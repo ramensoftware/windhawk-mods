@@ -30,7 +30,7 @@ Spotlight-style search, and More. — hosted in a dedicated `explorer.exe` tool 
 
 | Start Menu | Search | Control Center |
 | :---: | :---: | :---: |
-| ![Start Menu](https://i.imgur.com/fIkNeB9.png) | ![Search](https://i.imgur.com/hBmnVtY.png) | ![Control Center](https://i.imgur.com/2VjdQIt.png) |
+| ![Start Menu](https://i.imgur.com/IDdi4go.png) | ![Search](https://i.imgur.com/nY53K5V.png) | ![Control Center](https://i.imgur.com/2VjdQIt.png) |
 
 | Resource Monitor | Media Player | Weather |
 | :---: | :---: | :---: |
@@ -20882,6 +20882,7 @@ static void StopSearchHeightAnimation(bool preserveHeight = false) {
 }
 std::wstring g_searchQuery;
 std::vector<search::Result> g_searchResults;
+bool g_searchQueryPending = false; // XAML thread only; suppress transient "No results" during async search.
 std::atomic<int> g_searchToken{0};
 uint64_t g_searchRenderGeneration = 0; // XAML thread only
 ULONGLONG s_searchOpenTick = 0;
@@ -21147,6 +21148,7 @@ void BuildSearchFlyoutContent() {
             g_searchQuery = std::wstring(box.Text());
             g_searchToken.fetch_add(1);
             if (g_searchQuery.empty()) {
+                g_searchQueryPending = false;
                 if (g_searchQueryTimer) g_searchQueryTimer.Stop();
                 if (g_searchDebounceTimer) g_searchDebounceTimer.Stop();
                 g_searchResults.clear();
@@ -21155,6 +21157,7 @@ void BuildSearchFlyoutContent() {
             }
 
             g_searchResults.clear();
+            g_searchQueryPending = true;
             // Publish apps without waiting for the localized settings catalog.
             // Every nonempty query, including the first character, takes this path.
             RebuildSearchResultsPanel();
@@ -21196,15 +21199,21 @@ void BuildSearchFlyoutContent() {
                 RunOnUiThread([instant=std::move(instant),queryToken]()mutable{
                     if(queryToken!=g_searchToken.load())return;
                     for(auto& old:g_searchResults)if(old.kind==search::Result::Kind::File)instant.push_back(std::move(old));
-                    g_searchResults=std::move(instant);RebuildSearchResultsPanel();
+                    g_searchResults=std::move(instant);
+                    g_searchQueryPending = false;
+                    RebuildSearchResultsPanel();
                 });
                     });
                 });
             }
             g_searchQueryTimer.Stop();
             // Do not leave the first character waiting for a second edit.
+            // A 1 ms DispatcherTimer is below reliable UI dispatcher
+            // granularity and can be lost on the first edit after opening.
+            // Keep one-character queries prompt while allowing the TextBox
+            // and its first TextChanged event to settle.
             g_searchQueryTimer.Interval(std::chrono::milliseconds(
-                g_searchQuery.size() == 1 ? 1 : 100));
+                g_searchQuery.size() == 1 ? 50 : 100));
             g_searchQueryTimer.Start();
 
             if (!g_searchDebounceTimer) {
@@ -21713,6 +21722,12 @@ void RebuildSearchResultsPanel() {
         } else {
             AnimateSearchPopupHeight(84.0);
         }
+        return;
+    }
+
+    if (g_searchResults.empty() && g_searchQueryPending) {
+        // The result set is still being queried. Showing "No results" here
+        // makes the popup repeatedly shrink and grow while typing.
         return;
     }
 
