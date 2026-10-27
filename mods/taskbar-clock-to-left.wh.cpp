@@ -2,7 +2,7 @@
 // @id              taskbar-clock-to-left
 // @name            Taskbar Clock to Left
 // @description     Move the native Windows 11 clock/notification button to the left without shifting centered taskbar apps
-// @version         2.3.14
+// @version         2.3.15
 // @author          pleromyst
 // @github          https://github.com/pleromyst
 // @license         GPL-3.0
@@ -20,6 +20,7 @@ The original button, text, calendar and notification interactions are preserved.
 
 Supports a single-monitor desktop. With multiple monitors connected, all clocks
 stay in their native positions; secondary taskbars are not supported.
+The mod keeps observing the native clock and retries after returning to one monitor.
 
 - Follows the native system tray background, border and spacing. Asymmetric
   decoration faces the left screen edge; the clock text is never mirrored.
@@ -316,6 +317,7 @@ struct ClockTrayPlacement {
     std::optional<winrt::event_token> elementPreparedToken;
     std::optional<winrt::event_token> elementClearingToken;
     std::optional<ClockTrayLayoutStamp> layoutStamp;
+    std::optional<bool> displaySupported;
     bool layoutTrackingDirty{};
     bool geometryDirty{};
     bool metricsDirty{};
@@ -387,7 +389,8 @@ void QueueClockTrayUpdate(FrameworkElement clock) {
         return;
     }
     if (!ClockTrayDisplayIsSupported()) {
-        if (g_clockTrayCleanupPending) RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+        if (g_clockTrayPlacement.placed) RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+        if (!g_clockTrayCleanupPending) EnsureClockTrayRetry(clock);
         return;
     }
     if (auto previous = g_clockTrayPlacement.clock.get(); previous && previous != clock) {
@@ -2222,6 +2225,7 @@ void WatchClockTrayMetrics(FrameworkElement clock, uint64_t generation) {
         }
     }
     placement.layoutStamp = ReadClockTrayLayoutStamp();
+    placement.displaySupported = ClockTrayDisplayIsSupported();
     placement.clockLoadedToken = clock.Loaded(
         [generation](winrt::Windows::Foundation::IInspectable const&,
                      RoutedEventArgs const&) {
@@ -2286,13 +2290,21 @@ bool ClockTrayBeginNativeAttempt(ClockTrayRetryKey key) {
 
 void ProcessClockTrayChanges(uint64_t generation) {
     if (g_clockTrayWorkActive || !ClockTrayWorkIsCurrent(generation)) return;
-    if (!ClockTrayDisplayIsSupported()) {
-        RestoreClockTray(ClockTrayReason::UnsupportedLayout);
-        return;
-    }
     g_clockTrayCounters.signals++;
     try {
         auto& current = g_clockTrayPlacement;
+        bool displaySupported = ClockTrayDisplayIsSupported();
+        bool displayChanged = current.displaySupported != displaySupported;
+        current.displaySupported = displaySupported;
+        if (!displaySupported) {
+            if (current.placed) RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+            return;
+        }
+        if (displayChanged) {
+            current.geometryDirty = true;
+            // The native layout may be identical to the last successful move.
+            g_clockTray.lastNativeAttempt.reset();
+        }
         auto clock = current.clock.get();
         if (!clock) return;
         if (current.placed && !clock.IsLoaded() && WaitForClockTrayArrange()) return;
@@ -2349,8 +2361,7 @@ void ProcessClockTrayChanges(uint64_t generation) {
 }
 
 void EnsureClockTrayRetry(FrameworkElement clock) {
-    if (!clock || g_clockTrayPlacement.placed || !ClockTrayWorkIsCurrent(g_clockTray.generation) ||
-        !ClockTrayDisplayIsSupported()) return;
+    if (!clock || g_clockTrayPlacement.placed || !ClockTrayWorkIsCurrent(g_clockTray.generation)) return;
     ClockTrayWorkScope work;
     if (g_clockTrayPlacement.metricLayoutToken) return;
     if (g_clockTrayPlacement.clockLoadedToken) {
@@ -3047,10 +3058,6 @@ void UpdateClockPlacement(FrameworkElement content) {
     if (!g_callbacksEnabled) return;
     DWORD thread = GetCurrentThreadId();
     if (g_clockThreadId && g_clockThreadId != thread) return;
-    if (!ClockTrayDisplayIsSupported()) {
-        if (g_clockTrayCleanupPending) RestoreClockTray(ClockTrayReason::UnsupportedLayout);
-        return;
-    }
     g_clockThreadId = thread;
     g_clockContent = content;
     if (auto clock = FindAncestor(content, L"SystemTray.OmniButton", L"NotificationCenterButton")) {
