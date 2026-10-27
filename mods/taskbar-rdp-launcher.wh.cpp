@@ -6,6 +6,7 @@
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lcomdlg32 -lruntimeobject
 // @license         MIT
 // ==/WindhawkMod==
@@ -31,8 +32,9 @@ number.
 - **Right-click** for the menu: add computers (by name, from a saved .rdp file, or from Remote
   Desktop Connection's recent list), rename or remove them, and open their Remote Desktop settings.
 - **Position** in the mod's settings puts the widget left of the notification area, of the Wi-Fi,
-  volume and battery icons, or of the clock, or at the left end of the taskbar (free when its
-  icons are centered). The taskbar makes room for it.
+  volume and battery icons, or of the clock, where the taskbar makes room for it. It can also go
+  at the left end of the taskbar, over it: that's free when the taskbar's icons are centered and
+  the Widgets button is off.
 
 Out of the box, **1** is your main display, **2** adds the display nearest to it, and so on up to
 all of them. The buttons are remembered for each arrangement of displays, so a laptop that's
@@ -75,6 +77,7 @@ too, widgets in the same position sit side by side, in that order; right-click o
 - The mod needs Windows 11, whose taskbar the widget is part of. The first time it starts,
   Windhawk downloads Microsoft's symbols for the taskbar, to find its way in; that can take a
   moment.
+- The widget is on the main display's taskbar only.
 
 ## Settings
 
@@ -89,7 +92,7 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 /*
 - position: tray
   $name: Position
-  $description: Where on the taskbar the widget goes. The Taskbar Snipper and Taskbar Audio Flipper widgets in the same position sit beside it.
+  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, which is free when its icons are centered and the Widgets button is off. The Taskbar Snipper and Taskbar Audio Flipper widgets in the same position sit beside it.
   $options:
   - tray: Left of the notification area
   - systemIcons: Left of the Wi-Fi, volume and battery icons
@@ -238,22 +241,15 @@ std::wstring KnownFolder(REFKNOWNFOLDERID folder) {
     return result;
 }
 
-bool IsWow64() {
-    BOOL wow64 = FALSE;
-    return IsWow64Process(GetCurrentProcess(), &wow64) && wow64;
-}
-
 std::wstring WindowsFolder() {
     WCHAR path[MAX_PATH];
     UINT length = GetSystemWindowsDirectoryW(path, MAX_PATH);
     return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows";
 }
 
-// System32, for starting the programs in it. Explorer and the app are 64-bit on 64-bit Windows,
-// where System32 is the real one; a 32-bit process there gets the 32-bit SysWOW64 instead, and
-// "Sysnative" reaches the real System32 from it.
-std::wstring NativeSystemFolder() {
-    return WindowsFolder() + (IsWow64() ? L"\\Sysnative" : L"\\System32");
+// System32, for starting the programs in it.
+std::wstring SystemFolder() {
+    return WindowsFolder() + L"\\System32";
 }
 
 bool FileExists(const std::wstring& path) {
@@ -590,18 +586,12 @@ void DrawGlyph(gp::Graphics& graphics, const wchar_t* glyph, const gp::RectF& ta
     graphics.FillPath(&brush, &path);
 }
 
-enum class TextAlign { Left, Center, Right };
-
-// One line of text, vertically centered in the rectangle; cut short with "…" when trim is set,
-// otherwise never clipped.
+// One line of text, vertically centered in the rectangle, cut short with "…".
 void DrawTextLine(gp::Graphics& graphics, const std::wstring& text, const gp::Font& font, const gp::Color& color,
-                  const gp::RectF& rect, TextAlign align = TextAlign::Left, bool trim = true) {
-    gp::StringFormat format(trim ? gp::StringFormatFlagsNoWrap : gp::StringFormatFlagsNoWrap | gp::StringFormatFlagsNoClip);
-    format.SetTrimming(trim ? gp::StringTrimmingEllipsisCharacter : gp::StringTrimmingNone);
+                  const gp::RectF& rect) {
+    gp::StringFormat format(gp::StringFormatFlagsNoWrap);
+    format.SetTrimming(gp::StringTrimmingEllipsisCharacter);
     format.SetLineAlignment(gp::StringAlignmentCenter);
-    format.SetAlignment(align == TextAlign::Left ? gp::StringAlignmentNear
-                        : align == TextAlign::Center ? gp::StringAlignmentCenter
-                                                     : gp::StringAlignmentFar);
     gp::SolidBrush brush(color);
     graphics.DrawString(text.c_str(), (INT)text.size(), &font, rect, &format, &brush);
 }
@@ -621,17 +611,13 @@ std::unique_ptr<gp::Font> MakeFont(const wchar_t* family, float pixels) {
 
 // Popup colors for the "default app mode" (light or dark) chosen in Windows.
 struct Palette {
-    gp::Color background, foreground, secondary, accent, track, border, hover, onAccent;
+    gp::Color background, foreground, secondary, border;
 
     static Palette Current() {
         if (AppsUseLightTheme()) {
-            return {Argb(255, 243, 243, 243), Argb(255, 27, 27, 27), Argb(255, 96, 96, 96),
-                    Argb(255, 0, 95, 184), Argb(255, 196, 196, 196), Argb(255, 213, 213, 213),
-                    Argb(14, 0, 0, 0), Argb(255, 255, 255, 255)};
+            return {Argb(255, 243, 243, 243), Argb(255, 27, 27, 27), Argb(255, 96, 96, 96), Argb(255, 213, 213, 213)};
         }
-        return {Argb(255, 32, 32, 32), Argb(255, 255, 255, 255), Argb(255, 197, 197, 197),
-                Argb(255, 96, 205, 255), Argb(255, 80, 80, 80), Argb(255, 58, 58, 58),
-                Argb(16, 255, 255, 255), Argb(255, 0, 0, 0)};
+        return {Argb(255, 32, 32, 32), Argb(255, 255, 255, 255), Argb(255, 197, 197, 197), Argb(255, 58, 58, 58)};
     }
 };
 
@@ -760,28 +746,11 @@ public:
 
     bool Visible() const { return hwnd_ && IsWindowVisible(hwnd_); }
 
-    RECT Bounds() const {
-        RECT rect{};
-        if (hwnd_) {
-            GetWindowRect(hwnd_, &rect);
-        }
-        return rect;
-    }
-
     void Hide() {
         if (Visible()) {
             ShowWindow(hwnd_, SW_HIDE);
-            OnHidden();
         }
     }
-
-    void Invalidate() {
-        if (hwnd_) {
-            InvalidateRect(hwnd_, nullptr, FALSE);
-        }
-    }
-
-    float Scale() const { return scale_; }
 
     int Px(float value) const { return (int)std::nearbyint(value * scale_); }  // Halves to even, like the apps' Math.Round.
 
@@ -824,21 +793,8 @@ public:
                 EndPaint(hwnd_, &paint);
                 return true;
             }
-            case WM_MOUSEMOVE:
-                if (!trackingMouse_) {
-                    TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd_, 0};
-                    trackingMouse_ = TrackMouseEvent(&track);
-                    OnMouseEnter();
-                }
-                OnMouseMove({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
-                return true;
-            case WM_MOUSELEAVE:
-                trackingMouse_ = false;
-                OnMouseLeave();
-                return true;
             case WM_LBUTTONDOWN:
-                SetCapture(hwnd_);
-                OnMouseDown({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+                SetCapture(hwnd_);  // For the button's release.
                 return true;
             case WM_LBUTTONUP:
                 if (GetCapture() == hwnd_) {
@@ -849,13 +805,6 @@ public:
             case WM_TIMER:
                 OnTimer(wParam);
                 return true;
-            case WM_SETCURSOR:
-                if (LOWORD(lParam) == HTCLIENT) {
-                    SetCursor(LoadCursorW(nullptr, handCursor_ ? IDC_HAND : IDC_ARROW));
-                    result = TRUE;
-                    return true;
-                }
-                return false;
         }
         return false;
     }
@@ -897,22 +846,13 @@ protected:
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
-    void SetHandCursor(bool hand) { handCursor_ = hand; }
-
     virtual void Paint(gp::Graphics& graphics, int width, int height, const Palette& colors) = 0;
     virtual void OnScaleChanged() {}
-    virtual void OnHidden() {}
-    virtual void OnMouseEnter() {}
-    virtual void OnMouseMove(POINT point) {}
-    virtual void OnMouseLeave() {}
-    virtual void OnMouseDown(POINT point) {}
     virtual void OnMouseUp(POINT point) {}
     virtual void OnTimer(UINT_PTR timer) {}
 
     float scale_ = 1;
     bool roundedByWindows_ = false;
-    bool trackingMouse_ = false;
-    bool handCursor_ = false;
 };
 
 // The small popup in the bottom corner with a warning sign, a title and a line or two of detail,
@@ -978,8 +918,9 @@ protected:
 class DialogOwner {
 public:
     DialogOwner() {
-        // Like a WinForms dialog, keeps the thread's other windows (the widget and its popups) from
-        // taking clicks while it's open.
+        // Like a WinForms dialog, keeps the thread's other windows (its popups) from taking clicks
+        // while it's open. The widget, on the taskbar's thread, still takes them: what it asks for
+        // is looked up again once the dialog closes.
         EnumThreadWindows(GetCurrentThreadId(), DisableWindow, (LPARAM)&disabled_);
         POINT cursor;
         GetCursorPos(&cursor);
@@ -1207,12 +1148,11 @@ UINT TaskbarCreatedMessage() {
 }
 
 // A hidden top-level window of the app's thread: it owns the app's dialogs, and hears when a
-// Windows setting, the displays or the devices change, which a window for messages only doesn't.
+// Windows setting or the displays change, which a window for messages only doesn't.
 class OwnerWindow {
 public:
     std::function<void()> onSettingChange;
     std::function<void()> onDisplayChange;
-    std::function<void(WPARAM event)> onDeviceChange;
     std::function<void()> onTaskbarCreated;  // Explorer made the taskbar (as it started, say).
 
     bool Create(const wchar_t* className) {
@@ -1235,8 +1175,6 @@ public:
             onSettingChange();
         } else if (message == WM_DISPLAYCHANGE && onDisplayChange) {
             onDisplayChange();
-        } else if (message == WM_DEVICECHANGE && onDeviceChange) {
-            onDeviceChange(wParam);
         } else if (message == TaskbarCreatedMessage() && onTaskbarCreated) {
             onTaskbarCreated();
         }
@@ -1259,7 +1197,7 @@ void ForgetDraggedWidget() {
 // the chosen item's action then runs back on the app's thread.
 
 struct MenuEntry {
-    enum class Kind { Item, Separator, Heading, Submenu };
+    enum class Kind { Item, Separator, Submenu };
     Kind kind = Kind::Item;
     std::wstring text;  // A tab, then the item's shortcut, if it has one.
     bool checked = false;
@@ -1288,14 +1226,6 @@ public:
     void AddSeparator() {
         MenuEntry entry;
         entry.kind = MenuEntry::Kind::Separator;
-        entries_.push_back(entry);
-    }
-
-    // A line of text that can't be chosen, above the items it's about.
-    void AddHeading(const std::wstring& text) {
-        MenuEntry entry;
-        entry.kind = MenuEntry::Kind::Heading;
-        entry.text = text;
         entries_.push_back(entry);
     }
 
@@ -1527,17 +1457,15 @@ enum class Slot {
     Tray,         // Left of the notification area.
     SystemIcons,  // Left of the Wi-Fi, volume and battery icons.
     Clock,        // Left of the clock.
-    Left,         // The left end of the taskbar, over it (with its icons centered, it's free).
+    Left,         // The left end of the taskbar, over it (free when its icons are centered and the Widgets button is off).
 };
 
 Slot ReadSlot() {
-    PCWSTR value = Wh_GetStringSetting(L"position");
-    Slot slot = wcscmp(value, L"systemIcons") == 0 ? Slot::SystemIcons
-                : wcscmp(value, L"clock") == 0     ? Slot::Clock
-                : wcscmp(value, L"left") == 0      ? Slot::Left
-                                                   : Slot::Tray;
-    Wh_FreeStringSetting(value);
-    return slot;
+    auto value = WindhawkUtils::StringSetting::make(L"position");
+    return wcscmp(value, L"systemIcons") == 0 ? Slot::SystemIcons
+           : wcscmp(value, L"clock") == 0     ? Slot::Clock
+           : wcscmp(value, L"left") == 0      ? Slot::Left
+                                              : Slot::Tray;
 }
 
 std::wstring PanelName(Slot slot) {
@@ -1659,7 +1587,6 @@ std::atomic<HWND> g_appWindow{nullptr};
 constexpr UINT kAttachedMessage = WM_APP + 0x300;     // The widget is in the taskbar (again): send it everything.
 constexpr UINT kClickMessage = WM_APP + 0x301;        // wParam: the part. lParam: the MouseButton.
 constexpr UINT kWheelMessage = WM_APP + 0x302;        // wParam: the part. lParam: notches (up is positive).
-constexpr UINT kHoverMessage = WM_APP + 0x303;        // wParam: the part. lParam: 1 when the mouse came onto it, 0 when it left.
 constexpr UINT kMenuCommandMessage = WM_APP + 0x304;  // wParam: the command chosen in the menu.
 
 enum class MouseButton { Left, Middle, Right };
@@ -1733,7 +1660,11 @@ private:
     std::atomic<bool> stopping_{false};
 };
 
-Bridge g_bridge;
+// The widget's state on the taskbar's thread is in globals that are never destroyed by
+// themselves: Wh_ModUninit lets go of them on the taskbar's thread, as XAML needs. When Explorer
+// exits without turning the mod off, the taskbar's thread has gone already, and destructors run
+// then would let go of XAML on another thread, after XAML itself may have gone.
+[[clang::no_destroy]] std::optional<Bridge> g_bridge{std::in_place};
 
 // ---- The widget's elements (on the taskbar's thread)
 
@@ -1741,6 +1672,7 @@ Bridge g_bridge;
 // taskbar.
 class View {
 public:
+    virtual ~View() = default;
     virtual wux::FrameworkElement Build() = 0;
     virtual void Forget() = 0;
 };
@@ -1758,11 +1690,29 @@ int PlaceOf(wux::FrameworkElement const& element) {
     return winrt::unbox_value_or<int>(element.Tag(), 0);
 }
 
-wuxc::MenuFlyout g_menu{nullptr};  // The widget's menu while it's open.
+[[clang::no_destroy]] wuxc::MenuFlyout g_menu{nullptr};  // The widget's menu while it's open.
 winrt::event_token g_menuClosed{};
+// Its items' Click handlers, the mod's code, which come off as it closes (or the mod turns off).
+[[clang::no_destroy]] std::vector<wuxc::MenuFlyoutItem::Click_revoker> g_menuClicks;
 // Where the widget was last right-clicked, to open its menu there.
-wux::FrameworkElement g_menuTarget{nullptr};
+[[clang::no_destroy]] wux::FrameworkElement g_menuTarget{nullptr};
 winrt::Windows::Foundation::Point g_menuPoint{};
+
+// Lets go of the menu, hiding it first if asked, with the mod's handlers taken off it: none of them
+// runs once the mod's code has gone. Tells the app nothing (it may be gone).
+void ForgetMenu(bool hide) {
+    if (g_menu) {
+        try {
+            g_menu.Closed(g_menuClosed);
+            if (hide) {
+                g_menu.Hide();
+            }
+        } catch (...) {
+        }
+        g_menu = nullptr;
+    }
+    g_menuClicks.clear();
+}
 
 class WidgetHost {
 public:
@@ -1770,9 +1720,7 @@ public:
     // for a few seconds while it isn't), and tells the app.
     void Attach(HWND taskbar, Slot slot, View* view) {
         Detach();
-        AcquireSRWLockExclusive(&boundsLock_);
         taskbar_ = taskbar;
-        ReleaseSRWLockExclusive(&boundsLock_);
         slot_ = slot;
         view_ = view;
         attempts_ = 0;
@@ -1782,15 +1730,7 @@ public:
     // Takes the elements out (and the slot's panel, if they were the last in it).
     void Detach() {
         StopRetrying();
-        if (g_menu) {
-            try {
-                // It tells the app nothing more: the app may be gone.
-                g_menu.Closed(g_menuClosed);
-                g_menu.Hide();
-            } catch (...) {
-            }
-            g_menu = nullptr;
-        }
+        ForgetMenu(true);
         TakeOut();
         Forget();
     }
@@ -1799,15 +1739,12 @@ public:
     // Explorer has made it again.
     void Forget() {
         StopRetrying();
-        g_menu = nullptr;
+        ForgetMenu(false);
         g_menuTarget = nullptr;
         element_ = nullptr;
         if (view_) {
             view_->Forget();
         }
-        AcquireSRWLockExclusive(&boundsLock_);
-        bounds_ = {};
-        ReleaseSRWLockExclusive(&boundsLock_);
     }
 
     wux::FrameworkElement Element() const { return element_; }
@@ -1839,31 +1776,10 @@ public:
         panel.Children().InsertAt(target, element_);
     }
 
-    // Where the widget is on screen, for popups beside it (from the app's thread).
-    RECT ScreenBounds() {
-        AcquireSRWLockShared(&boundsLock_);
-        RECT bounds = bounds_;
-        HWND taskbar = taskbar_;
-        ReleaseSRWLockShared(&boundsLock_);
-        if (bounds.right <= bounds.left || !IsWindow(taskbar)) {
-            return {};
-        }
-        // The taskbar's XAML is drawn in this window, from its corner.
-        HWND content = FindWindowExW(taskbar, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
-        RECT window{};
-        GetWindowRect(content ? content : taskbar, &window);
-        OffsetRect(&bounds, window.left, window.top);
-        return bounds;
-    }
-
 private:
     void TakeOut() {
         try {
             if (element_) {
-                if (layoutToken_.value) {
-                    element_.LayoutUpdated(layoutToken_);
-                    layoutToken_ = {};
-                }
                 if (auto panel = wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>()) {
                     uint32_t index = 0;
                     if (panel.Children().IndexOf(element_, index)) {
@@ -1903,8 +1819,7 @@ private:
                 }
             }
             panel.Children().InsertAt(index, element_);
-            layoutToken_ = element_.LayoutUpdated([this](auto const&, auto const&) { UpdateBounds(); });
-            g_bridge.SetDispatcher(element_.Dispatcher(), taskbar_);
+            g_bridge->SetDispatcher(element_.Dispatcher(), taskbar_);
             PostToApp(kAttachedMessage, 0, 0);
         } catch (...) {
             // The taskbar may still be setting up, as Explorer starts: try again.
@@ -1947,37 +1862,16 @@ private:
         }
     }
 
-    void UpdateBounds() {
-        try {
-            auto root = element_ ? element_.XamlRoot() : nullptr;
-            if (!root) {
-                return;
-            }
-            auto rect = element_.TransformToVisual(nullptr).TransformBounds(
-                {0, 0, (float)element_.ActualWidth(), (float)element_.ActualHeight()});
-            double scale = root.RasterizationScale();
-            RECT bounds{(LONG)std::lround(rect.X * scale), (LONG)std::lround(rect.Y * scale),
-                        (LONG)std::lround((rect.X + rect.Width) * scale), (LONG)std::lround((rect.Y + rect.Height) * scale)};
-            AcquireSRWLockExclusive(&boundsLock_);
-            bounds_ = bounds;
-            ReleaseSRWLockExclusive(&boundsLock_);
-        } catch (...) {
-        }
-    }
-
+    HWND taskbar_ = nullptr;
     Slot slot_ = Slot::Tray;
     View* view_ = nullptr;
     wux::FrameworkElement element_{nullptr};
-    winrt::event_token layoutToken_{};
     UINT_PTR retryTimer_ = 0;
     static inline WidgetHost* retrying_ = nullptr;
     int attempts_ = 0;
-    SRWLOCK boundsLock_ = SRWLOCK_INIT;  // For these, which the app reads.
-    HWND taskbar_ = nullptr;
-    RECT bounds_{};  // In pixels, from the corner of the taskbar's XAML.
 };
 
-WidgetHost g_host;
+[[clang::no_destroy]] std::optional<WidgetHost> g_host{std::in_place};  // Not destroyed: see g_bridge.
 
 // The colors of the widget's highlights, as the taskbar's buttons have them. Its text and icons
 // follow the taskbar's light or dark theme by themselves.
@@ -2019,7 +1913,6 @@ public:
         enteredRevoker_ = border_.PointerEntered(winrt::auto_revoke, [this](auto const&, auto const&) {
             hovered_ = true;
             Paint();
-            PostToApp(kHoverMessage, part_, 1);
             if (onHover) {
                 onHover(true);
             }
@@ -2027,7 +1920,6 @@ public:
         exitedRevoker_ = border_.PointerExited(winrt::auto_revoke, [this](auto const&, auto const&) {
             hovered_ = pressed_ = false;
             Paint();
-            PostToApp(kHoverMessage, part_, 0);
             if (onHover) {
                 onHover(false);
             }
@@ -2240,13 +2132,6 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
             case MenuEntry::Kind::Separator:
                 items.Append(wuxc::MenuFlyoutSeparator());
                 break;
-            case MenuEntry::Kind::Heading: {
-                wuxc::MenuFlyoutItem item;
-                item.Text(text);
-                item.IsEnabled(false);
-                items.Append(item);
-                break;
-            }
             case MenuEntry::Kind::Submenu: {
                 wuxc::MenuFlyoutSubItem submenu;
                 submenu.Text(text);
@@ -2269,7 +2154,8 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
                     item.KeyboardAcceleratorTextOverride(entry.text.substr(tab + 1));
                 }
                 item.IsEnabled(entry.enabled);
-                item.Click([chosen, command = entry.command](auto const&, auto const&) { *chosen = command; });
+                g_menuClicks.push_back(
+                    item.Click(winrt::auto_revoke, [chosen, command = entry.command](auto const&, auto const&) { *chosen = command; }));
                 items.Append(item);
                 break;
             }
@@ -2285,32 +2171,30 @@ constexpr int kMoveRightCommand = -2;
 // widgets share its slot. The chosen item goes to the app once the menu has closed, so what it
 // does (a screenshot, say) doesn't have the menu in it.
 void ShowMenu(const std::vector<MenuEntry>& entries) {
-    auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host.Element();
+    auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
     if (!target || !target.XamlRoot()) {
         return;
     }
-    if (g_menu) {
-        g_menu.Hide();
-    }
+    ForgetMenu(true);
     auto chosen = std::make_shared<int>(0);
     wuxc::MenuFlyout menu;
     AddMenuEntries(menu.Items(), entries, chosen);
-    if (g_host.CanMove(-1) || g_host.CanMove(1)) {
+    if (g_host->CanMove(-1) || g_host->CanMove(1)) {
         menu.Items().Append(wuxc::MenuFlyoutSeparator());
         for (int command : {kMoveLeftCommand, kMoveRightCommand}) {
             wuxc::MenuFlyoutItem item;
             item.Text(command == kMoveLeftCommand ? L"Move left" : L"Move right");
-            item.IsEnabled(g_host.CanMove(command == kMoveLeftCommand ? -1 : 1));
-            item.Click([chosen, command](auto const&, auto const&) { *chosen = command; });
+            item.IsEnabled(g_host->CanMove(command == kMoveLeftCommand ? -1 : 1));
+            g_menuClicks.push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
             menu.Items().Append(item);
         }
     }
     g_menuClosed = menu.Closed([chosen](auto const& sender, auto const&) {
         if (g_menu == sender) {
-            g_menu = nullptr;
+            ForgetMenu(false);  // This handler too, which runs to its end.
         }
         if (*chosen == kMoveLeftCommand || *chosen == kMoveRightCommand) {
-            g_host.Move(*chosen == kMoveLeftCommand ? -1 : 1);
+            g_host->Move(*chosen == kMoveLeftCommand ? -1 : 1);
         } else if (*chosen) {
             PostToApp(kMenuCommandMessage, *chosen, 0);
         }
@@ -2678,7 +2562,7 @@ std::wstring DescribeCount(size_t count) {
 using DisplayIds = std::map<std::wstring, int>;  // By display key.
 
 std::wstring MstscPath() {
-    return NativeSystemFolder() + L"\\mstsc.exe";
+    return SystemFolder() + L"\\mstsc.exe";
 }
 
 bool CoversAll(const DisplayIds& ids, const Displays& displays) {
@@ -3719,6 +3603,36 @@ Color ColorWithAlpha(BYTE alpha, Color color) {
     return color;
 }
 
+// Windows' accent color for the taskbar's light or dark theme, read once on the taskbar's thread
+// and kept, rather than each time the widget is drawn. Read again once Windows' settings change
+// (ForgetAccentColors).
+struct AccentColors {
+    Color light{255, 0, 95, 184};
+    Color dark{255, 96, 205, 255};
+    bool read = false;
+};
+
+AccentColors g_accentColors;
+
+Color AccentColor(bool light) {
+    if (!g_accentColors.read) {
+        g_accentColors = {};
+        g_accentColors.read = true;
+        try {
+            using winrt::Windows::UI::ViewManagement::UIColorType;
+            winrt::Windows::UI::ViewManagement::UISettings settings;
+            g_accentColors.light = settings.GetColorValue(UIColorType::AccentDark1);
+            g_accentColors.dark = settings.GetColorValue(UIColorType::AccentLight2);
+        } catch (...) {
+        }
+    }
+    return light ? g_accentColors.light : g_accentColors.dark;
+}
+
+void ForgetAccentColors() {
+    g_accentColors.read = false;
+}
+
 // The display map's colors, for the taskbar's light or dark theme, with Windows' accent color.
 struct MapColors {
     Color accent, onAccent, secondary, track, hover;
@@ -3726,12 +3640,7 @@ struct MapColors {
 
 MapColors MapColorsFor(bool light) {
     MapColors colors;
-    colors.accent = light ? Color{255, 0, 95, 184} : Color{255, 96, 205, 255};
-    try {
-        using winrt::Windows::UI::ViewManagement::UIColorType;
-        colors.accent = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(light ? UIColorType::AccentDark1 : UIColorType::AccentLight2);
-    } catch (...) {
-    }
+    colors.accent = AccentColor(light);
     colors.onAccent = light ? Color{255, 255, 255, 255} : Color{255, 0, 0, 0};
     colors.secondary = light ? Color{255, 96, 96, 96} : Color{255, 197, 197, 197};
     colors.track = light ? Color{255, 196, 196, 196} : Color{255, 80, 80, 80};
@@ -4124,11 +4033,11 @@ private:
     TaskbarXaml::HoverCloser closer_;
 };
 
-RdpView g_view;
+[[clang::no_destroy]] std::optional<RdpView> g_view{std::in_place};  // Not destroyed: see TaskbarXaml::g_bridge.
 
 // Puts the widget in the taskbar where the settings say (on the taskbar's thread).
 void AttachWidget(HWND taskbar) {
-    TaskbarXaml::g_host.Attach(taskbar, TaskbarXaml::ReadSlot(), &g_view);
+    TaskbarXaml::g_host->Attach(taskbar, TaskbarXaml::ReadSlot(), &*g_view);
 }
 
 // Puts the widget in the taskbar if it isn't there (from the app's thread): Explorer said it made
@@ -4136,7 +4045,7 @@ void AttachWidget(HWND taskbar) {
 void AttachIfMissing() {
     if (HWND taskbar = OwnTaskbar()) {
         TaskbarXaml::RunOnWindowThread(taskbar, [taskbar]() {
-            if (!TaskbarXaml::g_host.Element()) {
+            if (!TaskbarXaml::g_host->Element()) {
                 AttachWidget(taskbar);
             }
         });
@@ -4231,7 +4140,11 @@ private:
             return false;
         }
         ForgetDraggedWidget();
-        owner_.onSettingChange = []() { RefreshShellSettings(); };
+        owner_.onSettingChange = []() {
+            RefreshShellSettings();
+            // Windows' accent color may have changed: the display map reads it again.
+            TaskbarXaml::g_bridge->Post([]() { ForgetAccentColors(); });
+        };
         owner_.onTaskbarCreated = []() { AttachIfMissing(); };
         owner_.onDisplayChange = [this]() {
             RefreshDisplays();
@@ -4249,7 +4162,7 @@ private:
 
     // Tells the widget what to show.
     void SendContent() {
-        TaskbarXaml::g_bridge.Post([content = content_]() { g_view.Show(content); });
+        TaskbarXaml::g_bridge->Post([content = content_]() { g_view->Show(content); });
     }
 
     void OnWidgetClick(int part, TaskbarXaml::MouseButton button) {
@@ -4692,7 +4605,7 @@ private:
         }
         menu.Add(L"Reset display buttons", [this]() { ResetDisplayButtons(); }, false, settings_.displayButtons.count(setupKey_) > 0);
         menu.Add(L"Read display numbers again", [this]() { ReadDisplayIdsAgain(); }, false, displays_.size() > 1);
-        TaskbarXaml::g_bridge.Post([entries = menu.Entries()]() { TaskbarXaml::ShowMenu(entries); });
+        TaskbarXaml::g_bridge->Post([entries = menu.Entries()]() { TaskbarXaml::ShowMenu(entries); });
     }
 
     Settings settings_;
@@ -4723,7 +4636,7 @@ std::atomic<bool> g_unloading{false};
 // Explorer has made the taskbar again (after it crashed, say): the widget goes in the new one.
 void OnTaskbarStarted(HWND taskbar) {
     if (!g_unloading) {
-        TaskbarXaml::g_host.Forget();
+        TaskbarXaml::g_host->Forget();
         AttachWidget(taskbar);
     }
 }
@@ -4771,8 +4684,15 @@ void Wh_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
     g_uiThread.Stop();
-    TaskbarXaml::g_bridge.Drain();
+    TaskbarXaml::g_bridge->Drain();
     if (HWND taskbar = OwnTaskbar()) {
-        TaskbarXaml::RunOnWindowThread(taskbar, []() { TaskbarXaml::g_host.Detach(); });
+        // Lets go of the widget's XAML on the taskbar's thread. Without a taskbar it's kept, as it
+        // can't be let go of anywhere else (see TaskbarXaml::g_bridge).
+        TaskbarXaml::RunOnWindowThread(taskbar, []() {
+            TaskbarXaml::g_host->Detach();
+            TaskbarXaml::g_host.reset();
+            g_view.reset();
+            TaskbarXaml::g_bridge.reset();
+        });
     }
 }
