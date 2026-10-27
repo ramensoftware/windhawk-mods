@@ -277,6 +277,10 @@ The active tab's folder and selection are resolved through `IShellWindows` /
 `IShellBrowser`, off the UI thread, so a slow or unresponsive shell can't block
 the command bar.
 
+Keyboard shortcuts are handled by a keyboard hook on the thread of each File
+Explorer window, so only key presses in File Explorer windows are seen. No
+system-wide hook is used.
+
 Notably, the mod does **not** use XAML Diagnostics
 (`InitializeXamlDiagnosticsEx`), since only one XAML diagnostics consumer can be
 active in a process at a time. That makes it compatible with mods and tools
@@ -887,6 +891,7 @@ struct CommandBarEntry {
     winrt::weak_ref<muxc::CommandBar> commandBar;
     winrt::event_token loadedToken{};
     winrt::event_token vectorChangedToken{};
+    winrt::event_token themeChangedToken{};
 };
 
 thread_local std::vector<CommandBarEntry> g_entries;
@@ -1453,7 +1458,12 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
     DestroyMenu(hMenu);
 }
 
-ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
+// Reads the folder and the selection of a File Explorer window. It walks
+// IShellWindows, which can be slow or live in another process, so it's called
+// from a worker thread. All selected paths are only collected when
+// allSelected is set, since a large selection takes a while.
+ExplorerContext GetExplorerContext(HWND hExplorerWnd,
+                                   bool allSelected = false) {
     ExplorerContext result;
     result.shellView = GetActiveShellView(hExplorerWnd);
     if (!result.shellView)
@@ -1481,7 +1491,8 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
         selection) {
         DWORD count = 0;
         selection->GetCount(&count);
-        for (DWORD i = 0; i < count; i++) {
+        for (DWORD i = 0;
+             i < count && (allSelected || result.selectedPath.empty()); i++) {
             winrt::com_ptr<IShellItem> shellItem;
             if (SUCCEEDED(selection->GetItemAt(i, shellItem.put())) &&
                 shellItem) {
@@ -1581,9 +1592,15 @@ void ExecuteProcess(std::wstring const& command,
     }
 }
 
-void LaunchItemForWindow(HWND hExplorerWnd,
-                         ActionItem const& item,
-                         ExplorerContext const& capturedContext) {
+// Runs on a worker thread, so that a slow or unresponsive shell can't block
+// the window.
+void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
+    bool allSelected =
+        item.parameters.find(L"%sel%") != std::wstring::npos ||
+        item.parameters.find(L"%sel_each%") != std::wstring::npos;
+    ExplorerContext capturedContext =
+        GetExplorerContext(hExplorerWnd, allSelected);
+
     std::wstring command = ResolveCommandPath(item.command);
     Wh_Log(L"Launching %s for window %08X, path: %s", item.command.c_str(),
            (DWORD)(ULONG_PTR)hExplorerWnd, capturedContext.folderPath.c_str());
@@ -1784,24 +1801,21 @@ void InvokeActionItem(HWND hWnd, ActionItem const& item) {
     }
 
     if (IsCommandMatch(cmd, L"OpenWith")) {
-        ExplorerContext context = GetExplorerContext(hWnd);
-        if (!context.selectedPath.empty() &&
-            !DirectoryExists(context.selectedPath)) {
-            std::wstring targetPath = context.selectedPath;
-            RunShellWorkOnWorkerThread([hWnd, targetPath]() {
-                OPENASINFO oai = {};
-                oai.pcszFile = targetPath.c_str();
-                oai.oaifInFlags = OAIF_EXEC | OAIF_ALLOW_REGISTRATION;
-                SHOpenWithDialog(hWnd, &oai);
-            });
-        }
+        RunShellWorkOnWorkerThread([hWnd]() {
+            ExplorerContext context = GetExplorerContext(hWnd);
+            if (context.selectedPath.empty() ||
+                DirectoryExists(context.selectedPath))
+                return;
+            OPENASINFO oai = {};
+            oai.pcszFile = context.selectedPath.c_str();
+            oai.oaifInFlags = OAIF_EXEC | OAIF_ALLOW_REGISTRATION;
+            SHOpenWithDialog(hWnd, &oai);
+        });
         return;
     }
 
-    ExplorerContext context = GetExplorerContext(hWnd);
-
     RunShellWorkOnWorkerThread(
-        [hWnd, item, context]() { LaunchItemForWindow(hWnd, item, context); });
+        [hWnd, item]() { LaunchItemForWindow(hWnd, item); });
 }
 
 void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
@@ -2928,21 +2942,25 @@ void QueueCommandBarUpdate(
         return;
     }
 
-    dispatcherQueue.TryEnqueue([weakCommandBar, takePending]() {
-        bool full = takePending();
-        if (g_unloading)
-            return;
-        if (auto commandBar = weakCommandBar.get()) {
-            try {
-                if (full)
-                    UpdateCommandBar(commandBar);
-                else
-                    ApplyDefaultButtonVisibility(commandBar);
-            } catch (...) {
-                Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    // If the update can't be queued, drop the pending entry, or every later
+    // update of this command bar would be merged into it and never run.
+    if (!dispatcherQueue.TryEnqueue([weakCommandBar, takePending]() {
+            bool full = takePending();
+            if (g_unloading)
+                return;
+            if (auto commandBar = weakCommandBar.get()) {
+                try {
+                    if (full)
+                        UpdateCommandBar(commandBar);
+                    else
+                        ApplyDefaultButtonVisibility(commandBar);
+                } catch (...) {
+                    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+                }
             }
-        }
-    });
+        })) {
+        takePending();
+    }
 }
 
 void QueueVisibilityRecompute(
@@ -3962,6 +3980,8 @@ void RemoveOurButtons(muxc::CommandBar const& commandBar) {
     }
 }
 
+void InstallShortcutHookForCurrentThread();
+
 void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
     for (auto it = g_entries.begin(); it != g_entries.end();) {
         if (!it->commandBar.get())
@@ -3978,37 +3998,66 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
     CommandBarEntry entry;
     entry.commandBar = winrt::make_weak(commandBar);
 
-    TrackRevoker(
-        commandBar,
-        commandBar.ActualThemeChanged(
-            winrt::auto_revoke,
-            [](mux::FrameworkElement const& sender, wf::IInspectable const&) {
-                if (g_unloading)
-                    return;
+    // These handlers live as long as the command bar is tracked. They aren't
+    // registered with TrackRevoker, since RefreshButtonsForCurrentThread
+    // revokes those on every settings change and the command bar is never
+    // added again. RemoveButtonsForCurrentThread revokes them on unload.
 
-                // Clear icon cache so new theme icons are decoded
-                {
-                    std::lock_guard<std::mutex> lock(g_iconCacheMutex);
-                    g_iconCache.clear();
-                }
+    // Re-add the buttons whenever the command bar reloads.
+    entry.loadedToken = commandBar.Loaded(
+        [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+            if (g_unloading)
+                return;
+            if (auto commandBar = sender.try_as<muxc::CommandBar>())
+                UpdateCommandBar(commandBar);
+        });
 
-                if (auto cb = sender.try_as<muxc::CommandBar>()) {
-                    try {
-                        RemoveOurButtons(cb);
-                        UpdateCommandBar(cb);
-                    } catch (...) {
-                        Wh_Log(L"Error %08X", winrt::to_hresult().value);
-                    }
+    // Re-add the buttons and reapply visibility if Explorer ever rebuilds
+    // the command list.
+    entry.vectorChangedToken = commandBar.PrimaryCommands().VectorChanged(
+        [weakCommandBar = winrt::make_weak(commandBar)](
+            wfc::IObservableVector<muxc::ICommandBarElement> const&,
+            wfc::IVectorChangedEventArgs const&) {
+            if (g_unloading)
+                return;
+
+            // Defer the update; mutating the vector from within its own change
+            // notification isn't allowed. Coalesced, since adding our own
+            // buttons raises one notification per button.
+            QueueCommandBarUpdate(weakCommandBar, true);
+        });
+
+    // Recreate the buttons with the icons of the new theme.
+    entry.themeChangedToken = commandBar.ActualThemeChanged(
+        [](mux::FrameworkElement const& sender, wf::IInspectable const&) {
+            if (g_unloading)
+                return;
+
+            {
+                std::lock_guard<std::mutex> lock(g_iconCacheMutex);
+                g_iconCache.clear();
+            }
+
+            if (auto cb = sender.try_as<muxc::CommandBar>()) {
+                try {
+                    RemoveOurButtons(cb);
+                    UpdateCommandBar(cb);
+                } catch (...) {
+                    Wh_Log(L"Error %08X", winrt::to_hresult().value);
                 }
-            }));
+            }
+        });
 
     g_entries.push_back(std::move(entry));
     UpdateCommandBar(commandBar);
+    InstallShortcutHookForCurrentThread();
 }
 
 void RestoreNudgedIslandsForCurrentThread();
+void RemoveShortcutHookForCurrentThread();
 
 void RemoveButtonsForCurrentThread() {
+    RemoveShortcutHookForCurrentThread();
     RestoreNudgedIslandsForCurrentThread();
     UnwatchVisibilityForCurrentThread();
     StopHoverTimersForCurrentThread();
@@ -4025,6 +4074,7 @@ void RemoveButtonsForCurrentThread() {
             commandBar.Loaded(entry.loadedToken);
             commandBar.PrimaryCommands().VectorChanged(
                 entry.vectorChangedToken);
+            commandBar.ActualThemeChanged(entry.themeChangedToken);
             RemoveOurButtons(commandBar);
             ApplyDefaultButtonVisibility(commandBar, true);
         } catch (...) {
@@ -4789,31 +4839,43 @@ void CollectShortcutBindings(std::vector<ActionItem> const& items,
     }
 }
 
-HANDLE g_shortcutHookThread;
-DWORD g_shortcutHookThreadId;
+// The hook is installed per File Explorer window thread, so it only sees the
+// key messages of this process's File Explorer windows. It runs when a key
+// message is retrieved, before Explorer's own accelerators, and on the
+// window's own thread, so an item runs exactly like a click.
+thread_local HHOOK g_shortcutHook;
 // The key of the last handled shortcut, its repeats and release are
-// swallowed too. Only used by the hook thread.
-UINT g_shortcutSwallowedVk;
+// swallowed too.
+thread_local UINT g_shortcutSwallowedVk;
 
-bool IsFileExplorerWindowOfThisProcess(HWND hWnd) {
-    DWORD processId = 0;
+// All installed hooks, so that hooks of threads which couldn't be reached
+// on unload can still be removed.
+std::mutex g_shortcutHooksMutex;
+std::unordered_map<DWORD, HHOOK> g_shortcutHooks;
+
+bool IsFileExplorerWindow(HWND hWnd) {
     WCHAR className[64];
-    return hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-           processId == GetCurrentProcessId() &&
-           GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+    return hWnd && GetClassName(hWnd, className, ARRAYSIZE(className)) &&
            _wcsicmp(className, L"CabinetWClass") == 0;
 }
 
 LRESULT CALLBACK ShortcutKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    // HC_NOREMOVE is a peek, the same message is seen again when it's removed.
     if (nCode != HC_ACTION || g_unloading)
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
-    auto* keyboard = (KBDLLHOOKSTRUCT const*)lParam;
-    UINT vk = keyboard->vkCode;
-    if (keyboard->flags & LLKHF_INJECTED)
+    UINT vk = (UINT)wParam;
+    UINT scanCode = (lParam >> 16) & 0xFF;
+    bool keyUp = (lParam & 0x80000000) != 0;
+    bool repeat = (lParam & 0x40000000) != 0;
+
+    // Keys sent with SendInput by virtual key only, such as the ones of
+    // SendKeyCombo, have no scan code. They're passed on, or an internal
+    // command which sends the same key as its shortcut would be swallowed.
+    if (scanCode == 0)
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
-    if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+    if (keyUp) {
         if (vk == g_shortcutSwallowedVk) {
             g_shortcutSwallowedVk = 0;
             return 1;
@@ -4821,15 +4883,17 @@ LRESULT CALLBACK ShortcutKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
 
-    if (wParam != WM_KEYDOWN && wParam != WM_SYSKEYDOWN)
-        return CallNextHookEx(nullptr, nCode, wParam, lParam);
     if (vk == g_shortcutSwallowedVk)
         return 1;
-    if (IsModifierKey(vk))
+    if (repeat || IsModifierKey(vk))
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
-    HWND hWnd = GetForegroundWindow();
-    if (!IsFileExplorerWindowOfThisProcess(hWnd))
+    // Keys of other windows of the thread, such as the settings window, are
+    // left alone.
+    HWND hFocusWnd = GetFocus();
+    HWND hWnd = GetAncestor(hFocusWnd ? hFocusWnd : GetActiveWindow(),
+                            GA_ROOT);
+    if (!IsFileExplorerWindow(hWnd))
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
     UINT modifiers = GetHeldModifiers();
@@ -4851,7 +4915,7 @@ LRESULT CALLBACK ShortcutKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     // Releasing Alt or Win alone would open the menu bar or the Start menu,
     // since the key in between is swallowed. An unassigned key in between
-    // prevents that.
+    // prevents that. It has no scan code, so the hook passes it on.
     if (modifiers & (MOD_ALT | MOD_WIN)) {
         INPUT inputs[2] = {};
         inputs[0].type = INPUT_KEYBOARD;
@@ -4861,90 +4925,55 @@ LRESULT CALLBACK ShortcutKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         SendInput(2, inputs, sizeof(INPUT));
     }
 
-    Wh_Log(L"Keyboard shortcut %s for window %08X",
-           item->shortcut.c_str(), (DWORD)(ULONG_PTR)hWnd);
-
-    // The hook must return quickly, and the item has to run on the thread of
-    // the window, like a click.
-    RunShellWorkOnWorkerThread([hWnd, action = std::move(*item)]() {
-        struct Param {
-            HWND hWnd;
-            ActionItem const* item;
-        } param{hWnd, &action};
-        RunFromWindowThread(
-            hWnd,
-            [](PVOID p) {
-                auto* param = (Param*)p;
-                InvokeActionItem(param->hWnd, *param->item);
-            },
-            &param);
-    });
-
+    Wh_Log(L"Keyboard shortcut %s for window %08X", item->shortcut.c_str(),
+           (DWORD)(ULONG_PTR)hWnd);
+    InvokeActionItem(hWnd, *item);
     return 1;
 }
 
-DWORD WINAPI ShortcutHookThread(LPVOID lpParam) {
-    HANDLE readyEvent = (HANDLE)lpParam;
-    // Create the message queue before the thread can be told to quit.
-    MSG msg;
-    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+// Called from the thread of a File Explorer window when its command bar is
+// found. The hook checks the shortcuts on each key press, so it doesn't need
+// to change with the settings.
+void InstallShortcutHookForCurrentThread() {
+    if (g_shortcutHook || g_unloading)
+        return;
 
-    HHOOK hook = SetWindowsHookEx(WH_KEYBOARD_LL, ShortcutKeyboardProc,
-                                  GetCurrentModuleHandle(), 0);
-    if (!hook)
-        Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
-    SetEvent(readyEvent);
-    if (!hook)
-        return 0;
-
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+    DWORD threadId = GetCurrentThreadId();
+    g_shortcutHook =
+        SetWindowsHookEx(WH_KEYBOARD, ShortcutKeyboardProc, nullptr, threadId);
+    if (!g_shortcutHook) {
+        Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD) failed: %u", GetLastError());
+        return;
     }
 
-    UnhookWindowsHookEx(hook);
-    return 0;
+    std::lock_guard<std::mutex> lock(g_shortcutHooksMutex);
+    g_shortcutHooks[threadId] = g_shortcutHook;
 }
 
-void StopShortcutHook() {
-    if (!g_shortcutHookThread)
+void RemoveShortcutHookForCurrentThread() {
+    if (!g_shortcutHook)
         return;
-    PostThreadMessage(g_shortcutHookThreadId, WM_QUIT, 0, 0);
-    WaitForSingleObject(g_shortcutHookThread, INFINITE);
-    CloseHandle(g_shortcutHookThread);
-    g_shortcutHookThread = nullptr;
-    g_shortcutHookThreadId = 0;
-}
 
-// The hook only runs while there are shortcuts, since every key press of the
-// system goes through it.
-void UpdateShortcutHook() {
-    bool hasShortcuts;
     {
-        std::lock_guard<std::mutex> lock(g_settings.mutex);
-        hasShortcuts = !g_settings.shortcuts.empty();
+        std::lock_guard<std::mutex> lock(g_shortcutHooksMutex);
+        g_shortcutHooks.erase(GetCurrentThreadId());
     }
+    UnhookWindowsHookEx(g_shortcutHook);
+    g_shortcutHook = nullptr;
+    g_shortcutSwallowedVk = 0;
+}
 
-    if (!hasShortcuts || g_unloading) {
-        StopShortcutHook();
-        return;
+// Removes the hooks of threads which couldn't be reached on unload.
+void RemoveLeftoverShortcutHooks() {
+    std::unordered_map<DWORD, HHOOK> leftovers;
+    {
+        std::lock_guard<std::mutex> lock(g_shortcutHooksMutex);
+        leftovers.swap(g_shortcutHooks);
     }
-    if (g_shortcutHookThread)
-        return;
-
-    HANDLE readyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!readyEvent)
-        return;
-    g_shortcutHookThread =
-        CreateThread(nullptr, 0, ShortcutHookThread, readyEvent, 0,
-                     &g_shortcutHookThreadId);
-    if (g_shortcutHookThread) {
-        WaitForSingleObject(readyEvent, INFINITE);
-    } else {
-        Wh_Log(L"CreateThread failed for the shortcut hook: %u",
-               GetLastError());
+    for (auto const& [threadId, hook] : leftovers) {
+        Wh_Log(L"Removing leftover keyboard hook of thread %u", threadId);
+        UnhookWindowsHookEx(hook);
     }
-    CloseHandle(readyEvent);
 }
 
 std::vector<HWND> GetFileExplorerWnds() {
@@ -9314,7 +9343,6 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
     HookFileExplorerExtensionsIfLoaded(true);
-    UpdateShortcutHook();
     for (HWND hWnd : GetFileExplorerWnds()) {
         RunFromWindowThread(
             hWnd,
@@ -9331,7 +9359,6 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
-    StopShortcutHook();
     DismissOpenContextMenus();
     CloseSettingsWindow();
     if (g_settingsWindowClassRegistered) {
@@ -9349,6 +9376,8 @@ void Wh_ModUninit() {
                    (DWORD)(ULONG_PTR)hWnd);
         }
     }
+
+    RemoveLeftoverShortcutHooks();
 
     {
         std::lock_guard<std::mutex> lock(g_iconCacheMutex);
@@ -9407,7 +9436,6 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
-    UpdateShortcutHook();
     for (HWND hWnd : GetFileExplorerWnds()) {
         RunFromWindowThread(
             hWnd, [](PVOID) { RefreshButtonsForCurrentThread(); }, nullptr);
