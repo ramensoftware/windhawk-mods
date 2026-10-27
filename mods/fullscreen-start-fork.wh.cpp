@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              fullscreen-start
+// @id              fullscreen-start-fork
 // @name            Fullscreen Start (Launchpad Style)
 // @description     A fullscreen Start menu featuring an app grid, search, and customizable blurred background.
 // @version         1.0.0
