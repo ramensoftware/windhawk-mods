@@ -1013,30 +1013,28 @@ BOOL Wh_ModInit() {
     LoadSettings();
     HMODULE module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return FALSE;
-    // Exact decorated x64 symbols verified in Microsoft's public Taskbar PDB.
+    // Symbols verified in Microsoft's public Taskbar PDB, given in the undecorated form
+    // Windhawk resolves and caches online.
     // Hook the implementation getter, whose this pointer matches the ctor/dtor;
     // the COM ABI getter uses a different interface pointer and cannot be keyed
     // by the implementation pointer without an adjustment. Both COM entries are
     // optional: without them the direct getter still drives the layout.
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{L"??_7?$produce@UTaskbarSettings@implementation@Shell@UI@WindowsUdk@winrt@@UITaskbarSettings@3456@@impl@winrt@@6B@"}, &g_settingsInterfaceVtable, nullptr, true},
-        {{L"?get_Alignment@?$produce@UTaskbarSettings@implementation@Shell@UI@WindowsUdk@winrt@@UITaskbarSettings@3456@@impl@winrt@@UEAAHPEAH@Z"}, &g_abiAlignment, AbiAlignmentHook, true},
-        {{L"??0TaskbarSettings@implementation@Shell@UI@WindowsUdk@winrt@@QEAA@PEAUITrayComponentHost@@PEAUITaskListWndSite@@@Z"}, &g_ctor, SettingsCtorHook},
-        {{L"??1TaskbarSettings@implementation@Shell@UI@WindowsUdk@winrt@@UEAA@XZ"}, &g_dtor, SettingsDtorHook},
-        {{L"?Alignment@TaskbarSettings@implementation@Shell@UI@WindowsUdk@winrt@@QEAA?AW4TaskbarAlignment@3456@XZ"}, &g_alignment, AlignmentHook},
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {{LR"(const winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::`vftable')"}, &g_settingsInterfaceVtable, nullptr, true},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"}, &g_abiAlignment, AbiAlignmentHook, true},
+        {{LR"(public: __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings::TaskbarSettings(struct ITrayComponentHost *,struct ITaskListWndSite *))"}, &g_ctor, SettingsCtorHook},
+        {{LR"(public: virtual __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings::~TaskbarSettings(void))"}, &g_dtor, SettingsDtorHook},
+        {{LR"(public: enum winrt::WindowsUdk::UI::Shell::TaskbarAlignment __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings::Alignment(void))"}, &g_alignment, AlignmentHook},
         // Right alignment only. Each is optional: without them Left and Center
         // still work and a Right selection falls back to Windows' Left.
-        {{L"?GetTaskbarHost@CTaskBand@@UEBA?AV?$shared_ptr@VTaskbarHost@@@std@@XZ"}, &g_taskbarHostGetters[0], nullptr, true},
-        {{L"?GetTaskbarHost@CSecondaryTaskBand@@UEBA?AV?$shared_ptr@VTaskbarHost@@@std@@XZ"}, &g_taskbarHostGetters[1], nullptr, true},
-        {{L"?GetTaskbarHost@CSecondaryTray@@UEBA?AV?$shared_ptr@VTaskbarHost@@@std@@XZ"}, &g_taskbarHostGetters[2], nullptr, true},
-        {{L"?GetTaskbarHost@TrayUI@@UEBA?AV?$shared_ptr@VTaskbarHost@@@std@@XZ"}, &g_taskbarHostGetters[3], nullptr, true},
-        {{L"?FrameHeight@TaskbarHost@@QEBAHXZ"}, &g_frameHeight, nullptr, true},
-        {{L"?_Decref@_Ref_count_base@std@@QEAAXXZ"}, &g_decref, nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[0], nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[1], nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTray::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[2], nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl TrayUI::GetTaskbarHost(void)const )"}, &g_taskbarHostGetters[3], nullptr, true},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &g_frameHeight, nullptr, true},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &g_decref, nullptr, true},
     };
-    WH_HOOK_SYMBOLS_OPTIONS options{};
-    options.optionsSize = sizeof(options);
-    options.noUndecoratedSymbols = TRUE;
-    bool ok = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), &options);
+    bool ok = WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
     // Keep taskbar.dll loaded for the hook lifetime, even during early injection.
     if (!ok) {
         FreeLibrary(module);
