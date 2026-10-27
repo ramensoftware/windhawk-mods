@@ -731,6 +731,7 @@ static int g_userTextW = -1;
 static bool g_swallowAccountUp = false;
 static bool g_swallowCharmUp = false;
 static bool g_swallowNamingUp = false;
+static bool g_swallowNamingRightUp = false;   // right press that only closed the name bar
 static DWORD g_charmSwallowTick = 0;
 static int ScI(int v) { return MulDiv(v, g_dpi, 96); }
 static float ScF(float v) { return v * g_dpiScale; }
@@ -1060,6 +1061,7 @@ static float g_dragGroupAnchorWX = 0.0f, g_dragGroupDx = 0.0f;
 static int g_namingGroup = -1;
 static bool g_customize = false;
 static std::wstring g_groupNameEdit;
+static bool g_nameSelAll = false;   // Ctrl+A: whole group name selected
 static bool g_alphaGrid = false;
 static bool g_appsSearchFocus = false;
 static DWORD g_alphaTick = 0;
@@ -1566,9 +1568,29 @@ static void LoadGroupNames() {
         g_groupNames[g] = p[1];
     }
 }
+static const UINT KEY_SELECT_ALL = 0x141;   // Ctrl+A (posted by the keyboard hook)
+static const UINT KEY_COPY_ALL   = 0x143;   // Ctrl+C
+static void CopyTextToClipboard(const wchar_t* text, size_t len) {
+    if (!OpenClipboard(g_wnd)) return;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (len + 1) * sizeof(wchar_t));
+    if (h) {
+        wchar_t* p = (wchar_t*)GlobalLock(h);
+        if (p) {
+            memcpy(p, text, len * sizeof(wchar_t));
+            p[len] = 0;
+            GlobalUnlock(h);
+            EmptyClipboard();
+            if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+        } else {
+            GlobalFree(h);
+        }
+    }
+    CloseClipboard();
+}
 static void StartNaming(int g) {
     if (g < 0) return;
     g_namingGroup = g;
+    g_nameSelAll = false;
     g_groupNameEdit = (g < (int)g_groupNames.size()) ? g_groupNames[g] : std::wstring();
     Wh_Log(L"[zoom] naming group %d", g);
     g_dirty = true; RepaintNow();
@@ -1580,6 +1602,7 @@ static void CommitNaming() {
     g_groupNames[g_namingGroup] = g_groupNameEdit;
     Wh_Log(L"[zoom] group %d named", g_namingGroup);
     g_namingGroup = -1;
+    g_nameSelAll = false;
     g_groupNameEdit.clear();
     SaveGroupNames();
     g_dirty = true; RepaintNow();
@@ -1587,17 +1610,31 @@ static void CommitNaming() {
 static void CancelNaming() {
     if (g_namingGroup < 0) return;
     g_namingGroup = -1;
+    g_nameSelAll = false;
     g_groupNameEdit.clear();
     g_dirty = true; RepaintNow();
 }
 static void NamingChar(wchar_t c) {
     if (g_namingGroup < 0) return;
-    if (c >= L' ' && g_groupNameEdit.size() < 48) g_groupNameEdit += c;
+    if (c >= L' ') {
+        if (g_nameSelAll) { g_groupNameEdit.clear(); g_nameSelAll = false; }
+        if (g_groupNameEdit.size() < 48) g_groupNameEdit += c;
+    }
     g_dirty = true; RepaintNow();
 }
 static void NamingKey(UINT vk) {
     if (g_namingGroup < 0) return;
-    if (vk == VK_BACK) { if (!g_groupNameEdit.empty()) g_groupNameEdit.pop_back(); g_dirty = true; RepaintNow(); }
+    if (vk == KEY_SELECT_ALL) {
+        if (!g_groupNameEdit.empty()) { g_nameSelAll = true; g_dirty = true; RepaintNow(); }
+    }
+    else if (vk == KEY_COPY_ALL) {
+        if (g_nameSelAll && !g_groupNameEdit.empty()) CopyTextToClipboard(g_groupNameEdit.c_str(), g_groupNameEdit.size());
+    }
+    else if (vk == VK_BACK) {
+        if (g_nameSelAll) { g_groupNameEdit.clear(); g_nameSelAll = false; }
+        else if (!g_groupNameEdit.empty()) g_groupNameEdit.pop_back();
+        g_dirty = true; RepaintNow();
+    }
     else if (vk == VK_RETURN) CommitNaming();
     else if (vk == VK_ESCAPE) CancelNaming();
 }
@@ -1635,6 +1672,19 @@ static bool GroupNameFieldRect(int g, RECT* out) {
     out->right = (int)(l + bw); out->bottom = (int)(t - ScF(10));
     return true;
 }
+// Width of a string laid out with the DirectWrite format that draws it, so the caret and the
+// selection line up with the text (a GDI font of the "same" size measures differently).
+static float DwTextWidth(const wchar_t* s, size_t n, IDWriteTextFormat* f) {
+    if (!s || !n || !f || !g_writeFactory) return 0.0f;
+    float w = 0.0f;
+    IDWriteTextLayout* lay = NULL;
+    if (SUCCEEDED(g_writeFactory->CreateTextLayout(s, (UINT32)n, f, 10000.0f, 200.0f, &lay)) && lay) {
+        DWRITE_TEXT_METRICS m = {};
+        if (SUCCEEDED(lay->GetMetrics(&m))) w = m.widthIncludingTrailingWhitespace;
+        lay->Release();
+    }
+    return w;
+}
 static void EnterCustomize() {
     if (g_view != VIEW_START || g_charmOpen || g_zoomOut || !g_open || g_closing) return;
     HideBar();
@@ -1660,15 +1710,16 @@ static void DrawGroupNamesGpu(DWORD now) {
             float bw = std::max(r - l, ScF(180)), bh = ScF(32);
             float bx = l, by = t - bh - ScF(10);
             FillRc(bx, by, bx + bw, by + bh, RGB(255, 255, 255), 1.0f);
-            TextAt(g_groupNameEdit.c_str(), g_queryFormat, bx + ScF(8), by, bx + bw - ScF(14), by + bh, RGB(0, 0, 0));
-            if ((NowMs() / 500) & 1) {
-                HDC dc = GetDC(NULL); SIZE tsz = {}; int tw = 0;
-                if (dc && g_fLabel) {
-                    HGDIOBJ o = SelectObject(dc, g_fLabel);
-                    if (GetTextExtentPoint32W(dc, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &tsz)) tw = tsz.cx;
-                    SelectObject(dc, o);
-                }
-                if (dc) ReleaseDC(NULL, dc);
+            const bool selAll = g_nameSelAll && !g_groupNameEdit.empty();
+            if (selAll) {
+                float sx1 = bx + ScF(8) + DwTextWidth(g_groupNameEdit.c_str(), g_groupNameEdit.size(), g_queryFormat);
+                if (sx1 > bx + bw - ScF(14)) sx1 = bx + bw - ScF(14);
+                FillRc(bx + ScF(8), by + ScF(5), sx1, by + bh - ScF(5), RGB(0, 120, 215), 1.0f);
+            }
+            TextAt(g_groupNameEdit.c_str(), g_queryFormat, bx + ScF(8), by, bx + bw - ScF(14), by + bh,
+                   selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
+            if (!selAll && ((NowMs() / 500) & 1)) {
+                float tw = DwTextWidth(g_groupNameEdit.c_str(), g_groupNameEdit.size(), g_queryFormat);
                 FillRc(bx + ScF(8) + tw, by + ScF(6), bx + ScF(10) + tw, by + bh - ScF(6), RGB(0, 0, 0), 1.0f);
             }
         } else if (g_customize) {
@@ -1878,11 +1929,21 @@ static void DrawZoomOverlayGdi(DWORD now) {
             HBRUSH wb = (HBRUSH)GetStockObject(WHITE_BRUSH);
             RECT wr = { bx, by, bx + bw, by + bh };
             FillRect(g_bbDC, &wr, wb);
-            SetTextColor(g_bbDC, RGB(0, 0, 0));
+            const bool selAll = g_nameSelAll && !g_groupNameEdit.empty();
+            SetTextColor(g_bbDC, selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
             SelectObject(g_bbDC, g_fLabel);
             RECT tr = { bx + ScI(8), by, bx + bw - ScI(8), by + bh };
+            if (selAll) {
+                SIZE ssz = {};
+                GetTextExtentPoint32W(g_bbDC, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &ssz);
+                RECT sr = { tr.left, by + ScI(5), tr.left + ssz.cx, by + bh - ScI(5) };
+                if (sr.right > tr.right) sr.right = tr.right;
+                HBRUSH sb = CreateSolidBrush(RGB(0, 120, 215));
+                FillRect(g_bbDC, &sr, sb);
+                DeleteObject(sb);
+            }
             DrawTextW(g_bbDC, g_groupNameEdit.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            if ((NowMs() / 500) & 1) {
+            if (!selAll && ((NowMs() / 500) & 1)) {
                 SIZE tsz = {}; int tw = 0;
                 if (GetTextExtentPoint32W(g_bbDC, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &tsz)) tw = tsz.cx;
                 RECT cr = { bx + ScI(8) + tw, by + ScI(6), bx + ScI(10) + tw, by + bh - ScI(6) };
@@ -5221,8 +5282,6 @@ static void MoveSelection(int delta) {
     RepaintNow();
 }
 
-static const UINT KEY_SELECT_ALL = 0x141;   // Ctrl+A (posted by the keyboard hook)
-static const UINT KEY_COPY_ALL   = 0x143;   // Ctrl+C
 static void OnSearchKey(UINT vk) {
     if (vk == KEY_SELECT_ALL || vk == KEY_COPY_ALL) {
         if (g_queryLen <= 0) return;
@@ -6626,16 +6685,7 @@ static void DrawAppsSearchBoxGpu() {
     if (!q.empty()) {
         const bool selAll = g_querySelAll;
         if (selAll) {
-            int stw = 0;
-            HDC sdc = GetDC(NULL);
-            if (sdc && g_fLabel) {
-                HGDIOBJ so = SelectObject(sdc, g_fLabel);
-                SIZE ssz = {};
-                if (GetTextExtentPoint32W(sdc, q.c_str(), (int)q.size(), &ssz)) stw = ssz.cx;
-                SelectObject(sdc, so);
-            }
-            if (sdc) ReleaseDC(NULL, sdc);
-            float sx1 = (float)b.left + ScI(10) + (float)stw;
+            float sx1 = (float)b.left + ScI(10) + DwTextWidth(q.c_str(), q.size(), g_queryFormat);
             if (sx1 > (float)b.right - ScI(40)) sx1 = (float)b.right - ScI(40);
             FillRc((float)b.left + ScI(10), (float)b.top + ScI(5), sx1, (float)b.bottom - ScI(5),
                    RGB(0, 120, 215), 1.0f);
@@ -6647,16 +6697,7 @@ static void DrawAppsSearchBoxGpu() {
            (float)b.right - ScI(36), (float)b.top, (float)b.right, (float)b.bottom,
            lit ? RGB(90, 90, 90) : RGB(220, 220, 230));
     if (g_appsSearchFocus && ((NowMs() / 500) & 1)) {
-        int tw = 0;
-        HDC dc = GetDC(NULL);
-        if (dc && g_fLabel) {
-            HGDIOBJ old = SelectObject(dc, g_fLabel);
-            SIZE sz = {};
-            if (GetTextExtentPoint32W(dc, q.c_str(), (int)q.size(), &sz)) tw = sz.cx;
-            SelectObject(dc, old);
-        }
-        if (dc) ReleaseDC(NULL, dc);
-        float cx = (float)b.left + ScI(10) + (float)tw;
+        float cx = (float)b.left + ScI(10) + DwTextWidth(q.c_str(), q.size(), g_queryFormat);
         FillRc(cx, (float)b.top + ScI(6), cx + 1.0f, (float)b.bottom - ScI(6), RGB(0, 0, 0), 1.0f);
     }
 }
@@ -9440,7 +9481,7 @@ static void OpenStart(bool atLogon = false) {
     g_zoomOut = false; g_zoomTick = 0; g_hoverZoomBtn = false; g_hoverGroup = -1;
     g_sbArrowDir = 0; g_sbDrag = false; g_orbPressOnStart = false;
     g_dragGroup = -1; g_dragGroupMoved = false; g_dragGroupDx = 0.0f;
-    g_namingGroup = -1; g_groupNameEdit.clear(); g_focus = -1; g_alphaGrid = false;
+    g_namingGroup = -1; g_nameSelAll = false; g_swallowNamingUp = g_swallowNamingRightUp = false; g_groupNameEdit.clear(); g_focus = -1; g_alphaGrid = false;
     g_charmOpen = false; g_charmTick = 0; g_leaveTick = 0; g_charmHover = -1; g_charmPressed = -1;
     SetCharmMouseHook(false);
     g_queryLen = 0; g_query[0] = 0;
@@ -9783,7 +9824,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_KEY:
         if (g_open && !g_closing) {
-            if (g_namingGroup >= 0 && (wp == VK_BACK || wp == VK_RETURN || wp == VK_ESCAPE)) {
+            if (g_namingGroup >= 0 && (wp == VK_BACK || wp == VK_RETURN || wp == VK_ESCAPE ||
+                                       wp == KEY_SELECT_ALL || wp == KEY_COPY_ALL)) {
                 NamingKey((UINT)wp);
             } else if (g_customize) {
                 if (wp == VK_ESCAPE) ExitCustomize();
@@ -10026,6 +10068,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_RBUTTONDOWN:
         if (g_swallowCharmUp && NowMs() - g_charmSwallowTick < 500) return 0;
         if (g_userMenuWnd) { g_swallowMenuUp = true; DismissUserMenu(); return 0; }
+        if (g_open && !g_closing && (g_namingGroup >= 0 || g_customize) && g_view == VIEW_START) {
+            POINT np = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT nfr;
+            const bool inField = g_namingGroup >= 0 && GroupNameFieldRect(g_namingGroup, &nfr) && PtInRect(&nfr, np);
+            if (!inField) {
+                if (g_namingGroup >= 0) CommitNaming();
+                if (g_customize) ExitCustomize();
+            }
+            g_swallowNamingRightUp = true;
+            return 0;
+        }
                 if (g_open && !g_closing) {
                     POINT sp = { (short)LOWORD(lp), (short)HIWORD(lp) };
                     ClientToScreen(h, &sp);
@@ -10054,6 +10107,37 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 }
         return 0;
     case WM_LBUTTONDOWN:
+        // Group name bars (Customize) and the name field: handled before anything else, so a click
+        // outside always closes them, whatever other press handling would have taken the click.
+        if (g_open && !g_closing && g_view == VIEW_START && !g_userMenuWnd &&
+            (g_namingGroup >= 0 || g_customize)) {
+            POINT xp = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT fr;
+            if (g_namingGroup >= 0 && GroupNameFieldRect(g_namingGroup, &fr) && PtInRect(&fr, xp)) {
+                if (g_nameSelAll) { g_nameSelAll = false; g_dirty = true; RepaintNow(); }
+                g_swallowNamingUp = true;
+                return 0;
+            }
+            if (g_customize) {
+                for (int g = 0; g < g_groupCount; ++g) {
+                    if (GroupNameFieldRect(g, &fr) && PtInRect(&fr, xp)) {
+                        if (g_namingGroup >= 0 && g_namingGroup != g) CommitNaming();
+                        if (g_namingGroup != g) StartNaming(g);
+                        else if (g_nameSelAll) { g_nameSelAll = false; g_dirty = true; RepaintNow(); }
+                        g_swallowNamingUp = true;
+                        return 0;
+                    }
+                }
+                Wh_Log(L"[names] click outside the name bars at %d,%d: closing them", (int)xp.x, (int)xp.y);
+                ExitCustomize();   // also commits a name that is being typed
+            } else {
+                Wh_Log(L"[names] click outside the name field at %d,%d: closing it", (int)xp.x, (int)xp.y);
+                CommitNaming();
+            }
+            g_swallowNamingUp = true;   // the click only closes; it does not press a tile or start a drag
+            g_pressed = -1;
+            return 0;
+        }
         if (g_swallowCharmUp && NowMs() - g_charmSwallowTick < 500) { g_pressed = -1; return 0; }
         if (g_userMenuWnd) {
             RECT ar; AccountRect(&ar);
@@ -10097,30 +10181,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             POINT op = { (short)LOWORD(lp), (short)HIWORD(lp) };
             ClientToScreen(h, &op);
             if (g_closing && OrbScreenContains(op)) { g_orbPressOnStart = true; SetCapture(h); }
-            return 0;
-        }
-        if (g_namingGroup >= 0 && !g_customize && !g_closing && g_view == VIEW_START) {
-            POINT xp = { (short)LOWORD(lp), (short)HIWORD(lp) };
-            RECT fr;
-            if (GroupNameFieldRect(g_namingGroup, &fr) && PtInRect(&fr, xp)) {
-                g_swallowNamingUp = true;
-                return 0;
-            }
-            CommitNaming();
-        }
-        if (g_customize && !g_closing && g_view == VIEW_START) {
-            POINT xn = { (short)LOWORD(lp), (short)HIWORD(lp) };
-            for (int g = 0; g < g_groupCount; ++g) {
-                RECT fr;
-                if (GroupNameFieldRect(g, &fr) && PtInRect(&fr, xn)) {
-                    if (g_namingGroup >= 0 && g_namingGroup != g) CommitNaming();
-                    if (g_namingGroup != g) StartNaming(g);
-                    g_swallowNamingUp = true;
-                    return 0;
-                }
-            }
-            if (g_namingGroup >= 0) CommitNaming();
-            else ExitCustomize();
             return 0;
         }
         if (ScrollBarVisible()) {
@@ -10307,6 +10367,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_RBUTTONUP:
+        if (g_swallowNamingRightUp) { g_swallowNamingRightUp = false; return 0; }
         if (g_swallowCharmUp) { g_swallowCharmUp = false; return 0; }
         if (g_open && !g_closing && g_charmOpen) {
             POINT rpu = { (short)LOWORD(lp), (short)HIWORD(lp) };
@@ -10561,7 +10622,7 @@ static bool HandleSearchKey(const KBDLLHOOKSTRUCT* k, bool down, bool up) {
                        !(GetAsyncKeyState(VK_RCONTROL) & 0x8000) && !(GetAsyncKeyState(VK_LMENU) & 0x8000);
     if (!altGr && (vk == 'A' || vk == 'C') && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
         !(GetAsyncKeyState(VK_MENU) & 0x8000) && !(GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
-        g_namingGroup < 0 && (g_view == VIEW_SEARCH || g_charmOpen)) {
+        (g_namingGroup >= 0 || g_view == VIEW_SEARCH || g_charmOpen)) {
         g_swallowed[vk] = true;
         PostMessageW(g_wnd, WM_APP_KEY, vk == 'A' ? 0x141 : 0x143, 0);
         return true;
