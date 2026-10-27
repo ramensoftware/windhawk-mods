@@ -9,6 +9,15 @@
       "parentId": null,
       "timestamp": 1793039028,
       "votes": 0
+    },
+    {
+      "authorName": "bbmaster123",
+      "content": "the features are really cool and work well! Especially loving the cache, it makes navigation SO much faster on my old i7 920. Easily a 2x speedup with all my other mods running, maybe a bit less than 2x if my other mods are disabled. \n\nJust in case you weren't already aware, I've noticed since it (v0.9.240, for future reference) overlays explorer's own view, this overwrites other mods which customize disk tiles. The toggle button restores it of course, but for myself I just forked the mod and removed this pc as a supported view\nanyway thanks for another sweet mod, looking forward to whatever else you come up with!",
+      "id": 82,
+      "modVersion": "0.9.240",
+      "parentId": null,
+      "timestamp": 1793127165,
+      "votes": 0
     }
   ]
 }
