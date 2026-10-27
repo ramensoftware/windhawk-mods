@@ -2,12 +2,118 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-27T19:01:58.000Z</updated>
+    <updated>2026-10-27T20:03:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.1]]></title>
+        <id>https://windhawk.net/mods/altbinz-dark#2b6819a228e11153d60b8f32314caa053e7aa2a5</id>
+        <link href="https://windhawk.net/mods/altbinz-dark"/>
+        <updated>2026-10-27T20:03:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Faster window resizing: the per-pixel color mapping is cached, skin tinting uses a lookup table, and the temporary bitmap for blits is reused instead of being created for every blit (about 2.4 times faster in a resize benchmark, 333 ms to 140 ms per step).</li>
+<li>The classification of the calling module is cached per address.</li>
+</ul>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Radial Window Switcher 1.0.0]]></title>
+        <id>https://windhawk.net/mods/radial-window-switcher#b8a9a6b78f6829de7a7e1530ab390be6c0701cae</id>
+        <link href="https://windhawk.net/mods/radial-window-switcher"/>
+        <updated>2026-10-27T20:03:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="radialwindowswitcher">Radial Window Switcher</h1>
+<p><img src="https://raw.githubusercontent.com/kotikdetka/radial-window-switcher/6fe413c441dce347eaf6f80ea5c2bb8c68d17b27/photo_2026-10-26_18-49-46.jpg" alt="Radial Window Switcher" /></p>
+<p>Replaces the standard Alt+Tab with a radial switcher: the icons of open
+windows are arranged in a ring in the center of the screen, the name of the
+selected app is shown in the middle, and a live preview of the selected window
+appears next to its sector.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Hold <strong>Alt</strong> and press <strong>Tab</strong> to open the ring.</li>
+<li>While holding Alt, press <strong>Tab</strong> for the next window, <strong>Shift+Tab</strong> for the
+previous one. Arrow keys also work.</li>
+<li>Release <strong>Alt</strong> to switch to the selected window.</li>
+<li>Press <strong>Esc</strong> to close the ring without switching.</li>
+<li>A quick Alt+Tab switches to the previous window, just like the standard one.</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li>Smooth animations: the ring spins in, sectors pop out one by one, the
+selection glows and a pointer glides to the selected app.</li>
+<li>Live window previews (DWM thumbnails), like the standard Alt+Tab.</li>
+<li>The selected sector uses the Windows accent color.</li>
+<li>Per-monitor DPI aware; the ring opens on the monitor with the cursor.</li>
+<li>Can use Alt+` or Alt+Q instead of Alt+Tab, keeping the standard switcher.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The switcher runs in its own Windhawk process. Only a small part runs in
+Explorer: it catches Explorer's Alt+Tab hotkey and hands it to the
+switcher, so the standard switcher doesn't open as well.</li>
+<li>Minimized windows have no preview: Windows doesn't render them.</li>
+<li>Alt+` and Alt+Q can't be caught while an elevated (administrator) window is
+in the foreground. Alt+Tab works there too, through Explorer.</li>
+</ul>]]></content>
+        <author>
+            <name>kotikdetka</name>
+            <uri>https://github.com/kotikdetka</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Secondary windows on the active monitor 2.1]]></title>
+        <id>https://windhawk.net/mods/secondary-windows-on-active-monitor#9400327e0c12f02a83208e7c2fc6e686a7bcd2e3</id>
+        <link href="https://windhawk.net/mods/secondary-windows-on-active-monitor"/>
+        <updated>2026-10-27T20:03:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="secondarywindowsontheactivemonitor">Secondary windows on the active monitor</h1>
+<p>Useful if you have <strong>several monitors</strong>. Many apps remember which monitor a
+secondary window (media viewer, player, dialog) was opened on and open it there
+again, even if you now work with the app on another monitor. For example,
+Telegram Desktop opens photos and videos on the monitor where the viewer was
+last time, not where the chat is.</p>
+<p><img src="https://raw.githubusercontent.com/limpompo/windhawk-mods-limpompo/main/mods/secondary-windows-on-active-monitor/demo.gif" alt="Demo" /></p>
+<p>The mod intercepts the showing of secondary windows of the apps from the
+<em>Applications</em> list and, if a window is about to appear on a different monitor
+than the app's active window, moves it to the active window's monitor before
+it is shown. By default the list contains a placeholder (<code>test.exe</code>), replace it with your app, for example Telegram Desktop (<code>Telegram.exe</code>);
+add any other app by its executable name in the mod settings.</p>
+<p>For apps that are not built with Qt, the mod decides which windows are regular
+ones by a heuristic (it skips menus, tooltips, tool windows and the like), so
+it may move something it shouldn't, such as a drop-down list or a splash
+screen. Telegram is the only app the mod was tested with; if another app
+misbehaves, use the <em>Window title filter</em> of that app.</p>
+<p>Which windows are moved: <strong>all</strong> secondary windows of the app that get their
+own window - for Telegram also picture-in-picture video, call windows and
+chats opened in a separate window. Menus, tooltips, notifications and tool
+windows are not moved. If you keep some windows on another monitor on purpose,
+set a <em>Window title filter</em> for the app to limit the mod to windows with a
+given title.</p>
+<p>How a window is placed:</p>
+<ul>
+<li>it keeps its relative position on the screen (a window in the top right
+corner of one monitor appears in the top right corner of the other);</li>
+<li>a window larger than the target monitor is shrunk to fit;</li>
+<li>a fullscreen window stays fullscreen;</li>
+<li>a maximized window stays maximized, and when restored it stays on the new
+monitor;</li>
+<li>monitors with different scaling are taken into account.</li>
+</ul>
+<p>Keeping the position and accounting for scaling can each be turned off in the
+settings.</p>
+<p>The mod is loaded into every process and unloads itself at once from those that
+are not in the <em>Applications</em> list. An app added to the list starts to work
+after it is restarted; removing an app from the list applies immediately.</p>
+<p>System files and app data are not modified.</p>]]></content>
+        <author>
+            <name>limpompo</name>
+            <uri>https://github.com/limpompo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Alt+Tab Recreation 1.1.0]]></title>
         <id>https://windhawk.net/mods/win-7-8-alt-tab-recreation#9db79e280da974f6d53332e0c3d05ed9fd459da0</id>
@@ -650,79 +756,6 @@ window on purpose, put a <code>*</code> in one of the match fields.</p>]]></cont
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Language Applet Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/language-applet-restorer#2e6bcbf393658d3d17205cd0aaaa012f79751153</id>
-        <link href="https://windhawk.net/mods/language-applet-restorer"/>
-        <updated>2026-10-26T15:04:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="languageappletrestorer">Language Applet Restorer</h1>
-<p>Restores the classic Control Panel <strong>Language</strong> applet from windows 10 1709 and optionally the classic <strong>Region</strong> applet (<code>intl.cpl</code>) of Windows 10 1709 on later versions of Windows.</p>
-<h2 id="preview">Preview:</h2>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151430.png" alt="mainpage" /></p>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151455.png" alt="advancepage" /></p>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151500.png" alt="addlang" /></p>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/intl1709.png" alt="intl.cpl" /></p>
-<h2 id="whatisdownloadedfromwhereandwhen">What is downloaded, from where, and when</h2>
-<p>The mod does not contain any Microsoft binaries. The first time it runs inside <code>explorer.exe</code>, it downloads five files of Windows 10 1709 (build 16299), about 3.7 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
-<p><code>intl.cpl</code>, <code>UserLanguagesCpl.dll</code>, <code>WinLangdb.dll</code>, <code>Bcp47Langs.dll</code> and <code>dui70.dll</code>.</p>
-<p>The size and SHA-256 of every file are checked against values pinned in the mod, and a file that doesn't match is discarded. The originals are kept in the mod's storage folder (<code>dl</code>); patched copies and small compatibility shims are generated from them into <code>bin</code>. Nothing is downloaded again as long as <code>dl</code> is present.</p>
-<p><strong>Offline:</strong> if the files are not on disk and there is no internet connection, the applet is simply not added and the reason is written to the mod's log. Connect to the internet and restart <code>explorer.exe</code> once. After a successful first run the mod works offline, provided <em>Keep downloaded files</em> is on.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Page language</strong>: language of the restored Language page and its Control Panel tooltip. <em>Automatic</em> follows the Windows UI language. Available: English, Italian, Persian, Spanish, French, Portuguese.</li>
-<li><strong>Force translations</strong>: use the embedded translations for the six languages above, instead of relying only on the generated <code>.mui</code> files.</li>
-<li><strong>Keep downloaded files when the mod is disabled</strong>: keep <code>dl</code> and <code>bin</code> in the storage folder so the mod works offline and doesn't download again. If off, the files are deleted when the mod is unloaded.</li>
-<li><strong>Redirect Control Panel's intl.cpl to the restored one</strong>: when enabled, opening Region (<code>intl.cpl</code>) from Control Panel, the Run dialog or <code>control.exe</code> loads the restored 1709 <code>intl.cpl</code> instead of the system one. This is done in <code>explorer.exe</code>, <code>rundll32.exe</code> and <code>control.exe</code>; the mod does nothing in other processes. It only affects windows opened after the setting is changed. The restored file is checked against the expected contents right before it is loaded; if that fails, or the files are not downloaded yet, the system <code>intl.cpl</code> is used.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Only <strong>x64</strong> is supported (no ARM64).</li>
-<li>The 2017 components run inside <code>explorer.exe</code>. A crash in them restarts Explorer.</li>
-<li>The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside <code>explorer.exe</code> (<code>control.exe</code> only gets the part needed to find the applet by name), and the applet's COM classes are created from inside <code>explorer.exe</code>. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (<code>vreg-&lt;pid&gt;.hiv</code> in the mod's storage folder, loaded with <code>RegLoadAppKeyW</code>), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start). If the hive cannot be loaded, the applet is simply not shown.</li>
-<li><strong>Compatibility:</strong> <code>intl.cpl</code> redirection overlaps with the <code>win7-intl-control-panel-restorer</code> mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which <code>intl.cpl</code> is opened.</li>
-<li>While the mod is enabled, one string in <code>shell32.dll</code>'s memory (the applet's entry in Windows' built-in hide list) is blanked so that Control Panel lists the applet. It is restored when the mod is disabled; nothing on disk is changed.</li>
-<li>Links in the applet that open the Settings app are not changed by this mod. The <code>settings-to-control-panel</code> mod can redirect them.</li>
-</ul>
-<h2 id="specialthanksto">Special Thanks to:</h2>
-<p>babamohammed2022 for adding various languages.</p>]]></content>
-        <author>
-            <name>AdmXP8</name>
-            <uri>https://github.com/AdmXP8</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Simple Cursor Trail 1.6]]></title>
-        <id>https://windhawk.net/mods/cursor-trail#3f4ace0fe0c3f6f9c48882fe50b4b2e351e4f1e7</id>
-        <link href="https://windhawk.net/mods/cursor-trail"/>
-        <updated>2026-10-26T15:04:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the "Always on top" setting, enabled by default. The trail now draws above the taskbar, Start menu and other shell surfaces. Explorer hosts a layered, click-through window in the UIAccess Z-order band (falling back to the system-tools band), and the trail is drawn into it; if that is not possible, the trail falls back to its own overlay window.</li>
-<li>Turning the setting off unloads the <code>explorer.exe</code> side and keeps the trail in the normal desktop band.</li>
-</ul>]]></content>
-        <author>
-            <name>Ulrizza</name>
-            <uri>https://github.com/Ulrizza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.3.1]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-tooltips#6774848bf06023622d0918a8b2d2110e315a7c9e</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
-        <updated>2026-10-25T22:37:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add <code>hideStartButtonTooltip</code> setting to hide or show the Windows Start button tooltip independently of taskbar applications.</li>
-<li>Accurately identify the Start button by querying <code>AutomationProperties.AutomationId == L"StartButton"</code> on the <code>ExperienceToggleButton</code> instance, preventing misclassification of the Task View button.</li>
-<li>Add <code>tooltipHoverDelayMs</code> setting to configure an extra stationary hover delay (in milliseconds) before showing visible tooltips, while keeping hidden tooltip areas permanently suppressed.</li>
-<li>Fall back to native display behavior if delayed tooltip scheduling fails or when tooltips open on external Explorer threads  to prevent them from being swallowed.</li>
-<li>Disarm delayed tooltip Win32 timers synchronously on the <code>Shell_TrayWnd</code> UI thread using <code>SendMessageW</code> in <code>Wh_ModBeforeUninit</code> to guarantee all timers are killed before the DLL is unloaded (<code>FreeLibrary</code>).</li>
-<li>Replace heavy C++/WinRT XAML headers with lightweight ABI COM interfaces, cache <code>IVisualTreeHelperStatics</code> once per visual tree walk, and adopt WRL <code>HString</code> / <code>HStringReference</code> to reduce overhead.</li>
-<li>Clean up unused <code>-lole32</code> and <code>-loleaut32</code> compiler options and remove obsolete <code>#undef GetCurrentTime</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
         </author>
     </entry>
 </feed>

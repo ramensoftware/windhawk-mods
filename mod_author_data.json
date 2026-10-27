@@ -1088,6 +1088,12 @@
     "githubId": 170975967,
     "homepages": []
   },
+  "https://github.com/kotikdetka": {
+    "author": "kotikdetka",
+    "github": "https://github.com/kotikdetka",
+    "githubId": 306814727,
+    "homepages": []
+  },
   "https://github.com/l3r0ythingz": {
     "author": "L3r0y",
     "github": "https://github.com/L3r0yThingz",
@@ -1161,6 +1167,14 @@
     "github": "https://github.com/LiHua81",
     "githubId": 202388049,
     "homepages": []
+  },
+  "https://github.com/limpompo": {
+    "author": "limpompo",
+    "github": "https://github.com/limpompo",
+    "githubId": 45596577,
+    "homepages": [
+      "https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/secondary-windows-on-active-monitor"
+    ]
   },
   "https://github.com/liset999": {
     "author": "Lanbo",

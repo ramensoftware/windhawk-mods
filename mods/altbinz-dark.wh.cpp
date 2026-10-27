@@ -2,7 +2,7 @@
 // @id              altbinz-dark
 // @name            Alt.Binz Dark Mode
 // @description     Dark colors for the skinned user interface of Alt.Binz, with a custom surface color, gradients and colored progress bars
-// @version         1.0.0
+// @version         1.0.1
 // @author          MrSmith
 // @github          https://github.com/MrSmith2017
 // @include         altbinz.exe
@@ -131,6 +131,7 @@ back completely.
 #include <string.h>
 #include <math.h>
 #include <algorithm>
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -259,7 +260,26 @@ static HBRUSH g_sysBrushes[32];
 static HMODULE g_exeModule;
 static std::unordered_map<HMODULE, int>* g_callerKind;  // 1 = the app, 2 = system drawing library, 0 = other
 
+// The answer only depends on the call site, and the same few call sites draw all the time: a small
+// table (address and kind in one word, so a read is never torn) avoids the module look-up
+// (which takes the loader lock) for each call.
+static std::atomic<uint32_t> g_callerCache[1024];
+
+static int CallerKindUncached(void* ret);
+
 static int CallerKind(void* ret) {
+    const uint32_t a = (uint32_t)(uintptr_t)ret;
+    const size_t slot = ((a >> 2) ^ (a >> 12)) & 1023;
+    const uint32_t v = g_callerCache[slot].load(std::memory_order_relaxed);
+    if (v != 0 && (v & ~3u) == (a & ~3u)) {
+        return (int)(v & 3u);
+    }
+    const int kind = CallerKindUncached(ret);
+    g_callerCache[slot].store((a & ~3u) | (uint32_t)kind, std::memory_order_relaxed);
+    return kind;
+}
+
+static int CallerKindUncached(void* ret) {
     HMODULE m = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCWSTR)ret, &m) || !m) {
@@ -349,12 +369,49 @@ static COLORREF MapShapeColor(COLORREF c, bool pen = false) {
 
 // ---- bitmap helpers -------------------------------------------------------------
 
+// Re-colors a bitmap in place. A bitmap has few distinct colors, so a small lookup table (colors
+// seen before are looked up instead of converted again) makes this several times faster.
 static void MapPixels(uint8_t* base, int width, int height, int stride, int bpp) {
+    const int step = bpp / 8;
+    const size_t pixels = (size_t)width * height;
+    if (pixels < 4096) {
+        for (int y = 0; y < height; y++) {
+            uint8_t* row = base + (size_t)y * stride;
+            for (int x = 0; x < width; x++) {
+                uint8_t* p = row + x * step;
+                MapRGB(p[2], p[1], p[0]);
+            }
+        }
+        return;
+    }
+    const int kBits = 13;
+    std::vector<uint32_t> cache((size_t)2 << kBits, 0xFFFFFFFFu);  // key, value pairs
+    uint32_t lastIn = 0xFFFFFFFFu, lastOut = 0;
     for (int y = 0; y < height; y++) {
         uint8_t* row = base + (size_t)y * stride;
         for (int x = 0; x < width; x++) {
-            uint8_t* p = row + x * (bpp / 8);
-            MapRGB(p[2], p[1], p[0]);
+            uint8_t* p = row + x * step;
+            const uint32_t in = ((uint32_t)p[2] << 16) | ((uint32_t)p[1] << 8) | p[0];
+            uint32_t out;
+            if (in == lastIn) {
+                out = lastOut;
+            } else {
+                const size_t slot = (size_t)((in * 2654435761u) >> (32 - kBits)) * 2;
+                if (cache[slot] == in) {
+                    out = cache[slot + 1];
+                } else {
+                    uint8_t r = p[2], g = p[1], b = p[0];
+                    MapRGB(r, g, b);
+                    out = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+                    cache[slot] = in;
+                    cache[slot + 1] = out;
+                }
+                lastIn = in;
+                lastOut = out;
+            }
+            p[2] = (uint8_t)(out >> 16);
+            p[1] = (uint8_t)(out >> 8);
+            p[0] = (uint8_t)out;
         }
     }
 }
@@ -465,6 +522,12 @@ static float Smooth(float edge0, float edge1, float x) {
 // Pixels of the skin color family are re-colored, anti-aliased text edges (lighter or less
 // saturated mixes of skin and text color) are only tinted a little, so text stays sharp.
 static void TintSkin(uint8_t* base, int width, int height, int stride, int bytesPerPixel, float t0, float dtx, float dty) {
+    // The result for a pixel depends on its color and on the gradient step only. For the current skin
+    // color there is a table with one entry per step; flat areas repeat the same few colors, so the
+    // per-pixel work is a look-up.
+    uint32_t tabKey = 0xFFFFFFFFu;
+    float tabW = 0.0f, tabL0 = 0.0f;
+    uint32_t tab[256];
     for (int y = 0; y < height; y++) {
         uint8_t* row = base + (size_t)y * stride;
         float t = t0 + y * dty;
@@ -476,22 +539,36 @@ static void TintSkin(uint8_t* base, int width, int height, int stride, int bytes
             if (b != mx || mx - mn < 12 || mx > 200) {
                 continue;  // not blue and dark enough
             }
-            float h0, s0, l0;
-            RgbToHsl(r / 255.0f, g / 255.0f, b / 255.0f, &h0, &s0, &l0);
-            float hueDeg = h0 * 60.0f;
-            float w = (1.0f - Smooth(0.34f, 0.55f, l0)) * Smooth(0.05f, 0.10f, l0) *
-                      Smooth(0.10f, 0.28f, s0) * Smooth(200.0f, 208.0f, hueDeg) *
-                      (1.0f - Smooth(224.0f, 236.0f, hueDeg));
-            if (w <= 0.01f) {
+            const uint32_t key = ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+            if (key != tabKey) {
+                float h0, s0, l0;
+                RgbToHsl(r / 255.0f, g / 255.0f, b / 255.0f, &h0, &s0, &l0);
+                float hueDeg = h0 * 60.0f;
+                tabW = (1.0f - Smooth(0.34f, 0.55f, l0)) * Smooth(0.05f, 0.10f, l0) *
+                       Smooth(0.10f, 0.28f, s0) * Smooth(200.0f, 208.0f, hueDeg) *
+                       (1.0f - Smooth(224.0f, 236.0f, hueDeg));
+                tabL0 = l0;
+                tabKey = key;
+                memset(tab, 0xFF, sizeof(tab));
+            }
+            if (tabW <= 0.01f) {
                 continue;
             }
             int idx = (int)(fminf(1.0f, fmaxf(0.0f, t)) * 255.0f + 0.5f);
-            float l1 = fminf(0.6f, g_gradient.l[idx] * (l0 / kSkinLightness));
-            uint8_t nr, ng, nb;
-            HslToRgb8(g_gradient.h[idx], g_gradient.s[idx], l1, &nr, &ng, &nb);
-            p[2] = (uint8_t)(r + (nr - r) * w + 0.5f);
-            p[1] = (uint8_t)(g + (ng - g) * w + 0.5f);
-            p[0] = (uint8_t)(b + (nb - b) * w + 0.5f);
+            uint32_t v = tab[idx];
+            if (v == 0xFFFFFFFFu) {
+                float l1 = fminf(0.6f, g_gradient.l[idx] * (tabL0 / kSkinLightness));
+                uint8_t nr, ng, nb;
+                HslToRgb8(g_gradient.h[idx], g_gradient.s[idx], l1, &nr, &ng, &nb);
+                const uint32_t fr = (uint32_t)(r + (nr - r) * tabW + 0.5f);
+                const uint32_t fg = (uint32_t)(g + (ng - g) * tabW + 0.5f);
+                const uint32_t fb = (uint32_t)(b + (nb - b) * tabW + 0.5f);
+                v = (fr << 16) | (fg << 8) | fb;
+                tab[idx] = v;
+            }
+            p[2] = (uint8_t)(v >> 16);
+            p[1] = (uint8_t)(v >> 8);
+            p[0] = (uint8_t)v;
         }
     }
 }
@@ -944,6 +1021,67 @@ static StretchBlt_t StretchBlt_orig;
 // Copies the source into a temporary bitmap, re-colors the copy, and draws that:
 //  * TImage32 (Graphics32) buffers: all pixels are re-colored on every blit
 //  * with the gradient enabled: the skin colored pixels get the gradient color
+// One temporary bitmap with its memory DC is reused for the blits that are processed (creating and
+// deleting both for each of the thousands of blits of a repaint was a large part of the cost). If another
+// thread holds it, the blit uses a bitmap of its own.
+static CRITICAL_SECTION g_tempCs;
+static HDC g_tempDc;
+static HBITMAP g_tempBmp;
+static HGDIOBJ g_tempOld;
+static void* g_tempBits;
+static int g_tempW, g_tempH;
+
+static bool EnsureTempBitmap(HDC like, int w, int h) {
+    if (g_tempDc && g_tempW >= w && g_tempH >= h) {
+        return true;
+    }
+    const int nw = std::max(g_tempW, (w + 63) & ~63), nh = std::max(g_tempH, (h + 63) & ~63);
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = nw;
+    bi.bmiHeader.biHeight = -nh;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(like, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp || !bits) {
+        if (bmp) {
+            DeleteObject(bmp);
+        }
+        return false;
+    }
+    HDC dc = g_tempDc ? g_tempDc : CreateCompatibleDC(like);
+    if (!dc) {
+        DeleteObject(bmp);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(dc, bmp);
+    if (g_tempDc) {
+        DeleteObject(g_tempBmp);  // the previous bitmap was selected into the same DC: now free
+    } else {
+        g_tempOld = old;
+    }
+    g_tempDc = dc;
+    g_tempBmp = bmp;
+    g_tempBits = bits;
+    g_tempW = nw;
+    g_tempH = nh;
+    return true;
+}
+
+static void FreeTempBitmap() {
+    if (g_tempDc) {
+        SelectObject(g_tempDc, g_tempOld);
+        DeleteObject(g_tempBmp);
+        DeleteDC(g_tempDc);
+        g_tempDc = nullptr;
+        g_tempBmp = nullptr;
+        g_tempBits = nullptr;
+        g_tempW = g_tempH = 0;
+    }
+}
+
 static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int sy, int sw, int sh, DWORD rop,
                           bool stretch) {
     if (!s || w <= 0 || h <= 0 || w > 4096 || h > 4096) {
@@ -958,20 +1096,36 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
         return false;
     }
 
-    BITMAPINFO bi = {};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = -h;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
+    // only small blits use the shared bitmap, the few large ones allocate their own (keeps the pool small)
+    const bool pooled = w <= 1024 && h <= 1024 && TryEnterCriticalSection(&g_tempCs) != FALSE;
+    HDC mem = nullptr;
+    HBITMAP tmp = nullptr;
+    HGDIOBJ old = nullptr;
     void* bits = nullptr;
-    HBITMAP tmp = CreateDIBSection(d, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!tmp || !bits) {
-        return false;
+    int bstride = w * 4;
+    if (pooled && EnsureTempBitmap(d, w, h)) {
+        mem = g_tempDc;
+        bits = g_tempBits;
+        bstride = g_tempW * 4;
+    } else {
+        if (pooled) {
+            LeaveCriticalSection(&g_tempCs);
+        }
+        BITMAPINFO bi = {};
+        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h;
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        tmp = CreateDIBSection(d, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!tmp || !bits) {
+            return false;
+        }
+        mem = CreateCompatibleDC(d);
+        old = SelectObject(mem, tmp);
     }
-    HDC mem = CreateCompatibleDC(d);
-    HGDIOBJ old = SelectObject(mem, tmp);
+    const bool usingPool = tmp == nullptr;
     if (stretch) {
         StretchBlt_orig(mem, 0, 0, w, h, s, sx, sy, sw, sh, SRCCOPY);
     } else {
@@ -981,9 +1135,9 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
     if (surfaceTree) {
         uint8_t sr, sg, sb;
         SurfaceColorAt(WindowFromDC(d), &sr, &sg, &sb);
-        SurfaceTree((uint8_t*)bits, w, h, w * 4, sr, sg, sb);
+        SurfaceTree((uint8_t*)bits, w, h, bstride, sr, sg, sb);
     } else if (image32) {
-        MapPixels((uint8_t*)bits, w, h, w * 4, 32);
+        MapPixels((uint8_t*)bits, w, h, bstride, 32);
     } else {
         HWND wnd = WindowFromDC(d);
         HWND root = GetAncestor(wnd, GA_ROOT);
@@ -999,13 +1153,17 @@ static bool BlitProcessed(HDC d, int x, int y, int w, int h, HDC s, int sx, int 
             extent = 1.0f;
         }
         float t0 = ((origin.x - W * 0.5f) * dx + (origin.y - H * 0.5f) * dy) / extent + 0.5f;
-        TintSkin((uint8_t*)bits, w, h, w * 4, 4, t0, dx / extent, dy / extent);
+        TintSkin((uint8_t*)bits, w, h, bstride, 4, t0, dx / extent, dy / extent);
     }
 
     BOOL ok = BitBlt_orig(d, x, y, w, h, mem, 0, 0, rop);
-    SelectObject(mem, old);
-    DeleteDC(mem);
-    DeleteObject(tmp);
+    if (usingPool) {
+        LeaveCriticalSection(&g_tempCs);
+    } else {
+        SelectObject(mem, old);
+        DeleteDC(mem);
+        DeleteObject(tmp);
+    }
     return ok != FALSE;
 }
 
@@ -1542,6 +1700,7 @@ static void StartLateRepaint() {
 
 BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_cs);
+    InitializeCriticalSection(&g_tempCs);
     g_bmps = new std::unordered_map<HBITMAP, BmpEntry>();
     g_textColors = new std::unordered_map<HDC, COLORREF>();
     g_bkColors = new std::unordered_map<HDC, COLORREF>();
@@ -1625,4 +1784,7 @@ void Wh_ModUninit() {
     EnumWindows(ResetDarkThemeTopLevel, 0);
     RestoreBitmaps();
     EnumWindows(RepaintWindow, 0);
+    EnterCriticalSection(&g_tempCs);
+    FreeTempBitmap();
+    LeaveCriticalSection(&g_tempCs);
 }

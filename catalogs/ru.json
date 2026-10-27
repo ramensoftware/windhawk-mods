@@ -520,7 +520,7 @@
         "ratingUsers": 0,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793027100000,
+        "updated": 1793131438000,
         "users": 1
       },
       "metadata": {
@@ -535,7 +535,7 @@
           "altbinz.exe"
         ],
         "name": "Alt.Binz Dark Mode",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "always-allow-ctrl-shift-enter": {
@@ -12667,6 +12667,36 @@
         "version": "1.0.0"
       }
     },
+    "radial-window-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793131432000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793131432000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "kotikdetka",
+        "compilerOptions": "-lgdiplus -lgdi32 -ldwmapi -lversion -lshcore -lshell32 -ladvapi32",
+        "description": "Круговой Alt+Tab в стиле macOS: иконки приложений по кругу, живое превью окна и плавные анимации",
+        "github": "https://github.com/kotikdetka",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Круговой переключатель окон",
+        "version": "1.0.0"
+      },
+      "metadataEnglish": {
+        "description": "A macOS-style radial Alt+Tab: app icons in a ring, a live window preview and smooth animations",
+        "name": "Radial Window Switcher"
+      }
+    },
     "realtime-cast-shadow-wallpaper": {
       "details": {
         "defaultSorting": 378,
@@ -13632,6 +13662,36 @@
         "license": "MIT",
         "name": "Secondary Monitor Pin",
         "version": "1.1"
+      }
+    },
+    "secondary-windows-on-active-monitor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793131425000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793131425000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "limpompo",
+        "compilerOptions": "-lshcore",
+        "description": "Для нескольких мониторов: второстепенные окна выбранных приложений (просмотрщик Telegram и др.) открываются на мониторе активного окна приложения, а не на запомненном",
+        "github": "https://github.com/limpompo",
+        "homepage": "https://github.com/limpompo/windhawk-mods-limpompo/tree/main/mods/secondary-windows-on-active-monitor",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Второстепенные окна на активном мониторе",
+        "version": "2.1"
+      },
+      "metadataEnglish": {
+        "description": "Multi-monitor: secondary windows of the selected apps (Telegram media viewer, etc.) open on the monitor of the app's active window instead of the remembered one",
+        "name": "Secondary windows on the active monitor"
       }
     },
     "separate-system-tray-icons": {
