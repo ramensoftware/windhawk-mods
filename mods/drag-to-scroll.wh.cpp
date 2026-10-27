@@ -2,7 +2,7 @@
 // @id              drag-to-scroll
 // @name            Drag to Scroll
 // @description     Hold Ctrl + Right-Click and drag to scroll smoothly in desktop applications with adaptive line precision, dynamic velocity, and hands-free cruising.
-// @version         1.0.0
+// @version         1.1.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @license         MIT
@@ -11,16 +11,20 @@
 // ==/WindhawkMod==
 
 // clang-format off
+
 // ==WindhawkModReadme==
 /*
 # Drag to Scroll
 
 Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and naturally across desktop applications, including web browsers (Chrome, Edge, Firefox), text editors (VS Code, Notepad++), File Explorer, and legacy Win32 utilities.
 
-![Drag to Scroll Demo](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/preview-global-drag-to-scroll.webp)
+![Drag to Scroll Demo 1](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/dts_preview_1.webp)
+
+![Drag to Scroll Demo 2](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/dts_preview_2.webp)
 
 ## Key Features
 
+* **Full 2D Canvas & Horizontal Scrolling:** Supports natural sideways panning with directional snapping (axis-lock) to prevent diagonal drift.
 * **High-Resolution Micro-Scrolling:** Injects fractional wheel increments for fluid, trackpad-like scrolling in modern desktop apps and web browsers.
 * **Legacy Control Detection:** Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete `WM_VSCROLL` line steps to preserve native line-by-line movement.
 * **Hands-Free Cruising:** Release the Right Mouse Button while continuing to hold `Ctrl` to let the page cruise automatically based on cursor offset. Cruising disengages instantly on keypress, mouse click, or `Ctrl` release.
@@ -31,6 +35,15 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 
 * **Packaged & Modern UI Surfaces:** Certain modern Windows interfaces (such as the Windows Start Menu or some packaged store apps) do not process standard Win32 mouse-drag messages through the message queue and are not supported.
 * **CAD & 3D Software:** If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to `Ctrl + Right-Click`, you can exclude those executables under the mod's **Advanced** tab in Windhawk.
+
+---
+
+### 🧩 More from this author
+* **[Explorer Custom Shortcuts](https://windhawk.net/mods/explorer-custom-shortcuts)** – Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.
+
+### Author & Attribution
+
+* **Created and maintained by ArvindSaini978 ([GitHub](https://github.com/ArvindSaini978)).**
 */
 // ==/WindhawkModReadme==
 
@@ -39,6 +52,12 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 - touch_style: true
   $name: "Natural / Touchscreen Scrolling"
   $description: "When enabled, dragging down pulls the content down (touchscreen style). When disabled, dragging follows traditional mouse wheel direction."
+- enable_horizontal: true
+  $name: "Enable Horizontal Scrolling"
+  $description: "Allows dragging horizontally to scroll sideways using horizontal wheel events and WM_HSCROLL."
+- axis_lock: true
+  $name: "Prevent Diagonal Drift (Axis Lock)"
+  $description: "Locks scrolling straight vertically or horizontally to prevent accidental drifting in the other direction. Disable for free 2D canvas panning."
 - enable_cruising: false
   $name: "Continuous Cruising (Hold Ctrl)"
   $description: "Releasing Right-Click while holding Ctrl keeps scrolling automatically based on displacement. Stops immediately on any click, keypress, or Ctrl release."
@@ -77,6 +96,8 @@ struct ModSettings {
     int deadzone = 5;
     bool enable_velocity = true;
     bool smooth_wheel = true;
+    bool enable_horizontal = true;
+    bool axis_lock = true;
 };
 
 static ModSettings g_settings;
@@ -86,9 +107,13 @@ static std::atomic<ScrollState> g_state{ScrollState::Idle};
 static std::atomic<bool> g_swallowRButtonUp{false};
 static std::atomic<UINT> g_swallowButtonUp{0};
 
+enum class DragAxis { Free, VerticalOnly, HorizontalOnly };
+static DragAxis g_activeAxis = DragAxis::Free;
+
 static POINT g_anchorPt = {0, 0};
 static POINT g_lastPt = {0, 0};
 static double g_accumY = 0.0;
+static double g_accumX = 0.0;
 static RECT g_windowBounds = {0, 0, 0, 0};
 static HWND g_captureHwnd = nullptr;
 
@@ -104,6 +129,7 @@ struct CruiseContext {
     int deadzone;
     bool touch_style;
     bool smooth_wheel;
+    bool enable_horizontal;
 };
 static CruiseContext g_cruiseCtx;
 static CRITICAL_SECTION g_cruiseCs;
@@ -115,7 +141,10 @@ static GetAsyncKeyState_t pfnGetAsyncKeyState_Original = nullptr;
 
 // Queries physical key state directly, bypassing our own hook that masks Ctrl
 static inline bool IsCtrlPhysicallyDown() {
-    return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
+    if (pfnGetAsyncKeyState_Original) {
+        return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
+    }
+    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
 }
 
 void LoadSettings() {
@@ -126,6 +155,8 @@ void LoadSettings() {
     g_settings.deadzone = std::max(0, Wh_GetIntSetting(L"deadzone"));
     g_settings.enable_velocity = Wh_GetIntSetting(L"enable_velocity") != 0;
     g_settings.smooth_wheel = Wh_GetIntSetting(L"smooth_wheel") != 0;
+    g_settings.enable_horizontal = Wh_GetIntSetting(L"enable_horizontal") != 0;
+    g_settings.axis_lock = Wh_GetIntSetting(L"axis_lock") != 0;
 }
 
 void Wh_ModSettingsChanged() {
@@ -137,6 +168,15 @@ void SendMaskedWheelAsync(int deltaY) {
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_WHEEL;
     input.mi.mouseData = static_cast<DWORD>(deltaY);
+    input.mi.dwExtraInfo = MASK_EXTRA_INFO;
+    SendInput(1, &input, sizeof(INPUT));
+}
+
+void SendMaskedHWheelAsync(int deltaX) {
+    INPUT input = {};
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_HWHEEL;
+    input.mi.mouseData = static_cast<DWORD>(deltaX);
     input.mi.dwExtraInfo = MASK_EXTRA_INFO;
     SendInput(1, &input, sizeof(INPUT));
 }
@@ -197,6 +237,23 @@ void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
         return;
     }
     SendMaskedWheelAsync(deltaY);
+}
+
+void DispatchHScroll(int deltaX, HWND hTarget, bool isDiscrete) {
+    if (isDiscrete && hTarget) {
+        UINT scrollChars = 3;
+        SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scrollChars, 0);
+
+        int notches = std::max(1, std::abs(deltaX) / WHEEL_DELTA);
+        int totalSteps = notches * static_cast<int>(scrollChars);
+        WPARAM scrollCmd = (deltaX > 0) ? SB_LINERIGHT : SB_LINELEFT;
+        for (int i = 0; i < totalSteps; ++i) {
+            PostMessageW(hTarget, WM_HSCROLL, scrollCmd, 0);
+        }
+        PostMessageW(hTarget, WM_HSCROLL, SB_ENDSCROLL, 0);
+        return;
+    }
+    SendMaskedHWheelAsync(deltaX);
 }
 
 DWORD WINAPI CruiseWorkerThread(LPVOID) {
@@ -283,6 +340,7 @@ void StartCruiseThreadIfNeeded() {
     g_cruiseCtx.deadzone = g_settings.deadzone;
     g_cruiseCtx.touch_style = g_settings.touch_style;
     g_cruiseCtx.smooth_wheel = g_settings.smooth_wheel;
+    g_cruiseCtx.enable_horizontal = g_settings.enable_horizontal;
     LeaveCriticalSection(&g_cruiseCs);
 
     bool expected = false;
@@ -336,7 +394,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
 
     // Strip MK_CONTROL from wheel messages during active drag to avoid
     // unintended zooming
-    if (m == WM_MOUSEWHEEL) {
+    if (m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL) {
         if (g_state.load() != ScrollState::Idle || extra == MASK_EXTRA_INFO) {
             if (canMutate)
                 pMsg->wParam &= ~((WPARAM)MK_CONTROL);
@@ -411,6 +469,8 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
             GetCursorPos(&g_anchorPt);
             g_lastPt = g_anchorPt;
             g_accumY = 0.0;
+            g_accumX = 0.0;
+            g_activeAxis = DragAxis::Free;
 
             HWND hTargetWnd = GetAncestor(pMsg->hwnd, GA_ROOT);
             if (!hTargetWnd)
@@ -440,37 +500,70 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                 return false;
             }
 
+            int totalDx = curPt.x - g_anchorPt.x;
             int totalDy = curPt.y - g_anchorPt.y;
+
+            // Euclidean distance check across both axes against deadzone
             if (cur == ScrollState::Pending &&
-                std::abs(totalDy) >= g_settings.deadzone) {
+                (totalDx * totalDx + totalDy * totalDy) >=
+                    (g_settings.deadzone * g_settings.deadzone)) {
                 g_state.store(ScrollState::Scrolling);
                 g_lastPt = curPt;
+
+                // Only snap to an axis if the user explicitly wants Axis Lock
+                if (g_settings.axis_lock && g_settings.enable_horizontal) {
+                    int absX = std::abs(totalDx);
+                    int absY = std::abs(totalDy);
+                    if (absY > absX * 2) {
+                        g_activeAxis = DragAxis::VerticalOnly;
+                    } else if (absX > absY * 2) {
+                        g_activeAxis = DragAxis::HorizontalOnly;
+                    } else {
+                        g_activeAxis = DragAxis::Free;
+                    }
+                } else if (!g_settings.enable_horizontal) {
+                    g_activeAxis = DragAxis::VerticalOnly;
+                } else {
+                    g_activeAxis = DragAxis::Free;
+                }
             }
 
             if (g_state.load() == ScrollState::Scrolling) {
+                int dx = curPt.x - g_lastPt.x;
                 int dy = curPt.y - g_lastPt.y;
                 g_lastPt = curPt;
 
+                // When axis_lock is OFF, g_activeAxis is DragAxis::Free,
+                // so neither dx nor dy will be zeroed out.
+                if (g_activeAxis == DragAxis::VerticalOnly)
+                    dx = 0;
+                if (g_activeAxis == DragAxis::HorizontalOnly)
+                    dy = 0;
+
+                HWND hTarget = nullptr;
+                bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
+                double wheelUnits = (static_cast<double>(WHEEL_DELTA) /
+                                     g_settings.pixels_per_notch);
+                int chunk =
+                    g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
+
+                // Shared dynamic velocity scaling for natural diagonal speed
+                double velocityFactor = 1.0;
+                if (g_settings.enable_velocity) {
+                    double dist = std::hypot(dx, dy);
+                    if (dist <= 2.0)
+                        velocityFactor = 0.40;
+                    else if (dist <= 6.0)
+                        velocityFactor = 1.0;
+                    else
+                        velocityFactor =
+                            std::min(2.5, 1.0 + ((dist - 6.0) * 0.06));
+                }
+
+                // --- 1. Vertical Processing ---
                 if (dy != 0) {
-                    double direction = g_settings.touch_style ? 1.0 : -1.0;
-                    double velocityFactor = 1.0;
-                    if (g_settings.enable_velocity) {
-                        int absDy = std::abs(dy);
-                        if (absDy <= 2)
-                            velocityFactor = 0.40;
-                        else if (absDy <= 6)
-                            velocityFactor = 1.0;
-                        else
-                            velocityFactor =
-                                std::min(2.5, 1.0 + ((absDy - 6) * 0.06));
-                    }
-
-                    double wheelUnits = (static_cast<double>(WHEEL_DELTA) /
-                                         g_settings.pixels_per_notch);
-                    g_accumY += (dy * direction * wheelUnits * velocityFactor);
-
-                    HWND hTarget = nullptr;
-                    bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
+                    double directionY = g_settings.touch_style ? 1.0 : -1.0;
+                    g_accumY += (dy * directionY * wheelUnits * velocityFactor);
 
                     if (isDiscrete) {
                         int notches = 0;
@@ -485,9 +578,6 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                         if (notches != 0)
                             DispatchScroll(notches, hTarget, true);
                     } else {
-                        int chunk = g_settings.smooth_wheel
-                                        ? SMOOTH_SCROLL_CHUNK
-                                        : WHEEL_DELTA;
                         int emitDelta = 0;
                         while (g_accumY <= -chunk) {
                             emitDelta -= chunk;
@@ -501,6 +591,44 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                             DispatchScroll(emitDelta, hTarget, false);
                     }
                 }
+
+                // --- 2. Horizontal Processing ---
+                if (dx != 0 && g_settings.enable_horizontal) {
+                    // In Windows MOUSEEVENTF_HWHEEL:
+                    // positive delta = wheel tilted right (scroll content left,
+                    // viewport moves right) negative delta = wheel tilted left
+                    // (scroll content right, viewport moves left) For natural
+                    // touch (pulling canvas):
+                    double directionX = g_settings.touch_style ? -1.0 : 1.0;
+                    g_accumX += (dx * directionX * wheelUnits * velocityFactor);
+
+                    if (isDiscrete) {
+                        int notches = 0;
+                        while (g_accumX <= -WHEEL_DELTA) {
+                            notches -= WHEEL_DELTA;
+                            g_accumX += WHEEL_DELTA;
+                        }
+                        while (g_accumX >= WHEEL_DELTA) {
+                            notches += WHEEL_DELTA;
+                            g_accumX -= WHEEL_DELTA;
+                        }
+                        if (notches != 0)
+                            DispatchHScroll(notches, hTarget, true);
+                    } else {
+                        int emitDelta = 0;
+                        while (g_accumX <= -chunk) {
+                            emitDelta -= chunk;
+                            g_accumX += chunk;
+                        }
+                        while (g_accumX >= chunk) {
+                            emitDelta += chunk;
+                            g_accumX -= chunk;
+                        }
+                        if (emitDelta != 0)
+                            DispatchHScroll(emitDelta, hTarget, false);
+                    }
+                }
+
                 return true;
             }
         }
