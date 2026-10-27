@@ -163,28 +163,17 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $options:pt:
   - auto: "Ancorar o menu Iniciar dentro do Explorer (recomendado), mais o hook de teclado como reserva"
   - keyboard: "Somente hook de teclado (o botão Iniciar da barra não é capturado)"
-- openSlideMs: 360
-  $name: "Opening desktop slide (milliseconds)"
-  $name:it: "Scorrimento del desktop in apertura (millisecondi)"
-  $name:es: "Deslizamiento del escritorio al abrir (milisegundos)"
-  $name:fr: "Glissement du bureau à l'ouverture (millisecondes)"
-  $name:pt: "Deslizamento da área de trabalho ao abrir (milissegundos)"
-  $description: "This setting controls the duration of the desktop moving left when Start opens. Smaller is faster. Allowed range 80 to 3000; default 360."
-  $description:it: "Questa impostazione controlla la durata dello spostamento del desktop verso sinistra quando Start si apre. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 360."
-  $description:es: "Esta configuración controla la duración del movimiento del escritorio hacia la izquierda cuando se abre Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 360."
-  $description:fr: "Ce paramètre contrôle la durée du déplacement du bureau vers la gauche quand l'écran d'accueil s'ouvre. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 360."
-  $description:pt: "Esta configuração controla a duração do movimento da área de trabalho para a esquerda quando a Tela Inicial abre. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 360."
-- closeSlideMs: 400
-  $name: "Closing desktop slide (milliseconds)"
-  $name:it: "Scorrimento del desktop in chiusura (millisecondi)"
-  $name:es: "Deslizamiento del escritorio al cerrar (milisegundos)"
-  $name:fr: "Glissement du bureau à la fermeture (millisecondes)"
-  $name:pt: "Deslizamento da área de trabalho ao fechar (milissegundos)"
-  $description: "This setting controls the duration of the desktop returning from the left when Start closes. Smaller is faster. Allowed range 80 to 3000; default 400."
-  $description:it: "Questa impostazione controlla la durata del ritorno del desktop da sinistra quando Start si chiude. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 400."
-  $description:es: "Esta configuración controla la duración del regreso del escritorio desde la izquierda cuando se cierra Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 400."
-  $description:fr: "Ce paramètre contrôle la durée du retour du bureau depuis la gauche quand l'écran d'accueil se ferme. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 400."
-  $description:pt: "Esta configuração controla a duração do retorno da área de trabalho vindo da esquerda quando a Tela Inicial fecha. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 400."
+- closeSlideMs: 320
+  $name: "Closing animation duration (milliseconds)"
+  $name:it: "Durata dell'animazione di chiusura (millisecondi)"
+  $name:es: "Duración de la animación de cierre (milisegundos)"
+  $name:fr: "Durée de l'animation de fermeture (millisecondes)"
+  $name:pt: "Duração da animação de fechamento (milissegundos)"
+  $description: "This setting controls the duration of the closing animation: the tiles shrink and fade, then the desktop fades back in. Smaller is faster. Allowed range 80 to 3000; default 320."
+  $description:it: "Questa impostazione controlla la durata dell'animazione di chiusura: i tile si riducono e svaniscono, poi il desktop ricompare con una dissolvenza. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 320."
+  $description:es: "Esta configuración controla la duración de la animación de cierre: los iconos se reducen y se desvanecen, y después el escritorio reaparece con un fundido. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 320."
+  $description:fr: "Ce paramètre contrôle la durée de l'animation de fermeture : les vignettes rétrécissent et s'estompent, puis le bureau réapparaît en fondu. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 320."
+  $description:pt: "Esta configuração controla a duração da animação de fechamento: os blocos diminuem e desaparecem, e depois a área de trabalho reaparece com um esmaecimento. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 320."
 - groupColumns: 2
   $name: "Tiles per group (horizontal)"
   $name:it: "Tile per gruppo (orizzontali)"
@@ -739,8 +728,6 @@ static int GROUP_SEPARATION = 40;
 static volatile LONG g_requestedGroupCols = 2, g_requestedGroupRows = 3;
 static const float PRESS_SCALE   = 0.94f;      
 
-static const float OPEN_HOLD     = 0.00f;  
-static const float OPEN_SLIDE    = 0.36f;   
 static const float TILES_DELAY   = 0.26f;   
 static const float TILE_FADE     = 0.065f;
 static const float TILE_T        = 0.42f;
@@ -768,19 +755,19 @@ static const float LOGON_GLASS_DELAY = 0.67f;
 static const float LOGON_GLASS_FADE = 0.70f;
 static const float HEADER_DELAY  = 0.47f;
 static const float HEADER_FADE   = 0.19f;
-static const float CLOSE_SLIDE   = 0.40f;
+static const float CLOSE_SLIDE   = 0.32f;
 // Closing timeline measured frame by frame (30 fps) from a real Windows 8.1 recording. Times are
 // seconds at the reference duration CLOSE_SLIDE and scale linearly with the closeSlideMs setting.
-//  1. Tiles fade out linearly in 0.12 s while the whole tile area shrinks to 0.64 around the
+//  1. Tiles fade out linearly in 0.10 s while the whole tile area shrinks to 0.64 around the
 //     CENTRE OF THE SCREEN (all tiles together, no stagger). Title and user name stay in place and
-//     fade out in 0.20 s. The scroll bar and the "all apps" arrow fade out together with the tiles.
-//  2. The bare Start background is held until 0.25 s, then the desktop snapshot cross-fades in
-//     over 0.13 s.
-static const float CLOSE_TILE_T       = 0.12f;
+//     fade out in 0.16 s. The scroll bar and the "all apps" arrow fade out together with the tiles.
+//  2. The bare Start background is held until 0.19 s, then the desktop snapshot cross-fades in
+//     over 0.10 s.
+static const float CLOSE_TILE_T       = 0.10f;
 static const float CLOSE_TILE_SCALE   = 0.36f;
-static const float CLOSE_HEADER_T     = 0.20f;
-static const float CLOSE_DESK_DELAY   = 0.25f;
-static const float CLOSE_DESK_T       = 0.13f;
+static const float CLOSE_HEADER_T     = 0.16f;
+static const float CLOSE_DESK_DELAY   = 0.19f;
+static const float CLOSE_DESK_T       = 0.10f;
 
 static int SB_W = 346, SB_PAD = 40;
 static const float SB_IN = 0.11f;
@@ -874,14 +861,14 @@ static volatile bool g_keyboardOnly = false;
 static volatile bool g_startHooked = false;
 static HANDLE g_startHookThread = NULL, g_startHookStop = NULL;
 static DWORD g_lastToggleTick = 0;
-static volatile LONG g_openSlideMs = 360, g_closeSlideMs = 400;
+static volatile LONG g_closeSlideMs = 320;
 static volatile LONG g_openAtLogon = 1;
 static bool g_logonOpening = false;
 static bool g_firstDesktopAfterLogon = false;
 static DWORD g_logonVisualMs = 0, g_logonLastFrameTick = 0, g_logonRevealGateTick = 0;
 static bool g_userToggledStart = false;
 static HANDLE g_logonThread = NULL, g_logonStop = NULL;
-static float g_openSlideSeconds = OPEN_SLIDE, g_closeSlideSeconds = CLOSE_SLIDE;
+static float g_closeSlideSeconds = CLOSE_SLIDE;
 
 static int  g_sw = 1920, g_sh = 1080;
 static int  g_monX = 0, g_monY = 0;   // top-left of the monitor Start is shown on
@@ -9472,7 +9459,6 @@ static void OpenStart(bool atLogon = false) {
     if (atLogon) g_snapReady = false;
     else if (!wasVisible) CaptureDesktop();
     RefreshDesktopTile();
-    g_openSlideSeconds = (float)InterlockedCompareExchange(&g_openSlideMs, 0, 0) / 1000.0f;
     ComputePivot();
     for (int i = 0; i < MAX_TILES; i++) g_tileScale[i] = 1.0f;
     g_hover = g_pressed = -1;
@@ -9631,7 +9617,7 @@ static void Tick() {
         }
         changed = true;
     } else {
-        float end = g_logonOpening ? 0.0f : OPEN_HOLD + g_openSlideSeconds;
+        float end = 0.0f;
         float tileEnd = g_logonOpening ?
             LOGON_TILE_DELAY + (float)(g_blockCount > 0 ? g_blockCount - 1 : 0) * LOGON_BLOCK_STAGGER + LOGON_TILE_T :
             TILES_DELAY + (float)(g_blockCount > 0 ? g_blockCount - 1 : 0) * BLOCK_STAGGER + TILE_T;
@@ -11034,13 +11020,9 @@ static void LoadSettings() {
         WindhawkUtils::StringSetting mode(WindhawkUtils::StringSetting::make(L"interceptMode"));
         g_keyboardOnly = wcscmp(mode.get(), L"keyboard") == 0;
     }
-    LONG openMs = Wh_GetIntSetting(L"openSlideMs");
     LONG closeMs = Wh_GetIntSetting(L"closeSlideMs");
-    if (openMs < 80) openMs = 80;
-    if (openMs > 3000) openMs = 3000;
     if (closeMs < 80) closeMs = 80;
     if (closeMs > 3000) closeMs = 3000;
-    InterlockedExchange(&g_openSlideMs, openMs);
     InterlockedExchange(&g_closeSlideMs, closeMs);
     WindhawkUtils::StringSetting bgModeStr(WindhawkUtils::StringSetting::make(L"backgroundMode"));
     LONG bgMode = 0;
