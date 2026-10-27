@@ -2,7 +2,7 @@
 // @id              taskbar-clock-to-left
 // @name            Taskbar Clock to Left
 // @description     Move the native Windows 11 clock/notification button to the left without shifting centered taskbar apps
-// @version         2.3.13
+// @version         2.3.14
 // @author          pleromyst
 // @github          https://github.com/pleromyst
 // @license         GPL-3.0
@@ -13,10 +13,13 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Clock to Left - Tray Test
+# Taskbar Clock to Left
 
 Places the single native Windows 11 clock button in a dedicated left container.
 The original button, text, calendar and notification interactions are preserved.
+
+Supports a single-monitor desktop. With multiple monitors connected, all clocks
+stay in their native positions; secondary taskbars are not supported.
 
 - Follows the native system tray background, border and spacing. Asymmetric
   decoration faces the left screen edge; the clock text is never mirrored.
@@ -245,8 +248,8 @@ void InvalidateClockTrayWork(ClockTrayReason reason, ClockTrayState state) {
     g_clockTray.state = state;
 }
 
-// Everything needed to put the native clock back. There is exactly one native
-// clock, so one record is enough; a second entry would mean two clocks.
+// Everything needed to put the clock back on the supported single-monitor
+// desktop. Multi-monitor layouts are left untouched.
 struct ClockTrayAppearanceHook {
     winrt::weak_ref<DependencyObject> owner;
     DependencyProperty property{nullptr};
@@ -349,6 +352,10 @@ void ProcessClockTrayChanges(uint64_t generation);
 bool ClearClockTrayMetricHooks();
 bool ClockTrayWorkIsCurrent(uint64_t generation);
 
+bool ClockTrayDisplayIsSupported() {
+    return GetSystemMetrics(SM_CMONITORS) == 1;
+}
+
 void ResetClockTrayForSession() {
     g_clockTray.clock = {};
     g_clockTray.pending = false;
@@ -377,6 +384,10 @@ void ResetClockTrayForSession() {
 void QueueClockTrayUpdate(FrameworkElement clock) {
     if (!clock || g_clockTrayWorkActive ||
         !ClockTrayWorkIsCurrent(g_clockTray.generation)) {
+        return;
+    }
+    if (!ClockTrayDisplayIsSupported()) {
+        if (g_clockTrayCleanupPending) RestoreClockTray(ClockTrayReason::UnsupportedLayout);
         return;
     }
     if (auto previous = g_clockTrayPlacement.clock.get(); previous && previous != clock) {
@@ -1349,17 +1360,15 @@ std::optional<ClockTrayLayout> ReadClockTrayLayout(Controls::Grid root,
     auto origin = transform.TransformPoint({0, 0});
     auto xAxis = transform.TransformPoint({1, 0});
     auto yAxis = transform.TransformPoint({0, 1});
-    RECT rect{};
+    auto size = root.XamlRoot().Size();
     if (!std::isfinite(origin.X) || !std::isfinite(origin.Y) ||
         !std::isfinite(xAxis.X) || !std::isfinite(xAxis.Y) ||
         !std::isfinite(yAxis.X) || !std::isfinite(yAxis.Y) ||
         std::abs(xAxis.X - origin.X - 1) > 0.0001 || std::abs(xAxis.Y - origin.Y) > 0.0001 ||
         std::abs(yAxis.X - origin.X) > 0.0001 || std::abs(yAxis.Y - origin.Y - 1) > 0.0001 ||
-        !GetClientRect(FindWindowW(L"Shell_TrayWnd", nullptr), &rect)) return reject(L"root-transform-or-window");
-    double scale = root.XamlRoot().RasterizationScale();
-    if (!std::isfinite(scale) || scale <= 0) return reject(L"scale");
+        !std::isfinite(size.Width) || size.Width <= 0) return reject(L"root-transform-or-size");
     double screenLeft = -origin.X;
-    double screenRight = (rect.right - rect.left) / scale - origin.X;
+    double screenRight = size.Width - origin.X;
     // The native root must cover the taskbar window. Do not pretend an
     // off-root child is visible through a theme's narrowed/clipped root.
     if (!std::isfinite(screenRight) || screenLeft < -kLayoutTolerance ||
@@ -1768,12 +1777,10 @@ ClockTrayReason CheckClockTrayVerticalBounds(double top, double height,
 }
 
 double ClockTrayWindowHeight(Controls::Grid root) {
-    RECT rect{};
     auto xamlRoot = root.XamlRoot();
-    HWND window = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!xamlRoot || !window || !GetClientRect(window, &rect)) return 0;
-    double scale = xamlRoot.RasterizationScale();
-    return scale > 0 ? (rect.bottom - rect.top) / scale : 0;
+    if (!xamlRoot) return 0;
+    double height = xamlRoot.Size().Height;
+    return std::isfinite(height) && height > 0 ? height : 0;
 }
 
 Controls::StackPanel FindClockTrayTextStack(FrameworkElement clock) {
@@ -2279,6 +2286,10 @@ bool ClockTrayBeginNativeAttempt(ClockTrayRetryKey key) {
 
 void ProcessClockTrayChanges(uint64_t generation) {
     if (g_clockTrayWorkActive || !ClockTrayWorkIsCurrent(generation)) return;
+    if (!ClockTrayDisplayIsSupported()) {
+        RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+        return;
+    }
     g_clockTrayCounters.signals++;
     try {
         auto& current = g_clockTrayPlacement;
@@ -2338,7 +2349,8 @@ void ProcessClockTrayChanges(uint64_t generation) {
 }
 
 void EnsureClockTrayRetry(FrameworkElement clock) {
-    if (!clock || g_clockTrayPlacement.placed || !ClockTrayWorkIsCurrent(g_clockTray.generation)) return;
+    if (!clock || g_clockTrayPlacement.placed || !ClockTrayWorkIsCurrent(g_clockTray.generation) ||
+        !ClockTrayDisplayIsSupported()) return;
     ClockTrayWorkScope work;
     if (g_clockTrayPlacement.metricLayoutToken) return;
     if (g_clockTrayPlacement.clockLoadedToken) {
@@ -2393,7 +2405,7 @@ bool TryAttachClockTray(FrameworkElement clock) {
     auto& placement = g_clockTrayPlacement;
     auto generation = g_clockTray.generation;
     if (!clock || placement.placed || g_clockTrayWorkActive ||
-        !ClockTrayWorkIsCurrent(generation)) {
+        !ClockTrayWorkIsCurrent(generation) || !ClockTrayDisplayIsSupported()) {
         return false;
     }
     ClockTrayWorkScope work;
@@ -2626,6 +2638,10 @@ void UpdateClockTrayPlacement() {
     auto generation = g_clockTray.generation;
     if (!placement.placed || g_clockTrayWorkActive ||
         !ClockTrayWorkIsCurrent(generation)) {
+        return;
+    }
+    if (!ClockTrayDisplayIsSupported()) {
+        RestoreClockTray(ClockTrayReason::UnsupportedLayout);
         return;
     }
     ClockTrayWorkScope work;
@@ -3031,6 +3047,10 @@ void UpdateClockPlacement(FrameworkElement content) {
     if (!g_callbacksEnabled) return;
     DWORD thread = GetCurrentThreadId();
     if (g_clockThreadId && g_clockThreadId != thread) return;
+    if (!ClockTrayDisplayIsSupported()) {
+        if (g_clockTrayCleanupPending) RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+        return;
+    }
     g_clockThreadId = thread;
     g_clockContent = content;
     if (auto clock = FindAncestor(content, L"SystemTray.OmniButton", L"NotificationCenterButton")) {
@@ -3560,14 +3580,6 @@ void Wh_ModUninit() {
         CleanupTaskbarStateSynchronously();
     }
     if (g_clockTrayCleanupPending) {
-        // Windhawk cannot cancel unload here. A surviving XAML delegate must
-        // not point into an unloaded DLL; retain its disabled code and records
-        // until Explorer exits if both synchronous cleanup attempts failed.
-        HMODULE retainedModule = nullptr;
-        BOOL pinned = GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(&Wh_ModUninit), &retainedModule);
-        Wh_Log(L"[clock-tray] cleanup incomplete; module retained=%d error=%u",
-               pinned, pinned ? 0 : GetLastError());
+        Wh_Log(L"[clock-tray] cleanup incomplete after synchronous retry; unloading");
     }
 }
