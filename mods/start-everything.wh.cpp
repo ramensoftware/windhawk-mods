@@ -25,6 +25,14 @@ Version **2.1** includes independent Apps-panel updates, Quick Tools cards, serv
 
 *Version 2.0: the separate search window with a folder preview.*
 
+## Version 2.1 Changes
+
+- Updates Apps independently of file searches, reuses result cards, and keeps existing files visible until replacements arrive.
+- Warms app, Settings and installed-program catalogs in the background and refreshes them after registry, package or shortcut changes.
+- Includes installed-only programs with friendly names, icons, launcher detection, installation-folder actions and confirmed uninstall actions.
+- Adds configurable Quick Tools names, weather/forecast cards, currency and crypto conversions, a bounded connection test, live hardware graphs and service management.
+- Keeps online cards off on a fresh install. After enabling them, weather, currency and crypto load automatically after a short typing pause, with cached results shown immediately. Speed tests require Run or Enter and have finite payload caps, reduced on metered connections.
+
 ## Version 2.0 Changes
 
 - Adds 50 left-to-right interface languages, automatic Windows display-language detection, and a manual language override. Calculator and conversion input support language-independent symbols.
@@ -155,7 +163,7 @@ Saved cards fill in individually as their requests complete. Conversions sharing
 
 ## Online Cards
 
-Weather, exchange rates, crypto prices and internet speed tests appear as cards in the Apps panel. Only explicit commands make network requests; ordinary app/file search, calculations, and unit conversions stay local. A speed test also requires pressing Run or Enter.
+Weather, exchange rates, crypto prices and internet speed tests appear as cards in the Apps panel. **Online Cards → Offline Mode is on by default on a fresh install.** Turn it off to opt in. Weather, currency and crypto load automatically after a 450 ms typing pause; cached results appear immediately. No Enter press is needed. A speed test requires Run or Enter. Ordinary app/file search, calculations, unit conversions, IP, usage and services stay local. Existing saved settings are preserved.
 
 | Type in search | Result |
 | :--- | :--- |
@@ -177,17 +185,21 @@ With the default names, `/currency` and `/fx` are aliases for `/money`; `/price`
 
 **Crypto:** [Coinbase's public price API](https://docs.cdp.coinbase.com/coinbase-app/track-apis/prices) supplies spot prices for supported pairs. Cards show when the price was fetched, in UTC. Supported assets and quote currencies depend on the provider. Prices are snapshots, not a streaming market feed.
 
-**Internet speed:** the open 270-degree speedometer has a cyan-to-mint download arc, a purple upload arc, a moving needle, labeled ticks and a large Mbps reading. Its arc and needle follow speed rather than test completion. The arc, needle and central reading ease smoothly up and down between samples. New readings retarget the current motion without jumping; animation stops when settled or search closes and respects Windows animation settings. The scale starts at 0–1000 Mbps with finer detail at lower speeds and expands for faster connections; the same scale is kept between download and upload. Latency and both speed results remain visible above the dial. **Stop** and **Run again** controls are available. Changing the query cancels the active test. The native client selects a responsive node from a small set of [public LibreSpeed servers](https://librespeed.org/backend-servers/servers.php) and reuses that selection for an hour. It uses five download connections and three upload connections, with [LibreSpeed-style adaptive timing](https://github.com/librespeed/speedtest/blob/master/speedtest_worker.js): a 1.5-second download grace period and 3-second upload grace period let connections reach speed before measurement. Faster runs shorten automatically, with roughly 5–15 seconds of measured traffic per direction instead of a fixed 15-second wait. Results include LibreSpeed's default 6% estimate for transport overhead. Downloads use long streams, and upload chunks grow with the connection speed and shrink conservatively when a server rejects a body. Small probes are paced at four starts per second; bulk transfers have a separate bounded start rate so small upload bodies do not impose the old ~32 Mbps ceiling. A server rate limit stops the transfer group, its Retry-After instruction is honored, and Run during cooldown sends no new traffic. Downloads stop at the measurement cutoff. Already-started uploads have at most three seconds to finish acknowledgment; only their bytes from the measurement window count, and rejected or unconfirmed bodies are discarded. Acknowledged uploads are distributed across their transfer intervals to reduce bias from locally buffered writes at the measurement boundaries. Temporary connection failures have at most two delayed retries per stream. There is no fixed payload cap ending a run early, so data usage depends on connection speed and can be large on fast connections. No extra app, account or API key is needed. No personal files, IP/ISP lookup requests, telemetry or measurement reports are sent. Server capacity, routing, other traffic and VPNs affect results, so different test services can report different speeds. The last completed result stays in memory until the mod unloads. Opening the command again shows it without starting another transfer.
+**Internet speed:** the 270-degree speedometer has a cyan-to-mint download arc, a purple upload arc, a moving needle, labeled ticks and a large Mbps reading with a second reading in kB/s, MB/s or GB/s, selected automatically. Both final results also show their byte-per-second equivalents (8 bits = 1 byte). The arc, needle and central reading animate together between samples and respect Windows animation settings. The scale starts at 0–1000 Mbps, expands for faster connections, and is shared by download and upload. Latency and both results stay visible above the dial. Stop and Run again are available; changing the query or closing search cancels the active test. An incomplete test never replaces the last completed result.
+
+The native client selects a responsive node from a small set of [public LibreSpeed servers](https://librespeed.org/backend-servers/servers.php) and reuses that selection for an hour. On unrestricted connections it uses five download streams and three upload streams with [LibreSpeed-style adaptive timing](https://github.com/librespeed/speedtest/blob/master/speedtest_worker.js), warmup/grace periods and the default 6% transport-overhead estimate. Faster tests shorten automatically instead of always waiting 15 seconds per direction. Upload bodies grow with the connection and shrink if a server rejects them. Rejected bodies still count against the run's allowance. Request starts are paced, server Retry-After instructions are honored, and Run during cooldown sends no traffic. Downloads stop at the measurement cutoff; already-started uploads get a bounded acknowledgment drain, and only acknowledged bytes within the measured interval contribute to the result.
+
+**Each run has a test-payload cap of 256 MiB download plus 128 MiB upload.** Metered or unknown-cost connections use smaller caps of 64 MiB down and 32 MiB up, with four streams and no grace-period traffic. Headers, small control responses and network-protocol overhead are additional. Capped runs show **Test data limit reached** and can be less precise, especially on fast connections. No extra app, account or API key is needed. No personal files, IP/ISP lookup requests, telemetry or measurement reports are sent. Server capacity, routing, other traffic and VPNs affect results. The last completed result stays in memory until the mod unloads; reopening the command does not start another transfer.
 
 Press Enter or click a completed card to copy the converted numeric value; a weather card copies its displayed weather details, and a speed-test card copies its measurements. Weather and money cards also support right-click copying. Help, loading and error cards do not launch anything.
 
-Results are cached in memory: weather for 10 minutes, currency pairs for an hour, and crypto pairs for 30 seconds. Location lookups are reused for six hours. Changing only the amount reuses a cached pair and calculates locally. Old data is marked **Cached** while a refresh is needed or has failed. Failed requests back off for a minute. Providers are contacted after typing settles, on a separate worker, so they do not delay app results or file results. There is no periodic background polling.
+Results are cached in memory: weather for 10 minutes, currency pairs for an hour, and crypto pairs for 30 seconds. Location lookups are reused for six hours. Changing only the amount reuses a cached pair and calculates locally. Old data is marked **Cached** while a refresh is needed or has failed. Failed requests back off for a minute. Providers are contacted after a 450 ms typing pause, on a separate worker, so they do not delay app results or file results. Further typing replaces pending lookups and prevents old responses from replacing the current results. There is no periodic background polling.
 
-**Privacy and connectivity:** providers see your public IP as part of the connection. For weather, the location service returns an approximate city and Open-Meteo receives the requested city or coordinates. Currency and crypto providers receive only the requested pair, without the amount. No normal search text, account credentials, cookies, or telemetry are sent. Automatic location and downloaded results are not saved to disk. Enable **Online Cards → Offline Mode** to disable these features. Public services can be unavailable or rate limited, and the free Open-Meteo service is intended for noncommercial use. Weather data is credited to Open-Meteo and location names to GeoNames.
+**Privacy and connectivity:** providers see your public IP as part of the connection. For weather, the location service returns an approximate city and Open-Meteo receives the requested city or coordinates. A city name paused on while typing can be sent as a location lookup. Currency and crypto providers receive only the requested pair, without the amount. No normal search text, account credentials, cookies, or telemetry are sent. Automatic location and downloaded results are not saved to disk. **Online Cards → Offline Mode** is enabled on a fresh install; turning it off opts in to these features. Turning it on disables provider requests. Public services can be unavailable or rate limited, and the free Open-Meteo service is intended for noncommercial use. Weather data is credited to Open-Meteo and location names to GeoNames.
 
 ## Windows Services
 
-Type `/services` to list local Windows services, or search with `/services audio`, `/services spooler` or words from a service description. `/services running` and `/services stopped` filter by state; the translated state labels work too. The command name is customizable under **Quick Tools → Services command**. It participates in duplicate-name detection and works in Offline Mode.
+Type `/services` to list local Windows services, or search with `/services audio`, `/services spooler` or words from a service description. `/services running` and `/services stopped` filter by state; the translated state labels work too. The command name is customizable under **Quick Tools → Services Command Name**. It participates in duplicate-name detection and works in Offline Mode.
 
 Each result shows the display name, internal name, current state, process ID when running, and description when available. Results update once per second while visible. Search uses cached entries immediately; service enumeration runs separately so it cannot delay ordinary app or file searches. Changing the query or closing search stops status polling.
 
@@ -636,9 +648,9 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
     $description: Shows CPU, RAM, each GPU, disk activity and physical network traffic in cards with a 60-second graph. Samples update every second only while this command is visible. All measurements stay on your PC.
   - speedName: speedtest
     $name: Internet Speed Test Command Name
-    $description: Opens a speed-test card. Press Run or Enter to measure HTTPS latency and download/upload speeds using LibreSpeed-style adaptive timing, with five download streams and three upload streams. Connections warm up first, then faster tests finish sooner. Data usage depends on your connection speed and can be large on fast connections. Stop it at any time; changing the query also cancels it. No personal files or measurement reports are uploaded.
+    $description: Opens a speed-test card. Press Run or Enter to measure HTTPS latency and download/upload speeds using LibreSpeed-style adaptive timing, with five download streams and three upload streams. Connections warm up first, then faster tests finish sooner. Test payload is capped at 256 MiB down and 128 MiB up, reduced to 64 MiB down and 32 MiB up on metered or unknown-cost connections, plus protocol/control overhead. Short capped tests can be less precise. Stop it at any time; changing the query also cancels it. No personal files or measurement reports are uploaded.
   - servicesName: services
-    $name: Services command
+    $name: Services Command Name
     $description: Search Windows services by name or description. Right-click a result to start, stop or restart it, copy its name/details, or open Windows Services. Operations request administrator approval when needed. Works offline; startup settings are not changed.
   - weatherPastDays: "2"
     $name: Past Weather Days
@@ -684,9 +696,9 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
   $description: Rename /tools to words in your language, including IP, hardware usage and speed test. Customize weather history/forecast and additional locations, and choose the currency and crypto cards shown without arguments. These settings are separate from Custom Commands, which run programs or scripts. A custom command starting with / must use a different name; a shared name displays a warning instead of choosing an action.
 
 - online:
-  - offlineMode: false
+  - offlineMode: true
     $name: Offline Mode
-    $description: Disable weather, currency, crypto and speed-test requests. Ordinary app/file search, the calculator, unit conversions and IP command always work offline. Requests happen only for explicit online commands, never for normal search text.
+    $description: On by default. Turn off to opt in to weather, currency, crypto and speed-test requests. Weather, currency and crypto load automatically after a short typing pause. Speed tests still require Run or Enter. Ordinary app/file search, the calculator, unit conversions, IP, usage and services work offline.
   - weatherLocation: auto
     $name: Weather Location
     $description: Auto uses ipwho.is to find an approximate city from your public IP only when you use /weather. A VPN can change the detected city. Enter a city here, or type /weather followed by a city, to avoid the IP lookup. Weather and city search use Open-Meteo.
@@ -701,7 +713,7 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
     $name: Default Quote Currency
     $description: Three-letter currency code used when /money or /crypto has no target currency, for example USD, EUR or IQD. Currency reference rates come from Frankfurter; crypto spot prices come from Coinbase. Supported currencies depend on the provider.
   $name: Online Cards
-  $description: Weather, currency rates, crypto prices and speed tests in the Apps panel. No API key is needed. Results are cached in memory; conversions use the downloaded rate. Providers receive your IP and the requested city or currency pair. Amounts and ordinary search text are not sent. Speed tests transfer synthetic data only after you press Run or Enter.
+  $description: Weather, currency rates, crypto prices and speed tests in the Apps panel. No API key is needed. Results are cached in memory; conversions use the downloaded rate. Providers receive your IP and the requested city or currency pair. Amounts and ordinary search text are not sent. Online cards are off by default. Weather and quotes load automatically after a short typing pause, including a partial city name if you pause on it. Speed tests transfer synthetic data only after Run or Enter, with per-run payload caps.
 
 - web:
   - defaultSearchUrl: "https://duckduckgo.com/?q={q}"
@@ -815,12 +827,13 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <winrt/Windows.Management.Deployment.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winhttp.h>
+#include <winrt/Windows.Networking.Connectivity.h>
 #include <pdh.h>
 #include <pdhmsg.h>
 #include <dxgi.h>
 #include <bcrypt.h>
 #include <winsvc.h>
-#include <ws2tcpip.h>
+#include <winsock2.h>  // base socket types required by netioapi.h
 #include <netioapi.h>
 #include <roapi.h>
 #include <shlguid.h>
@@ -10384,273 +10397,464 @@ class NativeCatalog {
 // an Office suite or a language pack). Metadata never supplies a launch target.
 namespace installed {
 struct Record {
-    std::wstring id,name,publisher,version,icon,family;
+    std::wstring id, name, publisher, version, icon, family;
     std::wstring packageFullName;
     std::vector<std::wstring> aliases;
     std::wstring location, registryKey;
-    HKEY registryHive=nullptr;
-    REGSAM registryView=0;
+    HKEY registryHive = nullptr;
+    REGSAM registryView = 0;
     std::wstring launcher;
 };
 struct Key {
-    HKEY value=nullptr;
-    ~Key(){if(value)RegCloseKey(value);}
+    HKEY value = nullptr;
+    ~Key() {
+        if (value)
+            RegCloseKey(value);
+    }
 };
-std::wstring String(HKEY key,const wchar_t* name) {
-    DWORD type=0,bytes=0;
-    if(RegQueryValueExW(key,name,nullptr,&type,nullptr,&bytes)!=ERROR_SUCCESS ||
-       (type!=REG_SZ && type!=REG_EXPAND_SZ) || bytes>65536 || bytes%sizeof(wchar_t))return {};
-    std::vector<wchar_t> text(bytes/sizeof(wchar_t)+1,0);
-    if(RegQueryValueExW(key,name,nullptr,&type,reinterpret_cast<BYTE*>(text.data()),&bytes)!=ERROR_SUCCESS)return {};
+std::wstring String(HKEY key, const wchar_t* name) {
+    DWORD type = 0, bytes = 0;
+    if (RegQueryValueExW(key, name, nullptr, &type, nullptr, &bytes) != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ) || bytes > 65536 || bytes % sizeof(wchar_t))
+        return {};
+    std::vector<wchar_t> text(bytes / sizeof(wchar_t) + 1, 0);
+    if (RegQueryValueExW(key, name, nullptr, &type, reinterpret_cast<BYTE*>(text.data()), &bytes) !=
+        ERROR_SUCCESS)
+        return {};
     return text.data();
 }
-DWORD Number(HKEY key,const wchar_t* name) {
-    DWORD value=0,bytes=sizeof(value);RegGetValueW(key,nullptr,name,RRF_RT_REG_DWORD,nullptr,&value,&bytes);return value;
+DWORD Number(HKEY key, const wchar_t* name) {
+    DWORD value = 0, bytes = sizeof(value);
+    RegGetValueW(key, nullptr, name, RRF_RT_REG_DWORD, nullptr, &value, &bytes);
+    return value;
+}
+bool FixedLocalPath(const std::wstring& path) {
+    if (path.size() < 3 || path[1] != L':' || path[2] != L'\\')
+        return false;
+    const wchar_t root[] = {path[0], L':', L'\\', 0};
+    return GetDriveTypeW(root) == DRIVE_FIXED;
 }
 std::wstring CleanIcon(std::wstring value) {
-    if(value.empty())return {};
-    if(value.front()==L'"') {const auto quote=value.find(L'"',1);if(quote==value.npos)return {};value=value.substr(1,quote-1);}
-    else if(const auto comma=value.find_last_of(L',');comma!=value.npos) {
-        auto index=std::wstring_view(value).substr(comma+1);
-        if(!index.empty() && std::all_of(index.begin(),index.end(),[](wchar_t c){return c==L'-'||c==L'+'||iswdigit(c)||iswspace(c);}))value.resize(comma);
+    if (value.empty())
+        return {};
+    if (value.front() == L'"') {
+        const auto quote = value.find(L'"', 1);
+        if (quote == value.npos)
+            return {};
+        value = value.substr(1, quote - 1);
+    } else if (const auto comma = value.find_last_of(L','); comma != value.npos) {
+        auto index = std::wstring_view(value).substr(comma + 1);
+        if (!index.empty() && std::all_of(index.begin(), index.end(), [](wchar_t c) {
+                return c == L'-' || c == L'+' || iswdigit(c) || iswspace(c);
+            }))
+            value.resize(comma);
     }
-    const auto first=value.find_first_not_of(L" \t"),last=value.find_last_not_of(L" \t");
-    if(first==value.npos)return {};value=value.substr(first,last-first+1);
-    wchar_t expanded[32768]{};const auto count=ExpandEnvironmentStringsW(value.c_str(),expanded,std::size(expanded));
-    if(!count || count>std::size(expanded))return {};
-    value=expanded;
-    if(value.size()<3 || value[1]!=L':' || value[2]!=L'\\' || PathIsNetworkPathW(value.c_str()))return {};
+    const auto first = value.find_first_not_of(L" \t"), last = value.find_last_not_of(L" \t");
+    if (first == value.npos)
+        return {};
+    value = value.substr(first, last - first + 1);
+    wchar_t expanded[32768]{};
+    const auto count = ExpandEnvironmentStringsW(value.c_str(), expanded, std::size(expanded));
+    if (!count || count > std::size(expanded))
+        return {};
+    value = expanded;
+    if (!FixedLocalPath(value))
+        return {};
     return value;
 }
 std::wstring Location(std::wstring value) {
-    const auto first=value.find_first_not_of(L" \t"),last=value.find_last_not_of(L" \t");
-    if(first==value.npos)return {};value=value.substr(first,last-first+1);
-    if(value.front()==L'"') {if(value.size()<2 || value.back()!=L'"')return {};value=value.substr(1,value.size()-2);}
-    wchar_t expanded[32768]{};const auto n=ExpandEnvironmentStringsW(value.c_str(),expanded,std::size(expanded));
-    if(!n || n>std::size(expanded))return {};value=expanded;
-    if(value.size()<3 || value[1]!=L':' || value[2]!=L'\\' || PathIsNetworkPathW(value.c_str()))return {};
-    const auto attributes=GetFileAttributesW(value.c_str());
-    return attributes!=INVALID_FILE_ATTRIBUTES && (attributes&FILE_ATTRIBUTE_DIRECTORY)?value:std::wstring();
-}
-bool Visible(std::wstring_view name,DWORD systemComponent,std::wstring_view parent,std::wstring_view release) {
-    return !name.empty() && !systemComponent && parent.empty() && release!=L"Update" && release!=L"Hotfix" && release!=L"Security Update";
-}
-std::wstring LauncherName(std::wstring value,std::wstring_view version={}) {
-    for(auto& c:value)c=static_cast<wchar_t>(towlower(c));
-    while(!value.empty() && iswspace(value.back()))value.pop_back();
-    for(const auto* suffix:{L" (x64)",L" (x86)",L" (64-bit)",L" (32-bit)"})
-        if(value.ends_with(suffix)){value.resize(value.size()-wcslen(suffix));break;}
-    if(!version.empty()) {
-        std::wstring suffix=L" ";for(auto c:version)suffix+=static_cast<wchar_t>(towlower(c));
-        if(value.ends_with(suffix))value.resize(value.size()-suffix.size());
+    const auto first = value.find_first_not_of(L" \t"), last = value.find_last_not_of(L" \t");
+    if (first == value.npos)
+        return {};
+    value = value.substr(first, last - first + 1);
+    if (value.front() == L'"') {
+        if (value.size() < 2 || value.back() != L'"')
+            return {};
+        value = value.substr(1, value.size() - 2);
     }
-    std::erase_if(value,[](wchar_t c){return !iswalnum(c);});return value;
+    wchar_t expanded[32768]{};
+    const auto n = ExpandEnvironmentStringsW(value.c_str(), expanded, std::size(expanded));
+    if (!n || n > std::size(expanded))
+        return {};
+    value = expanded;
+    if (!FixedLocalPath(value))
+        return {};
+    const auto attributes = GetFileAttributesW(value.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY)
+               ? value
+               : std::wstring();
+}
+bool Visible(std::wstring_view name, DWORD systemComponent, std::wstring_view parent,
+             std::wstring_view release) {
+    return !name.empty() && !systemComponent && parent.empty() && release != L"Update" &&
+           release != L"Hotfix" && release != L"Security Update";
+}
+std::wstring LauncherName(std::wstring value, std::wstring_view version = {}) {
+    for (auto& c : value)
+        c = static_cast<wchar_t>(towlower(c));
+    while (!value.empty() && iswspace(value.back()))
+        value.pop_back();
+    for (const auto* suffix : {L" (x64)", L" (x86)", L" (64-bit)", L" (32-bit)"})
+        if (value.ends_with(suffix)) {
+            value.resize(value.size() - wcslen(suffix));
+            break;
+        }
+    if (!version.empty()) {
+        std::wstring suffix = L" ";
+        for (auto c : version)
+            suffix += static_cast<wchar_t>(towlower(c));
+        if (value.ends_with(suffix))
+            value.resize(value.size() - suffix.size());
+    }
+    std::erase_if(value, [](wchar_t c) { return !iswalnum(c); });
+    return value;
 }
 std::wstring ParentFolder(std::wstring path) {
-    while(path.size()>3 && path.back()==L'\\')path.pop_back();
-    const auto slash=path.find_last_of(L'\\');
-    return slash==path.npos?std::wstring():path.substr(0,slash);
+    while (path.size() > 3 && path.back() == L'\\')
+        path.pop_back();
+    const auto slash = path.find_last_of(L'\\');
+    return slash == path.npos ? std::wstring() : path.substr(0, slash);
 }
 bool AuxiliaryExecutable(std::wstring name) {
-    for(auto& c:name)c=static_cast<wchar_t>(towlower(c));
-    for(const auto* word:{L"unins",L"setup",L"install",L"update",L"repair",L"service",L"helper",L"crash",L"report",L"bootstrap"})
-        if(name.find(word)!=name.npos)return true;
+    for (auto& c : name)
+        c = static_cast<wchar_t>(towlower(c));
+    for (const auto* word : {L"unins", L"setup", L"install", L"update", L"repair", L"service",
+                             L"helper", L"crash", L"report", L"bootstrap"})
+        if (name.find(word) != name.npos)
+            return true;
     return false;
 }
 bool GuiExecutable(const std::wstring& path) {
-    const auto file=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,0,nullptr);
-    if(file==INVALID_HANDLE_VALUE)return false;
-    const auto read=[&](void* data,DWORD bytes){DWORD got=0;return ReadFile(file,data,bytes,&got,nullptr) && got==bytes;};
-    IMAGE_DOS_HEADER dos{};bool ok=read(&dos,sizeof(dos)) && dos.e_magic==IMAGE_DOS_SIGNATURE && dos.e_lfanew>=sizeof(dos) && dos.e_lfanew<=1024*1024;
-    LARGE_INTEGER offset{};offset.QuadPart=dos.e_lfanew;
-    DWORD signature=0;IMAGE_FILE_HEADER header{};WORD magic=0;bool gui=false;
-    if(ok && SetFilePointerEx(file,offset,nullptr,FILE_BEGIN) && read(&signature,sizeof(signature)) && signature==IMAGE_NT_SIGNATURE &&
-       read(&header,sizeof(header)) && !(header.Characteristics&IMAGE_FILE_DLL) && (header.Characteristics&IMAGE_FILE_EXECUTABLE_IMAGE)) {
-        offset.QuadPart=dos.e_lfanew+sizeof(signature)+sizeof(header);
-        if(read(&magic,sizeof(magic)) && SetFilePointerEx(file,offset,nullptr,FILE_BEGIN)) {
-            if(magic==IMAGE_NT_OPTIONAL_HDR32_MAGIC && header.SizeOfOptionalHeader>=sizeof(IMAGE_OPTIONAL_HEADER32)) {
-                IMAGE_OPTIONAL_HEADER32 optional{};gui=read(&optional,sizeof(optional)) && optional.Subsystem==IMAGE_SUBSYSTEM_WINDOWS_GUI;
-            } else if(magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC && header.SizeOfOptionalHeader>=sizeof(IMAGE_OPTIONAL_HEADER64)) {
-                IMAGE_OPTIONAL_HEADER64 optional{};gui=read(&optional,sizeof(optional)) && optional.Subsystem==IMAGE_SUBSYSTEM_WINDOWS_GUI;
+    const auto file = CreateFileW(path.c_str(), GENERIC_READ,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                  OPEN_EXISTING, 0, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return false;
+    const auto read = [&](void* data, DWORD bytes) {
+        DWORD got = 0;
+        return ReadFile(file, data, bytes, &got, nullptr) && got == bytes;
+    };
+    IMAGE_DOS_HEADER dos{};
+    bool ok = read(&dos, sizeof(dos)) && dos.e_magic == IMAGE_DOS_SIGNATURE &&
+              dos.e_lfanew >= sizeof(dos) && dos.e_lfanew <= 1024 * 1024;
+    LARGE_INTEGER offset{};
+    offset.QuadPart = dos.e_lfanew;
+    DWORD signature = 0;
+    IMAGE_FILE_HEADER header{};
+    WORD magic = 0;
+    bool gui = false;
+    if (ok && SetFilePointerEx(file, offset, nullptr, FILE_BEGIN) &&
+        read(&signature, sizeof(signature)) && signature == IMAGE_NT_SIGNATURE &&
+        read(&header, sizeof(header)) && !(header.Characteristics & IMAGE_FILE_DLL) &&
+        (header.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE)) {
+        offset.QuadPart = dos.e_lfanew + sizeof(signature) + sizeof(header);
+        if (read(&magic, sizeof(magic)) && SetFilePointerEx(file, offset, nullptr, FILE_BEGIN)) {
+            if (magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC &&
+                header.SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER32)) {
+                IMAGE_OPTIONAL_HEADER32 optional{};
+                gui = read(&optional, sizeof(optional)) &&
+                      optional.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI;
+            } else if (magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
+                       header.SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER64)) {
+                IMAGE_OPTIONAL_HEADER64 optional{};
+                gui = read(&optional, sizeof(optional)) &&
+                      optional.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI;
             }
         }
     }
-    CloseHandle(file);return gui;
+    CloseHandle(file);
+    return gui;
 }
-bool LauncherProductMatches(const std::wstring& path,const std::wstring& wanted,std::wstring_view version) {
-    DWORD unused=0;const auto size=GetFileVersionInfoSizeW(path.c_str(),&unused);
-    if(!size || size>4*1024*1024)return false;
+bool LauncherProductMatches(const std::wstring& path, const std::wstring& wanted,
+                            std::wstring_view version) {
+    DWORD unused = 0;
+    const auto size = GetFileVersionInfoSizeW(path.c_str(), &unused);
+    if (!size || size > 4 * 1024 * 1024)
+        return false;
     std::vector<BYTE> data(size);
-    if(!GetFileVersionInfoW(path.c_str(),0,size,data.data()))return false;
-    struct Translation {WORD language,codepage;};Translation* languages=nullptr;UINT bytes=0;
-    if(!VerQueryValueW(data.data(),L"\\VarFileInfo\\Translation",reinterpret_cast<void**>(&languages),&bytes) || !languages || bytes<sizeof(Translation))return false;
-    for(size_t i=0;i<std::min<size_t>(bytes/sizeof(Translation),32);++i)for(const auto* key:{L"ProductName",L"FileDescription"}) {
-        wchar_t query[96]{};swprintf_s(query,L"\\StringFileInfo\\%04x%04x\\%ls",languages[i].language,languages[i].codepage,key);
-        wchar_t* text=nullptr;UINT length=0;
-        if(VerQueryValueW(data.data(),query,reinterpret_cast<void**>(&text),&length) && text && length && length<=4096 &&
-           text[length-1]==0 && LauncherName(std::wstring(text,length-1),version)==wanted)return true;
-    }
+    if (!GetFileVersionInfoW(path.c_str(), 0, size, data.data()))
+        return false;
+    struct Translation {
+        WORD language, codepage;
+    };
+    Translation* languages = nullptr;
+    UINT bytes = 0;
+    if (!VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation",
+                        reinterpret_cast<void**>(&languages), &bytes) ||
+        !languages || bytes < sizeof(Translation))
+        return false;
+    for (size_t i = 0; i < std::min<size_t>(bytes / sizeof(Translation), 32); ++i)
+        for (const auto* key : {L"ProductName", L"FileDescription"}) {
+            wchar_t query[96]{};
+            swprintf_s(query, L"\\StringFileInfo\\%04x%04x\\%ls", languages[i].language,
+                       languages[i].codepage, key);
+            wchar_t* text = nullptr;
+            UINT length = 0;
+            if (VerQueryValueW(data.data(), query, reinterpret_cast<void**>(&text), &length) &&
+                text && length && length <= 4096 && text[length - 1] == 0 &&
+                LauncherName(std::wstring(text, length - 1), version) == wanted)
+                return true;
+        }
     return false;
 }
 bool ProductFolder(const std::wstring& folder) {
-    if(folder.size()<=3)return false;
-    for(const auto* known:{&FOLDERID_Windows,&FOLDERID_ProgramFiles,&FOLDERID_ProgramFilesX86,&FOLDERID_ProgramData,&FOLDERID_Profile,&FOLDERID_LocalAppData,&FOLDERID_RoamingAppData}) {
-        PWSTR value=nullptr;
-        if(SUCCEEDED(SHGetKnownFolderPath(*known,0,nullptr,&value)) && value) {
-            const std::wstring root=value;CoTaskMemFree(value);
-            if(_wcsicmp(folder.c_str(),root.c_str())==0 ||
-               (*known==FOLDERID_Windows && folder.size()>root.size() && folder[root.size()]==L'\\' && _wcsnicmp(folder.c_str(),root.c_str(),root.size())==0))return false;
+    if (folder.size() <= 3)
+        return false;
+    for (const auto* known : {&FOLDERID_Windows, &FOLDERID_ProgramFiles, &FOLDERID_ProgramFilesX86,
+                              &FOLDERID_ProgramData, &FOLDERID_Profile, &FOLDERID_LocalAppData,
+                              &FOLDERID_RoamingAppData}) {
+        PWSTR value = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(*known, 0, nullptr, &value)) && value) {
+            const std::wstring root = value;
+            CoTaskMemFree(value);
+            if (_wcsicmp(folder.c_str(), root.c_str()) == 0 ||
+                (*known == FOLDERID_Windows && folder.size() > root.size() &&
+                 folder[root.size()] == L'\\' &&
+                 _wcsnicmp(folder.c_str(), root.c_str(), root.size()) == 0))
+                return false;
         }
     }
     return true;
 }
 std::wstring FindLauncher(const Record& record) {
-    if(!record.family.empty() || !record.packageFullName.empty())return {};
-    const auto wanted=LauncherName(record.name,record.version);
-    if(wanted.size()<3)return {};
-    auto folder=Location(record.location);
-    if(folder.empty()) {
-        folder=Location(ParentFolder(record.icon));
-        const auto leaf=folder.substr(folder.find_last_of(L'\\')+1);
+    if (!record.family.empty() || !record.packageFullName.empty())
+        return {};
+    const auto wanted = LauncherName(record.name, record.version);
+    if (wanted.size() < 3)
+        return {};
+    auto folder = Location(record.location);
+    if (folder.empty()) {
+        folder = Location(ParentFolder(record.icon));
+        const auto leaf = folder.substr(folder.find_last_of(L'\\') + 1);
         // An icon (often uninstall.exe) only identifies a folder, never a
         // launch target. Shared installer/icon folders cannot supply a target.
-        if(folder.empty() || LauncherName(leaf,record.version)!=wanted)return {};
+        if (folder.empty() || LauncherName(leaf, record.version) != wanted)
+            return {};
     }
-    while(folder.size()>3 && folder.back()==L'\\')folder.pop_back();
-    if(!ProductFolder(folder))return {};
-    WIN32_FIND_DATAW entry{};const auto find=FindFirstFileW((folder+L"\\*.exe").c_str(),&entry);
-    if(find==INVALID_HANDLE_VALUE)return {};
-    std::wstring candidate;bool complete=false;size_t count=0;
+    while (folder.size() > 3 && folder.back() == L'\\')
+        folder.pop_back();
+    if (!ProductFolder(folder))
+        return {};
+    WIN32_FIND_DATAW entry{};
+    const auto find = FindFirstFileW((folder + L"\\*.exe").c_str(), &entry);
+    if (find == INVALID_HANDLE_VALUE)
+        return {};
+    std::wstring candidate;
+    bool complete = false;
+    size_t count = 0;
     do {
-        if(++count>128){candidate.clear();break;}
-        const std::wstring filename=entry.cFileName;
-        if(!(entry.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)) && filename.size()>4 &&
-           _wcsicmp(filename.c_str()+filename.size()-4,L".exe")==0 && !AuxiliaryExecutable(filename) &&
-           LauncherName(filename.substr(0,filename.size()-4))==wanted) {
-            const auto path=folder+L"\\"+filename;
-            if(GuiExecutable(path) && LauncherProductMatches(path,wanted,record.version)) {
-                if(!candidate.empty()){candidate.clear();break;}
-                candidate=path;
+        if (++count > 128) {
+            candidate.clear();
+            break;
+        }
+        const std::wstring filename = entry.cFileName;
+        if (!(entry.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
+            filename.size() > 4 && _wcsicmp(filename.c_str() + filename.size() - 4, L".exe") == 0 &&
+            !AuxiliaryExecutable(filename) &&
+            LauncherName(filename.substr(0, filename.size() - 4)) == wanted) {
+            const auto path = folder + L"\\" + filename;
+            if (GuiExecutable(path) && LauncherProductMatches(path, wanted, record.version)) {
+                if (!candidate.empty()) {
+                    candidate.clear();
+                    break;
+                }
+                candidate = path;
             }
         }
-        if(!FindNextFileW(find,&entry)){complete=GetLastError()==ERROR_NO_MORE_FILES;break;}
-    }while(true);
-    FindClose(find);return complete?candidate:std::wstring();
-}
-std::vector<Record> ReadPrograms() {
-    std::vector<Record> records;std::set<std::wstring> seen;
-    for(const auto hive:{HKEY_LOCAL_MACHINE,HKEY_CURRENT_USER})for(const auto view:{KEY_WOW64_64KEY,KEY_WOW64_32KEY}) {
-        Key root;
-        if(RegOpenKeyExW(hive,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",0,KEY_READ|view,&root.value)!=ERROR_SUCCESS)continue;
-        for(DWORD index=0;index<32768;++index) {
-            wchar_t name[256]{};DWORD length=std::size(name);
-            const auto result=RegEnumKeyExW(root.value,index,name,&length,nullptr,nullptr,nullptr,nullptr);
-            if(result==ERROR_NO_MORE_ITEMS)break;
-            if(result!=ERROR_SUCCESS)continue;
-            Key entry;if(RegOpenKeyExW(root.value,name,0,KEY_READ|view,&entry.value)!=ERROR_SUCCESS)continue;
-            Record record;record.name=String(entry.value,L"DisplayName");
-            if(!Visible(record.name,Number(entry.value,L"SystemComponent"),String(entry.value,L"ParentKeyName"),String(entry.value,L"ReleaseType")))continue;
-            record.publisher=String(entry.value,L"Publisher");record.version=String(entry.value,L"DisplayVersion");
-            record.icon=CleanIcon(String(entry.value,L"DisplayIcon"));
-            record.location=Location(String(entry.value,L"InstallLocation"));
-            record.launcher=FindLauncher(record);
-            if(record.location.empty() && !record.launcher.empty())record.location=ParentFolder(record.launcher);
-            record.registryKey=name;record.registryHive=hive;record.registryView=view;
-            // HKCU's two registry views may point at the same registration.
-            const auto identity=std::wstring(hive==HKEY_LOCAL_MACHINE?L"machine:":L"user:")+name+L"\n"+record.name+L"\n"+record.version+L"\n"+record.publisher;
-            if(!seen.insert(identity).second)continue;
-            record.id=L"program:"+identity+L"\n"+std::to_wstring(view);records.push_back(std::move(record));
+        if (!FindNextFileW(find, &entry)) {
+            complete = GetLastError() == ERROR_NO_MORE_FILES;
+            break;
         }
-    }
+    } while (true);
+    FindClose(find);
+    return complete ? candidate : std::wstring();
+}
+std::vector<Record> ReadPrograms(const std::atomic<bool>* cancel = nullptr) {
+    std::vector<Record> records;
+    std::set<std::wstring> seen;
+    for (const auto hive : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER})
+        for (const auto view : {KEY_WOW64_64KEY, KEY_WOW64_32KEY}) {
+            Key root;
+            if (RegOpenKeyExW(hive, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0,
+                              KEY_READ | view, &root.value) != ERROR_SUCCESS)
+                continue;
+            for (DWORD index = 0; index < 32768; ++index) {
+                if (cancel && cancel->load())
+                    return {};
+                wchar_t name[256]{};
+                DWORD length = std::size(name);
+                const auto result = RegEnumKeyExW(root.value, index, name, &length, nullptr,
+                                                  nullptr, nullptr, nullptr);
+                if (result == ERROR_NO_MORE_ITEMS)
+                    break;
+                if (result != ERROR_SUCCESS)
+                    continue;
+                Key entry;
+                if (RegOpenKeyExW(root.value, name, 0, KEY_READ | view, &entry.value) !=
+                    ERROR_SUCCESS)
+                    continue;
+                Record record;
+                record.name = String(entry.value, L"DisplayName");
+                if (!Visible(record.name, Number(entry.value, L"SystemComponent"),
+                             String(entry.value, L"ParentKeyName"),
+                             String(entry.value, L"ReleaseType")))
+                    continue;
+                record.publisher = String(entry.value, L"Publisher");
+                record.version = String(entry.value, L"DisplayVersion");
+                record.icon = CleanIcon(String(entry.value, L"DisplayIcon"));
+                record.location = Location(String(entry.value, L"InstallLocation"));
+                record.launcher = FindLauncher(record);
+                if (record.location.empty() && !record.launcher.empty())
+                    record.location = ParentFolder(record.launcher);
+                record.registryKey = name;
+                record.registryHive = hive;
+                record.registryView = view;
+                // HKCU's two registry views may point at the same registration.
+                const auto identity =
+                    std::wstring(hive == HKEY_LOCAL_MACHINE ? L"machine:" : L"user:") + name +
+                    L"\n" + record.name + L"\n" + record.version + L"\n" + record.publisher;
+                if (!seen.insert(identity).second)
+                    continue;
+                record.id = L"program:" + identity + L"\n" + std::to_wstring(view);
+                records.push_back(std::move(record));
+            }
+        }
     return records;
 }
-std::wstring PackageText(std::wstring value,const std::wstring& packageName,const std::wstring& fullName) {
-    if(!value.starts_with(L"ms-resource:"))return value;
-    auto path=value.substr(12);
+std::wstring PackageText(std::wstring value, const std::wstring& packageName,
+                         const std::wstring& fullName) {
+    if (!value.starts_with(L"ms-resource:"))
+        return value;
+    auto path = value.substr(12);
     std::vector<std::wstring> resources;
-    if(path.starts_with(L"///"))resources.push_back(L"ms-resource://"+packageName+path.substr(2));
-    else if(path.starts_with(L"//"))resources.push_back(value);
+    if (path.starts_with(L"///"))
+        resources.push_back(L"ms-resource://" + packageName + path.substr(2));
+    else if (path.starts_with(L"//"))
+        resources.push_back(value);
     else {
-        while(path.starts_with(L"/"))path.erase(0,1);
-        resources.push_back(L"ms-resource://"+packageName+L"/"+path);
-        if(path.find(L'/')==path.npos)resources.push_back(L"ms-resource://"+packageName+L"/resources/"+path);
+        while (path.starts_with(L"/"))
+            path.erase(0, 1);
+        resources.push_back(L"ms-resource://" + packageName + L"/" + path);
+        if (path.find(L'/') == path.npos)
+            resources.push_back(L"ms-resource://" + packageName + L"/resources/" + path);
     }
-    for(const auto& resource:resources) {
-        const auto indirect=L"@{"+fullName+L"? "+resource+L"}";
+    for (const auto& resource : resources) {
+        const auto indirect = L"@{" + fullName + L"? " + resource + L"}";
         wchar_t resolved[2048]{};
-        if(SUCCEEDED(SHLoadIndirectString(indirect.c_str(),resolved,std::size(resolved),nullptr)) &&
-           *resolved && std::wstring_view(resolved)!=indirect)return resolved;
+        if (SUCCEEDED(
+                SHLoadIndirectString(indirect.c_str(), resolved, std::size(resolved), nullptr)) &&
+            *resolved && std::wstring_view(resolved) != indirect)
+            return resolved;
     }
     return {};
 }
 // Hidden application entries still have friendly VisualElements metadata.
 // GetAppListEntries excludes them, but Installed apps displays these names.
-std::wstring VisualName(IStream* stream,const std::wstring& packageName,const std::wstring& fullName) {
+std::wstring VisualName(IStream* stream, const std::wstring& packageName,
+                        const std::wstring& fullName) {
     winrt::com_ptr<IXmlReader> reader;
-    if(FAILED(CreateXmlReader(__uuidof(IXmlReader),reader.put_void(),nullptr)) ||
-       FAILED(reader->SetProperty(XmlReaderProperty_DtdProcessing,DtdProcessing_Prohibit)) ||
-       FAILED(reader->SetProperty(XmlReaderProperty_MaxElementDepth,32)) ||
-       FAILED(reader->SetInput(stream)))return {};
+    if (FAILED(CreateXmlReader(__uuidof(IXmlReader), reader.put_void(), nullptr)) ||
+        FAILED(reader->SetProperty(XmlReaderProperty_DtdProcessing, DtdProcessing_Prohibit)) ||
+        FAILED(reader->SetProperty(XmlReaderProperty_MaxElementDepth, 32)) ||
+        FAILED(reader->SetInput(stream)))
+        return {};
     std::set<std::wstring> names;
-    XmlNodeType type{};HRESULT hr;size_t nodes=0;
-    while((hr=reader->Read(&type))==S_OK) {
-        if(++nodes>10000)return {};
-        if(type!=XmlNodeType_Element)continue;
-        LPCWSTR tag=nullptr;UINT length=0,depth=0;
-        if(FAILED(reader->GetLocalName(&tag,&length)) || FAILED(reader->GetDepth(&depth)))return {};
-        if(depth!=3 || std::wstring_view(tag,length)!=L"VisualElements")continue;
-        if(reader->MoveToAttributeByName(L"DisplayName",nullptr)!=S_OK)continue;
-        LPCWSTR raw=nullptr;
-        if(SUCCEEDED(reader->GetValue(&raw,&length)) && length && length<2048) {
-            auto name=PackageText(std::wstring(raw,length),packageName,fullName);
-            if(!name.empty())names.insert(std::move(name));
+    XmlNodeType type{};
+    HRESULT hr;
+    size_t nodes = 0;
+    while ((hr = reader->Read(&type)) == S_OK) {
+        if (++nodes > 10000)
+            return {};
+        if (type != XmlNodeType_Element)
+            continue;
+        LPCWSTR tag = nullptr;
+        UINT length = 0, depth = 0;
+        if (FAILED(reader->GetLocalName(&tag, &length)) || FAILED(reader->GetDepth(&depth)))
+            return {};
+        if (depth != 3 || std::wstring_view(tag, length) != L"VisualElements")
+            continue;
+        if (reader->MoveToAttributeByName(L"DisplayName", nullptr) != S_OK)
+            continue;
+        LPCWSTR raw = nullptr;
+        if (SUCCEEDED(reader->GetValue(&raw, &length)) && length && length < 2048) {
+            auto name = PackageText(std::wstring(raw, length), packageName, fullName);
+            if (!name.empty())
+                names.insert(std::move(name));
         }
         reader->MoveToElement();
     }
     // A suite with different application names keeps its package-level title.
-    return SUCCEEDED(hr) && names.size()==1 ? *names.begin() : std::wstring();
+    return SUCCEEDED(hr) && names.size() == 1 ? *names.begin() : std::wstring();
 }
-std::wstring VisualName(const std::wstring& root,const std::wstring& packageName,const std::wstring& fullName) {
-    const auto file=root+L"\\AppxManifest.xml";
+std::wstring VisualName(const std::wstring& root, const std::wstring& packageName,
+                        const std::wstring& fullName) {
+    const auto file = root + L"\\AppxManifest.xml";
     WIN32_FILE_ATTRIBUTE_DATA attrs{};
-    if(!GetFileAttributesExW(file.c_str(),GetFileExInfoStandard,&attrs) || attrs.nFileSizeHigh ||
-       attrs.nFileSizeLow>2*1024*1024)return {};
+    if (!GetFileAttributesExW(file.c_str(), GetFileExInfoStandard, &attrs) || attrs.nFileSizeHigh ||
+        attrs.nFileSizeLow > 2 * 1024 * 1024)
+        return {};
     winrt::com_ptr<IStream> stream;
-    if(FAILED(SHCreateStreamOnFileEx(file.c_str(),STGM_READ|STGM_SHARE_DENY_NONE,
-                                    FILE_ATTRIBUTE_NORMAL,FALSE,nullptr,stream.put())))return {};
-    return VisualName(stream.get(),packageName,fullName);
+    if (FAILED(SHCreateStreamOnFileEx(file.c_str(), STGM_READ | STGM_SHARE_DENY_NONE,
+                                      FILE_ATTRIBUTE_NORMAL, FALSE, nullptr, stream.put())))
+        return {};
+    return VisualName(stream.get(), packageName, fullName);
 }
-std::vector<Record> ReadPackages() {
+std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
     std::vector<Record> records;
     try {
-        namespace model=winrt::Windows::ApplicationModel;
+        namespace model = winrt::Windows::ApplicationModel;
         winrt::Windows::Management::Deployment::PackageManager manager;
         std::set<std::wstring> seen;
-        for(const auto& package:manager.FindPackagesForUser(L""))try {
-            if(package.IsFramework() || package.IsResourcePackage() || package.IsBundle() || package.SignatureKind()==model::PackageSignatureKind::System)continue;
-            Record record;record.family=package.Id().FamilyName().c_str();
-            if(!seen.insert(record.family).second)continue;
-            record.id=L"package:"+record.family;record.name=package.DisplayName().c_str();
-            if(record.name.empty() || record.name.starts_with(L"ms-resource:"))record.name=package.Id().Name().c_str();
-            record.packageFullName=package.Id().FullName().c_str();
-            const auto originalName=record.name;
+        for (const auto& package : manager.FindPackagesForUser(L""))
             try {
-                record.location=Location(package.InstalledLocation().Path().c_str());
-                const auto friendly=VisualName(package.InstalledLocation().Path().c_str(),package.Id().Name().c_str(),record.packageFullName);
-                if(!friendly.empty() && originalName.find_first_of(L" \t")==originalName.npos)record.name=friendly;
-            }catch(...){}
-            if(originalName!=record.name)record.aliases.push_back(originalName);
-            record.publisher=package.PublisherDisplayName().c_str();
-            const auto version=package.Id().Version();
-            record.version=std::to_wstring(version.Major)+L"."+std::to_wstring(version.Minor)+L"."+std::to_wstring(version.Build)+L"."+std::to_wstring(version.Revision);
-            records.push_back(std::move(record));
-        }catch(...){}
-    }catch(...){Wh_Log(L"installed apps: package metadata unavailable");}
+                if (cancel && cancel->load())
+                    return {};
+                if (package.IsFramework() || package.IsResourcePackage() || package.IsBundle() ||
+                    package.SignatureKind() == model::PackageSignatureKind::System)
+                    continue;
+                Record record;
+                record.family = package.Id().FamilyName().c_str();
+                if (!seen.insert(record.family).second)
+                    continue;
+                record.id = L"package:" + record.family;
+                record.name = package.DisplayName().c_str();
+                if (record.name.empty() || record.name.starts_with(L"ms-resource:"))
+                    record.name = package.Id().Name().c_str();
+                record.packageFullName = package.Id().FullName().c_str();
+                const auto originalName = record.name;
+                try {
+                    record.location = Location(package.InstalledLocation().Path().c_str());
+                    const auto friendly =
+                        VisualName(package.InstalledLocation().Path().c_str(),
+                                   package.Id().Name().c_str(), record.packageFullName);
+                    if (!friendly.empty() &&
+                        originalName.find_first_of(L" \t") == originalName.npos)
+                        record.name = friendly;
+                } catch (...) {
+                }
+                if (originalName != record.name)
+                    record.aliases.push_back(originalName);
+                record.publisher = package.PublisherDisplayName().c_str();
+                const auto version = package.Id().Version();
+                record.version =
+                    std::to_wstring(version.Major) + L"." + std::to_wstring(version.Minor) + L"." +
+                    std::to_wstring(version.Build) + L"." + std::to_wstring(version.Revision);
+                records.push_back(std::move(record));
+            } catch (...) {
+            }
+    } catch (...) {
+        Wh_Log(L"installed apps: package metadata unavailable");
+    }
     return records;
 }
-std::vector<Record> ReadAll() {
-    auto records=ReadPrograms(),packages=ReadPackages();
-    records.insert(records.end(),std::make_move_iterator(packages.begin()),std::make_move_iterator(packages.end()));return records;
+std::vector<Record> ReadAll(const std::atomic<bool>* cancel = nullptr) {
+    auto records = ReadPrograms(cancel);
+    if (cancel && cancel->load())
+        return {};
+    auto packages = ReadPackages(cancel);
+    records.insert(records.end(), std::make_move_iterator(packages.begin()),
+                   std::make_move_iterator(packages.end()));
+    return records;
 }
 }  // namespace installed
 
@@ -11265,13 +11469,21 @@ inline bool SameResult(const App& a,const App& b) {
     if(a.installedOnly || b.installedOnly)return a.installedOnly && b.installedOnly && a.installedId==b.installedId;
     return a.nameLower==b.nameLower;
 }
+// Existence probes must not connect to UNC shares, disconnected mapped drives,
+// shell identities or URI targets while rebuilding the complete catalog.
+bool LocalTargetExists(const std::wstring& path) {
+    return installed::FixedLocalPath(path) &&
+           GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
 class Index {
    public:
     Index() = default;
     Index(const Index&) = delete;
     Index& operator=(const Index&) = delete;
 
-    bool Rebuild() {
+    bool Rebuild(const std::atomic<bool>* cancel = nullptr) {
+        const auto cancelled = [&] { return cancel && cancel->load(); };
+        if (cancelled()) return false;
         std::vector<App> fresh;
 
         IShellItem* folder = nullptr;
@@ -11289,7 +11501,12 @@ class Index {
         }
 
         IShellItem* item = nullptr;
-        while (e->Next(1, &item, nullptr) == S_OK && item) {
+        while (!cancelled() && e->Next(1, &item, nullptr) == S_OK && item) {
+            if (cancelled()) {
+                item->Release();
+                e->Release();
+                return false;
+            }
             App a;
             LPWSTR display = nullptr;
             if (SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &display)) &&
@@ -11358,8 +11575,8 @@ class Index {
                     }
                 }
 
-                a.targetExists=!a.targetPath.empty() && GetFileAttributesW(a.targetPath.c_str())!=INVALID_FILE_ATTRIBUTES;
-                a.linkExists=!a.linkTarget.empty() && GetFileAttributesW(a.linkTarget.c_str())!=INVALID_FILE_ATTRIBUTES;
+                a.targetExists = LocalTargetExists(a.targetPath);
+                a.linkExists = LocalTargetExists(a.linkTarget);
                 PopulateAppAliases(a);
                 if (a.nameLower == L"settings" || a.nameLower == L"windows settings" ||
                     a.targetPathLower.find(L"immersivecontrolpanel") != std::wstring::npos ||
@@ -11372,14 +11589,16 @@ class Index {
             item = nullptr;
         }
         e->Release();
+        if (cancelled()) return false;
 
         // Supplement launch entries on this background thread. Cache product
         // metadata across frequent shell refreshes, rather than per keystroke.
         if(!installedWhen_ || GetTickCount64()-installedWhen_>=30000) {
-            try{installed_=installed::ReadAll();installedWhen_=GetTickCount64();}
+            try{installed_=installed::ReadAll(cancel);installedWhen_=GetTickCount64();}
             catch(...){Wh_Log(L"installed apps: retained previous metadata after refresh failure");}
         }
         AppendInstalled(fresh,installed_);
+        if (cancelled()) return false;
 
         // Refresh native data only on this background thread, never per keystroke.
         settings::DestinationCheck destinations;
@@ -11423,6 +11642,7 @@ class Index {
         std::map<std::wstring, size_t> nativeCommands;
         if (usingNative) {
             for (const auto& item : *nativeItems) {
+                if (cancelled()) return false;
                 App a;
                 a.name = item.name;
                 a.targetPath = item.command;
@@ -11435,6 +11655,7 @@ class Index {
             }
         }
         for (const auto& s : settings::GetSettingsList()) {
+            if (cancelled()) return false;
             // Windows owns the Settings/category catalog. Keep our extra tools;
             // the complete audited list is used only if native data is unavailable.
             if (usingNative && std::wstring_view(s.command).starts_with(L"ms-settings:")) continue;
@@ -11463,13 +11684,13 @@ class Index {
 
     // Parsed Settings/installation caches are immutable after publication.
     // Copy them on the native I/O thread, then build a separate app snapshot.
-    std::shared_ptr<Index> Refreshed(bool inventoryChanged) const {
+    std::shared_ptr<Index> Refreshed(bool inventoryChanged, const std::atomic<bool>* cancel = nullptr) const {
         auto next=std::make_shared<Index>();
         // Published snapshots never call Rebuild again. Copying their private
         // metadata caches needs no lock shared with the matching worker.
         next->nativeSettings_=nativeSettings_;next->installed_=installed_;
         next->installedWhen_=inventoryChanged?0:installedWhen_;
-        return next->Rebuild()?next:nullptr;
+        return next->Rebuild(cancel)?next:nullptr;
     }
 
     size_t Count() const {
@@ -11589,154 +11810,265 @@ class Index {
 // immutable shared snapshot; a slow installer, shell extension or drive cannot
 // hold the worker which handles the next letter. No XAML is created here.
 class WarmIndex {
-public:
-    struct Ready {std::shared_ptr<Index> index;ULONGLONG builtAt=0;uint64_t version=0;};
+   public:
+    struct Ready {
+        std::shared_ptr<Index> index;
+        ULONGLONG builtAt = 0;
+        uint64_t version = 0;
+    };
     struct IconJob {
         std::shared_ptr<Index> owner;
-        const App* app=nullptr;
-        std::wstring key,path;
-        int pixels=24;
-        uint64_t generation=0;
+        const App* app = nullptr;
+        std::wstring key, path;
+        int pixels = 24;
+        uint64_t generation = 0;
     };
     struct Handlers {
         std::function<void()> catalogReady;
-        std::function<std::vector<BYTE>(const App*,int)> appIcon;
-        std::function<std::vector<BYTE>(const std::wstring&,int)> commandIcon;
-        std::function<void(const std::wstring&,const std::vector<BYTE>&,uint64_t)> iconReady;
+        std::function<std::vector<BYTE>(const App*, int)> appIcon;
+        std::function<std::vector<BYTE>(const std::wstring&, int)> commandIcon;
+        std::function<void(const std::wstring&, const std::vector<BYTE>&, uint64_t)> iconReady;
     };
-    bool Start(Handlers handlers={}) noexcept try {
+    bool Start(Handlers handlers = {}) noexcept try {
         std::lock_guard lock(mutex_);
-        if(started_)return true;
-        stopped_=false;finished_=false;started_=true;refresh_=true;handlers_=std::move(handlers);
-        try {thread_=std::thread([this]{Run();});}
-        catch(...){started_=false;finished_=true;return false;}
+        if (started_)
+            return true;
+        stopped_ = false;
+        cancel_ = false;
+        finished_ = false;
+        started_ = true;
+        refresh_ = true;
+        handlers_ = std::move(handlers);
+        try {
+            thread_ = std::thread([this] { Run(); });
+        } catch (...) {
+            started_ = false;
+            finished_ = true;
+            return false;
+        }
         return true;
-    }catch(...){return false;}
-    void Refresh(bool inventoryChanged=false) {
-        std::lock_guard lock(mutex_);refresh_=true;invalidateInventory_|=inventoryChanged;wake_.notify_all();
+    } catch (...) {
+        return false;
+    }
+    void Refresh(bool inventoryChanged = false) {
+        std::lock_guard lock(mutex_);
+        refresh_ = true;
+        invalidateInventory_ |= inventoryChanged;
+        wake_.notify_all();
     }
     Ready Take() {
         std::unique_lock lock(mutex_);
-        if(!started_)return {};
-        wake_.wait(lock,[&]{return finished_ || stopped_;});
-        return stopped_?Ready{}:Ready{current_,builtAt_,version_.load()};
+        if (!started_)
+            return {};
+        wake_.wait(lock, [&] { return finished_ || stopped_; });
+        return stopped_ ? Ready{} : Ready{current_, builtAt_, version_.load()};
     }
     Ready Newer(uint64_t version) const {
-        if(version_.load()==version)return {};
+        if (version_.load() == version)
+            return {};
         std::lock_guard lock(mutex_);
-        return stopped_ || version_.load()==version?Ready{}:Ready{current_,builtAt_,version_.load()};
+        return stopped_ || version_.load() == version ? Ready{}
+                                                      : Ready{current_, builtAt_, version_.load()};
     }
-    uint64_t Version() const {return version_.load();}
-    ULONGLONG BuiltAt() const {std::lock_guard lock(mutex_);return builtAt_;}
-    static std::wstring AppKey(const App& app,int pixels) {return std::to_wstring(pixels)+L":app:"+IconIdentity(app);}
-    static std::wstring CacheKey(const std::wstring& key,uint64_t generation) {
-        return generation?std::to_wstring(generation)+L":"+key:key;
+    uint64_t Version() const {
+        return version_.load();
     }
-    std::optional<std::vector<BYTE>> Cached(const std::wstring& key,uint64_t generation=0) const {
-        std::lock_guard lock(mutex_);auto found=icons_.find(CacheKey(key,generation));
-        return found==icons_.end()?std::nullopt:std::optional(found->second);
+    ULONGLONG BuiltAt() const {
+        std::lock_guard lock(mutex_);
+        return builtAt_;
+    }
+    static std::wstring AppKey(const App& app, int pixels) {
+        return std::to_wstring(pixels) + L":app:" + IconIdentity(app);
+    }
+    static std::wstring CacheKey(const std::wstring& key, uint64_t generation) {
+        return generation ? std::to_wstring(generation) + L":" + key : key;
+    }
+    std::optional<std::vector<BYTE>> Cached(const std::wstring& key,
+                                            uint64_t generation = 0) const {
+        std::lock_guard lock(mutex_);
+        auto found = icons_.find(CacheKey(key, generation));
+        return found == icons_.end() ? std::nullopt : std::optional(found->second);
     }
     void Prioritize(std::vector<IconJob> jobs) {
-        std::lock_guard lock(mutex_);if(stopped_ || !started_)return;jobs_.clear();
-        for(auto& job:jobs) {
-            const auto key=CacheKey(job.key,job.generation);
-            if(key==inFlight_ || icons_.contains(key) || std::any_of(jobs_.begin(),jobs_.end(),[&](const auto& pending){return CacheKey(pending.key,pending.generation)==key;}))continue;
-            jobs_.push_back(std::move(job));if(jobs_.size()==64)break;
+        std::lock_guard lock(mutex_);
+        if (stopped_ || !started_)
+            return;
+        jobs_.clear();
+        for (auto& job : jobs) {
+            const auto key = CacheKey(job.key, job.generation);
+            if (key == inFlight_ || icons_.contains(key) ||
+                std::any_of(jobs_.begin(), jobs_.end(), [&](const auto& pending) {
+                    return CacheKey(pending.key, pending.generation) == key;
+                }))
+                continue;
+            jobs_.push_back(std::move(job));
+            if (jobs_.size() == 64)
+                break;
         }
         wake_.notify_all();
     }
-    void Prefetch(std::shared_ptr<Index> owner,int pixels) {
-        std::lock_guard lock(mutex_);if(stopped_ || !started_)return;
-        if(prefetch_!=owner || pixels_!=pixels){prefetch_=std::move(owner);pixels_=pixels;next_=0;}
+    void Prefetch(std::shared_ptr<Index> owner, int pixels) {
+        std::lock_guard lock(mutex_);
+        if (stopped_ || !started_)
+            return;
+        if (prefetch_ != owner || pixels_ != pixels) {
+            prefetch_ = std::move(owner);
+            pixels_ = pixels;
+            next_ = 0;
+        }
         wake_.notify_all();
     }
     // Stop before joining the matching worker or releasing its UI, including
     // unloads where no search UI was ever opened. No callback survives this join.
     void Stop() {
-        {std::lock_guard lock(mutex_);stopped_=true;wake_.notify_all();}
-        if(thread_.joinable())thread_.join();
+        cancel_ = true;
+        {
+            std::lock_guard lock(mutex_);
+            stopped_ = true;
+            wake_.notify_all();
+        }
+        if (thread_.joinable())
+            thread_.join();
         std::lock_guard lock(mutex_);
-        current_.reset();prefetch_.reset();jobs_.clear();icons_.clear();handlers_={};
-        started_=false;finished_=false;builtAt_=0;version_=0;next_=0;bytes_=0;inFlight_.clear();
+        current_.reset();
+        prefetch_.reset();
+        jobs_.clear();
+        icons_.clear();
+        handlers_ = {};
+        started_ = false;
+        finished_ = false;
+        builtAt_ = 0;
+        version_ = 0;
+        next_ = 0;
+        bytes_ = 0;
+        inFlight_.clear();
     }
-private:
+
+   private:
     void Run() noexcept {
-        const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
-        SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_BELOW_NORMAL);
-        for(;;) {
+        const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+        for (;;) {
             std::shared_ptr<Index> source;
             IconJob job;
-            bool rebuild=false,invalidate=false;
+            bool rebuild = false, invalidate = false;
             {
                 std::unique_lock lock(mutex_);
-                wake_.wait(lock,[&]{return stopped_ || refresh_ || !jobs_.empty() || (prefetch_ && next_<prefetch_->Count());});
-                if(stopped_)break;
-                if(refresh_) {
-                    rebuild=true;refresh_=false;invalidate=std::exchange(invalidateInventory_,false);
-                    source=current_?current_:prefetch_;
-                } else if(!jobs_.empty()) {job=std::move(jobs_.front());jobs_.erase(jobs_.begin());}
-                else {
-                    job.owner=prefetch_;job.app=job.owner->At(next_++);job.pixels=pixels_;
-                    if(!job.app || (job.app->isSetting && !job.app->pidl))continue;
-                    job.key=AppKey(*job.app,job.pixels);
+                wake_.wait(lock, [&] {
+                    return stopped_ || refresh_ || !jobs_.empty() ||
+                           (prefetch_ && next_ < prefetch_->Count());
+                });
+                if (stopped_)
+                    break;
+                if (refresh_) {
+                    rebuild = true;
+                    refresh_ = false;
+                    invalidate = std::exchange(invalidateInventory_, false);
+                    source = current_ ? current_ : prefetch_;
+                } else if (!jobs_.empty()) {
+                    job = std::move(jobs_.front());
+                    jobs_.erase(jobs_.begin());
+                } else {
+                    job.owner = prefetch_;
+                    job.app = job.owner->At(next_++);
+                    job.pixels = pixels_;
+                    if (!job.app || (job.app->isSetting && !job.app->pidl))
+                        continue;
+                    job.key = AppKey(*job.app, job.pixels);
                 }
-                if(!rebuild) {
-                    inFlight_=CacheKey(job.key,job.generation);
-                    if(icons_.contains(inFlight_)){inFlight_.clear();continue;}
+                if (!rebuild) {
+                    inFlight_ = CacheKey(job.key, job.generation);
+                    if (icons_.contains(inFlight_)) {
+                        inFlight_.clear();
+                        continue;
+                    }
                 }
             }
-            if(rebuild) {
+            if (rebuild) {
                 std::shared_ptr<Index> candidate;
                 try {
-                    if(SUCCEEDED(com)) {
-                        if(source)candidate=source->Refreshed(invalidate);
-                        else {auto first=std::make_shared<Index>();if(first->Rebuild())candidate=std::move(first);}
+                    if (SUCCEEDED(com)) {
+                        if (source)
+                            candidate = source->Refreshed(invalidate, &cancel_);
+                        else {
+                            auto first = std::make_shared<Index>();
+                            if (first->Rebuild(&cancel_))
+                                candidate = std::move(first);
+                        }
                     }
-                }catch(...){Wh_Log(L"apps: background catalog refresh failed; keeping previous snapshot");}
-                bool publish=false;
+                } catch (...) {
+                    Wh_Log(L"apps: background catalog refresh failed; keeping previous snapshot");
+                }
+                bool publish = false;
                 {
                     std::lock_guard lock(mutex_);
-                    if(!stopped_ && candidate){current_=std::move(candidate);builtAt_=GetTickCount64();++version_;publish=true;}
-                    finished_=true;
+                    if (!stopped_ && candidate) {
+                        current_ = std::move(candidate);
+                        builtAt_ = GetTickCount64();
+                        ++version_;
+                        publish = true;
+                    }
+                    finished_ = true;
                 }
                 wake_.notify_all();
-                if(publish && handlers_.catalogReady)try{handlers_.catalogReady();}catch(...){}
+                if (publish && handlers_.catalogReady)
+                    try {
+                        handlers_.catalogReady();
+                    } catch (...) {
+                    }
                 continue;
             }
             std::vector<BYTE> pixels;
             try {
-                if(SUCCEEDED(com)) {
-                    if(job.app && handlers_.appIcon)pixels=handlers_.appIcon(job.app,job.pixels);
-                    else if(!job.path.empty() && handlers_.commandIcon)pixels=handlers_.commandIcon(job.path,job.pixels);
+                if (SUCCEEDED(com)) {
+                    if (job.app && handlers_.appIcon)
+                        pixels = handlers_.appIcon(job.app, job.pixels);
+                    else if (!job.path.empty() && handlers_.commandIcon)
+                        pixels = handlers_.commandIcon(job.path, job.pixels);
                 }
-            }catch(...){}
-            bool publish=false;
+            } catch (...) {
+            }
+            bool publish = false;
             {
-                std::lock_guard lock(mutex_);inFlight_.clear();
-                if(!stopped_) {
-                    constexpr size_t limit=16*1024*1024;
-                    if(icons_.size()>=4096 || bytes_+pixels.size()>limit){icons_.clear();bytes_=0;}
-                    if(pixels.size()<=limit){bytes_+=pixels.size();icons_.insert_or_assign(CacheKey(job.key,job.generation),pixels);}
-                    publish=true;
+                std::lock_guard lock(mutex_);
+                inFlight_.clear();
+                if (!stopped_) {
+                    constexpr size_t limit = 16 * 1024 * 1024;
+                    if (icons_.size() >= 4096 || bytes_ + pixels.size() > limit) {
+                        icons_.clear();
+                        bytes_ = 0;
+                    }
+                    if (pixels.size() <= limit) {
+                        bytes_ += pixels.size();
+                        icons_.insert_or_assign(CacheKey(job.key, job.generation), pixels);
+                    }
+                    publish = true;
                 }
             }
-            if(publish && handlers_.iconReady)try{handlers_.iconReady(job.key,pixels,job.generation);}catch(...){}
+            if (publish && handlers_.iconReady)
+                try {
+                    handlers_.iconReady(job.key, pixels, job.generation);
+                } catch (...) {
+                }
         }
-        if(SUCCEEDED(com))CoUninitialize();
+        if (SUCCEEDED(com))
+            CoUninitialize();
     }
     mutable std::mutex mutex_;
     std::condition_variable wake_;
     std::thread thread_;
-    std::shared_ptr<Index> current_,prefetch_;
+    std::shared_ptr<Index> current_, prefetch_;
     std::vector<IconJob> jobs_;
-    std::map<std::wstring,std::vector<BYTE>> icons_;
+    std::map<std::wstring, std::vector<BYTE>> icons_;
     Handlers handlers_;
     std::atomic<uint64_t> version_{0};
-    ULONGLONG builtAt_=0;
-    size_t next_=0,bytes_=0;
-    int pixels_=24;
+    std::atomic<bool> cancel_{false};
+    ULONGLONG builtAt_ = 0;
+    size_t next_ = 0, bytes_ = 0;
+    int pixels_ = 24;
     std::wstring inFlight_;
-    bool stopped_=false,started_=false,finished_=false,refresh_=false,invalidateInventory_=false;
+    bool stopped_ = false, started_ = false, finished_ = false, refresh_ = false,
+         invalidateInventory_ = false;
 };
 
 }  // namespace apps
@@ -13482,122 +13814,246 @@ struct CatalogChangeBatch {
     }
 };
 class AppCatalogWatch {
-public:
-    static constexpr UINT ChangedMessage=WM_APP+0x35,ShellMessage=WM_APP+0x36;
-    static constexpr UINT_PTR Timer=6;
+   public:
+    static constexpr UINT ChangedMessage = WM_APP + 0x35, ShellMessage = WM_APP + 0x36;
+    static constexpr UINT_PTR Timer = 6;
     void Start(HWND window) {
-        if(window_)return;
-        window_=window;gate_=std::make_shared<Gate>();RefreshRoots();
-        for(const auto* folder:{&FOLDERID_StartMenu,&FOLDERID_CommonStartMenu}) {
-            PIDLIST_ABSOLUTE root=nullptr;
-            if(FAILED(SHGetKnownFolderIDList(*folder,0,nullptr,&root)))continue;
-            SHChangeNotifyEntry entry{root,TRUE};
-            const auto id=SHChangeNotifyRegister(window_,SHCNRF_ShellLevel|SHCNRF_InterruptLevel|SHCNRF_RecursiveInterrupt|SHCNRF_NewDelivery,
-                SHCNE_CREATE|SHCNE_DELETE|SHCNE_RENAMEITEM|SHCNE_RENAMEFOLDER|SHCNE_UPDATEDIR|SHCNE_UPDATEITEM|SHCNE_MKDIR|SHCNE_RMDIR,
-                ShellMessage,1,&entry);
-            CoTaskMemFree(root);if(id)shell_.push_back(id);
+        if (window_)
+            return;
+        window_ = window;
+        gate_ = std::make_shared<Gate>();
+        RefreshRoots();
+        for (const auto* folder : {&FOLDERID_StartMenu, &FOLDERID_CommonStartMenu}) {
+            PIDLIST_ABSOLUTE root = nullptr;
+            if (FAILED(SHGetKnownFolderIDList(*folder, 0, nullptr, &root)))
+                continue;
+            SHChangeNotifyEntry entry{root, TRUE};
+            const auto id = SHChangeNotifyRegister(
+                window_,
+                SHCNRF_ShellLevel | SHCNRF_InterruptLevel | SHCNRF_RecursiveInterrupt |
+                    SHCNRF_NewDelivery,
+                SHCNE_CREATE | SHCNE_DELETE | SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER |
+                    SHCNE_UPDATEDIR | SHCNE_UPDATEITEM | SHCNE_MKDIR | SHCNE_RMDIR,
+                ShellMessage, 1, &entry);
+            CoTaskMemFree(root);
+            if (id)
+                shell_.push_back(id);
         }
         try {
-            runtime_=RoInitialize(RO_INIT_SINGLETHREADED);winrt::check_hresult(runtime_);
-            catalog_=winrt::Windows::ApplicationModel::PackageCatalog::OpenForCurrentUser();
-            auto complete=[gate=gate_,window](auto const&,auto const& args) noexcept {
-                Lease lease(gate);if(!lease)return;
-                try {if(args.IsComplete())PostMessageW(window,ChangedMessage,1,0);}catch(...){}
+            runtime_ = RoInitialize(RO_INIT_SINGLETHREADED);
+            winrt::check_hresult(runtime_);
+            catalog_ = winrt::Windows::ApplicationModel::PackageCatalog::OpenForCurrentUser();
+            auto complete = [gate = gate_, window](auto const&, auto const& args) noexcept {
+                Lease lease(gate);
+                if (!lease)
+                    return;
+                try {
+                    if (args.IsComplete())
+                        PostMessageW(window, ChangedMessage, 1, 0);
+                } catch (...) {
+                }
             };
-            installing_.emplace(catalog_.PackageInstalling(winrt::auto_revoke,complete));
-            updating_.emplace(catalog_.PackageUpdating(winrt::auto_revoke,complete));
-            uninstalling_.emplace(catalog_.PackageUninstalling(winrt::auto_revoke,complete));
-            status_.emplace(catalog_.PackageStatusChanged(winrt::auto_revoke,[gate=gate_,window](auto const&,auto const&) noexcept {
-                Lease lease(gate);if(lease)PostMessageW(window,ChangedMessage,1,0);
-            }));
-        }catch(...){Wh_Log(L"apps: package notifications unavailable; retaining registry, shortcut and reopen refresh");}
+            installing_.emplace(catalog_.PackageInstalling(winrt::auto_revoke, complete));
+            updating_.emplace(catalog_.PackageUpdating(winrt::auto_revoke, complete));
+            uninstalling_.emplace(catalog_.PackageUninstalling(winrt::auto_revoke, complete));
+            status_.emplace(catalog_.PackageStatusChanged(
+                winrt::auto_revoke, [gate = gate_, window](auto const&, auto const&) noexcept {
+                    Lease lease(gate);
+                    if (lease)
+                        PostMessageW(window, ChangedMessage, 1, 0);
+                }));
+        } catch (...) {
+            Wh_Log(
+                L"apps: package notifications unavailable; retaining registry, shortcut and reopen "
+                L"refresh");
+        }
     }
     void Changed(bool inventory) {
-        if(!window_)return;
-        RefreshRoots();batch_.Add(GetTickCount64(),inventory);ArmTimer();
+        if (!window_)
+            return;
+        RefreshRoots();
+        batch_.Add(GetTickCount64(), inventory);
+        ArmTimer();
     }
-    static bool ReleaseShellMessage(WPARAM wParam,LPARAM lParam) {
-        PIDLIST_ABSOLUTE* items=nullptr;LONG event=0;
-        if(auto lock=SHChangeNotification_Lock(reinterpret_cast<HANDLE>(wParam),static_cast<DWORD>(lParam),&items,&event)) {
-            SHChangeNotification_Unlock(lock);return true;
+    static bool ReleaseShellMessage(WPARAM wParam, LPARAM lParam) {
+        PIDLIST_ABSOLUTE* items = nullptr;
+        LONG event = 0;
+        if (auto lock = SHChangeNotification_Lock(reinterpret_cast<HANDLE>(wParam),
+                                                  static_cast<DWORD>(lParam), &items, &event)) {
+            SHChangeNotification_Unlock(lock);
+            return true;
         }
         return false;
     }
-    void Shell(WPARAM wParam,LPARAM lParam) {if(ReleaseShellMessage(wParam,lParam))Changed(false);}
+    void Shell(WPARAM wParam, LPARAM lParam) {
+        if (ReleaseShellMessage(wParam, lParam))
+            Changed(false);
+    }
     void Tick() {
-        if(!window_)return;
-        KillTimer(window_,Timer);bool inventory=false;
-        if(batch_.Take(GetTickCount64(),inventory))InvalidateAppsCatalog(inventory);
-        else if(batch_.dirty)ArmTimer();
+        if (!window_)
+            return;
+        KillTimer(window_, Timer);
+        bool inventory = false;
+        if (batch_.Take(GetTickCount64(), inventory))
+            InvalidateAppsCatalog(inventory);
+        else if (batch_.dirty)
+            ArmTimer();
     }
-    size_t RegistryCount() const {return registry_.size();}
-    size_t ShortcutCount() const {return shell_.size();}
-    bool PackagesActive() const {return installing_ && updating_ && uninstalling_;}
+    size_t RegistryCount() const {
+        return registry_.size();
+    }
+    size_t ShortcutCount() const {
+        return shell_.size();
+    }
+    bool PackagesActive() const {
+        return installing_ && updating_ && uninstalling_;
+    }
     void Stop() {
-        if(window_)KillTimer(window_,Timer);
-        {std::lock_guard lock(gate_->mutex);gate_->closed=true;}
-        installing_.reset();updating_.reset();uninstalling_.reset();status_.reset();catalog_=nullptr;
-        {std::unique_lock lock(gate_->mutex);gate_->wake.wait(lock,[&]{return gate_->active==0;});}
-        for(auto id:shell_)SHChangeNotifyDeregister(id);shell_.clear();
-        registry_.clear();batch_={};window_=nullptr;
-        if(SUCCEEDED(runtime_)){RoUninitialize();runtime_=E_FAIL;}
-    }
-    ~AppCatalogWatch(){Stop();}
-private:
-    struct Gate {std::mutex mutex;std::condition_variable wake;unsigned active=0;bool closed=false;};
-    struct Lease {
-        std::shared_ptr<Gate> gate;bool entered=false;
-        explicit Lease(std::shared_ptr<Gate> value):gate(std::move(value)) {
-            std::lock_guard lock(gate->mutex);if(!gate->closed){++gate->active;entered=true;}
+        if (window_)
+            KillTimer(window_, Timer);
+        {
+            std::lock_guard lock(gate_->mutex);
+            gate_->closed = true;
         }
-        explicit operator bool()const{return entered;}
-        ~Lease(){if(entered){std::lock_guard lock(gate->mutex);--gate->active;gate->wake.notify_all();}}
+        installing_.reset();
+        updating_.reset();
+        uninstalling_.reset();
+        status_.reset();
+        catalog_ = nullptr;
+        {
+            std::unique_lock lock(gate_->mutex);
+            gate_->wake.wait(lock, [&] { return gate_->active == 0; });
+        }
+        for (auto id : shell_)
+            SHChangeNotifyDeregister(id);
+        shell_.clear();
+        registry_.clear();
+        batch_ = {};
+        window_ = nullptr;
+        if (SUCCEEDED(runtime_)) {
+            RoUninitialize();
+            runtime_ = E_FAIL;
+        }
+    }
+    ~AppCatalogWatch() {
+        Stop();
+    }
+
+   private:
+    struct Gate {
+        std::mutex mutex;
+        std::condition_variable wake;
+        unsigned active = 0;
+        bool closed = false;
+    };
+    struct Lease {
+        std::shared_ptr<Gate> gate;
+        bool entered = false;
+        explicit Lease(std::shared_ptr<Gate> value) : gate(std::move(value)) {
+            std::lock_guard lock(gate->mutex);
+            if (!gate->closed) {
+                ++gate->active;
+                entered = true;
+            }
+        }
+        explicit operator bool() const {
+            return entered;
+        }
+        ~Lease() {
+            if (entered) {
+                std::lock_guard lock(gate->mutex);
+                --gate->active;
+                gate->wake.notify_all();
+            }
+        }
     };
     struct Registry {
-        HKEY hive=nullptr,key=nullptr;REGSAM view=0;
-        HANDLE event=nullptr,wait=nullptr;HWND target=nullptr;
-        bool subtree=true;DWORD filter=REG_NOTIFY_CHANGE_NAME|REG_NOTIFY_CHANGE_LAST_SET;
-        std::wstring path;std::atomic<bool> stopped{false},dead{false};
-        bool Arm(){return RegNotifyChangeKeyValue(key,subtree,filter|REG_NOTIFY_THREAD_AGNOSTIC,event,TRUE)==ERROR_SUCCESS;}
-        static VOID CALLBACK Signal(void* context,BOOLEAN) {
-            auto& self=*static_cast<Registry*>(context);
-            if(self.stopped.load())return;
-            if(!self.Arm())self.dead=true;
-            PostMessageW(self.target,ChangedMessage,1,0);
+        HKEY hive = nullptr, key = nullptr;
+        REGSAM view = 0;
+        HANDLE event = nullptr, wait = nullptr;
+        HWND target = nullptr;
+        bool subtree = true;
+        DWORD filter = REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET;
+        std::wstring path;
+        std::atomic<bool> stopped{false}, dead{false};
+        bool Arm() {
+            return RegNotifyChangeKeyValue(key, subtree, filter | REG_NOTIFY_THREAD_AGNOSTIC, event,
+                                           TRUE) == ERROR_SUCCESS;
         }
-        ~Registry(){stopped=true;if(wait)UnregisterWaitEx(wait,INVALID_HANDLE_VALUE);if(key)RegCloseKey(key);if(event)CloseHandle(event);}
+        static VOID CALLBACK Signal(void* context, BOOLEAN) {
+            auto& self = *static_cast<Registry*>(context);
+            if (self.stopped.load())
+                return;
+            if (!self.Arm())
+                self.dead = true;
+            PostMessageW(self.target, ChangedMessage, 1, 0);
+        }
+        ~Registry() {
+            stopped = true;
+            if (wait)
+                UnregisterWaitEx(wait, INVALID_HANDLE_VALUE);
+            if (key)
+                RegCloseKey(key);
+            if (event)
+                CloseHandle(event);
+        }
     };
-    bool Watch(HKEY hive,REGSAM view,const std::wstring& path,bool subtree=true) {
-        for(const auto& entry:registry_)if(entry->hive==hive && entry->view==view && entry->path==path)return true;
-        auto entry=std::make_unique<Registry>();entry->hive=hive;entry->view=view;entry->path=path;entry->target=window_;
-        entry->subtree=subtree;if(!subtree)entry->filter=REG_NOTIFY_CHANGE_NAME;
-        if(RegOpenKeyExW(hive,path.c_str(),0,KEY_NOTIFY|view,&entry->key)!=ERROR_SUCCESS)return false;
-        entry->event=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!entry->event || !entry->Arm())return false;
-        registry_.push_back(std::move(entry));auto& added=*registry_.back();
-        if(!RegisterWaitForSingleObject(&added.wait,added.event,Registry::Signal,&added,INFINITE,WT_EXECUTEDEFAULT)){registry_.pop_back();return false;}
+    bool Watch(HKEY hive, REGSAM view, const std::wstring& path, bool subtree = true) {
+        for (const auto& entry : registry_)
+            if (entry->hive == hive && entry->view == view && entry->path == path)
+                return true;
+        auto entry = std::make_unique<Registry>();
+        entry->hive = hive;
+        entry->view = view;
+        entry->path = path;
+        entry->target = window_;
+        entry->subtree = subtree;
+        if (!subtree)
+            entry->filter = REG_NOTIFY_CHANGE_NAME;
+        if (RegOpenKeyExW(hive, path.c_str(), 0, KEY_NOTIFY | view, &entry->key) != ERROR_SUCCESS)
+            return false;
+        entry->event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!entry->event || !entry->Arm())
+            return false;
+        registry_.push_back(std::move(entry));
+        auto& added = *registry_.back();
+        if (!RegisterWaitForSingleObject(&added.wait, added.event, Registry::Signal, &added,
+                                         INFINITE, WT_EXECUTEDEFAULT)) {
+            registry_.pop_back();
+            return false;
+        }
         return true;
     }
     void RefreshRoots() {
-        std::erase_if(registry_,[](auto const& entry){return entry->dead.load();});
-        const std::wstring parent=L"Software\\Microsoft\\Windows\\CurrentVersion";
-        for(auto hive:{HKEY_CURRENT_USER,HKEY_LOCAL_MACHINE})for(auto view:{KEY_WOW64_64KEY,KEY_WOW64_32KEY})
-            if(!Watch(hive,view,parent+L"\\Uninstall"))Watch(hive,view,parent,false);
+        std::erase_if(registry_, [](auto const& entry) { return entry->dead.load(); });
+        const std::wstring parent = L"Software\\Microsoft\\Windows\\CurrentVersion";
+        for (auto hive : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE})
+            for (auto view : {KEY_WOW64_64KEY, KEY_WOW64_32KEY})
+                if (!Watch(hive, view, parent + L"\\Uninstall"))
+                    Watch(hive, view, parent, false);
     }
     void ArmTimer() {
-        const auto now=GetTickCount64();
-        SetTimer(window_,Timer,static_cast<UINT>(batch_.due>now?std::min<ULONGLONG>(1000,batch_.due-now):1),nullptr);
+        const auto now = GetTickCount64();
+        SetTimer(
+            window_, Timer,
+            static_cast<UINT>(batch_.due > now ? std::min<ULONGLONG>(1000, batch_.due - now) : 1),
+            nullptr);
     }
-    HWND window_=nullptr;
-    HRESULT runtime_=E_FAIL;
+    HWND window_ = nullptr;
+    HRESULT runtime_ = E_FAIL;
     CatalogChangeBatch batch_;
-    std::shared_ptr<Gate> gate_=std::make_shared<Gate>();
+    std::shared_ptr<Gate> gate_ = std::make_shared<Gate>();
     std::vector<std::unique_ptr<Registry>> registry_;
     std::vector<ULONG> shell_;
     winrt::Windows::ApplicationModel::PackageCatalog catalog_{nullptr};
-    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageInstalling_revoker> installing_;
-    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageUpdating_revoker> updating_;
-    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageUninstalling_revoker> uninstalling_;
-    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageStatusChanged_revoker> status_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageInstalling_revoker>
+        installing_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageUpdating_revoker>
+        updating_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageUninstalling_revoker>
+        uninstalling_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageStatusChanged_revoker>
+        status_;
 };
 [[clang::no_destroy]] std::optional<AppCatalogWatch> g_appCatalogWatch;
 void StartAppCatalogWatch(HWND window) {
@@ -14167,7 +14623,7 @@ struct Settings {
     bool useCustomMenuSize = false;
     bool filePreview = true;
     bool animatePreview = true;
-    bool onlineCards = true;
+    bool onlineCards = false;
     std::wstring weatherLocation = L"auto";
     std::wstring weatherUnits = L"auto";
     std::wstring quoteCurrency = L"USD";
@@ -14426,6 +14882,7 @@ struct SpeedCardUI {
     wuxm::Brush downloadBrush{nullptr}, uploadBrush{nullptr};
     std::array<wuxc::TextBlock,9> ticks{nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr};
     wuxc::TextBlock reading{nullptr}, unit{nullptr}, stage{nullptr}, latency{nullptr}, download{nullptr}, upload{nullptr}, footer{nullptr};
+    wuxc::TextBlock downloadBytes{nullptr}, uploadBytes{nullptr};
     wuxc::Button action{nullptr};
     double meterMaximum = 1000;
     bool measuringLatency = false;
@@ -14434,8 +14891,9 @@ struct SpeedCardUI {
     ULONGLONG meterStarted = 0;
     bool meterInitialized = false, meterAnimating = false;
     bool meterNumeric = false, meterLatency = false, meterDrawn = false;
+    bool meterUpload = false, meterReady = false;
     std::array<bool,9> meterTickLit{};
-    std::wstring meterText;
+    std::wstring meterText, meterUnitText;
 };
 bool StartSpeedMeterAnimationTimer();
 struct UsageCardUI {
@@ -14945,7 +15403,7 @@ std::mutex g_resultsMutex;
 std::atomic<DWORD> g_totalMatches{0};
 
 [[clang::no_destroy]] std::optional<std::thread> g_searchThread;
-[[clang::no_destroy]] apps::WarmIndex g_appsWarmup;
+[[clang::no_destroy]] std::optional<apps::WarmIndex> g_appsWarmup;
 [[clang::no_destroy]] std::optional<std::thread> g_fileSearchThread;
 [[clang::no_destroy]] std::optional<std::thread> g_onlineThread;
 std::mutex g_queryMutex;
@@ -14966,9 +15424,12 @@ void OpenManager();
 }  // namespace services
 
 void RequestAppIndexRefresh() {
-    if(GetTickCount64()-g_appsWarmup.BuiltAt()>=5000)g_appsWarmup.Refresh();
+    if (g_appsWarmup && GetTickCount64() - g_appsWarmup->BuiltAt() >= 5000)
+        g_appsWarmup->Refresh();
 }
-void InvalidateAppsCatalog(bool inventoryChanged) {g_appsWarmup.Refresh(inventoryChanged);}
+void InvalidateAppsCatalog(bool inventoryChanged) {
+    if (g_appsWarmup) g_appsWarmup->Refresh(inventoryChanged);
+}
 
 // A row as the XAML thread needs it: text, an optional icon as raw BGRA, and
 // what to do when it is clicked.
@@ -16346,11 +16807,11 @@ template <typename F>
 inline void RunInMta(F&& f) {
     std::thread worker([&] {
         HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        try {
-            f();
-        } catch (...) {
-        }
         if (SUCCEEDED(co)) {
+            try {
+                f();
+            } catch (...) {
+            }
             CoUninitialize();
         }
     });
@@ -18986,6 +19447,12 @@ std::wstring SpeedMeterNumber(double value,bool compact=false) {
     if(!std::isfinite(value) || value<0)return L"\u2014";
     wchar_t buffer[64];swprintf_s(buffer,value>=1e6?L"%.3g":compact||value>=1000?L"%.0f":value<1?L"%.2f":L"%.1f",value);return buffer;
 }
+// Decimal byte units match Mbps: eight bits per byte, 1000 per prefix.
+std::wstring SpeedByteRate(double mbps) {
+    if (!std::isfinite(mbps) || mbps < 0) return L"\u2014";
+    const double value = mbps >= 8000 ? mbps / 8000 : mbps >= 8 ? mbps / 8 : mbps * 125;
+    return SpeedMeterNumber(value) + (mbps >= 8000 ? L" GB/s" : mbps >= 8 ? L" MB/s" : L" kB/s");
+}
 constexpr ULONGLONG kSpeedMeterEaseMs=250;
 void DrawSpeedMeter(SpeedCardUI& ui) {
     const double fraction=std::clamp(ui.meterFraction,0.0,1.0);
@@ -18996,6 +19463,9 @@ void DrawSpeedMeter(SpeedCardUI& ui) {
     if(!ui.meterLatency) {
         auto text=SpeedMeterNumber(ui.meterNumeric?ui.meterSpeed:-1);
         if(text!=ui.meterText){ui.reading.Text(winrt::hstring{text});ui.meterText=std::move(text);}
+        std::wstring unit = ui.meterReady ? L"Mbps" : ui.meterUpload ? L"\u2191 Mbps" : L"\u2193 Mbps";
+        if (!ui.meterReady && ui.meterNumeric) unit += L"\n" + SpeedByteRate(ui.meterSpeed);
+        if (unit != ui.meterUnitText) { ui.unit.Text(winrt::hstring{unit}); ui.meterUnitText=std::move(unit); }
     }
     for(size_t i=0;i<ui.ticks.size();++i) {
         const bool lit=!ui.meterLatency && ui.meterNumeric && ui.meterSpeed>=kSpeedMeterTicks[i]*ui.meterMaximum/1000;
@@ -19033,7 +19503,7 @@ void UpdateSpeedCard(SpeedCardUI& ui,const SpeedView& value) {
     const double fraction=latency || !valid(speed)?0:SpeedMeterFraction(speed,ui.meterMaximum);
     const double target=latency || !valid(speed)?0:speed;
     const bool changed=target!=ui.meterTargetSpeed || fraction!=ui.meterTargetFraction;
-    ui.meterLatency=latency;ui.meterNumeric=valid(speed);
+    ui.meterLatency=latency;ui.meterNumeric=valid(speed);ui.meterUpload=uploading;ui.meterReady=ready;
     ui.meterTargetSpeed=target;ui.meterTargetFraction=fraction;
     if(!ui.meterInitialized || ready || latency)FinishSpeedMeterAnimation(ui);
     else if(changed) {
@@ -19045,7 +19515,7 @@ void UpdateSpeedCard(SpeedCardUI& ui,const SpeedView& value) {
     ui.arc.Stroke(uploading?ui.uploadBrush:ui.downloadBrush);
     ui.needle.Opacity(ready||latency||!valid(speed)?0.25:0.85);
     if(latency){ui.meterText=number(value.latency,false);ui.reading.Text(winrt::hstring{ui.meterText});}
-    ui.unit.Text(latency?L"ms":uploading?L"\u2191 Mbps":ready?L"Mbps":L"\u2193 Mbps");
+    if(latency){ui.unit.Text(L"ms");ui.meterUnitText=L"ms";}
     for(size_t i=0;i<ui.ticks.size();++i){
         const double tick=kSpeedMeterTicks[i]*ui.meterMaximum/1000;
         ui.ticks[i].Text(winrt::hstring{number(tick,true)});
@@ -19060,6 +19530,8 @@ void UpdateSpeedCard(SpeedCardUI& ui,const SpeedView& value) {
     ui.stage.Text(i18n::Text(phase));
     ui.latency.Text(winrt::hstring{metric(value.latency,L"ms")});
     ui.download.Text(winrt::hstring{number(value.download,false)});ui.upload.Text(winrt::hstring{number(value.upload,false)});
+    ui.downloadBytes.Text(winrt::hstring{SpeedByteRate(value.download)});
+    ui.uploadBytes.Text(winrt::hstring{SpeedByteRate(value.upload)});
     ui.action.Tag(winrt::box_value(running));
     ui.action.Content(winrt::box_value(std::wstring(running?L"\u25A0 ":ready?L"\u25B6 ":L"\u21BB ")+i18n::Text(running?i18n::Key::StopTest:i18n::Key::Run)));
 }
@@ -19080,6 +19552,9 @@ SpeedCardUI BuildSpeedCard(const SpeedView& value) {
         reading.TextAlignment(wux::TextAlignment::Center);
         reading.TextTrimming(wux::TextTrimming::CharacterEllipsis);item.Children().Append(reading);
         if(i)ui.upload=reading;else ui.download=reading;
+        auto byteReading=SearchTextBlock();ScaleFont(byteReading,11);byteReading.Opacity(0.7);
+        byteReading.TextAlignment(wux::TextAlignment::Center);byteReading.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        item.Children().Append(byteReading);if(i)ui.uploadBytes=byteReading;else ui.downloadBytes=byteReading;
         wuxc::Grid::SetColumn(item,i);metrics.Children().Append(item);
     }
     summary.Children().Append(metrics);
@@ -20806,31 +21281,53 @@ void QueueQuery(std::wstring text) {
 // Measured at roughly 9.7ms per app in the broker, so this runs on the search
 // thread and is cached by name. Six visible rows make it about 60ms once, and
 // nothing after that.
-bool FetchInstalledPackageIcon(const std::wstring& fullName,int size,std::vector<BYTE>* out) {
+bool FetchInstalledPackageIconMta(const std::wstring& fullName, int size, std::vector<BYTE>* out) {
     try {
-        if(fullName.empty() || !out || size<1 || size>256)return false;
+        if (fullName.empty() || !out || size < 1 || size > 256)
+            return false;
         winrt::Windows::Management::Deployment::PackageManager manager;
-        const auto package=manager.FindPackageForUser(L"",fullName);
-        const auto stream=package.GetLogoAsRandomAccessStreamReference({static_cast<float>(size),static_cast<float>(size)}).OpenReadAsync().get();
-        if(stream.Size()>8*1024*1024)return false;
-        namespace imaging=winrt::Windows::Graphics::Imaging;
-        auto decoder=imaging::BitmapDecoder::CreateAsync(stream).get();
-        const auto width=decoder.PixelWidth(),height=decoder.PixelHeight();
-        if(!width || !height || width>2048 || height>2048)return false;
-        auto data=decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8,
-            imaging::BitmapAlphaMode::Premultiplied,imaging::BitmapTransform(),
-            imaging::ExifOrientationMode::IgnoreExifOrientation,imaging::ColorManagementMode::DoNotColorManage).get();
-        const auto bytes=data.DetachPixelData();
-        if(bytes.size()!=static_cast<size_t>(width)*height*4)return false;
-        const double scale=std::min(double(size)/width,double(size)/height);
-        const int w=std::clamp(static_cast<int>(std::lround(width*scale)),1,size);
-        const int h=std::clamp(static_cast<int>(std::lround(height*scale)),1,size);
-        auto pixels=icons::Resample(std::vector<BYTE>(bytes.begin(),bytes.end()),width,height,w,h);
-        out->assign(static_cast<size_t>(size)*size*4,0);
-        const int x=(size-w)/2,y=(size-h)/2;
-        for(int row=0;row<h;++row)memcpy(out->data()+(static_cast<size_t>(y+row)*size+x)*4,pixels.data()+static_cast<size_t>(row)*w*4,w*4);
+        const auto package = manager.FindPackageForUser(L"", fullName);
+        const auto stream = package
+                                .GetLogoAsRandomAccessStreamReference(
+                                    {static_cast<float>(size), static_cast<float>(size)})
+                                .OpenReadAsync()
+                                .get();
+        if (stream.Size() > 8 * 1024 * 1024)
+            return false;
+        namespace imaging = winrt::Windows::Graphics::Imaging;
+        auto decoder = imaging::BitmapDecoder::CreateAsync(stream).get();
+        const auto width = decoder.PixelWidth(), height = decoder.PixelHeight();
+        if (!width || !height || width > 2048 || height > 2048)
+            return false;
+        auto data = decoder
+                        .GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8,
+                                           imaging::BitmapAlphaMode::Premultiplied,
+                                           imaging::BitmapTransform(),
+                                           imaging::ExifOrientationMode::IgnoreExifOrientation,
+                                           imaging::ColorManagementMode::DoNotColorManage)
+                        .get();
+        const auto bytes = data.DetachPixelData();
+        if (bytes.size() != static_cast<size_t>(width) * height * 4)
+            return false;
+        const double scale = std::min(double(size) / width, double(size) / height);
+        const int w = std::clamp(static_cast<int>(std::lround(width * scale)), 1, size);
+        const int h = std::clamp(static_cast<int>(std::lround(height * scale)), 1, size);
+        auto pixels =
+            icons::Resample(std::vector<BYTE>(bytes.begin(), bytes.end()), width, height, w, h);
+        out->assign(static_cast<size_t>(size) * size * 4, 0);
+        const int x = (size - w) / 2, y = (size - h) / 2;
+        for (int row = 0; row < h; ++row)
+            memcpy(out->data() + (static_cast<size_t>(y + row) * size + x) * 4,
+                   pixels.data() + static_cast<size_t>(row) * w * 4, w * 4);
         return true;
-    }catch(...){return false;}
+    } catch (...) {
+        return false;
+    }
+}
+bool FetchInstalledPackageIcon(const std::wstring& fullName, int size, std::vector<BYTE>* out) {
+    bool ok = false;
+    preview::RunInMta([&] { ok = FetchInstalledPackageIconMta(fullName, size, out); });
+    return ok;
 }
 bool FetchAppIcon(const apps::App* app, int size, std::vector<BYTE>* out) {
     if(app && app->installedOnly && !app->installedPackage.empty() &&
@@ -21850,7 +22347,11 @@ struct Request {
     uint64_t speedId = 0;
     int speedServer = -1;
 };
-struct Day { std::wstring date; double low = 0, high = 0; int code = 0; };
+struct Day {
+    std::wstring date;
+    double low = 0, high = 0;
+    int code = 0;
+};
 struct Data {
     double value = 0, low = 0, high = 0, humidity = 0, wind = 0;
     int code = 0, day = 1;
@@ -21870,19 +22371,23 @@ std::map<std::wstring, Entry> g_cache;
 std::condition_variable g_wake;
 using Batch = std::vector<Request>;
 std::optional<Batch> g_request;  // g_queryMutex; one command can show several cards
-void Wake() { g_wake.notify_all(); }
+void Wake() {
+    g_wake.notify_all();
+}
 std::mutex g_httpMutex;
 struct ActiveRequest;
 ActiveRequest* g_activeHttp = nullptr;  // intrusive list, protected by g_httpMutex
 
 bool Code(std::wstring_view text, size_t minimum = 3, size_t maximum = 3) {
     return text.size() >= minimum && text.size() <= maximum &&
-        std::all_of(text.begin(), text.end(), [](wchar_t c) {
-            return (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9');
-        });
+           std::all_of(text.begin(), text.end(), [](wchar_t c) {
+               return (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9');
+           });
 }
 std::wstring Upper(std::wstring text) {
-    for (auto& c : text) if (c >= L'a' && c <= L'z') c -= L'a' - L'A';
+    for (auto& c : text)
+        if (c >= L'a' && c <= L'z')
+            c -= L'a' - L'A';
     return text;
 }
 Request Parse(const std::wstring& query, const std::wstring& location, const std::wstring& units,
@@ -21892,25 +22397,39 @@ Request Parse(const std::wstring& query, const std::wstring& location, const std
     request.query = query;
     request.enabled = enabled;
     const auto match = commands::Parse(query, names);
-    if (match.kind == commands::Kind::Weather) request.kind = Kind::Weather;
-    else if (match.kind == commands::Kind::Currency) request.kind = Kind::Currency;
-    else if (match.kind == commands::Kind::Crypto) request.kind = Kind::Crypto;
-    else if (match.kind == commands::Kind::Speed) request.kind = Kind::Speed;
-    else return request;
+    if (match.kind == commands::Kind::Weather)
+        request.kind = Kind::Weather;
+    else if (match.kind == commands::Kind::Currency)
+        request.kind = Kind::Currency;
+    else if (match.kind == commands::Kind::Crypto)
+        request.kind = Kind::Crypto;
+    else if (match.kind == commands::Kind::Speed)
+        request.kind = Kind::Speed;
+    else
+        return request;
     request.command = L"/" + commands::Name(names, match.kind);
     auto args = match.args;
     request.bare = args.empty();
     request.pastDays = std::clamp(pastDays, 0, 7);
     request.futureDays = std::clamp(futureDays, 0, 7);
-    if (request.kind == Kind::Speed) { request.valid = args.empty(); return request; }
+    if (request.kind == Kind::Speed) {
+        request.valid = args.empty();
+        return request;
+    }
     if (request.kind == Kind::Weather) {
         request.city = args.empty() ? tools::Trim(location) : args;
-        if (request.city.empty() || tools::ToLower(request.city) == L"auto") request.city.clear();
-        request.valid = request.city.empty() || (request.city.size() >= 2 && request.city.size() <= 120 &&
-            std::none_of(request.city.begin(), request.city.end(), [](wchar_t c) { return c < 32 || c == 127; }));
+        if (request.city.empty() || tools::ToLower(request.city) == L"auto")
+            request.city.clear();
+        request.valid =
+            request.city.empty() || (request.city.size() >= 2 && request.city.size() <= 120 &&
+                                     std::none_of(request.city.begin(), request.city.end(),
+                                                  [](wchar_t c) { return c < 32 || c == 127; }));
         wchar_t measure[4]{};
-        request.fahrenheit = units == L"fahrenheit" || (units == L"auto" &&
-            GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IMEASURE, measure, 4) && measure[0] == L'1');
+        request.fahrenheit =
+            units == L"fahrenheit" ||
+            (units == L"auto" &&
+             GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IMEASURE, measure, 4) &&
+             measure[0] == L'1');
         return request;
     }
     // Amounts are optional. Parsing is shared with the calculator so both
@@ -21918,11 +22437,14 @@ Request Parse(const std::wstring& query, const std::wstring& location, const std
     if (!args.empty() && (iswdigit(args.front()) || args.front() == L'.' || args.front() == L',' ||
                           args.front() == L'+' || args.front() == L'-')) {
         const size_t used = calc::ParseNumber(args, &request.amount);
-        if (!used || !std::isfinite(request.amount) || request.amount < 0 || request.amount > 1e15) return request;
+        if (!used || !std::isfinite(request.amount) || request.amount < 0 || request.amount > 1e15)
+            return request;
         args = tools::Trim(args.substr(used));
     }
     std::replace(args.begin(), args.end(), L'\u2192', L' ');
-    for (auto& c : args) if (c == L'>' || c == L'=' || c == L'/') c = L' ';
+    for (auto& c : args)
+        if (c == L'>' || c == L'=' || c == L'/')
+            c = L' ';
     std::wistringstream tokens(args);
     std::wstring extra;
     tokens >> request.base >> request.quote >> extra;
@@ -21930,47 +22452,70 @@ Request Parse(const std::wstring& query, const std::wstring& location, const std
     request.quote = Upper(request.quote);
     if (request.quote == L"TO" || request.quote == L"IN") {
         request.quote = Upper(extra);
-        extra.clear(); tokens >> extra;
+        extra.clear();
+        tokens >> extra;
     }
-    if (!extra.empty()) return request;
-    if (request.quote.empty()) request.quote = Upper(defaultQuote);
-    if (!Code(request.quote, request.kind == Kind::Crypto ? 2 : 3, request.kind == Kind::Crypto ? 12 : 3)) return request;
+    if (!extra.empty())
+        return request;
+    if (request.quote.empty())
+        request.quote = Upper(defaultQuote);
+    if (!Code(request.quote, request.kind == Kind::Crypto ? 2 : 3,
+              request.kind == Kind::Crypto ? 12 : 3))
+        return request;
     if (request.kind == Kind::Crypto) {
-        if (request.base == L"BITCOIN") request.base = L"BTC";
-        else if (request.base == L"ETHEREUM") request.base = L"ETH";
-        else if (request.base == L"DOGECOIN") request.base = L"DOGE";
+        if (request.base == L"BITCOIN")
+            request.base = L"BTC";
+        else if (request.base == L"ETHEREUM")
+            request.base = L"ETH";
+        else if (request.base == L"DOGECOIN")
+            request.base = L"DOGE";
         request.valid = Code(request.base, 2, 12);
-    } else request.valid = Code(request.base);
+    } else
+        request.valid = Code(request.base);
     return request;
 }
 std::wstring Key(const Request& request) {
-    if (request.kind == Kind::Weather) return L"weather:" + tools::ToLower(request.city) + L":" +
-        std::to_wstring(request.pastDays) + L":" + std::to_wstring(request.futureDays);
-    return std::to_wstring(static_cast<int>(request.kind)) + L":" + request.base + L":" + request.quote;
+    if (request.kind == Kind::Weather)
+        return L"weather:" + tools::ToLower(request.city) + L":" +
+               std::to_wstring(request.pastDays) + L":" + std::to_wstring(request.futureDays);
+    return std::to_wstring(static_cast<int>(request.kind)) + L":" + request.base + L":" +
+           request.quote;
 }
 const wchar_t* Label(Kind kind) {
-    if (kind == Kind::Speed) return i18n::Text(i18n::Key::SpeedTest);
-    return i18n::Text(kind == Kind::Weather ? i18n::Key::Weather :
-        kind == Kind::Currency ? i18n::Key::Currency : i18n::Key::Crypto);
+    if (kind == Kind::Speed)
+        return i18n::Text(i18n::Key::SpeedTest);
+    return i18n::Text(kind == Kind::Weather    ? i18n::Key::Weather
+                      : kind == Kind::Currency ? i18n::Key::Currency
+                                               : i18n::Key::Crypto);
 }
-const wchar_t* Glyph(Kind kind) { return kind == Kind::Weather ? L"\uE706" : kind == Kind::Speed ? L"\uE701" : L"\uE8D4"; }
+const wchar_t* Glyph(Kind kind) {
+    return kind == Kind::Weather ? L"\uE706" : kind == Kind::Speed ? L"\uE701" : L"\uE8D4";
+}
 std::wstring SectionEmoji(Kind kind) {
     return kind == Kind::Currency ? L"\U0001F4B1" : kind == Kind::Crypto ? L"\U0001FA99" : L"";
 }
 std::wstring Hint(const Request& request) {
     const auto& command = request.command;
-    if (request.kind == Kind::Speed) return command;
-    if (request.kind == Kind::Weather) return command + L"  \u00B7  " + command + L" London";
-    if (request.kind == Kind::Currency) return command + L" 100 USD > EUR  \u00B7  " + command + L" USD IQD";
+    if (request.kind == Kind::Speed)
+        return command;
+    if (request.kind == Kind::Weather)
+        return command + L"  \u00B7  " + command + L" London";
+    if (request.kind == Kind::Currency)
+        return command + L" 100 USD > EUR  \u00B7  " + command + L" USD IQD";
     return command + L" BTC  \u00B7  " + command + L" 0.5 ETH > EUR";
 }
-Row Notice(const Request& request, const std::wstring& title, const std::wstring& subtitle, bool pending = false) {
+Row Notice(const Request& request, const std::wstring& title, const std::wstring& subtitle,
+           bool pending = false) {
     Row row;
-    row.title = title; row.subtitle = subtitle;
-    row.sectionTitle = Label(request.kind); row.customGlyph = Glyph(request.kind);
+    row.title = title;
+    row.subtitle = subtitle;
+    row.sectionTitle = Label(request.kind);
+    row.customGlyph = Glyph(request.kind);
     row.sectionEmoji = SectionEmoji(request.kind);
     row.customIconText = row.sectionEmoji;
-    row.infoOnly = true; row.onlinePending = pending; row.canRunAsAdmin = false;
+    row.infoOnly = true;
+    row.onlinePending = pending;
+    row.canRunAsAdmin = false;
     return row;
 }
 std::wstring Number(double value) {
@@ -21988,51 +22533,81 @@ bool g_speedBusy = false;  // g_queryMutex
 uint64_t g_speedRevision = 0, g_speedId = 0;
 bool SpeedCurrent(const Request& request) {
     std::lock_guard lock(g_queryMutex);
-    return request.kind == Kind::Speed && request.runSpeed && !g_searchQuit.load() && request.revision == g_queryRevision &&
-        g_speedBusy && g_speedRevision == request.revision && g_speedId == request.speedId;
+    return request.kind == Kind::Speed && request.runSpeed && !g_searchQuit.load() &&
+           request.revision == g_queryRevision && g_speedBusy &&
+           g_speedRevision == request.revision && g_speedId == request.speedId;
 }
 Row ConflictRow() {
     Row row;
     row.title = i18n::Text(i18n::Key::CommandNameConflict);
     row.subtitle = i18n::Text(i18n::Key::CommandNameConflictHint);
-    row.sectionTitle = i18n::Text(i18n::Key::Error); row.sectionEmoji = L"\u26A0";
-    row.customIconText = L"\u26A0"; row.customGlyph = L"\uE7BA";
-    row.infoOnly = row.isError = true; row.canRunAsAdmin = false;
+    row.sectionTitle = i18n::Text(i18n::Key::Error);
+    row.sectionEmoji = L"\u26A0";
+    row.customIconText = L"\u26A0";
+    row.customGlyph = L"\uE7BA";
+    row.infoOnly = row.isError = true;
+    row.canRunAsAdmin = false;
     row.cardSignature = L"command-conflict";
     return row;
 }
 ULONGLONG SpeedRetrySeconds();
-std::vector<Row> SpeedRows(const Request& request, const SpeedView& view, const std::wstring& when = L"") {
+std::vector<Row> SpeedRows(const Request& request, const SpeedView& view,
+                           const std::wstring& when = L"") {
     Row row;
-    row.title = row.sectionTitle = Label(Kind::Speed); row.customGlyph = Glyph(Kind::Speed);
-    row.speed = view; row.canRunAsAdmin = false;
-    const bool running = view.phase == SpeedView::Phase::Latency || view.phase == SpeedView::Phase::Download || view.phase == SpeedView::Phase::Upload;
+    row.title = row.sectionTitle = Label(Kind::Speed);
+    row.customGlyph = Glyph(Kind::Speed);
+    row.speed = view;
+    row.canRunAsAdmin = false;
+    const bool running = view.phase == SpeedView::Phase::Latency ||
+                         view.phase == SpeedView::Phase::Download ||
+                         view.phase == SpeedView::Phase::Upload;
     row.infoOnly = running;
     row.speedStart = !running && view.phase != SpeedView::Phase::Done;
-    row.footerText = L"LibreSpeed" + (view.server.empty()?std::wstring():L" \u00B7 "+view.server) + (when.empty() ? std::wstring() : L" \u00B7 "+when);
-    if (view.dataLimited) row.footerText += L"\n" + std::wstring(i18n::Text(i18n::Key::DataLimitReached));
-    if (view.phase == SpeedView::Phase::Failed) row.footerText = (view.retrySeconds ? i18n::Format(i18n::Key::SpeedBusy, {std::to_wstring(view.retrySeconds)}) : std::wstring(i18n::Text(i18n::Key::OnlineUnavailable))) + L"\n" + row.footerText;
+    row.footerText = L"LibreSpeed" +
+                     (view.server.empty() ? std::wstring() : L" \u00B7 " + view.server) +
+                     (when.empty() ? std::wstring() : L" \u00B7 " + when);
+    if (view.dataLimited)
+        row.footerText += L"\n" + std::wstring(i18n::Text(i18n::Key::DataLimitReached));
+    if (view.phase == SpeedView::Phase::Failed)
+        row.footerText =
+            (view.retrySeconds
+                 ? i18n::Format(i18n::Key::SpeedBusy, {std::to_wstring(view.retrySeconds)})
+                 : std::wstring(i18n::Text(i18n::Key::OnlineUnavailable))) +
+            L"\n" + row.footerText;
     if (view.phase == SpeedView::Phase::Done) {
-        const auto rounded = [](double value) { const auto scale = value < 1 ? 100 : 10; return Number(std::round(value * scale) / scale); };
-        row.copyText = std::wstring(Label(Kind::Speed)) + L"\n" + i18n::Text(i18n::Key::Latency) + L": " + rounded(view.latency) + L" ms\n" +
-            i18n::Text(i18n::Key::Download) + L": " + rounded(view.download) + L" Mbps\n" +
-            i18n::Text(i18n::Key::Upload) + L": " + rounded(view.upload) + L" Mbps\n" + row.footerText;
+        const auto rounded = [](double value) {
+            const auto scale = value < 1 ? 100 : 10;
+            return Number(std::round(value * scale) / scale);
+        };
+        row.copyText = std::wstring(Label(Kind::Speed)) + L"\n" + i18n::Text(i18n::Key::Latency) +
+                       L": " + rounded(view.latency) + L" ms\n" + i18n::Text(i18n::Key::Download) +
+                       L": " + rounded(view.download) + L" Mbps (" + SpeedByteRate(view.download) + L")\n" + i18n::Text(i18n::Key::Upload) +
+                       L": " + rounded(view.upload) + L" Mbps (" + SpeedByteRate(view.upload) + L")\n" + row.footerText;
     }
     return {std::move(row)};
 }
 
 std::wstring WeatherSymbol(int code, int day) {
-    if (code == 0) return day ? L"\u2600" : L"\U0001F319";
-    if (code <= 2) return L"\u26C5";
-    if (code == 3) return L"\u2601";
-    if (code == 45 || code == 48) return L"\U0001F32B";
-    if (code >= 95) return L"\u26C8";
-    if ((code >= 71 && code <= 77) || code == 85 || code == 86) return L"\u2744";
+    if (code == 0)
+        return day ? L"\u2600" : L"\U0001F319";
+    if (code <= 2)
+        return L"\u26C5";
+    if (code == 3)
+        return L"\u2601";
+    if (code == 45 || code == 48)
+        return L"\U0001F32B";
+    if (code >= 95)
+        return L"\u26C8";
+    if ((code >= 71 && code <= 77) || code == 85 || code == 86)
+        return L"\u2744";
     return L"\U0001F327";
 }
 bool Date(const std::wstring& text, SYSTEMTIME* output = nullptr) {
-    if (text.size() != 10 || text[4] != L'-' || text[7] != L'-') return false;
-    for (size_t i = 0; i < text.size(); ++i) if (i != 4 && i != 7 && (text[i] < L'0' || text[i] > L'9')) return false;
+    if (text.size() != 10 || text[4] != L'-' || text[7] != L'-')
+        return false;
+    for (size_t i = 0; i < text.size(); ++i)
+        if (i != 4 && i != 7 && (text[i] < L'0' || text[i] > L'9'))
+            return false;
     SYSTEMTIME time{};
     time.wYear = static_cast<WORD>(_wtoi(text.substr(0, 4).c_str()));
     time.wMonth = static_cast<WORD>(_wtoi(text.substr(5, 2).c_str()));
@@ -22040,82 +22615,119 @@ bool Date(const std::wstring& text, SYSTEMTIME* output = nullptr) {
     FILETIME file{};
     const auto original = time;
     if (!SystemTimeToFileTime(&time, &file) || !FileTimeToSystemTime(&file, &time) ||
-        time.wYear != original.wYear || time.wMonth != original.wMonth || time.wDay != original.wDay) return false;
-    if (output) *output = time;
+        time.wYear != original.wYear || time.wMonth != original.wMonth ||
+        time.wDay != original.wDay)
+        return false;
+    if (output)
+        *output = time;
     return true;
 }
 std::wstring CityDate(int offset) {
-    FILETIME file{}; GetSystemTimeAsFileTime(&file);
-    ULARGE_INTEGER ticks{}; ticks.LowPart = file.dwLowDateTime; ticks.HighPart = file.dwHighDateTime;
-    ticks.QuadPart = static_cast<ULONGLONG>(static_cast<LONGLONG>(ticks.QuadPart) + static_cast<LONGLONG>(offset) * 10000000LL);
-    file.dwLowDateTime = ticks.LowPart; file.dwHighDateTime = ticks.HighPart;
-    SYSTEMTIME time{}; FileTimeToSystemTime(&file, &time);
-    wchar_t date[16]; swprintf_s(date, L"%04u-%02u-%02u", time.wYear, time.wMonth, time.wDay);
+    FILETIME file{};
+    GetSystemTimeAsFileTime(&file);
+    ULARGE_INTEGER ticks{};
+    ticks.LowPart = file.dwLowDateTime;
+    ticks.HighPart = file.dwHighDateTime;
+    ticks.QuadPart = static_cast<ULONGLONG>(static_cast<LONGLONG>(ticks.QuadPart) +
+                                            static_cast<LONGLONG>(offset) * 10000000LL);
+    file.dwLowDateTime = ticks.LowPart;
+    file.dwHighDateTime = ticks.HighPart;
+    SYSTEMTIME time{};
+    FileTimeToSystemTime(&file, &time);
+    wchar_t date[16];
+    swprintf_s(date, L"%04u-%02u-%02u", time.wYear, time.wMonth, time.wDay);
     return date;
 }
 std::wstring DayLabel(const std::wstring& date, bool today) {
-    if (today) return i18n::Text(i18n::Key::Today);
+    if (today)
+        return i18n::Text(i18n::Key::Today);
     SYSTEMTIME time{};
     wchar_t label[64]{};
-    if (Date(date, &time) && (GetDateFormatEx(i18n::Tag(), 0, &time, L"ddd d", label, 64, nullptr) ||
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &time, L"ddd d", label, 64, nullptr))) return label;
+    if (Date(date, &time) &&
+        (GetDateFormatEx(i18n::Tag(), 0, &time, L"ddd d", label, 64, nullptr) ||
+         GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &time, L"ddd d", label, 64, nullptr)))
+        return label;
     return date;
 }
 std::vector<Row> Rows(const Request& request, const Data& data, bool stale = false) {
     Row row;
-    row.sectionTitle = Label(request.kind); row.customGlyph = Glyph(request.kind); row.canRunAsAdmin = false;
+    row.sectionTitle = Label(request.kind);
+    row.customGlyph = Glyph(request.kind);
+    row.canRunAsAdmin = false;
     row.sectionEmoji = SectionEmoji(request.kind);
     if (request.kind == Kind::Weather) {
-        const auto temperature = [&](double c) { return Number(std::round(request.fahrenheit ? c * 1.8 + 32 : c)); };
+        const auto temperature = [&](double c) {
+            return Number(std::round(request.fahrenheit ? c * 1.8 + 32 : c));
+        };
         const std::wstring unit = request.fahrenheit ? L" \u00B0F" : L" \u00B0C";
-        row.title = temperature(data.value) + unit + L" \u00B7 " + (data.automatic ? L"\u2248 " : L"") + data.location;
+        row.title = temperature(data.value) + unit + L" \u00B7 " +
+                    (data.automatic ? L"\u2248 " : L"") + data.location;
         row.customIconText = WeatherSymbol(data.code, data.day);
-        row.subtitle = L"\U0001F4A7 " + Number(data.humidity) + L"%   \U0001F4A8 " + Number(data.wind) + L" km/h";
+        row.subtitle = L"\U0001F4A7 " + Number(data.humidity) + L"%   \U0001F4A8 " +
+                       Number(data.wind) + L" km/h";
         row.footerText = L"Open-Meteo.com \u00B7 " + data.date;
         row.copyText = row.title + L"\n" + row.subtitle;
         const auto today = CityDate(data.utcOffset);
         for (const auto& day : data.days) {
             WeatherDayRow item;
-            item.today = day.date == today; item.past = day.date < today;
-            item.label = DayLabel(day.date, item.today); item.symbol = WeatherSymbol(day.code, 1);
+            item.today = day.date == today;
+            item.past = day.date < today;
+            item.label = DayLabel(day.date, item.today);
+            item.symbol = WeatherSymbol(day.code, 1);
             item.low = L"\u2193 " + temperature(day.low) + L"\u00B0";
             item.high = L"\u2191 " + temperature(day.high) + L"\u00B0";
-            row.copyText += L"\n" + day.date + L" " + item.label + L" " + item.symbol + L" " + item.low + L" " + item.high;
+            row.copyText += L"\n" + day.date + L" " + item.label + L" " + item.symbol + L" " +
+                            item.low + L" " + item.high;
             row.weatherDays.push_back(std::move(item));
         }
     } else {
         row.customIconText = request.kind == Kind::Currency ? L"\U0001F4B1" : L"\U0001FA99";
         const double converted = request.amount * data.value;
-        if (!std::isfinite(converted)) return {Notice(request, i18n::Text(i18n::Key::Error), Hint(request))};
-        row.title = Number(request.amount) + L" " + request.base + L" \u2248 " + Number(converted) + L" " + request.quote;
-        row.subtitle = std::wstring(request.kind == Kind::Currency ? L"Frankfurter" : L"Coinbase") + L" \u00B7 " + data.date;
+        if (!std::isfinite(converted))
+            return {Notice(request, i18n::Text(i18n::Key::Error), Hint(request))};
+        row.title = Number(request.amount) + L" " + request.base + L" \u2248 " + Number(converted) +
+                    L" " + request.quote;
+        row.subtitle = std::wstring(request.kind == Kind::Currency ? L"Frankfurter" : L"Coinbase") +
+                       L" \u00B7 " + data.date;
         row.copyText = Number(converted);
     }
-    if (stale) (row.footerText.empty() ? row.subtitle : row.footerText) += L" \u00B7 " + std::wstring(i18n::Text(i18n::Key::Cached));
-    if (!row.footerText.empty()) row.copyText += L"\n" + row.footerText;
-    if (!row.weatherDays.empty()) row.cardSignature = row.copyText;
+    if (stale)
+        (row.footerText.empty() ? row.subtitle : row.footerText) +=
+            L" \u00B7 " + std::wstring(i18n::Text(i18n::Key::Cached));
+    if (!row.footerText.empty())
+        row.copyText += L"\n" + row.footerText;
+    if (!row.weatherDays.empty())
+        row.cardSignature = row.copyText;
     return {std::move(row)};
 }
 void Store(const std::wstring& key, Entry entry) {
     std::lock_guard lock(g_cacheMutex);
     if (!g_cache.count(key) && g_cache.size() >= 32) {
-        const auto oldest = std::min_element(g_cache.begin(), g_cache.end(), [](const auto& a, const auto& b) {
-            return a.second.used < b.second.used;
-        });
+        const auto oldest = std::min_element(
+            g_cache.begin(), g_cache.end(),
+            [](const auto& a, const auto& b) { return a.second.used < b.second.used; });
         g_cache.erase(oldest);
     }
     g_cache[key] = std::move(entry);
 }
-struct Initial { std::vector<Row> rows; bool fetch = false; };
+struct Initial {
+    std::vector<Row> rows;
+    bool fetch = false;
+};
 std::wstring Caption(const Request& request) {
-    if (request.kind == Kind::Speed) return Label(request.kind);
-    if (request.kind == Kind::Weather) return request.city.empty() ? Label(request.kind) : request.city;
-    if (request.valid) return Number(request.amount) + L" " + request.base + L" \u2192 " + request.quote;
+    if (request.kind == Kind::Speed)
+        return Label(request.kind);
+    if (request.kind == Kind::Weather)
+        return request.city.empty() ? Label(request.kind) : request.city;
+    if (request.valid)
+        return Number(request.amount) + L" " + request.base + L" \u2192 " + request.quote;
     return Label(request.kind);
 }
 Initial Begin(const Request& request) {
-    if (!request.enabled) return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineDisabled))}, false};
-    if (!request.valid) return {{Notice(request, Label(request.kind), Hint(request))}, false};
+    if (!request.enabled)
+        return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineDisabled))}, false};
+    if (!request.valid)
+        return {{Notice(request, Label(request.kind), Hint(request))}, false};
     if (request.kind == Kind::Speed) {
         std::lock_guard lock(g_cacheMutex);
         return {SpeedRows(request, g_lastSpeed.value_or(SpeedView{}), g_lastSpeedWhen), false};
@@ -22130,34 +22742,49 @@ Initial Begin(const Request& request) {
         }
     }
     if (cached && cached->data) {
-        const bool dayChanged = request.kind == Kind::Weather && CityDate(cached->data->utcOffset) != cached->data->today;
+        const bool dayChanged = request.kind == Kind::Weather &&
+                                CityDate(cached->data->utcOffset) != cached->data->today;
         return {Rows(request, *cached->data, cached->stale || now >= cached->expires || dayChanged),
                 now >= cached->expires || (dayChanged && !cached->stale)};
     }
-    if (cached && now < cached->expires) return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineUnavailable))}, false};
+    if (cached && now < cached->expires)
+        return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineUnavailable))},
+                false};
     return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineLoading), true)}, true};
 }
 
-Batch Expand(const Request& root, const commands::Names& names, const std::vector<std::wstring>& locations,
-             const std::vector<std::wstring>& currencies, const std::vector<std::wstring>& cryptos) {
-    if (!root.bare || root.kind == Kind::None || root.kind == Kind::Speed) return {root};
+Batch Expand(const Request& root, const commands::Names& names,
+             const std::vector<std::wstring>& locations,
+             const std::vector<std::wstring>& currencies,
+             const std::vector<std::wstring>& cryptos) {
+    if (!root.bare || root.kind == Kind::None || root.kind == Kind::Speed)
+        return {root};
     Batch batch;
     auto add = [&](const std::wstring& argument) {
         auto request = Parse(root.command + (argument.empty() ? L"" : L" " + argument), root.city,
-            root.fahrenheit ? L"fahrenheit" : L"celsius", root.quote, root.enabled, names, root.pastDays, root.futureDays);
-        request.revision = root.revision; request.query = root.query;
+                             root.fahrenheit ? L"fahrenheit" : L"celsius", root.quote, root.enabled,
+                             names, root.pastDays, root.futureDays);
+        request.revision = root.revision;
+        request.query = root.query;
         const auto identity = Key(request) + L":" + Number(request.amount);
-        for (const auto& old : batch) if (commands::Equal(Key(old) + L":" + Number(old.amount), identity)) return;
+        for (const auto& old : batch)
+            if (commands::Equal(Key(old) + L":" + Number(old.amount), identity))
+                return;
         batch.push_back(std::move(request));
     };
     if (root.kind == Kind::Weather) {
         add(L"");
-        for (size_t i = 0; i < std::min<size_t>(locations.size(), 8); ++i) if (!tools::Trim(locations[i]).empty()) add(locations[i]);
+        for (size_t i = 0; i < std::min<size_t>(locations.size(), 8); ++i)
+            if (!tools::Trim(locations[i]).empty())
+                add(locations[i]);
     } else {
         const auto& list = root.kind == Kind::Currency ? currencies : cryptos;
-        for (size_t i = 0; i < std::min<size_t>(list.size(), 12); ++i) if (!tools::Trim(list[i]).empty()) add(list[i]);
+        for (size_t i = 0; i < std::min<size_t>(list.size(), 12); ++i)
+            if (!tools::Trim(list[i]).empty())
+                add(list[i]);
     }
-    if (batch.empty()) batch.push_back(root);
+    if (batch.empty())
+        batch.push_back(root);
     return batch;
 }
 Initial BeginBatch(const Batch& batch) {
@@ -22165,56 +22792,81 @@ Initial BeginBatch(const Batch& batch) {
     for (const auto& request : batch) {
         auto initial = Begin(request);
         result.fetch = result.fetch || initial.fetch;
-        for (auto& row : initial.rows) result.rows.push_back(std::move(row));
+        for (auto& row : initial.rows)
+            result.rows.push_back(std::move(row));
     }
     return result;
 }
 
 std::wstring Escape(std::wstring_view text) {
-    if (text.size() > 200) throw std::invalid_argument("query too long");
-    const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
-    if (!count && !text.empty()) throw std::invalid_argument("invalid text");
+    if (text.size() > 200)
+        throw std::invalid_argument("query too long");
+    const int count =
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(),
+                            static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+    if (!count && !text.empty())
+        throw std::invalid_argument("invalid text");
     std::string utf8(static_cast<size_t>(count), '\0');
-    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), utf8.data(), count, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()),
+                        utf8.data(), count, nullptr, nullptr);
     std::wstring result;
     for (const unsigned char c : utf8) {
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') result += c;
-        else { result += L'%'; result += L"0123456789ABCDEF"[c >> 4]; result += L"0123456789ABCDEF"[c & 15]; }
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            c == '-' || c == '_' || c == '.' || c == '~')
+            result += c;
+        else {
+            result += L'%';
+            result += L"0123456789ABCDEF"[c >> 4];
+            result += L"0123456789ABCDEF"[c & 15];
+        }
     }
     return result;
 }
 std::wstring String(const Json& json, const wchar_t* key) {
     const auto text = std::wstring(json.GetNamedString(key, L""));
-    if (text.size() > 160 || std::any_of(text.begin(), text.end(), [](wchar_t c) { return c < 32 || c == 127; }))
+    if (text.size() > 160 ||
+        std::any_of(text.begin(), text.end(), [](wchar_t c) { return c < 32 || c == 127; }))
         throw std::invalid_argument("invalid provider text");
     return text;
 }
 double Numeric(const Json& json, const wchar_t* key) {
     const auto value = json.GetNamedValue(key);
-    if (value.ValueType() != JsonType::Number || !std::isfinite(value.GetNumber())) throw std::invalid_argument("invalid provider number");
+    if (value.ValueType() != JsonType::Number || !std::isfinite(value.GetNumber()))
+        throw std::invalid_argument("invalid provider number");
     return value.GetNumber();
 }
 double Decimal(const std::wstring& text) {
-    if (text.empty() || text.size() > 80 || std::any_of(text.begin(), text.end(), [](wchar_t c) { return c > 127; }))
+    if (text.empty() || text.size() > 80 ||
+        std::any_of(text.begin(), text.end(), [](wchar_t c) { return c > 127; }))
         throw std::invalid_argument("invalid decimal");
-    std::wistringstream stream(text); stream.imbue(std::locale::classic());
-    double value = 0; stream >> value;
-    if (!stream || stream.peek() != std::char_traits<wchar_t>::eof() || !std::isfinite(value)) throw std::invalid_argument("invalid decimal");
+    std::wistringstream stream(text);
+    stream.imbue(std::locale::classic());
+    double value = 0;
+    stream >> value;
+    if (!stream || stream.peek() != std::char_traits<wchar_t>::eof() || !std::isfinite(value))
+        throw std::invalid_argument("invalid decimal");
     return value;
 }
 std::wstring UtcNow() {
-    SYSTEMTIME time{}; GetSystemTime(&time);
-    wchar_t text[40]; swprintf_s(text, L"%04u-%02u-%02u %02u:%02u UTC", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute);
+    SYSTEMTIME time{};
+    GetSystemTime(&time);
+    wchar_t text[40];
+    swprintf_s(text, L"%04u-%02u-%02u %02u:%02u UTC", time.wYear, time.wMonth, time.wDay,
+               time.wHour, time.wMinute);
     return text;
 }
 bool AllowedHost(std::wstring_view host) {
     return host == L"api.open-meteo.com" || host == L"geocoding-api.open-meteo.com" ||
-        host == L"ipwho.is" || host == L"api.frankfurter.dev" || host == L"api.coinbase.com";
+           host == L"ipwho.is" || host == L"api.frankfurter.dev" || host == L"api.coinbase.com";
 }
 struct Handle {
     HINTERNET value = nullptr;
-    explicit Handle(HINTERNET handle) : value(handle) {}
-    ~Handle() { if (value) WinHttpCloseHandle(value); }
+    explicit Handle(HINTERNET handle) : value(handle) {
+    }
+    ~Handle() {
+        if (value)
+            WinHttpCloseHandle(value);
+    }
     Handle(const Handle&) = delete;
     Handle& operator=(const Handle&) = delete;
 };
@@ -22225,484 +22877,880 @@ struct ActiveRequest {
     ActiveRequest* next = nullptr;
     explicit ActiveRequest(HINTERNET handle) : value(handle) {
         std::lock_guard lock(g_httpMutex);
-        if (!value || g_searchQuit.load()) { if(value)WinHttpCloseHandle(value);value=nullptr;closed=true; }
-        next=g_activeHttp;if(next)next->previous=this;g_activeHttp=this;
+        if (!value || g_searchQuit.load()) {
+            if (value)
+                WinHttpCloseHandle(value);
+            value = nullptr;
+            closed = true;
+        }
+        next = g_activeHttp;
+        if (next)
+            next->previous = this;
+        g_activeHttp = this;
     }
     ~ActiveRequest() {
         std::lock_guard lock(g_httpMutex);
-        if(previous)previous->next=next;else g_activeHttp=next;
-        if(next)next->previous=previous;
-        if(value && !closed)WinHttpCloseHandle(value);
+        if (previous)
+            previous->next = next;
+        else
+            g_activeHttp = next;
+        if (next)
+            next->previous = previous;
+        if (value && !closed)
+            WinHttpCloseHandle(value);
     }
-    ActiveRequest(const ActiveRequest&)=delete;
-    ActiveRequest& operator=(const ActiveRequest&)=delete;
+    ActiveRequest(const ActiveRequest&) = delete;
+    ActiveRequest& operator=(const ActiveRequest&) = delete;
 };
 void CancelHttp() {
     std::lock_guard lock(g_httpMutex);
-    for(auto request=g_activeHttp;request;request=request->next)if(request->value && !request->closed) {
-        WinHttpCloseHandle(request->value);request->closed=true;
-    }
+    for (auto request = g_activeHttp; request; request = request->next)
+        if (request->value && !request->closed) {
+            WinHttpCloseHandle(request->value);
+            request->closed = true;
+        }
 }
 struct Http {
     Handle session{WinHttpOpen(L"StartEverything/2.1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
     Json Get(const std::wstring& host, const std::wstring& path) {
-        if (!AllowedHost(host) || !path.starts_with(L"/") || path.size() > 2048 || !session.value || g_searchQuit.load())
+        if (!AllowedHost(host) || !path.starts_with(L"/") || path.size() > 2048 || !session.value ||
+            g_searchQuit.load())
             throw std::runtime_error("request unavailable");
         WinHttpSetTimeouts(session.value, 2000, 2000, 2500, 3000);
-        Handle connection(WinHttpConnect(session.value, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0));
-        ActiveRequest request(connection.value ? WinHttpOpenRequest(connection.value, L"GET", path.c_str(), nullptr,
-            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr);
-        if (!request.value) throw std::runtime_error("request unavailable");
-        DWORD disable = WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_REDIRECTS;
-        if (!WinHttpSetOption(request.value, WINHTTP_OPTION_DISABLE_FEATURE, &disable, sizeof(disable)) ||
-            !WinHttpSendRequest(request.value, L"Accept: application/json\r\n", static_cast<DWORD>(-1L),
-                WINHTTP_NO_REQUEST_DATA, 0, 0, 0) || !WinHttpReceiveResponse(request.value, nullptr))
+        Handle connection(
+            WinHttpConnect(session.value, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0));
+        ActiveRequest request(
+            connection.value ? WinHttpOpenRequest(connection.value, L"GET", path.c_str(), nullptr,
+                                                  WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                                  WINHTTP_FLAG_SECURE)
+                             : nullptr);
+        if (!request.value)
+            throw std::runtime_error("request unavailable");
+        DWORD disable =
+            WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_REDIRECTS;
+        if (!WinHttpSetOption(request.value, WINHTTP_OPTION_DISABLE_FEATURE, &disable,
+                              sizeof(disable)) ||
+            !WinHttpSendRequest(request.value, L"Accept: application/json\r\n",
+                                static_cast<DWORD>(-1L), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+            !WinHttpReceiveResponse(request.value, nullptr))
             throw std::runtime_error("request failed");
         DWORD status = 0, size = sizeof(status);
-        if (!WinHttpQueryHeaders(request.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX) || status != 200)
+        if (!WinHttpQueryHeaders(
+                request.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX) ||
+            status != 200)
             throw std::runtime_error("provider unavailable");
         const auto deadline = GetTickCount64() + 8000;
         std::string bytes;
         for (;;) {
-            if (g_searchQuit.load() || GetTickCount64() >= deadline) throw std::runtime_error("request timed out");
-            char chunk[4096]; DWORD count = 0;
-            if (!WinHttpReadData(request.value, chunk, sizeof(chunk), &count)) throw std::runtime_error("response failed");
-            if (!count) break;
-            if (bytes.size() + count > 128 * 1024) throw std::runtime_error("response too large");
+            if (g_searchQuit.load() || GetTickCount64() >= deadline)
+                throw std::runtime_error("request timed out");
+            char chunk[4096];
+            DWORD count = 0;
+            if (!WinHttpReadData(request.value, chunk, sizeof(chunk), &count))
+                throw std::runtime_error("response failed");
+            if (!count)
+                break;
+            if (bytes.size() + count > 128 * 1024)
+                throw std::runtime_error("response too large");
             bytes.append(chunk, count);
         }
-        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
-        if (count <= 0) throw std::runtime_error("invalid response text");
+        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
+                                              static_cast<int>(bytes.size()), nullptr, 0);
+        if (count <= 0)
+            throw std::runtime_error("invalid response text");
         std::wstring text(static_cast<size_t>(count), L'\0');
-        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), text.data(), count);
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
+                            static_cast<int>(bytes.size()), text.data(), count);
         Json json{nullptr};
-        if (!Json::TryParse(text, json)) throw std::runtime_error("invalid response JSON");
+        if (!Json::TryParse(text, json))
+            throw std::runtime_error("invalid response JSON");
         return json;
     }
 };
 using SpeedProgress = std::function<void(const SpeedView&)>;
 using SpeedRunner = std::function<SpeedView(const Request&, const SpeedProgress&)>;
 double SpeedClock() {
-    LARGE_INTEGER tick{}; QueryPerformanceCounter(&tick);
-    static const double frequency=[] { LARGE_INTEGER value{};QueryPerformanceFrequency(&value);return static_cast<double>(value.QuadPart); }();
-    return static_cast<double>(tick.QuadPart)/frequency;
+    LARGE_INTEGER tick{};
+    QueryPerformanceCounter(&tick);
+    static const double frequency = [] {
+        LARGE_INTEGER value{};
+        QueryPerformanceFrequency(&value);
+        return static_cast<double>(value.QuadPart);
+    }();
+    return static_cast<double>(tick.QuadPart) / frequency;
 }
-struct SpeedTrial { size_t bytes=0; double seconds=0,latency=0; };
+struct SpeedTrial {
+    size_t bytes = 0;
+    double seconds = 0, latency = 0;
+};
 double Mbps(const SpeedTrial& trial) {
-    if(!trial.bytes || !std::isfinite(trial.seconds) || trial.seconds<=0)throw std::runtime_error("no speed sample");
-    return static_cast<double>(trial.bytes)*8/trial.seconds/1e6;
+    if (!trial.bytes || !std::isfinite(trial.seconds) || trial.seconds <= 0)
+        throw std::runtime_error("no speed sample");
+    return static_cast<double>(trial.bytes) * 8 / trial.seconds / 1e6;
 }
-using ByteProgress=std::function<void(size_t)>;
-using SpeedCheck=std::function<bool()>;
-struct SpeedBackend { const wchar_t* host; const wchar_t* prefix; const wchar_t* name; };
+using ByteProgress = std::function<void(size_t)>;
+using SpeedCheck = std::function<bool()>;
+struct SpeedBackend {
+    const wchar_t* host;
+    const wchar_t* prefix;
+    const wchar_t* name;
+};
 // Public LibreSpeed nodes listed at librespeed.org/backend-servers/servers.php.
 // Never contact getIP.php, telemetry endpoints or a URL supplied by a website.
-constexpr std::array<SpeedBackend,4> kSpeedBackends{{
-    {L"fra.speedtest.clouvider.net",L"/backend/",L"Frankfurt"},
-    {L"lon.speedtest.clouvider.net",L"/backend/",L"London"},
-    {L"nyc.speedtest.clouvider.net",L"/backend/",L"New York"},
-    {L"librespeed.a573.net",L"/backend/",L"Tokyo"},
+constexpr std::array<SpeedBackend, 4> kSpeedBackends{{
+    {L"fra.speedtest.clouvider.net", L"/backend/", L"Frankfurt"},
+    {L"lon.speedtest.clouvider.net", L"/backend/", L"London"},
+    {L"nyc.speedtest.clouvider.net", L"/backend/", L"New York"},
+    {L"librespeed.a573.net", L"/backend/", L"Tokyo"},
 }};
 const SpeedBackend& Backend(const Request& request) {
-    return kSpeedBackends[request.speedServer>=0 && request.speedServer<static_cast<int>(kSpeedBackends.size())?request.speedServer:0];
+    return kSpeedBackends[request.speedServer >= 0 &&
+                                  request.speedServer < static_cast<int>(kSpeedBackends.size())
+                              ? request.speedServer
+                              : 0];
 }
 std::atomic<ULONGLONG> g_speedRetryUntil{0};
 ULONGLONG SpeedRetrySeconds() {
-    const auto until=g_speedRetryUntil.load(),now=GetTickCount64();
-    return until>now?(until-now+999)/1000:0;
+    const auto until = g_speedRetryUntil.load(), now = GetTickCount64();
+    return until > now ? (until - now + 999) / 1000 : 0;
 }
 void DeferSpeed(ULONGLONG seconds) {
-    const auto now=GetTickCount64();
-    const auto until=now+std::min(std::max<ULONGLONG>(1,seconds),(~ULONGLONG{0}-now)/1000)*1000;
-    auto old=g_speedRetryUntil.load();while(old<until && !g_speedRetryUntil.compare_exchange_weak(old,until)){}
+    const auto now = GetTickCount64();
+    const auto until =
+        now + std::min(std::max<ULONGLONG>(1, seconds), (~ULONGLONG{0} - now) / 1000) * 1000;
+    auto old = g_speedRetryUntil.load();
+    while (old < until && !g_speedRetryUntil.compare_exchange_weak(old, until)) {
+    }
 }
 ULONGLONG RetryAfterSeconds(std::wstring_view text) {
-    if(!text.empty() && text.size()<=10 && std::all_of(text.begin(),text.end(),[](wchar_t c){return c>=L'0'&&c<=L'9';})) {
-        ULONGLONG value=0;for(auto c:text)value=value*10+c-L'0';return std::max<ULONGLONG>(1,value);
+    if (!text.empty() && text.size() <= 10 &&
+        std::all_of(text.begin(), text.end(), [](wchar_t c) { return c >= L'0' && c <= L'9'; })) {
+        ULONGLONG value = 0;
+        for (auto c : text)
+            value = value * 10 + c - L'0';
+        return std::max<ULONGLONG>(1, value);
     }
-    SYSTEMTIME date{};FILETIME future{},now{};
+    SYSTEMTIME date{};
+    FILETIME future{}, now{};
     const std::wstring value(text);
-    if(text.size()<=80 && WinHttpTimeToSystemTime(value.c_str(),&date) && SystemTimeToFileTime(&date,&future)) {
-        GetSystemTimeAsFileTime(&now);ULARGE_INTEGER a{},b{};
-        a.LowPart=future.dwLowDateTime;a.HighPart=future.dwHighDateTime;b.LowPart=now.dwLowDateTime;b.HighPart=now.dwHighDateTime;
-        return a.QuadPart>b.QuadPart?(a.QuadPart-b.QuadPart+9999999)/10000000:1;
+    if (text.size() <= 80 && WinHttpTimeToSystemTime(value.c_str(), &date) &&
+        SystemTimeToFileTime(&date, &future)) {
+        GetSystemTimeAsFileTime(&now);
+        ULARGE_INTEGER a{}, b{};
+        a.LowPart = future.dwLowDateTime;
+        a.HighPart = future.dwHighDateTime;
+        b.LowPart = now.dwLowDateTime;
+        b.HighPart = now.dwHighDateTime;
+        return a.QuadPart > b.QuadPart ? (a.QuadPart - b.QuadPart + 9999999) / 10000000 : 1;
     }
     return 60;
 }
 struct SpeedBusy : std::runtime_error {
     ULONGLONG seconds;
-    explicit SpeedBusy(ULONGLONG wait):std::runtime_error("speed server requested a cooldown"),seconds(wait){}
+    explicit SpeedBusy(ULONGLONG wait)
+        : std::runtime_error("speed server requested a cooldown"), seconds(wait) {
+    }
 };
 struct SpeedHttpError : std::runtime_error {
     DWORD status;
-    explicit SpeedHttpError(DWORD code):std::runtime_error("speed provider status "+std::to_string(code)),status(code){}
+    explicit SpeedHttpError(DWORD code)
+        : std::runtime_error("speed provider status " + std::to_string(code)), status(code) {
+    }
 };
 // Pace small probes separately from bulk transfers. Applying the probe rate
 // to every upload body artificially caps throughput on body-limited servers.
 // A bounded stream count and 32 ms minimum start interval limit bulk load.
 std::mutex g_speedPaceMutex;
-ULONGLONG g_speedNextRequest=0;
-void PaceSpeed(const Request& request,const SpeedCheck& active,size_t bytes=0) {
-    for(;;) {
-        if(!SpeedCurrent(request) || (active && !active()))throw std::runtime_error("speed test stopped");
-        if(const auto delay=SpeedRetrySeconds())throw SpeedBusy(delay);
-        ULONGLONG wait=0;
-        {std::lock_guard lock(g_speedPaceMutex);const auto now=GetTickCount64();
-            if(now>=g_speedNextRequest){g_speedNextRequest=now+(bytes>=32*1024?32:250);return;}
-            wait=g_speedNextRequest-now;
+ULONGLONG g_speedNextRequest = 0;
+void PaceSpeed(const Request& request, const SpeedCheck& active, size_t bytes = 0) {
+    for (;;) {
+        if (!SpeedCurrent(request) || (active && !active()))
+            throw std::runtime_error("speed test stopped");
+        if (const auto delay = SpeedRetrySeconds())
+            throw SpeedBusy(delay);
+        ULONGLONG wait = 0;
+        {
+            std::lock_guard lock(g_speedPaceMutex);
+            const auto now = GetTickCount64();
+            if (now >= g_speedNextRequest) {
+                g_speedNextRequest = now + (bytes >= 32 * 1024 ? 32 : 250);
+                return;
+            }
+            wait = g_speedNextRequest - now;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(std::min<ULONGLONG>(wait,25)));
+        std::this_thread::sleep_for(std::chrono::milliseconds(std::min<ULONGLONG>(wait, 25)));
     }
 }
-SpeedTrial Transfer(Http& http,const Request& request,bool upload,size_t bytes,const ByteProgress& progress,const SpeedCheck& active={}) {
-    constexpr size_t maxDownload=1024ULL*1024*1024,maxUpload=20ULL*1024*1024;
-    if(!SpeedCurrent(request) || !http.session.value || bytes>(upload?maxUpload:maxDownload))throw std::runtime_error("speed test unavailable");
-    PaceSpeed(request,active,bytes);
-    WinHttpSetTimeouts(http.session.value,2000,3000,4000,4000);
-    const auto& backend=Backend(request);
-    Handle connection(WinHttpConnect(http.session.value,backend.host,INTERNET_DEFAULT_HTTPS_PORT,0));
-    ULONGLONG nonce=0;
-    if(BCryptGenRandom(nullptr,reinterpret_cast<PUCHAR>(&nonce),sizeof(nonce),BCRYPT_USE_SYSTEM_PREFERRED_RNG)<0)throw std::runtime_error("test nonce unavailable");
-    std::wstring path=std::wstring(backend.prefix)+(upload||!bytes?L"empty.php":L"garbage.php");
-    path+=L"?r="+std::to_wstring(nonce);
-    if(!upload&&bytes)path+=L"&ckSize="+std::to_wstring((bytes+1048575)/1048576);
-    ActiveRequest response(connection.value?WinHttpOpenRequest(connection.value,upload?L"POST":L"GET",path.c_str(),nullptr,
-        WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE):nullptr);
-    if(!response.value)throw std::runtime_error("speed request unavailable");
-    DWORD disabled=WINHTTP_DISABLE_COOKIES|WINHTTP_DISABLE_AUTHENTICATION|WINHTTP_DISABLE_REDIRECTS;
-    if(!WinHttpSetOption(response.value,WINHTTP_OPTION_DISABLE_FEATURE,&disabled,sizeof(disabled)))throw std::runtime_error("speed options unavailable");
-    const double started=SpeedClock();
-    const auto check=[&]{if(!SpeedCurrent(request)||(active&&!active())||SpeedClock()-started>35)throw std::runtime_error("speed request stopped");};
+SpeedTrial Transfer(Http& http, const Request& request, bool upload, size_t bytes,
+                    const ByteProgress& progress, const SpeedCheck& active = {}) {
+    constexpr size_t maxDownload = 1024ULL * 1024 * 1024, maxUpload = 20ULL * 1024 * 1024;
+    if (!SpeedCurrent(request) || !http.session.value || bytes > (upload ? maxUpload : maxDownload))
+        throw std::runtime_error("speed test unavailable");
+    PaceSpeed(request, active, bytes);
+    WinHttpSetTimeouts(http.session.value, 2000, 3000, 4000, 4000);
+    const auto& backend = Backend(request);
+    Handle connection(
+        WinHttpConnect(http.session.value, backend.host, INTERNET_DEFAULT_HTTPS_PORT, 0));
+    ULONGLONG nonce = 0;
+    if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&nonce), sizeof(nonce),
+                        BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0)
+        throw std::runtime_error("test nonce unavailable");
+    std::wstring path =
+        std::wstring(backend.prefix) + (upload || !bytes ? L"empty.php" : L"garbage.php");
+    path += L"?r=" + std::to_wstring(nonce);
+    if (!upload && bytes)
+        path += L"&ckSize=" + std::to_wstring((bytes + 1048575) / 1048576);
+    ActiveRequest response(
+        connection.value ? WinHttpOpenRequest(connection.value, upload ? L"POST" : L"GET",
+                                              path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                              WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
+                         : nullptr);
+    if (!response.value)
+        throw std::runtime_error("speed request unavailable");
+    DWORD disabled =
+        WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_REDIRECTS;
+    if (!WinHttpSetOption(response.value, WINHTTP_OPTION_DISABLE_FEATURE, &disabled,
+                          sizeof(disabled)))
+        throw std::runtime_error("speed options unavailable");
+    const double started = SpeedClock();
+    const auto check = [&] {
+        if (!SpeedCurrent(request) || (active && !active()) || SpeedClock() - started > 35)
+            throw std::runtime_error("speed request stopped");
+    };
     check();
-    const wchar_t* headers=upload?L"Content-Type: application/octet-stream\r\nAccept-Encoding: identity\r\nCache-Control: no-cache\r\n":
-        L"Accept-Encoding: identity\r\nCache-Control: no-cache\r\n";
-    if(!WinHttpSendRequest(response.value,headers,static_cast<DWORD>(-1L),WINHTTP_NO_REQUEST_DATA,0,upload?static_cast<DWORD>(bytes):0,0))throw std::runtime_error("speed send failed");
+    const wchar_t* headers = upload ? L"Content-Type: application/octet-stream\r\nAccept-Encoding: "
+                                      L"identity\r\nCache-Control: no-cache\r\n"
+                                    : L"Accept-Encoding: identity\r\nCache-Control: no-cache\r\n";
+    if (!WinHttpSendRequest(response.value, headers, static_cast<DWORD>(-1L),
+                            WINHTTP_NO_REQUEST_DATA, 0, upload ? static_cast<DWORD>(bytes) : 0, 0))
+        throw std::runtime_error("speed send failed");
     char buffer[32768]{};
-    if(upload&&BCryptGenRandom(nullptr,reinterpret_cast<PUCHAR>(buffer),sizeof(buffer),BCRYPT_USE_SYSTEM_PREFERRED_RNG)<0)throw std::runtime_error("test data unavailable");
-    size_t sent=0;bool bodyComplete=true;
-    while(upload&&sent<bytes){check();DWORD written=0;
-        if(!WinHttpWriteData(response.value,buffer,static_cast<DWORD>(std::min(bytes-sent,sizeof(buffer))),&written)||!written){bodyComplete=false;break;}
-        sent+=written;progress(sent);
+    if (upload && BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(buffer), sizeof(buffer),
+                                  BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0)
+        throw std::runtime_error("test data unavailable");
+    size_t sent = 0;
+    bool bodyComplete = true;
+    while (upload && sent < bytes) {
+        check();
+        DWORD written = 0;
+        if (!WinHttpWriteData(response.value, buffer,
+                              static_cast<DWORD>(std::min(bytes - sent, sizeof(buffer))),
+                              &written) ||
+            !written) {
+            bodyComplete = false;
+            break;
+        }
+        sent += written;
+        progress(sent);
     }
-    check();if(!WinHttpReceiveResponse(response.value,nullptr))throw std::runtime_error("speed response failed");
-    DWORD status=0,size=sizeof(status);
-    if(!WinHttpQueryHeaders(response.value,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,WINHTTP_NO_HEADER_INDEX))throw std::runtime_error("speed status unavailable");
-    if(status!=200){
-        wchar_t retry[96]{};DWORD length=sizeof(retry);
-        const bool instructed=WinHttpQueryHeaders(response.value,WINHTTP_QUERY_CUSTOM,L"Retry-After",retry,&length,WINHTTP_NO_HEADER_INDEX);
-        if(status==429 || (status==503&&instructed)){
-            const auto wait=RetryAfterSeconds(instructed?std::wstring_view(retry):std::wstring_view{});DeferSpeed(wait);throw SpeedBusy(wait);
+    check();
+    if (!WinHttpReceiveResponse(response.value, nullptr))
+        throw std::runtime_error("speed response failed");
+    DWORD status = 0, size = sizeof(status);
+    if (!WinHttpQueryHeaders(response.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX))
+        throw std::runtime_error("speed status unavailable");
+    if (status != 200) {
+        wchar_t retry[96]{};
+        DWORD length = sizeof(retry);
+        const bool instructed =
+            WinHttpQueryHeaders(response.value, WINHTTP_QUERY_CUSTOM, L"Retry-After", retry,
+                                &length, WINHTTP_NO_HEADER_INDEX);
+        if (status == 429 || (status == 503 && instructed)) {
+            const auto wait =
+                RetryAfterSeconds(instructed ? std::wstring_view(retry) : std::wstring_view{});
+            DeferSpeed(wait);
+            throw SpeedBusy(wait);
         }
         throw SpeedHttpError(status);
     }
-    if(!bodyComplete)throw std::runtime_error("speed write failed");
-    const double headersAt=SpeedClock();size_t received=0;
-    for(;;){check();DWORD count=0;
-        const auto amount=static_cast<DWORD>(!upload&&bytes?std::min(sizeof(buffer),bytes-received):sizeof(buffer));
-        if(!amount)break;
-        if(!WinHttpReadData(response.value,buffer,amount,&count))throw std::runtime_error("speed read failed");
-        if(!count)break;received+=count;
-        if((upload||!bytes)&&received>65536)throw std::runtime_error("unexpected speed response");
-        if(!upload&&bytes)progress(received);
+    if (!bodyComplete)
+        throw std::runtime_error("speed write failed");
+    const double headersAt = SpeedClock();
+    size_t received = 0;
+    for (;;) {
+        check();
+        DWORD count = 0;
+        const auto amount = static_cast<DWORD>(
+            !upload && bytes ? std::min(sizeof(buffer), bytes - received) : sizeof(buffer));
+        if (!amount)
+            break;
+        if (!WinHttpReadData(response.value, buffer, amount, &count))
+            throw std::runtime_error("speed read failed");
+        if (!count)
+            break;
+        received += count;
+        if ((upload || !bytes) && received > 65536)
+            throw std::runtime_error("unexpected speed response");
+        if (!upload && bytes)
+            progress(received);
     }
-    if(!upload&&bytes&&received!=bytes)throw std::runtime_error("incomplete speed response");
-    return {upload?sent:bytes?received:0,SpeedClock()-started,(headersAt-started)*1000};
+    if (!upload && bytes && received != bytes)
+        throw std::runtime_error("incomplete speed response");
+    return {upload  ? sent
+            : bytes ? received
+                    : 0,
+            SpeedClock() - started, (headersAt - started) * 1000};
 }
-using SpeedTransfer=std::function<SpeedTrial(Http&,const Request&,bool,size_t,const ByteProgress&,const SpeedCheck&)>;
+using SpeedTransfer = std::function<SpeedTrial(Http&, const Request&, bool, size_t,
+                                               const ByteProgress&, const SpeedCheck&)>;
 // Explicit test injection does not touch HTTP; production always uses PaceSpeed.
-ULONGLONG g_speedServerExpires=0;
-int g_speedServer=-1; // online worker only
-int SelectSpeedBackend(Http& http,const Request& request,const SpeedTransfer& transfer) {
-    if(g_speedServer>=0 && GetTickCount64()<g_speedServerExpires)return g_speedServer;
-    int best=-1;double fastest=std::numeric_limits<double>::max();
-    for(size_t i=0;i<kSpeedBackends.size();++i) {
-        if(!SpeedCurrent(request))throw std::runtime_error("speed test stopped");
-        auto probe=request;probe.speedServer=static_cast<int>(i);
+ULONGLONG g_speedServerExpires = 0;
+int g_speedServer = -1;  // online worker only
+int SelectSpeedBackend(Http& http, const Request& request, const SpeedTransfer& transfer) {
+    if (g_speedServer >= 0 && GetTickCount64() < g_speedServerExpires)
+        return g_speedServer;
+    int best = -1;
+    double fastest = std::numeric_limits<double>::max();
+    for (size_t i = 0; i < kSpeedBackends.size(); ++i) {
+        if (!SpeedCurrent(request))
+            throw std::runtime_error("speed test stopped");
+        auto probe = request;
+        probe.speedServer = static_cast<int>(i);
         try {
-            const auto result=transfer(http,probe,false,0,[](size_t){},{});
-            if(result.latency<fastest){fastest=result.latency;best=static_cast<int>(i);}
-        }catch(const SpeedBusy&){throw;}
-        catch(...){if(!SpeedCurrent(request))throw;}
+            const auto result = transfer(http, probe, false, 0, [](size_t) {}, {});
+            if (result.latency < fastest) {
+                fastest = result.latency;
+                best = static_cast<int>(i);
+            }
+        } catch (const SpeedBusy&) {
+            throw;
+        } catch (...) {
+            if (!SpeedCurrent(request))
+                throw;
+        }
     }
-    if(best<0)throw std::runtime_error("no speed server available");
-    g_speedServer=best;g_speedServerExpires=GetTickCount64()+60*60*1000;return best;
+    if (best < 0)
+        throw std::runtime_error("no speed server available");
+    g_speedServer = best;
+    g_speedServerExpires = GetTickCount64() + 60 * 60 * 1000;
+    return best;
 }
 
 // LibreSpeed-style grace periods, adaptive duration and transport-overhead
 // estimate. Keep raw payload accounting separate from the displayed estimate.
 constexpr double kSpeedTestSeconds = 15.0;
 constexpr double kSpeedOverhead = 1.06;
-double SpeedTimeBonus(double bytesPerSecond,double elapsed) {
-    return std::isfinite(bytesPerSecond)&&bytesPerSecond>0&&elapsed>0?
-        elapsed*std::min(2.0,bytesPerSecond/4000000.0):0;
+double SpeedTimeBonus(double bytesPerSecond, double elapsed) {
+    return std::isfinite(bytesPerSecond) && bytesPerSecond > 0 && elapsed > 0
+               ? elapsed * std::min(2.0, bytesPerSecond / 4000000.0)
+               : 0;
 }
-std::array<size_t,4> g_speedUploadLimits{20*1024*1024,20*1024*1024,20*1024*1024,20*1024*1024}; // online worker only
-struct DirectionResult { double mbps=0; size_t bytes=0; bool limited=false; double seconds=0; };
-DirectionResult MeasureDirection(const Request& request,bool upload,SpeedView& view,const SpeedProgress& update,
-                                 size_t budget=0,double duration=kSpeedTestSeconds,const SpeedTransfer& transfer=Transfer,bool adaptive=false) {
-    const size_t streams=adaptive?(upload?3:5):4;
-    constexpr size_t warmup=1000;
-    if((budget && budget<=streams*warmup) || !std::isfinite(duration) || duration<=0)throw std::invalid_argument("invalid speed bounds");
-    const double grace=adaptive?(upload?3.0:1.5):0;
-    std::mutex mutex;std::condition_variable wake;
-    std::atomic<bool> stop{false},measurementDone{false};
+std::array<size_t, 4> g_speedUploadLimits{20 * 1024 * 1024, 20 * 1024 * 1024, 20 * 1024 * 1024,
+                                          20 * 1024 * 1024};  // online worker only
+struct DirectionResult {
+    double mbps = 0;
+    size_t bytes = 0;
+    bool limited = false;
+    double seconds = 0;
+};
+DirectionResult MeasureDirection(const Request& request, bool upload, SpeedView& view,
+                                 const SpeedProgress& update, size_t budget = 0,
+                                 double duration = kSpeedTestSeconds,
+                                 const SpeedTransfer& transfer = Transfer, bool adaptive = false) {
+    const size_t streams = adaptive ? (upload ? 3 : 5) : 4;
+    constexpr size_t warmup = 1000;
+    if ((budget && budget <= streams * warmup) || !std::isfinite(duration) || duration <= 0)
+        throw std::invalid_argument("invalid speed bounds");
+    const double grace = adaptive ? (upload ? 3.0 : 1.5) : 0;
+    std::mutex mutex;
+    std::condition_variable wake;
+    std::atomic<bool> stop{false}, measurementDone{false};
     std::atomic<size_t> remainingWorkers{streams};
-    const size_t server=request.speedServer>=0 && request.speedServer<4?request.speedServer:0;
+    const size_t server =
+        request.speedServer >= 0 && request.speedServer < 4 ? request.speedServer : 0;
     std::atomic<size_t> uploadCeiling{g_speedUploadLimits[server]};
-    size_t ready=0,reserved=streams*warmup,bytes=0,pendingBytes=0,completedSamples=0;
-    bool started=false;double begin=0,measureBegin=0,deadline=0,measureEnd=0,lastFinished=0;
+    size_t ready = 0, reserved = streams * warmup, bytes = 0, pendingBytes = 0,
+           completedSamples = 0;
+    size_t burstBytes = 0;
+    bool started = false;
+    double begin = 0, measureBegin = 0, deadline = 0, measureEnd = 0, lastFinished = 0;
     std::string firstFailure;
     std::atomic<ULONGLONG> serverBusy{0};
     struct Threads {
-        std::vector<std::thread> items;std::function<void()> stop;
-        ~Threads(){stop();for(auto& thread:items)if(thread.joinable())thread.join();}
-    } threads{{},[&]{stop=true;{std::lock_guard lock(mutex);started=true;}wake.notify_all();}};
-    for(size_t i=0;i<streams;++i)threads.items.emplace_back([&] {
-        try {
-            Http channel;
-            const auto current=[&]{return !stop.load() && SpeedCurrent(request);};
-            transfer(channel,request,false,warmup,[](size_t){},current);
-            {std::unique_lock lock(mutex);++ready;wake.notify_all();wake.wait(lock,[&]{return started || stop.load();});}
-            size_t next=upload?128*1024:256*1024*1024;unsigned sizeRetries=0,networkRetries=0;
-            while(current() && !measurementDone.load()) {
-                size_t length;
-                {std::lock_guard lock(mutex);
-                    if(measurementDone.load() || SpeedClock()>=deadline || (budget && reserved>=budget))break;
-                    if(upload)next=std::min(next,uploadCeiling.load());
-                    length=budget?std::min({next,budget-reserved,(budget-streams*warmup)/streams}):next;reserved+=length;
-                }
-                size_t previous=0,inWindow=0;const auto transferStarted=SpeedClock();
-                SpeedTrial sample;
-                try { sample=transfer(channel,request,upload,length,[&](size_t count) {
-                    if(count<previous || count>length)throw std::runtime_error("invalid speed progress");
-                    const auto delta=count-previous;previous=count;
-                    std::lock_guard lock(mutex);const auto now=SpeedClock();
-                    if(now>=measureBegin && now<=deadline && (!measureEnd || now<=measureEnd)) {
-                        if(upload){pendingBytes+=delta;inWindow+=delta;}else bytes+=delta;
-                        lastFinished=now;
-                    }
-                },current);
-                    if(sample.bytes!=length)throw std::runtime_error("incomplete speed sample");
-                } catch(...) {
-                    // A rejected or incomplete body is not a valid speed sample.
-                    if(upload){std::lock_guard lock(mutex);pendingBytes-=inWindow;}
-                    try {throw;}
-                    catch(const SpeedHttpError& error) {
-                        if(!upload || error.status!=413 || length<=128*1024 || sizeRetries++>=8)throw;
-                        const auto lower=std::clamp<size_t>(length/2,128*1024,20*1024*1024);
-                        auto old=uploadCeiling.load();while(old>lower&&!uploadCeiling.compare_exchange_weak(old,lower)){}
-                        {std::lock_guard lock(mutex);reserved-=length;}
-                        next=uploadCeiling.load();continue;
-                    }
-                    catch(const SpeedBusy&){throw;}
-                    catch(const std::runtime_error& error) {
-                        const std::string_view reason(error.what());
-                        const bool network=reason=="speed send failed" || reason=="speed write failed" ||
-                            reason=="speed response failed" || reason=="speed read failed";
-                        if(budget || !network || !current() || measurementDone.load() || networkRetries++>=2)throw;
-                        std::this_thread::sleep_for(std::chrono::milliseconds(250));continue;
-                    }
-                }
-                {std::lock_guard lock(mutex);++completedSamples;const auto finished=SpeedClock();
-                    if(upload){
-                        // WriteData may finish before the network delivers a body.
-                        // After acknowledgment, apportion the body over its full
-                        // transfer interval rather than treating buffered writes
-                        // as instantaneous network traffic at either boundary.
-                        const auto overlap=std::max(0.0,std::min(finished,measureEnd?measureEnd:deadline)-std::max(transferStarted,measureBegin));
-                        const auto fraction=std::clamp(overlap/std::max(1e-9,finished-transferStarted),0.0,1.0);
-                        bytes+=static_cast<size_t>(sample.bytes*fraction);pendingBytes-=inWindow;
-                    }
-                    lastFinished=std::min(finished,measureEnd?measureEnd:deadline);
-                }
-                if(upload && std::isfinite(sample.seconds) && sample.seconds>0)
-                    next=static_cast<size_t>(std::clamp(sample.bytes/sample.seconds*0.75,32.0*1024,20.0*1024*1024));
-            }
-        }catch(const SpeedBusy& error){serverBusy=error.seconds;DeferSpeed(error.seconds);stop=true;CancelHttp();}
-        catch(const std::exception& error){std::lock_guard lock(mutex);if(firstFailure.empty())firstFailure=error.what();}
-        catch(...){std::lock_guard lock(mutex);if(firstFailure.empty())firstFailure="unknown transfer failure";}
-        remainingWorkers.fetch_sub(1);wake.notify_all();
-    });
-    {
-        std::unique_lock lock(mutex);const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(8);
-        while(ready<remainingWorkers.load() && remainingWorkers.load() && SpeedCurrent(request)) {
-            if(wake.wait_until(lock,until)==std::cv_status::timeout)break;
+        std::vector<std::thread> items;
+        std::function<void()> stop;
+        ~Threads() {
+            stop();
+            for (auto& thread : items)
+                if (thread.joinable())
+                    thread.join();
         }
-        if(serverBusy.load())throw SpeedBusy(serverBusy.load());
-        if(!ready || !SpeedCurrent(request))throw std::runtime_error("speed warmup failed");
-        begin=SpeedClock();measureBegin=begin+grace;deadline=measureBegin+duration;lastFinished=begin;started=true;
+    } threads{{}, [&] {
+                  stop = true;
+                  {
+                      std::lock_guard lock(mutex);
+                      started = true;
+                  }
+                  wake.notify_all();
+              }};
+    for (size_t i = 0; i < streams; ++i)
+        threads.items.emplace_back([&] {
+            try {
+                Http channel;
+                const auto current = [&] { return !stop.load() && SpeedCurrent(request); };
+                transfer(channel, request, false, warmup, [](size_t) {}, current);
+                {
+                    std::unique_lock lock(mutex);
+                    ++ready;
+                    wake.notify_all();
+                    wake.wait(lock, [&] { return started || stop.load(); });
+                }
+                size_t next = upload ? 128 * 1024 : 256 * 1024 * 1024;
+                unsigned sizeRetries = 0, networkRetries = 0;
+                while (current() && !measurementDone.load()) {
+                    size_t length;
+                    {
+                        std::lock_guard lock(mutex);
+                        if (measurementDone.load() || SpeedClock() >= deadline ||
+                            (budget && reserved >= budget))
+                            break;
+                        if (upload)
+                            next = std::min(next, uploadCeiling.load());
+                        length = budget ? std::min({next, budget - reserved,
+                                                    (budget - streams * warmup) / streams})
+                                        : next;
+                        reserved += length;
+                    }
+                    size_t previous = 0, inWindow = 0;
+                    const auto transferStarted = SpeedClock();
+                    SpeedTrial sample;
+                    try {
+                        sample = transfer(
+                            channel, request, upload, length,
+                            [&](size_t count) {
+                                if (count < previous || count > length)
+                                    throw std::runtime_error("invalid speed progress");
+                                const auto delta = count - previous;
+                                previous = count;
+                                std::lock_guard lock(mutex);
+                                const auto now = SpeedClock();
+                                if (!upload) burstBytes += delta;
+                                if (now >= measureBegin && now <= deadline &&
+                                    (!measureEnd || now <= measureEnd)) {
+                                    if (upload) {
+                                        pendingBytes += delta;
+                                        inWindow += delta;
+                                    } else
+                                        bytes += delta;
+                                    lastFinished = now;
+                                }
+                            },
+                            current);
+                        if (sample.bytes != length)
+                            throw std::runtime_error("incomplete speed sample");
+                    } catch (...) {
+                        // A rejected or incomplete body is not a valid speed sample.
+                        if (upload) {
+                            std::lock_guard lock(mutex);
+                            pendingBytes -= inWindow;
+                        }
+                        try {
+                            throw;
+                        } catch (const SpeedHttpError& error) {
+                            if (!upload || error.status != 413 || length <= 128 * 1024 ||
+                                sizeRetries++ >= 8)
+                                throw;
+                            const auto lower =
+                                std::clamp<size_t>(length / 2, 128 * 1024, 20 * 1024 * 1024);
+                            auto old = uploadCeiling.load();
+                            while (old > lower &&
+                                   !uploadCeiling.compare_exchange_weak(old, lower)) {
+                            }
+                            // A rejected upload may already have sent its body.
+                            // Never refund a finite run's payload allowance.
+                            if (!budget) {
+                                std::lock_guard lock(mutex);
+                                reserved -= length;
+                            }
+                            next = uploadCeiling.load();
+                            continue;
+                        } catch (const SpeedBusy&) {
+                            throw;
+                        } catch (const std::runtime_error& error) {
+                            const std::string_view reason(error.what());
+                            const bool network =
+                                reason == "speed send failed" || reason == "speed write failed" ||
+                                reason == "speed response failed" || reason == "speed read failed";
+                            if (budget || !network || !current() || measurementDone.load() ||
+                                networkRetries++ >= 2)
+                                throw;
+                            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                            continue;
+                        }
+                    }
+                    {
+                        std::lock_guard lock(mutex);
+                        ++completedSamples;
+                        const auto finished = SpeedClock();
+                        if (upload) {
+                            // WriteData may finish before the network delivers a body.
+                            // After acknowledgment, apportion the body over its full
+                            // transfer interval rather than treating buffered writes
+                            // as instantaneous network traffic at either boundary.
+                            const auto overlap = std::max(
+                                0.0, std::min(finished, measureEnd ? measureEnd : deadline) -
+                                         std::max(transferStarted, measureBegin));
+                            const auto fraction = std::clamp(
+                                overlap / std::max(1e-9, finished - transferStarted), 0.0, 1.0);
+                            bytes += static_cast<size_t>(sample.bytes * fraction);
+                            burstBytes += sample.bytes;
+                            pendingBytes -= inWindow;
+                        }
+                        lastFinished = std::min(finished, measureEnd ? measureEnd : deadline);
+                    }
+                    if (upload && std::isfinite(sample.seconds) && sample.seconds > 0)
+                        next = static_cast<size_t>(std::clamp(sample.bytes / sample.seconds * 0.75,
+                                                              32.0 * 1024, 20.0 * 1024 * 1024));
+                }
+            } catch (const SpeedBusy& error) {
+                serverBusy = error.seconds;
+                DeferSpeed(error.seconds);
+                stop = true;
+                CancelHttp();
+            } catch (const std::exception& error) {
+                std::lock_guard lock(mutex);
+                if (firstFailure.empty())
+                    firstFailure = error.what();
+            } catch (...) {
+                std::lock_guard lock(mutex);
+                if (firstFailure.empty())
+                    firstFailure = "unknown transfer failure";
+            }
+            remainingWorkers.fetch_sub(1);
+            wake.notify_all();
+        });
+    {
+        std::unique_lock lock(mutex);
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+        while (ready < remainingWorkers.load() && remainingWorkers.load() &&
+               SpeedCurrent(request)) {
+            if (wake.wait_until(lock, until) == std::cv_status::timeout)
+                break;
+        }
+        if (serverBusy.load())
+            throw SpeedBusy(serverBusy.load());
+        if (!ready || !SpeedCurrent(request))
+            throw std::runtime_error("speed warmup failed");
+        begin = SpeedClock();
+        measureBegin = begin + grace;
+        deadline = measureBegin + duration;
+        lastFinished = begin;
+        started = true;
     }
     wake.notify_all();
-    const double base=upload?55:10,span=upload?43:45;
-    double bonus=0,lastUpdate=measureBegin,drainDeadline=0;
-    while(remainingWorkers.load()) {
-        if(serverBusy.load())throw SpeedBusy(serverBusy.load());
-        if(!SpeedCurrent(request))throw std::runtime_error("speed test stopped");
-        const auto now=SpeedClock(),elapsed=std::max(0.0,now-measureBegin);
-        size_t measured,allocated,acknowledged;
-        {std::lock_guard lock(mutex);measured=bytes+pendingBytes;allocated=reserved;acknowledged=completedSamples;}
-        if(!measurementDone.load()) {
-            if(adaptive && elapsed>0 && measured && (!upload || acknowledged))
-                bonus+=SpeedTimeBonus(measured/elapsed,std::max(0.0,now-lastUpdate));
-            lastUpdate=std::max(measureBegin,now);
-            if(elapsed+bonus>=duration) {
-                {std::lock_guard lock(mutex);measureEnd=std::min(now,deadline);measurementDone=true;}
+    const double base = upload ? 55 : 10, span = upload ? 43 : 45;
+    double bonus = 0, lastUpdate = measureBegin, drainDeadline = 0;
+    while (remainingWorkers.load()) {
+        if (serverBusy.load())
+            throw SpeedBusy(serverBusy.load());
+        if (!SpeedCurrent(request))
+            throw std::runtime_error("speed test stopped");
+        const auto now = SpeedClock(), elapsed = std::max(0.0, now - measureBegin);
+        size_t measured, allocated, acknowledged;
+        {
+            std::lock_guard lock(mutex);
+            measured = bytes + pendingBytes;
+            allocated = reserved;
+            acknowledged = completedSamples;
+        }
+        if (!measurementDone.load()) {
+            if (adaptive && elapsed > 0 && measured && (!upload || acknowledged))
+                bonus += SpeedTimeBonus(measured / elapsed, std::max(0.0, now - lastUpdate));
+            lastUpdate = std::max(measureBegin, now);
+            if (elapsed + bonus >= duration) {
+                {
+                    std::lock_guard lock(mutex);
+                    measureEnd = std::min(now, deadline);
+                    measurementDone = true;
+                }
                 // Finish already-started upload bodies to validate their in-window
                 // bytes. Exclude bytes written during this bounded response drain.
                 // Downloads have already been validated by HTTP 200 headers.
-                if(!upload){stop=true;CancelHttp();break;}
-                drainDeadline=now+std::min(3.0,std::max(1.0,duration/3));
+                if (!upload) {
+                    stop = true;
+                    CancelHttp();
+                    break;
+                }
+                drainDeadline = now + std::min(3.0, std::max(1.0, duration / 3));
             }
-        } else if(now>=drainDeadline){stop=true;CancelHttp();break;}
-        view.progress=std::max(view.progress,base+span*std::min(0.99,std::max((elapsed+bonus)/duration,budget?static_cast<double>(allocated)/budget:0.0)));
-        const auto sampleSeconds=measurementDone.load()?measureEnd-measureBegin:elapsed;
-        if(sampleSeconds>=0.2 && measured) {
-            const auto rate=Mbps({measured,sampleSeconds,0})*(adaptive?kSpeedOverhead:1);
-            if(upload)view.upload=rate;else view.download=rate;
+        } else if (now >= drainDeadline) {
+            stop = true;
+            CancelHttp();
+            break;
+        }
+        view.progress = std::max(
+            view.progress,
+            base + span * std::min(0.99, std::max((elapsed + bonus) / duration,
+                                                  budget ? static_cast<double>(allocated) / budget
+                                                         : 0.0)));
+        const auto sampleSeconds = measurementDone.load() ? measureEnd - measureBegin : elapsed;
+        if (sampleSeconds >= 0.2 && measured) {
+            const auto rate = Mbps({measured, sampleSeconds, 0}) * (adaptive ? kSpeedOverhead : 1);
+            if (upload)
+                view.upload = rate;
+            else
+                view.download = rate;
         }
         update(view);
-        std::unique_lock lock(mutex);wake.wait_for(lock,std::chrono::milliseconds(100));
+        std::unique_lock lock(mutex);
+        wake.wait_for(lock, std::chrono::milliseconds(100));
     }
-    for(auto& thread:threads.items)if(thread.joinable())thread.join();
-    if(upload)g_speedUploadLimits[server]=uploadCeiling.load();
-    if(!SpeedCurrent(request))throw std::runtime_error("speed test stopped");
-    if(serverBusy.load())throw SpeedBusy(serverBusy.load());
-    if(!bytes || (upload && !completedSamples))throw std::runtime_error("no measured speed samples");
-    const bool limited=budget && reserved>=budget && lastFinished<deadline;
-    if(!limited && !measurementDone.load())throw std::runtime_error(std::string(upload?"upload":"download")+" connections ended early: "+firstFailure);
-    const double seconds=limited?lastFinished-measureBegin:adaptive?measureEnd-measureBegin:duration;
-    const auto rate=Mbps({bytes,seconds,0})*(adaptive?kSpeedOverhead:1);
+    for (auto& thread : threads.items)
+        if (thread.joinable())
+            thread.join();
+    if (upload)
+        g_speedUploadLimits[server] = uploadCeiling.load();
+    if (!SpeedCurrent(request))
+        throw std::runtime_error("speed test stopped");
+    if (serverBusy.load())
+        throw SpeedBusy(serverBusy.load());
+    const bool limited = budget && reserved >= budget && lastFinished < deadline;
+    if (!limited && !measurementDone.load())
+        throw std::runtime_error(std::string(upload ? "upload" : "download") +
+                                 " connections ended early: " + firstFailure);
+    double seconds = limited    ? lastFinished - measureBegin
+                     : adaptive ? measureEnd - measureBegin
+                                : duration;
+    // A very fast link can spend its finite allowance before grace ends. Use
+    // the valid payload/acknowledgments over that whole capped burst instead
+    // of claiming there were no samples. The result remains marked limited.
+    if (!bytes && limited && burstBytes) {
+        bytes = burstBytes;
+        seconds = lastFinished - begin;
+    }
+    if (!bytes || (upload && !completedSamples) || !std::isfinite(seconds) || seconds <= 0)
+        throw std::runtime_error("no measured speed samples");
+    const auto rate = Mbps({bytes, seconds, 0}) * (adaptive ? kSpeedOverhead : 1);
     Wh_Log(L"speed: %ls %.1f Mbps, %.2f s measured, %.2f MB, upload ceiling %llu bytes",
-        upload?L"upload":L"download",rate,seconds,bytes/1e6,static_cast<unsigned long long>(uploadCeiling.load()));
-    return {rate,bytes,limited,seconds};
+           upload ? L"upload" : L"download", rate, seconds, bytes / 1e6,
+           static_cast<unsigned long long>(uploadCeiling.load()));
+    return {rate, bytes, limited, seconds};
 }
-SpeedView MeasureSpeed(Http& http,const Request& request,const SpeedProgress& update) {
-    if(const auto delay=SpeedRetrySeconds())throw SpeedBusy(delay);
-    auto selected=request;selected.speedServer=SelectSpeedBackend(http,request,Transfer);
-    SpeedView result;result.server=Backend(selected).name;result.phase=SpeedView::Phase::Latency;update(result);
+// A finite per-direction reservation includes warmups, concurrent bodies and
+// failed upload attempts. Header/control responses and protocol overhead are
+// separate and bounded by Transfer. Unknown connection costs use smaller caps.
+constexpr size_t kDownloadBudget = 256 * 1024 * 1024;
+constexpr size_t kUploadBudget = 128 * 1024 * 1024;
+constexpr size_t kMeteredDownloadBudget = 64 * 1024 * 1024;
+constexpr size_t kMeteredUploadBudget = 32 * 1024 * 1024;
+bool MeteredConnection() {
+    try {
+        namespace connectivity = winrt::Windows::Networking::Connectivity;
+        const auto profile = connectivity::NetworkInformation::GetInternetConnectionProfile();
+        return !profile || profile.GetConnectionCost().NetworkCostType() !=
+                               connectivity::NetworkCostType::Unrestricted;
+    } catch (...) {
+        return true;
+    }
+}
+SpeedView MeasureSpeed(Http& http, const Request& request, const SpeedProgress& update) {
+    if (const auto delay = SpeedRetrySeconds())
+        throw SpeedBusy(delay);
+    const bool metered = MeteredConnection();
+    const size_t downloadBudget = metered ? kMeteredDownloadBudget : kDownloadBudget;
+    const size_t uploadBudget = metered ? kMeteredUploadBudget : kUploadBudget;
+    auto selected = request;
+    selected.speedServer = SelectSpeedBackend(http, request, Transfer);
+    SpeedView result;
+    result.server = Backend(selected).name;
+    result.phase = SpeedView::Phase::Latency;
+    update(result);
     std::vector<double> latency;
-    for(int i=0;i<4;++i) {
-        const auto sample=Transfer(http,selected,false,0,[](size_t){});
-        if(i)latency.push_back(sample.latency);
-        result.progress=(i+1)*2.5;update(result);
+    for (int i = 0; i < 4; ++i) {
+        const auto sample = Transfer(http, selected, false, 0, [](size_t) {});
+        if (i)
+            latency.push_back(sample.latency);
+        result.progress = (i + 1) * 2.5;
+        update(result);
     }
-    std::sort(latency.begin(),latency.end());result.latency=latency[latency.size()/2];
-    for(bool upload:{false,true}) {
-        result.phase=upload?SpeedView::Phase::Upload:SpeedView::Phase::Download;
-        result.progress=upload?55:10;update(result);
-        const auto measured=MeasureDirection(selected,upload,result,update,0,kSpeedTestSeconds,Transfer,true);
-        if(upload)result.upload=measured.mbps;else result.download=measured.mbps;
-        result.dataLimited=result.dataLimited||measured.limited;
-        result.progress=upload?98:55;update(result);
+    std::sort(latency.begin(), latency.end());
+    result.latency = latency[latency.size() / 2];
+    for (bool upload : {false, true}) {
+        result.phase = upload ? SpeedView::Phase::Upload : SpeedView::Phase::Download;
+        result.progress = upload ? 55 : 10;
+        update(result);
+        const auto measured = MeasureDirection(selected, upload, result, update,
+                                               upload ? uploadBudget : downloadBudget,
+                                               kSpeedTestSeconds, Transfer, !metered);
+        if (upload)
+            result.upload = measured.mbps;
+        else
+            result.download = measured.mbps;
+        result.dataLimited = result.dataLimited || measured.limited;
+        result.progress = upload ? 98 : 55;
+        update(result);
     }
-    result.phase=SpeedView::Phase::Done;result.progress=100;update(result);return result;
+    result.phase = SpeedView::Phase::Done;
+    result.progress = 100;
+    update(result);
+    return result;
 }
 
 using GetJson = std::function<Json(const std::wstring&, const std::wstring&)>;
-struct Location { double latitude = 0, longitude = 0; std::wstring name; ULONGLONG expires = 0; };
-std::optional<Location> g_autoLocation;  // online worker only; never saved to disk
+struct Location {
+    double latitude = 0, longitude = 0;
+    std::wstring name;
+    ULONGLONG expires = 0;
+};
+std::optional<Location> g_autoLocation;        // online worker only; never saved to disk
 std::map<std::wstring, Location> g_locations;  // online worker only, bounded
 Location Locate(const Request& request, const GetJson& get) {
     const auto now = GetTickCount64();
-    if (request.city.empty() && g_autoLocation && now < g_autoLocation->expires) return *g_autoLocation;
+    if (request.city.empty() && g_autoLocation && now < g_autoLocation->expires)
+        return *g_autoLocation;
     const auto key = tools::ToLower(request.city);
-    if (!key.empty()) if (const auto found = g_locations.find(key); found != g_locations.end() && now < found->second.expires) return found->second;
+    if (!key.empty())
+        if (const auto found = g_locations.find(key);
+            found != g_locations.end() && now < found->second.expires)
+            return found->second;
     Json json{nullptr};
     if (request.city.empty()) {
         json = get(L"ipwho.is", L"/?fields=success,city,country,latitude,longitude");
-        if (!json.GetNamedBoolean(L"success", false)) throw std::runtime_error("location unavailable");
+        if (!json.GetNamedBoolean(L"success", false))
+            throw std::runtime_error("location unavailable");
     } else {
-        auto response = get(L"geocoding-api.open-meteo.com", L"/v1/search?count=1&format=json&name=" + Escape(request.city));
+        auto response = get(L"geocoding-api.open-meteo.com",
+                            L"/v1/search?count=1&format=json&name=" + Escape(request.city));
         auto results = response.GetNamedArray(L"results");
-        if (!results.Size()) throw std::runtime_error("city not found");
+        if (!results.Size())
+            throw std::runtime_error("city not found");
         json = results.GetObjectAt(0);
     }
     Location location;
-    location.latitude = Numeric(json, L"latitude"); location.longitude = Numeric(json, L"longitude");
+    location.latitude = Numeric(json, L"latitude");
+    location.longitude = Numeric(json, L"longitude");
     location.name = String(json, request.city.empty() ? L"city" : L"name");
     const auto country = String(json, L"country");
-    if (location.name.empty() || std::abs(location.latitude) > 90 || std::abs(location.longitude) > 180)
+    if (location.name.empty() || std::abs(location.latitude) > 90 ||
+        std::abs(location.longitude) > 180)
         throw std::runtime_error("invalid location");
-    if (!country.empty()) location.name += L", " + country;
+    if (!country.empty())
+        location.name += L", " + country;
     location.expires = now + 6 * 60 * 60 * 1000;
-    if (request.city.empty()) g_autoLocation = location;
+    if (request.city.empty())
+        g_autoLocation = location;
     else {
-        if (g_locations.size() >= 16) g_locations.erase(g_locations.begin());
+        if (g_locations.size() >= 16)
+            g_locations.erase(g_locations.begin());
         g_locations[key] = location;
     }
     return location;
 }
 std::wstring Coordinate(double value) {
-    std::wostringstream stream; stream.imbue(std::locale::classic()); stream.precision(8); stream << value;
+    std::wostringstream stream;
+    stream.imbue(std::locale::classic());
+    stream.precision(8);
+    stream << value;
     return stream.str();
 }
 Data Fetch(const Request& request, const GetJson& get) {
     Data data;
     if (request.kind == Kind::Weather) {
         const auto location = Locate(request, get);
-        const auto json = get(L"api.open-meteo.com", L"/v1/forecast?latitude=" + Coordinate(location.latitude) +
-            L"&longitude=" + Coordinate(location.longitude) + L"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day"
-            L"&daily=temperature_2m_max,temperature_2m_min,weather_code&past_days=" + std::to_wstring(request.pastDays) +
-            L"&forecast_days=" + std::to_wstring(request.futureDays + 1) + L"&timezone=auto");
-        const auto current = json.GetNamedObject(L"current"); const auto daily = json.GetNamedObject(L"daily");
-        data.location = location.name; data.automatic = request.city.empty();
+        const auto json = get(
+            L"api.open-meteo.com",
+            L"/v1/forecast?latitude=" + Coordinate(location.latitude) + L"&longitude=" +
+                Coordinate(location.longitude) +
+                L"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day"
+                L"&daily=temperature_2m_max,temperature_2m_min,weather_code&past_days=" +
+                std::to_wstring(request.pastDays) + L"&forecast_days=" +
+                std::to_wstring(request.futureDays + 1) + L"&timezone=auto");
+        const auto current = json.GetNamedObject(L"current");
+        const auto daily = json.GetNamedObject(L"daily");
+        data.location = location.name;
+        data.automatic = request.city.empty();
         data.value = Numeric(current, L"temperature_2m");
-        data.humidity = Numeric(current, L"relative_humidity_2m"); data.wind = Numeric(current, L"wind_speed_10m");
+        data.humidity = Numeric(current, L"relative_humidity_2m");
+        data.wind = Numeric(current, L"wind_speed_10m");
         const auto code = Numeric(current, L"weather_code"), day = Numeric(current, L"is_day");
-        if (code < 0 || code > 99 || code != std::floor(code) || (day != 0 && day != 1)) throw std::runtime_error("invalid weather code");
-        data.code = static_cast<int>(code); data.day = static_cast<int>(day);
-        data.date = String(current, L"time"); std::replace(data.date.begin(), data.date.end(), L'T', L' ');
+        if (code < 0 || code > 99 || code != std::floor(code) || (day != 0 && day != 1))
+            throw std::runtime_error("invalid weather code");
+        data.code = static_cast<int>(code);
+        data.day = static_cast<int>(day);
+        data.date = String(current, L"time");
+        std::replace(data.date.begin(), data.date.end(), L'T', L' ');
         data.today = data.date.substr(0, 10);
         const auto offset = Numeric(json, L"utc_offset_seconds");
-        if (!Date(data.today) || offset != std::floor(offset) || std::abs(offset) > 14 * 3600) throw std::runtime_error("invalid weather date");
+        if (!Date(data.today) || offset != std::floor(offset) || std::abs(offset) > 14 * 3600)
+            throw std::runtime_error("invalid weather date");
         data.utcOffset = static_cast<int>(offset);
-        const auto dates = daily.GetNamedArray(L"time"), lows = daily.GetNamedArray(L"temperature_2m_min"),
-                   highs = daily.GetNamedArray(L"temperature_2m_max"), codes = daily.GetNamedArray(L"weather_code");
+        const auto dates = daily.GetNamedArray(L"time"),
+                   lows = daily.GetNamedArray(L"temperature_2m_min"),
+                   highs = daily.GetNamedArray(L"temperature_2m_max"),
+                   codes = daily.GetNamedArray(L"weather_code");
         const auto count = dates.Size();
         if (count != static_cast<uint32_t>(request.pastDays + request.futureDays + 1) ||
-            lows.Size() != count || highs.Size() != count || codes.Size() != count) throw std::runtime_error("invalid forecast length");
+            lows.Size() != count || highs.Size() != count || codes.Size() != count)
+            throw std::runtime_error("invalid forecast length");
         bool hasToday = false;
         for (uint32_t i = 0; i < count; ++i) {
-            Day day; day.date = dates.GetStringAt(i); day.low = lows.GetNumberAt(i); day.high = highs.GetNumberAt(i);
+            Day day;
+            day.date = dates.GetStringAt(i);
+            day.low = lows.GetNumberAt(i);
+            day.high = highs.GetNumberAt(i);
             const double code = codes.GetNumberAt(i);
             if (!Date(day.date) || (!data.days.empty() && data.days.back().date >= day.date) ||
-                !std::isfinite(day.low) || !std::isfinite(day.high) || day.low < -100 || day.high > 80 || day.low > day.high ||
-                !std::isfinite(code) || code < 0 || code > 99 || code != std::floor(code)) throw std::runtime_error("invalid forecast day");
+                !std::isfinite(day.low) || !std::isfinite(day.high) || day.low < -100 ||
+                day.high > 80 || day.low > day.high || !std::isfinite(code) || code < 0 ||
+                code > 99 || code != std::floor(code))
+                throw std::runtime_error("invalid forecast day");
             day.code = static_cast<int>(code);
-            if (day.date == data.today) { data.low = day.low; data.high = day.high; hasToday = true; }
+            if (day.date == data.today) {
+                data.low = day.low;
+                data.high = day.high;
+                hasToday = true;
+            }
             data.days.push_back(std::move(day));
         }
-        if (!hasToday) throw std::runtime_error("forecast missing today");
-        if (!std::isfinite(data.low) || !std::isfinite(data.high) || data.value < -100 || data.value > 80 ||
-            data.low < -100 || data.high > 80 || data.low > data.high || data.humidity < 0 || data.humidity > 100 || data.wind < 0 || data.wind > 500)
+        if (!hasToday)
+            throw std::runtime_error("forecast missing today");
+        if (!std::isfinite(data.low) || !std::isfinite(data.high) || data.value < -100 ||
+            data.value > 80 || data.low < -100 || data.high > 80 || data.low > data.high ||
+            data.humidity < 0 || data.humidity > 100 || data.wind < 0 || data.wind > 500)
             throw std::runtime_error("invalid weather");
     } else if (request.base == request.quote) {
-        data.value = 1; data.date = UtcNow();
+        data.value = 1;
+        data.date = UtcNow();
     } else if (request.kind == Kind::Currency) {
-        const auto json = get(L"api.frankfurter.dev", L"/v2/rate/" + request.base + L"/" + request.quote);
-        if (String(json, L"base") != request.base || String(json, L"quote") != request.quote) throw std::runtime_error("wrong currency pair");
-        data.value = Numeric(json, L"rate"); data.date = String(json, L"date");
+        const auto json =
+            get(L"api.frankfurter.dev", L"/v2/rate/" + request.base + L"/" + request.quote);
+        if (String(json, L"base") != request.base || String(json, L"quote") != request.quote)
+            throw std::runtime_error("wrong currency pair");
+        data.value = Numeric(json, L"rate");
+        data.date = String(json, L"date");
     } else {
-        const auto json = get(L"api.coinbase.com", L"/v2/prices/" + request.base + L"-" + request.quote + L"/spot").GetNamedObject(L"data");
-        if (String(json, L"currency") != request.quote || (json.HasKey(L"base") && String(json, L"base") != request.base))
+        const auto json = get(L"api.coinbase.com",
+                              L"/v2/prices/" + request.base + L"-" + request.quote + L"/spot")
+                              .GetNamedObject(L"data");
+        if (String(json, L"currency") != request.quote ||
+            (json.HasKey(L"base") && String(json, L"base") != request.base))
             throw std::runtime_error("wrong crypto pair");
-        data.value = Decimal(String(json, L"amount")); data.date = UtcNow();
+        data.value = Decimal(String(json, L"amount"));
+        data.date = UtcNow();
     }
-    if (!std::isfinite(data.value) || (request.kind != Kind::Weather && data.value <= 0) || data.date.empty())
+    if (!std::isfinite(data.value) || (request.kind != Kind::Weather && data.value <= 0) ||
+        data.date.empty())
         throw std::runtime_error("invalid data");
     return data;
 }
 void ThreadMain();
 void Schedule(Batch batch) {
-    if (batch.empty()) return;
+    if (batch.empty() || std::none_of(batch.begin(), batch.end(), [](const Request& request) {
+            return request.enabled && request.valid && request.kind != Kind::None &&
+                   (request.kind != Kind::Speed || request.runSpeed);
+        }))
+        return;
     {
         std::lock_guard lock(g_queryMutex);
-        if (g_searchQuit.load() || batch.front().revision != g_queryRevision) return;
+        if (g_searchQuit.load() || batch.front().revision != g_queryRevision)
+            return;
         // Both the app worker and the speed card's Run button can schedule
         // work. Serialize lazy creation so they cannot start two HTTP workers.
-        if (!g_onlineThread) g_onlineThread.emplace(ThreadMain);
+        if (!g_onlineThread)
+            g_onlineThread.emplace(ThreadMain);
         g_request = std::move(batch);
     }
     // Ordinary local searches never need an online thread or HTTP session.
@@ -22710,36 +23758,61 @@ void Schedule(Batch batch) {
 }
 void PublishBatch(const Batch& batch, const std::vector<std::vector<Row>>& groups) {
     std::vector<Row> rows;
-    for (const auto& group : groups) for (const auto& row : group) rows.push_back(row);
-    if (PublishAppResults(batch.front().revision, batch.front().query, std::move(rows))) RequestRender();
+    for (const auto& group : groups)
+        for (const auto& row : group)
+            rows.push_back(row);
+    if (PublishAppResults(batch.front().revision, batch.front().query, std::move(rows)))
+        RequestRender();
 }
 void StartSpeed(Request request) {
-    if (request.kind != Kind::Speed || !request.valid || !request.enabled) return;
-    if(const auto wait=SpeedRetrySeconds()){SpeedView value;value.phase=SpeedView::Phase::Failed;value.retrySeconds=wait;
-        if(PublishAppResults(request.revision,request.query,SpeedRows(request,value)))RequestRender();return;}
+    if (request.kind != Kind::Speed || !request.valid || !request.enabled)
+        return;
+    if (const auto wait = SpeedRetrySeconds()) {
+        SpeedView value;
+        value.phase = SpeedView::Phase::Failed;
+        value.retrySeconds = wait;
+        if (PublishAppResults(request.revision, request.query, SpeedRows(request, value)))
+            RequestRender();
+        return;
+    }
     {
         std::lock_guard lock(g_queryMutex);
         if (g_searchQuit.load() || request.revision != g_queryRevision ||
-            (g_speedBusy && g_speedRevision == request.revision)) return;
-        g_speedBusy = true; g_speedRevision = request.revision; request.speedId = ++g_speedId;
+            (g_speedBusy && g_speedRevision == request.revision))
+            return;
+        g_speedBusy = true;
+        g_speedRevision = request.revision;
+        request.speedId = ++g_speedId;
     }
     request.runSpeed = true;
-    SpeedView view; view.phase = SpeedView::Phase::Latency;
-    { std::lock_guard lock(g_cacheMutex); g_liveSpeed = view; }
-    if (PublishAppResults(request.revision, request.query, SpeedRows(request, view))) RequestRender();
+    SpeedView view;
+    view.phase = SpeedView::Phase::Latency;
+    {
+        std::lock_guard lock(g_cacheMutex);
+        g_liveSpeed = view;
+    }
+    if (PublishAppResults(request.revision, request.query, SpeedRows(request, view)))
+        RequestRender();
     Schedule(Batch{request});
 }
 void StopSpeed(Request request) {
     {
         std::lock_guard lock(g_queryMutex);
-        if (request.revision != g_queryRevision || !g_speedBusy || g_speedRevision != request.revision) return;
-        g_speedBusy = false; ++g_speedId;
+        if (request.revision != g_queryRevision || !g_speedBusy ||
+            g_speedRevision != request.revision)
+            return;
+        g_speedBusy = false;
+        ++g_speedId;
     }
     CancelHttp();
     SpeedView view;
-    { std::lock_guard lock(g_cacheMutex); view = g_liveSpeed.value_or(SpeedView{}); }
+    {
+        std::lock_guard lock(g_cacheMutex);
+        view = g_liveSpeed.value_or(SpeedView{});
+    }
     view.phase = SpeedView::Phase::Stopped;
-    if (PublishAppResults(request.revision, request.query, SpeedRows(request, view))) RequestRender();
+    if (PublishAppResults(request.revision, request.query, SpeedRows(request, view)))
+        RequestRender();
     g_queryWake.notify_all();
 }
 void Run(const GetJson& get, const SpeedRunner& runSpeed = {}) {
@@ -22748,78 +23821,151 @@ void Run(const GetJson& get, const SpeedRunner& runSpeed = {}) {
         {
             std::unique_lock lock(g_queryMutex);
             g_wake.wait(lock, [] { return g_searchQuit.load() || g_request.has_value(); });
-            if (g_searchQuit.load()) break;
-            batch = std::move(*g_request); g_request.reset();
-            if (batch.empty()) continue;
-            if (!batch.front().runSpeed && g_wake.wait_for(lock, std::chrono::milliseconds(450), [&] {
-                return g_searchQuit.load() || g_queryRevision != batch.front().revision || g_request.has_value();
-            })) continue;
+            if (g_searchQuit.load())
+                break;
+            batch = std::move(*g_request);
+            g_request.reset();
+            if (batch.empty())
+                continue;
+            if (!batch.front().enabled)
+                continue;
+            // Settle only online lookups. Local results and cached cards appear
+            // immediately; more typing replaces this batch before any HTTP.
+            if (batch.front().kind != Kind::Speed &&
+                g_wake.wait_for(lock, std::chrono::milliseconds(450), [&] {
+                    return g_searchQuit.load() || g_queryRevision != batch.front().revision ||
+                           g_request.has_value();
+                }))
+                continue;
         }
         if (batch.front().kind == Kind::Speed && batch.front().runSpeed) {
             const auto& request = batch.front();
             ULONGLONG lastPosted = 0;
             auto lastPhase = SpeedView::Phase::Ready;
             auto progress = [&](const SpeedView& value) {
-                if (!SpeedCurrent(request)) throw std::runtime_error("speed test stopped");
-                { std::lock_guard lock(g_cacheMutex); g_liveSpeed = value; }
+                if (!SpeedCurrent(request))
+                    throw std::runtime_error("speed test stopped");
+                {
+                    std::lock_guard lock(g_cacheMutex);
+                    g_liveSpeed = value;
+                }
                 const auto now = GetTickCount64();
-                if (value.phase == lastPhase && now - lastPosted < 100 && value.progress < 100) return;
-                lastPosted = now; lastPhase = value.phase;
-                if (PublishAppResults(request.revision, request.query, SpeedRows(request, value))) RequestRender();
+                if (value.phase == lastPhase && now - lastPosted < 100 && value.progress < 100)
+                    return;
+                lastPosted = now;
+                lastPhase = value.phase;
+                if (PublishAppResults(request.revision, request.query, SpeedRows(request, value)))
+                    RequestRender();
             };
             try {
-                if (!runSpeed) throw std::runtime_error("no speed provider");
+                if (!runSpeed)
+                    throw std::runtime_error("no speed provider");
                 const auto result = runSpeed(request, progress);
                 if (SpeedCurrent(request)) {
                     const auto when = UtcNow();
-                    { std::lock_guard lock(g_cacheMutex); g_lastSpeed = result; g_lastSpeedWhen = when; }
-                    if (PublishAppResults(request.revision, request.query, SpeedRows(request, result, when))) RequestRender();
+                    {
+                        std::lock_guard lock(g_cacheMutex);
+                        g_lastSpeed = result;
+                        g_lastSpeedWhen = when;
+                    }
+                    if (PublishAppResults(request.revision, request.query,
+                                          SpeedRows(request, result, when)))
+                        RequestRender();
                 }
             } catch (...) {
-                ULONGLONG retry=0;
-                try{throw;}
-                catch(const SpeedBusy& error){DeferSpeed(error.seconds);retry=SpeedRetrySeconds();Wh_Log(L"speed: server cooldown (%llu seconds)",static_cast<unsigned long long>(retry));}
-                catch(const std::exception& error){g_speedServer=-1;g_speedServerExpires=0;Wh_Log(L"speed: test failed (%hs)",error.what());}
-                catch(...){g_speedServer=-1;g_speedServerExpires=0;Wh_Log(L"speed: test failed (unknown error)");}
+                ULONGLONG retry = 0;
+                try {
+                    throw;
+                } catch (const SpeedBusy& error) {
+                    DeferSpeed(error.seconds);
+                    retry = SpeedRetrySeconds();
+                    Wh_Log(L"speed: server cooldown (%llu seconds)",
+                           static_cast<unsigned long long>(retry));
+                } catch (const std::exception& error) {
+                    g_speedServer = -1;
+                    g_speedServerExpires = 0;
+                    Wh_Log(L"speed: test failed (%hs)", error.what());
+                } catch (...) {
+                    g_speedServer = -1;
+                    g_speedServerExpires = 0;
+                    Wh_Log(L"speed: test failed (unknown error)");
+                }
                 if (SpeedCurrent(request)) {
                     SpeedView value;
-                    { std::lock_guard lock(g_cacheMutex); value = g_liveSpeed.value_or(SpeedView{}); }
-                    value.phase = SpeedView::Phase::Failed;value.retrySeconds=retry;
-                    if (PublishAppResults(request.revision, request.query, SpeedRows(request, value))) RequestRender();
+                    {
+                        std::lock_guard lock(g_cacheMutex);
+                        value = g_liveSpeed.value_or(SpeedView{});
+                    }
+                    value.phase = SpeedView::Phase::Failed;
+                    value.retrySeconds = retry;
+                    if (PublishAppResults(request.revision, request.query,
+                                          SpeedRows(request, value)))
+                        RequestRender();
                 }
             }
-            { std::lock_guard lock(g_queryMutex); if (request.speedId == g_speedId) g_speedBusy = false; }
+            {
+                std::lock_guard lock(g_queryMutex);
+                if (request.speedId == g_speedId)
+                    g_speedBusy = false;
+            }
             g_queryWake.notify_all();
             continue;
         }
         std::vector<std::vector<Row>> groups;
-        for (const auto& request : batch) groups.push_back(Begin(request).rows);
+        for (const auto& request : batch)
+            groups.push_back(Begin(request).rows);
         for (size_t i = 0; i < batch.size(); ++i) {
             const auto& request = batch[i];
-            { std::lock_guard lock(g_queryMutex); if (g_searchQuit.load() || request.revision != g_queryRevision) break; }
+            if (!request.enabled || !request.valid || request.kind == Kind::None ||
+                request.kind == Kind::Speed)
+                continue;
+            {
+                std::lock_guard lock(g_queryMutex);
+                if (g_searchQuit.load() || request.revision != g_queryRevision)
+                    break;
+            }
             try {
                 // An earlier saved card may have fetched the same pair for a
                 // different amount. Recheck the cache before every request.
                 auto cached = Begin(request);
-                if (!cached.fetch) groups[i] = std::move(cached.rows);
+                if (!cached.fetch)
+                    groups[i] = std::move(cached.rows);
                 else {
-                    const auto data = Fetch(request, [&](const std::wstring& host, const std::wstring& path) {
-                        { std::lock_guard lock(g_queryMutex); if (g_searchQuit.load() || request.revision != g_queryRevision) throw std::runtime_error("obsolete request"); }
-                        return get(host, path);
-                    });
+                    const auto data =
+                        Fetch(request, [&](const std::wstring& host, const std::wstring& path) {
+                            {
+                                std::lock_guard lock(g_queryMutex);
+                                if (g_searchQuit.load() || request.revision != g_queryRevision)
+                                    throw std::runtime_error("obsolete request");
+                            }
+                            return get(host, path);
+                        });
                     const ULONGLONG now = GetTickCount64();
-                    const ULONGLONG ttl = request.kind == Kind::Weather ? 10 * 60 * 1000 : request.kind == Kind::Currency ? 60 * 60 * 1000 : 30 * 1000;
+                    const ULONGLONG ttl = request.kind == Kind::Weather    ? 10 * 60 * 1000
+                                          : request.kind == Kind::Currency ? 60 * 60 * 1000
+                                                                           : 30 * 1000;
                     Store(Key(request), Entry{data, now + ttl, now});
                     groups[i] = Rows(request, data);
                 }
             } catch (...) {
-                { std::lock_guard lock(g_queryMutex); if (g_searchQuit.load() || request.revision != g_queryRevision) break; }
+                {
+                    std::lock_guard lock(g_queryMutex);
+                    if (g_searchQuit.load() || request.revision != g_queryRevision)
+                        break;
+                }
                 const auto now = GetTickCount64();
                 std::optional<Data> previous;
-                { std::lock_guard lock(g_cacheMutex); if (const auto found = g_cache.find(Key(request)); found != g_cache.end()) previous = found->second.data; }
+                {
+                    std::lock_guard lock(g_cacheMutex);
+                    if (const auto found = g_cache.find(Key(request)); found != g_cache.end())
+                        previous = found->second.data;
+                }
                 Store(Key(request), Entry{previous, now + 60 * 1000, now, true});
-                groups[i] = previous ? Rows(request, *previous, true) : std::vector<Row>{Notice(request, Caption(request),
-                    std::wstring(i18n::Text(i18n::Key::OnlineUnavailable)) + L"\n" + Hint(request))};
+                groups[i] = previous ? Rows(request, *previous, true)
+                                     : std::vector<Row>{Notice(
+                                           request, Caption(request),
+                                           std::wstring(i18n::Text(i18n::Key::OnlineUnavailable)) +
+                                               L"\n" + Hint(request))};
             }
             PublishBatch(batch, groups);
         }
@@ -22829,434 +23975,697 @@ void ThreadMain() {
     const HRESULT apartment = RoInitialize(RO_INIT_MULTITHREADED);
     {
         Http http;
-        Run([&](const std::wstring& host, const std::wstring& path) { return http.Get(host, path); },
-            [&](const Request& request, const SpeedProgress& update) { return MeasureSpeed(http, request, update); });
+        Run([&](const std::wstring& host,
+                const std::wstring& path) { return http.Get(host, path); },
+            [&](const Request& request, const SpeedProgress& update) {
+                return MeasureSpeed(http, request, update);
+            });
     }
-    if (SUCCEEDED(apartment)) RoUninitialize();
+    if (SUCCEEDED(apartment))
+        RoUninitialize();
 }
 }  // namespace online
 
 // Local hardware counters are collected only while the usage command is visible.
 namespace hardware {
 constexpr size_t kHistory = 60;
-double Percent(double value) { return std::isfinite(value) && value >= 0 ? std::clamp(value, 0.0, 100.0) : -1; }
+double Percent(double value) {
+    return std::isfinite(value) && value >= 0 ? std::clamp(value, 0.0, 100.0) : -1;
+}
 std::wstring Fixed(double value, const wchar_t* unit = L"", int digits = 1) {
-    if (!std::isfinite(value) || value < 0) return L"\u2014";
-    wchar_t buffer[96]; swprintf_s(buffer, L"%.*f%ls", digits, value, unit); return buffer;
+    if (!std::isfinite(value) || value < 0)
+        return L"\u2014";
+    wchar_t buffer[96];
+    swprintf_s(buffer, L"%.*f%ls", digits, value, unit);
+    return buffer;
 }
 void Append(std::vector<double>& history, double value) {
-    if (history.size() >= kHistory) history.erase(history.begin());
+    if (history.size() >= kHistory)
+        history.erase(history.begin());
     history.push_back(std::isfinite(value) && value >= 0 ? value : -1);
 }
-struct CounterValue { std::wstring name; double value = 0; };
+struct CounterValue {
+    std::wstring name;
+    double value = 0;
+};
 using EngineKey = std::pair<std::wstring, std::wstring>;
-std::map<std::wstring,double> GpuUsage(const std::vector<CounterValue>& counters) {
-    std::map<EngineKey,double> engines;
+std::map<std::wstring, double> GpuUsage(const std::vector<CounterValue>& counters) {
+    std::map<EngineKey, double> engines;
     for (const auto& item : counters) {
-        if (!std::isfinite(item.value) || item.value < 0) continue;
+        if (!std::isfinite(item.value) || item.value < 0)
+            continue;
         const auto name = tools::ToLower(item.name);
-        const auto luid = name.find(L"luid_"), phys = name.find(L"_phys_"), engine = name.find(L"_eng_"), type = name.find(L"_engtype_");
-        if (luid == std::wstring::npos || phys == std::wstring::npos || engine == std::wstring::npos || type == std::wstring::npos ||
-            phys <= luid+5 || engine <= phys+6 || type <= engine+5) continue;
+        const auto luid = name.find(L"luid_"), phys = name.find(L"_phys_"),
+                   engine = name.find(L"_eng_"), type = name.find(L"_engtype_");
+        if (luid == std::wstring::npos || phys == std::wstring::npos ||
+            engine == std::wstring::npos || type == std::wstring::npos || phys <= luid + 5 ||
+            engine <= phys + 6 || type <= engine + 5)
+            continue;
         // Combine all processes on each physical engine, then use the busiest
         // engine per adapter. Summing independent engines would exceed 100%.
-        const auto adapter = name.substr(luid+5, phys-luid-5);
-        engines[{adapter,name.substr(phys,type-phys)}] += item.value;
+        const auto adapter = name.substr(luid + 5, phys - luid - 5);
+        engines[{adapter, name.substr(phys, type - phys)}] += item.value;
     }
-    std::map<std::wstring,double> result;
-    for (const auto& [key,value] : engines) result[key.first] = std::max(result[key.first], Percent(value));
+    std::map<std::wstring, double> result;
+    for (const auto& [key, value] : engines)
+        result[key.first] = std::max(result[key.first], Percent(value));
     return result;
 }
 // These are adapter-wide gauges. Summing GPU Process Memory counters would
 // double-count shared allocations and measure the wrong scope.
-std::map<std::wstring,double> GpuMemory(const std::vector<CounterValue>& counters) {
-    std::map<EngineKey,double> physical;
-    for(const auto& item:counters) {
-        if(!std::isfinite(item.value) || item.value<0)continue;
-        const auto name=tools::ToLower(item.name);
-        if(!name.starts_with(L"luid_"))continue;
-        const auto at=name.find(L"_phys_",5);
-        if(at==name.npos)continue;
-        const auto raw=name.substr(5,at-5);const auto split=raw.find(L'_');
-        if(split==raw.npos)continue;
-        const auto high=raw.substr(0,split),low=raw.substr(split+1);
-        const auto hex=[](const std::wstring& text) {
-            return text.size()>=3 && text.size()<=10 && text.starts_with(L"0x") &&
-                std::all_of(text.begin()+2,text.end(),[](wchar_t c){return (c>=L'0' && c<=L'9') || (c>=L'a' && c<=L'f');});
+std::map<std::wstring, double> GpuMemory(const std::vector<CounterValue>& counters) {
+    std::map<EngineKey, double> physical;
+    for (const auto& item : counters) {
+        if (!std::isfinite(item.value) || item.value < 0)
+            continue;
+        const auto name = tools::ToLower(item.name);
+        if (!name.starts_with(L"luid_"))
+            continue;
+        const auto at = name.find(L"_phys_", 5);
+        if (at == name.npos)
+            continue;
+        const auto raw = name.substr(5, at - 5);
+        const auto split = raw.find(L'_');
+        if (split == raw.npos)
+            continue;
+        const auto high = raw.substr(0, split), low = raw.substr(split + 1);
+        const auto hex = [](const std::wstring& text) {
+            return text.size() >= 3 && text.size() <= 10 && text.starts_with(L"0x") &&
+                   std::all_of(text.begin() + 2, text.end(), [](wchar_t c) {
+                       return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
+                   });
         };
-        if(!hex(high) || !hex(low))continue;
-        auto node=name.substr(at+6);if(const auto duplicate=node.find(L'#');duplicate!=node.npos)node.resize(duplicate);
-        if(node.empty() || !std::all_of(node.begin(),node.end(),[](wchar_t c){return c>=L'0' && c<=L'9';}))continue;
-        wchar_t id[48];swprintf_s(id,L"0x%08x_0x%08x",static_cast<unsigned>(wcstoul(high.c_str()+2,nullptr,16)),
-            static_cast<unsigned>(wcstoul(low.c_str()+2,nullptr,16)));
-        auto& value=physical[{id,node}];value=std::max(value,item.value);
+        if (!hex(high) || !hex(low))
+            continue;
+        auto node = name.substr(at + 6);
+        if (const auto duplicate = node.find(L'#'); duplicate != node.npos)
+            node.resize(duplicate);
+        if (node.empty() || !std::all_of(node.begin(), node.end(),
+                                         [](wchar_t c) { return c >= L'0' && c <= L'9'; }))
+            continue;
+        wchar_t id[48];
+        swprintf_s(id, L"0x%08x_0x%08x",
+                   static_cast<unsigned>(wcstoul(high.c_str() + 2, nullptr, 16)),
+                   static_cast<unsigned>(wcstoul(low.c_str() + 2, nullptr, 16)));
+        auto& value = physical[{id, node}];
+        value = std::max(value, item.value);
     }
-    std::map<std::wstring,double> result;
-    for(const auto& [key,value]:physical)result[key.first]+=value;
-    for(auto& [key,value]:result)if(!std::isfinite(value))value=-1;
+    std::map<std::wstring, double> result;
+    for (const auto& [key, value] : physical)
+        result[key.first] += value;
+    for (auto& [key, value] : result)
+        if (!std::isfinite(value))
+            value = -1;
     return result;
 }
-std::wstring VramText(double used,uint64_t capacity) {
-    const bool gigabytes=capacity>=1073741824ull || (std::isfinite(used) && used>=1073741824.0);
-    const double divisor=gigabytes?1073741824.0:1048576.0;
-    std::wstring text=L"VRAM "+Fixed(used/divisor);
-    if(capacity)text+=L" / "+Fixed(static_cast<double>(capacity)/divisor);
-    return text+((capacity || (std::isfinite(used) && used>=0))?(gigabytes?L" GB":L" MB"):L"");
+std::wstring VramText(double used, uint64_t capacity) {
+    const bool gigabytes =
+        capacity >= 1073741824ull || (std::isfinite(used) && used >= 1073741824.0);
+    const double divisor = gigabytes ? 1073741824.0 : 1048576.0;
+    std::wstring text = L"VRAM " + Fixed(used / divisor);
+    if (capacity)
+        text += L" / " + Fixed(static_cast<double>(capacity) / divisor);
+    return text +
+           ((capacity || (std::isfinite(used) && used >= 0)) ? (gigabytes ? L" GB" : L" MB") : L"");
 }
 
 struct Counters {
     PDH_HQUERY query = nullptr;
-    PDH_HCOUNTER cpu = nullptr, idle = nullptr, diskRead = nullptr, diskWrite = nullptr, gpu = nullptr, vram = nullptr;
+    PDH_HCOUNTER cpu = nullptr, idle = nullptr, diskRead = nullptr, diskWrite = nullptr,
+                 gpu = nullptr, vram = nullptr;
     Counters() {
-        if (PdhOpenQueryW(nullptr,0,&query) != ERROR_SUCCESS) return;
+        if (PdhOpenQueryW(nullptr, 0, &query) != ERROR_SUCCESS)
+            return;
         const auto add = [&](const wchar_t* path, PDH_HCOUNTER& counter) {
-            if (PdhAddEnglishCounterW(query,path,0,&counter) != ERROR_SUCCESS) counter = nullptr;
+            if (PdhAddEnglishCounterW(query, path, 0, &counter) != ERROR_SUCCESS)
+                counter = nullptr;
         };
-        add(L"\\Processor Information(_Total)\\% Processor Time",cpu);
-        if (!cpu) add(L"\\Processor(_Total)\\% Processor Time",cpu);
-        add(L"\\PhysicalDisk(_Total)\\% Idle Time",idle);
-        add(L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec",diskRead);
-        add(L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec",diskWrite);
-        add(L"\\GPU Engine(*)\\Utilization Percentage",gpu);
-        add(L"\\GPU Adapter Memory(*)\\Dedicated Usage",vram);
+        add(L"\\Processor Information(_Total)\\% Processor Time", cpu);
+        if (!cpu)
+            add(L"\\Processor(_Total)\\% Processor Time", cpu);
+        add(L"\\PhysicalDisk(_Total)\\% Idle Time", idle);
+        add(L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", diskRead);
+        add(L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", diskWrite);
+        add(L"\\GPU Engine(*)\\Utilization Percentage", gpu);
+        add(L"\\GPU Adapter Memory(*)\\Dedicated Usage", vram);
         PdhCollectQueryData(query);
     }
-    ~Counters() { if (query) PdhCloseQuery(query); }
+    ~Counters() {
+        if (query)
+            PdhCloseQuery(query);
+    }
     Counters(const Counters&) = delete;
     double Value(PDH_HCOUNTER counter) {
         PDH_FMT_COUNTERVALUE value{};
-        if (!counter || PdhGetFormattedCounterValue(counter,PDH_FMT_DOUBLE|PDH_FMT_NOCAP100,nullptr,&value) != ERROR_SUCCESS ||
-            (value.CStatus != PDH_CSTATUS_VALID_DATA && value.CStatus != PDH_CSTATUS_NEW_DATA) || !std::isfinite(value.doubleValue)) return -1;
+        if (!counter ||
+            PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, nullptr,
+                                        &value) != ERROR_SUCCESS ||
+            (value.CStatus != PDH_CSTATUS_VALID_DATA && value.CStatus != PDH_CSTATUS_NEW_DATA) ||
+            !std::isfinite(value.doubleValue))
+            return -1;
         return value.doubleValue;
     }
     std::vector<CounterValue> Values(PDH_HCOUNTER counter) {
         std::vector<CounterValue> values;
-        if (!counter) return values;
+        if (!counter)
+            return values;
         DWORD bytes = 0, count = 0;
-        if (PdhGetFormattedCounterArrayW(counter,PDH_FMT_DOUBLE|PDH_FMT_NOCAP100,&bytes,&count,nullptr) != PDH_MORE_DATA || !bytes || bytes > 4*1024*1024) return values;
+        if (PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, &bytes, &count,
+                                         nullptr) != PDH_MORE_DATA ||
+            !bytes || bytes > 4 * 1024 * 1024)
+            return values;
         std::vector<BYTE> data(bytes);
         auto items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(data.data());
-        if (PdhGetFormattedCounterArrayW(counter,PDH_FMT_DOUBLE|PDH_FMT_NOCAP100,&bytes,&count,items) != ERROR_SUCCESS || count > 20000) return values;
-        for (DWORD i=0;i<count;++i) if (items[i].szName &&
-            (items[i].FmtValue.CStatus == PDH_CSTATUS_VALID_DATA || items[i].FmtValue.CStatus == PDH_CSTATUS_NEW_DATA))
-            values.push_back({items[i].szName,items[i].FmtValue.doubleValue});
+        if (PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, &bytes, &count,
+                                         items) != ERROR_SUCCESS ||
+            count > 20000)
+            return values;
+        for (DWORD i = 0; i < count; ++i)
+            if (items[i].szName && (items[i].FmtValue.CStatus == PDH_CSTATUS_VALID_DATA ||
+                                    items[i].FmtValue.CStatus == PDH_CSTATUS_NEW_DATA))
+                values.push_back({items[i].szName, items[i].FmtValue.doubleValue});
         return values;
     }
 };
-struct Adapter { std::wstring id, name; uint64_t dedicatedMemory=0; };
+struct Adapter {
+    std::wstring id, name;
+    uint64_t dedicatedMemory = 0;
+};
 std::vector<Adapter> Adapters() {
     std::vector<Adapter> adapters;
     winrt::com_ptr<IDXGIFactory1> factory;
-    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1),factory.put_void()))) return adapters;
-    for (UINT i=0;i<8;++i) {
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), factory.put_void())))
+        return adapters;
+    for (UINT i = 0; i < 8; ++i) {
         winrt::com_ptr<IDXGIAdapter1> adapter;
-        if (factory->EnumAdapters1(i,adapter.put()) == DXGI_ERROR_NOT_FOUND) break;
+        if (factory->EnumAdapters1(i, adapter.put()) == DXGI_ERROR_NOT_FOUND)
+            break;
         DXGI_ADAPTER_DESC1 desc{};
-        if (!adapter || FAILED(adapter->GetDesc1(&desc)) || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) continue;
-        wchar_t id[48]; swprintf_s(id,L"0x%08x_0x%08x",static_cast<unsigned>(desc.AdapterLuid.HighPart),desc.AdapterLuid.LowPart);
-        adapters.push_back({id,desc.Description,static_cast<uint64_t>(desc.DedicatedVideoMemory)+desc.DedicatedSystemMemory});
+        if (!adapter || FAILED(adapter->GetDesc1(&desc)) ||
+            (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE))
+            continue;
+        wchar_t id[48];
+        swprintf_s(id, L"0x%08x_0x%08x", static_cast<unsigned>(desc.AdapterLuid.HighPart),
+                   desc.AdapterLuid.LowPart);
+        adapters.push_back(
+            {id, desc.Description,
+             static_cast<uint64_t>(desc.DedicatedVideoMemory) + desc.DedicatedSystemMemory});
     }
     return adapters;
 }
 std::wstring CpuName() {
-    wchar_t text[256]{}; DWORD bytes = sizeof(text);
-    if (RegGetValueW(HKEY_LOCAL_MACHINE,L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",L"ProcessorNameString",RRF_RT_REG_SZ,nullptr,text,&bytes) == ERROR_SUCCESS)
+    wchar_t text[256]{};
+    DWORD bytes = sizeof(text);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                     L"ProcessorNameString", RRF_RT_REG_SZ, nullptr, text, &bytes) == ERROR_SUCCESS)
         return tools::Trim(text);
     return L"CPU";
 }
-struct NetworkSample { ULONGLONG received=0, sent=0; };
+struct NetworkSample {
+    ULONGLONG received = 0, sent = 0;
+};
 struct Monitor {
     Counters counters;
     std::vector<Adapter> adapters = Adapters();
     std::wstring cpuName = CpuName();
-    std::map<ULONGLONG,NetworkSample> previousNetwork;
+    std::map<ULONGLONG, NetworkSample> previousNetwork;
     ULONGLONG networkTick = 0;
     bool primed = false;
-    std::map<std::wstring,std::vector<double>> history;
+    std::map<std::wstring, std::vector<double>> history;
     std::vector<Row> Sample() {
-        const bool measured = primed && counters.query && PdhCollectQueryData(counters.query) == ERROR_SUCCESS;
+        const bool measured =
+            primed && counters.query && PdhCollectQueryData(counters.query) == ERROR_SUCCESS;
         primed = true;
         std::vector<Row> rows;
-        const auto add = [&](const std::wstring& id,const std::wstring& title,const std::wstring& subtitle,
-                             const wchar_t* icon,double value,const std::wstring& display,const std::wstring& detail,uint32_t color,bool percentage=true) {
-            UsageView view; view.id=id; view.value=value; view.display=display; view.detail=detail; view.color=color;
-            auto& series=history[id]; Append(series,value); view.history=series;
-            view.maximum=100;
-            if (!percentage) { view.maximum=1; for(double point:series) if(std::isfinite(point)) view.maximum=std::max(view.maximum,point*1.1); }
-            Row row; row.title=title; row.subtitle=subtitle; row.customIconText=icon;row.customIconIsGlyph=true;row.customGlyph=L"\uE9D2";
-            row.sectionTitle=i18n::Text(i18n::Key::HardwareUsage);
-            row.usage=std::move(view); row.canRunAsAdmin=false; row.cardSignature=id;
-            if (value>=0) row.copyText=title+L": "+display+(detail.empty()?L"":L"\n"+detail);
+        const auto add = [&](const std::wstring& id, const std::wstring& title,
+                             const std::wstring& subtitle, const wchar_t* icon, double value,
+                             const std::wstring& display, const std::wstring& detail,
+                             uint32_t color, bool percentage = true) {
+            UsageView view;
+            view.id = id;
+            view.value = value;
+            view.display = display;
+            view.detail = detail;
+            view.color = color;
+            auto& series = history[id];
+            Append(series, value);
+            view.history = series;
+            view.maximum = 100;
+            if (!percentage) {
+                view.maximum = 1;
+                for (double point : series)
+                    if (std::isfinite(point))
+                        view.maximum = std::max(view.maximum, point * 1.1);
+            }
+            Row row;
+            row.title = title;
+            row.subtitle = subtitle;
+            row.customIconText = icon;
+            row.customIconIsGlyph = true;
+            row.customGlyph = L"\uE9D2";
+            row.sectionTitle = i18n::Text(i18n::Key::HardwareUsage);
+            row.usage = std::move(view);
+            row.canRunAsAdmin = false;
+            row.cardSignature = id;
+            if (value >= 0)
+                row.copyText = title + L": " + display + (detail.empty() ? L"" : L"\n" + detail);
             rows.push_back(std::move(row));
         };
-        const auto unavailable=std::wstring(i18n::Text(i18n::Key::MetricsUnavailable));
-        const double cpu=measured?Percent(counters.Value(counters.cpu)):-1;
-        add(L"cpu",L"CPU",cpuName,L"\uE950",cpu,Fixed(cpu,L"%"),cpu<0?unavailable:L"",0xFF4CB9EF);
+        const auto unavailable = std::wstring(i18n::Text(i18n::Key::MetricsUnavailable));
+        const double cpu = measured ? Percent(counters.Value(counters.cpu)) : -1;
+        add(L"cpu", L"CPU", cpuName, L"\uE950", cpu, Fixed(cpu, L"%"), cpu < 0 ? unavailable : L"",
+            0xFF4CB9EF);
         MEMORYSTATUSEX memory{sizeof(memory)};
-        const bool memoryOk=GlobalMemoryStatusEx(&memory) && memory.ullTotalPhys && memory.ullAvailPhys<=memory.ullTotalPhys;
-        const double used=memoryOk?static_cast<double>(memory.ullTotalPhys-memory.ullAvailPhys):-1;
-        const double ram=memoryOk?Percent(used*100/memory.ullTotalPhys):-1;
-        add(L"ram",i18n::Text(i18n::Key::MemoryUsage),L"RAM",L"\uE7F1",ram,Fixed(ram,L"%"),memoryOk?
-            Fixed(used/1073741824.0)+L" / "+Fixed(memory.ullTotalPhys/1073741824.0)+L" GB":unavailable,0xFFBD8CFC);
-        const auto gpu=measured?GpuUsage(counters.Values(counters.gpu)):std::map<std::wstring,double>{};
-        const auto gpuMemory=GpuMemory(counters.Values(counters.vram));
-        for (size_t i=0;i<adapters.size();++i) {
-            auto found=gpu.find(adapters[i].id);
-            const double value=found==gpu.end()?-1:found->second;
-            const auto memory=gpuMemory.find(adapters[i].id);
-            const double dedicated=memory==gpuMemory.end()?-1:memory->second;
-            const auto detail=VramText(dedicated,adapters[i].dedicatedMemory);
-            add(L"gpu:"+adapters[i].id,L"GPU "+std::to_wstring(i),adapters[i].name,L"\uE7F4",value,Fixed(value,L"%"),detail,0xFF61D4A5);
+        const bool memoryOk = GlobalMemoryStatusEx(&memory) && memory.ullTotalPhys &&
+                              memory.ullAvailPhys <= memory.ullTotalPhys;
+        const double used =
+            memoryOk ? static_cast<double>(memory.ullTotalPhys - memory.ullAvailPhys) : -1;
+        const double ram = memoryOk ? Percent(used * 100 / memory.ullTotalPhys) : -1;
+        add(L"ram", i18n::Text(i18n::Key::MemoryUsage), L"RAM", L"\uE7F1", ram, Fixed(ram, L"%"),
+            memoryOk ? Fixed(used / 1073741824.0) + L" / " +
+                           Fixed(memory.ullTotalPhys / 1073741824.0) + L" GB"
+                     : unavailable,
+            0xFFBD8CFC);
+        const auto gpu =
+            measured ? GpuUsage(counters.Values(counters.gpu)) : std::map<std::wstring, double>{};
+        const auto gpuMemory = GpuMemory(counters.Values(counters.vram));
+        for (size_t i = 0; i < adapters.size(); ++i) {
+            auto found = gpu.find(adapters[i].id);
+            const double value = found == gpu.end() ? -1 : found->second;
+            const auto memory = gpuMemory.find(adapters[i].id);
+            const double dedicated = memory == gpuMemory.end() ? -1 : memory->second;
+            const auto detail = VramText(dedicated, adapters[i].dedicatedMemory);
+            add(L"gpu:" + adapters[i].id, L"GPU " + std::to_wstring(i), adapters[i].name, L"\uE7F4",
+                value, Fixed(value, L"%"), detail, 0xFF61D4A5);
         }
-        if (adapters.empty()) add(L"gpu",L"GPU",L"",L"\uE7F4",-1,L"\u2014",VramText(-1,0),0xFF61D4A5);
-        const auto diskIdle=measured?counters.Value(counters.idle):-1;
-        const double disk=diskIdle<0?-1:Percent(std::max(0.0,100-diskIdle));
-        add(L"disk",i18n::Text(i18n::Key::DiskUsage),L"",L"\uEDA2",disk,Fixed(disk,L"%"),disk<0?unavailable:
-            L"\u2193 "+Fixed(counters.Value(counters.diskRead)/1e6,L" MB/s")+L"   \u2191 "+Fixed(counters.Value(counters.diskWrite)/1e6,L" MB/s"),0xFFF2B86B);
-        double received=0,sent=0; const auto now=GetTickCount64();
-        std::map<ULONGLONG,NetworkSample> current;
-        PMIB_IF_TABLE2 table=nullptr; const bool networkOk=GetIfTable2(&table)==NO_ERROR;
+        if (adapters.empty())
+            add(L"gpu", L"GPU", L"", L"\uE7F4", -1, L"\u2014", VramText(-1, 0), 0xFF61D4A5);
+        const auto diskIdle = measured ? counters.Value(counters.idle) : -1;
+        const double disk = diskIdle < 0 ? -1 : Percent(std::max(0.0, 100 - diskIdle));
+        add(L"disk", i18n::Text(i18n::Key::DiskUsage), L"", L"\uEDA2", disk, Fixed(disk, L"%"),
+            disk < 0
+                ? unavailable
+                : L"\u2193 " + Fixed(counters.Value(counters.diskRead) / 1e6, L" MB/s") +
+                      L"   \u2191 " + Fixed(counters.Value(counters.diskWrite) / 1e6, L" MB/s"),
+            0xFFF2B86B);
+        double received = 0, sent = 0;
+        const auto now = GetTickCount64();
+        std::map<ULONGLONG, NetworkSample> current;
+        PMIB_IF_TABLE2 table = nullptr;
+        const bool networkOk = GetIfTable2(&table) == NO_ERROR;
         if (networkOk) {
-            for(ULONG i=0;i<table->NumEntries;++i) {
-                const auto& entry=table->Table[i];
-                if (!entry.InterfaceAndOperStatusFlags.HardwareInterface || entry.OperStatus!=IfOperStatusUp ||
-                    (entry.Type!=IF_TYPE_ETHERNET_CSMACD && entry.Type!=IF_TYPE_IEEE80211)) continue;
-                current[entry.InterfaceLuid.Value]={entry.InOctets,entry.OutOctets};
-                if(auto old=previousNetwork.find(entry.InterfaceLuid.Value);old!=previousNetwork.end() && now>networkTick &&
-                    entry.InOctets>=old->second.received && entry.OutOctets>=old->second.sent) {
-                    received+=(entry.InOctets-old->second.received)*8.0/(now-networkTick)/1000;
-                    sent+=(entry.OutOctets-old->second.sent)*8.0/(now-networkTick)/1000;
+            for (ULONG i = 0; i < table->NumEntries; ++i) {
+                const auto& entry = table->Table[i];
+                if (!entry.InterfaceAndOperStatusFlags.HardwareInterface ||
+                    entry.OperStatus != IfOperStatusUp ||
+                    (entry.Type != IF_TYPE_ETHERNET_CSMACD && entry.Type != IF_TYPE_IEEE80211))
+                    continue;
+                current[entry.InterfaceLuid.Value] = {entry.InOctets, entry.OutOctets};
+                if (auto old = previousNetwork.find(entry.InterfaceLuid.Value);
+                    old != previousNetwork.end() && now > networkTick &&
+                    entry.InOctets >= old->second.received && entry.OutOctets >= old->second.sent) {
+                    received +=
+                        (entry.InOctets - old->second.received) * 8.0 / (now - networkTick) / 1000;
+                    sent += (entry.OutOctets - old->second.sent) * 8.0 / (now - networkTick) / 1000;
                 }
             }
             FreeMibTable(table);
         }
-        const bool baseline=networkTick!=0; previousNetwork=std::move(current);networkTick=now;
-        const double traffic=networkOk&&baseline?received+sent:-1;
-        add(L"network",i18n::Text(i18n::Key::NetworkTraffic),L"Ethernet / Wi-Fi",L"\uE968",traffic,Fixed(traffic,L" Mbps"),traffic<0?unavailable:
-            L"\u2193 "+Fixed(received,L" Mbps")+L"   \u2191 "+Fixed(sent,L" Mbps"),0xFF6F9EFF,false);
+        const bool baseline = networkTick != 0;
+        previousNetwork = std::move(current);
+        networkTick = now;
+        const double traffic = networkOk && baseline ? received + sent : -1;
+        add(L"network", i18n::Text(i18n::Key::NetworkTraffic), L"Ethernet / Wi-Fi", L"\uE968",
+            traffic, Fixed(traffic, L" Mbps"),
+            traffic < 0
+                ? unavailable
+                : L"\u2193 " + Fixed(received, L" Mbps") + L"   \u2191 " + Fixed(sent, L" Mbps"),
+            0xFF6F9EFF, false);
         return rows;
     }
 };
-struct Request { std::wstring query; uint64_t revision=0; };
-std::optional<Request> g_request; // g_queryMutex
+struct Request {
+    std::wstring query;
+    uint64_t revision = 0;
+};
+std::optional<Request> g_request;  // g_queryMutex
 std::condition_variable g_wake;
 std::atomic<bool> g_visible{false};
 [[clang::no_destroy]] std::optional<std::thread> g_thread;
-bool CurrentLocked(const Request& request) { return !g_searchQuit.load() && g_visible.load() && request.revision==g_queryRevision && request.query==g_pendingQuery; }
-void Wake() { g_wake.notify_all(); }
-void Visible(bool value) { g_visible.store(value);Wake(); }
+bool CurrentLocked(const Request& request) {
+    return !g_searchQuit.load() && g_visible.load() && request.revision == g_queryRevision &&
+           request.query == g_pendingQuery;
+}
+void Wake() {
+    g_wake.notify_all();
+}
+void Visible(bool value) {
+    g_visible.store(value);
+    Wake();
+}
 void Run() {
-    const HRESULT apartment=RoInitialize(RO_INIT_MULTITHREADED);
+    const HRESULT apartment = RoInitialize(RO_INIT_MULTITHREADED);
     try {
-        while(!g_searchQuit.load()) {
+        while (!g_searchQuit.load()) {
             Request request;
             {
                 std::unique_lock lock(g_queryMutex);
-                g_wake.wait(lock,[]{return g_searchQuit.load() || (g_request && CurrentLocked(*g_request));});
-                if(g_searchQuit.load())break;
-                request=*g_request;
+                g_wake.wait(lock, [] {
+                    return g_searchQuit.load() || (g_request && CurrentLocked(*g_request));
+                });
+                if (g_searchQuit.load())
+                    break;
+                request = *g_request;
             }
             Monitor monitor;
-            auto next=std::chrono::steady_clock::now();
+            auto next = std::chrono::steady_clock::now();
             for (;;) {
-                {std::lock_guard lock(g_queryMutex);if(!CurrentLocked(request))break;}
-                auto rows=monitor.Sample();
-                if(PublishAppResults(request.revision,request.query,std::move(rows)))RequestRender();
-                next+=std::chrono::seconds(1);
-                if(next<std::chrono::steady_clock::now())next=std::chrono::steady_clock::now()+std::chrono::seconds(1);
+                {
+                    std::lock_guard lock(g_queryMutex);
+                    if (!CurrentLocked(request))
+                        break;
+                }
+                auto rows = monitor.Sample();
+                if (PublishAppResults(request.revision, request.query, std::move(rows)))
+                    RequestRender();
+                next += std::chrono::seconds(1);
+                if (next < std::chrono::steady_clock::now())
+                    next = std::chrono::steady_clock::now() + std::chrono::seconds(1);
                 std::unique_lock lock(g_queryMutex);
-                if(g_wake.wait_until(lock,next,[&]{return !CurrentLocked(request);}))break;
+                if (g_wake.wait_until(lock, next, [&] { return !CurrentLocked(request); }))
+                    break;
             }
             // PDH and adapter objects are released before waiting while idle.
         }
-    } catch(...) { Wh_Log(L"hardware: monitoring unavailable"); }
-    if(SUCCEEDED(apartment))RoUninitialize();
+    } catch (...) {
+        Wh_Log(L"hardware: monitoring unavailable");
+    }
+    if (SUCCEEDED(apartment))
+        RoUninitialize();
 }
-void Schedule(std::wstring query,uint64_t revision) {
+void Schedule(std::wstring query, uint64_t revision) {
     {
         std::lock_guard lock(g_queryMutex);
-        if(g_searchQuit.load() || revision!=g_queryRevision)return;
-        if(!g_thread)g_thread.emplace(Run);
-        g_request=Request{std::move(query),revision};
+        if (g_searchQuit.load() || revision != g_queryRevision)
+            return;
+        if (!g_thread)
+            g_thread.emplace(Run);
+        g_request = Request{std::move(query), revision};
     }
     Wake();
 }
 std::vector<Row> Initial(const std::wstring& query, bool valid) {
-    Row row;row.title=i18n::Text(i18n::Key::HardwareUsage);row.customGlyph=L"\uE9D2";row.infoOnly=true;row.canRunAsAdmin=false;
-    row.subtitle=valid?i18n::Text(i18n::Key::OnlineLoading):query.substr(0,query.find_first_of(L" \t"));
+    Row row;
+    row.title = i18n::Text(i18n::Key::HardwareUsage);
+    row.customGlyph = L"\uE9D2";
+    row.infoOnly = true;
+    row.canRunAsAdmin = false;
+    row.subtitle =
+        valid ? i18n::Text(i18n::Key::OnlineLoading) : query.substr(0, query.find_first_of(L" \t"));
     return {std::move(row)};
 }
 }  // namespace hardware
 
 namespace services {
-struct Entry { std::wstring name,display,description;DWORD state=0,controls=0,pid=0; };
+struct Entry {
+    std::wstring name, display, description;
+    DWORD state = 0, controls = 0, pid = 0;
+};
 void OpenManager() {
-    wchar_t system[MAX_PATH]{};const auto count=GetSystemDirectoryW(system,MAX_PATH);if(!count || count>=MAX_PATH)return;
-    const auto exe=std::wstring(system)+L"\\mmc.exe",args=L"\""+std::wstring(system)+L"\\services.msc\"";
-    ShellExecuteW(nullptr,L"open",exe.c_str(),args.c_str(),system,SW_SHOWNORMAL);
+    wchar_t system[MAX_PATH]{};
+    const auto count = GetSystemDirectoryW(system, MAX_PATH);
+    if (!count || count >= MAX_PATH)
+        return;
+    const auto exe = std::wstring(system) + L"\\mmc.exe",
+               args = L"\"" + std::wstring(system) + L"\\services.msc\"";
+    ShellExecuteW(nullptr, L"open", exe.c_str(), args.c_str(), system, SW_SHOWNORMAL);
 }
 struct ScHandle {
-    SC_HANDLE value=nullptr;
-    explicit ScHandle(SC_HANDLE handle):value(handle){}
-    ~ScHandle(){if(value)CloseServiceHandle(value);}
-    ScHandle(const ScHandle&)=delete;
+    SC_HANDLE value = nullptr;
+    explicit ScHandle(SC_HANDLE handle) : value(handle) {
+    }
+    ~ScHandle() {
+        if (value)
+            CloseServiceHandle(value);
+    }
+    ScHandle(const ScHandle&) = delete;
 };
 std::wstring ErrorText(DWORD code) {
     wchar_t text[2048]{};
-    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,nullptr,code,0,text,2048,nullptr);
-    return std::wstring(i18n::Text(i18n::Key::Error))+L" "+std::to_wstring(code)+L": "+commands::Trim(text);
+    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, code, 0,
+                   text, 2048, nullptr);
+    return std::wstring(i18n::Text(i18n::Key::Error)) + L" " + std::to_wstring(code) + L": " +
+           commands::Trim(text);
 }
-bool Allowed(Action action,DWORD state,DWORD controls) {
-    if(action==Action::Start)return state==SERVICE_STOPPED;
-    if(action!=Action::Stop && action!=Action::Restart)return false;
-    return (state==SERVICE_RUNNING || state==SERVICE_PAUSED) && (controls&SERVICE_ACCEPT_STOP);
+bool Allowed(Action action, DWORD state, DWORD controls) {
+    if (action == Action::Start)
+        return state == SERVICE_STOPPED;
+    if (action != Action::Stop && action != Action::Restart)
+        return false;
+    return (state == SERVICE_RUNNING || state == SERVICE_PAUSED) &&
+           (controls & SERVICE_ACCEPT_STOP);
 }
 const wchar_t* Status(DWORD state) {
-    return i18n::Text(state==SERVICE_RUNNING?i18n::Key::ServiceRunning:state==SERVICE_STOPPED?i18n::Key::TestStopped:
-        state==SERVICE_PAUSED?i18n::Key::ServicePaused:i18n::Key::ServicePending);
+    return i18n::Text(state == SERVICE_RUNNING   ? i18n::Key::ServiceRunning
+                      : state == SERVICE_STOPPED ? i18n::Key::TestStopped
+                      : state == SERVICE_PAUSED  ? i18n::Key::ServicePaused
+                                                 : i18n::Key::ServicePending);
 }
 std::vector<Entry> Enumerate() {
-    ScHandle manager(OpenSCManagerW(nullptr,nullptr,SC_MANAGER_ENUMERATE_SERVICE));
-    if(!manager.value)throw GetLastError();
-    std::vector<BYTE> buffer(256*1024);std::vector<Entry> entries;DWORD resume=0;
-    for(unsigned page=0;page<32;++page) {
-        DWORD needed=0,count=0;const auto before=resume;
-        const BOOL ok=EnumServicesStatusExW(manager.value,SC_ENUM_PROCESS_INFO,SERVICE_WIN32,SERVICE_STATE_ALL,
-            buffer.data(),static_cast<DWORD>(buffer.size()),&needed,&count,&resume,nullptr);
-        const auto error=ok?ERROR_SUCCESS:GetLastError();
-        if(!ok && error!=ERROR_MORE_DATA)throw error;
-        const auto items=reinterpret_cast<ENUM_SERVICE_STATUS_PROCESSW*>(buffer.data());
-        for(DWORD i=0;i<count;++i) {
-            const auto& item=items[i];
-            entries.push_back({item.lpServiceName,item.lpDisplayName,{},item.ServiceStatusProcess.dwCurrentState,
-                item.ServiceStatusProcess.dwControlsAccepted,item.ServiceStatusProcess.dwProcessId});
+    ScHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_ENUMERATE_SERVICE));
+    if (!manager.value)
+        throw GetLastError();
+    std::vector<BYTE> buffer(256 * 1024);
+    std::vector<Entry> entries;
+    DWORD resume = 0;
+    for (unsigned page = 0; page < 32; ++page) {
+        DWORD needed = 0, count = 0;
+        const auto before = resume;
+        const BOOL ok = EnumServicesStatusExW(
+            manager.value, SC_ENUM_PROCESS_INFO, SERVICE_WIN32, SERVICE_STATE_ALL, buffer.data(),
+            static_cast<DWORD>(buffer.size()), &needed, &count, &resume, nullptr);
+        const auto error = ok ? ERROR_SUCCESS : GetLastError();
+        if (!ok && error != ERROR_MORE_DATA)
+            throw error;
+        const auto items = reinterpret_cast<ENUM_SERVICE_STATUS_PROCESSW*>(buffer.data());
+        for (DWORD i = 0; i < count; ++i) {
+            const auto& item = items[i];
+            entries.push_back({item.lpServiceName,
+                               item.lpDisplayName,
+                               {},
+                               item.ServiceStatusProcess.dwCurrentState,
+                               item.ServiceStatusProcess.dwControlsAccepted,
+                               item.ServiceStatusProcess.dwProcessId});
         }
-        if(ok)return entries;
-        if(!count || resume==before)throw DWORD(ERROR_MORE_DATA);
+        if (ok)
+            return entries;
+        if (!count || resume == before)
+            throw DWORD(ERROR_MORE_DATA);
     }
     throw DWORD(ERROR_MORE_DATA);
 }
-std::wstring Description(SC_HANDLE manager,const std::wstring& name) {
-    ScHandle service(OpenServiceW(manager,name.c_str(),SERVICE_QUERY_CONFIG));if(!service.value)return {};
-    DWORD needed=0;QueryServiceConfig2W(service.value,SERVICE_CONFIG_DESCRIPTION,nullptr,0,&needed);
-    if(!needed || needed>65536)return {};
+std::wstring Description(SC_HANDLE manager, const std::wstring& name) {
+    ScHandle service(OpenServiceW(manager, name.c_str(), SERVICE_QUERY_CONFIG));
+    if (!service.value)
+        return {};
+    DWORD needed = 0;
+    QueryServiceConfig2W(service.value, SERVICE_CONFIG_DESCRIPTION, nullptr, 0, &needed);
+    if (!needed || needed > 65536)
+        return {};
     std::vector<BYTE> buffer(needed);
-    if(!QueryServiceConfig2W(service.value,SERVICE_CONFIG_DESCRIPTION,buffer.data(),needed,&needed))return {};
-    const auto description=reinterpret_cast<SERVICE_DESCRIPTIONW*>(buffer.data())->lpDescription;
-    if(!description)return {};
-    if(description[0]==L'@'){
+    if (!QueryServiceConfig2W(service.value, SERVICE_CONFIG_DESCRIPTION, buffer.data(), needed,
+                              &needed))
+        return {};
+    const auto description = reinterpret_cast<SERVICE_DESCRIPTIONW*>(buffer.data())->lpDescription;
+    if (!description)
+        return {};
+    if (description[0] == L'@') {
         wchar_t expanded[4096]{};
-        const auto count=ExpandEnvironmentStringsW(description+1,expanded,4096);
-        if(!count || count>4096)return {};
-        auto resource=std::wstring(expanded);resource.resize(resource.find_last_of(L',')==resource.npos?resource.size():resource.find_last_of(L','));
-        resource=commands::Trim(resource);
-        if(resource.size()>1 && resource.front()==L'"' && resource.back()==L'"')resource=resource.substr(1,resource.size()-2);
+        const auto count = ExpandEnvironmentStringsW(description + 1, expanded, 4096);
+        if (!count || count > 4096)
+            return {};
+        auto resource = std::wstring(expanded);
+        resource.resize(resource.find_last_of(L',') == resource.npos ? resource.size()
+                                                                     : resource.find_last_of(L','));
+        resource = commands::Trim(resource);
+        if (resource.size() > 1 && resource.front() == L'"' && resource.back() == L'"')
+            resource = resource.substr(1, resource.size() - 2);
         // Resolve local MUI descriptions without touching network resources.
-        if(resource.size()<3 || resource[1]!=L':' || resource[2]!=L'\\' || PathIsNetworkPathW(resource.c_str()))return {};
-        wchar_t resolved[4096]{};if(SUCCEEDED(SHLoadIndirectString(description,resolved,4096,nullptr)))return resolved;
+        if (resource.size() < 3 || resource[1] != L':' || resource[2] != L'\\' ||
+            PathIsNetworkPathW(resource.c_str()))
+            return {};
+        wchar_t resolved[4096]{};
+        if (SUCCEEDED(SHLoadIndirectString(description, resolved, 4096, nullptr)))
+            return resolved;
         return {};
     }
     return description;
 }
-struct Request {std::wstring query,args;uint64_t revision=0;size_t limit=20;};
-std::mutex g_mutex;std::condition_variable g_wake;
-std::optional<std::thread> g_thread;
+struct Request {
+    std::wstring query, args;
+    uint64_t revision = 0;
+    size_t limit = 20;
+};
+std::mutex g_mutex;
+std::condition_variable g_wake;
+[[clang::no_destroy]] std::optional<std::thread> g_thread;
 std::optional<Request> g_request;
 std::vector<Entry> g_entries;
-std::map<std::wstring,DWORD> g_errors;
-bool g_loaded=false,g_busy=false;
-DWORD g_error=0;
+std::map<std::wstring, DWORD> g_errors;
+bool g_loaded = false, g_busy = false;
+DWORD g_error = 0;
 std::atomic<bool> g_visible{false};
-struct Operation {std::wstring name;Action action;};
+struct Operation {
+    std::wstring name;
+    Action action;
+};
 std::optional<Operation> g_operation;
 bool Current(const Request& request) {
-    std::lock_guard lock(g_queryMutex);return !g_searchQuit && request.revision==g_queryRevision;
+    std::lock_guard lock(g_queryMutex);
+    return !g_searchQuit && request.revision == g_queryRevision;
 }
-std::vector<Row> Rows(const std::wstring& args,size_t limit,const std::vector<Entry>& entries,bool loaded,DWORD error,
-                      bool busy,const std::map<std::wstring,DWORD>& errors) {
-    std::vector<std::pair<int,const Entry*>> matches;
-    const auto filter=tools::ToLower(commands::Trim(args));
-    const bool running=commands::Equal(filter,L"running") || commands::Equal(filter,i18n::Text(i18n::Key::ServiceRunning));
-    const bool stopped=commands::Equal(filter,L"stopped") || commands::Equal(filter,i18n::Text(i18n::Key::TestStopped));
-    for(const auto& entry:entries) {
-        const auto name=tools::ToLower(entry.name),display=tools::ToLower(entry.display),description=tools::ToLower(entry.description);
-        if(running?entry.state!=SERVICE_RUNNING:stopped?entry.state!=SERVICE_STOPPED:false)continue;
-        if(!running && !stopped) {
-            std::wistringstream tokens(filter);std::wstring token;bool found=true;
-            while(tokens>>token)if(name.find(token)==name.npos && display.find(token)==display.npos && description.find(token)==description.npos){found=false;break;}
-            if(!found)continue;
+std::vector<Row> Rows(const std::wstring& args, size_t limit, const std::vector<Entry>& entries,
+                      bool loaded, DWORD error, bool busy,
+                      const std::map<std::wstring, DWORD>& errors) {
+    std::vector<std::pair<int, const Entry*>> matches;
+    const auto filter = tools::ToLower(commands::Trim(args));
+    const bool running = commands::Equal(filter, L"running") ||
+                         commands::Equal(filter, i18n::Text(i18n::Key::ServiceRunning));
+    const bool stopped = commands::Equal(filter, L"stopped") ||
+                         commands::Equal(filter, i18n::Text(i18n::Key::TestStopped));
+    for (const auto& entry : entries) {
+        const auto name = tools::ToLower(entry.name), display = tools::ToLower(entry.display),
+                   description = tools::ToLower(entry.description);
+        if (running   ? entry.state != SERVICE_RUNNING
+            : stopped ? entry.state != SERVICE_STOPPED
+                      : false)
+            continue;
+        if (!running && !stopped) {
+            std::wistringstream tokens(filter);
+            std::wstring token;
+            bool found = true;
+            while (tokens >> token)
+                if (name.find(token) == name.npos && display.find(token) == display.npos &&
+                    description.find(token) == description.npos) {
+                    found = false;
+                    break;
+                }
+            if (!found)
+                continue;
         }
-        const int rank=filter.empty() || running || stopped?3:name==filter?0:name.starts_with(filter)||display.starts_with(filter)?1:
-            name.find(filter)!=name.npos || display.find(filter)!=display.npos?2:3;
-        matches.emplace_back(rank,&entry);
+        const int rank = filter.empty() || running || stopped                      ? 3
+                         : name == filter                                          ? 0
+                         : name.starts_with(filter) || display.starts_with(filter) ? 1
+                         : name.find(filter) != name.npos || display.find(filter) != display.npos
+                             ? 2
+                             : 3;
+        matches.emplace_back(rank, &entry);
     }
-    std::sort(matches.begin(),matches.end(),[](const auto& a,const auto& b){
-        if(a.first!=b.first)return a.first<b.first;
-        const auto order=CompareStringOrdinal(a.second->display.c_str(),-1,b.second->display.c_str(),-1,TRUE);
-        return order==CSTR_EQUAL?a.second->name<b.second->name:order==CSTR_LESS_THAN;
+    std::sort(matches.begin(), matches.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first)
+            return a.first < b.first;
+        const auto order = CompareStringOrdinal(a.second->display.c_str(), -1,
+                                                b.second->display.c_str(), -1, TRUE);
+        return order == CSTR_EQUAL ? a.second->name < b.second->name : order == CSTR_LESS_THAN;
     });
     std::vector<Row> rows;
-    for(const auto& [rank,entry]:matches) {
-        if(rows.size()>=std::clamp<size_t>(limit,1,100))break;
-        Row row;row.title=entry->display;row.serviceName=entry->name;row.serviceState=entry->state;
-        row.serviceControls=entry->controls;row.serviceBusy=busy;row.sectionTitle=i18n::Text(i18n::Key::Services);
-        row.customGlyph=L"\uE713";row.canRunAsAdmin=false;
-        row.subtitle=entry->name+L" \u00B7 "+Status(entry->state);
-        if(entry->pid)row.subtitle+=L" \u00B7 PID "+std::to_wstring(entry->pid);
-        if(busy)row.subtitle+=L" \u00B7 "+std::wstring(i18n::Text(i18n::Key::ServicePending));
-        if(const auto it=errors.find(entry->name);it!=errors.end()){row.subtitle+=L"\n"+ErrorText(it->second);row.isError=true;}
-        if(!entry->description.empty())row.subtitle+=L"\n"+entry->description;
-        row.copyText=row.title+L"\n"+row.subtitle;
-        row.cardSignature=L"service:"+entry->name+L":"+row.subtitle+L":"+std::to_wstring(entry->controls);
+    for (const auto& [rank, entry] : matches) {
+        if (rows.size() >= std::clamp<size_t>(limit, 1, 100))
+            break;
+        Row row;
+        row.title = entry->display;
+        row.serviceName = entry->name;
+        row.serviceState = entry->state;
+        row.serviceControls = entry->controls;
+        row.serviceBusy = busy;
+        row.sectionTitle = i18n::Text(i18n::Key::Services);
+        row.customGlyph = L"\uE713";
+        row.canRunAsAdmin = false;
+        row.subtitle = entry->name + L" \u00B7 " + Status(entry->state);
+        if (entry->pid)
+            row.subtitle += L" \u00B7 PID " + std::to_wstring(entry->pid);
+        if (busy)
+            row.subtitle += L" \u00B7 " + std::wstring(i18n::Text(i18n::Key::ServicePending));
+        if (const auto it = errors.find(entry->name); it != errors.end()) {
+            row.subtitle += L"\n" + ErrorText(it->second);
+            row.isError = true;
+        }
+        if (!entry->description.empty())
+            row.subtitle += L"\n" + entry->description;
+        row.copyText = row.title + L"\n" + row.subtitle;
+        row.cardSignature = L"service:" + entry->name + L":" + row.subtitle + L":" +
+                            std::to_wstring(entry->controls);
         rows.push_back(std::move(row));
     }
-    if(rows.empty()) {
-        Row row;row.sectionTitle=i18n::Text(i18n::Key::Services);row.customGlyph=L"\uE713";row.infoOnly=true;row.canRunAsAdmin=false;
-        row.title=i18n::Text(error?i18n::Key::Error:loaded?i18n::Key::NoServices:i18n::Key::OnlineLoading);
-        row.subtitle=error?ErrorText(error):loaded?i18n::Text(i18n::Key::Refine):L"";row.isError=error!=0;
+    if (rows.empty()) {
+        Row row;
+        row.sectionTitle = i18n::Text(i18n::Key::Services);
+        row.customGlyph = L"\uE713";
+        row.infoOnly = true;
+        row.canRunAsAdmin = false;
+        row.title = i18n::Text(error    ? i18n::Key::Error
+                               : loaded ? i18n::Key::NoServices
+                                        : i18n::Key::OnlineLoading);
+        row.subtitle = error ? ErrorText(error) : loaded ? i18n::Text(i18n::Key::Refine) : L"";
+        row.isError = error != 0;
         rows.push_back(std::move(row));
     }
     return rows;
 }
-std::vector<Row> Initial(const std::wstring& args,size_t limit) {
-    std::lock_guard lock(g_mutex);return Rows(args,limit,g_entries,g_loaded,g_error,g_busy,g_errors);
+std::vector<Row> Initial(const std::wstring& args, size_t limit) {
+    std::lock_guard lock(g_mutex);
+    return Rows(args, limit, g_entries, g_loaded, g_error, g_busy, g_errors);
 }
 // Names are encoded as data; only the three enumerated actions can become
 // executable text. sc.exe does not stop dependent services or change startup.
 std::wstring OperationScript(const Operation& operation) {
-    if(operation.name.empty() || operation.name.size()>256 || operation.name.find(L'\0')!=std::wstring::npos ||
-        (operation.action!=Action::Start && operation.action!=Action::Stop && operation.action!=Action::Restart))throw DWORD(ERROR_INVALID_PARAMETER);
-    std::wstring body=LR"($ErrorActionPreference='Stop';
+    if (operation.name.empty() || operation.name.size() > 256 ||
+        operation.name.find(L'\0') != std::wstring::npos ||
+        (operation.action != Action::Start && operation.action != Action::Stop &&
+         operation.action != Action::Restart))
+        throw DWORD(ERROR_INVALID_PARAMETER);
+    std::wstring body =
+        LR"($ErrorActionPreference='Stop';
 Add-Type -AssemblyName System.ServiceProcess;
-$n=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(')"+EncodePowerShellCommand(operation.name)+LR"('));
+$n=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(')" +
+        EncodePowerShellCommand(operation.name) +
+        LR"('));
 $sc=Join-Path ([Environment]::SystemDirectory) 'sc.exe';
 function Invoke-ServiceAction {
 try {
 $s=New-Object System.ServiceProcess.ServiceController($n);
 $s.Refresh();
 )";
-    if(operation.action!=Action::Start)body+=LR"(
+    if (operation.action != Action::Start)
+        body +=
+            LR"(
 if($s.Status -ne 'Stopped') { & $sc stop $n 2>&1 | Out-Null; $c=$LASTEXITCODE; if($c -ne 0 -and $c -ne 1062){return $c} }
 $s.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped,[TimeSpan]::FromSeconds(25));
 )";
-    if(operation.action!=Action::Stop)body+=LR"(
+    if (operation.action != Action::Stop)
+        body +=
+            LR"(
 $s.Refresh();
 if($s.Status -ne 'Running') { & $sc start $n 2>&1 | Out-Null; $c=$LASTEXITCODE; if($c -ne 0 -and $c -ne 1056){return $c} }
 $s.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running,[TimeSpan]::FromSeconds(25));
 )";
-    body+=LR"(
+    body +=
+        LR"(
 return 0
 } catch { if($_.Exception.InnerException.NativeErrorCode){return [int]$_.Exception.InnerException.NativeErrorCode}; return 1460 }
 finally { if($s){$s.Dispose()} }
 }
 )";
-    const auto elevated=EncodePowerShellCommand(body+L"exit (Invoke-ServiceAction)");
-    return body+LR"(
+    const auto elevated = EncodePowerShellCommand(body + L"exit (Invoke-ServiceAction)");
+    return body +
+           LR"(
 $c=Invoke-ServiceAction;
 if($c -eq 5) {
 try {
 $exe=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe';
-$p=Start-Process -FilePath $exe -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile -NonInteractive -EncodedCommand )"+elevated+LR"(' -PassThru;
+$p=Start-Process -FilePath $exe -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile -NonInteractive -EncodedCommand )" +
+           elevated +
+           LR"(' -PassThru;
 $p.WaitForExit(); $c=$p.ExitCode; $p.Dispose();
 } catch { $c=1223 }
 }
@@ -23264,80 +24673,167 @@ exit $c
 )";
 }
 HANDLE Launch(const Operation& operation) {
-    wchar_t system[MAX_PATH]{};const auto count=GetSystemDirectoryW(system,MAX_PATH);
-    if(!count || count>=MAX_PATH)throw DWORD(ERROR_PATH_NOT_FOUND);
-    const std::wstring exe=std::wstring(system)+L"\\WindowsPowerShell\\v1.0\\powershell.exe";
-    std::wstring command=L"\""+exe+L"\" -NoLogo -NoProfile -NonInteractive -EncodedCommand "+EncodePowerShellCommand(OperationScript(operation));
-    if(command.size()>=32767)throw DWORD(ERROR_INVALID_PARAMETER);
-    STARTUPINFOW startup{sizeof(startup)};PROCESS_INFORMATION process{};
-    startup.dwFlags=STARTF_USESHOWWINDOW;startup.wShowWindow=SW_HIDE;
-    if(!CreateProcessW(exe.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,system,&startup,&process))throw GetLastError();
-    CloseHandle(process.hThread);return process.hProcess;
+    wchar_t system[MAX_PATH]{};
+    const auto count = GetSystemDirectoryW(system, MAX_PATH);
+    if (!count || count >= MAX_PATH)
+        throw DWORD(ERROR_PATH_NOT_FOUND);
+    const std::wstring exe = std::wstring(system) + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
+    std::wstring command = L"\"" + exe + L"\" -NoLogo -NoProfile -NonInteractive -EncodedCommand " +
+                           EncodePowerShellCommand(OperationScript(operation));
+    if (command.size() >= 32767)
+        throw DWORD(ERROR_INVALID_PARAMETER);
+    STARTUPINFOW startup{sizeof(startup)};
+    PROCESS_INFORMATION process{};
+    startup.dwFlags = STARTF_USESHOWWINDOW;
+    startup.wShowWindow = SW_HIDE;
+    if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                        nullptr, system, &startup, &process))
+        throw GetLastError();
+    CloseHandle(process.hThread);
+    return process.hProcess;
 }
-void Wake(){g_wake.notify_all();}
-void Visible(bool value){g_visible=value;Wake();}
+void Wake() {
+    g_wake.notify_all();
+}
+void Visible(bool value) {
+    g_visible = value;
+    Wake();
+}
 void Run() {
-    HANDLE process=nullptr;std::wstring acting;ULONGLONG next=0;uint64_t lastRevision=~uint64_t{0};std::wstring lastRows;
-    std::map<std::wstring,std::wstring> descriptions;
-    while(!g_searchQuit) {
-        std::optional<Request> request;std::optional<Operation> operation;
-        {std::unique_lock lock(g_mutex);
-            if(!process && !g_operation && (!g_request || !g_visible || !Current(*g_request))) {
-                g_wake.wait(lock,[&]{return g_searchQuit || g_operation || (g_request && g_visible && Current(*g_request));});if(g_searchQuit)break;
+    HANDLE process = nullptr;
+    std::wstring acting;
+    ULONGLONG next = 0;
+    uint64_t lastRevision = ~uint64_t{0};
+    std::wstring lastRows;
+    std::map<std::wstring, std::wstring> descriptions;
+    while (!g_searchQuit) {
+        std::optional<Request> request;
+        std::optional<Operation> operation;
+        {
+            std::unique_lock lock(g_mutex);
+            if (!process && !g_operation && (!g_request || !g_visible || !Current(*g_request))) {
+                g_wake.wait(lock, [&] {
+                    return g_searchQuit || g_operation ||
+                           (g_request && g_visible && Current(*g_request));
+                });
+                if (g_searchQuit)
+                    break;
             }
-            request=g_request;
-            if(!process && g_operation){operation=std::move(g_operation);g_operation.reset();}
+            request = g_request;
+            if (!process && g_operation) {
+                operation = std::move(g_operation);
+                g_operation.reset();
+            }
         }
-        if(operation) {
-            acting=operation->name;
-            try {process=Launch(*operation);}
-            catch(DWORD error){std::lock_guard lock(g_mutex);g_errors[acting]=error;g_busy=false;}
-            catch(...){std::lock_guard lock(g_mutex);g_errors[acting]=ERROR_GEN_FAILURE;g_busy=false;}
-            next=0;
-        }
-        if(process && WaitForSingleObject(process,0)==WAIT_OBJECT_0) {
-            DWORD code=ERROR_GEN_FAILURE;GetExitCodeProcess(process,&code);CloseHandle(process);process=nullptr;
-            {std::lock_guard lock(g_mutex);g_busy=false;if(code)g_errors[acting]=code;else g_errors.erase(acting);}
-            next=0;
-        }
-        const bool visible=request && g_visible && Current(*request);
-        if(visible && (GetTickCount64()>=next || request->revision!=lastRevision)) {
+        if (operation) {
+            acting = operation->name;
             try {
-                auto entries=Enumerate();ScHandle manager(OpenSCManagerW(nullptr,nullptr,SC_MANAGER_CONNECT));
-                for(auto& entry:entries) {
-                    auto [it,added]=descriptions.try_emplace(entry.name);
-                    if(added && manager.value)it->second=Description(manager.value,entry.name);
-                    entry.description=it->second;
-                }
-                if(descriptions.size()>8192)descriptions.clear();
-                {std::lock_guard lock(g_mutex);g_entries=std::move(entries);g_loaded=true;g_error=0;}
-            }catch(DWORD error){std::lock_guard lock(g_mutex);g_entries.clear();g_loaded=true;g_error=error;}
-            catch(...){std::lock_guard lock(g_mutex);g_entries.clear();g_loaded=true;g_error=ERROR_GEN_FAILURE;}
-            auto rows=Initial(request->args,request->limit);std::wstring signature;
-            for(const auto& row:rows)signature+=row.title+L"\n"+row.subtitle+L"\n"+row.cardSignature;
-            if(request->revision!=lastRevision || signature!=lastRows) {
-                if(PublishAppResults(request->revision,request->query,std::move(rows)))RequestRender();
-                lastRows=std::move(signature);lastRevision=request->revision;
+                process = Launch(*operation);
+            } catch (DWORD error) {
+                std::lock_guard lock(g_mutex);
+                g_errors[acting] = error;
+                g_busy = false;
+            } catch (...) {
+                std::lock_guard lock(g_mutex);
+                g_errors[acting] = ERROR_GEN_FAILURE;
+                g_busy = false;
             }
-            next=GetTickCount64()+1000;
+            next = 0;
         }
-        std::unique_lock lock(g_mutex);g_wake.wait_for(lock,std::chrono::milliseconds(process?100:250));
+        if (process && WaitForSingleObject(process, 0) == WAIT_OBJECT_0) {
+            DWORD code = ERROR_GEN_FAILURE;
+            GetExitCodeProcess(process, &code);
+            CloseHandle(process);
+            process = nullptr;
+            {
+                std::lock_guard lock(g_mutex);
+                g_busy = false;
+                if (code)
+                    g_errors[acting] = code;
+                else
+                    g_errors.erase(acting);
+            }
+            next = 0;
+        }
+        const bool visible = request && g_visible && Current(*request);
+        if (visible && (GetTickCount64() >= next || request->revision != lastRevision)) {
+            try {
+                auto entries = Enumerate();
+                ScHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT));
+                for (auto& entry : entries) {
+                    auto [it, added] = descriptions.try_emplace(entry.name);
+                    if (added && manager.value)
+                        it->second = Description(manager.value, entry.name);
+                    entry.description = it->second;
+                }
+                if (descriptions.size() > 8192)
+                    descriptions.clear();
+                {
+                    std::lock_guard lock(g_mutex);
+                    g_entries = std::move(entries);
+                    g_loaded = true;
+                    g_error = 0;
+                }
+            } catch (DWORD error) {
+                std::lock_guard lock(g_mutex);
+                g_entries.clear();
+                g_loaded = true;
+                g_error = error;
+            } catch (...) {
+                std::lock_guard lock(g_mutex);
+                g_entries.clear();
+                g_loaded = true;
+                g_error = ERROR_GEN_FAILURE;
+            }
+            auto rows = Initial(request->args, request->limit);
+            std::wstring signature;
+            for (const auto& row : rows)
+                signature += row.title + L"\n" + row.subtitle + L"\n" + row.cardSignature;
+            if (request->revision != lastRevision || signature != lastRows) {
+                if (PublishAppResults(request->revision, request->query, std::move(rows)))
+                    RequestRender();
+                lastRows = std::move(signature);
+                lastRevision = request->revision;
+            }
+            next = GetTickCount64() + 1000;
+        }
+        std::unique_lock lock(g_mutex);
+        g_wake.wait_for(lock, std::chrono::milliseconds(process ? 100 : 250));
     }
     // A user-approved operation may finish independently; no callback points
     // into the mod, and unload never waits for a UAC prompt or service timeout.
-    if(process)CloseHandle(process);
+    if (process)
+        CloseHandle(process);
 }
-void Schedule(std::wstring query,std::wstring args,uint64_t revision,size_t limit) {
-    {std::lock_guard lock(g_mutex);if(g_searchQuit)return;g_request=Request{std::move(query),std::move(args),revision,limit};
-        if(!g_thread)g_thread.emplace([]{try{Run();}catch(...){Wh_Log(L"services: worker stopped");}});}
+void Schedule(std::wstring query, std::wstring args, uint64_t revision, size_t limit) {
+    {
+        std::lock_guard lock(g_mutex);
+        if (g_searchQuit)
+            return;
+        g_request = Request{std::move(query), std::move(args), revision, limit};
+        if (!g_thread)
+            g_thread.emplace([] {
+                try {
+                    Run();
+                } catch (...) {
+                    Wh_Log(L"services: worker stopped");
+                }
+            });
+    }
     Wake();
 }
-void Queue(std::wstring name,Action action) {
-    {std::lock_guard lock(g_mutex);
-        if(g_searchQuit || g_busy || !g_request || !Current(*g_request))return;
-        const auto found=std::find_if(g_entries.begin(),g_entries.end(),[&](const auto& e){return e.name==name;});
-        if(found==g_entries.end() || !Allowed(action,found->state,found->controls))return;
-        g_busy=true;g_errors.erase(name);g_operation=Operation{std::move(name),action};
+void Queue(std::wstring name, Action action) {
+    {
+        std::lock_guard lock(g_mutex);
+        if (g_searchQuit || g_busy || !g_request || !Current(*g_request))
+            return;
+        const auto found = std::find_if(g_entries.begin(), g_entries.end(),
+                                        [&](const auto& e) { return e.name == name; });
+        if (found == g_entries.end() || !Allowed(action, found->state, found->controls))
+            return;
+        g_busy = true;
+        g_errors.erase(name);
+        g_operation = Operation{std::move(name), action};
     }
     Wake();
 }
@@ -23356,7 +24852,6 @@ std::optional<online::Request> CurrentSpeedRequest() {
 }
 void StartInternetSpeedTest() { if (auto request = CurrentSpeedRequest()) online::StartSpeed(std::move(*request)); }
 void StopInternetSpeedTest() { if (auto request = CurrentSpeedRequest()) online::StopSpeed(std::move(*request)); }
-
 
 void RequestFileRender();
 
@@ -23449,7 +24944,7 @@ void SearchThreadMain() {
     // Regular catalog/icon I/O belongs to the native background worker.
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    auto warm=g_appsWarmup.Take();
+    auto warm=g_appsWarmup->Take();
     if(g_searchQuit.load()) {if(SUCCEEDED(comHr))CoUninitialize();return;}
     const bool prewarmed=warm.index!=nullptr;
     auto appIndex=prewarmed?std::move(warm.index):std::make_shared<apps::Index>();
@@ -23463,14 +24958,14 @@ void SearchThreadMain() {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         return g_settings.learnFavorites ? &appUsage : nullptr;
     };
-    if (prewarmed || appIndex->Rebuild()) {
+    if (prewarmed || appIndex->Rebuild(&g_searchQuit)) {
         Wh_Log(L"apps: indexed (%zu apps)", appIndex->Count());
     } else {
         Wh_Log(L"apps: index failed");
     }
 
     int iconPixels = IconPixels();
-    g_appsWarmup.Prefetch(appIndex,iconPixels);
+    g_appsWarmup->Prefetch(appIndex,iconPixels);
     std::map<std::wstring,std::vector<BYTE>> commandIconCache; // metadata helper; I/O lives on the native worker
 
     std::wstring last;
@@ -23483,7 +24978,7 @@ void SearchThreadMain() {
             std::unique_lock<std::mutex> lock(g_queryMutex);
             auto hasWork = [&] {
                 return g_queryDirty.load() || g_searchQuit.load() || g_launchRequest.has_value() ||
-                       !g_commandUsageRequests.empty() || (g_appsWarmup.Version()!=indexVersion && !online::g_speedBusy);
+                       !g_commandUsageRequests.empty() || (g_appsWarmup->Version()!=indexVersion && !online::g_speedBusy);
             };
             g_queryWake.wait(lock, hasWork);
             if (g_searchQuit.load()) {
@@ -23542,9 +25037,9 @@ void SearchThreadMain() {
                 continue;
             }
 
-            if(!online::g_speedBusy)if(auto ready=g_appsWarmup.Newer(indexVersion);ready.index) {
+            if(!online::g_speedBusy)if(auto ready=g_appsWarmup->Newer(indexVersion);ready.index) {
                 appIndex=std::move(ready.index);indexVersion=ready.version;
-                g_appsWarmup.Prefetch(appIndex,iconPixels);
+                g_appsWarmup->Prefetch(appIndex,iconPixels);
                 haveLast=false;
                 // Catalog replacement must not restart a live tool card.
                 if(g_isOverlayVisible.load() && !g_queryDirty.load() && !g_pendingQuery.starts_with(L"/") && !g_pendingQuery.starts_with(L"?")) {
@@ -23593,7 +25088,7 @@ void SearchThreadMain() {
         if (int pixels = IconPixels(); pixels != iconPixels) {
             iconPixels = pixels;
             commandIconCache.clear();
-            g_appsWarmup.Prefetch(appIndex,iconPixels);
+            g_appsWarmup->Prefetch(appIndex,iconPixels);
         }
 
         std::wstring qTrim = tools::Trim(query);
@@ -23752,7 +25247,7 @@ void SearchThreadMain() {
                 row.appIndex = nextAppIndex++;
 
                 row.iconKey=apps::WarmIndex::AppKey(*m.app,iconPixels);
-                if(auto cached=g_appsWarmup.Cached(row.iconKey))row.icon=std::move(*cached);
+                if(auto cached=g_appsWarmup->Cached(row.iconKey))row.icon=std::move(*cached);
                 else if(!m.app->isSetting || m.app->pidl)
                     iconJobs.push_back({appIndex,m.app,row.iconKey,L"",iconPixels,0});
                 appRows.push_back(std::move(row));
@@ -23768,12 +25263,12 @@ void SearchThreadMain() {
 
         for(auto& row:appRows) {
             if(row.commandIcon.empty() || row.iconKey.empty())continue;
-            if(auto cached=g_appsWarmup.Cached(row.iconKey,settingsRevision))row.icon=std::move(*cached);
+            if(auto cached=g_appsWarmup->Cached(row.iconKey,settingsRevision))row.icon=std::move(*cached);
             else iconJobs.push_back({{},nullptr,row.iconKey,CustomCommandIconPath(row.commandIcon),iconPixels,settingsRevision});
         }
         if (!PublishAppResults(revision, query, std::move(appRows))) continue;
         RequestRender();
-        g_appsWarmup.Prioritize(std::move(iconJobs));
+        g_appsWarmup->Prioritize(std::move(iconJobs));
         if (fetchOnline) online::Schedule(std::move(onlineBatch));
         if (isUsageCommand && validUsageCommand) hardware::Schedule(query, revision);
         if (isServicesCommand) services::Schedule(query,serviceArgs,revision,static_cast<size_t>(maxApps));
@@ -23798,6 +25293,7 @@ void SearchThreadMain() {
 
 
 void StartAppsWarmup() {
+    if (!g_appsWarmup) g_appsWarmup.emplace();
     apps::WarmIndex::Handlers callbacks;
     callbacks.catalogReady=[]{
         // Pair the notification with the query wait's mutex so a catalog
@@ -23814,9 +25310,15 @@ void StartAppsWarmup() {
     callbacks.iconReady=[](const std::wstring& key,const std::vector<BYTE>& pixels,uint64_t generation) {
         if(!g_searchQuit.load() && !g_quit.load() && (!generation || generation==g_settingsRevision.load()))PublishLateAppIcon(key,pixels);
     };
-    g_appsWarmup.Start(std::move(callbacks));
+    g_appsWarmup->Start(std::move(callbacks));
 }
-void StopAppsWarmup() {g_appsWarmup.Stop();}
+void StopAppsWarmup() {
+    if (!g_appsWarmup) return;
+    g_appsWarmup->Stop();
+    // Keep the object alive until the matching worker has released its last
+    // reference. A no-UI unload has no consumer and can destroy it immediately.
+    if (!g_searchThread || !g_searchThread->joinable()) g_appsWarmup.reset();
+}
 
 void TeardownSearchUi() {
     Wh_Log(L"teardown: tearing down search UI on XAML thread");
@@ -29440,6 +30942,7 @@ void SearchWindowTeardown() {
     if (g_searchThread && g_searchThread->joinable())
         g_searchThread->join();
     g_searchThread.reset();
+    StopAppsWarmup();  // destroy retained buffers after the matching worker exits
     if (g_onlineThread && g_onlineThread->joinable()) g_onlineThread->join();
     g_onlineThread.reset();
     if (hardware::g_thread && hardware::g_thread->joinable()) hardware::g_thread->join();
