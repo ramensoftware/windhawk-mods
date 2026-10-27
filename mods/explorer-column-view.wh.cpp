@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.54
+// @version         0.57
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -36,7 +36,7 @@ its glass appearance comes from the user's other customization tools.
 - Prefer deliberate opening? In **Browsing**, set **Expand folders** to
   **On double-click or Enter**. Up/Down and single-click change the selection;
   double-click, Enter or Right Arrow opens the selected folder in the next column.
-  File previews still follow the selection.
+  File previews follow the selection while the Inspector is enabled.
 - Start with one column and add only the columns you use. Drag a thin divider to
   resize a column live; the layout scrolls horizontally as your path grows.
 - Press **Right Arrow** to enter the selected folder's column and **Left Arrow**
@@ -93,7 +93,7 @@ setting off clears saved sizes and returns columns to the selected sizing mode.
 
 Enable **Fit window** to share available space between automatic columns. Manually
 resized columns keep their chosen widths. Automatic columns stop shrinking at
-**Minimum fitted width**, then the view scrolls horizontally. The Inspector
+**Minimum fitted width**, then the view scrolls horizontally. A visible Inspector
 keeps its reserved space. Fitting never saves automatic sizes as manual choices.
 Click **Save settings** to apply changes.
 
@@ -103,12 +103,25 @@ Selecting a file opens its Inspector after the folder columns, filling the
 remaining space. Prefer a sidebar? Enable **Use fixed-width Inspector** to dock
 it on the right and show folder details too.
 
+Enable **Hide Inspector** to browse with folder columns only. This hides the
+custom File Info panel, previews, playback controls and Open with selector, stops
+inline playback and cancels pending preview work. The folder columns regain the
+available space. Turn it off to restore the current selection's Inspector;
+placement and playback preferences are kept. Click **Save settings** to apply.
+Layout changes wait until an active pointer gesture or menu has finished.
+
 - File information, icons and registered **Open with** applications.
 - Image previews and installed Windows preview handlers for supported documents.
 - Inline audio and video playback for supported formats and installed codecs.
 - Scrubbable audio waveforms, with duration, sample rate, bit depth and channel
   information when available.
 - Playback starts when you press Play and pauses when its tab is hidden.
+- Inspector text and playback controls follow light/dark app mode when an inherited
+  transparent background exposes a system backdrop. Native custom palettes and
+  high-contrast colors stay authoritative. Existing styling tools supply background
+  effects. Bitmap image previews restore full opacity within the fitted picture
+  rectangle so glass backgrounds do not wash out the image. The surrounding
+  Inspector keeps its existing background effects.
 
 ## Turn columns on or off
 
@@ -198,7 +211,7 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
         - content: Content
     - FolderExpansion: selection
       $name: Expand folders
-      $description: On selection opens the next column as you browse. On double-click or Enter lets you move the selection without opening every folder. Right Arrow still enters the selected folder. File previews remain available.
+      $description: On selection opens the next column as you browse. On double-click or Enter lets you move the selection without opening every folder. Right Arrow still enters the selected folder. File previews remain available when the Inspector is enabled.
       $options:
         - selection: On selection (default)
         - activation: On double-click or Enter
@@ -212,7 +225,7 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
   $description: Save manually resized widths by column position, including after closing Explorer. Saved sizes override the default in new windows. Turning this off clears saved sizes and returns columns to the selected sizing mode.
 - FitWindow: false
   $name: Columns · Fit window
-  $description: Share available window space between automatic columns. Manually resized columns keep their width, and the Inspector retains its space. Once automatic columns reach the minimum below, scroll horizontally to see more.
+  $description: Share available window space between automatic columns. Manually resized columns keep their width, and a visible Inspector retains its space. Once automatic columns reach the minimum below, scroll horizontally to see more.
 - MinimumFittedColumnWidth: "240"
   $name: Columns · Minimum fitted width
   $description: Smallest automatic column width when Fit window is on. Display scaling is applied automatically. Manually resized columns can be narrower.
@@ -240,6 +253,9 @@ enabled. If another styling mod causes excessive flashing, compare with it off.
     - "10": "10"
     - "11": "11"
     - "12": "12 (maximum)"
+- DisableInspector: false
+  $name: Inspector · Hide Inspector
+  $description: Hide this mod's file information, previews, playback and Open with area, and release the space for folder columns. Turn off to restore the current selection's Inspector. Save settings to apply.
 - FixedInspector: false
   $name: Inspector · Use fixed-width Inspector
   $description: Off places file previews after the folder columns and fills the remaining window space. On docks the Inspector on the right at a fixed width and also shows folder details.
@@ -835,6 +851,15 @@ bool IsThisPCColumn(const std::wstring& path) {
     return !_wcsicmp(path.c_str(), L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}");
 }
 
+std::atomic<bool> g_inspectorEnabledSetting{true};
+std::atomic<ULONG_PTR> g_inspectorSettingsRevision{1};
+void LoadInspectorEnabledSetting() {
+    // Inverse key: a missing value is zero, preserving the enabled Inspector
+    // on existing installations without renaming any stored setting.
+    bool enabled = Wh_GetIntSetting(L"DisableInspector") == 0;
+    if (g_inspectorEnabledSetting.exchange(enabled) != enabled)
+        g_inspectorSettingsRevision.fetch_add(1);
+}
 std::atomic<bool> g_fixedInspectorSetting{false};
 std::atomic<bool> g_classicContextMenus{false};
 std::atomic<bool> g_delayedPaintRepairs{true};
@@ -868,6 +893,15 @@ struct Session final : std::enable_shared_from_this<Session> {
     std::wstring columnSelection[kMaxColumns];
     HWND overlay = nullptr;
     HWND splitters[kMaxColumns] = {};
+    bool inspectorEnabled = true; // Applied layout state; latest atomic policy gates all work immediately.
+    ULONG_PTR inspectorSettingsRevision = 1;
+    bool inspectorVisibilityApplying = false;
+    unsigned inspectorProviderDepth = 0;
+    bool inspectorClearingPreview = false;
+    bool inspectorRestorePending = false;
+    bool inspectorClearPending = false;
+    bool inspectorLayoutSettingsPending = false;
+    bool inspectorLayoutReplayPosted = false;
     bool fixedInspector = false; // UI-thread copy of the saved setting.
     int dividerWidth = kSeparatorWidth; // Snapshot after canceling any active drag.
     bool inlineMediaPlayback = true;
@@ -903,7 +937,8 @@ struct Session final : std::enable_shared_from_this<Session> {
     int inspectorScrollY = 0;
     int inspectorDrag = 0; // 1: waveform scrub, 2: volume.
     int inspectorHover = 0; // 1: play, 2: back, 3: forward, 4: speaker, 5: volume, 6: open.
-    COLORREF inspectorBackground = GetSysColor(COLOR_WINDOW);
+    COLORREF inspectorBackground = GetSysColor(COLOR_WINDOW); // Actual paint surface/semantic brush.
+    COLORREF inspectorContrastBackground = GetSysColor(COLOR_WINDOW); // Foreground contrast only.
     COLORREF inspectorText = GetSysColor(COLOR_WINDOWTEXT);
     HFONT inspectorHeadingFont = nullptr;
     HFONT inspectorNameFont = nullptr;
@@ -1064,6 +1099,38 @@ Session& Context() {
     assert(g_currentSession);
     return *g_currentSession;
 }
+
+constexpr UINT kInspectorVisibilityMessage = WM_APP + 60;
+constexpr UINT_PTR kInspectorVisibilityTimerId = 15;
+bool ApplyInspectorVisibilitySetting(bool insideSettingsHandler = false);
+
+bool InspectorWorkEnabled() {
+    const Session& owner = Context();
+    return g_inspectorEnabledSetting.load() && owner.inspectorEnabled &&
+        owner.inspectorSettingsRevision == g_inspectorSettingsRevision.load() && !owner.closed && !owner.suspended &&
+        !owner.inspectorVisibilityApplying && !owner.inspectorClearingPreview && !g_unloading.load();
+}
+struct InspectorPreviewSnapshot {
+    Session* owner = &Context();
+    DWORD generation = owner->previewGeneration;
+    HWND window = owner->previewWindow;
+    ULONG_PTR settings = g_inspectorSettingsRevision.load();
+    bool Current() const {
+        return owner == &Context() && InspectorWorkEnabled() && owner->previewGeneration == generation &&
+            owner->previewWindow == window && g_inspectorSettingsRevision.load() == settings;
+    }
+};
+struct InspectorProviderScope {
+    Session& owner = Context();
+    std::shared_ptr<Session> keepAlive = owner.weak_from_this().lock();
+    InspectorProviderScope() { ++owner.inspectorProviderDepth; }
+    ~InspectorProviderScope() {
+        --owner.inspectorProviderDepth;
+        if (!owner.inspectorProviderDepth && !owner.closed && IsWindow(owner.overlay) &&
+            (owner.inspectorSettingsRevision != g_inspectorSettingsRevision.load() || owner.inspectorClearPending))
+            PostMessageW(owner.overlay, kInspectorVisibilityMessage, owner.identity, 0);
+    }
+};
 
 struct SessionRecord {
     HWND tab;
@@ -4213,7 +4280,7 @@ int SlotCount() {
 }
 
 int InspectorWidth(HWND overlay) {
-    if (!IsWindow(overlay) || Context().previewIndex < 0) return 0;
+    if (!Context().inspectorEnabled || !IsWindow(overlay) || Context().previewIndex < 0) return 0;
     RECT rect = {};
     GetClientRect(overlay, &rect);
     return std::min(MulDiv(kInspectorWidth, GetDpiForWindow(overlay), 96),
@@ -4391,7 +4458,7 @@ void LayoutPanes(HWND overlay) {
     }
     Context().placedColumnCount = SlotCount();
     Context().placedSeparatorWidth = SeparatorWidth();
-    if (IsWindow(Context().previewWindow)) {
+    if (Context().inspectorEnabled && IsWindow(Context().previewWindow)) {
         int inspectorLeft = Context().fixedInspector ? rect.right - inspectorWidth : x;
         int expandedWidth = std::max(inspectorWidth,
                                     static_cast<int>(rect.right) - inspectorLeft);
@@ -4837,16 +4904,21 @@ public:
     }
 };
 
-bool MediaCanPlay() { return (Context().mediaEngine && Context().mediaReady) || Context().audioControl; }
-bool MediaCanSeek() { return (Context().mediaEngine && Context().mediaReady) || Context().audioSeeking; }
+bool MediaCanPlay() { return InspectorWorkEnabled() && ((Context().mediaEngine && Context().mediaReady) || Context().audioControl); }
+bool MediaCanSeek() { return InspectorWorkEnabled() && ((Context().mediaEngine && Context().mediaReady) || Context().audioSeeking); }
 bool MediaCanSetVolume() {
-    return (Context().mediaEngine && Context().mediaReady && Context().mediaEngine->HasAudio()) || Context().audioVolumeControl;
+    if (!InspectorWorkEnabled()) return false;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
+    bool can = Context().audioVolumeControl != nullptr;
+    if (Context().mediaEngine && Context().mediaReady) can = Context().mediaEngine->HasAudio() || can;
+    return operation.Current() && can;
 }
 void HandleMediaEvent(DWORD event, HRESULT error);
 void PositionVideoPreview();
 
 void UpdateAudioPlaybackTimer() {
-    bool active = Context().audioPlaying && (Context().audioGraph || Context().mediaEngine) &&
+    bool active = InspectorWorkEnabled() && Context().audioPlaying && (Context().audioGraph || Context().mediaEngine) &&
         IsWindowVisible(Context().previewWindow) && !g_unloading.load();
     if (active) {
         // PLAY and PLAYING can both arrive; preserve an already running timer.
@@ -4938,15 +5010,49 @@ double InspectorLuminance(COLORREF color) {
            0.0722 * linear(GetBValue(color));
 }
 
+double InspectorTextContrast(COLORREF background, COLORREF foreground) {
+    double back = InspectorLuminance(background), front = InspectorLuminance(foreground);
+    return (std::max(back, front) + 0.05) / (std::min(back, front) + 0.05);
+}
+
 COLORREF InspectorReadableText(COLORREF background, COLORREF requested) {
-    double back = InspectorLuminance(background);
-    double front = InspectorLuminance(requested);
-    double contrast = (std::max(back, front) + 0.05) / (std::min(back, front) + 0.05);
-    // Explorer themes can recolor DrawText while leaving GDI pens unchanged.
-    // A reported black foreground on a dark canvas must not produce black controls.
-    if (contrast >= 4.5) return requested;
-    return (1.05 / (back + 0.05)) >= ((back + 0.05) / 0.05) ?
-        RGB(238, 238, 238) : RGB(28, 28, 28);
+    if (InspectorTextContrast(background, requested) >= 4.5) return requested;
+    // Prefer a softer foreground when readable, otherwise use the stronger
+    // endpoint. Mid-tone custom palettes can need pure black or white.
+    bool white = InspectorTextContrast(background, RGB(255, 255, 255)) >=
+        InspectorTextContrast(background, RGB(0, 0, 0));
+    COLORREF soft = white ? RGB(238, 238, 238) : RGB(28, 28, 28);
+    return InspectorTextContrast(background, soft) >= 4.5 ? soft :
+        (white ? RGB(255, 255, 255) : RGB(0, 0, 0));
+}
+
+struct InspectorTextPalette {
+    COLORREF contrastBackground;
+    COLORREF text;
+};
+
+InspectorTextPalette ResolveInspectorTextPalette(COLORREF paintBackground, COLORREF requestedText,
+        bool highContrast, bool explicitNativeBackground, bool appThemeKnown, bool appDark) {
+    COLORREF contrastBackground = paintBackground;
+    if (!highContrast && !explicitNativeBackground && appThemeKnown && paintBackground == RGB(0, 0, 0)) {
+        // A styling mod may use semantic COLOR_WINDOW black as transparency.
+        // Choose readable foregrounds for the app material without replacing
+        // that paint colour or its semantic system brush.
+        contrastBackground = appDark ? RGB(25, 25, 25) : RGB(255, 255, 255);
+        requestedText = appDark ? RGB(238, 238, 238) : RGB(28, 28, 28);
+    }
+    return {contrastBackground, InspectorReadableText(contrastBackground, requestedText)};
+}
+
+COLORREF InspectorMutedText() {
+    COLORREF background = Context().inspectorContrastBackground;
+    return InspectorReadableText(background, InspectorBlend(Context().inspectorText, background, 76));
+}
+
+bool InspectorCanFillPlayHover() {
+    // Do not put an opaque dark circle behind dark text on a light glass
+    // material. Its existing outline and glyph still provide hover feedback.
+    return Context().inspectorBackground == Context().inspectorContrastBackground;
 }
 
 struct ColumnPalette {
@@ -4985,12 +5091,13 @@ void ReadInspectorColors() {
     bool highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
         (contrast.dwFlags & HCF_HIGHCONTRASTON);
     DWORD light = 1, length = sizeof(light);
-    bool appDark = RegGetValueW(HKEY_CURRENT_USER,
+    bool appThemeKnown = RegGetValueW(HKEY_CURRENT_USER,
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &length) == ERROR_SUCCESS && !light;
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &length) == ERROR_SUCCESS && light <= 1;
+    bool appDark = appThemeKnown && !light;
+    bool haveNativeBackground = false;
     PCWSTR source = highContrast ? L"high-contrast" : L"system-window";
     if (!highContrast) {
-        bool haveNativeBackground = false;
         HWND nativeWindow = Context().originalView;
         for (int attempt = 0; attempt < Context().columnCount; ++attempt) {
             int candidate = (index + attempt) % Context().columnCount;
@@ -5042,13 +5149,18 @@ void ReadInspectorColors() {
             source = palette.source;
         }
     }
-    text = InspectorReadableText(background, text);
-    if (background == Context().inspectorBackground && text == Context().inspectorText) return;
+    auto foreground = ResolveInspectorTextPalette(background, text, highContrast,
+        haveNativeBackground, appThemeKnown, appDark);
+    text = foreground.text;
+    if (background == Context().inspectorBackground && text == Context().inspectorText &&
+        foreground.contrastBackground == Context().inspectorContrastBackground) return;
     Context().inspectorBackground = background;
+    Context().inspectorContrastBackground = foreground.contrastBackground;
     Context().inspectorText = text;
-    Wh_Log(L"[Columns palette] v%s background=%08X text=%08X source=%s appDark=%d highContrast=%d systemWindow=%08X",
-        WH_MOD_VERSION, static_cast<unsigned>(background), static_cast<unsigned>(text), source,
-        appDark, highContrast, static_cast<unsigned>(GetSysColor(COLOR_WINDOW)));
+    Wh_Log(L"[Columns palette] v%s background=%08X contrast=%08X text=%08X source=%s appThemeKnown=%d appDark=%d highContrast=%d systemWindow=%08X",
+        WH_MOD_VERSION, static_cast<unsigned>(background), static_cast<unsigned>(foreground.contrastBackground),
+        static_cast<unsigned>(text), source, appThemeKnown, appDark, highContrast,
+        static_cast<unsigned>(GetSysColor(COLOR_WINDOW)));
     if (IsWindow(Context().overlay)) InvalidateRect(Context().overlay, nullptr, FALSE);
     if (IsWindow(Context().previewWindow)) InvalidateRect(Context().previewWindow, nullptr, FALSE);
     for (int i = 0; i < Context().columnCount; ++i) {
@@ -5083,7 +5195,7 @@ void PaintSplitterContents(HWND window, HDC dc, const RECT* area) {
     int center = (client.right - client.left) / 2;
     RECT line = {center, client.top, center + 1, client.bottom};
     COLORREF color = InspectorBlend(Context().inspectorText,
-        Context().inspectorBackground, GetCapture() == window ? 75 : 45);
+        Context().inspectorContrastBackground, GetCapture() == window ? 75 : 45);
     COLORREF previous = SetDCBrushColor(dc, color);
     FillRect(dc, &line, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
     SetDCBrushColor(dc, previous);
@@ -5169,6 +5281,8 @@ void InvalidateAudioPlayback() {
 }
 
 void UpdateVideoFrame() {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     if (!IsWindow(Context().videoWindow)) return;
     RECT destination = {};
     GetClientRect(Context().videoWindow, &destination);
@@ -5183,6 +5297,8 @@ void UpdateVideoFrame() {
 }
 
 void PositionVideoPreview() {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     if (!IsWindow(Context().videoWindow)) return;
     if (!Context().previewVideo) { ShowWindow(Context().videoWindow, SW_HIDE); return; }
     RECT area = GetInspectorLayout(InspectorClientRect()).wave;
@@ -5256,7 +5372,8 @@ LRESULT CALLBACK VideoPreviewProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp)
                         DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
                     if (old) SelectObject(dc, old);
                 }
-            } else if (Context().mediaEngineEx) {
+            } else if (InspectorWorkEnabled() && Context().mediaEngineEx) {
+                InspectorProviderScope provider;
                 Context().mediaEngineEx->UpdateVideoStream(nullptr, nullptr, nullptr);
             }
             EndPaint(hwnd, &ps);
@@ -5267,6 +5384,8 @@ LRESULT CALLBACK VideoPreviewProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp)
 }
 
 bool CreateVideoWindow() {
+    if (!InspectorWorkEnabled()) return false;
+    InspectorProviderScope provider;
     if (IsWindow(Context().videoWindow)) return true;
     Context().videoWindow = CreateWindowExW(0, kVideoClass, L"",
         WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 10, 10, Context().previewWindow,
@@ -5284,6 +5403,8 @@ void PositionNativePreview() {
 }
 
 void UpdateInspectorScroll() {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     if (!IsWindow(Context().previewWindow)) return;
     RECT client = InspectorClientRect();
     InspectorLayout layout = GetInspectorLayout(client);
@@ -5412,11 +5533,13 @@ void PaintInfoRow(HDC dc, int width, int row,
     RECT left = {InspectorPx(20), y, valueX - InspectorPx(8), y + InspectorPx(21)};
     RECT right = {valueX, y, width - InspectorPx(20), y + InspectorPx(21)};
     InspectorText(dc, Context().inspectorBodyFont,
-        InspectorBlend(Context().inspectorText, Context().inspectorBackground, 76), left, label);
+        InspectorMutedText(), left, label);
     InspectorText(dc, Context().inspectorBodyFont, Context().inspectorText, right, value);
 }
 
 void ApplyAudioVolume() {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     if (Context().mediaEngine) {
         HRESULT hr = Context().mediaEngine->SetVolume(Context().audioVolume / 100.0);
         if (FAILED(hr)) Wh_Log(L"[Columns] Media volume failed: %08X", hr);
@@ -5430,6 +5553,8 @@ void ApplyAudioVolume() {
 }
 
 void SeekAudio(LONGLONG position) {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     if (!MediaCanSeek() || Context().audioDuration <= 0) return;
     position = std::clamp(position, 0LL, Context().audioDuration);
     HRESULT hr = Context().mediaEngine ? Context().mediaEngine->SetCurrentTime(position / 10000000.0) :
@@ -5440,6 +5565,8 @@ void SeekAudio(LONGLONG position) {
 }
 
 void ToggleAudioPlayback() {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     if (!MediaCanPlay()) return;
     bool play = !Context().audioPlaying;
     if (play && Context().audioDuration > 0 &&
@@ -5455,6 +5582,7 @@ void ToggleAudioPlayback() {
 }
 
 void InspectorDragTo(POINT point) {
+    if (!InspectorWorkEnabled()) return;
     InspectorLayout layout = GetInspectorLayout(InspectorClientRect());
     RECT timeline = Context().previewVideo ? layout.seek : layout.wave;
     if (Context().inspectorDrag == 1 && timeline.right > timeline.left) {
@@ -5472,37 +5600,53 @@ void InspectorDragTo(POINT point) {
 }
 
 void ReadOpenWithDefault() {
-    Context().openWithName.clear();
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
+    const std::wstring path = Context().previewPath;
+    const bool folder = Context().previewIsFolder;
+    std::wstring friendly;
+    HICON icon = nullptr;
+    if (!Context().previewIsVirtualFolder) {
+        friendly = folder ? L"File Explorer" : L"Choose an app";
+        if (folder) {
+            if (Context().previewIcon) icon = CopyIcon(Context().previewIcon);
+        } else {
+            const wchar_t* extension = PathFindExtensionW(path.c_str());
+            wchar_t name[512] = {};
+            DWORD count = ARRAYSIZE(name);
+            HRESULT nameResult = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_FRIENDLYAPPNAME,
+                extension, L"open", name, &count);
+            if (!operation.Current()) return;
+            if (SUCCEEDED(nameResult) && name[0]) friendly = name;
+            std::wstring executable(MAX_PATH, L'\0');
+            count = static_cast<DWORD>(executable.size());
+            HRESULT result = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
+                extension, L"open", executable.data(), &count);
+            if (!operation.Current()) return;
+            if (result == E_POINTER && count > executable.size()) {
+                executable.resize(count);
+                result = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
+                    extension, L"open", executable.data(), &count);
+                if (!operation.Current()) return;
+            }
+            if (SUCCEEDED(result)) {
+                SHFILEINFOW info = {};
+                if (SHGetFileInfoW(executable.c_str(), 0, &info, sizeof(info), SHGFI_ICON | SHGFI_SMALLICON))
+                    icon = info.hIcon;
+            }
+        }
+    }
+    if (!operation.Current()) { if (icon) DestroyIcon(icon); return; }
     if (Context().openWithIcon) DestroyIcon(Context().openWithIcon);
-    Context().openWithIcon = nullptr;
-    if (Context().previewIsVirtualFolder) return;
-    Context().openWithName = Context().previewIsFolder ? L"File Explorer" : L"Choose an app";
-    if (Context().previewIsFolder) {
-        if (Context().previewIcon) Context().openWithIcon = CopyIcon(Context().previewIcon);
-        return;
-    }
-    const wchar_t* extension = PathFindExtensionW(Context().previewPath.c_str());
-    wchar_t name[512] = {};
-    DWORD count = ARRAYSIZE(name);
-    if (SUCCEEDED(AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_FRIENDLYAPPNAME,
-            extension, L"open", name, &count)) && name[0]) Context().openWithName = name;
-    std::wstring executable(MAX_PATH, L'\0');
-    count = static_cast<DWORD>(executable.size());
-    HRESULT executableResult = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
-        extension, L"open", executable.data(), &count);
-    if (executableResult == E_POINTER && count > executable.size()) {
-        executable.resize(count);
-        executableResult = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
-            extension, L"open", executable.data(), &count);
-    }
-    if (SUCCEEDED(executableResult)) {
-        SHFILEINFOW info = {};
-        if (SHGetFileInfoW(executable.c_str(), 0, &info, sizeof(info), SHGFI_ICON | SHGFI_SMALLICON))
-            Context().openWithIcon = info.hIcon;
-    }
+    Context().openWithIcon = icon;
+    Context().openWithName = std::move(friendly);
 }
 
+
 void ShowOpenWithMenu(HWND window) {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
     const std::wstring path = Context().previewPath;
     if (path.empty() || Context().previewIsVirtualFolder) return;
     const bool folder = Context().previewIsFolder;
@@ -5636,14 +5780,57 @@ void PaintAudioGlyph(HDC dc, const RECT& rect, int kind, COLORREF color) {
     DeleteObject(brush); DeleteObject(pen);
 }
 
+void DrawInspectorImage(HDC dc, HBITMAP image, const RECT& area) {
+    BITMAP bitmap = {};
+    int width = area.right - area.left, height = area.bottom - area.top;
+    if (!dc || !image || width <= 0 || height <= 0 ||
+        !GetObjectW(image, sizeof(bitmap), &bitmap) ||
+        bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0) return;
+
+    double scale = std::min(static_cast<double>(width) / bitmap.bmWidth,
+                            static_cast<double>(height) / bitmap.bmHeight);
+    int w = std::max(1, static_cast<int>(bitmap.bmWidth * scale));
+    int h = std::max(1, static_cast<int>(bitmap.bmHeight * scale));
+    int x = area.left + (width - w) / 2;
+    int y = area.top + (height - h) / 2;
+    HDC source = CreateCompatibleDC(dc);
+    if (!source) return;
+    HGDIOBJ old = SelectObject(source, image);
+    if (!old || old == HGDI_ERROR) { DeleteDC(source); return; }
+    int saved = SaveDC(dc);
+    if (saved) {
+        SetStretchBltMode(dc, HALFTONE);
+        SetBrushOrgEx(dc, 0, 0, nullptr);
+        if (StretchBlt(dc, x, y, w, h, source, 0, 0,
+                       bitmap.bmWidth, bitmap.bmHeight, SRCCOPY)) {
+            // GDI scaling can clear alpha on a glass surface. Restore only the
+            // fitted picture's alpha; OR with zero leaves its RGB unchanged.
+            // https://devblogs.microsoft.com/oldnewthing/20210915-00/?p=105687
+            BITMAPINFO info = {};
+            info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            info.bmiHeader.biWidth = info.bmiHeader.biHeight = 1;
+            info.bmiHeader.biPlanes = 1;
+            info.bmiHeader.biBitCount = 32;
+            info.bmiHeader.biCompression = BI_RGB;
+            RGBQUAD opaque = {0, 0, 0, 255};
+            SetStretchBltMode(dc, COLORONCOLOR);
+            StretchDIBits(dc, x, y, w, h, 0, 0, 1, 1,
+                          &opaque, &info, DIB_RGB_COLORS, SRCPAINT);
+        }
+        RestoreDC(dc, saved);
+    }
+    SelectObject(source, old);
+    DeleteDC(source);
+}
+
 void PaintInspector(HDC dc, RECT client) {
     InspectorLayout layout = GetInspectorLayout(client);
     int margin = InspectorPx(20);
-    COLORREF muted = InspectorBlend(Context().inspectorText, Context().inspectorBackground, 76);
-    COLORREF line = InspectorBlend(Context().inspectorText, Context().inspectorBackground, 18);
-    COLORREF waveform = InspectorBlend(Context().inspectorText, Context().inspectorBackground, 54);
-    COLORREF control = InspectorBlend(Context().inspectorText, Context().inspectorBackground, 80);
-    COLORREF accent = InspectorBlend(Context().inspectorText, Context().inspectorBackground, 88);
+    COLORREF muted = InspectorMutedText();
+    COLORREF line = InspectorBlend(Context().inspectorText, Context().inspectorContrastBackground, 18);
+    COLORREF waveform = InspectorBlend(Context().inspectorText, Context().inspectorContrastBackground, 54);
+    COLORREF control = InspectorBlend(Context().inspectorText, Context().inspectorContrastBackground, 80);
+    COLORREF accent = InspectorBlend(Context().inspectorText, Context().inspectorContrastBackground, 88);
     RECT canvas = {0, 0, client.right, layout.height};
     PaintColumnBackground(Context().previewWindow, dc, &canvas);
     SetBkMode(dc, TRANSPARENT);
@@ -5697,24 +5884,8 @@ void PaintInspector(HDC dc, RECT client) {
         PaintInfoRow(dc, client.right, row, L"Created", FormatFileDate(Context().previewCreated));
     }
     InspectorLine(dc, margin, client.right - margin, layout.infoLine, line);
-    if (Context().previewBitmap && !Context().previewMedia) {
-        BITMAP bitmap = {};
-        RECT area = layout.preview;
-        if (GetObjectW(Context().previewBitmap, sizeof(bitmap), &bitmap) && bitmap.bmWidth > 0 && bitmap.bmHeight > 0) {
-            double scale = std::min(static_cast<double>(area.right - area.left) / bitmap.bmWidth,
-                                    static_cast<double>(area.bottom - area.top) / bitmap.bmHeight);
-            int w = std::max(1, static_cast<int>(bitmap.bmWidth * scale));
-            int h = std::max(1, static_cast<int>(bitmap.bmHeight * scale));
-            HDC source = CreateCompatibleDC(dc);
-            HGDIOBJ old = SelectObject(source, Context().previewBitmap);
-            SetStretchBltMode(dc, HALFTONE);
-            SetBrushOrgEx(dc, 0, 0, nullptr);
-            StretchBlt(dc, area.left + (area.right - area.left - w) / 2,
-                area.top + (area.bottom - area.top - h) / 2, w, h,
-                source, 0, 0, bitmap.bmWidth, bitmap.bmHeight, SRCCOPY);
-            SelectObject(source, old); DeleteDC(source);
-        }
-    }
+    if (Context().previewBitmap && !Context().previewMedia)
+        DrawInspectorImage(dc, Context().previewBitmap, layout.preview);
     if (Context().previewMedia) {
         RECT title = {margin, layout.infoLine + InspectorPx(10),
                       client.right - margin, layout.infoLine + InspectorPx(34)};
@@ -5770,16 +5941,16 @@ void PaintInspector(HDC dc, RECT client) {
         InspectorText(dc, Context().inspectorCaptionFont, muted, layout.time,
             AudioTime(position) + L" / " + AudioTime(Context().audioDuration),
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        COLORREF disabled = InspectorBlend(Context().inspectorText, Context().inspectorBackground, 35);
+        COLORREF disabled = InspectorBlend(Context().inspectorText, Context().inspectorContrastBackground, 35);
         PaintAudioGlyph(dc, layout.back, 2, MediaCanPlay() ?
             (Context().inspectorHover == 2 ? Context().inspectorText : control) : disabled);
         PaintAudioGlyph(dc, layout.forward, 3, MediaCanPlay() ?
             (Context().inspectorHover == 3 ? Context().inspectorText : control) : disabled);
         bool playHover = Context().inspectorHover == 1 && MediaCanPlay();
-        HBRUSH button = playHover ? CreateSolidBrush(
+        HBRUSH button = playHover && InspectorCanFillPlayHover() ? CreateSolidBrush(
             InspectorBlend(Context().inspectorText, Context().inspectorBackground, 9)) : nullptr;
         HPEN ring = CreatePen(PS_SOLID, std::max(1, InspectorPx(1)),
-            InspectorBlend(Context().inspectorText, Context().inspectorBackground,
+            InspectorBlend(Context().inspectorText, Context().inspectorContrastBackground,
                 MediaCanPlay() ? (playHover ? 68 : 40) : 20));
         HGDIOBJ oldBrush = SelectObject(dc, button ? button : GetStockObject(NULL_BRUSH));
         HGDIOBJ oldPen = SelectObject(dc, ring);
@@ -5875,6 +6046,9 @@ LRESULT CALLBACK PreviewSlotProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) 
         RemovePropW(hwnd, kSessionProperty);
         return DefWindowProcW(hwnd, message, wp, lp);
     }
+    if (!InspectorWorkEnabled() && (message == kMediaEventMessage || message == WM_LBUTTONDOWN ||
+        message == WM_LBUTTONDBLCLK || message == WM_MOUSEMOVE || message == WM_KEYDOWN ||
+        message == WM_SYSKEYDOWN || message == WM_MOUSEWHEEL || message == WM_VSCROLL)) return 0;
     switch (message) {
         case kMediaEventMessage:
             if (wp == Context().previewGeneration)
@@ -5882,6 +6056,7 @@ LRESULT CALLBACK PreviewSlotProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) 
             return 0;
         case WM_TIMER:
             if (wp == kAudioTimerId) {
+                if (!InspectorWorkEnabled()) { UpdateAudioPlaybackTimer(); return 0; }
                 if (!IsWindowVisible(hwnd)) PauseMediaPreview();
                 if (!Context().audioPlaying || !(Context().audioGraph || Context().mediaEngine)) {
                     UpdateAudioPlaybackTimer();
@@ -6045,7 +6220,9 @@ LRESULT CALLBACK PreviewSlotProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) 
 }
 
 void ClearPreview() {
-    if (Context().previewIndex < 0) return;
+    if (Context().inspectorClearingPreview || Context().previewIndex < 0) return;
+    Context().inspectorClearingPreview = true;
+    struct ClearingScope { ~ClearingScope() { Context().inspectorClearingPreview = false; } } clearing;
     Context().previewGeneration = g_previewSequence.fetch_add(1) + 1;
     Context().imageWanted = false;
     Context().waveWanted = false;
@@ -6056,10 +6233,9 @@ void ClearPreview() {
     StopAudioPreview();
     if (Context().previewBitmap) DeleteObject(Context().previewBitmap);
     Context().previewBitmap = nullptr;
-    if (Context().previewHandler) {
-        Context().previewHandler->Unload();
-        Context().previewHandler->Release();
-        Context().previewHandler = nullptr;
+    if (auto* handler = std::exchange(Context().previewHandler, nullptr)) {
+        handler->Unload();
+        handler->Release();
     }
     if (IsWindow(Context().previewWindow)) DestroyWindow(Context().previewWindow);
     Context().previewWindow = nullptr;
@@ -6397,12 +6573,14 @@ DWORD WINAPI WaveWorker(void* data) {
 }
 
 void LaunchWaveWorker() {
+    if (!InspectorWorkEnabled()) return;
     if (!Context().waveWanted || !Context().previewWindow || !Context().overlay || Context().waveJob) return;
     Context().waveJob = StartPreviewJob(Context().previewPath, Context().overlay,
         Context().previewGeneration, kWaveReadyMessage, WaveWorker);
 }
 
 void LaunchImageWorker() {
+    if (!InspectorWorkEnabled()) return;
     if (!Context().imageWanted || !Context().previewWindow || !Context().overlay) return;
     // Keep at most one provider call per kind and tab. A new selection cancels
     // the old work, whose completion starts the latest requested preview.
@@ -6415,12 +6593,15 @@ void LaunchImageWorker() {
 }
 
 bool StartImageFallback(const std::wstring& path) {
+    if (!InspectorWorkEnabled()) return false;
+    InspectorPreviewSnapshot operation;
     const wchar_t* extension = PathFindExtensionW(path.c_str());
     PERCEIVED type = PERCEIVED_TYPE_UNSPECIFIED;
     PERCEIVEDFLAG flags = PERCEIVEDFLAG_UNDEFINED;
     if (!extension || FAILED(AssocGetPerceivedType(extension, &type,
             &flags, nullptr)) || type != PERCEIVED_TYPE_IMAGE)
         return false;
+    if (!operation.Current()) return false;
     Context().previewMessage = L"Loading image preview...";
     Context().imageWanted = true;
     LaunchImageWorker();
@@ -6428,36 +6609,54 @@ bool StartImageFallback(const std::wstring& path) {
 }
 
 HRESULT StartDirectShowPreview(const std::wstring& path) {
+    if (!InspectorWorkEnabled()) return E_ABORT;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
     HRESULT hr = CoCreateInstance(CLSID_FilterGraph, nullptr, CLSCTX_INPROC_SERVER,
         IID_IGraphBuilder, reinterpret_cast<void**>(&Context().audioGraph));
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().audioGraph->RenderFile(path.c_str(), nullptr);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().audioGraph->QueryInterface(IID_IMediaControl,
         reinterpret_cast<void**>(&Context().audioControl));
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().audioGraph->QueryInterface(IID_IMediaSeeking,
         reinterpret_cast<void**>(&Context().audioSeeking));
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().audioSeeking->SetTimeFormat(&TIME_FORMAT_MEDIA_TIME);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().audioSeeking->GetDuration(&Context().audioDuration);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr) && Context().previewVideo) {
         if (!CreateVideoWindow()) hr = HRESULT_FROM_WIN32(GetLastError());
+    if (!operation.Current()) hr = E_ABORT;
         if (SUCCEEDED(hr)) hr = Context().audioGraph->QueryInterface(IID_IVideoWindow,
             reinterpret_cast<void**>(&Context().directShowVideo));
+    if (!operation.Current()) hr = E_ABORT;
         if (SUCCEEDED(hr)) hr = Context().directShowVideo->put_AutoShow(OAFALSE);
+    if (!operation.Current()) hr = E_ABORT;
         if (SUCCEEDED(hr)) hr = Context().directShowVideo->put_Owner(reinterpret_cast<OAHWND>(Context().videoWindow));
+    if (!operation.Current()) hr = E_ABORT;
         if (SUCCEEDED(hr)) hr = Context().directShowVideo->put_WindowStyle(WS_CHILD | WS_CLIPSIBLINGS);
+    if (!operation.Current()) hr = E_ABORT;
         if (SUCCEEDED(hr)) hr = Context().directShowVideo->put_MessageDrain(reinterpret_cast<OAHWND>(Context().previewWindow));
+    if (!operation.Current()) hr = E_ABORT;
         if (SUCCEEDED(hr)) hr = Context().directShowVideo->put_Visible(OATRUE);
+    if (!operation.Current()) hr = E_ABORT;
         IBasicVideo* video = nullptr;
         if (SUCCEEDED(hr) && SUCCEEDED(Context().audioGraph->QueryInterface(IID_IBasicVideo,
                 reinterpret_cast<void**>(&video)))) {
             long width = 0, height = 0;
-            if (SUCCEEDED(video->GetVideoSize(&width, &height))) {
+            if (operation.Current() && SUCCEEDED(video->GetVideoSize(&width, &height)) && operation.Current()) {
                 Context().videoWidth = std::max(0L, width); Context().videoHeight = std::max(0L, height);
             }
             video->Release();
+    if (!operation.Current()) hr = E_ABORT;
         }
     }
     if (FAILED(hr)) { StopAudioPreview(); return hr; }
     Context().audioGraph->QueryInterface(IID_IBasicAudio, reinterpret_cast<void**>(&Context().audioVolumeControl));
+    if (!operation.Current()) { StopAudioPreview(); return E_ABORT; }
     ApplyAudioVolume();
     Context().audioPlaying = false;
     Context().previewMessage.clear();
@@ -6470,42 +6669,60 @@ HRESULT StartDirectShowPreview(const std::wstring& path) {
 }
 
 HRESULT StartMediaEngine(const std::wstring& path) {
+    if (!InspectorWorkEnabled()) return E_ABORT;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
     HRESULT hr = MFStartup(MF_VERSION);
     if (FAILED(hr)) return hr;
     Context().mediaFoundationStarted = true;
+    if (!operation.Current()) hr = E_ABORT;
     IMFMediaEngineClassFactory* factory = nullptr;
     IMFAttributes* attributes = nullptr;
     MediaEngineNotify* callback = new (std::nothrow) MediaEngineNotify(Context().previewWindow, Context().previewGeneration);
     if (!callback) hr = E_OUTOFMEMORY;
     if (SUCCEEDED(hr) && !CreateVideoWindow()) hr = HRESULT_FROM_WIN32(GetLastError());
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = MFCreateAttributes(&attributes, 3);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = attributes->SetUnknown(MF_MEDIA_ENGINE_CALLBACK, callback);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = attributes->SetUINT64(MF_MEDIA_ENGINE_PLAYBACK_HWND,
         reinterpret_cast<UINT64>(Context().videoWindow));
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = CoCreateInstance(CLSID_MFMediaEngineClassFactory, nullptr,
         CLSCTX_INPROC_SERVER, IID_IMFMediaEngineClassFactory, reinterpret_cast<void**>(&factory));
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = factory->CreateInstance(0, attributes, &Context().mediaEngine);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().mediaEngine->QueryInterface(IID_IMFMediaEngineEx,
         reinterpret_cast<void**>(&Context().mediaEngineEx));
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().mediaEngine->SetAutoPlay(FALSE);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().mediaEngine->SetVolume(Context().audioVolume / 100.0);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) hr = Context().mediaEngine->SetPreload(MF_MEDIA_ENGINE_PRELOAD_AUTOMATIC);
+    if (!operation.Current()) hr = E_ABORT;
     if (SUCCEEDED(hr)) {
         std::wstring url(MAX_PATH, L'\0');
         DWORD length = static_cast<DWORD>(url.size());
         hr = UrlCreateFromPathW(path.c_str(), url.data(), &length, 0);
+    if (!operation.Current()) hr = E_ABORT;
         if (hr == E_POINTER && length > url.size()) {
             url.resize(length);
             hr = UrlCreateFromPathW(path.c_str(), url.data(), &length, 0);
+    if (!operation.Current()) hr = E_ABORT;
         }
         if (SUCCEEDED(hr)) {
             BSTR source = SysAllocString(url.c_str());
             hr = source ? Context().mediaEngine->SetSource(source) : E_OUTOFMEMORY;
+    if (!operation.Current()) hr = E_ABORT;
             SysFreeString(source);
         }
     }
     if (attributes) attributes->Release();
     if (factory) factory->Release();
+    if (!operation.Current()) hr = E_ABORT;
     Context().mediaNotify = callback; // Retain a detachable callback through Shutdown.
     if (FAILED(hr)) { StopAudioPreview(); return hr; }
     Context().previewMessage = L"Loading media…";
@@ -6514,7 +6731,9 @@ HRESULT StartMediaEngine(const std::wstring& path) {
 }
 
 void HandleMediaEvent(DWORD event, HRESULT error) {
-    if (!Context().mediaEngine) return;
+    if (!InspectorWorkEnabled() || !Context().mediaEngine) return;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
     bool updateVideo = event == MF_MEDIA_ENGINE_EVENT_ERROR ||
         event == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA || event == MF_MEDIA_ENGINE_EVENT_LOADEDDATA ||
         event == MF_MEDIA_ENGINE_EVENT_CANPLAY || event == MF_MEDIA_ENGINE_EVENT_FORMATCHANGE ||
@@ -6522,6 +6741,7 @@ void HandleMediaEvent(DWORD event, HRESULT error) {
     if (event == MF_MEDIA_ENGINE_EVENT_ERROR) {
         Wh_Log(L"[Columns] Media Engine failed: %08X for %s; trying DirectShow", error, Context().previewPath.c_str());
         StopAudioPreview();
+        if (!operation.Current()) return;
         HRESULT hr = StartDirectShowPreview(Context().previewPath);
         if (FAILED(hr)) {
             Context().previewMessage = L"Windows could not decode this file. Use Open with to play it in another app.";
@@ -6531,9 +6751,12 @@ void HandleMediaEvent(DWORD event, HRESULT error) {
         if (event == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA ||
             event == MF_MEDIA_ENGINE_EVENT_DURATIONCHANGE || event == MF_MEDIA_ENGINE_EVENT_CANPLAY) {
             double duration = Context().mediaEngine->GetDuration();
+            if (!operation.Current()) return;
             if (std::isfinite(duration) && duration > 0)
                 Context().audioDuration = static_cast<LONGLONG>(duration * 10000000.0);
-            if (Context().mediaEngine->HasVideo()) {
+            bool hasVideo = Context().mediaEngine->HasVideo();
+            if (!operation.Current()) return;
+            if (hasVideo) {
                 Context().previewVideo = true;
                 Context().mediaEngine->GetNativeVideoSize(&Context().videoWidth, &Context().videoHeight);
             }
@@ -6554,6 +6777,7 @@ void HandleMediaEvent(DWORD event, HRESULT error) {
         if (event == MF_MEDIA_ENGINE_EVENT_ENDED) { PauseMediaPreview(); SeekAudio(0); }
         UpdateAudioPlaybackTimer();
     }
+    if (!operation.Current()) return;
     if (updateVideo) {
         UpdateInspectorScroll();
         UpdateVideoFrame();
@@ -6563,11 +6787,15 @@ void HandleMediaEvent(DWORD event, HRESULT error) {
 }
 
 bool StartMediaPreview(const std::wstring& path) {
+    if (!InspectorWorkEnabled()) return false;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
     const wchar_t* extension = PathFindExtensionW(path.c_str());
     if (!extension || !*extension) return false;
     PERCEIVED type = PERCEIVED_TYPE_UNSPECIFIED;
     PERCEIVEDFLAG flags = PERCEIVEDFLAG_UNDEFINED;
     AssocGetPerceivedType(extension, &type, &flags, nullptr);
+    if (!operation.Current()) return false;
     bool audio = type == PERCEIVED_TYPE_AUDIO;
     bool video = type == PERCEIVED_TYPE_VIDEO;
     const wchar_t* audioTypes[] = {L".mp3", L".wav", L".wma", L".m4a", L".m4b", L".aac",
@@ -6582,26 +6810,36 @@ bool StartMediaPreview(const std::wstring& path) {
     IShellItem2* metadata = nullptr;
     if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
             IID_IShellItem2, reinterpret_cast<void**>(&metadata)))) {
+        if (!operation.Current()) { metadata->Release(); return false; }
         metadata->GetUInt32(PKEY_Audio_SampleRate, &Context().audioSampleRate);
+        if (!operation.Current()) { metadata->Release(); return false; }
         metadata->GetUInt32(PKEY_Audio_SampleSize, &Context().audioBits);
+        if (!operation.Current()) { metadata->Release(); return false; }
         metadata->GetUInt32(PKEY_Audio_ChannelCount, &Context().audioChannels);
+        if (!operation.Current()) { metadata->Release(); return false; }
         metadata->GetUInt32(PKEY_Video_FrameWidth, &Context().videoWidth);
+        if (!operation.Current()) { metadata->Release(); return false; }
         metadata->GetUInt32(PKEY_Video_FrameHeight, &Context().videoHeight);
+        if (!operation.Current()) { metadata->Release(); return false; }
         metadata->GetUInt32(PKEY_Video_FrameRate, &Context().videoFrameRate);
+        if (!operation.Current()) { metadata->Release(); return false; }
         ULONGLONG duration = 0;
         if (SUCCEEDED(metadata->GetUInt64(PKEY_Media_Duration, &duration)))
             Context().audioDuration = static_cast<LONGLONG>(duration);
+        if (!operation.Current()) { metadata->Release(); return false; }
         PWSTR format = nullptr;
         if (SUCCEEDED(metadata->GetString(PKEY_Audio_Format, &format)) && format) Context().audioFormat = format;
         CoTaskMemFree(format);
         metadata->Release();
     }
+    if (!operation.Current()) return false;
     if (!Context().inlineMediaPlayback) {
         Context().previewMessage = L"Inline audio and video are disabled. Use Open with to play this file.";
         return true;
     }
     if (!video) { Context().waveWanted = true; LaunchWaveWorker(); }
     HRESULT hr = StartMediaEngine(path);
+    if (!operation.Current()) return false;
     if (FAILED(hr)) {
         Wh_Log(L"[Columns] Media Engine setup failed: %08X; trying DirectShow", hr);
         hr = StartDirectShowPreview(path);
@@ -6616,14 +6854,19 @@ bool StartMediaPreview(const std::wstring& path) {
 HRESULT OpenPreviewStream(const std::wstring& path, IStream** stream) {
     if (!stream) return E_POINTER;
     *stream = nullptr;
+    if (!InspectorWorkEnabled()) return E_ABORT;
+    InspectorPreviewSnapshot operation;
     HRESULT hr = SHCreateStreamOnFileEx(path.c_str(),
         STGM_READ | STGM_SHARE_DENY_NONE, FILE_ATTRIBUTE_NORMAL,
         FALSE, nullptr, stream);
+    if (!operation.Current()) return E_ABORT;
     if (SUCCEEDED(hr)) return hr;
+    if (!InspectorWorkEnabled()) return E_ABORT;
     IShellItem* item = nullptr;
     hr = SHCreateItemFromParsingName(path.c_str(), nullptr,
         IID_IShellItem, reinterpret_cast<void**>(&item));
     if (SUCCEEDED(hr)) {
+        if (!operation.Current()) { item->Release(); return E_ABORT; }
         hr = item->BindToHandler(nullptr, BHID_Stream, IID_IStream,
                                  reinterpret_cast<void**>(stream));
         item->Release();
@@ -6632,6 +6875,9 @@ HRESULT OpenPreviewStream(const std::wstring& path, IStream** stream) {
 }
 
 void StartNativePreview(const std::wstring& path) {
+    if (!InspectorWorkEnabled()) return;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
     if (Context().previewIsFolder) {
         Context().previewMessage = L"Select a file to see its preview here.";
         return;
@@ -6641,103 +6887,118 @@ void StartNativePreview(const std::wstring& path) {
         Context().previewMessage = L"No preview is available for this file.";
         return;
     }
-    // The built-in player supplies consistent controls for audio and video,
-    // including file types that have no registered Explorer preview handler.
-    // Media decoders need an on-disk file; archive members use Shell previews.
-    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES &&
-        StartMediaPreview(path)) return;
-    constexpr wchar_t previewKey[] =
-        L"{8895B1C6-B41F-4C1C-A562-0D564250836F}";
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        bool media = StartMediaPreview(path);
+        if (!operation.Current() || media) return;
+    }
+    constexpr wchar_t previewKey[] = L"{8895B1C6-B41F-4C1C-A562-0D564250836F}";
     wchar_t clsidText[80] = {};
     DWORD length = ARRAYSIZE(clsidText);
     HRESULT hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_SHELLEXTENSION,
-                                   extension, previewKey, clsidText,
-                                   &length);
+        extension, previewKey, clsidText, &length);
+    if (!operation.Current()) return;
     CLSID clsid = {};
     if (FAILED(hr) || FAILED(CLSIDFromString(clsidText, &clsid))) {
-        if (!StartImageFallback(path))
+        if (!StartImageFallback(path) && operation.Current())
             Context().previewMessage = L"No Windows preview handler is installed for this file type.";
-        Wh_Log(L"[Columns] No preview handler for %s", extension);
         return;
     }
-    // Request the registered out-of-process host. Never load an arbitrary
-    // third-party preview DLL directly into Explorer.
-    hr = CoCreateInstance(clsid, nullptr, CLSCTX_LOCAL_SERVER,
-        IID_IPreviewHandler, reinterpret_cast<void**>(&Context().previewHandler));
-    if (FAILED(hr) || !Context().previewHandler) {
-        if (!StartImageFallback(path))
+    IPreviewHandler* handler = nullptr;
+    hr = CoCreateInstance(clsid, nullptr, CLSCTX_LOCAL_SERVER, IID_IPreviewHandler,
+        reinterpret_cast<void**>(&handler));
+    struct HandlerRef { IPreviewHandler*& handler; ~HandlerRef() { if (handler) handler->Release(); } } keep{handler};
+    if (!operation.Current()) return;
+    if (FAILED(hr) || !handler) {
+        if (!StartImageFallback(path) && operation.Current())
             Context().previewMessage = L"The Windows preview handler could not start.";
-        Wh_Log(L"[Columns] Preview activation failed: %08X", hr);
         return;
     }
+    handler->AddRef();
+    Context().previewHandler = handler; // Session and current call each own a reference.
     bool initialized = false;
     IInitializeWithStream* withStream = nullptr;
-    if (SUCCEEDED(Context().previewHandler->QueryInterface(IID_IInitializeWithStream,
-            reinterpret_cast<void**>(&withStream))) && withStream) {
+    hr = handler->QueryInterface(IID_IInitializeWithStream, reinterpret_cast<void**>(&withStream));
+    if (SUCCEEDED(hr) && withStream) {
         IStream* stream = nullptr;
-        if (SUCCEEDED(OpenPreviewStream(path, &stream)) && stream) {
-            initialized = SUCCEEDED(withStream->Initialize(stream,
-                STGM_READ | STGM_SHARE_DENY_NONE));
-            stream->Release();
-        }
+        if (operation.Current() && SUCCEEDED(OpenPreviewStream(path, &stream)) && stream && operation.Current())
+            initialized = SUCCEEDED(withStream->Initialize(stream, STGM_READ | STGM_SHARE_DENY_NONE));
+        if (stream) stream->Release();
         withStream->Release();
     }
+    if (!operation.Current()) return;
     if (!initialized) {
         IInitializeWithFile* withFile = nullptr;
-        if (SUCCEEDED(Context().previewHandler->QueryInterface(IID_IInitializeWithFile,
-                reinterpret_cast<void**>(&withFile))) && withFile) {
-            initialized = SUCCEEDED(withFile->Initialize(path.c_str(), STGM_READ));
+        hr = handler->QueryInterface(IID_IInitializeWithFile, reinterpret_cast<void**>(&withFile));
+        if (SUCCEEDED(hr) && withFile) {
+            if (operation.Current()) initialized = SUCCEEDED(withFile->Initialize(path.c_str(), STGM_READ));
             withFile->Release();
         }
     }
+    if (!operation.Current()) return;
     if (!initialized) {
         IInitializeWithItem* withItem = nullptr;
-        if (SUCCEEDED(Context().previewHandler->QueryInterface(IID_IInitializeWithItem,
-                reinterpret_cast<void**>(&withItem))) && withItem) {
+        hr = handler->QueryInterface(IID_IInitializeWithItem, reinterpret_cast<void**>(&withItem));
+        if (SUCCEEDED(hr) && withItem) {
             IShellItem* item = nullptr;
-            if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
-                    IID_IShellItem, reinterpret_cast<void**>(&item))) && item) {
+            if (operation.Current() && SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                    IID_IShellItem, reinterpret_cast<void**>(&item))) && item && operation.Current())
                 initialized = SUCCEEDED(withItem->Initialize(item, STGM_READ));
-                item->Release();
-            }
+            if (item) item->Release();
             withItem->Release();
         }
     }
+    if (!operation.Current()) return;
+    auto retireHandler = [&] {
+        if (Context().previewHandler == handler) {
+            Context().previewHandler = nullptr;
+            handler->Unload();
+            handler->Release(); // Session reference; local call stays alive through any reentry.
+        }
+    };
     if (!initialized) {
-        Context().previewHandler->Release();
-        Context().previewHandler = nullptr;
-        if (!StartImageFallback(path))
+        retireHandler();
+        if (!StartImageFallback(path) && operation.Current())
             Context().previewMessage = L"The preview handler could not open this file.";
         return;
     }
     RECT area = {};
     GetClientRect(Context().previewWindow, &area);
     area = GetInspectorLayout(area).preview;
-    hr = Context().previewHandler->SetWindow(Context().previewWindow, &area);
-    if (SUCCEEDED(hr)) hr = Context().previewHandler->DoPreview();
+    hr = handler->SetWindow(Context().previewWindow, &area);
+    if (!operation.Current()) return;
+    if (SUCCEEDED(hr)) hr = handler->DoPreview();
+    if (!operation.Current()) return;
     if (FAILED(hr)) {
-        Wh_Log(L"[Columns] DoPreview failed: %08X", hr);
-        Context().previewHandler->Unload();
-        Context().previewHandler->Release();
-        Context().previewHandler = nullptr;
-        if (!StartImageFallback(path))
+        retireHandler();
+        if (!StartImageFallback(path) && operation.Current())
             Context().previewMessage = L"The preview handler could not display this file.";
-    } else {
-        Wh_Log(L"[Columns] Preview displayed: %s", path.c_str());
-    }
+    } else Wh_Log(L"[Columns] Preview displayed: %s", path.c_str());
 }
 
+
 bool ShowPreview(const std::wstring& path) {
-    if (!Context().overlay) return false;
+    if (!InspectorWorkEnabled() || !Context().overlay) return false;
+    if (Context().inspectorProviderDepth) {
+        Context().previewGeneration = g_previewSequence.fetch_add(1) + 1;
+        Context().inspectorClearPending = true;
+        Context().inspectorRestorePending = true;
+        return false;
+    }
+    ULONG_PTR settings = g_inspectorSettingsRevision.load();
     ClearPreview();
+    if (!InspectorWorkEnabled() || settings != g_inspectorSettingsRevision.load()) return false;
     Context().previewGeneration = g_previewSequence.fetch_add(1) + 1;
+    InspectorProviderScope provider;
+    InspectorPreviewSnapshot operation;
     WIN32_FILE_ATTRIBUTE_DATA attributes = {};
     bool haveAttributes = GetFileAttributesExW(path.c_str(),
         GetFileExInfoStandard, &attributes) != FALSE;
     bool isFolder = (haveAttributes &&
         (attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) ||
         IsShellFolderPath(path);
+    if (!operation.Current()) return false;
     if (isFolder && !Context().fixedInspector) {
+        Context().inspectorRestorePending = false;
         ScrollToNewestColumn();
         return true;
     }
@@ -6750,6 +7011,13 @@ bool ShowPreview(const std::wstring& path) {
         LogWin32(L"CreateWindowEx(preview)");
         return false;
     }
+    if (!InspectorWorkEnabled() || Context().previewGeneration != operation.generation ||
+        g_inspectorSettingsRevision.load() != settings) {
+        if (IsWindow(Context().previewWindow)) DestroyWindow(Context().previewWindow);
+        Context().previewWindow = nullptr;
+        return false;
+    }
+    operation.window = Context().previewWindow;
     Context().previewIndex = index;
     Context().previewPath = path;
     Context().previewDisplayName = PathFindFileNameW(path.c_str());
@@ -6766,25 +7034,36 @@ bool ShowPreview(const std::wstring& path) {
     IShellItem2* metadata = nullptr;
     if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
             IID_IShellItem2, reinterpret_cast<void**>(&metadata))) && metadata) {
+        auto retire = [&] { metadata->Release(); metadata = nullptr; };
+        if (!operation.Current()) { retire(); return false; }
         PWSTR displayName = nullptr;
-        if (SUCCEEDED(metadata->GetDisplayName(SIGDN_NORMALDISPLAY, &displayName)) &&
-                displayName && *displayName)
-            Context().previewDisplayName = displayName;
+        HRESULT nameResult = metadata->GetDisplayName(SIGDN_NORMALDISPLAY, &displayName);
+        if (!operation.Current()) { CoTaskMemFree(displayName); retire(); return false; }
+        if (SUCCEEDED(nameResult) && displayName && *displayName) Context().previewDisplayName = displayName;
         CoTaskMemFree(displayName);
         SFGAOF shellAttributes = 0;
-        if (SUCCEEDED(metadata->GetAttributes(SFGAO_FILESYSTEM, &shellAttributes)))
-            Context().previewIsVirtualFolder = isFolder && !(shellAttributes & SFGAO_FILESYSTEM);
+        HRESULT attributesResult = metadata->GetAttributes(SFGAO_FILESYSTEM, &shellAttributes);
+        if (!operation.Current()) { retire(); return false; }
+        if (SUCCEEDED(attributesResult)) Context().previewIsVirtualFolder = isFolder && !(shellAttributes & SFGAO_FILESYSTEM);
         if (!haveAttributes) {
-            metadata->GetUInt64(PKEY_Size, &Context().previewFileSize);
-            metadata->GetFileTime(PKEY_DateModified, &Context().previewModified);
-            metadata->GetFileTime(PKEY_DateCreated, &Context().previewCreated);
+            ULONGLONG size = 0; FILETIME modified = {}, created = {};
+            metadata->GetUInt64(PKEY_Size, &size);
+            if (!operation.Current()) { retire(); return false; }
+            metadata->GetFileTime(PKEY_DateModified, &modified);
+            if (!operation.Current()) { retire(); return false; }
+            metadata->GetFileTime(PKEY_DateCreated, &created);
+            if (!operation.Current()) { retire(); return false; }
+            Context().previewFileSize = size; Context().previewModified = modified; Context().previewCreated = created;
         }
     }
+    if (!operation.Current()) { if (metadata) metadata->Release(); return false; }
     SHFILEINFOW shellInfo = {};
     DWORD_PTR haveShellInfo = 0;
     if (Context().previewIsVirtualFolder) {
         PIDLIST_ABSOLUTE pidl = nullptr;
-        if (metadata && SUCCEEDED(SHGetIDListFromObject(metadata, &pidl)) && pidl)
+        HRESULT identityResult = metadata ? SHGetIDListFromObject(metadata, &pidl) : E_NOINTERFACE;
+        if (!operation.Current()) { CoTaskMemFree(pidl); if (metadata) metadata->Release(); return false; }
+        if (SUCCEEDED(identityResult) && pidl)
             haveShellInfo = SHGetFileInfoW(reinterpret_cast<PCWSTR>(pidl), 0,
                 &shellInfo, sizeof(shellInfo), SHGFI_PIDL | SHGFI_TYPENAME | SHGFI_ICON | SHGFI_LARGEICON);
         CoTaskMemFree(pidl);
@@ -6798,6 +7077,7 @@ bool ShowPreview(const std::wstring& path) {
             SHGFI_TYPENAME | SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES);
     }
     if (metadata) metadata->Release();
+    if (!operation.Current()) { if (shellInfo.hIcon) DestroyIcon(shellInfo.hIcon); return false; }
     if (haveShellInfo) {
         Context().previewType = shellInfo.szTypeName;
         Context().previewIcon = shellInfo.hIcon;
@@ -6806,10 +7086,81 @@ bool ShowPreview(const std::wstring& path) {
         Context().previewType = Context().previewIsFolder ? L"Folder" : L"File";
     ScrollToNewestColumn();
     ReadInspectorColors();
+    if (!operation.Current()) return false;
     ReadOpenWithDefault();
+    if (!operation.Current()) return false;
     StartNativePreview(path);
+    if (!operation.Current()) return false;
+    Context().inspectorRestorePending = false;
     UpdateInspectorScroll();
     InvalidateRect(Context().previewWindow, nullptr, FALSE);
+    return true;
+}
+
+
+bool ApplyInspectorVisibilitySetting(bool insideSettingsHandler) {
+    Session& owner = Context();
+    if (owner.closed || g_unloading.load()) return false;
+    ULONG_PTR revision = g_inspectorSettingsRevision.load();
+    bool wanted = g_inspectorEnabledSetting.load();
+    auto replaySettings = [&] {
+        if (!insideSettingsHandler && owner.inspectorLayoutSettingsPending && !owner.inspectorLayoutReplayPosted &&
+            !owner.closed && IsWindow(owner.overlay))
+            owner.inspectorLayoutReplayPosted = PostMessageW(owner.overlay, kLayoutSettingsChangedMessage, 0, 0) != FALSE;
+    };
+    if (owner.inspectorSettingsRevision == revision && owner.inspectorEnabled == wanted &&
+        !owner.inspectorClearPending) { replaySettings(); return true; }
+    auto retry = [&] {
+        if (!owner.closed && IsWindow(owner.overlay))
+            SetTimer(owner.overlay, kInspectorVisibilityTimerId, kPointerReleaseDelayMs, nullptr);
+    };
+    if (owner.inspectorVisibilityApplying || owner.inspectorProviderDepth || owner.inspectorClearingPreview) {
+        retry(); return false;
+    }
+    owner.inspectorVisibilityApplying = true;
+    struct ApplyingScope { Session& owner; ~ApplyingScope() { owner.inspectorVisibilityApplying = false; } } applying{owner};
+    HWND overlay = owner.overlay;
+    ULONG_PTR identity = owner.identity;
+    if (!wanted) {
+        // Stop ongoing activity even when physical teardown/layout must wait
+        // for a held divider, click or native menu to finish.
+        owner.imageWanted = owner.waveWanted = false;
+        if (owner.imageJob) SetEvent(owner.imageJob->cancel);
+        if (owner.waveJob) SetEvent(owner.waveJob->cancel);
+        if (owner.audioPlaying) PauseMediaPreview();
+        if (owner.closed || g_unloading.load() || owner.overlay != overlay || owner.identity != identity) return false;
+        if (revision != g_inspectorSettingsRevision.load()) { retry(); return false; }
+    }
+    bool held = owner.resizeSplitter || NativePointerInteractionActive();
+    bool menu = false;
+    if (!held) menu = static_cast<bool>(NativeMenuSessionOnThread());
+    if (owner.closed || g_unloading.load() || owner.overlay != overlay || owner.identity != identity) return false;
+    if (revision != g_inspectorSettingsRevision.load() || wanted != g_inspectorEnabledSetting.load()) {
+        retry(); return false;
+    }
+    if (held || menu || owner.resizeSplitter || NativePointerInteractionActive()) { retry(); return false; }
+    // Flip applied policy before unloading a handler: a pumped Off/On cannot
+    // start or unload a second Inspector while this cleanup is still on stack.
+    owner.inspectorEnabled = false;
+    owner.inspectorClearPending = false;
+    ClearPreview();
+    if (owner.closed || g_unloading.load() || owner.overlay != overlay || owner.identity != identity) return false;
+    if (revision != g_inspectorSettingsRevision.load() || wanted != g_inspectorEnabledSetting.load()) {
+        retry(); return false;
+    }
+    owner.inspectorEnabled = wanted;
+    owner.inspectorSettingsRevision = revision;
+    owner.inspectorRestorePending = wanted;
+    KillTimer(overlay, kInspectorVisibilityTimerId);
+    LayoutPanes(overlay);
+    if (owner.closed || g_unloading.load()) return false;
+    replaySettings();
+    if (wanted && !owner.inspectorLayoutSettingsPending && owner.columnCount > 0) {
+        int index = std::clamp(owner.activePane, 0, owner.columnCount - 1);
+        // Keep the folder trail/cache. The unchanged-selection branch restores
+        // a file or fixed-Inspector folder without navigating its column again.
+        QueueSelectionUpdate(owner.panes[index]);
+    }
     return true;
 }
 
@@ -6852,6 +7203,7 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
 void TestPaintOnly(const wchar_t* reason);
 
 void ProcessSelectionUpdates(bool recovery) {
+    if (!ApplyInspectorVisibilitySetting()) return;
     if (Context().suspended || Context().closed || g_unloading.load()) return;
     if (NativePointerInteractionActive()) {
         if (recovery)
@@ -6913,13 +7265,18 @@ void ProcessSelectionUpdates(bool recovery) {
             // Manual browsing preserves child selections while a parent is
             // highlighted. Restore a file Inspector when that child is focused
             // again, without reopening its folder or restarting an active preview.
-            if (i == Context().activePane && !selected.folder && !selected.path.empty() &&
+            if (InspectorWorkEnabled() && i == Context().activePane && !selected.path.empty() &&
+                (!selected.folder || (Context().fixedInspector && Context().inspectorRestorePending)) &&
                 (Context().previewIndex < 0 || Context().previewPath != selected.path)) {
                 ShowPreview(selected.path);
+                Context().inspectorRestorePending = false;
                 break;
             }
             continue;
         }
+        if (i == Context().activePane && Context().inspectorRestorePending &&
+            (selected.path.empty() || (selected.folder && !Context().fixedInspector)))
+            Context().inspectorRestorePending = false;
         Context().columnSelection[i] = selected.path;
         if (selected.folder && !Context().expandFoldersOnSelection && !activated) {
             // Highlighting a folder must not rebuild the trail. Clear a stale
@@ -7424,6 +7781,7 @@ void CleanupSession(HWND hwnd) {
     if (Context().closed) return;
     // Retire the cross-thread handles before releasing UI-owned state.
     Context().closed = true;
+    KillTimer(hwnd, kInspectorVisibilityTimerId);
     KillTimer(hwnd, kSharedAutoRetryTimerId);
     DetachNativeBoundsTracking();
     CancelPendingFocus();
@@ -7547,8 +7905,14 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             if (wp != Context().identity) return 0;
             SetTimer(hwnd, kPaletteRefreshTimerId, kPaletteSettleDelayMs, nullptr);
             return 0;
+        case kInspectorVisibilityMessage:
+            if (wp == Context().identity) ApplyInspectorVisibilitySetting();
+            return 0;
         case kLayoutSettingsChangedMessage:
         {
+            Context().inspectorLayoutReplayPosted = false;
+            Context().inspectorLayoutSettingsPending = true;
+            if (!ApplyInspectorVisibilitySetting(true)) return 0;
             CancelColumnResize();
             ApplyColumnWidthSettings(hwnd);
             ApplyFolderExpansionSettings();
@@ -7566,15 +7930,18 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                 KillTimer(hwnd, kSettledPaintTimerId);
                 KillTimer(hwnd, kDividerPaintTimerId);
             }
-            if (mediaChanged && Context().previewMedia && !Context().previewPath.empty()) {
+            if (InspectorWorkEnabled() && mediaChanged && Context().previewMedia && !Context().previewPath.empty()) {
                 std::wstring path = Context().previewPath;
                 ShowPreview(path);
             }
             if (!Context().fixedInspector && Context().previewIsFolder) ClearPreview();
-            if (Context().fixedInspector && !previous && Context().previewIndex < 0) {
+            if (InspectorWorkEnabled() && Context().fixedInspector && !previous && Context().previewIndex < 0) {
                 SelectedItem selected = SelectedPath(Context().panes[Context().activePane]);
                 if (!selected.path.empty()) ShowPreview(selected.path);
             }
+            Context().inspectorLayoutSettingsPending = false;
+            if (InspectorWorkEnabled() && Context().inspectorRestorePending && Context().columnCount > 0)
+                QueueSelectionUpdate(Context().panes[std::clamp(Context().activePane, 0, Context().columnCount - 1)]);
             if (previous != Context().fixedInspector) ScrollToNewestColumn();
             else LayoutPanes(hwnd);
             RedrawWindow(hwnd, nullptr, nullptr,
@@ -7601,7 +7968,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             DWORD generation = 0;
             if (!TakePreviewResult(Context().imageJob, wp, hwnd,
                     &generation, &bitmap, nullptr)) return 0;
-            if (generation == Context().previewGeneration && Context().previewWindow &&
+            if (InspectorWorkEnabled() && generation == Context().previewGeneration && Context().previewWindow &&
                 Context().imageWanted) {
                 Context().imageWanted = false;
                 if (bitmap) {
@@ -7623,7 +7990,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             DWORD generation = 0;
             if (!TakePreviewResult(Context().waveJob, wp, hwnd,
                     &generation, nullptr, &result)) return 0;
-            if (generation == Context().previewGeneration &&
+            if (InspectorWorkEnabled() && generation == Context().previewGeneration &&
                 Context().previewWindow && Context().waveWanted) {
                 Context().waveWanted = false;
                 delete Context().wavePreview;
@@ -7756,6 +8123,11 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         case kNavigationEventMessage:
         case kSelectionUpdateMessage:
         case WM_TIMER: {
+            if (message == WM_TIMER && wp == kInspectorVisibilityTimerId) {
+                KillTimer(hwnd, kInspectorVisibilityTimerId);
+                ApplyInspectorVisibilitySetting();
+                return 0;
+            }
             if (message == WM_TIMER && wp == kSharedAutoRetryTimerId) {
                 KillTimer(hwnd, kSharedAutoRetryTimerId);
                 if (!Context().closed && !Context().suspended && IsWindowVisible(Context().tab)) {
@@ -8162,6 +8534,8 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
         CoUninitialize();
         return;
     }
+    Context().inspectorEnabled = g_inspectorEnabledSetting.load();
+    Context().inspectorSettingsRevision = g_inspectorSettingsRevision.load();
     Context().inlineMediaPlayback = g_inlineMediaPlayback.load();
     Context().defaultColumnWidth = g_defaultColumnWidthSetting.load();
     Context().rememberColumnWidths = g_rememberColumnWidths.load();
@@ -8843,6 +9217,7 @@ BOOL Wh_ModInit() {
     g_preferenceChangePending.store(false);
     g_enableByDefault.store(Wh_GetIntSetting(L"EnableByDefault") != 0);
     g_columnsEnabled.store(g_enableByDefault.load());
+    LoadInspectorEnabledSetting();
     g_fixedInspectorSetting.store(Wh_GetIntSetting(L"FixedInspector") != 0);
     g_classicContextMenus.store(Wh_GetIntSetting(L"ClassicContextMenus") != 0);
     g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
@@ -8891,6 +9266,7 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModSettingsChanged() {
     bool preference = Wh_GetIntSetting(L"EnableByDefault") != 0;
+    LoadInspectorEnabledSetting();
     g_fixedInspectorSetting.store(Wh_GetIntSetting(L"FixedInspector") != 0);
     g_classicContextMenus.store(Wh_GetIntSetting(L"ClassicContextMenus") != 0);
     g_defaultColumnWidthSetting.store(ReadDefaultColumnWidthSetting());
