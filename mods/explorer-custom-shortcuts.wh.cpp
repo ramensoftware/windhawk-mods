@@ -208,6 +208,11 @@ You can bind custom hotkeys to external programs and scripts in settings using t
 * **`keyboard-shortcut-actions`** — Dispatches global desktop hotkeys without Explorer awareness. This mod inspects active tabs, selected items, and folder paths directly to dynamically expand arguments.
 * **Single-purpose mods** (`toggle-hidden-files`, `explorer-ctrln-newfile`, etc.) — Individual mods requiring separate installations. This mod combines those actions into a single configurable table using built-in commands (`int:` / `internal:`).
 
+---
+
+### 🧩 More from this author
+* **[Drag to Scroll](https://windhawk.net/mods/drag-to-scroll)** – Smoothly pan and scroll across windows by holding Ctrl and dragging with the right mouse button.
+
 ### Author & Attribution
 
 * **Created and maintained by ArvindSaini978 ([GitHub](https://github.com/ArvindSaini978)).**
