@@ -2,7 +2,7 @@
 // @id              windows-key-to-search
 // @name            Windows Key to Search
 // @description     Open Windows Search (Win+S) when either Windows key is tapped.
-// @version         1.0
+// @version         1.1
 // @author          Tyler
 // @github          https://github.com/snowtyler
 // @include         windhawk.exe
@@ -20,6 +20,10 @@ Tap either Windows key to open Search instead of Start. Search opens when the
 key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
 and Win+S continue to work normally. The generated shortcut is held for 50 ms
 before release.
+
+A Windows-key tap also brings the taskbar forward before opening Search,
+including when the foreground app is fullscreen. On multiple monitors, the
+taskbar on the foreground app's monitor is preferred.
 
 By default, the helper runs without requesting administrator privileges. On
 Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
@@ -163,8 +167,37 @@ bool CompleteSearch(const KBDLLHOOKSTRUCT* replay = nullptr, bool up = false) {
     return Inject(inputs, count);
 }
 
+void FocusTaskbarForSearch() {
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar) {
+        return;
+    }
+    HWND foreground = GetForegroundWindow();
+    HMONITOR monitor = foreground
+                           ? MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST)
+                           : nullptr;
+    if (monitor && MonitorFromWindow(taskbar, MONITOR_DEFAULTTONULL) != monitor) {
+        HWND secondary = nullptr;
+        while ((secondary = FindWindowExW(nullptr, secondary,
+                                          L"Shell_SecondaryTrayWnd", nullptr))) {
+            if (MonitorFromWindow(secondary, MONITOR_DEFAULTTONULL) == monitor) {
+                taskbar = secondary;
+                break;
+            }
+        }
+    }
+    // Win+S alone can overlay a fullscreen app without bringing the taskbar
+    // forward. Activate the shell first, letting Explorer manage its own
+    // visibility/fullscreen state. Search receives focus from the shortcut.
+    // This doesn't change the user's auto-hide setting or taskbar geometry.
+    if (!SetForegroundWindow(taskbar)) {
+        Wh_Log(L"Could not activate taskbar before Search");
+    }
+}
+
 void OpenSearch(WORD win) {
     CompleteSearch();
+    FocusTaskbarForSearch();
     // Query held keys only after the physical Win-up callback has returned.
     const WORD keys[] = {VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
                          VK_LMENU, VK_RMENU, 'S'};
