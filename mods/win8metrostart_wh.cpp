@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              win8-metro-start-screen
+ // @id              win8metrostart
 // @name            Windows 8 Metro Start Screen
 // @description     A native fullscreen Windows 8.1 Metro Start Screen for Windows 11 with Start button hook, anti-aliased icons, smooth staggered animations, blurred backgrounds, and clean UI.
 // @version         2.2.0
