@@ -1194,9 +1194,9 @@ static float HeaderOpacity(float to);
 static void ShowMenuFor(HWND owner, RECT anchor, int kind);
 static int HitTile(int mx, int my);
 static void DrawBarGpu(DWORD now);
-static void DrawAppsChromeGpu();
-static void DrawAppsChromeGdi(HDC sdc);
-static void DrawScrollBarTo(HDC dc);
+static void DrawAppsChromeGpu(float closeA = -1.0f);
+static void DrawAppsChromeGdi(HDC sdc, float closeA = -1.0f);
+static void DrawScrollBarTo(HDC dc, float closeA = -1.0f);
 static void DrawCharmBarGpu(DWORD now);
 static void DrawCharmBarGdi(HDC sdc, DWORD now);
 static void CharmToggle();
@@ -1802,14 +1802,12 @@ static RECT ScrollThumbRect() {
     r.left = tr.left + (int)pos; r.right = r.left + (int)tw; return r;
 }
 static DWORD g_lastMouseMs = 0;
-static float g_closeChromeA = 1.0f;   // closing fade applied to the scroll bar and the all-apps arrow
-static float ChromeIdleFadeBase(DWORD now) {
+static float ChromeIdleFade(DWORD now) {
     if (g_sbDrag || g_sbHover || g_hoverArrow) return 1.0f;
     DWORD idle = now - g_lastMouseMs;
     if (idle < 3500) return 1.0f;
     return Clamp01(1.0f - (float)(idle - 3500) / 500.0f);
 }
-static float ChromeIdleFade(DWORD now) { return ChromeIdleFadeBase(now) * g_closeChromeA; }
 static bool ScrollBarVisible() {
     return g_open && !g_closing && ZoomPresence(NowMs()) <= 0.0f && ScrollMax() > 0.5f;
 }
@@ -1838,9 +1836,14 @@ static void ScrollSetFromX(int mx) {
     g_scrollTarget = f * ScrollMax(); ClampScroll();
     g_scrollCur = g_scrollTarget;
 }
-static void DrawScrollBarTo(HDC dc) {
-    if (!ScrollBarVisible()) return;
-    float fade = ChromeIdleFade(NowMs());
+// closeA >= 0: drawn by the closing animation (g_open is already false then), faded by closeA.
+static bool ScrollBarShown(float closeA) {
+    if (closeA < 0.0f) return ScrollBarVisible();
+    return ZoomPresence(NowMs()) <= 0.0f && ScrollMax() > 0.5f;
+}
+static void DrawScrollBarTo(HDC dc, float closeA) {
+    if (!ScrollBarShown(closeA)) return;
+    float fade = ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f);
     if (fade <= 0.01f) return;
     RECT tr = ScrollTrackRect(), th = ScrollThumbRect();
     RECT al = ScrollArrowRect(false), ar = ScrollArrowRect(true);
@@ -1863,9 +1866,9 @@ static void DrawScrollBarTo(HDC dc) {
         SelectObject(dc, ob);
     }
 }
-static void DrawScrollBarGpu() {
-    if (!ScrollBarVisible() || !g_rt) return;
-    float fade = ChromeIdleFade(NowMs());
+static void DrawScrollBarGpu(float closeA = -1.0f) {
+    if (!ScrollBarShown(closeA) || !g_rt) return;
+    float fade = ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f);
     if (fade <= 0.01f) return;
     RECT tr = ScrollTrackRect(), th = ScrollThumbRect();
     RECT al = ScrollArrowRect(false), ar = ScrollArrowRect(true);
@@ -3571,26 +3574,27 @@ static bool RenderGpu() {
         const float tileU = Clamp01(tc / CLOSE_TILE_T);
         const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
         const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
-        if (g_view == VIEW_SEARCH && g_bgPlainGpu) DrawSearchGpu(now, true);
-        DrawHeaderGpu(hdrA, hdrA);
-        if (tileU < 1.0f) {
-            const float s = 1.0f - CLOSE_TILE_SCALE * tileU;
-            g_rt->SetTransform(D2D1::Matrix3x2F::Scale(s, s, D2D1::Point2F((float)g_sw * 0.5f, (float)g_sh * 0.5f)));
-            for (int pass = 0; pass < 2; ++pass) {
-                for (int i = 0; i < g_tileCount; ++i) {
-                    if ((i == g_dragIdx) != (pass == 1)) continue;
-                    if (g_tiles[i].alive) DrawTileGpu(i, 1.0f - tileU, 0.0f, 1.0f);
+        if (g_view == VIEW_SEARCH) {
+            // All Apps / search: only the list fades; the Start header and tiles are not on screen.
+            if (g_bgPlainGpu) DrawSearchGpu(now, true);
+        } else {
+            DrawHeaderGpu(hdrA, hdrA);
+            if (tileU < 1.0f) {
+                const float s = 1.0f - CLOSE_TILE_SCALE * tileU;
+                g_rt->SetTransform(D2D1::Matrix3x2F::Scale(s, s, D2D1::Point2F((float)g_sw * 0.5f, (float)g_sh * 0.5f)));
+                for (int pass = 0; pass < 2; ++pass) {
+                    for (int i = 0; i < g_tileCount; ++i) {
+                        if ((i == g_dragIdx) != (pass == 1)) continue;
+                        if (g_tiles[i].alive) DrawTileGpu(i, 1.0f - tileU, 0.0f, 1.0f);
+                    }
                 }
+                g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
             }
-            g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
         }
         if (tileU < 1.0f) {
-            g_closeChromeA = 1.0f - tileU;
-            const bool wasClosing = g_closing; g_closing = false;   // the chrome helpers hide it while closing
-            DrawScrollBarGpu();
-            if (g_view == VIEW_START) DrawAppsChromeGpu();
-            g_closing = wasClosing;
-            g_closeChromeA = 1.0f;
+            const float chromeA = 1.0f - tileU;
+            DrawScrollBarGpu(chromeA);
+            if (g_view == VIEW_START) DrawAppsChromeGpu(chromeA);
         }
         DrawSnapshotGpu(1.0f, wallA);
     }
@@ -3659,19 +3663,18 @@ static void Render() {
         const float tileU = Clamp01(tc / CLOSE_TILE_T);
         const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
         const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
-        DrawHeader(hdrA, sdc, hdrA);
-        // GDI fallback: tiles shrink around their own centres (the GPU path shrinks around the screen centre).
-        for (int pass = 0; pass < 2; ++pass) for (int i = 0; i < g_tileCount; ++i) {
-            if ((i == g_dragIdx) != (pass == 1)) continue;
-            if (g_tiles[i].alive && tileU < 1.0f) DrawTile(i, 1.0f - tileU, 0.0f, 1.0f - CLOSE_TILE_SCALE * tileU);
+        if (g_view == VIEW_START) {
+            DrawHeader(hdrA, sdc, hdrA);
+            // GDI fallback: tiles shrink around their own centres (the GPU path shrinks around the screen centre).
+            for (int pass = 0; pass < 2; ++pass) for (int i = 0; i < g_tileCount; ++i) {
+                if ((i == g_dragIdx) != (pass == 1)) continue;
+                if (g_tiles[i].alive && tileU < 1.0f) DrawTile(i, 1.0f - tileU, 0.0f, 1.0f - CLOSE_TILE_SCALE * tileU);
+            }
         }
         if (tileU < 1.0f) {
-            g_closeChromeA = 1.0f - tileU;
-            const bool wasClosing = g_closing; g_closing = false;   // the chrome helpers hide it while closing
-            DrawScrollBarTo(g_bbDC);
-            DrawAppsChromeGdi(sdc);
-            g_closing = wasClosing;
-            g_closeChromeA = 1.0f;
+            const float chromeA = 1.0f - tileU;
+            DrawScrollBarTo(g_bbDC, chromeA);
+            if (g_view == VIEW_START) DrawAppsChromeGdi(sdc, chromeA);
         }
         DrawSnapshot(1.0f, wallA);
     }
@@ -5389,7 +5392,10 @@ static void TextAt(const wchar_t* s, IDWriteTextFormat* f, float l, float t, flo
     // Never lay text out past the right edge of the screen (the layout box is clamped, so
     // wrapping/trimming of the format applies at the screen edge); fully off-screen text is skipped.
     if (l >= (float)g_sw || r <= 0.0f) return;
-    if (r > (float)g_sw) r = (float)g_sw;
+    // Single-line trimmed text is laid out inside the screen so its ellipsis stays visible. A wrapping
+    // format keeps its full width: narrowing it would re-wrap the text while it scrolls in, and the
+    // render target clips whatever lies past the edge.
+    if (f->GetWordWrapping() != DWRITE_WORD_WRAPPING_WRAP && r > (float)g_sw) r = (float)g_sw;
     if (r <= l) return;
     SetBr(c, a);
     g_rt->DrawText(s, (UINT32)wcslen(s), f, D2D1::RectF(l, t, r, b), g_scratch, D2D1_DRAW_TEXT_OPTIONS_CLIP);
@@ -6723,10 +6729,11 @@ static void DrawAppsSearchBoxGdi() {
     }
     SelectObject(g_bbDC, of);
 }
-static void DrawAppsChromeGdi(HDC) {
-    if (!g_open || g_closing || !EnsureUiIcons()) return;
+static void DrawAppsChromeGdi(HDC, float closeA) {
+    if (closeA < 0.0f && (!g_open || g_closing)) return;
+    if (!EnsureUiIcons()) return;
     RECT ar; AppsArrowRect(&ar);
-    const BYTE aa = (BYTE)((g_hoverArrow ? 255 : 42) * ChromeIdleFade(NowMs()));
+    const BYTE aa = (BYTE)((g_hoverArrow ? 255 : 42) * ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f));
     if (g_view == VIEW_START && ZoomPresence(NowMs()) <= 0.0f) {
         BlitIconGdi(g_bbDC, g_iconArrowDown, ar, g_hoverArrow, aa);
     } else if (g_queryLen == 0) {
@@ -6743,13 +6750,13 @@ static void DrawAppsChromeGdi(HDC) {
     }
     if (g_view == VIEW_SEARCH && !g_charmOpen) DrawAppsSearchBoxGdi();
 }
-static void DrawAppsChromeGpu() {
+static void DrawAppsChromeGpu(float closeA) {
     if (!g_scratch) return;
     RECT ar; AppsArrowRect(&ar);
     auto arrow = [&](bool down) {
         const UiIcon& ic = down ? g_iconArrowDown : g_iconArrowUp;
         if (ic.gpu) {
-            float op = (g_hoverArrow ? 1.0f : 0.16f) * ChromeIdleFade(NowMs());
+            float op = (g_hoverArrow ? 1.0f : 0.16f) * ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f);
             g_whiteGpu->SetOpacity(op);
             g_rt->DrawBitmap(ic.gpu, D2D1::RectF((float)ar.left, (float)ar.top,
                                                  (float)ar.right, (float)ar.bottom),
