@@ -13101,6 +13101,7 @@ void StartAppsWarmup();
 void StartAppCatalogWatch(HWND window);
 void StopAppCatalogWatch();
 void InvalidateAppsCatalog(bool inventoryChanged);
+void RequestAppIndexRefresh();
 void StopAppsWarmup();
 void StartSearchWindowInput();
 void StopSearchWindowInput();
@@ -14075,6 +14076,7 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         return 0;
     case kExplorerUpdateShortcut:
         UpdateAlternativeShortcut(hWnd);
+        RequestAppIndexRefresh();
         RefreshSearchUiSettings();
         return 0;
     case WM_HOTKEY:
@@ -15162,7 +15164,6 @@ HWND GetSearchWindow() {
 }
 
 
-void RequestAppIndexRefresh();
 
 // A result is being dragged by Explorer's helper (StartFileDrag), which holds
 // the pointer until the drop: the search window losing focus then is not search closing.
@@ -31101,7 +31102,8 @@ void Wh_ModSettingsChanged() {
         return;
     }
     LoadSettings();
-    RequestAppIndexRefresh();
+    // The helper owns g_appsWarmup and may destroy it after failed UI startup.
+    // Post the refresh there instead of reading the optional on this thread.
     if (g_targetProcess == TargetProcess::Explorer) {
         if (HWND helper = g_hExplorerHelperWnd.load()) {
             PostMessageW(helper, kExplorerUpdateShortcut, 0, 0);
