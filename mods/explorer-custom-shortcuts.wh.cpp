@@ -2,7 +2,7 @@
 // @id              explorer-custom-shortcuts
 // @name            Explorer Custom Shortcuts
 // @description     Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.
-// @version         1.7.0
+// @version         1.8.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
@@ -17,8 +17,51 @@
 /*
 # Explorer Custom Shortcuts
 
-Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.
+Adds customizable keyboard shortcuts to Windows File Explorer: open terminal, copy clean paths, create files and folders, toggle hidden items, and launch custom apps with hotkeys.
 
+Includes subtle, theme-matching on-screen confirmation notifications so you always know an action succeeded.
+
+---
+
+## Ready to Use: Default Shortcuts
+
+These shortcuts work immediately once the mod is enabled:
+
+| Shortcut | Action | Description |
+| :--- | :--- | :--- |
+| `Ctrl + Alt + T` | **Open Terminal Here** | Opens Windows Terminal (or PowerShell) in the current directory. |
+| `Ctrl + Shift + Alt + T` | **Open Terminal (Admin)** | Opens Windows Terminal or PowerShell as Administrator. |
+| `Alt + N` | **Open with Notepad** | Opens selected file(s) in Notepad. |
+| `Alt + C` | **Copy Name** | Copies selected file/folder name(s) including extensions to clipboard. |
+| `Alt + H` | **"Open With..." Dialog** | Opens the native Windows "How do you want to open this file?" dialog. |
+| `Ctrl + Alt + Enter` | **Show Properties** | Opens individual Properties dialogs for selected items. |
+| `Ctrl + Shift + B` | **Open Recycle Bin** | Navigates the current tab directly to the Recycle Bin. |
+| `Ctrl + Shift + Del` | **Empty Recycle Bin** | Prompts confirmation to wipe the Recycle Bin. |
+
+### Ready in Settings (Disabled by Default)
+
+These popular shortcuts are pre-configured in settings and can be enabled with a single toggle:
+
+| Shortcut | Action | Description |
+| :--- | :--- | :--- |
+| `Ctrl + H` | **Toggle Hidden Files** | Toggles visibility of hidden files & folders. |
+| `Ctrl + Shift + E` | **Toggle File Extensions** | Toggles display of file extensions. |
+| `Ctrl + Shift + C` | **Copy Path** | Copies full path(s) of selected items to clipboard. |
+
+---
+
+## Action Previews
+
+**Terminal & "Open With" Dialog (`Ctrl + Alt + T` / `Alt + H`)**
+![Terminal and Open With Preview](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/ecs_preview_1.webp)
+
+**Open with Notepad & "Open With" Dialog (`Alt + N` / `Alt + H`)**
+![Open with Notepad and Open With Preview](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/ecs_preview_2.webp)
+
+**Smart File Creation & Empty Recycle Bin (`newSmartFile` / `Ctrl + Shift + Del`)**
+![Smart File Creation and Empty Recycle Bin Preview](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/ecs_preview_3.webp)
+
+---
 
 ## Key Features
 
@@ -28,8 +71,6 @@ Adds customizable, app-style keyboard shortcuts to Windows File Explorer with pa
 * **Built-in Shell Actions** — Quick built-in commands to create text files, folders, or shortcuts, copy paths/names, toggle view settings, or open advanced dialogs.
 * **Typing & Rename Protection** — Shortcuts automatically pause while you are renaming a file, typing in the address bar, searching, or interacting with dialogs so they never interfere with your typing.
 * **On-Screen Action Popups** — Shows a clean, brief notification on your screen whenever background actions finish. Automatically matches your Windows accent color and Dark/Light theme, and can be disabled in settings.
-  
-  ![Toast Notification Preview](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/toast-preview.png)
 
 > **Windows 10 Ribbon Note:** Default shortcuts using `Alt` (such as `Alt+H` or `Alt+C`) take precedence over Windows 10 Explorer ribbon access keys. You can remap or disable these bindings in the mod settings if you rely on ribbon mnemonics.
 
@@ -129,24 +170,26 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 
 ---
 
+
 ### Preset Ideas & External App Examples
 
-You can add your own shortcuts using these templates in the settings:
+You can bind custom hotkeys to external programs and scripts in settings using these recipes:
 
-* **Terminal with Folder Name** (Sets active folder name as tab title)
+* **Windows Terminal with Dynamic Tab Title**
   * Path: `wt.exe` | Args: `--title "%d_name" -d "%d"` | Mode: `batch`
-* **Open with Notepad**
-  * Path: `notepad.exe` | Args: `%1` | Mode: `loop_files`
-* **PowerToys PowerRename** (Bulk rename selected items)
-  * Path: `C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
-* **Search with Everything** (Search current active directory)
-  * Path: `C:\Program Files\Everything\Everything.exe` | Args: `"%d"` | Mode: `batch`
-* **Open in VS Code (Built-in)**
-  * Path: `internal:openDirInCode` | Mode: `batch`
-* **Open in VS Code**
+* **Search Active Folder in Everything**
+  * Path: `Everything.exe` | Args: `-path "%d"` | Mode: `batch`
+* **PowerToys PowerRename (Bulk Rename Selected Items)**
+  * Path: `%ProgramFiles%\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
+  * *(Or if installed in user profile: `%LocalAppData%\PowerToys\PowerRename.exe`)*
+* **Git Bash in Current Directory**
+  * Path: `git-bash.exe` | Args: `--cd="%d"` | Mode: `batch`
+* **Open in VS Code (Current Directory or Selected Folder)**
   * Path: `code` | Args: `"%d_smart"` | Mode: `batch`
-* **Queue in VLC Media Player**
+* **Queue Selected Media in VLC**
   * Path: `vlc.exe` | Args: `%f` | Mode: `batch`
+* **Run Python Script with Selected Files**
+  * Path: `python.exe` | Args: `"C:\Scripts\process.py" %f` | Mode: `batch`
 
 ---
 
@@ -394,8 +437,18 @@ std::wstring ExpandEnv(const std::wstring& input) {
     return input;
 }
 
+// Trims leading/trailing whitespace and quote characters in place.
+void TrimWhitespaceAndQuotes(std::wstring& s) {
+    auto keep = [](wchar_t ch) {
+        return !(iswspace(ch) || ch == L'"' || ch == L'\'');
+    };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), keep));
+    s.erase(std::find_if(s.rbegin(), s.rend(), keep).base(), s.end());
+}
+
 std::wstring ResolveCommandPath(const std::wstring& command) {
     std::wstring expanded = ExpandEnv(command);
+    TrimWhitespaceAndQuotes(expanded);
     if (expanded.find(L'\\') != std::wstring::npos) {
         return expanded;
     }
@@ -429,15 +482,6 @@ std::wstring ResolveCommandPath(const std::wstring& command) {
         }
     }
     return expanded;
-}
-
-// Trims leading/trailing whitespace and quote characters in place.
-void TrimWhitespaceAndQuotes(std::wstring& s) {
-    auto keep = [](wchar_t ch) {
-        return !(iswspace(ch) || ch == L'"' || ch == L'\'');
-    };
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), keep));
-    s.erase(std::find_if(s.rbegin(), s.rend(), keep).base(), s.end());
 }
 
 int ParseKey(std::wstring keyStr) {
@@ -547,6 +591,7 @@ void LoadSettings() {
 
         CustomShortcut sc;
         sc.path = pathStr.get();
+        TrimWhitespaceAndQuotes(sc.path);
         sc.enabled = Wh_GetIntSetting(L"shortcuts[%d].enabled", i) != 0;
 
         WindhawkUtils::StringSetting nameStr =
