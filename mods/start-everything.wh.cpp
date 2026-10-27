@@ -2,7 +2,7 @@
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Replace Windows 11 search with Everything-powered files, apps and settings in a separate search window.
-// @version         2.0
+// @version         2.1
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         GPL-3.0
-// @compilerOptions -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32 -ld3d11 -lwindowscodecs -lxmllite
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32 -ld3d11 -lwindowscodecs -lxmllite -lwinhttp -lpdh -ldxgi -lbcrypt -ladvapi32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,7 +19,7 @@
 
 A native replacement for Windows 11 search, powered by voidtools Everything. Press Win+S, click the taskbar search icon, or start typing in Start to search files, apps, and settings in a separate window styled after your Start menu. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel.
 
-Version **2.0** introduces a separate Windows 11 search window, with Start appearance copying, app suggestions, and custom commands.
+Version **2.1** includes independent Apps-panel updates, Quick Tools cards, services management, and searchable installed-only programs with friendly names and package icons.
 
 ![Everything & Power Tools in the Start Menu](https://raw.githubusercontent.com/bardelyne/start-everything/main/img.png)
 
@@ -43,6 +43,13 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 
 - **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Windows Settings, Control Panel applets, and Windows tools. Settings names and keywords come from Windows' own local search database and navigation metadata, cached in memory and refreshed with the app index when the Windows catalog changes. Additional Windows tools stay available, and an audited built-in list is used if native data is missing or incompatible. No Windows Search indexing service or extra database software is required. Shell icons are rendered at your display's exact pixel size.
+- **Installed-only Programs**: Search also includes named installed programs and user packages, including entries without registered shortcuts, such as suites, runtimes and language packs. An **Installed app · No launcher found** label distinguishes them from Settings results. Package entries use their installed logos and friendlier application names when available; their original technical names remain searchable. Entries without an icon use Windows' default executable icon, while Settings results use a gear. Right-click for **Open file location** and **Copy path** when Windows provides an existing installation folder, plus **Copy name**. **Uninstall** uses that exact program registration or package and asks for confirmation; **Manage in Installed apps** appears only when direct removal is unavailable. Selecting an entry without a launcher opens its installation folder when known; otherwise it opens these actions. When a shortcut is missing, an executable can still be recognized by an exact product/filename match in its local installation folder. Detection requires a unique Windows GUI executable with matching version metadata; installers, uninstallers and ambiguous candidates are not used. Other entries retain the **No launcher found** label, which does not claim the program is incapable of running. Installation events invalidate cached metadata; typing uses the current in-memory catalog. Hidden system components, framework/resource packages and update-only registrations are excluded. Matching launchable entries stay merged, with their installed product name available as a search alias. Differently named shortcuts are also matched by their executable name and registered installation folder; the real shortcut keeps its icon, activation target and arguments. Distinct executables or installations are kept separate.
+- **Reusable Apps Cards**: Ordinary app, Settings and installed-only results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. The pool grows as needed up to **Max App Results** and resets when settings change. Rich Quick Tools cards keep their own layouts.
+- **Silent App-list Updates**: Windows registry, Store/MSIX package and Start-menu shortcut notifications refresh the catalog after changes settle. Install/update/remove events bypass the installed-metadata cache. Reopening search keeps a safety refresh with a five-second minimum; otherwise unchanged installation metadata is reused for up to 30 seconds. A native background worker builds a replacement catalog and loads icons while app matching continues against the last complete snapshot. No network requests or periodic polling are needed for these listeners.
+- **Background Catalog Warmup**: After the taskbar is available, app, Settings and installed-program metadata load on a background worker. First search reuses that catalog. The search window and its XAML UI remain deferred until needed.
+- **Independent App Results**: App results update without waiting for Everything's file search. Cached icons appear immediately; missing icons fill in afterward. File results arrive separately and preserve the app selection.
+- **Windows Services**: Use `/services` to find services by name or description and manage them from the right-click menu.
+- **Online Utility Cards**: Use `/weather` for your approximate local weather, `/money 100 USD > EUR` for currency conversion, `/crypto BTC` for a crypto spot price, or `/speedtest` for a connection test with a circular speed meter. Data loads separately from local search. See [Online Cards](#online-cards).
 - **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
 - **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start switches immediately without an opening animation and carries the opening text into search. The search bar uses Windows' own search icon.
 - **Windows Search Out of the Way**: `SearchHost.exe` keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
@@ -54,6 +61,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Inline Calculator**: Type a sum (e.g. `100 * 5`, `sqrt(144)`, `15% * 200`, `2^10`) and the result shows above the apps; large and small results show in scientific notation too (`= 99000`, `= 9.9e4`). Press Enter to copy it.
 - **Unit Converter**: Type `100 km` to see it in the usual units of its kind, all on one line first, or `100 km → mi` (also `in`, `->`, `=`) for just one; `255 hex` or `0xFF` for other bases. It knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with `.` or `,` as the decimal point, and each kind has its color. A number alone, or one in a name (`2024 report`, `3d`), is left to the search. Add units it does not know in the settings, and have them convert back too (Reciprocal).
 - **Network Interface Inspector**: Type `/ip` to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
+- **Live Hardware Cards**: Type `/usage` for CPU, memory, each GPU, disk activity and network traffic, with colored graphs covering the last 60 seconds. Readings update once a second while the command is visible and stay entirely on your PC.
 - **Full Right-Click Context Menu**: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy name (files/folders), Copy path, Open file location, or Uninstall (apps). Escape closes the menu; typing closes it and continues the query.
 - **Native Properties Dialogs**: Properties opens through `explorer.exe`, the same dialog as in File Explorer.
 - **File Preview**: Images, muted media, PDF pages, SVGs, text/document excerpts, and file properties beside search. The card adapts its alignment and resize direction to the search window’s height. See [File Preview](#file-preview) for formats, copying, and folder sizes.
@@ -74,6 +82,8 @@ The mod's Settings page groups related options together:
 | **Appearance** | Display language, text size and color, keyboard shortcut hints, and custom menu dimensions |
 | **Apps & Search** | App result limit, favorite learning, search delay, and an optional keyboard shortcut |
 | **Files & Preview** | Files panel, file result limit, previews, animation, and excluded paths |
+| **Quick Tools** | Localized command names, past/upcoming weather days, extra locations, and saved currency/crypto cards |
+| **Online Cards** | Offline mode, automatic or manual weather location, temperature units, and default quote currency |
 | **Web Search** | Default search engine and keyword shortcuts |
 | **Custom Commands** | Named commands, icons, shells, and terminal visibility |
 | **Custom Unit Conversions** | Units, formulas, categories, and reciprocal conversion |
@@ -114,6 +124,8 @@ In Windhawk, open the mod's **Settings → Custom Commands** and add an entry:
 
 Commands appear alongside installed apps in search results and empty-search suggestions, within **Max App Results**. They share the favorite system: frequently launched entries move up, and equal-use suggestions sort alphabetically. Turning off **Learn Favorite Apps** stops learning and clears history for both apps and commands. Right-click for **Run**, **Run as administrator**, or **Copy command**. Settings changes apply without reopening search. Up to 100 entries are supported.
 
+A name may start with `/`, such as `/backup`. Single-word custom `/commands` share names with Quick Tools and their active compatibility aliases. If the same name belongs to two entries, typing it shows a red conflict card instead of running either one. Names without `/` remain ordinary search entries. A slash name does not add argument forwarding: the saved script runs exactly as configured.
+
 For example, name a CMD command `Downloads`, use `📂` as its icon, and set its command to `explorer.exe "%USERPROFILE%\Downloads"`. Browse Microsoft's [Segoe Fluent Icons list](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font) for Windows glyphs and their codes.
 
 Custom shell examples (the shell must already be installed):
@@ -125,6 +137,74 @@ Custom shell examples (the shell must already be installed):
 | Bash in WSL | `wsl.exe` | `--exec bash -lc {command}` |
 
 Use a full executable path if it is installed somewhere else. WSL requires an installed Linux distribution. PowerShell 7 installation options are described in [Microsoft’s documentation](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
+
+## Quick Tools
+
+Open **Settings → Quick Tools** to rename the weather, currency, crypto, IP, hardware-usage and speed-test commands. Enter the word after `/`, in your own language. A leading slash is optional in the setting. For example, setting Weather Command Name to `météo` makes `/météo` and `/météo London` work. The layout remains left-to-right, but command names can contain non-Latin letters.
+
+Names are case-insensitive, cannot contain spaces, and must be distinct. Blank or invalid names use their defaults. If two commands share a name, typing that name shows a red warning card; give them separate names in settings to continue. English compatibility aliases remain only while their primary command name is unchanged. The examples below use the default names.
+
+- **Weather:** choose 0–7 past days and 0–7 upcoming days. The default is two past days, Today, and five upcoming days, arranged chronologically inside one card. Today uses Windows' accent color and follows the city's local date; past days are subdued. Add up to eight **Extra Weather Locations** for separate cards when you enter the command alone. An explicit city argument shows just that city. The primary location and temperature units remain under **Online Cards**.
+- **Currency:** **Saved Currency Cards** can contain a code such as `EUR`, or a conversion such as `100 USD > EUR`. A code alone means one unit converted into the default quote currency. Entering the currency command alone displays the saved list; adding arguments performs that one conversion instead.
+- **Crypto:** **Saved Crypto Cards** accepts symbols such as `BTC`, or conversions such as `0.5 ETH > EUR`. Entering the crypto command alone displays the list. Currency and crypto lists support up to twelve entries each; blank lists restore their default examples. Repeated equivalent entries are combined.
+- **IP:** the renamed IP command still displays local network interfaces and addresses. It works offline and does not contact the approximate-location service.
+- **Hardware usage:** `/usage` displays local resource cards. The command name can be changed here too. See [Live Hardware Usage](#live-hardware-usage).
+- **Speed test:** opens a ready card; press **Run** or Enter to start. The command name defaults to `speedtest`, with `/speed` as an alias while that name is unchanged.
+
+Saved cards fill in individually as their requests complete. Conversions sharing a pair reuse one downloaded rate, and a failed entry does not prevent the other cards from appearing. The selected card stays selected as other cards finish loading.
+
+## Online Cards
+
+Weather, exchange rates, crypto prices and internet speed tests appear as cards in the Apps panel. Only explicit commands make network requests; ordinary app/file search, calculations, and unit conversions stay local. A speed test also requires pressing Run or Enter.
+
+| Type in search | Result |
+| :--- | :--- |
+| `/weather` | Weather for the primary location plus saved extra locations, with history and forecasts inside each card. |
+| `/weather London` | Weather for a city you choose. A country qualifier such as `/weather Paris, France` can help distinguish places. |
+| `/money 100 USD > EUR` | Convert an amount using the latest available currency reference rate. |
+| `/money` | Display the saved currency cards. |
+| `/money USD IQD` | Show the rate for one US dollar in Iraqi dinars. |
+| `/crypto BTC` | Show one bitcoin in the default quote currency, initially USD. |
+| `/crypto` | Display the saved crypto cards. |
+| `/crypto 0.5 ETH > EUR` | Convert a crypto amount using an online spot price. |
+| `/speedtest` or `/speed` | Open the connection-test card, then press Run or Enter. |
+
+With the default names, `/currency` and `/fx` are aliases for `/money`; `/price` is an alias for `/crypto`. The amount defaults to 1. Target currencies can use `>`, `→`, `/`, `to`, or `in`, or simply a space between codes. Currency commands use three-letter codes such as USD, EUR, GBP, JPY and IQD. Crypto commands accept supported ticker symbols, including crypto quote currencies; Bitcoin, Ethereum and Dogecoin also work as names. Invalid arguments show examples without making a request, using your configured command name.
+
+**Weather:** [Open-Meteo](https://open-meteo.com/) supplies the temperature, daily low/high, humidity and wind speed. City searches use its [GeoNames-based geocoding service](https://open-meteo.com/en/docs/geocoding-api). Automatic location uses [ipwho.is](https://ipwhois.io/documentation) and is marked `≈` because it is approximate and can follow a VPN's exit location. Set **Online Cards → Weather Location** to a city, or include a city in the command, to avoid the IP lookup. Temperature can follow Windows' regional measurement settings or use Celsius/Fahrenheit; wind speed is in km/h. Weather timestamps use the city's local time.
+
+**Currency:** [Frankfurter](https://frankfurter.dev/) supplies published reference rates. The date on the card is the provider's rate date. These are reference rates, rather than a bank's retail buy/sell quote, and may not change on weekends or holidays.
+
+**Crypto:** [Coinbase's public price API](https://docs.cdp.coinbase.com/coinbase-app/track-apis/prices) supplies spot prices for supported pairs. Cards show when the price was fetched, in UTC. Supported assets and quote currencies depend on the provider. Prices are snapshots, not a streaming market feed.
+
+**Internet speed:** the open 270-degree speedometer has a cyan-to-mint download arc, a purple upload arc, a moving needle, labeled ticks and a large Mbps reading. Its arc and needle follow speed rather than test completion. The arc, needle and central reading ease smoothly up and down between samples. New readings retarget the current motion without jumping; animation stops when settled or search closes and respects Windows animation settings. The scale starts at 0–1000 Mbps with finer detail at lower speeds and expands for faster connections; the same scale is kept between download and upload. Latency and both speed results remain visible above the dial. **Stop** and **Run again** controls are available. Changing the query cancels the active test. The native client selects a responsive node from a small set of [public LibreSpeed servers](https://librespeed.org/backend-servers/servers.php) and reuses that selection for an hour. It uses five download connections and three upload connections, with [LibreSpeed-style adaptive timing](https://github.com/librespeed/speedtest/blob/master/speedtest_worker.js): a 1.5-second download grace period and 3-second upload grace period let connections reach speed before measurement. Faster runs shorten automatically, with roughly 5–15 seconds of measured traffic per direction instead of a fixed 15-second wait. Results include LibreSpeed's default 6% estimate for transport overhead. Downloads use long streams, and upload chunks grow with the connection speed and shrink conservatively when a server rejects a body. Small probes are paced at four starts per second; bulk transfers have a separate bounded start rate so small upload bodies do not impose the old ~32 Mbps ceiling. A server rate limit stops the transfer group, its Retry-After instruction is honored, and Run during cooldown sends no new traffic. Downloads stop at the measurement cutoff. Already-started uploads have at most three seconds to finish acknowledgment; only their bytes from the measurement window count, and rejected or unconfirmed bodies are discarded. Acknowledged uploads are distributed across their transfer intervals to reduce bias from locally buffered writes at the measurement boundaries. Temporary connection failures have at most two delayed retries per stream. There is no fixed payload cap ending a run early, so data usage depends on connection speed and can be large on fast connections. No extra app, account or API key is needed. No personal files, IP/ISP lookup requests, telemetry or measurement reports are sent. Server capacity, routing, other traffic and VPNs affect results, so different test services can report different speeds. The last completed result stays in memory until the mod unloads. Opening the command again shows it without starting another transfer.
+
+Press Enter or click a completed card to copy the converted numeric value; a weather card copies its displayed weather details, and a speed-test card copies its measurements. Weather and money cards also support right-click copying. Help, loading and error cards do not launch anything.
+
+Results are cached in memory: weather for 10 minutes, currency pairs for an hour, and crypto pairs for 30 seconds. Location lookups are reused for six hours. Changing only the amount reuses a cached pair and calculates locally. Old data is marked **Cached** while a refresh is needed or has failed. Failed requests back off for a minute. Providers are contacted after typing settles, on a separate worker, so they do not delay app results or file results. There is no periodic background polling.
+
+**Privacy and connectivity:** providers see your public IP as part of the connection. For weather, the location service returns an approximate city and Open-Meteo receives the requested city or coordinates. Currency and crypto providers receive only the requested pair, without the amount. No normal search text, account credentials, cookies, or telemetry are sent. Automatic location and downloaded results are not saved to disk. Enable **Online Cards → Offline Mode** to disable these features. Public services can be unavailable or rate limited, and the free Open-Meteo service is intended for noncommercial use. Weather data is credited to Open-Meteo and location names to GeoNames.
+
+## Windows Services
+
+Type `/services` to list local Windows services, or search with `/services audio`, `/services spooler` or words from a service description. `/services running` and `/services stopped` filter by state; the translated state labels work too. The command name is customizable under **Quick Tools → Services command**. It participates in duplicate-name detection and works in Offline Mode.
+
+Each result shows the display name, internal name, current state, process ID when running, and description when available. Results update once per second while visible. Search uses cached entries immediately; service enumeration runs separately so it cannot delay ordinary app or file searches. Changing the query or closing search stops status polling.
+
+Right-click a result for **Start**, **Stop**, **Restart**, **Copy name**, **Copy details**, or **Open Services** for the full Windows management console. Unavailable operations are disabled based on the latest state and the controls the service accepts. Only one operation runs at a time, and Windows errors are shown on the affected card. Clicking a service result or pressing Enter copies its details.
+
+Operations use Windows’ service controller through a short-lived hidden Windows PowerShell helper. Administrator approval is requested only if Windows denies the selected operation. Service names are encoded as data rather than inserted into executable instructions. Restart waits for Stop to finish before starting again; dependent services are never forcibly stopped. Disabled services are not enabled automatically, and startup types are not changed. An operation already requested can finish after search closes. No service information leaves the PC.
+
+## Live Hardware Usage
+
+Enter `/usage` to show a separate card for **CPU**, **RAM**, **each GPU**, **disk activity** and **network traffic**. Each card has a colored graph with up to 60 seconds of history. Values update every second without rebuilding the controls or moving selection. Clicking a measured card copies its current reading.
+
+- CPU shows average processor activity; RAM shows used physical memory and its total.
+- GPU cards use Windows performance counters. Activity is combined across processes on each engine, then the busiest engine represents the adapter, following Task Manager's approach. Each detected GPU has its own graph.
+- Disk activity shows the aggregate physical-disk active percentage, plus read/write throughput.
+- Network traffic sums active physical Ethernet and Wi-Fi adapters, with download/upload rates. Virtual and tunnel interfaces are excluded to avoid counting VPN traffic twice. This observes existing traffic and does not generate a network test.
+
+Collection runs on a separate worker, only while this command is open. Closing search or changing the query stops it and releases performance-counter resources. Reopening starts fresh history. Unavailable counters are shown as unavailable, and missing readings leave gaps rather than false zeroes. Nothing is uploaded or saved to disk, and this command works in Offline Mode. Cards use monochrome Windows icons. GPU cards also show **VRAM used / total** for dedicated GPU memory, updated every second; unavailable counters show a dash. GPU support depends on the installed Windows display driver and counters.
 
 ## File Preview
 
@@ -204,7 +284,7 @@ To add another way to open search, go to **Settings → Apps & Search**, turn on
 
 Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use Create desktop shortcut first, then right-click the shortcut on your desktop and select Pin to Taskbar or Pin to Start.
 
-## Built-In Commands and Utilities
+## Quick Tools and Utilities
 
 | Command | Description | Example | Enter Action |
 | :--- | :--- | :--- | :--- |
@@ -213,6 +293,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 | `<number> <unit>` | The number in the usual units of its kind, all on one line first | `100 km`<br>`32 f`<br>`1,5 kg` | Copies the selected one |
 | `<number> <unit> → <unit>` | Just that conversion (also `to`, `in`, `->`, `=`) | `100 km → mi`<br>`100 mbps → MB/s` | Copies the result |
 | `/ip` | Lists all active Wi-Fi, Ethernet, and VPN adapters with IP, subnet, gateway, and adapter name | `/ip` | Copies selected IP address to clipboard |
+| `/speedtest` | Measures HTTPS latency and approximate download/upload speed | `/speedtest` or `/speed` | Starts a ready test, or copies a completed result |
 | `?<query>` | Searches the web using the default search engine URL | `?weather today` | Opens search in default web browser |
 | `?<shortcut> <query>` | Searches specific service using configured shortcut keyword | `?yt lofi hip hop`<br>`?gh windhawk` | Opens query on target service |
 
@@ -537,6 +618,91 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
       Paths matching any of these substrings will be filtered out from file search results so build caches, dependencies, and internal system folders don't clutter matches.
   $name: Files & Preview
 
+- commands:
+  - weatherName: weather
+    $name: Weather Command Name
+    $description: Enter a name in your language, without spaces. For example, meteo makes /meteo the weather command. A leading slash is optional here. Command names are case-insensitive and must be different. Invalid names use defaults; typing a duplicate name displays a red warning card.
+  - moneyName: money
+    $name: Currency Command Name
+    $description: The name after / for currency rates and conversions. Enter the command alone to display your saved currency cards, or follow it with a conversion.
+  - cryptoName: crypto
+    $name: Crypto Command Name
+    $description: The name after / for crypto prices and conversions. Enter the command alone to display your saved crypto cards.
+  - ipName: ip
+    $name: IP Command Name
+    $description: The name after / for local network interfaces and IP addresses. This command works offline and does not contact an IP lookup service.
+  - usageName: usage
+    $name: Hardware Usage Command Name
+    $description: Shows CPU, RAM, each GPU, disk activity and physical network traffic in cards with a 60-second graph. Samples update every second only while this command is visible. All measurements stay on your PC.
+  - speedName: speedtest
+    $name: Internet Speed Test Command Name
+    $description: Opens a speed-test card. Press Run or Enter to measure HTTPS latency and download/upload speeds using LibreSpeed-style adaptive timing, with five download streams and three upload streams. Connections warm up first, then faster tests finish sooner. Data usage depends on your connection speed and can be large on fast connections. Stop it at any time; changing the query also cancels it. No personal files or measurement reports are uploaded.
+  - servicesName: services
+    $name: Services command
+    $description: Search Windows services by name or description. Right-click a result to start, stop or restart it, copy its name/details, or open Windows Services. Operations request administrator approval when needed. Works offline; startup settings are not changed.
+  - weatherPastDays: "2"
+    $name: Past Weather Days
+    $description: Recent days shown before Today, inside each location's weather card.
+    $options:
+    - "0": None
+    - "1": 1 day
+    - "2": 2 days
+    - "3": 3 days
+    - "4": 4 days
+    - "5": 5 days
+    - "6": 6 days
+    - "7": 7 days
+  - weatherFutureDays: "5"
+    $name: Upcoming Weather Days
+    $description: Forecast days shown after Today. Today follows each city's local date and uses your Windows accent color.
+    $options:
+    - "0": None
+    - "1": 1 day
+    - "2": 2 days
+    - "3": 3 days
+    - "4": 4 days
+    - "5": 5 days
+    - "6": 6 days
+    - "7": 7 days
+  - weatherLocations:
+    - ""
+    $name: Extra Weather Locations
+    $description: Add up to 8 cities, for example London or Paris, France. Entering the weather command alone shows the primary location plus one card per saved city. An explicit city argument shows only that city. Use auto for approximate IP-based location.
+  - currencyList:
+    - EUR
+    - GBP
+    - 100 USD > EUR
+    $name: Saved Currency Cards
+    $description: Up to 12 entries shown when you enter the currency command alone. Enter a currency such as EUR, or a full conversion such as 100 USD > EUR, without the command name. A currency alone uses amount 1 and the default quote currency. A blank list uses the default examples.
+  - cryptoList:
+    - BTC
+    - ETH
+    - SOL
+    $name: Saved Crypto Cards
+    $description: Up to 12 entries shown when you enter the crypto command alone. Enter a symbol such as BTC or a conversion such as 0.5 ETH > EUR. A symbol alone uses amount 1 and the default quote currency. A blank list uses the default examples.
+  $name: Quick Tools
+  $description: Rename /tools to words in your language, including IP, hardware usage and speed test. Customize weather history/forecast and additional locations, and choose the currency and crypto cards shown without arguments. These settings are separate from Custom Commands, which run programs or scripts. A custom command starting with / must use a different name; a shared name displays a warning instead of choosing an action.
+
+- online:
+  - offlineMode: false
+    $name: Offline Mode
+    $description: Disable weather, currency, crypto and speed-test requests. Ordinary app/file search, the calculator, unit conversions and IP command always work offline. Requests happen only for explicit online commands, never for normal search text.
+  - weatherLocation: auto
+    $name: Weather Location
+    $description: Auto uses ipwho.is to find an approximate city from your public IP only when you use /weather. A VPN can change the detected city. Enter a city here, or type /weather followed by a city, to avoid the IP lookup. Weather and city search use Open-Meteo.
+  - weatherUnits: auto
+    $name: Weather Temperature
+    $description: Auto follows Windows regional measurement settings. Wind speed is shown in km/h.
+    $options:
+    - auto: Auto (Windows region)
+    - celsius: Celsius
+    - fahrenheit: Fahrenheit
+  - quoteCurrency: USD
+    $name: Default Quote Currency
+    $description: Three-letter currency code used when /money or /crypto has no target currency, for example USD, EUR or IQD. Currency reference rates come from Frankfurter; crypto spot prices come from Coinbase. Supported currencies depend on the provider.
+  $name: Online Cards
+  $description: Weather, currency rates, crypto prices and speed tests in the Apps panel. No API key is needed. Results are cached in memory; conversions use the downloaded rate. Providers receive your IP and the requested city or currency pair. Amounts and ordinary search text are not sent. Speed tests transfer synthetic data only after you press Run or Enter.
+
 - web:
   - defaultSearchUrl: "https://duckduckgo.com/?q={q}"
     $name: Default Search Engine URL
@@ -578,7 +744,7 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 - customCommands:
     - - name: ""
         $name: Name
-        $description: Name shown in the Apps panel and used to find this command.
+        $description: Name shown in the Apps panel and used to find this command. You can use /backup, for example. Single-word names starting with / must be unique across Quick Tools and other custom /commands; a shared name shows a warning. The name is a search shortcut, not a template for passing arguments to the script.
       - icon: ""
         $name: Icon
         $description: Paste an emoji or Windows icon glyph, enter a Unicode value such as E713, or use a full path to an image, icon, or app file. Leave empty for the terminal icon. Environment variables in paths are supported.
@@ -643,6 +809,20 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 // types and must be defined before use.
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Data.Json.h>
+#include <winrt/Windows.ApplicationModel.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.Management.Deployment.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <winhttp.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#include <dxgi.h>
+#include <bcrypt.h>
+#include <winsvc.h>
+#include <ws2tcpip.h>
+#include <netioapi.h>
+#include <roapi.h>
 #include <shlguid.h>
 #include <exdisp.h>
 #include <shldisp.h>
@@ -663,6 +843,8 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
 #include <d2d1_3.h>
 #include <string_view>
 #include <initializer_list>
+#include <set>
+#include <iterator>
 #include <limits>
 #include <atomic>
 #include <chrono>
@@ -782,6 +964,42 @@ enum class Key {
     Error,
     Subnet,
     Gateway,
+    Weather,
+    Currency,
+    Crypto,
+    OnlineLoading,
+    OnlineUnavailable,
+    OnlineDisabled,
+    Cached,
+    Today,
+    SpeedTest,
+    Latency,
+    Download,
+    Upload,
+    TestReady,
+    TestComplete,
+    TestStopped,
+    StopTest,
+    CommandNameConflict,
+    CommandNameConflictHint,
+    HardwareUsage,
+    MemoryUsage,
+    DiskUsage,
+    NetworkTraffic,
+    MetricsUnavailable,
+    DataLimitReached,
+    SpeedBusy,
+    Services,
+    ServiceRunning,
+    ServicePaused,
+    ServicePending,
+    ServiceStart,
+    ServiceRestart,
+    NoServices,
+    CopyDetails,
+    NotLaunchable,
+    ManageInstalled,
+    InstalledApp,
     Count
 };
 struct Locale {
@@ -894,6 +1112,42 @@ inline constexpr Locale kLocales[] = {
         L"Error", // Error
         L"Subnet", // Subnet
         L"Gateway", // Gateway
+        L"Weather", // Weather
+        L"Currency", // Currency
+        L"Crypto", // Crypto
+        L"Loading…", // OnlineLoading
+        L"Could not load data. Try again shortly.", // OnlineUnavailable
+        L"Online cards are turned off in settings.", // OnlineDisabled
+        L"Cached", // Cached
+        L"Today", // Today
+        L"Internet speed test", // SpeedTest
+        L"Latency", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Ready", // TestReady
+        L"Complete", // TestComplete
+        L"Stopped", // TestStopped
+        L"Stop", // StopTest
+        L"Some commands have the same name.", // CommandNameConflict
+        L"Give each Quick Tool and custom /command a different name in settings.", // CommandNameConflictHint
+        L"Hardware usage", // HardwareUsage
+        L"Memory", // MemoryUsage
+        L"Disk activity", // DiskUsage
+        L"Network traffic", // NetworkTraffic
+        L"Waiting for counters or unavailable", // MetricsUnavailable
+        L"Test data limit reached", // DataLimitReached
+        L"Server busy. Try again in {0} seconds.", // SpeedBusy
+        L"Services", // Services
+        L"Running", // ServiceRunning
+        L"Paused", // ServicePaused
+        L"Pending…", // ServicePending
+        L"Start", // ServiceStart
+        L"Restart", // ServiceRestart
+        L"No matching services", // NoServices
+        L"Copy details", // CopyDetails
+        L"No launcher found", // NotLaunchable
+        L"Manage in Installed apps", // ManageInstalled
+        L"Installed app", // InstalledApp
     }},
     {L"af", {
         L"Soek enigiets", // SearchAnything
@@ -1000,6 +1254,42 @@ inline constexpr Locale kLocales[] = {
         L"Fout", // Error
         L"Subnet", // Subnet
         L"Poort", // Gateway
+        L"Weer", // Weather
+        L"Geldeenheid", // Currency
+        L"Kripto", // Crypto
+        L"Laai…", // OnlineLoading
+        L"Kon nie data laai nie. Probeer binnekort weer.", // OnlineUnavailable
+        L"Aanlyn kaarte is in die instellings afgeskakel.", // OnlineDisabled
+        L"Gekas", // Cached
+        L"Vandag", // Today
+        L"Internetspoedtoets", // SpeedTest
+        L"Vertraging", // Latency
+        L"Aflaai", // Download
+        L"Oplaai", // Upload
+        L"Gereed", // TestReady
+        L"Voltooi", // TestComplete
+        L"Gestop", // TestStopped
+        L"Stop", // StopTest
+        L"Sommige opdragte het dieselfde naam.", // CommandNameConflict
+        L"Gee elke hulpmiddel en pasgemaakte /opdrag ’n ander naam in die instellings.", // CommandNameConflictHint
+        L"Hardewaregebruik", // HardwareUsage
+        L"Geheue", // MemoryUsage
+        L"Skyfaktiwiteit", // DiskUsage
+        L"Netwerkverkeer", // NetworkTraffic
+        L"Wag vir tellers of nie beskikbaar nie", // MetricsUnavailable
+        L"Toetsdatalimiet bereik", // DataLimitReached
+        L"Bediener besig. Probeer oor {0} sekondes weer.", // SpeedBusy
+        L"Dienste", // Services
+        L"Loop", // ServiceRunning
+        L"Onderbreek", // ServicePaused
+        L"Besig…", // ServicePending
+        L"Begin", // ServiceStart
+        L"Herbegin", // ServiceRestart
+        L"Geen ooreenstemmende dienste nie", // NoServices
+        L"Kopieer besonderhede", // CopyDetails
+        L"Geen beginpunt gevind", // NotLaunchable
+        L"Bestuur in Geïnstalleerde programme", // ManageInstalled
+        L"Geïnstalleerde toepassing", // InstalledApp
     }},
     {L"bg", {
         L"Търсене навсякъде", // SearchAnything
@@ -1106,6 +1396,42 @@ inline constexpr Locale kLocales[] = {
         L"Грешка", // Error
         L"Подмрежа", // Subnet
         L"Шлюз", // Gateway
+        L"Време", // Weather
+        L"Валута", // Currency
+        L"Криптовалути", // Crypto
+        L"Зареждане…", // OnlineLoading
+        L"Данните не могат да се заредят. Опитайте отново след малко.", // OnlineUnavailable
+        L"Онлайн картите са изключени в настройките.", // OnlineDisabled
+        L"Кеширано", // Cached
+        L"Днес", // Today
+        L"Тест на интернет скоростта", // SpeedTest
+        L"Закъснение", // Latency
+        L"Изтегляне", // Download
+        L"Качване", // Upload
+        L"Готово", // TestReady
+        L"Завършено", // TestComplete
+        L"Спряно", // TestStopped
+        L"Спри", // StopTest
+        L"Някои команди имат едно и също име.", // CommandNameConflict
+        L"Задайте различно име на всеки инструмент и персонализирана /команда в настройките.", // CommandNameConflictHint
+        L"Натоварване на хардуера", // HardwareUsage
+        L"Памет", // MemoryUsage
+        L"Дискова активност", // DiskUsage
+        L"Мрежов трафик", // NetworkTraffic
+        L"Изчакване на броячи или недостъпно", // MetricsUnavailable
+        L"Достигнат е лимитът за тестови данни", // DataLimitReached
+        L"Сървърът е зает. Опитайте отново след {0} секунди.", // SpeedBusy
+        L"Услуги", // Services
+        L"Изпълнява се", // ServiceRunning
+        L"На пауза", // ServicePaused
+        L"Изчакване…", // ServicePending
+        L"Стартиране", // ServiceStart
+        L"Рестартиране", // ServiceRestart
+        L"Няма съответстващи услуги", // NoServices
+        L"Копиране на подробности", // CopyDetails
+        L"Не е намерен начин за стартиране", // NotLaunchable
+        L"Управление в инсталираните приложения", // ManageInstalled
+        L"Инсталирано приложение", // InstalledApp
     }},
     {L"bn", {
         L"সবকিছু খুঁজুন", // SearchAnything
@@ -1212,6 +1538,42 @@ inline constexpr Locale kLocales[] = {
         L"ত্রুটি", // Error
         L"সাবনেট", // Subnet
         L"গেটওয়ে", // Gateway
+        L"আবহাওয়া", // Weather
+        L"মুদ্রা", // Currency
+        L"ক্রিপ্টো", // Crypto
+        L"লোড হচ্ছে…", // OnlineLoading
+        L"তথ্য লোড করা যায়নি। একটু পরে আবার চেষ্টা করুন।", // OnlineUnavailable
+        L"সেটিংসে অনলাইন কার্ড বন্ধ আছে।", // OnlineDisabled
+        L"ক্যাশ করা", // Cached
+        L"আজ", // Today
+        L"ইন্টারনেটের গতি পরীক্ষা", // SpeedTest
+        L"বিলম্ব", // Latency
+        L"ডাউনলোড", // Download
+        L"আপলোড", // Upload
+        L"প্রস্তুত", // TestReady
+        L"সম্পূর্ণ", // TestComplete
+        L"থামানো হয়েছে", // TestStopped
+        L"থামান", // StopTest
+        L"কিছু কমান্ডের নাম একই।", // CommandNameConflict
+        L"সেটিংসে প্রতিটি সরঞ্জাম ও কাস্টম /কমান্ডের আলাদা নাম দিন।", // CommandNameConflictHint
+        L"হার্ডওয়্যার ব্যবহার", // HardwareUsage
+        L"মেমরি", // MemoryUsage
+        L"ডিস্কের কার্যকলাপ", // DiskUsage
+        L"নেটওয়ার্ক ট্রাফিক", // NetworkTraffic
+        L"কাউন্টারের অপেক্ষায় বা অনুপলব্ধ", // MetricsUnavailable
+        L"পরীক্ষার ডেটার সীমা পূর্ণ হয়েছে", // DataLimitReached
+        L"সার্ভার ব্যস্ত। {0} সেকেন্ড পরে আবার চেষ্টা করুন।", // SpeedBusy
+        L"পরিষেবাসমূহ", // Services
+        L"চলছে", // ServiceRunning
+        L"বিরতিতে", // ServicePaused
+        L"অপেক্ষমাণ…", // ServicePending
+        L"চালু করুন", // ServiceStart
+        L"পুনরায় চালু করুন", // ServiceRestart
+        L"কোনো মিলযুক্ত পরিষেবা নেই", // NoServices
+        L"বিস্তারিত কপি করুন", // CopyDetails
+        L"চালু করার উপায় পাওয়া যায়নি", // NotLaunchable
+        L"ইনস্টল করা অ্যাপে পরিচালনা করুন", // ManageInstalled
+        L"ইনস্টল করা অ্যাপ", // InstalledApp
     }},
     {L"bs", {
         L"Pretraži sve", // SearchAnything
@@ -1318,6 +1680,42 @@ inline constexpr Locale kLocales[] = {
         L"Greška", // Error
         L"Podmreža", // Subnet
         L"Mrežni prolaz", // Gateway
+        L"Vrijeme", // Weather
+        L"Valuta", // Currency
+        L"Kripto", // Crypto
+        L"Učitavanje…", // OnlineLoading
+        L"Podaci se ne mogu učitati. Pokušajte ponovo uskoro.", // OnlineUnavailable
+        L"Online kartice su isključene u postavkama.", // OnlineDisabled
+        L"Keširano", // Cached
+        L"Danas", // Today
+        L"Test brzine interneta", // SpeedTest
+        L"Kašnjenje", // Latency
+        L"Preuzimanje", // Download
+        L"Slanje", // Upload
+        L"Spremno", // TestReady
+        L"Završeno", // TestComplete
+        L"Zaustavljeno", // TestStopped
+        L"Zaustavi", // StopTest
+        L"Neke komande imaju isto ime.", // CommandNameConflict
+        L"U postavkama dajte svakom alatu i prilagođenoj /komandi različito ime.", // CommandNameConflictHint
+        L"Upotreba hardvera", // HardwareUsage
+        L"Memorija", // MemoryUsage
+        L"Aktivnost diska", // DiskUsage
+        L"Mrežni promet", // NetworkTraffic
+        L"Čekanje brojača ili nedostupno", // MetricsUnavailable
+        L"Dostignuto ograničenje testnih podataka", // DataLimitReached
+        L"Server je zauzet. Pokušajte ponovo za {0} sekundi.", // SpeedBusy
+        L"Servisi", // Services
+        L"Pokrenut", // ServiceRunning
+        L"Pauziran", // ServicePaused
+        L"Na čekanju…", // ServicePending
+        L"Pokreni", // ServiceStart
+        L"Ponovo pokreni", // ServiceRestart
+        L"Nema odgovarajućih servisa", // NoServices
+        L"Kopiraj detalje", // CopyDetails
+        L"Nije pronađen pokretač", // NotLaunchable
+        L"Upravljaj instaliranim aplikacijama", // ManageInstalled
+        L"Instalirana aplikacija", // InstalledApp
     }},
     {L"ca", {
         L"Cerca qualsevol cosa", // SearchAnything
@@ -1424,6 +1822,42 @@ inline constexpr Locale kLocales[] = {
         L"Error", // Error
         L"Subxarxa", // Subnet
         L"Passarel·la", // Gateway
+        L"Temps", // Weather
+        L"Moneda", // Currency
+        L"Criptomonedes", // Crypto
+        L"S'està carregant…", // OnlineLoading
+        L"No s'han pogut carregar les dades. Torneu-ho a provar d'aquí a poc.", // OnlineUnavailable
+        L"Les targetes en línia estan desactivades a la configuració.", // OnlineDisabled
+        L"A la memòria cau", // Cached
+        L"Avui", // Today
+        L"Prova de velocitat d'Internet", // SpeedTest
+        L"Latència", // Latency
+        L"Baixada", // Download
+        L"Pujada", // Upload
+        L"A punt", // TestReady
+        L"Completat", // TestComplete
+        L"Aturat", // TestStopped
+        L"Atura", // StopTest
+        L"Algunes ordres tenen el mateix nom.", // CommandNameConflict
+        L"Doneu un nom diferent a cada eina i /ordre personalitzada a la configuració.", // CommandNameConflictHint
+        L"Ús del maquinari", // HardwareUsage
+        L"Memòria", // MemoryUsage
+        L"Activitat del disc", // DiskUsage
+        L"Trànsit de xarxa", // NetworkTraffic
+        L"Esperant comptadors o no disponible", // MetricsUnavailable
+        L"S'ha arribat al límit de dades de prova", // DataLimitReached
+        L"Servidor ocupat. Torneu-ho a provar d'aquí a {0} segons.", // SpeedBusy
+        L"Serveis", // Services
+        L"En execució", // ServiceRunning
+        L"En pausa", // ServicePaused
+        L"Pendent…", // ServicePending
+        L"Inicia", // ServiceStart
+        L"Reinicia", // ServiceRestart
+        L"No hi ha serveis coincidents", // NoServices
+        L"Copia els detalls", // CopyDetails
+        L"No s’ha trobat cap iniciador", // NotLaunchable
+        L"Gestiona a Aplicacions instal·lades", // ManageInstalled
+        L"Aplicació instal·lada", // InstalledApp
     }},
     {L"cs", {
         L"Hledat vše", // SearchAnything
@@ -1530,6 +1964,42 @@ inline constexpr Locale kLocales[] = {
         L"Chyba", // Error
         L"Podsíť", // Subnet
         L"Brána", // Gateway
+        L"Počasí", // Weather
+        L"Měna", // Currency
+        L"Kryptoměny", // Crypto
+        L"Načítání…", // OnlineLoading
+        L"Data se nepodařilo načíst. Zkuste to za chvíli znovu.", // OnlineUnavailable
+        L"Online karty jsou v nastavení vypnuté.", // OnlineDisabled
+        L"Z mezipaměti", // Cached
+        L"Dnes", // Today
+        L"Test rychlosti internetu", // SpeedTest
+        L"Odezva", // Latency
+        L"Stahování", // Download
+        L"Odesílání", // Upload
+        L"Připraveno", // TestReady
+        L"Dokončeno", // TestComplete
+        L"Zastaveno", // TestStopped
+        L"Zastavit", // StopTest
+        L"Některé příkazy mají stejný název.", // CommandNameConflict
+        L"V nastavení dejte každému nástroji a vlastnímu /příkazu jiný název.", // CommandNameConflictHint
+        L"Využití hardwaru", // HardwareUsage
+        L"Paměť", // MemoryUsage
+        L"Aktivita disku", // DiskUsage
+        L"Síťový provoz", // NetworkTraffic
+        L"Čekání na čítače nebo nedostupné", // MetricsUnavailable
+        L"Dosažen limit testovacích dat", // DataLimitReached
+        L"Server je zaneprázdněn. Zkuste to znovu za {0} sekund.", // SpeedBusy
+        L"Služby", // Services
+        L"Spuštěno", // ServiceRunning
+        L"Pozastaveno", // ServicePaused
+        L"Čeká se…", // ServicePending
+        L"Spustit", // ServiceStart
+        L"Restartovat", // ServiceRestart
+        L"Žádné odpovídající služby", // NoServices
+        L"Kopírovat podrobnosti", // CopyDetails
+        L"Spouštěč nenalezen", // NotLaunchable
+        L"Spravovat v nainstalovaných aplikacích", // ManageInstalled
+        L"Nainstalovaná aplikace", // InstalledApp
     }},
     {L"da", {
         L"Søg efter alt", // SearchAnything
@@ -1636,6 +2106,42 @@ inline constexpr Locale kLocales[] = {
         L"Fejl", // Error
         L"Undernet", // Subnet
         L"Gateway", // Gateway
+        L"Vejr", // Weather
+        L"Valuta", // Currency
+        L"Krypto", // Crypto
+        L"Indlæser…", // OnlineLoading
+        L"Data kunne ikke indlæses. Prøv igen om lidt.", // OnlineUnavailable
+        L"Onlinekort er slået fra i indstillingerne.", // OnlineDisabled
+        L"Fra cache", // Cached
+        L"I dag", // Today
+        L"Test af internethastighed", // SpeedTest
+        L"Svartid", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Klar", // TestReady
+        L"Fuldført", // TestComplete
+        L"Stoppet", // TestStopped
+        L"Stop", // StopTest
+        L"Nogle kommandoer har samme navn.", // CommandNameConflict
+        L"Giv hvert værktøj og hver brugerdefineret /kommando et forskelligt navn i indstillingerne.", // CommandNameConflictHint
+        L"Hardwareforbrug", // HardwareUsage
+        L"Hukommelse", // MemoryUsage
+        L"Diskaktivitet", // DiskUsage
+        L"Netværkstrafik", // NetworkTraffic
+        L"Venter på tællere eller utilgængelig", // MetricsUnavailable
+        L"Grænsen for testdata er nået", // DataLimitReached
+        L"Serveren er optaget. Prøv igen om {0} sekunder.", // SpeedBusy
+        L"Tjenester", // Services
+        L"Kører", // ServiceRunning
+        L"Sat på pause", // ServicePaused
+        L"Afventer…", // ServicePending
+        L"Start", // ServiceStart
+        L"Genstart", // ServiceRestart
+        L"Ingen matchende tjenester", // NoServices
+        L"Kopiér detaljer", // CopyDetails
+        L"Ingen startgenvej fundet", // NotLaunchable
+        L"Administrer i Installerede apps", // ManageInstalled
+        L"Installeret app", // InstalledApp
     }},
     {L"de", {
         L"Alles durchsuchen", // SearchAnything
@@ -1742,6 +2248,42 @@ inline constexpr Locale kLocales[] = {
         L"Fehler", // Error
         L"Subnetz", // Subnet
         L"Gateway", // Gateway
+        L"Wetter", // Weather
+        L"Währung", // Currency
+        L"Krypto", // Crypto
+        L"Wird geladen…", // OnlineLoading
+        L"Daten konnten nicht geladen werden. Versuchen Sie es gleich erneut.", // OnlineUnavailable
+        L"Onlinekarten sind in den Einstellungen deaktiviert.", // OnlineDisabled
+        L"Zwischengespeichert", // Cached
+        L"Heute", // Today
+        L"Internet-Geschwindigkeitstest", // SpeedTest
+        L"Latenz", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Bereit", // TestReady
+        L"Abgeschlossen", // TestComplete
+        L"Gestoppt", // TestStopped
+        L"Stoppen", // StopTest
+        L"Einige Befehle haben denselben Namen.", // CommandNameConflict
+        L"Geben Sie jedem Werkzeug und eigenen /Befehl in den Einstellungen einen anderen Namen.", // CommandNameConflictHint
+        L"Hardwareauslastung", // HardwareUsage
+        L"Arbeitsspeicher", // MemoryUsage
+        L"Datenträgeraktivität", // DiskUsage
+        L"Netzwerkverkehr", // NetworkTraffic
+        L"Warten auf Leistungsindikatoren oder nicht verfügbar", // MetricsUnavailable
+        L"Testdatenlimit erreicht", // DataLimitReached
+        L"Server ausgelastet. In {0} Sekunden erneut versuchen.", // SpeedBusy
+        L"Dienste", // Services
+        L"Wird ausgeführt", // ServiceRunning
+        L"Angehalten", // ServicePaused
+        L"Ausstehend…", // ServicePending
+        L"Starten", // ServiceStart
+        L"Neu starten", // ServiceRestart
+        L"Keine passenden Dienste", // NoServices
+        L"Details kopieren", // CopyDetails
+        L"Kein Programmstarter gefunden", // NotLaunchable
+        L"In installierten Apps verwalten", // ManageInstalled
+        L"Installierte App", // InstalledApp
     }},
     {L"el", {
         L"Αναζήτηση παντού", // SearchAnything
@@ -1848,6 +2390,42 @@ inline constexpr Locale kLocales[] = {
         L"Σφάλμα", // Error
         L"Υποδίκτυο", // Subnet
         L"Πύλη", // Gateway
+        L"Καιρός", // Weather
+        L"Νόμισμα", // Currency
+        L"Κρυπτονομίσματα", // Crypto
+        L"Φόρτωση…", // OnlineLoading
+        L"Δεν ήταν δυνατή η φόρτωση δεδομένων. Δοκιμάστε ξανά σε λίγο.", // OnlineUnavailable
+        L"Οι διαδικτυακές κάρτες είναι απενεργοποιημένες στις ρυθμίσεις.", // OnlineDisabled
+        L"Από την προσωρινή μνήμη", // Cached
+        L"Σήμερα", // Today
+        L"Έλεγχος ταχύτητας Internet", // SpeedTest
+        L"Καθυστέρηση", // Latency
+        L"Λήψη", // Download
+        L"Αποστολή", // Upload
+        L"Έτοιμο", // TestReady
+        L"Ολοκληρώθηκε", // TestComplete
+        L"Διακόπηκε", // TestStopped
+        L"Διακοπή", // StopTest
+        L"Ορισμένες εντολές έχουν το ίδιο όνομα.", // CommandNameConflict
+        L"Δώστε διαφορετικό όνομα σε κάθε εργαλείο και προσαρμοσμένη /εντολή στις ρυθμίσεις.", // CommandNameConflictHint
+        L"Χρήση υλικού", // HardwareUsage
+        L"Μνήμη", // MemoryUsage
+        L"Δραστηριότητα δίσκου", // DiskUsage
+        L"Κίνηση δικτύου", // NetworkTraffic
+        L"Αναμονή μετρητών ή μη διαθέσιμο", // MetricsUnavailable
+        L"Συμπληρώθηκε το όριο δεδομένων δοκιμής", // DataLimitReached
+        L"Ο διακομιστής είναι απασχολημένος. Δοκιμάστε ξανά σε {0} δευτερόλεπτα.", // SpeedBusy
+        L"Υπηρεσίες", // Services
+        L"Εκτελείται", // ServiceRunning
+        L"Σε παύση", // ServicePaused
+        L"Σε αναμονή…", // ServicePending
+        L"Έναρξη", // ServiceStart
+        L"Επανεκκίνηση", // ServiceRestart
+        L"Δεν βρέθηκαν αντίστοιχες υπηρεσίες", // NoServices
+        L"Αντιγραφή λεπτομερειών", // CopyDetails
+        L"Δεν βρέθηκε εκκινητής", // NotLaunchable
+        L"Διαχείριση στις εγκατεστημένες εφαρμογές", // ManageInstalled
+        L"Εγκατεστημένη εφαρμογή", // InstalledApp
     }},
     {L"es", {
         L"Buscar cualquier cosa", // SearchAnything
@@ -1954,6 +2532,42 @@ inline constexpr Locale kLocales[] = {
         L"Error", // Error
         L"Subred", // Subnet
         L"Puerta de enlace", // Gateway
+        L"Tiempo", // Weather
+        L"Moneda", // Currency
+        L"Criptomonedas", // Crypto
+        L"Cargando…", // OnlineLoading
+        L"No se pudieron cargar los datos. Inténtalo de nuevo en un momento.", // OnlineUnavailable
+        L"Las tarjetas en línea están desactivadas en la configuración.", // OnlineDisabled
+        L"En caché", // Cached
+        L"Hoy", // Today
+        L"Prueba de velocidad de Internet", // SpeedTest
+        L"Latencia", // Latency
+        L"Descarga", // Download
+        L"Subida", // Upload
+        L"Listo", // TestReady
+        L"Completado", // TestComplete
+        L"Detenido", // TestStopped
+        L"Detener", // StopTest
+        L"Algunos comandos tienen el mismo nombre.", // CommandNameConflict
+        L"Asigna un nombre distinto a cada herramienta y /comando personalizado en los ajustes.", // CommandNameConflictHint
+        L"Uso del hardware", // HardwareUsage
+        L"Memoria", // MemoryUsage
+        L"Actividad del disco", // DiskUsage
+        L"Tráfico de red", // NetworkTraffic
+        L"Esperando contadores o no disponible", // MetricsUnavailable
+        L"Se alcanzó el límite de datos de prueba", // DataLimitReached
+        L"Servidor ocupado. Inténtalo de nuevo en {0} segundos.", // SpeedBusy
+        L"Servicios", // Services
+        L"En ejecución", // ServiceRunning
+        L"En pausa", // ServicePaused
+        L"Pendiente…", // ServicePending
+        L"Iniciar", // ServiceStart
+        L"Reiniciar", // ServiceRestart
+        L"No hay servicios coincidentes", // NoServices
+        L"Copiar detalles", // CopyDetails
+        L"No se encontró un iniciador", // NotLaunchable
+        L"Administrar en Aplicaciones instaladas", // ManageInstalled
+        L"Aplicación instalada", // InstalledApp
     }},
     {L"et", {
         L"Otsi kõike", // SearchAnything
@@ -2060,6 +2674,42 @@ inline constexpr Locale kLocales[] = {
         L"Tõrge", // Error
         L"Alamvõrk", // Subnet
         L"Lüüs", // Gateway
+        L"Ilm", // Weather
+        L"Valuuta", // Currency
+        L"Krüpto", // Crypto
+        L"Laadimine…", // OnlineLoading
+        L"Andmeid ei saanud laadida. Proovige veidi aja pärast uuesti.", // OnlineUnavailable
+        L"Veebikaardid on seadetes välja lülitatud.", // OnlineDisabled
+        L"Vahemälust", // Cached
+        L"Täna", // Today
+        L"Interneti kiiruse test", // SpeedTest
+        L"Viivitus", // Latency
+        L"Allalaadimine", // Download
+        L"Üleslaadimine", // Upload
+        L"Valmis", // TestReady
+        L"Lõpetatud", // TestComplete
+        L"Peatatud", // TestStopped
+        L"Peata", // StopTest
+        L"Mõnel käsul on sama nimi.", // CommandNameConflict
+        L"Andke seadetes igale tööriistale ja kohandatud /käsule erinev nimi.", // CommandNameConflictHint
+        L"Riistvara kasutus", // HardwareUsage
+        L"Mälu", // MemoryUsage
+        L"Ketta aktiivsus", // DiskUsage
+        L"Võrguliiklus", // NetworkTraffic
+        L"Loendurite ootel või pole saadaval", // MetricsUnavailable
+        L"Testandmete piirang saavutatud", // DataLimitReached
+        L"Server on hõivatud. Proovi uuesti {0} sekundi pärast.", // SpeedBusy
+        L"Teenused", // Services
+        L"Töötab", // ServiceRunning
+        L"Pausil", // ServicePaused
+        L"Ootel…", // ServicePending
+        L"Käivita", // ServiceStart
+        L"Taaskäivita", // ServiceRestart
+        L"Vastavaid teenuseid pole", // NoServices
+        L"Kopeeri üksikasjad", // CopyDetails
+        L"Käivitajat ei leitud", // NotLaunchable
+        L"Halda installitud rakendustes", // ManageInstalled
+        L"Installitud rakendus", // InstalledApp
     }},
     {L"fi", {
         L"Hae mitä tahansa", // SearchAnything
@@ -2166,6 +2816,42 @@ inline constexpr Locale kLocales[] = {
         L"Virhe", // Error
         L"Aliverkko", // Subnet
         L"Yhdyskäytävä", // Gateway
+        L"Sää", // Weather
+        L"Valuutta", // Currency
+        L"Kryptovaluutat", // Crypto
+        L"Ladataan…", // OnlineLoading
+        L"Tietoja ei voitu ladata. Yritä hetken kuluttua uudelleen.", // OnlineUnavailable
+        L"Verkkokortit on poistettu käytöstä asetuksissa.", // OnlineDisabled
+        L"Välimuistista", // Cached
+        L"Tänään", // Today
+        L"Internetin nopeustesti", // SpeedTest
+        L"Viive", // Latency
+        L"Lataus", // Download
+        L"Lähetys", // Upload
+        L"Valmis", // TestReady
+        L"Valmis", // TestComplete
+        L"Pysäytetty", // TestStopped
+        L"Pysäytä", // StopTest
+        L"Joillakin komennoilla on sama nimi.", // CommandNameConflict
+        L"Anna asetuksissa jokaiselle työkalulle ja omalle /komennolle eri nimi.", // CommandNameConflictHint
+        L"Laitteiston käyttö", // HardwareUsage
+        L"Muisti", // MemoryUsage
+        L"Levyn toiminta", // DiskUsage
+        L"Verkkoliikenne", // NetworkTraffic
+        L"Odotetaan laskureita tai ei saatavilla", // MetricsUnavailable
+        L"Testidatan raja saavutettu", // DataLimitReached
+        L"Palvelin on varattu. Yritä uudelleen {0} sekunnin kuluttua.", // SpeedBusy
+        L"Palvelut", // Services
+        L"Käynnissä", // ServiceRunning
+        L"Keskeytetty", // ServicePaused
+        L"Odottaa…", // ServicePending
+        L"Käynnistä", // ServiceStart
+        L"Käynnistä uudelleen", // ServiceRestart
+        L"Ei vastaavia palveluita", // NoServices
+        L"Kopioi tiedot", // CopyDetails
+        L"Käynnistintä ei löytynyt", // NotLaunchable
+        L"Hallitse asennetuissa sovelluksissa", // ManageInstalled
+        L"Asennettu sovellus", // InstalledApp
     }},
     {L"fil", {
         L"Maghanap ng anuman", // SearchAnything
@@ -2272,6 +2958,42 @@ inline constexpr Locale kLocales[] = {
         L"Error", // Error
         L"Subnet", // Subnet
         L"Gateway", // Gateway
+        L"Panahon", // Weather
+        L"Salapi", // Currency
+        L"Crypto", // Crypto
+        L"Naglo-load…", // OnlineLoading
+        L"Hindi ma-load ang data. Subukan muli makalipas ang ilang sandali.", // OnlineUnavailable
+        L"Naka-off ang mga online card sa mga setting.", // OnlineDisabled
+        L"Naka-cache", // Cached
+        L"Ngayon", // Today
+        L"Pagsubok ng bilis ng internet", // SpeedTest
+        L"Latency", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Handa", // TestReady
+        L"Tapos na", // TestComplete
+        L"Itinigil", // TestStopped
+        L"Itigil", // StopTest
+        L"May mga command na magkapareho ang pangalan.", // CommandNameConflict
+        L"Bigyan ng magkakaibang pangalan ang bawat tool at custom na /command sa mga setting.", // CommandNameConflictHint
+        L"Paggamit ng hardware", // HardwareUsage
+        L"Memory", // MemoryUsage
+        L"Aktibidad ng disk", // DiskUsage
+        L"Trapiko sa network", // NetworkTraffic
+        L"Naghihintay ng counter o hindi available", // MetricsUnavailable
+        L"Naabot ang limitasyon ng test data", // DataLimitReached
+        L"Abala ang server. Subukan muli pagkalipas ng {0} segundo.", // SpeedBusy
+        L"Mga serbisyo", // Services
+        L"Gumagana", // ServiceRunning
+        L"Naka-pause", // ServicePaused
+        L"Nakabinbin…", // ServicePending
+        L"Simulan", // ServiceStart
+        L"I-restart", // ServiceRestart
+        L"Walang tumutugmang serbisyo", // NoServices
+        L"Kopyahin ang mga detalye", // CopyDetails
+        L"Walang nakitang panglunsad", // NotLaunchable
+        L"Pamahalaan sa Mga naka-install na app", // ManageInstalled
+        L"Naka-install na app", // InstalledApp
     }},
     {L"fr", {
         L"Tout rechercher", // SearchAnything
@@ -2378,6 +3100,42 @@ inline constexpr Locale kLocales[] = {
         L"Erreur", // Error
         L"Sous-réseau", // Subnet
         L"Passerelle", // Gateway
+        L"Météo", // Weather
+        L"Devise", // Currency
+        L"Crypto", // Crypto
+        L"Chargement…", // OnlineLoading
+        L"Impossible de charger les données. Réessayez dans un instant.", // OnlineUnavailable
+        L"Les cartes en ligne sont désactivées dans les paramètres.", // OnlineDisabled
+        L"En cache", // Cached
+        L"Aujourd’hui", // Today
+        L"Test de débit Internet", // SpeedTest
+        L"Latence", // Latency
+        L"Réception", // Download
+        L"Envoi", // Upload
+        L"Prêt", // TestReady
+        L"Terminé", // TestComplete
+        L"Arrêté", // TestStopped
+        L"Arrêter", // StopTest
+        L"Certaines commandes portent le même nom.", // CommandNameConflict
+        L"Donnez un nom différent à chaque outil et /commande personnalisée dans les paramètres.", // CommandNameConflictHint
+        L"Utilisation du matériel", // HardwareUsage
+        L"Mémoire", // MemoryUsage
+        L"Activité du disque", // DiskUsage
+        L"Trafic réseau", // NetworkTraffic
+        L"En attente des compteurs ou indisponible", // MetricsUnavailable
+        L"Limite de données du test atteinte", // DataLimitReached
+        L"Serveur occupé. Réessayez dans {0} secondes.", // SpeedBusy
+        L"Services", // Services
+        L"En cours d’exécution", // ServiceRunning
+        L"En pause", // ServicePaused
+        L"En attente…", // ServicePending
+        L"Démarrer", // ServiceStart
+        L"Redémarrer", // ServiceRestart
+        L"Aucun service correspondant", // NoServices
+        L"Copier les détails", // CopyDetails
+        L"Aucun lanceur trouvé", // NotLaunchable
+        L"Gérer dans Applications installées", // ManageInstalled
+        L"Application installée", // InstalledApp
     }},
     {L"hi", {
         L"कुछ भी खोजें", // SearchAnything
@@ -2484,6 +3242,42 @@ inline constexpr Locale kLocales[] = {
         L"त्रुटि", // Error
         L"सबनेट", // Subnet
         L"गेटवे", // Gateway
+        L"मौसम", // Weather
+        L"मुद्रा", // Currency
+        L"क्रिप्टो", // Crypto
+        L"लोड हो रहा है…", // OnlineLoading
+        L"डेटा लोड नहीं हो सका। थोड़ी देर बाद फिर कोशिश करें।", // OnlineUnavailable
+        L"सेटिंग में ऑनलाइन कार्ड बंद हैं।", // OnlineDisabled
+        L"कैश किया हुआ", // Cached
+        L"आज", // Today
+        L"इंटरनेट गति परीक्षण", // SpeedTest
+        L"विलंब", // Latency
+        L"डाउनलोड", // Download
+        L"अपलोड", // Upload
+        L"तैयार", // TestReady
+        L"पूर्ण", // TestComplete
+        L"रोका गया", // TestStopped
+        L"रोकें", // StopTest
+        L"कुछ कमांड के नाम एक जैसे हैं।", // CommandNameConflict
+        L"सेटिंग में हर टूल और कस्टम /कमांड को अलग नाम दें।", // CommandNameConflictHint
+        L"हार्डवेयर उपयोग", // HardwareUsage
+        L"मेमोरी", // MemoryUsage
+        L"डिस्क गतिविधि", // DiskUsage
+        L"नेटवर्क ट्रैफ़िक", // NetworkTraffic
+        L"काउंटर की प्रतीक्षा या अनुपलब्ध", // MetricsUnavailable
+        L"परीक्षण डेटा की सीमा पूरी हुई", // DataLimitReached
+        L"सर्वर व्यस्त है। {0} सेकंड बाद फिर कोशिश करें।", // SpeedBusy
+        L"सेवाएँ", // Services
+        L"चल रही है", // ServiceRunning
+        L"रोकी गई", // ServicePaused
+        L"लंबित…", // ServicePending
+        L"शुरू करें", // ServiceStart
+        L"पुनः प्रारंभ करें", // ServiceRestart
+        L"कोई मेल खाती सेवा नहीं", // NoServices
+        L"विवरण कॉपी करें", // CopyDetails
+        L"लॉन्चर नहीं मिला", // NotLaunchable
+        L"इंस्टॉल किए गए ऐप्स में प्रबंधित करें", // ManageInstalled
+        L"इंस्टॉल किया गया ऐप", // InstalledApp
     }},
     {L"hr", {
         L"Pretraži sve", // SearchAnything
@@ -2590,6 +3384,42 @@ inline constexpr Locale kLocales[] = {
         L"Pogreška", // Error
         L"Podmreža", // Subnet
         L"Pristupnik", // Gateway
+        L"Vrijeme", // Weather
+        L"Valuta", // Currency
+        L"Kripto", // Crypto
+        L"Učitavanje…", // OnlineLoading
+        L"Podaci se ne mogu učitati. Pokušajte ponovno uskoro.", // OnlineUnavailable
+        L"Mrežne kartice isključene su u postavkama.", // OnlineDisabled
+        L"Iz predmemorije", // Cached
+        L"Danas", // Today
+        L"Test brzine interneta", // SpeedTest
+        L"Kašnjenje", // Latency
+        L"Preuzimanje", // Download
+        L"Slanje", // Upload
+        L"Spremno", // TestReady
+        L"Dovršeno", // TestComplete
+        L"Zaustavljeno", // TestStopped
+        L"Zaustavi", // StopTest
+        L"Neke naredbe imaju isti naziv.", // CommandNameConflict
+        L"U postavkama dodijelite različit naziv svakom alatu i prilagođenoj /naredbi.", // CommandNameConflictHint
+        L"Upotreba hardvera", // HardwareUsage
+        L"Memorija", // MemoryUsage
+        L"Aktivnost diska", // DiskUsage
+        L"Mrežni promet", // NetworkTraffic
+        L"Čekanje brojača ili nedostupno", // MetricsUnavailable
+        L"Dosegnuto ograničenje testnih podataka", // DataLimitReached
+        L"Poslužitelj je zauzet. Pokušajte ponovno za {0} sekundi.", // SpeedBusy
+        L"Servisi", // Services
+        L"Pokrenut", // ServiceRunning
+        L"Pauziran", // ServicePaused
+        L"Na čekanju…", // ServicePending
+        L"Pokreni", // ServiceStart
+        L"Ponovno pokreni", // ServiceRestart
+        L"Nema odgovarajućih servisa", // NoServices
+        L"Kopiraj pojedinosti", // CopyDetails
+        L"Pokretač nije pronađen", // NotLaunchable
+        L"Upravljaj instaliranim aplikacijama", // ManageInstalled
+        L"Instalirana aplikacija", // InstalledApp
     }},
     {L"hu", {
         L"Keresés mindenben", // SearchAnything
@@ -2696,6 +3526,42 @@ inline constexpr Locale kLocales[] = {
         L"Hiba", // Error
         L"Alhálózat", // Subnet
         L"Átjáró", // Gateway
+        L"Időjárás", // Weather
+        L"Pénznem", // Currency
+        L"Kripto", // Crypto
+        L"Betöltés…", // OnlineLoading
+        L"Az adatok nem tölthetők be. Próbálja újra hamarosan.", // OnlineUnavailable
+        L"Az online kártyák ki vannak kapcsolva a beállításokban.", // OnlineDisabled
+        L"Gyorsítótárazott", // Cached
+        L"Ma", // Today
+        L"Internetsebesség-teszt", // SpeedTest
+        L"Késleltetés", // Latency
+        L"Letöltés", // Download
+        L"Feltöltés", // Upload
+        L"Kész", // TestReady
+        L"Befejezve", // TestComplete
+        L"Leállítva", // TestStopped
+        L"Leállítás", // StopTest
+        L"Néhány parancs neve megegyezik.", // CommandNameConflict
+        L"A beállításokban adjon eltérő nevet minden eszköznek és egyéni /parancsnak.", // CommandNameConflictHint
+        L"Hardverhasználat", // HardwareUsage
+        L"Memória", // MemoryUsage
+        L"Lemeztevékenység", // DiskUsage
+        L"Hálózati forgalom", // NetworkTraffic
+        L"Várakozás a számlálókra vagy nem érhető el", // MetricsUnavailable
+        L"A tesztadatkorlát elérve", // DataLimitReached
+        L"A kiszolgáló foglalt. Próbálja újra {0} másodperc múlva.", // SpeedBusy
+        L"Szolgáltatások", // Services
+        L"Fut", // ServiceRunning
+        L"Szüneteltetve", // ServicePaused
+        L"Függőben…", // ServicePending
+        L"Indítás", // ServiceStart
+        L"Újraindítás", // ServiceRestart
+        L"Nincs megfelelő szolgáltatás", // NoServices
+        L"Részletek másolása", // CopyDetails
+        L"Nem található indító", // NotLaunchable
+        L"Kezelés a telepített alkalmazásoknál", // ManageInstalled
+        L"Telepített alkalmazás", // InstalledApp
     }},
     {L"hy", {
         L"Որոնել ամեն ինչ", // SearchAnything
@@ -2802,6 +3668,42 @@ inline constexpr Locale kLocales[] = {
         L"Սխալ", // Error
         L"Ենթացանց", // Subnet
         L"Դարպաս", // Gateway
+        L"Եղանակ", // Weather
+        L"Արժույթ", // Currency
+        L"Կրիպտո", // Crypto
+        L"Բեռնվում է…", // OnlineLoading
+        L"Տվյալները չհաջողվեց բեռնել։ Շուտով կրկին փորձեք։", // OnlineUnavailable
+        L"Առցանց քարտերն անջատված են կարգավորումներում։", // OnlineDisabled
+        L"Քեշավորված", // Cached
+        L"Այսօր", // Today
+        L"Ինտերնետի արագության ստուգում", // SpeedTest
+        L"Ուշացում", // Latency
+        L"Ներբեռնում", // Download
+        L"Վերբեռնում", // Upload
+        L"Պատրաստ է", // TestReady
+        L"Ավարտված է", // TestComplete
+        L"Կանգնեցված է", // TestStopped
+        L"Կանգնեցնել", // StopTest
+        L"Որոշ հրամաններ ունեն նույն անունը։", // CommandNameConflict
+        L"Կարգավորումներում յուրաքանչյուր գործիքին և հատուկ /հրամանին տվեք տարբեր անուն։", // CommandNameConflictHint
+        L"Սարքավորումների օգտագործում", // HardwareUsage
+        L"Հիշողություն", // MemoryUsage
+        L"Սկավառակի ակտիվություն", // DiskUsage
+        L"Ցանցային հոսք", // NetworkTraffic
+        L"Սպասում է հաշվիչներին կամ անհասանելի է", // MetricsUnavailable
+        L"Թեստային տվյալների սահմանաչափը լրացել է", // DataLimitReached
+        L"Սերվերը զբաղված է։ Կրկին փորձեք {0} վայրկյանից։", // SpeedBusy
+        L"Ծառայություններ", // Services
+        L"Աշխատում է", // ServiceRunning
+        L"Կասեցված է", // ServicePaused
+        L"Սպասում…", // ServicePending
+        L"Գործարկել", // ServiceStart
+        L"Վերագործարկել", // ServiceRestart
+        L"Համապատասխան ծառայություններ չկան", // NoServices
+        L"Պատճենել մանրամասները", // CopyDetails
+        L"Գործարկիչ չի գտնվել", // NotLaunchable
+        L"Կառավարել տեղադրված հավելվածներում", // ManageInstalled
+        L"Տեղադրված հավելված", // InstalledApp
     }},
     {L"id", {
         L"Cari apa saja", // SearchAnything
@@ -2908,6 +3810,42 @@ inline constexpr Locale kLocales[] = {
         L"Kesalahan", // Error
         L"Subnet", // Subnet
         L"Gerbang", // Gateway
+        L"Cuaca", // Weather
+        L"Mata uang", // Currency
+        L"Kripto", // Crypto
+        L"Memuat…", // OnlineLoading
+        L"Data tidak dapat dimuat. Coba lagi sebentar lagi.", // OnlineUnavailable
+        L"Kartu daring dinonaktifkan di pengaturan.", // OnlineDisabled
+        L"Dari cache", // Cached
+        L"Hari ini", // Today
+        L"Tes kecepatan internet", // SpeedTest
+        L"Latensi", // Latency
+        L"Unduh", // Download
+        L"Unggah", // Upload
+        L"Siap", // TestReady
+        L"Selesai", // TestComplete
+        L"Dihentikan", // TestStopped
+        L"Hentikan", // StopTest
+        L"Beberapa perintah memiliki nama yang sama.", // CommandNameConflict
+        L"Beri nama yang berbeda untuk setiap alat dan /perintah khusus di pengaturan.", // CommandNameConflictHint
+        L"Penggunaan perangkat keras", // HardwareUsage
+        L"Memori", // MemoryUsage
+        L"Aktivitas disk", // DiskUsage
+        L"Lalu lintas jaringan", // NetworkTraffic
+        L"Menunggu penghitung atau tidak tersedia", // MetricsUnavailable
+        L"Batas data pengujian tercapai", // DataLimitReached
+        L"Server sibuk. Coba lagi dalam {0} detik.", // SpeedBusy
+        L"Layanan", // Services
+        L"Berjalan", // ServiceRunning
+        L"Dijeda", // ServicePaused
+        L"Menunggu…", // ServicePending
+        L"Mulai", // ServiceStart
+        L"Mulai ulang", // ServiceRestart
+        L"Tidak ada layanan yang cocok", // NoServices
+        L"Salin detail", // CopyDetails
+        L"Peluncur tidak ditemukan", // NotLaunchable
+        L"Kelola di Aplikasi terinstal", // ManageInstalled
+        L"Aplikasi terinstal", // InstalledApp
     }},
     {L"is", {
         L"Leita að hverju sem er", // SearchAnything
@@ -3014,6 +3952,42 @@ inline constexpr Locale kLocales[] = {
         L"Villa", // Error
         L"Undirnet", // Subnet
         L"Gátt", // Gateway
+        L"Veður", // Weather
+        L"Gjaldmiðill", // Currency
+        L"Rafmyntir", // Crypto
+        L"Hleð…", // OnlineLoading
+        L"Ekki tókst að hlaða gögnum. Reyndu aftur eftir smástund.", // OnlineUnavailable
+        L"Slökkt er á netkortum í stillingum.", // OnlineDisabled
+        L"Úr skyndiminni", // Cached
+        L"Í dag", // Today
+        L"Nethraðapróf", // SpeedTest
+        L"Biðtími", // Latency
+        L"Niðurhal", // Download
+        L"Upphal", // Upload
+        L"Tilbúið", // TestReady
+        L"Lokið", // TestComplete
+        L"Stöðvað", // TestStopped
+        L"Stöðva", // StopTest
+        L"Sumar skipanir hafa sama heiti.", // CommandNameConflict
+        L"Gefðu hverju verkfæri og sérsniðinni /skipun sérstakt heiti í stillingum.", // CommandNameConflictHint
+        L"Vélbúnaðarnotkun", // HardwareUsage
+        L"Minni", // MemoryUsage
+        L"Diskavirkni", // DiskUsage
+        L"Netumferð", // NetworkTraffic
+        L"Bíður eftir teljurum eða ekki tiltækt", // MetricsUnavailable
+        L"Gagnamörkum prófunar náð", // DataLimitReached
+        L"Þjónninn er upptekinn. Reyndu aftur eftir {0} sekúndur.", // SpeedBusy
+        L"Þjónustur", // Services
+        L"Í gangi", // ServiceRunning
+        L"Í bið", // ServicePaused
+        L"Bíður…", // ServicePending
+        L"Ræsa", // ServiceStart
+        L"Endurræsa", // ServiceRestart
+        L"Engar samsvarandi þjónustur", // NoServices
+        L"Afrita upplýsingar", // CopyDetails
+        L"Ræsir fannst ekki", // NotLaunchable
+        L"Stjórna í Uppsett forrit", // ManageInstalled
+        L"Uppsett forrit", // InstalledApp
     }},
     {L"it", {
         L"Cerca qualsiasi cosa", // SearchAnything
@@ -3120,6 +4094,42 @@ inline constexpr Locale kLocales[] = {
         L"Errore", // Error
         L"Sottorete", // Subnet
         L"Gateway", // Gateway
+        L"Meteo", // Weather
+        L"Valuta", // Currency
+        L"Criptovalute", // Crypto
+        L"Caricamento…", // OnlineLoading
+        L"Impossibile caricare i dati. Riprova tra poco.", // OnlineUnavailable
+        L"Le schede online sono disattivate nelle impostazioni.", // OnlineDisabled
+        L"In cache", // Cached
+        L"Oggi", // Today
+        L"Test di velocità Internet", // SpeedTest
+        L"Latenza", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Pronto", // TestReady
+        L"Completato", // TestComplete
+        L"Interrotto", // TestStopped
+        L"Interrompi", // StopTest
+        L"Alcuni comandi hanno lo stesso nome.", // CommandNameConflict
+        L"Assegna un nome diverso a ogni strumento e /comando personalizzato nelle impostazioni.", // CommandNameConflictHint
+        L"Utilizzo hardware", // HardwareUsage
+        L"Memoria", // MemoryUsage
+        L"Attività disco", // DiskUsage
+        L"Traffico di rete", // NetworkTraffic
+        L"In attesa dei contatori o non disponibile", // MetricsUnavailable
+        L"Limite dati del test raggiunto", // DataLimitReached
+        L"Server occupato. Riprova tra {0} secondi.", // SpeedBusy
+        L"Servizi", // Services
+        L"In esecuzione", // ServiceRunning
+        L"In pausa", // ServicePaused
+        L"In attesa…", // ServicePending
+        L"Avvia", // ServiceStart
+        L"Riavvia", // ServiceRestart
+        L"Nessun servizio corrispondente", // NoServices
+        L"Copia dettagli", // CopyDetails
+        L"Nessun programma di avvio trovato", // NotLaunchable
+        L"Gestisci in App installate", // ManageInstalled
+        L"App installata", // InstalledApp
     }},
     {L"ja", {
         L"すべてを検索", // SearchAnything
@@ -3226,6 +4236,42 @@ inline constexpr Locale kLocales[] = {
         L"エラー", // Error
         L"サブネット", // Subnet
         L"ゲートウェイ", // Gateway
+        L"天気", // Weather
+        L"通貨", // Currency
+        L"暗号資産", // Crypto
+        L"読み込み中…", // OnlineLoading
+        L"データを読み込めませんでした。しばらくしてから再試行してください。", // OnlineUnavailable
+        L"設定でオンラインカードが無効になっています。", // OnlineDisabled
+        L"キャッシュ済み", // Cached
+        L"今日", // Today
+        L"インターネット速度テスト", // SpeedTest
+        L"遅延", // Latency
+        L"ダウンロード", // Download
+        L"アップロード", // Upload
+        L"準備完了", // TestReady
+        L"完了", // TestComplete
+        L"停止しました", // TestStopped
+        L"停止", // StopTest
+        L"同じ名前のコマンドがあります。", // CommandNameConflict
+        L"設定で各ツールとカスタム/コマンドに異なる名前を付けてください。", // CommandNameConflictHint
+        L"ハードウェア使用状況", // HardwareUsage
+        L"メモリ", // MemoryUsage
+        L"ディスクの動作", // DiskUsage
+        L"ネットワーク通信量", // NetworkTraffic
+        L"カウンターを待機中、または利用不可", // MetricsUnavailable
+        L"テストデータの上限に達しました", // DataLimitReached
+        L"サーバーが混雑しています。{0} 秒後に再試行してください。", // SpeedBusy
+        L"サービス", // Services
+        L"実行中", // ServiceRunning
+        L"一時停止", // ServicePaused
+        L"処理中…", // ServicePending
+        L"開始", // ServiceStart
+        L"再起動", // ServiceRestart
+        L"一致するサービスがありません", // NoServices
+        L"詳細をコピー", // CopyDetails
+        L"起動方法が見つかりません", // NotLaunchable
+        L"インストールされているアプリで管理", // ManageInstalled
+        L"インストール済みアプリ", // InstalledApp
     }},
     {L"ka", {
         L"ყველაფრის ძებნა", // SearchAnything
@@ -3332,6 +4378,42 @@ inline constexpr Locale kLocales[] = {
         L"შეცდომა", // Error
         L"ქვექსელი", // Subnet
         L"კარიბჭე", // Gateway
+        L"ამინდი", // Weather
+        L"ვალუტა", // Currency
+        L"კრიპტო", // Crypto
+        L"იტვირთება…", // OnlineLoading
+        L"მონაცემები ვერ ჩაიტვირთა. სცადეთ ცოტა ხანში.", // OnlineUnavailable
+        L"ონლაინ ბარათები გამორთულია პარამეტრებში.", // OnlineDisabled
+        L"ქეშირებული", // Cached
+        L"დღეს", // Today
+        L"ინტერნეტის სიჩქარის ტესტი", // SpeedTest
+        L"დაყოვნება", // Latency
+        L"ჩამოტვირთვა", // Download
+        L"ატვირთვა", // Upload
+        L"მზადაა", // TestReady
+        L"დასრულდა", // TestComplete
+        L"შეჩერდა", // TestStopped
+        L"შეჩერება", // StopTest
+        L"ზოგიერთ ბრძანებას ერთნაირი სახელი აქვს.", // CommandNameConflict
+        L"პარამეტრებში თითოეულ ხელსაწყოსა და მორგებულ /ბრძანებას განსხვავებული სახელი მიანიჭეთ.", // CommandNameConflictHint
+        L"აპარატურის გამოყენება", // HardwareUsage
+        L"მეხსიერება", // MemoryUsage
+        L"დისკის აქტივობა", // DiskUsage
+        L"ქსელის ტრაფიკი", // NetworkTraffic
+        L"მრიცხველების მოლოდინი ან მიუწვდომელია", // MetricsUnavailable
+        L"ტესტის მონაცემთა ლიმიტი მიღწეულია", // DataLimitReached
+        L"სერვერი დაკავებულია. სცადეთ ხელახლა {0} წამში.", // SpeedBusy
+        L"სერვისები", // Services
+        L"მუშაობს", // ServiceRunning
+        L"დაპაუზებულია", // ServicePaused
+        L"მოლოდინში…", // ServicePending
+        L"გაშვება", // ServiceStart
+        L"ხელახლა გაშვება", // ServiceRestart
+        L"შესაბამისი სერვისები ვერ მოიძებნა", // NoServices
+        L"დეტალების კოპირება", // CopyDetails
+        L"გამშვები ვერ მოიძებნა", // NotLaunchable
+        L"მართვა დაინსტალირებულ აპებში", // ManageInstalled
+        L"დაყენებული აპი", // InstalledApp
     }},
     {L"ko", {
         L"모든 항목 검색", // SearchAnything
@@ -3438,6 +4520,42 @@ inline constexpr Locale kLocales[] = {
         L"오류", // Error
         L"서브넷", // Subnet
         L"게이트웨이", // Gateway
+        L"날씨", // Weather
+        L"통화", // Currency
+        L"암호화폐", // Crypto
+        L"불러오는 중…", // OnlineLoading
+        L"데이터를 불러오지 못했습니다. 잠시 후 다시 시도하세요.", // OnlineUnavailable
+        L"설정에서 온라인 카드가 꺼져 있습니다.", // OnlineDisabled
+        L"캐시됨", // Cached
+        L"오늘", // Today
+        L"인터넷 속도 테스트", // SpeedTest
+        L"지연 시간", // Latency
+        L"다운로드", // Download
+        L"업로드", // Upload
+        L"준비됨", // TestReady
+        L"완료", // TestComplete
+        L"중지됨", // TestStopped
+        L"중지", // StopTest
+        L"이름이 같은 명령이 있습니다.", // CommandNameConflict
+        L"설정에서 각 도구와 사용자 지정 /명령에 서로 다른 이름을 지정하세요.", // CommandNameConflictHint
+        L"하드웨어 사용량", // HardwareUsage
+        L"메모리", // MemoryUsage
+        L"디스크 활동", // DiskUsage
+        L"네트워크 트래픽", // NetworkTraffic
+        L"카운터 대기 중 또는 사용할 수 없음", // MetricsUnavailable
+        L"테스트 데이터 한도에 도달했습니다", // DataLimitReached
+        L"서버가 사용 중입니다. {0}초 후에 다시 시도하세요.", // SpeedBusy
+        L"서비스", // Services
+        L"실행 중", // ServiceRunning
+        L"일시 중지됨", // ServicePaused
+        L"대기 중…", // ServicePending
+        L"시작", // ServiceStart
+        L"다시 시작", // ServiceRestart
+        L"일치하는 서비스 없음", // NoServices
+        L"세부 정보 복사", // CopyDetails
+        L"실행 경로를 찾지 못함", // NotLaunchable
+        L"설치된 앱에서 관리", // ManageInstalled
+        L"설치된 앱", // InstalledApp
     }},
     {L"lt", {
         L"Ieškoti visko", // SearchAnything
@@ -3544,6 +4662,42 @@ inline constexpr Locale kLocales[] = {
         L"Klaida", // Error
         L"Potinklis", // Subnet
         L"Šliuzas", // Gateway
+        L"Orai", // Weather
+        L"Valiuta", // Currency
+        L"Kriptovaliutos", // Crypto
+        L"Įkeliama…", // OnlineLoading
+        L"Nepavyko įkelti duomenų. Netrukus bandykite dar kartą.", // OnlineUnavailable
+        L"Internetinės kortelės išjungtos nustatymuose.", // OnlineDisabled
+        L"Iš podėlio", // Cached
+        L"Šiandien", // Today
+        L"Interneto spartos testas", // SpeedTest
+        L"Delsa", // Latency
+        L"Atsiuntimas", // Download
+        L"Išsiuntimas", // Upload
+        L"Paruošta", // TestReady
+        L"Baigta", // TestComplete
+        L"Sustabdyta", // TestStopped
+        L"Stabdyti", // StopTest
+        L"Kai kurios komandos turi tą patį pavadinimą.", // CommandNameConflict
+        L"Nustatymuose kiekvienam įrankiui ir pasirinktinei /komandai suteikite skirtingą pavadinimą.", // CommandNameConflictHint
+        L"Aparatinės įrangos naudojimas", // HardwareUsage
+        L"Atmintis", // MemoryUsage
+        L"Disko veikla", // DiskUsage
+        L"Tinklo srautas", // NetworkTraffic
+        L"Laukiama skaitiklių arba nepasiekiama", // MetricsUnavailable
+        L"Pasiekta bandymo duomenų riba", // DataLimitReached
+        L"Serveris užimtas. Bandykite dar kartą po {0} sekundžių.", // SpeedBusy
+        L"Tarnybos", // Services
+        L"Veikia", // ServiceRunning
+        L"Pristabdyta", // ServicePaused
+        L"Laukiama…", // ServicePending
+        L"Paleisti", // ServiceStart
+        L"Paleisti iš naujo", // ServiceRestart
+        L"Atitinkančių tarnybų nėra", // NoServices
+        L"Kopijuoti išsamią informaciją", // CopyDetails
+        L"Paleidimo priemonė nerasta", // NotLaunchable
+        L"Tvarkyti įdiegtose programose", // ManageInstalled
+        L"Įdiegta programa", // InstalledApp
     }},
     {L"lv", {
         L"Meklēt visu", // SearchAnything
@@ -3650,6 +4804,42 @@ inline constexpr Locale kLocales[] = {
         L"Kļūda", // Error
         L"Apakštīkls", // Subnet
         L"Vārteja", // Gateway
+        L"Laikapstākļi", // Weather
+        L"Valūta", // Currency
+        L"Kriptovalūtas", // Crypto
+        L"Ielādē…", // OnlineLoading
+        L"Neizdevās ielādēt datus. Pēc brīža mēģiniet vēlreiz.", // OnlineUnavailable
+        L"Tiešsaistes kartītes ir izslēgtas iestatījumos.", // OnlineDisabled
+        L"No kešatmiņas", // Cached
+        L"Šodien", // Today
+        L"Interneta ātruma pārbaude", // SpeedTest
+        L"Aizture", // Latency
+        L"Lejupielāde", // Download
+        L"Augšupielāde", // Upload
+        L"Gatavs", // TestReady
+        L"Pabeigts", // TestComplete
+        L"Apturēts", // TestStopped
+        L"Apturēt", // StopTest
+        L"Dažām komandām ir vienāds nosaukums.", // CommandNameConflict
+        L"Iestatījumos katram rīkam un pielāgotajai /komandai piešķiriet atšķirīgu nosaukumu.", // CommandNameConflictHint
+        L"Aparatūras lietojums", // HardwareUsage
+        L"Atmiņa", // MemoryUsage
+        L"Diska aktivitāte", // DiskUsage
+        L"Tīkla datplūsma", // NetworkTraffic
+        L"Gaida skaitītājus vai nav pieejams", // MetricsUnavailable
+        L"Sasniegts testa datu ierobežojums", // DataLimitReached
+        L"Serveris ir aizņemts. Mēģiniet vēlreiz pēc {0} sekundēm.", // SpeedBusy
+        L"Pakalpojumi", // Services
+        L"Darbojas", // ServiceRunning
+        L"Pauzēts", // ServicePaused
+        L"Gaida…", // ServicePending
+        L"Sākt", // ServiceStart
+        L"Restartēt", // ServiceRestart
+        L"Nav atbilstošu pakalpojumu", // NoServices
+        L"Kopēt informāciju", // CopyDetails
+        L"Palaidējs nav atrasts", // NotLaunchable
+        L"Pārvaldīt instalētajās programmās", // ManageInstalled
+        L"Instalēta programma", // InstalledApp
     }},
     {L"mk", {
         L"Пребарај сè", // SearchAnything
@@ -3756,6 +4946,42 @@ inline constexpr Locale kLocales[] = {
         L"Грешка", // Error
         L"Подмрежа", // Subnet
         L"Мрежен премин", // Gateway
+        L"Време", // Weather
+        L"Валута", // Currency
+        L"Крипто", // Crypto
+        L"Се вчитува…", // OnlineLoading
+        L"Податоците не може да се вчитаат. Обидете се повторно наскоро.", // OnlineUnavailable
+        L"Онлајн картичките се исклучени во поставките.", // OnlineDisabled
+        L"Кеширано", // Cached
+        L"Денес", // Today
+        L"Тест за брзина на интернет", // SpeedTest
+        L"Доцнење", // Latency
+        L"Преземање", // Download
+        L"Прикачување", // Upload
+        L"Подготвено", // TestReady
+        L"Завршено", // TestComplete
+        L"Запрено", // TestStopped
+        L"Запри", // StopTest
+        L"Некои команди имаат исто име.", // CommandNameConflict
+        L"Во поставките дајте различно име на секоја алатка и приспособена /команда.", // CommandNameConflictHint
+        L"Користење хардвер", // HardwareUsage
+        L"Меморија", // MemoryUsage
+        L"Активност на диск", // DiskUsage
+        L"Мрежен сообраќај", // NetworkTraffic
+        L"Се чекаат бројачи или е недостапно", // MetricsUnavailable
+        L"Достигнато е ограничувањето за тест-податоци", // DataLimitReached
+        L"Серверот е зафатен. Обидете се повторно за {0} секунди.", // SpeedBusy
+        L"Услуги", // Services
+        L"Работи", // ServiceRunning
+        L"Паузирана", // ServicePaused
+        L"Се чека…", // ServicePending
+        L"Стартувај", // ServiceStart
+        L"Рестартирај", // ServiceRestart
+        L"Нема соодветни услуги", // NoServices
+        L"Копирај детали", // CopyDetails
+        L"Не е пронајден стартер", // NotLaunchable
+        L"Управувај во инсталираните апликации", // ManageInstalled
+        L"Инсталирана апликација", // InstalledApp
     }},
     {L"ms", {
         L"Cari apa sahaja", // SearchAnything
@@ -3862,6 +5088,42 @@ inline constexpr Locale kLocales[] = {
         L"Ralat", // Error
         L"Subnet", // Subnet
         L"Get laluan", // Gateway
+        L"Cuaca", // Weather
+        L"Mata wang", // Currency
+        L"Kripto", // Crypto
+        L"Memuatkan…", // OnlineLoading
+        L"Data tidak dapat dimuatkan. Cuba lagi sebentar lagi.", // OnlineUnavailable
+        L"Kad dalam talian dimatikan dalam tetapan.", // OnlineDisabled
+        L"Dicache", // Cached
+        L"Hari ini", // Today
+        L"Ujian kelajuan internet", // SpeedTest
+        L"Kependaman", // Latency
+        L"Muat turun", // Download
+        L"Muat naik", // Upload
+        L"Sedia", // TestReady
+        L"Selesai", // TestComplete
+        L"Dihentikan", // TestStopped
+        L"Hentikan", // StopTest
+        L"Sesetengah perintah mempunyai nama yang sama.", // CommandNameConflict
+        L"Berikan nama berbeza bagi setiap alat dan /arahan tersuai dalam tetapan.", // CommandNameConflictHint
+        L"Penggunaan perkakasan", // HardwareUsage
+        L"Memori", // MemoryUsage
+        L"Aktiviti cakera", // DiskUsage
+        L"Trafik rangkaian", // NetworkTraffic
+        L"Menunggu pembilang atau tidak tersedia", // MetricsUnavailable
+        L"Had data ujian dicapai", // DataLimitReached
+        L"Pelayan sibuk. Cuba lagi dalam {0} saat.", // SpeedBusy
+        L"Perkhidmatan", // Services
+        L"Berjalan", // ServiceRunning
+        L"Dijeda", // ServicePaused
+        L"Menunggu…", // ServicePending
+        L"Mula", // ServiceStart
+        L"Mula semula", // ServiceRestart
+        L"Tiada perkhidmatan yang sepadan", // NoServices
+        L"Salin butiran", // CopyDetails
+        L"Pelancar tidak ditemukan", // NotLaunchable
+        L"Urus dalam Aplikasi dipasang", // ManageInstalled
+        L"Aplikasi dipasang", // InstalledApp
     }},
     {L"nb", {
         L"Søk etter alt", // SearchAnything
@@ -3968,6 +5230,42 @@ inline constexpr Locale kLocales[] = {
         L"Feil", // Error
         L"Delnett", // Subnet
         L"Gateway", // Gateway
+        L"Vær", // Weather
+        L"Valuta", // Currency
+        L"Krypto", // Crypto
+        L"Laster inn…", // OnlineLoading
+        L"Kunne ikke laste inn data. Prøv igjen om litt.", // OnlineUnavailable
+        L"Nettkort er slått av i innstillingene.", // OnlineDisabled
+        L"Fra hurtigbuffer", // Cached
+        L"I dag", // Today
+        L"Test av internetthastighet", // SpeedTest
+        L"Forsinkelse", // Latency
+        L"Nedlasting", // Download
+        L"Opplasting", // Upload
+        L"Klar", // TestReady
+        L"Fullført", // TestComplete
+        L"Stoppet", // TestStopped
+        L"Stopp", // StopTest
+        L"Noen kommandoer har samme navn.", // CommandNameConflict
+        L"Gi hvert verktøy og hver egendefinerte /kommando et forskjellig navn i innstillingene.", // CommandNameConflictHint
+        L"Maskinvarebruk", // HardwareUsage
+        L"Minne", // MemoryUsage
+        L"Diskaktivitet", // DiskUsage
+        L"Nettverkstrafikk", // NetworkTraffic
+        L"Venter på tellere eller utilgjengelig", // MetricsUnavailable
+        L"Grensen for testdata er nådd", // DataLimitReached
+        L"Serveren er opptatt. Prøv igjen om {0} sekunder.", // SpeedBusy
+        L"Tjenester", // Services
+        L"Kjører", // ServiceRunning
+        L"Satt på pause", // ServicePaused
+        L"Venter…", // ServicePending
+        L"Start", // ServiceStart
+        L"Start på nytt", // ServiceRestart
+        L"Ingen samsvarende tjenester", // NoServices
+        L"Kopier detaljer", // CopyDetails
+        L"Ingen oppstartssnarvei funnet", // NotLaunchable
+        L"Administrer i Installerte apper", // ManageInstalled
+        L"Installert app", // InstalledApp
     }},
     {L"nl", {
         L"Alles doorzoeken", // SearchAnything
@@ -4074,6 +5372,42 @@ inline constexpr Locale kLocales[] = {
         L"Fout", // Error
         L"Subnet", // Subnet
         L"Gateway", // Gateway
+        L"Weer", // Weather
+        L"Valuta", // Currency
+        L"Crypto", // Crypto
+        L"Laden…", // OnlineLoading
+        L"Gegevens konden niet worden geladen. Probeer het zo opnieuw.", // OnlineUnavailable
+        L"Onlinekaarten zijn uitgeschakeld in de instellingen.", // OnlineDisabled
+        L"In cache", // Cached
+        L"Vandaag", // Today
+        L"Internetsnelheidstest", // SpeedTest
+        L"Vertraging", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Gereed", // TestReady
+        L"Voltooid", // TestComplete
+        L"Gestopt", // TestStopped
+        L"Stoppen", // StopTest
+        L"Sommige opdrachten hebben dezelfde naam.", // CommandNameConflict
+        L"Geef elk hulpmiddel en elke eigen /opdracht een andere naam in de instellingen.", // CommandNameConflictHint
+        L"Hardwaregebruik", // HardwareUsage
+        L"Geheugen", // MemoryUsage
+        L"Schijfactiviteit", // DiskUsage
+        L"Netwerkverkeer", // NetworkTraffic
+        L"Wacht op tellers of niet beschikbaar", // MetricsUnavailable
+        L"Testdatalimiet bereikt", // DataLimitReached
+        L"Server bezet. Probeer het over {0} seconden opnieuw.", // SpeedBusy
+        L"Services", // Services
+        L"Actief", // ServiceRunning
+        L"Onderbroken", // ServicePaused
+        L"In behandeling…", // ServicePending
+        L"Starten", // ServiceStart
+        L"Opnieuw starten", // ServiceRestart
+        L"Geen overeenkomende services", // NoServices
+        L"Details kopiëren", // CopyDetails
+        L"Geen startpunt gevonden", // NotLaunchable
+        L"Beheren in Geïnstalleerde apps", // ManageInstalled
+        L"Geïnstalleerde app", // InstalledApp
     }},
     {L"pl", {
         L"Szukaj wszystkiego", // SearchAnything
@@ -4180,6 +5514,42 @@ inline constexpr Locale kLocales[] = {
         L"Błąd", // Error
         L"Podsieć", // Subnet
         L"Brama", // Gateway
+        L"Pogoda", // Weather
+        L"Waluta", // Currency
+        L"Kryptowaluty", // Crypto
+        L"Ładowanie…", // OnlineLoading
+        L"Nie udało się wczytać danych. Spróbuj ponownie za chwilę.", // OnlineUnavailable
+        L"Karty online są wyłączone w ustawieniach.", // OnlineDisabled
+        L"Z pamięci podręcznej", // Cached
+        L"Dzisiaj", // Today
+        L"Test prędkości internetu", // SpeedTest
+        L"Opóźnienie", // Latency
+        L"Pobieranie", // Download
+        L"Wysyłanie", // Upload
+        L"Gotowe", // TestReady
+        L"Ukończono", // TestComplete
+        L"Zatrzymano", // TestStopped
+        L"Zatrzymaj", // StopTest
+        L"Niektóre polecenia mają tę samą nazwę.", // CommandNameConflict
+        L"W ustawieniach nadaj inną nazwę każdemu narzędziu i własnemu /poleceniu.", // CommandNameConflictHint
+        L"Użycie sprzętu", // HardwareUsage
+        L"Pamięć", // MemoryUsage
+        L"Aktywność dysku", // DiskUsage
+        L"Ruch sieciowy", // NetworkTraffic
+        L"Oczekiwanie na liczniki lub niedostępne", // MetricsUnavailable
+        L"Osiągnięto limit danych testowych", // DataLimitReached
+        L"Serwer jest zajęty. Spróbuj ponownie za {0} sekund.", // SpeedBusy
+        L"Usługi", // Services
+        L"Uruchomiono", // ServiceRunning
+        L"Wstrzymano", // ServicePaused
+        L"Oczekiwanie…", // ServicePending
+        L"Uruchom", // ServiceStart
+        L"Uruchom ponownie", // ServiceRestart
+        L"Brak pasujących usług", // NoServices
+        L"Kopiuj szczegóły", // CopyDetails
+        L"Nie znaleziono programu uruchamiającego", // NotLaunchable
+        L"Zarządzaj w Zainstalowanych aplikacjach", // ManageInstalled
+        L"Zainstalowana aplikacja", // InstalledApp
     }},
     {L"pt-br", {
         L"Pesquisar qualquer coisa", // SearchAnything
@@ -4286,6 +5656,42 @@ inline constexpr Locale kLocales[] = {
         L"Erro", // Error
         L"Sub-rede", // Subnet
         L"Gateway", // Gateway
+        L"Clima", // Weather
+        L"Moeda", // Currency
+        L"Criptomoedas", // Crypto
+        L"Carregando…", // OnlineLoading
+        L"Não foi possível carregar os dados. Tente novamente em instantes.", // OnlineUnavailable
+        L"Os cartões online estão desativados nas configurações.", // OnlineDisabled
+        L"Em cache", // Cached
+        L"Hoje", // Today
+        L"Teste de velocidade da internet", // SpeedTest
+        L"Latência", // Latency
+        L"Download", // Download
+        L"Upload", // Upload
+        L"Pronto", // TestReady
+        L"Concluído", // TestComplete
+        L"Interrompido", // TestStopped
+        L"Parar", // StopTest
+        L"Alguns comandos têm o mesmo nome.", // CommandNameConflict
+        L"Dê um nome diferente a cada ferramenta e /comando personalizado nas configurações.", // CommandNameConflictHint
+        L"Uso do hardware", // HardwareUsage
+        L"Memória", // MemoryUsage
+        L"Atividade do disco", // DiskUsage
+        L"Tráfego de rede", // NetworkTraffic
+        L"Aguardando contadores ou indisponível", // MetricsUnavailable
+        L"Limite de dados do teste atingido", // DataLimitReached
+        L"Servidor ocupado. Tente novamente em {0} segundos.", // SpeedBusy
+        L"Serviços", // Services
+        L"Em execução", // ServiceRunning
+        L"Pausado", // ServicePaused
+        L"Pendente…", // ServicePending
+        L"Iniciar", // ServiceStart
+        L"Reiniciar", // ServiceRestart
+        L"Nenhum serviço correspondente", // NoServices
+        L"Copiar detalhes", // CopyDetails
+        L"Nenhum inicializador encontrado", // NotLaunchable
+        L"Gerenciar em Aplicativos instalados", // ManageInstalled
+        L"Aplicativo instalado", // InstalledApp
     }},
     {L"pt-pt", {
         L"Pesquisar tudo", // SearchAnything
@@ -4392,6 +5798,42 @@ inline constexpr Locale kLocales[] = {
         L"Erro", // Error
         L"Sub-rede", // Subnet
         L"Gateway", // Gateway
+        L"Meteorologia", // Weather
+        L"Moeda", // Currency
+        L"Criptomoedas", // Crypto
+        L"A carregar…", // OnlineLoading
+        L"Não foi possível carregar os dados. Tente novamente dentro de momentos.", // OnlineUnavailable
+        L"Os cartões online estão desativados nas definições.", // OnlineDisabled
+        L"Em cache", // Cached
+        L"Hoje", // Today
+        L"Teste de velocidade da Internet", // SpeedTest
+        L"Latência", // Latency
+        L"Receção", // Download
+        L"Envio", // Upload
+        L"Pronto", // TestReady
+        L"Concluído", // TestComplete
+        L"Parado", // TestStopped
+        L"Parar", // StopTest
+        L"Alguns comandos têm o mesmo nome.", // CommandNameConflict
+        L"Dê um nome diferente a cada ferramenta e /comando personalizado nas definições.", // CommandNameConflictHint
+        L"Utilização do hardware", // HardwareUsage
+        L"Memória", // MemoryUsage
+        L"Atividade do disco", // DiskUsage
+        L"Tráfego de rede", // NetworkTraffic
+        L"A aguardar contadores ou indisponível", // MetricsUnavailable
+        L"Limite de dados do teste atingido", // DataLimitReached
+        L"Servidor ocupado. Tente novamente dentro de {0} segundos.", // SpeedBusy
+        L"Serviços", // Services
+        L"Em execução", // ServiceRunning
+        L"Em pausa", // ServicePaused
+        L"Pendente…", // ServicePending
+        L"Iniciar", // ServiceStart
+        L"Reiniciar", // ServiceRestart
+        L"Nenhum serviço correspondente", // NoServices
+        L"Copiar detalhes", // CopyDetails
+        L"Nenhum iniciador encontrado", // NotLaunchable
+        L"Gerir em Aplicações instaladas", // ManageInstalled
+        L"Aplicação instalada", // InstalledApp
     }},
     {L"ro", {
         L"Caută orice", // SearchAnything
@@ -4498,6 +5940,42 @@ inline constexpr Locale kLocales[] = {
         L"Eroare", // Error
         L"Subrețea", // Subnet
         L"Gateway", // Gateway
+        L"Vreme", // Weather
+        L"Monedă", // Currency
+        L"Criptomonede", // Crypto
+        L"Se încarcă…", // OnlineLoading
+        L"Datele nu au putut fi încărcate. Încercați din nou în curând.", // OnlineUnavailable
+        L"Cardurile online sunt dezactivate în setări.", // OnlineDisabled
+        L"Din cache", // Cached
+        L"Astăzi", // Today
+        L"Test de viteză a internetului", // SpeedTest
+        L"Latență", // Latency
+        L"Descărcare", // Download
+        L"Încărcare", // Upload
+        L"Pregătit", // TestReady
+        L"Finalizat", // TestComplete
+        L"Oprit", // TestStopped
+        L"Oprește", // StopTest
+        L"Unele comenzi au același nume.", // CommandNameConflict
+        L"Dați un nume diferit fiecărui instrument și fiecărei /comenzi personalizate în setări.", // CommandNameConflictHint
+        L"Utilizare hardware", // HardwareUsage
+        L"Memorie", // MemoryUsage
+        L"Activitatea discului", // DiskUsage
+        L"Trafic de rețea", // NetworkTraffic
+        L"Se așteaptă contoare sau indisponibil", // MetricsUnavailable
+        L"S-a atins limita datelor de test", // DataLimitReached
+        L"Server ocupat. Încercați din nou peste {0} secunde.", // SpeedBusy
+        L"Servicii", // Services
+        L"În execuție", // ServiceRunning
+        L"În pauză", // ServicePaused
+        L"În așteptare…", // ServicePending
+        L"Pornire", // ServiceStart
+        L"Repornire", // ServiceRestart
+        L"Nu există servicii corespunzătoare", // NoServices
+        L"Copiază detaliile", // CopyDetails
+        L"Nu s-a găsit un lansator", // NotLaunchable
+        L"Gestionează în Aplicații instalate", // ManageInstalled
+        L"Aplicație instalată", // InstalledApp
     }},
     {L"ru", {
         L"Искать всё", // SearchAnything
@@ -4604,6 +6082,42 @@ inline constexpr Locale kLocales[] = {
         L"Ошибка", // Error
         L"Подсеть", // Subnet
         L"Шлюз", // Gateway
+        L"Погода", // Weather
+        L"Валюта", // Currency
+        L"Криптовалюты", // Crypto
+        L"Загрузка…", // OnlineLoading
+        L"Не удалось загрузить данные. Повторите попытку чуть позже.", // OnlineUnavailable
+        L"Онлайн-карточки отключены в настройках.", // OnlineDisabled
+        L"Из кэша", // Cached
+        L"Сегодня", // Today
+        L"Проверка скорости интернета", // SpeedTest
+        L"Задержка", // Latency
+        L"Загрузка", // Download
+        L"Отправка", // Upload
+        L"Готово", // TestReady
+        L"Завершено", // TestComplete
+        L"Остановлено", // TestStopped
+        L"Остановить", // StopTest
+        L"Некоторые команды имеют одинаковые имена.", // CommandNameConflict
+        L"Задайте разные имена каждому инструменту и пользовательской /команде в настройках.", // CommandNameConflictHint
+        L"Использование оборудования", // HardwareUsage
+        L"Память", // MemoryUsage
+        L"Активность диска", // DiskUsage
+        L"Сетевой трафик", // NetworkTraffic
+        L"Ожидание счётчиков или недоступно", // MetricsUnavailable
+        L"Достигнут лимит тестовых данных", // DataLimitReached
+        L"Сервер занят. Повторите попытку через {0} секунд.", // SpeedBusy
+        L"Службы", // Services
+        L"Выполняется", // ServiceRunning
+        L"Приостановлена", // ServicePaused
+        L"Ожидание…", // ServicePending
+        L"Запустить", // ServiceStart
+        L"Перезапустить", // ServiceRestart
+        L"Нет подходящих служб", // NoServices
+        L"Копировать сведения", // CopyDetails
+        L"Способ запуска не найден", // NotLaunchable
+        L"Управление в установленных приложениях", // ManageInstalled
+        L"Установленное приложение", // InstalledApp
     }},
     {L"sk", {
         L"Hľadať všetko", // SearchAnything
@@ -4710,6 +6224,42 @@ inline constexpr Locale kLocales[] = {
         L"Chyba", // Error
         L"Podsieť", // Subnet
         L"Brána", // Gateway
+        L"Počasie", // Weather
+        L"Mena", // Currency
+        L"Kryptomeny", // Crypto
+        L"Načítava sa…", // OnlineLoading
+        L"Údaje sa nepodarilo načítať. Skúste to o chvíľu znova.", // OnlineUnavailable
+        L"Online karty sú v nastaveniach vypnuté.", // OnlineDisabled
+        L"Z vyrovnávacej pamäte", // Cached
+        L"Dnes", // Today
+        L"Test rýchlosti internetu", // SpeedTest
+        L"Odozva", // Latency
+        L"Sťahovanie", // Download
+        L"Odosielanie", // Upload
+        L"Pripravené", // TestReady
+        L"Dokončené", // TestComplete
+        L"Zastavené", // TestStopped
+        L"Zastaviť", // StopTest
+        L"Niektoré príkazy majú rovnaký názov.", // CommandNameConflict
+        L"V nastaveniach dajte každému nástroju a vlastnému /príkazu iný názov.", // CommandNameConflictHint
+        L"Využitie hardvéru", // HardwareUsage
+        L"Pamäť", // MemoryUsage
+        L"Aktivita disku", // DiskUsage
+        L"Sieťová prevádzka", // NetworkTraffic
+        L"Čakanie na počítadlá alebo nedostupné", // MetricsUnavailable
+        L"Dosiahnutý limit testovacích dát", // DataLimitReached
+        L"Server je zaneprázdnený. Skúste to znova o {0} sekúnd.", // SpeedBusy
+        L"Služby", // Services
+        L"Spustené", // ServiceRunning
+        L"Pozastavené", // ServicePaused
+        L"Čaká sa…", // ServicePending
+        L"Spustiť", // ServiceStart
+        L"Reštartovať", // ServiceRestart
+        L"Žiadne zodpovedajúce služby", // NoServices
+        L"Kopírovať podrobnosti", // CopyDetails
+        L"Spúšťač sa nenašiel", // NotLaunchable
+        L"Spravovať v nainštalovaných aplikáciách", // ManageInstalled
+        L"Nainštalovaná aplikácia", // InstalledApp
     }},
     {L"sl", {
         L"Išči vse", // SearchAnything
@@ -4816,6 +6366,42 @@ inline constexpr Locale kLocales[] = {
         L"Napaka", // Error
         L"Podomrežje", // Subnet
         L"Prehod", // Gateway
+        L"Vreme", // Weather
+        L"Valuta", // Currency
+        L"Kriptovalute", // Crypto
+        L"Nalaganje…", // OnlineLoading
+        L"Podatkov ni bilo mogoče naložiti. Poskusite znova čez nekaj trenutkov.", // OnlineUnavailable
+        L"Spletne kartice so izklopljene v nastavitvah.", // OnlineDisabled
+        L"Iz predpomnilnika", // Cached
+        L"Danes", // Today
+        L"Preizkus hitrosti interneta", // SpeedTest
+        L"Zakasnitev", // Latency
+        L"Prenos", // Download
+        L"Pošiljanje", // Upload
+        L"Pripravljeno", // TestReady
+        L"Končano", // TestComplete
+        L"Ustavljeno", // TestStopped
+        L"Ustavi", // StopTest
+        L"Nekateri ukazi imajo enako ime.", // CommandNameConflict
+        L"V nastavitvah vsakemu orodju in /ukazu po meri določite drugačno ime.", // CommandNameConflictHint
+        L"Uporaba strojne opreme", // HardwareUsage
+        L"Pomnilnik", // MemoryUsage
+        L"Dejavnost diska", // DiskUsage
+        L"Omrežni promet", // NetworkTraffic
+        L"Čakanje na števce ali ni na voljo", // MetricsUnavailable
+        L"Dosežena omejitev preskusnih podatkov", // DataLimitReached
+        L"Strežnik je zaseden. Poskusite znova čez {0} sekund.", // SpeedBusy
+        L"Storitve", // Services
+        L"Se izvaja", // ServiceRunning
+        L"Začasno ustavljeno", // ServicePaused
+        L"Na čakanju…", // ServicePending
+        L"Zaženi", // ServiceStart
+        L"Znova zaženi", // ServiceRestart
+        L"Ni ustreznih storitev", // NoServices
+        L"Kopiraj podrobnosti", // CopyDetails
+        L"Zaganjalnik ni bil najden", // NotLaunchable
+        L"Upravljaj v nameščenih aplikacijah", // ManageInstalled
+        L"Nameščena aplikacija", // InstalledApp
     }},
     {L"sq", {
         L"Kërko gjithçka", // SearchAnything
@@ -4922,6 +6508,42 @@ inline constexpr Locale kLocales[] = {
         L"Gabim", // Error
         L"Nënrrjeti", // Subnet
         L"Porta hyrëse", // Gateway
+        L"Moti", // Weather
+        L"Monedha", // Currency
+        L"Kripto", // Crypto
+        L"Duke u ngarkuar…", // OnlineLoading
+        L"Të dhënat nuk mund të ngarkohen. Provoni sërish pas pak.", // OnlineUnavailable
+        L"Kartat në internet janë çaktivizuar te cilësimet.", // OnlineDisabled
+        L"Nga memoria e përkohshme", // Cached
+        L"Sot", // Today
+        L"Testi i shpejtësisë së internetit", // SpeedTest
+        L"Vonesa", // Latency
+        L"Shkarkim", // Download
+        L"Ngarkim", // Upload
+        L"Gati", // TestReady
+        L"Përfundoi", // TestComplete
+        L"U ndal", // TestStopped
+        L"Ndalo", // StopTest
+        L"Disa komanda kanë të njëjtin emër.", // CommandNameConflict
+        L"Jepini çdo mjeti dhe /komande të personalizuar një emër të ndryshëm te cilësimet.", // CommandNameConflictHint
+        L"Përdorimi i pajisjeve", // HardwareUsage
+        L"Memoria", // MemoryUsage
+        L"Aktiviteti i diskut", // DiskUsage
+        L"Trafiku i rrjetit", // NetworkTraffic
+        L"Në pritje të numëruesve ose i padisponueshëm", // MetricsUnavailable
+        L"U arrit kufiri i të dhënave të testit", // DataLimitReached
+        L"Serveri është i zënë. Provoni përsëri pas {0} sekondash.", // SpeedBusy
+        L"Shërbimet", // Services
+        L"Në punë", // ServiceRunning
+        L"Pezulluar", // ServicePaused
+        L"Në pritje…", // ServicePending
+        L"Nis", // ServiceStart
+        L"Rinis", // ServiceRestart
+        L"Nuk ka shërbime që përputhen", // NoServices
+        L"Kopjo hollësitë", // CopyDetails
+        L"Nuk u gjet nisës", // NotLaunchable
+        L"Menaxho te aplikacionet e instaluara", // ManageInstalled
+        L"Aplikacion i instaluar", // InstalledApp
     }},
     {L"sr-latn", {
         L"Pretraži sve", // SearchAnything
@@ -5028,6 +6650,42 @@ inline constexpr Locale kLocales[] = {
         L"Greška", // Error
         L"Podmreža", // Subnet
         L"Mrežni prolaz", // Gateway
+        L"Vreme", // Weather
+        L"Valuta", // Currency
+        L"Kripto", // Crypto
+        L"Učitavanje…", // OnlineLoading
+        L"Podaci ne mogu da se učitaju. Pokušajte ponovo uskoro.", // OnlineUnavailable
+        L"Onlajn kartice su isključene u podešavanjima.", // OnlineDisabled
+        L"Keširano", // Cached
+        L"Danas", // Today
+        L"Test brzine interneta", // SpeedTest
+        L"Kašnjenje", // Latency
+        L"Preuzimanje", // Download
+        L"Slanje", // Upload
+        L"Spremno", // TestReady
+        L"Završeno", // TestComplete
+        L"Zaustavljeno", // TestStopped
+        L"Zaustavi", // StopTest
+        L"Neke komande imaju isto ime.", // CommandNameConflict
+        L"U podešavanjima dajte svakom alatu i prilagođenoj /komandi različito ime.", // CommandNameConflictHint
+        L"Upotreba hardvera", // HardwareUsage
+        L"Memorija", // MemoryUsage
+        L"Aktivnost diska", // DiskUsage
+        L"Mrežni saobraćaj", // NetworkTraffic
+        L"Čekanje brojača ili nedostupno", // MetricsUnavailable
+        L"Dostignuto ograničenje testnih podataka", // DataLimitReached
+        L"Server je zauzet. Pokušajte ponovo za {0} sekundi.", // SpeedBusy
+        L"Usluge", // Services
+        L"Pokrenuta", // ServiceRunning
+        L"Pauzirana", // ServicePaused
+        L"Na čekanju…", // ServicePending
+        L"Pokreni", // ServiceStart
+        L"Ponovo pokreni", // ServiceRestart
+        L"Nema odgovarajućih usluga", // NoServices
+        L"Kopiraj detalje", // CopyDetails
+        L"Pokretač nije pronađen", // NotLaunchable
+        L"Upravljaj instaliranim aplikacijama", // ManageInstalled
+        L"Instalirana aplikacija", // InstalledApp
     }},
     {L"sv", {
         L"Sök efter allt", // SearchAnything
@@ -5134,6 +6792,42 @@ inline constexpr Locale kLocales[] = {
         L"Fel", // Error
         L"Undernät", // Subnet
         L"Gateway", // Gateway
+        L"Väder", // Weather
+        L"Valuta", // Currency
+        L"Krypto", // Crypto
+        L"Läser in…", // OnlineLoading
+        L"Kunde inte läsa in data. Försök igen om en stund.", // OnlineUnavailable
+        L"Onlinekort är avstängda i inställningarna.", // OnlineDisabled
+        L"Från cache", // Cached
+        L"Idag", // Today
+        L"Test av internethastighet", // SpeedTest
+        L"Svarstid", // Latency
+        L"Nedladdning", // Download
+        L"Uppladdning", // Upload
+        L"Redo", // TestReady
+        L"Slutfört", // TestComplete
+        L"Stoppat", // TestStopped
+        L"Stoppa", // StopTest
+        L"Vissa kommandon har samma namn.", // CommandNameConflict
+        L"Ge varje verktyg och eget /kommando ett annat namn i inställningarna.", // CommandNameConflictHint
+        L"Maskinvaruanvändning", // HardwareUsage
+        L"Minne", // MemoryUsage
+        L"Diskaktivitet", // DiskUsage
+        L"Nätverkstrafik", // NetworkTraffic
+        L"Väntar på räknare eller inte tillgänglig", // MetricsUnavailable
+        L"Gränsen för testdata har nåtts", // DataLimitReached
+        L"Servern är upptagen. Försök igen om {0} sekunder.", // SpeedBusy
+        L"Tjänster", // Services
+        L"Körs", // ServiceRunning
+        L"Pausad", // ServicePaused
+        L"Väntar…", // ServicePending
+        L"Starta", // ServiceStart
+        L"Starta om", // ServiceRestart
+        L"Inga matchande tjänster", // NoServices
+        L"Kopiera information", // CopyDetails
+        L"Ingen startgenväg hittades", // NotLaunchable
+        L"Hantera i Installerade appar", // ManageInstalled
+        L"Installerad app", // InstalledApp
     }},
     {L"sw", {
         L"Tafuta chochote", // SearchAnything
@@ -5240,6 +6934,42 @@ inline constexpr Locale kLocales[] = {
         L"Hitilafu", // Error
         L"Mtandao mdogo", // Subnet
         L"Lango", // Gateway
+        L"Hali ya hewa", // Weather
+        L"Sarafu", // Currency
+        L"Kripto", // Crypto
+        L"Inapakia…", // OnlineLoading
+        L"Imeshindwa kupakia data. Jaribu tena baada ya muda mfupi.", // OnlineUnavailable
+        L"Kadi za mtandaoni zimezimwa kwenye mipangilio.", // OnlineDisabled
+        L"Imehifadhiwa kwa muda", // Cached
+        L"Leo", // Today
+        L"Jaribio la kasi ya intaneti", // SpeedTest
+        L"Muda wa kusubiri", // Latency
+        L"Upakuaji", // Download
+        L"Upakiaji", // Upload
+        L"Tayari", // TestReady
+        L"Imekamilika", // TestComplete
+        L"Imesimamishwa", // TestStopped
+        L"Simamisha", // StopTest
+        L"Baadhi ya amri zina jina sawa.", // CommandNameConflict
+        L"Ipe kila zana na /amri maalumu jina tofauti katika mipangilio.", // CommandNameConflictHint
+        L"Matumizi ya vifaa", // HardwareUsage
+        L"Kumbukumbu", // MemoryUsage
+        L"Shughuli za diski", // DiskUsage
+        L"Trafiki ya mtandao", // NetworkTraffic
+        L"Inasubiri vihesabu au haipatikani", // MetricsUnavailable
+        L"Kikomo cha data ya jaribio kimefikiwa", // DataLimitReached
+        L"Seva ina shughuli nyingi. Jaribu tena baada ya sekunde {0}.", // SpeedBusy
+        L"Huduma", // Services
+        L"Inaendeshwa", // ServiceRunning
+        L"Imesitishwa", // ServicePaused
+        L"Inasubiri…", // ServicePending
+        L"Anzisha", // ServiceStart
+        L"Anzisha upya", // ServiceRestart
+        L"Hakuna huduma zinazolingana", // NoServices
+        L"Nakili maelezo", // CopyDetails
+        L"Kizindua hakikupatikana", // NotLaunchable
+        L"Dhibiti katika Programu zilizosakinishwa", // ManageInstalled
+        L"Programu iliyosakinishwa", // InstalledApp
     }},
     {L"ta", {
         L"அனைத்தையும் தேடுங்கள்", // SearchAnything
@@ -5346,6 +7076,42 @@ inline constexpr Locale kLocales[] = {
         L"பிழை", // Error
         L"துணைப் பிணையம்", // Subnet
         L"நுழைவாயில்", // Gateway
+        L"வானிலை", // Weather
+        L"நாணயம்", // Currency
+        L"கிரிப்டோ", // Crypto
+        L"ஏற்றுகிறது…", // OnlineLoading
+        L"தரவை ஏற்ற முடியவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயலவும்.", // OnlineUnavailable
+        L"அமைப்புகளில் இணைய அட்டைகள் அணைக்கப்பட்டுள்ளன.", // OnlineDisabled
+        L"தற்காலிகச் சேமிப்பில் உள்ளது", // Cached
+        L"இன்று", // Today
+        L"இணைய வேகச் சோதனை", // SpeedTest
+        L"தாமதம்", // Latency
+        L"பதிவிறக்கம்", // Download
+        L"பதிவேற்றம்", // Upload
+        L"தயார்", // TestReady
+        L"முடிந்தது", // TestComplete
+        L"நிறுத்தப்பட்டது", // TestStopped
+        L"நிறுத்து", // StopTest
+        L"சில கட்டளைகளுக்கு ஒரே பெயர் உள்ளது.", // CommandNameConflict
+        L"அமைப்புகளில் ஒவ்வொரு கருவிக்கும் தனிப்பயன் /கட்டளைக்கும் வெவ்வேறு பெயர் கொடுங்கள்.", // CommandNameConflictHint
+        L"வன்பொருள் பயன்பாடு", // HardwareUsage
+        L"நினைவகம்", // MemoryUsage
+        L"வட்டு செயல்பாடு", // DiskUsage
+        L"பிணையப் போக்குவரத்து", // NetworkTraffic
+        L"கணக்கிகளுக்காகக் காத்திருக்கிறது அல்லது கிடைக்கவில்லை", // MetricsUnavailable
+        L"சோதனைத் தரவு வரம்பை அடைந்தது", // DataLimitReached
+        L"சேவையகம் பிஸியாக உள்ளது. {0} வினாடிகளுக்குப் பிறகு மீண்டும் முயலவும்.", // SpeedBusy
+        L"சேவைகள்", // Services
+        L"இயங்குகிறது", // ServiceRunning
+        L"இடைநிறுத்தப்பட்டது", // ServicePaused
+        L"நிலுவையில்…", // ServicePending
+        L"தொடங்கு", // ServiceStart
+        L"மீண்டும் தொடங்கு", // ServiceRestart
+        L"பொருந்தும் சேவைகள் இல்லை", // NoServices
+        L"விவரங்களை நகலெடு", // CopyDetails
+        L"தொடங்கும் வழி கிடைக்கவில்லை", // NotLaunchable
+        L"நிறுவப்பட்ட பயன்பாடுகளில் நிர்வகி", // ManageInstalled
+        L"நிறுவப்பட்ட செயலி", // InstalledApp
     }},
     {L"te", {
         L"ఏదైనా వెతకండి", // SearchAnything
@@ -5452,6 +7218,42 @@ inline constexpr Locale kLocales[] = {
         L"లోపం", // Error
         L"సబ్\u200cనెట్", // Subnet
         L"గేట్\u200cవే", // Gateway
+        L"వాతావరణం", // Weather
+        L"కరెన్సీ", // Currency
+        L"క్రిప్టో", // Crypto
+        L"లోడ్ అవుతోంది…", // OnlineLoading
+        L"డేటాను లోడ్ చేయలేకపోయాము. కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి.", // OnlineUnavailable
+        L"సెట్టింగ్\u200cలలో ఆన్\u200cలైన్ కార్డ్\u200cలు ఆఫ్\u200cలో ఉన్నాయి.", // OnlineDisabled
+        L"కాష్\u200cలో ఉంది", // Cached
+        L"ఈరోజు", // Today
+        L"ఇంటర్నెట్ వేగ పరీక్ష", // SpeedTest
+        L"ఆలస్యం", // Latency
+        L"డౌన్\u200cలోడ్", // Download
+        L"అప్\u200cలోడ్", // Upload
+        L"సిద్ధం", // TestReady
+        L"పూర్తయింది", // TestComplete
+        L"ఆపివేయబడింది", // TestStopped
+        L"ఆపు", // StopTest
+        L"కొన్ని ఆదేశాలకు ఒకే పేరు ఉంది.", // CommandNameConflict
+        L"సెట్టింగ్\u200cలలో ప్రతి సాధనానికి మరియు అనుకూల /ఆదేశానికి వేరే పేరు ఇవ్వండి.", // CommandNameConflictHint
+        L"హార్డ్\u200cవేర్ వినియోగం", // HardwareUsage
+        L"మెమరీ", // MemoryUsage
+        L"డిస్క్ కార్యకలాపం", // DiskUsage
+        L"నెట్\u200cవర్క్ ట్రాఫిక్", // NetworkTraffic
+        L"కౌంటర్ల కోసం వేచి ఉంది లేదా అందుబాటులో లేదు", // MetricsUnavailable
+        L"పరీక్ష డేటా పరిమితి చేరుకుంది", // DataLimitReached
+        L"సర్వర్ బిజీగా ఉంది. {0} సెకన్ల తర్వాత మళ్లీ ప్రయత్నించండి.", // SpeedBusy
+        L"సేవలు", // Services
+        L"నడుస్తోంది", // ServiceRunning
+        L"పాజ్ చేయబడింది", // ServicePaused
+        L"వేచి ఉంది…", // ServicePending
+        L"ప్రారంభించు", // ServiceStart
+        L"పునఃప్రారంభించు", // ServiceRestart
+        L"సరిపోలే సేవలు లేవు", // NoServices
+        L"వివరాలను కాపీ చేయి", // CopyDetails
+        L"ప్రారంభించే మార్గం కనుగొనబడలేదు", // NotLaunchable
+        L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలలో నిర్వహించు", // ManageInstalled
+        L"ఇన్\u200cస్టాల్ చేసిన యాప్", // InstalledApp
     }},
     {L"th", {
         L"ค้นหาทุกอย่าง", // SearchAnything
@@ -5558,6 +7360,42 @@ inline constexpr Locale kLocales[] = {
         L"ข้อผิดพลาด", // Error
         L"เครือข่ายย่อย", // Subnet
         L"เกตเวย์", // Gateway
+        L"สภาพอากาศ", // Weather
+        L"สกุลเงิน", // Currency
+        L"คริปโต", // Crypto
+        L"กำลังโหลด…", // OnlineLoading
+        L"ไม่สามารถโหลดข้อมูลได้ โปรดลองอีกครั้งในอีกสักครู่", // OnlineUnavailable
+        L"ปิดการ์ดออนไลน์อยู่ในการตั้งค่า", // OnlineDisabled
+        L"ข้อมูลที่แคชไว้", // Cached
+        L"วันนี้", // Today
+        L"ทดสอบความเร็วอินเทอร์เน็ต", // SpeedTest
+        L"ความหน่วง", // Latency
+        L"ดาวน์โหลด", // Download
+        L"อัปโหลด", // Upload
+        L"พร้อม", // TestReady
+        L"เสร็จสิ้น", // TestComplete
+        L"หยุดแล้ว", // TestStopped
+        L"หยุด", // StopTest
+        L"บางคำสั่งมีชื่อซ้ำกัน", // CommandNameConflict
+        L"ตั้งชื่อเครื่องมือและ /คำสั่งที่กำหนดเองแต่ละรายการให้ต่างกันในการตั้งค่า", // CommandNameConflictHint
+        L"การใช้ฮาร์ดแวร์", // HardwareUsage
+        L"หน่วยความจำ", // MemoryUsage
+        L"กิจกรรมดิสก์", // DiskUsage
+        L"การรับส่งข้อมูลเครือข่าย", // NetworkTraffic
+        L"กำลังรอตัวนับหรือไม่พร้อมใช้งาน", // MetricsUnavailable
+        L"ถึงขีดจำกัดข้อมูลทดสอบแล้ว", // DataLimitReached
+        L"เซิร์ฟเวอร์ไม่ว่าง โปรดลองอีกครั้งใน {0} วินาที", // SpeedBusy
+        L"บริการ", // Services
+        L"กำลังทำงาน", // ServiceRunning
+        L"หยุดชั่วคราว", // ServicePaused
+        L"กำลังรอ…", // ServicePending
+        L"เริ่ม", // ServiceStart
+        L"เริ่มใหม่", // ServiceRestart
+        L"ไม่พบบริการที่ตรงกัน", // NoServices
+        L"คัดลอกรายละเอียด", // CopyDetails
+        L"ไม่พบตัวเรียกใช้", // NotLaunchable
+        L"จัดการในแอปที่ติดตั้ง", // ManageInstalled
+        L"แอปที่ติดตั้ง", // InstalledApp
     }},
     {L"tr", {
         L"Her şeyi ara", // SearchAnything
@@ -5664,6 +7502,42 @@ inline constexpr Locale kLocales[] = {
         L"Hata", // Error
         L"Alt ağ", // Subnet
         L"Ağ geçidi", // Gateway
+        L"Hava durumu", // Weather
+        L"Para birimi", // Currency
+        L"Kripto", // Crypto
+        L"Yükleniyor…", // OnlineLoading
+        L"Veriler yüklenemedi. Biraz sonra yeniden deneyin.", // OnlineUnavailable
+        L"Çevrimiçi kartlar ayarlarda kapalı.", // OnlineDisabled
+        L"Önbellekten", // Cached
+        L"Bugün", // Today
+        L"İnternet hız testi", // SpeedTest
+        L"Gecikme", // Latency
+        L"İndirme", // Download
+        L"Yükleme", // Upload
+        L"Hazır", // TestReady
+        L"Tamamlandı", // TestComplete
+        L"Durduruldu", // TestStopped
+        L"Durdur", // StopTest
+        L"Bazı komutlar aynı ada sahip.", // CommandNameConflict
+        L"Ayarlarda her araca ve özel /komuta farklı bir ad verin.", // CommandNameConflictHint
+        L"Donanım kullanımı", // HardwareUsage
+        L"Bellek", // MemoryUsage
+        L"Disk etkinliği", // DiskUsage
+        L"Ağ trafiği", // NetworkTraffic
+        L"Sayaçlar bekleniyor veya kullanılamıyor", // MetricsUnavailable
+        L"Test verisi sınırına ulaşıldı", // DataLimitReached
+        L"Sunucu meşgul. {0} saniye sonra tekrar deneyin.", // SpeedBusy
+        L"Hizmetler", // Services
+        L"Çalışıyor", // ServiceRunning
+        L"Duraklatıldı", // ServicePaused
+        L"Bekliyor…", // ServicePending
+        L"Başlat", // ServiceStart
+        L"Yeniden başlat", // ServiceRestart
+        L"Eşleşen hizmet yok", // NoServices
+        L"Ayrıntıları kopyala", // CopyDetails
+        L"Başlatıcı bulunamadı", // NotLaunchable
+        L"Yüklü uygulamalarda yönet", // ManageInstalled
+        L"Yüklü uygulama", // InstalledApp
     }},
     {L"uk", {
         L"Шукати все", // SearchAnything
@@ -5770,6 +7644,42 @@ inline constexpr Locale kLocales[] = {
         L"Помилка", // Error
         L"Підмережа", // Subnet
         L"Шлюз", // Gateway
+        L"Погода", // Weather
+        L"Валюта", // Currency
+        L"Криптовалюти", // Crypto
+        L"Завантаження…", // OnlineLoading
+        L"Не вдалося завантажити дані. Спробуйте знову трохи пізніше.", // OnlineUnavailable
+        L"Онлайн-картки вимкнено в налаштуваннях.", // OnlineDisabled
+        L"Із кешу", // Cached
+        L"Сьогодні", // Today
+        L"Перевірка швидкості інтернету", // SpeedTest
+        L"Затримка", // Latency
+        L"Завантаження", // Download
+        L"Надсилання", // Upload
+        L"Готово", // TestReady
+        L"Завершено", // TestComplete
+        L"Зупинено", // TestStopped
+        L"Зупинити", // StopTest
+        L"Деякі команди мають однакові назви.", // CommandNameConflict
+        L"Задайте різні назви кожному інструменту та власній /команді в налаштуваннях.", // CommandNameConflictHint
+        L"Використання обладнання", // HardwareUsage
+        L"Пам’ять", // MemoryUsage
+        L"Активність диска", // DiskUsage
+        L"Мережевий трафік", // NetworkTraffic
+        L"Очікування лічильників або недоступно", // MetricsUnavailable
+        L"Досягнуто обмеження тестових даних", // DataLimitReached
+        L"Сервер зайнятий. Повторіть спробу через {0} секунд.", // SpeedBusy
+        L"Служби", // Services
+        L"Виконується", // ServiceRunning
+        L"Призупинена", // ServicePaused
+        L"Очікування…", // ServicePending
+        L"Запустити", // ServiceStart
+        L"Перезапустити", // ServiceRestart
+        L"Немає відповідних служб", // NoServices
+        L"Копіювати відомості", // CopyDetails
+        L"Спосіб запуску не знайдено", // NotLaunchable
+        L"Керувати у встановлених програмах", // ManageInstalled
+        L"Установлена програма", // InstalledApp
     }},
     {L"vi", {
         L"Tìm kiếm mọi thứ", // SearchAnything
@@ -5876,6 +7786,42 @@ inline constexpr Locale kLocales[] = {
         L"Lỗi", // Error
         L"Mạng con", // Subnet
         L"Cổng mạng", // Gateway
+        L"Thời tiết", // Weather
+        L"Tiền tệ", // Currency
+        L"Tiền mã hóa", // Crypto
+        L"Đang tải…", // OnlineLoading
+        L"Không thể tải dữ liệu. Hãy thử lại sau ít phút.", // OnlineUnavailable
+        L"Thẻ trực tuyến đã tắt trong cài đặt.", // OnlineDisabled
+        L"Đã lưu đệm", // Cached
+        L"Hôm nay", // Today
+        L"Kiểm tra tốc độ Internet", // SpeedTest
+        L"Độ trễ", // Latency
+        L"Tải xuống", // Download
+        L"Tải lên", // Upload
+        L"Sẵn sàng", // TestReady
+        L"Hoàn tất", // TestComplete
+        L"Đã dừng", // TestStopped
+        L"Dừng", // StopTest
+        L"Một số lệnh có cùng tên.", // CommandNameConflict
+        L"Đặt tên khác nhau cho mỗi công cụ và /lệnh tùy chỉnh trong phần cài đặt.", // CommandNameConflictHint
+        L"Mức sử dụng phần cứng", // HardwareUsage
+        L"Bộ nhớ", // MemoryUsage
+        L"Hoạt động ổ đĩa", // DiskUsage
+        L"Lưu lượng mạng", // NetworkTraffic
+        L"Đang chờ bộ đếm hoặc không khả dụng", // MetricsUnavailable
+        L"Đã đạt giới hạn dữ liệu kiểm tra", // DataLimitReached
+        L"Máy chủ bận. Hãy thử lại sau {0} giây.", // SpeedBusy
+        L"Dịch vụ", // Services
+        L"Đang chạy", // ServiceRunning
+        L"Đã tạm dừng", // ServicePaused
+        L"Đang chờ…", // ServicePending
+        L"Bắt đầu", // ServiceStart
+        L"Khởi động lại", // ServiceRestart
+        L"Không có dịch vụ phù hợp", // NoServices
+        L"Sao chép chi tiết", // CopyDetails
+        L"Không tìm thấy trình khởi chạy", // NotLaunchable
+        L"Quản lý trong Ứng dụng đã cài đặt", // ManageInstalled
+        L"Ứng dụng đã cài đặt", // InstalledApp
     }},
     {L"zh-hans", {
         L"搜索所有内容", // SearchAnything
@@ -5982,6 +7928,42 @@ inline constexpr Locale kLocales[] = {
         L"错误", // Error
         L"子网", // Subnet
         L"网关", // Gateway
+        L"天气", // Weather
+        L"货币", // Currency
+        L"加密货币", // Crypto
+        L"正在加载…", // OnlineLoading
+        L"无法加载数据，请稍后重试。", // OnlineUnavailable
+        L"在线卡片已在设置中关闭。", // OnlineDisabled
+        L"已缓存", // Cached
+        L"今天", // Today
+        L"网络测速", // SpeedTest
+        L"延迟", // Latency
+        L"下载", // Download
+        L"上传", // Upload
+        L"就绪", // TestReady
+        L"完成", // TestComplete
+        L"已停止", // TestStopped
+        L"停止", // StopTest
+        L"某些命令的名称相同。", // CommandNameConflict
+        L"请在设置中为每个工具和自定义 /命令指定不同的名称。", // CommandNameConflictHint
+        L"硬件使用情况", // HardwareUsage
+        L"内存", // MemoryUsage
+        L"磁盘活动", // DiskUsage
+        L"网络流量", // NetworkTraffic
+        L"正在等待计数器或不可用", // MetricsUnavailable
+        L"已达到测试数据上限", // DataLimitReached
+        L"服务器繁忙。请在 {0} 秒后重试。", // SpeedBusy
+        L"服务", // Services
+        L"正在运行", // ServiceRunning
+        L"已暂停", // ServicePaused
+        L"处理中…", // ServicePending
+        L"启动", // ServiceStart
+        L"重新启动", // ServiceRestart
+        L"没有匹配的服务", // NoServices
+        L"复制详细信息", // CopyDetails
+        L"未找到启动入口", // NotLaunchable
+        L"在已安装的应用中管理", // ManageInstalled
+        L"已安装的应用", // InstalledApp
     }},
     {L"zh-hant", {
         L"搜尋所有內容", // SearchAnything
@@ -6088,6 +8070,42 @@ inline constexpr Locale kLocales[] = {
         L"錯誤", // Error
         L"子網路", // Subnet
         L"閘道", // Gateway
+        L"天氣", // Weather
+        L"貨幣", // Currency
+        L"加密貨幣", // Crypto
+        L"正在載入…", // OnlineLoading
+        L"無法載入資料，請稍後再試。", // OnlineUnavailable
+        L"線上卡片已在設定中關閉。", // OnlineDisabled
+        L"已快取", // Cached
+        L"今天", // Today
+        L"網路測速", // SpeedTest
+        L"延遲", // Latency
+        L"下載", // Download
+        L"上傳", // Upload
+        L"就緒", // TestReady
+        L"完成", // TestComplete
+        L"已停止", // TestStopped
+        L"停止", // StopTest
+        L"某些指令的名稱相同。", // CommandNameConflict
+        L"請在設定中為每個工具和自訂 /指令指定不同的名稱。", // CommandNameConflictHint
+        L"硬體使用情況", // HardwareUsage
+        L"記憶體", // MemoryUsage
+        L"磁碟活動", // DiskUsage
+        L"網路流量", // NetworkTraffic
+        L"正在等待計數器或無法使用", // MetricsUnavailable
+        L"已達到測試資料上限", // DataLimitReached
+        L"伺服器忙碌中。請在 {0} 秒後重試。", // SpeedBusy
+        L"服務", // Services
+        L"執行中", // ServiceRunning
+        L"已暫停", // ServicePaused
+        L"處理中…", // ServicePending
+        L"啟動", // ServiceStart
+        L"重新啟動", // ServiceRestart
+        L"沒有符合的服務", // NoServices
+        L"複製詳細資料", // CopyDetails
+        L"找不到啟動方式", // NotLaunchable
+        L"在已安裝的應用程式中管理", // ManageInstalled
+        L"已安裝的應用程式", // InstalledApp
     }},
 };
 inline std::atomic<const Locale*> g_locale{&kLocales[0]};
@@ -6171,6 +8189,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Author", Key::Author},
         {L"Base Radix", Key::BaseRadix},
         {L"Bitrate", Key::Bitrate},
+        {L"Cached", Key::Cached},
         {L"Calculator", Key::Calculator},
         {L"Camera", Key::Camera},
         {L"Check files or refine your query", Key::Refine},
@@ -6178,25 +8197,32 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Close", Key::Close},
         {L"Command Prompt", Key::CommandPrompt},
         {L"Company", Key::Company},
+        {L"Complete", Key::TestComplete},
         {L"Contains", Key::Contains},
         {L"Conversion", Key::Conversion},
         {L"Copy", Key::Copy},
         {L"Copy command", Key::CopyCommand},
+        {L"Copy details", Key::CopyDetails},
         {L"Copy name", Key::CopyName},
         {L"Copy path", Key::CopyPath},
         {L"Copy search link", Key::CopySearchLink},
         {L"Copy to clipboard", Key::CopyClipboard},
         {L"Copy: {0}", Key::CopyValue},
         {L"Could not find the Windows system directory.", Key::SystemDirMissing},
+        {L"Could not load data. Try again shortly.", Key::OnlineUnavailable},
         {L"Could not uninstall {0}.\n\n{1}", Key::UninstallFailed},
         {L"Create desktop shortcut", Key::DesktopShortcut},
         {L"Created", Key::Created},
+        {L"Crypto", Key::Crypto},
+        {L"Currency", Key::Currency},
         {L"Custom command", Key::CustomCommand},
         {L"Cut", Key::Cut},
         {L"Data", Key::Data},
         {L"Data rate", Key::DataRate},
         {L"Description", Key::Description},
         {L"Dimensions", Key::Dimensions},
+        {L"Disk activity", Key::DiskUsage},
+        {L"Download", Key::Download},
         {L"Energy", Key::Energy},
         {L"Error", Key::Error},
         {L"Everything (not running)", Key::NotRunning},
@@ -6210,24 +8236,38 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Frame rate", Key::FrameRate},
         {L"Frequency", Key::Frequency},
         {L"Gateway", Key::Gateway},
+        {L"Give each Quick Tool and custom /command a different name in settings.", Key::CommandNameConflictHint},
+        {L"Hardware usage", Key::HardwareUsage},
+        {L"Installed app", Key::InstalledApp},
+        {L"Internet speed test", Key::SpeedTest},
         {L"It is not installed for this account, or it is part of Windows.", Key::ProtectedApp},
         {L"Items", Key::Items},
+        {L"Latency", Key::Latency},
         {L"Length", Key::Length},
+        {L"Loading…", Key::OnlineLoading},
+        {L"Manage in Installed apps", Key::ManageInstalled},
         {L"Mass", Key::Mass},
         {L"Matches", Key::Matches},
+        {L"Memory", Key::MemoryUsage},
         {L"Menu", Key::Menu},
         {L"Modified", Key::Modified},
         {L"Network Interfaces", Key::Network},
+        {L"Network traffic", Key::NetworkTraffic},
         {L"Next", Key::Next},
         {L"No active network interfaces", Key::NoNetwork},
+        {L"No launcher found", Key::NotLaunchable},
         {L"No matching applications", Key::NoApps},
         {L"No matching files", Key::NoFiles},
+        {L"No matching services", Key::NoServices},
         {L"Number bases", Key::BaseRadix},
+        {L"Online cards are turned off in settings.", Key::OnlineDisabled},
         {L"Open", Key::Open},
         {L"Open file location", Key::OpenLocation},
         {L"Open in terminal", Key::Terminal},
         {L"Open {0}", Key::OpenService},
         {L"Pages", Key::Pages},
+        {L"Paused", Key::ServicePaused},
+        {L"Pending…", Key::ServicePending},
         {L"Power", Key::Power},
         {L"Press Enter to copy", Key::CopyHint},
         {L"Press Enter to copy IP", Key::CopyIpHint},
@@ -6235,34 +8275,48 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Press Enter to search in browser", Key::BrowserHint},
         {L"Pressure", Key::Pressure},
         {L"Properties", Key::Properties},
+        {L"Ready", Key::TestReady},
+        {L"Restart", Key::ServiceRestart},
         {L"Run", Key::Run},
         {L"Run as administrator", Key::RunAdmin},
+        {L"Running", Key::ServiceRunning},
         {L"Scientific notation", Key::Scientific},
         {L"Search Anything", Key::SearchAnything},
         {L"Search in browser", Key::SearchBrowser},
         {L"Search the web", Key::SearchWeb},
         {L"Search {0} for “{1}”", Key::SearchService},
         {L"Select", Key::Select},
+        {L"Server busy. Try again in {0} seconds.", Key::SpeedBusy},
+        {L"Services", Key::Services},
         {L"Settings", Key::Settings},
         {L"Shell arguments must contain {command} once as a separate, unquoted argument.", Key::ShellArguments},
         {L"Shell not found: {0}. Check the command settings.", Key::ShellMissing},
         {L"Shortcut", Key::Shortcut},
         {L"Shown", Key::Shown},
         {L"Size", Key::Size},
+        {L"Some commands have the same name.", Key::CommandNameConflict},
         {L"Speed", Key::Speed},
+        {L"Start", Key::ServiceStart},
+        {L"Stop", Key::StopTest},
+        {L"Stopped", Key::TestStopped},
         {L"Subnet", Key::Subnet},
         {L"Suggested apps", Key::SuggestedApps},
         {L"Taken", Key::Taken},
         {L"Temperature", Key::Temperature},
+        {L"Test data limit reached", Key::DataLimitReached},
         {L"This command exceeds the Windows command-line length limit.", Key::CommandTooLong},
         {L"Time", Key::Time},
         {L"Title", Key::Title},
+        {L"Today", Key::Today},
         {L"Type", Key::Type},
         {L"Type to search files", Key::TypeFiles},
         {L"Uninstall", Key::Uninstall},
         {L"Unit Converter", Key::Converter},
+        {L"Upload", Key::Upload},
         {L"Version", Key::Version},
         {L"Volume", Key::Volume},
+        {L"Waiting for counters or unavailable", Key::MetricsUnavailable},
+        {L"Weather", Key::Weather},
         {L"Web Search", Key::WebSearch},
         {L"bytes", Key::Bytes},
         {L"{0} and its related info will be uninstalled.", Key::UninstallPrompt},
@@ -7356,6 +9410,23 @@ inline bool IconToBgra(HICON icon, int size, std::vector<BYTE>* out) {
     return drawn != FALSE;
 }
 
+// Windows' generic executable icon, shared by every app without its own icon.
+// Cache the pixels per display size instead of asking the shell for each row.
+inline const std::vector<BYTE>& DefaultExecutableIcon(int size) {
+    static std::mutex mutex;
+    static std::map<int,std::vector<BYTE>> cache;
+    std::lock_guard lock(mutex);
+    auto [entry,inserted]=cache.try_emplace(size);
+    if(inserted) {
+        SHSTOCKICONINFO stock{sizeof(stock)};
+        if(SUCCEEDED(SHGetStockIconInfo(SIID_APPLICATION,SHGSI_ICON|SHGSI_LARGEICON,&stock)) && stock.hIcon) {
+            IconToBgra(stock.hIcon,size,&entry->second);
+            DestroyIcon(stock.hIcon);
+        }
+    }
+    return entry->second;
+}
+
 // The side of a square BGRA icon buffer, or 0 if it is not one.
 inline int IconSide(const std::vector<BYTE>& pixels) {
     const int side = static_cast<int>(std::lround(std::sqrt(pixels.size() / 4.0)));
@@ -8309,6 +10380,280 @@ class NativeCatalog {
 #include <mutex>
 #include <sstream>
 
+// Installed products can exist without any shell launch entry (for example
+// an Office suite or a language pack). Metadata never supplies a launch target.
+namespace installed {
+struct Record {
+    std::wstring id,name,publisher,version,icon,family;
+    std::wstring packageFullName;
+    std::vector<std::wstring> aliases;
+    std::wstring location, registryKey;
+    HKEY registryHive=nullptr;
+    REGSAM registryView=0;
+    std::wstring launcher;
+};
+struct Key {
+    HKEY value=nullptr;
+    ~Key(){if(value)RegCloseKey(value);}
+};
+std::wstring String(HKEY key,const wchar_t* name) {
+    DWORD type=0,bytes=0;
+    if(RegQueryValueExW(key,name,nullptr,&type,nullptr,&bytes)!=ERROR_SUCCESS ||
+       (type!=REG_SZ && type!=REG_EXPAND_SZ) || bytes>65536 || bytes%sizeof(wchar_t))return {};
+    std::vector<wchar_t> text(bytes/sizeof(wchar_t)+1,0);
+    if(RegQueryValueExW(key,name,nullptr,&type,reinterpret_cast<BYTE*>(text.data()),&bytes)!=ERROR_SUCCESS)return {};
+    return text.data();
+}
+DWORD Number(HKEY key,const wchar_t* name) {
+    DWORD value=0,bytes=sizeof(value);RegGetValueW(key,nullptr,name,RRF_RT_REG_DWORD,nullptr,&value,&bytes);return value;
+}
+std::wstring CleanIcon(std::wstring value) {
+    if(value.empty())return {};
+    if(value.front()==L'"') {const auto quote=value.find(L'"',1);if(quote==value.npos)return {};value=value.substr(1,quote-1);}
+    else if(const auto comma=value.find_last_of(L',');comma!=value.npos) {
+        auto index=std::wstring_view(value).substr(comma+1);
+        if(!index.empty() && std::all_of(index.begin(),index.end(),[](wchar_t c){return c==L'-'||c==L'+'||iswdigit(c)||iswspace(c);}))value.resize(comma);
+    }
+    const auto first=value.find_first_not_of(L" \t"),last=value.find_last_not_of(L" \t");
+    if(first==value.npos)return {};value=value.substr(first,last-first+1);
+    wchar_t expanded[32768]{};const auto count=ExpandEnvironmentStringsW(value.c_str(),expanded,std::size(expanded));
+    if(!count || count>std::size(expanded))return {};
+    value=expanded;
+    if(value.size()<3 || value[1]!=L':' || value[2]!=L'\\' || PathIsNetworkPathW(value.c_str()))return {};
+    return value;
+}
+std::wstring Location(std::wstring value) {
+    const auto first=value.find_first_not_of(L" \t"),last=value.find_last_not_of(L" \t");
+    if(first==value.npos)return {};value=value.substr(first,last-first+1);
+    if(value.front()==L'"') {if(value.size()<2 || value.back()!=L'"')return {};value=value.substr(1,value.size()-2);}
+    wchar_t expanded[32768]{};const auto n=ExpandEnvironmentStringsW(value.c_str(),expanded,std::size(expanded));
+    if(!n || n>std::size(expanded))return {};value=expanded;
+    if(value.size()<3 || value[1]!=L':' || value[2]!=L'\\' || PathIsNetworkPathW(value.c_str()))return {};
+    const auto attributes=GetFileAttributesW(value.c_str());
+    return attributes!=INVALID_FILE_ATTRIBUTES && (attributes&FILE_ATTRIBUTE_DIRECTORY)?value:std::wstring();
+}
+bool Visible(std::wstring_view name,DWORD systemComponent,std::wstring_view parent,std::wstring_view release) {
+    return !name.empty() && !systemComponent && parent.empty() && release!=L"Update" && release!=L"Hotfix" && release!=L"Security Update";
+}
+std::wstring LauncherName(std::wstring value,std::wstring_view version={}) {
+    for(auto& c:value)c=static_cast<wchar_t>(towlower(c));
+    while(!value.empty() && iswspace(value.back()))value.pop_back();
+    for(const auto* suffix:{L" (x64)",L" (x86)",L" (64-bit)",L" (32-bit)"})
+        if(value.ends_with(suffix)){value.resize(value.size()-wcslen(suffix));break;}
+    if(!version.empty()) {
+        std::wstring suffix=L" ";for(auto c:version)suffix+=static_cast<wchar_t>(towlower(c));
+        if(value.ends_with(suffix))value.resize(value.size()-suffix.size());
+    }
+    std::erase_if(value,[](wchar_t c){return !iswalnum(c);});return value;
+}
+std::wstring ParentFolder(std::wstring path) {
+    while(path.size()>3 && path.back()==L'\\')path.pop_back();
+    const auto slash=path.find_last_of(L'\\');
+    return slash==path.npos?std::wstring():path.substr(0,slash);
+}
+bool AuxiliaryExecutable(std::wstring name) {
+    for(auto& c:name)c=static_cast<wchar_t>(towlower(c));
+    for(const auto* word:{L"unins",L"setup",L"install",L"update",L"repair",L"service",L"helper",L"crash",L"report",L"bootstrap"})
+        if(name.find(word)!=name.npos)return true;
+    return false;
+}
+bool GuiExecutable(const std::wstring& path) {
+    const auto file=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,0,nullptr);
+    if(file==INVALID_HANDLE_VALUE)return false;
+    const auto read=[&](void* data,DWORD bytes){DWORD got=0;return ReadFile(file,data,bytes,&got,nullptr) && got==bytes;};
+    IMAGE_DOS_HEADER dos{};bool ok=read(&dos,sizeof(dos)) && dos.e_magic==IMAGE_DOS_SIGNATURE && dos.e_lfanew>=sizeof(dos) && dos.e_lfanew<=1024*1024;
+    LARGE_INTEGER offset{};offset.QuadPart=dos.e_lfanew;
+    DWORD signature=0;IMAGE_FILE_HEADER header{};WORD magic=0;bool gui=false;
+    if(ok && SetFilePointerEx(file,offset,nullptr,FILE_BEGIN) && read(&signature,sizeof(signature)) && signature==IMAGE_NT_SIGNATURE &&
+       read(&header,sizeof(header)) && !(header.Characteristics&IMAGE_FILE_DLL) && (header.Characteristics&IMAGE_FILE_EXECUTABLE_IMAGE)) {
+        offset.QuadPart=dos.e_lfanew+sizeof(signature)+sizeof(header);
+        if(read(&magic,sizeof(magic)) && SetFilePointerEx(file,offset,nullptr,FILE_BEGIN)) {
+            if(magic==IMAGE_NT_OPTIONAL_HDR32_MAGIC && header.SizeOfOptionalHeader>=sizeof(IMAGE_OPTIONAL_HEADER32)) {
+                IMAGE_OPTIONAL_HEADER32 optional{};gui=read(&optional,sizeof(optional)) && optional.Subsystem==IMAGE_SUBSYSTEM_WINDOWS_GUI;
+            } else if(magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC && header.SizeOfOptionalHeader>=sizeof(IMAGE_OPTIONAL_HEADER64)) {
+                IMAGE_OPTIONAL_HEADER64 optional{};gui=read(&optional,sizeof(optional)) && optional.Subsystem==IMAGE_SUBSYSTEM_WINDOWS_GUI;
+            }
+        }
+    }
+    CloseHandle(file);return gui;
+}
+bool LauncherProductMatches(const std::wstring& path,const std::wstring& wanted,std::wstring_view version) {
+    DWORD unused=0;const auto size=GetFileVersionInfoSizeW(path.c_str(),&unused);
+    if(!size || size>4*1024*1024)return false;
+    std::vector<BYTE> data(size);
+    if(!GetFileVersionInfoW(path.c_str(),0,size,data.data()))return false;
+    struct Translation {WORD language,codepage;};Translation* languages=nullptr;UINT bytes=0;
+    if(!VerQueryValueW(data.data(),L"\\VarFileInfo\\Translation",reinterpret_cast<void**>(&languages),&bytes) || !languages || bytes<sizeof(Translation))return false;
+    for(size_t i=0;i<std::min<size_t>(bytes/sizeof(Translation),32);++i)for(const auto* key:{L"ProductName",L"FileDescription"}) {
+        wchar_t query[96]{};swprintf_s(query,L"\\StringFileInfo\\%04x%04x\\%ls",languages[i].language,languages[i].codepage,key);
+        wchar_t* text=nullptr;UINT length=0;
+        if(VerQueryValueW(data.data(),query,reinterpret_cast<void**>(&text),&length) && text && length && length<=4096 &&
+           text[length-1]==0 && LauncherName(std::wstring(text,length-1),version)==wanted)return true;
+    }
+    return false;
+}
+bool ProductFolder(const std::wstring& folder) {
+    if(folder.size()<=3)return false;
+    for(const auto* known:{&FOLDERID_Windows,&FOLDERID_ProgramFiles,&FOLDERID_ProgramFilesX86,&FOLDERID_ProgramData,&FOLDERID_Profile,&FOLDERID_LocalAppData,&FOLDERID_RoamingAppData}) {
+        PWSTR value=nullptr;
+        if(SUCCEEDED(SHGetKnownFolderPath(*known,0,nullptr,&value)) && value) {
+            const std::wstring root=value;CoTaskMemFree(value);
+            if(_wcsicmp(folder.c_str(),root.c_str())==0 ||
+               (*known==FOLDERID_Windows && folder.size()>root.size() && folder[root.size()]==L'\\' && _wcsnicmp(folder.c_str(),root.c_str(),root.size())==0))return false;
+        }
+    }
+    return true;
+}
+std::wstring FindLauncher(const Record& record) {
+    if(!record.family.empty() || !record.packageFullName.empty())return {};
+    const auto wanted=LauncherName(record.name,record.version);
+    if(wanted.size()<3)return {};
+    auto folder=Location(record.location);
+    if(folder.empty()) {
+        folder=Location(ParentFolder(record.icon));
+        const auto leaf=folder.substr(folder.find_last_of(L'\\')+1);
+        // An icon (often uninstall.exe) only identifies a folder, never a
+        // launch target. Shared installer/icon folders cannot supply a target.
+        if(folder.empty() || LauncherName(leaf,record.version)!=wanted)return {};
+    }
+    while(folder.size()>3 && folder.back()==L'\\')folder.pop_back();
+    if(!ProductFolder(folder))return {};
+    WIN32_FIND_DATAW entry{};const auto find=FindFirstFileW((folder+L"\\*.exe").c_str(),&entry);
+    if(find==INVALID_HANDLE_VALUE)return {};
+    std::wstring candidate;bool complete=false;size_t count=0;
+    do {
+        if(++count>128){candidate.clear();break;}
+        const std::wstring filename=entry.cFileName;
+        if(!(entry.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)) && filename.size()>4 &&
+           _wcsicmp(filename.c_str()+filename.size()-4,L".exe")==0 && !AuxiliaryExecutable(filename) &&
+           LauncherName(filename.substr(0,filename.size()-4))==wanted) {
+            const auto path=folder+L"\\"+filename;
+            if(GuiExecutable(path) && LauncherProductMatches(path,wanted,record.version)) {
+                if(!candidate.empty()){candidate.clear();break;}
+                candidate=path;
+            }
+        }
+        if(!FindNextFileW(find,&entry)){complete=GetLastError()==ERROR_NO_MORE_FILES;break;}
+    }while(true);
+    FindClose(find);return complete?candidate:std::wstring();
+}
+std::vector<Record> ReadPrograms() {
+    std::vector<Record> records;std::set<std::wstring> seen;
+    for(const auto hive:{HKEY_LOCAL_MACHINE,HKEY_CURRENT_USER})for(const auto view:{KEY_WOW64_64KEY,KEY_WOW64_32KEY}) {
+        Key root;
+        if(RegOpenKeyExW(hive,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",0,KEY_READ|view,&root.value)!=ERROR_SUCCESS)continue;
+        for(DWORD index=0;index<32768;++index) {
+            wchar_t name[256]{};DWORD length=std::size(name);
+            const auto result=RegEnumKeyExW(root.value,index,name,&length,nullptr,nullptr,nullptr,nullptr);
+            if(result==ERROR_NO_MORE_ITEMS)break;
+            if(result!=ERROR_SUCCESS)continue;
+            Key entry;if(RegOpenKeyExW(root.value,name,0,KEY_READ|view,&entry.value)!=ERROR_SUCCESS)continue;
+            Record record;record.name=String(entry.value,L"DisplayName");
+            if(!Visible(record.name,Number(entry.value,L"SystemComponent"),String(entry.value,L"ParentKeyName"),String(entry.value,L"ReleaseType")))continue;
+            record.publisher=String(entry.value,L"Publisher");record.version=String(entry.value,L"DisplayVersion");
+            record.icon=CleanIcon(String(entry.value,L"DisplayIcon"));
+            record.location=Location(String(entry.value,L"InstallLocation"));
+            record.launcher=FindLauncher(record);
+            if(record.location.empty() && !record.launcher.empty())record.location=ParentFolder(record.launcher);
+            record.registryKey=name;record.registryHive=hive;record.registryView=view;
+            // HKCU's two registry views may point at the same registration.
+            const auto identity=std::wstring(hive==HKEY_LOCAL_MACHINE?L"machine:":L"user:")+name+L"\n"+record.name+L"\n"+record.version+L"\n"+record.publisher;
+            if(!seen.insert(identity).second)continue;
+            record.id=L"program:"+identity+L"\n"+std::to_wstring(view);records.push_back(std::move(record));
+        }
+    }
+    return records;
+}
+std::wstring PackageText(std::wstring value,const std::wstring& packageName,const std::wstring& fullName) {
+    if(!value.starts_with(L"ms-resource:"))return value;
+    auto path=value.substr(12);
+    std::vector<std::wstring> resources;
+    if(path.starts_with(L"///"))resources.push_back(L"ms-resource://"+packageName+path.substr(2));
+    else if(path.starts_with(L"//"))resources.push_back(value);
+    else {
+        while(path.starts_with(L"/"))path.erase(0,1);
+        resources.push_back(L"ms-resource://"+packageName+L"/"+path);
+        if(path.find(L'/')==path.npos)resources.push_back(L"ms-resource://"+packageName+L"/resources/"+path);
+    }
+    for(const auto& resource:resources) {
+        const auto indirect=L"@{"+fullName+L"? "+resource+L"}";
+        wchar_t resolved[2048]{};
+        if(SUCCEEDED(SHLoadIndirectString(indirect.c_str(),resolved,std::size(resolved),nullptr)) &&
+           *resolved && std::wstring_view(resolved)!=indirect)return resolved;
+    }
+    return {};
+}
+// Hidden application entries still have friendly VisualElements metadata.
+// GetAppListEntries excludes them, but Installed apps displays these names.
+std::wstring VisualName(IStream* stream,const std::wstring& packageName,const std::wstring& fullName) {
+    winrt::com_ptr<IXmlReader> reader;
+    if(FAILED(CreateXmlReader(__uuidof(IXmlReader),reader.put_void(),nullptr)) ||
+       FAILED(reader->SetProperty(XmlReaderProperty_DtdProcessing,DtdProcessing_Prohibit)) ||
+       FAILED(reader->SetProperty(XmlReaderProperty_MaxElementDepth,32)) ||
+       FAILED(reader->SetInput(stream)))return {};
+    std::set<std::wstring> names;
+    XmlNodeType type{};HRESULT hr;size_t nodes=0;
+    while((hr=reader->Read(&type))==S_OK) {
+        if(++nodes>10000)return {};
+        if(type!=XmlNodeType_Element)continue;
+        LPCWSTR tag=nullptr;UINT length=0,depth=0;
+        if(FAILED(reader->GetLocalName(&tag,&length)) || FAILED(reader->GetDepth(&depth)))return {};
+        if(depth!=3 || std::wstring_view(tag,length)!=L"VisualElements")continue;
+        if(reader->MoveToAttributeByName(L"DisplayName",nullptr)!=S_OK)continue;
+        LPCWSTR raw=nullptr;
+        if(SUCCEEDED(reader->GetValue(&raw,&length)) && length && length<2048) {
+            auto name=PackageText(std::wstring(raw,length),packageName,fullName);
+            if(!name.empty())names.insert(std::move(name));
+        }
+        reader->MoveToElement();
+    }
+    // A suite with different application names keeps its package-level title.
+    return SUCCEEDED(hr) && names.size()==1 ? *names.begin() : std::wstring();
+}
+std::wstring VisualName(const std::wstring& root,const std::wstring& packageName,const std::wstring& fullName) {
+    const auto file=root+L"\\AppxManifest.xml";
+    WIN32_FILE_ATTRIBUTE_DATA attrs{};
+    if(!GetFileAttributesExW(file.c_str(),GetFileExInfoStandard,&attrs) || attrs.nFileSizeHigh ||
+       attrs.nFileSizeLow>2*1024*1024)return {};
+    winrt::com_ptr<IStream> stream;
+    if(FAILED(SHCreateStreamOnFileEx(file.c_str(),STGM_READ|STGM_SHARE_DENY_NONE,
+                                    FILE_ATTRIBUTE_NORMAL,FALSE,nullptr,stream.put())))return {};
+    return VisualName(stream.get(),packageName,fullName);
+}
+std::vector<Record> ReadPackages() {
+    std::vector<Record> records;
+    try {
+        namespace model=winrt::Windows::ApplicationModel;
+        winrt::Windows::Management::Deployment::PackageManager manager;
+        std::set<std::wstring> seen;
+        for(const auto& package:manager.FindPackagesForUser(L""))try {
+            if(package.IsFramework() || package.IsResourcePackage() || package.IsBundle() || package.SignatureKind()==model::PackageSignatureKind::System)continue;
+            Record record;record.family=package.Id().FamilyName().c_str();
+            if(!seen.insert(record.family).second)continue;
+            record.id=L"package:"+record.family;record.name=package.DisplayName().c_str();
+            if(record.name.empty() || record.name.starts_with(L"ms-resource:"))record.name=package.Id().Name().c_str();
+            record.packageFullName=package.Id().FullName().c_str();
+            const auto originalName=record.name;
+            try {
+                record.location=Location(package.InstalledLocation().Path().c_str());
+                const auto friendly=VisualName(package.InstalledLocation().Path().c_str(),package.Id().Name().c_str(),record.packageFullName);
+                if(!friendly.empty() && originalName.find_first_of(L" \t")==originalName.npos)record.name=friendly;
+            }catch(...){}
+            if(originalName!=record.name)record.aliases.push_back(originalName);
+            record.publisher=package.PublisherDisplayName().c_str();
+            const auto version=package.Id().Version();
+            record.version=std::to_wstring(version.Major)+L"."+std::to_wstring(version.Minor)+L"."+std::to_wstring(version.Build)+L"."+std::to_wstring(version.Revision);
+            records.push_back(std::move(record));
+        }catch(...){}
+    }catch(...){Wh_Log(L"installed apps: package metadata unavailable");}
+    return records;
+}
+std::vector<Record> ReadAll() {
+    auto records=ReadPrograms(),packages=ReadPackages();
+    records.insert(records.end(),std::make_move_iterator(packages.begin()),std::make_move_iterator(packages.end()));return records;
+}
+}  // namespace installed
+
 namespace apps {
 
 // PKEY_Link_TargetParsingPath. Not from propkey.h: after initguid.h, that
@@ -8345,6 +10690,12 @@ struct App {
     std::wstring area;             // Settings category or Control Panel area
     std::wstring areaLower;
     std::wstring settingArguments; // Native Settings page/target activation
+    bool installedOnly=false;
+    bool targetExists=false,linkExists=false;
+    std::wstring installedId,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
+    std::wstring installedLocation,installedFamily,installedKey;
+    HKEY installedHive=nullptr;
+    REGSAM installedView=0;
 };
 
 struct Match {
@@ -8821,6 +11172,99 @@ inline int ScoreApp(const App& app, const std::wstring& q) {
     return s;
 }
 
+inline std::wstring CatalogFilePath(std::wstring path) {
+    std::replace(path.begin(),path.end(),L'/',L'\\');
+    if(path.size()<3 || path[1]!=L':' || path[2]!=L'\\' || PathIsNetworkPathW(path.c_str()))return {};
+    wchar_t absolute[32768]{};const auto count=GetFullPathNameW(path.c_str(),std::size(absolute),absolute,nullptr);
+    if(!count || count>=std::size(absolute))return {};
+    path=ToLower(absolute);while(path.size()>3 && path.back()==L'\\')path.pop_back();return path;
+}
+inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::Record>& records) {
+    const auto launchCount=apps.size();std::set<std::wstring> added;
+    // Resolve existing shortcut paths once per catalog build. This is only an
+    // identity comparison; existing targets/arguments/icons remain untouched.
+    std::vector<std::wstring> targets(launchCount),executableNames(launchCount);
+    for(size_t i=0;i<launchCount;++i) {
+        const auto& app=apps[i];if(app.isSetting || app.installedOnly)continue;
+        targets[i]=CatalogFilePath(app.linkTarget.empty()?app.targetPath:app.linkTarget);
+        const auto filename=targets[i].substr(targets[i].find_last_of(L'\\')+1);
+        if(filename.ends_with(L".exe") && !installed::AuxiliaryExecutable(filename))
+            executableNames[i]=installed::LauncherName(filename.substr(0,filename.size()-4));
+    }
+    for(const auto& record:records) {
+        if(record.name.empty() || !added.insert(record.id).second)continue;
+        const auto name=ToLower(record.name);bool represented=false;
+        const auto familyOf=[](const App& app) {
+            const auto& identity=app.shellIdentity.empty()?app.targetPath:app.shellIdentity;
+            const auto bang=identity.find(L'!');
+            if(bang==identity.npos || identity.find(L":\\")!=identity.npos)return std::wstring();
+            const auto slash=identity.rfind(L'\\',bang),start=slash==identity.npos?0:slash+1;
+            return ToLower(identity.substr(start,bang-start));
+        };
+        const auto family=ToLower(record.family);
+        const auto familyCount=family.empty()?0:std::count_if(apps.begin(),apps.begin()+launchCount,[&](const auto& app){return !app.isSetting && familyOf(app)==family;});
+        std::wstring productTarget;
+        if(record.family.empty() && record.packageFullName.empty() && !record.location.empty()) {
+            const auto folder=CatalogFilePath(record.location),productName=installed::LauncherName(record.name,record.version);
+            if(productName.size()>=3 && installed::ProductFolder(folder)) {
+                for(size_t i=0;i<launchCount;++i)if(executableNames[i]==productName && targets[i].size()>folder.size() &&
+                    targets[i].starts_with(folder) && targets[i][folder.size()]==L'\\') {
+                    // Two different executables are ambiguous. Several real
+                    // shortcuts to the same executable may all keep the alias.
+                    if(!productTarget.empty() && productTarget!=targets[i]){productTarget.clear();break;}
+                    productTarget=targets[i];
+                }
+            }
+        }
+        for(size_t i=0;i<launchCount;++i) {
+            auto& app=apps[i];if(app.isSetting || app.installedOnly)continue;
+            bool same=name==app.nameLower;
+            if(!productTarget.empty())same=same || targets[i]==productTarget;
+            if(!record.launcher.empty())same=same || _wcsicmp(record.launcher.c_str(),(app.linkTarget.empty()?app.targetPath:app.linkTarget).c_str())==0;
+            if(familyCount==1)same=same || familyOf(app)==family;
+            if(!same && name==app.nameLower+L" desktop" && !record.icon.empty()) {
+                const auto target=app.linkTarget.empty()?app.targetPath:app.linkTarget;
+                same=ToLower(record.icon)==ToLower(target);
+            }
+            if(!same)continue;
+            if(std::find(app.aliases.begin(),app.aliases.end(),name)==app.aliases.end())app.aliases.push_back(name);
+            for(const auto& alias:record.aliases) {
+                const auto lower=ToLower(alias);
+                if(!lower.empty() && std::find(app.aliases.begin(),app.aliases.end(),lower)==app.aliases.end())app.aliases.push_back(lower);
+            }
+            represented=true;
+        }
+        if(represented)continue;
+        App app;app.name=record.name;app.nameLower=name;app.installedOnly=true;
+        // Until a verified application is found, use a management destination.
+        // Never run an icon/uninstaller path as the installed product.
+        app.targetPath=L"ms-settings:appsfeatures";
+        app.installedId=record.id;app.installedPublisher=record.publisher;
+        app.installedVersion=record.version;app.installedIcon=record.icon;
+        app.installedPackage=record.packageFullName;
+        app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
+        app.installedHive=record.registryHive;app.installedView=record.registryView;
+        if(!record.launcher.empty()) {
+            ITEMIDLIST* pidl=nullptr;
+            if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
+                app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
+                app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
+                app.targetExists=true;PopulateAppAliases(app);
+            }
+        }
+        for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
+        std::wistringstream words(name);std::wstring word;
+        while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
+        apps.push_back(std::move(app));
+    }
+}
+inline const std::wstring& IconIdentity(const App& app) {
+    return app.installedOnly ? app.installedId : app.name;
+}
+inline bool SameResult(const App& a,const App& b) {
+    if(a.installedOnly || b.installedOnly)return a.installedOnly && b.installedOnly && a.installedId==b.installedId;
+    return a.nameLower==b.nameLower;
+}
 class Index {
    public:
     Index() = default;
@@ -8867,6 +11311,7 @@ class Index {
             LPWSTR parse = nullptr;
             if (SUCCEEDED(item->GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, &parse)) && parse) {
                 std::wstring resolvedParse = ResolveAppParsingPath(parse);
+                a.shellIdentity=resolvedParse;
                 if (a.targetPath.empty()) {
                     a.targetPath = resolvedParse;
                 } else if (a.targetPath.size() >= 4 && 
@@ -8913,6 +11358,8 @@ class Index {
                     }
                 }
 
+                a.targetExists=!a.targetPath.empty() && GetFileAttributesW(a.targetPath.c_str())!=INVALID_FILE_ATTRIBUTES;
+                a.linkExists=!a.linkTarget.empty() && GetFileAttributesW(a.linkTarget.c_str())!=INVALID_FILE_ATTRIBUTES;
                 PopulateAppAliases(a);
                 if (a.nameLower == L"settings" || a.nameLower == L"windows settings" ||
                     a.targetPathLower.find(L"immersivecontrolpanel") != std::wstring::npos ||
@@ -8925,6 +11372,14 @@ class Index {
             item = nullptr;
         }
         e->Release();
+
+        // Supplement launch entries on this background thread. Cache product
+        // metadata across frequent shell refreshes, rather than per keystroke.
+        if(!installedWhen_ || GetTickCount64()-installedWhen_>=30000) {
+            try{installed_=installed::ReadAll();installedWhen_=GetTickCount64();}
+            catch(...){Wh_Log(L"installed apps: retained previous metadata after refresh failure");}
+        }
+        AppendInstalled(fresh,installed_);
 
         // Refresh native data only on this background thread, never per keystroke.
         settings::DestinationCheck destinations;
@@ -9006,6 +11461,17 @@ class Index {
         return true;
     }
 
+    // Parsed Settings/installation caches are immutable after publication.
+    // Copy them on the native I/O thread, then build a separate app snapshot.
+    std::shared_ptr<Index> Refreshed(bool inventoryChanged) const {
+        auto next=std::make_shared<Index>();
+        // Published snapshots never call Rebuild again. Copying their private
+        // metadata caches needs no lock shared with the matching worker.
+        next->nativeSettings_=nativeSettings_;next->installed_=installed_;
+        next->installedWhen_=inventoryChanged?0:installedWhen_;
+        return next->Rebuild()?next:nullptr;
+    }
+
     size_t Count() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return apps_.size();
@@ -9066,7 +11532,7 @@ class Index {
             }
             bool seen = false;
             for (const Match& kept : shown) {
-                if (kept.app->nameLower == m.app->nameLower) {
+                    if (SameResult(*kept.app,*m.app)) {
                     seen = true;
                     break;
                 }
@@ -9084,7 +11550,7 @@ class Index {
         std::lock_guard<std::mutex> lock(mutex_);
         std::vector<Match> hits;
         for(const App& app:apps_) {
-            if(app.isSetting || app.name.empty() || (!app.pidl && app.targetPath.empty())) continue;
+            if(app.isSetting || app.installedOnly || app.name.empty() || (!app.pidl && app.targetPath.empty())) continue;
             const int uses=UsageCount(usage,app.nameLower);
             hits.push_back({&app,0,-uses});
         }
@@ -9113,8 +11579,164 @@ class Index {
 
    private:
     settings::NativeCatalog nativeSettings_;
+    std::vector<installed::Record> installed_;
+    ULONGLONG installedWhen_=0;
     mutable std::mutex mutex_;
     std::vector<App> apps_;
+};
+
+// Native catalog and icon I/O have their own owner. Matching only reads an
+// immutable shared snapshot; a slow installer, shell extension or drive cannot
+// hold the worker which handles the next letter. No XAML is created here.
+class WarmIndex {
+public:
+    struct Ready {std::shared_ptr<Index> index;ULONGLONG builtAt=0;uint64_t version=0;};
+    struct IconJob {
+        std::shared_ptr<Index> owner;
+        const App* app=nullptr;
+        std::wstring key,path;
+        int pixels=24;
+        uint64_t generation=0;
+    };
+    struct Handlers {
+        std::function<void()> catalogReady;
+        std::function<std::vector<BYTE>(const App*,int)> appIcon;
+        std::function<std::vector<BYTE>(const std::wstring&,int)> commandIcon;
+        std::function<void(const std::wstring&,const std::vector<BYTE>&,uint64_t)> iconReady;
+    };
+    bool Start(Handlers handlers={}) noexcept try {
+        std::lock_guard lock(mutex_);
+        if(started_)return true;
+        stopped_=false;finished_=false;started_=true;refresh_=true;handlers_=std::move(handlers);
+        try {thread_=std::thread([this]{Run();});}
+        catch(...){started_=false;finished_=true;return false;}
+        return true;
+    }catch(...){return false;}
+    void Refresh(bool inventoryChanged=false) {
+        std::lock_guard lock(mutex_);refresh_=true;invalidateInventory_|=inventoryChanged;wake_.notify_all();
+    }
+    Ready Take() {
+        std::unique_lock lock(mutex_);
+        if(!started_)return {};
+        wake_.wait(lock,[&]{return finished_ || stopped_;});
+        return stopped_?Ready{}:Ready{current_,builtAt_,version_.load()};
+    }
+    Ready Newer(uint64_t version) const {
+        if(version_.load()==version)return {};
+        std::lock_guard lock(mutex_);
+        return stopped_ || version_.load()==version?Ready{}:Ready{current_,builtAt_,version_.load()};
+    }
+    uint64_t Version() const {return version_.load();}
+    ULONGLONG BuiltAt() const {std::lock_guard lock(mutex_);return builtAt_;}
+    static std::wstring AppKey(const App& app,int pixels) {return std::to_wstring(pixels)+L":app:"+IconIdentity(app);}
+    static std::wstring CacheKey(const std::wstring& key,uint64_t generation) {
+        return generation?std::to_wstring(generation)+L":"+key:key;
+    }
+    std::optional<std::vector<BYTE>> Cached(const std::wstring& key,uint64_t generation=0) const {
+        std::lock_guard lock(mutex_);auto found=icons_.find(CacheKey(key,generation));
+        return found==icons_.end()?std::nullopt:std::optional(found->second);
+    }
+    void Prioritize(std::vector<IconJob> jobs) {
+        std::lock_guard lock(mutex_);if(stopped_ || !started_)return;jobs_.clear();
+        for(auto& job:jobs) {
+            const auto key=CacheKey(job.key,job.generation);
+            if(key==inFlight_ || icons_.contains(key) || std::any_of(jobs_.begin(),jobs_.end(),[&](const auto& pending){return CacheKey(pending.key,pending.generation)==key;}))continue;
+            jobs_.push_back(std::move(job));if(jobs_.size()==64)break;
+        }
+        wake_.notify_all();
+    }
+    void Prefetch(std::shared_ptr<Index> owner,int pixels) {
+        std::lock_guard lock(mutex_);if(stopped_ || !started_)return;
+        if(prefetch_!=owner || pixels_!=pixels){prefetch_=std::move(owner);pixels_=pixels;next_=0;}
+        wake_.notify_all();
+    }
+    // Stop before joining the matching worker or releasing its UI, including
+    // unloads where no search UI was ever opened. No callback survives this join.
+    void Stop() {
+        {std::lock_guard lock(mutex_);stopped_=true;wake_.notify_all();}
+        if(thread_.joinable())thread_.join();
+        std::lock_guard lock(mutex_);
+        current_.reset();prefetch_.reset();jobs_.clear();icons_.clear();handlers_={};
+        started_=false;finished_=false;builtAt_=0;version_=0;next_=0;bytes_=0;inFlight_.clear();
+    }
+private:
+    void Run() noexcept {
+        const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+        SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_BELOW_NORMAL);
+        for(;;) {
+            std::shared_ptr<Index> source;
+            IconJob job;
+            bool rebuild=false,invalidate=false;
+            {
+                std::unique_lock lock(mutex_);
+                wake_.wait(lock,[&]{return stopped_ || refresh_ || !jobs_.empty() || (prefetch_ && next_<prefetch_->Count());});
+                if(stopped_)break;
+                if(refresh_) {
+                    rebuild=true;refresh_=false;invalidate=std::exchange(invalidateInventory_,false);
+                    source=current_?current_:prefetch_;
+                } else if(!jobs_.empty()) {job=std::move(jobs_.front());jobs_.erase(jobs_.begin());}
+                else {
+                    job.owner=prefetch_;job.app=job.owner->At(next_++);job.pixels=pixels_;
+                    if(!job.app || (job.app->isSetting && !job.app->pidl))continue;
+                    job.key=AppKey(*job.app,job.pixels);
+                }
+                if(!rebuild) {
+                    inFlight_=CacheKey(job.key,job.generation);
+                    if(icons_.contains(inFlight_)){inFlight_.clear();continue;}
+                }
+            }
+            if(rebuild) {
+                std::shared_ptr<Index> candidate;
+                try {
+                    if(SUCCEEDED(com)) {
+                        if(source)candidate=source->Refreshed(invalidate);
+                        else {auto first=std::make_shared<Index>();if(first->Rebuild())candidate=std::move(first);}
+                    }
+                }catch(...){Wh_Log(L"apps: background catalog refresh failed; keeping previous snapshot");}
+                bool publish=false;
+                {
+                    std::lock_guard lock(mutex_);
+                    if(!stopped_ && candidate){current_=std::move(candidate);builtAt_=GetTickCount64();++version_;publish=true;}
+                    finished_=true;
+                }
+                wake_.notify_all();
+                if(publish && handlers_.catalogReady)try{handlers_.catalogReady();}catch(...){}
+                continue;
+            }
+            std::vector<BYTE> pixels;
+            try {
+                if(SUCCEEDED(com)) {
+                    if(job.app && handlers_.appIcon)pixels=handlers_.appIcon(job.app,job.pixels);
+                    else if(!job.path.empty() && handlers_.commandIcon)pixels=handlers_.commandIcon(job.path,job.pixels);
+                }
+            }catch(...){}
+            bool publish=false;
+            {
+                std::lock_guard lock(mutex_);inFlight_.clear();
+                if(!stopped_) {
+                    constexpr size_t limit=16*1024*1024;
+                    if(icons_.size()>=4096 || bytes_+pixels.size()>limit){icons_.clear();bytes_=0;}
+                    if(pixels.size()<=limit){bytes_+=pixels.size();icons_.insert_or_assign(CacheKey(job.key,job.generation),pixels);}
+                    publish=true;
+                }
+            }
+            if(publish && handlers_.iconReady)try{handlers_.iconReady(job.key,pixels,job.generation);}catch(...){}
+        }
+        if(SUCCEEDED(com))CoUninitialize();
+    }
+    mutable std::mutex mutex_;
+    std::condition_variable wake_;
+    std::thread thread_;
+    std::shared_ptr<Index> current_,prefetch_;
+    std::vector<IconJob> jobs_;
+    std::map<std::wstring,std::vector<BYTE>> icons_;
+    Handlers handlers_;
+    std::atomic<uint64_t> version_{0};
+    ULONGLONG builtAt_=0;
+    size_t next_=0,bytes_=0;
+    int pixels_=24;
+    std::wstring inFlight_;
+    bool stopped_=false,started_=false,finished_=false,refresh_=false,invalidateInventory_=false;
 };
 
 }  // namespace apps
@@ -10143,6 +12765,11 @@ static bool g_searchAppearanceDirty = false;
 namespace {
 void LoadSettings();
 bool SearchWindowInitialize();
+void StartAppsWarmup();
+void StartAppCatalogWatch(HWND window);
+void StopAppCatalogWatch();
+void InvalidateAppsCatalog(bool inventoryChanged);
+void StopAppsWarmup();
 void StartSearchWindowInput();
 void StopSearchWindowInput();
 void SyncSearchWindowInputForForeground(HWND foreground = GetForegroundWindow());
@@ -10802,6 +13429,8 @@ static void TryInitializeExplorerSearch(HWND helper) {
         return;
     }
 
+    StartAppsWarmup();
+    StartAppCatalogWatch(helper);
     // Input capture is native Win32 and only active while Start, SearchHost,
     // or the search window is in the foreground. The XAML UI is created lazily.
     UpdateAlternativeShortcut(helper);
@@ -10837,8 +13466,157 @@ static void RequestExplorerSearch(HWND helper) {
     TryInitializeExplorerSearch(helper);
 }
 
+namespace {
+// Listeners only post a native message. A burst of installer changes produces
+// one background refresh after settling, with a bounded delay for long bursts.
+struct CatalogChangeBatch {
+    bool dirty=false,inventory=false;
+    ULONGLONG first=0,due=0;
+    void Add(ULONGLONG now,bool installed) {
+        if(!dirty)first=now;
+        dirty=true;inventory|=installed;due=std::min(now+1000,first+5000);
+    }
+    bool Take(ULONGLONG now,bool& installed) {
+        if(!dirty || now<due)return false;
+        installed=inventory;*this={};return true;
+    }
+};
+class AppCatalogWatch {
+public:
+    static constexpr UINT ChangedMessage=WM_APP+0x35,ShellMessage=WM_APP+0x36;
+    static constexpr UINT_PTR Timer=6;
+    void Start(HWND window) {
+        if(window_)return;
+        window_=window;gate_=std::make_shared<Gate>();RefreshRoots();
+        for(const auto* folder:{&FOLDERID_StartMenu,&FOLDERID_CommonStartMenu}) {
+            PIDLIST_ABSOLUTE root=nullptr;
+            if(FAILED(SHGetKnownFolderIDList(*folder,0,nullptr,&root)))continue;
+            SHChangeNotifyEntry entry{root,TRUE};
+            const auto id=SHChangeNotifyRegister(window_,SHCNRF_ShellLevel|SHCNRF_InterruptLevel|SHCNRF_RecursiveInterrupt|SHCNRF_NewDelivery,
+                SHCNE_CREATE|SHCNE_DELETE|SHCNE_RENAMEITEM|SHCNE_RENAMEFOLDER|SHCNE_UPDATEDIR|SHCNE_UPDATEITEM|SHCNE_MKDIR|SHCNE_RMDIR,
+                ShellMessage,1,&entry);
+            CoTaskMemFree(root);if(id)shell_.push_back(id);
+        }
+        try {
+            runtime_=RoInitialize(RO_INIT_SINGLETHREADED);winrt::check_hresult(runtime_);
+            catalog_=winrt::Windows::ApplicationModel::PackageCatalog::OpenForCurrentUser();
+            auto complete=[gate=gate_,window](auto const&,auto const& args) noexcept {
+                Lease lease(gate);if(!lease)return;
+                try {if(args.IsComplete())PostMessageW(window,ChangedMessage,1,0);}catch(...){}
+            };
+            installing_.emplace(catalog_.PackageInstalling(winrt::auto_revoke,complete));
+            updating_.emplace(catalog_.PackageUpdating(winrt::auto_revoke,complete));
+            uninstalling_.emplace(catalog_.PackageUninstalling(winrt::auto_revoke,complete));
+            status_.emplace(catalog_.PackageStatusChanged(winrt::auto_revoke,[gate=gate_,window](auto const&,auto const&) noexcept {
+                Lease lease(gate);if(lease)PostMessageW(window,ChangedMessage,1,0);
+            }));
+        }catch(...){Wh_Log(L"apps: package notifications unavailable; retaining registry, shortcut and reopen refresh");}
+    }
+    void Changed(bool inventory) {
+        if(!window_)return;
+        RefreshRoots();batch_.Add(GetTickCount64(),inventory);ArmTimer();
+    }
+    static bool ReleaseShellMessage(WPARAM wParam,LPARAM lParam) {
+        PIDLIST_ABSOLUTE* items=nullptr;LONG event=0;
+        if(auto lock=SHChangeNotification_Lock(reinterpret_cast<HANDLE>(wParam),static_cast<DWORD>(lParam),&items,&event)) {
+            SHChangeNotification_Unlock(lock);return true;
+        }
+        return false;
+    }
+    void Shell(WPARAM wParam,LPARAM lParam) {if(ReleaseShellMessage(wParam,lParam))Changed(false);}
+    void Tick() {
+        if(!window_)return;
+        KillTimer(window_,Timer);bool inventory=false;
+        if(batch_.Take(GetTickCount64(),inventory))InvalidateAppsCatalog(inventory);
+        else if(batch_.dirty)ArmTimer();
+    }
+    size_t RegistryCount() const {return registry_.size();}
+    size_t ShortcutCount() const {return shell_.size();}
+    bool PackagesActive() const {return installing_ && updating_ && uninstalling_;}
+    void Stop() {
+        if(window_)KillTimer(window_,Timer);
+        {std::lock_guard lock(gate_->mutex);gate_->closed=true;}
+        installing_.reset();updating_.reset();uninstalling_.reset();status_.reset();catalog_=nullptr;
+        {std::unique_lock lock(gate_->mutex);gate_->wake.wait(lock,[&]{return gate_->active==0;});}
+        for(auto id:shell_)SHChangeNotifyDeregister(id);shell_.clear();
+        registry_.clear();batch_={};window_=nullptr;
+        if(SUCCEEDED(runtime_)){RoUninitialize();runtime_=E_FAIL;}
+    }
+    ~AppCatalogWatch(){Stop();}
+private:
+    struct Gate {std::mutex mutex;std::condition_variable wake;unsigned active=0;bool closed=false;};
+    struct Lease {
+        std::shared_ptr<Gate> gate;bool entered=false;
+        explicit Lease(std::shared_ptr<Gate> value):gate(std::move(value)) {
+            std::lock_guard lock(gate->mutex);if(!gate->closed){++gate->active;entered=true;}
+        }
+        explicit operator bool()const{return entered;}
+        ~Lease(){if(entered){std::lock_guard lock(gate->mutex);--gate->active;gate->wake.notify_all();}}
+    };
+    struct Registry {
+        HKEY hive=nullptr,key=nullptr;REGSAM view=0;
+        HANDLE event=nullptr,wait=nullptr;HWND target=nullptr;
+        bool subtree=true;DWORD filter=REG_NOTIFY_CHANGE_NAME|REG_NOTIFY_CHANGE_LAST_SET;
+        std::wstring path;std::atomic<bool> stopped{false},dead{false};
+        bool Arm(){return RegNotifyChangeKeyValue(key,subtree,filter|REG_NOTIFY_THREAD_AGNOSTIC,event,TRUE)==ERROR_SUCCESS;}
+        static VOID CALLBACK Signal(void* context,BOOLEAN) {
+            auto& self=*static_cast<Registry*>(context);
+            if(self.stopped.load())return;
+            if(!self.Arm())self.dead=true;
+            PostMessageW(self.target,ChangedMessage,1,0);
+        }
+        ~Registry(){stopped=true;if(wait)UnregisterWaitEx(wait,INVALID_HANDLE_VALUE);if(key)RegCloseKey(key);if(event)CloseHandle(event);}
+    };
+    bool Watch(HKEY hive,REGSAM view,const std::wstring& path,bool subtree=true) {
+        for(const auto& entry:registry_)if(entry->hive==hive && entry->view==view && entry->path==path)return true;
+        auto entry=std::make_unique<Registry>();entry->hive=hive;entry->view=view;entry->path=path;entry->target=window_;
+        entry->subtree=subtree;if(!subtree)entry->filter=REG_NOTIFY_CHANGE_NAME;
+        if(RegOpenKeyExW(hive,path.c_str(),0,KEY_NOTIFY|view,&entry->key)!=ERROR_SUCCESS)return false;
+        entry->event=CreateEventW(nullptr,FALSE,FALSE,nullptr);if(!entry->event || !entry->Arm())return false;
+        registry_.push_back(std::move(entry));auto& added=*registry_.back();
+        if(!RegisterWaitForSingleObject(&added.wait,added.event,Registry::Signal,&added,INFINITE,WT_EXECUTEDEFAULT)){registry_.pop_back();return false;}
+        return true;
+    }
+    void RefreshRoots() {
+        std::erase_if(registry_,[](auto const& entry){return entry->dead.load();});
+        const std::wstring parent=L"Software\\Microsoft\\Windows\\CurrentVersion";
+        for(auto hive:{HKEY_CURRENT_USER,HKEY_LOCAL_MACHINE})for(auto view:{KEY_WOW64_64KEY,KEY_WOW64_32KEY})
+            if(!Watch(hive,view,parent+L"\\Uninstall"))Watch(hive,view,parent,false);
+    }
+    void ArmTimer() {
+        const auto now=GetTickCount64();
+        SetTimer(window_,Timer,static_cast<UINT>(batch_.due>now?std::min<ULONGLONG>(1000,batch_.due-now):1),nullptr);
+    }
+    HWND window_=nullptr;
+    HRESULT runtime_=E_FAIL;
+    CatalogChangeBatch batch_;
+    std::shared_ptr<Gate> gate_=std::make_shared<Gate>();
+    std::vector<std::unique_ptr<Registry>> registry_;
+    std::vector<ULONG> shell_;
+    winrt::Windows::ApplicationModel::PackageCatalog catalog_{nullptr};
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageInstalling_revoker> installing_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageUpdating_revoker> updating_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageUninstalling_revoker> uninstalling_;
+    std::optional<winrt::Windows::ApplicationModel::PackageCatalog::PackageStatusChanged_revoker> status_;
+};
+[[clang::no_destroy]] std::optional<AppCatalogWatch> g_appCatalogWatch;
+void StartAppCatalogWatch(HWND window) {
+    try {if(!g_appCatalogWatch)g_appCatalogWatch.emplace();g_appCatalogWatch->Start(window);}
+    catch(...){Wh_Log(L"apps: catalog listeners unavailable; reopen refresh retained");}
+}
+void StopAppCatalogWatch() {if(g_appCatalogWatch){g_appCatalogWatch->Stop();g_appCatalogWatch.reset();}}
+
+}  // namespace
+
 static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case AppCatalogWatch::ChangedMessage:
+        if(g_appCatalogWatch)g_appCatalogWatch->Changed(wParam!=0);
+        return 0;
+    case AppCatalogWatch::ShellMessage:
+        if(g_appCatalogWatch)g_appCatalogWatch->Shell(wParam,lParam);
+        else AppCatalogWatch::ReleaseShellMessage(wParam,lParam);
+        return 0;
     case kExplorerUpdateShortcut:
         UpdateAlternativeShortcut(hWnd);
         RefreshSearchUiSettings();
@@ -10863,6 +13641,7 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         if (IsTaskbarProcess() && !SearchActivationSettling()) ArmSearchAloneCheck(kSearchAloneTicks);
         return 0;
     case WM_TIMER:
+        if(wParam==AppCatalogWatch::Timer){if(g_appCatalogWatch)g_appCatalogWatch->Tick();return 0;}
         if (wParam == kExplorerSearchStartupTimer) {
             TryInitializeExplorerSearch(hWnd);
             return 0;
@@ -10886,6 +13665,7 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         DestroyWindow(hWnd);
         return 0;
     case WM_DESTROY:
+        StopAppCatalogWatch();
         ReleaseAlternativeShortcut(hWnd);
         PostQuitMessage(0);
         return 0;
@@ -10959,8 +13739,10 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    StopAppCatalogWatch();
     ReleaseAlternativeShortcut(hWnd);
     SearchWindowTeardown();
+    StopAppsWarmup();  // also when no search UI was ever created
     StopSearchWindowInput();  // also when search was never opened
 
     if (g_searchForegroundHook) {
@@ -11275,6 +14057,96 @@ struct CustomConversion {
 // The text size setting (textScale), for Fs.
 std::atomic<int> g_textScale{100};
 
+namespace commands {
+enum class Kind { None, Weather, Currency, Crypto, Ip, Speed, Usage, Services, Conflict };
+struct Names {
+    std::wstring weather = L"weather", currency = L"money", crypto = L"crypto", ip = L"ip";
+    std::wstring speed = L"speedtest", usage = L"usage", services = L"services";
+};
+std::wstring Trim(std::wstring_view text) {
+    const auto first = text.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring_view::npos) return {};
+    return std::wstring(text.substr(first, text.find_last_not_of(L" \t\r\n") - first + 1));
+}
+bool Equal(std::wstring_view left, std::wstring_view right) {
+    return CompareStringOrdinal(left.data(), static_cast<int>(left.size()), right.data(),
+        static_cast<int>(right.size()), TRUE) == CSTR_EQUAL;
+}
+std::wstring Normalize(std::wstring_view value) {
+    auto name = Trim(value);
+    if (name.starts_with(L"/")) name.erase(0, 1);
+    if (name.empty() || name.size() > 32) return {};
+    for (size_t i = 0; i < name.size(); ++i) {
+        const auto c = name[i];
+        WORD type = 0;
+        GetStringTypeW(CT_CTYPE1, &c, 1, &type);
+        if (c < 33 || c == 127 || (type & C1_SPACE) || c == L'/' || c == L'>' || c == L'=' ||
+            c == L'?' || (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069)) return {};
+        if (c >= 0xD800 && c <= 0xDBFF) {
+            if (++i >= name.size() || name[i] < 0xDC00 || name[i] > 0xDFFF) return {};
+        } else if (c >= 0xDC00 && c <= 0xDFFF) return {};
+    }
+    return name;
+}
+Names Resolve(Names input) {
+    Names defaults;
+    auto fields = {&Names::weather, &Names::currency, &Names::crypto, &Names::ip, &Names::speed, &Names::usage, &Names::services};
+    for (auto field : fields) {
+        auto name = Normalize(input.*field);
+        input.*field = name.empty() ? defaults.*field : std::move(name);
+    }
+    return input;
+}
+const std::wstring& Name(const Names& names, Kind kind) {
+    if (kind == Kind::Weather) return names.weather;
+    if (kind == Kind::Currency) return names.currency;
+    if (kind == Kind::Crypto) return names.crypto;
+    if (kind == Kind::Speed) return names.speed;
+    if (kind == Kind::Usage) return names.usage;
+    if (kind == Kind::Services) return names.services;
+    return names.ip;
+}
+struct Match { Kind kind = Kind::None; std::wstring args; };
+Match Parse(std::wstring_view query, const Names& names) {
+    auto text = Trim(query);
+    if (!text.starts_with(L"/")) return {};
+    const auto end = text.find_first_of(L" \t\r\n");
+    const auto token = std::wstring_view(text).substr(1, end == std::wstring::npos ? text.size() - 1 : end - 1);
+    auto kind = Kind::None;
+    for (auto candidate : {Kind::Weather, Kind::Currency, Kind::Crypto, Kind::Ip, Kind::Speed, Kind::Usage, Kind::Services}) {
+        if (Equal(token, Name(names, candidate))) {
+            if (kind != Kind::None) { kind = Kind::Conflict; break; }
+            kind = candidate;
+        }
+    }
+    // Compatibility aliases remain while the primary name is unchanged.
+    if (kind == Kind::None && Equal(names.currency, L"money") && (Equal(token, L"currency") || Equal(token, L"fx"))) kind = Kind::Currency;
+    if (kind == Kind::None && Equal(names.crypto, L"crypto") && Equal(token, L"price")) kind = Kind::Crypto;
+    if (kind == Kind::None && Equal(names.speed, L"speedtest") && Equal(token, L"speed")) kind = Kind::Speed;
+    return {kind, end == std::wstring::npos ? std::wstring() : Trim(std::wstring_view(text).substr(end))};
+}
+template<class CustomCommands>
+Match Parse(std::wstring_view query, const Names& names, const CustomCommands& custom) {
+    auto match = Parse(query, names);
+    if (match.kind == Kind::Conflict) return match;
+    const auto text = Trim(query);
+    if (!text.starts_with(L"/")) return match;
+    const auto end = text.find_first_of(L" \t\r\n");
+    const auto token = std::wstring_view(text).substr(1, end == std::wstring::npos ? text.size() - 1 : end - 1);
+    size_t count = match.kind == Kind::None ? 0 : 1;
+    if (token.empty()) return match;
+    for (const auto& command : custom) {
+        const auto name = Trim(command.name);
+        if (!Trim(command.command).empty() && name.starts_with(L"/") &&
+            Equal(token, Normalize(name)) && ++count > 1) {
+            match.kind = Kind::Conflict;
+            break;
+        }
+    }
+    return match;
+}
+}  // namespace commands
+
 struct Settings {
     std::wstring defaultSearchUrl = L"https://duckduckgo.com/?q={q}";
     std::vector<WebShortcut> webShortcuts;
@@ -11295,6 +14167,15 @@ struct Settings {
     bool useCustomMenuSize = false;
     bool filePreview = true;
     bool animatePreview = true;
+    bool onlineCards = true;
+    std::wstring weatherLocation = L"auto";
+    std::wstring weatherUnits = L"auto";
+    std::wstring quoteCurrency = L"USD";
+    commands::Names commandNames;
+    std::vector<std::wstring> weatherLocations;
+    std::vector<std::wstring> currencyList{L"EUR", L"GBP", L"100 USD > EUR"};
+    std::vector<std::wstring> cryptoList{L"BTC", L"ETH", L"SOL"};
+    int weatherPastDays = 2, weatherFutureDays = 5;
 };
 
 Settings g_settings;
@@ -11312,6 +14193,40 @@ void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     auto language = WindhawkUtils::StringSetting::make(L"appearance.language");
     i18n::Load(language.get());
+    g_settings.onlineCards = Wh_GetIntSetting(L"online.offlineMode") == 0;
+    auto weatherLocation = WindhawkUtils::StringSetting::make(L"online.weatherLocation");
+    auto weatherUnits = WindhawkUtils::StringSetting::make(L"online.weatherUnits");
+    auto quoteCurrency = WindhawkUtils::StringSetting::make(L"online.quoteCurrency");
+    g_settings.weatherLocation = *weatherLocation.get() ? tools::Trim(weatherLocation.get()) : L"auto";
+    g_settings.weatherUnits = *weatherUnits.get() ? weatherUnits.get() : L"auto";
+    g_settings.quoteCurrency = *quoteCurrency.get() ? tools::Trim(quoteCurrency.get()) : L"USD";
+    auto weatherName = WindhawkUtils::StringSetting::make(L"commands.weatherName");
+    auto moneyName = WindhawkUtils::StringSetting::make(L"commands.moneyName");
+    auto cryptoName = WindhawkUtils::StringSetting::make(L"commands.cryptoName");
+    auto ipName = WindhawkUtils::StringSetting::make(L"commands.ipName");
+    auto speedName = WindhawkUtils::StringSetting::make(L"commands.speedName");
+    auto usageName = WindhawkUtils::StringSetting::make(L"commands.usageName");
+    auto servicesName = WindhawkUtils::StringSetting::make(L"commands.servicesName");
+    g_settings.commandNames = commands::Resolve({weatherName.get(), moneyName.get(), cryptoName.get(), ipName.get(), speedName.get(), usageName.get(), servicesName.get()});
+    auto savedList = [](const wchar_t* setting, int limit) {
+        std::vector<std::wstring> list;
+        for (int i = 0; i < limit; ++i) {
+            auto text = WindhawkUtils::StringSetting::make(L"commands.%ls[%d]", setting, i);
+            auto item = tools::Trim(text.get());
+            if (item.empty()) continue;
+            if (item.size() <= 160 && std::none_of(list.begin(), list.end(), [&](const auto& old) { return commands::Equal(old, item); })) list.push_back(std::move(item));
+        }
+        return list;
+    };
+    g_settings.weatherLocations = savedList(L"weatherLocations", 8);
+    g_settings.currencyList = savedList(L"currencyList", 12);
+    g_settings.cryptoList = savedList(L"cryptoList", 12);
+    if (g_settings.currencyList.empty()) g_settings.currencyList = {L"EUR", L"GBP", L"100 USD > EUR"};
+    if (g_settings.cryptoList.empty()) g_settings.cryptoList = {L"BTC", L"ETH", L"SOL"};
+    const auto pastDays = WindhawkUtils::StringSetting::make(L"commands.weatherPastDays");
+    const auto futureDays = WindhawkUtils::StringSetting::make(L"commands.weatherFutureDays");
+    g_settings.weatherPastDays = *pastDays.get() ? std::clamp(_wtoi(pastDays.get()), 0, 7) : 2;
+    g_settings.weatherFutureDays = *futureDays.get() ? std::clamp(_wtoi(futureDays.get()), 0, 7) : 5;
 
     auto shortcutModifiers = WindhawkUtils::StringSetting::make(L"search.shortcutModifiers");
     auto shortcutKey = WindhawkUtils::StringSetting::make(L"search.shortcutKey");
@@ -11503,6 +14418,31 @@ wux::DependencyObject FindDescendantByName(wux::DependencyObject const& root,
 [[clang::no_destroy]] wuxc::StackPanel g_resultsList{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_appsList{nullptr};
 [[clang::no_destroy]] wuxc::ScrollViewer g_appsScroll{nullptr}, g_filesScroll{nullptr};
+struct SpeedCardUI {
+    wuxc::StackPanel root{nullptr};
+    wux::Shapes::Path arc{nullptr}, needle{nullptr};
+    wuxm::ArcSegment meterArc{nullptr};
+    wuxm::RotateTransform needleRotation{nullptr};
+    wuxm::Brush downloadBrush{nullptr}, uploadBrush{nullptr};
+    std::array<wuxc::TextBlock,9> ticks{nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr};
+    wuxc::TextBlock reading{nullptr}, unit{nullptr}, stage{nullptr}, latency{nullptr}, download{nullptr}, upload{nullptr}, footer{nullptr};
+    wuxc::Button action{nullptr};
+    double meterMaximum = 1000;
+    bool measuringLatency = false;
+    double meterSpeed = 0, meterFromSpeed = 0, meterTargetSpeed = 0;
+    double meterFraction = 0, meterFromFraction = 0, meterTargetFraction = 0;
+    ULONGLONG meterStarted = 0;
+    bool meterInitialized = false, meterAnimating = false;
+    bool meterNumeric = false, meterLatency = false, meterDrawn = false;
+    std::array<bool,9> meterTickLit{};
+    std::wstring meterText;
+};
+bool StartSpeedMeterAnimationTimer();
+struct UsageCardUI {
+    wuxc::StackPanel root{nullptr};
+    wuxc::TextBlock value{nullptr}, detail{nullptr}, scale{nullptr};
+    wux::Shapes::Path line{nullptr}, area{nullptr};
+};
 struct AppCardUI {
     int appIndex = -1;
     std::wstring title;
@@ -11513,6 +14453,12 @@ struct AppCardUI {
     bool isFile = false;
     std::wstring commandLine;
     uint64_t commandRevision = 0;
+    std::wstring iconKey;
+    bool hasBitmap = false;
+    std::wstring subtitle;
+    std::wstring cardSignature;
+    std::optional<SpeedCardUI> speedUI;
+    std::optional<UsageCardUI> usageUI;
 };
 
 [[clang::no_destroy]] static std::optional<std::vector<wuxc::Button>> g_appButtonsOpt;
@@ -11757,8 +14703,6 @@ HWND GetSearchWindow() {
     return g_searchWindowWindow.load();
 }
 
-std::atomic<bool> g_appIndexNeedsRefresh{false};
-std::atomic<ULONGLONG> g_lastAppIndexRebuildTick{0};
 
 void RequestAppIndexRefresh();
 
@@ -11994,38 +14938,68 @@ void SubclassStartMenuWindow() {
 }
 
 // Results, handed from the search thread to the XAML thread.
+
+
+
 std::mutex g_resultsMutex;
 std::atomic<DWORD> g_totalMatches{0};
 
 [[clang::no_destroy]] std::optional<std::thread> g_searchThread;
+[[clang::no_destroy]] apps::WarmIndex g_appsWarmup;
+[[clang::no_destroy]] std::optional<std::thread> g_fileSearchThread;
+[[clang::no_destroy]] std::optional<std::thread> g_onlineThread;
 std::mutex g_queryMutex;
 std::condition_variable g_queryWake;
+std::condition_variable g_fileQueryWake;
 std::wstring g_pendingQuery;
+uint64_t g_queryRevision = 0;  // g_queryMutex; distinguishes A -> B -> A
 std::atomic<bool> g_searchQuit{false};
 std::atomic<bool> g_queryDirty{false};
+namespace online { void Wake(); }
+namespace hardware { void Wake(); }
+namespace services {
+void Wake();
+enum class Action { Start, Stop, Restart };
+void Queue(std::wstring name, Action action);
+bool Allowed(Action action, DWORD state, DWORD controls);
+void OpenManager();
+}  // namespace services
 
 void RequestAppIndexRefresh() {
-    ULONGLONG now = GetTickCount64();
-    if (now - g_lastAppIndexRebuildTick.load() >= 5000) {
-        {
-            std::lock_guard<std::mutex> lock(g_queryMutex);
-            g_appIndexNeedsRefresh.store(true);
-        }
-        g_queryWake.notify_all();
-    }
+    if(GetTickCount64()-g_appsWarmup.BuiltAt()>=5000)g_appsWarmup.Refresh();
 }
+void InvalidateAppsCatalog(bool inventoryChanged) {g_appsWarmup.Refresh(inventoryChanged);}
 
 // A row as the XAML thread needs it: text, an optional icon as raw BGRA, and
 // what to do when it is clicked.
 //
-// Icons travel as pixels rather than as a path to fetch later, because the
-// fetch is the slow part and it has already happened on the search thread.
+// Icons travel as pixels. Cached icons accompany the first result snapshot;
+// missing app icons are filled in after matching, without rebuilding cards.
+struct WeatherDayRow {
+    std::wstring label, symbol, low, high;
+    bool today = false, past = false;
+};
+struct SpeedView {
+    enum class Phase { Ready, Latency, Download, Upload, Done, Stopped, Failed };
+    Phase phase = Phase::Ready;
+    double progress = 0, latency = -1, download = -1, upload = -1;
+    bool dataLimited = false;
+    std::wstring server;
+    ULONGLONG retrySeconds = 0;
+};
+struct UsageView {
+    std::wstring id, display, detail;
+    double value = -1, maximum = 100;
+    uint32_t color = 0xFF4CB9EF;
+    std::vector<double> history;
+};
 struct Row {
     std::wstring title;
     std::wstring subtitle;
     std::wstring openPath;   // files: what ShellExecute opens
-    int appIndex = -1;       // apps: which entry of the index to launch
+    int appIndex = -1;       // nonnegative for a native app/setting result
     std::vector<BYTE> icon;  // premultiplied BGRA, IconPixels() square, or empty
+    std::wstring iconKey;   // identifies an asynchronous app/command icon
     bool canRunAsAdmin = true;
     bool isSetting = false;
     bool isFolder = false;
@@ -12033,6 +15007,22 @@ struct Row {
     std::wstring programPath; // apps launched by app ID: their program on disk, for its file actions
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
+    std::wstring sectionTitle; // online card heading; empty for ordinary results
+    std::wstring sectionEmoji;
+    bool infoOnly = false;
+    bool isError = false, speedStart = false;
+    bool onlinePending = false;
+    std::vector<WeatherDayRow> weatherDays;
+    std::wstring footerText, cardSignature;
+    std::optional<SpeedView> speed;
+    std::optional<UsageView> usage;
+    bool installedOnly=false;
+    std::wstring installedLocation,installedFamily,installedKey;
+    HKEY installedHive=nullptr;
+    REGSAM installedView=0;
+    std::wstring serviceName;
+    DWORD serviceState=0,serviceControls=0;
+    bool serviceBusy=false;
     uint32_t glyphColor = 0;  // ARGB of the glyph -- a conversion's kind (calc::KindColor) -- or 0
     std::wstring commandLine;
     CustomCommandShell commandShell = CustomCommandShell::Cmd;
@@ -12046,6 +15036,10 @@ struct Row {
     int matchScore = -1;
     int matchRank = 0;
 };
+
+bool IsSettingsResult(const Row& row) {
+    return !row.installedOnly && (row.isSetting || row.openPath.starts_with(L"ms-settings:"));
+}
 
 // Icons take 24 logical pixels in a row, which on a display at 150% is 36 real
 // ones. They are made at that real size (IconPixels), so XAML has nothing to
@@ -12082,16 +15076,51 @@ wuxmi::WriteableBitmap IconBitmap(const std::vector<BYTE>& pixels) {
 
 std::vector<Row> g_appRows;
 std::vector<Row> g_fileRows;
-std::wstring g_rowsQuery;  // the text g_appRows and g_fileRows are the results for
+std::wstring g_appsQuery;
+uint64_t g_appsRevision = 0, g_filesRevision = 0;  // g_resultsMutex
+uint64_t g_appsContentRevision = 0;  // also changes when online data arrives
+
+struct FileSearchRequest {
+    uint64_t revision = 0;
+    std::wstring query;
+    bool enabled = false;
+    int limit = 0;
+    bool filterNoise = false;
+    std::vector<std::wstring> excludedPaths;
+};
+std::optional<FileSearchRequest> g_fileQuery;  // g_queryMutex; latest only
+
+// Publish only the current request. The revision also rejects stale results
+// when the user types A -> B -> A, or changes settings with the same text.
+bool PublishAppResults(uint64_t revision, const std::wstring& query, std::vector<Row> rows) {
+    std::scoped_lock lock(g_queryMutex, g_resultsMutex);
+    if (g_searchQuit.load() || revision != g_queryRevision) return false;
+    g_appRows = std::move(rows);
+    g_appsQuery = query;
+    g_appsRevision = revision;
+    ++g_appsContentRevision;
+    return true;
+}
+
+bool PublishFileResults(uint64_t revision, std::vector<Row> rows, DWORD total) {
+    std::scoped_lock lock(g_queryMutex, g_resultsMutex);
+    if (g_searchQuit.load() || revision != g_queryRevision || revision != g_appsRevision) return false;
+    g_fileRows = std::move(rows);
+    g_filesRevision = revision;
+    g_totalMatches.store(total);
+    return true;
+}
 
 // Launch requests, posted from the XAML thread back to the search thread,
 // which owns the app index and therefore the PIDLs.
 //
-// A PIDL cannot simply be captured in a click handler: the index is rebuilt
-// and the pointer would dangle. Sending an index back to the owning thread
-// keeps the lifetime where the data lives.
-std::atomic<int> g_launchRequest{-1};
-std::atomic<bool> g_launchAsAdmin{false};
+// Resolve the clicked identity on the owning thread. A displayed row can
+// outlive a new match list, so a result's position is not a stable identity.
+struct AppLaunchRequest {
+    std::wstring name, target;
+    bool asAdmin = false;
+};
+std::optional<AppLaunchRequest> g_launchRequest;  // g_queryMutex
 std::vector<std::wstring> g_commandUsageRequests; // g_queryMutex; drained by the search thread
 
 
@@ -12454,15 +15483,54 @@ inline std::optional<Command> FindProgramUninstaller(const std::wstring& program
     return best;
 }
 
+// Installed-only results carry the exact registry registration, so suites and
+// similarly named runtimes never use fuzzy name matching to choose an uninstaller.
+inline std::optional<Command> RegisteredCommand(HKEY entry, const std::wstring& expectedName) {
+    const auto name = ReadString(entry, L"DisplayName");
+    if (!EqualsI(name, expectedName) || !installed::Visible(name, ReadDword(entry, L"SystemComponent"),
+        ReadString(entry, L"ParentKeyName"), ReadString(entry, L"ReleaseType")) || ReadDword(entry, L"NoRemove"))
+        return std::nullopt;
+    std::wstring file, params;
+    SplitCommand(ReadString(entry, L"UninstallString"), file, params);
+    const auto base = file.substr(file.find_last_of(L'\\') + 1);
+    const bool msi = EqualsI(base, L"msiexec.exe") || EqualsI(file, L"msiexec");
+    if (msi || EqualsI(file, L"rundll32.exe")) {
+        if (file.find(L'\\') == file.npos) {
+            wchar_t system[MAX_PATH]{};
+            const auto n = GetSystemDirectoryW(system, std::size(system));
+            if (!n || n >= std::size(system)) return std::nullopt;
+            file = std::wstring(system) + L"\\" + (msi ? L"msiexec.exe" : L"rundll32.exe");
+        }
+    }
+    if (file.size() < 3 || file[1] != L':' || file[2] != L'\\' || PathIsNetworkPathW(file.c_str())) return std::nullopt;
+    const auto attributes = GetFileAttributesW(file.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) return std::nullopt;
+    if (msi) {
+        // Match Installed apps' interactive removal; never select QuietUninstallString.
+        for (size_t at = 0; at + 1 < params.size(); ++at) {
+            if ((at == 0 || iswspace(params[at-1])) && params[at] == L'/' &&
+                (params[at+1] == L'I' || params[at+1] == L'i')) { params[at+1] = L'X'; break; }
+        }
+    }
+    return Command{name, file, params};
+}
+inline std::optional<Command> FindRegisteredUninstaller(HKEY hive, REGSAM view,
+    const std::wstring& key, const std::wstring& expectedName) {
+    if ((hive != HKEY_LOCAL_MACHINE && hive != HKEY_CURRENT_USER) ||
+        (view != KEY_WOW64_32KEY && view != KEY_WOW64_64KEY && view != 0) || key.empty() || key.size() > 255 ||
+        key.find_first_of(L"\\/") != key.npos) return std::nullopt;
+    installed::Key entry;
+    const auto path = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + key;
+    if (RegOpenKeyExW(hive, path.c_str(), 0, KEY_READ | view, &entry.value) != ERROR_SUCCESS) return std::nullopt;
+    return RegisteredCommand(entry.value, expectedName);
+}
+
+
 // The package family of a packaged app's app ID ("family!app") when it can be
 // uninstalled: installed for this user and not part of Windows (those live
 // under the Windows folder, in SystemApps).
-inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
-    const size_t bang = appId.find(L'!');
-    if (bang == std::wstring::npos || bang == 0 || appId.find(L'\\') != std::wstring::npos) {
-        return {};
-    }
-    const std::wstring family = appId.substr(0, bang);
+inline std::wstring RemovableFamily(const std::wstring& family) {
+    if (family.empty() || family.size()>128 || family.find_first_of(L"\\/!")!=family.npos) return {};
     UINT32 count = 0, length = 0;
     if (GetPackagesByPackageFamily(family.c_str(), &count, nullptr, &length, nullptr) != ERROR_INSUFFICIENT_BUFFER ||
         !count) {
@@ -12480,6 +15548,11 @@ inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
         return {};
     }
     return family;
+}
+inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
+    if(appId.find_first_of(L"\\/")!=appId.npos)return {};
+    const auto bang=appId.find(L'!');
+    return bang==appId.npos ? std::wstring() : RemovableFamily(appId.substr(0,bang));
 }
 
 }  // namespace uninstall
@@ -14913,11 +17986,21 @@ bool CaretAtEndOfQuery() {
     }
 }
 
+void StartInternetSpeedTest();
+void StopInternetSpeedTest();
 void LaunchSelectedApp(int index, bool asAdmin) {
     if (index < 0 || index >= static_cast<int>(g_currentAppRows.size())) {
         return;
     }
     const auto& row = g_currentAppRows[index];
+    if(row.installedOnly) {
+        if(!installed::Location(row.installedLocation).empty())
+            DismissSearchForLaunch([path=row.installedLocation]{OpenResult(path,false);});
+        else {SetAppSelection(index,true);OpenSelectedContextMenu();}
+        return;
+    }
+    if (row.speedStart) { StartInternetSpeedTest(); return; }
+    if (row.infoOnly) return;
     if (!row.commandLine.empty()) {
         CustomCommandLaunch launch;
         std::wstring error;
@@ -14961,11 +18044,10 @@ void LaunchSelectedApp(int index, bool asAdmin) {
         if (asAdmin && !row.canRunAsAdmin) {
             asAdmin = false;
         }
-        DismissSearchForLaunch([which, asAdmin] {
+        DismissSearchForLaunch([name = row.title, target = row.openPath, asAdmin] {
             {
                 std::lock_guard<std::mutex> lock(g_queryMutex);
-                g_launchAsAdmin.store(asAdmin);
-                g_launchRequest.store(which);
+                g_launchRequest = AppLaunchRequest{name, target, asAdmin};
             }
             g_queryWake.notify_all();
         });
@@ -14975,11 +18057,19 @@ void LaunchSelectedApp(int index, bool asAdmin) {
 
 // The text the rows on screen are the results for (RenderResults).
 std::wstring g_shownQuery;
+uint64_t g_shownAppsRevision = 0, g_shownFilesRevision = 0;  // XAML thread
+uint64_t g_shownAppsContentRevision = 0;
+DWORD g_shownFilesTotal = 0;
 
 // Whether the rows on screen are not yet the results for what is typed.
 bool ResultsPending() {
     std::lock_guard<std::mutex> lock(g_queryMutex);
-    return g_pendingQuery != g_shownQuery;
+    if (g_filesColumnActive || (g_currentAppRows.empty() && FilesPanelVisible())) {
+        return g_shownFilesRevision != g_queryRevision;
+    }
+    if (g_shownAppsRevision != g_queryRevision) return true;
+    return g_selectedApp >= 0 && g_selectedApp < static_cast<int>(g_currentAppRows.size()) &&
+        g_currentAppRows[g_selectedApp].onlinePending;
 }
 
 // What Enter does: opens the selected result.
@@ -15816,10 +18906,837 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     Wh_Log(L"results list failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
 
-// Runs on the XAML thread.
-void RenderResults() try {
-    if (g_searchWindowSliding) { g_renderAfterSlide = true; return; }
-    g_renderAfterSlide = false;
+// The XAML thread keeps the displayed files until a current replacement is
+// ready. An apps-only pass reads their count, without copying their icons or
+// invalidating their controls while Everything is still answering.
+struct SearchRenderSnapshot {
+    std::vector<Row> apps, files;
+    std::wstring query;
+    uint64_t appsRevision = 0, filesRevision = 0;
+    uint64_t appsContentRevision = 0;
+    DWORD total = 0;
+    size_t fileCount = 0;
+    bool appsChanged = false, filesChanged = false;
+};
+
+int RefreshedAppSelection(const std::wstring& shown,const std::wstring& query,
+    const std::vector<Row>& previous,const std::vector<Row>& next,int selected,bool force) {
+    if(force || shown!=query || selected<0 || selected>=static_cast<int>(previous.size()) || next.empty())return -1;
+    const auto& old=previous[selected];
+    if(!old.sectionTitle.empty())return std::min(selected,static_cast<int>(next.size())-1);
+    for(size_t i=0;i<next.size();++i) {
+        const auto& row=next[i];
+        if(old.installedOnly && row.installedOnly) {
+            if((!old.installedKey.empty() && old.installedKey==row.installedKey && old.installedHive==row.installedHive && old.installedView==row.installedView) ||
+               (!old.installedFamily.empty() && old.installedFamily==row.installedFamily))return static_cast<int>(i);
+        } else if(old.title==row.title && old.openPath==row.openPath && old.commandLine==row.commandLine &&
+            old.commandRevision==row.commandRevision && old.copyText==row.copyText && old.installedOnly==row.installedOnly)return static_cast<int>(i);
+    }
+    return -1;
+}
+
+std::optional<SearchRenderSnapshot> ReadSearchRenderSnapshot(bool appsOnly, bool force) {
+    std::scoped_lock lock(g_queryMutex, g_resultsMutex);
+    if (g_appsRevision != g_queryRevision) return std::nullopt;
+    const bool filesReady = g_filesRevision == g_appsRevision;
+    SearchRenderSnapshot snapshot;
+    snapshot.appsChanged = force || g_appsRevision != g_shownAppsRevision ||
+        g_appsContentRevision != g_shownAppsContentRevision;
+    snapshot.filesChanged = !appsOnly &&
+        (force || (filesReady && g_filesRevision != g_shownFilesRevision));
+    if (!snapshot.appsChanged && !snapshot.filesChanged) return std::nullopt;
+    snapshot.apps = g_appRows;
+    snapshot.query = g_appsQuery;
+    snapshot.appsRevision = g_appsRevision;
+    snapshot.appsContentRevision = g_appsContentRevision;
+    snapshot.filesRevision = g_shownFilesRevision;
+    snapshot.total = g_shownFilesTotal;
+    snapshot.fileCount = g_currentFileRows.size();
+    if (snapshot.filesChanged) {
+        snapshot.files = filesReady ? g_fileRows : g_currentFileRows;
+        snapshot.fileCount = snapshot.files.size();
+        if (filesReady) {
+            snapshot.filesRevision = g_filesRevision;
+            snapshot.total = g_totalMatches.load();
+        }
+    }
+    return snapshot;
+}
+
+// Replace a fallback icon without rebuilding a card or resetting selection.
+wf::Point SpeedMeterPoint(double fraction,double radius) {
+    const double angle=(-135+270*fraction)*3.141592653589793/180;
+    return {static_cast<float>(140+radius*std::sin(angle)),static_cast<float>(138-radius*std::cos(angle))};
+}
+wuxm::PathGeometry SpeedMeterArc(double fraction,double radius) {
+    wuxm::PathGeometry geometry;wuxm::PathFigure figure;figure.StartPoint(SpeedMeterPoint(0,radius));
+    wuxm::ArcSegment arc;arc.Point(SpeedMeterPoint(fraction,radius));arc.Size({static_cast<float>(radius),static_cast<float>(radius)});
+    arc.IsLargeArc(fraction>2.0/3);arc.SweepDirection(wuxm::SweepDirection::Clockwise);
+    figure.Segments().Append(arc);geometry.Figures().Append(figure);return geometry;
+}
+constexpr std::array<double,9> kSpeedMeterTicks{0,5,10,50,100,250,500,750,1000};
+double SpeedMeterFraction(double speed,double maximum) {
+    if(!std::isfinite(speed) || speed<=0 || !std::isfinite(maximum) || maximum<=0)return 0;
+    const double normalized=std::min(1000.0,speed/maximum*1000);
+    for(size_t i=1;i<kSpeedMeterTicks.size();++i)if(normalized<=kSpeedMeterTicks[i])
+        return (i-1+(normalized-kSpeedMeterTicks[i-1])/(kSpeedMeterTicks[i]-kSpeedMeterTicks[i-1]))/8.0;
+    return 1;
+}
+std::wstring SpeedMeterNumber(double value,bool compact=false) {
+    if(!std::isfinite(value) || value<0)return L"\u2014";
+    wchar_t buffer[64];swprintf_s(buffer,value>=1e6?L"%.3g":compact||value>=1000?L"%.0f":value<1?L"%.2f":L"%.1f",value);return buffer;
+}
+constexpr ULONGLONG kSpeedMeterEaseMs=250;
+void DrawSpeedMeter(SpeedCardUI& ui) {
+    const double fraction=std::clamp(ui.meterFraction,0.0,1.0);
+    // Keep the same geometry and controls during every frame.
+    ui.meterArc.Point(SpeedMeterPoint(fraction,118));ui.meterArc.IsLargeArc(fraction>2.0/3);
+    ui.arc.Visibility(fraction>0?wux::Visibility::Visible:wux::Visibility::Collapsed);
+    ui.needleRotation.Angle(-135+270*fraction);
+    if(!ui.meterLatency) {
+        auto text=SpeedMeterNumber(ui.meterNumeric?ui.meterSpeed:-1);
+        if(text!=ui.meterText){ui.reading.Text(winrt::hstring{text});ui.meterText=std::move(text);}
+    }
+    for(size_t i=0;i<ui.ticks.size();++i) {
+        const bool lit=!ui.meterLatency && ui.meterNumeric && ui.meterSpeed>=kSpeedMeterTicks[i]*ui.meterMaximum/1000;
+        if(!ui.meterDrawn || ui.meterTickLit[i]!=lit){ui.ticks[i].Opacity(lit?0.95:0.38);ui.meterTickLit[i]=lit;}
+    }
+    ui.meterDrawn=true;
+}
+void AdvanceSpeedMeter(SpeedCardUI& ui,ULONGLONG now) {
+    if(!ui.meterAnimating)return;
+    const double t=std::clamp(static_cast<double>(now>=ui.meterStarted?now-ui.meterStarted:0)/kSpeedMeterEaseMs,0.0,1.0);
+    const double ease=1-std::pow(1-t,3);
+    ui.meterSpeed=std::lerp(ui.meterFromSpeed,ui.meterTargetSpeed,ease);
+    ui.meterFraction=SpeedMeterFraction(ui.meterSpeed,ui.meterMaximum)+(1-ease)*
+        (ui.meterFromFraction-SpeedMeterFraction(ui.meterFromSpeed,ui.meterMaximum));
+    if(t>=1){ui.meterSpeed=ui.meterTargetSpeed;ui.meterFraction=ui.meterTargetFraction;ui.meterAnimating=false;}
+    DrawSpeedMeter(ui);
+}
+void FinishSpeedMeterAnimation(SpeedCardUI& ui) {
+    ui.meterAnimating=false;ui.meterSpeed=ui.meterTargetSpeed;ui.meterFraction=ui.meterTargetFraction;DrawSpeedMeter(ui);
+}
+void UpdateSpeedCard(SpeedCardUI& ui,const SpeedView& value) {
+    const bool running=value.phase==SpeedView::Phase::Latency || value.phase==SpeedView::Phase::Download || value.phase==SpeedView::Phase::Upload;
+    const auto number=SpeedMeterNumber;
+    const auto metric=[&](double value,const wchar_t* unit){return number(value,false)+(std::isfinite(value)&&value>=0?std::wstring(L" ")+unit:L"");};
+    const bool latency=value.phase==SpeedView::Phase::Latency,ready=value.phase==SpeedView::Phase::Ready;
+    const auto now=GetTickCount64();AdvanceSpeedMeter(ui,now);
+    if(ready || (latency && !ui.measuringLatency))ui.meterMaximum=1000;
+    ui.measuringLatency=latency;
+    const auto valid=[](double value){return std::isfinite(value)&&value>=0;};
+    const bool uploading=value.phase==SpeedView::Phase::Upload ||
+        ((value.phase==SpeedView::Phase::Done || value.phase==SpeedView::Phase::Stopped || value.phase==SpeedView::Phase::Failed)&&valid(value.upload));
+    const double speed=ready?0:uploading?value.upload:value.download;
+    const double peak=std::max(valid(value.download)?value.download:0,valid(value.upload)?value.upload:0);
+    while(peak>ui.meterMaximum && ui.meterMaximum<1e300)ui.meterMaximum*=10;
+    const double fraction=latency || !valid(speed)?0:SpeedMeterFraction(speed,ui.meterMaximum);
+    const double target=latency || !valid(speed)?0:speed;
+    const bool changed=target!=ui.meterTargetSpeed || fraction!=ui.meterTargetFraction;
+    ui.meterLatency=latency;ui.meterNumeric=valid(speed);
+    ui.meterTargetSpeed=target;ui.meterTargetFraction=fraction;
+    if(!ui.meterInitialized || ready || latency)FinishSpeedMeterAnimation(ui);
+    else if(changed) {
+        ui.meterFromSpeed=ui.meterSpeed;ui.meterFromFraction=ui.meterFraction;ui.meterStarted=now;
+        ui.meterAnimating=ui.meterSpeed!=target || ui.meterFraction!=fraction;
+        if(!ui.meterAnimating || !StartSpeedMeterAnimationTimer())FinishSpeedMeterAnimation(ui);
+    }
+    ui.meterInitialized=true;DrawSpeedMeter(ui);
+    ui.arc.Stroke(uploading?ui.uploadBrush:ui.downloadBrush);
+    ui.needle.Opacity(ready||latency||!valid(speed)?0.25:0.85);
+    if(latency){ui.meterText=number(value.latency,false);ui.reading.Text(winrt::hstring{ui.meterText});}
+    ui.unit.Text(latency?L"ms":uploading?L"\u2191 Mbps":ready?L"Mbps":L"\u2193 Mbps");
+    for(size_t i=0;i<ui.ticks.size();++i){
+        const double tick=kSpeedMeterTicks[i]*ui.meterMaximum/1000;
+        ui.ticks[i].Text(winrt::hstring{number(tick,true)});
+    }
+    auto phase=i18n::Key::TestReady;
+    if(value.phase==SpeedView::Phase::Latency)phase=i18n::Key::Latency;
+    if(value.phase==SpeedView::Phase::Download)phase=i18n::Key::Download;
+    if(value.phase==SpeedView::Phase::Upload)phase=i18n::Key::Upload;
+    if(value.phase==SpeedView::Phase::Done)phase=i18n::Key::TestComplete;
+    if(value.phase==SpeedView::Phase::Stopped)phase=i18n::Key::TestStopped;
+    if(value.phase==SpeedView::Phase::Failed)phase=i18n::Key::Error;
+    ui.stage.Text(i18n::Text(phase));
+    ui.latency.Text(winrt::hstring{metric(value.latency,L"ms")});
+    ui.download.Text(winrt::hstring{number(value.download,false)});ui.upload.Text(winrt::hstring{number(value.upload,false)});
+    ui.action.Tag(winrt::box_value(running));
+    ui.action.Content(winrt::box_value(std::wstring(running?L"\u25A0 ":ready?L"\u25B6 ":L"\u21BB ")+i18n::Text(running?i18n::Key::StopTest:i18n::Key::Run)));
+}
+SpeedCardUI BuildSpeedCard(const SpeedView& value) {
+    SpeedCardUI ui;ui.root=wuxc::StackPanel();ui.root.Margin(wux::ThicknessHelper::FromLengths(0,7,0,0));
+    wuxc::StackPanel summary;wuxc::Grid metrics;
+    for(int i=0;i<2;++i){
+        wuxc::ColumnDefinition column;
+        column.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+        metrics.ColumnDefinitions().Append(column);
+        wuxc::StackPanel item;item.Margin(wux::ThicknessHelper::FromLengths(3,0,3,0));
+        auto label=SearchTextBlock();ScaleFont(label,10);label.Opacity(0.75);label.TextAlignment(wux::TextAlignment::Center);
+        label.Text(winrt::hstring{std::wstring(i?L"\u2191 ":L"\u2193 ")+i18n::Text(i?i18n::Key::Upload:i18n::Key::Download)+L" Mbps"});
+        label.TextTrimming(wux::TextTrimming::CharacterEllipsis);item.Children().Append(label);
+        auto reading = SearchTextBlock();
+        ScaleFont(reading, 20);
+        reading.FontWeight(wut::FontWeights::SemiBold());
+        reading.TextAlignment(wux::TextAlignment::Center);
+        reading.TextTrimming(wux::TextTrimming::CharacterEllipsis);item.Children().Append(reading);
+        if(i)ui.upload=reading;else ui.download=reading;
+        wuxc::Grid::SetColumn(item,i);metrics.Children().Append(item);
+    }
+    summary.Children().Append(metrics);
+    wuxc::StackPanel latency;latency.Orientation(wuxc::Orientation::Horizontal);latency.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    latency.Margin(wux::ThicknessHelper::FromLengths(0,6,0,2));
+    auto latencyLabel=SearchTextBlock();latencyLabel.Text(i18n::Text(i18n::Key::Latency));ScaleFont(latencyLabel,10);latencyLabel.Opacity(0.65);
+    latencyLabel.Margin(wux::ThicknessHelper::FromLengths(0,0,7,0));latency.Children().Append(latencyLabel);
+    ui.latency=SearchTextBlock();ScaleFont(ui.latency,10);latency.Children().Append(ui.latency);summary.Children().Append(latency);
+    ui.root.Children().Append(summary);
+    wuxc::Canvas canvas;canvas.Width(280);canvas.Height(260);
+    wux::Shapes::Path track;
+    track.Data(SpeedMeterArc(1, 118));
+    track.Stroke(g_searchTextBrush);
+    track.Opacity(0.16);
+    track.StrokeThickness(18);
+    canvas.Children().Append(track);
+    const auto gradient=[](winrt::Windows::UI::Color first,winrt::Windows::UI::Color last){
+        wuxm::LinearGradientBrush brush;brush.StartPoint({0,1});brush.EndPoint({1,0});
+        wuxm::GradientStop a;a.Offset(0);a.Color(first);brush.GradientStops().Append(a);
+        wuxm::GradientStop b;b.Offset(1);b.Color(last);brush.GradientStops().Append(b);return brush;
+    };
+    ui.downloadBrush=gradient({255,0,176,239},{255,106,255,210});ui.uploadBrush=gradient({255,125,69,236},{255,227,124,255});
+    ui.arc=wux::Shapes::Path();ui.arc.StrokeThickness(18);ui.arc.Data(SpeedMeterArc(0,118));
+    ui.meterArc=ui.arc.Data().as<wuxm::PathGeometry>().Figures().GetAt(0).Segments().GetAt(0).as<wuxm::ArcSegment>();canvas.Children().Append(ui.arc);
+    for(size_t i=0;i<17;++i){
+        const auto a=SpeedMeterPoint(i/16.0,104),b=SpeedMeterPoint(i/16.0,i%2?107:109);
+        wux::Shapes::Line tick;
+        tick.X1(a.X);
+        tick.Y1(a.Y);
+        tick.X2(b.X);
+        tick.Y2(b.Y);
+        tick.Stroke(g_searchTextBrush);
+        tick.StrokeThickness(1);
+        tick.Opacity(0.25);
+        canvas.Children().Append(tick);
+    }
+    for(size_t i=0;i<ui.ticks.size();++i){
+        auto tick = SearchTextBlock();
+        ScaleFont(tick, 11);
+        tick.FontWeight(wut::FontWeights::SemiBold());
+        tick.Width(48);
+        tick.Height(18);
+        tick.TextAlignment(wux::TextAlignment::Center);
+        const auto point=SpeedMeterPoint(i/8.0,90);wuxc::Canvas::SetLeft(tick,point.X-24);wuxc::Canvas::SetTop(tick,point.Y-9);
+        ui.ticks[i]=tick;canvas.Children().Append(tick);
+    }
+    ui.needle=wux::Shapes::Path();wuxm::PathGeometry shape;wuxm::PathFigure figure;figure.StartPoint({134,145});
+    for(auto point:{wf::Point{146,145},wf::Point{143,54},wf::Point{137,54}}){wuxm::LineSegment line;line.Point(point);figure.Segments().Append(line);}
+    figure.IsClosed(true);shape.Figures().Append(figure);ui.needle.Data(shape);ui.needle.Fill(g_searchTextBrush);
+    ui.needleRotation = wuxm::RotateTransform();
+    ui.needleRotation.CenterX(140);
+    ui.needleRotation.CenterY(138);
+    ui.needle.RenderTransform(ui.needleRotation);
+    canvas.Children().Append(ui.needle);
+    ui.reading = SearchTextBlock();
+    ScaleFont(ui.reading, 32);
+    ui.reading.FontWeight(wut::FontWeights::Light());
+    ui.reading.Width(200);
+    ui.reading.Height(44);
+    ui.reading.TextAlignment(wux::TextAlignment::Center);
+    wuxc::Canvas::SetLeft(ui.reading,40);wuxc::Canvas::SetTop(ui.reading,184);canvas.Children().Append(ui.reading);
+    ui.unit=SearchTextBlock();ScaleFont(ui.unit,11);ui.unit.Opacity(0.7);ui.unit.Width(160);ui.unit.TextAlignment(wux::TextAlignment::Center);
+    wuxc::Canvas::SetLeft(ui.unit,60);wuxc::Canvas::SetTop(ui.unit,230);canvas.Children().Append(ui.unit);
+    wuxc::Viewbox gauge;
+    gauge.MaxHeight(260);
+    gauge.Stretch(wuxm::Stretch::Uniform);
+    gauge.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    gauge.Child(canvas);
+    ui.root.Children().Append(gauge);
+    ui.stage = SearchTextBlock();
+    ScaleFont(ui.stage, 11);
+    ui.stage.TextAlignment(wux::TextAlignment::Center);
+    ui.stage.Opacity(0.7);
+    ui.root.Children().Append(ui.stage);
+    ui.action = wuxc::Button();
+    ui.action.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    ui.action.Margin(wux::ThicknessHelper::FromLengths(0, 8, 0, 0));
+    ui.action.Padding(wux::ThicknessHelper::FromLengths(20,7,20,7));
+    KeepHandler(ui.action,ui.action.Click(winrt::auto_revoke,[](wf::IInspectable const& sender,wux::RoutedEventArgs const&){
+        if(winrt::unbox_value_or<bool>(sender.as<wuxc::Button>().Tag(),false))StopInternetSpeedTest();else StartInternetSpeedTest();
+    }));
+    ui.root.Children().Append(ui.action);UpdateSpeedCard(ui,value);return ui;
+}
+
+void UpdateUsageCard(UsageCardUI& ui,const UsageView& value) {
+    ui.value.Text(winrt::hstring{value.display});
+    ui.detail.Text(winrt::hstring{value.detail});
+    const double maximum=std::isfinite(value.maximum)&&value.maximum>0?value.maximum:100;
+    ui.scale.Text(winrt::hstring{std::to_wstring(static_cast<int>(std::ceil(maximum)))});
+    wuxm::PathGeometry line,area;
+    size_t i=0;
+    const size_t first=value.history.size()>60?value.history.size()-60:0;
+    while(first+i<value.history.size()) {
+        const auto valid=[&](size_t index){return index<value.history.size() && std::isfinite(value.history[index]) && value.history[index]>=0;};
+        if(!valid(first+i)){++i;continue;}
+        const auto point=[&](size_t index){return wf::Point{static_cast<float>((60-(value.history.size()-first)+index-first)*300.0/59),
+            static_cast<float>(58-56*std::clamp(value.history[index]/maximum,0.0,1.0))};};
+        const auto start=point(first+i);
+        wuxm::PathFigure stroke,fill;stroke.StartPoint(start);fill.StartPoint({start.X,60});
+        wuxm::LineSegment rise;rise.Point(start);fill.Segments().Append(rise);
+        auto end=start;++i;
+        while(valid(first+i)) {
+            end=point(first+i++);wuxm::LineSegment segment;segment.Point(end);stroke.Segments().Append(segment);
+            wuxm::LineSegment filled;filled.Point(end);fill.Segments().Append(filled);
+        }
+        // Draw a short marker for the first sample without inventing history.
+        if(stroke.Segments().Size()==0){wuxm::LineSegment dot;dot.Point({std::max(0.f,start.X-1),start.Y});stroke.Segments().Append(dot);}
+        wuxm::LineSegment bottom;bottom.Point({end.X,60});fill.Segments().Append(bottom);fill.IsClosed(true);
+        line.Figures().Append(stroke);area.Figures().Append(fill);
+    }
+    ui.line.Data(line);ui.area.Data(area);
+}
+UsageCardUI BuildUsageCard(const UsageView& value) {
+    UsageCardUI ui;ui.root=wuxc::StackPanel();
+    ui.root.Margin(wux::ThicknessHelper::FromLengths(0,4,0,0));
+    ui.value=SearchTextBlock();ScaleFont(ui.value,24);ui.value.FontWeight(wut::FontWeights::SemiBold());
+    ui.root.Children().Append(ui.value);
+    ui.detail=SearchTextBlock();ScaleFont(ui.detail,10);ui.detail.Opacity(0.7);
+    ui.detail.TextWrapping(wux::TextWrapping::Wrap);ui.detail.MaxLines(2);
+    ui.detail.Margin(wux::ThicknessHelper::FromLengths(0,1,0,6));ui.root.Children().Append(ui.detail);
+    wuxc::Viewbox graph;graph.Height(62);graph.Stretch(wuxm::Stretch::Fill);
+    graph.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    wuxc::Canvas canvas;canvas.Width(300);canvas.Height(60);
+    const BYTE r=static_cast<BYTE>(value.color>>16),g=static_cast<BYTE>(value.color>>8),b=static_cast<BYTE>(value.color);
+    for(int y:{2,30,58}){
+        wux::Shapes::Line grid;grid.X1(0);grid.X2(300);grid.Y1(y);grid.Y2(y);
+        grid.Stroke(g_searchTextBrush);grid.StrokeThickness(0.5);grid.Opacity(0.15);canvas.Children().Append(grid);
+    }
+    ui.area=wux::Shapes::Path();ui.area.Fill(MakeBrush(36,r,g,b));canvas.Children().Append(ui.area);
+    ui.line=wux::Shapes::Path();ui.line.Stroke(MakeBrush(255,r,g,b));ui.line.StrokeThickness(1.8);
+    ui.line.StrokeLineJoin(wuxm::PenLineJoin::Round);canvas.Children().Append(ui.line);
+    graph.Child(canvas);ui.root.Children().Append(graph);
+    wuxc::Grid footer;wuxc::ColumnDefinition left,right;
+    left.Width(wux::GridLengthHelper::FromValueAndType(1,wux::GridUnitType::Star));
+    right.Width(wux::GridLengthHelper::FromValueAndType(0,wux::GridUnitType::Auto));
+    footer.ColumnDefinitions().Append(left);footer.ColumnDefinitions().Append(right);
+    auto history=SearchTextBlock();history.Text(L"60 s  \u00B7  1 s");ScaleFont(history,9);history.Opacity(0.5);
+    ui.scale=SearchTextBlock();ScaleFont(ui.scale,9);ui.scale.Opacity(0.5);wuxc::Grid::SetColumn(ui.scale,1);
+    footer.Children().Append(history);footer.Children().Append(ui.scale);ui.root.Children().Append(footer);
+    UpdateUsageCard(ui,value);return ui;
+}
+
+wuxc::Grid BuildInstalledBadge() {
+    wuxc::Grid note;
+    wuxc::ColumnDefinition iconColumn,textColumn;
+    iconColumn.Width(wux::GridLengthHelper::FromValueAndType(0,wux::GridUnitType::Auto));
+    textColumn.Width(wux::GridLengthHelper::FromValueAndType(1,wux::GridUnitType::Star));
+    note.ColumnDefinitions().Append(iconColumn);note.ColumnDefinitions().Append(textColumn);
+    note.Margin(wux::ThicknessHelper::FromLengths(0,2,0,0));
+    auto mark=SearchFontIcon();mark.Glyph(L"\uE946");ScaleFont(mark,11);mark.Margin(wux::ThicknessHelper::FromLengths(0,0,4,0));note.Children().Append(mark);
+    auto label=SearchTextBlock();label.Text(std::wstring(i18n::Text(i18n::Key::InstalledApp))+L" \u00B7 "+i18n::Text(i18n::Key::NotLaunchable));
+    ScaleFont(label,10);label.Opacity(0.75);label.TextWrapping(wux::TextWrapping::Wrap);label.MaxLines(2);
+    wuxc::Grid::SetColumn(label,1);note.Children().Append(label);
+    return note;
+}
+wuxc::StackPanel BuildWeatherTimeline(const std::vector<WeatherDayRow>& days) {
+    wuxc::StackPanel timeline;
+    timeline.Margin(wux::ThicknessHelper::FromLengths(0, 7, 0, 0));
+    for (const auto& day : days) {
+        wuxc::Border frame;
+        frame.CornerRadius(wux::CornerRadius{5, 5, 5, 5});
+        frame.Padding(wux::ThicknessHelper::FromLengths(4, 4, 4, 4));
+        frame.Margin(wux::ThicknessHelper::FromLengths(0, 1, 0, 1));
+        frame.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+        frame.Opacity(day.past ? 0.75 : 1);
+        if (day.today) {
+            try {
+                namespace view = winrt::Windows::UI::ViewManagement;
+                const auto accent = view::UISettings().GetColorValue(view::UIColorType::Accent);
+                frame.Background(MakeBrush(0x24, accent.R, accent.G, accent.B));
+                frame.BorderBrush(MakeBrush(0xB0, accent.R, accent.G, accent.B));
+            } catch (...) {}
+        }
+        wuxc::Grid line;
+        for (int i = 0; i < 4; ++i) {
+            wuxc::ColumnDefinition column;
+            column.Width(wux::GridLengthHelper::FromValueAndType(i == 0 ? 1 : 0,
+                i == 0 ? wux::GridUnitType::Star : wux::GridUnitType::Auto));
+            line.ColumnDefinitions().Append(column);
+        }
+        const std::wstring values[] = {day.label, day.symbol, day.low, day.high};
+        for (int i = 0; i < 4; ++i) {
+            auto label = SearchTextBlock();
+            label.Text(winrt::hstring{values[i]});
+            ScaleFont(label, 10);
+            label.VerticalAlignment(wux::VerticalAlignment::Center);
+            label.TextWrapping(wux::TextWrapping::NoWrap);
+            label.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+            label.FontWeight(day.today ? wut::FontWeights::SemiBold() : wut::FontWeights::Normal());
+            if (i > 0) label.Margin(wux::ThicknessHelper::FromLengths(5, 0, 0, 0));
+            if (i == 1) {
+                label.FontFamily(wuxm::FontFamily(L"Segoe UI Emoji"));
+                label.IsColorFontEnabled(true);
+            }
+            if (i >= 2) label.TextAlignment(wux::TextAlignment::Right);
+            wuxc::Grid::SetColumn(label, i);
+            line.Children().Append(label);
+        }
+        frame.Child(line);
+        timeline.Children().Append(frame);
+    }
+    return timeline;
+}
+
+void ApplyAppIcon(const wuxc::Button& button, const std::vector<BYTE>& pixels) {
+    auto layout = button.Content().try_as<wuxc::Grid>();
+    auto bitmap = IconBitmap(pixels);
+    if (!layout || !layout.Children().Size() || !bitmap) return;
+    // Recycled slots keep an image and fallback icon in a stable icon host.
+    if(auto host=layout.Children().GetAt(0).try_as<wuxc::Grid>();host && host.Children().Size()==2) {
+        if(auto image=host.Children().GetAt(0).try_as<wuxc::Image>()) {
+            image.Source(bitmap);image.Visibility(wux::Visibility::Visible);
+            host.Children().GetAt(1).as<wux::UIElement>().Visibility(wux::Visibility::Collapsed);return;
+        }
+    }
+    wuxc::Image image;
+    image.Source(bitmap);
+    image.Width(kIconDisplay);
+    image.Height(kIconDisplay);
+    image.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
+    image.VerticalAlignment(wux::VerticalAlignment::Center);
+    wuxc::Grid::SetColumn(image, 0);
+    layout.Children().SetAt(0, image);
+}
+
+
+
+
+void AddAppUninstallItem(wuxc::MenuFlyout const& flyout, winrt::weak_ref<wuxc::Button> weakBtn,
+    std::wstring family, std::optional<uninstall::Command> uninstaller, std::wstring appTitle,
+    std::function<bool()> stillCurrent = {}) {
+    wuxc::MenuFlyoutItem uninstallItem;
+    uninstallItem.Text(i18n::Text(i18n::Key::Uninstall));
+    auto uninstallIcon = SearchFontIcon();
+    uninstallIcon.Glyph(L"\uE74D");
+    uninstallItem.Icon(uninstallIcon);
+    KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle, stillCurrent](
+                                                       wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        if(stillCurrent && !stillCurrent())return;
+        auto btn = weakBtn.get();
+        if (!btn) return;
+        // After the menu has closed: one flyout at a time.
+        btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle, stillCurrent] {
+            if(stillCurrent && !stillCurrent())return;
+            auto anchor = weakBtn.get();
+            if (!anchor) return;
+            ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle, stillCurrent] {
+                if(stillCurrent && !stillCurrent())return;
+                if (!family.empty()) {
+                    if (RequestPackageRemoval(family)) {
+                        DismissSearch();
+                    }
+                } else if (uninstaller) {
+                    DismissSearchForLaunch([command = *uninstaller] { RunUninstaller(command); });
+                }
+            });
+        }});
+    }));
+    flyout.Items().Append(uninstallItem);
+}
+
+void AttachAppCardInput(wuxc::Button const& button) {
+    // Weak: the button holds these handlers, and a strong self-reference
+    // would keep every card ever built alive.
+    KeepHandler(button, button.PointerEntered(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&,
+                                                               wux::Input::PointerRoutedEventArgs const&) {
+        auto btn = weakBtn.get();
+        if (!btn || !g_activeAppsOpt || g_dragging) return;  // a drag passing over
+        for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+            if ((*g_activeAppsOpt)[i].button == btn) {
+                SetAppSelection(static_cast<int>(i), true);
+                break;
+            }
+        }
+    }));
+
+    KeepHandler(button, button.Click(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&, wux::RoutedEventArgs const& event) {
+        auto btn = weakBtn.get();
+        if (!btn || !g_activeAppsOpt) return;
+        if (auto origin = event.OriginalSource().try_as<wuxc::Button>(); origin && origin != btn) return;
+        for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+            if ((*g_activeAppsOpt)[i].button == btn) {
+                LaunchSelectedApp(static_cast<int>(i), false);
+                return;
+            }
+        }
+    }));
+
+}
+
+void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& binding) {
+    wuxc::MenuFlyout menu;
+    KeepHandler(menu, menu.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuOpening(sender); }));
+    KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuClosed(sender); }));
+    // Filled in when first opened, not with the card (see the file rows).
+    // What it needs of the row is copied, less the icon pixels; the card
+    // is held weakly, since it owns this menu.
+    KeepHandler(menu, menu.Opening(winrt::auto_revoke, [binding, weakBtn = winrt::make_weak(button)](
+                     wf::IInspectable const& sender, wf::IInspectable const&) {
+        if (auto btn = weakBtn.get(); btn && g_appButtonsOpt) {
+            for (size_t i = 0; i < g_appButtonsOpt->size(); ++i) {
+                if ((*g_appButtonsOpt)[i] == btn) {
+                    SetAppSelection(static_cast<int>(i), true);
+                    break;
+                }
+            }
+        }
+        const Row& item=*binding;
+        auto flyout = sender.as<wuxc::MenuFlyout>();
+        flyout.Items().Clear();
+        if(item.installedOnly) {
+            const auto family=uninstall::RemovableFamily(item.installedFamily);
+            const auto uninstaller=family.empty()?uninstall::FindRegisteredUninstaller(
+                item.installedHive,item.installedView,item.installedKey,item.title):std::nullopt;
+            if(!family.empty() || uninstaller) {
+                AddAppUninstallItem(flyout,weakBtn,family,uninstaller,item.title,
+                    [binding,title=item.title,identity=item.cardSignature] {
+                        return binding->title==title && binding->cardSignature==identity;
+                    });
+            } else {
+                wuxc::MenuFlyoutItem manage;manage.Text(i18n::Text(i18n::Key::ManageInstalled));
+                auto icon=SearchFontIcon();icon.Glyph(L"\uE8A7");manage.Icon(icon);
+                KeepHandler(manage,manage.Click(winrt::auto_revoke,[](wf::IInspectable const&,wux::RoutedEventArgs const&){DismissSearchForLaunch([]{OpenResult(L"ms-settings:appsfeatures",false);});}));
+                flyout.Items().Append(manage);
+            }
+            if(const auto path=installed::Location(item.installedLocation);!path.empty()) {
+                wuxc::MenuFlyoutItem open;open.Text(i18n::Text(i18n::Key::OpenLocation));
+                auto icon=SearchFontIcon();icon.Glyph(L"\uE838");open.Icon(icon);
+                KeepHandler(open,open.Click(winrt::auto_revoke,[path](wf::IInspectable const&,wux::RoutedEventArgs const&){DismissSearchForLaunch([path]{OpenResult(path,false);});}));
+                flyout.Items().Append(open);
+                wuxc::MenuFlyoutItem copy;copy.Text(i18n::Text(i18n::Key::CopyPath));
+                auto copyIcon=SearchFontIcon();copyIcon.Glyph(L"\uE71B");copy.Icon(copyIcon);
+                KeepHandler(copy,copy.Click(winrt::auto_revoke,[path](wf::IInspectable const&,wux::RoutedEventArgs const&){tools::CopyTextToClipboard(path);}));
+                flyout.Items().Append(copy);
+            }
+            wuxc::MenuFlyoutItem copy;copy.Text(i18n::Text(i18n::Key::CopyName));
+            auto icon=SearchFontIcon();icon.Glyph(L"\uE8C8");copy.Icon(icon);
+            KeepHandler(copy,copy.Click(winrt::auto_revoke,[name=item.title](wf::IInspectable const&,wux::RoutedEventArgs const&){tools::CopyTextToClipboard(name);}));
+            flyout.Items().Append(copy);
+        } else if (!item.serviceName.empty()) {
+            for(auto action:{services::Action::Start,services::Action::Stop,services::Action::Restart}) {
+                wuxc::MenuFlyoutItem entry;
+                entry.Text(i18n::Text(action==services::Action::Start?i18n::Key::ServiceStart:action==services::Action::Stop?i18n::Key::StopTest:i18n::Key::ServiceRestart));
+                entry.IsEnabled(!item.serviceBusy && services::Allowed(action,item.serviceState,item.serviceControls));
+                KeepHandler(entry,entry.Click(winrt::auto_revoke,[name=item.serviceName,action](wf::IInspectable const&,wux::RoutedEventArgs const&){services::Queue(name,action);}));
+                flyout.Items().Append(entry);
+            }
+            flyout.Items().Append(wuxc::MenuFlyoutSeparator());
+            wuxc::MenuFlyoutItem name;name.Text(i18n::Text(i18n::Key::CopyName));
+            KeepHandler(name,name.Click(winrt::auto_revoke,[text=item.serviceName](wf::IInspectable const&,wux::RoutedEventArgs const&){tools::CopyTextToClipboard(text);}));
+            flyout.Items().Append(name);
+            wuxc::MenuFlyoutItem copy;copy.Text(i18n::Text(i18n::Key::CopyDetails));
+            KeepHandler(copy,copy.Click(winrt::auto_revoke,[text=item.copyText](wf::IInspectable const&,wux::RoutedEventArgs const&){tools::CopyTextToClipboard(text);}));
+            flyout.Items().Append(copy);
+            wuxc::MenuFlyoutItem open;open.Text(i18n::Format(i18n::Key::OpenService,{i18n::Text(i18n::Key::Services)}));
+            KeepHandler(open,open.Click(winrt::auto_revoke,[](wf::IInspectable const&,wux::RoutedEventArgs const&){DismissSearchForLaunch([]{services::OpenManager();});}));
+            flyout.Items().Append(open);
+        } else
+        if (!item.copyText.empty()) {
+            wuxc::MenuFlyoutItem copyItem;
+            copyItem.Text(i18n::Text(i18n::Key::CopyClipboard));
+            auto copyIcon = SearchFontIcon();
+            copyIcon.Glyph(L"\uE8C8");
+            copyItem.Icon(copyIcon);
+            KeepHandler(copyItem, copyItem.Click(winrt::auto_revoke, [txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                tools::CopyTextToClipboard(txt);
+            }));
+            flyout.Items().Append(copyItem);
+        } else {
+            bool isWebItem = item.appIndex < 0 && (item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:"));
+            bool isSettingItem = item.isSetting;
+            const bool isCommandItem = !item.commandLine.empty();
+
+            wuxc::MenuFlyoutItem openItem;
+            openItem.Text(i18n::Text(isCommandItem ? i18n::Key::Run : isWebItem ? i18n::Key::SearchBrowser : i18n::Key::Open));
+            auto openIcon = SearchFontIcon();
+            openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
+            openItem.Icon(openIcon);
+            KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                auto btn = weakBtn.get();
+                if (!btn || !g_activeAppsOpt) return;
+                for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                    if ((*g_activeAppsOpt)[i].button == btn) {
+                        LaunchSelectedApp(static_cast<int>(i), false);
+                        return;
+                    }
+                }
+            }));
+            flyout.Items().Append(openItem);
+
+            if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
+                wuxc::MenuFlyoutItem adminItem;
+                adminItem.Text(i18n::Text(i18n::Key::RunAdmin));
+                auto adminIcon = SearchFontIcon();
+                adminIcon.Glyph(L"\uE7EF");
+                adminItem.Icon(adminIcon);
+                KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    auto btn = weakBtn.get();
+                    if (!btn || !g_activeAppsOpt) return;
+                    for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                        if ((*g_activeAppsOpt)[i].button == btn) {
+                            LaunchSelectedApp(static_cast<int>(i), true);
+                            return;
+                        }
+                    }
+                }));
+                flyout.Items().Append(adminItem);
+            }
+
+            if (isCommandItem) {
+                wuxc::MenuFlyoutItem copyCommand;
+                copyCommand.Text(i18n::Text(i18n::Key::CopyCommand));
+                auto copyIcon = SearchFontIcon();
+                copyIcon.Glyph(L"\uE8C8");
+                copyCommand.Icon(copyIcon);
+                KeepHandler(copyCommand, copyCommand.Click(winrt::auto_revoke, [command = item.commandLine](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CopyTextToClipboard(command);
+                }));
+                flyout.Items().Append(copyCommand);
+            } else if (isWebItem) {
+                std::wstring webUrl = item.openPath;
+                wuxc::MenuFlyoutItem copyUrlItem;
+                copyUrlItem.Text(i18n::Text(i18n::Key::CopySearchLink));
+                auto copyIcon = SearchFontIcon();
+                copyIcon.Glyph(L"\uE8C8");
+                copyUrlItem.Icon(copyIcon);
+                KeepHandler(copyUrlItem, copyUrlItem.Click(winrt::auto_revoke, [webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CopyTextToClipboard(webUrl);
+                }));
+                flyout.Items().Append(copyUrlItem);
+            } else if (!isSettingItem && !item.openPath.empty()) {
+                std::wstring locTarget = item.openPath;
+                std::wstring appTitle = item.title;
+                bool isFile = item.isFile;
+                bool viaAppId = !isFile && !locTarget.starts_with(L"ms-settings:") &&
+                                !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:");
+                // An app launched by its app ID can still have a program
+                // on disk, which the card shows; the file actions use it.
+                std::wstring filePath = isFile ? locTarget : viaAppId ? item.programPath : L"";
+
+                if (isFile || viaAppId) {
+                    wuxc::MenuFlyoutSeparator sep1;
+                    flyout.Items().Append(sep1);
+
+                    if (!filePath.empty()) {
+                        wuxc::MenuFlyoutItem locItem;
+                        locItem.Text(i18n::Text(i18n::Key::OpenLocation));
+                        auto locIcon = SearchFontIcon();
+                        locIcon.Glyph(L"\uE838");
+                        locItem.Icon(locIcon);
+                        KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            OpenFileLocationThenDismiss(filePath);
+                        }));
+                        flyout.Items().Append(locItem);
+
+                        wuxc::MenuFlyoutItem copyPathItem;
+                        copyPathItem.Text(i18n::Text(i18n::Key::CopyPath));
+                        auto copyPathIcon = SearchFontIcon();
+                        copyPathIcon.Glyph(L"\uE71B");
+                        copyPathItem.Icon(copyPathIcon);
+                        KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            tools::CopyTextToClipboard(filePath);
+                        }));
+                        flyout.Items().Append(copyPathItem);
+                    }
+
+                    // Through the app ID where there is one, so the
+                    // shortcut keeps the original's arguments.
+                    std::wstring shortcutTarget = isFile ? locTarget : L"shell:AppsFolder\\" + locTarget;
+                    wuxc::MenuFlyoutItem shortcutItem;
+                    shortcutItem.Text(i18n::Text(i18n::Key::DesktopShortcut));
+                    auto shortcutIcon = SearchFontIcon();
+                    shortcutIcon.Glyph(L"\uE7C5");
+                    shortcutItem.Icon(shortcutIcon);
+                    KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [shortcutTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        tools::CreateDesktopShortcut(shortcutTarget, appTitle);
+                    }));
+                    flyout.Items().Append(shortcutItem);
+
+                    if (!filePath.empty()) {
+                        wuxc::MenuFlyoutSeparator sep2;
+                        flyout.Items().Append(sep2);
+
+                        wuxc::MenuFlyoutItem propItem;
+                        propItem.Text(i18n::Text(i18n::Key::Properties));
+                        auto propIcon = SearchFontIcon();
+                        propIcon.Glyph(L"\uE946");
+                        propItem.Icon(propIcon);
+                        KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            DismissSearch();
+                            ShowPropertiesDialog(filePath);
+                        }));
+                        flyout.Items().Append(propItem);
+                    }
+
+                    // Uninstall, as in Start's own menu: a packaged app is
+                    // removed, a program runs its uninstaller (uninstall).
+                    // Offered only where one of them applies.
+                    std::wstring family = viaAppId ? uninstall::RemovablePackageFamily(locTarget) : std::wstring();
+                    std::optional<uninstall::Command> uninstaller;
+                    if(family.empty() && !item.installedKey.empty()) {
+                        uninstaller=uninstall::FindRegisteredUninstaller(item.installedHive,item.installedView,item.installedKey,item.title);
+                    } else if (family.empty()) {
+                        std::wstring program = filePath;
+                        if (std::wstring target = apps::ResolveLnkTarget(program); !target.empty()) {
+                            program = target;
+                        }
+                        uninstaller = uninstall::FindProgramUninstaller(program, appTitle);
+                    }
+                    if (!family.empty() || uninstaller) {
+                        wuxc::MenuFlyoutSeparator sep3;
+                        flyout.Items().Append(sep3);
+
+                        AddAppUninstallItem(flyout,weakBtn,family,uninstaller,appTitle,
+                        [binding,title=item.title,target=item.openPath] {return binding->title==title && binding->openPath==target;});
+                    }
+                }
+            }
+        }
+
+    }));
+    InitializeCopiedMenu(menu);
+    button.ContextFlyout(menu);
+}
+
+// Ordinary app/Settings rows have one stable visual tree per slot. Rich cards
+// retain their own layouts. Slots grow on demand rather than delaying the first
+// search to build unused controls, and never exceed the configured result limit.
+struct PlainAppCard {
+    AppCardUI card;
+    std::shared_ptr<Row> binding;
+    wuxc::TextBlock name{nullptr},subtitle{nullptr};
+    wuxc::Grid badge{nullptr};
+    wuxc::Image image{nullptr};
+    wuxc::FontIcon fallback{nullptr};
+};
+[[clang::no_destroy]] std::optional<std::vector<PlainAppCard>> g_plainAppPool;
+bool g_plainPoolAttached=false;
+uint64_t g_plainPoolSettings=0;
+
+bool PlainAppRow(const Row& row) {
+    return row.appIndex>=0 && row.sectionTitle.empty() && row.serviceName.empty() &&
+        row.copyText.empty() && row.commandLine.empty() && row.customGlyph.empty() &&
+        row.customIconText.empty() && !row.infoOnly && !row.isError && row.weatherDays.empty() && !row.speed && !row.usage;
+}
+PlainAppCard BuildPlainAppCard() {
+    PlainAppCard slot;
+    slot.binding=std::make_shared<Row>();
+    wuxc::Grid layout;
+    wuxc::ColumnDefinition iconColumn,textColumn;
+    iconColumn.Width(wux::GridLengthHelper::FromValueAndType(0,wux::GridUnitType::Auto));
+    textColumn.Width(wux::GridLengthHelper::FromValueAndType(1,wux::GridUnitType::Star));
+    layout.ColumnDefinitions().Append(iconColumn);layout.ColumnDefinitions().Append(textColumn);
+    wuxc::Grid icon;
+    icon.Width(kIconDisplay);icon.Height(kIconDisplay);
+    icon.Margin(wux::ThicknessHelper::FromLengths(0,0,10,0));
+    icon.VerticalAlignment(wux::VerticalAlignment::Center);
+    slot.image=wuxc::Image();slot.image.Width(kIconDisplay);slot.image.Height(kIconDisplay);
+    slot.fallback=SearchFontIcon();ScaleFont(slot.fallback,15);slot.fallback.Opacity(0.7);
+    slot.fallback.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    slot.fallback.VerticalAlignment(wux::VerticalAlignment::Center);
+    icon.Children().Append(slot.image);icon.Children().Append(slot.fallback);layout.Children().Append(icon);
+    wuxc::StackPanel text;wuxc::Grid::SetColumn(text,1);text.VerticalAlignment(wux::VerticalAlignment::Center);
+    slot.name=SearchTextBlock();ScaleFont(slot.name,12.5);slot.name.FontWeight(wut::FontWeights::SemiBold());
+    slot.name.TextTrimming(wux::TextTrimming::CharacterEllipsis);text.Children().Append(slot.name);
+    slot.badge=BuildInstalledBadge();slot.badge.Visibility(wux::Visibility::Collapsed);text.Children().Append(slot.badge);
+    slot.subtitle=SearchTextBlock();ScaleFont(slot.subtitle,10.5);slot.subtitle.Opacity(0.45);
+    slot.subtitle.Margin(wux::ThicknessHelper::FromLengths(0,1,0,0));
+    slot.subtitle.TextTrimming(wux::TextTrimming::CharacterEllipsis);text.Children().Append(slot.subtitle);
+    layout.Children().Append(text);
+    slot.card.button=wuxc::Button();auto button=slot.card.button;
+    button.Content(layout);button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    button.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
+    button.Padding(wux::ThicknessHelper::FromLengths(10,6,10,6));button.Margin(wux::ThicknessHelper::FromLengths(2,1,2,1));
+    button.IsTabStop(false);button.AllowFocusOnInteraction(false);ApplyResultRowButtonTheme(button,false);
+    AttachAppCardInput(button);AttachAppCardMenu(button,slot.binding);
+    return slot;
+}
+void UpdatePlainAppCard(PlainAppCard& slot,const Row& row) {
+    auto& card=slot.card;
+    const bool changed=card.appIndex<0 || card.title!=row.title || card.openPath!=row.openPath ||
+        card.iconKey!=row.iconKey || card.cardSignature!=row.cardSignature || card.isSetting!=row.isSetting ||
+        slot.binding->installedLocation!=row.installedLocation || slot.binding->installedFamily!=row.installedFamily ||
+        slot.binding->installedKey!=row.installedKey || slot.binding->installedHive!=row.installedHive || slot.binding->installedView!=row.installedView;
+    if(changed && g_contextMenuOpen)DismissSearchContextMenu();
+    if(changed || card.hasBitmap!=!row.icon.empty()) {
+        auto bitmap=IconBitmap(row.icon);
+        card.hasBitmap=static_cast<bool>(bitmap);
+        if(!bitmap && !IsSettingsResult(row))bitmap=IconBitmap(icons::DefaultExecutableIcon(IconPixels()));
+        slot.image.Source(bitmap);
+        slot.image.Visibility(bitmap?wux::Visibility::Visible:wux::Visibility::Collapsed);
+        slot.fallback.Glyph(IsSettingsResult(row)?L"\uE713":L"\uE71D");
+        slot.fallback.Visibility(bitmap?wux::Visibility::Collapsed:wux::Visibility::Visible);
+    }
+    if(card.title!=row.title)slot.name.Text(winrt::hstring{row.title});
+    if(card.subtitle!=row.subtitle)slot.subtitle.Text(winrt::hstring{i18n::Subtitle(row.subtitle)});
+    const bool installed=row.installedOnly;
+    slot.name.TextWrapping(installed?wux::TextWrapping::Wrap:wux::TextWrapping::NoWrap);slot.name.MaxLines(installed?4:1);
+    slot.subtitle.TextWrapping(installed?wux::TextWrapping::Wrap:wux::TextWrapping::NoWrap);slot.subtitle.MaxLines(installed?2:1);
+    slot.subtitle.Visibility(row.subtitle.empty()?wux::Visibility::Collapsed:wux::Visibility::Visible);
+    slot.badge.Visibility(installed?wux::Visibility::Visible:wux::Visibility::Collapsed);
+    wuxc::ToolTipService::SetToolTip(card.button,installed?winrt::box_value(row.title):nullptr);
+    // Existing visible menus survive unrelated icon/metadata updates. A
+    // different target discards old actions; reopening always reads fresh data.
+    if(changed)if(auto menu=card.button.ContextFlyout().try_as<wuxc::MenuFlyout>())menu.Items().Clear();
+    *slot.binding=row;slot.binding->icon.clear();
+    card.appIndex=row.appIndex;card.title=row.title;card.openPath=row.openPath;
+    card.canRunAsAdmin=row.canRunAsAdmin;card.isSetting=row.isSetting;card.isFile=row.isFile;
+    card.iconKey=row.iconKey;card.subtitle=row.subtitle;card.cardSignature=row.cardSignature;
+    card.button.Visibility(wux::Visibility::Visible);
+}
+void DetachPlainAppPool() {
+    if(!g_plainPoolAttached)return;
+    g_appsList.Children().Clear();g_activeAppsOpt->clear();g_appButtonsOpt->clear();g_plainPoolAttached=false;
+}
+bool RenderPlainApps(const std::vector<Row>& rows,bool force) {
+    if(rows.empty() || !std::all_of(rows.begin(),rows.end(),PlainAppRow))return false;
+    size_t limit;
+    {std::lock_guard lock(g_settingsMutex);limit=static_cast<size_t>(std::clamp(g_settings.maxAppResults,1,30));}
+    if(rows.size()>limit)return false;
+    const auto settingsRevision=g_settingsRevision.load();
+    if(!g_plainAppPool || g_plainPoolSettings!=settingsRevision || g_plainAppPool->size()>limit) {
+        DetachPlainAppPool();g_plainAppPool.emplace();g_plainPoolSettings=settingsRevision;
+    }
+    if(!g_plainPoolAttached) {
+        g_appsList.Children().Clear();g_activeAppsOpt->clear();g_appButtonsOpt->clear();
+        for(auto& slot:*g_plainAppPool)g_appsList.Children().Append(slot.card.button);
+        g_plainPoolAttached=true;
+    }
+    while(g_plainAppPool->size()<rows.size()) {
+        auto slot=BuildPlainAppCard();
+        g_appsList.Children().Append(slot.card.button);g_plainAppPool->push_back(std::move(slot));
+    }
+    g_activeAppsOpt->clear();g_appButtonsOpt->clear();
+    if(force) {
+        if(auto previous=g_paintedSelectedButton.get())ApplyResultRowButtonTheme(previous,false);
+        g_paintedSelectedButton={};
+    }
+    for(size_t i=0;i<g_plainAppPool->size();++i) {
+        auto& slot=(*g_plainAppPool)[i];
+        if(i>=rows.size()) {slot.card.button.Visibility(wux::Visibility::Collapsed);continue;}
+        // The controls remain attached even when every result has changed.
+        UpdatePlainAppCard(slot,rows[i]);
+        if(force)ApplyResultRowButtonTheme(slot.card.button,false);
+        g_activeAppsOpt->push_back(slot.card);g_appButtonsOpt->push_back(slot.card.button);
+    }
+    return true;
+}
+
+
+// Runs on the XAML thread. The high-priority apps pass never builds file rows.
+void RenderResults(bool appsOnly = false, bool force = false) try {
+    if (g_searchWindowSliding && (!appsOnly || g_isHiding.load())) {
+        g_renderAfterSlide = true;
+        return;
+    }
+    if (!appsOnly) g_renderAfterSlide = false;
     if (!g_resultsList || !g_resultsHost || !g_appsList || !g_activeAppsOpt || !g_appButtonsOpt) {
         return;
     }
@@ -15828,32 +19745,36 @@ void RenderResults() try {
     const bool filesVisible=FilesPanelVisible();
     ApplyFilesPanelLayout();
 
-    std::vector<Row> files;
-    std::vector<Row> appNames;
-    DWORD total = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_resultsMutex);
-        files = g_fileRows;
-        appNames = g_appRows;
-        g_shownQuery = g_rowsQuery;
-        total = g_totalMatches.load();
-    }
-
-    if(!filesVisible) { files.clear(); total=0; }
-    if (files.empty() && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
+    auto snapshot = ReadSearchRenderSnapshot(appsOnly, force);
+    if (!snapshot) return;
+    auto& files = snapshot->files;
+    const auto& appNames = snapshot->apps;
+    const auto appsRevision = snapshot->appsRevision, filesRevision = snapshot->filesRevision;
+    const bool appsChanged = snapshot->appsChanged, filesChanged = snapshot->filesChanged;
+    const int previousAppSelection=appsChanged?RefreshedAppSelection(g_shownQuery,snapshot->query,g_currentAppRows,appNames,g_selectedApp,force):-1;
+    const bool retainFileSelection=!force && appsChanged && g_shownQuery==snapshot->query && g_filesColumnActive;
+    DWORD total = snapshot->total;
+    size_t fileCount = snapshot->fileCount;
+    g_shownQuery = snapshot->query;
+    if(!filesVisible) { files.clear(); fileCount=0; total=0; }
+    if (fileCount == 0 && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
         g_enterWaiting = false;
         g_currentAppRows.clear();
         g_currentFileRows.clear();
         g_selectedApp = -1;
         g_selectedFile = -1;
         g_filesColumnActive = false;
+        g_shownAppsRevision = appsRevision;
+        g_shownAppsContentRevision = snapshot->appsContentRevision;
+        if (filesChanged) g_shownFilesRevision = filesRevision;
+        if (filesChanged) g_shownFilesTotal = total;
         UpdateSearchResultsLayout(true);
         Wh_Log(L"render: nothing to show; menu restored");
         return;
     }
 
-    g_resultsList.Children().Clear();
-    g_currentAppRows = appNames;
+    if (filesChanged) g_resultsList.Children().Clear();
+    if (appsChanged) g_currentAppRows = appNames;
 
     const bool suggestions=g_searchWindowWindow.load() && g_shownQuery.empty();
     // Update bottom status bar
@@ -15861,7 +19782,12 @@ void RenderResults() try {
         g_footerStatus.Opacity(0.5);
         g_footerStatus.TextWrapping(wux::TextWrapping::NoWrap);
         wuxc::ToolTipService::SetToolTip(g_footerStatus,nullptr);
-        if (suggestions) {
+        if (!appNames.empty() && !appNames[0].sectionTitle.empty()) {
+            auto status = appNames[0].sectionTitle;
+            if (appNames[0].onlinePending || !appNames[0].infoOnly) status += L" \u2022 " +
+                std::wstring(i18n::Text(appNames[0].onlinePending ? i18n::Key::OnlineLoading : i18n::Key::CopyHint));
+            g_footerStatus.Text(winrt::hstring{status});
+        } else if (suggestions) {
             g_footerStatus.Text(i18n::Text(filesVisible ? i18n::Key::SuggestedApps : i18n::Key::Apps));
         } else if(!filesVisible) {
             g_footerStatus.Text(i18n::Text(i18n::Key::Apps));
@@ -15877,16 +19803,16 @@ void RenderResults() try {
         } else if (!appNames.empty() && appNames[0].appIndex < 0 &&
                    (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:"))) {
             std::wstring statusStr = std::wstring(i18n::Text(i18n::Key::WebSearch))+L" \u2022 "+i18n::Text(i18n::Key::BrowserHint);
-            if (!files.empty()) {
-                statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Files))+L": "+std::to_wstring(files.size())+L")";
+            if (fileCount) {
+                statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Files))+L": "+std::to_wstring(fileCount)+L")";
             }
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else {
             std::wstring statusStr;
             if (everything::FindIpcWindow()) {
                 statusStr = L"Everything \u2022 "+std::wstring(i18n::Text(i18n::Key::Matches))+L": "+std::to_wstring(total);
-                if (!appNames.empty() || !files.empty()) {
-                    statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Apps))+L": "+std::to_wstring(appNames.size())+L", "+i18n::Text(i18n::Key::Files)+L": "+std::to_wstring(files.size())+L")";
+                if (!appNames.empty() || fileCount) {
+                    statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Apps))+L": "+std::to_wstring(appNames.size())+L", "+i18n::Text(i18n::Key::Files)+L": "+std::to_wstring(fileCount)+L")";
                 }
             } else {
                 statusStr = i18n::Text(i18n::Key::NotRunning);
@@ -15907,7 +19833,7 @@ void RenderResults() try {
         g_footerHints.Visibility(showHints ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     }
 
-    auto makeHeader = [isLight](const std::wstring& title, const wchar_t* iconGlyph, int count, const std::wstring& badgeText = L"") {
+    auto makeHeader = [isLight](const std::wstring& title, const wchar_t* iconGlyph, int count, const std::wstring& badgeText = L"", const std::wstring& emoji = L"") {
         wuxc::Grid headerGrid;
         headerGrid.Margin(wux::ThicknessHelper::FromLengths(10, 5, 10, 5));
 
@@ -15927,7 +19853,14 @@ void RenderResults() try {
         icon.Opacity(0.6);
         icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
         icon.VerticalAlignment(wux::VerticalAlignment::Center);
-        leftStack.Children().Append(icon);
+        if (emoji.empty()) leftStack.Children().Append(icon);
+        else {
+            auto symbol = SearchTextBlock(); symbol.Text(winrt::hstring{emoji});
+            symbol.FontFamily(wuxm::FontFamily(L"Segoe UI Emoji")); symbol.IsColorFontEnabled(true);
+            ScaleFont(symbol, 12); symbol.VerticalAlignment(wux::VerticalAlignment::Center);
+            symbol.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
+            leftStack.Children().Append(symbol);
+        }
 
         auto titleBlock = SearchTextBlock();
         titleBlock.Text(winrt::hstring{title});
@@ -15968,8 +19901,10 @@ void RenderResults() try {
     // The web-search rows have no app index; a Start menu internet shortcut is an app.
     bool isWebMode = (!appNames.empty() && appNames[0].appIndex < 0 &&
                       (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:")));
-    if (auto target = g_appsHeaderContent ? g_appsHeaderContent : g_appsHeaderHolder) {
-        if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
+    if (auto target = g_appsHeaderContent ? g_appsHeaderContent : g_appsHeaderHolder; target && appsChanged) {
+        if (!appNames.empty() && !appNames[0].sectionTitle.empty()) {
+            target.Child(makeHeader(appNames[0].sectionTitle, appNames[0].customGlyph.c_str(), static_cast<int>(appNames.size()), L"", appNames[0].sectionEmoji));
+        } else if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
             target.Child(makeHeader(i18n::Text(i18n::Key::Network), L"\uE701", static_cast<int>(appNames.size())));
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE88E") {
             target.Child(makeHeader(i18n::Text(i18n::Key::Converter), L"\uE88E", static_cast<int>(appNames.size())));
@@ -15981,12 +19916,14 @@ void RenderResults() try {
             target.Child(makeHeader(i18n::Text(suggestions ? i18n::Key::SuggestedApps : i18n::Key::Apps), L"\uE71D", static_cast<int>(appNames.size())));
         }
     }
-    std::wstring filesBadge = std::to_wstring(files.size()) + L" / " + std::to_wstring(total);
-    if (auto target = g_filesHeaderContent ? g_filesHeaderContent : g_filesHeaderHolder) {
-        target.Child(makeHeader(i18n::Text(i18n::Key::Files), L"\uE8B7", static_cast<int>(files.size()), filesBadge));
+    std::wstring filesBadge = std::to_wstring(fileCount) + L" / " + std::to_wstring(total);
+    if (auto target = g_filesHeaderContent ? g_filesHeaderContent : g_filesHeaderHolder; target && filesChanged) {
+        target.Child(makeHeader(i18n::Text(i18n::Key::Files), L"\uE8B7", static_cast<int>(fileCount), filesBadge));
     }
 
     auto makeAppCard = [](const Row& item) -> AppCardUI {
+        std::optional<SpeedCardUI> speedUI;
+        std::optional<UsageCardUI> usageUI;
         wuxc::Grid layout;
         wuxc::ColumnDefinition iconCol, textCol;
         iconCol.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
@@ -15994,20 +19931,24 @@ void RenderResults() try {
         layout.ColumnDefinitions().Append(iconCol);
         layout.ColumnDefinitions().Append(textCol);
 
-        bool hasBitmap = false;
-        if (auto bmp = IconBitmap(item.icon)) {
+        auto bitmap = IconBitmap(item.icon);
+        // A stock placeholder must remain replaceable when the real icon arrives.
+        const bool hasBitmap = static_cast<bool>(bitmap);
+        if (!bitmap && item.appIndex >= 0 && !item.openPath.empty() &&
+            !IsSettingsResult(item) && item.customGlyph.empty() && item.commandLine.empty())
+            bitmap = IconBitmap(icons::DefaultExecutableIcon(IconPixels()));
+        if (bitmap) {
             wuxc::Image image;
-            image.Source(bmp);
+            image.Source(bitmap);
             image.Width(kIconDisplay);
             image.Height(kIconDisplay);
             image.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
             image.VerticalAlignment(wux::VerticalAlignment::Center);
             wuxc::Grid::SetColumn(image, 0);
             layout.Children().Append(image);
-            hasBitmap = true;
         }
 
-        if (!hasBitmap) {
+        if (!bitmap) {
             wuxc::Border iconBox;
             iconBox.Width(kIconDisplay);
             iconBox.Height(kIconDisplay);
@@ -16020,7 +19961,7 @@ void RenderResults() try {
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
             fallbackIcon.VerticalAlignment(wux::VerticalAlignment::Center);
 
-            if (item.openPath.starts_with(L"ms-settings:") || item.subtitle.starts_with(L"Settings")) {
+            if (IsSettingsResult(item)) {
                 fallbackIcon.Glyph(L"\uE713");
                 fallbackIcon.Opacity(0.7);
             } else if (item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:")) {
@@ -16071,12 +20012,16 @@ void RenderResults() try {
         name.TextWrapping(wux::TextWrapping::NoWrap);
         // A result to copy -- a sum, a conversion -- is shown whole: a long
         // one wraps instead of being cut off.
-        const bool whole = !item.copyText.empty();
+        const bool whole = !item.copyText.empty() || !item.sectionTitle.empty() || item.installedOnly;
         if (whole) {
             name.TextWrapping(wux::TextWrapping::Wrap);
             name.MaxLines(4);
         }
         text.Children().Append(name);
+
+        if(item.installedOnly) {
+            text.Children().Append(BuildInstalledBadge());
+        }
 
         if (!item.subtitle.empty()) {
             auto sub = SearchTextBlock();
@@ -16087,11 +20032,36 @@ void RenderResults() try {
             sub.TextTrimming(wux::TextTrimming::CharacterEllipsis);
             sub.TextWrapping(whole ? wux::TextWrapping::Wrap : wux::TextWrapping::NoWrap);
             if (whole) {
-                sub.MaxLines(2);
+                sub.MaxLines(item.sectionTitle.empty() ? 2 : 4);
             }
             text.Children().Append(sub);
         }
         layout.Children().Append(text);
+
+        if (!item.weatherDays.empty() || item.speed || item.usage) {
+            // The forecast spans the full card width below the current
+            // conditions, including the icon column, so narrow panels fit.
+            for (int i = 0; i < 3; ++i) {
+                wuxc::RowDefinition row;
+                row.Height(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
+                layout.RowDefinitions().Append(row);
+            }
+            wux::FrameworkElement detail{nullptr};
+            if (item.speed) { speedUI = BuildSpeedCard(*item.speed); detail = speedUI->root; }
+            else if (item.usage) { usageUI = BuildUsageCard(*item.usage); detail = usageUI->root; }
+            else detail = BuildWeatherTimeline(item.weatherDays);
+            wuxc::Grid::SetRow(detail, 1); wuxc::Grid::SetColumnSpan(detail, 2);
+            layout.Children().Append(detail);
+            auto footer = SearchTextBlock();
+            footer.Text(winrt::hstring{item.footerText});
+            ScaleFont(footer, 9.5);
+            footer.Opacity(0.55);
+            footer.TextWrapping(wux::TextWrapping::Wrap); footer.MaxLines(2);
+            footer.Margin(wux::ThicknessHelper::FromLengths(0, 6, 0, 0));
+            if (speedUI) speedUI->footer = footer;
+            wuxc::Grid::SetRow(footer, 2); wuxc::Grid::SetColumnSpan(footer, 2);
+            layout.Children().Append(footer);
+        }
 
         wuxc::Button button;
         button.Content(layout);
@@ -16100,245 +20070,29 @@ void RenderResults() try {
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
         button.IsTabStop(false);
+        button.IsHitTestVisible(!item.infoOnly || item.speed.has_value());
         button.AllowFocusOnInteraction(false);
         if (whole) {
             wuxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring{item.title}));
         }
         ApplyResultRowButtonTheme(button, false);
+        if (item.isError) {
+            wuxc::Border error;
+            error.Background(MakeBrush(0x28, 0xC4, 0x2B, 0x1C)); error.BorderBrush(MakeBrush(0xCC, 0xC4, 0x2B, 0x1C));
+            error.BorderThickness(wux::ThicknessHelper::FromUniformLength(1)); error.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
+            error.Padding(wux::ThicknessHelper::FromUniformLength(8)); error.Child(layout); button.Content(error);
+        }
 
-        // Weak: the button holds these handlers, and a strong self-reference
-        // would keep every card ever built alive.
-        KeepHandler(button, button.PointerEntered(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&,
-                                                                   wux::Input::PointerRoutedEventArgs const&) {
-            auto btn = weakBtn.get();
-            if (!btn || !g_activeAppsOpt || g_dragging) return;  // a drag passing over
-            for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
-                if ((*g_activeAppsOpt)[i].button == btn) {
-                    SetAppSelection(static_cast<int>(i), true);
-                    break;
-                }
-            }
-        }));
+        AttachAppCardInput(button);
+        if (!item.speed && !item.usage) {
+            auto binding=std::make_shared<Row>(item);binding->icon.clear();
+            AttachAppCardMenu(button,binding);
+        }
 
-        KeepHandler(button, button.Click(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-            auto btn = weakBtn.get();
-            if (!btn || !g_activeAppsOpt) return;
-            for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
-                if ((*g_activeAppsOpt)[i].button == btn) {
-                    LaunchSelectedApp(static_cast<int>(i), false);
-                    return;
-                }
-            }
-        }));
-
-        wuxc::MenuFlyout menu;
-        KeepHandler(menu, menu.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuOpening(sender); }));
-        KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuClosed(sender); }));
-        // Filled in when first opened, not with the card (see the file rows).
-        // What it needs of the row is copied, less the icon pixels; the card
-        // is held weakly, since it owns this menu.
-        Row menuItem = item;
-        menuItem.icon.clear();
-        KeepHandler(menu, menu.Opening(winrt::auto_revoke, [item = std::move(menuItem), weakBtn = winrt::make_weak(button)](
-                         wf::IInspectable const& sender, wf::IInspectable const&) {
-            if (auto btn = weakBtn.get(); btn && g_appButtonsOpt) {
-                for (size_t i = 0; i < g_appButtonsOpt->size(); ++i) {
-                    if ((*g_appButtonsOpt)[i] == btn) {
-                        SetAppSelection(static_cast<int>(i), true);
-                        break;
-                    }
-                }
-            }
-            auto flyout = sender.as<wuxc::MenuFlyout>();
-            if (flyout.Items().Size() > 0) return;
-            if (!item.copyText.empty()) {
-                wuxc::MenuFlyoutItem copyItem;
-                copyItem.Text(i18n::Text(i18n::Key::CopyClipboard));
-                auto copyIcon = SearchFontIcon();
-                copyIcon.Glyph(L"\uE8C8");
-                copyItem.Icon(copyIcon);
-                KeepHandler(copyItem, copyItem.Click(winrt::auto_revoke, [txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    tools::CopyTextToClipboard(txt);
-                }));
-                flyout.Items().Append(copyItem);
-            } else {
-                bool isWebItem = item.appIndex < 0 && (item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:"));
-                bool isSettingItem = item.isSetting;
-                const bool isCommandItem = !item.commandLine.empty();
-
-                wuxc::MenuFlyoutItem openItem;
-                openItem.Text(i18n::Text(isCommandItem ? i18n::Key::Run : isWebItem ? i18n::Key::SearchBrowser : i18n::Key::Open));
-                auto openIcon = SearchFontIcon();
-                openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
-                openItem.Icon(openIcon);
-                KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    auto btn = weakBtn.get();
-                    if (!btn || !g_activeAppsOpt) return;
-                    for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
-                        if ((*g_activeAppsOpt)[i].button == btn) {
-                            LaunchSelectedApp(static_cast<int>(i), false);
-                            return;
-                        }
-                    }
-                }));
-                flyout.Items().Append(openItem);
-
-                if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
-                    wuxc::MenuFlyoutItem adminItem;
-                    adminItem.Text(i18n::Text(i18n::Key::RunAdmin));
-                    auto adminIcon = SearchFontIcon();
-                    adminIcon.Glyph(L"\uE7EF");
-                    adminItem.Icon(adminIcon);
-                    KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        auto btn = weakBtn.get();
-                        if (!btn || !g_activeAppsOpt) return;
-                        for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
-                            if ((*g_activeAppsOpt)[i].button == btn) {
-                                LaunchSelectedApp(static_cast<int>(i), true);
-                                return;
-                            }
-                        }
-                    }));
-                    flyout.Items().Append(adminItem);
-                }
-
-                if (isCommandItem) {
-                    wuxc::MenuFlyoutItem copyCommand;
-                    copyCommand.Text(i18n::Text(i18n::Key::CopyCommand));
-                    auto copyIcon = SearchFontIcon();
-                    copyIcon.Glyph(L"\uE8C8");
-                    copyCommand.Icon(copyIcon);
-                    KeepHandler(copyCommand, copyCommand.Click(winrt::auto_revoke, [command = item.commandLine](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        tools::CopyTextToClipboard(command);
-                    }));
-                    flyout.Items().Append(copyCommand);
-                } else if (isWebItem) {
-                    std::wstring webUrl = item.openPath;
-                    wuxc::MenuFlyoutItem copyUrlItem;
-                    copyUrlItem.Text(i18n::Text(i18n::Key::CopySearchLink));
-                    auto copyIcon = SearchFontIcon();
-                    copyIcon.Glyph(L"\uE8C8");
-                    copyUrlItem.Icon(copyIcon);
-                    KeepHandler(copyUrlItem, copyUrlItem.Click(winrt::auto_revoke, [webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        tools::CopyTextToClipboard(webUrl);
-                    }));
-                    flyout.Items().Append(copyUrlItem);
-                } else if (!isSettingItem && !item.openPath.empty()) {
-                    std::wstring locTarget = item.openPath;
-                    std::wstring appTitle = item.title;
-                    bool isFile = item.isFile;
-                    bool viaAppId = !isFile && !locTarget.starts_with(L"ms-settings:") &&
-                                    !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:");
-                    // An app launched by its app ID can still have a program
-                    // on disk, which the card shows; the file actions use it.
-                    std::wstring filePath = isFile ? locTarget : viaAppId ? item.programPath : L"";
-
-                    if (isFile || viaAppId) {
-                        wuxc::MenuFlyoutSeparator sep1;
-                        flyout.Items().Append(sep1);
-
-                        if (!filePath.empty()) {
-                            wuxc::MenuFlyoutItem locItem;
-                            locItem.Text(i18n::Text(i18n::Key::OpenLocation));
-                            auto locIcon = SearchFontIcon();
-                            locIcon.Glyph(L"\uE838");
-                            locItem.Icon(locIcon);
-                            KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                                OpenFileLocationThenDismiss(filePath);
-                            }));
-                            flyout.Items().Append(locItem);
-
-                            wuxc::MenuFlyoutItem copyPathItem;
-                            copyPathItem.Text(i18n::Text(i18n::Key::CopyPath));
-                            auto copyPathIcon = SearchFontIcon();
-                            copyPathIcon.Glyph(L"\uE71B");
-                            copyPathItem.Icon(copyPathIcon);
-                            KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                                tools::CopyTextToClipboard(filePath);
-                            }));
-                            flyout.Items().Append(copyPathItem);
-                        }
-
-                        // Through the app ID where there is one, so the
-                        // shortcut keeps the original's arguments.
-                        std::wstring shortcutTarget = isFile ? locTarget : L"shell:AppsFolder\\" + locTarget;
-                        wuxc::MenuFlyoutItem shortcutItem;
-                        shortcutItem.Text(i18n::Text(i18n::Key::DesktopShortcut));
-                        auto shortcutIcon = SearchFontIcon();
-                        shortcutIcon.Glyph(L"\uE7C5");
-                        shortcutItem.Icon(shortcutIcon);
-                        KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [shortcutTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            tools::CreateDesktopShortcut(shortcutTarget, appTitle);
-                        }));
-                        flyout.Items().Append(shortcutItem);
-
-                        if (!filePath.empty()) {
-                            wuxc::MenuFlyoutSeparator sep2;
-                            flyout.Items().Append(sep2);
-
-                            wuxc::MenuFlyoutItem propItem;
-                            propItem.Text(i18n::Text(i18n::Key::Properties));
-                            auto propIcon = SearchFontIcon();
-                            propIcon.Glyph(L"\uE946");
-                            propItem.Icon(propIcon);
-                            KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                                DismissSearch();
-                                ShowPropertiesDialog(filePath);
-                            }));
-                            flyout.Items().Append(propItem);
-                        }
-
-                        // Uninstall, as in Start's own menu: a packaged app is
-                        // removed, a program runs its uninstaller (uninstall).
-                        // Offered only where one of them applies.
-                        std::wstring family = viaAppId ? uninstall::RemovablePackageFamily(locTarget) : std::wstring();
-                        std::optional<uninstall::Command> uninstaller;
-                        if (family.empty()) {
-                            std::wstring program = filePath;
-                            if (std::wstring target = apps::ResolveLnkTarget(program); !target.empty()) {
-                                program = target;
-                            }
-                            uninstaller = uninstall::FindProgramUninstaller(program, appTitle);
-                        }
-                        if (!family.empty() || uninstaller) {
-                            wuxc::MenuFlyoutSeparator sep3;
-                            flyout.Items().Append(sep3);
-
-                            wuxc::MenuFlyoutItem uninstallItem;
-                            uninstallItem.Text(i18n::Text(i18n::Key::Uninstall));
-                            auto uninstallIcon = SearchFontIcon();
-                            uninstallIcon.Glyph(L"\uE74D");
-                            uninstallItem.Icon(uninstallIcon);
-                            KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle](
-                                                                               wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                                auto btn = weakBtn.get();
-                                if (!btn) return;
-                                // After the menu has closed: one flyout at a time.
-                                btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle] {
-                                    auto anchor = weakBtn.get();
-                                    if (!anchor) return;
-                                    ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle] {
-                                        if (!family.empty()) {
-                                            if (RequestPackageRemoval(family)) {
-                                                DismissSearch();
-                                            }
-                                        } else if (uninstaller) {
-                                            DismissSearchForLaunch([command = *uninstaller] { RunUninstaller(command); });
-                                        }
-                                    });
-                                }});
-                            }));
-                            flyout.Items().Append(uninstallItem);
-                        }
-                    }
-                }
-            }
-
-        }));
-        InitializeCopiedMenu(menu);
-        button.ContextFlyout(menu);
-
-        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile, item.commandLine, item.commandRevision};
+        AppCardUI card{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile, item.commandLine, item.commandRevision, item.iconKey, hasBitmap, item.subtitle, item.cardSignature};
+        card.speedUI = std::move(speedUI);
+        card.usageUI = std::move(usageUI);
+        return card;
     };
 
     auto makeAppEmptyCard = [isLight]() -> wuxc::Border {
@@ -16383,6 +20137,12 @@ void RenderResults() try {
     };
 
     auto isMatch = [](const AppCardUI& card, const Row& row) {
+        if (card.speedUI || row.speed) return card.speedUI && row.speed && card.title == row.title;
+        if (card.usageUI || row.usage) return card.usageUI && row.usage && card.cardSignature == row.usage->id &&
+            card.title == row.title && card.subtitle == row.subtitle;
+        if (card.cardSignature != row.cardSignature) return false;
+        if (card.subtitle != row.subtitle) return false;
+        if (card.iconKey != row.iconKey) return false;
         if (!card.commandLine.empty() || !row.commandLine.empty()) {
             return card.title == row.title && card.commandLine == row.commandLine &&
                    card.commandRevision == row.commandRevision;
@@ -16393,74 +20153,88 @@ void RenderResults() try {
         return card.title == row.title;
     };
 
-    if (appNames.empty()) {
-        for (int i = static_cast<int>(g_activeAppsOpt->size()) - 1; i >= 0; --i) {
-            g_appsList.Children().RemoveAt(i);
-        }
-        g_activeAppsOpt->clear();
-        g_appButtonsOpt->clear();
-
-        if (g_appsList.Children().Size() == 0) {
-            g_appsList.Children().Append(makeAppEmptyCard());
-        }
-        g_selectedApp = -1;
-    } else {
-        if (g_activeAppsOpt->empty() && g_appsList.Children().Size() > 0) {
-            g_appsList.Children().Clear();
-        }
-
-        // 1. Remove cards that are no longer in appNames
-        for (int i = static_cast<int>(g_activeAppsOpt->size()) - 1; i >= 0; --i) {
-            bool found = false;
-            for (const auto& newApp : appNames) {
-                if (isMatch((*g_activeAppsOpt)[i], newApp)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+    if (appsChanged && !RenderPlainApps(appNames,force)) {
+        DetachPlainAppPool();
+        if (appNames.empty()) {
+            for (int i = static_cast<int>(g_activeAppsOpt->size()) - 1; i >= 0; --i) {
                 g_appsList.Children().RemoveAt(i);
-                g_activeAppsOpt->erase(g_activeAppsOpt->begin() + i);
             }
-        }
+            g_activeAppsOpt->clear();
+            g_appButtonsOpt->clear();
 
-        // 2. Insert new cards or reorder existing ones
-        for (size_t targetIdx = 0; targetIdx < appNames.size(); ++targetIdx) {
-            const Row& want = appNames[targetIdx];
-            int existingIdx = -1;
-            for (size_t i = targetIdx; i < g_activeAppsOpt->size(); ++i) {
-                if (isMatch((*g_activeAppsOpt)[i], want)) {
-                    existingIdx = static_cast<int>(i);
-                    break;
+            if (g_appsList.Children().Size() == 0) {
+                g_appsList.Children().Append(makeAppEmptyCard());
+            }
+            g_selectedApp = -1;
+        } else {
+            if (g_activeAppsOpt->empty() && g_appsList.Children().Size() > 0) {
+                g_appsList.Children().Clear();
+            }
+
+            // 1. Remove cards that are no longer in appNames
+            for (int i = static_cast<int>(g_activeAppsOpt->size()) - 1; i >= 0; --i) {
+                bool found = false;
+                for (const auto& newApp : appNames) {
+                    if (isMatch((*g_activeAppsOpt)[i], newApp)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    g_appsList.Children().RemoveAt(i);
+                    g_activeAppsOpt->erase(g_activeAppsOpt->begin() + i);
                 }
             }
 
-            if (existingIdx >= 0) {
-                (*g_activeAppsOpt)[existingIdx].appIndex = want.appIndex;
-                (*g_activeAppsOpt)[existingIdx].canRunAsAdmin = want.canRunAsAdmin;
-                (*g_activeAppsOpt)[existingIdx].isSetting = want.isSetting;
-                (*g_activeAppsOpt)[existingIdx].isFile = want.isFile;
-
-                if (static_cast<size_t>(existingIdx) != targetIdx) {
-                    auto card = (*g_activeAppsOpt)[existingIdx];
-                    g_activeAppsOpt->erase(g_activeAppsOpt->begin() + existingIdx);
-                    g_activeAppsOpt->insert(g_activeAppsOpt->begin() + targetIdx, card);
-
-                    g_appsList.Children().RemoveAt(existingIdx);
-                    g_appsList.Children().InsertAt(static_cast<uint32_t>(targetIdx), card.button);
+            // 2. Insert new cards or reorder existing ones
+            for (size_t targetIdx = 0; targetIdx < appNames.size(); ++targetIdx) {
+                const Row& want = appNames[targetIdx];
+                int existingIdx = -1;
+                for (size_t i = targetIdx; i < g_activeAppsOpt->size(); ++i) {
+                    if (isMatch((*g_activeAppsOpt)[i], want)) {
+                        existingIdx = static_cast<int>(i);
+                        break;
+                    }
                 }
-            } else {
-                AppCardUI newCard = makeAppCard(want);
-                g_activeAppsOpt->insert(g_activeAppsOpt->begin() + targetIdx, newCard);
-                g_appsList.Children().InsertAt(static_cast<uint32_t>(targetIdx), newCard.button);
-            }
-        }
 
-        g_appButtonsOpt->clear();
-        for (const auto& card : *g_activeAppsOpt) {
-            g_appButtonsOpt->push_back(card.button);
+                if (existingIdx >= 0) {
+                    (*g_activeAppsOpt)[existingIdx].appIndex = want.appIndex;
+                    (*g_activeAppsOpt)[existingIdx].canRunAsAdmin = want.canRunAsAdmin;
+                    (*g_activeAppsOpt)[existingIdx].isSetting = want.isSetting;
+                    (*g_activeAppsOpt)[existingIdx].isFile = want.isFile;
+                    if ((*g_activeAppsOpt)[existingIdx].speedUI && want.speed) {
+                        auto& ui = *(*g_activeAppsOpt)[existingIdx].speedUI;
+                        UpdateSpeedCard(ui, *want.speed);
+                        if (ui.footer) ui.footer.Text(winrt::hstring{want.footerText});
+                    }
+                    if ((*g_activeAppsOpt)[existingIdx].usageUI && want.usage) UpdateUsageCard(*(*g_activeAppsOpt)[existingIdx].usageUI, *want.usage);
+                    if (!(*g_activeAppsOpt)[existingIdx].hasBitmap && !want.icon.empty()) {
+                        ApplyAppIcon((*g_activeAppsOpt)[existingIdx].button, want.icon);
+                        (*g_activeAppsOpt)[existingIdx].hasBitmap = true;
+                    }
+
+                    if (static_cast<size_t>(existingIdx) != targetIdx) {
+                        auto card = (*g_activeAppsOpt)[existingIdx];
+                        g_activeAppsOpt->erase(g_activeAppsOpt->begin() + existingIdx);
+                        g_activeAppsOpt->insert(g_activeAppsOpt->begin() + targetIdx, card);
+
+                        g_appsList.Children().RemoveAt(existingIdx);
+                        g_appsList.Children().InsertAt(static_cast<uint32_t>(targetIdx), card.button);
+                    }
+                } else {
+                    AppCardUI newCard = makeAppCard(want);
+                    g_activeAppsOpt->insert(g_activeAppsOpt->begin() + targetIdx, newCard);
+                    g_appsList.Children().InsertAt(static_cast<uint32_t>(targetIdx), newCard.button);
+                }
+            }
+
+            g_appButtonsOpt->clear();
+            for (const auto& card : *g_activeAppsOpt) {
+                g_appButtonsOpt->push_back(card.button);
+            }
         }
     }
+
 
     // Files renderer
     auto makeFileRow = [](const Row& item) {
@@ -16748,74 +20522,86 @@ void RenderResults() try {
     };
 
     // Files on the right.
-    g_currentFileRows = files;
-    g_selectedFile = -1;
-    if (!g_fileButtonsOpt) g_fileButtonsOpt.emplace();
-    g_fileButtonsOpt->clear();
-    if (files.empty()) {
-        wuxc::Border emptyCard;
-        emptyCard.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
-        emptyCard.Background(isLight ? MakeBrush(0x08, 0x00, 0x00, 0x00) : MakeBrush(0x0A, 0xFF, 0xFF, 0xFF));
-        emptyCard.BorderBrush(isLight ? MakeBrush(0x15, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
-        emptyCard.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-        emptyCard.Padding(wux::ThicknessHelper::FromLengths(16, 22, 16, 22));
-        emptyCard.Margin(wux::ThicknessHelper::FromLengths(6, 10, 6, 8));
-        emptyCard.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    if (filesChanged) {
+        g_currentFileRows = files;
+        if (!g_fileButtonsOpt) g_fileButtonsOpt.emplace();
+        g_fileButtonsOpt->clear();
+        if (files.empty()) {
+            wuxc::Border emptyCard;
+            emptyCard.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
+            emptyCard.Background(isLight ? MakeBrush(0x08, 0x00, 0x00, 0x00) : MakeBrush(0x0A, 0xFF, 0xFF, 0xFF));
+            emptyCard.BorderBrush(isLight ? MakeBrush(0x15, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+            emptyCard.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+            emptyCard.Padding(wux::ThicknessHelper::FromLengths(16, 22, 16, 22));
+            emptyCard.Margin(wux::ThicknessHelper::FromLengths(6, 10, 6, 8));
+            emptyCard.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
 
-        wuxc::StackPanel emptyStack;
-        emptyStack.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            wuxc::StackPanel emptyStack;
+            emptyStack.HorizontalAlignment(wux::HorizontalAlignment::Center);
 
-        auto emptyIcon = SearchFontIcon();
-        emptyIcon.Glyph(L"\uE8B7");
-        ScaleFont(emptyIcon, 24);
-        emptyIcon.Opacity(0.2);
-        emptyIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
-        emptyStack.Children().Append(emptyIcon);
+            auto emptyIcon = SearchFontIcon();
+            emptyIcon.Glyph(L"\uE8B7");
+            ScaleFont(emptyIcon, 24);
+            emptyIcon.Opacity(0.2);
+            emptyIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
+            emptyStack.Children().Append(emptyIcon);
 
-        auto emptyTitle = SearchTextBlock();
-        emptyTitle.Text(i18n::Text(suggestions ? i18n::Key::TypeFiles : i18n::Key::NoFiles));
-        ScaleFont(emptyTitle, 11.5);
-        emptyTitle.FontWeight(wut::FontWeights::SemiBold());
-        emptyTitle.Opacity(0.45);
-        emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        emptyStack.Children().Append(emptyTitle);
+            auto emptyTitle = SearchTextBlock();
+            emptyTitle.Text(i18n::Text(suggestions ? i18n::Key::TypeFiles : i18n::Key::NoFiles));
+            ScaleFont(emptyTitle, 11.5);
+            emptyTitle.FontWeight(wut::FontWeights::SemiBold());
+            emptyTitle.Opacity(0.45);
+            emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            emptyStack.Children().Append(emptyTitle);
 
-        auto emptySubtitle = SearchTextBlock();
-        emptySubtitle.Text(i18n::Text(suggestions ? i18n::Key::FilesAppear : i18n::Key::NoItems));
-        ScaleFont(emptySubtitle, 10.5);
-        emptySubtitle.Opacity(0.3);
-        emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        emptySubtitle.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
-        emptyStack.Children().Append(emptySubtitle);
+            auto emptySubtitle = SearchTextBlock();
+            emptySubtitle.Text(i18n::Text(suggestions ? i18n::Key::FilesAppear : i18n::Key::NoItems));
+            ScaleFont(emptySubtitle, 10.5);
+            emptySubtitle.Opacity(0.3);
+            emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            emptySubtitle.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
+            emptyStack.Children().Append(emptySubtitle);
 
-        emptyCard.Child(emptyStack);
-        g_resultsList.Children().Append(emptyCard);
-    } else {
-        for (const Row& file : files) {
-            wuxc::Button row = makeFileRow(file);
-            g_resultsList.Children().Append(row);
-            g_fileButtonsOpt->push_back(row);
+            emptyCard.Child(emptyStack);
+            g_resultsList.Children().Append(emptyCard);
+        } else {
+            for (const Row& file : files) {
+                wuxc::Button row = makeFileRow(file);
+                g_resultsList.Children().Append(row);
+                g_fileButtonsOpt->push_back(row);
+            }
         }
+        g_shownFilesRevision = filesRevision;
+        g_shownFilesTotal = total;
     }
 
     InvalidateSearchContrastContainer(g_appsHeaderHolder);
     InvalidateSearchContrastContainer(g_filesHeaderHolder);
     PrepareSearchResultContrastColors();
 
-    // New results start the keyboard selection over: on the first app, or on
-    // the first file when there are no apps.
-    if (!g_appButtonsOpt->empty()) {
-        SetAppSelection(0, true);
-    } else if (!g_fileButtonsOpt->empty()) {
-        SetFileSelection(0, true);
-    } else {
+
+    // New app results start selection on the first app. A later file update
+    // keeps the selected app and only changes selection in the file column.
+    if(retainFileSelection && g_fileButtonsOpt && !g_fileButtonsOpt->empty()) {
+        SetFileSelection(std::clamp(g_selectedFile,0,static_cast<int>(g_fileButtonsOpt->size())-1),true);
+    } else if (appsChanged && !g_appButtonsOpt->empty()) {
+        SetAppSelection(std::clamp(previousAppSelection, 0, static_cast<int>(g_appButtonsOpt->size()) - 1), true);
+    } else if (g_fileButtonsOpt && !g_fileButtonsOpt->empty() &&
+               (appsChanged || g_filesColumnActive || g_appButtonsOpt->empty())) {
+        const int selected = std::clamp(g_selectedFile, 0, static_cast<int>(g_fileButtonsOpt->size()) - 1);
+        SetFileSelection(selected, true);
+    } else if (appsChanged || g_filesColumnActive) {
         if (auto prevBtn = g_paintedSelectedButton.get()) {
             ApplyResultRowButtonTheme(prevBtn, false, false);
         }
         g_paintedSelectedButton = {};
         g_filesColumnActive = false;
         SchedulePreview();
+    }
+    if (appsChanged) {
+        g_shownAppsRevision = appsRevision;
+        g_shownAppsContentRevision = snapshot->appsContentRevision;
     }
 
     if (g_ourBox && g_ourBox.Text().empty()) {
@@ -16824,7 +20610,7 @@ void RenderResults() try {
         UpdateSearchResultsLayout();
     }
     Wh_Log(L"render: %zu apps, %zu files, host %.0fx%.0f", appNames.size(),
-        files.size(), g_resultsHost.ActualWidth(),
+        fileCount, g_resultsHost.ActualWidth(),
         g_resultsHost.ActualHeight());
 
     if (g_enterWaiting && !ResultsPending()) {
@@ -16842,12 +20628,53 @@ void RenderResults() try {
 // g_resultsMutex. They are swapped into the rows in place: drawing the rows
 // again would start the keyboard selection over.
 std::vector<std::pair<std::wstring, std::vector<BYTE>>> g_lateFileIcons;
+uint64_t g_lateFileIconsRevision = 0;
+
+std::atomic<bool> g_appIconRenderPending{false};
+
+void PublishLateAppIcon(const std::wstring& key, const std::vector<BYTE>& pixels) {
+    if (pixels.empty()) return;
+    bool visible = false;
+    {
+        std::lock_guard lock(g_resultsMutex);
+        for (auto& row : g_appRows) {
+            if (row.iconKey == key) { row.icon = pixels; visible = true; }
+        }
+    }
+    if (!visible) return;
+    try {
+        if (!g_ourBox || g_appIconRenderPending.exchange(true)) return;
+        g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, wuc::DispatchedHandler{[] {
+            g_appIconRenderPending.store(false);
+            try {
+                if (g_quit.load() || !g_activeAppsOpt) return;
+                std::vector<Row> rows;
+                {
+                    std::lock_guard lock(g_resultsMutex);
+                    if (g_appsRevision != g_shownAppsRevision) return;
+                    rows = g_appRows;
+                }
+                for (auto& card : *g_activeAppsOpt) {
+                    if (card.hasBitmap || card.iconKey.empty()) continue;
+                    for (const auto& row : rows) {
+                        if (card.iconKey == row.iconKey && icons::IconSide(row.icon) == IconPixels()) {
+                            ApplyAppIcon(card.button, row.icon);
+                            card.hasBitmap = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (...) {}
+        }});
+    } catch (...) { g_appIconRenderPending.store(false); }
+}
 
 void ApplyLateFileIcons() try {
     std::vector<std::pair<std::wstring, std::vector<BYTE>>> late;
     {
         std::lock_guard<std::mutex> lock(g_resultsMutex);
         late.swap(g_lateFileIcons);
+        if (g_lateFileIconsRevision != g_shownFilesRevision) return;
     }
     if (!g_fileButtonsOpt) {
         return;
@@ -16875,14 +20702,22 @@ void ApplyLateFileIcons() try {
 } catch (...) {
 }
 
-// Called from the search thread.
-void PublishLateFileIcons(std::vector<std::pair<std::wstring, std::vector<BYTE>>> late) {
+// Called from the file worker.
+void PublishLateFileIcons(std::vector<std::pair<std::wstring, std::vector<BYTE>>> late, uint64_t revision) {
     if (late.empty()) {
         return;
     }
     {
-        std::lock_guard<std::mutex> lock(g_resultsMutex);
+        std::scoped_lock lock(g_queryMutex, g_resultsMutex);
+        if (revision != g_queryRevision || revision != g_filesRevision) return;
+        if (g_lateFileIconsRevision != revision) g_lateFileIcons.clear();
+        g_lateFileIconsRevision = revision;
         for (auto& icon : late) {
+            // Keep the snapshot complete if rendering is still deferred by
+            // the opening animation when the late icon arrives.
+            for (auto& row : g_fileRows) {
+                if (row.openPath == icon.first) row.icon = icon.second;
+            }
             g_lateFileIcons.push_back(std::move(icon));
         }
     }
@@ -16896,6 +20731,17 @@ void PublishLateFileIcons(std::vector<std::pair<std::wstring, std::vector<BYTE>>
 }
 
 std::atomic<bool> g_renderPending{false};
+std::atomic<bool> g_fileRenderPending{false};
+
+void RequestFileRender() {
+    try {
+        if (!g_ourBox || g_fileRenderPending.exchange(true)) return;
+        g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, wuc::DispatchedHandler{[] {
+            g_fileRenderPending.store(false);
+            if (!g_quit.load()) RenderResults();
+        }});
+    } catch (...) { g_fileRenderPending.store(false); }
+}
 
 // Called from the search thread once results are in. Each dispatch reads the
 // latest result snapshot, so multiple queued requests would redraw it twice.
@@ -16914,7 +20760,10 @@ void RequestRender() {
         dispatcher.RunAsync(wuc::CoreDispatcherPriority::High,
                             wuc::DispatchedHandler{[] {
                                 g_renderPending.store(false);
-                                if (!g_quit.load()) RenderResults();
+                                if (!g_quit.load()) {
+                                    RenderResults(true);
+                                    RequestFileRender();
+                                }
                             }});
     } catch (...) {
         if (scheduled) g_renderPending.store(false);
@@ -16928,8 +20777,8 @@ void RequestRender() {
 // round trip and the reply lands on a window, so it cannot run on the XAML
 // thread without blocking the search UI while the user types.
 //
-// Debounced, because a keystroke every ~60ms would otherwise be a query every
-// ~60ms. 120ms was measured as comfortable in the broker.
+// App matches have their own worker. File IPC and file icons cannot hold up
+// the next app query; each worker consumes only its latest pending request.
 // ---------------------------------------------------------------------------
 
 
@@ -16937,9 +20786,13 @@ void QueueQuery(std::wstring text) {
     {
         std::lock_guard<std::mutex> lock(g_queryMutex);
         g_pendingQuery = std::move(text);
+        ++g_queryRevision;
         g_queryDirty.store(true);
     }
     g_queryWake.notify_all();
+    online::Wake();
+    hardware::Wake();
+    services::Wake();
 }
 
 // An app's icon, from its shell identity.
@@ -16953,12 +20806,42 @@ void QueueQuery(std::wstring text) {
 // Measured at roughly 9.7ms per app in the broker, so this runs on the search
 // thread and is cached by name. Six visible rows make it about 60ms once, and
 // nothing after that.
+bool FetchInstalledPackageIcon(const std::wstring& fullName,int size,std::vector<BYTE>* out) {
+    try {
+        if(fullName.empty() || !out || size<1 || size>256)return false;
+        winrt::Windows::Management::Deployment::PackageManager manager;
+        const auto package=manager.FindPackageForUser(L"",fullName);
+        const auto stream=package.GetLogoAsRandomAccessStreamReference({static_cast<float>(size),static_cast<float>(size)}).OpenReadAsync().get();
+        if(stream.Size()>8*1024*1024)return false;
+        namespace imaging=winrt::Windows::Graphics::Imaging;
+        auto decoder=imaging::BitmapDecoder::CreateAsync(stream).get();
+        const auto width=decoder.PixelWidth(),height=decoder.PixelHeight();
+        if(!width || !height || width>2048 || height>2048)return false;
+        auto data=decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8,
+            imaging::BitmapAlphaMode::Premultiplied,imaging::BitmapTransform(),
+            imaging::ExifOrientationMode::IgnoreExifOrientation,imaging::ColorManagementMode::DoNotColorManage).get();
+        const auto bytes=data.DetachPixelData();
+        if(bytes.size()!=static_cast<size_t>(width)*height*4)return false;
+        const double scale=std::min(double(size)/width,double(size)/height);
+        const int w=std::clamp(static_cast<int>(std::lround(width*scale)),1,size);
+        const int h=std::clamp(static_cast<int>(std::lround(height*scale)),1,size);
+        auto pixels=icons::Resample(std::vector<BYTE>(bytes.begin(),bytes.end()),width,height,w,h);
+        out->assign(static_cast<size_t>(size)*size*4,0);
+        const int x=(size-w)/2,y=(size-h)/2;
+        for(int row=0;row<h;++row)memcpy(out->data()+(static_cast<size_t>(y+row)*size+x)*4,pixels.data()+static_cast<size_t>(row)*w*4,w*4);
+        return true;
+    }catch(...){return false;}
+}
 bool FetchAppIcon(const apps::App* app, int size, std::vector<BYTE>* out) {
-    if (!app || !app->pidl || !out) {
+    if(app && app->installedOnly && !app->installedPackage.empty() &&
+       FetchInstalledPackageIcon(app->installedPackage,size,out))return true;
+    if (!app || (!app->pidl && (!app->installedOnly || app->installedIcon.empty())) || !out) {
         return false;
     }
     IShellItem* item = nullptr;
-    if (FAILED(SHCreateItemFromIDList(app->pidl.get(), IID_PPV_ARGS(&item))) ||
+    const auto hr=app->installedOnly?SHCreateItemFromParsingName(app->installedIcon.c_str(),nullptr,IID_PPV_ARGS(&item)):
+        SHCreateItemFromIDList(app->pidl.get(),IID_PPV_ARGS(&item));
+    if (FAILED(hr) ||
         !item) {
         return false;
     }
@@ -17103,8 +20986,8 @@ void AddCustomCommandRows(std::vector<Row>* rows,std::vector<CustomCommand> cons
             row.customIconIsGlyph = true;
         } else if(icon.find_first_of(L"\\/")!=std::wstring::npos || icon.find(L':')!=std::wstring::npos) {
             auto found=iconCache->find(icon);
-            if(found==iconCache->end()) found=iconCache->emplace(icon,FetchCustomCommandIcon(icon,iconPixels)).first;
-            row.icon=found->second;
+            row.iconKey=std::to_wstring(iconPixels)+L":command:"+icon;
+            if(found!=iconCache->end()) row.icon=found->second;
         } else row.customIconText=icon;
     }
 }
@@ -17950,11 +21833,1627 @@ inline std::vector<Row> Rows(const std::wstring& input) {
 
 }  // namespace calc
 
+// Online commands are explicit, cached, and isolated from app/file matching.
+// Only the fixed providers below receive requests; normal search never does.
+namespace online {
+using Json = winrt::Windows::Data::Json::JsonObject;
+using JsonType = winrt::Windows::Data::Json::JsonValueType;
+enum class Kind { None, Weather, Currency, Crypto, Speed };
+struct Request {
+    Kind kind = Kind::None;
+    uint64_t revision = 0;
+    std::wstring query, city, base, quote, command;
+    double amount = 1;
+    bool valid = false, enabled = true, fahrenheit = false, bare = false;
+    int pastDays = 2, futureDays = 5;
+    bool runSpeed = false;
+    uint64_t speedId = 0;
+    int speedServer = -1;
+};
+struct Day { std::wstring date; double low = 0, high = 0; int code = 0; };
+struct Data {
+    double value = 0, low = 0, high = 0, humidity = 0, wind = 0;
+    int code = 0, day = 1;
+    std::wstring location, date;
+    bool automatic = false;
+    std::wstring today;
+    std::vector<Day> days;
+    int utcOffset = 0;
+};
+struct Entry {
+    std::optional<Data> data;
+    ULONGLONG expires = 0, used = 0;
+    bool stale = false;
+};
+std::mutex g_cacheMutex;
+std::map<std::wstring, Entry> g_cache;
+std::condition_variable g_wake;
+using Batch = std::vector<Request>;
+std::optional<Batch> g_request;  // g_queryMutex; one command can show several cards
+void Wake() { g_wake.notify_all(); }
+std::mutex g_httpMutex;
+struct ActiveRequest;
+ActiveRequest* g_activeHttp = nullptr;  // intrusive list, protected by g_httpMutex
+
+bool Code(std::wstring_view text, size_t minimum = 3, size_t maximum = 3) {
+    return text.size() >= minimum && text.size() <= maximum &&
+        std::all_of(text.begin(), text.end(), [](wchar_t c) {
+            return (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9');
+        });
+}
+std::wstring Upper(std::wstring text) {
+    for (auto& c : text) if (c >= L'a' && c <= L'z') c -= L'a' - L'A';
+    return text;
+}
+Request Parse(const std::wstring& query, const std::wstring& location, const std::wstring& units,
+              const std::wstring& defaultQuote, bool enabled, const commands::Names& names = {},
+              int pastDays = 2, int futureDays = 5) {
+    Request request;
+    request.query = query;
+    request.enabled = enabled;
+    const auto match = commands::Parse(query, names);
+    if (match.kind == commands::Kind::Weather) request.kind = Kind::Weather;
+    else if (match.kind == commands::Kind::Currency) request.kind = Kind::Currency;
+    else if (match.kind == commands::Kind::Crypto) request.kind = Kind::Crypto;
+    else if (match.kind == commands::Kind::Speed) request.kind = Kind::Speed;
+    else return request;
+    request.command = L"/" + commands::Name(names, match.kind);
+    auto args = match.args;
+    request.bare = args.empty();
+    request.pastDays = std::clamp(pastDays, 0, 7);
+    request.futureDays = std::clamp(futureDays, 0, 7);
+    if (request.kind == Kind::Speed) { request.valid = args.empty(); return request; }
+    if (request.kind == Kind::Weather) {
+        request.city = args.empty() ? tools::Trim(location) : args;
+        if (request.city.empty() || tools::ToLower(request.city) == L"auto") request.city.clear();
+        request.valid = request.city.empty() || (request.city.size() >= 2 && request.city.size() <= 120 &&
+            std::none_of(request.city.begin(), request.city.end(), [](wchar_t c) { return c < 32 || c == 127; }));
+        wchar_t measure[4]{};
+        request.fahrenheit = units == L"fahrenheit" || (units == L"auto" &&
+            GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IMEASURE, measure, 4) && measure[0] == L'1');
+        return request;
+    }
+    // Amounts are optional. Parsing is shared with the calculator so both
+    // decimal separators and grouped numbers behave consistently.
+    if (!args.empty() && (iswdigit(args.front()) || args.front() == L'.' || args.front() == L',' ||
+                          args.front() == L'+' || args.front() == L'-')) {
+        const size_t used = calc::ParseNumber(args, &request.amount);
+        if (!used || !std::isfinite(request.amount) || request.amount < 0 || request.amount > 1e15) return request;
+        args = tools::Trim(args.substr(used));
+    }
+    std::replace(args.begin(), args.end(), L'\u2192', L' ');
+    for (auto& c : args) if (c == L'>' || c == L'=' || c == L'/') c = L' ';
+    std::wistringstream tokens(args);
+    std::wstring extra;
+    tokens >> request.base >> request.quote >> extra;
+    request.base = Upper(request.base);
+    request.quote = Upper(request.quote);
+    if (request.quote == L"TO" || request.quote == L"IN") {
+        request.quote = Upper(extra);
+        extra.clear(); tokens >> extra;
+    }
+    if (!extra.empty()) return request;
+    if (request.quote.empty()) request.quote = Upper(defaultQuote);
+    if (!Code(request.quote, request.kind == Kind::Crypto ? 2 : 3, request.kind == Kind::Crypto ? 12 : 3)) return request;
+    if (request.kind == Kind::Crypto) {
+        if (request.base == L"BITCOIN") request.base = L"BTC";
+        else if (request.base == L"ETHEREUM") request.base = L"ETH";
+        else if (request.base == L"DOGECOIN") request.base = L"DOGE";
+        request.valid = Code(request.base, 2, 12);
+    } else request.valid = Code(request.base);
+    return request;
+}
+std::wstring Key(const Request& request) {
+    if (request.kind == Kind::Weather) return L"weather:" + tools::ToLower(request.city) + L":" +
+        std::to_wstring(request.pastDays) + L":" + std::to_wstring(request.futureDays);
+    return std::to_wstring(static_cast<int>(request.kind)) + L":" + request.base + L":" + request.quote;
+}
+const wchar_t* Label(Kind kind) {
+    if (kind == Kind::Speed) return i18n::Text(i18n::Key::SpeedTest);
+    return i18n::Text(kind == Kind::Weather ? i18n::Key::Weather :
+        kind == Kind::Currency ? i18n::Key::Currency : i18n::Key::Crypto);
+}
+const wchar_t* Glyph(Kind kind) { return kind == Kind::Weather ? L"\uE706" : kind == Kind::Speed ? L"\uE701" : L"\uE8D4"; }
+std::wstring SectionEmoji(Kind kind) {
+    return kind == Kind::Currency ? L"\U0001F4B1" : kind == Kind::Crypto ? L"\U0001FA99" : L"";
+}
+std::wstring Hint(const Request& request) {
+    const auto& command = request.command;
+    if (request.kind == Kind::Speed) return command;
+    if (request.kind == Kind::Weather) return command + L"  \u00B7  " + command + L" London";
+    if (request.kind == Kind::Currency) return command + L" 100 USD > EUR  \u00B7  " + command + L" USD IQD";
+    return command + L" BTC  \u00B7  " + command + L" 0.5 ETH > EUR";
+}
+Row Notice(const Request& request, const std::wstring& title, const std::wstring& subtitle, bool pending = false) {
+    Row row;
+    row.title = title; row.subtitle = subtitle;
+    row.sectionTitle = Label(request.kind); row.customGlyph = Glyph(request.kind);
+    row.sectionEmoji = SectionEmoji(request.kind);
+    row.customIconText = row.sectionEmoji;
+    row.infoOnly = true; row.onlinePending = pending; row.canRunAsAdmin = false;
+    return row;
+}
+std::wstring Number(double value) {
+    std::wostringstream stream;
+    stream.imbue(std::locale::classic());
+    stream.precision(12);
+    stream << value;
+    auto text = stream.str();
+    std::replace(text.begin(), text.end(), L'.', calc::DecimalPoint());
+    return text;
+}
+std::optional<SpeedView> g_lastSpeed, g_liveSpeed;  // g_cacheMutex
+std::wstring g_lastSpeedWhen;
+bool g_speedBusy = false;  // g_queryMutex
+uint64_t g_speedRevision = 0, g_speedId = 0;
+bool SpeedCurrent(const Request& request) {
+    std::lock_guard lock(g_queryMutex);
+    return request.kind == Kind::Speed && request.runSpeed && !g_searchQuit.load() && request.revision == g_queryRevision &&
+        g_speedBusy && g_speedRevision == request.revision && g_speedId == request.speedId;
+}
+Row ConflictRow() {
+    Row row;
+    row.title = i18n::Text(i18n::Key::CommandNameConflict);
+    row.subtitle = i18n::Text(i18n::Key::CommandNameConflictHint);
+    row.sectionTitle = i18n::Text(i18n::Key::Error); row.sectionEmoji = L"\u26A0";
+    row.customIconText = L"\u26A0"; row.customGlyph = L"\uE7BA";
+    row.infoOnly = row.isError = true; row.canRunAsAdmin = false;
+    row.cardSignature = L"command-conflict";
+    return row;
+}
+ULONGLONG SpeedRetrySeconds();
+std::vector<Row> SpeedRows(const Request& request, const SpeedView& view, const std::wstring& when = L"") {
+    Row row;
+    row.title = row.sectionTitle = Label(Kind::Speed); row.customGlyph = Glyph(Kind::Speed);
+    row.speed = view; row.canRunAsAdmin = false;
+    const bool running = view.phase == SpeedView::Phase::Latency || view.phase == SpeedView::Phase::Download || view.phase == SpeedView::Phase::Upload;
+    row.infoOnly = running;
+    row.speedStart = !running && view.phase != SpeedView::Phase::Done;
+    row.footerText = L"LibreSpeed" + (view.server.empty()?std::wstring():L" \u00B7 "+view.server) + (when.empty() ? std::wstring() : L" \u00B7 "+when);
+    if (view.dataLimited) row.footerText += L"\n" + std::wstring(i18n::Text(i18n::Key::DataLimitReached));
+    if (view.phase == SpeedView::Phase::Failed) row.footerText = (view.retrySeconds ? i18n::Format(i18n::Key::SpeedBusy, {std::to_wstring(view.retrySeconds)}) : std::wstring(i18n::Text(i18n::Key::OnlineUnavailable))) + L"\n" + row.footerText;
+    if (view.phase == SpeedView::Phase::Done) {
+        const auto rounded = [](double value) { const auto scale = value < 1 ? 100 : 10; return Number(std::round(value * scale) / scale); };
+        row.copyText = std::wstring(Label(Kind::Speed)) + L"\n" + i18n::Text(i18n::Key::Latency) + L": " + rounded(view.latency) + L" ms\n" +
+            i18n::Text(i18n::Key::Download) + L": " + rounded(view.download) + L" Mbps\n" +
+            i18n::Text(i18n::Key::Upload) + L": " + rounded(view.upload) + L" Mbps\n" + row.footerText;
+    }
+    return {std::move(row)};
+}
+
+std::wstring WeatherSymbol(int code, int day) {
+    if (code == 0) return day ? L"\u2600" : L"\U0001F319";
+    if (code <= 2) return L"\u26C5";
+    if (code == 3) return L"\u2601";
+    if (code == 45 || code == 48) return L"\U0001F32B";
+    if (code >= 95) return L"\u26C8";
+    if ((code >= 71 && code <= 77) || code == 85 || code == 86) return L"\u2744";
+    return L"\U0001F327";
+}
+bool Date(const std::wstring& text, SYSTEMTIME* output = nullptr) {
+    if (text.size() != 10 || text[4] != L'-' || text[7] != L'-') return false;
+    for (size_t i = 0; i < text.size(); ++i) if (i != 4 && i != 7 && (text[i] < L'0' || text[i] > L'9')) return false;
+    SYSTEMTIME time{};
+    time.wYear = static_cast<WORD>(_wtoi(text.substr(0, 4).c_str()));
+    time.wMonth = static_cast<WORD>(_wtoi(text.substr(5, 2).c_str()));
+    time.wDay = static_cast<WORD>(_wtoi(text.substr(8, 2).c_str()));
+    FILETIME file{};
+    const auto original = time;
+    if (!SystemTimeToFileTime(&time, &file) || !FileTimeToSystemTime(&file, &time) ||
+        time.wYear != original.wYear || time.wMonth != original.wMonth || time.wDay != original.wDay) return false;
+    if (output) *output = time;
+    return true;
+}
+std::wstring CityDate(int offset) {
+    FILETIME file{}; GetSystemTimeAsFileTime(&file);
+    ULARGE_INTEGER ticks{}; ticks.LowPart = file.dwLowDateTime; ticks.HighPart = file.dwHighDateTime;
+    ticks.QuadPart = static_cast<ULONGLONG>(static_cast<LONGLONG>(ticks.QuadPart) + static_cast<LONGLONG>(offset) * 10000000LL);
+    file.dwLowDateTime = ticks.LowPart; file.dwHighDateTime = ticks.HighPart;
+    SYSTEMTIME time{}; FileTimeToSystemTime(&file, &time);
+    wchar_t date[16]; swprintf_s(date, L"%04u-%02u-%02u", time.wYear, time.wMonth, time.wDay);
+    return date;
+}
+std::wstring DayLabel(const std::wstring& date, bool today) {
+    if (today) return i18n::Text(i18n::Key::Today);
+    SYSTEMTIME time{};
+    wchar_t label[64]{};
+    if (Date(date, &time) && (GetDateFormatEx(i18n::Tag(), 0, &time, L"ddd d", label, 64, nullptr) ||
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &time, L"ddd d", label, 64, nullptr))) return label;
+    return date;
+}
+std::vector<Row> Rows(const Request& request, const Data& data, bool stale = false) {
+    Row row;
+    row.sectionTitle = Label(request.kind); row.customGlyph = Glyph(request.kind); row.canRunAsAdmin = false;
+    row.sectionEmoji = SectionEmoji(request.kind);
+    if (request.kind == Kind::Weather) {
+        const auto temperature = [&](double c) { return Number(std::round(request.fahrenheit ? c * 1.8 + 32 : c)); };
+        const std::wstring unit = request.fahrenheit ? L" \u00B0F" : L" \u00B0C";
+        row.title = temperature(data.value) + unit + L" \u00B7 " + (data.automatic ? L"\u2248 " : L"") + data.location;
+        row.customIconText = WeatherSymbol(data.code, data.day);
+        row.subtitle = L"\U0001F4A7 " + Number(data.humidity) + L"%   \U0001F4A8 " + Number(data.wind) + L" km/h";
+        row.footerText = L"Open-Meteo.com \u00B7 " + data.date;
+        row.copyText = row.title + L"\n" + row.subtitle;
+        const auto today = CityDate(data.utcOffset);
+        for (const auto& day : data.days) {
+            WeatherDayRow item;
+            item.today = day.date == today; item.past = day.date < today;
+            item.label = DayLabel(day.date, item.today); item.symbol = WeatherSymbol(day.code, 1);
+            item.low = L"\u2193 " + temperature(day.low) + L"\u00B0";
+            item.high = L"\u2191 " + temperature(day.high) + L"\u00B0";
+            row.copyText += L"\n" + day.date + L" " + item.label + L" " + item.symbol + L" " + item.low + L" " + item.high;
+            row.weatherDays.push_back(std::move(item));
+        }
+    } else {
+        row.customIconText = request.kind == Kind::Currency ? L"\U0001F4B1" : L"\U0001FA99";
+        const double converted = request.amount * data.value;
+        if (!std::isfinite(converted)) return {Notice(request, i18n::Text(i18n::Key::Error), Hint(request))};
+        row.title = Number(request.amount) + L" " + request.base + L" \u2248 " + Number(converted) + L" " + request.quote;
+        row.subtitle = std::wstring(request.kind == Kind::Currency ? L"Frankfurter" : L"Coinbase") + L" \u00B7 " + data.date;
+        row.copyText = Number(converted);
+    }
+    if (stale) (row.footerText.empty() ? row.subtitle : row.footerText) += L" \u00B7 " + std::wstring(i18n::Text(i18n::Key::Cached));
+    if (!row.footerText.empty()) row.copyText += L"\n" + row.footerText;
+    if (!row.weatherDays.empty()) row.cardSignature = row.copyText;
+    return {std::move(row)};
+}
+void Store(const std::wstring& key, Entry entry) {
+    std::lock_guard lock(g_cacheMutex);
+    if (!g_cache.count(key) && g_cache.size() >= 32) {
+        const auto oldest = std::min_element(g_cache.begin(), g_cache.end(), [](const auto& a, const auto& b) {
+            return a.second.used < b.second.used;
+        });
+        g_cache.erase(oldest);
+    }
+    g_cache[key] = std::move(entry);
+}
+struct Initial { std::vector<Row> rows; bool fetch = false; };
+std::wstring Caption(const Request& request) {
+    if (request.kind == Kind::Speed) return Label(request.kind);
+    if (request.kind == Kind::Weather) return request.city.empty() ? Label(request.kind) : request.city;
+    if (request.valid) return Number(request.amount) + L" " + request.base + L" \u2192 " + request.quote;
+    return Label(request.kind);
+}
+Initial Begin(const Request& request) {
+    if (!request.enabled) return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineDisabled))}, false};
+    if (!request.valid) return {{Notice(request, Label(request.kind), Hint(request))}, false};
+    if (request.kind == Kind::Speed) {
+        std::lock_guard lock(g_cacheMutex);
+        return {SpeedRows(request, g_lastSpeed.value_or(SpeedView{}), g_lastSpeedWhen), false};
+    }
+    const auto now = GetTickCount64();
+    std::optional<Entry> cached;
+    {
+        std::lock_guard lock(g_cacheMutex);
+        if (const auto found = g_cache.find(Key(request)); found != g_cache.end()) {
+            found->second.used = now;
+            cached = found->second;
+        }
+    }
+    if (cached && cached->data) {
+        const bool dayChanged = request.kind == Kind::Weather && CityDate(cached->data->utcOffset) != cached->data->today;
+        return {Rows(request, *cached->data, cached->stale || now >= cached->expires || dayChanged),
+                now >= cached->expires || (dayChanged && !cached->stale)};
+    }
+    if (cached && now < cached->expires) return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineUnavailable))}, false};
+    return {{Notice(request, Caption(request), i18n::Text(i18n::Key::OnlineLoading), true)}, true};
+}
+
+Batch Expand(const Request& root, const commands::Names& names, const std::vector<std::wstring>& locations,
+             const std::vector<std::wstring>& currencies, const std::vector<std::wstring>& cryptos) {
+    if (!root.bare || root.kind == Kind::None || root.kind == Kind::Speed) return {root};
+    Batch batch;
+    auto add = [&](const std::wstring& argument) {
+        auto request = Parse(root.command + (argument.empty() ? L"" : L" " + argument), root.city,
+            root.fahrenheit ? L"fahrenheit" : L"celsius", root.quote, root.enabled, names, root.pastDays, root.futureDays);
+        request.revision = root.revision; request.query = root.query;
+        const auto identity = Key(request) + L":" + Number(request.amount);
+        for (const auto& old : batch) if (commands::Equal(Key(old) + L":" + Number(old.amount), identity)) return;
+        batch.push_back(std::move(request));
+    };
+    if (root.kind == Kind::Weather) {
+        add(L"");
+        for (size_t i = 0; i < std::min<size_t>(locations.size(), 8); ++i) if (!tools::Trim(locations[i]).empty()) add(locations[i]);
+    } else {
+        const auto& list = root.kind == Kind::Currency ? currencies : cryptos;
+        for (size_t i = 0; i < std::min<size_t>(list.size(), 12); ++i) if (!tools::Trim(list[i]).empty()) add(list[i]);
+    }
+    if (batch.empty()) batch.push_back(root);
+    return batch;
+}
+Initial BeginBatch(const Batch& batch) {
+    Initial result;
+    for (const auto& request : batch) {
+        auto initial = Begin(request);
+        result.fetch = result.fetch || initial.fetch;
+        for (auto& row : initial.rows) result.rows.push_back(std::move(row));
+    }
+    return result;
+}
+
+std::wstring Escape(std::wstring_view text) {
+    if (text.size() > 200) throw std::invalid_argument("query too long");
+    const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+    if (!count && !text.empty()) throw std::invalid_argument("invalid text");
+    std::string utf8(static_cast<size_t>(count), '\0');
+    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), utf8.data(), count, nullptr, nullptr);
+    std::wstring result;
+    for (const unsigned char c : utf8) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') result += c;
+        else { result += L'%'; result += L"0123456789ABCDEF"[c >> 4]; result += L"0123456789ABCDEF"[c & 15]; }
+    }
+    return result;
+}
+std::wstring String(const Json& json, const wchar_t* key) {
+    const auto text = std::wstring(json.GetNamedString(key, L""));
+    if (text.size() > 160 || std::any_of(text.begin(), text.end(), [](wchar_t c) { return c < 32 || c == 127; }))
+        throw std::invalid_argument("invalid provider text");
+    return text;
+}
+double Numeric(const Json& json, const wchar_t* key) {
+    const auto value = json.GetNamedValue(key);
+    if (value.ValueType() != JsonType::Number || !std::isfinite(value.GetNumber())) throw std::invalid_argument("invalid provider number");
+    return value.GetNumber();
+}
+double Decimal(const std::wstring& text) {
+    if (text.empty() || text.size() > 80 || std::any_of(text.begin(), text.end(), [](wchar_t c) { return c > 127; }))
+        throw std::invalid_argument("invalid decimal");
+    std::wistringstream stream(text); stream.imbue(std::locale::classic());
+    double value = 0; stream >> value;
+    if (!stream || stream.peek() != std::char_traits<wchar_t>::eof() || !std::isfinite(value)) throw std::invalid_argument("invalid decimal");
+    return value;
+}
+std::wstring UtcNow() {
+    SYSTEMTIME time{}; GetSystemTime(&time);
+    wchar_t text[40]; swprintf_s(text, L"%04u-%02u-%02u %02u:%02u UTC", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute);
+    return text;
+}
+bool AllowedHost(std::wstring_view host) {
+    return host == L"api.open-meteo.com" || host == L"geocoding-api.open-meteo.com" ||
+        host == L"ipwho.is" || host == L"api.frankfurter.dev" || host == L"api.coinbase.com";
+}
+struct Handle {
+    HINTERNET value = nullptr;
+    explicit Handle(HINTERNET handle) : value(handle) {}
+    ~Handle() { if (value) WinHttpCloseHandle(value); }
+    Handle(const Handle&) = delete;
+    Handle& operator=(const Handle&) = delete;
+};
+struct ActiveRequest {
+    HINTERNET value = nullptr;
+    bool closed = false;
+    ActiveRequest* previous = nullptr;
+    ActiveRequest* next = nullptr;
+    explicit ActiveRequest(HINTERNET handle) : value(handle) {
+        std::lock_guard lock(g_httpMutex);
+        if (!value || g_searchQuit.load()) { if(value)WinHttpCloseHandle(value);value=nullptr;closed=true; }
+        next=g_activeHttp;if(next)next->previous=this;g_activeHttp=this;
+    }
+    ~ActiveRequest() {
+        std::lock_guard lock(g_httpMutex);
+        if(previous)previous->next=next;else g_activeHttp=next;
+        if(next)next->previous=previous;
+        if(value && !closed)WinHttpCloseHandle(value);
+    }
+    ActiveRequest(const ActiveRequest&)=delete;
+    ActiveRequest& operator=(const ActiveRequest&)=delete;
+};
+void CancelHttp() {
+    std::lock_guard lock(g_httpMutex);
+    for(auto request=g_activeHttp;request;request=request->next)if(request->value && !request->closed) {
+        WinHttpCloseHandle(request->value);request->closed=true;
+    }
+}
+struct Http {
+    Handle session{WinHttpOpen(L"StartEverything/2.1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
+    Json Get(const std::wstring& host, const std::wstring& path) {
+        if (!AllowedHost(host) || !path.starts_with(L"/") || path.size() > 2048 || !session.value || g_searchQuit.load())
+            throw std::runtime_error("request unavailable");
+        WinHttpSetTimeouts(session.value, 2000, 2000, 2500, 3000);
+        Handle connection(WinHttpConnect(session.value, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0));
+        ActiveRequest request(connection.value ? WinHttpOpenRequest(connection.value, L"GET", path.c_str(), nullptr,
+            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr);
+        if (!request.value) throw std::runtime_error("request unavailable");
+        DWORD disable = WINHTTP_DISABLE_COOKIES | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_REDIRECTS;
+        if (!WinHttpSetOption(request.value, WINHTTP_OPTION_DISABLE_FEATURE, &disable, sizeof(disable)) ||
+            !WinHttpSendRequest(request.value, L"Accept: application/json\r\n", static_cast<DWORD>(-1L),
+                WINHTTP_NO_REQUEST_DATA, 0, 0, 0) || !WinHttpReceiveResponse(request.value, nullptr))
+            throw std::runtime_error("request failed");
+        DWORD status = 0, size = sizeof(status);
+        if (!WinHttpQueryHeaders(request.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX) || status != 200)
+            throw std::runtime_error("provider unavailable");
+        const auto deadline = GetTickCount64() + 8000;
+        std::string bytes;
+        for (;;) {
+            if (g_searchQuit.load() || GetTickCount64() >= deadline) throw std::runtime_error("request timed out");
+            char chunk[4096]; DWORD count = 0;
+            if (!WinHttpReadData(request.value, chunk, sizeof(chunk), &count)) throw std::runtime_error("response failed");
+            if (!count) break;
+            if (bytes.size() + count > 128 * 1024) throw std::runtime_error("response too large");
+            bytes.append(chunk, count);
+        }
+        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
+        if (count <= 0) throw std::runtime_error("invalid response text");
+        std::wstring text(static_cast<size_t>(count), L'\0');
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), text.data(), count);
+        Json json{nullptr};
+        if (!Json::TryParse(text, json)) throw std::runtime_error("invalid response JSON");
+        return json;
+    }
+};
+using SpeedProgress = std::function<void(const SpeedView&)>;
+using SpeedRunner = std::function<SpeedView(const Request&, const SpeedProgress&)>;
+double SpeedClock() {
+    LARGE_INTEGER tick{}; QueryPerformanceCounter(&tick);
+    static const double frequency=[] { LARGE_INTEGER value{};QueryPerformanceFrequency(&value);return static_cast<double>(value.QuadPart); }();
+    return static_cast<double>(tick.QuadPart)/frequency;
+}
+struct SpeedTrial { size_t bytes=0; double seconds=0,latency=0; };
+double Mbps(const SpeedTrial& trial) {
+    if(!trial.bytes || !std::isfinite(trial.seconds) || trial.seconds<=0)throw std::runtime_error("no speed sample");
+    return static_cast<double>(trial.bytes)*8/trial.seconds/1e6;
+}
+using ByteProgress=std::function<void(size_t)>;
+using SpeedCheck=std::function<bool()>;
+struct SpeedBackend { const wchar_t* host; const wchar_t* prefix; const wchar_t* name; };
+// Public LibreSpeed nodes listed at librespeed.org/backend-servers/servers.php.
+// Never contact getIP.php, telemetry endpoints or a URL supplied by a website.
+constexpr std::array<SpeedBackend,4> kSpeedBackends{{
+    {L"fra.speedtest.clouvider.net",L"/backend/",L"Frankfurt"},
+    {L"lon.speedtest.clouvider.net",L"/backend/",L"London"},
+    {L"nyc.speedtest.clouvider.net",L"/backend/",L"New York"},
+    {L"librespeed.a573.net",L"/backend/",L"Tokyo"},
+}};
+const SpeedBackend& Backend(const Request& request) {
+    return kSpeedBackends[request.speedServer>=0 && request.speedServer<static_cast<int>(kSpeedBackends.size())?request.speedServer:0];
+}
+std::atomic<ULONGLONG> g_speedRetryUntil{0};
+ULONGLONG SpeedRetrySeconds() {
+    const auto until=g_speedRetryUntil.load(),now=GetTickCount64();
+    return until>now?(until-now+999)/1000:0;
+}
+void DeferSpeed(ULONGLONG seconds) {
+    const auto now=GetTickCount64();
+    const auto until=now+std::min(std::max<ULONGLONG>(1,seconds),(~ULONGLONG{0}-now)/1000)*1000;
+    auto old=g_speedRetryUntil.load();while(old<until && !g_speedRetryUntil.compare_exchange_weak(old,until)){}
+}
+ULONGLONG RetryAfterSeconds(std::wstring_view text) {
+    if(!text.empty() && text.size()<=10 && std::all_of(text.begin(),text.end(),[](wchar_t c){return c>=L'0'&&c<=L'9';})) {
+        ULONGLONG value=0;for(auto c:text)value=value*10+c-L'0';return std::max<ULONGLONG>(1,value);
+    }
+    SYSTEMTIME date{};FILETIME future{},now{};
+    const std::wstring value(text);
+    if(text.size()<=80 && WinHttpTimeToSystemTime(value.c_str(),&date) && SystemTimeToFileTime(&date,&future)) {
+        GetSystemTimeAsFileTime(&now);ULARGE_INTEGER a{},b{};
+        a.LowPart=future.dwLowDateTime;a.HighPart=future.dwHighDateTime;b.LowPart=now.dwLowDateTime;b.HighPart=now.dwHighDateTime;
+        return a.QuadPart>b.QuadPart?(a.QuadPart-b.QuadPart+9999999)/10000000:1;
+    }
+    return 60;
+}
+struct SpeedBusy : std::runtime_error {
+    ULONGLONG seconds;
+    explicit SpeedBusy(ULONGLONG wait):std::runtime_error("speed server requested a cooldown"),seconds(wait){}
+};
+struct SpeedHttpError : std::runtime_error {
+    DWORD status;
+    explicit SpeedHttpError(DWORD code):std::runtime_error("speed provider status "+std::to_string(code)),status(code){}
+};
+// Pace small probes separately from bulk transfers. Applying the probe rate
+// to every upload body artificially caps throughput on body-limited servers.
+// A bounded stream count and 32 ms minimum start interval limit bulk load.
+std::mutex g_speedPaceMutex;
+ULONGLONG g_speedNextRequest=0;
+void PaceSpeed(const Request& request,const SpeedCheck& active,size_t bytes=0) {
+    for(;;) {
+        if(!SpeedCurrent(request) || (active && !active()))throw std::runtime_error("speed test stopped");
+        if(const auto delay=SpeedRetrySeconds())throw SpeedBusy(delay);
+        ULONGLONG wait=0;
+        {std::lock_guard lock(g_speedPaceMutex);const auto now=GetTickCount64();
+            if(now>=g_speedNextRequest){g_speedNextRequest=now+(bytes>=32*1024?32:250);return;}
+            wait=g_speedNextRequest-now;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(std::min<ULONGLONG>(wait,25)));
+    }
+}
+SpeedTrial Transfer(Http& http,const Request& request,bool upload,size_t bytes,const ByteProgress& progress,const SpeedCheck& active={}) {
+    constexpr size_t maxDownload=1024ULL*1024*1024,maxUpload=20ULL*1024*1024;
+    if(!SpeedCurrent(request) || !http.session.value || bytes>(upload?maxUpload:maxDownload))throw std::runtime_error("speed test unavailable");
+    PaceSpeed(request,active,bytes);
+    WinHttpSetTimeouts(http.session.value,2000,3000,4000,4000);
+    const auto& backend=Backend(request);
+    Handle connection(WinHttpConnect(http.session.value,backend.host,INTERNET_DEFAULT_HTTPS_PORT,0));
+    ULONGLONG nonce=0;
+    if(BCryptGenRandom(nullptr,reinterpret_cast<PUCHAR>(&nonce),sizeof(nonce),BCRYPT_USE_SYSTEM_PREFERRED_RNG)<0)throw std::runtime_error("test nonce unavailable");
+    std::wstring path=std::wstring(backend.prefix)+(upload||!bytes?L"empty.php":L"garbage.php");
+    path+=L"?r="+std::to_wstring(nonce);
+    if(!upload&&bytes)path+=L"&ckSize="+std::to_wstring((bytes+1048575)/1048576);
+    ActiveRequest response(connection.value?WinHttpOpenRequest(connection.value,upload?L"POST":L"GET",path.c_str(),nullptr,
+        WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE):nullptr);
+    if(!response.value)throw std::runtime_error("speed request unavailable");
+    DWORD disabled=WINHTTP_DISABLE_COOKIES|WINHTTP_DISABLE_AUTHENTICATION|WINHTTP_DISABLE_REDIRECTS;
+    if(!WinHttpSetOption(response.value,WINHTTP_OPTION_DISABLE_FEATURE,&disabled,sizeof(disabled)))throw std::runtime_error("speed options unavailable");
+    const double started=SpeedClock();
+    const auto check=[&]{if(!SpeedCurrent(request)||(active&&!active())||SpeedClock()-started>35)throw std::runtime_error("speed request stopped");};
+    check();
+    const wchar_t* headers=upload?L"Content-Type: application/octet-stream\r\nAccept-Encoding: identity\r\nCache-Control: no-cache\r\n":
+        L"Accept-Encoding: identity\r\nCache-Control: no-cache\r\n";
+    if(!WinHttpSendRequest(response.value,headers,static_cast<DWORD>(-1L),WINHTTP_NO_REQUEST_DATA,0,upload?static_cast<DWORD>(bytes):0,0))throw std::runtime_error("speed send failed");
+    char buffer[32768]{};
+    if(upload&&BCryptGenRandom(nullptr,reinterpret_cast<PUCHAR>(buffer),sizeof(buffer),BCRYPT_USE_SYSTEM_PREFERRED_RNG)<0)throw std::runtime_error("test data unavailable");
+    size_t sent=0;bool bodyComplete=true;
+    while(upload&&sent<bytes){check();DWORD written=0;
+        if(!WinHttpWriteData(response.value,buffer,static_cast<DWORD>(std::min(bytes-sent,sizeof(buffer))),&written)||!written){bodyComplete=false;break;}
+        sent+=written;progress(sent);
+    }
+    check();if(!WinHttpReceiveResponse(response.value,nullptr))throw std::runtime_error("speed response failed");
+    DWORD status=0,size=sizeof(status);
+    if(!WinHttpQueryHeaders(response.value,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,WINHTTP_NO_HEADER_INDEX))throw std::runtime_error("speed status unavailable");
+    if(status!=200){
+        wchar_t retry[96]{};DWORD length=sizeof(retry);
+        const bool instructed=WinHttpQueryHeaders(response.value,WINHTTP_QUERY_CUSTOM,L"Retry-After",retry,&length,WINHTTP_NO_HEADER_INDEX);
+        if(status==429 || (status==503&&instructed)){
+            const auto wait=RetryAfterSeconds(instructed?std::wstring_view(retry):std::wstring_view{});DeferSpeed(wait);throw SpeedBusy(wait);
+        }
+        throw SpeedHttpError(status);
+    }
+    if(!bodyComplete)throw std::runtime_error("speed write failed");
+    const double headersAt=SpeedClock();size_t received=0;
+    for(;;){check();DWORD count=0;
+        const auto amount=static_cast<DWORD>(!upload&&bytes?std::min(sizeof(buffer),bytes-received):sizeof(buffer));
+        if(!amount)break;
+        if(!WinHttpReadData(response.value,buffer,amount,&count))throw std::runtime_error("speed read failed");
+        if(!count)break;received+=count;
+        if((upload||!bytes)&&received>65536)throw std::runtime_error("unexpected speed response");
+        if(!upload&&bytes)progress(received);
+    }
+    if(!upload&&bytes&&received!=bytes)throw std::runtime_error("incomplete speed response");
+    return {upload?sent:bytes?received:0,SpeedClock()-started,(headersAt-started)*1000};
+}
+using SpeedTransfer=std::function<SpeedTrial(Http&,const Request&,bool,size_t,const ByteProgress&,const SpeedCheck&)>;
+// Explicit test injection does not touch HTTP; production always uses PaceSpeed.
+ULONGLONG g_speedServerExpires=0;
+int g_speedServer=-1; // online worker only
+int SelectSpeedBackend(Http& http,const Request& request,const SpeedTransfer& transfer) {
+    if(g_speedServer>=0 && GetTickCount64()<g_speedServerExpires)return g_speedServer;
+    int best=-1;double fastest=std::numeric_limits<double>::max();
+    for(size_t i=0;i<kSpeedBackends.size();++i) {
+        if(!SpeedCurrent(request))throw std::runtime_error("speed test stopped");
+        auto probe=request;probe.speedServer=static_cast<int>(i);
+        try {
+            const auto result=transfer(http,probe,false,0,[](size_t){},{});
+            if(result.latency<fastest){fastest=result.latency;best=static_cast<int>(i);}
+        }catch(const SpeedBusy&){throw;}
+        catch(...){if(!SpeedCurrent(request))throw;}
+    }
+    if(best<0)throw std::runtime_error("no speed server available");
+    g_speedServer=best;g_speedServerExpires=GetTickCount64()+60*60*1000;return best;
+}
+
+// LibreSpeed-style grace periods, adaptive duration and transport-overhead
+// estimate. Keep raw payload accounting separate from the displayed estimate.
+constexpr double kSpeedTestSeconds = 15.0;
+constexpr double kSpeedOverhead = 1.06;
+double SpeedTimeBonus(double bytesPerSecond,double elapsed) {
+    return std::isfinite(bytesPerSecond)&&bytesPerSecond>0&&elapsed>0?
+        elapsed*std::min(2.0,bytesPerSecond/4000000.0):0;
+}
+std::array<size_t,4> g_speedUploadLimits{20*1024*1024,20*1024*1024,20*1024*1024,20*1024*1024}; // online worker only
+struct DirectionResult { double mbps=0; size_t bytes=0; bool limited=false; double seconds=0; };
+DirectionResult MeasureDirection(const Request& request,bool upload,SpeedView& view,const SpeedProgress& update,
+                                 size_t budget=0,double duration=kSpeedTestSeconds,const SpeedTransfer& transfer=Transfer,bool adaptive=false) {
+    const size_t streams=adaptive?(upload?3:5):4;
+    constexpr size_t warmup=1000;
+    if((budget && budget<=streams*warmup) || !std::isfinite(duration) || duration<=0)throw std::invalid_argument("invalid speed bounds");
+    const double grace=adaptive?(upload?3.0:1.5):0;
+    std::mutex mutex;std::condition_variable wake;
+    std::atomic<bool> stop{false},measurementDone{false};
+    std::atomic<size_t> remainingWorkers{streams};
+    const size_t server=request.speedServer>=0 && request.speedServer<4?request.speedServer:0;
+    std::atomic<size_t> uploadCeiling{g_speedUploadLimits[server]};
+    size_t ready=0,reserved=streams*warmup,bytes=0,pendingBytes=0,completedSamples=0;
+    bool started=false;double begin=0,measureBegin=0,deadline=0,measureEnd=0,lastFinished=0;
+    std::string firstFailure;
+    std::atomic<ULONGLONG> serverBusy{0};
+    struct Threads {
+        std::vector<std::thread> items;std::function<void()> stop;
+        ~Threads(){stop();for(auto& thread:items)if(thread.joinable())thread.join();}
+    } threads{{},[&]{stop=true;{std::lock_guard lock(mutex);started=true;}wake.notify_all();}};
+    for(size_t i=0;i<streams;++i)threads.items.emplace_back([&] {
+        try {
+            Http channel;
+            const auto current=[&]{return !stop.load() && SpeedCurrent(request);};
+            transfer(channel,request,false,warmup,[](size_t){},current);
+            {std::unique_lock lock(mutex);++ready;wake.notify_all();wake.wait(lock,[&]{return started || stop.load();});}
+            size_t next=upload?128*1024:256*1024*1024;unsigned sizeRetries=0,networkRetries=0;
+            while(current() && !measurementDone.load()) {
+                size_t length;
+                {std::lock_guard lock(mutex);
+                    if(measurementDone.load() || SpeedClock()>=deadline || (budget && reserved>=budget))break;
+                    if(upload)next=std::min(next,uploadCeiling.load());
+                    length=budget?std::min({next,budget-reserved,(budget-streams*warmup)/streams}):next;reserved+=length;
+                }
+                size_t previous=0,inWindow=0;const auto transferStarted=SpeedClock();
+                SpeedTrial sample;
+                try { sample=transfer(channel,request,upload,length,[&](size_t count) {
+                    if(count<previous || count>length)throw std::runtime_error("invalid speed progress");
+                    const auto delta=count-previous;previous=count;
+                    std::lock_guard lock(mutex);const auto now=SpeedClock();
+                    if(now>=measureBegin && now<=deadline && (!measureEnd || now<=measureEnd)) {
+                        if(upload){pendingBytes+=delta;inWindow+=delta;}else bytes+=delta;
+                        lastFinished=now;
+                    }
+                },current);
+                    if(sample.bytes!=length)throw std::runtime_error("incomplete speed sample");
+                } catch(...) {
+                    // A rejected or incomplete body is not a valid speed sample.
+                    if(upload){std::lock_guard lock(mutex);pendingBytes-=inWindow;}
+                    try {throw;}
+                    catch(const SpeedHttpError& error) {
+                        if(!upload || error.status!=413 || length<=128*1024 || sizeRetries++>=8)throw;
+                        const auto lower=std::clamp<size_t>(length/2,128*1024,20*1024*1024);
+                        auto old=uploadCeiling.load();while(old>lower&&!uploadCeiling.compare_exchange_weak(old,lower)){}
+                        {std::lock_guard lock(mutex);reserved-=length;}
+                        next=uploadCeiling.load();continue;
+                    }
+                    catch(const SpeedBusy&){throw;}
+                    catch(const std::runtime_error& error) {
+                        const std::string_view reason(error.what());
+                        const bool network=reason=="speed send failed" || reason=="speed write failed" ||
+                            reason=="speed response failed" || reason=="speed read failed";
+                        if(budget || !network || !current() || measurementDone.load() || networkRetries++>=2)throw;
+                        std::this_thread::sleep_for(std::chrono::milliseconds(250));continue;
+                    }
+                }
+                {std::lock_guard lock(mutex);++completedSamples;const auto finished=SpeedClock();
+                    if(upload){
+                        // WriteData may finish before the network delivers a body.
+                        // After acknowledgment, apportion the body over its full
+                        // transfer interval rather than treating buffered writes
+                        // as instantaneous network traffic at either boundary.
+                        const auto overlap=std::max(0.0,std::min(finished,measureEnd?measureEnd:deadline)-std::max(transferStarted,measureBegin));
+                        const auto fraction=std::clamp(overlap/std::max(1e-9,finished-transferStarted),0.0,1.0);
+                        bytes+=static_cast<size_t>(sample.bytes*fraction);pendingBytes-=inWindow;
+                    }
+                    lastFinished=std::min(finished,measureEnd?measureEnd:deadline);
+                }
+                if(upload && std::isfinite(sample.seconds) && sample.seconds>0)
+                    next=static_cast<size_t>(std::clamp(sample.bytes/sample.seconds*0.75,32.0*1024,20.0*1024*1024));
+            }
+        }catch(const SpeedBusy& error){serverBusy=error.seconds;DeferSpeed(error.seconds);stop=true;CancelHttp();}
+        catch(const std::exception& error){std::lock_guard lock(mutex);if(firstFailure.empty())firstFailure=error.what();}
+        catch(...){std::lock_guard lock(mutex);if(firstFailure.empty())firstFailure="unknown transfer failure";}
+        remainingWorkers.fetch_sub(1);wake.notify_all();
+    });
+    {
+        std::unique_lock lock(mutex);const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(8);
+        while(ready<remainingWorkers.load() && remainingWorkers.load() && SpeedCurrent(request)) {
+            if(wake.wait_until(lock,until)==std::cv_status::timeout)break;
+        }
+        if(serverBusy.load())throw SpeedBusy(serverBusy.load());
+        if(!ready || !SpeedCurrent(request))throw std::runtime_error("speed warmup failed");
+        begin=SpeedClock();measureBegin=begin+grace;deadline=measureBegin+duration;lastFinished=begin;started=true;
+    }
+    wake.notify_all();
+    const double base=upload?55:10,span=upload?43:45;
+    double bonus=0,lastUpdate=measureBegin,drainDeadline=0;
+    while(remainingWorkers.load()) {
+        if(serverBusy.load())throw SpeedBusy(serverBusy.load());
+        if(!SpeedCurrent(request))throw std::runtime_error("speed test stopped");
+        const auto now=SpeedClock(),elapsed=std::max(0.0,now-measureBegin);
+        size_t measured,allocated,acknowledged;
+        {std::lock_guard lock(mutex);measured=bytes+pendingBytes;allocated=reserved;acknowledged=completedSamples;}
+        if(!measurementDone.load()) {
+            if(adaptive && elapsed>0 && measured && (!upload || acknowledged))
+                bonus+=SpeedTimeBonus(measured/elapsed,std::max(0.0,now-lastUpdate));
+            lastUpdate=std::max(measureBegin,now);
+            if(elapsed+bonus>=duration) {
+                {std::lock_guard lock(mutex);measureEnd=std::min(now,deadline);measurementDone=true;}
+                // Finish already-started upload bodies to validate their in-window
+                // bytes. Exclude bytes written during this bounded response drain.
+                // Downloads have already been validated by HTTP 200 headers.
+                if(!upload){stop=true;CancelHttp();break;}
+                drainDeadline=now+std::min(3.0,std::max(1.0,duration/3));
+            }
+        } else if(now>=drainDeadline){stop=true;CancelHttp();break;}
+        view.progress=std::max(view.progress,base+span*std::min(0.99,std::max((elapsed+bonus)/duration,budget?static_cast<double>(allocated)/budget:0.0)));
+        const auto sampleSeconds=measurementDone.load()?measureEnd-measureBegin:elapsed;
+        if(sampleSeconds>=0.2 && measured) {
+            const auto rate=Mbps({measured,sampleSeconds,0})*(adaptive?kSpeedOverhead:1);
+            if(upload)view.upload=rate;else view.download=rate;
+        }
+        update(view);
+        std::unique_lock lock(mutex);wake.wait_for(lock,std::chrono::milliseconds(100));
+    }
+    for(auto& thread:threads.items)if(thread.joinable())thread.join();
+    if(upload)g_speedUploadLimits[server]=uploadCeiling.load();
+    if(!SpeedCurrent(request))throw std::runtime_error("speed test stopped");
+    if(serverBusy.load())throw SpeedBusy(serverBusy.load());
+    if(!bytes || (upload && !completedSamples))throw std::runtime_error("no measured speed samples");
+    const bool limited=budget && reserved>=budget && lastFinished<deadline;
+    if(!limited && !measurementDone.load())throw std::runtime_error(std::string(upload?"upload":"download")+" connections ended early: "+firstFailure);
+    const double seconds=limited?lastFinished-measureBegin:adaptive?measureEnd-measureBegin:duration;
+    const auto rate=Mbps({bytes,seconds,0})*(adaptive?kSpeedOverhead:1);
+    Wh_Log(L"speed: %ls %.1f Mbps, %.2f s measured, %.2f MB, upload ceiling %llu bytes",
+        upload?L"upload":L"download",rate,seconds,bytes/1e6,static_cast<unsigned long long>(uploadCeiling.load()));
+    return {rate,bytes,limited,seconds};
+}
+SpeedView MeasureSpeed(Http& http,const Request& request,const SpeedProgress& update) {
+    if(const auto delay=SpeedRetrySeconds())throw SpeedBusy(delay);
+    auto selected=request;selected.speedServer=SelectSpeedBackend(http,request,Transfer);
+    SpeedView result;result.server=Backend(selected).name;result.phase=SpeedView::Phase::Latency;update(result);
+    std::vector<double> latency;
+    for(int i=0;i<4;++i) {
+        const auto sample=Transfer(http,selected,false,0,[](size_t){});
+        if(i)latency.push_back(sample.latency);
+        result.progress=(i+1)*2.5;update(result);
+    }
+    std::sort(latency.begin(),latency.end());result.latency=latency[latency.size()/2];
+    for(bool upload:{false,true}) {
+        result.phase=upload?SpeedView::Phase::Upload:SpeedView::Phase::Download;
+        result.progress=upload?55:10;update(result);
+        const auto measured=MeasureDirection(selected,upload,result,update,0,kSpeedTestSeconds,Transfer,true);
+        if(upload)result.upload=measured.mbps;else result.download=measured.mbps;
+        result.dataLimited=result.dataLimited||measured.limited;
+        result.progress=upload?98:55;update(result);
+    }
+    result.phase=SpeedView::Phase::Done;result.progress=100;update(result);return result;
+}
+
+using GetJson = std::function<Json(const std::wstring&, const std::wstring&)>;
+struct Location { double latitude = 0, longitude = 0; std::wstring name; ULONGLONG expires = 0; };
+std::optional<Location> g_autoLocation;  // online worker only; never saved to disk
+std::map<std::wstring, Location> g_locations;  // online worker only, bounded
+Location Locate(const Request& request, const GetJson& get) {
+    const auto now = GetTickCount64();
+    if (request.city.empty() && g_autoLocation && now < g_autoLocation->expires) return *g_autoLocation;
+    const auto key = tools::ToLower(request.city);
+    if (!key.empty()) if (const auto found = g_locations.find(key); found != g_locations.end() && now < found->second.expires) return found->second;
+    Json json{nullptr};
+    if (request.city.empty()) {
+        json = get(L"ipwho.is", L"/?fields=success,city,country,latitude,longitude");
+        if (!json.GetNamedBoolean(L"success", false)) throw std::runtime_error("location unavailable");
+    } else {
+        auto response = get(L"geocoding-api.open-meteo.com", L"/v1/search?count=1&format=json&name=" + Escape(request.city));
+        auto results = response.GetNamedArray(L"results");
+        if (!results.Size()) throw std::runtime_error("city not found");
+        json = results.GetObjectAt(0);
+    }
+    Location location;
+    location.latitude = Numeric(json, L"latitude"); location.longitude = Numeric(json, L"longitude");
+    location.name = String(json, request.city.empty() ? L"city" : L"name");
+    const auto country = String(json, L"country");
+    if (location.name.empty() || std::abs(location.latitude) > 90 || std::abs(location.longitude) > 180)
+        throw std::runtime_error("invalid location");
+    if (!country.empty()) location.name += L", " + country;
+    location.expires = now + 6 * 60 * 60 * 1000;
+    if (request.city.empty()) g_autoLocation = location;
+    else {
+        if (g_locations.size() >= 16) g_locations.erase(g_locations.begin());
+        g_locations[key] = location;
+    }
+    return location;
+}
+std::wstring Coordinate(double value) {
+    std::wostringstream stream; stream.imbue(std::locale::classic()); stream.precision(8); stream << value;
+    return stream.str();
+}
+Data Fetch(const Request& request, const GetJson& get) {
+    Data data;
+    if (request.kind == Kind::Weather) {
+        const auto location = Locate(request, get);
+        const auto json = get(L"api.open-meteo.com", L"/v1/forecast?latitude=" + Coordinate(location.latitude) +
+            L"&longitude=" + Coordinate(location.longitude) + L"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day"
+            L"&daily=temperature_2m_max,temperature_2m_min,weather_code&past_days=" + std::to_wstring(request.pastDays) +
+            L"&forecast_days=" + std::to_wstring(request.futureDays + 1) + L"&timezone=auto");
+        const auto current = json.GetNamedObject(L"current"); const auto daily = json.GetNamedObject(L"daily");
+        data.location = location.name; data.automatic = request.city.empty();
+        data.value = Numeric(current, L"temperature_2m");
+        data.humidity = Numeric(current, L"relative_humidity_2m"); data.wind = Numeric(current, L"wind_speed_10m");
+        const auto code = Numeric(current, L"weather_code"), day = Numeric(current, L"is_day");
+        if (code < 0 || code > 99 || code != std::floor(code) || (day != 0 && day != 1)) throw std::runtime_error("invalid weather code");
+        data.code = static_cast<int>(code); data.day = static_cast<int>(day);
+        data.date = String(current, L"time"); std::replace(data.date.begin(), data.date.end(), L'T', L' ');
+        data.today = data.date.substr(0, 10);
+        const auto offset = Numeric(json, L"utc_offset_seconds");
+        if (!Date(data.today) || offset != std::floor(offset) || std::abs(offset) > 14 * 3600) throw std::runtime_error("invalid weather date");
+        data.utcOffset = static_cast<int>(offset);
+        const auto dates = daily.GetNamedArray(L"time"), lows = daily.GetNamedArray(L"temperature_2m_min"),
+                   highs = daily.GetNamedArray(L"temperature_2m_max"), codes = daily.GetNamedArray(L"weather_code");
+        const auto count = dates.Size();
+        if (count != static_cast<uint32_t>(request.pastDays + request.futureDays + 1) ||
+            lows.Size() != count || highs.Size() != count || codes.Size() != count) throw std::runtime_error("invalid forecast length");
+        bool hasToday = false;
+        for (uint32_t i = 0; i < count; ++i) {
+            Day day; day.date = dates.GetStringAt(i); day.low = lows.GetNumberAt(i); day.high = highs.GetNumberAt(i);
+            const double code = codes.GetNumberAt(i);
+            if (!Date(day.date) || (!data.days.empty() && data.days.back().date >= day.date) ||
+                !std::isfinite(day.low) || !std::isfinite(day.high) || day.low < -100 || day.high > 80 || day.low > day.high ||
+                !std::isfinite(code) || code < 0 || code > 99 || code != std::floor(code)) throw std::runtime_error("invalid forecast day");
+            day.code = static_cast<int>(code);
+            if (day.date == data.today) { data.low = day.low; data.high = day.high; hasToday = true; }
+            data.days.push_back(std::move(day));
+        }
+        if (!hasToday) throw std::runtime_error("forecast missing today");
+        if (!std::isfinite(data.low) || !std::isfinite(data.high) || data.value < -100 || data.value > 80 ||
+            data.low < -100 || data.high > 80 || data.low > data.high || data.humidity < 0 || data.humidity > 100 || data.wind < 0 || data.wind > 500)
+            throw std::runtime_error("invalid weather");
+    } else if (request.base == request.quote) {
+        data.value = 1; data.date = UtcNow();
+    } else if (request.kind == Kind::Currency) {
+        const auto json = get(L"api.frankfurter.dev", L"/v2/rate/" + request.base + L"/" + request.quote);
+        if (String(json, L"base") != request.base || String(json, L"quote") != request.quote) throw std::runtime_error("wrong currency pair");
+        data.value = Numeric(json, L"rate"); data.date = String(json, L"date");
+    } else {
+        const auto json = get(L"api.coinbase.com", L"/v2/prices/" + request.base + L"-" + request.quote + L"/spot").GetNamedObject(L"data");
+        if (String(json, L"currency") != request.quote || (json.HasKey(L"base") && String(json, L"base") != request.base))
+            throw std::runtime_error("wrong crypto pair");
+        data.value = Decimal(String(json, L"amount")); data.date = UtcNow();
+    }
+    if (!std::isfinite(data.value) || (request.kind != Kind::Weather && data.value <= 0) || data.date.empty())
+        throw std::runtime_error("invalid data");
+    return data;
+}
+void ThreadMain();
+void Schedule(Batch batch) {
+    if (batch.empty()) return;
+    {
+        std::lock_guard lock(g_queryMutex);
+        if (g_searchQuit.load() || batch.front().revision != g_queryRevision) return;
+        // Both the app worker and the speed card's Run button can schedule
+        // work. Serialize lazy creation so they cannot start two HTTP workers.
+        if (!g_onlineThread) g_onlineThread.emplace(ThreadMain);
+        g_request = std::move(batch);
+    }
+    // Ordinary local searches never need an online thread or HTTP session.
+    g_wake.notify_one();
+}
+void PublishBatch(const Batch& batch, const std::vector<std::vector<Row>>& groups) {
+    std::vector<Row> rows;
+    for (const auto& group : groups) for (const auto& row : group) rows.push_back(row);
+    if (PublishAppResults(batch.front().revision, batch.front().query, std::move(rows))) RequestRender();
+}
+void StartSpeed(Request request) {
+    if (request.kind != Kind::Speed || !request.valid || !request.enabled) return;
+    if(const auto wait=SpeedRetrySeconds()){SpeedView value;value.phase=SpeedView::Phase::Failed;value.retrySeconds=wait;
+        if(PublishAppResults(request.revision,request.query,SpeedRows(request,value)))RequestRender();return;}
+    {
+        std::lock_guard lock(g_queryMutex);
+        if (g_searchQuit.load() || request.revision != g_queryRevision ||
+            (g_speedBusy && g_speedRevision == request.revision)) return;
+        g_speedBusy = true; g_speedRevision = request.revision; request.speedId = ++g_speedId;
+    }
+    request.runSpeed = true;
+    SpeedView view; view.phase = SpeedView::Phase::Latency;
+    { std::lock_guard lock(g_cacheMutex); g_liveSpeed = view; }
+    if (PublishAppResults(request.revision, request.query, SpeedRows(request, view))) RequestRender();
+    Schedule(Batch{request});
+}
+void StopSpeed(Request request) {
+    {
+        std::lock_guard lock(g_queryMutex);
+        if (request.revision != g_queryRevision || !g_speedBusy || g_speedRevision != request.revision) return;
+        g_speedBusy = false; ++g_speedId;
+    }
+    CancelHttp();
+    SpeedView view;
+    { std::lock_guard lock(g_cacheMutex); view = g_liveSpeed.value_or(SpeedView{}); }
+    view.phase = SpeedView::Phase::Stopped;
+    if (PublishAppResults(request.revision, request.query, SpeedRows(request, view))) RequestRender();
+    g_queryWake.notify_all();
+}
+void Run(const GetJson& get, const SpeedRunner& runSpeed = {}) {
+    while (!g_searchQuit.load()) {
+        Batch batch;
+        {
+            std::unique_lock lock(g_queryMutex);
+            g_wake.wait(lock, [] { return g_searchQuit.load() || g_request.has_value(); });
+            if (g_searchQuit.load()) break;
+            batch = std::move(*g_request); g_request.reset();
+            if (batch.empty()) continue;
+            if (!batch.front().runSpeed && g_wake.wait_for(lock, std::chrono::milliseconds(450), [&] {
+                return g_searchQuit.load() || g_queryRevision != batch.front().revision || g_request.has_value();
+            })) continue;
+        }
+        if (batch.front().kind == Kind::Speed && batch.front().runSpeed) {
+            const auto& request = batch.front();
+            ULONGLONG lastPosted = 0;
+            auto lastPhase = SpeedView::Phase::Ready;
+            auto progress = [&](const SpeedView& value) {
+                if (!SpeedCurrent(request)) throw std::runtime_error("speed test stopped");
+                { std::lock_guard lock(g_cacheMutex); g_liveSpeed = value; }
+                const auto now = GetTickCount64();
+                if (value.phase == lastPhase && now - lastPosted < 100 && value.progress < 100) return;
+                lastPosted = now; lastPhase = value.phase;
+                if (PublishAppResults(request.revision, request.query, SpeedRows(request, value))) RequestRender();
+            };
+            try {
+                if (!runSpeed) throw std::runtime_error("no speed provider");
+                const auto result = runSpeed(request, progress);
+                if (SpeedCurrent(request)) {
+                    const auto when = UtcNow();
+                    { std::lock_guard lock(g_cacheMutex); g_lastSpeed = result; g_lastSpeedWhen = when; }
+                    if (PublishAppResults(request.revision, request.query, SpeedRows(request, result, when))) RequestRender();
+                }
+            } catch (...) {
+                ULONGLONG retry=0;
+                try{throw;}
+                catch(const SpeedBusy& error){DeferSpeed(error.seconds);retry=SpeedRetrySeconds();Wh_Log(L"speed: server cooldown (%llu seconds)",static_cast<unsigned long long>(retry));}
+                catch(const std::exception& error){g_speedServer=-1;g_speedServerExpires=0;Wh_Log(L"speed: test failed (%hs)",error.what());}
+                catch(...){g_speedServer=-1;g_speedServerExpires=0;Wh_Log(L"speed: test failed (unknown error)");}
+                if (SpeedCurrent(request)) {
+                    SpeedView value;
+                    { std::lock_guard lock(g_cacheMutex); value = g_liveSpeed.value_or(SpeedView{}); }
+                    value.phase = SpeedView::Phase::Failed;value.retrySeconds=retry;
+                    if (PublishAppResults(request.revision, request.query, SpeedRows(request, value))) RequestRender();
+                }
+            }
+            { std::lock_guard lock(g_queryMutex); if (request.speedId == g_speedId) g_speedBusy = false; }
+            g_queryWake.notify_all();
+            continue;
+        }
+        std::vector<std::vector<Row>> groups;
+        for (const auto& request : batch) groups.push_back(Begin(request).rows);
+        for (size_t i = 0; i < batch.size(); ++i) {
+            const auto& request = batch[i];
+            { std::lock_guard lock(g_queryMutex); if (g_searchQuit.load() || request.revision != g_queryRevision) break; }
+            try {
+                // An earlier saved card may have fetched the same pair for a
+                // different amount. Recheck the cache before every request.
+                auto cached = Begin(request);
+                if (!cached.fetch) groups[i] = std::move(cached.rows);
+                else {
+                    const auto data = Fetch(request, [&](const std::wstring& host, const std::wstring& path) {
+                        { std::lock_guard lock(g_queryMutex); if (g_searchQuit.load() || request.revision != g_queryRevision) throw std::runtime_error("obsolete request"); }
+                        return get(host, path);
+                    });
+                    const ULONGLONG now = GetTickCount64();
+                    const ULONGLONG ttl = request.kind == Kind::Weather ? 10 * 60 * 1000 : request.kind == Kind::Currency ? 60 * 60 * 1000 : 30 * 1000;
+                    Store(Key(request), Entry{data, now + ttl, now});
+                    groups[i] = Rows(request, data);
+                }
+            } catch (...) {
+                { std::lock_guard lock(g_queryMutex); if (g_searchQuit.load() || request.revision != g_queryRevision) break; }
+                const auto now = GetTickCount64();
+                std::optional<Data> previous;
+                { std::lock_guard lock(g_cacheMutex); if (const auto found = g_cache.find(Key(request)); found != g_cache.end()) previous = found->second.data; }
+                Store(Key(request), Entry{previous, now + 60 * 1000, now, true});
+                groups[i] = previous ? Rows(request, *previous, true) : std::vector<Row>{Notice(request, Caption(request),
+                    std::wstring(i18n::Text(i18n::Key::OnlineUnavailable)) + L"\n" + Hint(request))};
+            }
+            PublishBatch(batch, groups);
+        }
+    }
+}
+void ThreadMain() {
+    const HRESULT apartment = RoInitialize(RO_INIT_MULTITHREADED);
+    {
+        Http http;
+        Run([&](const std::wstring& host, const std::wstring& path) { return http.Get(host, path); },
+            [&](const Request& request, const SpeedProgress& update) { return MeasureSpeed(http, request, update); });
+    }
+    if (SUCCEEDED(apartment)) RoUninitialize();
+}
+}  // namespace online
+
+// Local hardware counters are collected only while the usage command is visible.
+namespace hardware {
+constexpr size_t kHistory = 60;
+double Percent(double value) { return std::isfinite(value) && value >= 0 ? std::clamp(value, 0.0, 100.0) : -1; }
+std::wstring Fixed(double value, const wchar_t* unit = L"", int digits = 1) {
+    if (!std::isfinite(value) || value < 0) return L"\u2014";
+    wchar_t buffer[96]; swprintf_s(buffer, L"%.*f%ls", digits, value, unit); return buffer;
+}
+void Append(std::vector<double>& history, double value) {
+    if (history.size() >= kHistory) history.erase(history.begin());
+    history.push_back(std::isfinite(value) && value >= 0 ? value : -1);
+}
+struct CounterValue { std::wstring name; double value = 0; };
+using EngineKey = std::pair<std::wstring, std::wstring>;
+std::map<std::wstring,double> GpuUsage(const std::vector<CounterValue>& counters) {
+    std::map<EngineKey,double> engines;
+    for (const auto& item : counters) {
+        if (!std::isfinite(item.value) || item.value < 0) continue;
+        const auto name = tools::ToLower(item.name);
+        const auto luid = name.find(L"luid_"), phys = name.find(L"_phys_"), engine = name.find(L"_eng_"), type = name.find(L"_engtype_");
+        if (luid == std::wstring::npos || phys == std::wstring::npos || engine == std::wstring::npos || type == std::wstring::npos ||
+            phys <= luid+5 || engine <= phys+6 || type <= engine+5) continue;
+        // Combine all processes on each physical engine, then use the busiest
+        // engine per adapter. Summing independent engines would exceed 100%.
+        const auto adapter = name.substr(luid+5, phys-luid-5);
+        engines[{adapter,name.substr(phys,type-phys)}] += item.value;
+    }
+    std::map<std::wstring,double> result;
+    for (const auto& [key,value] : engines) result[key.first] = std::max(result[key.first], Percent(value));
+    return result;
+}
+// These are adapter-wide gauges. Summing GPU Process Memory counters would
+// double-count shared allocations and measure the wrong scope.
+std::map<std::wstring,double> GpuMemory(const std::vector<CounterValue>& counters) {
+    std::map<EngineKey,double> physical;
+    for(const auto& item:counters) {
+        if(!std::isfinite(item.value) || item.value<0)continue;
+        const auto name=tools::ToLower(item.name);
+        if(!name.starts_with(L"luid_"))continue;
+        const auto at=name.find(L"_phys_",5);
+        if(at==name.npos)continue;
+        const auto raw=name.substr(5,at-5);const auto split=raw.find(L'_');
+        if(split==raw.npos)continue;
+        const auto high=raw.substr(0,split),low=raw.substr(split+1);
+        const auto hex=[](const std::wstring& text) {
+            return text.size()>=3 && text.size()<=10 && text.starts_with(L"0x") &&
+                std::all_of(text.begin()+2,text.end(),[](wchar_t c){return (c>=L'0' && c<=L'9') || (c>=L'a' && c<=L'f');});
+        };
+        if(!hex(high) || !hex(low))continue;
+        auto node=name.substr(at+6);if(const auto duplicate=node.find(L'#');duplicate!=node.npos)node.resize(duplicate);
+        if(node.empty() || !std::all_of(node.begin(),node.end(),[](wchar_t c){return c>=L'0' && c<=L'9';}))continue;
+        wchar_t id[48];swprintf_s(id,L"0x%08x_0x%08x",static_cast<unsigned>(wcstoul(high.c_str()+2,nullptr,16)),
+            static_cast<unsigned>(wcstoul(low.c_str()+2,nullptr,16)));
+        auto& value=physical[{id,node}];value=std::max(value,item.value);
+    }
+    std::map<std::wstring,double> result;
+    for(const auto& [key,value]:physical)result[key.first]+=value;
+    for(auto& [key,value]:result)if(!std::isfinite(value))value=-1;
+    return result;
+}
+std::wstring VramText(double used,uint64_t capacity) {
+    const bool gigabytes=capacity>=1073741824ull || (std::isfinite(used) && used>=1073741824.0);
+    const double divisor=gigabytes?1073741824.0:1048576.0;
+    std::wstring text=L"VRAM "+Fixed(used/divisor);
+    if(capacity)text+=L" / "+Fixed(static_cast<double>(capacity)/divisor);
+    return text+((capacity || (std::isfinite(used) && used>=0))?(gigabytes?L" GB":L" MB"):L"");
+}
+
+struct Counters {
+    PDH_HQUERY query = nullptr;
+    PDH_HCOUNTER cpu = nullptr, idle = nullptr, diskRead = nullptr, diskWrite = nullptr, gpu = nullptr, vram = nullptr;
+    Counters() {
+        if (PdhOpenQueryW(nullptr,0,&query) != ERROR_SUCCESS) return;
+        const auto add = [&](const wchar_t* path, PDH_HCOUNTER& counter) {
+            if (PdhAddEnglishCounterW(query,path,0,&counter) != ERROR_SUCCESS) counter = nullptr;
+        };
+        add(L"\\Processor Information(_Total)\\% Processor Time",cpu);
+        if (!cpu) add(L"\\Processor(_Total)\\% Processor Time",cpu);
+        add(L"\\PhysicalDisk(_Total)\\% Idle Time",idle);
+        add(L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec",diskRead);
+        add(L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec",diskWrite);
+        add(L"\\GPU Engine(*)\\Utilization Percentage",gpu);
+        add(L"\\GPU Adapter Memory(*)\\Dedicated Usage",vram);
+        PdhCollectQueryData(query);
+    }
+    ~Counters() { if (query) PdhCloseQuery(query); }
+    Counters(const Counters&) = delete;
+    double Value(PDH_HCOUNTER counter) {
+        PDH_FMT_COUNTERVALUE value{};
+        if (!counter || PdhGetFormattedCounterValue(counter,PDH_FMT_DOUBLE|PDH_FMT_NOCAP100,nullptr,&value) != ERROR_SUCCESS ||
+            (value.CStatus != PDH_CSTATUS_VALID_DATA && value.CStatus != PDH_CSTATUS_NEW_DATA) || !std::isfinite(value.doubleValue)) return -1;
+        return value.doubleValue;
+    }
+    std::vector<CounterValue> Values(PDH_HCOUNTER counter) {
+        std::vector<CounterValue> values;
+        if (!counter) return values;
+        DWORD bytes = 0, count = 0;
+        if (PdhGetFormattedCounterArrayW(counter,PDH_FMT_DOUBLE|PDH_FMT_NOCAP100,&bytes,&count,nullptr) != PDH_MORE_DATA || !bytes || bytes > 4*1024*1024) return values;
+        std::vector<BYTE> data(bytes);
+        auto items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(data.data());
+        if (PdhGetFormattedCounterArrayW(counter,PDH_FMT_DOUBLE|PDH_FMT_NOCAP100,&bytes,&count,items) != ERROR_SUCCESS || count > 20000) return values;
+        for (DWORD i=0;i<count;++i) if (items[i].szName &&
+            (items[i].FmtValue.CStatus == PDH_CSTATUS_VALID_DATA || items[i].FmtValue.CStatus == PDH_CSTATUS_NEW_DATA))
+            values.push_back({items[i].szName,items[i].FmtValue.doubleValue});
+        return values;
+    }
+};
+struct Adapter { std::wstring id, name; uint64_t dedicatedMemory=0; };
+std::vector<Adapter> Adapters() {
+    std::vector<Adapter> adapters;
+    winrt::com_ptr<IDXGIFactory1> factory;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1),factory.put_void()))) return adapters;
+    for (UINT i=0;i<8;++i) {
+        winrt::com_ptr<IDXGIAdapter1> adapter;
+        if (factory->EnumAdapters1(i,adapter.put()) == DXGI_ERROR_NOT_FOUND) break;
+        DXGI_ADAPTER_DESC1 desc{};
+        if (!adapter || FAILED(adapter->GetDesc1(&desc)) || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) continue;
+        wchar_t id[48]; swprintf_s(id,L"0x%08x_0x%08x",static_cast<unsigned>(desc.AdapterLuid.HighPart),desc.AdapterLuid.LowPart);
+        adapters.push_back({id,desc.Description,static_cast<uint64_t>(desc.DedicatedVideoMemory)+desc.DedicatedSystemMemory});
+    }
+    return adapters;
+}
+std::wstring CpuName() {
+    wchar_t text[256]{}; DWORD bytes = sizeof(text);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE,L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",L"ProcessorNameString",RRF_RT_REG_SZ,nullptr,text,&bytes) == ERROR_SUCCESS)
+        return tools::Trim(text);
+    return L"CPU";
+}
+struct NetworkSample { ULONGLONG received=0, sent=0; };
+struct Monitor {
+    Counters counters;
+    std::vector<Adapter> adapters = Adapters();
+    std::wstring cpuName = CpuName();
+    std::map<ULONGLONG,NetworkSample> previousNetwork;
+    ULONGLONG networkTick = 0;
+    bool primed = false;
+    std::map<std::wstring,std::vector<double>> history;
+    std::vector<Row> Sample() {
+        const bool measured = primed && counters.query && PdhCollectQueryData(counters.query) == ERROR_SUCCESS;
+        primed = true;
+        std::vector<Row> rows;
+        const auto add = [&](const std::wstring& id,const std::wstring& title,const std::wstring& subtitle,
+                             const wchar_t* icon,double value,const std::wstring& display,const std::wstring& detail,uint32_t color,bool percentage=true) {
+            UsageView view; view.id=id; view.value=value; view.display=display; view.detail=detail; view.color=color;
+            auto& series=history[id]; Append(series,value); view.history=series;
+            view.maximum=100;
+            if (!percentage) { view.maximum=1; for(double point:series) if(std::isfinite(point)) view.maximum=std::max(view.maximum,point*1.1); }
+            Row row; row.title=title; row.subtitle=subtitle; row.customIconText=icon;row.customIconIsGlyph=true;row.customGlyph=L"\uE9D2";
+            row.sectionTitle=i18n::Text(i18n::Key::HardwareUsage);
+            row.usage=std::move(view); row.canRunAsAdmin=false; row.cardSignature=id;
+            if (value>=0) row.copyText=title+L": "+display+(detail.empty()?L"":L"\n"+detail);
+            rows.push_back(std::move(row));
+        };
+        const auto unavailable=std::wstring(i18n::Text(i18n::Key::MetricsUnavailable));
+        const double cpu=measured?Percent(counters.Value(counters.cpu)):-1;
+        add(L"cpu",L"CPU",cpuName,L"\uE950",cpu,Fixed(cpu,L"%"),cpu<0?unavailable:L"",0xFF4CB9EF);
+        MEMORYSTATUSEX memory{sizeof(memory)};
+        const bool memoryOk=GlobalMemoryStatusEx(&memory) && memory.ullTotalPhys && memory.ullAvailPhys<=memory.ullTotalPhys;
+        const double used=memoryOk?static_cast<double>(memory.ullTotalPhys-memory.ullAvailPhys):-1;
+        const double ram=memoryOk?Percent(used*100/memory.ullTotalPhys):-1;
+        add(L"ram",i18n::Text(i18n::Key::MemoryUsage),L"RAM",L"\uE7F1",ram,Fixed(ram,L"%"),memoryOk?
+            Fixed(used/1073741824.0)+L" / "+Fixed(memory.ullTotalPhys/1073741824.0)+L" GB":unavailable,0xFFBD8CFC);
+        const auto gpu=measured?GpuUsage(counters.Values(counters.gpu)):std::map<std::wstring,double>{};
+        const auto gpuMemory=GpuMemory(counters.Values(counters.vram));
+        for (size_t i=0;i<adapters.size();++i) {
+            auto found=gpu.find(adapters[i].id);
+            const double value=found==gpu.end()?-1:found->second;
+            const auto memory=gpuMemory.find(adapters[i].id);
+            const double dedicated=memory==gpuMemory.end()?-1:memory->second;
+            const auto detail=VramText(dedicated,adapters[i].dedicatedMemory);
+            add(L"gpu:"+adapters[i].id,L"GPU "+std::to_wstring(i),adapters[i].name,L"\uE7F4",value,Fixed(value,L"%"),detail,0xFF61D4A5);
+        }
+        if (adapters.empty()) add(L"gpu",L"GPU",L"",L"\uE7F4",-1,L"\u2014",VramText(-1,0),0xFF61D4A5);
+        const auto diskIdle=measured?counters.Value(counters.idle):-1;
+        const double disk=diskIdle<0?-1:Percent(std::max(0.0,100-diskIdle));
+        add(L"disk",i18n::Text(i18n::Key::DiskUsage),L"",L"\uEDA2",disk,Fixed(disk,L"%"),disk<0?unavailable:
+            L"\u2193 "+Fixed(counters.Value(counters.diskRead)/1e6,L" MB/s")+L"   \u2191 "+Fixed(counters.Value(counters.diskWrite)/1e6,L" MB/s"),0xFFF2B86B);
+        double received=0,sent=0; const auto now=GetTickCount64();
+        std::map<ULONGLONG,NetworkSample> current;
+        PMIB_IF_TABLE2 table=nullptr; const bool networkOk=GetIfTable2(&table)==NO_ERROR;
+        if (networkOk) {
+            for(ULONG i=0;i<table->NumEntries;++i) {
+                const auto& entry=table->Table[i];
+                if (!entry.InterfaceAndOperStatusFlags.HardwareInterface || entry.OperStatus!=IfOperStatusUp ||
+                    (entry.Type!=IF_TYPE_ETHERNET_CSMACD && entry.Type!=IF_TYPE_IEEE80211)) continue;
+                current[entry.InterfaceLuid.Value]={entry.InOctets,entry.OutOctets};
+                if(auto old=previousNetwork.find(entry.InterfaceLuid.Value);old!=previousNetwork.end() && now>networkTick &&
+                    entry.InOctets>=old->second.received && entry.OutOctets>=old->second.sent) {
+                    received+=(entry.InOctets-old->second.received)*8.0/(now-networkTick)/1000;
+                    sent+=(entry.OutOctets-old->second.sent)*8.0/(now-networkTick)/1000;
+                }
+            }
+            FreeMibTable(table);
+        }
+        const bool baseline=networkTick!=0; previousNetwork=std::move(current);networkTick=now;
+        const double traffic=networkOk&&baseline?received+sent:-1;
+        add(L"network",i18n::Text(i18n::Key::NetworkTraffic),L"Ethernet / Wi-Fi",L"\uE968",traffic,Fixed(traffic,L" Mbps"),traffic<0?unavailable:
+            L"\u2193 "+Fixed(received,L" Mbps")+L"   \u2191 "+Fixed(sent,L" Mbps"),0xFF6F9EFF,false);
+        return rows;
+    }
+};
+struct Request { std::wstring query; uint64_t revision=0; };
+std::optional<Request> g_request; // g_queryMutex
+std::condition_variable g_wake;
+std::atomic<bool> g_visible{false};
+[[clang::no_destroy]] std::optional<std::thread> g_thread;
+bool CurrentLocked(const Request& request) { return !g_searchQuit.load() && g_visible.load() && request.revision==g_queryRevision && request.query==g_pendingQuery; }
+void Wake() { g_wake.notify_all(); }
+void Visible(bool value) { g_visible.store(value);Wake(); }
+void Run() {
+    const HRESULT apartment=RoInitialize(RO_INIT_MULTITHREADED);
+    try {
+        while(!g_searchQuit.load()) {
+            Request request;
+            {
+                std::unique_lock lock(g_queryMutex);
+                g_wake.wait(lock,[]{return g_searchQuit.load() || (g_request && CurrentLocked(*g_request));});
+                if(g_searchQuit.load())break;
+                request=*g_request;
+            }
+            Monitor monitor;
+            auto next=std::chrono::steady_clock::now();
+            for (;;) {
+                {std::lock_guard lock(g_queryMutex);if(!CurrentLocked(request))break;}
+                auto rows=monitor.Sample();
+                if(PublishAppResults(request.revision,request.query,std::move(rows)))RequestRender();
+                next+=std::chrono::seconds(1);
+                if(next<std::chrono::steady_clock::now())next=std::chrono::steady_clock::now()+std::chrono::seconds(1);
+                std::unique_lock lock(g_queryMutex);
+                if(g_wake.wait_until(lock,next,[&]{return !CurrentLocked(request);}))break;
+            }
+            // PDH and adapter objects are released before waiting while idle.
+        }
+    } catch(...) { Wh_Log(L"hardware: monitoring unavailable"); }
+    if(SUCCEEDED(apartment))RoUninitialize();
+}
+void Schedule(std::wstring query,uint64_t revision) {
+    {
+        std::lock_guard lock(g_queryMutex);
+        if(g_searchQuit.load() || revision!=g_queryRevision)return;
+        if(!g_thread)g_thread.emplace(Run);
+        g_request=Request{std::move(query),revision};
+    }
+    Wake();
+}
+std::vector<Row> Initial(const std::wstring& query, bool valid) {
+    Row row;row.title=i18n::Text(i18n::Key::HardwareUsage);row.customGlyph=L"\uE9D2";row.infoOnly=true;row.canRunAsAdmin=false;
+    row.subtitle=valid?i18n::Text(i18n::Key::OnlineLoading):query.substr(0,query.find_first_of(L" \t"));
+    return {std::move(row)};
+}
+}  // namespace hardware
+
+namespace services {
+struct Entry { std::wstring name,display,description;DWORD state=0,controls=0,pid=0; };
+void OpenManager() {
+    wchar_t system[MAX_PATH]{};const auto count=GetSystemDirectoryW(system,MAX_PATH);if(!count || count>=MAX_PATH)return;
+    const auto exe=std::wstring(system)+L"\\mmc.exe",args=L"\""+std::wstring(system)+L"\\services.msc\"";
+    ShellExecuteW(nullptr,L"open",exe.c_str(),args.c_str(),system,SW_SHOWNORMAL);
+}
+struct ScHandle {
+    SC_HANDLE value=nullptr;
+    explicit ScHandle(SC_HANDLE handle):value(handle){}
+    ~ScHandle(){if(value)CloseServiceHandle(value);}
+    ScHandle(const ScHandle&)=delete;
+};
+std::wstring ErrorText(DWORD code) {
+    wchar_t text[2048]{};
+    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,nullptr,code,0,text,2048,nullptr);
+    return std::wstring(i18n::Text(i18n::Key::Error))+L" "+std::to_wstring(code)+L": "+commands::Trim(text);
+}
+bool Allowed(Action action,DWORD state,DWORD controls) {
+    if(action==Action::Start)return state==SERVICE_STOPPED;
+    if(action!=Action::Stop && action!=Action::Restart)return false;
+    return (state==SERVICE_RUNNING || state==SERVICE_PAUSED) && (controls&SERVICE_ACCEPT_STOP);
+}
+const wchar_t* Status(DWORD state) {
+    return i18n::Text(state==SERVICE_RUNNING?i18n::Key::ServiceRunning:state==SERVICE_STOPPED?i18n::Key::TestStopped:
+        state==SERVICE_PAUSED?i18n::Key::ServicePaused:i18n::Key::ServicePending);
+}
+std::vector<Entry> Enumerate() {
+    ScHandle manager(OpenSCManagerW(nullptr,nullptr,SC_MANAGER_ENUMERATE_SERVICE));
+    if(!manager.value)throw GetLastError();
+    std::vector<BYTE> buffer(256*1024);std::vector<Entry> entries;DWORD resume=0;
+    for(unsigned page=0;page<32;++page) {
+        DWORD needed=0,count=0;const auto before=resume;
+        const BOOL ok=EnumServicesStatusExW(manager.value,SC_ENUM_PROCESS_INFO,SERVICE_WIN32,SERVICE_STATE_ALL,
+            buffer.data(),static_cast<DWORD>(buffer.size()),&needed,&count,&resume,nullptr);
+        const auto error=ok?ERROR_SUCCESS:GetLastError();
+        if(!ok && error!=ERROR_MORE_DATA)throw error;
+        const auto items=reinterpret_cast<ENUM_SERVICE_STATUS_PROCESSW*>(buffer.data());
+        for(DWORD i=0;i<count;++i) {
+            const auto& item=items[i];
+            entries.push_back({item.lpServiceName,item.lpDisplayName,{},item.ServiceStatusProcess.dwCurrentState,
+                item.ServiceStatusProcess.dwControlsAccepted,item.ServiceStatusProcess.dwProcessId});
+        }
+        if(ok)return entries;
+        if(!count || resume==before)throw DWORD(ERROR_MORE_DATA);
+    }
+    throw DWORD(ERROR_MORE_DATA);
+}
+std::wstring Description(SC_HANDLE manager,const std::wstring& name) {
+    ScHandle service(OpenServiceW(manager,name.c_str(),SERVICE_QUERY_CONFIG));if(!service.value)return {};
+    DWORD needed=0;QueryServiceConfig2W(service.value,SERVICE_CONFIG_DESCRIPTION,nullptr,0,&needed);
+    if(!needed || needed>65536)return {};
+    std::vector<BYTE> buffer(needed);
+    if(!QueryServiceConfig2W(service.value,SERVICE_CONFIG_DESCRIPTION,buffer.data(),needed,&needed))return {};
+    const auto description=reinterpret_cast<SERVICE_DESCRIPTIONW*>(buffer.data())->lpDescription;
+    if(!description)return {};
+    if(description[0]==L'@'){
+        wchar_t expanded[4096]{};
+        const auto count=ExpandEnvironmentStringsW(description+1,expanded,4096);
+        if(!count || count>4096)return {};
+        auto resource=std::wstring(expanded);resource.resize(resource.find_last_of(L',')==resource.npos?resource.size():resource.find_last_of(L','));
+        resource=commands::Trim(resource);
+        if(resource.size()>1 && resource.front()==L'"' && resource.back()==L'"')resource=resource.substr(1,resource.size()-2);
+        // Resolve local MUI descriptions without touching network resources.
+        if(resource.size()<3 || resource[1]!=L':' || resource[2]!=L'\\' || PathIsNetworkPathW(resource.c_str()))return {};
+        wchar_t resolved[4096]{};if(SUCCEEDED(SHLoadIndirectString(description,resolved,4096,nullptr)))return resolved;
+        return {};
+    }
+    return description;
+}
+struct Request {std::wstring query,args;uint64_t revision=0;size_t limit=20;};
+std::mutex g_mutex;std::condition_variable g_wake;
+std::optional<std::thread> g_thread;
+std::optional<Request> g_request;
+std::vector<Entry> g_entries;
+std::map<std::wstring,DWORD> g_errors;
+bool g_loaded=false,g_busy=false;
+DWORD g_error=0;
+std::atomic<bool> g_visible{false};
+struct Operation {std::wstring name;Action action;};
+std::optional<Operation> g_operation;
+bool Current(const Request& request) {
+    std::lock_guard lock(g_queryMutex);return !g_searchQuit && request.revision==g_queryRevision;
+}
+std::vector<Row> Rows(const std::wstring& args,size_t limit,const std::vector<Entry>& entries,bool loaded,DWORD error,
+                      bool busy,const std::map<std::wstring,DWORD>& errors) {
+    std::vector<std::pair<int,const Entry*>> matches;
+    const auto filter=tools::ToLower(commands::Trim(args));
+    const bool running=commands::Equal(filter,L"running") || commands::Equal(filter,i18n::Text(i18n::Key::ServiceRunning));
+    const bool stopped=commands::Equal(filter,L"stopped") || commands::Equal(filter,i18n::Text(i18n::Key::TestStopped));
+    for(const auto& entry:entries) {
+        const auto name=tools::ToLower(entry.name),display=tools::ToLower(entry.display),description=tools::ToLower(entry.description);
+        if(running?entry.state!=SERVICE_RUNNING:stopped?entry.state!=SERVICE_STOPPED:false)continue;
+        if(!running && !stopped) {
+            std::wistringstream tokens(filter);std::wstring token;bool found=true;
+            while(tokens>>token)if(name.find(token)==name.npos && display.find(token)==display.npos && description.find(token)==description.npos){found=false;break;}
+            if(!found)continue;
+        }
+        const int rank=filter.empty() || running || stopped?3:name==filter?0:name.starts_with(filter)||display.starts_with(filter)?1:
+            name.find(filter)!=name.npos || display.find(filter)!=display.npos?2:3;
+        matches.emplace_back(rank,&entry);
+    }
+    std::sort(matches.begin(),matches.end(),[](const auto& a,const auto& b){
+        if(a.first!=b.first)return a.first<b.first;
+        const auto order=CompareStringOrdinal(a.second->display.c_str(),-1,b.second->display.c_str(),-1,TRUE);
+        return order==CSTR_EQUAL?a.second->name<b.second->name:order==CSTR_LESS_THAN;
+    });
+    std::vector<Row> rows;
+    for(const auto& [rank,entry]:matches) {
+        if(rows.size()>=std::clamp<size_t>(limit,1,100))break;
+        Row row;row.title=entry->display;row.serviceName=entry->name;row.serviceState=entry->state;
+        row.serviceControls=entry->controls;row.serviceBusy=busy;row.sectionTitle=i18n::Text(i18n::Key::Services);
+        row.customGlyph=L"\uE713";row.canRunAsAdmin=false;
+        row.subtitle=entry->name+L" \u00B7 "+Status(entry->state);
+        if(entry->pid)row.subtitle+=L" \u00B7 PID "+std::to_wstring(entry->pid);
+        if(busy)row.subtitle+=L" \u00B7 "+std::wstring(i18n::Text(i18n::Key::ServicePending));
+        if(const auto it=errors.find(entry->name);it!=errors.end()){row.subtitle+=L"\n"+ErrorText(it->second);row.isError=true;}
+        if(!entry->description.empty())row.subtitle+=L"\n"+entry->description;
+        row.copyText=row.title+L"\n"+row.subtitle;
+        row.cardSignature=L"service:"+entry->name+L":"+row.subtitle+L":"+std::to_wstring(entry->controls);
+        rows.push_back(std::move(row));
+    }
+    if(rows.empty()) {
+        Row row;row.sectionTitle=i18n::Text(i18n::Key::Services);row.customGlyph=L"\uE713";row.infoOnly=true;row.canRunAsAdmin=false;
+        row.title=i18n::Text(error?i18n::Key::Error:loaded?i18n::Key::NoServices:i18n::Key::OnlineLoading);
+        row.subtitle=error?ErrorText(error):loaded?i18n::Text(i18n::Key::Refine):L"";row.isError=error!=0;
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+std::vector<Row> Initial(const std::wstring& args,size_t limit) {
+    std::lock_guard lock(g_mutex);return Rows(args,limit,g_entries,g_loaded,g_error,g_busy,g_errors);
+}
+// Names are encoded as data; only the three enumerated actions can become
+// executable text. sc.exe does not stop dependent services or change startup.
+std::wstring OperationScript(const Operation& operation) {
+    if(operation.name.empty() || operation.name.size()>256 || operation.name.find(L'\0')!=std::wstring::npos ||
+        (operation.action!=Action::Start && operation.action!=Action::Stop && operation.action!=Action::Restart))throw DWORD(ERROR_INVALID_PARAMETER);
+    std::wstring body=LR"($ErrorActionPreference='Stop';
+Add-Type -AssemblyName System.ServiceProcess;
+$n=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(')"+EncodePowerShellCommand(operation.name)+LR"('));
+$sc=Join-Path ([Environment]::SystemDirectory) 'sc.exe';
+function Invoke-ServiceAction {
+try {
+$s=New-Object System.ServiceProcess.ServiceController($n);
+$s.Refresh();
+)";
+    if(operation.action!=Action::Start)body+=LR"(
+if($s.Status -ne 'Stopped') { & $sc stop $n 2>&1 | Out-Null; $c=$LASTEXITCODE; if($c -ne 0 -and $c -ne 1062){return $c} }
+$s.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped,[TimeSpan]::FromSeconds(25));
+)";
+    if(operation.action!=Action::Stop)body+=LR"(
+$s.Refresh();
+if($s.Status -ne 'Running') { & $sc start $n 2>&1 | Out-Null; $c=$LASTEXITCODE; if($c -ne 0 -and $c -ne 1056){return $c} }
+$s.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running,[TimeSpan]::FromSeconds(25));
+)";
+    body+=LR"(
+return 0
+} catch { if($_.Exception.InnerException.NativeErrorCode){return [int]$_.Exception.InnerException.NativeErrorCode}; return 1460 }
+finally { if($s){$s.Dispose()} }
+}
+)";
+    const auto elevated=EncodePowerShellCommand(body+L"exit (Invoke-ServiceAction)");
+    return body+LR"(
+$c=Invoke-ServiceAction;
+if($c -eq 5) {
+try {
+$exe=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe';
+$p=Start-Process -FilePath $exe -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile -NonInteractive -EncodedCommand )"+elevated+LR"(' -PassThru;
+$p.WaitForExit(); $c=$p.ExitCode; $p.Dispose();
+} catch { $c=1223 }
+}
+exit $c
+)";
+}
+HANDLE Launch(const Operation& operation) {
+    wchar_t system[MAX_PATH]{};const auto count=GetSystemDirectoryW(system,MAX_PATH);
+    if(!count || count>=MAX_PATH)throw DWORD(ERROR_PATH_NOT_FOUND);
+    const std::wstring exe=std::wstring(system)+L"\\WindowsPowerShell\\v1.0\\powershell.exe";
+    std::wstring command=L"\""+exe+L"\" -NoLogo -NoProfile -NonInteractive -EncodedCommand "+EncodePowerShellCommand(OperationScript(operation));
+    if(command.size()>=32767)throw DWORD(ERROR_INVALID_PARAMETER);
+    STARTUPINFOW startup{sizeof(startup)};PROCESS_INFORMATION process{};
+    startup.dwFlags=STARTF_USESHOWWINDOW;startup.wShowWindow=SW_HIDE;
+    if(!CreateProcessW(exe.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,system,&startup,&process))throw GetLastError();
+    CloseHandle(process.hThread);return process.hProcess;
+}
+void Wake(){g_wake.notify_all();}
+void Visible(bool value){g_visible=value;Wake();}
+void Run() {
+    HANDLE process=nullptr;std::wstring acting;ULONGLONG next=0;uint64_t lastRevision=~uint64_t{0};std::wstring lastRows;
+    std::map<std::wstring,std::wstring> descriptions;
+    while(!g_searchQuit) {
+        std::optional<Request> request;std::optional<Operation> operation;
+        {std::unique_lock lock(g_mutex);
+            if(!process && !g_operation && (!g_request || !g_visible || !Current(*g_request))) {
+                g_wake.wait(lock,[&]{return g_searchQuit || g_operation || (g_request && g_visible && Current(*g_request));});if(g_searchQuit)break;
+            }
+            request=g_request;
+            if(!process && g_operation){operation=std::move(g_operation);g_operation.reset();}
+        }
+        if(operation) {
+            acting=operation->name;
+            try {process=Launch(*operation);}
+            catch(DWORD error){std::lock_guard lock(g_mutex);g_errors[acting]=error;g_busy=false;}
+            catch(...){std::lock_guard lock(g_mutex);g_errors[acting]=ERROR_GEN_FAILURE;g_busy=false;}
+            next=0;
+        }
+        if(process && WaitForSingleObject(process,0)==WAIT_OBJECT_0) {
+            DWORD code=ERROR_GEN_FAILURE;GetExitCodeProcess(process,&code);CloseHandle(process);process=nullptr;
+            {std::lock_guard lock(g_mutex);g_busy=false;if(code)g_errors[acting]=code;else g_errors.erase(acting);}
+            next=0;
+        }
+        const bool visible=request && g_visible && Current(*request);
+        if(visible && (GetTickCount64()>=next || request->revision!=lastRevision)) {
+            try {
+                auto entries=Enumerate();ScHandle manager(OpenSCManagerW(nullptr,nullptr,SC_MANAGER_CONNECT));
+                for(auto& entry:entries) {
+                    auto [it,added]=descriptions.try_emplace(entry.name);
+                    if(added && manager.value)it->second=Description(manager.value,entry.name);
+                    entry.description=it->second;
+                }
+                if(descriptions.size()>8192)descriptions.clear();
+                {std::lock_guard lock(g_mutex);g_entries=std::move(entries);g_loaded=true;g_error=0;}
+            }catch(DWORD error){std::lock_guard lock(g_mutex);g_entries.clear();g_loaded=true;g_error=error;}
+            catch(...){std::lock_guard lock(g_mutex);g_entries.clear();g_loaded=true;g_error=ERROR_GEN_FAILURE;}
+            auto rows=Initial(request->args,request->limit);std::wstring signature;
+            for(const auto& row:rows)signature+=row.title+L"\n"+row.subtitle+L"\n"+row.cardSignature;
+            if(request->revision!=lastRevision || signature!=lastRows) {
+                if(PublishAppResults(request->revision,request->query,std::move(rows)))RequestRender();
+                lastRows=std::move(signature);lastRevision=request->revision;
+            }
+            next=GetTickCount64()+1000;
+        }
+        std::unique_lock lock(g_mutex);g_wake.wait_for(lock,std::chrono::milliseconds(process?100:250));
+    }
+    // A user-approved operation may finish independently; no callback points
+    // into the mod, and unload never waits for a UAC prompt or service timeout.
+    if(process)CloseHandle(process);
+}
+void Schedule(std::wstring query,std::wstring args,uint64_t revision,size_t limit) {
+    {std::lock_guard lock(g_mutex);if(g_searchQuit)return;g_request=Request{std::move(query),std::move(args),revision,limit};
+        if(!g_thread)g_thread.emplace([]{try{Run();}catch(...){Wh_Log(L"services: worker stopped");}});}
+    Wake();
+}
+void Queue(std::wstring name,Action action) {
+    {std::lock_guard lock(g_mutex);
+        if(g_searchQuit || g_busy || !g_request || !Current(*g_request))return;
+        const auto found=std::find_if(g_entries.begin(),g_entries.end(),[&](const auto& e){return e.name==name;});
+        if(found==g_entries.end() || !Allowed(action,found->state,found->controls))return;
+        g_busy=true;g_errors.erase(name);g_operation=Operation{std::move(name),action};
+    }
+    Wake();
+}
+}  // namespace services
+
+std::optional<online::Request> CurrentSpeedRequest() {
+    online::Request request;
+    { std::lock_guard lock(g_settingsMutex);
+      request = online::Parse(g_shownQuery, g_settings.weatherLocation, g_settings.weatherUnits,
+          g_settings.quoteCurrency, g_settings.onlineCards, g_settings.commandNames); }
+    if (request.kind != online::Kind::Speed || !request.valid || !request.enabled) return std::nullopt;
+    { std::lock_guard lock(g_queryMutex);
+      if (g_pendingQuery != g_shownQuery || g_shownAppsRevision != g_queryRevision) return std::nullopt;
+      request.revision = g_queryRevision; }
+    return request;
+}
+void StartInternetSpeedTest() { if (auto request = CurrentSpeedRequest()) online::StartSpeed(std::move(*request)); }
+void StopInternetSpeedTest() { if (auto request = CurrentSpeedRequest()) online::StopSpeed(std::move(*request)); }
+
+
+void RequestFileRender();
+
+void FileSearchThreadMain() {
+    const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    {
+        everything::Client client;
+        const bool ready = client.Init();
+        icons::FileIconCache iconCache(IconPixels());
+        uint64_t iconRevision = 0;
+        while (!g_searchQuit.load()) {
+            FileSearchRequest request;
+            {
+                std::unique_lock lock(g_queryMutex);
+                if (!g_fileQuery && iconCache.HasPending()) {
+                    lock.unlock();
+                    if (iconCache.FetchPending()) {
+                        PublishLateFileIcons(iconCache.TakeLate(), iconRevision);
+                    }
+                    continue;
+                }
+                g_fileQueryWake.wait(lock, [] { return g_searchQuit.load() || g_fileQuery.has_value(); });
+                if (g_searchQuit.load()) break;
+                request = std::move(*g_fileQuery);
+                g_fileQuery.reset();
+                if (request.revision != g_queryRevision) continue;
+            }
+            const auto started = std::chrono::steady_clock::now();
+            std::vector<everything::Result> pool;
+            DWORD total = 0;
+            bool ok = true;
+            if (request.enabled) {
+                ok = ready && client.Query(request.query, ranker::kDefaultPool, &pool, &total);
+                if (ok) {
+                    const size_t limit = static_cast<size_t>(request.limit);
+                    static const std::vector<std::wstring> noNoise;
+                    const auto* noise = request.filterNoise ? &request.excludedPaths : &noNoise;
+                    const size_t clean = ranker::Rank(&pool, request.query, limit, noise);
+                    if (clean < limit && total > ranker::kDefaultPool) {
+                        const auto filtered = ranker::WithExclusions(request.query, noise);
+                        // A newer app query takes precedence over an optional second file query.
+                        bool current;
+                        { std::lock_guard lock(g_queryMutex); current = request.revision == g_queryRevision; }
+                        if (current && filtered != request.query) {
+                            std::vector<everything::Result> more;
+                            DWORD moreTotal = 0;
+                            if (client.Query(filtered, ranker::kDefaultPool, &more, &moreTotal) &&
+                                ranker::Rank(&more, request.query, limit, noise) > clean) {
+                                pool = std::move(more);
+                                total = moreTotal;
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                std::lock_guard lock(g_queryMutex);
+                if (g_searchQuit.load() || request.revision != g_queryRevision) continue;
+            }
+            if (!ok) { pool.clear(); total = 0; }
+            iconCache.SetSize(IconPixels());
+            iconCache.NewResults(std::chrono::milliseconds(25));
+            iconRevision = request.revision;
+            std::vector<Row> rows;
+            for (const auto& file : pool) {
+                Row row;
+                row.title = file.name;
+                row.subtitle = file.path;
+                row.isFolder = file.isFolder;
+                row.openPath = file.path;
+                if (!row.openPath.empty() && row.openPath.back() != L'\\') row.openPath += L'\\';
+                row.openPath += file.name;
+                if (const auto* pixels = iconCache.Get(row.openPath, file.isFolder)) row.icon = *pixels;
+                rows.push_back(std::move(row));
+            }
+            if (PublishFileResults(request.revision, std::move(rows), total)) {
+                RequestFileRender();
+                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - started).count();
+                Wh_Log(L"search files: %u matches, %zu rows (%lld ms), ok=%d", total, pool.size(),
+                       static_cast<long long>(ms), ok);
+            }
+        }
+    }
+    if (SUCCEEDED(comHr)) CoUninitialize();
+}
+
 void SearchThreadMain() {
-    // COM for the apps index: it enumerates shell:AppsFolder.
+    // COM for launch metadata and the initial warmup-failure fallback.
+    // Regular catalog/icon I/O belongs to the native background worker.
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    apps::Index appIndex;
+    auto warm=g_appsWarmup.Take();
+    if(g_searchQuit.load()) {if(SUCCEEDED(comHr))CoUninitialize();return;}
+    const bool prewarmed=warm.index!=nullptr;
+    auto appIndex=prewarmed?std::move(warm.index):std::make_shared<apps::Index>();
+    uint64_t indexVersion=warm.version;
     apps::UsageCounts appUsage = apps::LoadUsage();
     // The counts to rank by, or null while Learn Favorite Apps is off.
     auto learnedUsage = [&appUsage]() -> apps::UsageCounts* {
@@ -17964,76 +23463,28 @@ void SearchThreadMain() {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         return g_settings.learnFavorites ? &appUsage : nullptr;
     };
-    if (appIndex.Rebuild()) {
-        g_lastAppIndexRebuildTick.store(GetTickCount64());
-        Wh_Log(L"apps: indexed (%zu apps)", appIndex.Count());
+    if (prewarmed || appIndex->Rebuild()) {
+        Wh_Log(L"apps: indexed (%zu apps)", appIndex->Count());
     } else {
         Wh_Log(L"apps: index failed");
     }
 
     int iconPixels = IconPixels();
-    icons::FileIconCache iconCache(iconPixels);
-
-    // The apps behind the rows currently on screen, in the same order.
-    std::vector<const apps::App*> lastHits;
-
-    // One fetch per app, ever. Keyed by name because that is what identifies
-    // an entry across index rebuilds.
-    std::map<std::wstring, std::vector<BYTE>> appIconCache;
-    std::map<std::wstring, std::vector<BYTE>> commandIconCache;
-
-    // An app's icon is the slow part of showing it the first time -- about
-    // 10 ms each through the shell, 20-50 ms for a keystroke that brings up a
-    // few new ones -- so they are fetched ahead, while there is nothing to
-    // search, one at a time so a keystroke never waits for more than one.
-    // Walks the index once, and again after a rebuild.
-    size_t prefetchNext = 0;
-    auto prefetchIcon = [&] {
-        const apps::App* app = appIndex.At(prefetchNext++);
-        if (!app || appIconCache.count(app->name)) {
-            return;
-        }
-        std::vector<BYTE> pixels;
-        if (!app->isSetting || app->pidl) {
-            FetchAppIcon(app, iconPixels, &pixels);
-        }
-        appIconCache.emplace(app->name, std::move(pixels));
-    };
-
-    everything::Client client;
-    if (!client.Init()) {
-        Wh_Log(L"search: could not create the reply window");
-        if (SUCCEEDED(comHr)) {
-            CoUninitialize();
-        }
-        return;
-    }
-    Wh_Log(L"search: ready (Everything %ls)",
-        everything::FindIpcWindow() ? L"found" : L"NOT running");
+    g_appsWarmup.Prefetch(appIndex,iconPixels);
+    std::map<std::wstring,std::vector<BYTE>> commandIconCache; // metadata helper; I/O lives on the native worker
 
     std::wstring last;
-    bool haveLast=false,lastFilesVisible=true;
+    bool haveLast=false;
     uint64_t lastSettingsRevision = 0;
     while (!g_searchQuit.load()) {
         std::wstring query;
+        uint64_t revision = 0;
         {
             std::unique_lock<std::mutex> lock(g_queryMutex);
-            auto hasWork = [] {
-                return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) ||
-                       !g_commandUsageRequests.empty() || g_appIndexNeedsRefresh.load();
+            auto hasWork = [&] {
+                return g_queryDirty.load() || g_searchQuit.load() || g_launchRequest.has_value() ||
+                       !g_commandUsageRequests.empty() || (g_appsWarmup.Version()!=indexVersion && !online::g_speedBusy);
             };
-            if (!hasWork() && (iconCache.HasPending() || prefetchNext < appIndex.Count())) {
-                lock.unlock();
-                // Files first: they are on screen now.
-                if (iconCache.FetchPending()) {
-                    if (!iconCache.HasPending()) {
-                        PublishLateFileIcons(iconCache.TakeLate());
-                    }
-                } else {
-                    prefetchIcon();
-                }
-                continue;
-            }
             g_queryWake.wait(lock, hasWork);
             if (g_searchQuit.load()) {
                 if (SUCCEEDED(comHr)) {
@@ -18053,12 +23504,20 @@ void SearchThreadMain() {
                 }
                 continue;
             }
-            int wanted = g_launchRequest.exchange(-1);
-            if (wanted >= 0) {
+            if (g_launchRequest) {
+                auto wanted = std::move(*g_launchRequest);
+                g_launchRequest.reset();
                 haveLast=false; // refresh suggestions after a launch changes favorite counts
-                bool asAdmin = g_launchAsAdmin.exchange(false);
-                if (static_cast<size_t>(wanted) < lastHits.size() && lastHits[wanted]) {
-                    const auto* app = lastHits[wanted];
+                const bool asAdmin = wanted.asAdmin;
+                const apps::App* app = nullptr;
+                for (size_t i = 0; i < appIndex->Count(); ++i) {
+                    const auto* candidate = appIndex->At(i);
+                    if (candidate->name == wanted.name && candidate->targetPath == wanted.target) {
+                        app = candidate;
+                        break;
+                    }
+                }
+                if (app) {
                     apps::UsageCounts* usage = learnedUsage();
                     apps::RecordUsage(usage,app->nameLower);
                     std::wstring name = app->name;
@@ -18083,22 +23542,13 @@ void SearchThreadMain() {
                 continue;
             }
 
-            // Serve a pending query from the existing index first. Refreshing
-            // shell:AppsFolder must not precede the first results on reopening.
-            bool shouldRebuild = !g_queryDirty.load() && g_appIndexNeedsRefresh.exchange(false);
-            if (shouldRebuild) {
-                lock.unlock();
-                g_lastAppIndexRebuildTick.store(GetTickCount64());
-                bool rebuilt = appIndex.Rebuild();
-                lock.lock();
-                if (rebuilt) {
-                    lastHits.clear();
-                    prefetchNext = 0;
-                    g_launchRequest.store(-1);
-                    last.clear();
-                    haveLast=false;
-                    g_queryDirty.store(true);
-                    Wh_Log(L"apps: dynamically refreshed (%zu apps)", appIndex.Count());
+            if(!online::g_speedBusy)if(auto ready=g_appsWarmup.Newer(indexVersion);ready.index) {
+                appIndex=std::move(ready.index);indexVersion=ready.version;
+                g_appsWarmup.Prefetch(appIndex,iconPixels);
+                haveLast=false;
+                // Catalog replacement must not restart a live tool card.
+                if(g_isOverlayVisible.load() && !g_queryDirty.load() && !g_pendingQuery.starts_with(L"/") && !g_pendingQuery.starts_with(L"?")) {
+                    ++g_queryRevision;g_queryDirty=true;
                 }
             }
 
@@ -18106,6 +23556,7 @@ void SearchThreadMain() {
                 continue;
             }
             query = g_pendingQuery;
+            revision = g_queryRevision;
         }
 
         // Optional settle (searchDebounceMs, off by default). Not needed to keep
@@ -18122,7 +23573,7 @@ void SearchThreadMain() {
         if (haveLast && !last.empty() && !query.empty() && debounceMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(debounceMs));
             std::lock_guard<std::mutex> lock(g_queryMutex);
-            if (g_pendingQuery != query) {
+            if (g_queryRevision != revision) {
                 g_queryDirty.store(true);
                 continue;
             }
@@ -18130,11 +23581,9 @@ void SearchThreadMain() {
 
         const bool filesVisible=FilesPanelVisible();
         const uint64_t settingsRevision = g_settingsRevision.load();
-        if (haveLast && query == last && filesVisible==lastFilesVisible && settingsRevision==lastSettingsRevision) {
-            continue;
-        }
         last = query;
-        haveLast=true; lastFilesVisible=filesVisible;
+        haveLast=true;
+        std::vector<apps::WarmIndex::IconJob> iconJobs;
         if (settingsRevision != lastSettingsRevision) {
             commandIconCache.clear();
             lastSettingsRevision = settingsRevision;
@@ -18143,16 +23592,13 @@ void SearchThreadMain() {
         // Start may be on a display with another scale by now.
         if (int pixels = IconPixels(); pixels != iconPixels) {
             iconPixels = pixels;
-            iconCache.SetSize(pixels);
-            appIconCache.clear();
             commandIconCache.clear();
-            prefetchNext = 0;
+            g_appsWarmup.Prefetch(appIndex,iconPixels);
         }
 
         std::wstring qTrim = tools::Trim(query);
-        std::wstring qLower = tools::ToLower(qTrim);
-
-        bool isIpCommand = (qLower == L"/ip" || qLower.starts_with(L"/ip "));
+        bool isIpCommand = false, isConflictCommand = false, isUsageCommand = false, validUsageCommand = false, isServicesCommand=false;
+        std::wstring serviceArgs;
         bool isExplicitWeb = query.starts_with(L"?");
         std::wstring webQuery;
         ResolvedWebQuery explicitWeb;
@@ -18164,15 +23610,13 @@ void SearchThreadMain() {
             explicitWeb = ResolveWebSearch(webQuery);
         }
 
-        std::vector<everything::Result> pool;
-        DWORD total = 0;
-        long long ms = 0;
-
         int maxFiles = 12;
         int maxApps = 6;
         bool filterNoise = true;
         std::vector<std::wstring> excludedPaths;
         std::vector<CustomCommand> customCommands;
+        online::Request onlineRequest;
+        online::Batch onlineBatch;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             maxFiles = g_settings.maxFileResults;
@@ -18180,72 +23624,35 @@ void SearchThreadMain() {
             filterNoise = g_settings.filterNoisyPaths;
             excludedPaths = g_settings.excludedPaths;
             customCommands = g_settings.customCommands;
+            const auto command = commands::Parse(query, g_settings.commandNames, customCommands);
+            isIpCommand = command.kind == commands::Kind::Ip;
+            isConflictCommand = command.kind == commands::Kind::Conflict;
+            isUsageCommand = command.kind == commands::Kind::Usage;
+            isServicesCommand = command.kind == commands::Kind::Services;
+            if(isServicesCommand)serviceArgs=command.args;
+            validUsageCommand = command.args.empty();
+            onlineRequest = online::Parse(query, g_settings.weatherLocation, g_settings.weatherUnits,
+                g_settings.quoteCurrency, g_settings.onlineCards, g_settings.commandNames,
+                g_settings.weatherPastDays, g_settings.weatherFutureDays);
+            onlineRequest.revision = revision;
+            if (onlineRequest.kind != online::Kind::None) onlineBatch = online::Expand(onlineRequest,
+                g_settings.commandNames, g_settings.weatherLocations, g_settings.currencyList, g_settings.cryptoList);
         }
-        static const std::vector<std::wstring> s_disabledNoise;
-        const std::vector<std::wstring>* noisePtr = filterNoise ? &excludedPaths : &s_disabledNoise;
-
-        // Queries and ranks the files. The query as typed is the fast one and
-        // is usually enough: Rank takes the excluded paths out of what it
-        // returns. Only when that leaves too few clean results while
-        // Everything has more matches than it sent is the query run again
-        // with the excluded paths left out at the source (WithExclusions) --
-        // it costs more, and most queries never need it. Noise still shows
-        // when it is all there is.
-        auto queryFiles = [&](const std::wstring& text) {
-            const size_t limit = static_cast<size_t>(maxFiles);
-            if (!client.Query(text, ranker::kDefaultPool, &pool, &total)) {
-                return false;
-            }
-            size_t clean = ranker::Rank(&pool, text, limit, noisePtr);
-            if (clean >= limit || total <= ranker::kDefaultPool) {
-                return true;
-            }
-            const std::wstring filtered = ranker::WithExclusions(text, noisePtr);
-            if (filtered == text) {
-                return true;
-            }
-            std::vector<everything::Result> more;
-            DWORD moreTotal = 0;
-            if (client.Query(filtered, ranker::kDefaultPool, &more, &moreTotal) &&
-                ranker::Rank(&more, text, limit, noisePtr) > clean) {
-                pool = std::move(more);
-                total = moreTotal;
-            }
-            return true;
-        };
-
-        if (!filesVisible || query.empty() || isIpCommand) {
-            pool.clear();
-            total = 0;
-            ms = 0;
-        } else if (isExplicitWeb) {
-            if (!explicitWeb.queryTerm.empty()) {
-                auto start = std::chrono::steady_clock::now();
-                queryFiles(explicitWeb.queryTerm);
-                ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                         std::chrono::steady_clock::now() - start)
-                         .count();
-            }
-        } else {
-            auto start = std::chrono::steady_clock::now();
-            bool ok = queryFiles(query);
-            ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - start)
-                          .count();
-            if (!ok) {
-                Wh_Log(L"search: '%ls' failed (Everything running?)", query.c_str());
-                pool.clear();
-                total = 0;
-            }
-        }
-
-        // Apps are a name match over an index built once at startup, so this
-        // costs nothing next to the file query.
+        const bool isOnline = onlineRequest.kind != online::Kind::None;
+        bool fetchOnline = false;
+        // Match apps before scheduling any file work.
         auto usage=learnedUsage();
         std::vector<Row> appRows;
-        lastHits.clear();
+        int nextAppIndex = 0;
 
-        if (isIpCommand) {
+        if (isConflictCommand) appRows.push_back(online::ConflictRow());
+        else if (isUsageCommand) appRows = hardware::Initial(query, validUsageCommand);
+        else if (isServicesCommand) appRows = services::Initial(serviceArgs,static_cast<size_t>(maxApps));
+        else if (isOnline) {
+            auto initial = online::BeginBatch(onlineBatch);
+            appRows = std::move(initial.rows);
+            fetchOnline = initial.fetch;
+        } else if (isIpCommand) {
             auto ifaces = tools::GetNetworkInterfaces();
             if (ifaces.empty()) {
                 Row r;
@@ -18253,8 +23660,7 @@ void SearchThreadMain() {
                 r.subtitle = i18n::Text(i18n::Key::CheckNetwork);
                 r.customGlyph = L"\uE701";
                 r.canRunAsAdmin = false;
-                r.appIndex = static_cast<int>(lastHits.size());
-                lastHits.push_back(nullptr);
+                r.appIndex = nextAppIndex++;
                 appRows.push_back(std::move(r));
             } else {
                 for (const auto& iface : ifaces) {
@@ -18267,8 +23673,7 @@ void SearchThreadMain() {
                     r.copyText = iface.ip;
                     r.customGlyph = iface.glyph;
                     r.canRunAsAdmin = false;
-                    r.appIndex = static_cast<int>(lastHits.size());
-                    lastHits.push_back(nullptr);
+                    r.appIndex = nextAppIndex++;
                     appRows.push_back(std::move(r));
                 }
             }
@@ -18295,12 +23700,11 @@ void SearchThreadMain() {
             // A sum, a conversion or another base typed: worked out above the
             // apps (calc).
             for (Row& r : calc::Rows(qTrim)) {
-                r.appIndex = static_cast<int>(lastHits.size());
-                lastHits.push_back(nullptr);
+                r.appIndex = nextAppIndex++;
                 appRows.push_back(std::move(r));
             }
-            auto matches=query.empty() ? appIndex.Suggest(static_cast<size_t>(maxApps),usage)
-                                       : appIndex.Search(query,static_cast<size_t>(maxApps),usage);
+            auto matches=query.empty() ? appIndex->Suggest(static_cast<size_t>(maxApps),usage)
+                                       : appIndex->Search(query,static_cast<size_t>(maxApps),usage);
             for (const apps::Match& m : matches) {
                 if (!m.app) {
                     continue;
@@ -18311,22 +23715,29 @@ void SearchThreadMain() {
                 row.matchRank = m.rank;
                 bool isSettingItem = m.app->isSetting;
                 row.isSetting = isSettingItem;
+                row.installedOnly=m.app->installedOnly;
+                row.installedLocation=m.app->installedLocation;row.installedFamily=m.app->installedFamily;row.installedKey=m.app->installedKey;
+                row.installedHive=m.app->installedHive;row.installedView=m.app->installedView;
 
                 bool canAdmin = true;
                 bool isFileTarget = false;
-                if (isSettingItem) {
+                if(m.app->installedOnly) {
+                    row.subtitle=m.app->installedPublisher;
+                    if(!m.app->installedVersion.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedVersion;
+                    row.cardSignature=L"installed:"+m.app->installedId;
+                    canAdmin=false;
+                } else if (isSettingItem) {
                     if (!m.app->area.empty() && _wcsicmp(m.app->area.c_str(), L"Settings") != 0) {
                         row.subtitle = L"Settings \u2022 " + m.app->area;
                     } else {
                         row.subtitle = L"Settings";
                     }
                     canAdmin = false;
-                } else if (!m.app->targetPath.empty() && GetFileAttributesW(m.app->targetPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                } else if (m.app->targetExists) {
                     row.subtitle = m.app->targetPath;
                     canAdmin = true;
                     isFileTarget = true;
-                } else if (!m.app->linkTarget.empty() &&
-                           GetFileAttributesW(m.app->linkTarget.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                } else if (m.app->linkExists) {
                     // Shown, and used by the file actions, but not launched:
                     // the app ID keeps the shortcut's arguments and taskbar
                     // identity.
@@ -18338,74 +23749,74 @@ void SearchThreadMain() {
                 row.canRunAsAdmin = canAdmin;
                 row.isFile = isFileTarget;
                 row.openPath = m.app->targetPath;
-                row.appIndex = static_cast<int>(lastHits.size());
+                row.appIndex = nextAppIndex++;
 
-                auto cached = appIconCache.find(m.app->name);
-                if (cached == appIconCache.end()) {
-                    std::vector<BYTE> pixels;
-                    if (!m.app->isSetting || m.app->pidl) {
-                        FetchAppIcon(m.app, iconPixels, &pixels);
-                    }
-                    cached = appIconCache.emplace(m.app->name, std::move(pixels))
-                                 .first;
-                }
-                row.icon = cached->second;
-
+                row.iconKey=apps::WarmIndex::AppKey(*m.app,iconPixels);
+                if(auto cached=g_appsWarmup.Cached(row.iconKey))row.icon=std::move(*cached);
+                else if(!m.app->isSetting || m.app->pidl)
+                    iconJobs.push_back({appIndex,m.app,row.iconKey,L"",iconPixels,0});
                 appRows.push_back(std::move(row));
-                // The App outlives this loop -- the index owns it and lives as
-                // long as this thread -- so a pointer is safe here in a way it
-                // would not be inside a XAML click handler.
-                lastHits.push_back(m.app);
             }
 
         }
 
-        if (!isIpCommand && !isExplicitWeb && !customCommands.empty()) {
+        if (!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isExplicitWeb && !customCommands.empty()) {
             AddCustomCommandRows(&appRows, customCommands, query,
                                  static_cast<size_t>(maxApps), settingsRevision,
                                  iconPixels, &commandIconCache, usage);
         }
 
-        std::vector<Row> fileRows;
-        iconCache.NewResults(std::chrono::milliseconds(25));
-        for (const everything::Result& r : pool) {
-            Row row;
-            row.title = r.name;
-            row.subtitle = r.path;
-            row.isFolder = r.isFolder;
-            row.openPath = r.path;
-            if (!row.openPath.empty() && row.openPath.back() != L'\\') {
-                row.openPath += L'\\';
-            }
-            row.openPath += r.name;
-            // One shell call per distinct extension, not per row, except for
-            // files with an icon of their own (see FileIconCache).
-            if (const std::vector<BYTE>* pixels =
-                    iconCache.Get(row.openPath, r.isFolder)) {
-                row.icon = *pixels;
-            }
-            fileRows.push_back(std::move(row));
+        for(auto& row:appRows) {
+            if(row.commandIcon.empty() || row.iconKey.empty())continue;
+            if(auto cached=g_appsWarmup.Cached(row.iconKey,settingsRevision))row.icon=std::move(*cached);
+            else iconJobs.push_back({{},nullptr,row.iconKey,CustomCommandIconPath(row.commandIcon),iconPixels,settingsRevision});
         }
-
-        {
-            std::lock_guard<std::mutex> lock(g_resultsMutex);
-            g_appRows = appRows;
-            g_fileRows = fileRows;
-            g_rowsQuery = query;
-            g_totalMatches.store(total);
-        }
+        if (!PublishAppResults(revision, query, std::move(appRows))) continue;
         RequestRender();
-        Wh_Log(L"search: '%ls' -> %u files (kept %zu), %zu apps (%lld ms)", query.c_str(),
-            total, pool.size(), appRows.size(), static_cast<long long>(ms));
-        for (size_t i = 0; i < appRows.size(); ++i) {
-            Wh_Log(L"    [app %zu] %ls -> %ls", i, appRows[i].title.c_str(), appRows[i].subtitle.c_str());
+        g_appsWarmup.Prioritize(std::move(iconJobs));
+        if (fetchOnline) online::Schedule(std::move(onlineBatch));
+        if (isUsageCommand && validUsageCommand) hardware::Schedule(query, revision);
+        if (isServicesCommand) services::Schedule(query,serviceArgs,revision,static_cast<size_t>(maxApps));
+
+        // A slow or unavailable Everything process never blocks the next app
+        // query. Replacing this slot also drops file queries not yet started.
+        {
+            std::lock_guard lock(g_queryMutex);
+            if (g_searchQuit.load() || revision != g_queryRevision) continue;
+            FileSearchRequest request;
+            request.revision = revision;
+            request.query = isExplicitWeb ? explicitWeb.queryTerm : query;
+            request.enabled = filesVisible && !isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !request.query.empty();
+            request.limit = maxFiles;
+            request.filterNoise = filterNoise;
+            request.excludedPaths = std::move(excludedPaths);
+            g_fileQuery = std::move(request);
         }
-        for (size_t i = 0; i < pool.size() && i < 5; ++i) {
-            Wh_Log(L"    [file %zu] %ls  %ls", i, pool[i].name.c_str(), pool[i].path.c_str());
-        }
+        g_fileQueryWake.notify_one();
     }
 }
 
+
+void StartAppsWarmup() {
+    apps::WarmIndex::Handlers callbacks;
+    callbacks.catalogReady=[]{
+        // Pair the notification with the query wait's mutex so a catalog
+        // published between its predicate check and sleep cannot lose a wake.
+        std::lock_guard lock(g_queryMutex);g_queryWake.notify_all();
+    };
+    callbacks.appIcon = [](const apps::App* app, int size) {
+        std::vector<BYTE> pixels;
+        if (app && (!app->isSetting || app->pidl))
+            FetchAppIcon(app, size, &pixels);
+        return pixels;
+    };
+    callbacks.commandIcon=[](const std::wstring& path,int size){return FetchCustomCommandIcon(path,size);};
+    callbacks.iconReady=[](const std::wstring& key,const std::vector<BYTE>& pixels,uint64_t generation) {
+        if(!g_searchQuit.load() && !g_quit.load() && (!generation || generation==g_settingsRevision.load()))PublishLateAppIcon(key,pixels);
+    };
+    g_appsWarmup.Start(std::move(callbacks));
+}
+void StopAppsWarmup() {g_appsWarmup.Stop();}
 
 void TeardownSearchUi() {
     Wh_Log(L"teardown: tearing down search UI on XAML thread");
@@ -18466,6 +23877,7 @@ void TeardownSearchUi() {
         }
     } catch (...) {}
 
+    g_plainAppPool.reset();g_plainPoolAttached=false;g_plainPoolSettings=0;
     g_activeAppsOpt.reset();
     g_appButtonsOpt.reset();
     g_fileButtonsOpt.reset();
@@ -19144,6 +24556,32 @@ ULONGLONG g_searchWindowStartClosedAt = 0;
 bool SearchWindowAnimationsEnabled() {
     BOOL enabled = TRUE;
     return !SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0) || enabled;
+}
+
+constexpr UINT_PTR kSpeedMeterAnimationTimer=0x707;
+bool g_speedMeterTimerActive=false;  // Search window's UI thread only.
+bool StartSpeedMeterAnimationTimer() {
+    const auto host=g_searchWindowWindow.load();
+    if(!host || !IsWindowVisible(host) || !SearchWindowAnimationsEnabled())return false;
+    if(!g_speedMeterTimerActive)g_speedMeterTimerActive=SetTimer(host,kSpeedMeterAnimationTimer,16,nullptr)!=0;
+    return g_speedMeterTimerActive;
+}
+void StopSpeedMeterAnimations() {
+    if(const auto host=g_searchWindowWindow.load())KillTimer(host,kSpeedMeterAnimationTimer);
+    g_speedMeterTimerActive=false;
+    if(g_activeAppsOpt)for(auto& card:*g_activeAppsOpt)if(card.speedUI) {
+        try {FinishSpeedMeterAnimation(*card.speedUI);}catch(...){card.speedUI->meterAnimating=false;}
+    }
+}
+void SpeedMeterAnimationFrame() {
+    const auto host=g_searchWindowWindow.load();
+    if(!host || !IsWindowVisible(host) || !SearchWindowAnimationsEnabled()){StopSpeedMeterAnimations();return;}
+    bool moving=false;const auto now=GetTickCount64();
+    if(g_activeAppsOpt)for(auto& card:*g_activeAppsOpt)if(card.speedUI) {
+        try {AdvanceSpeedMeter(*card.speedUI,now);moving=moving || card.speedUI->meterAnimating;}
+        catch(...){card.speedUI->meterAnimating=false;}
+    }
+    if(!moving){KillTimer(host,kSpeedMeterAnimationTimer);g_speedMeterTimerActive=false;}
 }
 
 // Documented WinRT interface, omitted from the projected SDK headers.
@@ -23390,6 +28828,8 @@ void FinishSearchWindowHide() {
     KillTimer(host, kSearchWindowMotionTimer);
     KillTimer(host, kSearchWindowStyleTimer);
     PauseSearchContainerContrast();
+    hardware::Visible(false);
+    services::Visible(false);
     ShowWindow(host, SW_HIDE);
     SnapSearchWindowSlide(0);
     SetSearchWindowCloaked(false);
@@ -23485,10 +28925,13 @@ void SearchWindowHide() {
     if (!host || g_searchWindowClosing || !IsWindowVisible(host))
         return;
     KillTimer(host, kSearchWindowDismissTimer);
+    StopSpeedMeterAnimations();
     g_searchWindowInputReady = false;
     g_enterWaiting = false;
     g_isOverlayVisible = false;
     g_isHiding = true;
+    hardware::Visible(false);
+    services::Visible(false);
     g_searchWindowClosing = true;
     g_resultsHost.IsHitTestVisible(false);
     HidePreview();
@@ -23558,6 +29001,8 @@ void SearchWindowShow(std::wstring const& text, bool append) {
             SendMessageTimeoutW(foreground, SearchWindowForegroundMessage(), 0, 0, SMTO_ABORTIFHUNG, 150, &granted);
         }
         ShowWindow(host, SW_SHOWNORMAL);
+        hardware::Visible(IsWindowVisible(host) != FALSE);
+        services::Visible(IsWindowVisible(host) != FALSE);
         BOOL activated = SetForegroundWindow(host);
         g_searchWindowInputReady = false;
         SetFocus(g_searchWindowChild);
@@ -23712,6 +29157,10 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
             QueueSearchBoxRefocus();
             break;
         case WM_TIMER:
+            if (wParam == kSpeedMeterAnimationTimer) {
+                SpeedMeterAnimationFrame();
+                return 0;
+            }
             if (wParam == kSearchContainerContrastTimer) {
                 SearchContainerContrastTick();
                 return 0;
@@ -23932,6 +29381,15 @@ bool SearchWindowInitialize() {
             preview::g_quit = false;
         }
         g_searchQuit = false;
+        {
+            std::lock_guard lock(g_queryMutex);
+            g_fileQuery.reset();
+        }
+        g_shownAppsRevision = g_shownFilesRevision = 0;
+        g_shownAppsContentRevision = 0;
+        g_shownFilesTotal = 0;
+        g_renderPending = g_fileRenderPending = g_appIconRenderPending = false;
+        g_fileSearchThread.emplace(FileSearchThreadMain);
         g_searchThread.emplace(SearchThreadMain);
         SyncSearchWindowInputForForeground();
         SearchWindowTrace(L"ready");
@@ -23951,6 +29409,7 @@ void SearchWindowTeardown() {
     g_dragging = false;
     StopSearchWindowSlide();
     StopSearchContainerContrast();
+    StopSpeedMeterAnimations();
     g_searchSlideClock.reset();
     g_searchMenuPresenterStyle = nullptr;
     g_searchMenuAppearance.reset();
@@ -23964,11 +29423,49 @@ void SearchWindowTeardown() {
     g_searchWindowMenuTyping = false;
     g_searchWindowMenuCaret = -1;
     g_searchWindowMenuSelection = 0;
-    g_searchQuit = true;
+    {
+        std::lock_guard lock(g_queryMutex);
+        g_searchQuit = true;
+    }
     g_queryWake.notify_all();
+    g_fileQueryWake.notify_all();
+    online::Wake();
+    online::CancelHttp();
+    hardware::Visible(false);
+    services::Visible(false);
+    hardware::Wake();
+    // Wake a matching worker still waiting for its first catalog, join native
+    // I/O, and stop icon callbacks before any XAML objects are released.
+    StopAppsWarmup();
     if (g_searchThread && g_searchThread->joinable())
         g_searchThread->join();
     g_searchThread.reset();
+    if (g_onlineThread && g_onlineThread->joinable()) g_onlineThread->join();
+    g_onlineThread.reset();
+    if (hardware::g_thread && hardware::g_thread->joinable()) hardware::g_thread->join();
+    hardware::g_thread.reset();
+    services::Wake();
+    if(services::g_thread && services::g_thread->joinable())services::g_thread->join();
+    services::g_thread.reset();
+    {
+        std::lock_guard lock(services::g_mutex);
+        services::g_request.reset();
+        services::g_entries.clear();
+        services::g_errors.clear();
+        services::g_loaded = false;
+        services::g_busy = false;
+        services::g_error = 0;
+        services::g_operation.reset();
+    }
+    if (g_fileSearchThread && g_fileSearchThread->joinable())
+        g_fileSearchThread->join();
+    g_fileSearchThread.reset();
+    {
+        std::lock_guard lock(g_queryMutex);
+        g_fileQuery.reset();
+        g_launchRequest.reset();
+        online::g_request.reset();
+    }
     StopPreviewThread();
     WaitForTrackedLaunches();
     TeardownSearchUi();
@@ -24034,7 +29531,7 @@ void RefreshSearchUiSettings() {
         if (g_ourBox) {
             QueueQuery(std::wstring(g_ourBox.Text()));
         }
-        RenderResults();
+        RenderResults(false, true);
         if (g_searchWindowWindow.load()) {
             SearchWindowStyle();
             SearchWindowChooseBounds();
