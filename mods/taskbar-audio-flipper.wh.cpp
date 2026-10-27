@@ -1703,7 +1703,7 @@ int PlaceOf(wux::FrameworkElement const& element) {
 [[clang::no_destroy]] wuxc::MenuFlyout g_menu{nullptr};  // The widget's menu while it's open.
 winrt::event_token g_menuClosed{};
 // Its items' Click handlers, the mod's code, which come off as it closes (or the mod turns off).
-[[clang::no_destroy]] std::vector<wuxc::MenuFlyoutItem::Click_revoker> g_menuClicks;
+[[clang::no_destroy]] std::optional<std::vector<wuxc::MenuFlyoutItem::Click_revoker>> g_menuClicks{std::in_place};
 // Where the widget was last right-clicked, to open its menu there.
 [[clang::no_destroy]] wux::FrameworkElement g_menuTarget{nullptr};
 winrt::Windows::Foundation::Point g_menuPoint{};
@@ -1721,7 +1721,7 @@ void ForgetMenu(bool hide) {
         }
         g_menu = nullptr;
     }
-    g_menuClicks.clear();
+    g_menuClicks->clear();
 }
 
 class WidgetHost {
@@ -2171,7 +2171,7 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
                     item.KeyboardAcceleratorTextOverride(entry.text.substr(tab + 1));
                 }
                 item.IsEnabled(entry.enabled);
-                g_menuClicks.push_back(
+                g_menuClicks->push_back(
                     item.Click(winrt::auto_revoke, [chosen, command = entry.command](auto const&, auto const&) { *chosen = command; }));
                 items.Append(item);
                 break;
@@ -2202,7 +2202,7 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
             wuxc::MenuFlyoutItem item;
             item.Text(command == kMoveLeftCommand ? L"Move left" : L"Move right");
             item.IsEnabled(g_host->CanMove(command == kMoveLeftCommand ? -1 : 1));
-            g_menuClicks.push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
+            g_menuClicks->push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
             menu.Items().Append(item);
         }
     }
@@ -4650,6 +4650,7 @@ void Wh_ModUninit() {
         // can't be let go of anywhere else (see TaskbarXaml::g_bridge).
         TaskbarXaml::RunOnWindowThread(taskbar, []() {
             TaskbarXaml::g_host->Detach();
+            TaskbarXaml::g_menuClicks.reset();
             TaskbarXaml::g_host.reset();
             g_view.reset();
             TaskbarXaml::g_bridge.reset();
