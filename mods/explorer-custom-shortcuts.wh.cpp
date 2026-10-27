@@ -181,7 +181,7 @@ You can bind custom hotkeys to external programs and scripts in settings using t
   * Path: `Everything.exe` | Args: `-path "%d"` | Mode: `batch`
 * **PowerToys PowerRename (Bulk Rename Selected Items)**
   * Path: `%ProgramFiles%\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
-  * *(Or if installed in user profile: `%LocalAppData%\PowerToys\PowerRename.exe`)*
+  * *(Or if installed in user profile: `%LocalAppData%\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe`)*
 * **Git Bash in Current Directory**
   * Path: `git-bash.exe` | Args: `--cd="%d"` | Mode: `batch`
 * **Open in VS Code (Current Directory or Selected Folder)**
