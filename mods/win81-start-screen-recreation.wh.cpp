@@ -174,17 +174,17 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración controla la duración del movimiento del escritorio hacia la izquierda cuando se abre Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 360."
   $description:fr: "Ce paramètre contrôle la durée du déplacement du bureau vers la gauche quand l'écran d'accueil s'ouvre. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 360."
   $description:pt: "Esta configuração controla a duração do movimento da área de trabalho para a esquerda quando a Tela Inicial abre. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 360."
-- closeSlideMs: 600
+- closeSlideMs: 400
   $name: "Closing desktop slide (milliseconds)"
   $name:it: "Scorrimento del desktop in chiusura (millisecondi)"
   $name:es: "Deslizamiento del escritorio al cerrar (milisegundos)"
   $name:fr: "Glissement du bureau à la fermeture (millisecondes)"
   $name:pt: "Deslizamento da área de trabalho ao fechar (milissegundos)"
-  $description: "This setting controls the duration of the desktop returning from the left when Start closes. Smaller is faster. Allowed range 80 to 3000; default 600."
-  $description:it: "Questa impostazione controlla la durata del ritorno del desktop da sinistra quando Start si chiude. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 600."
-  $description:es: "Esta configuración controla la duración del regreso del escritorio desde la izquierda cuando se cierra Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 600."
-  $description:fr: "Ce paramètre contrôle la durée du retour du bureau depuis la gauche quand l'écran d'accueil se ferme. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 600."
-  $description:pt: "Esta configuração controla a duração do retorno da área de trabalho vindo da esquerda quando a Tela Inicial fecha. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 600."
+  $description: "This setting controls the duration of the desktop returning from the left when Start closes. Smaller is faster. Allowed range 80 to 3000; default 400."
+  $description:it: "Questa impostazione controlla la durata del ritorno del desktop da sinistra quando Start si chiude. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 400."
+  $description:es: "Esta configuración controla la duración del regreso del escritorio desde la izquierda cuando se cierra Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 400."
+  $description:fr: "Ce paramètre contrôle la durée du retour du bureau depuis la gauche quand l'écran d'accueil se ferme. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 400."
+  $description:pt: "Esta configuração controla a duração do retorno da área de trabalho vindo da esquerda quando a Tela Inicial fecha. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 400."
 - groupColumns: 2
   $name: "Tiles per group (horizontal)"
   $name:it: "Tile per gruppo (orizzontali)"
@@ -740,12 +740,10 @@ static const float PRESS_SCALE   = 0.94f;
 
 static const float OPEN_HOLD     = 0.00f;  
 static const float OPEN_SLIDE    = 0.36f;   
-static const float OPEN_SCALE_T  = 0.12f;
-static const float DESK_SCALE    = 0.948f;
-static const float TILES_DELAY   = 0.30f;   
+static const float TILES_DELAY   = 0.26f;   
 static const float TILE_FADE     = 0.065f;
-static const float TILE_T        = 0.50f;
-static const float TILE_SCALE_T  = 0.27f;
+static const float TILE_T        = 0.42f;
+static const float TILE_SCALE_T  = 0.23f;
 static const float TILE_S0       = 0.83f;
 static float TILE_PIVOT_Y = 180.0f + 2.875f * 152.0f;    
 static float TILE_SLIDE = 110.0f;
@@ -769,7 +767,19 @@ static const float LOGON_GLASS_DELAY = 0.67f;
 static const float LOGON_GLASS_FADE = 0.70f;
 static const float HEADER_DELAY  = 0.47f;
 static const float HEADER_FADE   = 0.19f;
-static const float CLOSE_SLIDE   = 0.60f;
+static const float CLOSE_SLIDE   = 0.40f;
+// Closing timeline measured frame by frame (30 fps) from a real Windows 8.1 recording. Times are
+// seconds at the reference duration CLOSE_SLIDE and scale linearly with the closeSlideMs setting.
+//  1. Tiles fade out linearly in 0.12 s while the whole tile area shrinks to 0.64 around the
+//     CENTRE OF THE SCREEN (all tiles together, no stagger). Title and user name stay in place and
+//     fade out in 0.20 s. The scroll bar and the "all apps" arrow fade out together with the tiles.
+//  2. The bare Start background is held until 0.25 s, then the desktop snapshot cross-fades in
+//     over 0.13 s.
+static const float CLOSE_TILE_T       = 0.12f;
+static const float CLOSE_TILE_SCALE   = 0.36f;
+static const float CLOSE_HEADER_T     = 0.20f;
+static const float CLOSE_DESK_DELAY   = 0.25f;
+static const float CLOSE_DESK_T       = 0.13f;
 
 static int SB_W = 346, SB_PAD = 40;
 static const float SB_IN = 0.11f;
@@ -863,7 +873,7 @@ static volatile bool g_keyboardOnly = false;
 static volatile bool g_startHooked = false;
 static HANDLE g_startHookThread = NULL, g_startHookStop = NULL;
 static DWORD g_lastToggleTick = 0;
-static volatile LONG g_openSlideMs = 360, g_closeSlideMs = 600;
+static volatile LONG g_openSlideMs = 360, g_closeSlideMs = 400;
 static volatile LONG g_openAtLogon = 1;
 static bool g_logonOpening = false;
 static bool g_firstDesktopAfterLogon = false;
@@ -1098,6 +1108,7 @@ static volatile bool g_searchEnabled = true;
 static View g_view = VIEW_START;
 static wchar_t g_query[128] = L"";
 static int g_queryLen = 0;
+static bool g_querySelAll = false;   // Ctrl+A: whole query selected
 static std::vector<AppEntry> g_apps;
 static std::vector<IconSlot> g_icons;
 static std::vector<int> g_results;
@@ -1272,39 +1283,6 @@ static float EaseMetroOut(float t) {
     }
     const float v = 1.0f - u;
     return 3.0f * v * v * u * y1 + 3.0f * v * u * u * y2 + u * u * u;
-}
-
-static float SlideTangent(const float* time, const float* pos, int count, int i) {
-    if (i <= 0 || i >= count - 1) return 0.0f;
-    float h0 = time[i] - time[i - 1], h1 = time[i + 1] - time[i];
-    float d0 = (pos[i] - pos[i - 1]) / h0, d1 = (pos[i + 1] - pos[i]) / h1;
-    if (d0 <= 0.0f || d1 <= 0.0f) return 0.0f;
-    float w0 = 2.0f * h1 + h0, w1 = h1 + 2.0f * h0;
-    return (w0 + w1) / (w0 / d0 + w1 / d1);
-}
-
-static float ReferenceSlide(const float* time, const float* pos, int count, float t) {
-    t = Clamp01(t);
-    int i = 0;
-    while (i + 1 < count - 1 && t > time[i + 1]) ++i;
-    float h = time[i + 1] - time[i], u = (t - time[i]) / h;
-    float u2 = u * u, u3 = u2 * u;
-    float a = (2.0f * u3 - 3.0f * u2 + 1.0f) * pos[i] + (u3 - 2.0f * u2 + u) * h * SlideTangent(time, pos, count, i);
-    float b = (-2.0f * u3 + 3.0f * u2) * pos[i + 1] + (u3 - u2) * h * SlideTangent(time, pos, count, i + 1);
-    return Clamp01(a + b);
-}
-
-static float OpenSlideProgress(float t) {
-    t = Clamp01(t);
-    float smooth = t * t * (3.0f - 2.0f * t);
-    float brisk = t * (2.0f - t);
-    return 0.65f * smooth + 0.35f * brisk;
-}
-
-static float CloseSlideProgress(float t) {
-    static const float time[] = { 0.0f, .0333f, .0667f, .1333f, .20f, .3333f, .50f, .6667f, .8333f, 1.0f };
-    static const float pos[]  = { 0.0f, .12f,   .32f,   .61f,   .77f, .89f,    .948f,.982f,  .994f,  1.0f };
-    return ReferenceSlide(time, pos, ARRAYSIZE(time), t);
 }
 
 static float SmoothStep(float t) { t = Clamp01(t); return t * t * (3.0f - 2.0f * t); }
@@ -1703,7 +1681,7 @@ static void DrawGroupNamesGpu(DWORD now) {
         } else {
             float nx = l + ScF(2);
             float ny = (k > 0.5f) ? b + ScF(6) : t - ScF(30);
-            TextAt(nm->c_str(), g_subFormat, nx, ny, nx + (r - l), ny + ScF(26), RGB(255, 255, 255), 0.92f * ta);
+            TextAt(nm->c_str(), g_subFormat, nx, ny, nx + (r - l), ny + ScF(36), RGB(255, 255, 255), 0.92f * ta);
         }
     }
 }
@@ -1786,12 +1764,14 @@ static RECT ScrollThumbRect() {
     r.left = tr.left + (int)pos; r.right = r.left + (int)tw; return r;
 }
 static DWORD g_lastMouseMs = 0;
-static float ChromeIdleFade(DWORD now) {
+static float g_closeChromeA = 1.0f;   // closing fade applied to the scroll bar and the all-apps arrow
+static float ChromeIdleFadeBase(DWORD now) {
     if (g_sbDrag || g_sbHover || g_hoverArrow) return 1.0f;
     DWORD idle = now - g_lastMouseMs;
     if (idle < 3500) return 1.0f;
     return Clamp01(1.0f - (float)(idle - 3500) / 500.0f);
 }
+static float ChromeIdleFade(DWORD now) { return ChromeIdleFadeBase(now) * g_closeChromeA; }
 static bool ScrollBarVisible() {
     return g_open && !g_closing && ZoomPresence(NowMs()) <= 0.0f && ScrollMax() > 0.5f;
 }
@@ -3174,6 +3154,19 @@ static bool UploadSnapshotGpu() {
     return SUCCEEDED(hr) && g_snapGpu;
 }
 
+// Defensive text layout (documented DirectWrite behaviour): a format that does not wrap gets
+// character-granularity ellipsis trimming, so text wider than its layout box ends in "..."
+// instead of being cut off or running past the box.
+static void ApplyEllipsisTrimming(IDWriteTextFormat* f) {
+    if (!f || !g_writeFactory) return;
+    IDWriteInlineObject* ell = NULL;
+    if (SUCCEEDED(g_writeFactory->CreateEllipsisTrimmingSign(f, &ell)) && ell) {
+        DWRITE_TRIMMING trim = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+        f->SetTrimming(&trim, ell);
+        ell->Release();
+    }
+}
+
 static IDWriteTextFormat* NewFmt(const wchar_t* face, float size, DWRITE_FONT_WEIGHT weight,
                                 DWRITE_PARAGRAPH_ALIGNMENT para, DWRITE_TEXT_ALIGNMENT align, bool wrap) {
     IDWriteTextFormat* f = NULL;
@@ -3182,6 +3175,7 @@ static IDWriteTextFormat* NewFmt(const wchar_t* face, float size, DWRITE_FONT_WE
     f->SetParagraphAlignment(para);
     f->SetTextAlignment(align);
     f->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
+    if (!wrap) ApplyEllipsisTrimming(f);
     return f;
 }
 
@@ -3246,7 +3240,7 @@ static void RecreateFonts() {
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(56.0f), L"en-US", &g_titleFormat);
             g_writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_LIGHT,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(28.0f), L"en-US", &g_userFormat);
-            if (g_userFormat) g_userFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            if (g_userFormat) { g_userFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING); ApplyEllipsisTrimming(g_userFormat); }
             MakeSearchFormats();
         }
     }
@@ -3379,15 +3373,15 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
     }
     if (EnsureUiIcons()) {
         RECT pw, sc; HeaderButtonRects(&pw, &sc);
-        auto put = [&](const UiIcon& ic, const RECT& r, bool hov) {
+        auto put = [&](const UiIcon& ic, const RECT& r, bool hov, int dy = 0) {
             if (hov && g_iconHover.gpu) {
-                RECT q; IconDestRect(r, &q); InflateRect(&q, ScI(6), ScI(6));
+                RECT q; IconDestRect(r, &q); OffsetRect(&q, 0, dy); InflateRect(&q, ScI(6), ScI(6));
                 g_rt->DrawBitmap(g_iconHover.gpu, D2D1::RectF((float)q.left + accountShift, (float)q.top,
                                                               (float)q.right + accountShift, (float)q.bottom),
                                  1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             }
             if (ic.gpu) {
-                RECT d; IconDestRect(r, &d);
+                RECT d; IconDestRect(r, &d); OffsetRect(&d, 0, dy);
                 g_whiteGpu->SetOpacity(Clamp01(userA));
                 g_rt->DrawBitmap(ic.gpu, D2D1::RectF((float)d.left + accountShift, (float)d.top,
                                                      (float)d.right + accountShift, (float)d.bottom),
@@ -3445,12 +3439,13 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     }
 }
 
-static void DrawSnapshotGpu(float s, float rightEdge) {
-    if (!g_snapGpu || rightEdge <= 0.0f) return;
+static void DrawSnapshotGpu(float s, float opacity) {
+    if (!g_snapGpu || opacity <= 0.0f) return;
     float dw = s * (float)g_sw, dh = s * (float)g_sh;
+    float x = ((float)g_sw - dw) * 0.5f;
     float y = ((float)g_sh - dh) * 0.5f;
     g_rt->DrawBitmap(g_snapGpu,
-        D2D1::RectF(rightEdge - dw, y, rightEdge, y + dh), 1.0f,
+        D2D1::RectF(x, y, x + dw, y + dh), Clamp01(opacity),
         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
@@ -3521,17 +3516,35 @@ static bool RenderGpu() {
                 g_rt->DrawRectangle(fr, g_scratch, 3.0f);
             }
         }
-        if (!g_skipSnapshot && to < OPEN_HOLD + g_openSlideSeconds) {
-            float s = 1.0f - (1.0f - DESK_SCALE) * EaseOut(to / OPEN_SCALE_T);
-            float p = OpenSlideProgress((to - OPEN_HOLD) / g_openSlideSeconds);
-            DrawSnapshotGpu(s, (1.0f + s) * 0.5f * (float)g_sw * (1.0f - p));
-        }
+        // Opening: Start appears at once and the staggered tile entrance (slide + scale + fade) plays.
     } else {
-        if (g_view == VIEW_SEARCH && g_bgPlainGpu) DrawSearchGpu(now, true); else DrawHeaderGpu(1.0f);
-        float tc = (float)(now - g_closeTick) / 1000.0f;
-        float q = CloseSlideProgress(tc / g_closeSlideSeconds);
-        float s = DESK_SCALE + (1.0f - DESK_SCALE) * q;
-        DrawSnapshotGpu(s, q * (1.0f + s) * 0.5f * (float)g_sw);
+        // Closing timeline measured from a real Windows 8.1 recording (see CLOSE_* constants).
+        const float tc = (float)(now - g_closeTick) / 1000.0f * (CLOSE_SLIDE / g_closeSlideSeconds);
+        const float tileU = Clamp01(tc / CLOSE_TILE_T);
+        const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
+        const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
+        if (g_view == VIEW_SEARCH && g_bgPlainGpu) DrawSearchGpu(now, true);
+        DrawHeaderGpu(hdrA, hdrA);
+        if (tileU < 1.0f) {
+            const float s = 1.0f - CLOSE_TILE_SCALE * tileU;
+            g_rt->SetTransform(D2D1::Matrix3x2F::Scale(s, s, D2D1::Point2F((float)g_sw * 0.5f, (float)g_sh * 0.5f)));
+            for (int pass = 0; pass < 2; ++pass) {
+                for (int i = 0; i < g_tileCount; ++i) {
+                    if ((i == g_dragIdx) != (pass == 1)) continue;
+                    if (g_tiles[i].alive) DrawTileGpu(i, 1.0f - tileU, 0.0f, 1.0f);
+                }
+            }
+            g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
+        }
+        if (tileU < 1.0f) {
+            g_closeChromeA = 1.0f - tileU;
+            const bool wasClosing = g_closing; g_closing = false;   // the chrome helpers hide it while closing
+            DrawScrollBarGpu();
+            if (g_view == VIEW_START) DrawAppsChromeGpu();
+            g_closing = wasClosing;
+            g_closeChromeA = 1.0f;
+        }
+        DrawSnapshotGpu(1.0f, wallA);
     }
     if (!g_closing && g_open && g_view == VIEW_START) DrawGroupNamesGpu(now);
     if (!g_closing && g_open) DrawScrollBarGpu();
@@ -3549,18 +3562,16 @@ static bool RenderGpu() {
     return true;
 }
 
-static void DrawSnapshot(float s, float rightEdge) {
-    if (!g_snapDC) return;
+static void DrawSnapshot(float s, float opacity) {
+    if (!g_snapDC || opacity <= 0.0f) return;
     int dw = (int)(s * (float)g_sw + 0.5f), dh = (int)(s * (float)g_sh + 0.5f);
-    int dx = (int)(rightEdge + 0.5f) - dw, dy = (g_sh - dh) / 2;
-    if (dx >= g_sw || dx + dw <= 0) return;
-    if (dw == g_sw && dh == g_sh) {
-        BitBlt(g_bbDC, dx, dy, dw, dh, g_snapDC, 0, 0, SRCCOPY);
-    } else {
-        SetStretchBltMode(g_bbDC, HALFTONE);
-        SetBrushOrgEx(g_bbDC, 0, 0, NULL);
-        StretchBlt(g_bbDC, dx, dy, dw, dh, g_snapDC, 0, 0, g_sw, g_sh, SRCCOPY);
-    }
+    int dx = (g_sw - dw) / 2, dy = (g_sh - dh) / 2;
+    if (dx >= g_sw || dx + dw <= 0 || dy >= g_sh || dy + dh <= 0) return;
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = (BYTE)(Clamp01(opacity) * 255.0f + 0.5f);
+    blend.AlphaFormat = 0;
+    AlphaBlend(g_bbDC, dx, dy, dw, dh, g_snapDC, 0, 0, g_sw, g_sh, blend);
 }
 
 static void Render() {
@@ -3594,17 +3605,27 @@ static void Render() {
                 for (int bnd = 0; bnd < 3; ++bnd) { FrameRect(g_bbDC, &fr, wb); InflateRect(&fr, -1, -1); }
             }
         }
-        if (!g_skipSnapshot && to < OPEN_HOLD + g_openSlideSeconds) {
-            float s = 1.0f - (1.0f - DESK_SCALE) * EaseOut(to / OPEN_SCALE_T);
-            float p = OpenSlideProgress((to - OPEN_HOLD) / g_openSlideSeconds);
-            DrawSnapshot(s, (1.0f + s) * 0.5f * (float)g_sw * (1.0f - p));
-        }
+        // Same opening as the GPU path (see above).
     } else {
-        DrawHeader(1.0f, sdc);
-        float tc = (float)(now - g_closeTick) / 1000.0f;
-        float q = CloseSlideProgress(tc / g_closeSlideSeconds);
-        float s = DESK_SCALE + (1.0f - DESK_SCALE) * q;
-        DrawSnapshot(s, q * (1.0f + s) * 0.5f * (float)g_sw);
+        const float tc = (float)(now - g_closeTick) / 1000.0f * (CLOSE_SLIDE / g_closeSlideSeconds);
+        const float tileU = Clamp01(tc / CLOSE_TILE_T);
+        const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
+        const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
+        DrawHeader(hdrA, sdc, hdrA);
+        // GDI fallback: tiles shrink around their own centres (the GPU path shrinks around the screen centre).
+        for (int pass = 0; pass < 2; ++pass) for (int i = 0; i < g_tileCount; ++i) {
+            if ((i == g_dragIdx) != (pass == 1)) continue;
+            if (g_tiles[i].alive && tileU < 1.0f) DrawTile(i, 1.0f - tileU, 0.0f, 1.0f - CLOSE_TILE_SCALE * tileU);
+        }
+        if (tileU < 1.0f) {
+            g_closeChromeA = 1.0f - tileU;
+            const bool wasClosing = g_closing; g_closing = false;   // the chrome helpers hide it while closing
+            DrawScrollBarTo(g_bbDC);
+            DrawAppsChromeGdi(sdc);
+            g_closing = wasClosing;
+            g_closeChromeA = 1.0f;
+        }
+        DrawSnapshot(1.0f, wallA);
     }
     DrawAlphaGridGdi(now);
     DrawZoomOverlayGdi(now);
@@ -5088,10 +5109,12 @@ static void RunSearch() {
 }
 
 static void QueryAppend(wchar_t c) {
+    if (g_querySelAll) { g_queryLen = 0; g_query[0] = 0; g_querySelAll = false; }
     if (g_queryLen < 120) { g_query[g_queryLen++] = c; g_query[g_queryLen] = 0; }
 }
 
 static void QueryBackspace() {
+    if (g_querySelAll) { g_queryLen = 0; g_query[0] = 0; g_querySelAll = false; return; }
     if (g_queryLen > 0) g_query[--g_queryLen] = 0;
 }
 
@@ -5196,7 +5219,24 @@ static void MoveSelection(int delta) {
     RepaintNow();
 }
 
+static const UINT KEY_SELECT_ALL = 0x141;   // Ctrl+A (posted by the keyboard hook)
+static const UINT KEY_COPY_ALL   = 0x143;   // Ctrl+C
 static void OnSearchKey(UINT vk) {
+    if (vk == KEY_SELECT_ALL || vk == KEY_COPY_ALL) {
+        if (g_queryLen <= 0) return;
+        if (vk == KEY_SELECT_ALL) { g_querySelAll = true; if (g_charmOpen) CharmRender(g_charmCont); RepaintNow(); return; }
+        if (g_querySelAll && OpenClipboard(g_wnd)) {
+            size_t bytes = ((size_t)g_queryLen + 1) * sizeof(wchar_t);
+            HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
+            if (h) {
+                wchar_t* p = (wchar_t*)GlobalLock(h);
+                if (p) { memcpy(p, g_query, (size_t)g_queryLen * sizeof(wchar_t)); p[g_queryLen] = 0; GlobalUnlock(h); EmptyClipboard(); if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h); }
+                else GlobalFree(h);
+            }
+            CloseClipboard();
+        }
+        return;
+    }
     if (g_charmOpen) {
         switch (vk) {
         case VK_ESCAPE:
@@ -5291,6 +5331,11 @@ static void FillRc(float l, float t, float r, float b, COLORREF c, float a) {
 
 static void TextAt(const wchar_t* s, IDWriteTextFormat* f, float l, float t, float r, float b, COLORREF c, float a) {
     if (!s || !*s || !f) return;
+    // Never lay text out past the right edge of the screen (the layout box is clamped, so
+    // wrapping/trimming of the format applies at the screen edge); fully off-screen text is skipped.
+    if (l >= (float)g_sw || r <= 0.0f) return;
+    if (r > (float)g_sw) r = (float)g_sw;
+    if (r <= l) return;
     SetBr(c, a);
     g_rt->DrawText(s, (UINT32)wcslen(s), f, D2D1::RectF(l, t, r, b), g_scratch, D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
@@ -6569,9 +6614,26 @@ static void DrawAppsSearchBoxGpu() {
     FillRc((float)b.left, (float)b.top, (float)b.right, (float)b.bottom,
            RGB(255, 255, 255), lit ? 1.0f : 0.25f);
     std::wstring q(g_query, (size_t)g_queryLen);
-    if (!q.empty())
+    if (!q.empty()) {
+        const bool selAll = g_querySelAll;
+        if (selAll) {
+            int stw = 0;
+            HDC sdc = GetDC(NULL);
+            if (sdc && g_fLabel) {
+                HGDIOBJ so = SelectObject(sdc, g_fLabel);
+                SIZE ssz = {};
+                if (GetTextExtentPoint32W(sdc, q.c_str(), (int)q.size(), &ssz)) stw = ssz.cx;
+                SelectObject(sdc, so);
+            }
+            if (sdc) ReleaseDC(NULL, sdc);
+            float sx1 = (float)b.left + ScI(10) + (float)stw;
+            if (sx1 > (float)b.right - ScI(40)) sx1 = (float)b.right - ScI(40);
+            FillRc((float)b.left + ScI(10), (float)b.top + ScI(5), sx1, (float)b.bottom - ScI(5),
+                   RGB(0, 120, 215), 1.0f);
+        }
         TextAt(q.c_str(), g_queryFormat, (float)b.left + ScI(10), (float)b.top,
-               (float)b.right - ScI(40), (float)b.bottom, RGB(0, 0, 0));
+               (float)b.right - ScI(40), (float)b.bottom, selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
+    }
     TextAt(q.empty() ? L"" : L"", g_glyphSmall,
            (float)b.right - ScI(36), (float)b.top, (float)b.right, (float)b.bottom,
            lit ? RGB(90, 90, 90) : RGB(220, 220, 230));
@@ -6598,8 +6660,17 @@ static void DrawAppsSearchBoxGdi() {
     HGDIOBJ of = SelectObject(g_bbDC, g_fLabel);
     std::wstring q(g_query, (size_t)g_queryLen);
     if (!q.empty()) {
-        SetTextColor(g_bbDC, RGB(0, 0, 0));
+        SetTextColor(g_bbDC, g_querySelAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
         RECT tr = { b.left + ScI(10), b.top, b.right - ScI(40), b.bottom };
+        if (g_querySelAll) {
+            SIZE ssz = {};
+            GetTextExtentPoint32W(g_bbDC, q.c_str(), (int)q.size(), &ssz);
+            RECT sr = { tr.left, b.top + ScI(5), tr.left + ssz.cx, b.bottom - ScI(5) };
+            if (sr.right > tr.right) sr.right = tr.right;
+            HBRUSH sb = CreateSolidBrush(RGB(0, 120, 215));
+            FillRect(g_bbDC, &sr, sb);
+            DeleteObject(sb);
+        }
         DrawTextW(g_bbDC, q.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
     SetTextColor(g_bbDC, lit ? RGB(90, 90, 90) : RGB(220, 220, 230));
@@ -7641,19 +7712,22 @@ static void GlyphPower(Gdiplus::Graphics& g, float sz, const Gdiplus::Color& c) 
     Gdiplus::SolidBrush br(c);
     g.FillRectangle(&br, cx - sz * 0.055f, sz * 0.07f, sz * 0.11f, sz * 0.46f);
 }
+// Search glyph measured pixel-by-pixel from the Windows 8.1 Start screen reference (22 px box):
+// ring centred at (12.95, 7.95) with a 4.6 px radius and a 2.2 px stroke, plus a round-capped
+// 2.3 px handle running down-left to (4.35, 17.65). The glyph's bounding box is centred in the box.
 static void GlyphSearch(Gdiplus::Graphics& g, float sz, const Gdiplus::Color& c) {
-    Gdiplus::Pen pen(c, sz * 0.105f);
-    pen.SetStartCap(Gdiplus::LineCapFlat);
-    pen.SetEndCap(Gdiplus::LineCapRound);
-    const float r = sz * 0.30f;
-    const float cx = sz * 0.60f, cy = sz * 0.34f;
+    // Slightly enlarged: scale the whole glyph by 1.15 about the centre of its box (it still fits).
+    g.TranslateTransform(sz * 0.5f, sz * 0.5f);
+    g.ScaleTransform(1.15f, 1.15f);
+    g.TranslateTransform(-sz * 0.5f, -sz * 0.5f);
+    Gdiplus::Pen pen(c, sz * 0.100f);
+    const float r = sz * 0.209f;
+    const float cx = sz * 0.589f, cy = sz * 0.361f;
     g.DrawEllipse(&pen, cx - r, cy - r, r * 2.0f, r * 2.0f);
-    Gdiplus::Pen hp(c, sz * 0.12f);
+    Gdiplus::Pen hp(c, sz * 0.105f);
     hp.SetStartCap(Gdiplus::LineCapFlat);
     hp.SetEndCap(Gdiplus::LineCapRound);
-    const float dx = -0.77f, dy = 0.64f;
-    const float sx = cx + r * dx, sy = cy + r * dy;
-    g.DrawLine(&hp, sx, sy, sx + sz * 0.32f * dx, sy + sz * 0.32f * dy);
+    g.DrawLine(&hp, sz * 0.447f, sz * 0.514f, sz * 0.198f, sz * 0.802f);
 }
 static void GlyphArrow(Gdiplus::Graphics& g, float sz, bool down, const Gdiplus::Color& c) {
     Gdiplus::Pen ring(c, sz * 0.067f);
@@ -7799,7 +7873,10 @@ static HBITMAP g_charmBmp = NULL;
 static BYTE* g_charmBits = NULL;
 static int g_charmW = 0, g_charmH = 0;
 static ID2D1Bitmap* g_charmGpu = NULL;
-#define CHARM_SLIDE_MS 260
+#define CHARM_SLIDE_IN_MS  475   // same timings as the Windows 8 Networks charm
+#define CHARM_SLIDE_OUT_MS 380
+#define CHARM_SLIDE_MS     CHARM_SLIDE_OUT_MS
+#define CHARM_EASE_OUT_DECEL 8.0f
 
 static int CharmW() { return ScI(346); }
 static COLORREF CharmBlend(COLORREF bg, int pct) {
@@ -7916,10 +7993,12 @@ static void CharmRender(int contOff) {
     SetTextColor(dc, RGB(255, 255, 255));
     HFONT of = (HFONT)SelectObject(dc, fTitle.get());
     const wchar_t* ttl = T(STR_CHARM_TITLE);
-    TextOutW(dc, L.mx + ox, L.titleY, ttl, lstrlenW(ttl));
+    { RECT tr0 = { L.mx + ox, L.titleY, W - ScI(16) + ox, L.titleY + ScI(64) };
+      DrawTextW(dc, ttl, -1, &tr0, DT_SINGLELINE | DT_NOPREFIX | DT_TOP | DT_LEFT | DT_END_ELLIPSIS); }
     SelectObject(dc, fLabel.get());
     const wchar_t* scp = CharmScopeName(g_charmScope);
-    TextOutW(dc, L.mx + ox, L.lblY, scp, lstrlenW(scp));
+    { RECT lr0 = { L.mx + ox, L.lblY, W - ScI(60) + ox, L.lblY + ScI(28) };
+      DrawTextW(dc, scp, -1, &lr0, DT_SINGLELINE | DT_NOPREFIX | DT_TOP | DT_LEFT | DT_END_ELLIPSIS); }
     SIZE ls = {};
     GetTextExtentPoint32W(dc, scp, lstrlenW(scp), &ls);
     {
@@ -7972,9 +8051,17 @@ static void CharmRender(int contOff) {
         SIZE sz = {};
         GetTextExtentPoint32W(dc, g_query, g_queryLen, &sz);
         bool tail = sz.cx > (tr.right - tr.left - ScI(2));
-        SetTextColor(dc, RGB(0, 0, 0));
+        const bool selAll = g_querySelAll && g_queryLen > 0;
+        SetTextColor(dc, selAll ? GetSysColor(COLOR_HIGHLIGHTTEXT) : RGB(0, 0, 0));
         SaveDC(dc);
         IntersectClipRect(dc, tr.left, tr.top, tr.right + 1, tr.bottom);
+        if (selAll) {
+            int x0 = tail ? tr.right - sz.cx : tr.left;
+            RECT sr = { x0, box.top + ScI(5), x0 + sz.cx, box.bottom - ScI(5) };
+            HBRUSH sb = CreateSolidBrush(GetSysColor(COLOR_HIGHLIGHT));
+            FillRect(dc, &sr, sb);
+            DeleteObject(sb);
+        }
         DrawTextW(dc, g_query, g_queryLen, &tr,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | (tail ? DT_RIGHT : DT_LEFT));
         RestoreDC(dc, -1);
@@ -8004,7 +8091,8 @@ static void CharmRender(int contOff) {
             HFONT tf = (HFONT)SelectObject(dc, fText.get());
             SetTextColor(dc, RGB(255, 255, 255));
             const wchar_t* msg = T(STR_NO_RESULTS);
-            TextOutW(dc, L.mx + ox, L.listY, msg, lstrlenW(msg));
+            RECT mr = { L.mx + ox, L.listY, W - ScI(16) + ox, L.listY + ScI(80) };
+            DrawTextW(dc, msg, -1, &mr, DT_WORDBREAK | DT_NOPREFIX | DT_TOP | DT_LEFT);
             SelectObject(dc, tf);
         }
         int y = L.listY;
@@ -8142,10 +8230,16 @@ static void CharmRender(int contOff) {
     } catch (...) { Wh_Log(L"[charm] render failed"); CharmRelease(); }
 }
 
+// Normalized exponential ease-out, shared by the enter and the exit slide.
+static float CharmEaseOut(float t) {
+    if (t <= 0.0f) return 0.0f;
+    if (t >= 1.0f) return 1.0f;
+    return (1.0f - expf(-CHARM_EASE_OUT_DECEL * t)) / (1.0f - expf(-CHARM_EASE_OUT_DECEL));
+}
 static float CharmPresence(DWORD now) {
-    float t = (float)(now - g_charmTick) / (float)CHARM_SLIDE_MS;
-    if (g_charmOpen) return Clamp01(t);
-    return 1.0f - Clamp01(t);
+    float el = (float)(now - g_charmTick);
+    if (g_charmOpen) return CharmEaseOut(el / (float)CHARM_SLIDE_IN_MS);
+    return 1.0f - CharmEaseOut(el / (float)CHARM_SLIDE_OUT_MS);
 }
 static bool CharmVisible(DWORD now) {
     return g_charmOpen || (g_charmTick && (now - g_charmTick) < CHARM_SLIDE_MS);
@@ -8153,7 +8247,7 @@ static bool CharmVisible(DWORD now) {
 static void DrawCharmBarGpu(DWORD now) {
     if (!CharmVisible(now) || !g_charmGpu) return;
     try {
-    float e = EaseMetroOut(CharmPresence(now));
+    float e = CharmPresence(now);
     float off = (1.0f - e) * (float)g_charmW;
     g_rt->DrawBitmap(g_charmGpu, D2D1::RectF((float)g_sw - (float)g_charmW + off, 0.0f,
                                              (float)g_sw + off, (float)g_charmH), 1.0f,
@@ -8164,7 +8258,7 @@ static void DrawCharmBarGpu(DWORD now) {
 static void DrawCharmBarGdi(HDC sdc, DWORD now) {
     if (!CharmVisible(now) || !g_charmBmp) return;
     try {
-    float e = EaseMetroOut(CharmPresence(now));
+    float e = CharmPresence(now);
     float off = (1.0f - e) * (float)g_charmW;
     HDC idc = CreateCompatibleDC(sdc);
     HGDIOBJ o = SelectObject(idc, g_charmBmp);
@@ -8443,7 +8537,7 @@ static UINT RefreshStartOrb() {
 static void OpenCharm(wchar_t firstChar) {
     if (!g_open || g_closing) return;
     try {
-    g_queryLen = 0; g_query[0] = 0;
+    g_queryLen = 0; g_query[0] = 0; g_querySelAll = false;
     if (firstChar) QueryAppend(firstChar);
     Wh_Log(L"[charm] open char=%d view=%d", (int)firstChar, (int)g_view);
     g_charmSel = 0; g_charmScroll = 0; g_charmHover = -1;
@@ -8459,7 +8553,7 @@ static void OpenCharm(wchar_t firstChar) {
 static void CloseCharm(bool now) {
     if (!g_charmOpen) return;
     Wh_Log(L"[charm] close now=%d", (int)now);
-    g_charmOpen = false;
+    g_charmOpen = false; g_querySelAll = false;
     SetCharmMouseHook(false);
     g_charmTick = now ? 0 : NowMs();
     g_charmHover = -1;
@@ -8805,8 +8899,24 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
     case UM_SHUTDOWN:
     case UM_RESTART:
         CloseStart();
-        ExitWindowsEx(cmd == UM_RESTART ? EWX_REBOOT : (EWX_SHUTDOWN | EWX_POWEROFF),
-                      SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
+        {
+            HANDLE hTok = NULL;
+            if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hTok)) {
+                TOKEN_PRIVILEGES tp = {};
+                tp.PrivilegeCount = 1;
+                tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+                if (LookupPrivilegeValueW(NULL, SE_SHUTDOWN_NAME, &tp.Privileges[0].Luid))
+                    AdjustTokenPrivileges(hTok, FALSE, &tp, 0, NULL, NULL);
+                CloseHandle(hTok);
+            }
+            BOOL ok = ExitWindowsEx(cmd == UM_RESTART ? EWX_REBOOT : (EWX_SHUTDOWN | EWX_POWEROFF),
+                          SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
+            if (!ok) {
+                Wh_Log(L"[Power] ExitWindowsEx failed, error %u", (unsigned)GetLastError());
+                ShellExecuteW(NULL, L"open", L"shutdown.exe",
+                              cmd == UM_RESTART ? L"/r /t 0" : L"/s /t 0", NULL, SW_HIDE);
+            }
+        }
         break;
     case MC_SEP_ID: break;
     case CM_OPEN: if (g_ctxAppValid) LaunchEntry(g_ctxApp); break;
@@ -9622,7 +9732,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             POINT cp = sp;
             ScreenToClient(h, &cp);
             RECT pr; CharmPaneRect(&pr);
-            const int visLeft = pr.left + (int)((1.0f - EaseMetroOut(CharmPresence(NowMs()))) * (float)g_charmW);
+            const int visLeft = pr.left + (int)((1.0f - CharmPresence(NowMs())) * (float)g_charmW);
             if (!(cp.x >= visLeft && PtInRect(&pr, cp))) {
                 CloseCharm(false);
                 if (WindowFromPoint(sp) == h) {
@@ -9956,7 +10066,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (g_open && !g_closing && g_charmOpen) {
             POINT cpt = { (short)LOWORD(lp), (short)HIWORD(lp) };
             RECT cpr; CharmPaneRect(&cpr);
-            const int visLeft = cpr.left + (int)((1.0f - EaseMetroOut(CharmPresence(NowMs()))) * (float)g_charmW);
+            const int visLeft = cpr.left + (int)((1.0f - CharmPresence(NowMs())) * (float)g_charmW);
             if (cpt.x >= visLeft && PtInRect(&cpr, cpt)) {
                 int lx = cpt.x - cpr.left - g_charmCont, ly = cpt.y - cpr.top, row = -1;
                 int hit = CharmHit(lx, ly, &row);
@@ -10440,6 +10550,13 @@ static bool HandleSearchKey(const KBDLLHOOKSTRUCT* k, bool down, bool up) {
     }
     const bool altGr = (GetAsyncKeyState(VK_RMENU) & 0x8000) && (GetAsyncKeyState(VK_LCONTROL) & 0x8000) &&
                        !(GetAsyncKeyState(VK_RCONTROL) & 0x8000) && !(GetAsyncKeyState(VK_LMENU) & 0x8000);
+    if (!altGr && (vk == 'A' || vk == 'C') && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+        !(GetAsyncKeyState(VK_MENU) & 0x8000) && !(GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
+        g_namingGroup < 0 && (g_view == VIEW_SEARCH || g_charmOpen)) {
+        g_swallowed[vk] = true;
+        PostMessageW(g_wnd, WM_APP_KEY, vk == 'A' ? 0x141 : 0x143, 0);
+        return true;
+    }
     if (!altGr && ((GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000))) return false;
     bool searching = (g_view == VIEW_SEARCH) || g_charmOpen || g_namingGroup >= 0;
     if (searching && (vk == VK_BACK || vk == VK_RETURN || vk == VK_UP || vk == VK_DOWN ||
