@@ -9,7 +9,7 @@
 // @license         GPL-3.0-or-later
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -lole32 -loleaut32 -lruntimeobject -luser32 -lgdi32 -ld2d1 -ldwrite -ldwmapi -lwinmm -lshell32 -ladvapi32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -luser32 -lgdi32 -ld2d1 -ldwrite -ldwmapi -lwinmm -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -2388,7 +2388,8 @@ namespace tb
     {
         if (!h || g_hooksReady.load())
             return g_hooksReady.load();
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        // Taskbar.View.dll, SystemTray.dll, ExplorerExtensions.dll, taskbar.dll
+        WindhawkUtils::SYMBOL_HOOK taskbarModuleHooks[] = {
             {
                 {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))",
                  LR"(public: virtual void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
@@ -2396,7 +2397,7 @@ namespace tb
                 OAT_Hook,
             },
         };
-        if (!WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks)))
+        if (!WindhawkUtils::HookSymbols(h, taskbarModuleHooks, ARRAYSIZE(taskbarModuleHooks)))
             return false;
         g_hookedModule = h;
         g_hooksReady = true;
@@ -8237,7 +8238,7 @@ namespace ui
         return true;
     }
 
-    static LRESULT CALLBACK BodyEditProc(HWND h, UINT m, WPARAM w, LPARAM l); // defined after g_panel
+    static LRESULT CALLBACK BodyEditProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR dwRefData); // defined after g_panel
 
     // ---------------------------------------------------------------------------------------------
     class PanelWindow : public UiWindow
@@ -8260,7 +8261,6 @@ namespace ui
         ULONGLONG panLastTick = 0;
         bool timerPeriodActive = false;
         std::vector<std::wstring> noteLinks; // link targets of the preview hit areas (rebuilt every paint)
-        WNDPROC origBodyProc = nullptr;      // the note body EDIT is subclassed for rich paste and wheel input
         int panelWorkBottom = 0;             // physical px: bottom edge of the work area (top of the taskbar), clip line of the slide
         bool slideClipped = false;
         // The panel slides out from *behind* the taskbar (z-order below it) instead of being cut by a window region:
@@ -8371,9 +8371,7 @@ namespace ui
             for (int i = 0; i < E_COUNT; ++i)
                 if (edits[i])
                 {
-                    WNDPROC o = (WNDPROC)SetWindowLongPtrW(edits[i], GWLP_WNDPROC, (LONG_PTR)BodyEditProc);
-                    if (!origBodyProc)
-                        origBodyProc = o; // every field is a plain EDIT, so they share one original procedure
+                    WindhawkUtils::SetWindowSubclassFromAnyThread(edits[i], BodyEditProc, 0); // rich paste and wheel input
                 }
             SendMessageW(edits[E_TNAME], 0x1501 /*EM_SETCUEBANNER*/, TRUE, (LPARAM)L"Timer name (optional)");
             SendMessageW(edits[E_ALABEL], 0x1501, TRUE, (LPARAM)L"Alarm name (optional)");
@@ -11260,7 +11258,7 @@ namespace ui
 
     // Note body editor: rich paste, and wheel / touchpad scrolling that reaches the edit directly
     // (pointer-wheel and legacy wheel messages are both taken, so every touchpad driver works).
-    static LRESULT CALLBACK BodyEditProc(HWND h, UINT m, WPARAM w, LPARAM l)
+    static LRESULT CALLBACK BodyEditProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR)
     {
         PanelWindow *p = g_panel;
         if (p)
@@ -11282,7 +11280,7 @@ namespace ui
                 return 0;
             }
         }
-        return p && p->origBodyProc ? CallWindowProcW(p->origBodyProc, h, m, w, l) : DefWindowProcW(h, m, w, l);
+        return DefSubclassProc(h, m, w, l);
     }
 
     // ---------------------------------------------------------------------------------------------
