@@ -76,8 +76,8 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ### Settings
 * Taskbar previews, preview layout, notification icon, 12/24-hour time (applied everywhere),
-  panel material (acrylic or simple), custom taskbar height and default timer / alarm sounds.
-* **Sync time now** without a UAC prompt after a one-time setup, **Reload taskbar** and **Quit WinKlok**.
+  panel material (acrylic or simple) and default timer / alarm sounds.
+* **Sync time now** (Windows asks for administrator permission whenever it is needed) and **Quit WinKlok**.
 * A compact **About** card with the version, developer and project links.
 
 
@@ -85,15 +85,14 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ## First-run defaults
 Notification bell off, taskbar previews on, 12-hour time, acrylic blur, side-by-side layout, the *Windows Alarm*
-tone for both timers and alarms, and your current taskbar height (untouched until you change it).
+tone for both timers and alarms.
 
 ## Getting started
 1. Install and enable the mod in Windhawk.
-2. Restart the Windows Explorer from task manager.
+2. Restart the Windows Explorer from task manager if the mod seems not to work.
 3. Have fun...
 
-The first clock refresh can take up to a minute or might not even appear on an already running taskbar.
-Restarting Explorer makes the change instant.
+
 
 ## Tips
 * Scroll over the tab bar to reveal more tabs, or click a tab to slide it to the centre.
@@ -104,6 +103,7 @@ Restarting Explorer makes the change instant.
 * Windows 11 with the XAML taskbar, 64-bit only.
 * Do not combine with other mods that rebuild the taskbar clock area (for example *Taskbar Clock
   Customization*) until you have verified they coexist.
+* WinKlok does not change the taskbar height. Use the *Taskbar height and icon size* mod for that.
 * *Quit WinKlok* hands the clock back to Windows immediately. Re-enable it by toggling
   **Enable WinKlok** in this mod's settings or reloading the mod.
 * If something misbehaves, turn on **Verbose logging** and check the Windhawk log.
@@ -147,6 +147,7 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <winsvc.h>
 #include <dwmapi.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -224,6 +225,16 @@ static bool g_debug = false;
             Wh_Log(__VA_ARGS__); \
     } while (0)
 
+// The mod's own module handle. Window classes are registered with it (not with Explorer's handle), so they
+// belong to this image and can never outlive it.
+static HINSTANCE ModInst()
+{
+    static HINSTANCE h = nullptr;
+    if (!h)
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&ModInst, &h);
+    return h ? h : GetModuleHandleW(nullptr);
+}
+
 static inline bool WkActive()
 {
     return g_enabledSetting.load() && !g_quitRequested.load() && !g_shuttingDown.load();
@@ -255,7 +266,6 @@ namespace td
         std::atomic<int> showPreviews{1};
         std::atomic<int> stacked{0}; // 0 = side by side, 1 = stopwatch above timer
         std::atomic<int> showBell{0};
-        std::atomic<int> taskbarSize{0};                 // custom taskbar height in pixels (Windows 11); 0 = keep the height Windows currently uses
         std::atomic<int> hour24{0};                      // 0 = 12 h (default), 1 = 24 h, -1 = follow Windows
         std::atomic<int> acrylic{1};                     // 1 = acrylic blur when Windows transparency is on, 0 = simple transparency
         std::atomic<int> timerSound{kTimerSound};        // default sound when a timer ends
@@ -279,16 +289,13 @@ namespace td
             alarmSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"alarmSound", kDefaultAlarmSound)));
             alarmSnooze = std::min(60, std::max(1, Wh_GetIntValue(L"alarmSnooze", 10)));
             sys24 = SystemUses24h();
-            // Never chosen (or an old preset index 0/1/2): keep whatever height the taskbar currently has.
-            int saved = Wh_GetIntValue(L"taskbarSize", 0);
-            taskbarSize = (saved < 32) ? 0 : std::min(80, saved);
+            Wh_DeleteValue(L"taskbarSize"); // the custom taskbar height feature was removed
         }
         void Save()
         {
             Wh_SetIntValue(L"showPreviews", showPreviews);
             Wh_SetIntValue(L"stacked", stacked);
             Wh_SetIntValue(L"showBell", showBell);
-            Wh_SetIntValue(L"taskbarSize", taskbarSize);
             Wh_SetIntValue(L"hour24", hour24);
             Wh_SetIntValue(L"acrylic", acrylic);
             Wh_SetIntValue(L"timerSound", timerSound);
@@ -1075,6 +1082,29 @@ namespace td
             return ev;
         }
 
+        // Milliseconds until the next running timer ends or the next enabled alarm fires; -1 when nothing is armed.
+        long long MsUntilNextDue()
+        {
+            std::lock_guard<std::mutex> g(m);
+            const ULONGLONG now = MonoMs();
+            const long long wall = WallMs();
+            long long best = -1;
+            auto consider = [&](long long d)
+            {
+                if (d < 0)
+                    d = 0;
+                if (best < 0 || d < best)
+                    best = d;
+            };
+            for (auto &t : timers)
+                if (t.running)
+                    consider(t.endMono > now ? (long long)(t.endMono - now) : 0);
+            for (auto &a : alarms)
+                if (a.enabled && !a.ringing && a.nextFire > 0)
+                    consider(a.nextFire - wall);
+            return best;
+        }
+
         std::vector<MissedItem> TakeMissed()
         {
             std::lock_guard<std::mutex> g(m);
@@ -1146,7 +1176,6 @@ namespace ui
     void Stop();  // stop it and wait
     void RequestTogglePanel(bool noActivate);
     void NotifyTaskbarClockPress();
-    void ApplyTaskbarSize(int size);
 } // namespace ui
 
 // ============================================================================
@@ -1186,9 +1215,10 @@ namespace tb
         std::vector<std::pair<wux::FrameworkElement, wux::Visibility>> bells;
         // Every tooltip attached to the native clock (and its ancestors) is removed and remembered here.
         std::vector<std::pair<wux::DependencyObject, wf::IInspectable>> tooltips;
-        std::vector<std::pair<wuxc::TextBlock, double>> fonts; // original native font sizes
         bool injected = false, bellHidden = false, seenLoaded = false;
-        int unloadedTicks = 0, injectFailures = 0, layoutKey = -1, brushAge = 0, bellSearchTries = 0, tipAge = 0, measureAge = 0;
+        int injectFailures = 0, layoutKey = -1, bellSearchTries = 0;
+        // Time stamps (ms, GetTickCount64) so the periodic jobs keep their cadence whatever the tick interval is.
+        ULONGLONG unloadedSinceMs = 0, lastTipMs = 0, lastMeasureMs = 0, lastBrushMs = 0;
         double shift = 0, nativeH = 0, nativeDy = 0;
 
         void ClearUi()
@@ -1224,6 +1254,7 @@ namespace tb
     [[clang::no_destroy]] static std::vector<std::shared_ptr<Entry>> g_entries;
     static std::mutex g_entMtx;
     [[clang::no_destroy]] static std::map<DWORD, HWND> g_msgWnds;
+    [[clang::no_destroy]] static std::map<DWORD, UINT> g_msgTickMs; // current timer interval of each message window
     static std::mutex g_msgMtx;
     static bool g_msgClassRegistered = false;
 
@@ -1263,94 +1294,6 @@ namespace tb
         wuxm::SolidColorBrush br;
         br.Color(winrt::Windows::UI::Color{a, r, g, b});
         return br;
-    }
-
-    // ---- taskbar height (frame-size hook) --------------------------------------------------
-    // The TaskbarSi registry value only supports three presets. On supported Windows 11
-    // builds WinKlok overrides the XAML taskbar frame-height query with a pixel value.
-    using TaskbarGetFrameSize_t = double(WINAPI *)(int enumTaskbarSize);
-    static TaskbarGetFrameSize_t g_origTaskbarGetFrameSize = nullptr;
-    static std::atomic<bool> g_taskbarHeightHooked{false};
-    static double g_origSizes[3] = {0, 0, 0}; // what Windows itself returns per preset
-
-    static bool CustomHeightHooked() { return g_taskbarHeightHooked.load(); }
-
-    // The height Windows would use for the user's configured taskbar size preset.
-    static int DefaultTaskbarPx()
-    {
-        DWORD si = 1, sz = sizeof(si);
-        if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                         L"TaskbarSi", RRF_RT_REG_DWORD, nullptr, &si, &sz) != ERROR_SUCCESS ||
-            si > 2)
-            si = 1;
-        if (g_origSizes[si] >= 20.0)
-            return (int)std::lround(g_origSizes[si]);
-        static const int fallback[3] = {32, 48, 64};
-        return fallback[si];
-    }
-
-    static bool IsTaskbarVertical()
-    {
-        APPBARDATA abd{};
-        abd.cbSize = sizeof(abd);
-        if (!SHAppBarMessage(ABM_GETTASKBARPOS, &abd))
-            return false;
-        return abd.uEdge == ABE_LEFT || abd.uEdge == ABE_RIGHT;
-    }
-
-    static double WINAPI TaskbarGetFrameSize_Hook(int enumTaskbarSize)
-    {
-        double original = g_origTaskbarGetFrameSize ? g_origTaskbarGetFrameSize(enumTaskbarSize) : 48.0;
-        if (enumTaskbarSize >= 0 && enumTaskbarSize <= 2)
-            g_origSizes[enumTaskbarSize] = original;
-        if (g_shuttingDown.load() || IsTaskbarVertical() || enumTaskbarSize < 0 || enumTaskbarSize > 2)
-            return original;
-        int customPx = td::g_set.taskbarSize.load(); // 0 = never customised: leave Windows' own height alone
-        return (customPx < 32 || customPx > 80) ? original : static_cast<double>(customPx);
-    }
-
-    static bool TryHookTaskbarHeightModule(HMODULE h)
-    {
-        if (!h || g_taskbarHeightHooked.load())
-            return g_taskbarHeightHooked.load();
-        WH_FIND_SYMBOL fs{};
-        HANDLE hf = Wh_FindFirstSymbol(h, nullptr, &fs);
-        if (!hf)
-            return false;
-        void *target = nullptr;
-        std::wstring matched;
-        do
-        {
-            if (fs.symbol && fs.address && wcsstr(fs.symbol, L"TaskbarConfiguration") && wcsstr(fs.symbol, L"GetFrameSize") &&
-                wcsstr(fs.symbol, L"implementation") && !wcsstr(fs.symbol, L"produce") && !wcsstr(fs.symbol, L"get_"))
-            {
-                target = fs.address;
-                matched = fs.symbol;
-                break;
-            }
-        } while (Wh_FindNextSymbol(hf, &fs));
-        Wh_FindCloseSymbol(hf);
-        if (!target)
-            return false;
-        if (!Wh_SetFunctionHook(target, (void *)TaskbarGetFrameSize_Hook, (void **)&g_origTaskbarGetFrameSize))
-        {
-            WK_LOG(L"WinKlok: could not hook taskbar frame-size function '%s'", matched.c_str());
-            return false;
-        }
-        g_taskbarHeightHooked = true;
-        WK_LOG(L"WinKlok: custom taskbar-height hook installed: %s", matched.c_str());
-        return true;
-    }
-
-    // Native clock text follows the taskbar height so the whole clock area scales together.
-    static double NativeFactor()
-    {
-        if (!CustomHeightHooked())
-            return 1.0;
-        if (td::g_set.taskbarSize.load() < 32)
-            return 1.0;
-        double f = (double)td::g_set.taskbarSize.load() / std::max(1, DefaultTaskbarPx());
-        return std::fabs(f - 1.0) < 0.03 ? 1.0 : std::min(1.35, std::max(0.85, f));
     }
 
     // ---- tooltips (the hover card) ---------------------------------------------------------
@@ -1538,23 +1481,6 @@ namespace tb
         en.shift = w;
     }
 
-    // Scales the native date/time text with the taskbar height (restored when f == 1 or on unload).
-    static void ApplyNativeScale(Entry &en, double f)
-    {
-        if (!en.grid)
-            return;
-        WalkVisual(en.grid, [&](wux::DependencyObject const &o, int)
-                   {
-        if (auto t = o.try_as<wuxc::TextBlock>()) {
-            if (StartsWith(t.Name(), L"Winklok")) return false;
-            size_t i = 0;
-            for (; i < en.fonts.size(); ++i) if (en.fonts[i].first == t) break;
-            if (i == en.fonts.size()) en.fonts.emplace_back(t, t.FontSize());
-            try { t.FontSize(en.fonts[i].second * f); } catch (...) {}
-        }
-        return false; }, 0, 12);
-    }
-
     // Vertical extent (height + centre offset inside the grid) of the native date/time text.
     static void Remeasure(Entry &en)
     {
@@ -1587,7 +1513,7 @@ namespace tb
         }
         else
         {
-            h = 32.0 * NativeFactor();
+            h = 32.0;
         }
         if (gridH > 8)
             h = std::min(h, gridH - 4);
@@ -1996,7 +1922,7 @@ namespace tb
                 HookButton(en, Named<wux::UIElement>(en.host, d.name), d.fn);
 
             en.layoutKey = -1;
-            en.brushAge = 0;
+            en.lastBrushMs = GetTickCount64();
             ClearClockTooltips(en);
             en.injected = true;
             en.injectFailures = 0;
@@ -2035,17 +1961,6 @@ namespace tb
             }
             en.bells.clear();
             en.bellHidden = false;
-            for (auto &f : en.fonts)
-            {
-                try
-                {
-                    f.first.FontSize(f.second);
-                }
-                catch (...)
-                {
-                }
-            }
-            en.fonts.clear();
             RestoreClockTooltips(en);
             RemoveOurChildren(en);
         }
@@ -2063,18 +1978,17 @@ namespace tb
         try
         {
             auto &S = td::g_set;
-            if (en.layoutKey < 0 || ++en.measureAge >= 5)
+            const ULONGLONG nowMs = GetTickCount64();
+            if (en.layoutKey < 0 || nowMs - en.lastMeasureMs >= 500)
             {
-                en.measureAge = 0;
+                en.lastMeasureMs = nowMs;
                 Remeasure(en);
             }
 
             const bool showAny = S.showPreviews.load() && (p.swOn || p.tmOn);
             const bool compact = showAny && p.swOn && p.tmOn && S.stacked.load() != 0; // two one-line rows
             const bool bell = S.showBell.load() != 0;
-            const double f = NativeFactor();
-            const int key = (showAny ? 1 : 0) | (p.swOn ? 2 : 0) | (p.tmOn ? 4 : 0) | (compact ? 8 : 0) | (bell ? 16 : 0) |
-                            ((int)std::lround(f * 100) << 8);
+            const int key = (showAny ? 1 : 0) | (p.swOn ? 2 : 0) | (p.tmOn ? 4 : 0) | (compact ? 8 : 0) | (bell ? 16 : 0);
 
             if (showAny)
             {
@@ -2110,7 +2024,6 @@ namespace tb
                 en.swBlock.Margin(wux::Thickness{0, 0, (p.tmOn && !compact) ? 6.0 : 0.0, 0});
                 en.tmBlock.Margin(wux::Thickness{0, 0, 0, 0});
 
-                ApplyNativeScale(en, f);
                 en.scale.Height(en.nativeH); // preview + buttons are exactly as tall as the native date/time
                 double dy = en.nativeDy;     // keep the preview centred on the native text
                 en.host.Margin(wux::Thickness{4, dy > 0 ? 2 * dy : 0.0, 2, dy < 0 ? -2 * dy : 0.0});
@@ -2118,9 +2031,9 @@ namespace tb
                 en.host.Measure(wf::Size{1e6f, 1e6f});
                 ShiftNative(en, (showAny || bell) ? en.host.DesiredSize().Width : 0);
             }
-            else if (showAny && ++en.brushAge >= 50)
+            else if (showAny && nowMs - en.lastBrushMs >= 5000)
             {
-                en.brushAge = 0;
+                en.lastBrushMs = nowMs;
                 ApplyBrushes(en); // follows light/dark changes
             }
         }
@@ -2155,11 +2068,34 @@ namespace tb
                         g_entries.end());
     }
 
+    // Sets the interval of this thread's message-window timer (only when it changes).
+    static void SetTickMs(UINT ms)
+    {
+        const DWORD tid = GetCurrentThreadId();
+        std::lock_guard<std::mutex> g(g_msgMtx);
+        auto it = g_msgWnds.find(tid);
+        if (it == g_msgWnds.end())
+            return;
+        UINT &cur = g_msgTickMs[tid];
+        if (cur == ms)
+            return;
+        cur = ms;
+        SetTimer(it->second, 1, ms, nullptr);
+    }
+
+    // The tick only runs as fast as what is on screen needs: 100 ms for a running stopwatch preview (tenths),
+    // 250 ms for a running timer preview or while the bell is still being set up, 100 ms until the first
+    // injection has succeeded, and 1 s otherwise. Engine and settings changes do not wait for the next tick:
+    // they post a refresh (PostRefreshAll).
     static void OnTick()
     {
         auto list = EntriesForThisThread();
         if (list.empty())
+        {
+            SetTickMs(1000);
             return;
+        }
+        const ULONGLONG nowMs = GetTickCount64();
         const bool active = WkActive();
         td::PreviewSnap snap;
         if (active)
@@ -2179,13 +2115,18 @@ namespace tb
                 if (loaded)
                 {
                     en->seenLoaded = true;
-                    en->unloadedTicks = 0;
+                    en->unloadedSinceMs = 0;
                 }
-                else if (en->seenLoaded && ++en->unloadedTicks > 30)
-                { // element left the tree (taskbar rebuilt)
-                    Restore(*en);
-                    en->clock = nullptr;
-                    continue;
+                else if (en->seenLoaded)
+                {
+                    if (!en->unloadedSinceMs)
+                        en->unloadedSinceMs = nowMs;
+                    else if (nowMs - en->unloadedSinceMs > 3000)
+                    { // element left the tree (taskbar rebuilt)
+                        Restore(*en);
+                        en->clock = nullptr;
+                        continue;
+                    }
                 }
                 if (!active)
                 {
@@ -2202,9 +2143,9 @@ namespace tb
                 }
                 ApplyPreview(*en, snap);
                 ApplyBell(*en);
-                if (++en->tipAge >= 3)
+                if (nowMs - en->lastTipMs >= 300)
                 {
-                    en->tipAge = 0;
+                    en->lastTipMs = nowMs;
                     ClearClockTooltips(*en);
                 }
             }
@@ -2214,6 +2155,27 @@ namespace tb
             }
         }
         DropEntries(false); // drop dead entries
+
+        UINT want = 1000;
+        if (active)
+        {
+            const bool previews = td::g_set.showPreviews.load() != 0;
+            if (previews && snap.swOn && snap.swRun)
+                want = 100;
+            else if (previews && snap.tmOn && snap.tmRun)
+                want = 250;
+            const bool bell = td::g_set.showBell.load() != 0;
+            for (auto &en : list)
+            {
+                if (!en->clock)
+                    continue;
+                if (!en->injected && en->injectFailures < 25)
+                    want = std::min(want, 100u); // retry the first injection quickly
+                else if (bell && !en->bellHidden && en->bellSearchTries < 50)
+                    want = std::min(want, 250u); // still looking for the native bell
+            }
+        }
+        SetTickMs(want);
     }
 
     static LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -2243,6 +2205,7 @@ namespace tb
         case WM_NCDESTROY:
         {
             std::lock_guard<std::mutex> g(g_msgMtx);
+            g_msgTickMs.erase(GetCurrentThreadId());
             for (auto it = g_msgWnds.begin(); it != g_msgWnds.end(); ++it)
                 if (it->second == hwnd)
                 {
@@ -2265,19 +2228,24 @@ namespace tb
         {
             WNDCLASSW wc{};
             wc.lpfnWndProc = MsgProc;
-            wc.hInstance = GetModuleHandleW(nullptr);
+            wc.hInstance = ModInst();
             wc.lpszClassName = kMsgClass;
-            RegisterClassW(&wc);
+            if (!RegisterClassW(&wc))
+            {
+                WK_LOG(L"WinKlok: could not register the message window class (%u)", GetLastError());
+                return;
+            }
             g_msgClassRegistered = true;
         }
         HWND h = CreateWindowExW(0, kMsgClass, L"WinklokMsg", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                                 GetModuleHandleW(nullptr), nullptr);
+                                 ModInst(), nullptr);
         if (!h)
         {
             WK_LOG(L"WinKlok: could not create message window (%u)", GetLastError());
             return;
         }
         SetTimer(h, 1, 100, nullptr);
+        g_msgTickMs[tid] = 100;
         g_msgWnds[tid] = h;
     }
 
@@ -2320,6 +2288,7 @@ namespace tb
             g_entries.push_back(en);
         }
         WK_DLOG(L"WinKlok: adopted clock element (tid %u)", en->tid);
+        SetTickMs(100); // a new clock: start with the fast tick until it is set up
         if (WkActive())
             Inject(*en);
     }
@@ -2327,10 +2296,9 @@ namespace tb
     // ---- clock hooks --------------------------------------------------------------------------------
     using OnApplyTemplate_t = void(WINAPI *)(void *);
     static OnApplyTemplate_t g_origOAT = nullptr;
-    using GetViewModel_t = void *(WINAPI *)(void *, void *);
+    using GetViewModel_t = int(WINAPI *)(void *, void **); // produce<> ABI thunk: HRESULT get_ViewModel(void **)
     static GetViewModel_t g_origGVM = nullptr;
     static std::atomic<bool> g_hooksReady{false};
-    static HMODULE g_hookedModule = nullptr;
 
     static void WINAPI OAT_Hook(void *pThis)
     {
@@ -2355,33 +2323,49 @@ namespace tb
     [[clang::no_destroy]] static std::unordered_map<void *, bool> g_seenThis;
     static std::mutex g_seenMtx;
 
-    static void *WINAPI GVM_Hook(void *pThis, void *ret)
+    // Hooked on the produce<> ABI thunk, so pThis is always an IUnknown* of the runtime object.
+    static int WINAPI GVM_Hook(void *pThis, void **ppViewModel)
     {
-        void *r = g_origGVM ? g_origGVM(pThis, ret) : nullptr;
+        const int hr = g_origGVM ? g_origGVM(pThis, ppViewModel) : (int)E_FAIL;
         if (g_shuttingDown.load() || !pThis)
-            return r;
+            return hr;
         try
         {
+            static std::atomic<bool> logged{false};
+            if (!logged.exchange(true))
+                WK_LOG(L"WinKlok: BadgeIconContent::get_ViewModel hook is active");
             {
                 std::lock_guard<std::mutex> g(g_seenMtx);
                 auto it = g_seenThis.find(pThis);
                 if (it != g_seenThis.end() && !it->second)
-                    return r; // known non-clock
+                    return hr; // known non-clock
                 if (g_seenThis.size() > 512)
                     g_seenThis.clear();
             }
-            auto fe = ElementFromThis(pThis, L"SystemTray.DateTimeIconContent");
+            wux::FrameworkElement fe{nullptr};
+            ((IUnknown *)pThis)->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(fe));
+            bool isClock = false;
+            if (fe)
+            {
+                try
+                {
+                    isClock = winrt::get_class_name(fe) == L"SystemTray.DateTimeIconContent";
+                }
+                catch (...)
+                {
+                }
+            }
             {
                 std::lock_guard<std::mutex> g(g_seenMtx);
-                g_seenThis[pThis] = (bool)fe;
+                g_seenThis[pThis] = isClock;
             }
-            if (fe)
+            if (isClock)
                 AdoptClock(fe, false);
         }
         catch (...)
         {
         }
-        return r;
+        return hr;
     }
 
     static bool TryHookModule(HMODULE h)
@@ -2396,70 +2380,22 @@ namespace tb
                 &g_origOAT,
                 OAT_Hook,
             },
+            {
+                // Optional: lets WinKlok adopt a clock that already exists when the mod is enabled.
+                // If this build has no such symbol, existing clocks are picked up after an Explorer restart.
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))"},
+                &g_origGVM,
+                GVM_Hook,
+                true,
+            },
         };
         if (!WindhawkUtils::HookSymbols(h, taskbarModuleHooks, ARRAYSIZE(taskbarModuleHooks)))
             return false;
-        g_hookedModule = h;
         g_hooksReady = true;
         wchar_t path[MAX_PATH] = {};
         GetModuleFileNameW(h, path, MAX_PATH);
         WK_LOG(L"WinKlok: DateTimeIconContent::OnApplyTemplate hooked in %s", path);
         return true;
-    }
-
-    // Optional: BadgeIconContent::get_ViewModel lets us adopt clocks that already exist when the mod loads.
-    // The symbol is located by enumeration once per module version and cached.
-    static void TryHookViewModel(HMODULE h)
-    {
-        if (!h)
-            return;
-        auto *dos = (IMAGE_DOS_HEADER *)h;
-        auto *nt = (IMAGE_NT_HEADERS *)((BYTE *)h + dos->e_lfanew);
-        wchar_t key[64];
-        _snwprintf(key, 64, L"%08X:%08X", (unsigned)nt->FileHeader.TimeDateStamp, (unsigned)nt->OptionalHeader.SizeOfImage);
-        key[63] = 0;
-
-        void *addr = nullptr;
-        wchar_t cached[64] = {};
-        Wh_GetStringValue(L"gvmKey", cached, ARRAYSIZE(cached));
-        if (wcscmp(cached, key) == 0)
-        {
-            int rva = Wh_GetIntValue(L"gvmRva", 0);
-            if (rva <= 0)
-            {
-                WK_DLOG(L"WinKlok: get_ViewModel previously not found for this build");
-                return;
-            }
-            addr = (BYTE *)h + (unsigned)rva;
-        }
-        else
-        {
-            WH_FIND_SYMBOL fs;
-            HANDLE hf = Wh_FindFirstSymbol(h, nullptr, &fs);
-            if (hf)
-            {
-                do
-                {
-                    if (fs.symbol && wcsstr(fs.symbol, L"BadgeIconContent") && wcsstr(fs.symbol, L"get_ViewModel") &&
-                        wcsstr(fs.symbol, L"implementation") && !wcsstr(fs.symbol, L"produce"))
-                    {
-                        addr = fs.address;
-                        WK_LOG(L"WinKlok: found %s", fs.symbol);
-                        break;
-                    }
-                } while (Wh_FindNextSymbol(hf, &fs));
-                Wh_FindCloseSymbol(hf);
-            }
-            Wh_SetStringValue(L"gvmKey", key);
-            Wh_SetIntValue(L"gvmRva", addr ? (int)((BYTE *)addr - (BYTE *)h) : 0);
-        }
-        if (!addr || !AddressInModule(addr))
-        {
-            WK_LOG(L"WinKlok: get_ViewModel not available; existing clocks are picked up after an Explorer restart");
-            return;
-        }
-        if (!Wh_SetFunctionHook(addr, (void *)GVM_Hook, (void **)&g_origGVM))
-            WK_LOG(L"WinKlok: hooking get_ViewModel failed");
     }
 
     static const wchar_t *const kCandidateModules[] = {L"Taskbar.View.dll", L"SystemTray.dll", L"ExplorerExtensions.dll", L"taskbar.dll"};
@@ -2472,7 +2408,6 @@ namespace tb
             HMODULE h = GetModuleHandleW(name);
             if (!h)
                 continue;
-            TryHookTaskbarHeightModule(h);
             if (!g_hooksReady.load())
                 TryHookModule(h);
             if (g_hooksReady.load())
@@ -2495,12 +2430,9 @@ namespace tb
             {
                 if (_wcsicmp(base, cand) != 0)
                     continue;
-                bool changed = TryHookTaskbarHeightModule(m);
+                bool changed = false;
                 if (!g_hooksReady.load() && TryHookModule(m))
-                {
-                    TryHookViewModel(m);
                     changed = true;
-                }
                 if (changed)
                     Wh_ApplyHookOperations();
                 break;
@@ -2512,10 +2444,7 @@ namespace tb
     static bool InstallHooks()
     {
         if (TryHookAnyLoadedModule())
-        {
-            TryHookViewModel(g_hookedModule);
             return true;
-        }
         WK_LOG(L"WinKlok: taskbar modules not loaded yet; waiting for them");
         HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
         void *target = kb ? (void *)GetProcAddress(kb, "LoadLibraryExW") : nullptr;
@@ -2534,13 +2463,13 @@ namespace tb
         }
         for (HWND h : wnds)
         {
-            DWORD_PTR res = 0;
-            if (!SendMessageTimeoutW(h, WM_TD_CLEANUP, 0, 0, SMTO_ABORTIFHUNG, 4000, &res))
-                WK_LOG(L"WinKlok: taskbar thread did not answer cleanup (err %u)", GetLastError());
+            // A plain SendMessage: the taskbar thread never waits on the Windhawk thread, so this cannot deadlock,
+            // and the unload must not continue while that thread could still run code from this module.
+            SendMessageW(h, WM_TD_CLEANUP, 0, 0);
         }
         if (g_msgClassRegistered)
         {
-            UnregisterClassW(kMsgClass, GetModuleHandleW(nullptr));
+            UnregisterClassW(kMsgClass, ModInst());
             g_msgClassRegistered = false;
         }
     }
@@ -3867,7 +3796,7 @@ namespace ui
         wc.cbSize = sizeof(wc);
         wc.style = CS_DROPSHADOW;
         wc.lpfnWndProc = UiWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = ModInst();
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.lpszClassName = kUiClass;
         if (!RegisterClassExW(&wc))
@@ -7119,14 +7048,11 @@ namespace ui
         ID_ST_LAYOUT,
         ID_ST_FORMAT,
         ID_ST_ACRYLIC,
-        ID_ST_SIZE,
-        ID_ST_SIZE_RESET,
         ID_ST_TSOUND,
         ID_ST_TSOUND_PLAY,
         ID_ST_ASOUND,
         ID_ST_ASOUND_PLAY,
         ID_ST_SYNC,
-        ID_ST_RELOAD,
         ID_ST_QUIT,
         ID_ABOUT_TOGGLE,
         ID_ABOUT_WINDHAWK,
@@ -7145,7 +7071,6 @@ namespace ui
         E_AH,
         E_AM,
         E_ALABEL,
-        E_TBHEIGHT,
         E_NTITLE,
         E_NBODY,
         E_COUNT
@@ -7162,7 +7087,7 @@ namespace ui
     static const float kGlideMs = 80.f; // scroll glide time constant
     static const float kWheelPx = 56.f; // pixels per 120-unit wheel notch
     static const float kFrameMs = 8.f;  // animation timer interval (the display paces the real rate)
-    static const float kSlideOpenMs = 340.f, kSlideCloseMs = 210.f;
+    static const float kSlideOpenMs = 250.f, kSlideCloseMs = 230.f;
     static const float kAboutMs = 220.f; // About card expand / collapse
 
     static bool IsShellFlyoutWindow(HWND fg)
@@ -8034,23 +7959,31 @@ namespace ui
 
     // ---------------------------------------------------------------------------------------------
     //  TIME SYNC
-    //  Only administrators may change the system clock, so a plain user process can never do it directly.
+    //  Only administrators may change the system clock, so a plain user process cannot do it directly.
     //  Order of attempts, each silent until the last:
-    //    1. run the "WinKlok Time Sync" scheduled task (created once, runs as SYSTEM, startable by its creator);
-    //    2. run `w32tm /resync` directly (works when Windows already allows it);
-    //    3. one-time elevated setup (a single UAC prompt) that creates that task and runs it.
-    //  After the one-time setup every later sync is prompt-free. Runs on a worker thread; the result is posted back.
+    //    1. run `w32tm /resync` directly (works when Windows already allows it);
+    //    2. otherwise run it elevated. This shows one UAC prompt per sync; nothing is installed or left behind.
+    //  Runs on a worker thread and posts the result back. The worker is interruptible: shutting down sets
+    //  g_syncStop, which ends every wait and terminates a non-elevated child, and the unload then joins the thread.
     // ---------------------------------------------------------------------------------------------
     enum SyncResult
     {
         SYNC_OK = 0,
-        SYNC_SETUP_OK,
         SYNC_CANCELLED,
         SYNC_FAILED
     };
-    static const wchar_t kSyncTask[] = L"WinKlok Time Sync";
     static std::atomic<bool> g_syncBusy{false};
     static HANDLE g_syncThread = nullptr;
+    static HANDLE g_syncStop = nullptr; // manual-reset event: created by Start(), set by Stop()
+
+    static bool SyncStopRequested() { return g_syncStop && WaitForSingleObject(g_syncStop, 0) == WAIT_OBJECT_0; }
+
+    // WAIT_OBJECT_0 = the process ended; anything else = timeout or shutdown.
+    static DWORD WaitProcessOrStop(HANDLE proc, DWORD timeoutMs)
+    {
+        HANDLE hs[2] = {proc, g_syncStop};
+        return WaitForMultipleObjects(g_syncStop ? 2 : 1, hs, FALSE, timeoutMs);
+    }
 
     static bool RunHidden(const std::wstring &exe, const std::wstring &args, DWORD timeoutMs, DWORD &exitCode)
     {
@@ -8064,8 +7997,8 @@ namespace ui
         PROCESS_INFORMATION pi{};
         if (!CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
             return false;
-        const DWORD w = WaitForSingleObject(pi.hProcess, timeoutMs);
-        if (w == WAIT_TIMEOUT)
+        const DWORD w = WaitProcessOrStop(pi.hProcess, timeoutMs);
+        if (w != WAIT_OBJECT_0)
             TerminateProcess(pi.hProcess, 1);
         exitCode = 1;
         GetExitCodeProcess(pi.hProcess, &exitCode);
@@ -8074,7 +8007,8 @@ namespace ui
         return w == WAIT_OBJECT_0;
     }
 
-    // Runs a Microsoft-signed system tool elevated (one UAC prompt that names the tool, not a command shell).
+    // Runs a Microsoft-signed system tool elevated (one UAC prompt). ShellExecuteExW returns only after the prompt
+    // has been answered, so a shutdown during the prompt is handled right after it returns.
     static bool RunElevated(const wchar_t *exe, const std::wstring &args, DWORD timeoutMs, DWORD &exitCode, bool &cancelled)
     {
         wchar_t sys[MAX_PATH] = {};
@@ -8096,122 +8030,51 @@ namespace ui
         exitCode = 1;
         if (sei.hProcess)
         {
-            WaitForSingleObject(sei.hProcess, timeoutMs);
+            if (!SyncStopRequested())
+                WaitProcessOrStop(sei.hProcess, timeoutMs); // an elevated child cannot be terminated from here
             GetExitCodeProcess(sei.hProcess, &exitCode);
             CloseHandle(sei.hProcess);
         }
         return true;
     }
 
-    // Build a one-shot task definition in a temporary UTF-16 XML file. The DACL grants Interactive Users
-    // read/execute only (not modify/delete), so the user can start the SYSTEM task without a second UAC prompt.
-    // Its fixed action only starts Windows Time and requests resynchronization; callers cannot pass commands.
-    static bool WriteSyncTaskDefinition(std::wstring &path)
+    // The Windows Time service is trigger-started, so it may not be running yet.
+    static bool W32TimeRunning()
     {
-        wchar_t tempDir[MAX_PATH] = {};
-        const DWORD tempLen = GetTempPathW(MAX_PATH, tempDir);
-        if (!tempLen || tempLen >= MAX_PATH)
-            return false;
-        wchar_t tempFile[MAX_PATH] = {};
-        if (!GetTempFileNameW(tempDir, L"wks", 0, tempFile))
-            return false;
-
-        wchar_t sys[MAX_PATH] = {};
-        const UINT sysLen = GetSystemDirectoryW(sys, MAX_PATH);
-        if (!sysLen || sysLen >= MAX_PATH)
+        bool running = false;
+        SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+        if (scm)
         {
-            DeleteFileW(tempFile);
-            return false;
+            SC_HANDLE svc = OpenServiceW(scm, L"w32time", SERVICE_QUERY_STATUS);
+            if (svc)
+            {
+                SERVICE_STATUS st{};
+                if (QueryServiceStatus(svc, &st))
+                    running = st.dwCurrentState == SERVICE_RUNNING;
+                CloseServiceHandle(svc);
+            }
+            CloseServiceHandle(scm);
         }
-        const std::wstring command = std::wstring(sys) + L"\\cmd.exe";
-        const std::wstring xml =
-            L"<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n"
-            L"<Task version=\"1.3\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n"
-            L"  <RegistrationInfo>\r\n"
-            L"    <Author>WinKlok</Author>\r\n"
-            L"    <Description>On-demand system time resynchronization for WinKlok.</Description>\r\n"
-            L"    <SecurityDescriptor>D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;IU)</SecurityDescriptor>\r\n"
-            L"  </RegistrationInfo>\r\n"
-            L"  <Triggers />\r\n"
-            L"  <Principals><Principal id=\"System\"><UserId>S-1-5-18</UserId><LogonType>ServiceAccount</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>\r\n"
-            L"  <Settings>\r\n"
-            L"    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\r\n"
-            L"    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\r\n"
-            L"    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\r\n"
-            L"    <AllowHardTerminate>true</AllowHardTerminate>\r\n"
-            L"    <StartWhenAvailable>true</StartWhenAvailable>\r\n"
-            L"    <Enabled>true</Enabled><Hidden>false</Hidden><AllowStartOnDemand>true</AllowStartOnDemand>\r\n"
-            L"    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit><Priority>7</Priority>\r\n"
-            L"  </Settings>\r\n"
-            L"  <Actions Context=\"System\"><Exec><Command>" +
-            command +
-            L"</Command><Arguments>/c net start w32time &amp; w32tm /resync /force</Arguments></Exec></Actions>\r\n"
-            L"</Task>\r\n";
-
-        HANDLE f = CreateFileW(tempFile, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
-        if (f == INVALID_HANDLE_VALUE)
-        {
-            DeleteFileW(tempFile);
-            return false;
-        }
-        const WORD bom = 0xFEFF;
-        DWORD written = 0;
-        bool ok = WriteFile(f, &bom, sizeof(bom), &written, nullptr) && written == sizeof(bom);
-        const size_t bytes = xml.size() * sizeof(wchar_t);
-        if (ok && bytes <= MAXDWORD)
-            ok = WriteFile(f, xml.data(), (DWORD)bytes, &written, nullptr) && written == bytes;
-        else
-            ok = false;
-        CloseHandle(f);
-        if (!ok)
-        {
-            DeleteFileW(tempFile);
-            return false;
-        }
-        path = tempFile;
-        return true;
+        return running;
     }
 
     static DWORD WINAPI SyncThreadProc(LPVOID)
     {
         SyncResult result = SYNC_FAILED;
         DWORD ec = 1;
-        const std::wstring task = std::wstring(L"\"") + kSyncTask + L"\"";
-        const std::wstring runTask = L"/run /tn " + task;
-        if (RunHidden(L"schtasks.exe", runTask, 6000, ec) && ec == 0)
+        if (RunHidden(L"w32tm.exe", L"/resync /force", 10000, ec) && ec == 0)
             result = SYNC_OK;
-        else if (RunHidden(L"w32tm.exe", L"/resync /force", 10000, ec) && ec == 0)
-            result = SYNC_OK;
-        else if (!g_shuttingDown.load())
+        else if (!g_shuttingDown.load() && !SyncStopRequested())
         {
-            // One-time elevated setup only. The XML task ACL lets this same user start the fixed SYSTEM task
-            // without elevating the /run operation separately, so this path can issue at most one UAC prompt.
-            std::wstring xmlPath;
+            // One UAC prompt for this sync only. When the service is stopped, start it in the same elevated step.
             bool cancelled = false;
-            if (!WriteSyncTaskDefinition(xmlPath))
-            {
-                WK_LOG(L"WinKlok: could not create the temporary time-sync task definition (%u)", GetLastError());
-                result = SYNC_FAILED;
-            }
+            const bool launched = W32TimeRunning()
+                                      ? RunElevated(L"w32tm.exe", L"/resync /force", 20000, ec, cancelled)
+                                      : RunElevated(L"cmd.exe", L"/c net start w32time & w32tm /resync /force", 30000, ec, cancelled);
+            if (!launched)
+                result = cancelled ? SYNC_CANCELLED : SYNC_FAILED;
             else
-            {
-                const std::wstring create = L"/create /tn " + task + L" /xml \"" + xmlPath + L"\" /f";
-                const bool created = RunElevated(L"schtasks.exe", create, 20000, ec, cancelled);
-                DeleteFileW(xmlPath.c_str());
-                if (!created)
-                    result = cancelled ? SYNC_CANCELLED : SYNC_FAILED;
-                else if (ec != 0)
-                    result = SYNC_FAILED;
-                else if (RunHidden(L"schtasks.exe", runTask, 6000, ec) && ec == 0)
-                    result = SYNC_SETUP_OK;
-                else
-                {
-                    // Never launch a second elevated process. If the task cannot be started with its XML ACL,
-                    // report a failure instead of showing another UAC prompt or claiming a sync succeeded.
-                    WK_LOG(L"WinKlok: task was created but non-elevated /run failed (exit=%lu); no second UAC prompt will be shown", ec);
-                    result = SYNC_FAILED;
-                }
-            }
+                result = ec == 0 ? SYNC_OK : SYNC_FAILED;
         }
         HWND h = g_panelWnd.load();
         if (h && !g_shuttingDown.load())
@@ -8335,11 +8198,11 @@ namespace ui
                 DeleteObject(editBrush);
         }
 
-        static bool IsNumericSlot(int i) { return i == E_TH || i == E_TM || i == E_TS || i == E_AH || i == E_AM || i == E_TBHEIGHT; }
+        static bool IsNumericSlot(int i) { return i == E_TH || i == E_TM || i == E_TS || i == E_AH || i == E_AM; }
 
         bool Create()
         {
-            HINSTANCE inst = GetModuleHandleW(nullptr);
+            HINSTANCE inst = ModInst();
             CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED, kUiClass, L"WinKlok", WS_POPUP | WS_CLIPCHILDREN,
                             0, 0, 100, 100, nullptr, nullptr, inst, this);
             if (!hwnd)
@@ -8354,7 +8217,7 @@ namespace ui
                 if (IsNumericSlot(i))
                 {
                     style |= ES_CENTER | ES_NUMBER;
-                    limit = i == E_TBHEIGHT ? 3 : 2;
+                    limit = 2;
                 }
                 if (i == E_NTITLE)
                     limit = 120;
@@ -8379,8 +8242,6 @@ namespace ui
             SetWindowTextW(edits[E_TH], L"00");
             SetWindowTextW(edits[E_TM], L"05");
             SetWindowTextW(edits[E_TS], L"00");
-            SetWindowTextW(edits[E_TBHEIGHT],
-                           std::to_wstring(td::g_set.taskbarSize.load() >= 32 ? td::g_set.taskbarSize.load() : tb::DefaultTaskbarPx()).c_str());
             LoadNotes();
 
             const float pad = 30.f; // text width + horizontal padding per tab; wider than the panel => scrollable
@@ -9612,6 +9473,11 @@ namespace ui
             InitTabAnim();
             noActMode = noAct;
             shownAt = GetTickCount64();
+            if (tickMs != 100)
+            { // open: back to the fast tick right away
+                tickMs = 100;
+                SetTimer(hwnd, TIMER_TICK, 100, nullptr);
+            }
             panelWorkBottom = (int)mi.rcWork.bottom;
             if (!timerPeriodActive)
             { // finer timer resolution while the panel is open keeps scrolling and sliding even
@@ -9661,6 +9527,25 @@ namespace ui
         void AddAlertFor(const td::RingEvent &e);                  // defined below
         void AddMissedAlert(const std::vector<td::MissedItem> &m); // defined below
 
+        UINT tickMs = 100; // current interval of TIMER_TICK
+
+        // While the panel is open it needs the fast tick (animations, touchpad routing). While it is hidden the
+        // tick only has to be there when the next timer or alarm is due (and at least once a second).
+        void UpdateTickInterval()
+        {
+            UINT want = 100;
+            if (!IsWindowVisible(hwnd))
+            {
+                const long long d = td::g_eng.MsUntilNextDue();
+                want = d < 0 ? 1000u : (UINT)std::min<long long>(1000, std::max<long long>(15, d));
+            }
+            if (want != tickMs)
+            {
+                tickMs = want;
+                SetTimer(hwnd, TIMER_TICK, want, nullptr);
+            }
+        }
+
         void OnTick()
         {
             auto evs = td::g_eng.Tick();
@@ -9671,6 +9556,7 @@ namespace ui
                 if (!missedNow.empty())
                     AddMissedAlert(missedNow);
             }
+            UpdateTickInterval();
             if (!IsWindowVisible(hwnd))
                 return;
             {
@@ -10723,34 +10609,12 @@ namespace ui
             y += 86;
             SoundRow(y, L"Default alarm sound", S.alarmSound.load(), ID_ST_ASOUND, ID_ST_ASOUND_PLAY);
             y += 86;
-            SettingRow(y, 92, L"Taskbar height", L"Pixels, 32\u201380 (use Reload taskbar to apply)");
-            UseEdit(E_TBHEIGHT, RF(30, y + 54, 64, 30), 5, 5);
-            Text(L"px", RF(98, y + 54, 22, 30), 12.f, 400, pal.sub, 0, 1);
-            Btn(RF(126, y + 54, 104, 30), ID_ST_SIZE, 0, L"Apply", 1, 12.f);
-            Btn(RF(238, y + 54, 104, 30), ID_ST_SIZE_RESET, 0, L"Reset", 0, 12.f);
-            y += 100;
             Btn(RF(16, y, 340, 38), ID_ST_SYNC, 0, syncBusy ? L"Syncing time\u2026" : L"Sync time now", 0, 13.5f);
-            y += 46;
-            Btn(RF(16, y, 340, 38), ID_ST_RELOAD, 0, L"Reload taskbar (restart Explorer)", 0, 13.5f);
             y += 46;
             Btn(RF(16, y, 340, 38), ID_ST_QUIT, 0, L"Quit WinKlok", 3, 13.5f);
             y += 38 + 30; // a little air between the functions and the About card
             settingsAboutTop = y;
             PaintAbout(y);
-        }
-
-        void ApplyHeight(int px, bool reset)
-        {
-            px = std::min(80, std::max(32, px));
-            SetWindowTextW(edits[E_TBHEIGHT], std::to_wstring(px).c_str());
-            ApplyTaskbarSize(reset ? 0 : px); // reset = follow Windows' own height again
-            tb::PostRefreshAll();
-            if (!tb::CustomHeightHooked())
-                SetStatus(L"Height saved, but this Windows build's height hook was not found. Check the Windhawk log.");
-            else if (reset)
-                SetStatus(L"Reset to the default height (" + std::to_wstring(px) + L" px). Use Reload taskbar to apply.");
-            else
-                SetStatus(L"Height saved. Use Reload taskbar to apply the custom pixel height.");
         }
 
         // ---------------------------------------------------------------- input
@@ -11050,12 +10914,6 @@ namespace ui
                 td::g_set.Save();
                 ApplyComposition();
                 break;
-            case ID_ST_SIZE:
-                ApplyHeight(GetEditInt(E_TBHEIGHT), false);
-                break;
-            case ID_ST_SIZE_RESET:
-                ApplyHeight(tb::DefaultTaskbarPx(), true);
-                break;
             case ID_ST_SYNC:
                 if (StartTimeSync())
                 {
@@ -11063,11 +10921,6 @@ namespace ui
                     SetStatus(L"Syncing time\u2026");
                 }
                 break;
-            case ID_ST_RELOAD:
-                HidePanel();
-                ShellExecuteW(nullptr, L"open", L"cmd.exe", L"/c taskkill /f /im explorer.exe & start explorer.exe",
-                              nullptr, SW_HIDE);
-                return;
             case ID_ST_QUIT:
                 g_quitRequested = true;
                 HidePanel();
@@ -11195,7 +11048,6 @@ namespace ui
             case WM_UI_SYNCDONE:
                 syncBusy = false;
                 SetStatus(wp == SYNC_OK          ? L"Time synced"
-                          : wp == SYNC_SETUP_OK  ? L"Time sync set up. Next syncs need no prompt."
                           : wp == SYNC_CANCELLED ? L"Time sync was cancelled"
                                                  : L"Time sync failed");
                 td::g_eng.RescheduleAfterTimeChange();
@@ -11515,7 +11367,7 @@ namespace ui
         auto *a = new AlertWindow();
         a->ev = e;
         HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED, kUiClass, L"WinKlok alert",
-                                 WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), a);
+                                 WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, ModInst(), a);
         if (!h)
         {
             delete a;
@@ -11543,7 +11395,7 @@ namespace ui
         const int shown = (int)std::min<size_t>(missed.size(), 5);
         a->height = 66.f + 52.f * shown + (missed.size() > 5 ? 22.f : 0.f) + 52.f;
         HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED, kUiClass, L"WinKlok missed", WS_POPUP, 0, 0,
-                                 100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), a);
+                                 100, 100, nullptr, nullptr, ModInst(), a);
         if (!h)
         {
             delete a;
@@ -11657,7 +11509,7 @@ namespace ui
         }
         if (g_uiClassRegistered)
         {
-            UnregisterClassW(kUiClass, GetModuleHandleW(nullptr));
+            UnregisterClassW(kUiClass, ModInst());
             g_uiClassRegistered = false;
         }
         CoUninitialize();
@@ -11669,19 +11521,28 @@ namespace ui
         HANDLE evt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!evt)
             return false;
+        g_syncStop = CreateEventW(nullptr, TRUE, FALSE, nullptr); // created before any thread that uses it
         g_thread = CreateThread(nullptr, 0, UiThreadProc, evt, 0, &g_threadId);
         if (!g_thread)
         {
             CloseHandle(evt);
+            if (g_syncStop)
+                CloseHandle(g_syncStop);
+            g_syncStop = nullptr;
             return false;
         }
-        WaitForSingleObject(evt, 8000);
+        // The UI thread always signals once its start-up has finished (successfully or not). Never give up
+        // early: returning while it still runs would let the module be unloaded under it.
+        WaitForSingleObject(evt, INFINITE);
         CloseHandle(evt);
         if (!g_uiOk)
         {
-            WaitForSingleObject(g_thread, 3000);
+            WaitForSingleObject(g_thread, INFINITE); // join before reporting failure
             CloseHandle(g_thread);
             g_thread = nullptr;
+            if (g_syncStop)
+                CloseHandle(g_syncStop);
+            g_syncStop = nullptr;
             return false;
         }
         return true;
@@ -11691,20 +11552,27 @@ namespace ui
     {
         if (!g_thread)
             return;
+        if (g_syncStop)
+            SetEvent(g_syncStop); // interrupt the sync worker first; it winds down while the UI thread stops
         HWND h = g_panelWnd.load();
         if (h)
             PostMessageW(h, WM_UI_QUIT, 0, 0);
         else
             PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-        if (WaitForSingleObject(g_thread, 6000) == WAIT_TIMEOUT)
-            WK_LOG(L"WinKlok: UI thread did not stop in time");
+        // No timeouts: when Wh_ModUninit returns, no thread of this module may still be running.
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
         if (g_syncThread)
-        { // never unload the module while the sync worker could still be running its code
-            WaitForSingleObject(g_syncThread, 4000);
+        {
+            WaitForSingleObject(g_syncThread, INFINITE);
             CloseHandle(g_syncThread);
             g_syncThread = nullptr;
+        }
+        if (g_syncStop)
+        {
+            CloseHandle(g_syncStop);
+            g_syncStop = nullptr;
         }
     }
 
@@ -11717,17 +11585,6 @@ namespace ui
             PostMessageW(h, WM_UI_TOGGLE, noActivate ? 1 : 0, 0);
         else
             g_clockTogglePendingUntil = 0;
-    }
-
-    void ApplyTaskbarSize(int size)
-    {
-        const int px = size < 32 ? 0 : std::min(80, size);
-        td::g_set.taskbarSize = px;
-        td::g_set.Save();
-        // Notify Explorer that the tray configuration changed. The WinKlok hook overrides the
-        // taskbar frame-height query on supported Windows 11 builds.
-        DWORD_PTR res = 0;
-        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings", SMTO_ABORTIFHUNG, 1500, &res);
     }
 
 } // namespace ui
@@ -11746,6 +11603,8 @@ BOOL Wh_ModInit()
     LoadModSettings();
     td::g_eng.Load();
     td::g_set.Load();
+    Wh_DeleteValue(L"gvmKey"); // leftovers of the removed symbol cache
+    Wh_DeleteValue(L"gvmRva");
     if (!ui::Start())
     {
         WK_LOG(L"WinKlok: could not start the UI thread");
