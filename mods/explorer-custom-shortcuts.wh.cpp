@@ -38,7 +38,7 @@ These shortcuts work immediately once the mod is enabled:
 | `Ctrl + Shift + B` | **Open Recycle Bin** | Navigates the current tab directly to the Recycle Bin. |
 | `Ctrl + Shift + Del` | **Empty Recycle Bin** | Prompts confirmation to wipe the Recycle Bin. |
 
-### Ready in Settings (Disabled by Default)
+### Ready in Settings *(Disabled by Default)*
 
 These popular shortcuts are pre-configured in settings and can be enabled with a single toggle:
 
@@ -47,6 +47,10 @@ These popular shortcuts are pre-configured in settings and can be enabled with a
 | `Ctrl + H` | **Toggle Hidden Files** | Toggles visibility of hidden files & folders. |
 | `Ctrl + Shift + E` | **Toggle File Extensions** | Toggles display of file extensions. |
 | `Ctrl + Shift + C` | **Copy Path** | Copies full path(s) of selected items to clipboard. |
+
+### Desktop Shortcuts *(Disabled by Default)*
+
+Under the **Desktop Background Support** section in mod settings, turn on **Enable Shortcuts on Desktop** to allow all hotkeys (open terminal, create files/folders, copy paths, dialogs) to trigger while focused on the desktop wallpaper.
 
 ---
 
@@ -69,6 +73,7 @@ These popular shortcuts are pre-configured in settings and can be enabled with a
 * **Smart Explorer Arguments** — Pass active folder paths, selected file names, extensions, or file lists directly into your custom apps or scripts.
 * **Flexible Run Modes** — Run an application once with all selected items, or launch it individually for each selected file or folder.
 * **Built-in Shell Actions** — Quick built-in commands to create text files, folders, or shortcuts, copy paths/names, toggle view settings, or open advanced dialogs.
+* **Desktop Background Support** — Optionally enable all keyboard shortcuts directly on the Windows desktop wallpaper and icons *(configurable toggle in Settings, disabled by default)*.
 * **Typing & Rename Protection** — Shortcuts automatically pause while you are renaming a file, typing in the address bar, searching, or interacting with dialogs so they never interfere with your typing.
 * **On-Screen Action Popups** — Shows a clean, brief notification on your screen whenever background actions finish. Automatically matches your Windows accent color and Dark/Light theme, and can be disabled in settings.
 
@@ -114,6 +119,10 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 | `internal:emptyRecycleBin` | `Ctrl + Shift + Del` | Prompts confirmation to wipe the Recycle Bin. |
 | `internal:openParentFolder` | — | Navigates the active tab to its parent folder. |
 | `internal:folderOptions` | — | Opens the classic Folder Options property window. |
+
+> **Desktop Usage Note:** 
+> * **`internal:openRecycleBin`** navigates in-place when inside an Explorer tab, and opens a new Explorer window directly to the Recycle Bin when triggered from desktop.
+> * **`internal:openParentFolder`** automatically detects when triggered from the desktop and notifies you that you are already at the root directory.
 
 #### View Toggles
 | Command | Default Key | Description |
@@ -181,7 +190,7 @@ You can bind custom hotkeys to external programs and scripts in settings using t
   * Path: `Everything.exe` | Args: `-path "%d"` | Mode: `batch`
 * **PowerToys PowerRename (Bulk Rename Selected Items)**
   * Path: `%ProgramFiles%\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
-  * *(Or if installed in user profile: `%LocalAppData%\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe`)*
+  * *(Or if installed in user profile: `%LocalAppData%\PowerToys\PowerRename.exe`)*
 * **Git Bash in Current Directory**
   * Path: `git-bash.exe` | Args: `--cd="%d"` | Mode: `batch`
 * **Open in VS Code (Current Directory or Selected Folder)**
@@ -354,6 +363,12 @@ You can bind custom hotkeys to external programs and scripts in settings using t
       - bottom_right: "Bottom Right"
   $name: "Toast Notifications"
   $description: "Customize appearance and behavior of action popups."
+- desktop:
+  - enabled: false
+    $name: "Enable Shortcuts on Desktop"
+    $description: "Allow shortcuts to trigger when the Windows Desktop background or desktop icons are focused."
+  $name: "Desktop Background Support"
+  $description: "Configure whether custom shortcuts should function on the desktop."
 */
 // ==/WindhawkModSettings==
 
@@ -406,6 +421,7 @@ static std::vector<HANDLE> g_threads;
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_showActionToasts{true};
 static std::atomic<int> g_toastDuration{1400};
+static std::atomic<bool> g_enableDesktopShortcuts{false};
 
 enum class ToastPosition {
     TopLeft,
@@ -546,6 +562,7 @@ int ParseKey(std::wstring keyStr) {
 void LoadSettings() {
     Wh_Log(L"Loading mod settings...");
     g_showActionToasts = Wh_GetIntSetting(L"toasts.enabled") != 0;
+    g_enableDesktopShortcuts = Wh_GetIntSetting(L"desktop.enabled") != 0;
 
     int duration = Wh_GetIntSetting(L"toasts.duration");
     if (duration <= 0)
@@ -760,6 +777,60 @@ std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
 }
 
 IShellView* GetActiveShellView(HWND hExplorerWnd, HWND hCapturedFocus) {
+    // 1. Detect if the focused window belongs to the Desktop
+    if (hExplorerWnd) {
+        WCHAR rootCls[64] = {};
+        if (GetClassNameW(hExplorerWnd, rootCls, ARRAYSIZE(rootCls))) {
+            if (wcscmp(rootCls, L"Progman") == 0 ||
+                wcscmp(rootCls, L"WorkerW") == 0) {
+                IShellWindows* pShellWindows = nullptr;
+                if (SUCCEEDED(CoCreateInstance(CLSID_ShellWindows, nullptr,
+                                               CLSCTX_ALL,
+                                               IID_PPV_ARGS(&pShellWindows))) &&
+                    pShellWindows) {
+                    VARIANT vEmpty;
+                    VariantInit(&vEmpty);
+                    HWND hwndDesktop = nullptr;
+                    IDispatch* pDispatch = nullptr;
+
+                    HRESULT hrFind = pShellWindows->FindWindowSW(
+                        &vEmpty, &vEmpty, SWC_DESKTOP, (long*)&hwndDesktop,
+                        SWFO_NEEDDISPATCH, &pDispatch);
+                    VariantClear(&vEmpty);
+
+                    if (SUCCEEDED(hrFind) && pDispatch) {
+                        IServiceProvider* pServiceProvider = nullptr;
+                        if (SUCCEEDED(pDispatch->QueryInterface(
+                                IID_PPV_ARGS(&pServiceProvider)))) {
+                            IShellBrowser* pShellBrowser = nullptr;
+                            if (SUCCEEDED(pServiceProvider->QueryService(
+                                    SID_STopLevelBrowser,
+                                    IID_PPV_ARGS(&pShellBrowser)))) {
+                                IShellView* pShellView = nullptr;
+                                if (SUCCEEDED(
+                                        pShellBrowser->QueryActiveShellView(
+                                            &pShellView)) &&
+                                    pShellView) {
+                                    pShellBrowser->Release();
+                                    pServiceProvider->Release();
+                                    pDispatch->Release();
+                                    pShellWindows->Release();
+                                    return pShellView;
+                                }
+                                pShellBrowser->Release();
+                            }
+                            pServiceProvider->Release();
+                        }
+                        pDispatch->Release();
+                    }
+                    pShellWindows->Release();
+                }
+                return nullptr;
+            }
+        }
+    }
+
+    // 2. Standard Explorer Window Handling (Tabs / CabinetWClass)
     IShellWindows* pShellWindows = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(&pShellWindows))) ||
@@ -879,6 +950,19 @@ std::wstring GetActiveFolderPath(IShellView* psv) {
         }
         pfv->Release();
     }
+
+    // Fallback: If empty (virtual desktop namespace), resolve to the user's
+    // desktop folder
+    if (result.empty()) {
+        PWSTR desktopPath = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr,
+                                           &desktopPath)) &&
+            desktopPath) {
+            result = desktopPath;
+            CoTaskMemFree(desktopPath);
+        }
+    }
+
     return result;
 }
 
@@ -1130,10 +1214,25 @@ void ShowActionToast(HWND hOwner,
     RECT rcRef = {};
     bool hasTargetRect = false;
 
-    if (hOwner && GetWindowRect(hOwner, &rcRef)) {
+    // Detect if hOwner is desktop (Progman / WorkerW)
+    bool isDesktopOwner = false;
+    if (hOwner) {
+        WCHAR cls[64] = {};
+        if (GetClassNameW(hOwner, cls, ARRAYSIZE(cls))) {
+            if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
+                isDesktopOwner = true;
+            }
+        }
+    }
+
+    if (hOwner && !isDesktopOwner && GetWindowRect(hOwner, &rcRef)) {
         hasTargetRect = true;
     } else {
-        HMONITOR hMon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        // Anchor to the monitor under the mouse cursor for desktop or missing
+        // owner
+        POINT cursorPt = {0, 0};
+        GetCursorPos(&cursorPt);
+        HMONITOR hMon = MonitorFromPoint(cursorPt, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = {sizeof(mi)};
         if (GetMonitorInfoW(hMon, &mi)) {
             rcRef = mi.rcWork;
@@ -1491,6 +1590,44 @@ std::wstring FindVsCode() {
     return cmd;
 }
 
+bool ItemExistsOnDisk(const std::wstring& targetPath,
+                      const std::wstring& activeDir) {
+    // 1. Direct filesystem check
+    if (GetFileAttributesW(targetPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return true;
+    }
+
+    // 2. If the active directory is the User's Desktop, also check the Public
+    // Desktop
+    PWSTR userDesktop = nullptr;
+    if (SUCCEEDED(
+            SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &userDesktop)) &&
+        userDesktop) {
+        if (_wcsicmp(activeDir.c_str(), userDesktop) == 0) {
+            PWSTR publicDesktop = nullptr;
+            if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_PublicDesktop, 0,
+                                               nullptr, &publicDesktop)) &&
+                publicDesktop) {
+                PCWSTR fileName = PathFindFileNameW(targetPath.c_str());
+                if (fileName) {
+                    std::wstring publicPath =
+                        std::wstring(publicDesktop) + L"\\" + fileName;
+                    if (GetFileAttributesW(publicPath.c_str()) !=
+                        INVALID_FILE_ATTRIBUTES) {
+                        CoTaskMemFree(publicDesktop);
+                        CoTaskMemFree(userDesktop);
+                        return true;
+                    }
+                }
+                CoTaskMemFree(publicDesktop);
+            }
+        }
+        CoTaskMemFree(userDesktop);
+    }
+
+    return false;
+}
+
 void ExecuteInternalCommand(const std::wstring& action,
                             HWND rootHwnd,
                             HWND capturedFocus) {
@@ -1518,7 +1655,7 @@ void ExecuteInternalCommand(const std::wstring& action,
         // 1. Resolve collision suffix
         std::wstring path = currentDir + L"\\New Text Document.txt";
         int counter = 2;
-        while (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        while (ItemExistsOnDisk(path, currentDir)) {
             path = currentDir + L"\\New Text Document (" +
                    std::to_wstring(counter++) + L").txt";
         }
@@ -1581,7 +1718,7 @@ void ExecuteInternalCommand(const std::wstring& action,
         // 1. Resolve collision suffix without extension
         std::wstring path = currentDir + L"\\New File";
         int counter = 2;
-        while (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        while (ItemExistsOnDisk(path, currentDir)) {
             path = currentDir + L"\\New File (" + std::to_wstring(counter++) +
                    L")";
         }
@@ -1709,8 +1846,7 @@ void ExecuteInternalCommand(const std::wstring& action,
 
         std::wstring targetFolderPath = currentDir + L"\\New Folder";
         int counter = 2;
-        while (GetFileAttributesW(targetFolderPath.c_str()) !=
-               INVALID_FILE_ATTRIBUTES) {
+        while (ItemExistsOnDisk(targetFolderPath, currentDir)) {
             targetFolderPath = currentDir + L"\\New Folder (" +
                                std::to_wstring(counter++) + L")";
         }
@@ -2256,42 +2392,51 @@ void ExecuteInternalCommand(const std::wstring& action,
     // --- Open Recycle Bin ---
     if (_wcsicmp(action.c_str(), L"openRecycleBin") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
-        if (!psv) {
-            Wh_Log(L"internal:openRecycleBin: Failed to get active IShellView");
-            ShowActionToast(rootHwnd, L"Failed to open Recycle Bin",
-                            ToastType::Error);
-            return;
+        bool navigated = false;
+
+        if (psv) {
+            PIDLIST_ABSOLUTE pidlRecycle = nullptr;
+            if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0,
+                                                 nullptr, &pidlRecycle)) &&
+                pidlRecycle) {
+                IServiceProvider* psp = nullptr;
+                if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp))) && psp) {
+                    IShellBrowser* psb = nullptr;
+                    if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser,
+                                                    IID_PPV_ARGS(&psb))) &&
+                        psb) {
+                        // Attempt in-place navigation (works in Explorer tab)
+                        if (SUCCEEDED(psb->BrowseObject(
+                                pidlRecycle,
+                                SBSP_SAMEBROWSER | SBSP_ABSOLUTE))) {
+                            navigated = true;
+                            Wh_Log(
+                                L"internal:openRecycleBin: In-place navigation "
+                                L"succeeded");
+                        }
+                        psb->Release();
+                    }
+                    psp->Release();
+                }
+                CoTaskMemFree(pidlRecycle);
+            }
+            psv->Release();
         }
 
-        bool navigated = false;
-        PIDLIST_ABSOLUTE pidlRecycle = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0,
-                                             nullptr, &pidlRecycle)) &&
-            pidlRecycle) {
-            IServiceProvider* psp = nullptr;
-            if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp)))) {
-                IShellBrowser* psb = nullptr;
-                if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser,
-                                                IID_PPV_ARGS(&psb)))) {
-                    HRESULT hr = psb->BrowseObject(
-                        pidlRecycle, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-                    if (SUCCEEDED(hr)) {
-                        Wh_Log(
-                            L"internal:openRecycleBin: Navigated successfully");
-                        navigated = true;
-                    } else {
-                        Wh_Log(
-                            L"internal:openRecycleBin: Navigation failed "
-                            L"(hr=0x%08X)",
-                            hr);
-                    }
-                    psb->Release();
-                }
-                psp->Release();
+        // Desktop fallback or standalone fallback: Open in a new window
+        if (!navigated) {
+            SHELLEXECUTEINFOW sei = {sizeof(sei)};
+            sei.fMask = SEE_MASK_DEFAULT | SEE_MASK_NOASYNC;
+            sei.hwnd = rootHwnd;
+            sei.lpVerb = L"open";
+            sei.lpFile = L"shell:RecycleBinFolder";
+            sei.nShow = SW_SHOWNORMAL;
+
+            if (ShellExecuteExW(&sei)) {
+                Wh_Log(L"internal:openRecycleBin: Launched in new window");
+                navigated = true;
             }
-            CoTaskMemFree(pidlRecycle);
         }
-        psv->Release();
 
         if (!navigated) {
             ShowActionToast(rootHwnd, L"Failed to open Recycle Bin",
@@ -2341,6 +2486,19 @@ void ExecuteInternalCommand(const std::wstring& action,
 
     // --- Open Parent Folder ---
     if (_wcsicmp(action.c_str(), L"openParentFolder") == 0) {
+        // Detect if triggered from the desktop
+        if (rootHwnd) {
+            WCHAR cls[64] = {};
+            if (GetClassNameW(rootHwnd, cls, ARRAYSIZE(cls))) {
+                if (wcscmp(cls, L"Progman") == 0 ||
+                    wcscmp(cls, L"WorkerW") == 0) {
+                    ShowActionToast(rootHwnd, L"Already at root folder",
+                                    ToastType::Error);
+                    return;
+                }
+            }
+        }
+
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(
@@ -2365,6 +2523,8 @@ void ExecuteInternalCommand(const std::wstring& action,
                         L"internal:openParentFolder: Navigation failed "
                         L"(hr=0x%08X)",
                         hr);
+                    ShowActionToast(rootHwnd, L"Already at root folder",
+                                    ToastType::Error);
                 }
                 psb->Release();
             }
@@ -2719,7 +2879,13 @@ bool IsInlineEditingActive(HWND rootHwnd) {
     HWND hFocusRoot = GetAncestor(hFocus, GA_ROOT);
     if (hFocusRoot && hFocusRoot != rootHwnd) {
         if (GetWindow(hFocusRoot, GW_OWNER) == rootHwnd) {
-            return true;
+            WCHAR ownerCls[64] = {};
+            if (GetClassNameW(hFocus, ownerCls, ARRAYSIZE(ownerCls))) {
+                if (wcscmp(ownerCls, L"Edit") == 0 ||
+                    wcsstr(ownerCls, L"TextBox") != nullptr) {
+                    return true;
+                }
+            }
         }
     }
 
@@ -2766,8 +2932,16 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
         return false;
     }
 
-    if (wcscmp(className, L"CabinetWClass") == 0 ||
-        wcscmp(className, L"ExploreWClass") == 0) {
+    bool isExplorer = (wcscmp(className, L"CabinetWClass") == 0 ||
+                       wcscmp(className, L"ExploreWClass") == 0);
+    bool isDesktop = (wcscmp(className, L"Progman") == 0 ||
+                      wcscmp(className, L"WorkerW") == 0);
+
+    if (isDesktop && !g_enableDesktopShortcuts.load()) {
+        return false;
+    }
+
+    if (isExplorer || isDesktop) {
         std::shared_lock<std::shared_mutex> lock(g_shortcutsMutex);
         if (g_shortcuts.empty())
             return false;
@@ -2819,9 +2993,17 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd,
                     HWND rootHwnd = GetAncestor(lpMsg->hwnd, GA_ROOT);
 
                     if (rootHwnd) {
-                        SetFocus(rootHwnd);
-                        if (hFocus && IsWindow(hFocus)) {
-                            SetFocus(hFocus);
+                        WCHAR cls[64] = {};
+                        if (GetClassNameW(rootHwnd, cls, ARRAYSIZE(cls))) {
+                            // Only cycle focus for regular Explorer windows to
+                            // clear ribbon keytips
+                            if (wcscmp(cls, L"CabinetWClass") == 0 ||
+                                wcscmp(cls, L"ExploreWClass") == 0) {
+                                SetFocus(rootHwnd);
+                                if (hFocus && IsWindow(hFocus)) {
+                                    SetFocus(hFocus);
+                                }
+                            }
                         }
                     }
                 }
