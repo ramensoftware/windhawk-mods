@@ -71,6 +71,20 @@ constexpr wchar_t kRecoveryApplied[] = L"recoveryApplied";
 const wchar_t* shortcut = L"Tray button only";
 HICON shownIcon = nullptr, hiddenIcon = nullptr;
 
+// Win32 enumeration requires CALLBACK (__stdcall on 32-bit Windows).
+// A plain lambda has an incompatible calling convention on x86.
+BOOL CALLBACK FindDesktopWorker(HWND window, LPARAM param) {
+    wchar_t className[32]{};
+    if (!GetClassNameW(window, className, ARRAYSIZE(className)) ||
+        lstrcmpW(className, L"WorkerW") != 0)
+        return TRUE;
+    HWND candidate = FindWindowExW(
+        window, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (!candidate) return TRUE;
+    *reinterpret_cast<HWND*>(param) = candidate;
+    return FALSE;
+}
+
 HWND FindView() {
     HWND shell = GetShellWindow();
     if (!shell) return nullptr;
@@ -79,17 +93,8 @@ HWND FindView() {
 
     DWORD shellThreadId = GetWindowThreadProcessId(shell, nullptr);
     if (!shellThreadId) return nullptr;
-    EnumThreadWindows(shellThreadId, [](HWND window, LPARAM param) -> BOOL {
-        wchar_t className[32]{};
-        if (!GetClassNameW(window, className, ARRAYSIZE(className)) ||
-            lstrcmpW(className, L"WorkerW") != 0)
-            return TRUE;
-        HWND candidate = FindWindowExW(
-            window, nullptr, L"SHELLDLL_DefView", nullptr);
-        if (!candidate) return TRUE;
-        *reinterpret_cast<HWND*>(param) = candidate;
-        return FALSE;
-    }, reinterpret_cast<LPARAM>(&view));
+    EnumThreadWindows(shellThreadId, FindDesktopWorker,
+                      reinterpret_cast<LPARAM>(&view));
     return view;
 }
 
