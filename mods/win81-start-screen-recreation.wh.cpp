@@ -9481,7 +9481,13 @@ static void OpenStart(bool atLogon = false) {
     g_zoomOut = false; g_zoomTick = 0; g_hoverZoomBtn = false; g_hoverGroup = -1;
     g_sbArrowDir = 0; g_sbDrag = false; g_orbPressOnStart = false;
     g_dragGroup = -1; g_dragGroupMoved = false; g_dragGroupDx = 0.0f;
-    g_namingGroup = -1; g_nameSelAll = false; g_swallowNamingUp = g_swallowNamingRightUp = false; g_groupNameEdit.clear(); g_focus = -1; g_alphaGrid = false;
+    g_namingGroup = -1;
+    g_nameSelAll = false;
+    g_swallowNamingUp = false;
+    g_swallowNamingRightUp = false;
+    g_groupNameEdit.clear();
+    g_focus = -1;
+    g_alphaGrid = false;
     g_charmOpen = false; g_charmTick = 0; g_leaveTick = 0; g_charmHover = -1; g_charmPressed = -1;
     SetCharmMouseHook(false);
     g_queryLen = 0; g_query[0] = 0;
