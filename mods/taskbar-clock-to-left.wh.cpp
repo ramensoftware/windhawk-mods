@@ -2,7 +2,7 @@
 // @id              taskbar-clock-to-left
 // @name            Taskbar Clock to Left
 // @description     Move the native Windows 11 clock/notification button to the left without shifting centered taskbar apps
-// @version         2.3
+// @version         2.3.13
 // @author          pleromyst
 // @github          https://github.com/pleromyst
 // @license         GPL-3.0
@@ -13,88 +13,40 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Clock to Left
+# Taskbar Clock to Left - Tray Test
 
-Moves the native Windows 11 clock/notification button to the left side of the
-taskbar while keeping centered app buttons centered.
+Places the single native Windows 11 clock button in a dedicated left container.
+The original button, text, calendar and notification interactions are preserved.
 
-The clock is hosted in its own left-side layer. Instead of adding columns or
-invisible spacers, the mod reserves width only where needed and keeps the
-native system-tray extent in sync, so the remaining tray stays flush with the
-right edge.
-
-## What it does
-
-- Places the clock after the native Start, search and Task View buttons, and
-  after the Widgets/weather button when it is visible on the left.
-- Also handles a Start button pinned to the physical left edge by another mod.
-- On a left-aligned taskbar, the clock stays in its native position by default;
-  the left-align setting keeps it after the system-button prefix when the
-  layout has room.
-- Optionally moves these native tray groups before the clock: the control
-  center, the non-activatable system-icon group, the hidden-icons chevron, and
-  the notification-area application tray. Native data sources, panels, tooltips
-  and clicks are preserved, and each group restores independently.
-- In a crowded centered layout without fixed system buttons or Widgets, the mod
-  can reserve the native app viewport after a real collision, so Windows can
-  shrink buttons or overflow them while the clock stays on the left.
-
-## Requirements and limits
-
-- Windows 11's modern taskbar is required.
-- Only one clock-relocation mod should be enabled at a time.
-- The automatic centered reservation requires at least three visible apps, a
-  complete native item source, no fixed left system buttons and no Widgets. It
-  is not released automatically after apps decrease; turn the setting off to
-  restore the reservation.
-- An external left margin added to the taskbar repeater (for example by
-  Taskbar Styler) is not reserved automatically in this version; the clock
-  falls back to its native position when the apps collide.
-- Unsupported native layouts, external property changes and unsafe geometry
-  restore the clock instead of fighting the layout.
-- After a centered-layout safety fallback, closing apps alone does not move
-  the clock back to the left. Make room, then turn the mod off and on to retry.
-
-## Disable
-
-Turn the mod off, or disable the relevant settings. Width, margin and sibling
-order changes are restored. If another program changed the same property after
-the mod did, the newer value is kept.
+- Follows the native system tray background, border and spacing. Asymmetric
+  decoration faces the left screen edge; the clock text is never mirrored.
+- Keeps clear of Start, search, Task View, Widgets and application buttons,
+  including a Start button fixed to the left by another mod.
+- Uses existing empty space. If placement is unsafe or cannot be verified,
+  restores the clock to its native position without pushing other buttons.
+- Supports one/two text lines. Three or more lines and content exceeding the
+  taskbar window fall back; clipping caused only by a short theme box is allowed.
+- Enabling the mod starts placement; disabling it restores the native clock.
+- After a safety fallback, retries when effective space, text size or layout
+  changes. Unchanged time ticks do not rescan taskbar items or move the clock.
 
 ![Taskbar Clock to Left](https://i.imgur.com/Wew0LZh.png)
 
-## Acknowledgements
+Shown with **Windows 11 Taskbar Styler** using the **Surface** theme and
+**Taskbar Clock Customization**. This mod places the clock in a matching
+container on the left for a more balanced taskbar layout.
 
-This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization) by [m417z](https://github.com/m417z).
+![Taskbar Clock to Left with the Surface theme and Taskbar Clock Customization](https://i.imgur.com/ms9rpmz.png)
+Inspired by [Taskbar Clock Customization](https://windhawk.net/mods/taskbar-clock-customization)
+by [m417z](https://github.com/m417z).
+
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- keepOnLeftWhenLeftAligned: false
-  $name: Keep the clock on the left when the taskbar is left-aligned
-  $description: Keep the clock right after the Start, search and Task View buttons when Windows is set to left-align the taskbar.
-- moveControlCenter: false
-  $name: Move the control center before the clock
-  $description: Move the network, sound and battery buttons to the left of the clock.
-- moveNonActivatableStack: false
-  $name: Move the non-activatable system-icon group
-  $description: Move the small group of Windows system icons to the left of the clock.
-- moveNotifyIconStack: false
-  $name: Move the hidden-icons chevron
-  $description: Move the arrow that shows hidden icons to the left of the clock.
-- moveNotificationAreaIcons: false
-  $name: Move the notification-area application tray
-  $description: Move the small app icons next to the clock to its left.
-- reserveCenteredViewport: false
-  $name: Reserve the app viewport in a crowded centered layout
-  $description: When a centered taskbar gets crowded and apps would overlap the clock, make room for the clock so Windows can shrink or hide the app buttons.
-*/
-// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <optional>
@@ -108,6 +60,8 @@ This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 // The taskbar uses WinUI 2 controls on top of system XAML.
 #define WH_WINRT_WINUI2
@@ -117,21 +71,8 @@ This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods
 using namespace winrt::Windows::UI::Xaml;
 
 constexpr double kLayoutTolerance = 0.5;
-
-// XAML layout distances are DIP. Preserve the verified values and keep time
-// limits with different purposes separate even when their numbers match.
 constexpr double kTaskbarLayoutGap = 4.0;
-constexpr uint64_t kLayoutReadyTimeoutMs = 10000;
-constexpr uint32_t kLayoutReadyMaxAttempts = 600;
-constexpr uint32_t kAutomaticArrangeMaxCallbacks = 16;
-constexpr uint64_t kAutomaticArrangeTimeoutMs = 1000;
-constexpr double kNativeClockFontSize = 12.0;
 constexpr float kNativeClockMeasureLimit = 10000.0f;
-constexpr double kNativeClockDefaultChromeWidth = 24.0;
-constexpr double kNativeClockMinChromeWidth = 8.0;
-constexpr double kNativeClockMaxChromeWidth = 64.0;
-constexpr double kNativeClockMinLayoutWidth = 64.0;
-constexpr double kNativeClockMaxLayoutWidth = 180.0;
 
 enum class SystemButtonKind { None, Start, Search, TaskView, Widgets };
 
@@ -158,19 +99,11 @@ struct FlowElementLayout {
     bool overflow{};
 };
 
-struct TaskbarItemIdentity {
-    int index;
-    uintptr_t itemIdentity;
-    winrt::Windows::Foundation::IInspectable item{nullptr};
-};
-
 struct TaskbarElementSample {
     uintptr_t repeaterIdentity{};
     Controls::Grid root{nullptr};
     FrameworkElement repeater{nullptr};
     std::vector<FrameworkElement> elements;
-    std::optional<std::vector<TaskbarItemIdentity>> itemIdentities;
-    FrameworkElement widgets{nullptr};
 };
 
 struct LeftHostLayoutSnapshot {
@@ -185,131 +118,303 @@ struct LeftHostLayoutSnapshot {
     bool unknownVisible{};
     double rightBoundary{};
     double repeaterDesiredWidth{};
-    std::vector<uintptr_t> childIdentities;
     std::vector<SystemButtonLayout> buttons;
     std::vector<FlowElementLayout> flowElements;
-    std::vector<TaskbarItemIdentity> itemIdentities;
 };
 
-struct WidgetsSpacingData {
-    winrt::weak_ref<FrameworkElement> target;
-    Thickness originalMargin;
-    bool localUnset;
-    double lastRight;
+// BEGIN CLOCK TRAY
+// Cleanup retains unfinished restoration and rejects callbacks from old work.
+enum class ClockTrayState {
+    Disabled,
+    AwaitingLayout,
+    NativeWaiting,
+    Placing,
+    Stable,
+    Restoring,
 };
 
-struct FlowSpacingData {
-    winrt::weak_ref<FrameworkElement> target;
-    Thickness originalMargin;
-    bool localUnset;
-    double lastValue;
-    double increment{};
-    bool rightSide{};
+enum class ClockTrayReason {
+    None,
+    NoSpace,
+    TooTall,
+    TooManyLines,
+    UnknownMetrics,
+    TargetOwned,
+    UnsupportedLayout,
+    UnsupportedAppearance,
+    ElementReplaced,
+    UserDisabled,
 };
 
-struct CenteredViewportProbeData {
-    LeftHostLayoutSnapshot baseline;
-    ULONGLONG startTick;
-    double increment;
-    bool failed{};
-    bool appliedLogged{};
-    uint32_t initialLayoutWaits{};
-    bool initialArrangeAccepted{};
-};
-
-struct MovedTrayElementData {
-    winrt::weak_ref<FrameworkElement> element;
-    winrt::weak_ref<Controls::Panel> originalParent;
-    winrt::weak_ref<UIElement> previousSibling;
-    winrt::weak_ref<UIElement> nextSibling;
-    // Retain this measurement object while moved; still verify its original collection.
-    Controls::ColumnDefinition nativeColumn{nullptr};
-    uint32_t originalIndex;
-    int originalColumn;
-    bool columnLocalUnset;
-    double nativeColumnWidth;
-    int hostColumn{};
-    winrt::Windows::Foundation::IInspectable itemsSource{nullptr};
-    winrt::weak_ref<FrameworkElement> nativeChevron;
-    bool columnChanged{};
-    double lastContribution{-1};
-};
-
-struct MovedClockData {
-    winrt::weak_ref<FrameworkElement> clock;
-    winrt::weak_ref<Controls::Panel> originalParent;
-    winrt::weak_ref<Controls::Grid> taskbarRoot;
-    winrt::weak_ref<FrameworkElement> widgets;
-    winrt::weak_ref<FrameworkElement> repeater;
-    Controls::Grid leftHost{nullptr};
-    std::optional<MovedTrayElementData> controlCenter;
-    std::optional<MovedTrayElementData> trayGroup;
-    std::optional<MovedTrayElementData> notifyIcons;
-    std::optional<MovedTrayElementData> applicationTray;
-    winrt::weak_ref<UIElement> originalPreviousSibling;
-    winrt::weak_ref<UIElement> originalNextSibling;
-    std::optional<winrt::event_token> widgetsSizeChangedToken;
-    int64_t widgetsVisibilityChangedToken{};
-    std::optional<winrt::event_token> rootLayoutUpdatedToken;
-    std::optional<LeftHostLayoutSnapshot> layoutSnapshot;
-    std::optional<WidgetsSpacingData> widgetsSpacing;
-    std::optional<FlowSpacingData> flowSpacing;
-    std::optional<CenteredViewportProbeData> centeredProbe;
-    bool centeredProbeAttempted{};
-    bool widgetsSpacingBlocked{};
-    bool updatingLayout{};
-    bool restoring{};
-    bool layoutSampleUnavailableLogged{};
-    double layoutReservedWidth;
-    uint32_t originalIndex;
-    int originalColumn;
-    int originalColumnSpan;
-    int originalRow;
-    int originalRowSpan;
-    HorizontalAlignment originalHorizontalAlignment;
-    VerticalAlignment originalVerticalAlignment;
-    Thickness originalMargin;
-};
-
-using TrayElementRecord = std::optional<MovedTrayElementData> MovedClockData::*;
-
-struct DeferredClockData {
-    winrt::weak_ref<FrameworkElement> content;
-    std::optional<winrt::event_token> loadedToken;
-    std::optional<winrt::event_token> layoutUpdatedToken;
-    uint64_t loadedRegistration{};
-    uint64_t layoutUpdatedRegistration{};
-    ULONGLONG layoutUpdatedStartTick;
-    uint32_t layoutUpdatedAttempts;
-    winrt::weak_ref<FrameworkElement> centeredFallbackClock;
-};
-
-// Deferred event registration and cleanup run on the captured taskbar UI thread.
-// A serial distinguishes an in-flight registration from a cancelled replacement.
-uint64_t g_nextDeferredRegistration{};
-
-struct {
-    bool keepOnLeftWhenLeftAligned;
-    bool moveControlCenter;
-    bool moveNonActivatableStack;
-    bool moveNotifyIconStack;
-    bool moveNotificationAreaIcons;
-    bool reserveCenteredViewport;
-} g_settings;
-
-void LoadSettings() {
-    g_settings.keepOnLeftWhenLeftAligned =
-        Wh_GetIntSetting(L"keepOnLeftWhenLeftAligned") != 0;
-    g_settings.moveControlCenter = Wh_GetIntSetting(L"moveControlCenter") != 0;
-    g_settings.moveNonActivatableStack = Wh_GetIntSetting(L"moveNonActivatableStack") != 0;
-    g_settings.moveNotifyIconStack = Wh_GetIntSetting(L"moveNotifyIconStack") != 0;
-    g_settings.moveNotificationAreaIcons = Wh_GetIntSetting(L"moveNotificationAreaIcons") != 0;
-    g_settings.reserveCenteredViewport =
-        Wh_GetIntSetting(L"reserveCenteredViewport") != 0;
+PCWSTR ClockTrayStateName(ClockTrayState state) {
+    switch (state) {
+        case ClockTrayState::Disabled:
+            return L"disabled";
+        case ClockTrayState::AwaitingLayout:
+            return L"awaiting-layout";
+        case ClockTrayState::NativeWaiting:
+            return L"native-waiting";
+        case ClockTrayState::Placing:
+            return L"placing";
+        case ClockTrayState::Stable:
+            return L"stable";
+        case ClockTrayState::Restoring:
+            return L"restoring";
+    }
+    return L"unknown";
 }
 
-decltype(&SetWindowPos) SetWindowPos_Original;
-bool g_notifyPopupHooked;
+PCWSTR ClockTrayReasonName(ClockTrayReason reason) {
+    switch (reason) {
+        case ClockTrayReason::None:
+            return L"none";
+        case ClockTrayReason::NoSpace:
+            return L"no-space";
+        case ClockTrayReason::TooTall:
+            return L"too-tall";
+        case ClockTrayReason::TooManyLines:
+            return L"too-many-lines";
+        case ClockTrayReason::UnknownMetrics:
+            return L"unknown-metrics";
+        case ClockTrayReason::TargetOwned:
+            return L"target-owned";
+        case ClockTrayReason::UnsupportedLayout:
+            return L"unsupported-layout";
+        case ClockTrayReason::UnsupportedAppearance:
+            return L"unsupported-appearance";
+        case ClockTrayReason::ElementReplaced:
+            return L"element-replaced";
+        case ClockTrayReason::UserDisabled:
+            return L"user-disabled";
+    }
+    return L"unknown";
+}
+
+struct ClockTrayRetryKey {
+    std::vector<double> values;
+    std::vector<uintptr_t> identities;
+    bool operator==(const ClockTrayRetryKey&) const = default;
+};
+
+struct ClockTrayCounters {
+    uint64_t signals{}, metricReads{}, layoutReads{}, marginWrites{};
+    uint64_t attachments{}, restorations{}, nativeAttempts{}, unchangedMetrics{};
+};
+ClockTrayCounters g_clockTrayCounters;
+
+void LogClockTrayCounters() {
+    Wh_Log(L"[clock-tray] counters signals=%llu metrics=%llu layouts=%llu margins=%llu attaches=%llu restores=%llu attempts=%llu unchanged=%llu",
+        g_clockTrayCounters.signals, g_clockTrayCounters.metricReads, g_clockTrayCounters.layoutReads,
+        g_clockTrayCounters.marginWrites, g_clockTrayCounters.attachments, g_clockTrayCounters.restorations,
+        g_clockTrayCounters.nativeAttempts, g_clockTrayCounters.unchangedMetrics);
+}
+
+struct ClockTrayRuntime {
+    ClockTrayState state{ClockTrayState::Disabled};
+    ClockTrayReason reason{ClockTrayReason::None};
+    // Bumped whenever queued work must be discarded: reload, unload, or an
+    // element replacement seen by the dispatcher.
+    uint64_t generation{1};
+    bool pending{};
+    bool reportedInGeneration{};
+    // Compare only inputs sampled in the native position. Our own migration
+    // changes the tray extent and must not count as newly available space.
+    std::optional<ClockTrayRetryKey> lastNativeAttempt;
+    winrt::weak_ref<FrameworkElement> clock;
+};
+
+ClockTrayRuntime g_clockTray;
+
+void SetClockTrayResult(ClockTrayState state, ClockTrayReason reason) {
+    if (g_clockTray.state == state && g_clockTray.reason == reason) {
+        return;
+    }
+    g_clockTray.state = state;
+    g_clockTray.reason = reason;
+    Wh_Log(L"[clock-tray] state=%s reason=%s generation=%llu",
+           ClockTrayStateName(state), ClockTrayReasonName(reason),
+           static_cast<unsigned long long>(g_clockTray.generation));
+}
+
+void InvalidateClockTrayWork(ClockTrayReason reason, ClockTrayState state) {
+    g_clockTray.generation++;
+    g_clockTray.pending = false;
+    g_clockTray.reportedInGeneration = false;
+    g_clockTray.clock = {};
+    g_clockTray.reason = reason;
+    g_clockTray.state = state;
+}
+
+// Everything needed to put the native clock back. There is exactly one native
+// clock, so one record is enough; a second entry would mean two clocks.
+struct ClockTrayAppearanceHook {
+    winrt::weak_ref<DependencyObject> owner;
+    DependencyProperty property{nullptr};
+    int64_t token{};
+};
+
+struct ClockTrayMetrics {
+    double requiredWidth{};
+    double requiredHeight{};
+    unsigned lines{}; // Three means three or more, including clipped lines.
+    double nativeChromeWidth{};
+};
+
+struct ClockTrayPlan {
+    ClockTrayReason reason{ClockTrayReason::None};
+    double layoutLeft{};
+    double visualShift{};
+    double hostLeft{};
+    double hostWidth{};
+    HorizontalBounds visible{};
+};
+
+struct ClockTrayLayoutStamp {
+    uintptr_t repeater{};
+    uintptr_t source{};
+    int count{};
+    bool centered{};
+    double nativeColumnWidth{};
+    std::array<double, 9> geometry{};
+    std::array<double, 12> systemGeometry{};
+    bool operator==(const ClockTrayLayoutStamp&) const = default;
+};
+
+struct ClockTrayPlacement {
+    bool placed{};
+    bool restoring{};
+    winrt::weak_ref<FrameworkElement> clock;
+    // Hold the native element only while it is between parents.
+    FrameworkElement detachedClock{nullptr};
+    winrt::weak_ref<Controls::Grid> root;
+    winrt::weak_ref<Controls::Panel> originalParent;
+    uint32_t originalIndex{};
+    int originalColumn{};
+    int originalColumnSpan{1};
+    int originalRow{};
+    int originalRowSpan{1};
+    HorizontalAlignment originalHorizontalAlignment{};
+    VerticalAlignment originalVerticalAlignment{};
+    VerticalAlignment appliedVerticalAlignment{VerticalAlignment::Stretch};
+    Thickness originalMargin{};
+    uint32_t changedProperties{};
+    uint32_t unsetProperties{};
+    Controls::Grid host{nullptr};
+    Controls::Border decoration{nullptr};
+    std::optional<winrt::event_token> clockSizeToken;
+    winrt::weak_ref<FrameworkElement> clockSizeOwner;
+    winrt::weak_ref<Controls::Panel> appearanceSource;
+    std::vector<ClockTrayAppearanceHook> appearanceHooks;
+    std::vector<ClockTrayAppearanceHook> metricHooks;
+    std::optional<winrt::event_token> metricLayoutToken;
+    winrt::weak_ref<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater> layoutRepeater;
+    winrt::weak_ref<winrt::Microsoft::UI::Xaml::Controls::ItemsSourceView> layoutItems;
+    std::optional<winrt::event_token> itemsChangedToken;
+    std::optional<winrt::event_token> elementPreparedToken;
+    std::optional<winrt::event_token> elementClearingToken;
+    std::optional<ClockTrayLayoutStamp> layoutStamp;
+    bool layoutTrackingDirty{};
+    bool geometryDirty{};
+    bool metricsDirty{};
+    winrt::weak_ref<Controls::StackPanel> textStack;
+    std::array<winrt::weak_ref<FrameworkElement>, 4> systemButtons;
+    std::optional<ClockTrayMetrics> observedMetrics;
+    ClockTrayMetrics metrics;
+    ClockTrayPlan plan;
+    Controls::ColumnDefinition nativeColumn{nullptr};
+    double nativeColumnWidth{};
+    double lastReservedWidth{-1};
+    uint64_t arrangeWaitStart{};
+    DispatcherTimer arrangeDeadline{nullptr};
+    std::optional<winrt::event_token> arrangeDeadlineToken;
+    std::optional<winrt::event_token> clockLoadedToken;
+};
+
+[[clang::no_destroy]] ClockTrayPlacement g_clockTrayPlacement;
+bool g_clockTrayWorkActive{};
+std::atomic<bool> g_clockTrayCleanupPending{};
+
+struct ClockTrayWorkScope {
+    bool previous{g_clockTrayWorkActive};
+    ClockTrayWorkScope() { g_clockTrayWorkActive = true; }
+    ~ClockTrayWorkScope() { g_clockTrayWorkActive = previous; }
+};
+
+// Defined with the layout code below; declared here for the dispatcher.
+bool TryAttachClockTray(FrameworkElement clock);
+void UpdateClockTrayPlacement();
+void RestoreClockTray(ClockTrayReason reason);
+void EnsureClockTrayRetry(FrameworkElement clock);
+void ProcessClockTrayChanges(uint64_t generation);
+bool ClearClockTrayMetricHooks();
+bool ClockTrayWorkIsCurrent(uint64_t generation);
+
+void ResetClockTrayForSession() {
+    g_clockTray.clock = {};
+    g_clockTray.pending = false;
+    g_clockTray.reportedInGeneration = false;
+    g_clockTray.lastNativeAttempt.reset();
+    g_clockTrayCounters = {};
+    g_clockTray.generation++;
+    if (g_clockTrayCleanupPending) {
+        SetClockTrayResult(ClockTrayState::Restoring,
+                           ClockTrayReason::ElementReplaced);
+        Wh_Log(L"[clock-tray] pending cleanup retained at session start");
+        return;
+    }
+    g_clockTrayPlacement = ClockTrayPlacement{};
+    g_clockTray.reason = ClockTrayReason::None;
+    g_clockTray.state = ClockTrayState::AwaitingLayout;
+    Wh_Log(L"[clock-tray] session state=%s reason=%s generation=%llu",
+           ClockTrayStateName(g_clockTray.state),
+           ClockTrayReasonName(g_clockTray.reason),
+           static_cast<unsigned long long>(g_clockTray.generation));
+}
+
+// The enabled mod owns the clock. This path attaches one
+// container and mirrors the native tray background; it never pushes the app
+// row. A placement that does not fit is dropped, not forced.
+void QueueClockTrayUpdate(FrameworkElement clock) {
+    if (!clock || g_clockTrayWorkActive ||
+        !ClockTrayWorkIsCurrent(g_clockTray.generation)) {
+        return;
+    }
+    if (auto previous = g_clockTrayPlacement.clock.get(); previous && previous != clock) {
+        RestoreClockTray(ClockTrayReason::ElementReplaced);
+        if (!g_clockTrayPlacement.placed && !g_clockTrayPlacement.detachedClock &&
+            !g_clockTrayPlacement.changedProperties && ClearClockTrayMetricHooks()) {
+            g_clockTrayPlacement = {};
+            g_clockTrayCleanupPending = false;
+        }
+        if (g_clockTrayCleanupPending) return;
+        g_clockTray.lastNativeAttempt.reset();
+    }
+    if (g_clockTrayPlacement.placed) {
+        g_clockTrayPlacement.metricsDirty = true;
+        g_clockTrayPlacement.layoutTrackingDirty = true;
+        return;
+    }
+    if (g_clockTrayPlacement.clock.get() == clock &&
+        g_clockTrayPlacement.metricLayoutToken) {
+        g_clockTrayPlacement.geometryDirty = true;
+        g_clockTrayPlacement.metricsDirty = true;
+        g_clockTrayPlacement.layoutTrackingDirty = true;
+        return;
+    }
+    if (g_clockTrayCleanupPending) return;
+    g_clockTray.clock = clock;
+    g_clockTray.pending = true;
+    if (g_clockTray.state == ClockTrayState::Disabled) {
+        SetClockTrayResult(ClockTrayState::AwaitingLayout, ClockTrayReason::None);
+    }
+    if (!g_clockTray.reportedInGeneration) {
+        g_clockTray.reportedInGeneration = true;
+        Wh_Log(L"[clock-tray] dispatch generation=%llu",
+               static_cast<unsigned long long>(g_clockTray.generation));
+    }
+    if (!TryAttachClockTray(clock)) EnsureClockTrayRetry(clock);
+}
+// END CLOCK TRAY (P2 dispatch)
 
 std::atomic<bool> g_callbacksEnabled;
 std::atomic<bool> g_systemTrayHooked;
@@ -318,6 +423,76 @@ std::atomic<bool> g_systemTrayHookAttempted;
 std::atomic<bool> g_taskbarViewHookAttempted;
 std::atomic<DWORD> g_clockThreadId;
 std::atomic<bool> g_extentThreadMismatchLogged;
+
+bool ClockTrayWorkIsCurrent(uint64_t generation) {
+    return g_callbacksEnabled &&
+           g_clockThreadId == GetCurrentThreadId() &&
+           generation == g_clockTray.generation &&
+           g_clockTray.state != ClockTrayState::Restoring;
+}
+
+template <typename Callback>
+void ApplyClockTrayStep(uint64_t generation, Callback&& callback) {
+    if (!ClockTrayWorkIsCurrent(generation)) {
+        throw winrt::hresult_error(E_ABORT);
+    }
+    callback();
+    if (!ClockTrayWorkIsCurrent(generation)) {
+        throw winrt::hresult_error(E_ABORT);
+    }
+}
+
+template <typename T>
+uint32_t ClockTrayUnsetProperty(FrameworkElement clock,
+                               DependencyProperty property, uint32_t bit) {
+    auto local = clock.ReadLocalValue(property);
+    bool unset = local == DependencyProperty::UnsetValue();
+    if (clock.GetBindingExpression(property) ||
+        (!unset && !local.try_as<winrt::Windows::Foundation::IReference<T>>())) {
+        throw winrt::hresult_error(E_NOTIMPL);
+    }
+    return unset ? bit : 0;
+}
+
+template <typename T>
+void SetClockTrayProperty(FrameworkElement clock, DependencyProperty property,
+                         T value, uint32_t bit, uint64_t generation) {
+    auto parent = Media::VisualTreeHelper::GetParent(clock);
+    if ((parent && parent != g_clockTrayPlacement.decoration) ||
+        (!parent && g_clockTrayPlacement.detachedClock != clock)) {
+        throw winrt::hresult_error(E_ABORT);
+    }
+    // Recheck binding ownership, but retain the pre-detach local-value snapshot.
+    ClockTrayUnsetProperty<T>(clock, property, bit);
+    g_clockTrayPlacement.changedProperties |= bit;
+    ApplyClockTrayStep(generation, [&] {
+        if (bit == 64) g_clockTrayCounters.marginWrites++;
+        clock.SetValue(property, winrt::box_value(value));
+    });
+}
+
+template <typename T>
+void RestoreClockTrayProperty(FrameworkElement clock, Controls::Panel parent,
+                             DependencyProperty property, T original,
+                             T applied, uint32_t bit) {
+    if (!(g_clockTrayPlacement.changedProperties & bit)) return;
+    if (Media::VisualTreeHelper::GetParent(clock) != parent) {
+        throw winrt::hresult_error(E_ABORT);
+    }
+    auto local = clock.ReadLocalValue(property);
+    auto value = local.try_as<winrt::Windows::Foundation::IReference<T>>();
+    // A binding, cleared local value or a different value belongs to its writer.
+    if (!clock.GetBindingExpression(property) && value &&
+        value.Value() == applied) {
+        if (bit == 64) g_clockTrayCounters.marginWrites++;
+        if (g_clockTrayPlacement.unsetProperties & bit) {
+            clock.ClearValue(property);
+        } else {
+            clock.SetValue(property, winrt::box_value(original));
+        }
+    }
+    g_clockTrayPlacement.changedProperties &= ~bit;
+}
 std::atomic<int> g_lastTaskbarCenteredAlignment{-1};
 std::atomic_flag g_hookSetupInProgress = ATOMIC_FLAG_INIT;
 
@@ -465,19 +640,6 @@ void StartAlignmentRegistryWatch() {
 }
 // END ALIGNMENT REGISTRY WATCH
 
-[[clang::no_destroy]] std::optional<std::vector<DeferredClockData>>
-    g_deferredClocks{std::in_place};
-[[clang::no_destroy]] std::optional<std::vector<MovedClockData>>
-    g_movedClocks{std::in_place};
-
-std::vector<DeferredClockData>& DeferredClocks() {
-    return *g_deferredClocks;
-}
-
-std::vector<MovedClockData>& MovedClocks() {
-    return *g_movedClocks;
-}
-
 using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
 DateTimeIconContent_OnApplyTemplate_t DateTimeIconContent_OnApplyTemplate_Original;
 
@@ -615,11 +777,6 @@ bool TaskbarUsesCenteredAlignment() {
                           : ReadTaskbarUsesCenteredAlignment();
 }
 
-bool ShouldRelocateClock() {
-    return TaskbarUsesCenteredAlignment() ||
-           g_settings.keepOnLeftWhenLeftAligned;
-}
-
 bool IsValidHorizontalBounds(HorizontalBounds bounds) {
     return std::isfinite(bounds.left) && std::isfinite(bounds.right) &&
            bounds.left < bounds.right;
@@ -704,8 +861,7 @@ FrameworkElement FindTaskbarRepeater(Controls::Grid root) {
 }
 
 std::optional<std::vector<FrameworkElement>> GetRealizedTaskbarElements(
-    FrameworkElement element,
-    std::vector<TaskbarItemIdentity>* itemIdentities = nullptr) {
+    FrameworkElement element) {
     std::vector<FrameworkElement> elements;
     auto repeater =
         element.try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
@@ -722,19 +878,6 @@ std::optional<std::vector<FrameworkElement>> GetRealizedTaskbarElements(
         if (child) {
             elements.push_back(child);
         }
-        if (itemIdentities) {
-            uintptr_t itemIdentity = 0;
-            winrt::Windows::Foundation::IInspectable item{nullptr};
-            try {
-                item = source.GetAt(i);
-                itemIdentity = reinterpret_cast<uintptr_t>(winrt::get_abi(item));
-            } catch (...) {
-                // A diagnostic read must not change the realization contract.
-                Wh_Log(L"[layout] item identity unavailable index=%d error=%08X",
-                       i, winrt::to_hresult());
-            }
-            itemIdentities->push_back({i, itemIdentity, item});
-        }
     }
     if (elements.empty()) {
         return std::nullopt;
@@ -743,7 +886,7 @@ std::optional<std::vector<FrameworkElement>> GetRealizedTaskbarElements(
 }
 
 std::optional<TaskbarElementSample> CollectTaskbarElements(
-    Controls::Grid root, FrameworkElement repeater, bool needIdentities) {
+    Controls::Grid root, FrameworkElement repeater) {
     if (!root || !repeater || !IsTaskbarRepeater(repeater, root)) {
         return std::nullopt;
     }
@@ -752,21 +895,11 @@ std::optional<TaskbarElementSample> CollectTaskbarElements(
         reinterpret_cast<uintptr_t>(winrt::get_abi(repeater));
     sample.root = root;
     sample.repeater = repeater;
-    if (needIdentities) {
-        sample.itemIdentities.emplace();
-    }
-    auto elements = GetRealizedTaskbarElements(
-        repeater, needIdentities ? &*sample.itemIdentities : nullptr);
+    auto elements = GetRealizedTaskbarElements(repeater);
     if (!elements) {
         return std::nullopt;
     }
     sample.elements = std::move(*elements);
-    for (const auto& child : sample.elements) {
-        if (IdentifySystemButton(child) == SystemButtonKind::Widgets) {
-            sample.widgets = child;
-            break;
-        }
-    }
     return sample;
 }
 
@@ -928,19 +1061,6 @@ double GetLeftHostOffset(LeftHostLayoutSnapshot& snapshot,
     return ComputeLeftHostOffset(origin, prefixRight);
 }
 
-double GetLeftAlignedRightBoundary(const LeftHostLayoutSnapshot& layout,
-                                   double reservedRightWidth) {
-    double boundary = layout.rightBoundary - reservedRightWidth;
-    for (const auto& button : layout.buttons) {
-        if (button.visible && !button.fixed &&
-            button.kind == SystemButtonKind::Widgets) {
-            // Native trailing Widgets is a boundary, not part of the app flow.
-            // The native clock compensation belongs to the tray boundary only.
-            boundary = std::min(boundary, button.bounds.left);
-        }
-    }
-    return boundary;
-}
 
 std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     Controls::Grid root, FrameworkElement repeater, Controls::Grid host,
@@ -959,7 +1079,7 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     std::optional<TaskbarElementSample> fallbackSample;
     if (!sample) {
         fallbackSample = CollectTaskbarElements(
-            root, repeater, g_settings.reserveCenteredViewport);
+            root, repeater);
         if (!fallbackSample) {
             return std::nullopt;
         }
@@ -981,10 +1101,7 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
         .rightBoundary = root.ActualWidth(),
         .repeaterDesiredWidth = repeater.DesiredSize().Width,
     };
-    if (!snapshot.centered ||
-        g_settings.reserveCenteredViewport || g_settings.moveControlCenter ||
-        g_settings.moveNonActivatableStack || g_settings.moveNotifyIconStack ||
-        g_settings.moveNotificationAreaIcons) {
+    {
         FrameworkElement tray{nullptr};
         for (auto child : root.Children()) {
             auto element = child.try_as<FrameworkElement>();
@@ -1001,11 +1118,6 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
         }
         snapshot.rightBoundary = bounds->left;
     }
-    // Use the sample collected once for this update. An unavailable projection
-    // or unfinished realization is not an empty prefix.
-    if (sample->itemIdentities) {
-        snapshot.itemIdentities = *sample->itemIdentities;
-    }
     // The repeater bounds already validated its parent-to-root chain. Validate
     // the repeater's own hop once; reuse this origin only in this read-only pass.
     std::optional<double> repeaterOriginX;
@@ -1016,7 +1128,6 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     }
     for (auto child : sample->elements) {
         auto identity = reinterpret_cast<uintptr_t>(winrt::get_abi(child));
-        snapshot.childIdentities.push_back(identity);
         auto kind = IdentifySystemButton(child);
         if (kind == SystemButtonKind::None) {
             auto className = winrt::get_class_name(child);
@@ -1094,1888 +1205,1724 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     return snapshot;
 }
 
-bool LeftHostFlowCollision(const LeftHostLayoutSnapshot& layout) {
-    if (layout.hostWidth <= 0) {
-        return false;
+// BEGIN CLOCK TRAY LAYOUT (P2)
+//
+// P2 scope: one container with a stable name, the untouched native clock
+// inside it, and a read-only mirror of the native tray background. No app-row
+// pushing, no viewport reservation, no theme table.
+// R02: the clock belongs at the screen's left edge unless a real left-pinned
+// system-button cluster sits there. A centered dock/pill carries the same
+// buttons too, but its left edge is not the screen edge, so anchoring inside
+// the pill would land on top of the app row for no reason.
+constexpr double kTrayScreenEdgeInset = 12.0;
+
+double ResolveClockTrayOffset(const LeftHostLayoutSnapshot& layout,
+                              double screenLeft) {
+    auto buttons = layout.buttons;
+    double origin = screenLeft;
+    for (const auto& button : buttons) {
+        if (button.visible && button.kind == SystemButtonKind::Start &&
+            button.bounds.left >= screenLeft - kLayoutTolerance &&
+            button.bounds.left <= screenLeft + kTrayScreenEdgeInset) {
+            origin = button.bounds.left;
+        }
     }
-    double requiredEnd = layout.offset + layout.hostWidth + kTaskbarLayoutGap;
-    return std::any_of(layout.flowElements.begin(), layout.flowElements.end(),
-        [&](const auto& flow) {
-            return flow.bounds.left + kLayoutTolerance < requiredEnd;
-        });
+    IdentifyFixedSystemPrefix(buttons, layout.centered, origin, 0, 0);
+    std::optional<double> right;
+    for (auto& button : buttons) {
+        if (button.kind == SystemButtonKind::Widgets) {
+            button.fixed = button.visible && std::abs(button.bounds.left -
+                screenLeft - button.marginLeft) <= kLayoutTolerance;
+        }
+        if (!button.visible || !button.fixed) continue;
+        double edge = button.bounds.right;
+        // Include the current visible extent of the fixed button, not just
+        // its layout cell (themes may expand the button outside that cell).
+        for (const auto& item : layout.flowElements) {
+            if (item.identity == button.identity) edge = std::max(edge, item.bounds.right);
+        }
+        right = right ? std::max(*right, edge) : edge;
+    }
+    return right ? *right + kTaskbarLayoutGap : screenLeft;
 }
 
-void LogLeftHostLayout(const LeftHostLayoutSnapshot& snapshot, PCWSTR reason,
-                       double reservedRightWidth = 0) {
-    double flowLeft = snapshot.rootWidth;
-    for (const auto& element : snapshot.flowElements) {
-        flowLeft = std::min(flowLeft, element.bounds.left);
+ClockTrayReason CheckClockTrayHorizontalBounds(
+    const LeftHostLayoutSnapshot& layout, double screenLeft,
+    const HorizontalBounds& bounds) {
+    if (layout.unknownVisible || !IsValidHorizontalBounds(bounds) ||
+        !std::isfinite(screenLeft) || !std::isfinite(layout.rightBoundary)) {
+        return ClockTrayReason::UnsupportedLayout;
     }
-    double hostRight = snapshot.offset + snapshot.hostWidth;
-    bool overlap = LeftHostFlowCollision(snapshot);
-    Wh_Log(L"[layout] left-host-sample build=" WH_MOD_VERSION L" reason=%s repeater=%p "
-           L"realized=%zu systemButtons=%zu targetOffset=%.3f "
-           L"actualLeft=%.3f width=%.3f targetRight=%.3f "
-           L"flowCount=%zu flowLeft=%.3f overlap=%d centered=%d rightBoundary=%.3f nativeRightLimit=%.3f unknownVisible=%d viewportLeft=%.3f viewportWidth=%.3f repeaterDesiredWidth=%.3f",
-           reason, reinterpret_cast<void*>(snapshot.repeaterIdentity),
-           snapshot.childIdentities.size(), snapshot.buttons.size(),
-           snapshot.offset, snapshot.hostLeft, snapshot.hostWidth, hostRight,
-           snapshot.flowElements.size(),
-           snapshot.flowElements.empty() ? -1 : flowLeft, overlap,
-           snapshot.centered, snapshot.rightBoundary,
-           snapshot.centered ? -1 :
-               GetLeftAlignedRightBoundary(snapshot, reservedRightWidth),
-           snapshot.unknownVisible, snapshot.contentLeft, snapshot.contentWidth,
-           snapshot.repeaterDesiredWidth);
+    if (bounds.left < screenLeft - kLayoutTolerance ||
+        bounds.right + kTaskbarLayoutGap > layout.rightBoundary + kLayoutTolerance) {
+        return ClockTrayReason::NoSpace;
+    }
+    for (const auto& item : layout.flowElements) {
+        if (!IsValidHorizontalBounds(item.bounds)) return ClockTrayReason::UnsupportedLayout;
+        if (bounds.left < item.bounds.right + kTaskbarLayoutGap - kLayoutTolerance &&
+            item.bounds.left < bounds.right + kTaskbarLayoutGap - kLayoutTolerance) {
+            return ClockTrayReason::NoSpace;
+        }
+    }
+    return ClockTrayReason::None;
 }
 
-bool SameLeftHostLayout(const LeftHostLayoutSnapshot& a,
-                        const LeftHostLayoutSnapshot& b) {
-    if (a.repeaterIdentity != b.repeaterIdentity ||
-        a.centered != b.centered || a.unknownVisible != b.unknownVisible ||
-        std::abs(a.rightBoundary - b.rightBoundary) > kLayoutTolerance ||
-        a.childIdentities != b.childIdentities ||
-        a.buttons.size() != b.buttons.size() ||
-        a.flowElements.size() != b.flowElements.size() ||
-        std::abs(a.contentLeft - b.contentLeft) > kLayoutTolerance ||
-        std::abs(a.contentWidth - b.contentWidth) > kLayoutTolerance ||
-        std::abs(a.rootWidth - b.rootWidth) > kLayoutTolerance ||
-        std::abs(a.hostLeft - b.hostLeft) > kLayoutTolerance ||
-        std::abs(a.hostWidth - b.hostWidth) > kLayoutTolerance ||
-        std::abs(a.offset - b.offset) > kLayoutTolerance) {
-        return false;
-    }
-    for (size_t i = 0; i < a.buttons.size(); i++) {
-        const auto& x = a.buttons[i];
-        const auto& y = b.buttons[i];
-        if (x.identity != y.identity || x.kind != y.kind ||
-            x.visible != y.visible || x.fixed != y.fixed ||
-            std::abs(x.bounds.left - y.bounds.left) > kLayoutTolerance ||
-            std::abs(x.bounds.right - y.bounds.right) > kLayoutTolerance ||
-            std::abs(x.marginLeft - y.marginLeft) > kLayoutTolerance ||
-            std::abs(x.outerWidth - y.outerWidth) > kLayoutTolerance ||
-            std::abs(x.contentWidth - y.contentWidth) > kLayoutTolerance ||
-            std::abs(x.marginRight - y.marginRight) > kLayoutTolerance) {
-            return false;
+ClockTrayPlan ComputeClockTrayPlan(const LeftHostLayoutSnapshot& layout,
+                                  double screenLeft, double width,
+                                  Thickness margin, Thickness border,
+                                  Thickness padding) {
+    ClockTrayPlan plan;
+    auto valid = [](Thickness value, bool nonnegative) {
+        for (double part : {value.Left, value.Top, value.Right, value.Bottom}) {
+            if (!std::isfinite(part) || (nonnegative && part < 0)) return false;
         }
-    }
-    for (size_t i = 0; i < a.flowElements.size(); i++) {
-        const auto& x = a.flowElements[i];
-        const auto& y = b.flowElements[i];
-        if (x.identity != y.identity || x.overflow != y.overflow ||
-            std::abs(x.bounds.left - y.bounds.left) > kLayoutTolerance ||
-            std::abs(x.bounds.right - y.bounds.right) > kLayoutTolerance) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool TaskbarClockShowsSeconds() {
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    return RegGetValue(
-               HKEY_CURRENT_USER,
-               L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-               L"ShowSecondsInSystemClock", RRF_RT_REG_DWORD, nullptr,
-               &value, &size) == ERROR_SUCCESS &&
-           value != 0;
-}
-
-winrt::hstring GetNativeClockText(bool timeText) {
-    SYSTEMTIME localTime;
-    GetLocalTime(&localTime);
-
-    WCHAR buffer[128];
-    int length = 0;
-    if (timeText) {
-        DWORD flags = TaskbarClockShowsSeconds() ? 0 : TIME_NOSECONDS;
-        length = GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, flags, &localTime,
-                                 nullptr, buffer, ARRAYSIZE(buffer));
-    } else {
-        length = GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE,
-                                 &localTime, nullptr, buffer,
-                                 ARRAYSIZE(buffer), nullptr);
-    }
-
-    if (length > 1) {
-        return winrt::hstring{buffer, static_cast<uint32_t>(length - 1)};
-    }
-
-    return timeText ? winrt::hstring{L"00:00"}
-                    : winrt::hstring{L"2000/1/1"};
-}
-
-double MeasureNativeClockLine(const winrt::hstring& text) {
-    Controls::TextBlock probe;
-    probe.Text(text);
-    probe.FontFamily(Media::FontFamily{L"Segoe UI Variable Text"});
-    probe.FontSize(kNativeClockFontSize);
-    probe.TextWrapping(TextWrapping::NoWrap);
-
-    WCHAR localeName[LOCALE_NAME_MAX_LENGTH];
-    if (GetUserDefaultLocaleName(localeName, ARRAYSIZE(localeName))) {
-        probe.Language(localeName);
-    }
-
-    probe.Measure(winrt::Windows::Foundation::Size{kNativeClockMeasureLimit, kNativeClockMeasureLimit});
-    return probe.DesiredSize().Width;
-}
-
-double CalculateNativeClockLayoutWidth(FrameworkElement content,
-                                       FrameworkElement clock) {
-    // Clock customization mods replace these strings and can make the button
-    // hundreds of pixels wide. Measure fresh native strings instead of using
-    // the customized element's DesiredSize/ActualWidth.
-    double nativeTextWidth = std::max(
-        MeasureNativeClockLine(GetNativeClockText(true)),
-        MeasureNativeClockLine(GetNativeClockText(false)));
-
-    // Everything outside the text StackPanel is the native button chrome
-    // (padding and surrounding presenters). Its size is unaffected by text
-    // formatting mods, so it can be recovered from the live visual tree.
-    double chromeWidth = kNativeClockDefaultChromeWidth;
-    auto dateText = FindDescendantByName(content, L"DateInnerTextBlock");
-    auto timeText = FindDescendantByName(content, L"TimeInnerTextBlock");
-    auto textElement = dateText ? dateText : timeText;
-    if (textElement) {
-        auto stackPanel = Media::VisualTreeHelper::GetParent(textElement)
-                              .try_as<Controls::StackPanel>();
-        if (stackPanel && clock.ActualWidth() > 0 &&
-            stackPanel.ActualWidth() > 0) {
-            double measuredChrome =
-                clock.ActualWidth() - stackPanel.ActualWidth();
-            if (measuredChrome >= kNativeClockMinChromeWidth && measuredChrome <= kNativeClockMaxChromeWidth) {
-                chromeWidth = measuredChrome;
-            }
-        }
-    }
-
-    // Native taskbar clock widths are DPI-independent XAML units. Bounds keep
-    // a malformed third-party style from poisoning the layout baseline.
-    return std::clamp(nativeTextWidth + chromeWidth, kNativeClockMinLayoutWidth, kNativeClockMaxLayoutWidth);
-}
-
-MovedClockData* FindMovedClockData(FrameworkElement clock) {
-    if (g_movedClocks) {
-        for (auto& data : MovedClocks()) {
-            if (data.clock.get() == clock) {
-                return &data;
-            }
-        }
-    }
-    return nullptr;
-}
-
-FrameworkElement FindNotifyChevron(FrameworkElement group) {
-    struct Node { FrameworkElement element; uint32_t depth; };
-    std::vector<Node> nodes{{group, 0}};
-    FrameworkElement chevron{nullptr};
-    for (size_t i = 0; i < nodes.size(); i++) {
-        auto node = nodes[i];
-        if (winrt::get_class_name(node.element) == L"SystemTray.ChevronIconView") {
-            if (chevron || Automation::AutomationProperties::GetAutomationId(node.element) != L"SystemTrayIcon") return nullptr;
-            chevron = node.element;
-            continue; // Its template cannot contain another source item.
-        }
-        int count = Media::VisualTreeHelper::GetChildrenCount(node.element);
-        if (count > 32 || (node.depth >= 8 && count > 0)) return nullptr;
-        for (int j = 0; j < count; j++) {
-            auto child = Media::VisualTreeHelper::GetChild(node.element, j).try_as<FrameworkElement>();
-            if (!child || nodes.size() == 64) return nullptr;
-            nodes.push_back({child, node.depth + 1});
-        }
-    }
-    return chevron;
-}
-
-winrt::Windows::Foundation::IInspectable ReadTrayGroupItemsSource(FrameworkElement group) {
-    try {
-        if (group && group.Name() == L"NotificationAreaIcons") {
-            if (winrt::get_class_name(group) != L"SystemTray.NotificationAreaIcons" ||
-                Automation::AutomationProperties::GetAutomationId(group) != L"NotificationAreaIcons") return nullptr;
-            auto view = group.try_as<Controls::ItemsControl>();
-            if (!view) return nullptr;
-            auto context = group.ReadLocalValue(FrameworkElement::DataContextProperty());
-            if (group.DataContext() || group.GetBindingExpression(FrameworkElement::DataContextProperty()) ||
-                (context && context != DependencyProperty::UnsetValue())) return nullptr;
-            auto source = view.ItemsSource();
-            if (!source || view.GetBindingExpression(Controls::ItemsControl::ItemsSourceProperty()) ||
-                view.ReadLocalValue(Controls::ItemsControl::ItemsSourceProperty()) != source ||
-                winrt::get_class_name(source) !=
-                    L"Windows.Foundation.Collections.IObservableVector`1<SystemTray.IconViewModel>" ||
-                (view.Items().Size() && winrt::get_class_name(view.Items().GetAt(0)) != L"SystemTray.IconViewModel")) return nullptr;
-            return source;
-        }
-        if (!group || (group.Name() != L"NonActivatableStack" && group.Name() != L"NotifyIconStack") ||
-            winrt::get_class_name(group) != L"SystemTray.Stack" ||
-            Media::VisualTreeHelper::GetChildrenCount(group) != 1) return nullptr;
-        auto content = Media::VisualTreeHelper::GetChild(group, 0).try_as<Controls::Grid>();
-        if (!content || content.Name() != L"Content" ||
-            Media::VisualTreeHelper::GetChildrenCount(content) != 1) return nullptr;
-        auto view = Media::VisualTreeHelper::GetChild(content, 0).try_as<Controls::ItemsControl>();
-        if (!view || view.Name() != L"IconStack" ||
-            winrt::get_class_name(view) != L"SystemTray.StackListView" ||
-            Automation::AutomationProperties::GetAutomationId(view) !=
-                (group.Name() == L"NotifyIconStack" ? L"NotifyIcon" : L"NonActivatable")) return nullptr;
-        for (auto element : {group, content.as<FrameworkElement>(), view.as<FrameworkElement>()}) {
-            auto context = element.ReadLocalValue(FrameworkElement::DataContextProperty());
-            if (element.DataContext() || element.GetBindingExpression(FrameworkElement::DataContextProperty()) ||
-                (context && context != DependencyProperty::UnsetValue())) return nullptr;
-        }
-        auto source = view.ItemsSource();
-        if (!source || view.GetBindingExpression(Controls::ItemsControl::ItemsSourceProperty()) ||
-            view.ReadLocalValue(Controls::ItemsControl::ItemsSourceProperty()) != source ||
-            winrt::get_class_name(source) !=
-                L"Windows.Foundation.Collections.IObservableVector`1<SystemTray.IconViewModel>") return nullptr;
-        if (group.Name() == L"NotifyIconStack" &&
-            (view.Items().Size() != 1 ||
-             winrt::get_class_name(view.Items().GetAt(0)) != L"SystemTray.IconViewModel")) return nullptr;
-        return source;
-    } catch (...) {
-        return nullptr; // Treat unavailable native source APIs as an unsupported group.
-    }
-}
-
-std::optional<MovedTrayElementData> ReadTrayElementToMove(
-    FrameworkElement clock, Controls::Grid root, bool trayGroup,
-    PCWSTR groupName = L"NonActivatableStack") {
-    auto parent = Media::VisualTreeHelper::GetParent(clock).try_as<Controls::Grid>();
-    auto frame = parent ? Media::VisualTreeHelper::GetParent(parent)
-                              .try_as<FrameworkElement>() : nullptr;
-    if (!parent || parent.Name() != L"SystemTrayFrameGrid" || !frame ||
-        winrt::get_class_name(frame) != L"SystemTray.SystemTrayFrame" ||
-        Media::VisualTreeHelper::GetParent(frame) != root ||
-        parent.XamlRoot() != root.XamlRoot() || parent.Children().Size() > 32) {
-        return std::nullopt;
-    }
-    bool applicationTray = trayGroup && std::wstring_view(groupName) == L"NotificationAreaIcons";
-    FrameworkElement target{nullptr};
-    auto children = parent.Children();
-    uint32_t index = 0, clockIndex = 0;
-    for (auto child : children) {
-        auto element = child.try_as<FrameworkElement>();
-        if (element && element.Name() == (trayGroup ? groupName : L"ControlCenterButton") &&
-            winrt::get_class_name(element) == (applicationTray ? L"SystemTray.NotificationAreaIcons" :
-                trayGroup ? L"SystemTray.Stack" : L"SystemTray.OmniButton") &&
-            Automation::AutomationProperties::GetAutomationId(element) ==
-                (applicationTray ? L"NotificationAreaIcons" : trayGroup ? L"" : L"ControlCenterButton")) {
-            if (target) return std::nullopt;
-            target = element;
-        }
-    }
-    if (!target || !target.IsLoaded() || target.XamlRoot() != root.XamlRoot() ||
-        target.Visibility() != Visibility::Visible ||
-        !children.IndexOf(target.as<UIElement>(), index) ||
-        !children.IndexOf(clock.as<UIElement>(), clockIndex) || index >= clockIndex ||
-        Controls::Grid::GetRow(target) != 0 || Controls::Grid::GetRowSpan(target) != 1 ||
-        Controls::Grid::GetColumnSpan(target) != 1 ||
-        Controls::Grid::GetRow(clock) != 0 || Controls::Grid::GetRowSpan(clock) != 1 ||
-        Controls::Grid::GetColumnSpan(clock) != 1) {
-        return std::nullopt;
-    }
-    auto property = Controls::Grid::ColumnProperty();
-    auto local = target.ReadLocalValue(property);
-    bool unset = local == DependencyProperty::UnsetValue();
-    int columnIndex = Controls::Grid::GetColumn(target);
-    auto columns = parent.ColumnDefinitions();
-    if (target.GetBindingExpression(property) ||
-        (!unset && !local.try_as<winrt::Windows::Foundation::IReference<int32_t>>()) ||
-        columnIndex < 0 || static_cast<uint32_t>(columnIndex) >= columns.Size() ||
-        columnIndex >= Controls::Grid::GetColumn(clock)) {
-        return std::nullopt;
-    }
-    for (auto element : {target, parent.as<FrameworkElement>(), frame, root.as<FrameworkElement>()}) {
-        auto context = element.ReadLocalValue(FrameworkElement::DataContextProperty());
-        if (element.DataContext() || element.GetBindingExpression(FrameworkElement::DataContextProperty()) ||
-            (context && context != DependencyProperty::UnsetValue())) {
-            return std::nullopt;
-        }
-    }
-    for (auto gridProperty : {Controls::Grid::RowProperty(), Controls::Grid::RowSpanProperty(),
-                             Controls::Grid::ColumnSpanProperty()}) {
-        auto value = target.ReadLocalValue(gridProperty);
-        if (target.GetBindingExpression(gridProperty) ||
-            (value != DependencyProperty::UnsetValue() &&
-             !value.try_as<winrt::Windows::Foundation::IReference<int32_t>>())) return std::nullopt;
-    }
-    auto column = columns.GetAt(columnIndex);
-    auto localWidth = column.ReadLocalValue(Controls::ColumnDefinition::WidthProperty());
-    if (column.Width().GridUnitType != GridUnitType::Auto || column.MinWidth() != 0 ||
-        !std::isfinite(column.ActualWidth()) || column.ActualWidth() <= 0 ||
-        (localWidth != DependencyProperty::UnsetValue() &&
-         !localWidth.try_as<winrt::Windows::Foundation::IReference<GridLength>>())) {
-        return std::nullopt;
-    }
-    for (auto child : children) {
-        auto element = child.try_as<FrameworkElement>();
-        if (!element) return std::nullopt;
-        int first = Controls::Grid::GetColumn(element);
-        int span = Controls::Grid::GetColumnSpan(element);
-        if (child != target && first <= columnIndex && columnIndex - first < span) {
-            return std::nullopt; // A shared or spanning column is not this control's contribution.
-        }
-    }
-    auto bounds = TryGetLayoutBounds(target, root, target.ActualWidth());
-    auto clockBounds = TryGetLayoutBounds(clock, root, clock.ActualWidth());
-    if (!bounds || !clockBounds ||
-        (trayGroup ? bounds->right > clockBounds->left + kLayoutTolerance :
-                    std::abs(bounds->right - clockBounds->left) > kLayoutTolerance)) {
-        return std::nullopt;
-    }
-    auto source = trayGroup ? ReadTrayGroupItemsSource(target) : nullptr;
-    if (trayGroup && !source) return std::nullopt;
-    if (applicationTray && !target.as<Controls::ItemsControl>().Items().Size()) return std::nullopt;
-    auto chevron = trayGroup && target.Name() == L"NotifyIconStack" ? FindNotifyChevron(target) : nullptr;
-    if (target.Name() == L"NotifyIconStack" &&
-        (!chevron || !chevron.IsLoaded() || chevron.Visibility() != Visibility::Visible ||
-         chevron.XamlRoot() != root.XamlRoot())) return std::nullopt;
-    return MovedTrayElementData{
-        .element = target, .originalParent = parent.as<Controls::Panel>(),
-        .previousSibling = index ? winrt::make_weak(children.GetAt(index - 1)) : winrt::weak_ref<UIElement>{},
-        .nextSibling = index + 1 < children.Size() ? winrt::make_weak(children.GetAt(index + 1)) : winrt::weak_ref<UIElement>{},
-        .nativeColumn = column, .originalIndex = index, .originalColumn = columnIndex,
-        .columnLocalUnset = unset, .nativeColumnWidth = column.ActualWidth(),
-        .itemsSource = source, .nativeChevron = chevron,
+        return true;
     };
+    if (!std::isfinite(width) || width <= 0 || !valid(margin, false) ||
+        !valid(border, true) || !valid(padding, true)) {
+        plan.reason = ClockTrayReason::UnsupportedAppearance;
+        return plan;
+    }
+    double visibleWidth = width + border.Left + border.Right + padding.Left + padding.Right;
+    plan.layoutLeft = ResolveClockTrayOffset(layout, screenLeft);
+    plan.visualShift = std::max(0.0, -margin.Left);
+    plan.hostLeft = plan.layoutLeft + plan.visualShift;
+    plan.hostWidth = visibleWidth + margin.Left + margin.Right;
+    plan.visible = {plan.hostLeft + margin.Left, plan.hostLeft + margin.Left + visibleWidth};
+    if (!std::isfinite(plan.hostWidth) || plan.hostWidth <= 0 ||
+        !std::isfinite(plan.hostLeft)) {
+        plan.reason = ClockTrayReason::UnsupportedAppearance;
+    } else {
+        plan.reason = CheckClockTrayHorizontalBounds(layout, screenLeft, plan.visible);
+    }
+    return plan;
 }
 
-std::optional<MovedTrayElementData> ReadControlCenterToMove(
-    FrameworkElement clock, Controls::Grid root) {
-    return g_settings.moveControlCenter ? ReadTrayElementToMove(clock, root, false) : std::nullopt;
+ClockTrayReason CheckClockTrayActualBounds(const LeftHostLayoutSnapshot& layout,
+                                         double screenLeft, const ClockTrayPlan& plan,
+                                         HorizontalBounds actual) {
+    auto reason = CheckClockTrayHorizontalBounds(layout, screenLeft, actual);
+    if (reason != ClockTrayReason::None) return reason;
+    return std::abs(actual.left - plan.visible.left) > kLayoutTolerance ||
+           std::abs(actual.right - plan.visible.right) > kLayoutTolerance
+               ? ClockTrayReason::UnsupportedLayout : ClockTrayReason::None;
 }
 
-std::optional<MovedTrayElementData> ReadTrayGroupToMove(
-    FrameworkElement clock, Controls::Grid root) {
-    return g_settings.moveNonActivatableStack ? ReadTrayElementToMove(clock, root, true) : std::nullopt;
+double ComputeClockTrayReservedWidth(bool centered, bool owned,
+                                    double before, double current) {
+    if (!centered || !owned || !std::isfinite(before) || !std::isfinite(current) ||
+        before <= 0 || current < 0) return 0;
+    return std::max(0.0, before - current);
 }
 
-std::optional<MovedTrayElementData> ReadNotifyIconGroupToMove(
-    FrameworkElement clock, Controls::Grid root) {
-    if (!g_settings.moveNotifyIconStack || !g_notifyPopupHooked ||
-        GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) != DPI_AWARENESS_PER_MONITOR_AWARE) return std::nullopt;
-    return ReadTrayElementToMove(clock, root, true, L"NotifyIconStack");
+std::optional<HorizontalBounds> ReadClockTrayVisualBounds(
+    FrameworkElement element, Controls::Grid root) {
+    if (!element || !element.IsLoaded() || element.Visibility() != Visibility::Visible ||
+        !root.XamlRoot() || element.XamlRoot() != root.XamlRoot() ||
+        element.ActualWidth() <= 0 || element.ActualHeight() <= 0) return std::nullopt;
+    auto bounds = element.TransformToVisual(root).TransformBounds(
+        {0, 0, static_cast<float>(element.ActualWidth()), static_cast<float>(element.ActualHeight())});
+    HorizontalBounds horizontal{bounds.X, bounds.X + bounds.Width};
+    return IsValidHorizontalBounds(horizontal) ? std::optional{horizontal} : std::nullopt;
 }
 
-std::optional<MovedTrayElementData> ReadApplicationTrayToMove(
-    FrameworkElement clock, Controls::Grid root) {
-    return g_settings.moveNotificationAreaIcons ?
-        ReadTrayElementToMove(clock, root, true, L"NotificationAreaIcons") : std::nullopt;
-}
+struct ClockTrayLayout {
+    LeftHostLayoutSnapshot snapshot;
+    double screenLeft{};
+};
 
-std::optional<double> ReadMovedTrayContribution(
-    Controls::Grid leftHost, bool restoring,
-    const std::optional<MovedTrayElementData>& record, PCWSTR* reason) {
-    if (reason) *reason = nullptr;
-    if (!record || restoring) return 0;
-    auto reject = [reason](PCWSTR value) -> std::optional<double> {
-        if (reason) *reason = value;
+Controls::Panel FindNativeTrayPanel(Controls::Grid root);
+
+std::optional<ClockTrayLayout> ReadClockTrayLayout(Controls::Grid root,
+                                                FrameworkElement repeater) {
+    auto reject = [](PCWSTR stage) -> std::optional<ClockTrayLayout> {
+        Wh_Log(L"[clock-tray] layout unavailable stage=%s", stage);
         return std::nullopt;
     };
-    const auto saved = *record;
-    auto target = saved.element.get();
-    auto parent = saved.originalParent.get().try_as<Controls::Grid>();
-    auto column = saved.nativeColumn;
-    uint32_t index = 0;
-    if (!target) return reject(saved.itemsSource ? L"tray-group-expired" : L"control-center-expired");
-    if (saved.itemsSource && ReadTrayGroupItemsSource(target) != saved.itemsSource) {
-        return reject(L"tray-group-source");
+    g_clockTrayCounters.layoutReads++;
+    auto sample = CollectTaskbarElements(root, repeater);
+    if (!sample) return reject(L"repeater-sample");
+    auto layout = ReadLeftHostLayout(root, repeater, nullptr, {}, 0, 0, &*sample);
+    if (!layout || layout->unknownVisible) return reject(L"layout-or-unknown-item");
+    auto content = root.XamlRoot().Content();
+    auto transform = root.TransformToVisual(content);
+    auto origin = transform.TransformPoint({0, 0});
+    auto xAxis = transform.TransformPoint({1, 0});
+    auto yAxis = transform.TransformPoint({0, 1});
+    RECT rect{};
+    if (!std::isfinite(origin.X) || !std::isfinite(origin.Y) ||
+        !std::isfinite(xAxis.X) || !std::isfinite(xAxis.Y) ||
+        !std::isfinite(yAxis.X) || !std::isfinite(yAxis.Y) ||
+        std::abs(xAxis.X - origin.X - 1) > 0.0001 || std::abs(xAxis.Y - origin.Y) > 0.0001 ||
+        std::abs(yAxis.X - origin.X) > 0.0001 || std::abs(yAxis.Y - origin.Y - 1) > 0.0001 ||
+        !GetClientRect(FindWindowW(L"Shell_TrayWnd", nullptr), &rect)) return reject(L"root-transform-or-window");
+    double scale = root.XamlRoot().RasterizationScale();
+    if (!std::isfinite(scale) || scale <= 0) return reject(L"scale");
+    double screenLeft = -origin.X;
+    double screenRight = (rect.right - rect.left) / scale - origin.X;
+    // The native root must cover the taskbar window. Do not pretend an
+    // off-root child is visible through a theme's narrowed/clipped root.
+    if (!std::isfinite(screenRight) || screenLeft < -kLayoutTolerance ||
+        screenRight > root.ActualWidth() + kLayoutTolerance || root.Clip()) {
+        Wh_Log(L"[clock-tray] root bounds origin=%.3f width=%.3f screen=%.3f..%.3f clip=%d",
+               origin.X, root.ActualWidth(), screenLeft, screenRight, root.Clip() ? 1 : 0);
+        return reject(L"root-coverage");
     }
-    if (target.Name() == L"NotifyIconStack" && !saved.nativeChevron.get()) return reject(L"notify-chevron-expired");
-    if (!parent) return reject(L"native-parent-unavailable");
-    if (!column) return reject(L"native-column-unavailable");
-    if (!leftHost) return reject(L"left-host-unavailable");
-    if (!saved.columnChanged) return reject(L"column-write-record-missing");
-    if (!leftHost.Children().IndexOf(target.as<UIElement>(), index)) {
-        return reject(L"host-child-ownership");
-    }
-    if (target.GetBindingExpression(Controls::Grid::ColumnProperty()) ||
-        Controls::Grid::GetColumn(target) != saved.hostColumn ||
-        !target.ReadLocalValue(Controls::Grid::ColumnProperty())
-             .try_as<winrt::Windows::Foundation::IReference<int32_t>>() ||
-        Controls::Grid::GetRow(target) != 0 || Controls::Grid::GetRowSpan(target) != 1 ||
-        Controls::Grid::GetColumnSpan(target) != 1) {
-        return reject(L"grid-properties");
-    }
-    if (static_cast<uint32_t>(saved.originalColumn) >= parent.ColumnDefinitions().Size() ||
-        parent.ColumnDefinitions().GetAt(saved.originalColumn) != column ||
-        column.Width().GridUnitType != GridUnitType::Auto || column.MinWidth() != 0 ||
-        !std::isfinite(column.ActualWidth()) || column.ActualWidth() < 0 ||
-        column.ActualWidth() > saved.nativeColumnWidth + kLayoutTolerance) {
-        return reject(L"native-column");
-    }
-    auto visualParent = Media::VisualTreeHelper::GetParent(target);
-    auto targetRoot = target.XamlRoot();
-    auto hostRoot = leftHost.XamlRoot();
-    if (visualParent && visualParent != leftHost) {
-        return reject(L"visual-parent");
-    }
-    if (targetRoot && hostRoot && targetRoot != hostRoot) {
-        return reject(L"xaml-root");
-    }
-    // Children.Append can precede Loaded, visual parent/root and first measure.
-    // Only initial attachment may wait; known ownership conflicts above never do.
-    bool layoutPending = !targetRoot || !hostRoot || !target.IsLoaded() ||
-                         !leftHost.IsLoaded() ||
-                         leftHost.ActualWidth() <= kLayoutTolerance;
-    if (saved.lastContribution < 0 && layoutPending) {
-        if (reason) *reason = L"layout-pending";
-        return 0;
-    }
-    if (!visualParent || !targetRoot || !hostRoot ||
-        !target.IsLoaded() || !leftHost.IsLoaded()) {
-        return reject(L"visual-attachment-lost");
-    }
-    return std::max(0.0, saved.nativeColumnWidth - column.ActualWidth());
-}
-
-std::optional<double> ReadNotifyIconGroupContribution(
-    const MovedClockData& data, PCWSTR* reason = nullptr) {
-    return ReadMovedTrayContribution(data.leftHost, data.restoring, data.notifyIcons, reason);
-}
-
-double GetReservedTrayLayoutWidth(const MovedClockData& data) {
-    if (!TaskbarUsesCenteredAlignment()) {
-        return 0;
-    }
-    // Keep only the tray inputs alive across XAML reads, not the vector record.
-    double reserved = data.layoutReservedWidth;
-    auto leftHost = data.leftHost;
-    bool restoring = data.restoring;
-    const auto records = {data.controlCenter, data.trayGroup,
-                          data.notifyIcons, data.applicationTray};
-    for (const auto& record : records) {
-        reserved += ReadMovedTrayContribution(leftHost, restoring, record, nullptr).value_or(0);
-    }
-    return reserved;
-}
-
-PCWSTR TrayElementLogTag(TrayElementRecord record) {
-    return record == &MovedClockData::applicationTray ? L"application-tray" :
-           record == &MovedClockData::notifyIcons ? L"notify-icons" :
-           record == &MovedClockData::trayGroup ? L"tray-group" : L"control-center";
-}
-
-bool TryMoveTrayElement(FrameworkElement clock, TrayElementRecord record) {
-    bool trayGroup = record != &MovedClockData::controlCenter;
-    auto data = FindMovedClockData(clock);
-    if (!data || data->restoring) return false;
-    if (!(data->*record)) return true;
-    auto saved = *(data->*record);
-    auto host = data->leftHost;
-    auto target = saved.element.get();
-    auto parent = saved.originalParent.get();
-    uint32_t index = 0;
-    if (!target || !parent || Media::VisualTreeHelper::GetParent(target) != parent ||
-        !parent.Children().IndexOf(target.as<UIElement>(), index)) return false;
-    data = nullptr;
-    parent.Children().RemoveAt(index);
-    data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->leftHost != host || !(data->*record) ||
-        (data->*record)->element.get() != target) return false;
-    (data->*record)->columnChanged = true;
-    data = nullptr;
-    Controls::Grid::SetColumn(target, saved.hostColumn);
-    data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->leftHost != host || !(data->*record) ||
-        (data->*record)->element.get() != target) return false;
-    data = nullptr;
-    // Remove clock, control center, system group, application tray, arrow in descending native order.
-    // Each earlier group precedes the controls already moved into the host.
-    if (trayGroup) host.Children().InsertAt(0, target.as<UIElement>());
-    else host.Children().Append(target.as<UIElement>());
-    data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->leftHost != host ||
-        !(data->*record) ||
-        (data->*record)->element.get() != target) return false;
-    Wh_Log(L"[%s] native element moved before clock; originalColumnWidth=%.3f hostColumn=%d",
-           TrayElementLogTag(record), saved.nativeColumnWidth, saved.hostColumn);
-    return true;
-}
-
-bool TryMoveControlCenter(FrameworkElement clock) {
-    return TryMoveTrayElement(clock, &MovedClockData::controlCenter);
-}
-
-uint32_t GetTrayRestoreIndex(Controls::Panel parent,
-                             winrt::weak_ref<UIElement> previous,
-                             winrt::weak_ref<UIElement> next, uint32_t original) {
-    uint32_t index = 0;
-    auto children = parent.Children();
-    if (auto anchor = next.get(); anchor && children.IndexOf(anchor, index)) return index;
-    if (auto anchor = previous.get(); anchor && children.IndexOf(anchor, index)) return index + 1;
-    return std::min<uint32_t>(original, children.Size());
-}
-
-bool RestoreExtraTrayElements(MovedClockData& data, TrayElementRecord record = &MovedClockData::controlCenter) {
-    if (!(data.*record)) return true;
-    auto saved = *(data.*record);
-    auto target = saved.element.get();
-    if (!target) { (data.*record).reset(); return true; }
-    auto parent = saved.originalParent.get();
-    auto current = Media::VisualTreeHelper::GetParent(target).try_as<Controls::Panel>();
-    uint32_t index = 0;
-    bool owned = data.leftHost && data.leftHost.Children().IndexOf(target.as<UIElement>(), index);
-    if (current && current != parent && !owned) {
-        Wh_Log(L"[%s] restore conflict: third-party parent; leaving native object and properties",
-               TrayElementLogTag(record));
-        (data.*record).reset();
-        return false;
-    }
-    if (!parent) {
-        Wh_Log(L"[%s] restore conflict: original parent expired; retaining nonempty host",
-               TrayElementLogTag(record));
-        throw winrt::hresult_error(E_FAIL);
-    }
-    if (owned) data.leftHost.Children().RemoveAt(index);
-    if (Media::VisualTreeHelper::GetParent(target) != parent) {
-        index = GetTrayRestoreIndex(parent, saved.previousSibling, saved.nextSibling, saved.originalIndex);
-        parent.Children().InsertAt(index, target.as<UIElement>());
-    }
-    bool columnOwned = !target.GetBindingExpression(Controls::Grid::ColumnProperty()) &&
-        Controls::Grid::GetColumn(target) == saved.hostColumn &&
-        static_cast<bool>(target.ReadLocalValue(Controls::Grid::ColumnProperty())
-                              .try_as<winrt::Windows::Foundation::IReference<int32_t>>());
-    if (saved.columnChanged && columnOwned) {
-        if (saved.columnLocalUnset) target.ClearValue(Controls::Grid::ColumnProperty());
-        else Controls::Grid::SetColumn(target, saved.originalColumn);
-    } else if (saved.columnChanged) {
-        Wh_Log(L"[%s] restore conflict: external Column; leaving property",
-               TrayElementLogTag(record));
-    }
-    (data.*record).reset();
-    Wh_Log(L"[%s] restored native parent/order columnOwned=%d localUnset=%d",
-           TrayElementLogTag(record), columnOwned, saved.columnLocalUnset);
-    return !saved.columnChanged || columnOwned;
-}
-
-void RegisterWidgetsTracking(MovedClockData& data, FrameworkElement clock);
-void RevokeWidgetsTracking(MovedClockData& data);
-bool RestoreClock(FrameworkElement clock);
-DeferredClockData* FindDeferredClockData(FrameworkElement content);
-bool RestoreFlowSpacing(const FlowSpacingData& spacing);
-void RestoreWidgetsSpacing(const WidgetsSpacingData& spacing);
-FrameworkElement FindFlowTarget(FrameworkElement repeater, uintptr_t identity);
-std::optional<FlowSpacingData> ReadFlowSpacing(
-    FrameworkElement target, bool rightSide = false);
-
-bool HasCenteredOnlyFlow(const LeftHostLayoutSnapshot& layout) {
-    return layout.centered && !layout.unknownVisible &&
-        std::none_of(layout.buttons.begin(), layout.buttons.end(), [](const auto& button) {
-            return button.kind == SystemButtonKind::Widgets ||
-                   (button.visible && button.fixed);
-        });
-}
-
-bool SameTaskbarItemSource(const LeftHostLayoutSnapshot& a,
-                           const LeftHostLayoutSnapshot& b) {
-    if (a.itemIdentities.empty() || a.itemIdentities.size() != b.itemIdentities.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < a.itemIdentities.size(); i++) {
-        const auto& x = a.itemIdentities[i];
-        const auto& y = b.itemIdentities[i];
-        if (x.index != static_cast<int>(i) || y.index != x.index ||
-            !x.item || !y.item || !x.itemIdentity || x.itemIdentity != y.itemIdentity ||
-            std::count_if(a.itemIdentities.begin(), a.itemIdentities.end(),
-                [&](const auto& item) { return item.itemIdentity == x.itemIdentity; }) != 1) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool CenteredViewportApplied(const CenteredViewportProbeData& probe,
-                             const LeftHostLayoutSnapshot& current) {
-    if (std::abs(current.contentLeft - probe.baseline.contentLeft - probe.increment) > kLayoutTolerance ||
-        std::abs(current.contentWidth - probe.baseline.contentWidth + probe.increment) > kLayoutTolerance ||
-        std::abs(current.hostLeft - probe.baseline.hostLeft) > kLayoutTolerance ||
-        current.flowElements.empty()) {
-        return false;
-    }
-    double requiredEnd = current.hostLeft + current.hostWidth + kTaskbarLayoutGap;
-    return std::all_of(current.flowElements.begin(), current.flowElements.end(),
-        [&](const auto& flow) {
-            return flow.bounds.left + kLayoutTolerance >= requiredEnd &&
-                   flow.bounds.right + kTaskbarLayoutGap <= current.rightBoundary + kLayoutTolerance;
-        });
-}
-
-bool CenteredViewportFallbackActive(FrameworkElement clock) {
-    bool centered = TaskbarUsesCenteredAlignment();
-    for (auto& data : DeferredClocks()) {
-        if (data.centeredFallbackClock.get() != clock) {
-            continue;
-        }
-        if (centered) {
-            return true;
-        }
-        data.centeredFallbackClock = nullptr;
-    }
-    return false;
-}
-
-bool RestoreCenteredClockFallback(FrameworkElement clock) {
-    if (auto data = FindMovedClockData(clock); !data || data->restoring) {
-        return false;
-    }
-    // Block rediscovery before restoring, including when no viewport was owned.
-    std::vector<FrameworkElement> contents;
-    for (const auto& deferred : DeferredClocks()) {
-        if (auto content = deferred.content.get()) {
-            contents.push_back(content);
-        }
-    }
-    for (const auto& content : contents) {
-        if (FindAncestor(content, L"SystemTray.OmniButton",
-                         L"NotificationCenterButton") == clock) {
-            if (auto deferred = FindDeferredClockData(content)) {
-                deferred->centeredFallbackClock = clock;
-            }
-        }
-    }
-    return RestoreClock(clock);
-}
-
-void CancelCenteredViewportProbe(FrameworkElement clock, const wchar_t* reason,
-                                 const LeftHostLayoutSnapshot* layout) {
-    auto data = FindMovedClockData(clock);
-    if (!data || !data->centeredProbe) {
-        return;
-    }
-    auto probe = *data->centeredProbe;
-    double reserved = GetReservedTrayLayoutWidth(*data);
-    data = nullptr;
-    if (layout) {
-        LogLeftHostLayout(*layout, L"centered-viewport-cancelled", reserved);
-    }
-    Wh_Log(L"[centered-viewport] cancelled: reason=%s elapsedMs=%llu "
-           L"clockWidth=(%.3f,%.3f) viewport=(%.3f,%.3f) expected=(%.3f,%.3f)",
-           reason,
-           static_cast<unsigned long long>(GetTickCount64() - probe.startTick),
-           layout ? layout->hostWidth : -1.0, probe.baseline.hostWidth,
-           layout ? layout->contentLeft : -1.0, layout ? layout->contentWidth : -1.0,
-           probe.baseline.contentLeft + probe.increment,
-           probe.baseline.contentWidth - probe.increment);
-    bool restored = RestoreCenteredClockFallback(clock);
-    Wh_Log(L"[centered-viewport] native clock fallback accepted=%d", restored);
-}
-
-bool UpdateCenteredViewportProbe(FrameworkElement clock,
-                                const LeftHostLayoutSnapshot& layout) {
-    auto data = FindMovedClockData(clock);
-    if (!data || data->restoring) {
-        return false;
-    }
-    if (data->centeredProbe) {
-        if (data->centeredProbe->failed) {
-            return true; // Retain ownership for cleanup; do not retry writes.
-        }
-        auto probe = *data->centeredProbe;
-        const wchar_t* reason = nullptr;
-        if (!layout.centered) {
-            reason = L"alignment-changed";
-        } else if (!HasCenteredOnlyFlow(layout)) {
-            reason = L"unsupported-flow";
-        } else if (layout.repeaterIdentity != probe.baseline.repeaterIdentity) {
-            reason = L"repeater-replaced";
-        } else if (std::abs(layout.rootWidth - probe.baseline.rootWidth) > kLayoutTolerance) {
-            reason = L"root-width-changed";
-        } else if (layout.hostWidth <= 0) {
-            reason = L"clock-width-invalid";
-        } else if (std::abs(layout.offset - probe.baseline.offset) > kLayoutTolerance) {
-            reason = L"fixed-prefix-offset-changed";
-        }
-        if (reason) {
-            data = nullptr;
-            CancelCenteredViewportProbe(clock, reason, &layout);
-            return true;
-        }
-        auto target = data->repeater.get();
-        auto root = data->taskbarRoot.get();
-        auto spacing = data->flowSpacing;
-        data = nullptr;
-        bool flowOutside = false;
-        // Native app changes can keep the same safe, owned viewport.
-        if (!SameTaskbarItemSource(layout, layout)) {
-            reason = L"item-source-invalid";
-        } else if (!target) {
-            reason = L"repeater-expired";
-        } else if (!spacing) {
-            reason = L"reservation-missing";
-        } else if (!ReadFlowSpacing(target)) {
-            reason = L"margin-bound-or-expression";
-        } else if (target.Margin().Left != spacing->lastValue) {
-            reason = L"margin-external-change";
-        } else if (!CenteredViewportApplied(probe, layout)) {
-            // Margin ownership can be current while the first arranged
-            // viewport is still the baseline. Never wait on other changes,
-            // diagnostics, an accepted viewport, or a stale growth result.
-            if (!probe.appliedLogged && !probe.initialArrangeAccepted &&
-                probe.initialLayoutWaits < kAutomaticArrangeMaxCallbacks &&
-                GetTickCount64() - probe.startTick < kAutomaticArrangeTimeoutMs &&
-                std::abs(layout.contentLeft - probe.baseline.contentLeft) <= kLayoutTolerance &&
-                std::abs(layout.contentWidth - probe.baseline.contentWidth) <= kLayoutTolerance &&
-                std::abs(layout.hostLeft - probe.baseline.hostLeft) <= kLayoutTolerance &&
-                std::abs(layout.hostWidth - probe.baseline.hostWidth) <= kLayoutTolerance &&
-                SameTaskbarItemSource(probe.baseline, layout) && !layout.flowElements.empty() &&
-                std::all_of(layout.flowElements.begin(), layout.flowElements.end(),
-                    [&](const auto& flow) {
-                        return flow.bounds.right + kTaskbarLayoutGap <= layout.rightBoundary + kLayoutTolerance;
-                    })) {
-                if (auto current = FindMovedClockData(clock);
-                    current && !current->restoring && current->centeredProbe && current->flowSpacing) {
-                    current->centeredProbe->initialLayoutWaits++;
-                    if (!probe.initialLayoutWaits) {
-                        Wh_Log(L"[centered-viewport] waiting for first automatic arrange: increment=%.3f; owned Margin, baseline viewport; limits=%u callbacks/%llums",
-                               probe.increment, kAutomaticArrangeMaxCallbacks,
-                               static_cast<unsigned long long>(kAutomaticArrangeTimeoutMs));
-                    }
-                }
-                return true; // Existing root LayoutUpdated validates the next native result.
-            }
-            if (std::abs(layout.contentLeft - probe.baseline.contentLeft - probe.increment) > kLayoutTolerance) {
-                reason = L"viewport-origin-changed";
-            } else if (std::abs(layout.contentWidth - probe.baseline.contentWidth + probe.increment) > kLayoutTolerance) {
-                reason = L"viewport-width-changed";
-            } else if (std::abs(layout.hostLeft - probe.baseline.hostLeft) > kLayoutTolerance) {
-                reason = L"clock-position-changed";
-            } else {
-                reason = L"flow-outside-boundaries";
-                flowOutside = !layout.flowElements.empty();
-            }
-        }
-        if (reason) {
-            double increment = layout.hostLeft + layout.hostWidth + kTaskbarLayoutGap -
-                               probe.baseline.contentLeft;
-            if (probe.appliedLogged && flowOutside && root &&
-                std::isfinite(increment) && increment > probe.increment + kLayoutTolerance &&
-                increment < probe.baseline.contentWidth &&
-                probe.baseline.contentLeft + increment < layout.rightBoundary &&
-                std::isfinite(spacing->originalMargin.Left + increment) &&
-                std::all_of(layout.flowElements.begin(), layout.flowElements.end(),
-                    [&](const auto& flow) {
-                        return flow.bounds.right + kTaskbarLayoutGap <= layout.rightBoundary + kLayoutTolerance;
-                    })) {
-                auto margin = target.Margin();
-                margin.Left = spacing->originalMargin.Left + increment;
-                if (auto current = FindMovedClockData(clock);
-                    current && !current->restoring && current->centeredProbe && current->flowSpacing) {
-                    current->centeredProbe->increment = increment;
-                    current->centeredProbe->appliedLogged = false;
-                    current->flowSpacing->increment = increment;
-                    current->flowSpacing->lastValue = margin.Left;
-                } else {
-                    return true;
-                }
-                Wh_Log(L"[centered-viewport] automatic growth requested: increment=(%.3f,%.3f) clockWidth=%.3f; awaiting native layout",
-                       probe.increment, increment, layout.hostWidth);
-                target.Margin(margin);
-                root.InvalidateMeasure();
-                return true;
-            }
-            CancelCenteredViewportProbe(clock, reason, &layout);
-            return true;
-        }
-        if (probe.appliedLogged) {
-            return true;
-        }
-        double reserved = 0;
-        if (auto current = FindMovedClockData(clock)) {
-            reserved = GetReservedTrayLayoutWidth(*current);
-        }
-        LogLeftHostLayout(layout, L"centered-viewport-applied", reserved);
-        Wh_Log(L"[centered-viewport] automatic viewport accepted: origin=%.3f width=%.3f increment=%.3f clockWidth=%.3f visibleFlowInside=1",
-               layout.contentLeft, layout.contentWidth, probe.increment, layout.hostWidth);
-        if (auto current = FindMovedClockData(clock); current && current->centeredProbe) {
-            current->centeredProbe->appliedLogged = true;
-            current->centeredProbe->initialArrangeAccepted = true;
-        }
-        return true;
-    }
-    if (!g_settings.reserveCenteredViewport || !layout.centered ||
-        data->centeredProbeAttempted || layout.hostWidth <= 0 ||
-        std::abs(layout.hostLeft - layout.offset) > kLayoutTolerance ||
-        data->flowSpacing || data->widgetsSpacing) {
-        return false;
-    }
-    bool fullRootViewport = std::abs(layout.contentLeft) <= kLayoutTolerance &&
-        std::abs(layout.contentWidth - layout.rootWidth) <= kLayoutTolerance;
-    if (!fullRootViewport) {
-        return false; // External repeater margins stay on the native fallback.
-    }
-    auto appCount = std::count_if(layout.flowElements.begin(), layout.flowElements.end(),
-        [&](const auto& item) {
-            return !item.overflow && std::none_of(layout.buttons.begin(), layout.buttons.end(),
-                [&](const auto& button) { return button.identity == item.identity; });
-        });
-    if (!HasCenteredOnlyFlow(layout) || appCount < 3) {
-        return false;
-    }
-    if (!SameTaskbarItemSource(layout, layout)) {
-        return false;
-    }
-    auto target = data->repeater;
-    auto root = data->taskbarRoot;
-    double reserved = GetReservedTrayLayoutWidth(*data);
-    data = nullptr;
-    auto element = target.get();
-    auto taskbarRoot = root.get();
-    auto spacing = element ? ReadFlowSpacing(element) : std::nullopt;
-    if (!spacing || !taskbarRoot) {
-        return false;
-    }
-    auto leading = std::min_element(layout.flowElements.begin(), layout.flowElements.end(),
-        [](const auto& a, const auto& b) { return a.bounds.left < b.bounds.left; });
-    double increment = layout.offset + layout.hostWidth + kTaskbarLayoutGap - layout.contentLeft;
-    if (leading->bounds.left + kLayoutTolerance >= layout.offset + layout.hostWidth + kTaskbarLayoutGap ||
-        !std::isfinite(increment) || increment <= 0 || increment >= layout.contentWidth ||
-        !std::isfinite(layout.contentLeft + increment) ||
-        layout.contentLeft + increment >= layout.rightBoundary ||
-        !std::isfinite(spacing->originalMargin.Left + increment)) {
-        return false;
-    }
-    LogLeftHostLayout(layout, L"centered-viewport-baseline", reserved);
-    auto spacingElement = spacing->target.get();
-    auto currentSpacing = ReadFlowSpacing(element);
-    if (!currentSpacing || currentSpacing->localUnset != spacing->localUnset ||
-        currentSpacing->originalMargin != spacing->originalMargin ||
-        currentSpacing->target.get() != spacingElement || !spacingElement) {
-        return false;
-    }
-    data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->centeredProbe || data->flowSpacing || data->widgetsSpacing ||
-        data->repeater.get() != element || data->taskbarRoot.get() != taskbarRoot) {
-        return false;
-    }
-    spacing->increment = increment;
-    spacing->lastValue = spacing->originalMargin.Left + increment;
-    data->flowSpacing = *spacing;
-    data->centeredProbe = CenteredViewportProbeData{layout, GetTickCount64(), increment};
-    data->centeredProbeAttempted = true;
-    data = nullptr;
-    Wh_Log(L"[centered-viewport] target=%p originalLeft=%.3f localUnset=%d increment=%.3f "
-           L"targetLeft=%.3f expectedViewport=(%.3f,%.3f) repeater=%p",
-           winrt::get_abi(spacingElement), spacing->originalMargin.Left,
-           spacing->localUnset, increment, spacing->lastValue,
-           layout.contentLeft + increment, layout.contentWidth - increment,
-           reinterpret_cast<void*>(layout.repeaterIdentity));
-    auto margin = currentSpacing->originalMargin;
-    margin.Left = spacing->lastValue;
-    spacingElement.Margin(margin);
-    taskbarRoot.InvalidateMeasure();
-    return true;
-}
-
-std::optional<FlowElementLayout> GetLeadingLeftAlignedFlow(
-    const LeftHostLayoutSnapshot& layout) {
-    if (layout.centered || layout.unknownVisible || layout.flowElements.empty() ||
-        std::any_of(layout.flowElements.begin(), layout.flowElements.end(),
-                    [](const auto& item) { return item.overflow; })) {
-        return std::nullopt;
-    }
-    for (const auto& button : layout.buttons) {
-        if (button.visible &&
-            (button.kind == SystemButtonKind::Widgets ? button.fixed
-                                                       : !button.fixed)) {
-            return std::nullopt;
-        }
-    }
-    return *std::min_element(layout.flowElements.begin(), layout.flowElements.end(),
-        [](const auto& a, const auto& b) { return a.bounds.left < b.bounds.left; });
-}
-
-std::optional<SystemButtonLayout> GetLeftAlignedSpacingAnchor(
-    const LeftHostLayoutSnapshot& layout) {
-    if (!GetLeadingLeftAlignedFlow(layout)) {
-        return std::nullopt;
-    }
-    std::optional<SystemButtonLayout> anchor;
-    for (const auto& button : layout.buttons) {
-        if (button.visible && button.fixed &&
-            button.kind != SystemButtonKind::Widgets &&
-            (!anchor || button.bounds.right > anchor->bounds.right)) {
-            anchor = button;
-        }
-    }
-    return anchor && std::isfinite(anchor->marginRight) && anchor->marginRight >= 0
-        ? anchor : std::nullopt;
-}
-
-FrameworkElement FindFlowTarget(FrameworkElement repeater, uintptr_t identity) {
-    auto children = GetRealizedTaskbarElements(repeater);
-    if (children) {
-        for (auto child : *children) {
-            if (reinterpret_cast<uintptr_t>(winrt::get_abi(child)) == identity) {
-                return child;
-            }
-        }
-    }
-    return nullptr;
-}
-
-std::optional<FlowSpacingData> ReadFlowSpacing(
-    FrameworkElement target, bool rightSide) {
-    auto property = FrameworkElement::MarginProperty();
-    auto margin = target.Margin();
-    auto local = target.ReadLocalValue(property);
-    bool unset = local == DependencyProperty::UnsetValue();
-    double value = rightSide ? margin.Right : margin.Left;
-    if (target.GetBindingExpression(property) ||
-        (!unset && !local.try_as<winrt::Windows::Foundation::IReference<Thickness>>()) ||
-        !std::isfinite(value)) {
-        return std::nullopt;
-    }
-    return FlowSpacingData{target, margin, unset, value, 0, rightSide};
-}
-
-std::optional<double> ComputeRequiredSpacing(double hostRight, double flowLeft,
-                                            double currentIncrement) {
-    if (!std::isfinite(hostRight) || !std::isfinite(flowLeft) ||
-        !std::isfinite(currentIncrement) || currentIncrement < 0) {
-        return std::nullopt;
-    }
-    double needed = hostRight + kTaskbarLayoutGap - (flowLeft - currentIncrement);
-    return std::isfinite(needed) ? std::optional{std::max(0.0, needed)}
-                                 : std::nullopt;
-}
-
-bool FlowSpacingFits(const LeftHostLayoutSnapshot& layout, double oldIncrement,
-                      double newIncrement, double reservedRightWidth) {
-    double right = layout.offset + layout.hostWidth;
-    for (const auto& element : layout.flowElements) {
-        right = std::max(right, element.bounds.right - oldIncrement + newIncrement);
-    }
-    return std::isfinite(right) &&
-           right + kTaskbarLayoutGap <= GetLeftAlignedRightBoundary(layout, reservedRightWidth);
-}
-
-bool UpdateFlowSpacing(FrameworkElement clock,
-                        const LeftHostLayoutSnapshot& layout) {
-    auto data = FindMovedClockData(clock);
-    auto anchor = GetLeftAlignedSpacingAnchor(layout);
-    if (!data || data->restoring || !anchor) {
-        Wh_Log(L"[layout] native-left unsupported prefix, left-pinned Widgets or flow");
-        return false;
-    }
-    auto root = data->taskbarRoot.get();
-    // Keep the reservation off reorderable application containers. Its owner
-    // must remain the fixed prefix even when the first application changes.
-    auto target = FindFlowTarget(data->repeater.get(), anchor->identity);
-    if (data->flowSpacing && data->flowSpacing->target.get() != target) {
-        auto spacing = *data->flowSpacing;
-        data->flowSpacing.reset();
-        data = nullptr;
-        RestoreFlowSpacing(spacing);
-        root.InvalidateMeasure();
-        return true; // Establish the replacement baseline on the next layout.
-    }
-    if (!target) {
-        return false;
-    }
-    auto initial = ReadFlowSpacing(target, true);
-    auto margin = target.Margin();
-    if (!initial || (data->flowSpacing &&
-                    (!data->flowSpacing->rightSide ||
-                     margin.Right != data->flowSpacing->lastValue))) {
-        Wh_Log(L"[layout] native-left Margin bound, unknown or externally changed");
-        return false;
-    }
-    if (layout.hostWidth <= 0) {
-        return true;
-    }
-    if (!data->flowSpacing) {
-        data->flowSpacing = *initial;
-    }
-    double oldIncrement = data->flowSpacing->increment;
-    // Derive the baseline from the fixed prefix, not a moving drag rectangle.
-    double baselineLeft = anchor->bounds.right + data->flowSpacing->originalMargin.Right;
-    auto increment = ComputeRequiredSpacing(layout.offset + layout.hostWidth,
-                                             baselineLeft, 0);
-    if (!increment || !FlowSpacingFits(layout, oldIncrement, *increment,
-                                       GetReservedTrayLayoutWidth(*data))) {
-        Wh_Log(L"[layout] native-left insufficient room; overflow path unverified");
-        return false;
-    }
-    double right = data->flowSpacing->originalMargin.Right + *increment;
-    if (!std::isfinite(right)) {
-        return false;
-    }
-    if (std::abs(right - margin.Right) <= kLayoutTolerance) {
-        return true;
-    }
-    data->flowSpacing->lastValue = right;
-    data->flowSpacing->increment = *increment;
-    double layoutRightBoundary =
-        GetLeftAlignedRightBoundary(layout, GetReservedTrayLayoutWidth(*data));
-    data = nullptr;
-    Wh_Log(L"[layout] native-left prefix reservation target=%p increment=%.3f rightMargin=%.3f "
-           L"baselineLeft=%.3f requiredEnd=%.3f layoutRightBoundary=%.3f",
-           reinterpret_cast<void*>(anchor->identity), *increment, right, baselineLeft,
-           layout.offset + layout.hostWidth + kTaskbarLayoutGap,
-           layoutRightBoundary);
-    margin.Right = right;
-    target.Margin(margin);
-    return true;
-}
-
-bool RestoreSpacingForAlignment(FrameworkElement clock,
-                                const LeftHostLayoutSnapshot& layout) {
-    auto data = FindMovedClockData(clock);
-    if (!data) {
-        return false;
-    }
-    auto root = data->taskbarRoot.get();
-    if (layout.centered && data->flowSpacing) {
-        auto spacing = *data->flowSpacing;
-        data->flowSpacing.reset();
-        data = nullptr;
-        RestoreFlowSpacing(spacing);
-    } else if (!layout.centered && data->widgetsSpacing) {
-        auto spacing = *data->widgetsSpacing;
-        data->widgetsSpacing.reset();
-        data = nullptr;
-        RestoreWidgetsSpacing(spacing);
-    } else {
-        return false;
-    }
-    root.InvalidateMeasure();
-    return true;
-}
-
-double CalculateWidgetsRightMargin(const SystemButtonLayout& widgets,
-                                   const LeftHostLayoutSnapshot& layout,
-                                   double originalRight) {
-    return std::max(originalRight, layout.offset + layout.hostWidth + kTaskbarLayoutGap -
-                                      widgets.bounds.left - widgets.outerWidth);
-}
-
-void RestoreWidgetsSpacing(const WidgetsSpacingData& spacing) {
-    auto target = spacing.target.get();
-    if (!target) {
-        return;
-    }
-    auto property = FrameworkElement::MarginProperty();
-    auto margin = target.Margin();
-    if (target.GetBindingExpression(property) ||
-        margin.Right != spacing.lastRight) {
-        Wh_Log(L"Widgets spacing ownership changed; leaving external Margin");
-        return;
-    }
-    margin.Right = spacing.originalMargin.Right;
-    // Start-left can change Left while we own Right; preserve its new value.
-    if (spacing.localUnset && margin.Left == spacing.originalMargin.Left &&
-        margin.Top == spacing.originalMargin.Top &&
-        margin.Bottom == spacing.originalMargin.Bottom) {
-        target.ClearValue(property);
-    } else {
-        target.Margin(margin);
-    }
-    Wh_Log(L"[layout] Widgets spacing restored right=%.3f", margin.Right);
-}
-
-void UpdateWidgetsSpacing(FrameworkElement clock,
-                          const LeftHostLayoutSnapshot& layout) {
-    auto data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->widgetsSpacingBlocked) {
-        return;
-    }
-    auto widgets = data->widgets.get();
-    const SystemButtonLayout* button = nullptr;
-    for (const auto& candidate : layout.buttons) {
-        if (candidate.kind == SystemButtonKind::Widgets && candidate.visible &&
-            candidate.fixed && widgets && candidate.identity ==
-                reinterpret_cast<uintptr_t>(winrt::get_abi(widgets))) {
-            button = &candidate;
+    layout->rightBoundary = screenRight;
+    FrameworkElement tray{nullptr};
+    for (auto child : root.Children()) {
+        auto element = child.try_as<FrameworkElement>();
+        if (element && winrt::get_class_name(element) == L"SystemTray.SystemTrayFrame") {
+            tray = element;
             break;
         }
     }
-    if (data->widgetsSpacing &&
-        (!button || data->widgetsSpacing->target.get() != widgets)) {
-        auto spacing = *data->widgetsSpacing;
-        data->widgetsSpacing.reset();
-        data = nullptr;
-        RestoreWidgetsSpacing(spacing);
-        return;  // Sample the replacement after the old reservation is removed.
+    auto trayBounds = ReadClockTrayVisualBounds(tray, root);
+    if (!trayBounds) return reject(L"native-tray-bounds");
+    layout->rightBoundary = std::min(layout->rightBoundary, trayBounds->left);
+    if (auto panel = FindNativeTrayPanel(root)) {
+        auto panelBounds = ReadClockTrayVisualBounds(panel, root);
+        if (!panelBounds) return reject(L"native-panel-bounds");
+        layout->rightBoundary = std::min(layout->rightBoundary, panelBounds->left);
     }
-    if (!button || layout.hostWidth <= 0 ||
-        !std::isfinite(button->outerWidth) || button->outerWidth <= 0) {
-        return;
+    // Check every realized visible button, including fixed system buttons and
+    // trailing Widgets. A failed measurement is not an empty slot.
+    layout->flowElements.clear();
+    for (const auto& child : sample->elements) {
+        if (child.Visibility() != Visibility::Visible) continue;
+        auto bounds = ReadClockTrayVisualBounds(child, root);
+        if (!bounds) {
+            Wh_Log(L"[clock-tray] visible item unavailable class=%s name=%s loaded=%d size=%.3fx%.3f",
+                   winrt::get_class_name(child).c_str(), child.Name().c_str(), child.IsLoaded() ? 1 : 0,
+                   child.ActualWidth(), child.ActualHeight());
+            return reject(L"visible-item-bounds");
+        }
+        if (bounds->right > screenLeft && bounds->left < screenRight) {
+            layout->flowElements.push_back({reinterpret_cast<uintptr_t>(winrt::get_abi(child)), *bounds});
+        }
     }
-    auto property = FrameworkElement::MarginProperty();
-    auto margin = widgets.Margin();
-    auto local = widgets.ReadLocalValue(property);
-    bool localUnset = local == DependencyProperty::UnsetValue();
-    if (widgets.GetBindingExpression(property) ||
-        (!localUnset && !local.try_as<winrt::Windows::Foundation::IReference<Thickness>>()) ||
-        !std::isfinite(margin.Right) ||
-        (data->widgetsSpacing &&
-         margin.Right != data->widgetsSpacing->lastRight)) {
-        data->widgetsSpacingBlocked = true;
-        data->widgetsSpacing.reset();
-        Wh_Log(L"Widgets spacing unsupported or externally changed; no Margin takeover");
-        return;
-    }
-    if (!data->widgetsSpacing) {
-        data->widgetsSpacing = WidgetsSpacingData{
-            widgets, margin, localUnset, margin.Right};
-    }
-    double right = CalculateWidgetsRightMargin(
-        *button, layout, data->widgetsSpacing->originalMargin.Right);
-    if (!std::isfinite(right) ||
-        std::abs(right - margin.Right) <= kLayoutTolerance) {
-        return;
-    }
-    data->widgetsSpacing->lastRight = right;
-    data = nullptr;
-    // Absolute reservation from the original value, never cumulative padding.
-    Wh_Log(L"[layout] Widgets native reservation rightMargin=%.3f "
-           L"clockWidth=%.3f requiredEnd=%.3f",
-           right, layout.hostWidth, layout.offset + layout.hostWidth + kTaskbarLayoutGap);
-    margin.Right = right;
-    widgets.Margin(margin);
+    return ClockTrayLayout{*layout, screenLeft};
 }
 
-bool RefreshTrackedElements(FrameworkElement clock, Controls::Grid host,
-                            const TaskbarElementSample& sample) {
-    auto data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->leftHost != host ||
-        data->taskbarRoot.get() != sample.root ||
-        data->repeater.get() != sample.repeater) return true;
-    if (sample.widgets == data->widgets.get()) return false;
-    RevokeWidgetsTracking(*data);
-    data = FindMovedClockData(clock);
-    if (!data || data->restoring || data->leftHost != host ||
-        data->taskbarRoot.get() != sample.root ||
-        data->repeater.get() != sample.repeater) return true;
-    data->widgets = sample.widgets;
-    RegisterWidgetsTracking(*data, clock);
-    return true; // Registration is a sampling boundary, even if identities match.
+Controls::Panel FindNativeTrayPanel(Controls::Grid root) {
+    if (!root) {
+        return nullptr;
+    }
+    for (auto child : root.Children()) {
+        auto element = child.try_as<FrameworkElement>();
+        if (!element ||
+            winrt::get_class_name(element) != L"SystemTray.SystemTrayFrame") {
+            continue;
+        }
+        if (auto grid = FindDirectChildByName(element, L"SystemTrayFrameGrid")) {
+            if (auto panel = grid.try_as<Controls::Panel>()) {
+                return panel;
+            }
+        }
+        return element.try_as<Controls::Panel>();
+    }
+    return nullptr;
 }
 
-void UpdateLeftHostOffsetForClock(
-    winrt::weak_ref<FrameworkElement> weakClock) {
-    if (!g_callbacksEnabled || g_clockThreadId != GetCurrentThreadId() ||
-        !g_movedClocks) {
-        return;
-    }
+// Snapshot of the appearance values the native tray actually exposes. Themes
+// differ, so nothing is assumed: whatever cannot be read stays at its default.
+struct TrayAppearance {
+    Media::Brush background{nullptr};
+    Media::Brush borderBrush{nullptr};
+    CornerRadius cornerRadius{};
+    Thickness borderThickness{};
+    Thickness margin{};
+    Thickness padding{};
+    bool hasCornerRadius{};
+    bool hasBorder{};
+    bool hasMargin{};
+    bool hasPadding{};
+};
 
-    auto clock = weakClock.get();
-    if (!clock) {
-        return;
+TrayAppearance ReadNativeTrayAppearance(Controls::Panel panel) {
+    TrayAppearance appearance{};
+    if (!panel) {
+        return appearance;
     }
+    appearance.background = panel.Background();
+    // The native visual box is (cell + Margin - BorderThickness). Themes use
+    // both signs of Margin, so mirroring only the border is not enough.
+    appearance.margin = panel.Margin();
+    appearance.hasMargin = true;
+    if (auto grid = panel.try_as<Controls::Grid>()) {
+        appearance.cornerRadius = grid.CornerRadius();
+        appearance.borderThickness = grid.BorderThickness();
+        appearance.borderBrush = grid.BorderBrush();
+        appearance.padding = grid.Padding();
+        appearance.hasCornerRadius = true;
+        appearance.hasBorder = true;
+        appearance.hasPadding = true;
+    } else if (auto stack = panel.try_as<Controls::StackPanel>()) {
+        appearance.cornerRadius = stack.CornerRadius();
+        appearance.borderThickness = stack.BorderThickness();
+        appearance.borderBrush = stack.BorderBrush();
+        appearance.padding = stack.Padding();
+        appearance.hasCornerRadius = true;
+        appearance.hasBorder = true;
+        appearance.hasPadding = true;
+    } else if (auto border = panel.try_as<Controls::Border>()) {
+        appearance.cornerRadius = border.CornerRadius();
+        appearance.borderThickness = border.BorderThickness();
+        appearance.borderBrush = border.BorderBrush();
+        appearance.padding = border.Padding();
+        appearance.hasCornerRadius = true;
+        appearance.hasBorder = true;
+        appearance.hasPadding = true;
+    }
+    return appearance;
+}
 
-    auto data = FindMovedClockData(clock);
-    if (!data || data->updatingLayout || data->restoring ||
-        !ShouldRelocateClock()) {
+bool TrayThicknessIsFinite(const Thickness& value) {
+    return std::isfinite(value.Left) && std::isfinite(value.Top) &&
+           std::isfinite(value.Right) && std::isfinite(value.Bottom);
+}
+
+TrayAppearance LeftClockTrayAppearance(TrayAppearance appearance) {
+    // The source is at the right screen edge. Face its outer edge left while
+    // leaving the native button, text and shared brush in their original direction.
+    std::swap(appearance.cornerRadius.TopLeft, appearance.cornerRadius.TopRight);
+    std::swap(appearance.cornerRadius.BottomLeft, appearance.cornerRadius.BottomRight);
+    for (auto value : {&appearance.margin, &appearance.borderThickness, &appearance.padding}) {
+        std::swap(value->Left, value->Right);
+    }
+    return appearance;
+}
+
+// Padding moves content, not the box, so a negative component cannot be
+// reproduced by shifting. Clamp it and keep the usable parts.
+Thickness ClampTrayPadding(const Thickness& value) {
+    return Thickness{std::max(0.0, value.Left), std::max(0.0, value.Top),
+                     std::max(0.0, value.Right), std::max(0.0, value.Bottom)};
+}
+
+// A negative left Margin is how themes expand the pill past its own cell. The
+// native tray never sits at the screen edge, so it is never clipped there; our
+// clock does. Instead of clipping, move the whole host right by the overflow,
+// so the pill keeps its full size and simply starts at the screen edge.
+void ApplyClockTrayHostOffset() {
+    auto generation = g_clockTray.generation;
+    auto host = g_clockTrayPlacement.host;
+    if (!host || !g_clockTrayPlacement.placed) {
         return;
     }
-    auto trackedHost = data->leftHost;
-    data->updatingLayout = true;
-    try {
-        // Keep the original processing order and the control-center fallback.
-        for (auto record : {&MovedClockData::notifyIcons,
-                            &MovedClockData::applicationTray,
-                            &MovedClockData::trayGroup,
-                            &MovedClockData::controlCenter}) {
-            if (!(data->*record)) {
-                continue;
-            }
-            PCWSTR tag = TrayElementLogTag(record);
-            PCWSTR reason = nullptr;
-            // A read can reenter cleanup; never carry a container pointer across it.
-            auto saved = data->*record;
-            data = nullptr;
-            auto contribution = ReadMovedTrayContribution(trackedHost, false, saved, &reason);
-            data = FindMovedClockData(clock);
-            if (!data || data->restoring || data->leftHost != trackedHost) return;
-            if (!(data->*record) || (data->*record)->nativeColumn != saved->nativeColumn) {
-                data->updatingLayout = false;
-                return;
-            }
-            if (!contribution) {
-                if (record == &MovedClockData::controlCenter) {
-                    data = nullptr;
-                    Wh_Log(L"[%s] layout ownership changed reason=%s; restoring moved modules",
-                           tag, reason);
-                    RestoreClock(clock);
-                    return;
-                }
-                Wh_Log(L"[%s] layout ownership changed reason=%s; restoring only this group",
-                       tag, reason);
-                RestoreExtraTrayElements(*data, record);
-                data = FindMovedClockData(clock);
-                if (!data || data->restoring || data->leftHost != trackedHost) return;
-            } else if (reason) {
-                if ((data->*record)->lastContribution != -2) {
-                    (data->*record)->lastContribution = -2;
-                    Wh_Log(L"[%s] waiting for first host layout; extraReserved=0", tag);
-                }
-                if (TaskbarUsesCenteredAlignment()) {
-                    data->updatingLayout = false;
-                    return;
-                }
-            } else if (std::abs((data->*record)->lastContribution - *contribution) > kLayoutTolerance) {
-                (data->*record)->lastContribution = *contribution;
-                Wh_Log(L"[%s] measured native column shrink=%.3f clockBaseline=%.3f",
-                       tag, *contribution, data->layoutReservedWidth);
-            }
-        }
-        auto weakRoot = data->taskbarRoot;
-        auto weakRepeater = data->repeater;
-        data = nullptr;
-        auto root = weakRoot.get();
-        auto repeater = weakRepeater.get();
-        if (root && !IsTaskbarRepeater(repeater, root)) {
-            repeater = FindTaskbarRepeater(root);
-            data = FindMovedClockData(clock);
-            if (!data || data->restoring || data->leftHost != trackedHost) return;
-            data->repeater = repeater;
-            data->layoutSnapshot.reset();
-            data = nullptr;
-        }
-        auto sample = CollectTaskbarElements(
-            root, repeater, g_settings.reserveCenteredViewport);
-        if (sample && RefreshTrackedElements(clock, trackedHost, *sample)) {
-            sample = CollectTaskbarElements(
-                root, repeater, g_settings.reserveCenteredViewport);
-        }
-        data = FindMovedClockData(clock);
-        if (!data || data->restoring || data->leftHost != trackedHost) return;
-        if (data->taskbarRoot.get() != root || data->repeater.get() != repeater ||
-            (sample && data->widgets.get() != sample->widgets)) {
-            data->updatingLayout = false;
-            data = nullptr;
-            if (root) root.InvalidateMeasure();
-            return;
-        }
-        auto host = trackedHost;
-        // An owned viewport is an app constraint, not a new fixed prefix.
-        // Keep the clock at its baseline while managing that constraint.
-        auto prefixOrigin = data->centeredProbe ?
-            std::optional{data->centeredProbe->baseline.contentLeft} : std::nullopt;
-        uintptr_t spacingTarget = 0;
-        double spacingIncrement = 0;
-        auto flowSpacing = data->flowSpacing;
-        if (flowSpacing && flowSpacing->rightSide) {
-            auto target = flowSpacing->target.get();
-            auto current = target ? ReadFlowSpacing(target, true) : std::nullopt;
-            if (current && current->lastValue == flowSpacing->lastValue) {
-                spacingTarget = reinterpret_cast<uintptr_t>(winrt::get_abi(target));
-                spacingIncrement = flowSpacing->increment;
-            }
-        }
-        data = nullptr;
-        auto snapshot = sample
-            ? ReadLeftHostLayout(root, repeater, host, prefixOrigin,
-                                 spacingTarget, spacingIncrement, &*sample)
-            : std::nullopt;
-        data = FindMovedClockData(clock);
-        if (data && !data->restoring && data->leftHost == host && snapshot) {
-            data->layoutSampleUnavailableLogged = false;
-            bool changed = !data->layoutSnapshot ||
-                !SameLeftHostLayout(*data->layoutSnapshot, *snapshot) ||
-                std::abs(data->layoutSnapshot->repeaterDesiredWidth -
-                         snapshot->repeaterDesiredWidth) > kLayoutTolerance ||
-                (data->centeredProbe &&
-                 !SameTaskbarItemSource(*data->layoutSnapshot, *snapshot));
-            data = nullptr;
-            auto margin = host.Margin();
-            data = FindMovedClockData(clock);
-            if (!data || data->restoring || data->leftHost != trackedHost) return;
-            bool needsMove =
-                std::abs(margin.Left - snapshot->offset) > kLayoutTolerance;
-            // Only the decision log needs this number. Stable passes do not read
-            // all four tray groups again for an unchanged log line.
-            double reservedRightWidth = 0;
-            if (changed) {
-                reservedRightWidth = GetReservedTrayLayoutWidth(*data);
-                data = FindMovedClockData(clock);
-                if (!data || data->restoring || data->leftHost != trackedHost) return;
-            }
-            data->layoutSnapshot = *snapshot;
-            // Save all state before a write; XAML can reenter and erase records.
-            data = nullptr;
-            if (changed) {
-                LogLeftHostLayout(*snapshot, L"host-update", reservedRightWidth);
-            }
-            if (UpdateCenteredViewportProbe(clock, *snapshot)) {
-                // The owned viewport handles this layout until restoration.
-            } else if (snapshot->centered && LeftHostFlowCollision(*snapshot)) {
-                Wh_Log(L"[centered-viewport] collision without a usable reservation; "
-                       L"viewport=(%.3f,%.3f) clockRight=%.3f; restoring native clock",
-                       snapshot->contentLeft, snapshot->contentWidth,
-                       snapshot->offset + snapshot->hostWidth);
-                bool restored = RestoreCenteredClockFallback(clock);
-                Wh_Log(L"[centered-viewport] unreserved collision fallback accepted=%d "
-                       L"viewportLeftMargin=%.3f", restored,
-                       repeater ? repeater.Margin().Left : -1.0);
-            } else if (!snapshot->centered && !GetLeadingLeftAlignedFlow(*snapshot)) {
-                Wh_Log(L"[layout] native-left layout no longer supported; restoring clock");
-                RestoreClock(clock);
-            } else if (RestoreSpacingForAlignment(clock, *snapshot)) {
-                // Wait for the old reservation to leave the native layout.
-            } else if (needsMove) {
-                margin.Left = snapshot->offset;
-                host.Margin(margin);
-            } else {
-                if (snapshot->centered) {
-                    UpdateWidgetsSpacing(clock, *snapshot);
-                } else if (!UpdateFlowSpacing(clock, *snapshot)) {
-                    RestoreClock(clock);
-                }
-            }
-        } else if (data && !data->restoring && data->centeredProbe) {
-            data = nullptr;
-            CancelCenteredViewportProbe(clock, L"layout-sample-unavailable", nullptr);
-        } else if (data && !data->restoring && !TaskbarUsesCenteredAlignment()) {
-            data = nullptr;
-            Wh_Log(L"[layout] native-left sample unavailable; restoring clock");
-            RestoreClock(clock);
-        } else if (data && !data->restoring &&
-                   !data->layoutSampleUnavailableLogged) {
-            data->layoutSampleUnavailableLogged = true;
-            Wh_Log(L"Left host sample unavailable; preserving its last offset");
-        }
-    } catch (...) {
-        data = FindMovedClockData(clock);
-        if (data && data->leftHost == trackedHost && data->centeredProbe) {
-            data->centeredProbe->failed = true;
-            Wh_Log(L"[centered-viewport] failed: reason=layout-exception hr=%08X; retaining Margin record for cleanup",
+    double left = g_clockTrayPlacement.plan.hostLeft;
+    auto margin = host.Margin();
+    if (std::abs(margin.Left - left) > kLayoutTolerance) {
+        margin.Left = left;
+        g_clockTrayCounters.marginWrites++;
+        ApplyClockTrayStep(generation, [&] { host.Margin(margin); });
+    }
+}
+
+void ApplyClockTrayAppearance() {
+    auto generation = g_clockTray.generation;
+    if (!ClockTrayWorkIsCurrent(generation)) return;
+    auto decoration = g_clockTrayPlacement.decoration;
+    auto source = g_clockTrayPlacement.appearanceSource.get();
+    if (!decoration || !source) {
+        return;
+    }
+    auto appearance = LeftClockTrayAppearance(ReadNativeTrayAppearance(source));
+    // One bad property must not abort the whole placement: each step is
+    // independent and reports its own failure once.
+    auto tryStep = [generation](PCWSTR name, auto&& step) {
+        try {
+            ApplyClockTrayStep(generation, step);
+        } catch (...) {
+            Wh_Log(L"[clock-tray] appearance step=%s failed hr=%08X", name,
                    winrt::to_hresult());
         }
-        if (data && data->leftHost == trackedHost && !data->layoutSampleUnavailableLogged) {
-            data->layoutSampleUnavailableLogged = true;
-            Wh_Log(L"Left host layout handling failed: %08X", winrt::to_hresult());
+    };
+    tryStep(L"background",
+            [&] { decoration.Background(appearance.background); });
+    if (appearance.hasCornerRadius) {
+        tryStep(L"radius", [&] {
+            decoration.CornerRadius(appearance.cornerRadius);
+        });
+    }
+    if (appearance.hasBorder) {
+        tryStep(L"border", [&] {
+            ApplyClockTrayStep(generation, [&] {
+                decoration.BorderThickness(appearance.borderThickness);
+            });
+            ApplyClockTrayStep(generation, [&] {
+                decoration.BorderBrush(appearance.borderBrush);
+            });
+        });
+    }
+    if (appearance.hasPadding) {
+        auto padding = ClampTrayPadding(appearance.padding);
+        if (!TrayThicknessIsFinite(appearance.padding) ||
+            padding.Left != appearance.padding.Left ||
+            padding.Top != appearance.padding.Top ||
+            padding.Right != appearance.padding.Right ||
+            padding.Bottom != appearance.padding.Bottom) {
+            // XAML rejects negative Padding outright; keep the positive parts.
+            Wh_Log(L"[clock-tray] appearance padding clamped: from "
+                   L"%.1f,%.1f,%.1f,%.1f to %.1f,%.1f,%.1f,%.1f",
+                   appearance.padding.Left, appearance.padding.Top,
+                   appearance.padding.Right, appearance.padding.Bottom,
+                   padding.Left, padding.Top, padding.Right, padding.Bottom);
         }
-        data = nullptr;
-        if (!TaskbarUsesCenteredAlignment()) {
+        tryStep(L"padding", [&] { decoration.Padding(padding); });
+        appearance.padding = padding;
+    }
+    if (appearance.hasMargin) {
+        tryStep(L"margin", [&] {
+            auto host = g_clockTrayPlacement.host;
+            double cellHeight = host ? host.ActualHeight() : 0;
+            double cellWidth = host ? host.ActualWidth() : 0;
+            double fillHeight = cellHeight - appearance.margin.Top -
+                                appearance.margin.Bottom -
+                                appearance.borderThickness.Top -
+                                appearance.borderThickness.Bottom;
+            double fillWidth = cellWidth - appearance.margin.Left -
+                               appearance.margin.Right -
+                               appearance.borderThickness.Left -
+                               appearance.borderThickness.Right;
+            if (cellHeight > 0 && (fillHeight < 1 || fillWidth < 1)) {
+                // A theme with extreme insets must not collapse the layer.
+                ApplyClockTrayStep(generation, [&] {
+                    decoration.Margin(Thickness{0, 0, 0, 0});
+                });
+                Wh_Log(L"[clock-tray] appearance margin skipped: cell=%.1fx%.1f "
+                       L"margin=%.1f,%.1f,%.1f,%.1f",
+                       cellWidth, cellHeight, appearance.margin.Left,
+                       appearance.margin.Top, appearance.margin.Right,
+                       appearance.margin.Bottom);
+            } else {
+                ApplyClockTrayStep(generation, [&] {
+                    decoration.Margin(appearance.margin);
+                });
+            }
+            // Geometry uses the values that were actually applied, after this
+            // pass, rather than mixing the requested appearance with old sizes.
+            g_clockTrayPlacement.metricsDirty = true;
+        });
+    }
+}
+
+bool ClearClockTrayAppearanceHooks() {
+    // Take the list out before calling XAML; an unregister may reenter us.
+    auto hooks = std::move(g_clockTrayPlacement.appearanceHooks);
+    g_clockTrayPlacement.appearanceHooks.clear();
+    for (const auto& hook : hooks) {
+        try {
+            if (auto owner = hook.owner.get()) {
+                if (hook.property) {
+                    owner.UnregisterPropertyChangedCallback(hook.property,
+                                                            hook.token);
+                }
+            }
+        } catch (...) {
+            g_clockTrayPlacement.appearanceHooks.push_back(hook);
+            g_clockTrayCleanupPending = true;
+            Wh_Log(L"[clock-tray] appearance removal failed: %08X",
+                   winrt::to_hresult());
+        }
+    }
+    return g_clockTrayPlacement.appearanceHooks.empty();
+}
+
+void AddClockTrayAppearanceHook(DependencyObject owner,
+                                DependencyProperty property) {
+    if (!owner || !property) {
+        return;
+    }
+    auto weakDecoration = winrt::make_weak(g_clockTrayPlacement.decoration);
+    auto generation = g_clockTray.generation;
+    if (!ClockTrayWorkIsCurrent(generation)) {
+        throw winrt::hresult_error(E_ABORT);
+    }
+    int64_t token = owner.RegisterPropertyChangedCallback(
+        property,
+        [weakDecoration, generation](DependencyObject const&,
+                                     DependencyProperty const&) {
             try {
-                RestoreClock(clock);
+                if (!g_clockTrayWorkActive && ClockTrayWorkIsCurrent(generation) &&
+                    weakDecoration.get() == g_clockTrayPlacement.decoration) {
+                    ClockTrayWorkScope work;
+                    ApplyClockTrayAppearance();
+                }
             } catch (...) {
-                Wh_Log(L"[layout] native-left fallback restoration failed: %08X",
+                Wh_Log(L"[clock-tray] appearance update failed: %08X",
                        winrt::to_hresult());
             }
-        }
-    }
-    if (auto current = FindMovedClockData(clock); current && current->leftHost == trackedHost) {
-        current->updatingLayout = false;
+        });
+    g_clockTrayPlacement.appearanceHooks.push_back({owner, property, token});
+    g_clockTrayCleanupPending = true;
+    if (!ClockTrayWorkIsCurrent(generation)) {
+        ClearClockTrayAppearanceHooks();
+        throw winrt::hresult_error(E_ABORT);
     }
 }
 
-void RegisterWidgetsTracking(MovedClockData& data, FrameworkElement clock) {
-    auto host = data.leftHost;
-    auto widgets = data.widgets.get();
-    if (!widgets) return;
-    auto weakClock = winrt::make_weak(clock);
-    auto sizeToken = widgets.SizeChanged(
-        [weakClock](winrt::Windows::Foundation::IInspectable const&,
-                    SizeChangedEventArgs const&) {
-            try {
-                UpdateLeftHostOffsetForClock(weakClock);
-            } catch (...) {
-                Wh_Log(L"Widgets size handling failed: %08X", winrt::to_hresult());
-            }
-        });
-    auto current = FindMovedClockData(clock);
-    if (!g_callbacksEnabled || !current || current->restoring ||
-        current->leftHost != host || current->widgets.get() != widgets ||
-        current->widgetsSizeChangedToken) {
-        widgets.SizeChanged(sizeToken);
+// One-way mirror: read the source values, then re-read them when the source
+// properties change. Brushes are shareable, so no copy is invented. The source
+// is read-only: this never writes to the native tray.
+void MirrorNativeTrayAppearance(Controls::Grid root) {
+    auto& placement = g_clockTrayPlacement;
+    auto panel = FindNativeTrayPanel(root);
+    if (!panel) {
+        Wh_Log(L"[clock-tray] appearance source not found");
         return;
     }
-    current->widgetsSizeChangedToken = sizeToken;
-    current = nullptr;
-    auto visibilityToken = widgets.RegisterPropertyChangedCallback(
-        UIElement::VisibilityProperty(),
-        [weakClock](DependencyObject const&, DependencyProperty const&) {
-            try {
-                UpdateLeftHostOffsetForClock(weakClock);
-            } catch (...) {
-                Wh_Log(L"Widgets visibility handling failed: %08X", winrt::to_hresult());
-            }
-        });
-    current = FindMovedClockData(clock);
-    if (!g_callbacksEnabled || !current || current->restoring ||
-        current->leftHost != host || current->widgets.get() != widgets ||
-        !current->widgetsSizeChangedToken ||
-        current->widgetsSizeChangedToken->value != sizeToken.value ||
-        current->widgetsVisibilityChangedToken) {
-        widgets.UnregisterPropertyChangedCallback(
-            UIElement::VisibilityProperty(), visibilityToken);
-        return;
+    if (placement.appearanceSource.get() != panel) {
+        if (!ClearClockTrayAppearanceHooks()) {
+            throw winrt::hresult_error(E_FAIL);
+        }
+        placement.appearanceSource = panel;
+        AddClockTrayAppearanceHook(panel, Controls::Panel::BackgroundProperty());
+        AddClockTrayAppearanceHook(panel, FrameworkElement::MarginProperty());
+        if (auto grid = panel.try_as<Controls::Grid>()) {
+            AddClockTrayAppearanceHook(grid, Controls::Grid::CornerRadiusProperty());
+            AddClockTrayAppearanceHook(grid, Controls::Grid::BorderThicknessProperty());
+            AddClockTrayAppearanceHook(grid, Controls::Grid::PaddingProperty());
+        } else if (auto stack = panel.try_as<Controls::StackPanel>()) {
+            AddClockTrayAppearanceHook(stack,
+                                       Controls::StackPanel::CornerRadiusProperty());
+            AddClockTrayAppearanceHook(
+                stack, Controls::StackPanel::BorderThicknessProperty());
+            AddClockTrayAppearanceHook(stack,
+                                       Controls::StackPanel::PaddingProperty());
+        } else if (auto border = panel.try_as<Controls::Border>()) {
+            AddClockTrayAppearanceHook(border,
+                                       Controls::Border::CornerRadiusProperty());
+            AddClockTrayAppearanceHook(border,
+                                       Controls::Border::BorderThicknessProperty());
+            AddClockTrayAppearanceHook(border,
+                                       Controls::Border::PaddingProperty());
+        }
     }
-    current->widgetsVisibilityChangedToken = visibilityToken;
+    ApplyClockTrayAppearance();
+    auto appearance = ReadNativeTrayAppearance(panel);
+    Wh_Log(L"[clock-tray] appearance source=%s hasBackground=%d "
+           L"hasRadius=%d radius=%.1f,%.1f,%.1f,%.1f border=%.1f,%.1f,%.1f,%.1f "
+           L"margin=%.1f,%.1f,%.1f,%.1f padding=%.1f,%.1f,%.1f,%.1f",
+           winrt::get_class_name(panel).c_str(),
+           appearance.background ? 1 : 0, appearance.hasCornerRadius ? 1 : 0,
+           appearance.cornerRadius.TopLeft, appearance.cornerRadius.TopRight,
+           appearance.cornerRadius.BottomRight,
+           appearance.cornerRadius.BottomLeft,
+           appearance.borderThickness.Left, appearance.borderThickness.Top,
+           appearance.borderThickness.Right,
+           appearance.borderThickness.Bottom,
+           appearance.margin.Left, appearance.margin.Top,
+           appearance.margin.Right, appearance.margin.Bottom,
+           appearance.padding.Left, appearance.padding.Top,
+           appearance.padding.Right, appearance.padding.Bottom);
 }
 
-void RevokeWidgetsTracking(MovedClockData& data) {
-    auto widgets = data.widgets.get();
-    auto sizeToken = data.widgetsSizeChangedToken;
-    auto visibilityToken = data.widgetsVisibilityChangedToken;
-    data.widgetsSizeChangedToken.reset();
-    data.widgetsVisibilityChangedToken = 0;
-    if (widgets) {
-        if (sizeToken) widgets.SizeChanged(*sizeToken);
-        if (visibilityToken) {
-            widgets.UnregisterPropertyChangedCallback(
-                UIElement::VisibilityProperty(), visibilityToken);
+// BEGIN CLOCK TRAY METRICS (P3)
+unsigned ClockTrayExplicitLines(std::wstring_view text) {
+    unsigned lines = 1;
+    for (size_t i = 0; i < text.size(); i++) {
+        if (text[i] == L'\r' || text[i] == L'\n' ||
+            text[i] == L'\u2028' || text[i] == L'\u2029') {
+            if (++lines == 3) return lines;
+            if (text[i] == L'\r' && i + 1 < text.size() && text[i + 1] == L'\n') i++;
+        }
+    }
+    return lines;
+}
+
+unsigned ClockTrayMeasuredLines(double full, double one, double two) {
+    // Compare layouts of the SAME text, not height / FontSize. Font fallback,
+    // explicit LineHeight and wrapped lines need not have the nominal height.
+    constexpr double epsilon = 0.01;
+    if (!std::isfinite(full) || !std::isfinite(one) || !std::isfinite(two) ||
+        one < 1 || two < one - epsilon || full < two - epsilon) return 0;
+    if (std::abs(full - one) <= epsilon) return 1;
+    if (std::abs(full - two) <= epsilon) return 2;
+    return 3;
+}
+
+ClockTrayReason CheckClockTrayMetrics(const ClockTrayMetrics& metrics,
+                                     double windowHeight) {
+    if (metrics.lines >= 3) return ClockTrayReason::TooManyLines;
+    if (!metrics.lines || !std::isfinite(metrics.requiredWidth) ||
+        !std::isfinite(metrics.requiredHeight) ||
+        !std::isfinite(windowHeight) || metrics.requiredWidth <= 0 ||
+        metrics.requiredHeight <= 0 || windowHeight <= 0) {
+        return ClockTrayReason::UnknownMetrics;
+    }
+    // Theme insets are deliberately NOT subtracted from windowHeight.
+    // One/two lines clipped only by a short themed content box stay on the left.
+    return metrics.requiredHeight > windowHeight + kLayoutTolerance
+               ? ClockTrayReason::TooTall : ClockTrayReason::None;
+}
+
+ClockTrayReason CheckClockTrayVerticalBounds(double top, double height,
+                                            double windowHeight) {
+    if (!std::isfinite(top) || !std::isfinite(height) ||
+        !std::isfinite(windowHeight) || height <= 0 || windowHeight <= 0) {
+        return ClockTrayReason::UnknownMetrics;
+    }
+    return top < -kLayoutTolerance || top + height > windowHeight + kLayoutTolerance
+               ? ClockTrayReason::TooTall : ClockTrayReason::None;
+}
+
+double ClockTrayWindowHeight(Controls::Grid root) {
+    RECT rect{};
+    auto xamlRoot = root.XamlRoot();
+    HWND window = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!xamlRoot || !window || !GetClientRect(window, &rect)) return 0;
+    double scale = xamlRoot.RasterizationScale();
+    return scale > 0 ? (rect.bottom - rect.top) / scale : 0;
+}
+
+Controls::StackPanel FindClockTrayTextStack(FrameworkElement clock) {
+    auto time = FindDescendantByName(clock, L"TimeInnerTextBlock");
+    auto date = FindDescendantByName(clock, L"DateInnerTextBlock");
+    if (!time || !date) return nullptr;
+    auto stack = Media::VisualTreeHelper::GetParent(time).try_as<Controls::StackPanel>();
+    if (!stack || Media::VisualTreeHelper::GetParent(date) != stack ||
+        stack.Orientation() != Controls::Orientation::Vertical ||
+        stack.Children().Size() != 2) return nullptr;
+    return stack;
+}
+
+std::optional<double> ResolveClockTrayChrome(bool placed, double saved,
+                                            double clockWidth, double stackWidth) {
+    double value = placed ? saved : clockWidth - stackWidth;
+    if (!std::isfinite(value) || value < -kLayoutTolerance) return std::nullopt;
+    return std::max(0.0, value);
+}
+
+bool ClockTrayCanWaitForArrange(bool placing, uint64_t elapsed) {
+    return placing && elapsed < 500;
+}
+
+bool WaitForClockTrayArrange() {
+    auto& placement = g_clockTrayPlacement;
+    if (!ClockTrayCanWaitForArrange(g_clockTray.state == ClockTrayState::Placing,
+            GetTickCount64() - placement.arrangeWaitStart)) return false;
+    placement.metricsDirty = true;
+    // Loaded and the one-shot deadline drive progress. Invalidating arrange
+    // here spins through LayoutUpdated before XAML can deliver Loaded.
+    return true;
+}
+
+bool StopClockTrayArrangeDeadline() {
+    auto& placement = g_clockTrayPlacement;
+    try {
+        if (placement.arrangeDeadline) {
+            placement.arrangeDeadline.Stop();
+            if (placement.arrangeDeadlineToken) {
+                auto events = placement.arrangeDeadline.as<IDispatcherTimer>();
+                auto abi = reinterpret_cast<winrt::impl::abi_t<IDispatcherTimer>*>(winrt::get_abi(events));
+                winrt::check_hresult(abi->remove_Tick(*placement.arrangeDeadlineToken));
+            }
+        }
+        placement.arrangeDeadlineToken.reset();
+        placement.arrangeDeadline = nullptr;
+        return true;
+    } catch (...) {
+        g_clockTrayCleanupPending = true;
+        Wh_Log(L"[clock-tray] arrange deadline removal failed: %08X", winrt::to_hresult());
+        return false;
+    }
+}
+
+void StartClockTrayArrangeDeadline(bool nativeRetry = false) {
+    if (!StopClockTrayArrangeDeadline()) throw winrt::hresult_error(E_FAIL);
+    auto generation = g_clockTray.generation;
+    auto& placement = g_clockTrayPlacement;
+    placement.arrangeWaitStart = GetTickCount64();
+    placement.arrangeDeadline = DispatcherTimer{};
+    placement.arrangeDeadline.Interval(winrt::Windows::Foundation::TimeSpan{nativeRetry ? 1000000 : 5000000});
+    placement.arrangeDeadlineToken = placement.arrangeDeadline.Tick(
+        [generation](winrt::Windows::Foundation::IInspectable const& sender,
+                     winrt::Windows::Foundation::IInspectable const&) {
+            try {
+                sender.as<DispatcherTimer>().Stop();
+                if (!ClockTrayWorkIsCurrent(generation)) return;
+                g_clockTrayPlacement.metricsDirty = true;
+                if (g_clockTrayWorkActive) return;
+                if (g_clockTrayPlacement.placed) {
+                    UpdateClockTrayPlacement();
+                } else {
+                    auto clock = g_clockTrayPlacement.clock.get();
+                    if (clock && !TryAttachClockTray(clock)) EnsureClockTrayRetry(clock);
+                }
+            } catch (...) {
+                if (ClockTrayWorkIsCurrent(generation)) RestoreClockTray(ClockTrayReason::UnknownMetrics);
+            }
+        });
+    g_clockTrayCleanupPending = true;
+    ApplyClockTrayStep(generation, [&] { placement.arrangeDeadline.Start(); });
+}
+
+ClockTrayMetrics ReadClockTrayMetrics(FrameworkElement clock) {
+    g_clockTrayCounters.metricReads++;
+    ClockTrayMetrics result;
+    auto unknown = [](PCWSTR stage) -> ClockTrayMetrics {
+        if (g_clockTray.reason != ClockTrayReason::UnknownMetrics) {
+            Wh_Log(L"[clock-tray] metrics unavailable stage=%s", stage);
+        }
+        return {};
+    };
+    auto stack = g_clockTrayPlacement.clock.get() == clock
+        ? g_clockTrayPlacement.textStack.get() : nullptr;
+    if (!stack) stack = FindClockTrayTextStack(clock);
+    if (!stack || !stack.IsLoaded() || stack.Visibility() != Visibility::Visible ||
+        clock.ActualWidth() <= 0 || stack.ActualWidth() <= 0) {
+        if (g_clockTray.reason != ClockTrayReason::UnknownMetrics) {
+            auto time = FindDescendantByName(clock, L"TimeInnerTextBlock");
+            auto parent = time ? Media::VisualTreeHelper::GetParent(time) : nullptr;
+            Wh_Log(L"[clock-tray] text stack parent=%s children=%d clockWidth=%.3f stackWidth=%.3f",
+                   parent ? winrt::get_class_name(parent).c_str() : L"none",
+                   parent ? Media::VisualTreeHelper::GetChildrenCount(parent) : -1,
+                   clock.ActualWidth(), stack ? stack.ActualWidth() : -1.0);
+        }
+        return unknown(L"text-stack");
+    }
+    // Once hosted, ActualWidth is constrained by our own border. Reusing it
+    // to derive chrome feeds rounding/clipping back into the next width.
+    auto chrome = ResolveClockTrayChrome(g_clockTrayPlacement.placed,
+        g_clockTrayPlacement.metrics.nativeChromeWidth, clock.ActualWidth(), stack.ActualWidth());
+    if (!chrome) return unknown(L"button-chrome");
+    auto padding = stack.Padding();
+    auto border = stack.BorderThickness();
+    double stackWidth = 0;
+    double stackHeight = padding.Top + padding.Bottom + border.Top + border.Bottom;
+    unsigned blocks = 0;
+    for (const auto& child : stack.Children()) {
+        auto text = child.try_as<Controls::TextBlock>();
+        if (!text) return unknown(L"text-child-type");
+        if (text.Visibility() == Visibility::Collapsed) continue;
+        // Plain Text is the native/TCC contract. Rich inline formatting needs
+        // a different measurer; never silently flatten it and claim accuracy.
+        auto inlines = text.Inlines();
+        if (inlines.Size() > 1) return unknown(L"multiple-inlines");
+        if (inlines.Size() == 1) {
+            auto run = inlines.GetAt(0).try_as<Documents::Run>();
+            if (!run || run.Text() != text.Text() ||
+                run.FontFamily().Source() != text.FontFamily().Source() ||
+                run.FontSize() != text.FontSize() || run.FontWeight() != text.FontWeight() ||
+                run.FontStyle() != text.FontStyle() || run.FontStretch() != text.FontStretch() ||
+                run.CharacterSpacing() != text.CharacterSpacing()) return unknown(L"inline-style");
+        }
+        unsigned explicitLines = ClockTrayExplicitLines(text.Text());
+        if (result.lines + explicitLines >= 3) {
+            result.lines = 3;
+            return result;
+        }
+        Controls::TextBlock probe;
+        probe.Text(text.Text());
+        probe.FontFamily(text.FontFamily());
+        probe.FontSize(text.FontSize());
+        probe.FontWeight(text.FontWeight());
+        probe.FontStyle(text.FontStyle());
+        probe.FontStretch(text.FontStretch());
+        probe.CharacterSpacing(text.CharacterSpacing());
+        probe.LineHeight(text.LineHeight());
+        probe.LineStackingStrategy(text.LineStackingStrategy());
+        probe.TextLineBounds(text.TextLineBounds());
+        probe.TextReadingOrder(text.TextReadingOrder());
+        probe.TextAlignment(text.TextAlignment());
+        probe.FlowDirection(text.FlowDirection());
+        probe.Language(text.Language());
+        probe.IsTextScaleFactorEnabled(text.IsTextScaleFactorEnabled());
+        probe.Padding(text.Padding());
+        probe.TextTrimming(TextTrimming::None);
+        probe.TextWrapping(TextWrapping::NoWrap);
+        // Only the detached probe is measured. Measuring the live element
+        // would invalidate its arrange and overwrite its constrained result.
+        probe.Measure({kNativeClockMeasureLimit, kNativeClockMeasureLimit});
+        auto natural = probe.DesiredSize();
+        if (natural.Width >= kNativeClockMeasureLimit ||
+            natural.Height >= kNativeClockMeasureLimit) return unknown(L"measure-limit");
+        float available = kNativeClockMeasureLimit;
+        if (text.TextWrapping() != TextWrapping::NoWrap) {
+            available = static_cast<float>(text.ActualWidth());
+            if (!std::isfinite(available) || available <= 0) return unknown(L"wrap-width");
+            probe.TextWrapping(text.TextWrapping());
+        }
+        probe.Measure({available, kNativeClockMeasureLimit});
+        auto full = probe.DesiredSize();
+        if (full.Height >= kNativeClockMeasureLimit) return unknown(L"wrapped-measure-limit");
+        probe.MaxLines(1);
+        probe.Measure({available, kNativeClockMeasureLimit});
+        double one = probe.DesiredSize().Height;
+        probe.MaxLines(2);
+        probe.Measure({available, kNativeClockMeasureLimit});
+        unsigned lines = ClockTrayMeasuredLines(full.Height, one, probe.DesiredSize().Height);
+        if (!lines) {
+            if (g_clockTray.reason != ClockTrayReason::UnknownMetrics) {
+                Wh_Log(L"[clock-tray] text heights full=%.3f one=%.3f two=%.3f name=%s",
+                       static_cast<double>(full.Height), one, static_cast<double>(probe.DesiredSize().Height), text.Name().c_str());
+            }
+            return unknown(L"measured-lines");
+        }
+        result.lines += std::max(lines, explicitLines);
+        if (result.lines >= 3) return result;
+        auto margin = text.Margin();
+        double width = std::max<double>(full.Width, text.MinWidth());
+        if (std::isfinite(text.Width())) width = std::max(width, text.Width());
+        // A caller-imposed horizontal cap can still hide complete content.
+        // Keep the caller's property intact and report an unsupported input.
+        if (width > text.MaxWidth() + kLayoutTolerance ||
+            (std::isfinite(text.Width()) && full.Width > text.Width() + kLayoutTolerance)) return unknown(L"text-width-cap");
+        stackWidth = std::max(stackWidth, width + margin.Left + margin.Right);
+        double height = std::max<double>(full.Height, text.MinHeight());
+        if (std::isfinite(text.Height())) height = std::max(height, text.Height());
+        stackHeight += height + margin.Top + margin.Bottom;
+        blocks++;
+    }
+    if (!blocks || !std::isfinite(stack.Spacing()) || stack.Spacing() < 0) return unknown(L"empty-or-negative-spacing");
+    stackHeight += (blocks - 1) * stack.Spacing();
+    stackWidth += padding.Left + padding.Right + border.Left + border.Right;
+    stackWidth = std::max(stackWidth, stack.MinWidth());
+    if (std::isfinite(stack.Width())) stackWidth = std::max(stackWidth, stack.Width());
+    if (stackWidth > stack.MaxWidth() + kLayoutTolerance ||
+        (std::isfinite(stack.Width()) && stackWidth > stack.Width() + kLayoutTolerance)) return unknown(L"stack-width-cap");
+    result.nativeChromeWidth = *chrome;
+    result.requiredWidth = std::max(stackWidth + *chrome, clock.MinWidth());
+    if (std::isfinite(clock.Width())) result.requiredWidth = std::max(result.requiredWidth, clock.Width());
+    if (result.requiredWidth > clock.MaxWidth() + kLayoutTolerance ||
+        (std::isfinite(clock.Width()) && result.requiredWidth > clock.Width() + kLayoutTolerance)) return unknown(L"clock-width-cap");
+    result.requiredHeight = std::max({stackHeight, stack.MinHeight(), clock.MinHeight()});
+    if (std::isfinite(stack.Height())) result.requiredHeight = std::max(result.requiredHeight, stack.Height());
+    if (std::isfinite(clock.Height())) result.requiredHeight = std::max(result.requiredHeight, clock.Height());
+    return result;
+}
+
+bool ClearClockTrayMetricHooks() {
+    auto& placement = g_clockTrayPlacement;
+    bool deadlineRemoved = StopClockTrayArrangeDeadline();
+    auto hooks = std::move(placement.metricHooks);
+    placement.metricHooks.clear();
+    for (const auto& hook : hooks) {
+        try {
+            if (auto owner = hook.owner.get()) {
+                owner.UnregisterPropertyChangedCallback(hook.property, hook.token);
+            }
+        } catch (...) {
+            placement.metricHooks.push_back(hook);
+        }
+    }
+    try {
+        if (auto clock = placement.clock.get(); clock && placement.metricLayoutToken) {
+            auto events = clock.as<IFrameworkElement>();
+            auto abi = reinterpret_cast<winrt::impl::abi_t<IFrameworkElement>*>(winrt::get_abi(events));
+            winrt::check_hresult(abi->remove_LayoutUpdated(*placement.metricLayoutToken));
+        }
+        placement.metricLayoutToken.reset();
+    } catch (...) {}
+    auto revoke = [](auto owner, auto& token, auto remove) {
+        try {
+            if (owner && token) remove(owner, *token);
+            token.reset();
+        } catch (...) {}
+    };
+    revoke(placement.clock.get(), placement.clockLoadedToken,
+           [](auto owner, auto token) {
+               auto events = owner.template as<IFrameworkElement>();
+               auto abi = reinterpret_cast<winrt::impl::abi_t<IFrameworkElement>*>(winrt::get_abi(events));
+               winrt::check_hresult(abi->remove_Loaded(token));
+           });
+    // The projected event removers are noexcept and discard HRESULT. Check the
+    // ABI result for these new subscriptions so a failure really retains them.
+    revoke(placement.layoutItems.get(), placement.itemsChangedToken,
+           [](auto owner, auto token) {
+               auto events = owner.template as<Interop::INotifyCollectionChanged>();
+               auto abi = reinterpret_cast<winrt::impl::abi_t<Interop::INotifyCollectionChanged>*>(winrt::get_abi(events));
+               winrt::check_hresult(abi->remove_CollectionChanged(token));
+           });
+    revoke(placement.layoutRepeater.get(), placement.elementPreparedToken,
+           [](auto owner, auto token) {
+               auto events = owner.template as<winrt::Microsoft::UI::Xaml::Controls::IItemsRepeater>();
+               auto abi = reinterpret_cast<winrt::impl::abi_t<winrt::Microsoft::UI::Xaml::Controls::IItemsRepeater>*>(winrt::get_abi(events));
+               winrt::check_hresult(abi->remove_ElementPrepared(token));
+           });
+    revoke(placement.layoutRepeater.get(), placement.elementClearingToken,
+           [](auto owner, auto token) {
+               auto events = owner.template as<winrt::Microsoft::UI::Xaml::Controls::IItemsRepeater>();
+               auto abi = reinterpret_cast<winrt::impl::abi_t<winrt::Microsoft::UI::Xaml::Controls::IItemsRepeater>*>(winrt::get_abi(events));
+               winrt::check_hresult(abi->remove_ElementClearing(token));
+           });
+    bool complete = deadlineRemoved && !placement.clockLoadedToken &&
+                    placement.metricHooks.empty() && !placement.metricLayoutToken &&
+                    !placement.itemsChangedToken && !placement.elementPreparedToken && !placement.elementClearingToken;
+    if (complete) {
+        placement.layoutItems = {};
+        placement.layoutRepeater = {};
+        placement.layoutStamp.reset();
+    }
+    if (!complete) {
+        g_clockTrayCleanupPending = true;
+        Wh_Log(L"[clock-tray] metrics removal incomplete");
+    }
+    return complete;
+}
+
+ClockTrayLayoutStamp ReadClockTrayLayoutStamp() {
+    auto& placement = g_clockTrayPlacement;
+    auto root = placement.root.get();
+    // Three known direct-child levels; never enumerate taskbar items here.
+    auto repeater = FindTaskbarRepeater(root).as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    auto source = repeater.ItemsSourceView();
+    auto parent = placement.originalParent.get();
+    if (!source || !parent || !parent.IsLoaded() || !root.IsLoaded() ||
+        !root.XamlRoot() || parent.XamlRoot() != root.XamlRoot() || !placement.nativeColumn) {
+        throw winrt::hresult_error(E_FAIL);
+    }
+    auto grid = parent.as<Controls::Grid>();
+    uint32_t columnIndex = 0;
+    if (!grid.ColumnDefinitions().IndexOf(placement.nativeColumn, columnIndex) ||
+        static_cast<int>(columnIndex) != placement.originalColumn) throw winrt::hresult_error(E_FAIL);
+    auto rootOrigin = root.TransformToVisual(root.XamlRoot().Content()).TransformPoint({0, 0});
+    auto repeaterOrigin = repeater.TransformToVisual(root).TransformPoint({0, 0});
+    ClockTrayLayoutStamp stamp{
+        reinterpret_cast<uintptr_t>(winrt::get_abi(repeater)),
+        reinterpret_cast<uintptr_t>(winrt::get_abi(source)), source.Count(), TaskbarUsesCenteredAlignment(),
+        placement.nativeColumn.ActualWidth(),
+        {rootOrigin.X, root.ActualWidth(), root.ActualHeight(), root.XamlRoot().RasterizationScale(),
+         repeaterOrigin.X, repeater.ActualWidth(), repeater.DesiredSize().Width,
+         parent.ActualWidth(), parent.ActualOffset().x}};
+    if (stamp.count < 0 || !std::isfinite(stamp.nativeColumnWidth)) throw winrt::hresult_error(E_FAIL);
+    for (double value : stamp.geometry) {
+        if (!std::isfinite(value)) throw winrt::hresult_error(E_FAIL);
+    }
+    // A Start-left mod can mutate an existing Transform instead of replacing
+    // the RenderTransform property. Check only the four cached system buttons.
+    for (size_t i = 0; i < placement.systemButtons.size(); i++) {
+        if (auto button = placement.systemButtons[i].get();
+            button && button.Visibility() == Visibility::Visible) {
+            auto bounds = ReadClockTrayVisualBounds(button, root);
+            if (!bounds) throw winrt::hresult_error(E_PENDING);
+            stamp.systemGeometry[i * 3] = bounds->left;
+            stamp.systemGeometry[i * 3 + 1] = bounds->right;
+            stamp.systemGeometry[i * 3 + 2] = 1;
+        }
+    }
+    return stamp;
+}
+
+void WatchClockTrayMetrics(FrameworkElement clock, uint64_t generation) {
+    auto watchGeometry = [generation](DependencyObject owner, DependencyProperty property) {
+        auto token = owner.RegisterPropertyChangedCallback(property,
+            [generation](auto const&, auto const&) {
+                if (ClockTrayWorkIsCurrent(generation)) g_clockTrayPlacement.geometryDirty = true;
+            });
+        g_clockTrayPlacement.metricHooks.push_back({owner, property, token});
+        g_clockTrayCleanupPending = true;
+        ApplyClockTrayStep(generation, [] {});
+    };
+    auto watch = [generation](DependencyObject owner, DependencyProperty property) {
+        int64_t token = owner.RegisterPropertyChangedCallback(property,
+            [generation](DependencyObject const&, DependencyProperty const&) {
+                if (ClockTrayWorkIsCurrent(generation)) g_clockTrayPlacement.metricsDirty = true;
+            });
+        g_clockTrayPlacement.metricHooks.push_back({owner, property, token});
+        g_clockTrayCleanupPending = true;
+        ApplyClockTrayStep(generation, [] {});
+    };
+    auto stack = FindClockTrayTextStack(clock);
+    if (!stack) throw winrt::hresult_error(E_FAIL);
+    g_clockTrayPlacement.textStack = stack;
+    for (FrameworkElement element : {clock, stack.as<FrameworkElement>(),
+             stack.Children().GetAt(0).as<FrameworkElement>(),
+             stack.Children().GetAt(1).as<FrameworkElement>()}) {
+        for (auto property : {UIElement::VisibilityProperty(), FrameworkElement::WidthProperty(),
+                 FrameworkElement::HeightProperty(), FrameworkElement::MinWidthProperty(),
+                 FrameworkElement::MaxWidthProperty(), FrameworkElement::MinHeightProperty(),
+                 FrameworkElement::MaxHeightProperty(), FrameworkElement::MarginProperty()}) watch(element, property);
+        if (auto text = element.try_as<Controls::TextBlock>()) {
+            for (auto property : {Controls::TextBlock::TextProperty(), Controls::TextBlock::FontFamilyProperty(),
+                     Controls::TextBlock::FontSizeProperty(), Controls::TextBlock::FontWeightProperty(),
+                     Controls::TextBlock::FontStyleProperty(), Controls::TextBlock::FontStretchProperty(),
+                     Controls::TextBlock::CharacterSpacingProperty(), Controls::TextBlock::LineHeightProperty(),
+                     Controls::TextBlock::LineStackingStrategyProperty(), Controls::TextBlock::TextWrappingProperty(),
+                     Controls::TextBlock::TextLineBoundsProperty(), Controls::TextBlock::PaddingProperty(),
+                     Controls::TextBlock::IsTextScaleFactorEnabledProperty(), FrameworkElement::LanguageProperty(),
+                     FrameworkElement::FlowDirectionProperty(), Controls::TextBlock::TextReadingOrderProperty()}) watch(text, property);
+        }
+    }
+    watch(stack, Controls::StackPanel::SpacingProperty());
+    watch(stack, Controls::StackPanel::PaddingProperty());
+    watch(stack, Controls::StackPanel::BorderThicknessProperty());
+    watch(stack, Controls::StackPanel::OrientationProperty());
+    for (auto property : {Controls::Grid::ColumnProperty(), Controls::Grid::ColumnSpanProperty(),
+             Controls::Grid::RowProperty(), Controls::Grid::RowSpanProperty(),
+             FrameworkElement::HorizontalAlignmentProperty(), FrameworkElement::VerticalAlignmentProperty(),
+             FrameworkElement::MarginProperty()}) watchGeometry(clock, property);
+    // The same observers remain useful in the native waiting position.
+    auto& placement = g_clockTrayPlacement;
+    placement.layoutTrackingDirty = false;
+    auto root = placement.root.get();
+    auto repeater = FindTaskbarRepeater(root).as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    auto source = repeater.ItemsSourceView();
+    if (!source) throw winrt::hresult_error(E_FAIL);
+    placement.layoutRepeater = repeater;
+    placement.layoutItems = source;
+    auto changed = [generation](auto const&, auto const&) {
+        if (ClockTrayWorkIsCurrent(generation)) {
+            g_clockTrayPlacement.layoutTrackingDirty = true;
+            g_clockTrayPlacement.geometryDirty = true;
+        }
+    };
+    placement.itemsChangedToken = source.CollectionChanged(changed);
+    g_clockTrayCleanupPending = true;
+    ApplyClockTrayStep(generation, [] {});
+    placement.elementPreparedToken = repeater.ElementPrepared(changed);
+    g_clockTrayCleanupPending = true;
+    ApplyClockTrayStep(generation, [] {});
+    placement.elementClearingToken = repeater.ElementClearing(changed);
+    g_clockTrayCleanupPending = true;
+    ApplyClockTrayStep(generation, [] {});
+    auto elements = GetRealizedTaskbarElements(repeater);
+    if (!elements) throw winrt::hresult_error(E_FAIL);
+    placement.systemButtons = {};
+    for (auto element : *elements) {
+        auto kind = IdentifySystemButton(element);
+        if (kind != SystemButtonKind::None) {
+            placement.systemButtons[static_cast<size_t>(kind) - 1] = element;
+        }
+    }
+    elements->push_back(root);
+    elements->push_back(placement.originalParent.get());
+    auto ancestor = repeater.as<FrameworkElement>();
+    while (ancestor && ancestor != root) {
+        elements->push_back(ancestor);
+        ancestor = Media::VisualTreeHelper::GetParent(ancestor).try_as<FrameworkElement>();
+    }
+    if (auto sourcePanel = FindNativeTrayPanel(root)) elements->push_back(sourcePanel);
+    for (auto element : *elements) {
+        for (auto property : {FrameworkElement::ActualWidthProperty(), FrameworkElement::ActualHeightProperty(),
+                 FrameworkElement::MarginProperty(), UIElement::VisibilityProperty(),
+                 FrameworkElement::HorizontalAlignmentProperty(), UIElement::RenderTransformProperty()}) {
+            watchGeometry(element, property);
+        }
+    }
+    // Native tray insets may change without changing the source panel's size.
+    if (auto panel = FindNativeTrayPanel(root)) {
+        if (auto grid = panel.try_as<Controls::Grid>()) {
+            watchGeometry(grid, Controls::Grid::PaddingProperty());
+            watchGeometry(grid, Controls::Grid::BorderThicknessProperty());
+        } else if (auto stackPanel = panel.try_as<Controls::StackPanel>()) {
+            watchGeometry(stackPanel, Controls::StackPanel::PaddingProperty());
+            watchGeometry(stackPanel, Controls::StackPanel::BorderThicknessProperty());
+        } else if (auto border = panel.try_as<Controls::Border>()) {
+            watchGeometry(border, Controls::Border::PaddingProperty());
+            watchGeometry(border, Controls::Border::BorderThicknessProperty());
+        }
+    }
+    placement.layoutStamp = ReadClockTrayLayoutStamp();
+    placement.clockLoadedToken = clock.Loaded(
+        [generation](winrt::Windows::Foundation::IInspectable const&,
+                     RoutedEventArgs const&) {
+            if (!ClockTrayWorkIsCurrent(generation)) return;
+            g_clockTrayPlacement.metricsDirty = true;
+            // Let the native Loaded wave finish before reading descendants.
+            // The next layout or the one-shot deadline performs the check.
+        });
+    g_clockTrayCleanupPending = true;
+    ApplyClockTrayStep(generation, [] {});
+    g_clockTrayPlacement.metricLayoutToken = clock.LayoutUpdated(
+        [generation](winrt::Windows::Foundation::IInspectable const&,
+                     winrt::Windows::Foundation::IInspectable const&) {
+            ProcessClockTrayChanges(generation);
+        });
+    g_clockTrayCleanupPending = true;
+    ApplyClockTrayStep(generation, [] {});
+    g_clockTrayPlacement.metricsDirty = true;
+}
+// END CLOCK TRAY METRICS (P3)
+
+bool ClockTraySameMetrics(const ClockTrayMetrics& a, const ClockTrayMetrics& b) {
+    // Do not round away small growth: it may consume the last safe gap.
+    return a.requiredWidth == b.requiredWidth && a.requiredHeight == b.requiredHeight &&
+           a.lines == b.lines && a.nativeChromeWidth == b.nativeChromeWidth;
+}
+
+ClockTrayRetryKey MakeClockTrayRetryKey(const ClockTrayLayout& layout,
+                                       const ClockTrayMetrics& metrics,
+                                       const TrayAppearance& appearance,
+                                       double windowHeight) {
+    auto& sample = layout.snapshot;
+    ClockTrayRetryKey key{{layout.screenLeft, windowHeight, metrics.requiredWidth,
+        metrics.requiredHeight, double(metrics.lines), metrics.nativeChromeWidth,
+        sample.contentLeft, sample.contentWidth, sample.rootWidth, sample.offset,
+        double(sample.centered), sample.rightBoundary, sample.repeaterDesiredWidth},
+        {sample.repeaterIdentity}};
+    for (auto value : {appearance.margin, appearance.borderThickness, appearance.padding}) {
+        key.values.insert(key.values.end(), {value.Left, value.Top, value.Right, value.Bottom});
+    }
+    for (auto& button : sample.buttons) {
+        key.identities.push_back(button.identity);
+        key.values.insert(key.values.end(), {double(button.kind), double(button.visible),
+            double(button.fixed), button.bounds.left, button.bounds.right, button.marginLeft,
+            button.outerWidth, button.contentWidth, button.marginRight});
+    }
+    for (auto& item : sample.flowElements) {
+        key.identities.push_back(item.identity);
+        key.values.insert(key.values.end(), {item.bounds.left, item.bounds.right, double(item.overflow)});
+    }
+    // Unknown measurements also need a stable key; NaN never compares equal.
+    for (auto& value : key.values) if (std::isnan(value)) value = 0;
+    return key;
+}
+
+bool ClockTrayBeginNativeAttempt(ClockTrayRetryKey key) {
+    if (g_clockTray.lastNativeAttempt && *g_clockTray.lastNativeAttempt == key) return false;
+    g_clockTray.lastNativeAttempt = std::move(key);
+    g_clockTrayCounters.nativeAttempts++;
+    return true;
+}
+
+void ProcessClockTrayChanges(uint64_t generation) {
+    if (g_clockTrayWorkActive || !ClockTrayWorkIsCurrent(generation)) return;
+    g_clockTrayCounters.signals++;
+    try {
+        auto& current = g_clockTrayPlacement;
+        auto clock = current.clock.get();
+        if (!clock) return;
+        if (current.placed && !clock.IsLoaded() && WaitForClockTrayArrange()) return;
+        auto stamp = ReadClockTrayLayoutStamp();
+        if (!current.layoutStamp || *current.layoutStamp != stamp) {
+            if (!current.layoutStamp || current.layoutStamp->source != stamp.source ||
+                current.layoutStamp->repeater != stamp.repeater) current.layoutTrackingDirty = true;
+            bool extentChanged = current.placed && current.layoutStamp &&
+                (current.layoutStamp->nativeColumnWidth != stamp.nativeColumnWidth ||
+                 current.layoutStamp->centered != stamp.centered);
+            current.layoutStamp = stamp;
+            current.geometryDirty = true;
+            if (extentChanged) {
+                ClockTrayWorkScope work;
+                ApplyClockTrayStep(generation, [&] { current.root.get().InvalidateMeasure(); });
+            }
+        }
+        if (current.layoutTrackingDirty && !current.placed) {
+            ClockTrayWorkScope work;
+            if (!ClearClockTrayMetricHooks()) return;
+            WatchClockTrayMetrics(clock, generation);
+            current.geometryDirty = true;
+        }
+        bool metricsChanged = false;
+        if (current.metricsDirty) {
+            ClockTrayWorkScope work;
+            current.metricsDirty = false;
+            auto metrics = ReadClockTrayMetrics(clock);
+            metricsChanged = !current.observedMetrics || !ClockTraySameMetrics(*current.observedMetrics, metrics);
+            if (!metricsChanged) g_clockTrayCounters.unchangedMetrics++;
+            current.observedMetrics = metrics;
+        }
+        if (current.geometryDirty || current.layoutTrackingDirty || metricsChanged) {
+            current.geometryDirty = false;
+            if (current.placed) {
+                UpdateClockTrayPlacement();
+            } else if (!current.arrangeDeadline || !current.arrangeDeadline.IsEnabled()) {
+                StartClockTrayArrangeDeadline(true);
+            }
+        }
+    } catch (...) {
+        if (ClockTrayWorkIsCurrent(generation)) {
+            if (g_clockTrayPlacement.placed) RestoreClockTray(ClockTrayReason::ElementReplaced);
+            else {
+                ClockTrayWorkScope work;
+                if (ClearClockTrayMetricHooks()) {
+                    g_clockTrayPlacement = {};
+                    g_clockTrayCleanupPending = false;
+                    EnsureClockTrayRetry(g_clockTray.clock.get());
+                }
+            }
         }
     }
 }
 
-void RegisterLeftHostTracking(MovedClockData& data, FrameworkElement clock) {
-    if (auto root = data.taskbarRoot.get()) {
+void EnsureClockTrayRetry(FrameworkElement clock) {
+    if (!clock || g_clockTrayPlacement.placed || !ClockTrayWorkIsCurrent(g_clockTray.generation)) return;
+    ClockTrayWorkScope work;
+    if (g_clockTrayPlacement.metricLayoutToken) return;
+    if (g_clockTrayPlacement.clockLoadedToken) {
+        if (!clock.IsLoaded() || !ClearClockTrayMetricHooks()) return;
+        g_clockTrayPlacement = {};
+        g_clockTrayCleanupPending = false;
+    }
+    if (g_clockTrayCleanupPending) return;
+    auto generation = g_clockTray.generation;
+    try {
+        if (!clock.IsLoaded()) {
+            // Startup/template creation needs only Loaded, not a frame budget.
+            g_clockTrayPlacement.clock = clock;
+            g_clockTray.clock = clock;
+            g_clockTrayPlacement.clockLoadedToken = clock.Loaded(
+                [generation](auto const&, auto const&) {
+                    if (!g_clockTrayWorkActive && ClockTrayWorkIsCurrent(generation)) {
+                        try { StartClockTrayArrangeDeadline(true); }
+                        catch (...) { RestoreClockTray(ClockTrayReason::UnknownMetrics); }
+                    }
+                });
+            g_clockTrayCleanupPending = true;
+            ApplyClockTrayStep(generation, [] {});
+            StartClockTrayArrangeDeadline(true);
+            return;
+        }
+        auto parent = Media::VisualTreeHelper::GetParent(clock).try_as<Controls::Grid>();
+        auto frame = parent ? Media::VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>() : nullptr;
+        auto root = frame ? Media::VisualTreeHelper::GetParent(frame).try_as<Controls::Grid>() : nullptr;
+        int column = Controls::Grid::GetColumn(clock);
+        if (!parent || parent.Name() != L"SystemTrayFrameGrid" || !root ||
+            !root.IsLoaded() || column < 0 || uint32_t(column) >= parent.ColumnDefinitions().Size()) return;
+        auto& current = g_clockTrayPlacement;
+        current.clock = clock;
+        current.root = root;
+        current.originalParent = parent;
+        current.originalColumn = column;
+        current.nativeColumn = parent.ColumnDefinitions().GetAt(column);
+        g_clockTray.clock = clock;
+        WatchClockTrayMetrics(clock, generation);
+        StartClockTrayArrangeDeadline(true);
+    } catch (...) {
+        // Keep failed removals recorded; a later unload can retry safely.
+        bool complete = ClearClockTrayMetricHooks();
+        if (complete) g_clockTrayPlacement = {};
+        g_clockTrayCleanupPending = !complete;
+        SetClockTrayResult(ClockTrayState::NativeWaiting, ClockTrayReason::UnsupportedLayout);
+    }
+}
+
+bool TryAttachClockTray(FrameworkElement clock) {
+    auto& placement = g_clockTrayPlacement;
+    auto generation = g_clockTray.generation;
+    if (!clock || placement.placed || g_clockTrayWorkActive ||
+        !ClockTrayWorkIsCurrent(generation)) {
+        return false;
+    }
+    ClockTrayWorkScope work;
+    PCWSTR stage = L"validate";
+    try {
+        auto originalParent =
+            Media::VisualTreeHelper::GetParent(clock).try_as<Controls::Panel>();
+        if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
+            Wh_Log(L"[clock-tray] unexpected clock parent");
+            SetClockTrayResult(ClockTrayState::NativeWaiting,
+                               ClockTrayReason::UnsupportedLayout);
+            return false;
+        }
+        auto frame =
+            Media::VisualTreeHelper::GetParent(originalParent)
+                .try_as<FrameworkElement>();
+        if (!frame ||
+            winrt::get_class_name(frame) != L"SystemTray.SystemTrayFrame") {
+            SetClockTrayResult(ClockTrayState::NativeWaiting,
+                               ClockTrayReason::UnsupportedLayout);
+            return false;
+        }
+        auto root = Media::VisualTreeHelper::GetParent(frame)
+                        .try_as<Controls::Grid>();
+        if (!root || !root.IsLoaded()) {
+            SetClockTrayResult(ClockTrayState::AwaitingLayout,
+                               ClockTrayReason::None);
+            return false;
+        }
+        auto nativeGrid = originalParent.try_as<Controls::Grid>();
+        int columnIndex = Controls::Grid::GetColumn(clock);
+        if (!nativeGrid || columnIndex < 0 || Controls::Grid::GetColumnSpan(clock) != 1 ||
+            static_cast<uint32_t>(columnIndex) >= nativeGrid.ColumnDefinitions().Size()) {
+            Wh_Log(L"[clock-tray] native column unavailable parent=%s column=%d span=%d count=%u",
+                   winrt::get_class_name(originalParent).c_str(), columnIndex,
+                   Controls::Grid::GetColumnSpan(clock), nativeGrid ? nativeGrid.ColumnDefinitions().Size() : 0);
+            SetClockTrayResult(ClockTrayState::NativeWaiting, ClockTrayReason::UnsupportedLayout);
+            return false;
+        }
+        auto nativeColumn = nativeGrid.ColumnDefinitions().GetAt(columnIndex);
+        double nativeColumnWidth = nativeColumn.ActualWidth();
+        if (!std::isfinite(nativeColumnWidth) || nativeColumnWidth <= 0) {
+            SetClockTrayResult(ClockTrayState::AwaitingLayout, ClockTrayReason::UnknownMetrics);
+            return false;
+        }
+        auto repeater = FindTaskbarRepeater(root);
+        stage = L"layout";
+        auto layout = ReadClockTrayLayout(root, repeater);
+        if (!layout) {
+            SetClockTrayResult(ClockTrayState::NativeWaiting,
+                               ClockTrayReason::UnsupportedLayout);
+            return false;
+        }
+        stage = L"metrics";
+        auto metrics = ReadClockTrayMetrics(clock);
+        auto appearance = LeftClockTrayAppearance(ReadNativeTrayAppearance(FindNativeTrayPanel(root)));
+        auto key = MakeClockTrayRetryKey(*layout, metrics, appearance, ClockTrayWindowHeight(root));
+        key.identities.push_back(reinterpret_cast<uintptr_t>(winrt::get_abi(clock)));
+        key.identities.push_back(reinterpret_cast<uintptr_t>(winrt::get_abi(FindClockTrayTextStack(clock))));
+        key.identities.push_back(reinterpret_cast<uintptr_t>(winrt::get_abi(
+            repeater.as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>().ItemsSourceView())));
+        // Releasing a binding or replacing a local style is an effective
+        // ownership change even when the resulting text width stays equal.
+        for (auto property : {Controls::Grid::ColumnProperty(), Controls::Grid::ColumnSpanProperty(),
+                 Controls::Grid::RowProperty(), Controls::Grid::RowSpanProperty(),
+                 FrameworkElement::HorizontalAlignmentProperty(), FrameworkElement::VerticalAlignmentProperty(),
+                 FrameworkElement::MarginProperty()}) {
+            key.values.push_back(clock.GetBindingExpression(property) ? 1 : 0);
+            key.values.push_back(clock.ReadLocalValue(property) == DependencyProperty::UnsetValue() ? 1 : 0);
+        }
+        if (!ClockTrayBeginNativeAttempt(std::move(key))) return false;
+        auto metricsReason = CheckClockTrayMetrics(metrics, ClockTrayWindowHeight(root));
+        if (metricsReason != ClockTrayReason::None) {
+            SetClockTrayResult(metricsReason == ClockTrayReason::UnknownMetrics
+                                   ? ClockTrayState::AwaitingLayout : ClockTrayState::NativeWaiting,
+                               metricsReason);
+            return false;
+        }
+        double width = metrics.requiredWidth;
+        auto plan = ComputeClockTrayPlan(layout->snapshot, layout->screenLeft, width,
+            appearance.margin, appearance.borderThickness, ClampTrayPadding(appearance.padding));
+        if (plan.reason != ClockTrayReason::None) {
+            Wh_Log(L"[clock-tray] plan rejected reason=%s visible=%.3f..%.3f boundary=%.3f",
+                   ClockTrayReasonName(plan.reason), plan.visible.left, plan.visible.right,
+                   layout->snapshot.rightBoundary);
+            SetClockTrayResult(ClockTrayState::NativeWaiting,
+                               plan.reason);
+                return false;
+        }
+        uint32_t originalIndex = 0;
+        if (!originalParent.Children().IndexOf(clock.as<UIElement>(),
+                                               originalIndex)) {
+            SetClockTrayResult(ClockTrayState::NativeWaiting,
+                               ClockTrayReason::ElementReplaced);
+            return false;
+        }
+
+        if (!ClearClockTrayMetricHooks()) return false;
+        Controls::Grid host;
+        host.Name(L"TaskbarClockToLeftHost");
+        host.HorizontalAlignment(HorizontalAlignment::Left);
+        host.VerticalAlignment(VerticalAlignment::Stretch);
+        g_clockTrayCounters.marginWrites++;
+        host.Margin(Thickness{plan.hostLeft, 0, 0, 0});
+        host.Width(plan.hostWidth);
+        Controls::Grid::SetColumn(host, 0);
+        Controls::Grid::SetColumnSpan(
+            host, std::max<int>(1, root.ColumnDefinitions().Size()));
+        Controls::Grid::SetRow(host, 0);
+        Controls::Grid::SetRowSpan(
+            host, std::max<int>(1, root.RowDefinitions().Size()));
+
+        Controls::Border decoration;
+        decoration.Name(L"TaskbarClockToLeftBackground");
+        // The border is the clock's parent now, so it must stay hit-testable;
+        // its insets are what the theme applies around the native tray content.
+        decoration.HorizontalAlignment(HorizontalAlignment::Stretch);
+        decoration.VerticalAlignment(VerticalAlignment::Stretch);
+
+        placement = ClockTrayPlacement{};
+        placement.clock = clock;
+        placement.root = root;
+        placement.originalParent = originalParent;
+        placement.originalIndex = originalIndex;
+        placement.originalColumn = Controls::Grid::GetColumn(clock);
+        placement.originalColumnSpan = Controls::Grid::GetColumnSpan(clock);
+        placement.originalRow = Controls::Grid::GetRow(clock);
+        placement.originalRowSpan = Controls::Grid::GetRowSpan(clock);
+        placement.originalHorizontalAlignment = clock.HorizontalAlignment();
+        placement.originalVerticalAlignment = clock.VerticalAlignment();
+        placement.appliedVerticalAlignment = metrics.lines == 1
+            ? VerticalAlignment::Center : VerticalAlignment::Stretch;
+        placement.originalMargin = clock.Margin();
+        placement.unsetProperties =
+            ClockTrayUnsetProperty<int>(clock, Controls::Grid::ColumnProperty(), 1) |
+            ClockTrayUnsetProperty<int>(clock, Controls::Grid::ColumnSpanProperty(), 2) |
+            ClockTrayUnsetProperty<int>(clock, Controls::Grid::RowProperty(), 4) |
+            ClockTrayUnsetProperty<int>(clock, Controls::Grid::RowSpanProperty(), 8) |
+            ClockTrayUnsetProperty<HorizontalAlignment>(clock,
+                FrameworkElement::HorizontalAlignmentProperty(), 16) |
+            ClockTrayUnsetProperty<VerticalAlignment>(clock,
+                FrameworkElement::VerticalAlignmentProperty(), 32) |
+            ClockTrayUnsetProperty<Thickness>(clock,
+                FrameworkElement::MarginProperty(), 64);
+        placement.host = host;
+        placement.decoration = decoration;
+        placement.plan = plan;
+        placement.nativeColumn = nativeColumn;
+        placement.nativeColumnWidth = nativeColumnWidth;
+        placement.metrics = metrics;
+        placement.observedMetrics = metrics;
+        placement.arrangeWaitStart = GetTickCount64();
+        placement.placed = true;
+        g_clockTrayCleanupPending = true;
+
+        stage = L"remove-clock";
+        placement.detachedClock = clock;
+        ApplyClockTrayStep(generation, [&] {
+            originalParent.Children().RemoveAt(originalIndex);
+        });
+        SetClockTrayProperty(clock, Controls::Grid::ColumnProperty(),
+                             0, 1, generation);
+        SetClockTrayProperty(clock, Controls::Grid::ColumnSpanProperty(),
+                             1, 2, generation);
+        SetClockTrayProperty(clock, Controls::Grid::RowProperty(),
+                             0, 4, generation);
+        SetClockTrayProperty(clock, Controls::Grid::RowSpanProperty(),
+                             1, 8, generation);
+        SetClockTrayProperty(clock, FrameworkElement::HorizontalAlignmentProperty(),
+                             HorizontalAlignment::Stretch, 16, generation);
+        SetClockTrayProperty(clock, FrameworkElement::VerticalAlignmentProperty(),
+                             placement.appliedVerticalAlignment, 32, generation);
+        SetClockTrayProperty(clock, FrameworkElement::MarginProperty(),
+                             Thickness{0, 0, 0, 0}, 64, generation);
+        // Faithful structure: the decoration is the clock's parent, so the
+        // theme's Margin and BorderThickness inset the content exactly as they
+        // inset the native tray's icons.
+        stage = L"attach-child";
+        ApplyClockTrayStep(generation, [&] { decoration.Child(clock.as<UIElement>()); });
+        placement.detachedClock = nullptr;
+        stage = L"append-host";
+        ApplyClockTrayStep(generation, [&] { host.Children().Append(decoration); });
+        ApplyClockTrayStep(generation, [&] { root.Children().Append(host.as<UIElement>()); });
+        stage = L"appearance";
+        ApplyClockTrayStep(generation, [&] { MirrorNativeTrayAppearance(root); });
+        stage = L"size-hook";
         auto weakClock = winrt::make_weak(clock);
-        data.rootLayoutUpdatedToken = root.LayoutUpdated(
-            [weakClock](winrt::Windows::Foundation::IInspectable const&,
-                        winrt::Windows::Foundation::IInspectable const&) {
+        placement.clockSizeToken = clock.SizeChanged(
+            [weakClock, generation](winrt::Windows::Foundation::IInspectable const&,
+                        SizeChangedEventArgs const&) {
                 try {
-                    UpdateLeftHostOffsetForClock(weakClock);
+                    if (!g_clockTrayWorkActive && ClockTrayWorkIsCurrent(generation) &&
+                        weakClock.get() == g_clockTrayPlacement.clock.get()) {
+                        g_clockTrayPlacement.metricsDirty = true;
+                    }
                 } catch (...) {
-                    Wh_Log(L"Root layout callback failed: %08X",
+                    Wh_Log(L"[clock-tray] size handling failed: %08X",
                            winrt::to_hresult());
                 }
             });
-    }
-    RegisterWidgetsTracking(data, clock);
-}
-
-void RevokeLeftHostTracking(MovedClockData& data) {
-    auto token = data.rootLayoutUpdatedToken;
-    data.rootLayoutUpdatedToken.reset();
-    if (token) {
-        if (auto root = data.taskbarRoot.get()) {
-            root.LayoutUpdated(*token);
-        }
-    }
-    RevokeWidgetsTracking(data);
-    data.layoutSnapshot.reset();
-}
-
-void RemoveLeftHost(MovedClockData& data) {
-    RevokeLeftHostTracking(data);
-
-    if (!data.leftHost) {
-        return;
-    }
-
-    if (data.leftHost.Children().Size()) {
-        Wh_Log(L"Left host cleanup conflict: host still owns native elements");
-        return;
-    }
-    if (auto root = data.taskbarRoot.get()) {
-        auto hostElement = data.leftHost.as<UIElement>();
-        uint32_t index = 0;
-        if (root.Children().IndexOf(hostElement, index)) {
-            root.Children().RemoveAt(index);
-        }
-    }
-
-    data.leftHost = nullptr;
-}
-
-void RestoreMovedClockData(MovedClockData& data) {
-    data.restoring = true;
-    RevokeLeftHostTracking(data);
-    RestoreExtraTrayElements(data, &MovedClockData::notifyIcons);
-    RestoreExtraTrayElements(data, &MovedClockData::applicationTray);
-    RestoreExtraTrayElements(data, &MovedClockData::trayGroup);
-    RestoreExtraTrayElements(data);  // Original native order: arrow, application tray, system group, control center, clock.
-    auto movedClock = data.clock.get();
-    if (movedClock) {
-        auto originalParent = data.originalParent.get();
-        auto element = movedClock.as<UIElement>();
-        // A not-yet-attached host can own the clock even when GetParent is null.
-        if (data.leftHost) {
-            uint32_t index = 0;
-            if (data.leftHost.Children().IndexOf(element, index)) {
-                data.leftHost.Children().RemoveAt(index);
-            }
-        }
-        auto currentParent = Media::VisualTreeHelper::GetParent(movedClock)
-                                 .try_as<Controls::Panel>();
-
-        if (currentParent &&
-            (!originalParent ||
-             currentParent != originalParent)) {
-            uint32_t index = 0;
-            if (currentParent.Children().IndexOf(element, index)) {
-                currentParent.Children().RemoveAt(index);
-            }
-        }
-
-        // Reattach before restoring properties or removing the host, so a
-        // property failure can't strand the clock inside a discarded host.
-        currentParent = Media::VisualTreeHelper::GetParent(movedClock)
-                            .try_as<Controls::Panel>();
-        if (originalParent && !currentParent) {
-            auto children = originalParent.Children();
-            uint32_t index =
-                GetTrayRestoreIndex(originalParent, data.originalPreviousSibling,
-                                    data.originalNextSibling, data.originalIndex);
-            if (index < children.Size()) {
-                children.InsertAt(index, element);
-            } else {
-                children.Append(element);
-            }
-        }
-
-        Controls::Grid::SetColumn(movedClock, data.originalColumn);
-        Controls::Grid::SetColumnSpan(movedClock, data.originalColumnSpan);
-        Controls::Grid::SetRow(movedClock, data.originalRow);
-        Controls::Grid::SetRowSpan(movedClock, data.originalRowSpan);
-        movedClock.HorizontalAlignment(data.originalHorizontalAlignment);
-        movedClock.VerticalAlignment(data.originalVerticalAlignment);
-        movedClock.Margin(data.originalMargin);
-    }
-
-    RemoveLeftHost(data);
-    auto spacing = data.widgetsSpacing;
-    auto flowSpacing = data.flowSpacing;
-    data.widgetsSpacing.reset();
-    data.flowSpacing.reset();
-    data.centeredProbe.reset();
-    if (flowSpacing) {
-        RestoreFlowSpacing(*flowSpacing);
-    }
-    if (spacing) {
-        RestoreWidgetsSpacing(*spacing);
-    }
-    if (movedClock) {
-        Wh_Log(L"Clock restored from the left host");
-    }
-}
-
-void CleanupMovedClockData() {
-    auto& movedClocks = MovedClocks();
-    for (auto it = movedClocks.begin(); it != movedClocks.end();) {
-        if (!it->clock.get() || !it->taskbarRoot.get()) {
-            RestoreMovedClockData(*it);
-            it = movedClocks.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-bool RestoreClock(FrameworkElement clock) {
-    auto& movedClocks = MovedClocks();
-    for (auto it = movedClocks.begin(); it != movedClocks.end(); ++it) {
-        auto movedClock = it->clock.get();
-        if (!movedClock || movedClock != clock) {
-            continue;
-        }
-
-        RestoreMovedClockData(*it);
-        movedClocks.erase(it);
+        placement.clockSizeOwner = clock;
+        g_clockTrayCleanupPending = true;
+        ApplyClockTrayStep(generation, [] {});
+        stage = L"metrics-hooks";
+        WatchClockTrayMetrics(clock, generation);
+        StartClockTrayArrangeDeadline();
+        g_clockTray.pending = false;
+        g_clockTrayCounters.attachments++;
+        SetClockTrayResult(ClockTrayState::Placing, ClockTrayReason::None);
+        Wh_Log(L"[clock-tray] attached anchor=%.3f shift=%.3f host=%.3f+%.3f "
+               L"visible=%.3f..%.3f nativeColumn=%.3f centered=%d",
+               plan.layoutLeft, plan.visualShift, plan.hostLeft, plan.hostWidth,
+               plan.visible.left, plan.visible.right, nativeColumnWidth, layout->snapshot.centered);
+        Wh_Log(L"[clock-tray] metrics lines=%u required=%.3fx%.3f actual=%.3fx%.3f",
+               metrics.lines, metrics.requiredWidth, metrics.requiredHeight,
+               clock.ActualWidth(), clock.ActualHeight());
         return true;
-    }
-
-    return false;
-}
-
-bool MoveClock(FrameworkElement content) {
-    CleanupMovedClockData();
-
-    if (!g_taskbarViewHooked) {
-        Wh_Log(L"Taskbar layout hook isn't ready; relocation skipped");
-        return false;
-    }
-
-    auto clock = FindAncestor(content, L"SystemTray.OmniButton",
-                              L"NotificationCenterButton");
-    if (!clock) {
-        Wh_Log(L"NotificationCenterButton not found");
-        return false;
-    }
-
-    if (!ShouldRelocateClock()) {
-        RestoreClock(clock);
-        return false;
-    }
-
-    if (CenteredViewportFallbackActive(clock)) {
-        return false;
-    }
-
-    for (const auto& data : MovedClocks()) {
-        if (auto movedClock = data.clock.get(); movedClock == clock) {
-            auto host = data.leftHost;
-            UpdateLeftHostOffsetForClock(winrt::make_weak(clock));
-            auto current = FindMovedClockData(clock);
-            return current && !current->restoring && current->leftHost == host;
-        }
-    }
-
-    auto originalParent = Media::VisualTreeHelper::GetParent(clock)
-                              .try_as<Controls::Panel>();
-    if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
-        Wh_Log(L"Unexpected clock parent");
-        return false;
-    }
-
-    auto systemTrayFrame = Media::VisualTreeHelper::GetParent(originalParent)
-                               .try_as<FrameworkElement>();
-    if (!systemTrayFrame ||
-        winrt::get_class_name(systemTrayFrame) !=
-            L"SystemTray.SystemTrayFrame") {
-        Wh_Log(L"SystemTrayFrame not found");
-        return false;
-    }
-
-    auto root = Media::VisualTreeHelper::GetParent(systemTrayFrame)
-                    .try_as<Controls::Grid>();
-    if (!root ||
-        root.as<winrt::Windows::Foundation::IInspectable>() ==
-            originalParent.as<winrt::Windows::Foundation::IInspectable>()) {
-        Wh_Log(L"Taskbar root Grid not found");
-        return false;
-    }
-
-    auto repeater = FindTaskbarRepeater(root);
-    auto layout = ReadLeftHostLayout(root, repeater, nullptr);
-    if (!layout) {
-        Wh_Log(L"Unsupported or unfinished taskbar layout; relocation skipped");
-        return false;
-    }
-    LogLeftHostLayout(*layout, L"relocation-plan");
-    auto controlCenter = ReadControlCenterToMove(clock, root);
-    auto trayGroup = ReadTrayGroupToMove(clock, root);
-    auto notifyIcons = ReadNotifyIconGroupToMove(clock, root);
-    auto applicationTray = ReadApplicationTrayToMove(clock, root);
-    if (applicationTray && ((notifyIcons && notifyIcons->originalIndex >= applicationTray->originalIndex) ||
-                            (trayGroup && applicationTray->originalIndex >= trayGroup->originalIndex) ||
-                            (controlCenter && applicationTray->originalIndex >= controlCenter->originalIndex))) applicationTray.reset();
-    if (g_settings.moveNotificationAreaIcons && !applicationTray) {
-        Wh_Log(L"[application-tray] empty or unsupported native contract; keeping application tray in its current parent");
-    }
-    if (notifyIcons && ((trayGroup && notifyIcons->originalIndex >= trayGroup->originalIndex) ||
-                        (controlCenter && notifyIcons->originalIndex >= controlCenter->originalIndex))) notifyIcons.reset();
-    if (g_settings.moveNotifyIconStack && !notifyIcons) {
-        Wh_Log(L"[notify-icons] unsupported native contract or popup hook/DPI context; keeping arrow in its current parent");
-    }
-    if (trayGroup && controlCenter && trayGroup->originalIndex >= controlCenter->originalIndex) {
-        trayGroup.reset(); // Only the sampled native ordering is supported.
-    }
-    if (g_settings.moveNonActivatableStack && !trayGroup) {
-        Wh_Log(L"[tray-group] unsupported native contract; keeping group in its current parent");
-    }
-    if (g_settings.moveControlCenter && !controlCenter) {
-        Wh_Log(L"[control-center] unsupported native contract; keeping control in its current parent");
-    }
-    if (!layout->centered) {
-        auto leading = GetLeadingLeftAlignedFlow(*layout);
-        auto anchor = GetLeftAlignedSpacingAnchor(*layout);
-        auto target = anchor ? FindFlowTarget(repeater, anchor->identity) : nullptr;
-        auto spacing = target ? ReadFlowSpacing(target, true) : std::nullopt;
-        double baselineLeft = anchor && spacing ?
-            anchor->bounds.right + spacing->originalMargin.Right : 0;
-        layout->hostWidth = clock.ActualWidth() +
-            (controlCenter ? controlCenter->element.get().ActualWidth() : 0) +
-            (trayGroup ? trayGroup->element.get().ActualWidth() : 0) +
-            (notifyIcons ? notifyIcons->element.get().ActualWidth() : 0) +
-            (applicationTray ? applicationTray->element.get().ActualWidth() : 0);
-        auto increment = leading ? ComputeRequiredSpacing(
-            layout->offset + layout->hostWidth, baselineLeft, 0)
-                                 : std::nullopt;
-        if (applicationTray && (!increment || !FlowSpacingFits(*layout, 0, *increment, 0))) {
-            layout->hostWidth -= applicationTray->element.get().ActualWidth();
-            applicationTray.reset();
-            increment = leading ? ComputeRequiredSpacing(
-                layout->offset + layout->hostWidth, baselineLeft, 0) : std::nullopt;
-            Wh_Log(L"[application-tray] native-left space insufficient; keeping application tray in its current parent");
-        }
-        if (notifyIcons && (!increment || !FlowSpacingFits(*layout, 0, *increment, 0))) {
-            layout->hostWidth -= notifyIcons->element.get().ActualWidth();
-            notifyIcons.reset();
-            increment = leading ? ComputeRequiredSpacing(
-                layout->offset + layout->hostWidth, baselineLeft, 0) : std::nullopt;
-            Wh_Log(L"[notify-icons] native-left space insufficient; keeping arrow in its current parent");
-        }
-        if (trayGroup && (!increment || !FlowSpacingFits(*layout, 0, *increment, 0))) {
-            layout->hostWidth -= trayGroup->element.get().ActualWidth();
-            trayGroup.reset();
-            increment = leading ? ComputeRequiredSpacing(
-                layout->offset + layout->hostWidth, baselineLeft, 0) : std::nullopt;
-            Wh_Log(L"[tray-group] native-left space insufficient; keeping group in its current parent");
-        }
-        if (!spacing || layout->hostWidth <= 0 || !increment ||
-            !FlowSpacingFits(*layout, 0, *increment, 0)) {
-            double requiredRight = layout->offset + layout->hostWidth;
-            for (const auto& flow : layout->flowElements) {
-                requiredRight = std::max(requiredRight, flow.bounds.right + increment.value_or(0));
-            }
-            Wh_Log(L"[layout] native-left relocation rejected: anchor=%d margin=%d "
-                   L"hostWidth=%.3f increment=%.3f requiredRight=%.3f availableRight=%.3f; keeping native clock",
-                   anchor.has_value(), spacing.has_value(), layout->hostWidth,
-                   increment.value_or(-1), requiredRight + kTaskbarLayoutGap,
-                   GetLeftAlignedRightBoundary(*layout, 0));
-            return false;
-        }
-    }
-
-    auto element = clock.as<UIElement>();
-    uint32_t originalIndex = 0;
-    if (!originalParent.Children().IndexOf(element, originalIndex)) {
-        return false;
-    }
-
-    double layoutReservedWidth =
-        CalculateNativeClockLayoutWidth(content, clock);
-    auto widgets = FindDirectChildByName(repeater, L"AugmentedEntryPointButton");
-
-    if (applicationTray) applicationTray->hostColumn = notifyIcons ? 1 : 0;
-    if (trayGroup) trayGroup->hostColumn = static_cast<int>(notifyIcons.has_value()) + static_cast<int>(applicationTray.has_value());
-    if (controlCenter) controlCenter->hostColumn = static_cast<int>(trayGroup.has_value()) +
-        static_cast<int>(notifyIcons.has_value()) + static_cast<int>(applicationTray.has_value());
-    int clockHostColumn = static_cast<int>(controlCenter.has_value()) + static_cast<int>(trayGroup.has_value()) +
-                          static_cast<int>(notifyIcons.has_value()) + static_cast<int>(applicationTray.has_value());
-    MovedClockData data{
-        .clock = clock,
-        .originalParent = originalParent,
-        .taskbarRoot = root,
-        .widgets = widgets,
-        .repeater = repeater,
-        .controlCenter = controlCenter,
-        .trayGroup = trayGroup,
-        .notifyIcons = notifyIcons,
-        .applicationTray = applicationTray,
-        .originalPreviousSibling = (controlCenter || trayGroup || notifyIcons || applicationTray) && originalIndex ?
-            winrt::make_weak(originalParent.Children().GetAt(originalIndex - 1)) : winrt::weak_ref<UIElement>{},
-        .originalNextSibling = (controlCenter || trayGroup || notifyIcons || applicationTray) && originalIndex + 1 < originalParent.Children().Size() ?
-            winrt::make_weak(originalParent.Children().GetAt(originalIndex + 1)) : winrt::weak_ref<UIElement>{},
-        .layoutReservedWidth = layoutReservedWidth,
-        .originalIndex = originalIndex,
-        .originalColumn = Controls::Grid::GetColumn(clock),
-        .originalColumnSpan = Controls::Grid::GetColumnSpan(clock),
-        .originalRow = Controls::Grid::GetRow(clock),
-        .originalRowSpan = Controls::Grid::GetRowSpan(clock),
-        .originalHorizontalAlignment = clock.HorizontalAlignment(),
-        .originalVerticalAlignment = clock.VerticalAlignment(),
-        .originalMargin = clock.Margin(),
-    };
-
-    // The host is a sibling layer in the existing root cell. It doesn't add a
-    // Grid column and therefore doesn't change any TaskbarFrame coordinates.
-    data.leftHost = Controls::Grid();
-    data.leftHost.Name(L"TaskbarClockToLeftHost");
-    data.leftHost.HorizontalAlignment(HorizontalAlignment::Left);
-    data.leftHost.VerticalAlignment(VerticalAlignment::Stretch);
-    data.leftHost.Margin(Thickness{layout->offset, 0, 0, 0});
-    Controls::Grid::SetColumn(data.leftHost, 0);
-    Controls::Grid::SetColumnSpan(
-        data.leftHost,
-        std::max<int>(1, root.ColumnDefinitions().Size()));
-    Controls::Grid::SetRow(data.leftHost, 0);
-    Controls::Grid::SetRowSpan(
-        data.leftHost, std::max<int>(1, root.RowDefinitions().Size()));
-
-    if (clockHostColumn) {
-        for (int i = 0; i <= clockHostColumn; i++) {
-            Controls::ColumnDefinition column;
-            column.Width(GridLength{1, GridUnitType::Auto});
-            data.leftHost.ColumnDefinitions().Append(column);
-        }
-    }
-    auto host = data.leftHost;
-    MovedClocks().push_back(std::move(data));
-
-    try {
-        originalParent.Children().RemoveAt(originalIndex);
-        Controls::Grid::SetColumn(clock, clockHostColumn);
-        Controls::Grid::SetColumnSpan(clock, 1);
-        Controls::Grid::SetRow(clock, 0);
-        Controls::Grid::SetRowSpan(clock, 1);
-        clock.HorizontalAlignment(HorizontalAlignment::Stretch);
-        clock.VerticalAlignment(VerticalAlignment::Stretch);
-        clock.Margin(Thickness{0, 0, 0, 0});
-
-        if (auto current = FindMovedClockData(clock);
-            !current || current->restoring || current->leftHost != host) {
-            return false;
-        }
-        if (!TryMoveControlCenter(clock)) {
-            throw winrt::hresult_error(E_FAIL);
-        }
-        bool groupMoved = false;
-        try {
-            groupMoved = TryMoveTrayElement(clock, &MovedClockData::trayGroup);
-        } catch (...) {
-            Wh_Log(L"[tray-group] migration failed: %08X", winrt::to_hresult());
-        }
-        if (!groupMoved) {
-            auto current = FindMovedClockData(clock);
-            if (!current || current->restoring || current->leftHost != host) return false;
-            RestoreExtraTrayElements(*current, &MovedClockData::trayGroup);
-            Wh_Log(L"[tray-group] migration failed; restored group independently");
-        }
-        if (auto current = FindMovedClockData(clock);
-            !current || current->restoring || current->leftHost != host) return false;
-        bool applicationMoved = false;
-        try {
-            applicationMoved = TryMoveTrayElement(clock, &MovedClockData::applicationTray);
-        } catch (...) {
-            Wh_Log(L"[application-tray] migration failed: %08X", winrt::to_hresult());
-        }
-        if (!applicationMoved) {
-            auto current = FindMovedClockData(clock);
-            if (!current || current->restoring || current->leftHost != host) return false;
-            RestoreExtraTrayElements(*current, &MovedClockData::applicationTray);
-            Wh_Log(L"[application-tray] migration failed; restored application tray independently");
-        }
-        if (auto current = FindMovedClockData(clock);
-            !current || current->restoring || current->leftHost != host) return false;
-        bool notifyMoved = false;
-        try {
-            notifyMoved = TryMoveTrayElement(clock, &MovedClockData::notifyIcons);
-        } catch (...) {
-            Wh_Log(L"[notify-icons] migration failed: %08X", winrt::to_hresult());
-        }
-        if (!notifyMoved) {
-            auto current = FindMovedClockData(clock);
-            if (!current || current->restoring || current->leftHost != host) return false;
-            RestoreExtraTrayElements(*current, &MovedClockData::notifyIcons);
-            Wh_Log(L"[notify-icons] migration failed; restored arrow independently");
-        }
-        if (auto current = FindMovedClockData(clock);
-            !current || current->restoring || current->leftHost != host) return false;
-        host.Children().Append(element);
-        root.Children().Append(host.as<UIElement>());
-        if (auto current = FindMovedClockData(clock);
-            current && !current->restoring && current->leftHost == host) {
-            RegisterLeftHostTracking(*current, clock);
-        } else {
-            return false;
-        }
-        UpdateLeftHostOffsetForClock(winrt::make_weak(clock));
-        if (auto current = FindMovedClockData(clock);
-            !current || current->restoring || current->leftHost != host) {
-            return false;
-        }
-
-        // If a clock customization mod loaded first, TaskbarFrame has already
-        // arranged app buttons using the expanded clock. Queue a fresh measure
-        // with our native-width baseline. Don't call UpdateLayout here: this
-        // path can run from LayoutUpdated, where synchronous layout re-entry is
-        // unsafe.
-        originalParent.InvalidateMeasure();
-        systemTrayFrame.InvalidateMeasure();
-        root.InvalidateMeasure();
     } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        RestoreClock(clock);
-        Wh_Log(L"Clock relocation failed: %08X", hr);
+        Wh_Log(L"[clock-tray] attach failed stage=%s hr=%08X",
+               stage, winrt::to_hresult());
+        if (generation == g_clockTray.generation) {
+            RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+        }
         return false;
     }
-
-    if (auto current = FindMovedClockData(clock);
-        !current || current->restoring || current->leftHost != host) {
-        return false;
-    }
-    Wh_Log(L"Clock moved to the left host; visual=%.1f, layout=%.1f",
-           clock.ActualWidth(), layoutReservedWidth);
-    return true;
 }
+
+void UpdateClockTrayPlacement() {
+    auto& placement = g_clockTrayPlacement;
+    auto generation = g_clockTray.generation;
+    if (!placement.placed || g_clockTrayWorkActive ||
+        !ClockTrayWorkIsCurrent(generation)) {
+        return;
+    }
+    ClockTrayWorkScope work;
+    auto clock = placement.clock.get();
+    auto host = placement.host;
+    auto root = placement.root.get();
+    if (!clock || !host || !root) {
+        RestoreClockTray(ClockTrayReason::ElementReplaced);
+        return;
+    }
+    try {
+        if (Media::VisualTreeHelper::GetParent(clock) != placement.decoration) {
+            RestoreClockTray(ClockTrayReason::TargetOwned);
+            return;
+        }
+        auto nativeGrid = placement.originalParent.get().try_as<Controls::Grid>();
+        uint32_t columnIndex = 0;
+        if (!nativeGrid || !placement.nativeColumn ||
+            !nativeGrid.ColumnDefinitions().IndexOf(placement.nativeColumn, columnIndex) ||
+            static_cast<int>(columnIndex) != placement.originalColumn) {
+            RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+            return;
+        }
+        if (placement.layoutTrackingDirty) {
+            if (!ClearClockTrayMetricHooks()) throw winrt::hresult_error(E_FAIL);
+            WatchClockTrayMetrics(clock, generation);
+            if (g_clockTray.state == ClockTrayState::Placing) StartClockTrayArrangeDeadline();
+        }
+        if (!clock.IsLoaded() || !host.IsLoaded() || !placement.decoration.IsLoaded() ||
+            clock.ActualWidth() <= 0 || clock.ActualHeight() <= 0) {
+            if (WaitForClockTrayArrange()) return;
+            Wh_Log(L"[clock-tray] arrange deadline loaded=%d,%d,%d clock=%.3fx%.3f",
+                   clock.IsLoaded() ? 1 : 0, host.IsLoaded() ? 1 : 0,
+                   placement.decoration.IsLoaded() ? 1 : 0, clock.ActualWidth(), clock.ActualHeight());
+            RestoreClockTray(ClockTrayReason::UnknownMetrics);
+            return;
+        }
+        auto repeater = FindTaskbarRepeater(root);
+        auto layout = ReadClockTrayLayout(root, repeater);
+        if (!layout) {
+            RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+            return;
+        }
+        auto metrics = placement.observedMetrics.value_or(ClockTrayMetrics{});
+        if (placement.metricsDirty || !placement.observedMetrics) metrics = ReadClockTrayMetrics(clock);
+        placement.observedMetrics = metrics;
+        placement.metricsDirty = false;
+        double windowHeight = ClockTrayWindowHeight(root);
+        auto metricsReason = CheckClockTrayMetrics(metrics, windowHeight);
+        if (metricsReason != ClockTrayReason::None) {
+            Wh_Log(L"[clock-tray] metrics rejected lines=%u required=%.3fx%.3f window=%.3f",
+                   metrics.lines, metrics.requiredWidth, metrics.requiredHeight, windowHeight);
+            RestoreClockTray(metricsReason);
+            return;
+        }
+        auto bounds = clock.TransformToVisual(root.XamlRoot().Content()).TransformBounds(
+            {0, 0, static_cast<float>(clock.ActualWidth()), static_cast<float>(clock.ActualHeight())});
+        auto boundsReason = CheckClockTrayVerticalBounds(bounds.Y, bounds.Height, windowHeight);
+        if (boundsReason != ClockTrayReason::None) {
+            RestoreClockTray(boundsReason);
+            return;
+        }
+        auto decoration = placement.decoration;
+        auto plan = ComputeClockTrayPlan(layout->snapshot, layout->screenLeft,
+            metrics.requiredWidth, decoration.Margin(), decoration.BorderThickness(), decoration.Padding());
+        if (plan.reason != ClockTrayReason::None) {
+            Wh_Log(L"[clock-tray] plan rejected reason=%s visible=%.3f..%.3f boundary=%.3f",
+                   ClockTrayReasonName(plan.reason), plan.visible.left, plan.visible.right,
+                   layout->snapshot.rightBoundary);
+            RestoreClockTray(plan.reason);
+            return;
+        }
+        bool changed = !std::isfinite(host.Width()) || std::abs(host.Width() - plan.hostWidth) > 0.01 ||
+                       std::abs(host.Margin().Left - plan.hostLeft) > kLayoutTolerance;
+        placement.plan = plan;
+        if (!std::isfinite(host.Width()) || std::abs(host.Width() - plan.hostWidth) > 0.01) {
+            ApplyClockTrayStep(generation, [&] { host.Width(plan.hostWidth); });
+        }
+        auto alignment = metrics.lines == 1 ? VerticalAlignment::Center : VerticalAlignment::Stretch;
+        if (clock.VerticalAlignment() != placement.appliedVerticalAlignment) {
+            RestoreClockTray(ClockTrayReason::TargetOwned);
+            return;
+        }
+        if (alignment != placement.appliedVerticalAlignment) {
+            changed = true;
+            // Record the intended value before the setter can synchronously reenter.
+            placement.appliedVerticalAlignment = alignment;
+            SetClockTrayProperty(clock, FrameworkElement::VerticalAlignmentProperty(),
+                                 alignment, 32, generation);
+        }
+        ApplyClockTrayHostOffset();
+        if (changed) {
+            // Validate the resulting rectangle after XAML has arranged our
+            // writes. Old ActualWidth is not evidence that a new width fits.
+            placement.metricsDirty = true;
+            if (g_clockTray.state == ClockTrayState::Stable) StartClockTrayArrangeDeadline();
+            SetClockTrayResult(ClockTrayState::Placing, ClockTrayReason::None);
+            return;
+        }
+        auto boxBounds = ReadClockTrayVisualBounds(decoration, root);
+        auto clockBounds = ReadClockTrayVisualBounds(clock, root);
+        if (!boxBounds || !clockBounds || clock.ActualWidth() + kLayoutTolerance < metrics.requiredWidth) {
+            Wh_Log(L"[clock-tray] arranged metrics boxValid=%d clockValid=%d actualWidth=%.3f requiredWidth=%.3f nativeChrome=%.3f",
+                   boxBounds ? 1 : 0, clockBounds ? 1 : 0, clock.ActualWidth(), metrics.requiredWidth,
+                   metrics.nativeChromeWidth);
+            if (WaitForClockTrayArrange()) return;
+            RestoreClockTray(ClockTrayReason::UnknownMetrics);
+            return;
+        }
+        HorizontalBounds actual{std::min(boxBounds->left, clockBounds->left),
+                                std::max(boxBounds->right, clockBounds->right)};
+        auto actualReason = CheckClockTrayActualBounds(layout->snapshot, layout->screenLeft, plan, actual);
+        if (actualReason != ClockTrayReason::None) {
+            Wh_Log(L"[clock-tray] arranged bounds rejected reason=%s planned=%.3f..%.3f actual=%.3f..%.3f",
+                   ClockTrayReasonName(actualReason), plan.visible.left, plan.visible.right,
+                   actual.left, actual.right);
+            RestoreClockTray(actualReason);
+            return;
+        }
+        if (g_clockTray.state != ClockTrayState::Stable) {
+            Wh_Log(L"[clock-tray] arranged anchor=%.3f shift=%.3f host=%.3f+%.3f actual=%.3f..%.3f boundary=%.3f",
+                   plan.layoutLeft, plan.visualShift, plan.hostLeft, plan.hostWidth,
+                   actual.left, actual.right, layout->snapshot.rightBoundary);
+            LogClockTrayCounters();
+        }
+        if (placement.metrics.lines != metrics.lines ||
+            std::abs(placement.metrics.requiredWidth - metrics.requiredWidth) > 0.01 ||
+            std::abs(placement.metrics.requiredHeight - metrics.requiredHeight) > 0.01) {
+            Wh_Log(L"[clock-tray] metrics lines=%u required=%.3fx%.3f actual=%.3fx%.3f",
+                   metrics.lines, metrics.requiredWidth, metrics.requiredHeight,
+                   clock.ActualWidth(), clock.ActualHeight());
+        }
+        placement.metrics = metrics;
+        if (!StopClockTrayArrangeDeadline()) throw winrt::hresult_error(E_FAIL);
+        placement.arrangeWaitStart = 0;
+        // A confirmed success is not a failed input. The next safety fallback
+        // must allow recovery even if space returns before its deferred check.
+        g_clockTray.lastNativeAttempt.reset();
+        SetClockTrayResult(ClockTrayState::Stable, ClockTrayReason::None);
+    } catch (...) {
+        Wh_Log(L"[clock-tray] placement update failed: %08X",
+               winrt::to_hresult());
+        if (generation == g_clockTray.generation) {
+            RestoreClockTray(ClockTrayReason::UnsupportedLayout);
+        }
+    }
+}
+
+void RestoreClockTray(ClockTrayReason reason) {
+    auto& placement = g_clockTrayPlacement;
+    if (placement.restoring) return;
+    ClockTrayWorkScope work;
+    placement.restoring = true;
+    InvalidateClockTrayWork(reason, ClockTrayState::Restoring);
+    bool subscriptionsRemoved = true;
+    try {
+        if (auto owner = placement.clockSizeOwner.get()) {
+            if (placement.clockSizeToken) {
+                owner.SizeChanged(*placement.clockSizeToken);
+            }
+        }
+        placement.clockSizeToken.reset();
+        placement.clockSizeOwner = {};
+    } catch (...) {
+        subscriptionsRemoved = false;
+        Wh_Log(L"[clock-tray] size removal failed: %08X", winrt::to_hresult());
+    }
+    if (!ClearClockTrayAppearanceHooks()) subscriptionsRemoved = false;
+    if (!ClearClockTrayMetricHooks()) subscriptionsRemoved = false;
+
+    auto clock = placement.clock.get();
+    if (!clock) clock = placement.detachedClock;
+    auto host = placement.host;
+    auto root = placement.root.get();
+    auto decoration = placement.decoration;
+    auto originalParent = placement.originalParent.get();
+    bool nativeWaiting = clock && !placement.placed && !placement.detachedClock && !placement.changedProperties;
+    bool restored = false;
+    bool released = !clock;
+    try {
+        if (nativeWaiting) {
+            // A native waiting record owns observers, never the native parent.
+            released = true;
+        } else if (clock) {
+            auto parent = Media::VisualTreeHelper::GetParent(clock);
+            bool external = parent && parent != decoration && parent != host &&
+                            parent != originalParent;
+            if (external) {
+                // Never remove the clock from a different mod's parent.
+                reason = ClockTrayReason::TargetOwned;
+                released = true;
+            } else {
+                auto nativeParentIsValid = [&] {
+                    return originalParent && originalParent.IsLoaded() &&
+                           root && root.IsLoaded() && originalParent.XamlRoot() &&
+                           originalParent.XamlRoot() == root.XamlRoot();
+                };
+                if (!nativeParentIsValid()) {
+                    throw winrt::hresult_error(E_PENDING);
+                }
+                if (!parent && placement.detachedClock != clock) {
+                    // An unparented element without our handoff record is not ours.
+                    throw winrt::hresult_error(E_ABORT);
+                }
+                if (parent == decoration || parent == host) {
+                    placement.detachedClock = clock;
+                    if (parent == decoration && decoration.Child() == clock) {
+                        decoration.Child(nullptr);
+                    } else if (parent == host) {
+                        uint32_t index = 0;
+                        if (host.Children().IndexOf(clock.as<UIElement>(), index)) {
+                            host.Children().RemoveAt(index);
+                        }
+                    }
+                }
+                parent = Media::VisualTreeHelper::GetParent(clock);
+                if (!parent && nativeParentIsValid()) {
+                    auto children = originalParent.Children();
+                    children.InsertAt(std::min<uint32_t>(placement.originalIndex,
+                                                        children.Size()),
+                                      clock.as<UIElement>());
+                }
+                if (Media::VisualTreeHelper::GetParent(clock) != originalParent ||
+                    !nativeParentIsValid()) {
+                    throw winrt::hresult_error(E_ABORT);
+                }
+                placement.detachedClock = nullptr;
+                RestoreClockTrayProperty(clock, originalParent,
+                    Controls::Grid::ColumnProperty(), placement.originalColumn, 0, 1);
+                RestoreClockTrayProperty(clock, originalParent,
+                    Controls::Grid::ColumnSpanProperty(), placement.originalColumnSpan, 1, 2);
+                RestoreClockTrayProperty(clock, originalParent,
+                    Controls::Grid::RowProperty(), placement.originalRow, 0, 4);
+                RestoreClockTrayProperty(clock, originalParent,
+                    Controls::Grid::RowSpanProperty(), placement.originalRowSpan, 1, 8);
+                RestoreClockTrayProperty(clock, originalParent,
+                    FrameworkElement::HorizontalAlignmentProperty(),
+                    placement.originalHorizontalAlignment, HorizontalAlignment::Stretch, 16);
+                RestoreClockTrayProperty(clock, originalParent,
+                    FrameworkElement::VerticalAlignmentProperty(),
+                    placement.originalVerticalAlignment, placement.appliedVerticalAlignment, 32);
+                RestoreClockTrayProperty(clock, originalParent,
+                    FrameworkElement::MarginProperty(), placement.originalMargin,
+                    Thickness{0, 0, 0, 0}, 64);
+                restored = Media::VisualTreeHelper::GetParent(clock) == originalParent &&
+                           nativeParentIsValid();
+                released = restored;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"[clock-tray] restore failed: %08X", winrt::to_hresult());
+    }
+    bool containersRemoved = false;
+    if (released) try {
+        if (decoration && decoration.Child()) {
+            throw winrt::hresult_error(E_PENDING);
+        }
+        if (host) {
+            // Only the empty decoration is ours to remove. Keep unexpected children.
+            if (host.Children().Size() == 1 && host.Children().GetAt(0) == decoration) {
+                host.Children().RemoveAt(0);
+            }
+            if (host.Children().Size() != 0 || (decoration && decoration.Child())) {
+                throw winrt::hresult_error(E_PENDING);
+            }
+            auto parent = Media::VisualTreeHelper::GetParent(host);
+            if (parent && parent == root) {
+                uint32_t index = 0;
+                if (root.Children().IndexOf(host.as<UIElement>(), index)) {
+                    root.Children().RemoveAt(index);
+                }
+            }
+            if (Media::VisualTreeHelper::GetParent(host) || host.Children().Size() ||
+                (decoration && decoration.Child())) {
+                throw winrt::hresult_error(E_PENDING);
+            }
+        }
+        containersRemoved = true;
+    } catch (...) {
+        Wh_Log(L"[clock-tray] container cleanup failed: %08X",
+               winrt::to_hresult());
+    }
+    bool complete = released && containersRemoved && subscriptionsRemoved;
+    placement.restoring = false;
+    if (complete) placement = ClockTrayPlacement{};
+    g_clockTrayCleanupPending = !complete;
+    SetClockTrayResult(!complete ? ClockTrayState::Restoring :
+                      reason == ClockTrayReason::UserDisabled ? ClockTrayState::Disabled :
+                      ClockTrayState::NativeWaiting, reason);
+    if (restored) g_clockTrayCounters.restorations++;
+    Wh_Log(L"[clock-tray] restored reason=%s accepted=%d cleanup=%d",
+           ClockTrayReasonName(reason), restored ? 1 : 0, complete ? 1 : 0);
+    if (complete && (restored || nativeWaiting) && reason != ClockTrayReason::UserDisabled && g_callbacksEnabled) {
+        EnsureClockTrayRetry(clock);
+    }
+}
+// END CLOCK TRAY LAYOUT (P2)
 
 double GetLayoutReservedClockWidthForTaskbarFrame(void* pThis) {
     if (!g_callbacksEnabled || !pThis) {
@@ -3007,26 +2954,41 @@ double GetLayoutReservedClockWidthForTaskbarFrame(void* pThis) {
             return 0;
         }
 
-        if (!g_movedClocks) {
+        if (g_clockTrayPlacement.placed) {
+            auto trayClock = g_clockTrayPlacement.clock.get();
+            // Compensate only the width that the original native column lost.
+            // A fixed/minimum column can retain space after the clock leaves;
+            // counting the whole old clock width would reserve it twice.
+            if (trayClock && trayClock.XamlRoot() == taskbarXamlRoot &&
+                Media::VisualTreeHelper::GetParent(trayClock) ==
+                    g_clockTrayPlacement.decoration) {
+                auto parent = g_clockTrayPlacement.originalParent.get().try_as<Controls::Grid>();
+                auto column = g_clockTrayPlacement.nativeColumn;
+                uint32_t index = 0;
+                if (parent && parent.IsLoaded() && parent.XamlRoot() == taskbarXamlRoot &&
+                    column && parent.ColumnDefinitions().IndexOf(column, index) &&
+                    static_cast<int>(index) == g_clockTrayPlacement.originalColumn) {
+                    double current = column.ActualWidth();
+                    bool centered = TaskbarUsesCenteredAlignment();
+                    double reserved = ComputeClockTrayReservedWidth(centered, true,
+                        g_clockTrayPlacement.nativeColumnWidth, current);
+                    if (std::abs(g_clockTrayPlacement.lastReservedWidth - reserved) > kLayoutTolerance) {
+                        g_clockTrayPlacement.lastReservedWidth = reserved;
+                        Wh_Log(L"[clock-tray] native extent before=%.3f remaining=%.3f reserved=%.3f centered=%d",
+                               g_clockTrayPlacement.nativeColumnWidth, current, reserved, centered);
+                    }
+                    return reserved;
+                }
+            }
             return 0;
         }
 
-        for (const auto& data : MovedClocks()) {
-            auto clock = data.clock.get();
-            auto host = data.leftHost;
-            if (!clock || !host || host.XamlRoot() != taskbarXamlRoot) {
-                continue;
-            }
-
-            return GetReservedTrayLayoutWidth(data);
-        }
     } catch (...) {
         Wh_Log(L"Taskbar extent lookup failed: %08X", winrt::to_hresult());
     }
 
     return 0;
 }
-
 void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
     double layoutReservedWidth =
         GetLayoutReservedClockWidthForTaskbarFrame(pThis);
@@ -3057,464 +3019,37 @@ HRESULT WINAPI TaskbarFrame_get_Alignment_Hook(void* pThis, int* alignment) {
 
     return result;
 }
-
-bool RestoreFlowSpacing(const FlowSpacingData& spacing) {
-    auto target = spacing.target.get();
-    if (!target) {
-        return false;
-    }
-    auto margin = target.Margin();
-    double& value = spacing.rightSide ? margin.Right : margin.Left;
-    if (!ReadFlowSpacing(target, spacing.rightSide) || value != spacing.lastValue) {
-        Wh_Log(L"[layout] flow spacing restore relinquished: binding, expression or external %s",
-               spacing.rightSide ? L"Right" : L"Left");
-        return false;
-    }
-    value = spacing.rightSide ? spacing.originalMargin.Right : spacing.originalMargin.Left;
-    if (spacing.localUnset && margin.Left == spacing.originalMargin.Left &&
-        margin.Top == spacing.originalMargin.Top &&
-        margin.Right == spacing.originalMargin.Right &&
-        margin.Bottom == spacing.originalMargin.Bottom) {
-        target.ClearValue(FrameworkElement::MarginProperty());
-    } else {
-        target.Margin(margin);
-    }
-    Wh_Log(L"[layout] flow spacing %s restored to %.3f",
-           spacing.rightSide ? L"Right" : L"Left", value);
-    return true;
-}
-
-DeferredClockData& GetDeferredData(FrameworkElement content) {
-    auto& deferredClocks = DeferredClocks();
-    for (auto it = deferredClocks.begin(); it != deferredClocks.end();) {
-        auto element = it->content.get();
-        if (!element && !it->centeredFallbackClock.get()) {
-            it = deferredClocks.erase(it);
-            continue;
-        }
-        if (element == content) {
-            return *it;
-        }
-        ++it;
-    }
-
-    deferredClocks.push_back({.content = content});
-    return deferredClocks.back();
-}
-
-DeferredClockData* FindDeferredClockData(FrameworkElement content) {
-    if (g_deferredClocks) {
-        for (auto& data : DeferredClocks()) {
-            if (data.content.get() == content) {
-                return &data;
-            }
-        }
-    }
-    return nullptr;
-}
-
-void RememberClockContent(FrameworkElement content) {
-    GetDeferredData(content);
-}
-
-void RemoveLoadedHandler(FrameworkElement content) {
-    std::optional<winrt::event_token> token;
-    for (auto& data : DeferredClocks()) {
-        if (data.content.get() == content) {
-            data.loadedRegistration = 0;
-            token = data.loadedToken;
-            data.loadedToken.reset();
-            break;
-        }
-    }
-
-    if (token) {
-        content.Loaded(*token);
-    }
-}
-
-void RemoveLayoutUpdatedHandler(FrameworkElement content) {
-    std::optional<winrt::event_token> token;
-    for (auto& data : DeferredClocks()) {
-        if (data.content.get() == content) {
-            data.layoutUpdatedRegistration = 0;
-            token = data.layoutUpdatedToken;
-            data.layoutUpdatedToken.reset();
-            data.layoutUpdatedStartTick = 0;
-            data.layoutUpdatedAttempts = 0;
-            break;
-        }
-    }
-
-    if (token) {
-        content.LayoutUpdated(*token);
-    }
-}
-
-void RemoveDeferredHandlers(FrameworkElement content) {
-    RemoveLoadedHandler(content);
-    RemoveLayoutUpdatedHandler(content);
-}
-
-bool ClockIsAlreadyMoved(FrameworkElement clock) {
-    for (const auto& data : MovedClocks()) {
-        if (data.clock.get() == clock) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool ClockLayoutIsReady(FrameworkElement content) {
-    if (!content.IsLoaded()) {
-        return false;
-    }
-
-    auto clock = FindAncestor(content, L"SystemTray.OmniButton",
-                              L"NotificationCenterButton");
-    if (!clock || ClockIsAlreadyMoved(clock)) {
-        return true;
-    }
-    if (!TaskbarUsesCenteredAlignment() &&
-        g_settings.keepOnLeftWhenLeftAligned &&
-        (!clock.IsLoaded() || clock.ActualWidth() <= 0 ||
-         !std::isfinite(clock.ActualWidth()))) {
-        return false;
-    }
-
-    auto originalParent = Media::VisualTreeHelper::GetParent(clock)
-                              .try_as<Controls::Panel>();
-    if (!originalParent || originalParent.Name() != L"SystemTrayFrameGrid") {
-        return false;
-    }
-
-    auto systemTrayFrame = Media::VisualTreeHelper::GetParent(originalParent)
-                               .try_as<FrameworkElement>();
-    auto root = systemTrayFrame
-                    ? Media::VisualTreeHelper::GetParent(systemTrayFrame)
-                          .try_as<Controls::Grid>()
-                    : nullptr;
-    if (!root || !root.XamlRoot() || root.ActualWidth() <= 0 ||
-        root.ActualHeight() <= 0) {
-        return false;
-    }
-
-    auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
-    return !widgets || widgets.Visibility() != Visibility::Visible ||
-           widgets.ActualWidth() > 0;
-}
-
-bool LayoutUpdatedWaitExpired(FrameworkElement content) {
-    for (auto& data : DeferredClocks()) {
-        if (data.content.get() != content || !data.layoutUpdatedToken) {
-            continue;
-        }
-
-        data.layoutUpdatedAttempts++;
-        ULONGLONG elapsed =
-            data.layoutUpdatedStartTick
-                ? GetTickCount64() - data.layoutUpdatedStartTick
-                : kLayoutReadyTimeoutMs;
-        return data.layoutUpdatedAttempts >= kLayoutReadyMaxAttempts ||
-               elapsed >= kLayoutReadyTimeoutMs;
-    }
-
-    return true;
-}
-
-void MoveClockSafely(FrameworkElement content) {
-    if (!g_callbacksEnabled || !g_movedClocks) {
-        return;
-    }
-
-    try {
-        MoveClock(content);
-    } catch (...) {
-        Wh_Log(L"Clock relocation failed: %08X", winrt::to_hresult());
-    }
-}
-
-void RegisterLayoutUpdatedHandler(FrameworkElement content) {
-    auto weakContent = winrt::make_weak(content);
-
-    winrt::Windows::Foundation::EventHandler<
-        winrt::Windows::Foundation::IInspectable>
-        handler =
-            [weakContent](
-                winrt::Windows::Foundation::IInspectable const&,
-                winrt::Windows::Foundation::IInspectable const&) {
-                if (!g_callbacksEnabled) {
-                    return;
-                }
-
-                if (auto content = weakContent.get()) {
-                    try {
-                        if (!ClockLayoutIsReady(content)) {
-                            if (LayoutUpdatedWaitExpired(content)) {
-                                RemoveLayoutUpdatedHandler(content);
-                                Wh_Log(L"Clock layout wait expired; relocation "
-                                       L"will retry after the next template "
-                                       L"callback");
-                            }
-                            return;
-                        }
-
-                        RemoveLayoutUpdatedHandler(content);
-                        MoveClockSafely(content);
-                    } catch (...) {
-                        Wh_Log(L"Layout-ready clock handling failed: %08X",
-                               winrt::to_hresult());
-                    }
-                }
-            };
-
-    if (!g_callbacksEnabled) {
-        return;
-    }
-
-    uint64_t registration;
-    {
-        auto& data = GetDeferredData(content);
-        if (data.layoutUpdatedToken || data.layoutUpdatedRegistration) {
-            return;
-        }
-        registration = ++g_nextDeferredRegistration;
-        data.layoutUpdatedRegistration = registration;
-        data.layoutUpdatedStartTick = GetTickCount64();
-        data.layoutUpdatedAttempts = 0;
-    }
-    winrt::event_token token;
-    try {
-        token = content.LayoutUpdated(handler);
-    } catch (...) {
-        if (auto current = FindDeferredClockData(content);
-            current && current->layoutUpdatedRegistration == registration) {
-            current->layoutUpdatedRegistration = 0;
-            current->layoutUpdatedStartTick = 0;
-            current->layoutUpdatedAttempts = 0;
-        }
-        throw;
-    }
-    auto current = FindDeferredClockData(content);
-    if (!g_callbacksEnabled || !current ||
-        current->layoutUpdatedRegistration != registration) {
-        content.LayoutUpdated(token);
-        return;
-    }
-    current->layoutUpdatedToken = token;
-    current->layoutUpdatedRegistration = 0;
-    current = nullptr;
-    content.InvalidateMeasure();
-}
-
-void RegisterLoadedHandler(FrameworkElement content) {
-    auto weakContent = winrt::make_weak(content);
-
-    RoutedEventHandler handler =
-        [weakContent](
-            winrt::Windows::Foundation::IInspectable const&,
-            RoutedEventArgs const&) {
-            if (!g_callbacksEnabled) {
-                return;
-            }
-
-            if (auto content = weakContent.get()) {
-                try {
-                    RemoveLoadedHandler(content);
-                    RegisterLayoutUpdatedHandler(content);
-                } catch (...) {
-                    Wh_Log(L"Loaded clock handling failed: %08X",
-                           winrt::to_hresult());
-                }
-            }
-        };
-
-    if (!g_callbacksEnabled) {
-        return;
-    }
-
-    uint64_t registration;
-    {
-        auto& data = GetDeferredData(content);
-        if (data.loadedToken || data.loadedRegistration) {
-            return;
-        }
-        registration = ++g_nextDeferredRegistration;
-        data.loadedRegistration = registration;
-    }
-    winrt::event_token token;
-    try {
-        token = content.Loaded(handler);
-    } catch (...) {
-        if (auto current = FindDeferredClockData(content);
-            current && current->loadedRegistration == registration) {
-            current->loadedRegistration = 0;
-        }
-        throw;
-    }
-    auto current = FindDeferredClockData(content);
-    if (!g_callbacksEnabled || !current ||
-        current->loadedRegistration != registration) {
-        content.Loaded(token);
-        return;
-    }
-    current->loadedToken = token;
-    current->loadedRegistration = 0;
-}
+winrt::weak_ref<FrameworkElement> g_clockContent;
 
 void QueueKnownClockPlacementUpdate() {
-    if (!g_callbacksEnabled || !g_deferredClocks ||
-        g_clockThreadId != GetCurrentThreadId()) {
-        return;
-    }
-
-    std::vector<FrameworkElement> contents;
-    for (auto& data : DeferredClocks()) {
-        if (auto content = data.content.get()) {
-            contents.push_back(content);
-        }
-    }
-
-    for (const auto& content : contents) {
-        RegisterLayoutUpdatedHandler(content);
+    if (g_callbacksEnabled && g_clockThreadId == GetCurrentThreadId()) {
+        if (auto clock = g_clockTray.clock.get()) QueueClockTrayUpdate(clock);
     }
 }
 
 void UpdateClockPlacement(FrameworkElement content) {
-    if (!g_callbacksEnabled || !g_deferredClocks || !g_movedClocks) {
-        return;
-    }
-
-    // The clock template and TaskbarFrame layout callbacks are expected to run
-    // on the same XAML UI thread. Capture the first clock callback's thread and
-    // reject later callbacks from any other thread before touching XAML state.
-    DWORD currentThreadId = GetCurrentThreadId();
-    DWORD clockThreadId = g_clockThreadId;
-    if (clockThreadId && clockThreadId != currentThreadId) {
-        Wh_Log(L"Clock callback skipped on a non-taskbar thread: %u != %u",
-               currentThreadId, clockThreadId);
-        return;
-    }
-    g_clockThreadId = currentThreadId;
-
-    RememberClockContent(content);
-
-    auto clock = FindAncestor(content, L"SystemTray.OmniButton",
-                              L"NotificationCenterButton");
-    if (!clock) {
-        return;
-    }
-
-    if (CenteredViewportFallbackActive(clock)) {
-        RemoveDeferredHandlers(content);
-        return;
-    }
-
-    if (!ShouldRelocateClock()) {
-        RestoreClock(clock);
-        RemoveDeferredHandlers(content);
-    } else if (content.IsLoaded()) {
-        RemoveLoadedHandler(content);
-        if (ClockIsAlreadyMoved(clock)) {
-            RemoveLayoutUpdatedHandler(content);
-            UpdateLeftHostOffsetForClock(winrt::make_weak(clock));
-        } else {
-            RegisterLayoutUpdatedHandler(content);
-        }
-    } else {
-        RegisterLoadedHandler(content);
-    }
-}
-
-void StopDeferredCallbacksOnTaskbarThread() {
-    if (!g_deferredClocks) {
-        return;
-    }
-
-    std::vector<FrameworkElement> contents;
-    for (const auto& data : DeferredClocks()) {
-        if (auto content = data.content.get()) {
-            contents.push_back(content);
-        }
-    }
-    for (const auto& content : contents) {
-        try {
-            RemoveDeferredHandlers(content);
-        } catch (...) {
-            Wh_Log(L"Deferred handler cleanup failed: %08X",
-                   winrt::to_hresult());
-        }
-    }
-}
-
-void RestoreAllMovedClocksOnTaskbarThread() {
-    if (!g_movedClocks) {
-        return;
-    }
-
-    auto& movedClocks = MovedClocks();
-    while (!movedClocks.empty()) {
-        // Own this record before calling XAML; cleanup must never act on a
-        // different entry that happens to become the vector's front later.
-        auto data = std::move(movedClocks.front());
-        movedClocks.erase(movedClocks.begin());
-
-        try {
-            RestoreMovedClockData(data);
-        } catch (...) {
-            Wh_Log(L"Clock restore failed: %08X", winrt::to_hresult());
-            try {
-                // Never strand native elements by clearing a failed restore.
-                RemoveLeftHost(data);
-            } catch (...) {
-                Wh_Log(L"Clock host cleanup failed: %08X", winrt::to_hresult());
-            }
-        }
-    }
-}
-
-void UpdateKnownClocksOnTaskbarThread() {
-    if (!g_deferredClocks) {
-        return;
-    }
-
-    std::vector<FrameworkElement> contents;
-    for (auto& data : DeferredClocks()) {
-        if (auto content = data.content.get()) {
-            contents.push_back(content);
-        }
-    }
-
-    for (const auto& content : contents) {
-        UpdateClockPlacement(content);
+    if (!g_callbacksEnabled) return;
+    DWORD thread = GetCurrentThreadId();
+    if (g_clockThreadId && g_clockThreadId != thread) return;
+    g_clockThreadId = thread;
+    g_clockContent = content;
+    if (auto clock = FindAncestor(content, L"SystemTray.OmniButton", L"NotificationCenterButton")) {
+        QueueClockTrayUpdate(clock);
     }
 }
 
 void UpdateKnownClocksCallback(void*) {
     try {
-        UpdateKnownClocksOnTaskbarThread();
+        if (auto content = g_clockContent.get()) UpdateClockPlacement(content);
     } catch (...) {
         Wh_Log(L"Known clock update failed: %08X", winrt::to_hresult());
     }
 }
 
-struct CleanupTaskbarStateParameters {
-    bool releaseContainers;
-};
-
-void CleanupTaskbarStateCallback(void* parameter) {
-    auto* cleanup = static_cast<CleanupTaskbarStateParameters*>(parameter);
-
-    StopDeferredCallbacksOnTaskbarThread();
-    RestoreAllMovedClocksOnTaskbarThread();
-
-    if (cleanup->releaseContainers) {
-        // These containers intentionally have no process-shutdown destructor.
-        // Release their XAML/WinRT members here, on the owning UI thread.
-        g_deferredClocks.reset();
-        g_movedClocks.reset();
-    }
+void CleanupTaskbarStateCallback(void*) {
+    LogClockTrayCounters();
+    RestoreClockTray(ClockTrayReason::UserDisabled);
+    if (!g_clockTrayCleanupPending) g_clockContent = {};
 }
 
 bool RunOnTaskbarThread(RunFromWindowThreadProc procedure, void* parameter,
@@ -3581,58 +3116,25 @@ void UpdateKnownClocksSynchronously() {
     RunOnTaskbarThread(UpdateKnownClocksCallback, nullptr,
                        L"Clock placement update");
 }
-
-bool CleanupTaskbarStateSynchronously(bool releaseContainers) {
-    CleanupTaskbarStateParameters parameters{releaseContainers};
-    if (RunOnTaskbarThread(CleanupTaskbarStateCallback, &parameters,
-                           L"Clock layout cleanup")) {
+bool CleanupTaskbarStateSynchronously() {
+    if (RunOnTaskbarThread(CleanupTaskbarStateCallback, nullptr, L"Clock layout cleanup")) return true;
+    auto content = g_clockContent.get();
+    if (!content) content = g_clockTrayPlacement.clock.get();
+    if (!content) return !g_clockTrayCleanupPending;
+    try {
+        auto dispatcher = content.Dispatcher();
+        if (!dispatcher) return false;
+        if (dispatcher.HasThreadAccess()) {
+            CleanupTaskbarStateCallback(nullptr);
+        } else {
+            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+                [] { CleanupTaskbarStateCallback(nullptr); }).get();
+        }
         return true;
-    }
-
-    // A taskbar window can disappear briefly while Explorer rebuilds it. The
-    // stored clock content still exposes its owning dispatcher, so use that as
-    // a window-independent cleanup path before allowing this DLL to unload.
-    if (!g_deferredClocks) {
+    } catch (...) {
+        Wh_Log(L"Clock dispatcher cleanup failed: %08X", winrt::to_hresult());
         return false;
     }
-
-    for (auto& data : DeferredClocks()) {
-        auto content = data.content.get();
-        if (!content) {
-            continue;
-        }
-
-        try {
-            auto dispatcher = content.Dispatcher();
-            if (!dispatcher) {
-                continue;
-            }
-
-            if (dispatcher.HasThreadAccess()) {
-                CleanupTaskbarStateParameters fallbackParameters{
-                    releaseContainers};
-                CleanupTaskbarStateCallback(&fallbackParameters);
-            } else {
-                dispatcher
-                    .RunAsync(
-                        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                        [releaseContainers] {
-                            CleanupTaskbarStateParameters fallbackParameters{
-                                releaseContainers};
-                            CleanupTaskbarStateCallback(&fallbackParameters);
-                        })
-                    .get();
-            }
-
-            return true;
-        } catch (...) {
-            Wh_Log(L"Clock dispatcher cleanup failed: %08X",
-                   winrt::to_hresult());
-        }
-    }
-
-    Wh_Log(L"Clock layout cleanup failed: no live taskbar dispatcher");
-    return false;
 }
 
 void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
@@ -3993,116 +3495,6 @@ bool TryHookAvailableModules(bool applyImmediately) {
     return success;
 }
 
-FrameworkElement ReadNativeNotifyChevron(const MovedClockData& data, Controls::Grid root) {
-    auto clock = data.clock.get();
-    auto parent = data.originalParent.get().try_as<Controls::Grid>();
-    auto frame = parent ? Media::VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>() : nullptr;
-    if (!clock || !data.leftHost || Media::VisualTreeHelper::GetParent(clock) != data.leftHost ||
-        !root || !root.IsLoaded() || !root.XamlRoot() || !parent || !parent.IsLoaded() ||
-        parent.Name() != L"SystemTrayFrameGrid" || !frame ||
-        winrt::get_class_name(frame) != L"SystemTray.SystemTrayFrame" ||
-        Media::VisualTreeHelper::GetParent(frame) != root || parent.XamlRoot() != root.XamlRoot() ||
-        parent.Children().Size() > 32) return nullptr;
-    FrameworkElement group{nullptr};
-    for (auto child : parent.Children()) {
-        auto candidate = child.try_as<FrameworkElement>();
-        if (!candidate || candidate.Name() != L"NotifyIconStack" ||
-            winrt::get_class_name(candidate) != L"SystemTray.Stack") continue;
-        if (group) return nullptr;
-        group = candidate;
-    }
-    if (!group || !group.IsLoaded() || group.Visibility() != Visibility::Visible ||
-        group.XamlRoot() != root.XamlRoot() || !ReadTrayGroupItemsSource(group)) return nullptr;
-    auto arrow = FindNotifyChevron(group);
-    if (!arrow || !arrow.IsLoaded() || arrow.Visibility() != Visibility::Visible ||
-        arrow.XamlRoot() != root.XamlRoot()) return nullptr;
-    return arrow;
-}
-
-std::optional<int> ClampNotifyPopupX(int x, int width, const RECT& work) {
-    int64_t span = static_cast<int64_t>(work.right) - work.left;
-    if (width <= 0 || span <= 0 || width > span) return std::nullopt;
-    return static_cast<int>(std::clamp<int64_t>(x, work.left, static_cast<int64_t>(work.right) - width));
-}
-
-BOOL WINAPI SetWindowPos_Hook(HWND window, HWND insertAfter, int x, int y,
-                             int cx, int cy, UINT flags) {
-    bool inspectPlacement = false;
-    try {
-        DWORD process = 0;
-        wchar_t name[64];
-        if (GetCurrentThreadId() == g_clockThreadId && g_callbacksEnabled &&
-            g_movedClocks && !(flags & SWP_HIDEWINDOW) &&
-            GetWindowThreadProcessId(window, &process) == g_clockThreadId &&
-            process == GetCurrentProcessId() && GetAncestor(window, GA_ROOT) == window &&
-            !GetWindow(window, GW_OWNER) && GetClassNameW(window, name, ARRAYSIZE(name)) &&
-            wcscmp(name, L"TopLevelWindowForOverflowXamlIsland") == 0 &&
-            GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) == DPI_AWARENESS_PER_MONITOR_AWARE) {
-            uint32_t candidates = 0;
-            PCWSTR arrowSide = L"unknown";
-            for (auto& data : MovedClocks()) {
-                if (data.restoring || data.updatingLayout) continue;
-                auto root = data.taskbarRoot.get();
-                if (!root || !root.IsLoaded() || !root.XamlRoot()) continue;
-                FrameworkElement arrow{nullptr};
-                bool movedArrow = false;
-                if (data.notifyIcons && data.notifyIcons->lastContribution >= 0) {
-                    PCWSTR reason = nullptr;
-                    auto contribution = ReadNotifyIconGroupContribution(data, &reason);
-                    if (contribution && !reason) {
-                        arrow = data.notifyIcons->nativeChevron.get();
-                        movedArrow = true;
-                    }
-                } else if (!data.notifyIcons) {
-                    bool movedGroup = false;
-                    for (const auto* saved : {&data.controlCenter, &data.trayGroup, &data.applicationTray}) {
-                        if (!*saved || (*saved)->lastContribution < 0) continue;
-                        PCWSTR reason = nullptr;
-                        auto contribution = ReadMovedTrayContribution(
-                            data.leftHost, data.restoring, *saved, &reason);
-                        movedGroup |= contribution.has_value() && !reason;
-                    }
-                    if (movedGroup) arrow = ReadNativeNotifyChevron(data, root);
-                }
-                if (arrow && arrow.IsLoaded() && arrow.XamlRoot() == root.XamlRoot()) {
-                    candidates++;
-                    arrowSide = movedArrow ? L"left" : L"right";
-                }
-            }
-            RECT current{};
-            MONITORINFO monitor{sizeof(monitor)};
-            if (candidates == 1 && GetWindowRect(window, &current) &&
-                GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor)) {
-                int nativeX = flags & SWP_NOMOVE ? current.left : x;
-                int width = flags & SWP_NOSIZE ? current.right - current.left : cx;
-                auto corrected = ClampNotifyPopupX(nativeX, width, monitor.rcWork);
-                if (corrected) {
-                    inspectPlacement = true;
-                    Wh_Log(L"[notify-popup] placement window=%p nativeX=%d correctedX=%d width=%d work=(%ld,%ld) flags=%08X arrowSide=%s",
-                           window, nativeX, *corrected, width, monitor.rcWork.left, monitor.rcWork.right, flags, arrowSide);
-                    if (*corrected != nativeX) {
-                        x = *corrected;
-                        if (flags & SWP_NOMOVE) y = current.top;
-                        flags &= ~SWP_NOMOVE;
-                    }
-                }
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"[notify-popup] placement inspection failed: %08X", winrt::to_hresult());
-    }
-    BOOL result = SetWindowPos_Original(window, insertAfter, x, y, cx, cy, flags);
-    if (inspectPlacement) {
-        DWORD error = GetLastError();
-        RECT actual{};
-        BOOL rectValid = GetWindowRect(window, &actual);
-        Wh_Log(L"[notify-popup] result window=%p success=%d rectValid=%d actual=(%ld,%ld,%ld,%ld)",
-               window, result, rectValid, actual.left, actual.top, actual.right, actual.bottom);
-        SetLastError(error);
-    }
-    return result;
-}
-
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
                                    HANDLE file,
                                    DWORD flags) {
@@ -4114,11 +3506,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 }
 
 BOOL Wh_ModInit() {
-    LoadSettings();
-    Wh_Log(L"Taskbar Clock to Left " WH_MOD_VERSION L": keepOnLeftWhenLeftAligned=%d moveControlCenter=%d moveNonActivatableStack=%d moveNotifyIconStack=%d moveNotificationAreaIcons=%d reserveCenteredViewport=%d",
-           g_settings.keepOnLeftWhenLeftAligned, g_settings.moveControlCenter,
-           g_settings.moveNonActivatableStack, g_settings.moveNotifyIconStack,
-           g_settings.moveNotificationAreaIcons, g_settings.reserveCenteredViewport);
+    ResetClockTrayForSession();
+    Wh_Log(L"Taskbar Clock to Left " WH_MOD_VERSION L": enabled");
     g_clockThreadId = 0;
     g_lastTaskbarCenteredAlignment =
         ReadTaskbarUsesCenteredAlignment() ? 1 : 0;
@@ -4137,14 +3526,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (g_settings.moveNotifyIconStack || g_settings.moveControlCenter ||
-        g_settings.moveNonActivatableStack || g_settings.moveNotificationAreaIcons) {
-        HMODULE user32 = GetModuleHandle(L"user32.dll");
-        auto setWindowPos = user32 ? reinterpret_cast<decltype(&SetWindowPos)>(GetProcAddress(user32, "SetWindowPos")) : nullptr;
-        g_notifyPopupHooked = setWindowPos && WindhawkUtils::SetFunctionHook(
-            setWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
-        if (!g_notifyPopupHooked) Wh_Log(L"[notify-icons] popup hook unavailable; keeping native arrow");
-    }
     return TRUE;
 }
 
@@ -4160,26 +3541,33 @@ void Wh_ModAfterInit() {
     StartAlignmentRegistryWatch();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    *bReload = TRUE;
-    return TRUE;
-}
-
 void Wh_ModBeforeUninit() {
     g_callbacksEnabled = false;
+    // Invalidate tray work inside RestoreClockTray on the owning UI thread.
+    Wh_Log(L"[clock-tray] unloading; callbacks disabled");
     StopAlignmentRegistryWatch();
     // Revoke all mod-owned XAML delegates and release their containers while
     // the mod code and hooks are still present. The synchronous taskbar-thread
     // call must finish before Windhawk can continue unloading this DLL.
-    CleanupTaskbarStateSynchronously(true);
+    CleanupTaskbarStateSynchronously();
 }
 
 void Wh_ModUninit() {
     g_callbacksEnabled = false;
     StopAlignmentRegistryWatch();
-    // Normally Wh_ModBeforeUninit already released both containers. Retry only
-    // if taskbar discovery failed during that earlier cleanup.
-    if (g_deferredClocks || g_movedClocks) {
-        CleanupTaskbarStateSynchronously(true);
+    // Retry incomplete cleanup before the DLL can unload.
+    if (g_clockTrayCleanupPending) {
+        CleanupTaskbarStateSynchronously();
+    }
+    if (g_clockTrayCleanupPending) {
+        // Windhawk cannot cancel unload here. A surviving XAML delegate must
+        // not point into an unloaded DLL; retain its disabled code and records
+        // until Explorer exits if both synchronous cleanup attempts failed.
+        HMODULE retainedModule = nullptr;
+        BOOL pinned = GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+            reinterpret_cast<LPCWSTR>(&Wh_ModUninit), &retainedModule);
+        Wh_Log(L"[clock-tray] cleanup incomplete; module retained=%d error=%u",
+               pinned, pinned ? 0 : GetLastError());
     }
 }
