@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-26T21:02:39.000Z</updated>
+    <updated>2026-10-27T00:01:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Task Manager Navigation Border 0.1]]></title>
+        <id>https://windhawk.net/mods/disable-taskmgr-navigation-border#d3c74881949732caeed9c3045880d991110129d4</id>
+        <link href="https://windhawk.net/mods/disable-taskmgr-navigation-border"/>
+        <updated>2026-10-27T00:01:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disabletaskmanagernavigationborder">Disable Task Manager Navigation Border</h1>
+<p><img src="https://i.imgur.com/00TkdHI.png" alt="Compared" /></p>
+<p>Disables the ugly focus borders in Windows 11 Task Manager.</p>
+<p>It works by replacing the following functions with empty implementations:</p>
+<ul>
+<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
+<li><code>SetBorderUponNavigatingIntoElement</code></li>
+</ul>
+<p>Functions are located using symbols for the running Taskmgr.exe version, not
+fixed addresses. First use may require internet access to download symbols.
+Initialization fails if any required symbol is unavailable.</p>
+<p>This MOD targets x64 Task Manager versions providing these methods. No system
+files or signatures are modified. </p>
+<hr />
+<p>禁用 Windows 11 任务管理器上丑陋的焦点边框。</p>
+<p>实现原理是将以下方法替换为空实现：</p>
+<ul>
+<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
+<li><code>SetBorderUponNavigatingIntoElement</code></li>
+</ul>
+<p>这些函数是通过当前运行的 Taskmgr.exe 版本的符号信息进行定位，而非固定内存地址。首次使用可能需要联网下载符号文件。若缺少任何所需符号，初始化将失败。</p>
+<p>此 MOD 适用于包含上述方法的 x64 版本任务管理器。不会修改任何系统文件或签名。</p>]]></content>
+        <author>
+            <name>GF-Huang</name>
+            <uri>https://github.com/GF-Huang</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar collapse to running apps 1.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-collapse-to-running#7d48d0c128c3d3491776f18c26fce3ebf8b6e9ae</id>
+        <link href="https://windhawk.net/mods/taskbar-collapse-to-running"/>
+        <updated>2026-10-27T00:01:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hotkey now toggles collapse like a click, always instant (no longer turns the mod off)</li>
+<li>Removed the "Collapse taskbar" setting</li>
+<li>New setting: "Uncollapsed at startup" (default on)</li>
+<li>Fixed: Windows' reorder animation playing when the hotkey uncollapsed</li>
+<li>Fixed: saving settings no longer collapses the taskbar</li>
+<li>Renamed "Reveal while Start is open" (resets to off)</li>
+</ul>]]></content>
+        <author>
+            <name>Lars</name>
+            <uri>https://github.com/LarsGudm</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Volume Mixer 1.6.0]]></title>
         <id>https://windhawk.net/mods/better-volume-mixer#1783f8739a19d202886cb964262eb4c3d66fd943</id>
@@ -781,61 +835,6 @@ window on purpose, put a <code>*</code> in one of the match fields.</p>]]></cont
         <author>
             <name>cheliks1123</name>
             <uri>https://github.com/cheliks1123</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.7.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#12b5a5cebac0d359e06df2efdb1aa0c4014c86a2</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2026-10-25T18:17:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the WindowGlass theme with context menu styling fixes.</li>
-<li>Background effects are no longer applied for Explorer windows with the legacy frame and for the legacy Control Panel. It was never supported, and previous versions styled only some of the elements in these cases, resulting in a bad experience. If you want background effects for these windows, you might want to try the Translucent Windows mod.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Shortcut Arrow Overlays 1.0.0]]></title>
-        <id>https://windhawk.net/mods/remove-shortcut-arrows#99b2c90b8dcdc892d7bcbe4d5978e47dced3a0bb</id>
-        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
-        <updated>2026-10-25T18:01:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="removeshortcutarrowoverlays">Remove Shortcut Arrow Overlays</h1>
-<p>Removes the shortcut arrow overlay from desktop and File Explorer icons cleanly
-in memory without modifying the Windows Registry.</p>
-<h3 id="whythisisbetterthantheregistrytweak">Why this is better than the Registry tweak:</h3>
-<ul>
-<li><strong>In-Place Overlay Replacement</strong>: Modifies Explorer's system image lists
-in-place with zero image slot leaks.</li>
-<li><strong>No Black Squares</strong>: The common registry tweak (<code>Shell Icons\29</code> pointing to
-a blank <code>.ico</code>) frequently causes visual bugs such as black squares on icons
-after icon cache updates or on high-DPI displays.</li>
-<li><strong>No Registry Tampering</strong>: Does not alter system registry keys and does not
-require copying files into <code>C:\Windows\System32</code>.</li>
-<li><strong>Zero Dependencies</strong>: Generates a 100% transparent icon dynamically in
-memory. No external <code>.ico</code> files are needed.</li>
-<li><strong>Instant Reversibility</strong>: Automatically restores the original Windows
-shortcut arrows when the mod is disabled or unloaded without an Explorer restart.</li>
-<li><strong>Optional Custom Icon</strong>: Allows using a custom badge or icon instead of a
-completely transparent one.</li>
-</ul>
-<h3 id="scopeprocessbehavior">Scope &amp; Process Behavior</h3>
-<ul>
-<li>System image lists are per-process, so this mod targets <code>explorer.exe</code> (Desktop
-and File Explorer). Shell Open/Save dialogs hosted inside other application
-processes retain their separate process image lists.</li>
-</ul>
-<h3 id="credits">Credits</h3>
-<ul>
-<li>Credit to the <strong>Hide Desktop Icon Text and Shortcut Arrows</strong> mod
-(<code>hide-desktop-icon-text</code>) by kivsak for the transparent GDI icon generation and
-shell image list technique.</li>
-</ul>]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
         </author>
     </entry>
 </feed>

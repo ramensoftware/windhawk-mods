@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-26T21:02:34.000Z</updated>
+    <updated>2026-10-27T00:01:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Task Manager Navigation Border 0.1]]></title>
+        <id>https://windhawk.net/mods/disable-taskmgr-navigation-border#d3c74881949732caeed9c3045880d991110129d4</id>
+        <link href="https://windhawk.net/mods/disable-taskmgr-navigation-border"/>
+        <updated>2026-10-27T00:01:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disabletaskmanagernavigationborder">Disable Task Manager Navigation Border</h1>
+<p><img src="https://i.imgur.com/00TkdHI.png" alt="Compared" /></p>
+<p>Disables the ugly focus borders in Windows 11 Task Manager.</p>
+<p>It works by replacing the following functions with empty implementations:</p>
+<ul>
+<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
+<li><code>SetBorderUponNavigatingIntoElement</code></li>
+</ul>
+<p>Functions are located using symbols for the running Taskmgr.exe version, not
+fixed addresses. First use may require internet access to download symbols.
+Initialization fails if any required symbol is unavailable.</p>
+<p>This MOD targets x64 Task Manager versions providing these methods. No system
+files or signatures are modified. </p>
+<hr />
+<p>禁用 Windows 11 任务管理器上丑陋的焦点边框。</p>
+<p>实现原理是将以下方法替换为空实现：</p>
+<ul>
+<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
+<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
+<li><code>SetBorderUponNavigatingIntoElement</code></li>
+</ul>
+<p>这些函数是通过当前运行的 Taskmgr.exe 版本的符号信息进行定位，而非固定内存地址。首次使用可能需要联网下载符号文件。若缺少任何所需符号，初始化将失败。</p>
+<p>此 MOD 适用于包含上述方法的 x64 版本任务管理器。不会修改任何系统文件或签名。</p>]]></content>
+        <author>
+            <name>GF-Huang</name>
+            <uri>https://github.com/GF-Huang</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Flashlight Desktop Icons 1.0.0]]></title>
         <id>https://windhawk.net/mods/flashlight-desktop-icons#18d4cc081c7dd2eeb3fdfac4f5ef52385baec3b8</id>
@@ -1275,39 +1311,6 @@ enabled. If another styling mod causes excessive flashing, compare with it off.<
         <author>
             <name>ItsMikesch</name>
             <uri>https://github.com/ItsMikesch</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Terminal Admin Aliases 1.0.4]]></title>
-        <id>https://windhawk.net/mods/explorer-terminal-admin-alias#640e843644d6bef023896312768387eb5b7065c4</id>
-        <link href="https://windhawk.net/mods/explorer-terminal-admin-alias"/>
-        <updated>2026-10-24T11:01:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexplorerterminaladminaliases">🛠️ File Explorer Terminal Admin Aliases</h1>
-<p>Launch elevated (Administrator) command prompts, Windows Terminal, PowerShell, or custom shells directly from any Windows File Explorer address bar, opened to your active directory.</p>
-<p>Just like typing <code>cmd</code>, <code>wt</code>, or <code>powershell</code> into File Explorer—but with administrator privileges and completely customizable aliases!</p>
-<hr />
-<h2 id="features">⚡ Features</h2>
-<ul>
-<li><strong>Configurable Aliases</strong>: Choose any alias trigger you want (<code>cmda</code>, <code>wta</code>, <code>psa</code>, <code>pwsha</code>, <code>basha</code>, or your own custom commands).</li>
-<li><strong>Native & Silent Elevation</strong>: Intercepts shell execution directly inside File Explorer and launches with native <code>runas</code> elevation—no background PowerShell spawns, no <code>.bat</code> files, and zero flickering.</li>
-<li><strong>Zero PATH Pollution</strong>: Works without needing to edit your system/user <code>Path</code> environment variable.</li>
-<li><strong>Directory Preservation</strong>: Accurately preserves the active directory in elevated sessions, handling spaces, special characters, drive roots, and network UNC paths.</li>
-<li><strong>Virtual Folder Fallback</strong>: Automatically defaults to <code>%USERPROFILE%</code> when launched from virtual folders (e.g., "This PC", "Quick Access", or "Home").</li>
-<li><strong>Clean UAC Cancellation</strong>: If you cancel or dismiss the UAC prompt, the mod cleanly suppresses the annoying "Windows cannot find…" error dialog.</li>
-<li><strong>Inline Arguments Supported</strong>: Type extra arguments directly in the address bar (e.g. <code>cmda dir</code> or <code>wta -p PowerShell</code>).</li>
-</ul>
-<hr />
-<h2 id="configuration">⚙️ Configuration</h2>
-<p>Open the mod's <strong>Settings</strong> tab in Windhawk to:</p>
-<ol>
-<li>Customize aliases for <strong>Command Prompt</strong>, <strong>Windows Terminal</strong>, <strong>PowerShell 5.1</strong>, <strong>PowerShell 7+</strong>, and <strong>Git Bash</strong>.</li>
-<li>Toggle elevation (<code>runas</code>) on or off per shell.</li>
-<li>Configure custom aliases for any tool (e.g. <code>code</code>, <code>wsl</code>, <code>nvim</code>).</li>
-<li>Set an optional profile name for Windows Terminal.</li>
-</ol>]]></content>
-        <author>
-            <name>RobotsNeverDie</name>
-            <uri>https://github.com/RBND</uri>
         </author>
     </entry>
 </feed>

@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-collapse-to-running
 // @name            Taskbar collapse to running apps
-// @description     Hides pinned taskbar icons whose app is not running. Hover, rest on, or click the empty taskbar to reveal them.
-// @version         1.0.0
+// @description     Hides pinned taskbar icons whose app is not running. Hover, rest on, or click the empty taskbar to reveal.
+// @version         1.1.0
 // @author          Lars
 // @github          https://github.com/LarsGudm
 // @license         MIT
@@ -15,42 +15,40 @@
 /*
 # Taskbar collapse to running apps
 
-Hides pinned taskbar icons whose app is not running. Icons hide and unhide in
-place, so pinned order is never touched.
+Left click on the empty taskbar to collapse icons down to only display running apps. Click again to reveal.
+There's also a hover mode to reveal apps when cursor rests on the open taskbar, or use a custom hotkey!
 
 ![Demo](https://i.imgur.com/jgDv8Su.gif)
 
-*Hovering effect not included. Check out **Taskbar Dock Animation** by **Ph0en1x-dev**!
-**Same goes for the icon sizing and spacing. **Taskbar height and icon size** made by the OG, **m417z**.
+## Collapse/Uncollapse
 
-Running state is read straight from the taskbar's own buttons, so detection
-is exact and language-independent, and the mod reacts the moment an app opens
-or closes.
+* **Hotkey** (default: `Ctrl+Alt+T`) toggle collapse
+* **Click** (default) — left-click empty taskbar to toggle
+* **Hover** — rest the cursor on empty taskbar
+* **Rest** — hover, but triggers only below **Rest speed**
+* **Start** — reveal while Start menu is open.
 
-## Revealing
 
-* **Click** (default) — left-click empty taskbar to toggle; right-click stays
-  Windows'.
-* **Hover** — rest the cursor on empty taskbar; collapses again a grace period
-  after the cursor leaves.
-* **Rest** — hover, but only below **Rest speed**, so sweeping past does nothing.
-* **Start** — optional, off by default: everything shows while Start is open.
-* **Hotkey** (`Ctrl+Alt+T`) and the Collapse checkbox flip the whole mod,
-  always instantly.
+**Padding around elements** keeps reveals clear of every other taskbar element.
 
-**Padding around elements** keeps reveals clear of every taskbar element,
-icons and tray alike; **Reveal delay** requires the cursor to stay put first.
+
+*Hovering effect not included. For that, you should check out **Taskbar Dock Animation** by **Ph0en1x-dev**!
+
+*And for the icon sizing and spacing, check out **Taskbar height and icon size**, made by the OG **m417z**.
 
 ## Notes
-* While collapse is on, Windows' own taskbar button animations are switched
-  off; the mod animates the row itself.
 * Built with Claude and tested on Windows 11 build 26200.
+* While mod is enabled, Windows' own taskbar button animations are switched off.
+* Does not work with left or right positioned taskbars. Yet... Animations slide horizontally, always.
 * Thanks to https://easings.net/ for the easing curve values.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- Hotkey: Ctrl+Alt+T
+  $name: Toggle hotkey
+  $description: Modifiers Ctrl, Alt, Shift, Win plus one of A-Z, 0-9, F1-F24, Space. Leave empty for no hotkey
 - RevealTrigger: click
   $name: Reveal trigger
   $options:
@@ -58,34 +56,15 @@ icons and tray alike; **Reveal delay** requires the cursor to stay put first.
   - rest: Rest
   - hover: Hover
   - never: None, hotkey only
-- RevealOnStart: false
-  $name: Reveal while Start is open
+- RevealOnWinStart: false
+  $name: Reveal on Start Menu
   $description: >-
-    Opening Start, by the Windows key or the Start button, shows every icon and
-    keeps them shown until Start closes. Works with any reveal trigger.
-- RevealDelayMs: 30
-  $name: Reveal delay (ms)
+    Reveals taskbar whilst Windows Start Menu is open
+- StartRevealed: true
+  $name: Uncollapsed at startup
   $description: >-
-    How long the cursor must stay in the empty taskbar area before the icons
-    come back (only applies to: Reveal trigger > Hover / Rest)
-- RestSpeedPxPerSec: 300
-  $name: Rest speed (px/s)
-  $description: >-
-    How slow the cursor must be moving across empty taskbar area to count as resting (only applies to: Reveal trigger > Rest)
-- Collapsed: true
-  $name: Collapse taskbar
-  $description: >-
-    Hide pinned icons whose app is not running. The hotkey flips the same
-    switch, but only until settings are saved again, which restores this box.
-- ElementPaddingPx: 12
-  $name: Padding around elements (px)
-  $description: >-
-    Safe area around every taskbar element to prevent unwanted transitions.
-- HoverGraceMs: 150
-  $name: Grace period (ms)
-  $description: >-
-    How long the cursor may be off the taskbar before it collapses again
-    (only applies to: Reveal trigger > Hover / Rest)
+    Reveal full taskbar when the mod loads. Off restores the last collapse
+    state when mod reloads (*applies only to Click and None triggers)
 - AnimationMode: slide
   $name: Reveal animation
   $description: >-
@@ -100,20 +79,37 @@ icons and tray alike; **Reveal delay** requires the cursor to stay put first.
   - sine: easeInOutSine
   - cubic: easeInOutCubic
   - circ: easeInOutCirc
-- AnimationDurationMs: 160
+- AnimationDurationMs: 240
   $name: Animation length (ms)
-- SnappinessPct: 40
+- SnappinessPct: 50
   $name: Snappiness (%)
   $description: >-
     How much of the motion the mid-transition cut takes. The icons travel to
     their new spots, and this share of that journey is skipped at the cut,
     where the icons swapping hides the jump. 0 is fully smooth, 100 is
     maximum snap.
-- Hotkey: Ctrl+Alt+T
-  $name: Toggle hotkey
-  $description: Modifiers Ctrl, Alt, Shift, Win plus one of A-Z, 0-9, F1-F24, Space. Leave empty for no hotkey.
+- RevealDelayMs: 30
+  $name: Reveal delay (ms)
+  $description: >-
+    How long the cursor must stay in the empty taskbar area before the icons
+    come back (only applies to: Reveal trigger > Hover / Rest)
+- RestSpeedPxPerSec: 300
+  $name: Rest speed (px/s)
+  $description: >-
+    How slow the cursor must be moving across empty taskbar area to count as resting (only applies to: Reveal trigger > Rest)
+- ElementPaddingPx: 12
+  $name: Padding around elements (px)
+  $description: >-
+    Safe area around every taskbar element to prevent unwanted transitions.
+- HoverGraceMs: 150
+  $name: Grace period (ms)
+  $description: >-
+    How long the cursor may be off the taskbar before it collapses again
+    (only applies to: Reveal trigger > Hover / Rest)
 */
 // ==/WindhawkModSettings==
+
+// --- SETUP ---
 
 #include <windhawk_utils.h>
 
@@ -163,6 +159,7 @@ using winrt::Windows::Foundation::Point;
 typedef void (*RunFromWindowThreadProc_t)(PVOID);
 void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, PVOID param);
 bool PointerClearsSurfaces(void* key, Point framePt);
+bool CursorOverAnyTaskbar();
 void ApplyOnThisThreadNow();
 void WakeAllFramesAsync(bool skipCurrentThread = false);
 void StartHotkeyThread();
@@ -210,9 +207,11 @@ enum class AnimKind { Accordion, GapClose };
 // motion.
 constexpr double kGapHoldMs = 250.0;
 
+// --- STATE ---
+
 struct {
     std::atomic<RevealTrigger> revealTrigger;
-    std::atomic<bool> revealOnStart;
+    std::atomic<bool> revealOnWinStart;
     std::atomic<int> restSpeedPxPerSec;
     std::atomic<int> revealDelayMs;
     std::atomic<int> elementPaddingPx;
@@ -223,25 +222,37 @@ struct {
     std::atomic<int> snappinessPct;
 } g_settings;
 
+bool IsHoverLike(RevealTrigger t) {
+    return t == RevealTrigger::Hover || t == RevealTrigger::Rest;
+}
+
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 
-std::atomic<bool> g_collapseEnabled = true;
+// Revealed (click, hotkey, startup) holds until the next flip. HoverRevealed
+// (hover, rest, Start) ages out on grace and is never saved.
+enum class RevealState { Collapsed, Revealed, HoverRevealed };
+std::atomic<RevealState> g_reveal = RevealState::Collapsed;
 
-std::atomic<bool> g_revealed = false;
+// Holds a HoverRevealed against grace while Start is open.
+std::atomic<bool> g_startOpen = false;
 
-// Pins the reveal against grace until Start closes.
-std::atomic<bool> g_revealedByStart = false;
+// Click and hotkey: any reveal collapses, collapsed reveals. Atomic because
+// clicks, hover, Start and the hotkey write it from different threads.
+RevealState FlipReveal() {
+    RevealState prev = g_reveal.load();
+    RevealState next;
+    do {
+        next = prev == RevealState::Collapsed ? RevealState::Revealed
+                                              : RevealState::Collapsed;
+    } while (!g_reveal.compare_exchange_weak(prev, next));
+    return next;
+}
 
-// Only click reveals persist: a restored hover reveal would age out on grace
-// anyway, and it keeps hover cycles off the registry.
 std::atomic<int> g_lastSavedRevealed = -1;
 
 void PersistRevealState() {
-    int value = g_revealed && !g_revealedByStart &&
-                        g_settings.revealTrigger == RevealTrigger::Click
-                    ? 1
-                    : 0;
+    int value = g_reveal == RevealState::Revealed ? 1 : 0;
     if (g_lastSavedRevealed.exchange(value) != value) {
         Wh_SetIntValue(L"RevealedState", value);
     }
@@ -375,7 +386,6 @@ std::mutex g_framesMutex;
 std::unordered_map<DWORD, HANDLE> g_frameThreads;
 
 FrameContext* GetFrameContext(void* key);
-bool HasVisibleIcon(FrameworkElement root, int depth);
 int HidePhantomButtons(FrameContext& ctx,
                        FrameworkElement repeater,
                        FrameworkElement frame,
@@ -393,7 +403,7 @@ double NowMs() {
     return (double)counter.QuadPart * 1000.0 / frequency;
 }
 
-// ---------------------------------------------------------------- visual tree
+// --- VISUAL TREE ---
 
 // Adapted from taskbar-labels (m417z).
 FrameworkElement EnumChildElements(
@@ -436,6 +446,50 @@ void CollectTaskListButtons(FrameworkElement root,
     });
 }
 
+FrameworkElement FindVisibleIcon(FrameworkElement root, int depth) {
+    if (!root || depth < 0) {
+        return nullptr;
+    }
+    FrameworkElement found = nullptr;
+    EnumChildElements(root, [&](FrameworkElement child) {
+        try {
+            if (child.Visibility() == Visibility::Visible &&
+                winrt::get_class_name(child) ==
+                    L"Windows.UI.Xaml.Controls.Image") {
+                found = child;
+                return true;
+            }
+        } catch (winrt::hresult_error const&) {
+        }
+        found = FindVisibleIcon(child, depth - 1);
+        return found != nullptr;
+    });
+    return found;
+}
+
+// The promoted-slot divider: a hairline rectangle spanning the button.
+FrameworkElement FindDividerRect(FrameworkElement root, int depth) {
+    if (!root || depth < 0) {
+        return nullptr;
+    }
+    FrameworkElement found = nullptr;
+    EnumChildElements(root, [&](FrameworkElement child) {
+        try {
+            if (child.Visibility() == Visibility::Visible &&
+                child.ActualWidth() < 2.0 && child.ActualHeight() >= 24.0 &&
+                winrt::get_class_name(child) ==
+                    L"Windows.UI.Xaml.Shapes.Rectangle") {
+                found = child;
+                return true;
+            }
+        } catch (winrt::hresult_error const&) {
+        }
+        found = FindDividerRect(child, depth - 1);
+        return found != nullptr;
+    });
+    return found;
+}
+
 // Adapted from taskbar-labels (m417z). Mandatory symbol: a build missing it
 // refuses to load rather than mis-hide.
 using TaskListButton_get_IsRunning_t = HRESULT(__cdecl*)(void* pThis,
@@ -459,7 +513,20 @@ bool TaskListButton_IsRunning(FrameworkElement taskListButtonElement) {
     return isRunning;
 }
 
-// ------------------------------------------------------------------- applying
+
+// Snapshot for loops that write Visibility: the UpdateVisualStates hook can
+// push into hiddenByUs from inside such a write.
+std::vector<FrameworkElement> ResolveHiddenByUs(FrameContext& ctx) {
+    std::vector<FrameworkElement> resolved;
+    for (size_t i = 0; i < ctx.hiddenByUs.size(); i++) {
+        if (auto button = ctx.hiddenByUs[i].get()) {
+            resolved.push_back(button);
+        }
+    }
+    return resolved;
+}
+
+// --- HIDDEN SET & WINDOWS ANIMATIONS ---
 
 bool TakeFromHiddenSet(std::vector<winrt::weak_ref<FrameworkElement>>& hidden,
                        FrameworkElement const& element,
@@ -485,59 +552,6 @@ bool TakeFromHiddenSet(std::vector<winrt::weak_ref<FrameworkElement>>& hidden,
     }
 
     return found;
-}
-
-// Snapshot for loops that write Visibility: the UpdateVisualStates hook can
-// push into hiddenByUs from inside such a write.
-std::vector<FrameworkElement> ResolveHiddenByUs(FrameContext& ctx) {
-    std::vector<FrameworkElement> resolved;
-    for (size_t i = 0; i < ctx.hiddenByUs.size(); i++) {
-        if (auto button = ctx.hiddenByUs[i].get()) {
-            resolved.push_back(button);
-        }
-    }
-    return resolved;
-}
-
-bool CursorOverAnyTaskbar() {
-    POINT pt;
-    if (!GetCursorPos(&pt)) {
-        return false;
-    }
-
-    HWND hWnd = WindowFromPoint(pt);
-    if (!hWnd) {
-        return false;
-    }
-
-    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-    if (!hRoot) {
-        return false;
-    }
-
-    WCHAR className[64];
-    if (!GetClassNameW(hRoot, className, ARRAYSIZE(className))) {
-        return false;
-    }
-
-    if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
-        wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-        return true;
-    }
-
-    // Popups on a taskbar thread count as taskbar, or grace collapses menus.
-    DWORD processId = 0;
-    DWORD threadId = GetWindowThreadProcessId(hRoot, &processId);
-    if (threadId && processId == GetCurrentProcessId()) {
-        std::lock_guard<std::mutex> guard(g_framesMutex);
-        for (auto& [key, ctx] : *g_frames) {
-            if (ctx.threadId == threadId) {
-                return true;
-            }
-        }
-    }
-
-    return false;
 }
 
 void DeanimateButton(FrameContext& ctx,
@@ -592,6 +606,7 @@ void DeanimateButton(FrameContext& ctx,
     }
 }
 
+
 // Only the reversible pair (Transitions, ImplicitAnimations); the implicit
 // show/hide channel has no getter and must stay Windows'.
 void DeanimateRunSet(FrameContext& ctx,
@@ -628,7 +643,7 @@ void ReanimateButtons(FrameContext& ctx) {
     ctx.deanimated.clear();
 }
 
-// ------------------------------------------------------------------ easing
+// --- EASING ---
 
 // One axis of a cubic bezier whose endpoints are fixed at 0 and 1.
 double BezierAxis(double p1, double p2, double u) {
@@ -658,7 +673,7 @@ double CubicBezierEase(EasingCurve const& curve, double t) {
     return BezierAxis(curve.y1, curve.y2, (lo + hi) * 0.5);
 }
 
-// ---------------------------------------------------------------- animation
+// --- SLIDES ---
 
 // Identity, not interface pointer: the same object answers with a different
 // pointer per interface.
@@ -775,6 +790,8 @@ void DetachSlides(FrameContext& ctx) {
     ctx.slides.clear();
 }
 
+// --- COLLAPSE ---
+
 // Windows' domain: a parked container's running state is the husk's, not the
 // app's.
 bool IsParkedOffBar(FrameContext& ctx, FrameworkElement const& button) {
@@ -829,7 +846,7 @@ void SetCollapseState(
             } else if (weHidIt) {
                 // A retired container: shown, it draws its leftover plate over
                 // the icon now in that slot. Kept hidden until it runs.
-                if (!running && !HasVisibleIcon(button, 3)) {
+                if (!running && !FindVisibleIcon(button, 3)) {
                     if (!collapse && ctx.appliedCollapse == 1) {
                         Wh_Log(L"Kept hidden (no icon): %s",
                                winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(button).c_str());
@@ -942,49 +959,7 @@ void StopAnimation(FrameContext& ctx) {
     ctx.animGapOffsets.clear();
 }
 
-FrameworkElement FindVisibleIcon(FrameworkElement root, int depth) {
-    if (!root || depth < 0) {
-        return nullptr;
-    }
-    FrameworkElement found = nullptr;
-    EnumChildElements(root, [&](FrameworkElement child) {
-        try {
-            if (child.Visibility() == Visibility::Visible &&
-                winrt::get_class_name(child) ==
-                    L"Windows.UI.Xaml.Controls.Image") {
-                found = child;
-                return true;
-            }
-        } catch (winrt::hresult_error const&) {
-        }
-        found = FindVisibleIcon(child, depth - 1);
-        return found != nullptr;
-    });
-    return found;
-}
-
-// The promoted-slot divider: a hairline rectangle spanning the button.
-FrameworkElement FindDividerRect(FrameworkElement root, int depth) {
-    if (!root || depth < 0) {
-        return nullptr;
-    }
-    FrameworkElement found = nullptr;
-    EnumChildElements(root, [&](FrameworkElement child) {
-        try {
-            if (child.Visibility() == Visibility::Visible &&
-                child.ActualWidth() < 2.0 && child.ActualHeight() >= 24.0 &&
-                winrt::get_class_name(child) ==
-                    L"Windows.UI.Xaml.Shapes.Rectangle") {
-                found = child;
-                return true;
-            }
-        } catch (winrt::hresult_error const&) {
-        }
-        found = FindDividerRect(child, depth - 1);
-        return found != nullptr;
-    });
-    return found;
-}
+// --- ANIMATION PLAN ---
 
 int CountStripChildren(FrameContext& ctx) {
     auto repeater = ctx.repeater.get();
@@ -1329,31 +1304,7 @@ bool BuildAnimPlan(FrameContext& ctx,
     return !ctx.animPlan.empty();
 }
 
-bool HasVisibleIcon(FrameworkElement root, int depth) {
-    if (!root || depth < 0) {
-        return false;
-    }
-    bool found = false;
-    EnumChildElements(root, [&](FrameworkElement child) {
-        if (found) {
-            return false;
-        }
-        try {
-            if (child.Visibility() == Visibility::Visible &&
-                winrt::get_class_name(child) ==
-                    L"Windows.UI.Xaml.Controls.Image") {
-                found = true;
-                return false;
-            }
-        } catch (winrt::hresult_error const&) {
-        }
-        if (HasVisibleIcon(child, depth - 1)) {
-            found = true;
-        }
-        return false;
-    });
-    return found;
-}
+// --- PHANTOMS ---
 
 void RestoreRepairedPhantoms(FrameContext& ctx, FrameworkElement frame) {
     for (size_t i = 0; i < ctx.phantomHidden.size();) {
@@ -1369,7 +1320,7 @@ void RestoreRepairedPhantoms(FrameContext& ctx, FrameworkElement frame) {
         try {
             x = element.TransformToVisual(frame).TransformPoint(Point{0, 0}).X;
             double frameWidth = frame.ActualWidth();
-            if (HasVisibleIcon(element, 3)) {
+            if (FindVisibleIcon(element, 3)) {
                 why = L"has icon";
                 restore = true;
             } else if (x < 0 || (frameWidth > 0 && x > frameWidth)) {
@@ -1434,7 +1385,7 @@ int HidePhantomButtons(FrameContext& ctx,
             if (candidate.x < 0 || (frameWidth > 0 && candidate.x > frameWidth)) {
                 return false;
             }
-            candidate.hasIcon = HasVisibleIcon(child, 3);
+            candidate.hasIcon = FindVisibleIcon(child, 3) != nullptr;
             row.push_back(std::move(candidate));
         } catch (winrt::hresult_error const&) {
         }
@@ -1475,6 +1426,8 @@ int HidePhantomButtons(FrameContext& ctx,
     }
     return hidden;
 }
+
+// --- FINALIZE & GAP CLOSE ---
 
 // Only the mod's own TranslateTransform is checked. Opacity and width are
 // never swept: other mods zero them on purpose (tray hiding, indicator
@@ -1699,6 +1652,8 @@ void StartGapCloseAnimation(
     HookRendering(ctx, ctx.key);
 }
 
+// --- APPLY & RENDER ---
+
 // Never runs mid-animation; reports false so pending work can retry.
 bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     auto frame = ctx.frame.get();
@@ -1754,12 +1709,7 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     // Windows' animations play from a hidden icon's old spot; off while the mod
     // manages the row.
     if (!g_unloading) {
-        if (!g_collapseEnabled && ctx.hiddenByUs.empty()) {
-            ReanimateButtons(ctx);
-            DetachSlides(ctx);
-        } else {
-            DeanimateRunSet(ctx, buttons, L"apply");
-        }
+        DeanimateRunSet(ctx, buttons, L"apply");
     }
 
     bool instant = instantRequested || ctx.appliedCollapse < 0 ||
@@ -1776,12 +1726,6 @@ bool ApplyToFrame(FrameContext& ctx, bool collapse, bool instantRequested) {
     std::vector<std::pair<FrameworkElement, double>> deferHide;
     SetCollapseState(ctx, buttons, collapse,
                      animateGaps ? &deferHide : nullptr);
-    // Reanimating in the same pass as the shows would play Windows' show
-    // transitions from stale spots; the next apply does it.
-    if (!g_collapseEnabled && ctx.hiddenByUs.empty() &&
-        !ctx.deanimated.empty()) {
-        PostApply(ctx.dispatcher, ctx.threadId);
-    }
     if (!deferHide.empty()) {
         StartGapCloseAnimation(ctx, buttons, std::move(deferHide));
     } else if (!ctx.animActive) {
@@ -2046,6 +1990,8 @@ void RestoreFrame(FrameContext& ctx) {
     ReanimateButtons(ctx);
 }
 
+// --- TIMER & FRAMES ---
+
 void OnTimerTick(void* key) {
     FrameContext* ctx = nullptr;
     {
@@ -2083,34 +2029,32 @@ void OnTimerTick(void* key) {
 
     ULONGLONG now = GetTickCount64();
     RevealTrigger trigger = g_settings.revealTrigger;
-    bool hoverLike =
-        trigger == RevealTrigger::Hover || trigger == RevealTrigger::Rest;
+    bool hoverLike = IsHoverLike(trigger);
     bool cursorInside = CursorOverAnyTaskbar();
     // A flip must reach every monitor; only a posted wake does that now.
     bool flipped = false;
 
-    if (g_revealed) {
-        if (!g_collapseEnabled ||
-            (trigger == RevealTrigger::Never && !g_revealedByStart)) {
-            g_revealed = false;
-            g_revealedByStart = false;
+    RevealState reveal = g_reveal;
+    if (reveal == RevealState::HoverRevealed) {
+        bool expire = false;
+        if (g_startOpen) {
+            g_lastCursorInsideTick = now;
+        } else if (!hoverLike) {
+            // Left over from a trigger switch; nothing else would age it.
+            expire = true;
+        } else if (cursorInside) {
+            g_lastCursorInsideTick = now;
+        } else if (now - g_lastCursorInsideTick >
+                   (ULONGLONG)g_settings.hoverGraceMs) {
+            expire = true;
+        }
+        RevealState expected = RevealState::HoverRevealed;
+        if (expire && g_reveal.compare_exchange_strong(
+                          expected, RevealState::Collapsed)) {
             g_emptyHoverSinceTick = 0;
             flipped = true;
-        } else if (g_revealedByStart) {
-            // Pinned while Start is open; the worker ends it on close.
-            g_lastCursorInsideTick = now;
-        } else if (hoverLike) {
-            // Only hover ages out on grace; a click reveal stays.
-            if (cursorInside) {
-                g_lastCursorInsideTick = now;
-            } else if (now - g_lastCursorInsideTick >
-                       (ULONGLONG)g_settings.hoverGraceMs) {
-                g_revealed = false;
-                g_emptyHoverSinceTick = 0;
-                flipped = true;
-            }
         }
-    } else if (hoverLike && g_collapseEnabled) {
+    } else if (reveal == RevealState::Collapsed && hoverLike) {
         // The tick has the last word on the latch; exit events can be missed.
         if (!cursorInside) {
             g_lastPointerQualified = false;
@@ -2135,8 +2079,9 @@ void OnTimerTick(void* key) {
             now - since >= (ULONGLONG)g_settings.revealDelayMs) {
             if (PointerClearsSurfaces(g_lastQualifiedKey,
                                       g_lastQualifiedFramePt)) {
-                g_revealed = true;
-                flipped = true;
+                RevealState expected = RevealState::Collapsed;
+                flipped = g_reveal.compare_exchange_strong(
+                    expected, RevealState::HoverRevealed);
             } else {
                 g_lastPointerQualified = false;
             }
@@ -2148,7 +2093,7 @@ void OnTimerTick(void* key) {
         WakeAllFramesAsync();
     }
 
-    bool desired = g_collapseEnabled && !g_revealed;
+    bool desired = g_reveal == RevealState::Collapsed;
 
     // Consumed only on a successful apply.
     uint64_t instantGen = g_instantApplyGen;
@@ -2194,8 +2139,9 @@ void OnTimerTick(void* key) {
     // The timer runs only while something needs a clock; everything else
     // arrives as events. Reveal terms are global: cost, not correctness.
     bool timing = ctx->animActive || g_emptyHoverSinceTick != 0 ||
-                  (g_revealed && hoverLike && !g_revealedByStart) ||
-                  (hoverLike && g_collapseEnabled && !g_revealed &&
+                  (g_reveal == RevealState::HoverRevealed && hoverLike &&
+                   !g_startOpen) ||
+                  (hoverLike && g_reveal == RevealState::Collapsed &&
                    g_lastPointerQualified) ||
                   ctx->applyRetries > 0;
     if (timing != ctx->timer.IsEnabled()) {
@@ -2376,7 +2322,48 @@ void WakeAllFramesAsync(bool skipCurrentThread) {
     }
 }
 
-// --------------------------------------------------------------------- hover
+// --- HOVER ---
+
+bool CursorOverAnyTaskbar() {
+    POINT pt;
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+
+    HWND hWnd = WindowFromPoint(pt);
+    if (!hWnd) {
+        return false;
+    }
+
+    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+    if (!hRoot) {
+        return false;
+    }
+
+    WCHAR className[64];
+    if (!GetClassNameW(hRoot, className, ARRAYSIZE(className))) {
+        return false;
+    }
+
+    if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
+        wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+        return true;
+    }
+
+    // Popups on a taskbar thread count as taskbar, or grace collapses menus.
+    DWORD processId = 0;
+    DWORD threadId = GetWindowThreadProcessId(hRoot, &processId);
+    if (threadId && processId == GetCurrentProcessId()) {
+        std::lock_guard<std::mutex> guard(g_framesMutex);
+        for (auto& [key, ctx] : *g_frames) {
+            if (ctx.threadId == threadId) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 bool IsPointerOverEmptySpace(Input::PointerRoutedEventArgs const& args) {
     auto source = args.OriginalSource().try_as<DependencyObject>();
@@ -2556,6 +2543,8 @@ bool PointerClearsSurfaces(void* key, Point framePt) {
     return ProbeStripIsClear(frame, framePt, g_settings.elementPaddingPx);
 }
 
+// --- HOOKS ---
+
 // QI to one interface: raw hook pointers differ per interface slot.
 void* FrameKeyFromThis(void* pThis, FrameworkElement* elementOut) {
     FrameworkElement element = nullptr;
@@ -2596,8 +2585,7 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
     g_lastCursorInsideTick = GetTickCount64();
 
     RevealTrigger trigger = g_settings.revealTrigger;
-    if ((trigger != RevealTrigger::Hover && trigger != RevealTrigger::Rest) ||
-        !g_collapseEnabled || g_revealed) {
+    if (!IsHoverLike(trigger) || g_reveal != RevealState::Collapsed) {
         return;
     }
 
@@ -2670,7 +2658,8 @@ void HandlePointerMoved(void* pThis, void* pArgs) {
         return;
     }
 
-    g_revealed = true;
+    RevealState expected = RevealState::Collapsed;
+    g_reveal.compare_exchange_strong(expected, RevealState::HoverRevealed);
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
     // Other monitors' taskbars have no running timer to notice the flip.
@@ -2733,8 +2722,7 @@ using TaskbarFrame_OnPointerReleased_t = int(__cdecl*)(void* pThis,
                                                        void* pArgs);
 TaskbarFrame_OnPointerReleased_t TaskbarFrame_OnPointerReleased_Original;
 void HandlePointerReleased(void* pThis, void* pArgs) {
-    if (g_unloading || g_settings.revealTrigger != RevealTrigger::Click ||
-        !g_collapseEnabled) {
+    if (g_unloading || g_settings.revealTrigger != RevealTrigger::Click) {
         return;
     }
 
@@ -2763,10 +2751,7 @@ void HandlePointerReleased(void* pThis, void* pArgs) {
         return;
     }
 
-    // Atomic flip: two taskbars' release hooks can race on this.
-    bool revealed = g_revealed.load();
-    while (!g_revealed.compare_exchange_weak(revealed, !revealed)) {
-    }
+    FlipReveal();
     g_emptyHoverSinceTick = 0;
     ApplyOnThisThreadNow();
     // Other monitors' taskbars have no running timer to notice the flip.
@@ -2830,7 +2815,7 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     // a frame before the posted apply; this hook runs inside the drain's own
     // pass, early enough to hide it unrendered.
     try {
-        if (g_collapseEnabled && !g_revealed) {
+        if (g_reveal == RevealState::Collapsed) {
             // Adapted from taskbar-labels (m417z): pThis is the implementation
             // object, not an ABI pointer; its first interface sits three
             // pointers in.
@@ -2911,7 +2896,7 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
 }
 
-// -------------------------------------------------------------------- hotkey
+// --- HOTKEY & START ---
 
 bool ParseHotkey(std::wstring spec, UINT* modifiers, UINT* vk) {
     *modifiers = 0;
@@ -2976,17 +2961,11 @@ bool ParseHotkey(std::wstring spec, UINT* modifiers, UINT* vk) {
 
 // Never waits on a taskbar thread, or unload could strand the worker.
 void ToggleCollapse() {
-    // Atomic flip: LoadSettings writes this concurrently on settings saves.
-    bool prev = g_collapseEnabled.load();
-    while (!g_collapseEnabled.compare_exchange_weak(prev, !prev)) {
-    }
-    bool enabled = !prev;
-    g_revealed = false;
-    g_revealedByStart = false;
+    bool revealed = FlipReveal() == RevealState::Revealed;
     g_emptyHoverSinceTick = 0;
     g_lastPointerQualified = false;
     g_instantApplyGen++;
-    Wh_Log(L"Hotkey toggled collapse to %d", (int)enabled);
+    Wh_Log(L"Hotkey toggled reveal to %d", (int)revealed);
     WakeAllFramesAsync();
 
     bool anyFrames;
@@ -3000,36 +2979,29 @@ void ToggleCollapse() {
 }
 
 void OnStartMenuVisibility(bool visible) {
-    if (g_unloading || !g_settings.revealOnStart || !g_collapseEnabled) {
+    if (g_unloading || !g_settings.revealOnWinStart) {
         return;
     }
 
     if (visible) {
-        bool wasRevealed = g_revealed.exchange(true);
-        RevealTrigger trigger = g_settings.revealTrigger;
-        bool hoverLike = trigger == RevealTrigger::Hover ||
-                         trigger == RevealTrigger::Rest;
-        // Adopt an in-flight hover reveal or grace ages it out under Start;
-        // a click reveal stays its own, so Start-close cannot cancel it.
-        if (!wasRevealed || hoverLike) {
-            g_revealedByStart = true;
-        }
-        if (!wasRevealed) {
+        // Flag first, or the tick can age the reveal before it is held.
+        g_startOpen = true;
+        RevealState expected = RevealState::Collapsed;
+        if (g_reveal.compare_exchange_strong(expected,
+                                             RevealState::HoverRevealed)) {
             Wh_Log(L"Start menu opened, revealing");
             WakeAllFramesAsync();
         }
         return;
     }
 
-    if (g_revealedByStart.exchange(false)) {
-        // Hover hands over to grace; click/hotkey reveals end with Start.
-        RevealTrigger trigger = g_settings.revealTrigger;
-        bool hoverLike = trigger == RevealTrigger::Hover ||
-                         trigger == RevealTrigger::Rest;
-        if (hoverLike && CursorOverAnyTaskbar()) {
+    if (g_startOpen.exchange(false)) {
+        // Hover hands over to grace; elsewhere the reveal ends with Start.
+        if (IsHoverLike(g_settings.revealTrigger) && CursorOverAnyTaskbar()) {
             g_lastCursorInsideTick = GetTickCount64();
         } else {
-            g_revealed = false;
+            RevealState expected = RevealState::HoverRevealed;
+            g_reveal.compare_exchange_strong(expected, RevealState::Collapsed);
         }
         Wh_Log(L"Start menu closed");
         WakeAllFramesAsync();
@@ -3120,7 +3092,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID param) {
     winrt::com_ptr<IAppVisibility> appVisibility;
     DWORD adviseCookie = 0;
     StartVisibilitySink* sink = nullptr;
-    if (g_settings.revealOnStart) {
+    if (g_settings.revealOnWinStart) {
         if (SUCCEEDED(CoCreateInstance(__uuidof(AppVisibility), nullptr,
                                        CLSCTX_ALL,
                                        IID_PPV_ARGS(appVisibility.put())))) {
@@ -3186,7 +3158,7 @@ void StartHotkeyThread() {
         modifiers = 0;
         vk = 0;
     }
-    if (!valid && !g_settings.revealOnStart) {
+    if (!valid && !g_settings.revealOnWinStart) {
         return;
     }
 
@@ -3222,7 +3194,7 @@ void StopHotkeyThread() {
     g_hotkeyThreadId = 0;
 }
 
-// ------------------------------------------------------- taskbar UI threads
+// --- TASKBAR UI THREADS ---
 
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
@@ -3364,10 +3336,10 @@ void CleanupOnThisThread() {
     }
 }
 
-// ------------------------------------------------------------------ lifetime
+// --- LIFETIME ---
 
 void LoadSettings() {
-    g_settings.revealOnStart = Wh_GetIntSetting(L"RevealOnStart") != 0;
+    g_settings.revealOnWinStart = Wh_GetIntSetting(L"RevealOnWinStart") != 0;
 
     auto trigger = WindhawkUtils::StringSetting::make(L"RevealTrigger");
     g_settings.revealTrigger = RevealTrigger::Click;
@@ -3407,9 +3379,7 @@ void LoadSettings() {
         g_settings.animationCurve = CurveId::Circ;
     }
 
-    g_collapseEnabled = Wh_GetIntSetting(L"Collapsed") != 0;
-    g_revealed = false;
-    g_revealedByStart = false;
+    g_startOpen = false;
     g_emptyHoverSinceTick = 0;
     g_lastPointerQualified = false;
 }
@@ -3506,8 +3476,13 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_revealed = Wh_GetIntValue(L"RevealedState", 0) != 0;
-    g_lastSavedRevealed = g_revealed ? 1 : 0;
+    int saved = Wh_GetIntValue(L"RevealedState", 0);
+    g_lastSavedRevealed = saved;
+    if ((saved || Wh_GetIntSetting(L"StartRevealed")) &&
+        !IsHoverLike(g_settings.revealTrigger)) {
+        g_reveal = RevealState::Revealed;
+    }
+    PersistRevealState();
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
@@ -3560,6 +3535,11 @@ void Wh_ModSettingsChanged() {
 
     StopHotkeyThread();
     LoadSettings();
+    if (IsHoverLike(g_settings.revealTrigger)) {
+        RevealState expected = RevealState::Revealed;
+        g_reveal.compare_exchange_strong(expected, RevealState::HoverRevealed);
+    }
+
     if (g_taskbarViewDllLoaded) {
         StartHotkeyThread();
     }
