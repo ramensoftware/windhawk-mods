@@ -116,8 +116,7 @@ too, widgets in the same position sit side by side, in that order; right-click o
   otherwise the next time the mod starts.
 - Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
   mod's storage (in a folder only you can open), and go with the mod.
-- On 32-bit Windows, short on memory for video, an area bigger than 2560 × 1440 is recorded
-  scaled down to that many pixels. Otherwise areas up to 4K are recorded as they are.
+- Areas up to 4K are recorded as they are; bigger ones are scaled down to fit 4K.
 */
 // ==/WindhawkModReadme==
 
@@ -194,7 +193,6 @@ too, widgets in the same position sit side by side, in that order; right-click o
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cmath>
 #include <cwctype>
 #include <functional>
@@ -394,7 +392,6 @@ struct SaveFolder {
 };
 
 struct ModSettings {
-    bool showButton = true;
     bool screenshotButton = true;  // At least one of the two.
     bool recordButton = true;
     bool recordShortcut = true;
@@ -404,7 +401,6 @@ struct ModSettings {
 
     static ModSettings Load() {
         ModSettings settings;
-        settings.showButton = Wh_GetIntSetting(L"showButton") != 0;
         auto buttons = WindhawkUtils::StringSetting::make(L"buttons");
         settings.screenshotButton = wcscmp(buttons, L"record") != 0;
         settings.recordButton = wcscmp(buttons, L"screenshot") != 0;
@@ -863,13 +859,12 @@ void ForgetDraggedWidget() {
 // the chosen item's action then runs back on the app's thread.
 
 struct MenuEntry {
-    enum class Kind { Item, Separator, Submenu };
+    enum class Kind { Item, Separator };
     Kind kind = Kind::Item;
     std::wstring text;  // A tab, then the item's shortcut, if it has one.
     bool checked = false;
     bool enabled = true;
-    int command = 0;                 // An item's: what the widget sends back when it's chosen.
-    std::vector<MenuEntry> entries;  // A submenu's.
+    int command = 0;  // An item's: what the widget sends back when it's chosen.
 };
 
 class Menu {
@@ -895,26 +890,8 @@ public:
         entries_.push_back(entry);
     }
 
-    // A submenu; items added to it share this menu's actions.
-    Menu& AddSubmenu(const std::wstring& text, bool enabled = true) {
-        submenus_.push_back(std::unique_ptr<Menu>(new Menu(actions_)));
-        MenuEntry entry;
-        entry.kind = MenuEntry::Kind::Submenu;
-        entry.text = text;
-        entry.enabled = enabled;
-        entries_.push_back(entry);
-        submenuEntries_.push_back(entries_.size() - 1);
-        return *submenus_.back();
-    }
-
     // What the widget shows.
-    std::vector<MenuEntry> Entries() const {
-        std::vector<MenuEntry> entries = entries_;
-        for (size_t i = 0; i < submenus_.size(); i++) {
-            entries[submenuEntries_[i]].entries = submenus_[i]->Entries();
-        }
-        return entries;
-    }
+    std::vector<MenuEntry> Entries() const { return entries_; }
 
     // Runs the action of the item the widget sent back.
     void Run(int command) {
@@ -925,12 +902,8 @@ public:
     }
 
 private:
-    explicit Menu(std::shared_ptr<std::vector<std::function<void()>>> actions) : actions_(std::move(actions)) {}
-
     std::shared_ptr<std::vector<std::function<void()>>> actions_;
     std::vector<MenuEntry> entries_;
-    std::vector<std::unique_ptr<Menu>> submenus_;
-    std::vector<size_t> submenuEntries_;  // Where each submenu is in entries_.
 };
 
 // ---------------------------------------------------------------------------
@@ -1252,7 +1225,6 @@ std::atomic<HWND> g_appWindow{nullptr};
 // Messages from the widget to the app's window.
 constexpr UINT kAttachedMessage = WM_APP + 0x300;     // The widget is in the taskbar (again): send it everything.
 constexpr UINT kClickMessage = WM_APP + 0x301;        // wParam: the part. lParam: the MouseButton.
-constexpr UINT kWheelMessage = WM_APP + 0x302;        // wParam: the part. lParam: notches (up is positive).
 constexpr UINT kMenuCommandMessage = WM_APP + 0x304;  // wParam: the command chosen in the menu.
 
 enum class MouseButton { Left, Middle, Right };
@@ -1359,7 +1331,7 @@ int PlaceOf(wux::FrameworkElement const& element) {
 [[clang::no_destroy]] wuxc::MenuFlyout g_menu{nullptr};  // The widget's menu while it's open.
 winrt::event_token g_menuClosed{};
 // Its items' Click handlers, the mod's code, which come off as it closes (or the mod turns off).
-[[clang::no_destroy]] std::vector<wuxc::MenuFlyoutItem::Click_revoker> g_menuClicks;
+[[clang::no_destroy]] std::optional<std::vector<wuxc::MenuFlyoutItem::Click_revoker>> g_menuClicks{std::in_place};
 // Where the widget was last right-clicked, to open its menu there.
 [[clang::no_destroy]] wux::FrameworkElement g_menuTarget{nullptr};
 winrt::Windows::Foundation::Point g_menuPoint{};
@@ -1377,7 +1349,7 @@ void ForgetMenu(bool hide) {
         }
         g_menu = nullptr;
     }
-    g_menuClicks.clear();
+    g_menuClicks->clear();
 }
 
 class WidgetHost {
@@ -1553,15 +1525,10 @@ Highlights HighlightsFor(wux::FrameworkElement const& element) {
     return {{0x18, 0xFF, 0xFF, 0xFF}, {0x10, 0xFF, 0xFF, 0xFF}};
 }
 
-// A part of the widget to click, scroll or hover, highlighted like the taskbar's buttons. What's
-// done to it goes to the app, as messages with the part's number.
+// A part of the widget to click, highlighted like the taskbar's buttons. Clicks go to the app, as
+// messages with the part's number.
 class Part {
 public:
-    // For the widget's own flyouts, on the taskbar's thread.
-    std::function<void(bool entered)> onHover;
-    std::function<void()> onPress;
-    std::function<void()> onClick;  // Left-clicked, after the app is told.
-
     // plainOnClick: drops the highlight on a click, as the click shows something that copies the
     // screen.
     wuxc::Border Make(int part, wux::UIElement const& content, const wchar_t* name, bool plainOnClick = false) {
@@ -1569,7 +1536,6 @@ public:
         part_ = part;
         plainOnClick_ = plainOnClick;
         hovered_ = pressed_ = false;
-        wheelRemainder_ = 0;
         border_ = wuxc::Border();
         border_.CornerRadius(wux::CornerRadiusHelper::FromUniformRadius(4));
         border_.Margin(wux::ThicknessHelper::FromLengths(2, 4, 2, 4));
@@ -1579,16 +1545,10 @@ public:
         enteredRevoker_ = border_.PointerEntered(winrt::auto_revoke, [this](auto const&, auto const&) {
             hovered_ = true;
             Paint();
-            if (onHover) {
-                onHover(true);
-            }
         });
         exitedRevoker_ = border_.PointerExited(winrt::auto_revoke, [this](auto const&, auto const&) {
             hovered_ = pressed_ = false;
             Paint();
-            if (onHover) {
-                onHover(false);
-            }
         });
         captureLostRevoker_ = border_.PointerCaptureLost(winrt::auto_revoke, [this](auto const&, auto const&) {
             pressed_ = false;
@@ -1599,23 +1559,10 @@ public:
             Paint();
             border_.CapturePointer(args.Pointer());
             args.Handled(true);
-            if (onPress) {
-                onPress();
-            }
         });
         releasedRevoker_ = border_.PointerReleased(winrt::auto_revoke, [this](auto const&, wux::Input::PointerRoutedEventArgs const& args) { OnReleased(args); });
         // So the taskbar doesn't open its own menu too.
         rightTappedRevoker_ = border_.RightTapped(winrt::auto_revoke, [](auto const&, wux::Input::RightTappedRoutedEventArgs const& args) { args.Handled(true); });
-        wheelRevoker_ = border_.PointerWheelChanged(winrt::auto_revoke, [this](auto const&, wux::Input::PointerRoutedEventArgs const& args) {
-            // Precision touchpads scroll by fractions of a notch; they're added up.
-            wheelRemainder_ += args.GetCurrentPoint(border_).Properties().MouseWheelDelta();
-            int notches = wheelRemainder_ / WHEEL_DELTA;
-            wheelRemainder_ -= notches * WHEEL_DELTA;
-            if (notches != 0) {
-                PostToApp(kWheelMessage, part_, notches);
-            }
-            args.Handled(true);
-        });
         themeRevoker_ = border_.ActualThemeChanged(winrt::auto_revoke, [this](auto const&, auto const&) { Paint(); });
         return border_;
     }
@@ -1630,7 +1577,6 @@ public:
         pressedRevoker_.revoke();
         releasedRevoker_.revoke();
         rightTappedRevoker_.revoke();
-        wheelRevoker_.revoke();
         themeRevoker_.revoke();
         border_ = nullptr;
     }
@@ -1660,9 +1606,6 @@ private:
         switch (kind) {
             case PointerUpdateKind::LeftButtonReleased:
                 PostToApp(kClickMessage, part_, (LPARAM)MouseButton::Left);
-                if (onClick) {
-                    onClick();
-                }
                 break;
             case PointerUpdateKind::MiddleButtonReleased:
                 PostToApp(kClickMessage, part_, (LPARAM)MouseButton::Middle);
@@ -1696,89 +1639,9 @@ private:
     wux::UIElement::PointerPressed_revoker pressedRevoker_;
     wux::UIElement::PointerReleased_revoker releasedRevoker_;
     wux::UIElement::RightTapped_revoker rightTappedRevoker_;
-    wux::UIElement::PointerWheelChanged_revoker wheelRevoker_;
     wux::FrameworkElement::ActualThemeChanged_revoker themeRevoker_;
     bool hovered_ = false;
     bool pressed_ = false;
-    int wheelRemainder_ = 0;
-};
-
-// Closes a flyout opened by hovering a part of the widget once the mouse is off both the flyout and
-// the part for a moment (it may be crossing the gap between them), but not while a mouse button is
-// held (dragging a slider, say). The flyout's own dismissal can't see the mouse leave for the
-// desktop, only for the rest of the taskbar.
-class HoverCloser {
-public:
-    // Watches the flyout, just opened from its part, which the mouse is on; close closes it.
-    void Start(wuxc::Primitives::FlyoutBase const& flyout, wux::FrameworkElement const& content, std::function<void()> close) {
-        Stop();
-        close_ = std::move(close);
-        partHovered_ = true;
-        flyoutHovered_ = false;
-        awayTicks_ = 0;
-        openedRevoker_ = flyout.Opened(winrt::auto_revoke, [this, content](auto const&, auto const&) { WatchPresenter(content); });
-        if (!timer_) {
-            timer_ = wux::DispatcherTimer();
-            timer_.Interval(std::chrono::milliseconds(100));
-            tickRevoker_ = timer_.Tick(winrt::auto_revoke, [this](auto const&, auto const&) { Tick(); });
-        }
-        timer_.Start();
-    }
-
-    // The mouse came onto the flyout's part, or left it.
-    void PartHovered(bool hovered) { partHovered_ = hovered; }
-
-    void Stop() {
-        if (timer_) {
-            timer_.Stop();
-        }
-        openedRevoker_.revoke();
-        enteredRevoker_.revoke();
-        exitedRevoker_.revoke();
-        close_ = nullptr;
-    }
-
-    // Lets go of its timer too, as the widget goes.
-    void Forget() {
-        Stop();
-        tickRevoker_.revoke();
-        timer_ = nullptr;
-    }
-
-private:
-    // Hears the mouse on the flyout's presenter, around the content with its padding.
-    void WatchPresenter(wux::FrameworkElement const& content) {
-        wux::DependencyObject element = content;
-        while (element && !element.try_as<wuxc::FlyoutPresenter>()) {
-            element = wuxm::VisualTreeHelper::GetParent(element);
-        }
-        wux::UIElement target = element ? element.as<wux::UIElement>() : content.as<wux::UIElement>();
-        enteredRevoker_ = target.PointerEntered(winrt::auto_revoke, [this](auto const&, auto const&) { flyoutHovered_ = true; });
-        exitedRevoker_ = target.PointerExited(winrt::auto_revoke, [this](auto const&, auto const&) { flyoutHovered_ = false; });
-    }
-
-    void Tick() {
-        bool held = GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0 || GetAsyncKeyState(VK_MBUTTON) < 0;
-        if (partHovered_ || flyoutHovered_ || held) {
-            awayTicks_ = 0;
-            return;
-        }
-        if (++awayTicks_ >= 3 && close_) {
-            timer_.Stop();
-            auto close = close_;  // Closing stops this, letting go of close_.
-            close();
-        }
-    }
-
-    std::function<void()> close_;
-    wux::DispatcherTimer timer_{nullptr};
-    wux::DispatcherTimer::Tick_revoker tickRevoker_;
-    wuxc::Primitives::FlyoutBase::Opened_revoker openedRevoker_;
-    wux::UIElement::PointerEntered_revoker enteredRevoker_;
-    wux::UIElement::PointerExited_revoker exitedRevoker_;
-    bool partHovered_ = false;
-    bool flyoutHovered_ = false;
-    int awayTicks_ = 0;
 };
 
 wuxc::FontIcon MakeGlyph(const wchar_t* glyph, double size) {
@@ -1798,14 +1661,6 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
             case MenuEntry::Kind::Separator:
                 items.Append(wuxc::MenuFlyoutSeparator());
                 break;
-            case MenuEntry::Kind::Submenu: {
-                wuxc::MenuFlyoutSubItem submenu;
-                submenu.Text(text);
-                submenu.IsEnabled(entry.enabled);
-                AddMenuEntries(submenu.Items(), entry.entries, chosen);
-                items.Append(submenu);
-                break;
-            }
             case MenuEntry::Kind::Item: {
                 wuxc::MenuFlyoutItem item{nullptr};
                 if (entry.checked) {
@@ -1820,7 +1675,7 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
                     item.KeyboardAcceleratorTextOverride(entry.text.substr(tab + 1));
                 }
                 item.IsEnabled(entry.enabled);
-                g_menuClicks.push_back(
+                g_menuClicks->push_back(
                     item.Click(winrt::auto_revoke, [chosen, command = entry.command](auto const&, auto const&) { *chosen = command; }));
                 items.Append(item);
                 break;
@@ -1851,7 +1706,7 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
             wuxc::MenuFlyoutItem item;
             item.Text(command == kMoveLeftCommand ? L"Move left" : L"Move right");
             item.IsEnabled(g_host->CanMove(command == kMoveLeftCommand ? -1 : 1));
-            g_menuClicks.push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
+            g_menuClicks->push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
             menu.Items().Append(item);
         }
     }
@@ -2842,12 +2697,9 @@ private:
 };
 
 // The size a video of an area of the screen is recorded at: the same, unless it's more than the
-// encoder takes (bigger than 4K), and a whole number of pixel pairs, as H.264 needs. In a 32-bit
-// process (Explorer on 32-bit Windows), whose memory runs out around 2 GB, recording, trimming and
-// saving a video bigger than 2560 × 1440 wouldn't fit: bigger areas are recorded at that many
-// pixels.
+// encoder takes (bigger than 4K), and a whole number of pixel pairs, as H.264 needs.
 SIZE VideoSizeFor(int width, int height) {
-    double most = sizeof(void*) == 4 ? 2560.0 * 1440.0 : 3840.0 * 2160.0;
+    double most = 3840.0 * 2160.0;
     double shrink = std::min({1.0, std::sqrt(most / ((double)width * height)), 4096.0 / width, 4096.0 / height});
     return {std::max(2, (int)(width * shrink) & ~1), std::max(2, (int)(height * shrink) & ~1)};
 }
@@ -2855,14 +2707,10 @@ SIZE VideoSizeFor(int width, int height) {
 // Writes a video file, frame by frame.
 class VideoWriter {
 public:
-    // Starts the file. The width and height must be even. In a 64-bit process the graphics card
-    // encodes, where it can; in a 32-bit one (on 32-bit Windows) its encoder would take about twice
-    // the memory, which isn't there to spare, so the processor does.
+    // Starts the file. The width and height must be even. The graphics card encodes, where it can,
+    // otherwise the processor.
     bool Open(const std::wstring& path, int width, int height) {
-        if (sizeof(void*) == 8 && Open(path, width, height, true)) {
-            return true;
-        }
-        return Open(path, width, height, false);
+        return Open(path, width, height, true) || Open(path, width, height, false);
     }
 
     bool Open(const std::wstring& path, int width, int height, bool hardware) {
@@ -6116,7 +5964,7 @@ private:
         }
         exportTarget_ = NewFileName(folder, L"Screen Recording", L".mp4");
         // Saving decodes and encodes the whole picture, which takes a lot of memory: the preview
-        // gives its back meanwhile (in a 32-bit process, there isn't room for both).
+        // gives its back meanwhile.
         KillTimer(hwnd_, kDecodeTimer);
         StopThumbnails();
         reader_.Close();
@@ -6920,6 +6768,7 @@ void Wh_ModUninit() {
         // can't be let go of anywhere else (see TaskbarXaml::g_bridge).
         TaskbarXaml::RunOnWindowThread(taskbar, []() {
             TaskbarXaml::g_host->Detach();
+            TaskbarXaml::g_menuClicks.reset();
             TaskbarXaml::g_host.reset();
             g_view.reset();
             TaskbarXaml::g_bridge.reset();
