@@ -2,11 +2,10 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons with a tray button or Ctrl+Alt+H
-// @version         1.0.0
+// @version         1.0.1
 // @author          merpzzz
 // @github          https://github.com/merpzzz
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -lshell32 -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
@@ -15,22 +14,35 @@
 /*
 # Desktop Icons Toggle
 
-Left-click the tray icon or press **Ctrl+Alt+H** to hide desktop icons. Repeat
-to show them again. Running app windows and files are not changed or deleted.
-Right-click the tray icon for explicit Show and Hide commands.
+Quickly show or hide desktop icons without affecting your running windows or
+deleting files. Left-click the tray icon or press **Ctrl+Alt+H** to toggle;
+if that hotkey is taken, **Ctrl+Alt+F12** is tried instead. Right-click the
+tray icon for explicit **Show** and **Hide** actions.
 
-If Ctrl+Alt+H is taken, the mod tries Ctrl+Alt+F12; the menu shows the actual
-shortcut. If neither is available, use the tray icon. Do not run the standalone
-Desktop Icons Toggle helper at the same time.
+Unlike broad keyboard automation or desktop double-click/automatic-hide mods,
+this one focuses on a dedicated, always-available tray control with an optional
+keyboard shortcut and an explicit Show/Hide menu.
 
-The mod runs locally inside Explorer. No telemetry, network access, keyboard
-monitoring, downloads, or elevated helper is used. It restores the visibility
-it found at startup when unloaded if its last change is still in effect.
-Explorer's own desktop context menu > View > Show desktop icons remains usable.
+## Saved Windows setting and recovery
 
-Initial target: Windows 11 x64. Uses Explorer's Show desktop icons command,
-which Microsoft could change in a future Windows release. Shell replacements
-are not supported.
+The toggle uses Explorer's own "Show desktop icons" command. **That command
+changes Windows' saved desktop icon visibility preference.** When the mod
+unloads normally, it restores the visibility observed on startup, provided the
+mod's last change is still in effect.
+
+To recover from Explorer crashes, sign-out, restarts, and unexpected exits,
+the mod stores the previous visibility before changing the setting. It checks
+this record on its next start and restores the prior preference when the
+current preference still matches the mod's change. A change made separately
+by the user is respected if detected.
+
+Icons might remain hidden until the next successful mod start. If you uninstall
+it or it does not restart, desktop right-click > View > Show desktop icons
+can manually restore visibility.
+
+The tray and hotkey run in a dedicated Windhawk tool process, not Explorer.
+No network, telemetry, downloads, keylogging or elevated helpers are used.
+Initial target: Windows 11. Windows Explorer internals may change.
 */
 // ==/WindhawkModReadme==
 
@@ -38,6 +50,7 @@ are not supported.
 #include <shellapi.h>
 #include <cwchar>
 #include <atomic>
+#include <cstdlib>
 
 namespace {
 constexpr wchar_t kClass[] = L"Merpzzz.DesktopIconsToggle.Tray";
@@ -45,25 +58,38 @@ constexpr UINT kTray = WM_APP + 1;
 constexpr UINT_PTR kRefresh = 1;
 HANDLE stopEvent = nullptr;
 HANDLE worker = nullptr;
-HANDLE instanceMutex = nullptr;
 std::atomic<HWND> workerWindow{nullptr};
 HINSTANCE module = nullptr;
 UINT taskbarCreated = 0;
 NOTIFYICONDATAW tray{};
 int initialVisible = -1, lastApplied = -1;
+int lastUiVisibility = -2;
+bool recoveryChecked = false;
+constexpr wchar_t kRecoveryPending[] = L"recoveryPending";
+constexpr wchar_t kRecoveryOriginal[] = L"recoveryOriginal";
+constexpr wchar_t kRecoveryApplied[] = L"recoveryApplied";
 const wchar_t* shortcut = L"Tray button only";
 HICON shownIcon = nullptr, hiddenIcon = nullptr;
 
 HWND FindView() {
-    HWND view = FindWindowExW(FindWindowW(L"Progman", nullptr), nullptr,
-                              L"SHELLDLL_DefView", nullptr);
-    if (!view) {
-        EnumWindows([](HWND h, LPARAM p) -> BOOL {
-            auto result = reinterpret_cast<HWND*>(p);
-            *result = FindWindowExW(h, nullptr, L"SHELLDLL_DefView", nullptr);
-            return !*result;
-        }, reinterpret_cast<LPARAM>(&view));
-    }
+    HWND shell = GetShellWindow();
+    if (!shell) return nullptr;
+    HWND view = FindWindowExW(shell, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (view) return view;
+
+    DWORD shellThreadId = GetWindowThreadProcessId(shell, nullptr);
+    if (!shellThreadId) return nullptr;
+    EnumThreadWindows(shellThreadId, [](HWND window, LPARAM param) -> BOOL {
+        wchar_t className[32]{};
+        if (!GetClassNameW(window, className, ARRAYSIZE(className)) ||
+            lstrcmpW(className, L"WorkerW") != 0)
+            return TRUE;
+        HWND candidate = FindWindowExW(
+            window, nullptr, L"SHELLDLL_DefView", nullptr);
+        if (!candidate) return TRUE;
+        *reinterpret_cast<HWND*>(param) = candidate;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&view));
     return view;
 }
 
@@ -73,16 +99,70 @@ int Visibility() {
     return icons ? (IsWindowVisible(icons) ? 1 : 0) : -1;
 }
 
-bool SetVisible(bool visible) {
-    const int before = Visibility();
-    if (before < 0) return false;
-    if (before == static_cast<int>(visible)) return true;
-    DWORD_PTR result = 0;
+// Sends Explorer's command, which persists the chosen visibility.
+bool SendExplorerToggle(bool visible) {
+    int current = Visibility();
+    if (current < 0) return false;
+    if (current == static_cast<int>(visible)) return true;
     HWND view = FindView();
-    if (!view || !SendMessageTimeoutW(view, WM_COMMAND, 0x7402, 0,
-                                      SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result))
-        return false;
+    DWORD_PTR result = 0;
+    return view && SendMessageTimeoutW(
+        view, WM_COMMAND, 0x7402, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK,
+        1000, &result);
+}
+
+// Only capture the baseline after restoring any change from an earlier crash.
+bool RecoverIfNeeded() {
+    if (recoveryChecked) return true;
+    int current = Visibility();
+    if (current < 0) return false;
+
+    if (Wh_GetIntValue(kRecoveryPending, 0)) {
+        int original = Wh_GetIntValue(kRecoveryOriginal, -1);
+        int applied = Wh_GetIntValue(kRecoveryApplied, -1);
+        if (original >= 0 && original <= 1 &&
+            applied >= 0 && applied <= 1 &&
+            current == applied && current != original) {
+            if (!SendExplorerToggle(original != 0)) return false;
+        }
+        // If current != applied, a user or Windows component changed it.
+        // Never overwrite that newer setting.
+        if (!Wh_SetIntValue(kRecoveryPending, 0)) return false;
+        current = Visibility();
+        if (current < 0) return false;
+    }
+
+    initialVisible = current;
+    recoveryChecked = true;
+    return true;
+}
+
+bool SetVisible(bool visible) {
+    if (!RecoverIfNeeded()) return false;
+    int before = Visibility();
+    if (before < 0) return false;
+
+    if (lastApplied >= 0 && before != lastApplied) {
+        initialVisible = before;
+        lastApplied = -1;
+        Wh_SetIntValue(kRecoveryPending, 0);
+    }
+
+    if (before == static_cast<int>(visible)) return true;
+    if (initialVisible < 0) initialVisible = before;
+
+    if (static_cast<int>(visible) != initialVisible) {
+        // Commit the recovery record *before* changing Explorer's setting.
+        if (!Wh_SetIntValue(kRecoveryOriginal, initialVisible) ||
+            !Wh_SetIntValue(kRecoveryApplied, visible ? 1 : 0) ||
+            !Wh_SetIntValue(kRecoveryPending, 1))
+            return false;
+    }
+
+    if (!SendExplorerToggle(visible)) return false;
     lastApplied = visible ? 1 : 0;
+    if (lastApplied == initialVisible)
+        Wh_SetIntValue(kRecoveryPending, 0);
     return true;
 }
 
@@ -102,10 +182,11 @@ HICON MakeIcon(bool hidden) {
         bool square = ((x >= 5 && x < 14) || (x >= 18 && x < 27)) &&
                       ((y >= 5 && y < 14) || (y >= 18 && y < 27));
         if (square) data[y * 32 + x] = hidden ? 0xFF6E7D8C : 0xFF5ACDF5;
-        if (hidden && x >= 4 && x < 28 && y >= 4 && y < 28 && abs(x + y - 31) <= 1)
+        if (hidden && x >= 4 && x < 28 && y >= 4 && y < 28 && std::abs(x + y - 31) <= 1)
             data[y * 32 + x] = 0xFFFFCD55;
     }
-    HBITMAP mask = CreateBitmap(32, 32, 1, 1, nullptr);
+    BYTE maskBits[32 * 4]{};
+    HBITMAP mask = CreateBitmap(32, 32, 1, 1, maskBits);
     ICONINFO info{TRUE, 0, 0, mask, bitmap};
     HICON icon = mask ? CreateIconIndirect(&info) : nullptr;
     if (mask) DeleteObject(mask);
@@ -114,11 +195,25 @@ HICON MakeIcon(bool hidden) {
 }
 
 void Refresh(bool add = false) {
-    int visible = Visibility();
-    if (initialVisible < 0 && visible >= 0) initialVisible = visible;
+    int visible = -1;
+    if (RecoverIfNeeded()) {
+        visible = Visibility();
+        if (lastApplied >= 0 && visible >= 0 &&
+            visible != lastApplied) {
+            // A change external to this mod wins.
+            initialVisible = visible;
+            lastApplied = -1;
+            Wh_SetIntValue(kRecoveryPending, 0);
+        }
+    }
+
+    if (!add && visible == lastUiVisibility) return;
+    lastUiVisibility = visible;
     tray.hIcon = visible == 0 ? hiddenIcon : shownIcon;
-    std::swprintf(tray.szTip, ARRAYSIZE(tray.szTip), L"Desktop icons: %ls | %ls",
-               visible < 0 ? L"waiting" : visible ? L"shown" : L"hidden", shortcut);
+    std::swprintf(tray.szTip, ARRAYSIZE(tray.szTip),
+                  L"Desktop icons: %ls | %ls",
+                  visible < 0 ? L"waiting" : visible ? L"shown" : L"hidden",
+                  shortcut);
     Shell_NotifyIconW(add ? NIM_ADD : NIM_MODIFY, &tray);
 }
 
@@ -155,7 +250,9 @@ LRESULT CALLBACK WindowProc(HWND h, UINT message, WPARAM w, LPARAM l) {
 }
 
 DWORD WINAPI Run(void*) {
-    initialVisible = Visibility(); lastApplied = -1;
+    initialVisible = -1;
+    lastApplied = -1;
+    recoveryChecked = false;
     WNDCLASSW wc{}; wc.hInstance = module; wc.lpfnWndProc = WindowProc;
     wc.lpszClassName = kClass;
     if (!RegisterClassW(&wc)) return 1;
@@ -187,34 +284,230 @@ DWORD WINAPI Run(void*) {
         }
     }
     KillTimer(h, kRefresh); UnregisterHotKey(h, 1); Shell_NotifyIconW(NIM_DELETE, &tray);
-    if (initialVisible >= 0 && lastApplied >= 0 && Visibility() == lastApplied)
-        SetVisible(initialVisible != 0);
+    if (recoveryChecked && initialVisible >= 0 && lastApplied >= 0 &&
+        Visibility() == lastApplied) {
+        if (SendExplorerToggle(initialVisible != 0))
+            Wh_SetIntValue(kRecoveryPending, 0);
+    }
     workerWindow = nullptr; DestroyWindow(h); DestroyIcon(shownIcon); DestroyIcon(hiddenIcon);
     UnregisterClassW(kClass, module); return 0;
 }
 }
 
-BOOL Wh_ModInit() {
-    // Only the desktop Explorer instance, not separate folder processes.
-    HWND shell = GetShellWindow(); DWORD pid = 0;
-    if (shell && (!GetWindowThreadProcessId(shell, &pid) || pid != GetCurrentProcessId())) return FALSE;
-    instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\merpzzz.DesktopIconsToggle.Mod");
-    if (!instanceMutex) return FALSE;
-    if (GetLastError() == ERROR_ALREADY_EXISTS) { CloseHandle(instanceMutex); instanceMutex = nullptr; return FALSE; }
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), &module);
+BOOL WhTool_ModInit() {
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&WhTool_ModInit), &module))
+        return FALSE;
+
     taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!stopEvent) { CloseHandle(instanceMutex); instanceMutex = nullptr; return FALSE; }
+    if (!stopEvent) return FALSE;
+
     worker = CreateThread(nullptr, 0, Run, nullptr, 0, nullptr);
-    if (!worker) { CloseHandle(stopEvent); stopEvent = nullptr; CloseHandle(instanceMutex); instanceMutex = nullptr; return FALSE; }
+    if (!worker) {
+        CloseHandle(stopEvent);
+        stopEvent = nullptr;
+        return FALSE;
+    }
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    if (HWND h = workerWindow.load()) PostMessageW(h, WM_CANCELMODE, 0, 0);
+void WhTool_ModSettingsChanged() {
+    // No settings yet.
+}
+
+void WhTool_ModUninit() {
+    if (HWND h = workerWindow.load())
+        PostMessageW(h, WM_CANCELMODE, 0, 0);
     if (stopEvent) SetEvent(stopEvent);
-    if (worker) { WaitForSingleObject(worker, INFINITE); CloseHandle(worker); worker = nullptr; }
-    if (stopEvent) { CloseHandle(stopEvent); stopEvent = nullptr; }
-    if (instanceMutex) { CloseHandle(instanceMutex); instanceMutex = nullptr; }
+    if (worker) {
+        WaitForSingleObject(worker, INFINITE);
+        CloseHandle(worker);
+        worker = nullptr;
+    }
+    if (stopEvent) {
+        CloseHandle(stopEvent);
+        stopEvent = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
