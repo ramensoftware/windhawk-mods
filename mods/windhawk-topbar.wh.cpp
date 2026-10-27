@@ -142,16 +142,6 @@ latitude/longitude to `api.open-meteo.com` for the forecast. No account, no
 API key, no personal data — only the coordinates (or search string) you
 provided.
 
-## Theme usage statistics
-
-The mod automatically sends the selected theme and a random installation ID to
-the public TopBar theme statistics service. The ID is stored locally to count
-the same installation once when its theme changes. The report does not include
-your Windows account name or device name. The service can still see the
-request's IP address. Reports are sent on startup, after a theme change, and at
-most once per day while the mod is running. The public dashboard displays
-aggregate counts: https://topbar-theme-stats.windhawk-topbar.workers.dev/
-
 ## Process model
 
 The bar runs in its own Explorer tool process (`explorer.exe -tool-mod windhawk-topbar`).
@@ -1164,12 +1154,6 @@ void RegisterNamed(PCWSTR name, FrameworkElement const& element);
 bool IsWindowTopmost(HWND hwnd);
 void RunOnUiThread(std::function<void()> work);
 void RunInBackground(std::function<void()> work);
-namespace theme_stats {
-constexpr UINT_PTR kDailyTimerId = 0x544253;
-void Submit();
-void Start();
-void SettingsChanged();
-}
 RECT GetBarMonitorRect();
 void HideOrphanXamlPopups();
 void InstallLightDismissGuard(wuxc::Primitives::FlyoutBase const& fb);
@@ -33270,7 +33254,13 @@ static bool IsPlausibleTaskbarButtonRect(RECT const& r,std::vector<RECT> const& 
     return false;
 }
 
+static bool TaskbarButtonRemapNeeded() {
+    return (g_settings.defaultStartMenu && g_settings.remapTaskbarStart) ||
+           (g_settings.defaultSearch && g_settings.remapTaskbarSearch);
+}
+
 void RefreshTaskbarButtonRectsAsync() {
+    if (!TaskbarButtonRemapNeeded()) return;
     static std::atomic<ULONGLONG> s_minIntervalGuard{0};
     ULONGLONG nowTick = GetTickCount64();
     ULONGLONG lastGuard = s_minIntervalGuard.load();
@@ -33287,6 +33277,7 @@ void RefreshTaskbarButtonRectsAsync() {
         struct FlagGuard {
             ~FlagGuard() { g_taskbarRectRefreshRunning = false; }
         } flagGuard;
+        if (!TaskbarButtonRemapNeeded()) return;
         RECT startRect{};
         RECT searchRect{};
         bool foundStart = false;
@@ -33406,8 +33397,8 @@ void RefreshTaskbarButtonRectsAsync() {
         } catch (...) {}
 
         // Windows 11 can expose the taskbar's XAML island as a separate
-        // desktop automation subtree. Search that tree by AutomationId as
-        // well, and keep every verified monitor's button bounds.
+        // desktop automation subtree. Limit fallback discovery to top-level
+        // elements owned by Explorer, the process hosting the taskbar.
         std::vector<RECT> startRects, searchRects;
         auto addButtonRect = [&](std::vector<RECT>& output, RECT const& rect, bool search) {
             if (!IsPlausibleTaskbarButtonRect(rect, taskbarRects, search)) return;
@@ -33421,8 +33412,11 @@ void RefreshTaskbarButtonRectsAsync() {
         try {
             auto uia = GetCachedUIA();
             winrt::com_ptr<IUIAutomationElement> desktop;
+            HWND tray = GetShellTrayWnd();
+            DWORD taskbarPid = 0;
             if (uia && !taskbarRects.empty() &&
                 (startRects.empty() || searchRects.empty() || taskbarRects.size() > 1) &&
+                tray && GetWindowThreadProcessId(tray, &taskbarPid) && taskbarPid &&
                 SUCCEEDED(uia->GetRootElement(desktop.put())) && desktop) {
                 auto conditionForId = [&](PCWSTR id) {
                     VARIANT value; VariantInit(&value);
@@ -33443,23 +33437,47 @@ void RefreshTaskbarButtonRectsAsync() {
                     SUCCEEDED(uia->CreateOrCondition(startId.get(), searchId.get(), firstPair.put())) &&
                     SUCCEEDED(uia->CreateOrCondition(searchBoxId.get(), searchBoxButtonId.get(), secondPair.put())) &&
                     SUCCEEDED(uia->CreateOrCondition(firstPair.get(), secondPair.get(), combined.put()))) {
-                    winrt::com_ptr<IUIAutomationElementArray> matches;
-                    if (SUCCEEDED(desktop->FindAll(TreeScope_Descendants, combined.get(),
-                                                   matches.put())) && matches) {
-                    int count = 0;
-                    if (SUCCEEDED(matches->get_Length(&count))) for (int i = 0; i < count; ++i) {
-                        winrt::com_ptr<IUIAutomationElement> element;
-                        RECT rect{};
-                        if (SUCCEEDED(matches->GetElement(i, element.put())) && element &&
-                            SUCCEEDED(element->get_CurrentBoundingRectangle(&rect))) {
-                            BSTR rawId = nullptr;
-                            if (SUCCEEDED(element->get_CurrentAutomationId(&rawId)) && rawId) {
-                                bool isStart = wcscmp(rawId, L"StartButton") == 0;
-                                SysFreeString(rawId);
-                                addButtonRect(isStart ? startRects : searchRects, rect, !isStart);
+                    VARIANT processId; VariantInit(&processId);
+                    processId.vt = VT_I4;
+                    processId.lVal = static_cast<LONG>(taskbarPid);
+                    winrt::com_ptr<IUIAutomationCondition> processCondition;
+                    HRESULT processConditionHr = uia->CreatePropertyCondition(
+                        UIA_ProcessIdPropertyId, processId, processCondition.put());
+                    VariantClear(&processId);
+                    winrt::com_ptr<IUIAutomationElementArray> processWindows;
+                    if (SUCCEEDED(processConditionHr) && processCondition &&
+                        SUCCEEDED(desktop->FindAll(TreeScope_Children,
+                                                   processCondition.get(),
+                                                   processWindows.put())) && processWindows) {
+                        int processWindowCount = 0;
+                        if (SUCCEEDED(processWindows->get_Length(&processWindowCount))) {
+                            for (int windowIndex = 0; windowIndex < processWindowCount; ++windowIndex) {
+                                winrt::com_ptr<IUIAutomationElement> processWindow;
+                                if (FAILED(processWindows->GetElement(windowIndex,
+                                                                     processWindow.put())) ||
+                                    !processWindow) continue;
+                                winrt::com_ptr<IUIAutomationElementArray> matches;
+                                if (FAILED(processWindow->FindAll(TreeScope_Descendants,
+                                                                 combined.get(),
+                                                                 matches.put())) || !matches) continue;
+                                int count = 0;
+                                if (FAILED(matches->get_Length(&count))) continue;
+                                for (int i = 0; i < count; ++i) {
+                                    winrt::com_ptr<IUIAutomationElement> element;
+                                    RECT rect{};
+                                    if (SUCCEEDED(matches->GetElement(i, element.put())) && element &&
+                                        SUCCEEDED(element->get_CurrentBoundingRectangle(&rect))) {
+                                        BSTR rawId = nullptr;
+                                        if (SUCCEEDED(element->get_CurrentAutomationId(&rawId)) && rawId) {
+                                            bool isStart = wcscmp(rawId, L"StartButton") == 0;
+                                            SysFreeString(rawId);
+                                            addButtonRect(isStart ? startRects : searchRects,
+                                                          rect, !isStart);
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
                     }
                 }
             }
@@ -33487,6 +33505,13 @@ void RefreshTaskbarButtonRectsAsync() {
 
 void ScheduleTaskbarRectCacheRefresh() {
     if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    if (!TaskbarButtonRemapNeeded()) {
+        if (g_taskbarRectDebounceTimer) {
+            KillTimer(g_topBarHwnd, g_taskbarRectDebounceTimer);
+            g_taskbarRectDebounceTimer = 0;
+        }
+        return;
+    }
     if (g_taskbarRectDebounceTimer) {
         KillTimer(g_topBarHwnd, g_taskbarRectDebounceTimer);
         g_taskbarRectDebounceTimer = 0;
@@ -33517,6 +33542,13 @@ static bool TaskbarRemapRectsReady() {
 
 void ScheduleTaskbarRectRefreshRetries() {
     if(!g_topBarHwnd||!IsWindow(g_topBarHwnd))return;
+    if (!TaskbarButtonRemapNeeded()) {
+        if (g_taskbarRemapRetryTimer) {
+            KillTimer(g_topBarHwnd, g_taskbarRemapRetryTimer);
+            g_taskbarRemapRetryTimer = 0;
+        }
+        return;
+    }
     if(g_taskbarRemapRetryTimer)KillTimer(g_topBarHwnd,g_taskbarRemapRetryTimer);
     static unsigned attempts=0;
     attempts=0;
@@ -33524,6 +33556,11 @@ void ScheduleTaskbarRectRefreshRetries() {
         [](HWND hwnd,UINT,UINT_PTR timerId,DWORD){
             if(g_stopEvent&&WaitForSingleObject(g_stopEvent,0)==WAIT_OBJECT_0){
                 KillTimer(hwnd,timerId);g_taskbarRemapRetryTimer=0;return;
+            }
+            if (!TaskbarButtonRemapNeeded()) {
+                KillTimer(hwnd, timerId);
+                g_taskbarRemapRetryTimer = 0;
+                return;
             }
             InstallChildFlyoutMouseHook();
             SyncSearchKeyHook();
@@ -38274,12 +38311,8 @@ void UpdateClockText() {
 
 LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if(message==WM_CREATE){
-        SetTimer(hwnd, theme_stats::kDailyTimerId, 24 * 60 * 60 * 1000, nullptr);
         if(!WTSRegisterSessionNotification(hwnd,NOTIFY_FOR_THIS_SESSION))
             Wh_Log(L"Session notification registration failed: %u",GetLastError());
-    }else if(message==WM_TIMER&&wParam==theme_stats::kDailyTimerId){
-        theme_stats::Submit();
-        return 0;
     }else if(message==WM_WTSSESSION_CHANGE){
         if(wParam==WTS_SESSION_LOCK||wParam==WTS_CONSOLE_DISCONNECT||wParam==WTS_REMOTE_DISCONNECT){
             g_sessionInputBlocked=true;
@@ -38290,7 +38323,6 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         }
         return 0;
     }else if(message==WM_DESTROY){
-        KillTimer(hwnd, theme_stats::kDailyTimerId);
         WTSUnRegisterSessionNotification(hwnd);
         ResetShortcutChordState();
     }
@@ -40326,153 +40358,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 // Settings
 // ============================================================================
 
-namespace theme_stats {
 
-constexpr wchar_t kEndpoint[] = L"https://topbar-theme-stats.windhawk-topbar.workers.dev/";
-constexpr wchar_t kRegistryPath[] = L"Software\\WasiXGamer\\WindhawkTopBar\\ThemeStats";
-constexpr ULONGLONG kReportIntervalSeconds = 24ull * 60 * 60;
-std::atomic<bool> g_requestInFlight{false};
-std::atomic<bool> g_reportPending{false};
-
-std::wstring ReadRegistryString(PCWSTR name) {
-    HKEY key{};
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryPath, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) return {};
-    DWORD type = 0, bytes = 0;
-    std::wstring result;
-    if (RegQueryValueExW(key, name, nullptr, &type, nullptr, &bytes) == ERROR_SUCCESS &&
-        type == REG_SZ && bytes >= sizeof(wchar_t) && bytes <= 4096) {
-        result.resize(bytes / sizeof(wchar_t));
-        if (RegQueryValueExW(key, name, nullptr, &type,
-                reinterpret_cast<BYTE*>(result.data()), &bytes) == ERROR_SUCCESS) {
-            while (!result.empty() && result.back() == L'\0') result.pop_back();
-        } else result.clear();
-    }
-    RegCloseKey(key);
-    return result;
-}
-
-bool WriteRegistryValue(PCWSTR name, DWORD type, const void* data, DWORD bytes) {
-    HKEY key{};
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryPath, 0, nullptr, 0,
-            KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) return false;
-    LONG status = RegSetValueExW(key, name, 0, type,
-        static_cast<const BYTE*>(data), bytes);
-    RegCloseKey(key);
-    return status == ERROR_SUCCESS;
-}
-
-void WriteRegistryString(PCWSTR name, std::wstring const& value) {
-    WriteRegistryValue(name, REG_SZ, value.c_str(),
-        static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
-}
-
-std::wstring GetOrCreateInstallationId() {
-    std::wstring id = ReadRegistryString(L"InstallationId");
-    if (!id.empty()) return id;
-    GUID guid{};
-    if (FAILED(CoCreateGuid(&guid))) return {};
-    wchar_t buffer[40]{};
-    if (!StringFromGUID2(guid, buffer, ARRAYSIZE(buffer))) return {};
-    id.assign(buffer + 1, wcslen(buffer) - 2); // UUID without braces.
-    WriteRegistryString(L"InstallationId", id);
-    return id;
-}
-
-bool SendReport(std::wstring const& id, std::wstring const& theme, bool remove) {
-    std::string body = "{\"installationId\":\"";
-    for (wchar_t c : id) body.push_back(static_cast<char>(c));
-    body += "\"";
-    if (remove) body += ",\"remove\":true}";
-    else {
-        body += ",\"theme\":\"";
-        for (wchar_t c : theme) body.push_back(static_cast<char>(c));
-        body += "\"}";
-    }
-
-    URL_COMPONENTS parts{};
-    parts.dwStructSize = sizeof(parts);
-    wchar_t host[256]{};
-    parts.lpszHostName = host;
-    parts.dwHostNameLength = ARRAYSIZE(host);
-    if (!WinHttpCrackUrl(kEndpoint, 0, 0, &parts)) return false;
-    HINTERNET session = WinHttpOpen(L"Windhawk-TopBar-ThemeStats/1.0",
-        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
-        WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) return false;
-    WinHttpSetTimeouts(session, 4000, 4000, 4000, 4000);
-    HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
-    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"POST", L"/",
-        nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-        WINHTTP_FLAG_SECURE) : nullptr;
-    BOOL ok = FALSE;
-    if (request) {
-        const wchar_t headers[] = L"Content-Type: application/json\r\n";
-        ok = WinHttpSendRequest(request, headers, static_cast<DWORD>(-1L),
-            body.data(), static_cast<DWORD>(body.size()),
-            static_cast<DWORD>(body.size()), 0) && WinHttpReceiveResponse(request, nullptr);
-        DWORD status = 0, size = sizeof(status);
-        if (ok) ok = WinHttpQueryHeaders(request,
-            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
-            WINHTTP_NO_HEADER_INDEX) && status >= 200 && status < 300;
-    }
-    if (request) WinHttpCloseHandle(request);
-    if (connection) WinHttpCloseHandle(connection);
-    WinHttpCloseHandle(session);
-    return ok != FALSE;
-}
-
-void Submit() {
-    if (g_requestInFlight.exchange(true)) {
-        g_reportPending = true;
-        return;
-    }
-    RunInBackground([] {
-        struct Reset {
-            ~Reset() {
-                g_requestInFlight = false;
-                if (g_reportPending.exchange(false)) Submit();
-            }
-        } reset;
-        if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
-        std::wstring id = GetOrCreateInstallationId();
-        if (id.empty()) return;
-        std::wstring theme = GetModEditorStringSetting(L"theme");
-        if (theme.empty()) theme = L"None";
-        const wchar_t* valid[] = {L"None", L"GreenBar", L"NoIslands", L"OS27 GoldenGate",
-            L"Midnight Neon", L"Neon Blue", L"Neon Blue (Island)"};
-        if (std::find(std::begin(valid), std::end(valid), theme) == std::end(valid)) theme = L"None";
-        std::wstring previousTheme = ReadRegistryString(L"LastTheme");
-        ULONGLONG previousTime = 0;
-        HKEY key{};
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryPath, 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
-            DWORD type = 0, bytes = sizeof(previousTime);
-            RegQueryValueExW(key, L"LastReport", nullptr, &type,
-                reinterpret_cast<BYTE*>(&previousTime), &bytes);
-            RegCloseKey(key);
-        }
-        ULONGLONG now = static_cast<ULONGLONG>(time(nullptr));
-        if (previousTheme == theme && previousTime && now >= previousTime &&
-            now - previousTime < kReportIntervalSeconds) return;
-        if (SendReport(id, theme, false)) {
-            WriteRegistryString(L"LastTheme", theme);
-            WriteRegistryValue(L"LastReport", REG_QWORD, &now, sizeof(now));
-            Wh_Log(L"[ThemeStats] theme report sent");
-        } else {
-            Wh_Log(L"[ThemeStats] report failed; will retry later");
-        }
-    });
-}
-
-void SettingsChanged() {
-    Submit();
-}
-
-void Start() {
-    Submit();
-}
-
-} // namespace theme_stats
 
 void LoadSettings() {
     // Strings: GetStringSettingCopy is already storage-first.
@@ -41745,7 +41631,6 @@ BOOL WhTool_ModInit() {
 
     InstallProcessTransparencyBlock();
     LoadSettings();
-    theme_stats::Start();
     // Start every mode in the same visible, interactive state. If autohide
     // was selected, defer activating it until the XAML popup has been live
     // for one second (scheduled when the initial root is applied).
@@ -41778,7 +41663,6 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() { 
-    theme_stats::SettingsChanged();
     if (!g_uiDispatcherQueue) {
         // Settings will be loaded on next start.
         return;
@@ -41858,6 +41742,20 @@ void WhTool_ModSettingsChanged() {
         (void)startActionSwitchedToWindows;
         if (!g_topBarHwnd) {
             return;
+        }
+        g_taskbarButtonRectsValid = false;
+        if (TaskbarButtonRemapNeeded()) {
+            RefreshTaskbarButtonRectsAsync();
+            ScheduleTaskbarRectRefreshRetries();
+        } else {
+            if (g_taskbarRectDebounceTimer) {
+                KillTimer(g_topBarHwnd, g_taskbarRectDebounceTimer);
+                g_taskbarRectDebounceTimer = 0;
+            }
+            if (g_taskbarRemapRetryTimer) {
+                KillTimer(g_topBarHwnd, g_taskbarRemapRetryTimer);
+                g_taskbarRemapRetryTimer = 0;
+            }
         }
         g_dpiScale = g_settings.topBarScale / 100.0;
         g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
@@ -42010,6 +41908,10 @@ void WhTool_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
+
+    // Remove statistics data written by older builds of this mod.
+    RegDeleteTreeW(HKEY_CURRENT_USER,
+        L"Software\\WasiXGamer\\WindhawkTopBar\\ThemeStats");
 }
 
 
