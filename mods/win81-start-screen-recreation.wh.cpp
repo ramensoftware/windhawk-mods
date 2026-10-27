@@ -4908,7 +4908,9 @@ static DWORD WINAPI AppsThread(LPVOID) {
 }
 
 static int RowsPerCol() {
-    int rows = (g_sh - kItemY - ScI(24)) / kItemPitchY;
+    // Keep the last row above the bottom-left "back" arrow (AppsArrowRect: its top edge is at
+    // g_sh - ScI(62)) so the arrow never draws over an app entry.
+    int rows = (g_sh - kItemY - ScI(68)) / kItemPitchY;
     return rows < 1 ? 1 : rows;
 }
 
@@ -5230,8 +5232,15 @@ static void OnSearchKey(UINT vk) {
             HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
             if (h) {
                 wchar_t* p = (wchar_t*)GlobalLock(h);
-                if (p) { memcpy(p, g_query, (size_t)g_queryLen * sizeof(wchar_t)); p[g_queryLen] = 0; GlobalUnlock(h); EmptyClipboard(); if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h); }
-                else GlobalFree(h);
+                if (p) {
+                    memcpy(p, g_query, (size_t)g_queryLen * sizeof(wchar_t));
+                    p[g_queryLen] = 0;
+                    GlobalUnlock(h);
+                    EmptyClipboard();
+                    if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+                } else {
+                    GlobalFree(h);
+                }
             }
             CloseClipboard();
         }
