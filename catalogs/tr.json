@@ -672,7 +672,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791871216000,
+        "updated": 1793127708000,
         "users": 62
       },
       "metadata": {
@@ -688,7 +688,7 @@
         ],
         "license": "MIT",
         "name": "App Owned Frame",
-        "version": "1.44"
+        "version": "1.45"
       }
     },
     "app-theme-crash-fixer": {
@@ -6329,7 +6329,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791723798000,
+        "updated": 1793127713000,
         "users": 25
       },
       "metadata": {
@@ -6345,7 +6345,7 @@
           "*"
         ],
         "name": "Explorer Picker",
-        "version": "1.5.7"
+        "version": "1.5.8"
       }
     },
     "explorer-properties-button": {
@@ -10838,7 +10838,7 @@
         "rating": 9,
         "ratingBreakdown": [2, 0, 1, 3, 24],
         "ratingUsers": 30,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 1.1739233643186253,
         "updated": 1788624275000,
         "users": 1218
@@ -17825,7 +17825,7 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792922589000,
+        "updated": 1793127702000,
         "users": 49
       },
       "metadata": {
@@ -17834,14 +17834,14 @@
         ],
         "author": "Deen-0x",
         "compilerOptions": "-lgdi32 -ldwmapi -lole32 -loleaut32 -lruntimeobject",
-        "description": "Bleeds the color of a maximized window's top edge into a top-docked taskbar behind the task buttons",
+        "description": "Bleeds the color of a maximized window's title bar into a top-docked taskbar behind the task buttons",
         "github": "https://github.com/Deen-0x",
         "include": [
           "explorer.exe"
         ],
         "license": "GPL-3.0",
         "name": "Top Taskbar Bleed",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "tortoisegit-progress-animation-background-fix": {
@@ -18973,7 +18973,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792949485000,
+        "updated": 1793127718000,
         "users": 20
       },
       "metadata": {
@@ -18986,7 +18986,7 @@
         ],
         "license": "GPL-2.0",
         "name": "Windows 7/8.1 Alt+Tab Recreation",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "win-d-per-monitor": {
