@@ -5816,7 +5816,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792044243000,
+        "updated": 1793228439000,
         "users": 49
       },
       "metadata": {
@@ -5832,7 +5832,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.7.0"
+        "version": "1.8.0"
       }
     },
     "explorer-details-better-file-sizes": {

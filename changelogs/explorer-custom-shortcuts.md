@@ -1,3 +1,14 @@
+## 1.8.0 ([Oct 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5f7c8fdebcc26e7d3df215688a438ba94f06ba49/mods/explorer-custom-shortcuts.wh.cpp))
+
+* Added **desktop background support**: shortcuts can now work directly on the desktop wallpaper and icons (disabled by default in settings).
+* Added Public Desktop collision checks to prevent duplicate item naming conflicts when creating new files or folders.
+* Added automatic quote and whitespace trimming for shortcut executable paths and internal command inputs.
+* Updated `internal:openRecycleBin` to open in a new window when triggered from the desktop.
+* Updated `internal:openParentFolder` to show an error notification when triggered at the desktop or root folder.
+* Fixed toast notification centering on multi-monitor setups when triggered on the desktop.
+* Fixed `Alt`-key focus cycling to preserve desktop item selection.
+* Updated README documentation with animated previews and desktop usage details.
+
 ## 1.7.0 ([Oct 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a62f085f428edfe603914cee262a1088ea22da03/mods/explorer-custom-shortcuts.wh.cpp))
 
 * Added `%base` and `%basename` tokens to extract filenames without extensions.

@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-28T19:01:59.000Z</updated>
+    <updated>2026-10-28T23:00:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.8.0]]></title>
+        <id>https://windhawk.net/mods/explorer-custom-shortcuts#5f7c8fdebcc26e7d3df215688a438ba94f06ba49</id>
+        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
+        <updated>2026-10-28T23:00:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <strong>desktop background support</strong>: shortcuts can now work directly on the desktop wallpaper and icons (disabled by default in settings).</li>
+<li>Added Public Desktop collision checks to prevent duplicate item naming conflicts when creating new files or folders.</li>
+<li>Added automatic quote and whitespace trimming for shortcut executable paths and internal command inputs.</li>
+<li>Updated <code>internal:openRecycleBin</code> to open in a new window when triggered from the desktop.</li>
+<li>Updated <code>internal:openParentFolder</code> to show an error notification when triggered at the desktop or root folder.</li>
+<li>Fixed toast notification centering on multi-monitor setups when triggered on the desktop.</li>
+<li>Fixed <code>Alt</code>-key focus cycling to preserve desktop item selection.</li>
+<li>Updated README documentation with animated previews and desktop usage details.</li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enter to Rename in File Explorer 0.5.0]]></title>
         <id>https://windhawk.net/mods/macos-enter-rename#a2e932eb009c3476b3ae0de439ee3777fe513af0</id>
@@ -433,22 +453,6 @@ files or signatures are modified. </p>
         <author>
             <name>Lars</name>
             <uri>https://github.com/LarsGudm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.6.0]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#1783f8739a19d202886cb964262eb4c3d66fd943</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-10-26T21:02:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added optional alert sound when changing volume</li>
-<li>Added togglable option to mute apps by clicking their icons</li>
-<li>Muted apps now have grayscaled icons</li>
-<li>Shortened setting descriptions</li>
-</ul>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
         </author>
     </entry>
 </feed>
