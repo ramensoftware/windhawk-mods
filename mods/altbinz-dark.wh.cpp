@@ -48,8 +48,17 @@ default blue.
 
 ## Appearance
 
-The **text color** (interface) and the **list text color** (download queue and log)
-and the **column text color** (the header bars of the lists) are applied live. The values below are applied when Alt.Binz is restarted:
+These values are applied live:
+
+* **Text color**: an optional color for text and lines of the interface (toolbar, menus, dialogs).
+* **List text color**: an optional color for text and lines in the download queue and the log. Without it the text color is used.
+* **Column text color**: an optional color for the text of the column headers. Without it the text color is used.
+* **Column header color**: an optional color for the header bars of the lists.
+* **Keep the tree in Setup dark gray**.
+
+The text colors may be dark, so make sure they contrast with the background.
+
+These values are applied when Alt.Binz is restarted:
 
 * **Background lightness**: how dark the lists and dark areas are (percent).
 * **Text lightness**: how bright text and lines are (percent). Ignored when a text color is set.
@@ -60,9 +69,7 @@ The **title bar color** (default black) is applied live. It needs Windows 11; on
 Windows 10 the title bar keeps its normal color. Leave the value empty to keep the
 color of Windows.
 
-The **column header color** (the header bars of the lists) and everything else is
-applied live. If you disable the mod, restart Alt.Binz to get the original look
-back completely.
+If you disable the mod, restart Alt.Binz to get the original look back completely.
 */
 // ==/WindhawkModReadme==
 
