@@ -2,11 +2,11 @@
 // @id              nested-tray-drawer
 // @name            Nested Tray Drawer
 // @description     Collect rarely used tray icons in a second drawer.
-// @version         0.1.11
+// @version         0.1.12
 // @author          MEI
 // @github          https://github.com/Meidios
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -26,10 +26,13 @@ native templates, input handlers and app context menus. The footer is 40 DIP hig
 
 ## Experimental compatibility
 
-Validated on Windows 11 23H2 build 22631.5126 x64 with Windhawk 1.7.3,
+Runtime validated on Windows 11 23H2 build 22631.5126 x64 with Windhawk 1.7.3,
 Taskbar.View.dll 2125.4507.10.0 and taskbar.dll from that installation.
-Windows 10, ARM64, other Windows builds, DPI/monitor combinations and interactions
-with other tray mods have not been validated.
+ARM64 builds and offline identity/symbol checks are also provided, using
+ARM64 taskbar.dll 10.0.26100.9549, SystemTray.dll 2608.26001.100.0 and
+Taskbar.View.dll 2125.26100.0.0. ARM64 UI behavior has not been tested on a
+physical device and remains experimental. Windows 10, other Windows builds,
+DPI/monitor combinations and interactions with other tray mods are unverified.
 
 The mod discovers SystemTray.dll, older Taskbar.View.dll or ExplorerExtensions.dll
 and resolves the required internal interfaces and methods from symbols. It no
@@ -37,11 +40,13 @@ longer requires a particular DLL version, timestamp, image size or vtable addres
 This does not make every Windows build supported: the symbol names, root layout
 and native identity ABI must still be compatible.
 
-Persistent identity currently requires a recognized x64 Identity() accessor,
-QueryInterface adjustment and native identity copy ABI in taskbar.dll. Their
-instruction forms are checked before deriving any object position. Unknown forms
-are rejected; this is intentionally an amd64 release. It does not claim ARM64
-support. Never bypass these checks to force compatibility.
+Persistent identity uses Wh_Disasm to follow a recognized interface-adjustment
+thunk and the HWND/UID/GUID copy on x64 or ARM64. Both constructor-based and
+inlined identity getters are recognized; the native owning-string return type
+is never called across C++ ABIs. Unrecognized symbols, instructions, field layouts
+or call targets are rejected rather than guessed. Some older ARM64 binaries
+(such as the inspected taskbar.dll 10.0.22621.3810) lack the required Identity()
+symbol. Do not bypass these checks to force compatibility.
 
 ## Use
 
@@ -53,7 +58,8 @@ support. Never bypass these checks to force compatibility.
    every collected icon and explicitly clear saved membership.
 
 There is no right-click icon picker or individual drag-out command. Disabling
-the mod restores the native tray and preserves the saved collection.
+the mod using Windhawk's own toggle restores the native tray and preserves
+the saved collection. There is no second enable setting.
 
 ## Saved collection
 
@@ -84,25 +90,23 @@ Native overflow access is adapted from m417z's GPLv3
 [Taskbar notification icon spacing](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp).
 Symbol-based interface resolution and vtable verification follow Ris Peng's GPLv3
 [System Tray Folders](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/system-tray-folders.wh.cpp).
+The Wh_Disasm instruction-scanning approach follows m417z's GPLv3
+[Taskbar height and icon size](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-icon-size.wh.cpp).
 Nested Tray Drawer keeps a separate simultaneous flyout and drag-based membership;
 it does not replace the first drawer with an in-grid folder view.
 The single-file mod retains its GPL-3.0 declaration.
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- enabled: true
-  $name: Enable the second drawer
-  $description: Collect icons by dropping first-drawer icons onto the added chevron.
-*/
-// ==/WindhawkModSettings==
-
 #include <windhawk_utils.h>
 #include <cstring>
 #include <winver.h>
 #include <sddl.h>
 #include <algorithm>
+#include <array>
+#include <charconv>
+#include <cctype>
+#include <string_view>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -134,7 +138,6 @@ using Controls::ItemsControl;
 using winrt::Windows::Foundation::IInspectable;
 
 std::atomic<bool> g_unloading;
-std::atomic<bool> g_enabled{true};
 std::atomic<bool> g_runtimeAvailable{true};
 std::atomic<int> g_hookState;  // 0: waiting, 1: resolving, 2: ready, 3: failed.
 std::atomic<HWND> g_uiWindow;
@@ -484,42 +487,351 @@ IInspectable NativeObjectProperty(IInspectable const& object,
 }
 
 // BEGIN IDENTITY ACCESSOR
-// UDK's WinRT icon interfaces expose input and presentation, not its persistent
-// identity. Identity() returns a native MSVC object containing an owning string;
-// calling it as a MinGW C++ struct would be ABI-unsafe. On x64 recognize its
-// small, symbol-resolved accessor and copy constructor instead. Derive both
-// object adjustments from instructions, and reject every unfamiliar encoding.
-// No Windows build number, absolute address or private object offset is assumed.
+// Decode only bounded, symbol-resolved thunks and identity-prefix copies. The
+// native MSVC owning-string return value is never constructed or called here.
+enum class IdentityMachine { X64, Arm64 };
+#ifdef _M_ARM64
+constexpr IdentityMachine kIdentityMachine = IdentityMachine::Arm64;
+#else
+constexpr IdentityMachine kIdentityMachine = IdentityMachine::X64;
+#endif
+
+struct IdentityInstruction {
+    std::string operation;
+    std::vector<std::string> operands;
+};
+
+bool ReadIdentityInstruction(const BYTE*& pc, IdentityMachine machine, IdentityInstruction& out) {
+    WH_DISASM_RESULT result{};
+    if (!Wh_Disasm(const_cast<BYTE*>(pc), &result) || !result.length ||
+        result.length > (machine == IdentityMachine::Arm64 ? 4u : 15u) ||
+        (machine == IdentityMachine::Arm64 && result.length != 4) ||
+        !memchr(result.text, 0, sizeof(result.text)))
+        return false;
+    pc += result.length;
+    std::string_view text(result.text);
+    auto separator = text.find_first_of(" \t");
+    out.operation = text.substr(0, separator);
+    for (auto& ch : out.operation)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    out.operands.clear();
+    if (separator == text.npos)
+        return true;
+    std::string operand;
+    int depth{};
+    for (char ch : text.substr(separator)) {
+        if (std::isspace(static_cast<unsigned char>(ch)))
+            continue;
+        if (ch == '[')
+            ++depth;
+        if (ch == ']')
+            --depth;
+        if (ch == ',' && depth == 0) {
+            out.operands.push_back(std::move(operand));
+            operand.clear();
+        } else {
+            operand += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        }
+    }
+    if (!operand.empty())
+        out.operands.push_back(std::move(operand));
+    return depth == 0;
+}
+
+bool IdentityNumber(std::string_view text, int64_t& value) {
+    if (text.starts_with('#'))
+        text.remove_prefix(1);
+    bool negative = text.starts_with('-');
+    if (negative || text.starts_with('+'))
+        text.remove_prefix(1);
+    int base = 10;
+    if (text.starts_with("0x")) {
+        base = 16;
+        text.remove_prefix(2);
+    }
+    uint64_t magnitude{};
+    auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), magnitude, base);
+    if (text.empty() || error != std::errc{} || end != text.data() + text.size() ||
+        magnitude > INT64_MAX)
+        return false;
+    value = negative ? -static_cast<int64_t>(magnitude) : static_cast<int64_t>(magnitude);
+    return true;
+}
+
+struct IdentityRegister {
+    int index{-1};
+    size_t width{};
+};
+IdentityRegister IdentityReg(std::string_view name, IdentityMachine machine) {
+    if (machine == IdentityMachine::X64) {
+        constexpr std::string_view wide[] = {"rax", "rcx", "rdx", "rbx",
+                                             "rsp", "rbp", "rsi", "rdi"};
+        constexpr std::string_view narrow[] = {"eax", "ecx", "edx", "ebx",
+                                               "esp", "ebp", "esi", "edi"};
+        for (int i = 0; i < 8; ++i) {
+            if (name == wide[i])
+                return {i, 8};
+            if (name == narrow[i])
+                return {i, 4};
+        }
+        if (name.starts_with("xmm")) {
+            int64_t n{};
+            if (IdentityNumber(name.substr(3), n) && n >= 0 && n < 32)
+                return {32 + int(n), 16};
+        }
+        if (name.starts_with('r')) {
+            auto width = name.ends_with('d') ? 4u : 8u;
+            name.remove_prefix(1);
+            if (width == 4)
+                name.remove_suffix(1);
+            int64_t n{};
+            if (IdentityNumber(name, n) && n >= 8 && n <= 15)
+                return {int(n), width};
+        }
+    } else {
+        if (name == "sp")
+            return {31, 8};
+        if (name.empty())
+            return {};
+        char type = name.front();
+        if (type != 'x' && type != 'w' && type != 'q' && type != 'v')
+            return {};
+        name.remove_prefix(1);
+        if (auto dot = name.find('.'); dot != name.npos)
+            name = name.substr(0, dot);
+        int64_t n{};
+        if (IdentityNumber(name, n) && n >= 0 && n < 31)
+            return {int(n) + (type == 'q' || type == 'v' ? 32 : 0), type == 'x'   ? 8u
+                                                                    : type == 'w' ? 4u
+                                                                                  : 16u};
+    }
+    return {};
+}
+
+bool IdentityMemory(std::string_view text, IdentityMachine machine, int& base, int64_t& offset) {
+    auto open = text.find('[');
+    if (open == text.npos || !text.ends_with(']'))
+        return false;
+    text = text.substr(open + 1, text.size() - open - 2);
+    auto separator = text.find_first_of(",+-");
+    auto reg = IdentityReg(text.substr(0, separator), machine);
+    if (reg.index < 0 || reg.width != 8)
+        return false;
+    base = reg.index;
+    offset = 0;
+    if (separator == text.npos)
+        return true;
+    if (text[separator] == ',')
+        ++separator;
+    return IdentityNumber(text.substr(separator), offset) && offset >= -4096 && offset <= 4096;
+}
+
+bool DecodeIdentityAdjustment(const BYTE* query, IdentityMachine machine, ptrdiff_t& adjustment) {
+    std::vector<IdentityInstruction> code;
+    for (int i = 0; i < 12; ++i) {
+        IdentityInstruction instruction;
+        if (!ReadIdentityInstruction(query, machine, instruction))
+            return false;
+        if (instruction.operation == "nop" || instruction.operation == "endbr64" ||
+            instruction.operation == "bti")
+            continue;
+        bool terminal = instruction.operation == "b" || instruction.operation == "jmp";
+        code.push_back(std::move(instruction));
+        if (terminal)
+            break;
+    }
+    int64_t target{};
+    if (code.empty() || code.back().operands.size() != 1 ||
+        !IdentityNumber(code.back().operands[0], target) || target <= 0)
+        return false;
+    int64_t delta{};
+    if (machine == IdentityMachine::X64 && code.size() == 5) {
+        int base{};
+        if (code[0].operation != "lea" || code[0].operands.size() != 2 ||
+            !IdentityMemory(code[0].operands[1], machine, base, delta) || base != 1 ||
+            code[1].operation != "neg" || code[1].operands != std::vector<std::string>{"rcx"} ||
+            code[2].operation != "sbb" ||
+            code[2].operands != std::vector<std::string>{"rcx", "rcx"} ||
+            code[3].operation != "and" ||
+            code[3].operands != std::vector<std::string>{"rcx", code[0].operands[0]} ||
+            code[4].operation != "jmp" ||
+            (IdentityReg(code[0].operands[0], machine).width != 8 ||
+             IdentityReg(code[0].operands[0], machine).index == 1))
+            return false;
+    } else if (machine == IdentityMachine::Arm64 && code.size() == 4) {
+        if (code[0].operation != "sub" || code[0].operands.size() != 3 ||
+            code[0].operands[1] != "x0" || IdentityReg(code[0].operands[0], machine).width != 8 ||
+            IdentityReg(code[0].operands[0], machine).index == 0 ||
+            !IdentityNumber(code[0].operands[2], delta) || code[1].operation != "cmp" ||
+            code[1].operands != std::vector<std::string>{"x0", "#0"} ||
+            code[2].operation != "csel" ||
+            code[2].operands != std::vector<std::string>{"x0", "xzr", code[0].operands[0], "eq"} ||
+            code[3].operation != "b")
+            return false;
+        delta = -delta;
+    } else {
+        return false;
+    }
+    if (delta >= 0 || delta < -4096)
+        return false;
+    adjustment = static_cast<ptrdiff_t>(delta);
+    return true;
+}
+
+// Track only register aliases, constant pointer additions and three prefix
+// load/store pairs, rather than attempting to interpret arbitrary native code.
+struct IdentityValue {
+    enum Kind { Unknown, Source, Output, Field } kind{};
+    int64_t offset{};
+    size_t width{};
+};
+
+bool DecodeIdentityPrefix(const BYTE* function,
+                          const BYTE* copy,
+                          bool copyVerified,
+                          bool getter,
+                          IdentityMachine machine,
+                          size_t& offset) {
+    std::array<IdentityValue, 64> registers{};
+    const int first = machine == IdentityMachine::X64 ? 1 : 0;
+    const int second = machine == IdentityMachine::X64 ? 2 : 1;
+    registers[getter ? first : second] = {IdentityValue::Source, 0, 8};
+    registers[getter ? second : first] = {IdentityValue::Output, 0, 8};
+    int64_t candidate = -1;
+    unsigned fields{};
+    for (int i = 0; i < 40; ++i) {
+        IdentityInstruction instruction;
+        if (!ReadIdentityInstruction(function, machine, instruction))
+            return false;
+        auto const& op = instruction.operation;
+        auto const& args = instruction.operands;
+        if (op == "call" || op == "bl") {
+            int64_t target{};
+            auto destination = registers[first], source = registers[second];
+            if (!getter || !copyVerified || args.size() != 1 || !IdentityNumber(args[0], target) ||
+                reinterpret_cast<uintptr_t>(copy) != static_cast<uintptr_t>(target) ||
+                destination.kind != IdentityValue::Output || destination.offset != 0 ||
+                source.kind != IdentityValue::Source || source.offset < 8 || source.offset > 4096 ||
+                source.offset % 8)
+                return false;
+            offset = static_cast<size_t>(source.offset);
+            return true;
+        }
+        if (op == "bti")
+            continue;
+        if (op.starts_with('b') || op.starts_with('j') || op == "ret")
+            return false;
+        if (op == "cmp" || op == "test" || op == "push" || op == "nop" || op == "pacibsp" ||
+            op == "paciasp" || op == "endbr64")
+            continue;
+        bool move = op == "mov" || op == "movups" || op == "movdqu" || op == "movdqa";
+        bool load = move || op == "ldr" || op == "ldur";
+        bool store = move || op == "str" || op == "stur";
+        if (args.size() == 2 && (load || store)) {
+            auto left = IdentityReg(args[0], machine), right = IdentityReg(args[1], machine);
+            int base{};
+            int64_t displacement{};
+            bool memoryLoad =
+                load && left.index >= 0 && IdentityMemory(args[1], machine, base, displacement);
+            if (memoryLoad) {
+                auto pointer = registers[base];
+                registers[left.index] =
+                    pointer.kind == IdentityValue::Source
+                        ? IdentityValue{IdentityValue::Field, pointer.offset + displacement,
+                                        left.width}
+                        : IdentityValue{};
+                continue;
+            }
+            auto valueReg = machine == IdentityMachine::X64 ? right : left;
+            auto memory = machine == IdentityMachine::X64 ? args[0] : args[1];
+            if (store && valueReg.index >= 0 &&
+                IdentityMemory(memory, machine, base, displacement)) {
+                auto pointer = registers[base], value = registers[valueReg.index];
+                auto destination = pointer.offset + displacement;
+                int field = destination == 0    ? 0
+                            : destination == 8  ? 1
+                            : destination == 12 ? 2
+                                                : -1;
+                if (pointer.kind == IdentityValue::Output && field >= 0) {
+                    size_t width = field == 0 ? 8 : field == 1 ? 4 : 16;
+                    int64_t begin = value.offset - destination;
+                    if (value.kind != IdentityValue::Field || value.width != width ||
+                        valueReg.width != width || begin < (getter ? 8 : 0) || begin > 4096 ||
+                        begin % 8 || (candidate >= 0 && candidate != begin))
+                        return false;
+                    candidate = begin;
+                    fields |= 1u << field;
+                    if (fields == 7) {
+                        offset = static_cast<size_t>(candidate);
+                        return true;
+                    }
+                }
+                continue;
+            }
+            if (move && left.index >= 0 && right.index >= 0) {
+                auto value = registers[right.index];
+                if ((value.kind == IdentityValue::Source || value.kind == IdentityValue::Output) &&
+                    (left.width != 8 || right.width != 8))
+                    value = {};
+                registers[left.index] = left.width == right.width ? value : IdentityValue{};
+                continue;
+            }
+        }
+        if (op == "lea" && args.size() == 2) {
+            auto destination = IdentityReg(args[0], machine);
+            int base{};
+            int64_t displacement{};
+            if (destination.index < 0 || destination.width != 8 ||
+                !IdentityMemory(args[1], machine, base, displacement))
+                return false;
+            auto value = registers[base];
+            if (value.kind == IdentityValue::Source || value.kind == IdentityValue::Output)
+                value.offset += displacement;
+            else
+                value = {};
+            registers[destination.index] = value;
+            continue;
+        }
+        if ((op == "add" || op == "sub") && (args.size() == 2 || args.size() == 3)) {
+            auto destination = IdentityReg(args[0], machine);
+            auto source = IdentityReg(args.size() == 3 ? args[1] : args[0], machine);
+            int64_t immediate{};
+            if (destination.index < 0 || source.index < 0 || destination.width != 8 ||
+                source.width != 8 || !IdentityNumber(args.back(), immediate) || immediate < -4096 ||
+                immediate > 4096)
+                return false;
+            auto value = registers[source.index];
+            if (value.kind == IdentityValue::Source || value.kind == IdentityValue::Output)
+                value.offset += op == "sub" ? -immediate : immediate;
+            else
+                value = {};
+            if (value.offset < -4096 || value.offset > 4096)
+                return false;
+            registers[destination.index] = value;
+            continue;
+        }
+        // An unrecognized register write invalidates that alias. Stores to the
+        // stack do not make a pointer available for identity field matching.
+        if (!args.empty()) {
+            auto destination = IdentityReg(args[0], machine);
+            if (destination.index >= 0)
+                registers[destination.index] = {};
+        }
+    }
+    return false;
+}
+
 bool DecodeIdentityAccessor(const BYTE* query,
                             const BYTE* getter,
                             const BYTE* copy,
                             ptrdiff_t& adjustment,
-                            size_t& identityOffset) {
-    const BYTE queryHead[] = {0x48, 0x8d, 0x41};  // lea rax,[rcx+signed byte]
-    const BYTE queryTail[] = {0x48, 0xf7, 0xd9, 0x48, 0x1b, 0xc9, 0x48, 0x23, 0xc8, 0xe9};
-    const BYTE getterHead[] = {0x40, 0x53, 0x48, 0x83, 0xec, 0x30,
-                               0x48, 0x8b, 0xda, 0x48, 0x8d, 0x51};
-    const BYTE getterCall[] = {0x48, 0x8b, 0xcb, 0xe8};
-    const BYTE getterTail[] = {0x48, 0x8b, 0xc3, 0x48, 0x83, 0xc4, 0x30, 0x5b, 0xc3};
-    // Verifies that the returned native identity starts with HWND, UINT, GUID.
-    const BYTE copyHead[] = {0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x02, 0x48, 0x8b, 0xd9,
-                             0x48, 0x89, 0x01, 0x8b, 0x42, 0x08, 0x89, 0x41, 0x08, 0x0f, 0x10, 0x42,
-                             0x0c, 0x48, 0x83, 0xc2, 0x20, 0xf3, 0x0f, 0x7f, 0x41, 0x0c};
-    if (memcmp(query, queryHead, sizeof(queryHead)) ||
-        memcmp(query + 4, queryTail, sizeof(queryTail)) ||
-        memcmp(getter, getterHead, sizeof(getterHead)) ||
-        memcmp(getter + 13, getterCall, sizeof(getterCall)) ||
-        memcmp(getter + 21, getterTail, sizeof(getterTail)) ||
-        memcmp(copy, copyHead, sizeof(copyHead)))
-        return false;
-    int32_t relative;
-    memcpy(&relative, getter + 17, sizeof(relative));
-    if (getter + 21 + relative != copy)
-        return false;
-    adjustment = static_cast<int8_t>(query[3]);
-    identityOffset = getter[12];
-    return adjustment < 0 && adjustment >= -128 && identityOffset >= sizeof(void*) &&
-           identityOffset < 128;
+                            size_t& identityOffset,
+                            IdentityMachine machine = kIdentityMachine) {
+    size_t copiedOffset{};
+    bool copyVerified = DecodeIdentityPrefix(copy, nullptr, false, false, machine, copiedOffset) &&
+                        copiedOffset == 0;
+    return DecodeIdentityAdjustment(query, machine, adjustment) &&
+           DecodeIdentityPrefix(getter, copy, copyVerified, true, machine, identityOffset);
 }
 // END IDENTITY ACCESSOR
 
@@ -550,7 +862,7 @@ bool ResolveNativeIdentity(HMODULE module) {
                                     g_nativeThisAdjustment, g_nativeIdentityOffset);
     }
     g_identityState = ok ? 2 : 3;
-    Wh_Log(L"Native identity symbols and x64 accessor validation: %d", ok);
+    Wh_Log(L"Native identity symbols and instruction validation: %d", ok);
     return ok;
 }
 
@@ -919,7 +1231,7 @@ std::vector<std::wstring> LiveCollectionKeys(std::vector<IInspectable> const& mo
 }
 
 void RefreshClassification(DrawerState& state) {
-    if (g_unloading || !g_enabled || state.closing || state.changing)
+    if (g_unloading || state.closing || state.changing)
         return;
     if (state.nativeDragActive || ShouldHoldForMenu(state)) {
         state.refreshDeferred = true;
@@ -1002,7 +1314,7 @@ void RefreshClassification(DrawerState& state) {
 }
 
 bool SelectIcon(IconCandidate const& candidate) {
-    if (!g_drawer || g_unloading || !g_enabled || !candidate.model)
+    if (!g_drawer || g_unloading || !candidate.model)
         return false;
     auto& state = *g_drawer;
     if (state.changing || state.closing)
@@ -1229,8 +1541,7 @@ Controls::Border CreateDrawerFooter() {
 }
 
 void InstallDrawer(Grid const& root) {
-    if (g_unloading || !g_enabled || g_identityState != 2 || !root ||
-        root.Name() != L"OverflowRootGrid")
+    if (g_unloading || g_identityState != 2 || !root || root.Name() != L"OverflowRootGrid")
         return;
     if (g_drawer && g_drawer->root == root)
         return;
@@ -1639,7 +1950,7 @@ void WINAPI Initialize_Hook(void* self) {
     struct UnlockAttachment {
         ~UnlockAttachment() { ReleaseSRWLockExclusive(&g_attachmentLock); }
     } unlock;
-    if (g_unloading || !g_enabled)
+    if (g_unloading)
         return;
     try {
         // The composed root slot is taken from the official tray-spacing mod.
@@ -1772,8 +2083,8 @@ void WINAPI EndDrag_Hook(void* manager) {
 void WINAPI DoDrop_Hook(void* manager, void* sourceView, void* const* args) {
     UiCallbackScope callbackScope;
     IconCandidate dropped;
-    if (!g_unloading && g_enabled && g_runtimeAvailable && g_uiThread == GetCurrentThreadId() &&
-        g_drawer && args && *args && IsWindow(g_uiWindow)) {
+    if (!g_unloading && g_runtimeAvailable && g_uiThread == GetCurrentThreadId() && g_drawer &&
+        args && *args && IsWindow(g_uiWindow)) {
         try {
             IInspectable event{nullptr};
             winrt::copy_from_abi(event, *args);
@@ -1790,7 +2101,7 @@ void WINAPI DoDrop_Hook(void* manager, void* sourceView, void* const* args) {
     // The original DoDrop ends via this same native routine. End the drag
     // without issuing a Windows reorder/pin operation on this custom target.
     EndDrag_Hook(manager);
-    if (!g_drawer || g_unloading || !g_enabled)
+    if (!g_drawer || g_unloading)
         return;
     g_drawer->pendingDrop = std::move(dropped);
     if (!PostMessageW(g_uiWindow, kCollectDroppedIconMessage, 0, 0)) {
@@ -1944,7 +2255,6 @@ BOOL Wh_ModInit() {
         CreateEventW(nullptr, TRUE, FALSE, nullptr), CloseHandle);
     if (!cleanupEvent)
         return FALSE;
-    g_enabled = Wh_GetIntSetting(L"enabled") != 0;
     auto kernel = GetModuleHandleW(L"kernelbase.dll");
     auto load = reinterpret_cast<LoadLibrary_t>(GetProcAddress(kernel, "LoadLibraryExW"));
     if (!load || !WindhawkUtils::SetFunctionHook(load, LoadLibrary_Hook, &LoadLibrary_Original))
@@ -2018,12 +2328,4 @@ void Wh_ModUninit() {
         CloseHandle(g_instanceGuard);
         g_instanceGuard = nullptr;
     }
-}
-
-void Wh_ModSettingsChanged() {
-    AcquireSRWLockExclusive(&g_attachmentLock);
-    g_enabled = Wh_GetIntSetting(L"enabled") != 0;
-    ReleaseSRWLockExclusive(&g_attachmentLock);
-    if (!g_enabled)
-        RemoveOnUiThread();
 }
