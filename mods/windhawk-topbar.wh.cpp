@@ -21385,8 +21385,16 @@ void BuildSearchFlyoutContent() {
 
 static void RecenterSearchPopup() {
     if (!g_searchFlyout || !g_searchFlyout.IsOpen()) return;
-    auto placement = GetStartSearchScreenRect();
-    SnapOpenChildFlyoutTo(placement.left, placement.top);
+    // Capture the intended position once per open. Recomputing the work area
+    // and DPI during the popup's first layout/resize can shift the search
+    // window by a few pixels during Windows startup. Keep the top edge fixed
+    // for the whole open session so height changes only extend downward.
+    if (g_wideFlyoutTargetX < 0 || g_wideFlyoutTargetY < 0) {
+        auto placement = GetStartSearchScreenRect();
+        g_wideFlyoutTargetX = placement.left;
+        g_wideFlyoutTargetY = placement.top;
+    }
+    SnapOpenChildFlyoutTo(g_wideFlyoutTargetX, g_wideFlyoutTargetY);
 }
 
 static void AnimateSearchPopupHeight(double targetHeight) {
@@ -22305,6 +22313,8 @@ void ShowSearchFlyout() {
         }
 
         ++g_searchPopupEpoch;
+        g_wideFlyoutTargetX = -1;
+        g_wideFlyoutTargetY = -1;
         auto anchorIt = g_namedElements.find(L"SearchAnchor");
         if (anchorIt == g_namedElements.end()) {
             Wh_Log(L"[Search] SearchAnchor not registered");
@@ -22639,6 +22649,121 @@ static std::wstring StartIconKey(const std::wstring& path, UINT size) {
     return path + L"|" + std::to_wstring(size);
 }
 
+struct StartIconDiskHeader {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t pixelSize;
+    uint32_t flags;
+    uint64_t sourceSignature;
+    uint32_t dataBytes;
+};
+static constexpr uint32_t kStartIconDiskMagic = 0x43494254; // TBIC
+static constexpr uint32_t kStartIconDiskVersion = 1;
+
+static uint64_t StartIconHashBytes(uint64_t hash, const void* data, size_t size) {
+    auto bytes = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < size; ++i) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+static uint64_t StartIconSourceSignature(const startmenu::AppEntry& app, UINT size) {
+    uint64_t hash = 14695981039346656037ull;
+    hash = StartIconHashBytes(hash, app.lnkPath.data(), app.lnkPath.size() * sizeof(wchar_t));
+    hash = StartIconHashBytes(hash, app.target.data(), app.target.size() * sizeof(wchar_t));
+    hash = StartIconHashBytes(hash, &size, sizeof(size));
+    if (!app.logoBytes.empty())
+        hash = StartIconHashBytes(hash, app.logoBytes.data(), app.logoBytes.size());
+
+    // Invalidate Win32 shortcut icons when the shortcut or its executable is
+    // replaced/updated. New applications naturally get a new path signature.
+    for (auto const* path : { &app.lnkPath, &app.target }) {
+        if (path->empty()) continue;
+        WIN32_FILE_ATTRIBUTE_DATA data{};
+        if (!GetFileAttributesExW(path->c_str(), GetFileExInfoStandard, &data)) continue;
+        hash = StartIconHashBytes(hash, &data.ftLastWriteTime, sizeof(data.ftLastWriteTime));
+        hash = StartIconHashBytes(hash, &data.nFileSizeHigh, sizeof(data.nFileSizeHigh));
+        hash = StartIconHashBytes(hash, &data.nFileSizeLow, sizeof(data.nFileSizeLow));
+    }
+    return hash;
+}
+
+static uint64_t StartIconCacheIdentity(const startmenu::AppEntry& app, UINT size) {
+    uint64_t hash = 14695981039346656037ull;
+    hash = StartIconHashBytes(hash, app.lnkPath.data(), app.lnkPath.size() * sizeof(wchar_t));
+    return StartIconHashBytes(hash, &size, sizeof(size));
+}
+
+static std::wstring StartIconCachePath(uint64_t identity) {
+    wchar_t storage[32768]{};
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) return {};
+    std::wstring directory = std::wstring(storage) + L"\\StartMenuIcons";
+    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return {};
+    wchar_t filename[32]{};
+    swprintf_s(filename, ARRAYSIZE(filename), L"%016llX.bin",
+               static_cast<unsigned long long>(identity));
+    return directory + L"\\" + filename;
+}
+
+static bool ReadStartIconDiskCache(const startmenu::AppEntry& app, UINT size,
+                                   StartMenuIconPixels& result) {
+    const uint64_t signature = StartIconSourceSignature(app, size);
+    const auto path = StartIconCachePath(StartIconCacheIdentity(app, size));
+    if (path.empty()) return false;
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    StartIconDiskHeader header{};
+    DWORD read = 0;
+    bool ok = ReadFile(file, &header, sizeof(header), &read, nullptr) &&
+              read == sizeof(header) && header.magic == kStartIconDiskMagic &&
+              header.version == kStartIconDiskVersion && header.pixelSize == size &&
+              header.sourceSignature == signature && header.dataBytes > 0 &&
+              header.dataBytes <= 4 * 1024 * 1024 && (header.flags & ~1u) == 0;
+    if (ok) {
+        result.bytes.resize(header.dataBytes);
+        ok = ReadFile(file, result.bytes.data(), header.dataBytes, &read, nullptr) &&
+             read == header.dataBytes;
+        if (ok && !(header.flags & 1u))
+            ok = result.bytes.size() == static_cast<size_t>(size) * size * 4;
+        result.encoded = (header.flags & 1u) != 0;
+    }
+    CloseHandle(file);
+    if (!ok) result.bytes.clear();
+    return ok;
+}
+
+static void WriteStartIconDiskCache(const startmenu::AppEntry& app, UINT size,
+                                    const StartMenuIconPixels& icon) {
+    if (icon.bytes.empty() || icon.bytes.size() > 4 * 1024 * 1024) return;
+    const uint64_t signature = StartIconSourceSignature(app, size);
+    const auto path = StartIconCachePath(StartIconCacheIdentity(app, size));
+    if (path.empty()) return;
+    const auto temp = path + L".tmp-" + std::to_wstring(GetCurrentThreadId());
+    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    StartIconDiskHeader header{kStartIconDiskMagic, kStartIconDiskVersion, size,
+                               icon.encoded ? 1u : 0u, signature,
+                               static_cast<uint32_t>(icon.bytes.size())};
+    DWORD written = 0;
+    bool ok = WriteFile(file, &header, sizeof(header), &written, nullptr) &&
+              written == sizeof(header) &&
+              WriteFile(file, icon.bytes.data(), header.dataBytes, &written, nullptr) &&
+              written == header.dataBytes;
+    CloseHandle(file);
+    if (ok) {
+        if (!MoveFileExW(temp.c_str(), path.c_str(),
+                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            DeleteFileW(temp.c_str());
+    } else {
+        DeleteFileW(temp.c_str());
+    }
+}
+
 // Normalize only substantially padded icons; preserve aspect ratio and the
 // existing optical padding of icons that already fill their canvas.
 static std::vector<uint8_t> NormalizeStartIconPixels(
@@ -22724,6 +22849,11 @@ static std::shared_ptr<StartMenuIconPixels> LoadStartMenuIconPixels(
     }
     auto result = std::make_shared<StartMenuIconPixels>();
     result->size = size;
+    if (ReadStartIconDiskCache(app, size, *result)) {
+        std::lock_guard<std::mutex> lock(g_startIconPixelsMutex);
+        g_startIconPixels.insert_or_assign(key, result);
+        return result;
+    }
     UINT rasterSize = std::clamp(size * 4, 128u, 512u);
     if (!app.logoBytes.empty()) {
         try { result->bytes = DecodeStartLogoPixels(app.logoBytes, rasterSize); } catch (...) {}
@@ -22791,6 +22921,7 @@ static std::shared_ptr<StartMenuIconPixels> LoadStartMenuIconPixels(
     }
     if (!result->encoded && !result->bytes.empty())
         result->bytes = NormalizeStartIconPixels(result->bytes, rasterSize, size);
+    WriteStartIconDiskCache(app, size, *result);
     // Cache failures too, so a missing icon never repeatedly calls the shell.
     std::lock_guard<std::mutex> lock(g_startIconPixelsMutex);
     g_startIconPixels.insert_or_assign(key, result);
@@ -27239,7 +27370,10 @@ void BuildAboutPage(wuxc::StackPanel& p) {
     p.Children().Append(MakeHeading(L"TopBar for Windows", 22));
     p.Children().Append(MakeLabel(L"Version 1.4.2", 13, false, 0.65));
     auto info = MakeLabel(
-        L"Mod Created By WasiXGamer. Tray Buttons funcionality inspired by Mac Island & Dock by caliberda. Settings App inspired by Taskbar Fluent Media Player mod by Salyts, Windhawk Blur imported from Windows 11 Taskbar Styler by m417z.",
+        L"• Mod created by WasiXGamer.\n"
+        L"• Tray button functionality inspired by Mac Island & Dock by caliberda.\n"
+        L"• Settings app inspired by Taskbar Fluent Media Player by Salyts.\n"
+        L"• Windhawk Blur imported from Windows 11 Taskbar Styler by m417z.",
         12, false, 0.8);
     info.TextWrapping(TextWrapping::Wrap);
     info.MaxWidth(420);
@@ -39400,7 +39534,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try { InstallChildFlyoutMouseHook(); } catch (...) {}
         });
 
-        RunInBackground([] {
+        const UINT startupStartIconSize = static_cast<UINT>(std::lround(
+            32.0 * std::max(1.0, GetBarDpiScale() * GetStartMenuScaleFactor())));
+        RunInBackground([startupStartIconSize] {
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
 
             // Wait 3 seconds before hammering the shell icon cache. This
@@ -39419,8 +39555,17 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
             auto& apps = startmenu::GetCachedApps();
             Wh_Log(L"[StartMenu] Pre-warmed %zu apps", apps.size());
-            // Icons load on demand for realized tiles; avoid scanning every
-            // shell icon at startup or contending with taskbar icon loading.
+            // Warm persistent icon files in the background. Existing icons
+            // load from the mod cache; new or updated apps are extracted and
+            // replace their cache entries. The startup delay avoids competing
+            // with the taskbar's own first icon pass.
+            size_t cached = 0;
+            for (auto const& app : apps) {
+                if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+                auto pixels = LoadStartMenuIconPixels(app, startupStartIconSize);
+                if (pixels && !pixels->bytes.empty()) ++cached;
+            }
+            Wh_Log(L"[StartMenu] Persistent icon cache ready: %zu/%zu", cached, apps.size());
         });
 
         // Boot diagnostic: after the bar has had time to appear, ask
@@ -41968,9 +42113,6 @@ void WhTool_ModUninit() {
         g_stopEvent = nullptr;
     }
 
-    // Remove statistics data written by older builds of this mod.
-    RegDeleteTreeW(HKEY_CURRENT_USER,
-        L"Software\\WasiXGamer\\WindhawkTopBar\\ThemeStats");
 }
 
 
