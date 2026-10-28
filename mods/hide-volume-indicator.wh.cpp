@@ -15,10 +15,10 @@
 Hides the Windows 11 on-screen volume slider indicator. The brightness, airplane mode, camera, and microphone indicators will still appear normally.
 
 ## Compatibility
-This mod depends on `Windows.Internal.HardwareConfirmator.dll`, which is the Windows 11 indicator host. If this DLL is missing from your system (e.g., on older Windows versions), the mod will safely do nothing. Tested on Windows 11.
+This mod depends on `Windows.Internal.HardwareConfirmator.dll`, which is the Windows 11 indicator host. If this DLL is missing from your system (e.g., on older Windows versions), the mod will safely do nothing. Tested on Windows 11 24H2.
 
 ## Relation to other mods
-Note that this is a standalone, lightweight mod strictly for hiding the volume indicator. There is an existing mod called "On-Screen Indicator Position" which allows moving the indicators. While that mod might add a "hide" feature in the future, this mod exists for users who just want a simple, zero-configuration toggle to hide the volume OSD without extra settings.
+To move the indicators instead of hiding them, see the "On-Screen Indicator Position" mod. This mod exists as a standalone option for users who just want a simple, zero-configuration toggle to hide the volume OSD without extra settings.
 */
 // ==/WindhawkModReadme==
 
