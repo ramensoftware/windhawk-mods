@@ -26,8 +26,8 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 
 * **Full 2D Canvas & Horizontal Scrolling:** Supports natural sideways panning with directional snapping (axis-lock) to prevent diagonal drift.
 * **High-Resolution Micro-Scrolling:** Injects fractional wheel increments for fluid, trackpad-like scrolling in modern desktop apps and web browsers.
-* **Legacy Control Detection:** Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete `WM_VSCROLL` line steps to preserve native line-by-line movement.
-* **Hands-Free Cruising:** Release the Right Mouse Button while continuing to hold `Ctrl` to let the page cruise automatically based on cursor offset. Cruising disengages instantly on keypress, mouse click, or `Ctrl` release.
+* **Legacy Control Detection:** Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete `WM_VSCROLL` and `WM_HSCROLL` line steps to preserve native line-by-line movement.
+* **Hands-Free Cruising:** Release the Right Mouse Button while continuing to hold `Ctrl` to let the page cruise automatically based on cursor offset along the active axis. Cruising disengages instantly on keypress, mouse click, or `Ctrl` release.
 * **Zero Zoom Interference:** Dynamically masks `Ctrl` state during scroll dispatch so applications never accidentally trigger browser zoom or editor scaling.
 * **Accidental Click Protection:** Tapping `Ctrl + Right-Click` in place without exceeding the deadzone transparently passes through as a regular right-click.
 
@@ -130,6 +130,7 @@ struct CruiseContext {
     bool touch_style;
     bool smooth_wheel;
     bool enable_horizontal;
+    DragAxis axis;
 };
 static CruiseContext g_cruiseCtx;
 static CRITICAL_SECTION g_cruiseCs;
@@ -141,10 +142,7 @@ static GetAsyncKeyState_t pfnGetAsyncKeyState_Original = nullptr;
 
 // Queries physical key state directly, bypassing our own hook that masks Ctrl
 static inline bool IsCtrlPhysicallyDown() {
-    if (pfnGetAsyncKeyState_Original) {
-        return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
-    }
-    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    return (pfnGetAsyncKeyState_Original(VK_CONTROL) & 0x8000) != 0;
 }
 
 void LoadSettings() {
@@ -152,7 +150,7 @@ void LoadSettings() {
     g_settings.enable_cruising = Wh_GetIntSetting(L"enable_cruising") != 0;
     g_settings.pixels_per_notch = static_cast<double>(
         std::max(10, Wh_GetIntSetting(L"pixels_per_notch")));
-    g_settings.deadzone = std::max(0, Wh_GetIntSetting(L"deadzone"));
+    g_settings.deadzone = std::clamp(Wh_GetIntSetting(L"deadzone"), 0, 1000);
     g_settings.enable_velocity = Wh_GetIntSetting(L"enable_velocity") != 0;
     g_settings.smooth_wheel = Wh_GetIntSetting(L"smooth_wheel") != 0;
     g_settings.enable_horizontal = Wh_GetIntSetting(L"enable_horizontal") != 0;
@@ -263,7 +261,8 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
         if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED)
             return 0;
 
-        double cruiseAccum = 0.0;
+        double cruiseAccumY = 0.0;
+        double cruiseAccumX = 0.0;
         EnterCriticalSection(&g_cruiseCs);
         CruiseContext ctx = g_cruiseCtx;
         LeaveCriticalSection(&g_cruiseCs);
@@ -285,44 +284,91 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
                 break;
             }
 
+            int distX = curPt.x - ctx.anchorPt.x;
             int distY = curPt.y - ctx.anchorPt.y;
-            if (std::abs(distY) >= ctx.deadzone) {
-                double direction = ctx.touch_style ? 1.0 : -1.0;
-                double notchRate =
-                    (static_cast<double>(distY) / ctx.pixels_per_notch);
-                double unitsThisTick =
-                    notchRate * direction * WHEEL_DELTA * 0.035;
 
-                cruiseAccum += unitsThisTick;
-                HWND hTarget = nullptr;
-                bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
+            // Zero out axes according to the locked axis
+            if (ctx.axis == DragAxis::VerticalOnly)
+                distX = 0;
+            if (ctx.axis == DragAxis::HorizontalOnly)
+                distY = 0;
+
+            HWND hTarget = nullptr;
+            bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
+            int chunk = ctx.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
+
+            // --- Vertical Cruising ---
+            if (std::abs(distY) >= ctx.deadzone) {
+                double directionY = ctx.touch_style ? 1.0 : -1.0;
+                double notchRateY =
+                    (static_cast<double>(distY) / ctx.pixels_per_notch);
+                double unitsThisTickY =
+                    notchRateY * directionY * WHEEL_DELTA * 0.035;
+
+                cruiseAccumY += unitsThisTickY;
 
                 if (isDiscrete) {
                     int notches = 0;
-                    while (cruiseAccum <= -WHEEL_DELTA) {
+                    while (cruiseAccumY <= -WHEEL_DELTA) {
                         notches -= WHEEL_DELTA;
-                        cruiseAccum += WHEEL_DELTA;
+                        cruiseAccumY += WHEEL_DELTA;
                     }
-                    while (cruiseAccum >= WHEEL_DELTA) {
+                    while (cruiseAccumY >= WHEEL_DELTA) {
                         notches += WHEEL_DELTA;
-                        cruiseAccum -= WHEEL_DELTA;
+                        cruiseAccumY -= WHEEL_DELTA;
                     }
                     if (notches != 0)
                         DispatchScroll(notches, hTarget, true);
                 } else {
-                    int chunk =
-                        ctx.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
                     int emitDelta = 0;
-                    while (cruiseAccum <= -chunk) {
+                    while (cruiseAccumY <= -chunk) {
                         emitDelta -= chunk;
-                        cruiseAccum += chunk;
+                        cruiseAccumY += chunk;
                     }
-                    while (cruiseAccum >= chunk) {
+                    while (cruiseAccumY >= chunk) {
                         emitDelta += chunk;
-                        cruiseAccum -= chunk;
+                        cruiseAccumY -= chunk;
                     }
                     if (emitDelta != 0)
                         DispatchScroll(emitDelta, hTarget, false);
+                }
+            }
+
+            // --- Horizontal Cruising ---
+            if (ctx.enable_horizontal && std::abs(distX) >= ctx.deadzone) {
+                // Inverted direction compared to Y to match pull-canvas logic
+                double directionX = ctx.touch_style ? -1.0 : 1.0;
+                double notchRateX =
+                    (static_cast<double>(distX) / ctx.pixels_per_notch);
+                double unitsThisTickX =
+                    notchRateX * directionX * WHEEL_DELTA * 0.035;
+
+                cruiseAccumX += unitsThisTickX;
+
+                if (isDiscrete) {
+                    int notches = 0;
+                    while (cruiseAccumX <= -WHEEL_DELTA) {
+                        notches -= WHEEL_DELTA;
+                        cruiseAccumX += WHEEL_DELTA;
+                    }
+                    while (cruiseAccumX >= WHEEL_DELTA) {
+                        notches += WHEEL_DELTA;
+                        cruiseAccumX -= WHEEL_DELTA;
+                    }
+                    if (notches != 0)
+                        DispatchHScroll(notches, hTarget, true);
+                } else {
+                    int emitDelta = 0;
+                    while (cruiseAccumX <= -chunk) {
+                        emitDelta -= chunk;
+                        cruiseAccumX += chunk;
+                    }
+                    while (cruiseAccumX >= chunk) {
+                        emitDelta += chunk;
+                        cruiseAccumX -= chunk;
+                    }
+                    if (emitDelta != 0)
+                        DispatchHScroll(emitDelta, hTarget, false);
                 }
             }
             if (WaitForSingleObject(g_stopEvent, 20) == WAIT_OBJECT_0)
@@ -341,6 +387,7 @@ void StartCruiseThreadIfNeeded() {
     g_cruiseCtx.touch_style = g_settings.touch_style;
     g_cruiseCtx.smooth_wheel = g_settings.smooth_wheel;
     g_cruiseCtx.enable_horizontal = g_settings.enable_horizontal;
+    g_cruiseCtx.axis = g_activeAxis;
     LeaveCriticalSection(&g_cruiseCs);
 
     bool expected = false;
@@ -503,24 +550,23 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
             int totalDx = curPt.x - g_anchorPt.x;
             int totalDy = curPt.y - g_anchorPt.y;
 
-            // Euclidean distance check across both axes against deadzone
-            if (cur == ScrollState::Pending &&
-                (totalDx * totalDx + totalDy * totalDy) >=
-                    (g_settings.deadzone * g_settings.deadzone)) {
+            bool deadzoneExceeded = false;
+            if (g_settings.enable_horizontal) {
+                deadzoneExceeded = (totalDx * totalDx + totalDy * totalDy) >=
+                                   (g_settings.deadzone * g_settings.deadzone);
+            } else {
+                deadzoneExceeded = std::abs(totalDy) >= g_settings.deadzone;
+            }
+
+            if (cur == ScrollState::Pending && deadzoneExceeded) {
                 g_state.store(ScrollState::Scrolling);
                 g_lastPt = curPt;
 
-                // Only snap to an axis if the user explicitly wants Axis Lock
                 if (g_settings.axis_lock && g_settings.enable_horizontal) {
                     int absX = std::abs(totalDx);
                     int absY = std::abs(totalDy);
-                    if (absY > absX * 2) {
-                        g_activeAxis = DragAxis::VerticalOnly;
-                    } else if (absX > absY * 2) {
-                        g_activeAxis = DragAxis::HorizontalOnly;
-                    } else {
-                        g_activeAxis = DragAxis::Free;
-                    }
+                    g_activeAxis = (absY >= absX) ? DragAxis::VerticalOnly
+                                                  : DragAxis::HorizontalOnly;
                 } else if (!g_settings.enable_horizontal) {
                     g_activeAxis = DragAxis::VerticalOnly;
                 } else {
