@@ -61,7 +61,7 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 - enable_cruising: false
   $name: "Continuous Cruising (Hold Ctrl)"
   $description: "Releasing Right-Click while holding Ctrl keeps scrolling automatically based on displacement. Stops immediately on any click, keypress, or Ctrl release."
-- pixels_per_notch: 35
+- pixels_per_notch: 45
   $name: "Base Drag Distance (Pixels per Notch)"
   $description: "Pixels required to drag for one full standard scroll notch (120 units). Lower values scroll faster (minimum: 10)."
 - deadzone: 5
@@ -92,7 +92,7 @@ constexpr int SMOOTH_SCROLL_CHUNK = 15;
 struct ModSettings {
     bool touch_style = true;
     bool enable_cruising = false;
-    double pixels_per_notch = 35.0;
+    double pixels_per_notch = 45.0;
     int deadzone = 5;
     bool enable_velocity = true;
     bool smooth_wheel = true;
@@ -114,6 +114,8 @@ static POINT g_anchorPt = {0, 0};
 static POINT g_lastPt = {0, 0};
 static double g_accumY = 0.0;
 static double g_accumX = 0.0;
+static double g_smoothDx = 0.0;
+static double g_smoothDy = 0.0;
 static RECT g_windowBounds = {0, 0, 0, 0};
 static HWND g_captureHwnd = nullptr;
 
@@ -161,19 +163,25 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
-void SendMaskedWheelAsync(int deltaY) {
+void SendMaskedWheelAsync(int deltaY, POINT pt) {
     INPUT input = {};
     input.type = INPUT_MOUSE;
-    input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+    input.mi.dx = MulDiv(pt.x, 65535, GetSystemMetrics(SM_CXSCREEN) - 1);
+    input.mi.dy = MulDiv(pt.y, 65535, GetSystemMetrics(SM_CYSCREEN) - 1);
+    input.mi.dwFlags =
+        MOUSEEVENTF_WHEEL | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
     input.mi.mouseData = static_cast<DWORD>(deltaY);
     input.mi.dwExtraInfo = MASK_EXTRA_INFO;
     SendInput(1, &input, sizeof(INPUT));
 }
 
-void SendMaskedHWheelAsync(int deltaX) {
+void SendMaskedHWheelAsync(int deltaX, POINT pt) {
     INPUT input = {};
     input.type = INPUT_MOUSE;
-    input.mi.dwFlags = MOUSEEVENTF_HWHEEL;
+    input.mi.dx = MulDiv(pt.x, 65535, GetSystemMetrics(SM_CXSCREEN) - 1);
+    input.mi.dy = MulDiv(pt.y, 65535, GetSystemMetrics(SM_CYSCREEN) - 1);
+    input.mi.dwFlags =
+        MOUSEEVENTF_HWHEEL | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
     input.mi.mouseData = static_cast<DWORD>(deltaX);
     input.mi.dwExtraInfo = MASK_EXTRA_INFO;
     SendInput(1, &input, sizeof(INPUT));
@@ -227,45 +235,30 @@ int TakeWholeSteps(double& accum, int step) {
     return delta;
 }
 
-void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
+void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete, POINT pt) {
     if (isDiscrete && hTarget) {
-        UINT scrollLines = 3;
-        SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
-
-        if (scrollLines == WHEEL_PAGESCROLL) {
-            PostMessageW(hTarget, WM_VSCROLL,
-                         (deltaY > 0) ? SB_PAGEUP : SB_PAGEDOWN, 0);
-            PostMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
-            return;
-        }
-
-        int notches = std::max(1, std::abs(deltaY) / WHEEL_DELTA);
-        int totalSteps = notches * static_cast<int>(scrollLines);
         WPARAM scrollCmd = (deltaY > 0) ? SB_LINEUP : SB_LINEDOWN;
-        for (int i = 0; i < totalSteps; ++i) {
-            PostMessageW(hTarget, WM_VSCROLL, scrollCmd, 0);
+        int steps = std::max(1, std::abs(deltaY) / WHEEL_DELTA);
+        for (int i = 0; i < steps; ++i) {
+            SendMessageW(hTarget, WM_VSCROLL, scrollCmd, 0);
         }
-        PostMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
+        SendMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
         return;
     }
-    SendMaskedWheelAsync(deltaY);
+    SendMaskedWheelAsync(deltaY, pt);
 }
 
-void DispatchHScroll(int deltaX, HWND hTarget, bool isDiscrete) {
+void DispatchHScroll(int deltaX, HWND hTarget, bool isDiscrete, POINT pt) {
     if (isDiscrete && hTarget) {
-        UINT scrollChars = 3;
-        SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scrollChars, 0);
-
-        int notches = std::max(1, std::abs(deltaX) / WHEEL_DELTA);
-        int totalSteps = notches * static_cast<int>(scrollChars);
         WPARAM scrollCmd = (deltaX > 0) ? SB_LINERIGHT : SB_LINELEFT;
-        for (int i = 0; i < totalSteps; ++i) {
-            PostMessageW(hTarget, WM_HSCROLL, scrollCmd, 0);
+        int steps = std::max(1, std::abs(deltaX) / WHEEL_DELTA);
+        for (int i = 0; i < steps; ++i) {
+            SendMessageW(hTarget, WM_HSCROLL, scrollCmd, 0);
         }
-        PostMessageW(hTarget, WM_HSCROLL, SB_ENDSCROLL, 0);
+        SendMessageW(hTarget, WM_HSCROLL, SB_ENDSCROLL, 0);
         return;
     }
-    SendMaskedHWheelAsync(deltaX);
+    SendMaskedHWheelAsync(deltaX, pt);
 }
 
 DWORD WINAPI CruiseWorkerThread(LPVOID) {
@@ -323,7 +316,7 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
                 int step = isDiscrete ? WHEEL_DELTA : chunk;
                 if (int delta = TakeWholeSteps(cruiseAccumY, step)) {
-                    DispatchScroll(delta, hTarget, isDiscrete);
+                    DispatchScroll(delta, hTarget, isDiscrete, curPt);
                 }
             }
 
@@ -339,7 +332,7 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
                 int step = isDiscrete ? WHEEL_DELTA : chunk;
                 if (int delta = TakeWholeSteps(cruiseAccumX, step)) {
-                    DispatchHScroll(delta, hTarget, isDiscrete);
+                    DispatchHScroll(delta, hTarget, isDiscrete, curPt);
                 }
             }
             if (WaitForSingleObject(g_stopEvent, 20) == WAIT_OBJECT_0)
@@ -488,6 +481,8 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
             g_lastPt = g_anchorPt;
             g_accumY = 0.0;
             g_accumX = 0.0;
+            g_smoothDx = 0.0;
+            g_smoothDy = 0.0;
             g_activeAxis = DragAxis::Free;
 
             HWND hTargetWnd = GetAncestor(pMsg->hwnd, GA_ROOT);
@@ -546,9 +541,18 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
             }
 
             if (g_state.load() == ScrollState::Scrolling) {
-                int dx = curPt.x - g_lastPt.x;
-                int dy = curPt.y - g_lastPt.y;
+                int rawDx = curPt.x - g_lastPt.x;
+                int rawDy = curPt.y - g_lastPt.y;
                 g_lastPt = curPt;
+
+                // Low-pass filter (70% previous motion, 30% new sensor input)
+                // Eliminates sensor jitter while preserving instantaneous
+                // response
+                g_smoothDx = (g_smoothDx * 0.70) + (rawDx * 0.30);
+                g_smoothDy = (g_smoothDy * 0.70) + (rawDy * 0.30);
+
+                double dx = g_smoothDx;
+                double dy = g_smoothDy;
 
                 // When axis_lock is OFF, g_activeAxis is DragAxis::Free,
                 // so neither dx nor dy will be zeroed out.
@@ -564,17 +568,12 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                 int chunk =
                     g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
 
-                // Shared dynamic velocity scaling for natural diagonal speed
+                // Smooth continuous velocity curve without sudden threshold
+                // jumps
                 double velocityFactor = 1.0;
                 if (g_settings.enable_velocity) {
                     double dist = std::hypot(dx, dy);
-                    if (dist <= 2.0)
-                        velocityFactor = 0.40;
-                    else if (dist <= 6.0)
-                        velocityFactor = 1.0;
-                    else
-                        velocityFactor =
-                            std::min(2.5, 1.0 + ((dist - 6.0) * 0.06));
+                    velocityFactor = std::clamp(0.6 + (dist * 0.08), 0.6, 2.2);
                 }
 
                 // --- 1. Vertical Processing ---
@@ -584,7 +583,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
 
                     int step = isDiscrete ? WHEEL_DELTA : chunk;
                     if (int delta = TakeWholeSteps(g_accumY, step)) {
-                        DispatchScroll(delta, hTarget, isDiscrete);
+                        DispatchScroll(delta, hTarget, isDiscrete, curPt);
                     }
                 }
 
@@ -595,7 +594,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
 
                     int step = isDiscrete ? WHEEL_DELTA : chunk;
                     if (int delta = TakeWholeSteps(g_accumX, step)) {
-                        DispatchHScroll(delta, hTarget, isDiscrete);
+                        DispatchHScroll(delta, hTarget, isDiscrete, curPt);
                     }
                 }
 
