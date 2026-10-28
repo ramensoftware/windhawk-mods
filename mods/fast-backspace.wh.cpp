@@ -5,7 +5,8 @@
 // @version         1.0
 // @author          Enrique Bos
 // @github          https://github.com/enriquebos
-// @include         explorer.exe
+// @include         windhawk.exe
+// @compilerOptions -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -17,58 +18,38 @@
 Increase the speed of held Backspace without changing the repeat speed of other
 keys. The first press and the Windows keyboard repeat delay stay unchanged.
 
-## Installation and settings
+## Settings
 
-Install **Fast Backspace** in Windhawk, then open its **Settings** tab. Set
-**Backspace speed multiplier** to an integer from **1** to **10**. The default is
-**2**; **1** keeps normal Windows speed. Values outside this range are clamped.
-Settings take effect without recompiling or restarting Explorer.
-
-While reviewing an unpublished copy, use **Create a new mod** in Windhawk, replace
-the template with this complete source file, then compile and enable it.
-
-Each Windows-generated repeat can produce up to the selected number of Backspace
-key-downs in total. Actual deletion speed depends on the application. Use a low
-multiplier first: a high value can delete more text than intended.
+Set **Backspace speed multiplier** to an integer from **1** to **10**. The default is
+**2**; **1** keeps normal Windows speed. Changes take effect immediately. Values
+outside this range are clamped. Start with a low value to avoid deleting too much.
 
 ## Behavior
 
-- Tapping Backspace still sends one ordinary press and release.
-- Acceleration starts only when Windows repeats a held physical Backspace key.
+- Single presses stay normal. Acceleration starts when Windows repeats a held
+  physical Backspace key.
 - Ctrl, Alt, Shift, and Windows-key combinations are not accelerated. Pressing
   another key during a hold cancels acceleration until Backspace is released.
 - A repeat observed in a different foreground window cancels acceleration for
   that hold.
-- Disabling the mod stops pending work, removes the hook, and joins its thread.
-  Input already delivered to an application cannot be undone.
+- Repeats arrive in small batches, which can feel bursty at high multipliers.
+  Actual deletion speed depends on the application.
 
 ## How it works
 
-A dedicated thread in one Explorer process per Windows session installs a global
-`WH_KEYBOARD_LL` hook. It observes physical Backspace repeats and posts work to its
-own message loop. `SendInput` runs after the keyboard callback has returned.
-Only one repeat batch can be pending; delayed batches are dropped rather than
-accumulated. No timer, continuous polling, or injection into every app is needed.
-
-Extra events are tagged key-downs. The physical key-up remains responsible for
-releasing Backspace; synthetic key-up/key-down pairs would release a key that is
-still physically held. The hook rejects its own stale input after a release, a
-new hold, a shortcut, a foreground-window change, or shutdown. Other injected
-Backspace events do not start acceleration.
+A dedicated Windhawk tool process uses a global keyboard hook to observe repeats
+and queues bounded extra key-downs through `SendInput` outside the callback. Extra
+events retain the source scan code; the physical key-up releases Backspace, and
+stale input is discarded after release, cancellation, or shutdown.
 
 ## Compatibility and limitations
 
-Designed for Windows 10 and 11. Programs that accept ordinary synthetic keyboard
-input may work, including editors, browsers, and terminals, but each app needs
-testing. Games, raw-input applications, keyboard remappers, accessibility tools,
-and Remote Desktop can handle repeats or injected input differently.
+Designed for Windows 10 and 11 and applications that accept synthetic keyboard
+input. The mod runs independently of Explorer and does not inject into each app.
 
-- Windows integrity restrictions can prevent Explorer from sending extra input
-  to elevated applications. Ordinary physical input is always passed through;
-  the mod does not bypass this restriction or elevate Explorer.
-- The hook operates on Explorer's input desktop, not the secure desktop. Missed
-  events across desktop/session switches can affect hold detection; release
-  Backspace before continuing. Events marked as injected are not accelerated.
+- Elevated apps, games, raw-input apps, remappers, accessibility tools, and remote
+  sessions may reject or handle injected input differently. The mod does not
+  bypass Windows integrity restrictions or operate on the secure desktop.
 - Backspace is accelerated wherever it is handled, including password fields
   and non-text actions such as navigation. The global hook cannot reliably
   identify text fields. Disable the mod where this behavior is undesirable.
@@ -76,30 +57,15 @@ and Remote Desktop can handle repeats or injected input differently.
   or an application-specific mode change. Release Backspace before changing focus.
 - Other hooks can block injected input. Windows can also silently remove a
   low-level hook if its thread times out; disable and re-enable the mod to retry.
-- Acceleration is unavailable while its Explorer host is stopped. Windhawk can
-  load the mod again when Explorer restarts. Each Windows session is independent.
+- Disabling the mod cancels pending work and removes its hook. Input already
+  delivered to an application cannot be undone. Physical input is passed through.
 
-## Troubleshooting and verification
+## Troubleshooting
 
 If Backspace is not faster, check that the multiplier exceeds 1, release and hold
 the key again without modifiers, and try an ordinary, non-elevated text editor.
 Disable and re-enable the mod if necessary. Windhawk logs initialization and
 input-insertion failures when logging is enabled. Failed batches are not retried.
-
-Before relying on the mod, test disposable text in your editors, browser inputs,
-terminal, and VS Code. Verify single taps, rapid taps, long holds at 1/2/10,
-settings changes while held, release during a repeat, left/right modifier
-shortcuts, foreground/focus changes, disable/re-enable, and an Explorer restart.
-Check elevated apps, remote sessions, and games separately if you use them.
-
-## Changelog
-
-### 1.0
-
-- Initial submission, based on the author's locally tested Fast Backspace mod.
-- Configurable 1-10 multiplier with a default of 2 and live settings.
-- Preserve the physical release; generate bounded, cancellable extra key-downs.
-- Check hook startup and clean up the worker and session guard on shutdown.
 */
 // ==/WindhawkModReadme==
 
@@ -116,6 +82,8 @@ Check elevated apps, remote sessions, and games separately if you use them.
 
 #include <windows.h>
 
+#include <shellapi.h>
+
 #include <algorithm>
 #include <atomic>
 
@@ -131,10 +99,9 @@ std::atomic<int> g_multiplier{2};
 std::atomic<bool> g_stopping{true};
 std::atomic<bool> g_hookInstalled{false};
 
-HANDLE g_mutex = nullptr;
 HANDLE g_thread = nullptr;
 HANDLE g_ready = nullptr;
-HANDLE g_stop = nullptr;
+DWORD g_threadId = 0;
 
 // Hook-thread state. Generations invalidate queued work and injected input.
 bool g_backspaceDown = false;
@@ -219,8 +186,11 @@ LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
                 CancelAcceleration();
             } else if (g_multiplier.load() > 1 && !g_repeatPending) {
                 g_repeatPending = true;
+                DWORD flags =
+                    (key->flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0;
+                LPARAM scanInfo = MAKELPARAM(key->scanCode, flags);
                 if (!PostThreadMessageW(GetCurrentThreadId(), kRepeatMessage,
-                                        g_generation, 0)) {
+                                        g_generation, scanInfo)) {
                     g_repeatPending = false;
                 }
             }
@@ -231,7 +201,7 @@ LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-void ProcessRepeat(ULONG_PTR generation) {
+void ProcessRepeat(ULONG_PTR generation, LPARAM scanInfo) {
     if (generation != g_generation || !g_repeatPending) {
         return;
     }
@@ -251,6 +221,8 @@ void ProcessRepeat(ULONG_PTR generation) {
     for (int i = 0; i < extra; ++i) {
         inputs[i].type = INPUT_KEYBOARD;
         inputs[i].ki.wVk = VK_BACK;
+        inputs[i].ki.wScan = LOWORD(scanInfo);
+        inputs[i].ki.dwFlags = HIWORD(scanInfo) & KEYEVENTF_EXTENDEDKEY;
         inputs[i].ki.dwExtraInfo = kInputTag | (generation & kGenerationMask);
     }
 
@@ -274,6 +246,10 @@ DWORD WINAPI HookThread(void*) {
 
     MSG message;
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_stopping.load()) {
+        SetEvent(g_ready);
+        return 0;
+    }
 
     HMODULE module = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -296,31 +272,20 @@ DWORD WINAPI HookThread(void*) {
     SetEvent(g_ready);
     Wh_Log(L"Global keyboard hook installed");
 
-    bool quit = false;
-    while (!quit && !g_stopping.load()) {
-        DWORD result =
-            MsgWaitForMultipleObjects(1, &g_stop, FALSE, INFINITE, QS_ALLINPUT);
-        if (result == WAIT_OBJECT_0) {
-            break;
+    // Also check the flag before GetMessage: startup cancellation can precede
+    // queue creation, in which case Cleanup's WM_QUIT post cannot succeed.
+    BOOL result = 0;
+    while (!g_stopping.load() &&
+           (result = GetMessageW(&message, nullptr, 0, 0)) > 0) {
+        if (message.message == kRepeatMessage) {
+            ProcessRepeat(message.wParam, message.lParam);
+        } else {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
         }
-        if (result != WAIT_OBJECT_0 + 1) {
-            Wh_Log(L"Hook message wait failed: %lu", GetLastError());
-            break;
-        }
-
-        while (!g_stopping.load() &&
-               PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            if (message.message == WM_QUIT) {
-                quit = true;
-                break;
-            }
-            if (message.message == kRepeatMessage) {
-                ProcessRepeat(message.wParam);
-            } else {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
-        }
+    }
+    if (result == -1) {
+        Wh_Log(L"GetMessage failed: %lu", GetLastError());
     }
 
     g_stopping.store(true);
@@ -330,46 +295,30 @@ DWORD WINAPI HookThread(void*) {
     return 0;
 }
 
-void RequestStop() {
-    g_stopping.store(true);
-    if (g_stop) {
-        SetEvent(g_stop);
-    }
-}
-
 void Cleanup() {
-    RequestStop();
+    g_stopping.store(true);
     if (g_thread) {
+        if (!PostThreadMessageW(g_threadId, WM_QUIT, 0, 0)) {
+            Wh_Log(L"PostThreadMessage(WM_QUIT) failed: %lu", GetLastError());
+        }
         // The DLL must remain loaded until the callback and thread have exited.
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
+        g_threadId = 0;
     }
-    for (HANDLE* handle : {&g_ready, &g_stop, &g_mutex}) {
-        if (*handle) {
-            CloseHandle(*handle);
-            *handle = nullptr;
-        }
+    if (g_ready) {
+        CloseHandle(g_ready);
+        g_ready = nullptr;
     }
 }
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     g_stopping.store(true);
     g_hookInstalled.store(false);
     LoadSettings();
-
-    g_mutex = CreateMutexW(nullptr, FALSE, L"Local\\WindhawkFastBackspaceHook");
-    if (!g_mutex) {
-        Wh_Log(L"CreateMutex failed: %lu", GetLastError());
-        return FALSE;
-    }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"Another Explorer instance already hosts the hook");
-        Cleanup();
-        return FALSE;
-    }
 
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_ready) {
@@ -378,15 +327,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stop) {
-        Wh_Log(L"Failed to create stop event: %lu", GetLastError());
-        Cleanup();
-        return FALSE;
-    }
-
     g_stopping.store(false);
-    g_thread = CreateThread(nullptr, 0, HookThread, nullptr, 0, nullptr);
+    g_thread = CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_threadId);
     if (!g_thread) {
         Wh_Log(L"CreateThread failed: %lu", GetLastError());
         Cleanup();
@@ -405,14 +347,199 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
-void Wh_ModBeforeUninit() {
-    RequestStop();
+void WhTool_ModUninit() {
+    Cleanup();
+}
+
+#ifdef __clang__
+#pragma clang diagnostic push
+// Keep the official launcher's zero-initialized STARTUPINFO snippet unchanged.
+#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
+#endif
+// clang-format off
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    Cleanup();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
+// clang-format on
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
