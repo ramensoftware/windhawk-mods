@@ -2,7 +2,7 @@
 // @id              monitor-sleep-button
 // @name            Monitor Sleep Button
 // @description     Tray icon to turn off the monitor after a configurable countdown.
-// @version         1.1.0
+// @version         1.1.1
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @homepage        https://github.com/SilverAmd
@@ -17,6 +17,12 @@
 # Monitor Sleep Button
 
 Adds a small tray icon for quickly turning off the monitor after a configurable countdown.
+
+## Preview
+
+![Monitor Sleep Button preview 1](https://i.imgur.com/sztL2TK.png)
+
+![Monitor Sleep Button preview 2](https://i.imgur.com/euxiJiQ.png)
 
 ## Features
 
@@ -667,9 +673,9 @@ void RefreshTrayIconRect();
 bool IsPointNearTrayIcon(POINT pt) {
     RECT rect = g_trayIconRect;
 
-    // Tray icon rect can be slightly off because of DPI/taskbar scaling.
-    // Expand it a bit so mouse wheel over the visible icon is still detected.
-    InflateRect(&rect, 32, 48);
+    if (IsRectEmpty(&rect)) {
+        return false;
+    }
 
     return PtInRect(&rect, pt) != FALSE;
 }

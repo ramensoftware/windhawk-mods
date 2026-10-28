@@ -2,10 +2,14 @@
 
 ## Changelog
 
-If this pull request updates an existing mod, describe the changes below:
+If this pull request updates an existing mod, describe the changes inside the changelog markers:
+
+<!-- changelog:start -->
 
 * Changelog item 1...
 * Changelog item 2...
+
+<!-- changelog:end -->
 
 ## Mod authorship
 

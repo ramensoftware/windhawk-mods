@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-notification-icons-show-all
 // @name            Always show all taskbar tray icons
-// @description     Restore the missing Windows option to always show all notification (tray) icons (Windows 11 only)
-// @version         1.0
+// @description     Restore the missing Windows option to always show all tray icons, show new icons by default, or hide all of them (Windows 11 only)
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -23,11 +23,24 @@
 /*
 # Always show all taskbar tray icons
 
-Restore the missing Windows option to always show all notification (tray) icons.
+Restore the missing Windows option to always show all tray icons, show new icons
+by default, or hide all of them.
 
-Alternatively, just make sure that new icons are shown by default.
+The mod has three modes that can be selected in the mod settings:
+
+1. All icons are shown. That's the default, and like in the animation below, all
+   icons become shown when the mod is enabled.
+2. New icons are shown, existing icons are unaffected. If this mode is selected,
+   the mod only affects icons of new apps, which become visible by default
+   instead of being hidden.
+3. All icons are hidden. The opposite of the first mode: all app icons are moved
+   to the overflow menu. System icons such as network, volume and battery are
+   unaffected, they can be hidden with the [Taskbar tray system icon
+   tweaks](https://windhawk.net/mods/taskbar-tray-system-icon-tweaks) mod.
 
 Only Windows 11 is supported.
+
+![demonstration](https://i.imgur.com/q6pgi0Z.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -38,11 +51,13 @@ Only Windows 11 is supported.
   $options:
   - showAll: All icons are shown
   - showNew: New icons are shown, existing icons are unaffected
+  - hideAll: All icons are hidden
 */
 // ==/WindhawkModSettings==
 
 #include <ntstatus.h>
 
+#include <atomic>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,44 +65,58 @@ Only Windows 11 is supported.
 enum class Mode {
     showAll,
     showNew,
+    hideAll,
 };
 
 struct {
-    Mode mode;
+    std::atomic<Mode> mode;
 } g_settings;
 
 // https://github.com/valinet/wh-mods/blob/61319815c7e018e392a08077dc364559548ade02/mods/valinet-unserver.wh.cpp#L95
 // https://stackoverflow.com/questions/937044/determine-path-to-registry-key-from-hkey-handle-in-c
 std::wstring GetPathFromHKEY(HKEY key) {
-    std::wstring keyPath;
-    if (key) {
-        HMODULE dll = GetModuleHandleW(L"ntdll.dll");
-        if (dll) {
-            typedef NTSTATUS(__stdcall * NtQueryKeyType)(
-                HANDLE KeyHandle, int KeyInformationClass, PVOID KeyInformation,
-                ULONG Length, PULONG ResultLength);
-            NtQueryKeyType func = reinterpret_cast<NtQueryKeyType>(
-                GetProcAddress(dll, "NtQueryKey"));
-            if (func) {
-                DWORD size = 0;
-                NTSTATUS result = func(key, 3, 0, 0, &size);
-                if (result == STATUS_BUFFER_TOO_SMALL) {
-                    size = size + 2;
-                    wchar_t* buffer = new (std::nothrow)
-                        wchar_t[size / sizeof(wchar_t)];  // size is in bytes
-                    if (buffer) {
-                        result = func(key, 3, buffer, size, &size);
-                        if (result == STATUS_SUCCESS) {
-                            buffer[size / sizeof(wchar_t)] = L'\0';
-                            keyPath = std::wstring(buffer + 2);
-                        }
-                        delete[] buffer;
-                    }
-                }
-            }
-        }
+    if (!key) {
+        return {};
     }
-    return keyPath;
+
+    using NtQueryKey_t = NTSTATUS(NTAPI*)(
+        HANDLE KeyHandle, int KeyInformationClass, PVOID KeyInformation,
+        ULONG Length, PULONG ResultLength);
+    static NtQueryKey_t pNtQueryKey = []() {
+        HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+        if (hNtdll) {
+            return (NtQueryKey_t)GetProcAddress(hNtdll, "NtQueryKey");
+        }
+        return (NtQueryKey_t) nullptr;
+    }();
+
+    if (!pNtQueryKey) {
+        return {};
+    }
+
+    constexpr int kKeyNameInformation = 3;
+
+    ULONG size = 0;
+    NTSTATUS result = pNtQueryKey(key, kKeyNameInformation, nullptr, 0, &size);
+    if (result != STATUS_BUFFER_TOO_SMALL) {
+        return {};
+    }
+
+    std::vector<BYTE> buffer(size);
+    result = pNtQueryKey(key, kKeyNameInformation, buffer.data(), size, &size);
+    if (result != STATUS_SUCCESS || size < sizeof(ULONG)) {
+        return {};
+    }
+
+    // The buffer contains a KEY_NAME_INFORMATION structure:
+    // ULONG NameLength (4 bytes) + WCHAR Name[1].
+    ULONG nameLength = *reinterpret_cast<ULONG*>(buffer.data());
+    if (size < sizeof(ULONG) + nameLength) {
+        return {};
+    }
+
+    PCWSTR name = reinterpret_cast<PCWSTR>(buffer.data() + sizeof(ULONG));
+    return std::wstring(name, nameLength / sizeof(WCHAR));
 }
 
 // https://stackoverflow.com/a/46931770
@@ -133,7 +162,7 @@ LONG WINAPI RegSetValueExW_Hook(HKEY hKey,
                                 DWORD dwType,
                                 CONST BYTE* lpData,
                                 DWORD cbData) {
-    if (g_settings.mode == Mode::showAll && lpValueName &&
+    if (g_settings.mode != Mode::showNew && lpValueName &&
         _wcsicmp(lpValueName, L"IsPromoted") == 0) {
         auto entry = GetNotifyIconSettingsNameFromRegKey(hKey);
         if (!entry.empty()) {
@@ -187,7 +216,7 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
         if (!entry.empty()) {
             Wh_Log(L"Getting IsPromoted for %s", entry.c_str());
 
-            if (g_settings.mode != Mode::showAll) {
+            if (g_settings.mode == Mode::showNew) {
                 LONG result = RegGetValueW_Original(
                     hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
                 if (result != ERROR_FILE_NOT_FOUND) {
@@ -203,7 +232,7 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
                 *pdwType = REG_DWORD;
             }
 
-            *(DWORD*)pvData = 1;
+            *(DWORD*)pvData = g_settings.mode == Mode::hideAll ? 0 : 1;
             *pcbData = sizeof(DWORD);
             return ERROR_SUCCESS;
         }
@@ -221,8 +250,8 @@ void TouchAllNotifyIconSettings() {
         L"_temp_windhawk_taskbar-notification-icons-show-all";
 
     HKEY hKey;
-    LONG result = RegOpenKeyEx(HKEY_CURRENT_USER, kBaseKeyPath, 0,
-                               KEY_READ | KEY_WRITE, &hKey);
+    LONG result =
+        RegOpenKeyEx(HKEY_CURRENT_USER, kBaseKeyPath, 0, KEY_READ, &hKey);
     if (result != ERROR_SUCCESS) {
         Wh_Log(L"Failed to open base key: %d", result);
         return;
@@ -259,12 +288,15 @@ void TouchAllNotifyIconSettings() {
 }
 
 void LoadSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
-    g_settings.mode = Mode::showAll;
-    if (wcscmp(mode, L"showNew") == 0) {
-        g_settings.mode = Mode::showNew;
+    PCWSTR modeStr = Wh_GetStringSetting(L"mode");
+    Mode mode = Mode::showAll;
+    if (wcscmp(modeStr, L"showNew") == 0) {
+        mode = Mode::showNew;
+    } else if (wcscmp(modeStr, L"hideAll") == 0) {
+        mode = Mode::hideAll;
     }
-    Wh_FreeStringSetting(mode);
+    Wh_FreeStringSetting(modeStr);
+    g_settings.mode = mode;
 }
 
 BOOL Wh_ModInit() {

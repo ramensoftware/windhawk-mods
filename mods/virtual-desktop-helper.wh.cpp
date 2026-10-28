@@ -2,10 +2,12 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys
-// @version         2.4.2
+// @version         2.5.0
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
+// @include         windhawk-mod.exe
+// @include         windhawk-mod-uiaccess.exe
 // @compilerOptions -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
@@ -24,7 +26,7 @@ Based on VD.ahk by FuPeiJiang.
 - **Move Windows**: Send the active window to any desktop instantly
 - **Previous Desktop**: Switch to the previous desktop by index (wraps around)
 - **Next Desktop**: Switch to the next desktop by index (wraps around)
-- **Last Desktop**: Toggle back to the last visited desktop
+- **Last-used Desktop**: Return to the desktop you were using immediately before the current one
 - **Pin Windows**: Pin/unpin windows to appear on all desktops
 
 ## Default Hotkeys
@@ -33,28 +35,28 @@ Based on VD.ahk by FuPeiJiang.
 |--------|----------------|
 | Switch to desktop 1-9 | `Alt + 1-9` |
 | Move window to desktop 1-9 | `Alt + Shift + 1-9` |
-| Switch to previous desktop | `Alt + Z` (configurable modifier) |
-| Switch to next desktop | `Alt + X` (configurable modifier) |
-| Switch to last visited desktop | `Alt + Q` (configurable modifier) |
+| Switch to previous desktop by index | `Alt + Z` (configurable modifier) |
+| Switch to next desktop by index | `Alt + X` (configurable modifier) |
+| Switch to last-used desktop | `Alt + Q` (configurable modifier) |
 | Pin/unpin window | `Alt + P` (configurable modifier) |
 
 Note: The modifier for all hotkey groups can be freely configured using any combination of Alt, Ctrl, Shift, and Win keys. Previous/next desktop cycling is limited by the "Maximum Desktops" setting.
 
-**⚠️ Win key note:** Win+number keys conflict with Windows taskbar shortcuts. If it doesn't work for you, you may need to disable these Win-combinations by yourself.
+**⚠️ Win key note:** Win+number combinations are used by the Windows taskbar and may conflict with numbered desktop hotkeys. Choose another modifier if needed.
 
 ## Customization
 
-Settings are organized by feature. Each feature has an **Enable** toggle and its associated key configuration:
+Settings are organized by feature. Each feature has an **Enable** toggle and its associated key configuration.
 
 ### Hotkey Groups
 
 - **[Switch Desktop]** - Alt+1-9 to switch desktops
 - **[Move Window]** - Alt+Shift+1-9 to move windows between desktops
-- **[Previous/Next/Last Desktop]** - Previous/next desktop by index and last-visited desktop toggle (Alt+Z, Alt+X, Alt+Q by default)
+- **[Previous/Next/Last-used Desktop]** - Previous/next by index and last-used desktop toggle (Alt+Z, Alt+X, Alt+Q by default)
 - **[Pin Window]** - Pin/unpin windows to all desktops (Alt+P by default)
 ### Key Binding Format
 
-Hotkey fields accept any single character:
+The Previous, Next, Last-used, and Pin key fields accept a single character or a supported special key. **Leave an individual key field blank to disable only that hotkey.**
 
 **Letters & Numbers:** A-Z, 0-9  
 **Special Characters:**
@@ -63,19 +65,16 @@ Hotkey fields accept any single character:
 - `[`, `]`, `\` (backslash)
 - `;` (semicolon), `'` (quote)
 - `,` (comma), `.` (period), `/` (slash)
-- Shifted versions: `!@#$%^&*()_+{}|:"<>?`
+- **Shifted-symbol aliases:** `!@#$%^&*()_+{}|:"<>?` are accepted as aliases for their underlying physical keys; they do not add Shift automatically.
 
 **Special Keys:** Type the name: `Tab`, `Space`, `Enter`
 
 **Examples:**
 - Enter `F` → binds to Alt+F
 - Enter `~` → binds to Alt+` (backtick)
-- Enter `!` → binds to Alt+1 (shifted)
+- Enter `!` → binds to Alt+1; include `shift` in the modifier if you want Alt+Shift+1
 - Enter `Tab` → binds to Alt+Tab
-
-**Example:** If you only want Alt+1-9 for switching desktops:
-1. Disable all options except "[Switch Desktop] Enable"
-2. All other hotkeys will be unregistered
+- Leave `Last-used Desktop Key` blank → disables Alt+Q while keeping Previous/Next enabled
 
 ## Windows Version Support
 
@@ -85,6 +84,10 @@ Select your Windows version in settings for correct functionality:
 - Windows 11 (Build 22000 - 22482)
 - Windows 11 (Build 22621/22631/23H2)
 - Windows 11 (Build 26100+ / 24H2)
+
+## Credits
+
+Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 ## See Also
 
@@ -127,27 +130,27 @@ Select your Windows version in settings for correct functionality:
 
 - MaxDesktops: 9
   $name: Maximum Desktops
-  $description: Number of desktops to register hotkeys for (1-9). Set lower if you use fewer desktops to avoid hotkey conflicts.
+  $description: Maximum number of desktops used by numbered hotkeys and previous/next cycling (1-9).
 
 - EnablePrevNextDesktop: true
-  $name: '[Previous/Next/Last Desktop] Enable'
-  $description: Enable hotkeys to cycle between desktops and toggle to the last visited desktop
+  $name: '[Previous/Next/Last-used Desktop] Enable'
+  $description: Enable previous/next-by-index hotkeys and the last-used desktop toggle
 
 - UtilityModifier: alt
-  $name: '[Previous/Next/Last Desktop] Modifier'
-  $description: 'Modifier keys for previous/next/last desktop hotkeys. Combine with +: alt, ctrl, shift, win. Examples: alt, ctrl+shift, win'
+  $name: '[Previous/Next/Last-used Desktop] Modifier'
+  $description: 'Modifier keys for previous/next/last-used desktop hotkeys. Combine with +: alt, ctrl, shift, win. Examples: alt, ctrl+shift, win'
 
 - PrevDesktopKey: "Z"
-  $name: '[Previous/Next/Last Desktop] Previous Desktop Key'
-  $description: 'Key to switch to the previous desktop by index (wraps around). Examples: Z, A, <, ,, Tab'
+  $name: '[Previous/Next/Last-used Desktop] Previous Desktop Key'
+  $description: 'Key to switch to the previous desktop by index (wraps around). Leave blank to disable this hotkey. Examples: Z, A, <, ,, Tab'
 
 - NextDesktopKey: "X"
-  $name: '[Previous/Next/Last Desktop] Next Desktop Key'
-  $description: 'Key to switch to the next desktop by index (wraps around). Examples: X, E, N, Z, @, ], Enter'
+  $name: '[Previous/Next/Last-used Desktop] Next Desktop Key'
+  $description: 'Key to switch to the next desktop by index (wraps around). Leave blank to disable this hotkey. Examples: X, E, N, Z, @, ], Enter'
 
 - LastDesktopKey: "Q"
-  $name: '[Previous/Next/Last Desktop] Last Desktop Key'
-  $description: 'Key to toggle back to the last visited desktop. Examples: Q, F, ~, !, [, Tab, Space'
+  $name: '[Previous/Next/Last-used Desktop] Last-used Desktop Key'
+  $description: 'Key to return to the desktop used immediately before the current one. Leave blank to disable this hotkey. Examples: Q, F, ~, !, [, Tab, Space'
 
 - EnablePinWindow: true
   $name: '[Pin Window] Enable'
@@ -155,7 +158,7 @@ Select your Windows version in settings for correct functionality:
 
 - PinKey: "P"
   $name: '[Pin Window] Key'
-  $description: 'Key to pin/unpin the active window to all desktops. Examples: P, W, #, ;, \\'
+  $description: 'Key to pin/unpin the active window to all desktops. Leave blank to disable this hotkey. Examples: P, W, #, ;, \'
 
 */
 // ==/WindhawkModSettings==
@@ -167,6 +170,9 @@ Select your Windows version in settings for correct functionality:
 #include <shobjidl.h>
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <atomic>
+#include <cwctype>
+#include <string>
 #include <unordered_map>
 
 #define SAFE_RELEASE(p) \
@@ -301,9 +307,12 @@ static IVirtualDesktopPinnedApps* g_pPinnedApps = nullptr;
 static bool g_bInitialized = false;
 
 static HANDLE g_hThread = nullptr;
-static DWORD g_threadId = 0;
-static HANDLE g_hReadyEvent = nullptr;
-static volatile bool g_stopHotkeyThread = false;
+static std::atomic<HWND> g_hMsgWnd = nullptr;
+static std::atomic_bool g_hotkeyThreadRunning = false;
+static std::atomic_bool g_settingsReloadPending = false;
+
+static constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 1;
+static constexpr wchar_t kHotkeyWindowClassName[] = L"WindhawkVirtualDesktopHelperHotkeys";
 
 static UINT g_moveModifiers = MOD_ALT | MOD_SHIFT;
 static UINT g_switchModifiers = MOD_ALT;
@@ -319,7 +328,7 @@ static bool g_hasCurrentDesktop = false;
 // Hotkey ID ranges:
 // HK_MOVE_BASE (1-9): Move window to desktop 1-9
 // HK_SWITCH_BASE (10-18): Switch to desktop 1-9
-// HK_LAST (19): Toggle to last visited desktop
+// HK_LAST (19): Toggle to last-used desktop
 // HK_PIN (20): Pin/unpin current window
 // HK_NEXT (21): Switch to next desktop (wrap around)
 // HK_PREV (22): Switch to previous desktop by index (wrap around)
@@ -378,12 +387,56 @@ bool InitializeVirtualDesktopAPI();
 bool UsesHMonitorParameter() { return g_versionIIDs[g_windowsVersionIndex].usesHMonitor; }
 
 UINT ParseModifiers(PCWSTR str) {
+  std::wstring normalized;
+  for (; str && *str; ++str) {
+    if (!std::iswspace(*str)) {
+      normalized.push_back(std::towlower(*str));
+    }
+  }
+
+  if (normalized.empty()) return 0;
+
   UINT modifiers = 0;
-  if (wcsstr(str, L"alt")) modifiers |= MOD_ALT;
-  if (wcsstr(str, L"ctrl")) modifiers |= MOD_CONTROL;
-  if (wcsstr(str, L"shift")) modifiers |= MOD_SHIFT;
-  if (wcsstr(str, L"win")) modifiers |= MOD_WIN;
+  size_t tokenStart = 0;
+  while (tokenStart <= normalized.size()) {
+    size_t tokenEnd = normalized.find(L'+', tokenStart);
+    size_t tokenLength = tokenEnd == std::wstring::npos
+                             ? normalized.size() - tokenStart
+                             : tokenEnd - tokenStart;
+    if (tokenLength == 0) return 0;
+
+    std::wstring token = normalized.substr(tokenStart, tokenLength);
+    if (token == L"alt") {
+      modifiers |= MOD_ALT;
+    } else if (token == L"ctrl") {
+      modifiers |= MOD_CONTROL;
+    } else if (token == L"shift") {
+      modifiers |= MOD_SHIFT;
+    } else if (token == L"win") {
+      modifiers |= MOD_WIN;
+    } else {
+      return 0;
+    }
+
+    if (tokenEnd == std::wstring::npos) break;
+    tokenStart = tokenEnd + 1;
+  }
+
   return modifiers;
+}
+
+std::wstring ReadTrimmedStringSetting(PCWSTR name) {
+  PCWSTR rawValue = Wh_GetStringSetting(name);
+  std::wstring value = rawValue ? rawValue : L"";
+  if (rawValue) Wh_FreeStringSetting(rawValue);
+
+  size_t first = 0;
+  while (first < value.size() && std::iswspace(value[first])) ++first;
+
+  size_t last = value.size();
+  while (last > first && std::iswspace(value[last - 1])) --last;
+
+  return value.substr(first, last - first);
 }
 
 template <typename T>
@@ -400,28 +453,30 @@ int ParseWindowsVersion(PCWSTR str) {
       {L"win10_old", 0}, {L"win10_20348", 1}, {L"win11_22000", 2}, {L"win11_22621", 3}, {L"win11_26100", 4}};
   return LookupTable(str, kVersionMap, _countof(kVersionMap), 4);
 }
-
-template <typename T, typename Parser>
-T ReadStringSetting(PCWSTR name, Parser parser, T defaultVal) {
-  PCWSTR str = Wh_GetStringSetting(name);
-  T result = parser(str);
-  Wh_FreeStringSetting(str);
-  return result ? result : defaultVal;
-}
-
 UINT ReadModifierSetting(PCWSTR name, UINT defaultVal) {
-  PCWSTR str = Wh_GetStringSetting(name);
-  UINT result = ParseModifiers(str);
-  Wh_Log(L"ReadModifierSetting: name=%s, raw=\"%s\", parsed=0x%X, default=0x%X, using=0x%X",
-         name, str, result, defaultVal, result ? result : defaultVal);
-  Wh_FreeStringSetting(str);
+  std::wstring value = ReadTrimmedStringSetting(name);
+  UINT result = ParseModifiers(value.c_str());
+  Wh_Log(L"ReadModifierSetting: name=%s, value=\"%s\", parsed=0x%X, default=0x%X, using=0x%X",
+         name, value.c_str(), result, defaultVal, result ? result : defaultVal);
   return result ? result : defaultVal;
 }
-
-// Parse single character to virtual key code
-// Supports A-Z, 0-9, and special characters
-UINT ParseSingleCharKey(PCWSTR str) {
+// Parse a configured hotkey key. Named keys are case-insensitive; all
+// other supported values must be exactly one character.
+UINT ParseHotkeyKey(PCWSTR str) {
   if (!str || !str[0]) return 0;
+
+  static const std::pair<PCWSTR, UINT> kNamedKeys[] = {
+      {L"Tab", VK_TAB},
+      {L"Space", VK_SPACE},
+      {L"Enter", VK_RETURN},
+  };
+  for (const auto& [name, key] : kNamedKeys) {
+    if (_wcsicmp(str, name) == 0) return key;
+  }
+
+  // Reject unknown multi-character values instead of silently using str[0].
+  if (str[1] != L'\0') return 0;
+
   wchar_t c = str[0];
 
   // Letters A-Z (and a-z)
@@ -431,7 +486,8 @@ UINT ParseSingleCharKey(PCWSTR str) {
   // Numbers 0-9
   if (c >= L'0' && c <= L'9') return c;
 
-  // Number row symbols
+  // Number-row symbols are aliases for their underlying physical keys. Shift
+  // itself is controlled by the configured modifier setting.
   if (c == L'!') return '1';
   if (c == L'@') return '2';
   if (c == L'#') return '3';
@@ -446,7 +502,7 @@ UINT ParseSingleCharKey(PCWSTR str) {
   // Other common special characters
   if (c == L'`' || c == L'~') return VK_OEM_3;      // Grave/tilde key
   if (c == L'-' || c == L'_') return VK_OEM_MINUS;  // Minus/underscore
-  if (c == L'=' || c == L'+') return VK_OEM_PLUS;   // Equals/plus (VK_OEM_PLUS is same as VK_ADD on some keyboards, use VK_OEM_NEC_EQUAL for some layouts)
+  if (c == L'=' || c == L'+') return VK_OEM_PLUS;   // Equals/plus
   if (c == L'[' || c == L'{') return VK_OEM_4;      // Left bracket
   if (c == L']' || c == L'}') return VK_OEM_6;      // Right bracket
   if (c == L'\\' || c == L'|') return VK_OEM_5;     // Backslash/pipe
@@ -455,11 +511,24 @@ UINT ParseSingleCharKey(PCWSTR str) {
   if (c == L',' || c == L'<') return VK_OEM_COMMA;  // Comma
   if (c == L'.' || c == L'>') return VK_OEM_PERIOD; // Period
   if (c == L'/' || c == L'?') return VK_OEM_2;      // Slash
-
-  // Space
   if (c == L' ') return VK_SPACE;
 
   return 0;
+}
+
+UINT ReadHotkeySetting(PCWSTR name) {
+  std::wstring value = ReadTrimmedStringSetting(name);
+
+  if (value.empty()) {
+    Wh_Log(L"ReadHotkeySetting: %s is blank; hotkey disabled", name);
+    return 0;
+  }
+
+  UINT key = ParseHotkeyKey(value.c_str());
+  if (!key) {
+    Wh_Log(L"ReadHotkeySetting: %s has invalid value \"%s\"; hotkey disabled", name, value.c_str());
+  }
+  return key;
 }
 
 void LoadSettings() {
@@ -485,12 +554,11 @@ void LoadSettings() {
   g_enableMoveWindow = Wh_GetIntSetting(L"EnableMoveWindow") != 0;
   g_enablePrevNextDesktop = Wh_GetIntSetting(L"EnablePrevNextDesktop") != 0;
   g_enablePinWindow = Wh_GetIntSetting(L"EnablePinWindow") != 0;
-
-  // Load hotkey settings (single character input supporting A-Z, 0-9, and special chars)
-  g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseSingleCharKey, (UINT)'Z');
-  g_nextDesktopKey = ReadStringSetting(L"NextDesktopKey", ParseSingleCharKey, (UINT)'X');
-  g_lastDesktopKey = ReadStringSetting(L"LastDesktopKey", ParseSingleCharKey, (UINT)'Q');
-  g_pinKey = ReadStringSetting(L"PinKey", ParseSingleCharKey, (UINT)'P');
+  // A blank individual key disables that hotkey without disabling the whole group.
+  g_prevDesktopKey = ReadHotkeySetting(L"PrevDesktopKey");
+  g_nextDesktopKey = ReadHotkeySetting(L"NextDesktopKey");
+  g_lastDesktopKey = ReadHotkeySetting(L"LastDesktopKey");
+  g_pinKey = ReadHotkeySetting(L"PinKey");
 }
 
 //=============================================================================
@@ -784,6 +852,20 @@ void FocusWindow(HWND hwnd) {
   SetForegroundWindow(hwnd);
 }
 
+// Raise a normal window to the front of the non-topmost Z-order group without
+// activating it. HWND_TOP keeps non-topmost windows below the topmost group, so
+// no temporary always-on-top state is needed.
+void RaiseWindowToFrontOfNormalBand(HWND hwnd) {
+  if (!hwnd || !IsWindow(hwnd)) return;
+
+  // Don't interfere with windows that are intentionally always-on-top.
+  if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) return;
+
+  if (!SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+    Wh_Log(L"Z-order repair failed: %lu", GetLastError());
+  }
+}
 void UpdateCurrentDesktopTracking(const GUID& desktopId, bool updatePreviousDesktop) {
   if (g_hasCurrentDesktop && !IsEqualGUID(g_currentDesktopId, desktopId)) {
     if (updatePreviousDesktop) {
@@ -812,29 +894,27 @@ void HandleForegroundWindowChanged(HWND hwnd) {
   bool hasCurrentDesktopId = GetCurrentDesktopId(&currentDesktopId);
   GUID windowDesktopId = {};
   bool hasWindowDesktopId = eligibleWindow && TryGetWindowDesktopId(hwnd, &windowDesktopId);
-  bool windowPinned = eligibleWindow && IsWindowPinned(hwnd);
 
-  if (!hasCurrentDesktopId && !hasWindowDesktopId) return;
-
-  GUID effectiveDesktopId = {};
-  bool hasEffectiveDesktopId = false;
+  // The virtual desktop manager is authoritative. During a desktop transition,
+  // the foreground event can briefly refer to a window from the old desktop.
   if (hasCurrentDesktopId) {
-    effectiveDesktopId = currentDesktopId;
-    hasEffectiveDesktopId = true;
+    UpdateCurrentDesktopTracking(currentDesktopId, true);
+
+    // Only query pinned state when the foreground window is otherwise a valid
+    // focus-map candidate. This avoids two unnecessary COM calls on most
+    // foreground changes.
+    if (eligibleWindow && hasWindowDesktopId &&
+        IsEqualGUID(windowDesktopId, currentDesktopId) && !IsWindowPinned(hwnd)) {
+      g_desktopFocusMap[currentDesktopId] = hwnd;
+    }
+    return;
   }
 
-  if (hasWindowDesktopId && !windowPinned &&
-      (!hasCurrentDesktopId || !IsEqualGUID(currentDesktopId, windowDesktopId))) {
-    effectiveDesktopId = windowDesktopId;
-    hasEffectiveDesktopId = true;
-  }
-
-  if (!hasEffectiveDesktopId) return;
-
-  UpdateCurrentDesktopTracking(effectiveDesktopId, true);
-
-  if (eligibleWindow && hasWindowDesktopId && !windowPinned && IsEqualGUID(windowDesktopId, effectiveDesktopId)) {
-    g_desktopFocusMap[effectiveDesktopId] = hwnd;
+  // Fall back to the foreground window only when querying the current desktop
+  // itself failed. This keeps tracking useful during a transient COM failure.
+  if (hasWindowDesktopId && !IsWindowPinned(hwnd)) {
+    UpdateCurrentDesktopTracking(windowDesktopId, true);
+    g_desktopFocusMap[windowDesktopId] = hwnd;
   }
 }
 
@@ -930,18 +1010,43 @@ bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
 }
 
 bool SwitchToLastDesktop() {
-  if (!g_hasPreviousDesktop) return false;
-  if (!InitializeVirtualDesktopAPI()) return false;
+  if (!InitializeVirtualDesktopAPI()) {
+    Wh_Log(L"SwitchToLastDesktop: API not initialized");
+    return false;
+  }
 
-  GUID currentId = {};
-  if (!GetCurrentDesktopId(&currentId) || IsEqualGUID(currentId, g_previousDesktopId)) {
-    return true;
+  GUID actualCurrentId = {};
+  if (!GetCurrentDesktopId(&actualCurrentId)) {
+    Wh_Log(L"SwitchToLastDesktop: failed to get current desktop");
+    return false;
+  }
+
+  // Repair cached state if a desktop transition happened without a clean
+  // foreground event. The actual manager state is always authoritative.
+  if (!g_hasCurrentDesktop) {
+    g_currentDesktopId = actualCurrentId;
+    g_hasCurrentDesktop = true;
+  } else if (!IsEqualGUID(actualCurrentId, g_currentDesktopId)) {
+    Wh_Log(L"SwitchToLastDesktop: repairing stale desktop tracking");
+    g_previousDesktopId = g_currentDesktopId;
+    g_hasPreviousDesktop = true;
+    g_currentDesktopId = actualCurrentId;
+  }
+
+  if (!g_hasPreviousDesktop) {
+    Wh_Log(L"SwitchToLastDesktop: no previous desktop is known yet");
+    return false;
+  }
+
+  if (IsEqualGUID(actualCurrentId, g_previousDesktopId)) {
+    Wh_Log(L"SwitchToLastDesktop: previous desktop equals the current desktop; ignoring stale target");
+    return false;
   }
 
   int index = GetDesktopIndexById(g_previousDesktopId);
   if (index < 0) {
     g_hasPreviousDesktop = false;
-    Wh_Log(L"Previous desktop no longer exists");
+    Wh_Log(L"SwitchToLastDesktop: previous desktop no longer exists");
     return false;
   }
   return GoToDesktopNum(index + 1);
@@ -1053,6 +1158,7 @@ bool MoveActiveWindowToDesktopNum(int desktopNum) {
   targetDesktop->Release();
 
   if (success) {
+    RaiseWindowToFrontOfNormalBand(hwnd);
     Wh_Log(L"Moved window to desktop %d", desktopNum);
   }
   return success;
@@ -1095,184 +1201,209 @@ bool TogglePinWindow() {
 // Hotkey Thread
 //=============================================================================
 
-DWORD WINAPI HotkeyThreadProc(LPVOID) {
-  g_threadId = GetCurrentThreadId();
-  Wh_Log(L"Hotkey thread started, thread ID: %lu", g_threadId);
-
-  HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-  Wh_Log(L"CoInitializeEx result: 0x%08X", coHr);
-
-  // Create message queue and signal ready immediately
-  MSG msg;
-  PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
-  SetEvent(g_hReadyEvent);
-
-  if (!InitializeVirtualDesktopAPI()) {
-    Wh_Log(L"Virtual Desktop API failed to initialize on startup");
-  } else {
-    SyncCurrentDesktopTracking(false);
-  }
-
-  HWINEVENTHOOK foregroundHook =
-      SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundWinEventProc, 0, 0,
-                      WINEVENT_OUTOFCONTEXT);
-  if (!foregroundHook) {
-    Wh_Log(L"Failed to install foreground WinEvent hook");
-  }
-
+void RegisterHotkeys(HWND hwnd) {
   if (g_enableMoveWindow) {
     for (int i = 1; i <= g_maxDesktops; ++i) {
-      BOOL ok = RegisterHotKey(nullptr, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
+      BOOL ok = RegisterHotKey(hwnd, HK_MOVE_BASE + i - 1, g_moveModifiers | MOD_NOREPEAT, '0' + i);
       Wh_Log(L"RegisterHotKey MOVE_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              i, g_moveModifiers, '0' + i, ok, ok ? 0 : GetLastError());
     }
   }
+
   if (g_enableSwitchDesktop) {
     for (int i = 1; i <= g_maxDesktops; ++i) {
-      BOOL ok = RegisterHotKey(nullptr, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
+      BOOL ok = RegisterHotKey(hwnd, HK_SWITCH_BASE + i - 1, g_switchModifiers | MOD_NOREPEAT, '0' + i);
       Wh_Log(L"RegisterHotKey SWITCH_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              i, g_switchModifiers, '0' + i, ok, ok ? 0 : GetLastError());
     }
   }
+
   if (g_enablePrevNextDesktop) {
-    BOOL ok;
-    ok = RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
-    Wh_Log(L"RegisterHotKey PREV: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
-           g_utilityModifiers, g_prevDesktopKey, ok, ok ? 0 : GetLastError());
-    ok = RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
-    Wh_Log(L"RegisterHotKey NEXT: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
-           g_utilityModifiers, g_nextDesktopKey, ok, ok ? 0 : GetLastError());
-    ok = RegisterHotKey(nullptr, HK_LAST, g_utilityModifiers, g_lastDesktopKey);
-    Wh_Log(L"RegisterHotKey LAST: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
-           g_utilityModifiers, g_lastDesktopKey, ok, ok ? 0 : GetLastError());
+    if (g_prevDesktopKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_PREV, g_utilityModifiers | MOD_NOREPEAT, g_prevDesktopKey);
+      Wh_Log(L"RegisterHotKey PREV: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_utilityModifiers, g_prevDesktopKey, ok, ok ? 0 : GetLastError());
+    } else {
+      Wh_Log(L"RegisterHotKey PREV: disabled by blank key setting");
+    }
+
+    if (g_nextDesktopKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_NEXT, g_utilityModifiers | MOD_NOREPEAT, g_nextDesktopKey);
+      Wh_Log(L"RegisterHotKey NEXT: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_utilityModifiers, g_nextDesktopKey, ok, ok ? 0 : GetLastError());
+    } else {
+      Wh_Log(L"RegisterHotKey NEXT: disabled by blank key setting");
+    }
+
+    if (g_lastDesktopKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_LAST, g_utilityModifiers | MOD_NOREPEAT, g_lastDesktopKey);
+      Wh_Log(L"RegisterHotKey LAST: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_utilityModifiers, g_lastDesktopKey, ok, ok ? 0 : GetLastError());
+    } else {
+      Wh_Log(L"RegisterHotKey LAST: disabled by blank key setting");
+    }
   }
+
   if (g_enablePinWindow) {
-    BOOL ok = RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
-    Wh_Log(L"RegisterHotKey PIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
-           g_utilityModifiers, g_pinKey, ok, ok ? 0 : GetLastError());
+    if (g_pinKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_PIN, g_utilityModifiers | MOD_NOREPEAT, g_pinKey);
+      Wh_Log(L"RegisterHotKey PIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_utilityModifiers, g_pinKey, ok, ok ? 0 : GetLastError());
+    } else {
+      Wh_Log(L"RegisterHotKey PIN: disabled by blank key setting");
+    }
   }
-  Wh_Log(L"Hotkeys registered");
+}
 
-  // Message loop - use MsgWaitForMultipleObjects to allow periodic check for stop signal
-  while (!g_stopHotkeyThread) {
-    // Wait for message or timeout (100ms) to check stop flag
-    DWORD waitResult = MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
+void UnregisterHotkeys(HWND hwnd) {
+  for (int i = 0; i < 9; ++i) {
+    UnregisterHotKey(hwnd, HK_MOVE_BASE + i);
+    UnregisterHotKey(hwnd, HK_SWITCH_BASE + i);
+  }
+  UnregisterHotKey(hwnd, HK_PREV);
+  UnregisterHotKey(hwnd, HK_NEXT);
+  UnregisterHotKey(hwnd, HK_LAST);
+  UnregisterHotKey(hwnd, HK_PIN);
+}
 
-    if (waitResult == WAIT_OBJECT_0) {
-      // Messages available
-      while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        if (msg.message == WM_QUIT) {
-          goto cleanup;
-        }
-        if (msg.message == WM_HOTKEY) {
-          UINT hotkeyId = static_cast<UINT>(msg.wParam);
+void HandleHotkey(UINT hotkeyId) {
+  if (!g_bInitialized && !InitializeVirtualDesktopAPI()) {
+    Wh_Log(L"Hotkey ignored: API not initialized");
+    return;
+  }
 
-          // All other hotkeys require Virtual Desktop API
-          if (!g_bInitialized && !InitializeVirtualDesktopAPI()) {
-            Wh_Log(L"Hotkey ignored: API not initialized");
-            continue;
-          }
+  if (hotkeyId >= HK_MOVE_BASE && hotkeyId < HK_MOVE_BASE + 9) {
+    int desktopNum = hotkeyId - HK_MOVE_BASE + 1;
+    HWND movedHwnd = GetForegroundWindow();
+    bool moved = MoveActiveWindowToDesktopNum(desktopNum);
+    if (moved && g_followMovedWindow) {
+      GoToDesktopNum(desktopNum, movedHwnd);
+    }
+  } else if (hotkeyId >= HK_SWITCH_BASE && hotkeyId < HK_SWITCH_BASE + 9) {
+    GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
+  } else if (hotkeyId == HK_PREV) {
+    SwitchToPreviousDesktop();
+  } else if (hotkeyId == HK_NEXT) {
+    SwitchToNextDesktop();
+  } else if (hotkeyId == HK_LAST) {
+    SwitchToLastDesktop();
+  } else if (hotkeyId == HK_PIN) {
+    TogglePinWindow();
+  }
+}
 
-          if (hotkeyId >= HK_MOVE_BASE && hotkeyId < HK_MOVE_BASE + 9) {
-            int desktopNum = hotkeyId - HK_MOVE_BASE + 1;
-            HWND movedHwnd = GetForegroundWindow();
-            bool moved = MoveActiveWindowToDesktopNum(desktopNum);
-            if (moved && g_followMovedWindow) {
-              GoToDesktopNum(desktopNum, movedHwnd);
-            }
-          } else if (hotkeyId >= HK_SWITCH_BASE && hotkeyId < HK_SWITCH_BASE + 9) {
-            GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
-          } else if (hotkeyId == HK_PREV) {
-            SwitchToPreviousDesktop();
-          } else if (hotkeyId == HK_NEXT) {
-            SwitchToNextDesktop();
-          } else if (hotkeyId == HK_LAST) {
-            SwitchToLastDesktop();
-          } else if (hotkeyId == HK_PIN) {
-            TogglePinWindow();
-          }
-        }
+LRESULT CALLBACK HotkeyWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+  if (message == WM_HOTKEY) {
+    if (g_hotkeyThreadRunning) {
+      HandleHotkey(static_cast<UINT>(wParam));
+    }
+    return 0;
+  }
+
+  if (message == WM_APP_SETTINGS_CHANGED) {
+    if (!g_hotkeyThreadRunning) return 0;
+
+    UnregisterHotkeys(hwnd);
+    int previousWindowsVersionIndex = g_windowsVersionIndex;
+    LoadSettings();
+    g_desktopFocusMap.clear();
+
+    if (previousWindowsVersionIndex != g_windowsVersionIndex) {
+      CleanupVirtualDesktopAPI();
+      if (InitializeVirtualDesktopAPI()) {
+        SyncCurrentDesktopTracking(false);
+      } else {
+        Wh_Log(L"Virtual Desktop API failed to initialize after settings change; hotkeys will retry on use");
       }
     }
-    // WAIT_TIMEOUT: just loop and check g_stopHotkeyThread
+
+    RegisterHotkeys(hwnd);
+    return 0;
   }
 
-cleanup:
-  if (g_enableMoveWindow) {
-    for (int i = 0; i < 9; ++i) {
-      UnregisterHotKey(nullptr, HK_MOVE_BASE + i);
-    }
-  }
-  if (g_enableSwitchDesktop) {
-    for (int i = 0; i < 9; ++i) {
-      UnregisterHotKey(nullptr, HK_SWITCH_BASE + i);
-    }
-  }
-  if (g_enablePrevNextDesktop) {
-    UnregisterHotKey(nullptr, HK_PREV);
-    UnregisterHotKey(nullptr, HK_NEXT);
-    UnregisterHotKey(nullptr, HK_LAST);
-  }
-  if (g_enablePinWindow) {
-    UnregisterHotKey(nullptr, HK_PIN);
+  return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
+DWORD WINAPI HotkeyThreadProc(LPVOID) {
+  Wh_Log(L"Hotkey thread started, thread ID: %lu", GetCurrentThreadId());
+
+  HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  if (FAILED(coHr)) {
+    Wh_Log(L"Hotkey thread COM initialization failed: 0x%08X", coHr);
+    g_hotkeyThreadRunning = false;
+    return 0;
   }
 
+  HINSTANCE module = GetModuleHandle(nullptr);
+  WNDCLASSEXW windowClass = {
+      .cbSize = sizeof(windowClass),
+      .lpfnWndProc = HotkeyWindowProc,
+      .hInstance = module,
+      .lpszClassName = kHotkeyWindowClassName,
+  };
+
+  if (!RegisterClassExW(&windowClass)) {
+    Wh_Log(L"Failed to register hotkey window class: %lu", GetLastError());
+    CoUninitialize();
+    g_hotkeyThreadRunning = false;
+    return 0;
+  }
+
+  HWND hwnd = CreateWindowExW(0, kHotkeyWindowClassName, nullptr, 0, 0, 0, 0, 0,
+                              HWND_MESSAGE, nullptr, module, nullptr);
+  if (!hwnd) {
+    Wh_Log(L"Failed to create hotkey message window: %lu", GetLastError());
+    UnregisterClassW(kHotkeyWindowClassName, module);
+    CoUninitialize();
+    g_hotkeyThreadRunning = false;
+    return 0;
+  }
+
+  g_hMsgWnd = hwnd;
+
+  HWINEVENTHOOK foregroundHook = nullptr;
+  if (g_hotkeyThreadRunning) {
+    foregroundHook =
+        SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundWinEventProc, 0, 0,
+                        WINEVENT_OUTOFCONTEXT);
+    if (!foregroundHook) {
+      Wh_Log(L"Failed to install foreground WinEvent hook");
+    }
+
+    if (g_settingsReloadPending.exchange(false)) {
+      LoadSettings();
+    }
+    RegisterHotkeys(hwnd);
+    Wh_Log(L"Hotkey thread ready");
+
+    if (InitializeVirtualDesktopAPI()) {
+      SyncCurrentDesktopTracking(false);
+    } else {
+      Wh_Log(L"Virtual Desktop API failed to initialize on startup; hotkeys will retry on use");
+    }
+  }
+
+  MSG msg;
+  while (g_hotkeyThreadRunning && GetMessage(&msg, nullptr, 0, 0) > 0) {
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+  }
+
+  g_hMsgWnd = nullptr;
+  UnregisterHotkeys(hwnd);
   if (foregroundHook) {
     UnhookWinEvent(foregroundHook);
   }
-
   CleanupVirtualDesktopAPI();
+  DestroyWindow(hwnd);
+  UnregisterClassW(kHotkeyWindowClassName, module);
   CoUninitialize();
-  return 0;
-}
 
-bool StartHotkeyThread() {
-  g_hReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-  g_hThread = CreateThread(nullptr, 0, HotkeyThreadProc, nullptr, 0, nullptr);
-
-  if (!g_hThread || WaitForSingleObject(g_hReadyEvent, 5000) != WAIT_OBJECT_0) {
-    Wh_Log(L"Failed to start hotkey thread");
-    if (g_hThread) {
-      CloseHandle(g_hThread);
-      g_hThread = nullptr;
-    }
-    CloseHandle(g_hReadyEvent);
-    g_hReadyEvent = nullptr;
-    return false;
-  }
-
-  CloseHandle(g_hReadyEvent);
-  g_hReadyEvent = nullptr;
-  return true;
-}
-
-void StopHotkeyThread() {
-  // Signal thread to stop
-  g_stopHotkeyThread = true;
-
-  // Disable operations to prevent new COM calls during cleanup
-  g_bInitialized = false;
-
-  if (g_threadId) {
-    PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
-  }
-
-  if (g_hThread) {
-    // Wait with timeout to avoid infinite hang on CoUninitialize
-    DWORD waitResult = WaitForSingleObject(g_hThread, 5000);
-    if (waitResult == WAIT_TIMEOUT) {
-      Wh_Log(L"WARNING: Hotkey thread cleanup timeout, thread may be stuck in CoUninitialize");
-      // Do NOT call TerminateThread - let Windows handle cleanup on process exit
-      // to avoid corrupting COM state and potentially crashing Explorer
-    }
-    CloseHandle(g_hThread);
-    g_hThread = nullptr;
-  }
-
-  g_threadId = 0;
-  g_stopHotkeyThread = false;
+  g_hotkeyThreadRunning = false;
   g_hasCurrentDesktop = false;
   g_currentDesktopId = {};
+  Wh_Log(L"Hotkey thread stopped");
+  return 0;
 }
 
 //=============================================================================
@@ -1282,8 +1413,12 @@ void StopHotkeyThread() {
 BOOL WhTool_ModInit() {
   Wh_Log(L"Virtual Desktop Helper mod initializing...");
   LoadSettings();
-  if (!StartHotkeyThread()) {
-    Wh_Log(L"Failed to start hotkey thread");
+  g_settingsReloadPending = false;
+  g_hotkeyThreadRunning = true;
+  g_hThread = CreateThread(nullptr, 0, HotkeyThreadProc, nullptr, 0, nullptr);
+  if (!g_hThread) {
+    g_hotkeyThreadRunning = false;
+    Wh_Log(L"Failed to create hotkey thread: %lu", GetLastError());
     return FALSE;
   }
   Wh_Log(L"Virtual Desktop Helper mod initialized successfully");
@@ -1292,27 +1427,48 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
   Wh_Log(L"Virtual Desktop Helper mod uninitializing...");
-  StopHotkeyThread();
+  g_hotkeyThreadRunning = false;
+  if (HWND hwnd = g_hMsgWnd.load()) {
+    PostMessage(hwnd, WM_QUIT, 0, 0);
+  }
+
+  if (g_hThread) {
+    DWORD waitResult = WaitForSingleObject(g_hThread, 5000);
+    if (waitResult != WAIT_OBJECT_0) {
+      Wh_Log(L"Hotkey thread cleanup did not finish before process exit (wait=%lu)", waitResult);
+    }
+    CloseHandle(g_hThread);
+    g_hThread = nullptr;
+  }
   Wh_Log(L"Virtual Desktop Helper mod uninitialized");
 }
 
 void WhTool_ModSettingsChanged() {
-  Wh_Log(L"Settings changed, reloading...");
-  StopHotkeyThread();
-  g_desktopFocusMap.clear();
-  LoadSettings();
-  if (!StartHotkeyThread()) {
-    Wh_Log(L"Failed to restart hotkey thread after settings change");
+  Wh_Log(L"Settings changed, notifying hotkey thread...");
+  if (HWND hwnd = g_hMsgWnd.load()) {
+    PostMessage(hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    return;
+  }
+
+  g_settingsReloadPending = true;
+  if (HWND hwnd = g_hMsgWnd.load();
+      hwnd && g_settingsReloadPending.exchange(false)) {
+    PostMessage(hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
   }
 }
-
-//=============================================================================
+////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/pull/1916
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
-//=============================================================================
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;

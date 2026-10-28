@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.10
+// @version         1.3.11
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -39,9 +39,6 @@ the grouping settings.
 
 Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
-
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModReadme==
 
@@ -70,11 +67,16 @@ or a similar tool), enable the relevant option in the mod's settings.
 - useWindowIcons: false
   $name: Use window icons
   $description: >-
-    By default, application icons are used. Enable this option to use window
-    icons instead. Usually it doesn't matter, an example where it does is an
-    open folder window - with application icons, the icon on the taskbar is
-    always the icon of Explorer, while with window icons, the icon changes
-    depending on the open folder.
+    Use window icons instead of application icons when labels are hidden. For
+    example, a folder window then shows the icon of the open folder instead of
+    the Explorer icon.
+- windowIconsPrograms: [program1.exe]
+  $name: Use window icons exceptions
+  $description: >-
+    Each entry is a name, path, or application ID for which the "Use window
+    icons" option is inverted. If the option is enabled, these programs use
+    application icons. If the option is disabled, only these programs use window
+    icons.
 - customGroups:
   - - name: Group 1
       $name: Group name
@@ -160,6 +162,7 @@ struct {
     PinnedItemsMode pinnedItemsMode;
     PlaceUngroupedItemsTogetherMode placeUngroupedItemsTogether;
     bool useWindowIcons;
+    std::unordered_set<std::wstring> windowIconsProgramItems;
     std::unordered_set<std::wstring> excludedProgramItems;
     std::vector<std::wstring> customGroupNames;
     std::unordered_map<std::wstring, int> customGroupProgramItems;
@@ -191,7 +194,9 @@ bool g_inFindTaskBtnGroup;
 PVOID g_findTaskBtnGroup_TaskGroupSentinel =
     &g_findTaskBtnGroup_TaskGroupSentinel;
 std::function<bool(PVOID)> g_findTaskBtnGroup_Callback;
+std::atomic<DWORD> g_cTaskListWnd_TaskCreated_ThreadId;
 std::atomic<DWORD> g_cTaskListWnd__CreateTBGroup_ThreadId;
+std::atomic<DWORD> g_taskCreatedReplacingPinnedThreadId;
 bool g_disableGetLauncherName;
 std::atomic<DWORD> g_compareStringOrdinalHookThreadId;
 bool g_compareStringOrdinalIgnoreSuffix;
@@ -200,6 +205,14 @@ std::atomic<DWORD> g_doingPinnedItemSwapThreadId;
 void* g_doingPinnedItemSwapFromTaskGroup;
 void* g_doingPinnedItemSwapToTaskGroup;
 int g_doingPinnedItemSwapIndex = -1;
+
+// Uppercase app ID (without the suffix) to the uppercase process path of the
+// last window resolved with it.
+std::unordered_map<std::wstring, std::wstring> g_appIdProcessPaths;
+
+// Entries of app IDs with no task group are pruned when a new app ID is added
+// after reaching this size.
+constexpr size_t kAppIdProcessPathsPruneThreshold = 64;
 
 constexpr size_t ITaskListUIOffset = 0x28;
 
@@ -253,6 +266,39 @@ bool RemoveAppIdSuffix(WCHAR appIdStripped[MAX_PATH], PCWSTR appIdWithSuffix) {
     wcsncpy_s(appIdStripped, MAX_PATH, appIdWithSuffix,
               suffix - appIdWithSuffix);
     return true;
+}
+
+// Maps len characters of src to uppercase into dst. src and dst may be the
+// same buffer.
+void ToUpper(PCWSTR src, PWSTR dst, size_t len) {
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, src,
+                  static_cast<int>(len), dst, static_cast<int>(len), nullptr,
+                  nullptr, 0);
+}
+
+void ToUpperInPlace(PWSTR str, size_t len) {
+    ToUpper(str, str, len);
+}
+
+bool IsWindowIconsProgram(PCWSTR appIdUpper, PCWSTR processPathUpper) {
+    const auto& items = g_settings.windowIconsProgramItems;
+
+    if (items.contains(appIdUpper)) {
+        return true;
+    }
+
+    if (processPathUpper) {
+        if (items.contains(processPathUpper)) {
+            return true;
+        }
+
+        PCWSTR fileName = wcsrchr(processPathUpper, L'\\');
+        if (fileName && fileName[1] && items.contains(fileName + 1)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 using CTaskGroup_GetNumItems_t = int(WINAPI*)(PVOID pThis);
@@ -309,6 +355,36 @@ using CTaskBand__MatchWindow_t = HRESULT(WINAPI*)(PVOID pThis,
                                                   PVOID* taskItem);
 CTaskBand__MatchWindow_t CTaskBand__MatchWindow_Original;
 
+// Checks whether a task group exists with the given app ID, ignoring suffixes.
+bool AppIdTaskGroupExists(PVOID taskBand, PCWSTR appId) {
+    g_compareStringOrdinalHookThreadId = GetCurrentThreadId();
+    g_compareStringOrdinalIgnoreSuffix = true;
+
+    winrt::com_ptr<IUnknown> taskGroupMatched;
+    winrt::com_ptr<IUnknown> taskItemMatched;
+    HRESULT hr = CTaskBand__MatchWindow_Original(
+        taskBand, nullptr, nullptr, appId, 1, taskGroupMatched.put_void(),
+        taskItemMatched.put_void());
+
+    g_compareStringOrdinalHookThreadId = 0;
+    g_compareStringOrdinalIgnoreSuffix = false;
+
+    return SUCCEEDED(hr) && taskGroupMatched;
+}
+
+void SetAppIdProcessPath(PVOID taskBand,
+                         PCWSTR appIdUpper,
+                         PCWSTR processPathUpper) {
+    if (g_appIdProcessPaths.size() >= kAppIdProcessPathsPruneThreshold &&
+        !g_appIdProcessPaths.contains(appIdUpper)) {
+        std::erase_if(g_appIdProcessPaths, [taskBand](const auto& item) {
+            return !AppIdTaskGroupExists(taskBand, item.first.c_str());
+        });
+    }
+
+    g_appIdProcessPaths[appIdUpper] = processPathUpper;
+}
+
 void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
     Wh_Log(L"==========");
     Wh_Log(L"hButtonWnd=%08X", resolvedWindow->hButtonWnd);
@@ -324,10 +400,8 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
 
     DWORD resolvedAppIdStrLen = wcslen(resolvedWindow->szAppIdStr);
     WCHAR resolvedAppIdStrUpper[MAX_PATH];
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
-                  resolvedWindow->szAppIdStr, resolvedAppIdStrLen + 1,
-                  resolvedAppIdStrUpper, resolvedAppIdStrLen + 1, nullptr,
-                  nullptr, 0);
+    ToUpper(resolvedWindow->szAppIdStr, resolvedAppIdStrUpper,
+            resolvedAppIdStrLen + 1);
 
     DWORD resolvedWindowProcessPathLen = 0;
     WCHAR resolvedWindowProcessPath[MAX_PATH];
@@ -351,11 +425,8 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
         }
 
         if (resolvedWindowProcessPathLen > 0) {
-            LCMapStringEx(
-                LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
-                resolvedWindowProcessPath, resolvedWindowProcessPathLen + 1,
-                resolvedWindowProcessPathUpper,
-                resolvedWindowProcessPathLen + 1, nullptr, nullptr, 0);
+            ToUpper(resolvedWindowProcessPath, resolvedWindowProcessPathUpper,
+                    resolvedWindowProcessPathLen + 1);
 
             programFileNameUpper =
                 wcsrchr(resolvedWindowProcessPathUpper, L'\\');
@@ -371,31 +442,37 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
         }
     }
 
-    bool excluded = false;
+    if (resolvedWindowProcessPathLen > 0) {
+        SetAppIdProcessPath(pThis, resolvedAppIdStrUpper,
+                            resolvedWindowProcessPathUpper);
+    }
+
+    bool matchedExcludedItem = false;
 
     if (g_settings.excludedProgramItems.contains(resolvedAppIdStrUpper)) {
-        Wh_Log(L"Excluding %s", resolvedWindow->szAppIdStr);
-        excluded = true;
+        Wh_Log(L"Excluded item match: %s", resolvedWindow->szAppIdStr);
+        matchedExcludedItem = true;
     }
 
-    if (!excluded && resolvedWindowProcessPathLen > 0 &&
+    if (!matchedExcludedItem && resolvedWindowProcessPathLen > 0 &&
         g_settings.excludedProgramItems.contains(
             resolvedWindowProcessPathUpper)) {
-        Wh_Log(L"Excluding %s", resolvedWindowProcessPath);
-        excluded = true;
+        Wh_Log(L"Excluded item match: %s", resolvedWindowProcessPath);
+        matchedExcludedItem = true;
     }
 
-    if (!excluded && programFileNameUpper &&
+    if (!matchedExcludedItem && programFileNameUpper &&
         g_settings.excludedProgramItems.contains(programFileNameUpper)) {
-        Wh_Log(L"Excluding %s", resolvedWindowProcessPath);
-        excluded = true;
+        Wh_Log(L"Excluded item match: %s", resolvedWindowProcessPath);
+        matchedExcludedItem = true;
     }
 
-    if (g_settings.groupingMode == GroupingMode::inverse) {
-        excluded = !excluded;
-    }
+    bool excluded = g_settings.groupingMode == GroupingMode::inverse
+                        ? !matchedExcludedItem
+                        : matchedExcludedItem;
 
     if (excluded) {
+        Wh_Log(L"Excluded, keeping the default grouping");
         return;
     }
 
@@ -454,6 +531,14 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
         swprintf(resolvedWindow->szAppIdStr, L"%s%d", kCustomGroupPrefix,
                  customGroup);
         Wh_Log(L"Custom group AppId: %s", resolvedWindow->szAppIdStr);
+
+        if (resolvedWindowProcessPathLen > 0) {
+            std::wstring customGroupAppIdUpper = resolvedWindow->szAppIdStr;
+            ToUpperInPlace(customGroupAppIdUpper.data(),
+                           customGroupAppIdUpper.length());
+            SetAppIdProcessPath(pThis, customGroupAppIdUpper.c_str(),
+                                resolvedWindowProcessPathUpper);
+        }
     } else {
         bool appIdSuffixAdded;
         if (g_settings.pinnedItemsMode ==
@@ -630,6 +715,34 @@ winrt::com_ptr<IUnknown> GetTaskGroupWithoutSuffix(
     return taskGroupMatched;
 }
 
+bool TaskGroupUsesWindowIcons(PVOID taskGroup) {
+    if (g_settings.windowIconsProgramItems.empty()) {
+        return g_settings.useWindowIcons;
+    }
+
+    PCWSTR appId = CTaskGroup_GetAppID_Original(taskGroup);
+    if (!appId) {
+        return g_settings.useWindowIcons;
+    }
+
+    WCHAR appIdStripped[MAX_PATH];
+    if (!RemoveAppIdSuffix(appIdStripped, appId)) {
+        wcsncpy_s(appIdStripped, appId, _TRUNCATE);
+    }
+
+    WCHAR appIdUpper[MAX_PATH];
+    ToUpper(appIdStripped, appIdUpper, wcslen(appIdStripped) + 1);
+
+    PCWSTR processPathUpper = nullptr;
+    if (auto it = g_appIdProcessPaths.find(appIdUpper);
+        it != g_appIdProcessPaths.end()) {
+        processPathUpper = it->second.c_str();
+    }
+
+    bool matched = IsWindowIconsProgram(appIdUpper, processPathUpper);
+    return g_settings.useWindowIcons != matched;
+}
+
 using CTaskGroup_IsImmersiveGroup_t = bool(WINAPI*)(PVOID pThis);
 CTaskGroup_IsImmersiveGroup_t CTaskGroup_IsImmersiveGroup_Original;
 bool WINAPI CTaskGroup_IsImmersiveGroup_Hook(PVOID pThis) {
@@ -670,7 +783,7 @@ const ITEMIDLIST* WINAPI CTaskGroup_GetShortcutIDList_Hook(PVOID pThis) {
             return nullptr;
         }
 
-        if (g_settings.useWindowIcons) {
+        if (TaskGroupUsesWindowIcons(pThis)) {
             return nullptr;
         }
 
@@ -704,15 +817,18 @@ PCWSTR WINAPI CTaskGroup_GetIconResource_Hook(PVOID pThis) {
 
 using CTaskBand__UpdateItemIcon_t = void(WINAPI*)(PVOID pThis,
                                                   PVOID taskGroup,
-                                                  PVOID taskItem);
+                                                  PVOID taskItem,
+                                                  PVOID iconVariants);
 CTaskBand__UpdateItemIcon_t CTaskBand__UpdateItemIcon_Original;
 void WINAPI CTaskBand__UpdateItemIcon_Hook(PVOID pThis,
                                            PVOID taskGroup,
-                                           PVOID taskItem) {
+                                           PVOID taskItem,
+                                           PVOID iconVariants) {
     Wh_Log(L">");
 
     g_inUpdateItemIcon = true;
-    CTaskBand__UpdateItemIcon_Original(pThis, taskGroup, taskItem);
+    CTaskBand__UpdateItemIcon_Original(pThis, taskGroup, taskItem,
+                                       iconVariants);
     g_inUpdateItemIcon = false;
 }
 
@@ -904,16 +1020,74 @@ PVOID WINAPI CTaskListWnd__CreateTBGroup_Hook(PVOID pThis,
     return ret;
 }
 
+// Returns the index of the pinned button matching the suffixed app ID of the
+// given button without the suffix, or -1 if there's none.
+int FindPinnedTaskBtnGroupIndexForSuffixed(HDPA hdpa, PVOID taskBtnGroup) {
+    PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
+    if (!taskGroup) {
+        return -1;
+    }
+
+    PCWSTR appId = CTaskGroup_GetAppID_Original(taskGroup);
+    if (!appId) {
+        return -1;
+    }
+
+    WCHAR appIdOriginal[MAX_PATH];
+    if (!RemoveAppIdSuffix(appIdOriginal, appId)) {
+        return -1;
+    }
+
+    int count = DPA_GetPtrCount(hdpa);
+    for (int i = 0; i < count; i++) {
+        PVOID taskBtnGroupIter = DPA_GetPtr(hdpa, i);
+        if (!taskBtnGroupIter ||
+            CTaskBtnGroup_GetGroupType_Original(taskBtnGroupIter) != 2) {
+            continue;
+        }
+
+        PVOID taskGroupIter = CTaskBtnGroup_GetGroup_Original(taskBtnGroupIter);
+        if (!taskGroupIter) {
+            continue;
+        }
+
+        int windowMatchConfidence;
+        winrt::com_ptr<IUnknown> taskItemMatched;
+        HRESULT hr = CTaskGroup_DoesWindowMatch_Original(
+            taskGroupIter, nullptr, nullptr, appIdOriginal,
+            &windowMatchConfidence, taskItemMatched.put_void());
+        if (SUCCEEDED(hr)) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 using DPA_InsertPtr_t = decltype(&DPA_InsertPtr);
 DPA_InsertPtr_t DPA_InsertPtr_Original;
 int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
     if (g_doingPinnedItemSwapThreadId == GetCurrentThreadId()) {
         Wh_Log(L">");
 
-        if (g_doingPinnedItemSwapIndex != -1) {
-            PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(p);
-            if (taskGroup && taskGroup == g_doingPinnedItemSwapToTaskGroup) {
+        PVOID taskGroup = p ? CTaskBtnGroup_GetGroup_Original(p) : nullptr;
+        if (taskGroup && taskGroup == g_doingPinnedItemSwapToTaskGroup) {
+            if (g_doingPinnedItemSwapIndex != -1) {
                 i = g_doingPinnedItemSwapIndex;
+            } else {
+                // The source button might not be removed yet, e.g. if its group
+                // still has a window on another monitor. Insert before it so
+                // that the new button takes its place once it's removed.
+                int count = DPA_GetPtrCount(hdpa);
+                for (int j = 0; j < count; j++) {
+                    PVOID taskBtnGroupIter = DPA_GetPtr(hdpa, j);
+                    if (taskBtnGroupIter &&
+                        CTaskBtnGroup_GetGroup_Original(taskBtnGroupIter) ==
+                            g_doingPinnedItemSwapFromTaskGroup) {
+                        i = j;
+                        break;
+                    }
+                }
             }
         }
 
@@ -922,11 +1096,26 @@ int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
 
     auto original = [=]() { return DPA_InsertPtr_Original(hdpa, i, p); };
 
-    if (g_cTaskListWnd__CreateTBGroup_ThreadId != GetCurrentThreadId()) {
+    if (g_cTaskListWnd_TaskCreated_ThreadId != GetCurrentThreadId() ||
+        g_cTaskListWnd__CreateTBGroup_ThreadId != GetCurrentThreadId()) {
         return original();
     }
 
-    Wh_Log(L">");
+    // Only the first insert in _CreateTBGroup adds the new button group to the
+    // task list, other DPAs may hold different object types.
+    g_cTaskListWnd__CreateTBGroup_ThreadId = 0;
+
+    Wh_Log(L"> i=%d, count=%d", i, DPA_GetPtrCount(hdpa));
+
+    if (g_taskCreatedReplacingPinnedThreadId == GetCurrentThreadId() && p) {
+        int pinnedIndex = FindPinnedTaskBtnGroupIndexForSuffixed(hdpa, p);
+        Wh_Log(L"Matched pinned item index: %d", pinnedIndex);
+        if (pinnedIndex != -1) {
+            // The pinned item is removed after the swap, leaving the new item
+            // in its place.
+            return DPA_InsertPtr_Original(hdpa, pinnedIndex + 1, p);
+        }
+    }
 
     if (g_settings.placeUngroupedItemsTogether ==
             PlaceUngroupedItemsTogetherMode::off ||
@@ -1142,6 +1331,25 @@ void HandleUnsuffixedInstanceOnTaskDestroyed(PVOID taskList_TaskListUI,
     }
 }
 
+using CTaskListWnd_TaskCreated_t = LONG_PTR(WINAPI*)(PVOID pThis,
+                                                     PVOID taskGroup,
+                                                     PVOID taskItem);
+CTaskListWnd_TaskCreated_t CTaskListWnd_TaskCreated_Original;
+LONG_PTR WINAPI CTaskListWnd_TaskCreated_Hook(PVOID pThis,
+                                              PVOID taskGroup,
+                                              PVOID taskItem) {
+    Wh_Log(L">");
+
+    g_cTaskListWnd_TaskCreated_ThreadId = GetCurrentThreadId();
+
+    LONG_PTR ret =
+        CTaskListWnd_TaskCreated_Original(pThis, taskGroup, taskItem);
+
+    g_cTaskListWnd_TaskCreated_ThreadId = 0;
+
+    return ret;
+}
+
 LONG_PTR OnTaskDestroyed(std::function<LONG_PTR()> original,
                          PVOID taskList_TaskListUI,
                          PVOID taskGroup,
@@ -1168,7 +1376,8 @@ LONG_PTR OnTaskDestroyed(std::function<LONG_PTR()> original,
         HandleUnsuffixedInstanceOnTaskDestroyed(taskList_TaskListUI, taskGroup);
     }
 
-    if (taskGroupIsPinned && numItems == 1 && g_settings.useWindowIcons &&
+    if (taskGroupIsPinned && numItems == 1 &&
+        TaskGroupUsesWindowIcons(taskGroup) &&
         CTaskListWnd_GroupChanged_Original) {
         // Trigger CTaskListWnd::GroupChanged to trigger an icon change.
         // https://github.com/ramensoftware/windhawk-mods/issues/644
@@ -1299,7 +1508,9 @@ LONG_PTR WINAPI CTaskListWnd__TaskCreated_Hook(PVOID pThis,
         return original();
     }
 
+    g_taskCreatedReplacingPinnedThreadId = GetCurrentThreadId();
     LONG_PTR ret = original();
+    g_taskCreatedReplacingPinnedThreadId = 0;
 
     // Check if it exists on the task list.
     PVOID taskBtnGroup =
@@ -1495,6 +1706,8 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         {R"(?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z)",
          &CTaskListWnd__CreateTBGroup_Original,
          CTaskListWnd__CreateTBGroup_Hook},
+        {R"(?TaskCreated@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@@Z)",
+         &CTaskListWnd_TaskCreated_Original, CTaskListWnd_TaskCreated_Hook},
         {// Available from Windows 11.
          R"(?HandleTaskGroupSwitchItemAdded@CTaskBand@@IEAAJPEAUISwitchItem@Multitasking@ComposableShell@Internal@Windows@ABI@@@Z)",
          &CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
@@ -1692,7 +1905,12 @@ bool HookTaskbarSymbols() {
                 CTaskGroup_GetIconResource_Hook,
             },
             {
-                {LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))"},
+                {
+                    LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *,class std::vector<struct TaskbarIcon::Variant,class std::allocator<struct TaskbarIcon::Variant> > const *))",
+
+                    // Before Windows 11 build 26100.9549.
+                    LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))",
+                },
                 &CTaskBand__UpdateItemIcon_Original,
                 CTaskBand__UpdateItemIcon_Hook,
             },
@@ -1776,6 +1994,11 @@ bool HookTaskbarSymbols() {
                 &CTaskListWnd_HandleTaskGroupUnpinned_Original,
             },
             {
+                {LR"(public: virtual long __cdecl CTaskListWnd::TaskCreated(struct ITaskGroup *,struct ITaskItem *))"},
+                &CTaskListWnd_TaskCreated_Original,
+                CTaskListWnd_TaskCreated_Hook,
+            },
+            {
                 // An older variant, see the newer variant below.
                 {LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *,enum TaskDestroyedFlags))"},
                 &CTaskListWnd_TaskDestroyed_Original,
@@ -1794,7 +2017,7 @@ bool HookTaskbarSymbols() {
                 &CTaskListWnd__TaskCreated_Original,
                 CTaskListWnd__TaskCreated_Hook,
             },
-        };
+    };
 
     HMODULE module;
     if (g_winVersion <= WinVersion::Win10) {
@@ -1842,6 +2065,26 @@ void LoadSettings() {
 
     g_settings.useWindowIcons = Wh_GetIntSetting(L"useWindowIcons");
 
+    g_settings.windowIconsProgramItems.clear();
+
+    for (int i = 0;; i++) {
+        PCWSTR program = Wh_GetStringSetting(L"windowIconsPrograms[%d]", i);
+
+        bool hasProgram = *program;
+        if (hasProgram) {
+            std::wstring programUpper = program;
+            ToUpperInPlace(programUpper.data(), programUpper.length());
+
+            g_settings.windowIconsProgramItems.insert(std::move(programUpper));
+        }
+
+        Wh_FreeStringSetting(program);
+
+        if (!hasProgram) {
+            break;
+        }
+    }
+
     g_settings.excludedProgramItems.clear();
 
     for (int i = 0;; i++) {
@@ -1850,10 +2093,7 @@ void LoadSettings() {
         bool hasProgram = *program;
         if (hasProgram) {
             std::wstring programUpper = program;
-            LCMapStringEx(
-                LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, &programUpper[0],
-                static_cast<int>(programUpper.length()), &programUpper[0],
-                static_cast<int>(programUpper.length()), nullptr, nullptr, 0);
+            ToUpperInPlace(programUpper.data(), programUpper.length());
 
             g_settings.excludedProgramItems.insert(std::move(programUpper));
         }
@@ -1889,11 +2129,7 @@ void LoadSettings() {
             bool hasProgram = *program;
             if (hasProgram) {
                 std::wstring programUpper = program;
-                LCMapStringEx(
-                    LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, &programUpper[0],
-                    static_cast<int>(programUpper.length()), &programUpper[0],
-                    static_cast<int>(programUpper.length()), nullptr, nullptr,
-                    0);
+                ToUpperInPlace(programUpper.data(), programUpper.length());
 
                 g_settings.customGroupProgramItems.insert(
                     {std::move(programUpper), groupIndex + 1});
@@ -1950,22 +2186,22 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     auto kernelBaseCompareStringOrdinal =
         (decltype(&CompareStringOrdinal))GetProcAddress(kernelBaseModule,
                                                         "CompareStringOrdinal");
-    WindhawkUtils::Wh_SetFunctionHookT(kernelBaseCompareStringOrdinal,
-                                       CompareStringOrdinal_Hook,
-                                       &CompareStringOrdinal_Original);
+    WindhawkUtils::SetFunctionHook(kernelBaseCompareStringOrdinal,
+                                   CompareStringOrdinal_Hook,
+                                   &CompareStringOrdinal_Original);
 
-    WindhawkUtils::Wh_SetFunctionHookT(DPA_InsertPtr, DPA_InsertPtr_Hook,
-                                       &DPA_InsertPtr_Original);
+    WindhawkUtils::SetFunctionHook(DPA_InsertPtr, DPA_InsertPtr_Hook,
+                                   &DPA_InsertPtr_Original);
 
-    WindhawkUtils::Wh_SetFunctionHookT(DPA_DeletePtr, DPA_DeletePtr_Hook,
-                                       &DPA_DeletePtr_Original);
+    WindhawkUtils::SetFunctionHook(DPA_DeletePtr, DPA_DeletePtr_Hook,
+                                   &DPA_DeletePtr_Original);
 
     g_initialized = true;
 
