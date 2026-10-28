@@ -40,6 +40,7 @@ On Windows 10 the Win32 clock flyout must be available
 
 * [RetroBar](https://github.com/dremin/RetroBar) by dremin — the taskbar that hosts the Aero clock flyout.
 * [Aero Flyout Fix](https://windhawk.net/mods/aero-flyout-fix) by aubymori — `timedate.cpl` hooks and flyout positioning logic.
+* xoascf - Testing
 */
 // ==/WindhawkModReadme==
 
