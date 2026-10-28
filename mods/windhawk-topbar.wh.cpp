@@ -1338,6 +1338,7 @@ void CenterChildFlyoutPopup(double matchedWidthDip, double matchedHeightDip);
 void EnsureWideFlyoutCenterTimer();
 void StripFlyoutPopupBackgrounds(wuxc::Primitives::FlyoutBase const& fb);
 void SnapOpenChildFlyoutTo(int screenX, int screenY);
+static HWND FindWideFlyoutPopupHwnd();
 void SetAnchorScreenPosition(FrameworkElement const& anchor, double xDip, double yDip);
 void SetTopBarAnchorScreenPosition(FrameworkElement const& anchor, double xDip, double yDip);
 void RegisterChildPopupTarget(HWND hwnd, RECT target, bool moveNow = true);
@@ -21385,11 +21386,19 @@ void BuildSearchFlyoutContent() {
 
 static void RecenterSearchPopup() {
     if (!g_searchFlyout || !g_searchFlyout.IsOpen()) return;
-    // Capture the intended position once per open. Recomputing the work area
-    // and DPI during the popup's first layout/resize can shift the search
-    // window by a few pixels during Windows startup. Keep the top edge fixed
-    // for the whole open session so height changes only extend downward.
+    // Do not freeze the target from ShowAt/Opened: on the first popup after
+    // Windows startup, the taskbar work area and DPI can still be settling
+    // before XAML creates its popup HWND. Capturing then makes the first
+    // result-size change reposition the whole surface (the search field
+    // appears to move down while the no-results row grows upward). Wait until
+    // the actual popup exists, then keep the resolved top edge fixed for this
+    // open session so all later height changes extend downward.
     if (g_wideFlyoutTargetX < 0 || g_wideFlyoutTargetY < 0) {
+        HWND popup = FindWideFlyoutPopupHwnd();
+        RECT popupRect{};
+        if (!popup || !IsWindow(popup) || !GetWindowRect(popup, &popupRect) ||
+            popupRect.right <= popupRect.left || popupRect.bottom <= popupRect.top)
+            return;
         auto placement = GetStartSearchScreenRect();
         g_wideFlyoutTargetX = placement.left;
         g_wideFlyoutTargetY = placement.top;
