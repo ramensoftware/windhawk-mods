@@ -3,7 +3,7 @@
 // @name            RetroBar Clock Flyout Fix
 // @description     This mod fixes the Aero clock flyout opened by RetroBar by applying thick borders to it
 // @version         1.0.0
-// @author          babamohammed2022
+// @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         RetroBar.exe
 // @architecture    x86-64
