@@ -24,18 +24,33 @@ license, including settings loading, the tag record and file-identity helpers,
 shortcut-folder synchronization and index maintenance, the worker thread, and
 the classic context-menu submenu.
 
-This is not an upstream extension of Explorer Tags. It replaces the
-navigation-pane tag browser with in-place dots, a Tags column, desktop support
-and keyboard tagging. The DirectUI and desktop painters, keyboard handling,
-and Tags-column integration were developed for this project:
+This is not an upstream extension of Explorer Tags. Unlike Explorer Tags,
+which provides a tag browser in the navigation pane, Explorer Color Tags keeps
+tagged items in their normal folder position. Each tagged item gets up to three
+colored dots directly after its name. If the optional Tags column is enabled,
+the same tags are also shown as colored pills in that row. Tags therefore stay
+visible in place without opening a separate tag folder.
+
+The mod also provides:
 
 - `Alt+1` through `Alt+8` assign a tag to the selected files.
 - `Alt+0` removes every tag from the selected files.
-- Colored dots are drawn next to tagged items in File Explorer and on the Desktop.
-- A native **Tags** column can be displayed in Details view as a canvas for compact
-  colored pills drawn by the mod.
+- Colored dots are drawn directly after tagged item names in File Explorer and
+  on the Desktop.
+- An optional **Tags** column shows the same tags as colored pills in Details
+  view.
 - A classic context menu provides the same tag commands. The navigation-pane
   Tags section is not shown because it opens cross-folder shortcut views.
+
+## Screenshots
+
+![Colored dots beside file names and colored tag pills in the Tags column](https://raw.githubusercontent.com/renegadeFree/explorer-color-tags/main/docs/explorer-color-tags.png)
+
+![Colored tag dots on the Windows Desktop](https://raw.githubusercontent.com/renegadeFree/explorer-color-tags/main/docs/desktop.png)
+
+![Tagging from the classic context menu](https://raw.githubusercontent.com/renegadeFree/explorer-color-tags/main/docs/menu.png)
+
+![The Tags submenu with colored tag entries](https://raw.githubusercontent.com/renegadeFree/explorer-color-tags/main/docs/submenu.png)
 
 The mod keeps an internal shortcut-folder record as a rebuildable index, so
 tags remain valid for every extension and folder. That record is stored in
