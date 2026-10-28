@@ -3436,9 +3436,10 @@ static void RequestViewBinding() {
     for (HWND hwnd : windows) PostMessageW(hwnd, WM_WH_BIND_REMOVAL, 0, 0);
 }
 // A exclusao so e preparada com o escalonamento ligado; ligar a opcao depois
-// tambem a prepara.
+// tambem a prepara. Ela depende das consultas do explorerframe: sem elas, espera.
 static void StageRemoval() {
-    if (removalAttempted.load(std::memory_order_acquire) || !live.load(std::memory_order_acquire) ||
+    if (removalAttempted.load(std::memory_order_acquire) || !frameResolved.load(std::memory_order_acquire) ||
+        !live.load(std::memory_order_acquire) ||
         !alphaPaintLive.load(std::memory_order_acquire) || !Enabled() ||
         stopping.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire)) return;
     removalAttempted.store(true, std::memory_order_release);
@@ -4984,11 +4985,18 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    bool motionBefore = ItemStagger::MotionEnabled();
     LoadSettings();
+    // A opcao existe para contornar simbolos quebrados: desligada, os hooks
+    // DirectUI ja instalados saem com o recarregamento do mod.
+    *bReload = motionBefore && !ItemStagger::MotionEnabled() &&
+        ItemStagger::setupAttempted.load(std::memory_order_acquire);
+    if (*bReload) return TRUE;
     // Exclusao ja preparada: as views abertas com o escalonamento desligado nao foram vinculadas.
     if (ItemStagger::Removal::ready.load(std::memory_order_acquire) && ItemStagger::Enabled())
         ItemStagger::RequestViewBinding();
     ItemStagger::StartPreparation();
     ItemStagger::RequestPreparation();
+    return TRUE;
 }
