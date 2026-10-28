@@ -7,7 +7,7 @@
 // @github          https://github.com/Metanoid18
 // @license         MIT
 // @include         mmc.exe
-// @compilerOptions -lgdi32
+// @compilerOptions -lgdi32 -lcomctl32 -ldwmapi
 // ==/WindhawkMod==
 
 // Source code is published under the MIT license.
@@ -77,23 +77,18 @@ The hooks exist for specific reasons:
 * The icon strip keeps its classic drawing, so its hover is drawn by this mod.
 * One caption in the device properties dialog, "Setting based on:", is drawn by
   MMC itself with Windows' own renderer, in pure white and without ClearType, so it
-  looks slightly brighter and softer than the labels around it. It was traced
-  through four separate causes and ruled out of every one: the page theme, the
-  control's own theme, dark mode on the control, and the background mode. Reaching
-  it would mean taking over the drawing of a control MMC owns, which is not worth
-  the risk to the rest of the dialog.
+  looks slightly brighter and softer than the labels around it. Reaching it would
+  mean taking over the drawing of a control MMC owns, which is not worth the risk
+  to the rest of the dialog.
 * High contrast mode is respected: the mod does nothing while it is on.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enabled
-  $description: Turn the dark theme on or off without removing the mod
 - darkTitleBar: true
   $name: Dark title bar
-  $description: Darkens the title bar of the console window. Windows 11 only
+  $description: Darkens the title bar of the console window. Windows 10 2004 and later
 - roundCorners: true
   $name: Rounded window corners
   $description: Rounded corners on the console window. Windows 11 only
@@ -106,17 +101,24 @@ The hooks exist for specific reasons:
 - hideToolbar: false
   $name: Hide the toolbar
   $description: Removes the strip of icons at the top of the console. The menu bar stays, and every command is in the View and Action menus
-- logDetails: false
-  $name: Write what was themed to the log
-  $description: One line per new window class. Useful while this is new; turn it off afterwards
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <commctrl.h>
 #include <dwmapi.h>
+#include <uxtheme.h>
+#include <vssym32.h>
 #include <windhawk_api.h>
 
 #include <cstddef>
+#include <mutex>
+#include <unordered_set>
+#include <vector>
+
+// Last, because it uses nullptr_t and the standard headers above are what make
+// that name available to a compiler that does not put it in the global namespace.
+#include <windhawk_utils.h>
 
 // ---------------------------------------------------------------------------
 // Undocumented pieces
@@ -143,97 +145,22 @@ constexpr WORD kOrdinalSetPreferredAppMode = 135;
 constexpr WORD kOrdinalFlushMenuThemes = 136;
 constexpr WORD kOrdinalIsDarkModeAllowedForWindow = 137;
 
-// SetWindowCompositionAttribute, user32, attribute 26 darkens the frame.
-constexpr DWORD kWcaUseImmersiveDarkModeColors = 26;
+// DwmSetWindowAttribute, the documented attribute for a dark frame. Windows 10
+// before 2004 knew it as 19; both are tried, newest first, and the one that takes
+// is remembered for the session.
+constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
+constexpr DWORD kDwmwaUseImmersiveDarkModeLegacy = 19;
 
 // DwmSetWindowAttribute, Windows 11 corner preference.
-constexpr DWORD kDwmwaWindowCornerPreference = 33;
-constexpr int kDwmcRound = 2;
-// DWMWCP_DEFAULT: back to whatever the system and the user chose, which is what
-// a window that was never touched looks like.
-constexpr int kDwmcDefault = 0;
-// DWMWA_COLOR_DEFAULT: the frame colour the window had before the mod set one.
-constexpr DWORD kColorBorderDefault = 0xFFFFFFFF;
-
-#ifndef WM_THEMECHANGED
-#define WM_THEMECHANGED 0x031A
-#endif
-
-// Classic controls take their colours from these messages even when they
-// ignore the dark theme for their background. The console tree and the results
-// list both honour them.
-constexpr UINT kTvmSetBkColor = 0x111D;    // TVM_SETBKCOLOR
-constexpr UINT kTvmSetTextColor = 0x111E;  // TVM_SETTEXTCOLOR
-constexpr UINT kTvmSetLineColor = 0x1128;  // TVM_SETLINECOLOR
-constexpr UINT kLvmSetBkColor = 0x1001;    // LVM_SETBKCOLOR
-constexpr UINT kLvmSetTextColor = 0x1024;  // LVM_SETTEXTCOLOR
-constexpr UINT kLvmSetTextBkColor = 0x1026;  // LVM_SETTEXTBKCOLOR
+// DWMWCP_DEFAULT, DWMWCP_ROUND and DWMWA_COLOR_DEFAULT come from dwmapi.h.
 
 constexpr COLORREF kColorBackground = RGB(32, 32, 32);
 constexpr COLORREF kColorText = RGB(240, 240, 240);
 constexpr COLORREF kColorLine = RGB(70, 70, 70);
-constexpr COLORREF kColorDefault = 0xFF000000;  // CLR_DEFAULT
-
-// Status bar messages and drawing flags, from commctrl.h and winuser.h.
-constexpr UINT kSbGetParts = 0x0406;       // SB_GETPARTS
-constexpr UINT kSbGetRect = 0x040A;        // SB_GETRECT
-constexpr UINT kSbGetTextLengthW = 0x040C;  // SB_GETTEXTLENGTHW
-constexpr UINT kSbGetTextW = 0x040D;       // SB_GETTEXTW
-
-constexpr UINT kDtLeft = 0x0000;           // DT_LEFT
-constexpr UINT kDtVCenter = 0x0004;        // DT_VCENTER
-constexpr UINT kDtSingleLine = 0x0020;     // DT_SINGLELINE
-constexpr UINT kDtEndEllipsis = 0x8000;    // DT_END_ELLIPSIS
-constexpr int kGwlWndProc = -4;            // GWLP_WNDPROC
-struct TbButton {
-    int iBitmap;
-    int idCommand;
-    BYTE fsState;
-    BYTE fsStyle;
-#ifdef _WIN64
-    BYTE bReserved[6];
-#else
-    BYTE bReserved[2];
-#endif
-    DWORD_PTR dwData;
-    LONG_PTR iString;
-};
-
-constexpr UINT kTbButtonCount = 0x0419;    // TB_BUTTONCOUNT
-constexpr UINT kTbGetHotItem = 0x0447;     // TB_GETHOTITEM
-constexpr UINT kTbGetItemRect = 0x041D;    // TB_GETITEMRECT
 constexpr COLORREF kColorHover = RGB(58, 60, 66);
-constexpr UINT kCdisHot = 0x0040;          // CDIS_HOT
-constexpr UINT kTbGetButton = 0x0417;      // TB_GETBUTTON
-constexpr UINT kTbGetButtonTextW = 0x044B; // TB_GETBUTTONTEXTW
-constexpr int kDwmwaBorderColor = 34;      // DWMWA_BORDER_COLOR
-constexpr int kGwlStyle = -16;             // GWL_STYLE
-constexpr int kGwlExStyle = -20;           // GWL_EXSTYLE
-constexpr LONG_PTR kWsBorder = 0x00800000; // WS_BORDER
-constexpr LONG_PTR kWsExClientEdge = 0x00000200;  // WS_EX_CLIENTEDGE
-constexpr LONG_PTR kBsGroupBox = 0x00000007;      // BS_GROUPBOX
-constexpr int kStockNullBrush = 5;                // NULL_BRUSH
-constexpr int kPenSolid = 0;                      // PS_SOLID
-constexpr int kOpaque = 2;                        // OPAQUE
-constexpr UINT kMsgGetFont = 0x0031;              // WM_GETFONT
-constexpr UINT kSwpNoSize = 0x0001;
-constexpr UINT kSwpNoMove = 0x0002;
-constexpr UINT kSwpNoZOrder = 0x0004;
-constexpr UINT kSwpFrameChanged = 0x0020;
-constexpr UINT kTcmSetBkColor = 0x1321;     // TCM_SETBKCOLOR
-constexpr UINT kTcmGetItemCount = 0x1304;   // TCM_GETITEMCOUNT
-constexpr UINT kTcmGetCursel = 0x130B;      // TCM_GETCURSEL
-constexpr UINT kTcmGetItemRect = 0x130A;    // TCM_GETITEMRECT
-constexpr UINT kTcmGetItemW = 0x133C;       // TCM_GETITEMW
-constexpr UINT kTcifText = 0x0001;          // TCIF_TEXT
-constexpr LONG_PTR kTcsBottom = 0x0002;      // TCS_BOTTOM
-constexpr LONG_PTR kTcsVertical = 0x0080;    // TCS_VERTICAL
-constexpr LONG_PTR kTcsButtons = 0x0100;     // TCS_BUTTONS
 constexpr COLORREF kColorTabText = RGB(178, 178, 178);
 constexpr COLORREF kColorTabSelected = RGB(45, 45, 45);
 constexpr COLORREF kColorSelection = RGB(38, 79, 120);
-constexpr int kSwHide = 0;                 // SW_HIDE
-constexpr int kSwShow = 5;                 // SW_SHOW
 
 using ShouldAppsUseDarkMode_t = BOOL(WINAPI*)();
 using AllowDarkModeForWindow_t = BOOL(WINAPI*)(HWND, BOOL);
@@ -241,15 +168,6 @@ using SetPreferredAppMode_t = PreferredAppMode(WINAPI*)(PreferredAppMode);
 using FlushMenuThemes_t = void(WINAPI*)();
 using IsDarkModeAllowedForWindow_t = BOOL(WINAPI*)(HWND);
 using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, const void*, DWORD);
-
-struct WindowCompositionAttributeData {
-    DWORD attribute;
-    void* data;
-    size_t size;
-};
-using SetWindowCompositionAttribute_t =
-    BOOL(WINAPI*)(HWND, WindowCompositionAttributeData*);
 
 ShouldAppsUseDarkMode_t pShouldAppsUseDarkMode = nullptr;
 AllowDarkModeForWindow_t pAllowDarkModeForWindow = nullptr;
@@ -270,21 +188,97 @@ GetWindowTheme_t pGetWindowTheme = nullptr;
 // rectangle thirteen pixels tall across the whole list with no text pixels in it.
 // This answers that one question, for that one part in its selected states, and
 // leaves every other theme colour alone.
-constexpr int kTmtFillColor = 3802;
-constexpr int kLbcpItem = 1;
-constexpr int kLbpsiHot = 2;
-constexpr int kLbpsiSelected = 3;
-constexpr int kLbpsiHotSelected = 4;
-
 using GetThemeColor_t = HRESULT(WINAPI*)(HTHEME, int, int, int, COLORREF*);
 GetThemeColor_t pGetThemeColor = nullptr;
 GetThemeColor_t pGetThemeColorHook = nullptr;
 
+// Which theme handles belong to a list box. Part and state numbers only mean
+// anything inside a class: part 5 of a list view is an empty text area, and part 1
+// of a button is the button. Answering by part and state alone coloured things
+// this mod never meant to touch, so the handle is checked first.
+using OpenThemeData_t = HTHEME(WINAPI*)(HWND, LPCWSTR);
+using OpenThemeDataForDpi_t = HTHEME(WINAPI*)(HWND, LPCWSTR, UINT);
+using CloseThemeData_t = HRESULT(WINAPI*)(HTHEME);
 // Whether the mod is currently in effect. Declared before the hooks that read it,
 // because a name that is only defined later does not compile. While this is false
-// every hook below passes the call straight through, which is what makes the
-// enabled setting a switch rather than a reload.
+// every hook below passes the call straight through. That covers the moment
+// between the hooks being installed and the theme being applied, and the case
+// where high contrast mode means the mod never applies anything at all.
 bool g_active = false;
+
+bool NameContains(PCWSTR name, PCWSTR needle);
+
+OpenThemeData_t pOpenThemeData = nullptr;
+OpenThemeDataForDpi_t pOpenThemeDataForDpi = nullptr;
+CloseThemeData_t pCloseThemeData = nullptr;
+OpenThemeData_t pOpenThemeDataHook = nullptr;
+OpenThemeDataForDpi_t pOpenThemeDataForDpiHook = nullptr;
+CloseThemeData_t pCloseThemeDataHook = nullptr;
+
+std::mutex g_themeLock;
+std::unordered_set<HTHEME> g_listBoxThemes;
+
+bool IsListBoxClass(PCWSTR classList) {
+    return NameContains(classList, L"listbox");
+}
+
+void RememberTheme(HTHEME theme, PCWSTR classList) {
+    if (!theme || !IsListBoxClass(classList)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_themeLock);
+    g_listBoxThemes.insert(theme);
+}
+
+void ForgetTheme(HTHEME theme) {
+    if (!theme) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_themeLock);
+    g_listBoxThemes.erase(theme);
+}
+
+bool IsListBoxTheme(HTHEME theme) {
+    if (!theme) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(g_themeLock);
+    return g_listBoxThemes.count(theme) != 0;
+}
+
+// The pointers below are the trampolines Windhawk hands back, never the imports:
+// the imports are the functions being replaced, so calling one from inside its
+// own hook would come straight back. Nothing here links uxtheme directly.
+HTHEME WINAPI OpenThemeData_Hook(HWND hWnd, LPCWSTR classList) {
+    if (!pOpenThemeData) {
+        return nullptr;
+    }
+    HTHEME theme = pOpenThemeData(hWnd, classList);
+    if (g_active) {
+        RememberTheme(theme, classList);
+    }
+    return theme;
+}
+
+HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hWnd, LPCWSTR classList, UINT dpi) {
+    if (!pOpenThemeDataForDpi) {
+        return nullptr;
+    }
+    HTHEME theme = pOpenThemeDataForDpi(hWnd, classList, dpi);
+    if (g_active) {
+        RememberTheme(theme, classList);
+    }
+    return theme;
+}
+
+HRESULT WINAPI CloseThemeData_Hook(HTHEME theme) {
+    ForgetTheme(theme);
+    if (!pCloseThemeData) {
+        return E_FAIL;
+    }
+    return pCloseThemeData(theme);
+}
+
 
 HRESULT WINAPI GetThemeColor_Hook(HTHEME theme, int part, int state, int prop,
                                   COLORREF* colour) {
@@ -292,9 +286,9 @@ HRESULT WINAPI GetThemeColor_Hook(HTHEME theme, int part, int state, int prop,
     // written before the trampoline is consulted, so a call that arrives in the
     // moment the hook is installed still gets a defined colour instead of S_OK
     // with nothing written.
-    if (colour && g_active && prop == kTmtFillColor && part == kLbcpItem &&
-        (state == kLbpsiHot || state == kLbpsiSelected ||
-         state == kLbpsiHotSelected)) {
+    if (colour && g_active && IsListBoxTheme(theme) && prop == TMT_FILLCOLOR &&
+        part == LBCP_ITEM && state >= LBPSI_HOT &&
+        state <= LBPSI_SELECTEDNOTFOCUS) {
         *colour = kColorSelection;
         return S_OK;
     }
@@ -351,17 +345,16 @@ HRESULT WINAPI SetWindowTheme_Hook(HWND hWnd, LPCWSTR subApp, LPCWSTR subId) {
     }
     return S_OK;
 }
-DwmSetWindowAttribute_t pDwmSetWindowAttribute = nullptr;
-SetWindowCompositionAttribute_t pSetWindowCompositionAttribute = nullptr;
+// Which of the two immersive dark mode attribute numbers this build accepts. 0
+// until one of them has been tried.
+DWORD g_darkTitleBarAttribute = 0;
 
 struct Settings {
-    bool enabled;
     bool darkTitleBar;
     bool roundCorners;
     bool darkStatusBar;
     bool hideStatusBar;
     bool hideToolbar;
-    bool logDetails;
 };
 
 Settings g_settings;
@@ -370,41 +363,70 @@ Settings g_settings;
 // every window is put back to its stock theme, which needs no shared state and
 // no locking in a process that creates windows on more than one thread.
 
-// One log line per class, so the log stays readable. Best effort: written from
-// whichever thread created the window.
-struct SeenClass {
-    WCHAR name[64];
-};
-constexpr size_t kMaxSeenClasses = 64;
-SeenClass g_seenClasses[kMaxSeenClasses];
-size_t g_seenClassCount = 0;
-
 LRESULT SendToControl(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-// The status bar paints its own text in a colour we cannot reach, so it is
-// subclassed and drawn by hand. Only a handful of windows are ever involved; the
-// original procedure is kept so unload can put it back.
-using WndProc_t = LRESULT(CALLBACK*)(HWND, UINT, WPARAM, LPARAM);
-
-struct SubclassEntry {
-    HWND hWnd;
-    LONG_PTR oldProc;
-    // Which of this mod's procedures the window was given, so a window that is
-    // destroyed and whose handle is reused is not mistaken for the one before.
-    WndProc_t proc;
-    // Set only for a strip this mod hid, so the setting can put it back.
-    bool hiddenByUs;
+// Windows taken over by this mod are subclassed through comctl32's chain, with
+// Windhawk's any-thread wrapper. The chain keeps the original procedure for us,
+// removes the entry when the window is destroyed, and can be entered from any
+// order, which a replaced window procedure cannot: if another component
+// subclasses on top, a replaced procedure is buried and its pointer is restored
+// to the wrong place on unload.
+//
+// The set below is only so unload knows which windows to hand back. MMC creates
+// windows on more than one thread (a property sheet runs on its own), so it is
+// guarded.
+enum class WindowKind : DWORD_PTR {
+    Backdrop = 1,
+    Strip,
+    StatusBar,
+    Toolbar,
+    NoBorder,
+    Tab,
+    Field,
+    GroupBox,
+    Dialog,
 };
 
-constexpr size_t kMaxSubclassed = 128;
-SubclassEntry g_subclassed[kMaxSubclassed];
-size_t g_subclassedCount = 0;
+bool SubclassWith(HWND hWnd, WindowKind kind);
+
+std::mutex g_stateLock;
+std::unordered_set<HWND> g_subclassed;
+std::unordered_set<HWND> g_adding;
+std::unordered_set<HWND> g_hiddenByUs;
+
 HBRUSH g_backgroundBrush = nullptr;
 HBRUSH g_hoverBrush = nullptr;
 HBRUSH g_lineBrush = nullptr;
 HBRUSH g_tabSelectedBrush = nullptr;
 
-bool g_hidingStrip = false;
+thread_local bool g_hidingStrip = false;
+
+// ---------------------------------------------------------------------------
+// Who is allowed to touch the caches
+//
+// MMC creates windows on more than one thread: a property sheet runs its pages
+// on a thread of its own. The four tables below are small fixed arrays with no
+// locking, because every write and every read happens on the thread that owns
+// the window. When a walk from another thread wants a table filled it posts
+// OwnThreadSetupMessage() and returns, so the work happens where the paint will.
+// ---------------------------------------------------------------------------
+
+// A registered message, not WM_APP + n: MMC has windows of its own and may be
+// using the WM_APP range, and a number it also uses would be swallowed here.
+UINT OwnThreadSetupMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"MMC Dark Mode: fill a cache on the owning thread");
+    return message ? message : WM_APP + 47;
+}
+
+bool OnOwningThread(HWND hWnd) {
+    DWORD pid = 0;
+    return GetWindowThreadProcessId(hWnd, &pid) == GetCurrentThreadId();
+}
+
+void AskOwningThread(HWND hWnd) {
+    PostMessageW(hWnd, OwnThreadSetupMessage(), 0, 0);
+}
 
 // The status bar is painted by hand, and asking it about its own text while it
 // is painting is the same re-entrancy that made the toolbar flicker. The content
@@ -423,18 +445,6 @@ void ForgetSubclass(HWND hWnd);
 bool HiddenByUs(HWND hWnd);
 void MarkHiddenByUs(HWND hWnd, bool hidden);
 
-
-// The hovered button is worked out when the mouse moves, never while a button is
-// being painted. Asking a toolbar about itself mid paint re-enters the control
-// inside its own drawing, and that is what made the window flicker.
-LONG_PTR OldProcOf(HWND hWnd) {
-    for (size_t i = 0; i < g_subclassedCount; i++) {
-        if (g_subclassed[i].hWnd == hWnd) {
-            return g_subclassed[i].oldProc;
-        }
-    }
-    return 0;
-}
 
 struct HotEntry {
     HWND toolbar;
@@ -463,6 +473,9 @@ HotEntry* HotFor(HWND toolbar, bool create) {
 }
 
 bool UpdateHot(HWND toolbar) {
+    if (!OnOwningThread(toolbar)) {
+        return false;
+    }
     HotEntry* entry = HotFor(toolbar, true);
     if (!entry) {
         return false;
@@ -471,12 +484,12 @@ bool UpdateHot(HWND toolbar) {
     bool wasValid = entry->valid;
     RECT wasRect = entry->rect;
 
-    int hot = static_cast<int>(SendToControl(toolbar, kTbGetHotItem, 0, 0));
+    int hot = static_cast<int>(SendToControl(toolbar, TB_GETHOTITEM, 0, 0));
     if (hot < 0) {
         entry->valid = false;
     } else {
         RECT rect = {};
-        if (SendToControl(toolbar, kTbGetItemRect, hot,
+        if (SendToControl(toolbar, TB_GETITEMRECT, hot,
                           reinterpret_cast<LPARAM>(&rect))) {
             entry->rect = rect;
             entry->valid = true;
@@ -496,36 +509,17 @@ bool UpdateHot(HWND toolbar) {
            wasRect.bottom != entry->rect.bottom;
 }
 
-LRESULT CALLBACK ToolbarProc(HWND hWnd, UINT message, WPARAM wParam,
-                             LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+LRESULT HandleToolbar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        HotEntry* entry = HotFor(hWnd, false);
-        if (entry) {
-            *entry = {};
-        }
-        ForgetSubclass(hWnd);
-        return result;
-    }
 
     LRESULT result =
-        reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+        DefSubclassProc(hWnd, message, wParam, lParam);
 
     // The toolbar only repaints the buttons it knows about, so when the button
     // under the mouse changes, the button we painted last has to be redrawn or
     // its highlight stays on screen.
-    if (message == 0x0200 || message == 0x02A0 || message == 0x02A3) {
+    if (message == WM_MOUSEMOVE || message == WM_NCMOUSEMOVE ||
+        message == WM_MOUSELEAVE) {
         if (UpdateHot(hWnd)) {
             InvalidateRect(hWnd, nullptr, FALSE);
         }
@@ -538,14 +532,14 @@ LRESULT CALLBACK ToolbarProc(HWND hWnd, UINT message, WPARAM wParam,
 bool ShouldStayHidden(HWND hWnd);
 BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM lParam);
 void RefreshFrame(HWND hWnd);
-LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 bool RefreshTabEntry(HWND hWnd);
 HBRUSH LineBrush();
 HBRUSH TabSelectedBrush();
 void DrawTextOn(HDC dc, PCWSTR text, RECT* rect, UINT flags, COLORREF colour,
                 COLORREF behind);
-LRESULT CALLBACK GroupBoxProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK FieldProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+LRESULT HandleGroupBox(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+LRESULT HandleField(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 void PaintGroupBox(HWND hWnd);
 void PaintClientEdge(HWND hWnd);
 void CoverPageFrame(HWND sheet);
@@ -554,31 +548,10 @@ HFONT GroupFontOf(HWND hWnd);
 void ForgetGroupFont(HWND hWnd);
 bool NameContains(PCWSTR name, PCWSTR needle);
 
-LRESULT CALLBACK StatusBarProc(HWND hWnd, UINT message, WPARAM wParam,
-                               LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+LRESULT HandleStatusBar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        for (int i = 0; i < 2; i++) {
-            if (g_statusCache[i].hWnd == hWnd) {
-                g_statusCache[i] = {};
-            }
-        }
-        ForgetSubclass(hWnd);
-        return result;
-    }
 
-    if (message == 0x0085) {  // WM_NCPAINT
+    if (message == WM_NCPAINT) {
         return 0;
     }
 
@@ -607,8 +580,8 @@ LRESULT CALLBACK StatusBarProc(HWND hWnd, UINT message, WPARAM wParam,
                     RECT partRect = cache.rects[part];
                     partRect.left += 4;
                     DrawTextOn(dc, cache.text[part], &partRect,
-                               kDtLeft | kDtVCenter | kDtSingleLine |
-                                   kDtEndEllipsis,
+                               DT_LEFT | DT_VCENTER | DT_SINGLELINE |
+                                   DT_END_ELLIPSIS,
                                kColorText, kColorBackground);
                 }
             }
@@ -618,61 +591,23 @@ LRESULT CALLBACK StatusBarProc(HWND hWnd, UINT message, WPARAM wParam,
     }
 
     LRESULT result =
-        reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+        DefSubclassProc(hWnd, message, wParam, lParam);
 
     // Anything that can change the text, the part layout or the width: rebuild
     // the cache here, outside paint, then let the bar repaint itself.
-    if (message == 0x0402 /* SB_SETTEXT */ || message == 0x0404 /* SB_SETPARTS */ ||
-        message == 0x0005 /* WM_SIZE */ || message == 0x0401 /* SB_SETTEXTW/legacy */) {
+    if (message == SB_SETTEXTW || message == SB_SETPARTS || message == WM_SIZE) {
         RefreshStatusCache(hWnd);
     }
 
     if (g_settings.hideStatusBar && !g_hidingStrip && ShouldStayHidden(hWnd)) {
         g_hidingStrip = true;
-        ShowWindow(hWnd, kSwHide);
+        ShowWindow(hWnd, SW_HIDE);
         g_hidingStrip = false;
         MarkHiddenByUs(hWnd, true);
     }
     return result;
 }
 
-bool FirstTimeSeeingClass(HWND hWnd) {
-    WCHAR name[64] = {};
-    if (!GetClassNameW(hWnd, name, ARRAYSIZE(name))) {
-        return false;
-    }
-    for (size_t i = 0; i < g_seenClassCount; i++) {
-        if (wcscmp(g_seenClasses[i].name, name) == 0) {
-            return false;
-        }
-    }
-    if (g_seenClassCount < kMaxSeenClasses) {
-        WCHAR* dst = g_seenClasses[g_seenClassCount].name;
-        size_t i = 0;
-        for (; i + 1 < ARRAYSIZE(g_seenClasses[g_seenClassCount].name) && name[i];
-             i++) {
-            dst[i] = name[i];
-        }
-        dst[i] = L'\0';
-        g_seenClassCount++;
-    }
-    return true;
-}
-
-void LogWindowOnce(HWND hWnd, PCWSTR what) {
-    if (!g_settings.logDetails || !FirstTimeSeeingClass(hWnd)) {
-        return;
-    }
-    WCHAR className[64] = {};
-    WCHAR parentClass[64] = {};
-    GetClassNameW(hWnd, className, ARRAYSIZE(className));
-    HWND parent = GetAncestor(hWnd, GA_PARENT);
-    if (parent && parent != hWnd) {
-        GetClassNameW(parent, parentClass, ARRAYSIZE(parentClass));
-    }
-    Wh_Log(L"%s: %s, parent %s", what, className,
-           parentClass[0] ? parentClass : L"none");
-}
 
 // ---------------------------------------------------------------------------
 // Resolution
@@ -705,6 +640,12 @@ bool ResolveApis() {
         reinterpret_cast<GetWindowTheme_t>(GetProcAddress(uxtheme, "GetWindowTheme"));
     pGetThemeColor =
         reinterpret_cast<GetThemeColor_t>(GetProcAddress(uxtheme, "GetThemeColor"));
+    pOpenThemeData =
+        reinterpret_cast<OpenThemeData_t>(GetProcAddress(uxtheme, "OpenThemeData"));
+    pOpenThemeDataForDpi = reinterpret_cast<OpenThemeDataForDpi_t>(
+        GetProcAddress(uxtheme, "OpenThemeDataForDpi"));
+    pCloseThemeData =
+        reinterpret_cast<CloseThemeData_t>(GetProcAddress(uxtheme, "CloseThemeData"));
 
     if (!pAllowDarkModeForWindow || !pSetPreferredAppMode || !pSetWindowTheme) {
         Wh_Log(L"uxtheme is missing dark mode entry points "
@@ -715,28 +656,10 @@ bool ResolveApis() {
         return false;
     }
 
-    HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
-    if (!dwmapi) {
-        dwmapi = LoadLibraryExW(L"dwmapi.dll", nullptr,
-                                LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (dwmapi) {
-        pDwmSetWindowAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
-            GetProcAddress(dwmapi, "DwmSetWindowAttribute"));
-    }
-
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (user32) {
-        pSetWindowCompositionAttribute =
-            reinterpret_cast<SetWindowCompositionAttribute_t>(
-                GetProcAddress(user32, "SetWindowCompositionAttribute"));
-    }
-
-    Wh_Log(L"resolved: shouldApps=%d isAllowed=%d flush=%d dwm=%d swca=%d",
+    Wh_Log(L"resolved: shouldApps=%d isAllowed=%d flush=%d",
            pShouldAppsUseDarkMode != nullptr,
            pIsDarkModeAllowedForWindow != nullptr,
-           pFlushMenuThemes != nullptr, pDwmSetWindowAttribute != nullptr,
-           pSetWindowCompositionAttribute != nullptr);
+           pFlushMenuThemes != nullptr);
     return true;
 }
 
@@ -753,39 +676,50 @@ bool HighContrastIsOn() {
 // Theming
 // ---------------------------------------------------------------------------
 
-bool SubclassWith(HWND hWnd, WndProc_t proc);
+
 void ThemeDialog(HWND hWnd);
-LRESULT CALLBACK BackdropProc(HWND hWnd, UINT message, WPARAM wParam,
-                              LPARAM lParam);
+LRESULT HandleBackdrop(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+// Attribute numbers are tried once per process: the first one the system accepts
+// is kept, so the failure case is not re-tested for every window.
+void SetDarkTitleBar(HWND hWnd, bool dark) {
+    BOOL value = dark ? TRUE : FALSE;
+    if (g_darkTitleBarAttribute) {
+        DwmSetWindowAttribute(hWnd, g_darkTitleBarAttribute, &value,
+                              sizeof(value));
+        return;
+    }
+    if (SUCCEEDED(DwmSetWindowAttribute(hWnd, kDwmwaUseImmersiveDarkMode, &value,
+                                        sizeof(value)))) {
+        g_darkTitleBarAttribute = kDwmwaUseImmersiveDarkMode;
+        return;
+    }
+    if (SUCCEEDED(DwmSetWindowAttribute(hWnd, kDwmwaUseImmersiveDarkModeLegacy,
+                                        &value, sizeof(value)))) {
+        g_darkTitleBarAttribute = kDwmwaUseImmersiveDarkModeLegacy;
+    }
+}
 
 void ApplyToTopLevel(HWND hWnd) {
-    if (g_settings.darkTitleBar && pSetWindowCompositionAttribute) {
-        BOOL dark = TRUE;
-        WindowCompositionAttributeData data = {};
-        data.attribute = kWcaUseImmersiveDarkModeColors;
-        data.data = &dark;
-        data.size = sizeof(dark);
-        pSetWindowCompositionAttribute(hWnd, &data);
+    if (g_settings.darkTitleBar) {
+        SetDarkTitleBar(hWnd, true);
     }
 
-    if (g_settings.roundCorners && pDwmSetWindowAttribute) {
-        int preference = kDwmcRound;
-        pDwmSetWindowAttribute(hWnd, kDwmwaWindowCornerPreference, &preference,
-                               sizeof(preference));
+    if (g_settings.roundCorners) {
+        int preference = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference,
+                              sizeof(preference));
     }
 
-    if (pDwmSetWindowAttribute) {
-        // The one pixel frame Windows draws around the window keeps the light
-        // system colour unless it is told otherwise.
-        COLORREF border = kColorBackground;
-        pDwmSetWindowAttribute(hWnd, kDwmwaBorderColor, &border,
-                               sizeof(border));
-    }
+    // The one pixel frame Windows draws around the window keeps the light system
+    // colour unless it is told otherwise.
+    COLORREF border = kColorBackground;
+    DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 
     if (!g_backgroundBrush) {
         g_backgroundBrush = CreateSolidBrush(kColorBackground);
     }
-    SubclassWith(hWnd, BackdropProc);
+    SubclassWith(hWnd, WindowKind::Backdrop);
 }
 
 LRESULT SendToControl(HWND hWnd, UINT message, WPARAM wParam,
@@ -797,6 +731,10 @@ LRESULT SendToControl(HWND hWnd, UINT message, WPARAM wParam,
 }
 
 void RefreshStatusCache(HWND hWnd) {
+    if (!OnOwningThread(hWnd)) {
+        AskOwningThread(hWnd);
+        return;
+    }
     StatusCache* cache = nullptr;
     for (int i = 0; i < 2; i++) {
         if (g_statusCache[i].hWnd == hWnd) {
@@ -829,7 +767,7 @@ void RefreshStatusCache(HWND hWnd) {
     cache->hWnd = hWnd;
     cache->valid = false;
 
-    int parts = static_cast<int>(SendToControl(hWnd, kSbGetParts, 0, 0));
+    int parts = static_cast<int>(SendToControl(hWnd, SB_GETPARTS, 0, 0));
     if (parts <= 0) {
         parts = 1;
     }
@@ -841,17 +779,17 @@ void RefreshStatusCache(HWND hWnd) {
     for (int part = 0; part < parts; part++) {
         cache->text[part][0] = 0;
         RECT rect = {};
-        if (SendToControl(hWnd, kSbGetRect, part,
+        if (SendToControl(hWnd, SB_GETRECT, part,
                           reinterpret_cast<LPARAM>(&rect))) {
             cache->rects[part] = rect;
         }
-        DWORD_PTR info = SendToControl(hWnd, kSbGetTextLengthW, part, 0);
+        DWORD_PTR info = SendToControl(hWnd, SB_GETTEXTLENGTHW, part, 0);
         int length = static_cast<int>(info & 0xffff);
         if (length <= 0 || length >= 255) {
             continue;
         }
         WCHAR buffer[256] = {};
-        if (SendToControl(hWnd, kSbGetTextW, part,
+        if (SendToControl(hWnd, SB_GETTEXTW, part,
                           reinterpret_cast<LPARAM>(buffer))) {
             for (int c = 0; c < 255 && c < length; c++) {
                 cache->text[part][c] = buffer[c];
@@ -870,13 +808,13 @@ void ColourClassicControl(HWND hWnd, bool dark) {
         return;
     }
 
-    const COLORREF background = dark ? kColorBackground : kColorDefault;
-    const COLORREF text = dark ? kColorText : kColorDefault;
+    const COLORREF background = dark ? kColorBackground : CLR_DEFAULT;
+    const COLORREF text = dark ? kColorText : CLR_DEFAULT;
 
     if (wcscmp(className, L"SysTreeView32") == 0) {
-        SendToControl(hWnd, kTvmSetBkColor, 0, background);
-        SendToControl(hWnd, kTvmSetTextColor, 0, text);
-        SendToControl(hWnd, kTvmSetLineColor, 0, dark ? kColorLine : kColorDefault);
+        SendToControl(hWnd, TVM_SETBKCOLOR, 0, background);
+        SendToControl(hWnd, TVM_SETTEXTCOLOR, 0, text);
+        SendToControl(hWnd, TVM_SETLINECOLOR, 0, dark ? kColorLine : CLR_DEFAULT);
         InvalidateRect(hWnd, nullptr, TRUE);
     } else if (wcscmp(className, L"ComboBox") == 0) {
         // Measured before this fix: an Explorer themed combo box field is
@@ -885,13 +823,16 @@ void ColourClassicControl(HWND hWnd, bool dark) {
         if (dark) {
             pSetWindowTheme(hWnd, L"DarkMode_CFD", nullptr);
         } else {
-            pSetWindowTheme(hWnd, L"", L"");
+            // NULL, NULL removes the association this mod made. L"" would match no
+            // section and turn visual styles off, which is not the same thing.
+            pSetWindowTheme(hWnd, nullptr, nullptr);
         }
         InvalidateRect(hWnd, nullptr, TRUE);
     } else if (wcscmp(className, L"ListBox") == 0) {
         // A list box has no dark theme. Classic drawing asks the parent for a
-        // brush, and the parent answers dark.
-        pSetWindowTheme(hWnd, L"", L"");
+        // brush, and the parent answers dark; on the way back, the association is
+        // removed so the control keeps whatever style it had.
+        pSetWindowTheme(hWnd, dark ? L"" : nullptr, dark ? L"" : nullptr);
         InvalidateRect(hWnd, nullptr, TRUE);
     } else if (wcscmp(className, L"ScrollBar") == 0) {
         // A classic scrollbar is drawn from the system colour table, which a colour
@@ -900,7 +841,8 @@ void ColourClassicControl(HWND hWnd, bool dark) {
             pAllowDarkModeForWindow(hWnd, TRUE);
             pSetWindowTheme(hWnd, L"DarkMode_Explorer", nullptr);
         } else {
-            pSetWindowTheme(hWnd, L"", L"");
+            pSetWindowTheme(hWnd, nullptr, nullptr);
+            pAllowDarkModeForWindow(hWnd, FALSE);
         }
     } else if (wcscmp(className, L"SysTabControl32") == 0) {
         // Reached here for every window in the process, which matters because a
@@ -908,111 +850,161 @@ void ColourClassicControl(HWND hWnd, bool dark) {
         // top level window that never goes through the dialog walk.
         if (dark) {
             pSetWindowTheme(hWnd, L"", L"");
-            SendToControl(hWnd, kTcmSetBkColor, 0,
-                          static_cast<LPARAM>(kColorBackground));
-            SubclassWith(hWnd, TabProc);
+            SubclassWith(hWnd, WindowKind::Tab);
             RefreshTabEntry(hWnd);
             InvalidateRect(hWnd, nullptr, TRUE);
         }
     } else if (wcscmp(className, L"SysListView32") == 0) {
-        SendToControl(hWnd, kLvmSetBkColor, 0, background);
-        SendToControl(hWnd, kLvmSetTextColor, 0, text);
-        SendToControl(hWnd, kLvmSetTextBkColor, 0, background);
+        SendToControl(hWnd, LVM_SETBKCOLOR, 0, background);
+        SendToControl(hWnd, LVM_SETTEXTCOLOR, 0, text);
+        SendToControl(hWnd, LVM_SETTEXTBKCOLOR, 0, background);
         InvalidateRect(hWnd, nullptr, TRUE);
     }
 }
 
 // Drops the table entry for a window. Used when the window is going away, and
 // when its handle turns out to belong to a different window now.
-void ForgetSubclass(HWND hWnd) {
-    for (size_t i = 0; i < g_subclassedCount; i++) {
-        if (g_subclassed[i].hWnd != hWnd) {
-            continue;
+// --- the style bits this mod removes, and where to put them back ----------
+
+// Stripping a sunken edge means clearing WS_EX_CLIENTEDGE or WS_BORDER, which is
+// the only way to get rid of the white two pixel frame those bits draw. Nothing
+// about the window remembers that afterwards, so it is remembered here.
+struct StyleFix {
+    HWND hWnd;
+    LONG_PTR styleBits;
+    LONG_PTR exStyleBits;
+};
+constexpr int kMaxStyleFixes = 64;
+StyleFix g_styleFixes[kMaxStyleFixes] = {};
+
+void NoteRemovedStyles(HWND hWnd, LONG_PTR styleBits, LONG_PTR exStyleBits) {
+    std::lock_guard<std::mutex> lock(g_stateLock);
+    for (int i = 0; i < kMaxStyleFixes; i++) {
+        if (g_styleFixes[i].hWnd == hWnd) {
+            g_styleFixes[i].styleBits |= styleBits;
+            g_styleFixes[i].exStyleBits |= exStyleBits;
+            return;
         }
-        for (size_t j = i + 1; j < g_subclassedCount; j++) {
-            g_subclassed[j - 1] = g_subclassed[j];
+    }
+    for (int i = 0; i < kMaxStyleFixes; i++) {
+        if (!g_styleFixes[i].hWnd) {
+            g_styleFixes[i].hWnd = hWnd;
+            g_styleFixes[i].styleBits = styleBits;
+            g_styleFixes[i].exStyleBits = exStyleBits;
+            return;
         }
-        g_subclassedCount--;
+    }
+}
+
+void RestoreRemovedStyles(HWND hWnd) {
+    LONG_PTR styleBits = 0;
+    LONG_PTR exStyleBits = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        for (int i = 0; i < kMaxStyleFixes; i++) {
+            if (g_styleFixes[i].hWnd != hWnd) {
+                continue;
+            }
+            styleBits = g_styleFixes[i].styleBits;
+            exStyleBits = g_styleFixes[i].exStyleBits;
+            g_styleFixes[i] = {};
+            break;
+        }
+    }
+    if (!styleBits && !exStyleBits) {
         return;
     }
-}
-
-SubclassEntry* FindSubclass(HWND hWnd) {
-    for (size_t i = 0; i < g_subclassedCount; i++) {
-        if (g_subclassed[i].hWnd == hWnd) {
-            return &g_subclassed[i];
-        }
+    if (styleBits) {
+        SetWindowLongPtrW(hWnd, GWL_STYLE,
+                          GetWindowLongPtrW(hWnd, GWL_STYLE) | styleBits);
     }
-    return nullptr;
+    if (exStyleBits) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
+                          GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | exStyleBits);
+    }
+    RefreshFrame(hWnd);
 }
 
-// The mark is set on a window when this mod first takes it over, and lives
-// exactly as long as the window does. It answers "is this the same window", which
-// the procedure pointer cannot: a destroyed window's handle is handed to the next
-// window created here, and another component may have subclassed on top of us.
-constexpr PCWSTR kSubclassMark = L"DarkConsole.Subclass";
+// --- subclass bookkeeping -------------------------------------------------
 
-bool IsMarkedSubclass(HWND hWnd, WndProc_t proc) {
-    return hWnd &&
-           GetPropW(hWnd, kSubclassMark) == reinterpret_cast<HANDLE>(proc);
+LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                 LPARAM lParam, DWORD_PTR refData);
+
+// Drops a window from the set. Called from the subclass procedure when the
+// window is destroyed, after comctl32 has already removed its chain entry.
+void ForgetSubclass(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_stateLock);
+    g_subclassed.erase(hWnd);
+    g_hiddenByUs.erase(hWnd);
 }
 
-// Whether the procedure at the top of the window's chain is still this mod's,
-// which is the only case in which the original may be written back.
-bool CarriesProc(SubclassEntry* entry) {
-    return entry && entry->hWnd &&
-           GetWindowLongPtrW(entry->hWnd, kGwlWndProc) ==
-               reinterpret_cast<LONG_PTR>(entry->proc);
+bool IsSubclassed(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_stateLock);
+    return g_subclassed.count(hWnd) != 0;
 }
 
 bool HiddenByUs(HWND hWnd) {
-    SubclassEntry* entry = FindSubclass(hWnd);
-    return entry && entry->hiddenByUs;
+    std::lock_guard<std::mutex> lock(g_stateLock);
+    return g_hiddenByUs.count(hWnd) != 0;
 }
 
 void MarkHiddenByUs(HWND hWnd, bool hidden) {
-    SubclassEntry* entry = FindSubclass(hWnd);
-    if (entry) {
-        entry->hiddenByUs = hidden;
+    std::lock_guard<std::mutex> lock(g_stateLock);
+    if (hidden) {
+        g_hiddenByUs.insert(hWnd);
+    } else {
+        g_hiddenByUs.erase(hWnd);
     }
 }
 
-bool SubclassWith(HWND hWnd, WndProc_t proc) {
+// The wrapper below sends a message to the window's thread, so it is never called
+// with the lock held: that thread can be inside this mod at the same moment. The
+// pending set keeps two threads from subclassing the same window at once.
+bool SubclassWith(HWND hWnd, WindowKind kind) {
     if (!hWnd || !IsWindow(hWnd)) {
         return false;
     }
-    SubclassEntry* existing = FindSubclass(hWnd);
-    if (existing) {
-        if (IsMarkedSubclass(hWnd, existing->proc)) {
-            // The same window, already carrying one of ours. A window can only
-            // wear one of them, so this is the normal repeated call.
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        if (g_subclassed.count(hWnd) || g_adding.count(hWnd)) {
             return false;
         }
-        // The handle is in the table but the window does not carry the mark: the
-        // window was destroyed and its handle reused. Drop the stale entry.
-        ForgetSubclass(hWnd);
+        g_adding.insert(hWnd);
     }
-    if (g_subclassedCount >= kMaxSubclassed) {
-        Wh_Log(L"out of subclass slots, %d in use", static_cast<int>(g_subclassedCount));
-        return false;
+    const BOOL added = WindhawkUtils::SetWindowSubclassFromAnyThread(
+        hWnd, ModSubclassProc, static_cast<DWORD_PTR>(kind));
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        g_adding.erase(hWnd);
+        if (added) {
+            g_subclassed.insert(hWnd);
+        }
     }
-    // Without the mark, the window could never be told apart from a future window
-    // that reuses its handle, so it is left alone rather than half tracked.
-    if (!SetPropW(hWnd, kSubclassMark, reinterpret_cast<HANDLE>(proc))) {
-        return false;
+    if (!added) {
+        WCHAR className[64] = {};
+        GetClassNameW(hWnd, className, ARRAYSIZE(className));
+        Wh_Log(L"could not subclass a %s window", className);
     }
-    LONG_PTR oldProc = SetWindowLongPtrW(
-        hWnd, kGwlWndProc, reinterpret_cast<LONG_PTR>(proc));
-    if (!oldProc) {
-        RemovePropW(hWnd, kSubclassMark);
-        return false;
+    return added != FALSE;
+}
+
+// Hands every subclassed window back to comctl32. Called once, from unload, and
+// deliberately without the lock: the removal sends to each window's thread.
+void RemoveAllSubclasses() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        windows.assign(g_subclassed.begin(), g_subclassed.end());
+        g_subclassed.clear();
+        g_adding.clear();
+        g_hiddenByUs.clear();
     }
-    g_subclassed[g_subclassedCount].hWnd = hWnd;
-    g_subclassed[g_subclassedCount].oldProc = oldProc;
-    g_subclassed[g_subclassedCount].proc = proc;
-    g_subclassed[g_subclassedCount].hiddenByUs = false;
-    g_subclassedCount++;
-    return true;
+    for (HWND hWnd : windows) {
+        if (IsWindow(hWnd)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
+                                                             ModSubclassProc);
+        }
+    }
 }
 
 bool ShouldStayHidden(HWND hWnd) {
@@ -1022,24 +1014,7 @@ bool ShouldStayHidden(HWND hWnd) {
 // Last line of defence for the console frame itself. If the console keeps the
 // space where a hidden strip used to be, that space shows this background
 // instead of a white band.
-LRESULT CALLBACK BackdropProc(HWND hWnd, UINT message, WPARAM wParam,
-                              LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
-
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        ForgetSubclass(hWnd);
-        return result;
-    }
+LRESULT HandleBackdrop(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
     // The colour goes down in the erase, not in a paint of our own: a paint
     // that fills the whole client covers whatever the console drew into its own
@@ -1055,7 +1030,7 @@ LRESULT CALLBACK BackdropProc(HWND hWnd, UINT message, WPARAM wParam,
     }
 
     LRESULT result =
-        reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+        DefSubclassProc(hWnd, message, wParam, lParam);
 
     // A property sheet is a top level window, so it carries this proc rather than
     // the dialog one. Its body frame is drawn just before this and covered here.
@@ -1078,24 +1053,7 @@ LRESULT CALLBACK BackdropProc(HWND hWnd, UINT message, WPARAM wParam,
 // The band at the top of the console holds the menu bar and the icon strip in
 // one rebar. Nothing here paints it: the theme is asked to do it, and this proc
 // only exists so the band can still be removed if the user turns that on.
-LRESULT CALLBACK StripProc(HWND hWnd, UINT message, WPARAM wParam,
-                           LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
-
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        ForgetSubclass(hWnd);
-        return result;
-    }
+LRESULT HandleStrip(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
     // The console's toolbars draw a hovered button as a two tone border, which on
     // a dark band shows up as a thin corner. The fill is painted here instead.
@@ -1117,7 +1075,7 @@ LRESULT CALLBACK StripProc(HWND hWnd, UINT message, WPARAM wParam,
                 HotEntry* entry =
                     HotFor(static_cast<HWND>(header->hwndFrom), false);
                 bool isHot =
-                    (custom->uItemState & kCdisHot) != 0 ||
+                    (custom->uItemState & CDIS_HOT) != 0 ||
                     (entry && entry->valid &&
                      entry->rect.left == custom->rc.left &&
                      entry->rect.top == custom->rc.top);
@@ -1150,37 +1108,11 @@ LRESULT CALLBACK StripProc(HWND hWnd, UINT message, WPARAM wParam,
     }
 
     LRESULT result =
-        reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+        DefSubclassProc(hWnd, message, wParam, lParam);
 
-    // Hiding from inside the window's own proc can come straight back as
-    // WM_SHOWWINDOW. The guard makes the recursion impossible.
-    if (g_settings.hideToolbar && !g_hidingStrip && ShouldStayHidden(hWnd)) {
-        g_hidingStrip = true;
-        ShowWindow(hWnd, kSwHide);
-        g_hidingStrip = false;
-        MarkHiddenByUs(hWnd, true);
-    }
     return result;
 }
 
-
-void UnsubclassStatusBar(HWND hWnd) {
-    SubclassEntry* entry = FindSubclass(hWnd);
-    if (!entry) {
-        return;
-    }
-    const bool top = CarriesProc(entry);
-    LONG_PTR oldProc = entry->oldProc;
-    ForgetSubclass(hWnd);
-    if (!top) {
-        // Something else is on top of the chain, or the handle belongs to another
-        // window now. Writing here would break whichever it is.
-        return;
-    }
-    SetWindowLongPtrW(hWnd, kGwlWndProc, oldProc);
-    RemovePropW(hWnd, kSubclassMark);
-    InvalidateRect(hWnd, nullptr, TRUE);
-}
 
 WCHAR LowerAscii(WCHAR c) {
     return (c >= L'A' && c <= L'Z') ? static_cast<WCHAR>(c + 32) : c;
@@ -1208,7 +1140,7 @@ bool NameContains(PCWSTR name, PCWSTR needle) {
 
 void RefreshFrame(HWND hWnd) {
     SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
-                 kSwpNoSize | kSwpNoMove | kSwpNoZOrder | kSwpFrameChanged);
+                 SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
 }
 
 // The console frames its panes with a sunken edge painted in the light system
@@ -1223,47 +1155,32 @@ bool IsBorderHost(PCWSTR name) {
            NameContains(name, L"afxolecontrol");
 }
 
-LRESULT CALLBACK NoBorderProc(HWND hWnd, UINT message, WPARAM wParam,
-                              LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+LRESULT HandleNoBorder(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        ForgetSubclass(hWnd);
-        return result;
-    }
-
-    if (message == 0x0085) {  // WM_NCPAINT
+    if (message == WM_NCPAINT) {
         return 0;
     }
-    return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 void StripFrame(HWND hWnd) {
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, kGwlExStyle);
-    LONG_PTR style = GetWindowLongPtrW(hWnd, kGwlStyle);
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
     bool changed = false;
 
-    if (exStyle & kWsExClientEdge) {
-        SetWindowLongPtrW(hWnd, kGwlExStyle, exStyle & ~kWsExClientEdge);
+    if (exStyle & WS_EX_CLIENTEDGE) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_CLIENTEDGE);
+        NoteRemovedStyles(hWnd, 0, WS_EX_CLIENTEDGE);
         changed = true;
     }
-    if (style & kWsBorder) {
-        SetWindowLongPtrW(hWnd, kGwlStyle, style & ~kWsBorder);
+    if (style & WS_BORDER) {
+        SetWindowLongPtrW(hWnd, GWL_STYLE, style & ~WS_BORDER);
+        NoteRemovedStyles(hWnd, WS_BORDER, 0);
         changed = true;
     }
     if (changed) {
         RefreshFrame(hWnd);
-        SubclassWith(hWnd, NoBorderProc);
+        SubclassWith(hWnd, WindowKind::NoBorder);
         InvalidateRect(hWnd, nullptr, TRUE);
     }
 }
@@ -1272,11 +1189,12 @@ void StripFrame(HWND hWnd) {
 // which stays white on a dark page however the rest is coloured. The edge is
 // non client area, so the only reliable answer is to remove the style.
 bool RemoveClientEdge(HWND hWnd) {
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, kGwlExStyle);
-    if (!(exStyle & kWsExClientEdge)) {
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (!(exStyle & WS_EX_CLIENTEDGE)) {
         return false;
     }
-    SetWindowLongPtrW(hWnd, kGwlExStyle, exStyle & ~kWsExClientEdge);
+    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_CLIENTEDGE);
+    NoteRemovedStyles(hWnd, 0, WS_EX_CLIENTEDGE);
     RefreshFrame(hWnd);
     InvalidateRect(hWnd, nullptr, TRUE);
     return true;
@@ -1301,18 +1219,6 @@ struct TabEntry {
 };
 TabEntry g_tabEntries[4] = {};
 
-// As the SDK declares TCITEMW. The pointer makes it 40 bytes on 64 bit and 28 on
-// 32 bit, which is what the control expects on each.
-struct TabItemW {
-    UINT mask;
-    DWORD dwState;
-    DWORD dwStateMask;
-    LPWSTR pszText;
-    int cchText;
-    int iImage;
-    LPARAM lParam;
-};
-
 TabEntry* TabEntryFor(HWND hWnd, bool create) {
     const int slots = static_cast<int>(ARRAYSIZE(g_tabEntries));
     for (int i = 0; i < slots; i++) {
@@ -1334,6 +1240,10 @@ TabEntry* TabEntryFor(HWND hWnd, bool create) {
 }
 
 bool RefreshTabEntry(HWND hWnd) {
+    if (!OnOwningThread(hWnd)) {
+        AskOwningThread(hWnd);
+        return false;
+    }
     TabEntry* entry = TabEntryFor(hWnd, true);
     if (!entry) {
         return false;
@@ -1342,12 +1252,12 @@ bool RefreshTabEntry(HWND hWnd) {
     // Only plain tabs along the top are drawn here. Button tabs, vertical tabs
     // and bottom tabs keep the control's own drawing, which is what the console
     // expects there.
-    const LONG_PTR style = GetWindowLongPtrW(hWnd, kGwlStyle);
-    if (style & (kTcsBottom | kTcsVertical | kTcsButtons)) {
+    const LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if (style & (TCS_BOTTOM | TCS_VERTICAL | TCS_BUTTONS)) {
         entry->count = 0;
         return false;
     }
-    const int count = static_cast<int>(SendToControl(hWnd, kTcmGetItemCount, 0, 0));
+    const int count = static_cast<int>(SendToControl(hWnd, TCM_GETITEMCOUNT, 0, 0));
     if (count <= 0 || count > kMaxTabs) {
         entry->count = 0;
         return false;
@@ -1355,21 +1265,21 @@ bool RefreshTabEntry(HWND hWnd) {
     entry->count = count;
     for (int i = 0; i < count; i++) {
         entry->items[i] = {};
-        if (!SendToControl(hWnd, kTcmGetItemRect, static_cast<WPARAM>(i),
+        if (!SendToControl(hWnd, TCM_GETITEMRECT, static_cast<WPARAM>(i),
                            reinterpret_cast<LPARAM>(&entry->items[i]))) {
             entry->count = 0;
             return false;
         }
-        TabItemW item = {};
-        item.mask = kTcifText;
+        TCITEMW item = {};
+        item.mask = TCIF_TEXT;
         item.pszText = entry->labels[i];
-        item.cchText = kTabLabelChars - 1;
+        item.cchTextMax = kTabLabelChars - 1;
         entry->labels[i][0] = 0;
-        SendToControl(hWnd, kTcmGetItemW, static_cast<WPARAM>(i),
+        SendToControl(hWnd, TCM_GETITEMW, static_cast<WPARAM>(i),
                       reinterpret_cast<LPARAM>(&item));
     }
-    entry->selected = static_cast<int>(SendToControl(hWnd, kTcmGetCursel, 0, 0));
-    entry->font = reinterpret_cast<HFONT>(SendToControl(hWnd, kMsgGetFont, 0, 0));
+    entry->selected = static_cast<int>(SendToControl(hWnd, TCM_GETCURSEL, 0, 0));
+    entry->font = reinterpret_cast<HFONT>(SendToControl(hWnd, WM_GETFONT, 0, 0));
     // Nothing to go on means the item layout did not match; the control then draws
     // itself, which is what shipped before.
     for (int i = 0; i < count; i++) {
@@ -1441,34 +1351,15 @@ void PaintTabStrip(HWND hWnd) {
     EndPaint(hWnd, &ps);
 }
 
-LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        TabEntry* entry = TabEntryFor(hWnd, false);
-        if (entry) {
-            *entry = {};
-        }
-        UnsubclassStatusBar(hWnd);
-        return result;
-    }
 
     // The cached font is what the strip is painted with. Reading it back when the
     // app hands the control a new one keeps a deleted font out of the paint path.
     if (message == WM_SETFONT) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         TabEntry* entry = TabEntryFor(hWnd, false);
         if (entry) {
             entry->font = reinterpret_cast<HFONT>(lParam);
@@ -1494,8 +1385,7 @@ LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         // stops retrying the moment it reads successfully.
         if (!entry || !entry->usable) {
             if (!RefreshTabEntry(hWnd) || !entry) {
-                return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam,
-                                                            lParam);
+                return DefSubclassProc(hWnd, message, wParam, lParam);
             }
         }
         PaintTabStrip(hWnd);
@@ -1507,7 +1397,7 @@ LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP ||
         message == WM_KEYUP) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         RefreshTabEntry(hWnd);
         InvalidateRect(hWnd, nullptr, TRUE);
         return result;
@@ -1518,7 +1408,7 @@ LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     // during a paint.
     if (message == WM_THEMECHANGED) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         RefreshTabEntry(hWnd);
         InvalidateRect(hWnd, nullptr, TRUE);
         return result;
@@ -1527,7 +1417,7 @@ LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     if (message == WM_SIZE || message == WM_SHOWWINDOW ||
         message == WM_WINDOWPOSCHANGED) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         TabEntry* entry = TabEntryFor(hWnd, false);
         if (!entry || !entry->usable) {
             RefreshTabEntry(hWnd);
@@ -1535,7 +1425,7 @@ LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return result;
     }
 
-    return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 // The strips above and below the console tree. The status bar gets painted by
@@ -1549,20 +1439,23 @@ LRESULT CALLBACK TabProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 bool IsIconStrip(HWND hWnd);
 
 bool IsIconStrip(HWND hWnd) {
-    int count = static_cast<int>(SendToControl(hWnd, kTbButtonCount, 0, 0));
+    int count = static_cast<int>(SendToControl(hWnd, TB_BUTTONCOUNT, 0, 0));
     if (count <= 0) {
         return false;
     }
     for (int i = 0; i < count; i++) {
-        TbButton button = {};
-        if (!SendToControl(hWnd, kTbGetButton, i,
+        TBBUTTON button = {};
+        if (!SendToControl(hWnd, TB_GETBUTTON, i,
                            reinterpret_cast<LPARAM>(&button))) {
             continue;
         }
-        WCHAR text[64] = {};
-        SendToControl(hWnd, kTbGetButtonTextW, button.idCommand,
-                      reinterpret_cast<LPARAM>(text));
-        if (text[0]) {
+        // Only "does this button have a label" is needed, and asking for the text
+        // itself means handing over a buffer with no size in the protocol: the
+        // control writes the whole label wherever it points. Asking with a null
+        // buffer returns the length and writes nothing.
+        const int length = static_cast<int>(
+            SendToControl(hWnd, TB_GETBUTTONTEXTW, button.idCommand, 0));
+        if (length > 0) {
             return false;
         }
     }
@@ -1586,15 +1479,25 @@ void DressExtraChrome(HWND hWnd, bool dark) {
 
     if (NameContains(className, L"toolbar")) {
         // The icon strip's squares are painted into the console's own button
-        // images, so no colour or theme setting reaches them. Removing the strip
-        // is the only reliable answer, and every one of its commands is also in
-        // the menus above it.
-        bool iconStrip = dark && IsIconStrip(hWnd);
+        // images, so no colour or theme setting reaches them. Hiding the strip is
+        // the only reliable answer, and every one of its commands is also in the
+        // menus above it.
+        // Asking a toolbar about its buttons sends a message to the thread that
+        // owns it, so it is only asked when the answer can change anything.
+        bool iconStrip = dark && g_settings.hideToolbar && IsIconStrip(hWnd);
         if (!dark) {
-            ShowWindow(hWnd, kSwShow);
+            // Only a toolbar this mod hid is shown again. Showing every toolbar
+            // would override the console's own View > Customize choices.
+            if (HiddenByUs(hWnd)) {
+                ShowWindow(hWnd, SW_SHOW);
+                MarkHiddenByUs(hWnd, false);
+            }
             return;
         }
-        ShowWindow(hWnd, iconStrip && g_settings.hideToolbar ? kSwHide : kSwShow);
+        if (iconStrip && !HiddenByUs(hWnd)) {
+            ShowWindow(hWnd, SW_HIDE);
+            MarkHiddenByUs(hWnd, true);
+        }
         return;
     }
 
@@ -1606,10 +1509,9 @@ void DressExtraChrome(HWND hWnd, bool dark) {
     }
 
     if (!dark) {
-        bool wasOurs = OldProcOf(hWnd) != 0;
-        UnsubclassStatusBar(hWnd);
-        if (wasOurs) {
-            ShowWindow(hWnd, kSwShow);
+        if (HiddenByUs(hWnd)) {
+            ShowWindow(hWnd, SW_SHOW);
+            MarkHiddenByUs(hWnd, false);
         }
         return;
     }
@@ -1618,26 +1520,25 @@ void DressExtraChrome(HWND hWnd, bool dark) {
         g_backgroundBrush = CreateSolidBrush(kColorBackground);
     }
 
-    SubclassWith(hWnd, isStatusBar ? StatusBarProc : StripProc);
+    SubclassWith(hWnd, isStatusBar ? WindowKind::StatusBar : WindowKind::Strip);
     if (isStatusBar) {
         RefreshStatusCache(hWnd);
     }
     InvalidateRect(hWnd, nullptr, TRUE);
 
+    // Visibility is the console's business except where this mod hid something
+    // itself. Hiding is only ever done to a window the user asked about, and the
+    // undo only ever runs on a window this mod hid, so the console's own toolbar
+    // and status bar choices survive untouched.
     bool hide = isStatusBar ? g_settings.hideStatusBar : g_settings.hideToolbar;
     if (hide) {
-        ShowWindow(hWnd, kSwHide);
-        MarkHiddenByUs(hWnd, true);
-    } else {
-        // A strip this mod hid is put back the moment the setting is turned off.
-        // Without this the band could only come back after a restart.
-        if (HiddenByUs(hWnd)) {
-            ShowWindow(hWnd, kSwShow);
-            MarkHiddenByUs(hWnd, false);
+        if (!HiddenByUs(hWnd)) {
+            ShowWindow(hWnd, SW_HIDE);
+            MarkHiddenByUs(hWnd, true);
         }
-        if (isStatusBar && !g_settings.darkStatusBar) {
-            UnsubclassStatusBar(hWnd);
-        }
+    } else if (HiddenByUs(hWnd)) {
+        ShowWindow(hWnd, SW_SHOW);
+        MarkHiddenByUs(hWnd, false);
     }
 }
 
@@ -1675,7 +1576,7 @@ void ApplyToWindow(HWND hWnd) {
     if (GetClassNameW(hWnd, toolbarClass, ARRAYSIZE(toolbarClass)) &&
         wcscmp(toolbarClass, L"ToolbarWindow32") == 0) {
         pSetWindowTheme(hWnd, L"", L"");
-        SubclassWith(hWnd, ToolbarProc);
+        SubclassWith(hWnd, WindowKind::Toolbar);
     }
 
     // A label carries no visual style of its own, and handing it one makes some
@@ -1709,7 +1610,6 @@ void ApplyToWindow(HWND hWnd) {
                         SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &ignored);
     ColourClassicControl(hWnd, true);
     DressExtraChrome(hWnd, true);
-    LogWindowOnce(hWnd, L"themed");
 
     if (GetAncestor(hWnd, GA_ROOT) == hWnd) {
         ApplyToTopLevel(hWnd);
@@ -1726,7 +1626,7 @@ void DrawTextOn(HDC dc, PCWSTR text, RECT* rect, UINT flags, COLORREF colour,
     if (!dc || !text || !rect) {
         return;
     }
-    SetBkMode(dc, kOpaque);
+    SetBkMode(dc, OPAQUE);
     SetBkColor(dc, behind);
     SetTextColor(dc, colour);
     DrawTextW(dc, text, -1, rect, flags);
@@ -1749,29 +1649,13 @@ HBRUSH TabSelectedBrush() {
 // Removing the white edge from a field leaves it with no boundary at all and the
 // text appears to float on the page. This draws a quiet one pixel edge of its own,
 // after the field has painted its content.
-LRESULT CALLBACK FieldProc(HWND hWnd, UINT message, WPARAM wParam,
-                           LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+LRESULT HandleField(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        UnsubclassStatusBar(hWnd);
-        return result;
-    }
 
     if (message == WM_PAINT) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         HBRUSH brush = LineBrush();
         HDC dc = GetDC(hWnd);
         if (brush && dc) {
@@ -1783,7 +1667,7 @@ LRESULT CALLBACK FieldProc(HWND hWnd, UINT message, WPARAM wParam,
         return result;
     }
 
-    return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 // A painted caption has to use the control's own font, or it comes out in the
@@ -1796,7 +1680,11 @@ struct GroupFont {
 GroupFont g_groupFonts[32] = {};
 
 void RememberGroupFont(HWND hWnd) {
-    HFONT font = reinterpret_cast<HFONT>(SendToControl(hWnd, kMsgGetFont, 0, 0));
+    if (!OnOwningThread(hWnd)) {
+        AskOwningThread(hWnd);
+        return;
+    }
+    HFONT font = reinterpret_cast<HFONT>(SendToControl(hWnd, WM_GETFONT, 0, 0));
     if (!font) {
         return;
     }
@@ -1869,9 +1757,9 @@ void PaintGroupBox(HWND hWnd) {
     // The frame starts at the caption's midline and leaves a gap for the text.
     const int lineY = client.top + textSize.cy / 2;
 
-    HGDIOBJ pen = CreatePen(kPenSolid, 1, kColorLine);
+    HGDIOBJ pen = CreatePen(PS_SOLID, 1, kColorLine);
     HGDIOBJ oldPen = SelectObject(dc, pen);
-    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(kStockNullBrush));
+    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
 
     Rectangle(dc, client.left, lineY, client.right, client.bottom);
 
@@ -1894,26 +1782,9 @@ void PaintGroupBox(HWND hWnd) {
     EndPaint(hWnd, &ps);
 }
 
-LRESULT CALLBACK GroupBoxProc(HWND hWnd, UINT message, WPARAM wParam,
-                              LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+LRESULT HandleGroupBox(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        ForgetGroupFont(hWnd);
-        UnsubclassStatusBar(hWnd);
-        return result;
-    }
 
     if (message == WM_ERASEBKGND) {
         HDC dc = reinterpret_cast<HDC>(wParam);
@@ -1930,7 +1801,7 @@ LRESULT CALLBACK GroupBoxProc(HWND hWnd, UINT message, WPARAM wParam,
         return 0;
     }
 
-    return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 // The property sheet draws a raised two pixel frame around its body, the tabs and
@@ -2013,7 +1884,7 @@ void PaintClientEdge(HWND hWnd) {
     if (!g_backgroundBrush) {
         return;
     }
-    if (!(GetWindowLongPtrW(hWnd, kGwlExStyle) & kWsExClientEdge)) {
+    if (!(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE)) {
         return;
     }
     HDC dc = GetWindowDC(hWnd);
@@ -2032,27 +1903,33 @@ void PaintClientEdge(HWND hWnd) {
 // A classic dialog, including every property sheet the console opens, paints its
 // own background from the system colours. The theme call alone does not reach it,
 // so the colours are answered directly.
-LRESULT CALLBACK DialogProc(HWND hWnd, UINT message, WPARAM wParam,
-                            LPARAM lParam) {
-    LONG_PTR oldProc = OldProcOf(hWnd);
-    if (!oldProc) {
-        return DefWindowProcW(hWnd, message, wParam, lParam);
+LRESULT HandleOwnThreadSetup(HWND hWnd, WindowKind kind) {
+    switch (kind) {
+        case WindowKind::StatusBar:
+            RefreshStatusCache(hWnd);
+            break;
+        case WindowKind::Tab:
+            RefreshTabEntry(hWnd);
+            break;
+        case WindowKind::GroupBox:
+            RememberGroupFont(hWnd);
+            break;
+        case WindowKind::Toolbar:
+            if (UpdateHot(hWnd)) {
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            break;
+        default:
+            break;
     }
-    // Inert the moment the mod is switched off, so a window that keeps this proc
-    // does not keep the colours.
-    if (!g_active && message != 0x0082) {  // WM_NCDESTROY
-        return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-    }
+    return 0;
+}
+
+LRESULT HandleDialog(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 
     // A destroyed window leaving its handle in the table is how a later window
     // that reuses the handle inherits the wrong proc.
-    if (message == 0x0082) {  // WM_NCDESTROY
-        LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
-        UnsubclassStatusBar(hWnd);
-        return result;
-    }
 
     // The colour goes down in the erase and the paint still reaches the dialog's
     // own proc. Painting the client here and returning early skips the dialog
@@ -2077,7 +1954,7 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT message, WPARAM wParam,
     // The sheet has just painted, including its body frame; cover it.
     if (message == WM_PAINT) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         CoverPageFrame(hWnd);
         return result;
     }
@@ -2086,7 +1963,7 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT message, WPARAM wParam,
     // white outline left.
     if (message == WM_NCPAINT) {
         LRESULT result =
-            reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+            DefSubclassProc(hWnd, message, wParam, lParam);
         PaintClientEdge(hWnd);
         return result;
     }
@@ -2106,14 +1983,14 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT message, WPARAM wParam,
             // painted twice, merges its own edge pixels with itself, which reads
             // as doubled and blurred. Measured on a device properties page: one
             // label had no colour fringing at all while every other label did.
-            SetBkMode(dc, kOpaque);
+            SetBkMode(dc, OPAQUE);
             SetTextColor(dc, kColorText);
             SetBkColor(dc, kColorBackground);
         }
         return reinterpret_cast<LRESULT>(g_backgroundBrush);
     }
 
-    return reinterpret_cast<WndProc_t>(oldProc)(hWnd, message, wParam, lParam);
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
 BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
@@ -2142,12 +2019,12 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
     // A group box is a button control. Themed, it draws its own frame and
     // caption through the theme engine and ignores every colour set here.
     if (wcscmp(className, L"Button") == 0) {
-        LONG_PTR style = GetWindowLongPtrW(hWnd, kGwlStyle);
-        if ((style & 0x0f) == kBsGroupBox) {
+        LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+        if ((style & 0x0f) == BS_GROUPBOX) {
             // Unthemed so nothing themed draws it, and painted here because the
             // classic frame comes from the table above.
             SetWindowThemeQuiet(hWnd, L"", L"");
-            SubclassWith(hWnd, GroupBoxProc);
+            SubclassWith(hWnd, WindowKind::GroupBox);
             RememberGroupFont(hWnd);
             InvalidateRect(hWnd, nullptr, TRUE);
         }
@@ -2155,7 +2032,7 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
 
     if (wcscmp(className, L"Edit") == 0) {
         if (RemoveClientEdge(hWnd)) {
-            SubclassWith(hWnd, FieldProc);
+            SubclassWith(hWnd, WindowKind::Field);
         }
     }
 
@@ -2164,7 +2041,7 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
         // background, so the page has to be painted during the erase instead.
         // That only happens if this dialog proc is on it, and a page found by
         // walking down from the sheet has not been through ThemeDialog.
-        SubclassWith(hWnd, DialogProc);
+        SubclassWith(hWnd, WindowKind::Dialog);
         SetWindowThemeQuiet(hWnd, L"", L"");
         InvalidateRect(hWnd, nullptr, TRUE);
     }
@@ -2173,9 +2050,7 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
         // Tab controls have no dark variant in any shipping Windows. Unthemed,
         // they draw their tabs from the colour table, which this mod answers.
         SetWindowThemeQuiet(hWnd, L"", L"");
-        SendToControl(hWnd, kTcmSetBkColor, 0,
-                      static_cast<LPARAM>(kColorBackground));
-        SubclassWith(hWnd, TabProc);
+        SubclassWith(hWnd, WindowKind::Tab);
         RefreshTabEntry(hWnd);
         InvalidateRect(hWnd, nullptr, TRUE);
     }
@@ -2183,7 +2058,7 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
 }
 
 void ThemeDialog(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd) || OldProcOf(hWnd)) {
+    if (!hWnd || !IsWindow(hWnd) || IsSubclassed(hWnd)) {
         return;
     }
 
@@ -2192,7 +2067,7 @@ void ThemeDialog(HWND hWnd) {
     // is found here and themed the same way.
     for (int depth = 0; depth < 3; depth++) {
         HWND parent = GetParent(hWnd);
-        if (!parent || OldProcOf(parent)) {
+        if (!parent || IsSubclassed(parent)) {
             break;
         }
         WCHAR parentClass[64] = {};
@@ -2200,7 +2075,7 @@ void ThemeDialog(HWND hWnd) {
             wcscmp(parentClass, L"#32770") != 0) {
             break;
         }
-        SubclassWith(parent, DialogProc);
+        SubclassWith(parent, WindowKind::Dialog);
         ApplyToWindow(parent);
         EnumChildWindows(parent, ReapplyChild, 0);
         InvalidateRect(parent, nullptr, TRUE);
@@ -2211,7 +2086,7 @@ void ThemeDialog(HWND hWnd) {
     }
     // Subclass first: ApplyToWindow would give a top level window the frame
     // backdrop proc, and a window can only carry one of ours.
-    SubclassWith(hWnd, DialogProc);
+    SubclassWith(hWnd, WindowKind::Dialog);
     ApplyToWindow(hWnd);
     // The controls were created and themed before the dialog itself was, so
     // they were resolving their theme against a light parent. Now that the
@@ -2224,33 +2099,29 @@ void ResetWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
         return;
     }
-    pSetWindowTheme(hWnd, L"", L"");
+    // NULL, NULL removes the association the mod made, which is not the same as
+    // the empty string: L"" matches no section and turns visual styles off, so a
+    // reset that used it left every control drawing in the classic style.
+    pSetWindowTheme(hWnd, nullptr, nullptr);
+    if (pAllowDarkModeForWindow) {
+        pAllowDarkModeForWindow(hWnd, FALSE);
+    }
+    RestoreRemovedStyles(hWnd);
     ColourClassicControl(hWnd, false);
     DressExtraChrome(hWnd, false);
     DWORD_PTR ignored = 0;
     SendMessageTimeoutW(hWnd, WM_THEMECHANGED, 0, 0,
                         SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &ignored);
     if (GetAncestor(hWnd, GA_ROOT) == hWnd) {
-        if (pSetWindowCompositionAttribute) {
-            BOOL dark = FALSE;
-            WindowCompositionAttributeData data = {};
-            data.attribute = kWcaUseImmersiveDarkModeColors;
-            data.data = &dark;
-            data.size = sizeof(dark);
-            pSetWindowCompositionAttribute(hWnd, &data);
-        }
-        if (pDwmSetWindowAttribute) {
-            int preference = kDwmcDefault;
-            pDwmSetWindowAttribute(hWnd, kDwmwaWindowCornerPreference,
-                                   &preference, sizeof(preference));
-            // The one pixel frame was set to the background colour when the window
-            // was themed. Left behind, it draws a dark outline around a light
-            // window after the mod is switched off.
-            DWORD border = kColorBorderDefault;
-            pDwmSetWindowAttribute(hWnd, kDwmwaBorderColor, &border,
-                                   sizeof(border));
-        }
-        UnsubclassStatusBar(hWnd);
+        SetDarkTitleBar(hWnd, false);
+        int preference = DWMWCP_DEFAULT;
+        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference,
+                              sizeof(preference));
+        // The frame colour was set to the background when the window was themed.
+        // Left behind, it draws a dark outline around a light window after the mod
+        // is switched off.
+        DWORD border = DWMWA_COLOR_DEFAULT;
+        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
         InvalidateRect(hWnd, nullptr, TRUE);
     }
 }
@@ -2260,14 +2131,12 @@ struct WalkResult {
     int children;
 };
 
-void LogChromeClass(HWND hWnd);
 
 BOOL CALLBACK WalkChild(HWND hWnd, LPARAM lParam) {
     WalkResult* result = reinterpret_cast<WalkResult*>(lParam);
     if (!hWnd || !IsWindow(hWnd)) {
         return TRUE;
     }
-    LogChromeClass(hWnd);
     if (g_active) {
         ApplyToWindow(hWnd);
     } else {
@@ -2294,34 +2163,6 @@ BOOL CALLBACK WalkTop(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
-const wchar_t* const kChromeNames[] = {L"status", L"toolbar", L"rebar",
-                                      L"header", L"tab", L"mmc", L"afx"};
-
-void LogChromeClass(HWND hWnd) {
-    WCHAR className[64] = {};
-    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
-        return;
-    }
-    bool interesting = false;
-    for (size_t i = 0; i < ARRAYSIZE(kChromeNames); i++) {
-        if (NameContains(className, kChromeNames[i])) {
-            interesting = true;
-        }
-    }
-    if (!interesting || !FirstTimeSeeingClass(hWnd)) {
-        return;
-    }
-    WCHAR parentClass[64] = {};
-    HWND parent = GetAncestor(hWnd, GA_PARENT);
-    if (parent && parent != hWnd) {
-        GetClassNameW(parent, parentClass, ARRAYSIZE(parentClass));
-    }
-    RECT rect = {};
-    GetWindowRect(hWnd, &rect);
-    Wh_Log(L"chrome: %s, parent %s, %ldx%ld", className,
-           parentClass[0] ? parentClass : L"none", rect.right - rect.left,
-           rect.bottom - rect.top);
-}
 
 void WalkProcessWindows() {
     WalkResult result = {};
@@ -2458,109 +2299,232 @@ HWND WINAPI CreateDialogIndirectParamW_Hook(HINSTANCE hInstance,
 // Settings and lifecycle
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Telling the process its colours moved
+// ---------------------------------------------------------------------------
+
+BOOL CALLBACK SendSysColorChange(HWND hWnd, LPARAM);
+
+BOOL CALLBACK WalkTopSysColor(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) {
+        return TRUE;
+    }
+    SendSysColorChange(hWnd, 0);
+    EnumChildWindows(hWnd, SendSysColorChange, 0);
+    int* count = reinterpret_cast<int*>(lParam);
+    if (count) {
+        (*count)++;
+    }
+    return TRUE;
+}
+
+BOOL CALLBACK SendSysColorChange(HWND hWnd, LPARAM) {
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(hWnd, WM_SYSCOLORCHANGE, 0, 0,
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &ignored);
+    return TRUE;
+}
+
+// Sent before the brushes this mod answered with are deleted, so anything that
+// cached one (comctl32 caches several until the next WM_SYSCOLORCHANGE) asks
+// again and gets the system's own.
+void BroadcastSysColorChange() {
+    int counted = 0;
+    EnumWindows(WalkTopSysColor, reinterpret_cast<LPARAM>(&counted));
+    Wh_Log(L"asked %d top level windows for their colours again", counted);
+}
+
+// ---------------------------------------------------------------------------
+// The one window procedure this mod installs
+// ---------------------------------------------------------------------------
+
+// Every window handed to this mod carries its kind in the subclass reference
+// data, so one procedure can serve all of them. Teardown happens here too, on the
+// thread that owns the window, at the moment the window dies.
+LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                 LPARAM lParam, DWORD_PTR refData) {
+    const WindowKind kind = static_cast<WindowKind>(refData);
+
+    if (message == WM_NCDESTROY) {
+        LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
+        ForgetSubclass(hWnd);
+        switch (kind) {
+        case WindowKind::Toolbar: {
+            HotEntry* entry = HotFor(hWnd, false);
+            if (entry) {
+                *entry = {};
+            }
+            break;
+        }
+        case WindowKind::StatusBar: {
+            for (int i = 0; i < 2; i++) {
+                if (g_statusCache[i].hWnd == hWnd) {
+                    g_statusCache[i] = {};
+                }
+            }
+            break;
+        }
+        case WindowKind::Tab: {
+            TabEntry* entry = TabEntryFor(hWnd, false);
+            if (entry) {
+                *entry = {};
+            }
+            break;
+        }
+        case WindowKind::GroupBox:
+            ForgetGroupFont(hWnd);
+            break;
+        default:
+            break;
+        }
+        return result;
+    }
+
+    // Switched off: nothing of this mod runs, and the window behaves as it did
+    // before the mod ever saw it.
+    if (!g_active) {
+        return DefSubclassProc(hWnd, message, wParam, lParam);
+    }
+
+    // Posted by a walk that had to fill a table from another thread. Comes back
+    // here, on the thread that owns the window.
+    if (message == OwnThreadSetupMessage()) {
+        return HandleOwnThreadSetup(hWnd, kind);
+    }
+
+    switch (kind) {
+    case WindowKind::Backdrop:
+        return HandleBackdrop(hWnd, message, wParam, lParam);
+    case WindowKind::Strip:
+        return HandleStrip(hWnd, message, wParam, lParam);
+    case WindowKind::StatusBar:
+        return HandleStatusBar(hWnd, message, wParam, lParam);
+    case WindowKind::Toolbar:
+        return HandleToolbar(hWnd, message, wParam, lParam);
+    case WindowKind::NoBorder:
+        return HandleNoBorder(hWnd, message, wParam, lParam);
+    case WindowKind::Tab:
+        return HandleTab(hWnd, message, wParam, lParam);
+    case WindowKind::Field:
+        return HandleField(hWnd, message, wParam, lParam);
+    case WindowKind::GroupBox:
+        return HandleGroupBox(hWnd, message, wParam, lParam);
+    case WindowKind::Dialog:
+        return HandleDialog(hWnd, message, wParam, lParam);
+    }
+    return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
 void LoadSettings() {
-    g_settings.enabled = Wh_GetIntSetting(L"enabled") != 0;
     g_settings.darkTitleBar = Wh_GetIntSetting(L"darkTitleBar") != 0;
     g_settings.roundCorners = Wh_GetIntSetting(L"roundCorners") != 0;
     g_settings.darkStatusBar = Wh_GetIntSetting(L"darkStatusBar") != 0;
     g_settings.hideStatusBar = Wh_GetIntSetting(L"hideStatusBar") != 0;
     g_settings.hideToolbar = Wh_GetIntSetting(L"hideToolbar") != 0;
-    g_settings.logDetails = Wh_GetIntSetting(L"logDetails") != 0;
 }
 
-// Installed once, at load, even when the mod starts switched off. Every hook
-// below passes the call straight through while g_active is false, which is what
-// makes the enabled setting work in both directions without reloading the mod.
+// Installed once, at load. The typed wrapper checks at compile time that each
+// hook has the same signature as the function it replaces, which a void* cast
+// cannot do. Every hook passes calls straight through while g_active is false.
 void InstallHooks() {
     if (pSetWindowTheme) {
-        if (!Wh_SetFunctionHook((void*)pSetWindowTheme,
-                                (void*)SetWindowTheme_Hook,
-                                (void**)&pSetWindowThemeHook)) {
+        if (!WindhawkUtils::SetFunctionHook(pSetWindowTheme, SetWindowTheme_Hook,
+                                            &pSetWindowThemeHook)) {
             Wh_Log(L"could not hook SetWindowTheme");
         } else {
-            // Everything else keeps calling through the hook from now on.
+            // Later calls go through the trampoline, so nothing calls the
+            // function that is now a jump back into the hook.
             pSetWindowTheme = pSetWindowThemeHook;
         }
     }
 
+    // Which theme handle belongs to a list box has to be known before a colour
+    // question can be answered, so the three handle calls are hooked as well.
+    if (pOpenThemeData) {
+        if (!WindhawkUtils::SetFunctionHook(pOpenThemeData, OpenThemeData_Hook,
+                                            &pOpenThemeDataHook)) {
+            Wh_Log(L"could not hook OpenThemeData");
+        } else {
+            pOpenThemeData = pOpenThemeDataHook;
+        }
+    }
+    if (pOpenThemeDataForDpi) {
+        if (!WindhawkUtils::SetFunctionHook(pOpenThemeDataForDpi,
+                                            OpenThemeDataForDpi_Hook,
+                                            &pOpenThemeDataForDpiHook)) {
+            Wh_Log(L"could not hook OpenThemeDataForDpi");
+        } else {
+            pOpenThemeDataForDpi = pOpenThemeDataForDpiHook;
+        }
+    }
+    if (pCloseThemeData) {
+        if (!WindhawkUtils::SetFunctionHook(pCloseThemeData, CloseThemeData_Hook,
+                                            &pCloseThemeDataHook)) {
+            Wh_Log(L"could not hook CloseThemeData");
+        } else {
+            pCloseThemeData = pCloseThemeDataHook;
+        }
+    }
+
     if (pGetThemeColor) {
-        if (!Wh_SetFunctionHook((void*)pGetThemeColor, (void*)GetThemeColor_Hook,
-                                (void**)&pGetThemeColorHook)) {
+        if (!WindhawkUtils::SetFunctionHook(pGetThemeColor, GetThemeColor_Hook,
+                                            &pGetThemeColorHook)) {
             Wh_Log(L"could not hook GetThemeColor; selected list rows may stay white");
         }
     } else {
         Wh_Log(L"GetThemeColor not found; selected list rows may stay white");
     }
 
-    if (!Wh_SetFunctionHook((void*)GetSysColor, (void*)GetSysColor_Hook,
-                            (void**)&pGetSysColor)) {
+    if (!WindhawkUtils::SetFunctionHook(GetSysColor, GetSysColor_Hook,
+                                        &pGetSysColor)) {
         Wh_Log(L"could not hook GetSysColor");
     }
-
-    if (!Wh_SetFunctionHook((void*)GetSysColorBrush,
-                            (void*)GetSysColorBrush_Hook,
-                            (void**)&pGetSysColorBrush)) {
+    if (!WindhawkUtils::SetFunctionHook(GetSysColorBrush, GetSysColorBrush_Hook,
+                                        &pGetSysColorBrush)) {
         Wh_Log(L"could not hook GetSysColorBrush");
     }
-
-    if (!Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                            (void**)&pCreateWindowExW)) {
-        Wh_Log(L"could not hook CreateWindowExW; existing windows are themed, "
-               L"new ones will not be");
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &pCreateWindowExW)) {
+        Wh_Log(L"could not hook CreateWindowExW; new windows will not be themed");
     }
-
-    if (!Wh_SetFunctionHook((void*)CreateDialogParamW,
-                            (void*)CreateDialogParamW_Hook,
-                            (void**)&pCreateDialogParamW)) {
+    if (!WindhawkUtils::SetFunctionHook(CreateDialogParamW, CreateDialogParamW_Hook,
+                                        &pCreateDialogParamW)) {
         Wh_Log(L"could not hook CreateDialogParamW");
     }
-
-    if (!Wh_SetFunctionHook((void*)CreateDialogIndirectParamW,
-                            (void*)CreateDialogIndirectParamW_Hook,
-                            (void**)&pCreateDialogIndirectParamW)) {
+    if (!WindhawkUtils::SetFunctionHook(CreateDialogIndirectParamW,
+                                        CreateDialogIndirectParamW_Hook,
+                                        &pCreateDialogIndirectParamW)) {
         Wh_Log(L"could not hook CreateDialogIndirectParamW");
     }
 }
 
-// Every window this mod took over gets its own procedure back before the DLL is
-// unloaded. Windows are not obliged to be destroyed first: a property sheet can
-// still be open when the mod is turned off and unloaded, and a window procedure
-// that points into an unloaded DLL is an access violation waiting for the next
-// message. The table is checked window by window, because a handle that has been
-// reused must not have a stranger's procedure written into it.
-void RestoreSubclassedWindows() {
-    for (size_t i = 0; i < g_subclassedCount; i++) {
-        if (CarriesProc(&g_subclassed[i])) {
-            SetWindowLongPtrW(g_subclassed[i].hWnd, kGwlWndProc,
-                              g_subclassed[i].oldProc);
-            RemovePropW(g_subclassed[i].hWnd, kSubclassMark);
-        }
-    }
-    g_subclassedCount = 0;
-}
-
-// Everything that has to be true for the theme to be in effect. Called at load,
-// and again when the enabled setting is turned back on.
+// Everything that has to be true for the theme to be in effect. Called once, from
+// Wh_ModInit, after the hooks are in place.
 void Activate() {
-    pSetPreferredAppMode(PreferredAppModeForceDark);
-    if (pFlushMenuThemes) {
-        pFlushMenuThemes();
-    }
-
-    g_active = true;
+    // The brushes exist before anything is painted: the first walk themes windows
+    // that then repaint themselves, and a repaint that asks for a system brush
+    // must not get the real one.
     if (!g_backgroundBrush) {
         g_backgroundBrush = CreateSolidBrush(kColorBackground);
     }
-
-    // Windows that already exist were created before the hook was in place.
-    WalkProcessWindows();
-
     for (int i = 0; i < 23; i++) {
         COLORREF mapped = MapSystemColour(i);
         if (mapped != 0xffffffff && !g_sysBrushes[i]) {
             g_sysBrushes[i] = CreateSolidBrush(mapped);
         }
     }
+
+    pSetPreferredAppMode(PreferredAppModeForceDark);
+    if (pFlushMenuThemes) {
+        pFlushMenuThemes();
+    }
+
+    g_active = true;
+
+    // Windows that already exist were created before the hook was in place.
+    WalkProcessWindows();
 }
 
 }  // namespace
@@ -2571,20 +2535,14 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!ResolveApis()) {
-        // A mod that is switched off must never fail to load; one that is on says
-        // so in the log instead of half working.
-        return g_settings.enabled ? FALSE : TRUE;
+        // Refusing to load is better than loading and half working.
+        return FALSE;
     }
 
     InstallHooks();
 
     if (pShouldAppsUseDarkMode) {
         Wh_Log(L"system dark mode is %d", pShouldAppsUseDarkMode() ? 1 : 0);
-    }
-
-    if (!g_settings.enabled) {
-        Wh_Log(L"disabled in settings, hooks installed but inert");
-        return TRUE;
     }
 
     if (HighContrastIsOn()) {
@@ -2601,12 +2559,21 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    if (!g_active) {
-        return;
-    }
+    // Unconditional, and before any early return that could skip it. Every window
+    // is put back before the DLL that owns the window procedure goes away.
+    const bool wasActive = g_active;
     g_active = false;
-    WalkProcessWindows();
-    RestoreSubclassedWindows();
+    if (wasActive) {
+        WalkProcessWindows();
+    }
+    RemoveAllSubclasses();
+    {
+        std::lock_guard<std::mutex> lock(g_themeLock);
+        g_listBoxThemes.clear();
+    }
+    // Callers may have cached the brushes this mod answered with, so they are told
+    // to ask again before the handles go away.
+    BroadcastSysColorChange();
     if (pSetPreferredAppMode) {
         pSetPreferredAppMode(PreferredAppModeDefault);
     }
@@ -2637,33 +2604,20 @@ void Wh_ModUninit() {
     }
 }
 
+// Switching the mod on and off is Windhawk's own toggle, so no setting here
+// duplicates it. Only the choices that change once the theme is already up need
+// a replay.
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Wh_Log(L"settings changed: enabled=%d darkTitleBar=%d roundCorners=%d",
-           g_settings.enabled, g_settings.darkTitleBar, g_settings.roundCorners);
-
-    if (g_settings.enabled && !g_active) {
-        if (HighContrastIsOn()) {
-            Wh_Log(L"high contrast is on, leaving the console alone");
-            return;
-        }
-        if (!pSetPreferredAppMode) {
-            // The mod loaded while uxtheme would not cooperate. Try once more, so
-            // the switch is not silently dead.
-            if (!ResolveApis()) {
-                return;
-            }
-            InstallHooks();
-        }
-        Activate();
-    } else if (!g_settings.enabled && g_active) {
-        g_active = false;
-        WalkProcessWindows();
-        if (pSetPreferredAppMode) {
-            pSetPreferredAppMode(PreferredAppModeDefault);
-        }
-    } else if (g_active) {
-        // Title bar and corner switches changed while running: reapply.
-        WalkProcessWindows();
+    Wh_Log(L"settings changed: darkTitleBar=%d roundCorners=%d darkStatusBar=%d "
+           L"hideToolbar=%d hideStatusBar=%d",
+           g_settings.darkTitleBar, g_settings.roundCorners,
+           g_settings.darkStatusBar, g_settings.hideToolbar,
+           g_settings.hideStatusBar);
+    if (!g_active) {
+        // High contrast at load, or uxtheme refusing to cooperate. Nothing is
+        // themed, so there is nothing to replay.
+        return;
     }
+    WalkProcessWindows();
 }
