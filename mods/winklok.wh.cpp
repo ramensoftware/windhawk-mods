@@ -89,9 +89,8 @@ tone for both timers and alarms.
 
 ## Getting started
 1. Install and enable the mod in Windhawk.
-2. Restart the Windows Explorer from task manager if the mod seems not to work.
+2. Restart the Windows Explorer from task manager if changes don't appear. 
 3. Have fun...
-
 
 
 ## Tips
@@ -199,8 +198,6 @@ WinKlok is free and open source software released under the **GNU General Public
 //  7. Alert windows, UI-thread lifetime, time sync, and Windhawk entry points
 //
 //  UI rendering and taskbar/XAML integration stay separate from the engine.
-//  The persisted state format is backward compatible (alarms gained one optional trailing
-//  field: the sound index).
 // ============================================================================
 
 // ---- product information ---------------------------------------------------
@@ -289,7 +286,6 @@ namespace td
             alarmSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"alarmSound", kDefaultAlarmSound)));
             alarmSnooze = std::min(60, std::max(1, Wh_GetIntValue(L"alarmSnooze", 10)));
             sys24 = SystemUses24h();
-            Wh_DeleteValue(L"taskbarSize"); // the custom taskbar height feature was removed
         }
         void Save()
         {
@@ -1352,68 +1348,6 @@ namespace tb
         en.tooltips.clear();
     }
 
-    // ---- safe memory probing (used to get the XAML element out of a hooked `this`) ----
-    static bool ReadableRange(const void *p, size_t n)
-    {
-        if (!p)
-            return false;
-        MEMORY_BASIC_INFORMATION mbi;
-        if (!VirtualQuery(p, &mbi, sizeof(mbi)))
-            return false;
-        if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
-            return false;
-        return (const char *)p + n <= (const char *)mbi.BaseAddress + mbi.RegionSize;
-    }
-
-    static bool AddressInModule(const void *p)
-    {
-        HMODULE m = nullptr;
-        return GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                  (LPCWSTR)p, &m) &&
-               m;
-    }
-
-    static IUnknown *LooksLikeCom(void *obj)
-    {
-        if (!ReadableRange(obj, sizeof(void *)))
-            return nullptr;
-        void **vt = *(void ***)obj;
-        if (!ReadableRange(vt, 3 * sizeof(void *)))
-            return nullptr;
-        for (int i = 0; i < 3; ++i)
-            if (!AddressInModule(vt[i]))
-                return nullptr;
-        return (IUnknown *)obj;
-    }
-
-    // Tries `pThis` itself and a few well-known slots. Validated by QueryInterface + class name.
-    static wux::FrameworkElement ElementFromThis(void *pThis, const wchar_t *expectedClass)
-    {
-        if (!ReadableRange(pThis, 4 * sizeof(void *)))
-            return nullptr;
-        void *cands[3] = {pThis, ((void **)pThis)[1], ((void **)pThis)[3]};
-        for (void *c : cands)
-        {
-            IUnknown *u = LooksLikeCom(c);
-            if (!u)
-                continue;
-            void *out = nullptr;
-            if (FAILED(u->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), &out)) || !out)
-                continue;
-            wux::FrameworkElement fe{nullptr};
-            winrt::attach_abi(fe, out);
-            try
-            {
-                if (winrt::get_class_name(fe) == expectedClass)
-                    return fe;
-            }
-            catch (...)
-            {
-            }
-        }
-        return nullptr;
-    }
-
     // ---- brush / layout ----------------------------------------------------------
     static wuxm::Brush NativeForeground(Entry &en)
     {
@@ -2218,12 +2152,12 @@ namespace tb
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
 
-    static void EnsureMsgWindow()
+    static bool EnsureMsgWindow()
     {
         DWORD tid = GetCurrentThreadId();
         std::lock_guard<std::mutex> g(g_msgMtx);
         if (g_msgWnds.count(tid))
-            return;
+            return true;
         if (!g_msgClassRegistered)
         {
             WNDCLASSW wc{};
@@ -2233,7 +2167,7 @@ namespace tb
             if (!RegisterClassW(&wc))
             {
                 WK_LOG(L"WinKlok: could not register the message window class (%u)", GetLastError());
-                return;
+                return false;
             }
             g_msgClassRegistered = true;
         }
@@ -2242,11 +2176,12 @@ namespace tb
         if (!h)
         {
             WK_LOG(L"WinKlok: could not create message window (%u)", GetLastError());
-            return;
+            return false;
         }
         SetTimer(h, 1, 100, nullptr);
         g_msgTickMs[tid] = 100;
         g_msgWnds[tid] = h;
+        return true;
     }
 
     static void PostRefreshAll()
@@ -2279,10 +2214,11 @@ namespace tb
             }
             return;
         }
+        if (!EnsureMsgWindow())
+            return; // this clock could never be cleaned up, so don't touch it
         en = std::make_shared<Entry>();
         en->tid = GetCurrentThreadId();
         en->clock = fe;
-        EnsureMsgWindow();
         {
             std::lock_guard<std::mutex> g(g_entMtx);
             g_entries.push_back(en);
@@ -2294,30 +2230,32 @@ namespace tb
     }
 
     // ---- clock hooks --------------------------------------------------------------------------------
-    using OnApplyTemplate_t = void(WINAPI *)(void *);
+    using OnApplyTemplate_t = int(WINAPI *)(void *); // produce<> ABI thunk: HRESULT OnApplyTemplate()
     static OnApplyTemplate_t g_origOAT = nullptr;
     using GetViewModel_t = int(WINAPI *)(void *, void **); // produce<> ABI thunk: HRESULT get_ViewModel(void **)
     static GetViewModel_t g_origGVM = nullptr;
     static std::atomic<bool> g_hooksReady{false};
 
-    static void WINAPI OAT_Hook(void *pThis)
+    // Hooked on the produce<> ABI thunk, so pThis is always an IUnknown* of the DateTimeIconContent object.
+    static int WINAPI OAT_Hook(void *pThis)
     {
-        if (g_origOAT)
-            g_origOAT(pThis);
-        if (g_shuttingDown.load())
-            return;
+        const int hr = g_origOAT ? g_origOAT(pThis) : (int)E_FAIL;
+        if (g_shuttingDown.load() || !pThis)
+            return hr;
         try
         {
-            auto fe = ElementFromThis(pThis, L"SystemTray.DateTimeIconContent");
+            wux::FrameworkElement fe{nullptr};
+            ((IUnknown *)pThis)->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(fe));
             if (fe)
                 AdoptClock(fe, true);
             else
-                WK_DLOG(L"WinKlok: OnApplyTemplate: could not obtain element from this=%p", pThis);
+                WK_DLOG(L"WinKlok: OnApplyTemplate: no FrameworkElement from this=%p", pThis);
         }
         catch (...)
         {
             WK_DLOG(L"WinKlok: OnApplyTemplate exception");
         }
+        return hr;
     }
 
     [[clang::no_destroy]] static std::unordered_map<void *, bool> g_seenThis;
@@ -2368,15 +2306,32 @@ namespace tb
         return hr;
     }
 
+    // Modules where the symbol lookup already failed: each candidate DLL is looked up at most once.
+    [[clang::no_destroy]] static std::vector<HMODULE> g_failedModules;
+    static std::mutex g_failedMtx;
+
+    static bool ModuleAlreadyFailed(HMODULE h)
+    {
+        std::lock_guard<std::mutex> g(g_failedMtx);
+        return std::find(g_failedModules.begin(), g_failedModules.end(), h) != g_failedModules.end();
+    }
+
+    static void RememberFailedModule(HMODULE h)
+    {
+        std::lock_guard<std::mutex> g(g_failedMtx);
+        g_failedModules.push_back(h);
+    }
+
     static bool TryHookModule(HMODULE h)
     {
         if (!h || g_hooksReady.load())
             return g_hooksReady.load();
-        // Taskbar.View.dll, SystemTray.dll, ExplorerExtensions.dll, taskbar.dll
-        WindhawkUtils::SYMBOL_HOOK taskbarModuleHooks[] = {
+        if (ModuleAlreadyFailed(h))
+            return false;
+        // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+        WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
             {
-                {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))",
-                 LR"(public: virtual void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
                 &g_origOAT,
                 OAT_Hook,
             },
@@ -2389,16 +2344,22 @@ namespace tb
                 true,
             },
         };
-        if (!WindhawkUtils::HookSymbols(h, taskbarModuleHooks, ARRAYSIZE(taskbarModuleHooks)))
-            return false;
-        g_hooksReady = true;
         wchar_t path[MAX_PATH] = {};
         GetModuleFileNameW(h, path, MAX_PATH);
+        if (!WindhawkUtils::HookSymbols(h, systemTrayHooks, ARRAYSIZE(systemTrayHooks)))
+        {
+            RememberFailedModule(h);
+            WK_LOG(L"WinKlok: DateTimeIconContent::OnApplyTemplate not found in %s", path);
+            return false;
+        }
+        g_hooksReady = true;
         WK_LOG(L"WinKlok: DateTimeIconContent::OnApplyTemplate hooked in %s", path);
         return true;
     }
 
-    static const wchar_t *const kCandidateModules[] = {L"Taskbar.View.dll", L"SystemTray.dll", L"ExplorerExtensions.dll", L"taskbar.dll"};
+    // Where the SystemTray types live depends on the Windows build: SystemTray.dll in recent builds,
+    // Taskbar.View.dll or ExplorerExtensions.dll in older ones. The first one that has them is used.
+    static const wchar_t *const kCandidateModules[] = {L"SystemTray.dll", L"Taskbar.View.dll", L"ExplorerExtensions.dll"};
 
     static bool TryHookAnyLoadedModule()
     {
@@ -2450,7 +2411,7 @@ namespace tb
         void *target = kb ? (void *)GetProcAddress(kb, "LoadLibraryExW") : nullptr;
         if (!target)
             return false;
-        return Wh_SetFunctionHook(target, (void *)LoadLibraryExW_Hook, (void **)&g_origLoadLibraryExW) != 0;
+        return WindhawkUtils::SetFunctionHook((LoadLibraryExW_t)target, LoadLibraryExW_Hook, &g_origLoadLibraryExW) != 0;
     }
 
     static void CleanupAll()
@@ -2516,7 +2477,6 @@ namespace ui
         TIMER_STATUS_ANIM,
         TIMER_TAB_ANIM,
         TIMER_NOTE_SAVE,
-        TIMER_PREVIEW_ANIM,
         TIMER_ABOUT_ANIM
     };
 
@@ -3555,11 +3515,9 @@ namespace ui
             HMODULE user32 = GetModuleHandleW(L"user32.dll");
             if (!user32)
                 return nullptr;
-            FARPROC proc = GetProcAddress(user32, "RegisterTouchpadCapableWindow");
-            // Some Windows 11 builds export the documented API by ordinal rather than by name.
-            if (!proc)
-                proc = GetProcAddress(user32, MAKEINTRESOURCEA(2689));
-            return reinterpret_cast<WkRegisterTouchpadCapableWindow_t>(proc);
+            // Resolved by name only: an export that is not found simply disables the direct touchpad tracking
+            // (two-finger scrolling then uses the wheel hook).
+            return reinterpret_cast<WkRegisterTouchpadCapableWindow_t>(GetProcAddress(user32, "RegisterTouchpadCapableWindow"));
         }();
         return fn;
     }
@@ -3574,9 +3532,13 @@ namespace ui
     // registration is last-caller-wins. Child EDIT controls (the notes editor) therefore never saw the two-finger
     // gesture. The registration is handed to whichever of the two (panel surface / body editor) is under the cursor.
     static HWND g_touchpadPanelWindow = nullptr; // the panel HWND that owns the registration lifetime
+    // The registration exists only while the panel is on screen: it is taken when the panel opens and given back
+    // when it has finished closing, so a hidden panel never holds on to the system's touchpad routing.
     static void RouteTouchpadTo(HWND target)
     {
         if (!target || !g_touchpadPanelWindow || target == g_touchpadCapableWindow)
+            return;
+        if (!IsWindowVisible(g_touchpadPanelWindow))
             return;
         if (g_touchpadCapableWindow && IsWindow(g_touchpadCapableWindow))
             SetTouchpadWindowCapability(g_touchpadCapableWindow, FALSE);
@@ -3585,7 +3547,22 @@ namespace ui
         else if (SetTouchpadWindowCapability(g_touchpadPanelWindow, TRUE))
             g_touchpadCapableWindow = g_touchpadPanelWindow;
         else
+        {
             g_touchpadCapableWindow = nullptr;
+            static bool logged = false;
+            if (!logged)
+            {
+                logged = true;
+                WK_LOG(L"WinKlok: touchpad-capable registration failed (%u); two-finger scrolling uses the wheel hook", GetLastError());
+            }
+        }
+    }
+
+    static void ReleaseTouchpadCapability()
+    {
+        if (g_touchpadCapableWindow && IsWindow(g_touchpadCapableWindow))
+            SetTouchpadWindowCapability(g_touchpadCapableWindow, FALSE);
+        g_touchpadCapableWindow = nullptr;
     }
 
     static LRESULT CALLBACK UiWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -3610,10 +3587,13 @@ namespace ui
             // so only undo the registration for the exact panel window we registered.
             if (hwnd == g_touchpadPanelWindow)
             {
-                if (g_touchpadCapableWindow && g_touchpadCapableWindow != hwnd && IsWindow(g_touchpadCapableWindow))
-                    SetTouchpadWindowCapability(g_touchpadCapableWindow, FALSE);
-                if (!SetTouchpadWindowCapability(hwnd, FALSE))
-                    WK_DLOG(L"WinKlok: touchpad-capable unregistration failed (%u)", GetLastError());
+                if (g_touchpadCapableWindow)
+                {
+                    if (g_touchpadCapableWindow != hwnd && IsWindow(g_touchpadCapableWindow))
+                        SetTouchpadWindowCapability(g_touchpadCapableWindow, FALSE);
+                    if (!SetTouchpadWindowCapability(hwnd, FALSE))
+                        WK_DLOG(L"WinKlok: touchpad-capable unregistration failed (%u)", GetLastError());
+                }
                 g_touchpadCapableWindow = nullptr;
                 g_touchpadPanelWindow = nullptr;
             }
@@ -7087,7 +7067,7 @@ namespace ui
     static const float kGlideMs = 80.f; // scroll glide time constant
     static const float kWheelPx = 56.f; // pixels per 120-unit wheel notch
     static const float kFrameMs = 8.f;  // animation timer interval (the display paces the real rate)
-    static const float kSlideOpenMs = 250.f, kSlideCloseMs = 230.f;
+    static const float kSlideOpenMs = 250.f, kSlideCloseMs = 210.f;
     static const float kAboutMs = 220.f; // About card expand / collapse
 
     static bool IsShellFlyoutWindow(HWND fg)
@@ -8111,7 +8091,7 @@ namespace ui
         int calView = 0, calYear = 2025, calMonth = 1, calSelY = 0, calSelM = 0, calSelD = 0, yearBase = 2020;
         float panelH = kPanelH; // fixed for a given monitor; never follows the selected tab
         // panelScroll is the visible position; panelScrollTarget is where it is gliding to.
-        // panelScrollStarted != 0 marks "gliding" (the From/Started names are historical).
+        // panelScrollStarted != 0 marks "gliding".
         float panelScroll = 0.f, panelScrollFrom = 0.f, panelScrollTarget = 0.f;
         ULONGLONG panelScrollStarted = 0;
         Smooth lapSm;  // stopwatch laps, in pixels
@@ -8257,16 +8237,12 @@ namespace ui
             InitTabAnim();
             // Required for Windows to send PT_TOUCHPAD events to this panel. The active handler tracks
             // contacts by pointer ID and ptHimetricLocation; do not replace it with wheel-only fallback.
-            if (SetTouchpadWindowCapability(hwnd, TRUE))
-            {
-                g_touchpadCapableWindow = hwnd;
-                g_touchpadPanelWindow = hwnd;
-                WK_LOG(L"WinKlok: touchpad-capable registration succeeded; direct per-pointer HIMETRIC tracking with kinetic momentum active");
-            }
+            // The registration itself is taken while the panel is open (ShowPanel) and released when it closes.
+            g_touchpadPanelWindow = hwnd;
+            if (ResolveRegisterTouchpadCapableWindow())
+                WK_LOG(L"WinKlok: touchpad API found; direct per-pointer HIMETRIC tracking is registered while the panel is open");
             else
-            {
-                WK_LOG(L"WinKlok: touchpad-capable registration failed (%u); direct touchpad scrolling may not receive PT_TOUCHPAD input", GetLastError());
-            }
+                WK_LOG(L"WinKlok: touchpad-capable API not available; two-finger scrolling uses the wheel hook");
             return true;
         }
 
@@ -9401,6 +9377,7 @@ namespace ui
                     }
                     SetPanelFade(1.f);
                     RemoveWheelHook();
+                    ReleaseTouchpadCapability(); // hidden: give the touchpad routing back
                     EndTimerPeriod();
                 }
                 else
@@ -9495,6 +9472,7 @@ namespace ui
             if (!(IsWindowVisible(hwnd) && panelAnimation == PanelAnimationState::Closing))
                 FindSlideTaskbar(mon, mi); // a panel re-opened mid-close keeps the taskbar it is already sliding behind
             BeginOpenAnimation(x, y, w, h, noAct);
+            RouteTouchpadTo(hwnd); // the panel is on screen now: take the touchpad registration
         }
 
         void HidePanel()
@@ -10971,9 +10949,6 @@ namespace ui
                     }
                     Invalidate();
                     return 0;
-                case TIMER_PREVIEW_ANIM:
-                    KillTimer(hwnd, TIMER_PREVIEW_ANIM); // retired: the preview glides through TIMER_SCROLL_ANIM
-                    return 0;
                 case TIMER_TAB_ANIM:
                     if (!tabScrollA.Running(kTabAnimMs) && !indXA.Running(kTabAnimMs) && !indWA.Running(kTabAnimMs))
                     {
@@ -11144,9 +11119,73 @@ namespace ui
         std::vector<td::MissedItem> items;
         float height = 124.f;
         static constexpr float W = 360.f, H = 124.f;
+        int compMode = 0; // same material as the panel: 0 opaque, 1 simple transparency, 2 acrylic
+        BYTE restingAlpha = 255;
         bool animateOnNextLayout = true;
         ULONGLONG appearStarted = 0;
         int appearX = 0, appearStartY = 0, appearEndY = 0, appearWidth = 0, appearHeight = 0;
+
+        // Picks palette and material exactly like the panel (Windows transparency setting + Settings > Panel material).
+        void ApplyMaterial()
+        {
+            const bool trans = TransparencyEffectsEnabled();
+            const bool acrylic = trans && td::g_set.acrylic.load() != 0;
+            compMode = acrylic ? 2 : trans ? 1
+                                           : 0;
+            grayText = compMode != 0;
+            pal = LoadPalette(acrylic);
+            if (alphaTarget != acrylic)
+            {
+                alphaTarget = acrylic;
+                ReleaseTarget();
+            }
+            else if (rt)
+                rt->SetTextAntialiasMode(grayText ? D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE : D2D1_TEXT_ANTIALIAS_MODE_DEFAULT);
+            DwmStyle(hwnd, pal);
+            restingAlpha = ConfigureComposition(hwnd, pal, compMode);
+        }
+
+        // The same sequence as PanelWindow::WarmUpMaterial (Simple, then Acrylic, on a window DWM is composing).
+        void WarmUpMaterial()
+        {
+            alphaTarget = false;
+            ReleaseTarget();
+            restingAlpha = ConfigureComposition(hwnd, pal, 1);
+            Render();
+            DwmFlush();
+            alphaTarget = true;
+            ReleaseTarget();
+            restingAlpha = ConfigureComposition(hwnd, pal, 2);
+            Render();
+            RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
+            DwmFlush();
+            DwmFlush();
+        }
+
+        // Shows the popup. In acrylic mode the live backdrop only comes up correctly when the material is switched on
+        // a window DWM is already composing, so the window is cloaked while that happens (as for the panel).
+        void ShowWithMaterial(int x, int y, int w, int h)
+        {
+            bool cloaked = false;
+            if (compMode == 2)
+            {
+                const BOOL on = TRUE; // DWMWA_CLOAK
+                cloaked = SUCCEEDED(DwmSetWindowAttribute(hwnd, 13, &on, sizeof(on)));
+            }
+            SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            if (compMode == 2)
+            {
+                WarmUpMaterial();
+                restingAlpha = ConfigureComposition(hwnd, pal, compMode);
+                Render();
+                RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE | RDW_ALLCHILDREN);
+            }
+            if (cloaked)
+            {
+                const BOOL off = FALSE;
+                DwmSetWindowAttribute(hwnd, 13, &off, sizeof(off));
+            }
+        }
 
         static std::wstring When(long long whenWall)
         {
@@ -11241,13 +11280,16 @@ namespace ui
                 const float t = Clamp01((float)(GetTickCount64() - appearStarted) / 220.f);
                 const float eased = EaseOutCubic(t);
                 const int y = appearStartY + (int)std::lround((appearEndY - appearStartY) * eased);
-                SetLayeredWindowAttributes(hwnd, 0, (BYTE)std::lround(255.f * eased), LWA_ALPHA);
+                // Over the live acrylic backdrop the popup only slides (no fade), like the panel.
+                if (compMode != 2)
+                    SetLayeredWindowAttributes(hwnd, 0, (BYTE)std::lround((float)restingAlpha * eased), LWA_ALPHA);
                 SetWindowPos(hwnd, HWND_TOPMOST, appearX, t >= 1.f ? appearEndY : y, appearWidth, appearHeight,
                              SWP_NOACTIVATE | SWP_NOSENDCHANGING);
                 if (t >= 1.f)
                 {
                     KillTimer(hwnd, TIMER_ALERT_ANIM);
-                    SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+                    if (compMode != 2)
+                        SetLayeredWindowAttributes(hwnd, 0, restingAlpha, LWA_ALPHA);
                 }
                 return 0;
             }
@@ -11325,14 +11367,16 @@ namespace ui
                 a->appearStartY = y + (int)std::lround(10.f * s);
                 a->appearWidth = w;
                 a->appearHeight = h;
-                SetLayeredWindowAttributes(a->hwnd, 0, 0, LWA_ALPHA);
-                SetWindowPos(a->hwnd, HWND_TOPMOST, x, a->appearStartY, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                if (a->compMode != 2)
+                    SetLayeredWindowAttributes(a->hwnd, 0, 0, LWA_ALPHA);
+                a->ShowWithMaterial(x, a->appearStartY, w, h);
                 SetTimer(a->hwnd, TIMER_ALERT_ANIM, 15, nullptr);
             }
             else
             {
                 KillTimer(a->hwnd, TIMER_ALERT_ANIM);
-                SetLayeredWindowAttributes(a->hwnd, 0, 255, LWA_ALPHA);
+                if (a->compMode != 2)
+                    SetLayeredWindowAttributes(a->hwnd, 0, a->restingAlpha, LWA_ALPHA);
                 SetWindowPos(a->hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
             a->Invalidate();
@@ -11377,7 +11421,7 @@ namespace ui
         a->dpi = GetDpiForWindow(h);
         if (!a->dpi)
             a->dpi = 96;
-        DwmStyle(h, a->pal);
+        a->ApplyMaterial();
         g_alerts.push_back(a);
         StopPreviewSound(); // an alert always wins over an alarm-editor preview
         snd::g_ringing = false;
@@ -11405,7 +11449,7 @@ namespace ui
         a->dpi = GetDpiForWindow(h);
         if (!a->dpi)
             a->dpi = 96;
-        DwmStyle(h, a->pal);
+        a->ApplyMaterial();
         g_alerts.push_back(a);
         LayoutAlerts(); // silent: no SoundUpdate for a missed-items popup
     }
@@ -11603,8 +11647,6 @@ BOOL Wh_ModInit()
     LoadModSettings();
     td::g_eng.Load();
     td::g_set.Load();
-    Wh_DeleteValue(L"gvmKey"); // leftovers of the removed symbol cache
-    Wh_DeleteValue(L"gvmRva");
     if (!ui::Start())
     {
         WK_LOG(L"WinKlok: could not start the UI thread");
