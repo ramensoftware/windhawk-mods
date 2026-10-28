@@ -61,10 +61,6 @@ Adds a modern, interactive seek bar and live playback timestamps directly to the
 */
 // ==/WindhawkModSettings==
 
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"quick-settings-media-progress-bar"
-#endif
-
 #include <windows.h>
 #include <unknwn.h>
 #ifdef GetCurrentTime
