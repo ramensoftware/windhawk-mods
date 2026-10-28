@@ -2,12 +2,12 @@
 // @id              altbinz-dark
 // @name            Alt.Binz Dark Mode
 // @description     Dark colors for the skinned user interface of Alt.Binz, with a custom surface color, gradients and colored progress bars
-// @version         1.0.1
+// @version         1.0.2
 // @author          MrSmith
 // @github          https://github.com/MrSmith2017
 // @include         altbinz.exe
 // @architecture    x86
-// @compilerOptions -lgdi32 -luser32 -luxtheme
+// @compilerOptions -lgdi32 -luser32 -luxtheme -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,13 +48,17 @@ default blue.
 
 ## Appearance
 
-These values are applied when Alt.Binz is restarted:
+The **text color** (interface) and the **list text color** (download queue and log)
+and the **column text color** (the header bars of the lists) are applied live. The values below are applied when Alt.Binz is restarted:
 
 * **Background lightness**: how dark the lists and dark areas are (percent).
 * **Text lightness**: how bright text and lines are (percent). Ignored when a text color is set.
-* **Text color**: an optional color for text and lines.
 * **List background color**: an optional color for the large list areas.
 * **Saturation**: how colorful the blue skin is (percent).
+
+The **title bar color** (default black) is applied live. It needs Windows 11; on
+Windows 10 the title bar keeps its normal color. Leave the value empty to keep the
+color of Windows.
 
 The **column header color** (the header bars of the lists) and everything else is
 applied live. If you disable the mod, restart Alt.Binz to get the original look
@@ -107,7 +111,13 @@ back completely.
     $description: In percent. Ignored when a text color is set. Restart Alt.Binz to apply.
   - textColor: ""
     $name: Text color
-    $description: Hex color for text and lines, for example E8EEF8. Leave empty for the neutral light gray. Restart Alt.Binz to apply.
+    $description: Hex color for text and lines of the interface (toolbar, menus, dialogs), for example E8EEF8. Leave empty for the neutral light gray. Make sure it contrasts with the background.
+  - listTextColor: ""
+    $name: List text color
+    $description: Hex color for text and lines in the download queue and log lists. Leave empty to use the text color.
+  - columnTextColor: ""
+    $name: Column text color
+    $description: Hex color for the text of the column headers (Subject, Size, Action, Description ...). Leave empty to use the text color.
   - listColor: ""
     $name: List background color
     $description: Hex color for the large list areas (download queue, log), for example 1E2430. Leave empty for dark gray. Restart Alt.Binz to apply.
@@ -120,6 +130,9 @@ back completely.
   - keepSetupTreeDark: false
     $name: Keep the tree in Setup dark gray
     $description: By default the tree on the left of the Setup window uses the color of the surface.
+  - titleBarColor: "000000"
+    $name: Title bar color
+    $description: Hex color of the window title bars, for example 000000. Leave empty for the color of Windows. Needs Windows 11.
   $name: Appearance
 */
 // ==/WindhawkModSettings==
@@ -127,6 +140,7 @@ back completely.
 #include <windhawk_api.h>
 #include <windows.h>
 #include <uxtheme.h>
+#include <dwmapi.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -159,9 +173,13 @@ struct Settings {
     float listL;
     bool headerOn;
     COLORREF headerColor;
+    COLORREF titleBarColor;  // CLR_INVALID = color of Windows
+    bool listTextTint;       // separate text color for the lists
+    float listTextHue, listTextSat, listTextLight;
+    COLORREF columnTextColor;  // CLR_INVALID = like the list text
 };
 static Settings g_cfg = {0.11f, 0.92f, 0.85f, false, RGB(0x2F, 0x5A, 0x96), RGB(0x15, 0x22, 0x38), 90, 0.5f, false, 0.0f, 0.0f, false, 0.0f, 0.0f,
-                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0};
+                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0, CLR_INVALID, false, 0.0f, 0.0f, 0.0f, CLR_INVALID};
 
 // ---- color mapping ----------------------------------------------------------
 
@@ -203,15 +221,27 @@ static void HslToRgb8(float h, float s, float l, uint8_t* r8, uint8_t* g8, uint8
     *b8 = (uint8_t)fminf(255.0f, fmaxf(0.0f, (bb + m) * 255.0f + 0.5f));
 }
 
+// The window of a list (download queue, log) that is being painted on this thread: its text takes
+// the list text color.
+static thread_local HWND g_listPaintWnd;
+// The DC a column header bar was just filled on: text drawn on it before its next fill is header text.
+static thread_local HDC g_headerDc;
+
 static void MapRGB(uint8_t& r8, uint8_t& g8, uint8_t& b8) {
     if (r8 == 255 && g8 == 0 && b8 == 255) {  // transparency key (clFuchsia)
         return;
     }
     float h, s, l;
     RgbToHsl(r8 / 255.0f, g8 / 255.0f, b8 / 255.0f, &h, &s, &l);
-    float l2 = g_cfg.lightOut - (g_cfg.lightOut - g_cfg.darkOut) * l;
+    const bool listText = g_cfg.listTextTint && g_listPaintWnd;
+    const float lightOut = listText ? g_cfg.listTextLight : g_cfg.lightOut;
+    float l2 = lightOut - (lightOut - g_cfg.darkOut) * l;
     if (g_cfg.listTint && s < 0.12f && l >= 0.9f) {  // white areas (lists, edits)
         HslToRgb8(g_cfg.listHue, g_cfg.listSat, fminf(0.5f, fmaxf(0.0f, l2 + g_cfg.listL - g_cfg.darkOut)), &r8, &g8, &b8);
+        return;
+    }
+    if (listText && s < 0.12f && l < 0.5f) {  // text in the lists
+        HslToRgb8(g_cfg.listTextHue, g_cfg.listTextSat, l2, &r8, &g8, &b8);
         return;
     }
     if (g_cfg.textTint && s < 0.12f && l < 0.5f) {  // gray and black/white text takes the color of the text setting
@@ -719,18 +749,25 @@ typedef int(WINAPI* FillRect_t)(HDC, const RECT*, HBRUSH);
 static FillRect_t FillRect_orig;
 static int WINAPI FillRect_hook(HDC hdc, const RECT* rc, HBRUSH br) {
     MarkDirty(hdc);
+    if (g_headerDc == hdc) {
+        g_headerDc = nullptr;  // set again below when this fill is a header bar
+    }
     if ((ULONG_PTR)br > 0 && (ULONG_PTR)br <= 32) {
         int index = (int)(ULONG_PTR)br - 1;
         if (!IsSelectionColorIndex(index) && ShouldMap(__builtin_return_address(0), hdc)) {
             br = MappedSysBrush(index);
         }
-    } else if (g_cfg.headerOn && rc && rc->right - rc->left >= 4 && rc->top == 0 && rc->bottom - rc->top >= 15 && rc->bottom - rc->top <= 22 &&
-               ShouldMap(__builtin_return_address(0), hdc) && IsSkinColorBrush(br)) {
+    } else if ((g_cfg.headerOn || g_cfg.columnTextColor != CLR_INVALID) && rc && rc->right - rc->left >= 4 && rc->top == 0 &&
+               rc->bottom - rc->top >= 15 && rc->bottom - rc->top <= 22 && ShouldMap(__builtin_return_address(0), hdc) &&
+               IsSkinColorBrush(br)) {
         // the header bars of the lists are filled with the color of the skin
-        HBRUSH tmp = CreateSolidBrush_orig(g_cfg.headerColor);
-        int res = FillRect_orig(hdc, rc, tmp);
-        DeleteObject(tmp);
-        return res;
+        g_headerDc = hdc;
+        if (g_cfg.headerOn) {
+            HBRUSH tmp = CreateSolidBrush_orig(g_cfg.headerColor);
+            int res = FillRect_orig(hdc, rc, tmp);
+            DeleteObject(tmp);
+            return res;
+        }
     } else if (g_cfg.progressOn && rc && rc->right - rc->left >= 1 && rc->bottom - rc->top >= 8 && rc->bottom - rc->top <= 24 &&
                ShouldMap(__builtin_return_address(0), hdc)) {
         // the small bars of the connection list: a gray background piece, then the fill in narrow strips
@@ -1308,13 +1345,29 @@ static HBITMAP WINAPI CreateDIBitmap_hook(HDC hdc, const BITMAPINFOHEADER* hdr, 
 typedef BOOL(WINAPI* EndPaint_t)(HWND, const PAINTSTRUCT*);
 static EndPaint_t EndPaint_orig;
 static void ForgetDcColors(HDC dc) {
+    if (g_headerDc == dc) {
+        g_headerDc = nullptr;
+    }
     EnterCriticalSection(&g_cs);
     g_textColors->erase(dc);
     g_bkColors->erase(dc);
     LeaveCriticalSection(&g_cs);
 }
 
+typedef HDC(WINAPI* BeginPaint_t)(HWND, LPPAINTSTRUCT);
+static BeginPaint_t BeginPaint_orig;
+static HDC WINAPI BeginPaint_hook(HWND wnd, LPPAINTSTRUCT ps) {
+    if ((g_cfg.listTextTint || g_cfg.columnTextColor != CLR_INVALID) && !g_listPaintWnd && WindowClassIs(wnd, L"TVirtualStringTree") &&
+        !WindowClassIs(GetAncestor(wnd, GA_ROOT), L"TSetupForm")) {
+        g_listPaintWnd = wnd;
+    }
+    return BeginPaint_orig(wnd, ps);
+}
+
 static BOOL WINAPI EndPaint_hook(HWND wnd, const PAINTSTRUCT* ps) {
+    if (wnd && wnd == g_listPaintWnd) {
+        g_listPaintWnd = nullptr;
+    }
     if (ps && ps->hdc && WindowClassIs(wnd, L"TbsSkinStatusBar")) {
         FixStatusGlyph(ps->hdc);
     }
@@ -1372,6 +1425,13 @@ typedef BOOL(WINAPI* ExtTextOutW_t)(HDC, int, int, UINT, const RECT*, LPCWSTR, U
 static ExtTextOutW_t ExtTextOutW_orig;
 static BOOL WINAPI ExtTextOutW_hook(HDC hdc, int x, int y, UINT o, const RECT* rc, LPCWSTR s, UINT n, const INT* dx) {
     MarkDirty(hdc);
+    if (g_cfg.columnTextColor != CLR_INVALID && g_headerDc == hdc) {
+        // the text drawn on the DC after a header bar was filled
+        COLORREF prev = SetTextColor_orig(hdc, g_cfg.columnTextColor);
+        BOOL res = ExtTextOutW_orig(hdc, x, y, o, rc, s, n, dx);
+        SetTextColor_orig(hdc, prev);
+        return res;
+    }
     return ExtTextOutW_orig(hdc, x, y, o, rc, s, n, dx);
 }
 typedef BOOL(WINAPI* PatBlt_t)(HDC, int, int, int, int, DWORD);
@@ -1408,6 +1468,9 @@ static BOOL WINAPI DeleteObject_hook(HGDIOBJ obj) {
 typedef BOOL(WINAPI* DeleteDC_t)(HDC);
 static DeleteDC_t DeleteDC_orig;
 static BOOL WINAPI DeleteDC_hook(HDC hdc) {
+    if (g_headerDc == hdc) {
+        g_headerDc = nullptr;
+    }
     if (g_csReady && hdc) {
         EnterCriticalSection(&g_cs);
         g_textColors->erase(hdc);
@@ -1442,7 +1505,21 @@ static bool IsAppWindow(HWND hWnd) {
     return IsAppRoot(hWnd);
 }
 
+// Colors the title bar of a top-level window of the app (Windows 11 build 22000 or newer, older
+// versions ignore the attribute). color is CLR_INVALID to put the color of Windows back.
+static void ApplyTitleBar(HWND hWnd, COLORREF color) {
+    if (!hWnd || GetAncestor(hWnd, GA_ROOT) != hWnd || (GetWindowLongW(hWnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) {
+        return;
+    }
+    if (!IsAppWindow(hWnd)) {
+        return;
+    }
+    DWORD value = color == CLR_INVALID ? 0xFFFFFFFF : (DWORD)color;  // DWMWA_COLOR_DEFAULT
+    DwmSetWindowAttribute(hWnd, 35 /* DWMWA_CAPTION_COLOR */, &value, sizeof(value));
+}
+
 static void ApplyDarkTheme(HWND hWnd) {
+    ApplyTitleBar(hWnd, g_cfg.titleBarColor);
     wchar_t cls[64];
     if (hWnd && IsAppWindow(hWnd) && GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
         (NeedsDarkTheme(cls) || (GetWindowLongW(hWnd, GWL_STYLE) & (WS_HSCROLL | WS_VSCROLL)))) {
@@ -1469,6 +1546,7 @@ static HWND WINAPI CreateWindowExA_hook(DWORD ex, LPCSTR cls, LPCSTR name, DWORD
 }
 
 static void ResetDarkTheme(HWND hWnd) {
+    ApplyTitleBar(hWnd, CLR_INVALID);
     wchar_t cls[64];
     if (hWnd && IsAppWindow(hWnd) && GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
         (NeedsDarkTheme(cls) || (GetWindowLongW(hWnd, GWL_STYLE) & (WS_HSCROLL | WS_VSCROLL)))) {
@@ -1583,8 +1661,20 @@ static void LoadSettings() {
     if (g_cfg.textTint) {
         float tl;
         RgbToHsl(GetRValue(tcc) / 255.0f, GetGValue(tcc) / 255.0f, GetBValue(tcc) / 255.0f, &g_cfg.textHue, &g_cfg.textSat, &tl);
-        g_cfg.lightOut = fmaxf(0.5f, tl);
+        g_cfg.lightOut = tl;
     }
+    PCWSTR ltc = Wh_GetStringSetting(L"appearance.listTextColor");
+    COLORREF ltcc = ltc && *ltc ? ParseColor(ltc, CLR_INVALID) : CLR_INVALID;
+    Wh_FreeStringSetting(ltc);
+    g_cfg.listTextTint = ltcc != CLR_INVALID;
+    if (g_cfg.listTextTint) {
+        float tl;
+        RgbToHsl(GetRValue(ltcc) / 255.0f, GetGValue(ltcc) / 255.0f, GetBValue(ltcc) / 255.0f, &g_cfg.listTextHue, &g_cfg.listTextSat, &tl);
+        g_cfg.listTextLight = tl;
+    }
+    PCWSTR ctc = Wh_GetStringSetting(L"appearance.columnTextColor");
+    g_cfg.columnTextColor = ctc && *ctc ? ParseColor(ctc, CLR_INVALID) : CLR_INVALID;
+    Wh_FreeStringSetting(ctc);
     PCWSTR lc = Wh_GetStringSetting(L"appearance.listColor");
     COLORREF lcc = lc && *lc ? ParseColor(lc, CLR_INVALID) : CLR_INVALID;
     Wh_FreeStringSetting(lc);
@@ -1620,6 +1710,9 @@ static void LoadSettings() {
     }
 
     g_cfg.keepSetupTreeDark = Wh_GetIntSetting(L"appearance.keepSetupTreeDark") != 0;
+    PCWSTR tb = Wh_GetStringSetting(L"appearance.titleBarColor");
+    g_cfg.titleBarColor = tb && *tb ? ParseColor(tb, CLR_INVALID) : CLR_INVALID;
+    Wh_FreeStringSetting(tb);
     PCWSTR prog = Wh_GetStringSetting(L"progress.colorTop");
     COLORREF pc = prog && *prog ? ParseColor(prog, CLR_INVALID) : CLR_INVALID;
     Wh_FreeStringSetting(prog);
@@ -1718,6 +1811,7 @@ BOOL Wh_ModInit() {
     HOOK(user32, GetSysColor);
     HOOK(user32, GetSysColorBrush);
     HOOK(user32, FillRect);
+    HOOK(user32, BeginPaint);
     HOOK(user32, EndPaint);
     HOOK(user32, ReleaseDC);
 
@@ -1766,6 +1860,7 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     RestoreBitmaps();  // the skin bitmaps are re-colored again with the new values on their next use
+    EnumWindows(ApplyDarkThemeTopLevel, 0);  // title bar color
     for (int i = 0; i < 32; i++) {
         g_sysBrushes[i] = nullptr;  // rebuilt on demand (the old brushes stay alive: they may still be selected)
     }
