@@ -95,12 +95,6 @@ The hooks exist for specific reasons:
 - darkStatusBar: true
   $name: Dark status bar
   $description: Repaints the status bar at the bottom of the console in the dark colours
-- hideStatusBar: false
-  $name: Hide the status bar
-  $description: Removes the strip at the bottom. It shows nothing in Device Manager except a resize grip
-- hideToolbar: false
-  $name: Hide the toolbar
-  $description: Removes the strip of icons at the top of the console. The menu bar stays, and every command is in the View and Action menus
 */
 // ==/WindhawkModSettings==
 
@@ -111,6 +105,7 @@ The hooks exist for specific reasons:
 #include <vssym32.h>
 #include <windhawk_api.h>
 
+#include <atomic>
 #include <cstddef>
 #include <mutex>
 #include <unordered_set>
@@ -169,6 +164,11 @@ using FlushMenuThemes_t = void(WINAPI*)();
 using IsDarkModeAllowedForWindow_t = BOOL(WINAPI*)(HWND);
 using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
 
+// The process's own system colours, asked for through the original function.
+// Declared up here because the reset path needs it before the hook section.
+using GetSysColor_t = DWORD(WINAPI*)(int);
+GetSysColor_t pGetSysColor = nullptr;
+
 ShouldAppsUseDarkMode_t pShouldAppsUseDarkMode = nullptr;
 AllowDarkModeForWindow_t pAllowDarkModeForWindow = nullptr;
 SetPreferredAppMode_t pSetPreferredAppMode = nullptr;
@@ -192,93 +192,14 @@ using GetThemeColor_t = HRESULT(WINAPI*)(HTHEME, int, int, int, COLORREF*);
 GetThemeColor_t pGetThemeColor = nullptr;
 GetThemeColor_t pGetThemeColorHook = nullptr;
 
-// Which theme handles belong to a list box. Part and state numbers only mean
-// anything inside a class: part 5 of a list view is an empty text area, and part 1
-// of a button is the button. Answering by part and state alone coloured things
-// this mod never meant to touch, so the handle is checked first.
-using OpenThemeData_t = HTHEME(WINAPI*)(HWND, LPCWSTR);
-using OpenThemeDataForDpi_t = HTHEME(WINAPI*)(HWND, LPCWSTR, UINT);
-using CloseThemeData_t = HRESULT(WINAPI*)(HTHEME);
 // Whether the mod is currently in effect. Declared before the hooks that read it,
 // because a name that is only defined later does not compile. While this is false
 // every hook below passes the call straight through. That covers the moment
 // between the hooks being installed and the theme being applied, and the case
-// where high contrast mode means the mod never applies anything at all.
-bool g_active = false;
-
-bool NameContains(PCWSTR name, PCWSTR needle);
-
-OpenThemeData_t pOpenThemeData = nullptr;
-OpenThemeDataForDpi_t pOpenThemeDataForDpi = nullptr;
-CloseThemeData_t pCloseThemeData = nullptr;
-OpenThemeData_t pOpenThemeDataHook = nullptr;
-OpenThemeDataForDpi_t pOpenThemeDataForDpiHook = nullptr;
-CloseThemeData_t pCloseThemeDataHook = nullptr;
-
-std::mutex g_themeLock;
-std::unordered_set<HTHEME> g_listBoxThemes;
-
-bool IsListBoxClass(PCWSTR classList) {
-    return NameContains(classList, L"listbox");
-}
-
-void RememberTheme(HTHEME theme, PCWSTR classList) {
-    if (!theme || !IsListBoxClass(classList)) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(g_themeLock);
-    g_listBoxThemes.insert(theme);
-}
-
-void ForgetTheme(HTHEME theme) {
-    if (!theme) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(g_themeLock);
-    g_listBoxThemes.erase(theme);
-}
-
-bool IsListBoxTheme(HTHEME theme) {
-    if (!theme) {
-        return false;
-    }
-    std::lock_guard<std::mutex> lock(g_themeLock);
-    return g_listBoxThemes.count(theme) != 0;
-}
-
-// The pointers below are the trampolines Windhawk hands back, never the imports:
-// the imports are the functions being replaced, so calling one from inside its
-// own hook would come straight back. Nothing here links uxtheme directly.
-HTHEME WINAPI OpenThemeData_Hook(HWND hWnd, LPCWSTR classList) {
-    if (!pOpenThemeData) {
-        return nullptr;
-    }
-    HTHEME theme = pOpenThemeData(hWnd, classList);
-    if (g_active) {
-        RememberTheme(theme, classList);
-    }
-    return theme;
-}
-
-HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hWnd, LPCWSTR classList, UINT dpi) {
-    if (!pOpenThemeDataForDpi) {
-        return nullptr;
-    }
-    HTHEME theme = pOpenThemeDataForDpi(hWnd, classList, dpi);
-    if (g_active) {
-        RememberTheme(theme, classList);
-    }
-    return theme;
-}
-
-HRESULT WINAPI CloseThemeData_Hook(HTHEME theme) {
-    ForgetTheme(theme);
-    if (!pCloseThemeData) {
-        return E_FAIL;
-    }
-    return pCloseThemeData(theme);
-}
-
+// where high contrast mode means the mod never applies anything at all. Atomic
+// because unload clears it on one thread while window procedures read it on
+// another.
+std::atomic<bool> g_active{false};
 
 HRESULT WINAPI GetThemeColor_Hook(HTHEME theme, int part, int state, int prop,
                                   COLORREF* colour) {
@@ -286,9 +207,10 @@ HRESULT WINAPI GetThemeColor_Hook(HTHEME theme, int part, int state, int prop,
     // written before the trampoline is consulted, so a call that arrives in the
     // moment the hook is installed still gets a defined colour instead of S_OK
     // with nothing written.
-    if (colour && g_active && IsListBoxTheme(theme) && prop == TMT_FILLCOLOR &&
-        part == LBCP_ITEM && state >= LBPSI_HOT &&
-        state <= LBPSI_SELECTEDNOTFOCUS) {
+    // Part 5 of the item class is the one this mod answers, and it is the only
+    // part of a list box that can be the background of a row.
+    if (colour && g_active && prop == TMT_FILLCOLOR && part == LBCP_ITEM &&
+        state >= LBPSI_HOT && state <= LBPSI_SELECTEDNOTFOCUS) {
         *colour = kColorSelection;
         return S_OK;
     }
@@ -353,15 +275,13 @@ struct Settings {
     bool darkTitleBar;
     bool roundCorners;
     bool darkStatusBar;
-    bool hideStatusBar;
-    bool hideToolbar;
 };
 
 Settings g_settings;
 
-// Windows are not kept in a list. On unload the process is walked again and
-// every window is put back to its stock theme, which needs no shared state and
-// no locking in a process that creates windows on more than one thread.
+// On unload the process is walked again and every window is put back to its stock
+// theme, and the subclass set is emptied, so nothing depends on a window being
+// found by a second route.
 
 LRESULT SendToControl(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -388,18 +308,19 @@ enum class WindowKind : DWORD_PTR {
 };
 
 bool SubclassWith(HWND hWnd, WindowKind kind);
+void RestoreAllWindows();
+void RemoveAllSubclasses();
+void ResetWindow(HWND hWnd);
+void ForceRepaint(HWND hWnd);
 
 std::mutex g_stateLock;
 std::unordered_set<HWND> g_subclassed;
 std::unordered_set<HWND> g_adding;
-std::unordered_set<HWND> g_hiddenByUs;
 
 HBRUSH g_backgroundBrush = nullptr;
 HBRUSH g_hoverBrush = nullptr;
 HBRUSH g_lineBrush = nullptr;
 HBRUSH g_tabSelectedBrush = nullptr;
-
-thread_local bool g_hidingStrip = false;
 
 // ---------------------------------------------------------------------------
 // Who is allowed to touch the caches
@@ -416,7 +337,7 @@ thread_local bool g_hidingStrip = false;
 UINT OwnThreadSetupMessage() {
     static const UINT message =
         RegisterWindowMessageW(L"MMC Dark Mode: fill a cache on the owning thread");
-    return message ? message : WM_APP + 47;
+    return message;
 }
 
 bool OnOwningThread(HWND hWnd) {
@@ -438,12 +359,10 @@ struct StatusCache {
     WCHAR text[16][256];
     bool valid;
 };
-StatusCache g_statusCache[2];
+thread_local StatusCache g_statusCache[2];
 
 void RefreshStatusCache(HWND hWnd);
 void ForgetSubclass(HWND hWnd);
-bool HiddenByUs(HWND hWnd);
-void MarkHiddenByUs(HWND hWnd, bool hidden);
 
 
 struct HotEntry {
@@ -451,7 +370,7 @@ struct HotEntry {
     RECT rect;
     bool valid;
 };
-HotEntry g_hot[8];
+thread_local HotEntry g_hot[8];
 
 HotEntry* HotFor(HWND toolbar, bool create) {
     for (int i = 0; i < 8; i++) {
@@ -529,7 +448,6 @@ LRESULT HandleToolbar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 
 // A strip that was hidden is hidden again whenever the console shows it back.
-bool ShouldStayHidden(HWND hWnd);
 BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM lParam);
 void RefreshFrame(HWND hWnd);
 LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -549,7 +467,12 @@ void ForgetGroupFont(HWND hWnd);
 bool NameContains(PCWSTR name, PCWSTR needle);
 
 LRESULT HandleStatusBar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-
+    // The setting can be turned off while a console is open, so it is read here
+    // rather than baked into whether the bar was subclassed. Off, the bar passes
+    // every paint message to its own procedure and draws exactly as it did.
+    if (!g_settings.darkStatusBar) {
+        return DefSubclassProc(hWnd, message, wParam, lParam);
+    }
 
     if (message == WM_NCPAINT) {
         return 0;
@@ -599,12 +522,6 @@ LRESULT HandleStatusBar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         RefreshStatusCache(hWnd);
     }
 
-    if (g_settings.hideStatusBar && !g_hidingStrip && ShouldStayHidden(hWnd)) {
-        g_hidingStrip = true;
-        ShowWindow(hWnd, SW_HIDE);
-        g_hidingStrip = false;
-        MarkHiddenByUs(hWnd, true);
-    }
     return result;
 }
 
@@ -640,12 +557,6 @@ bool ResolveApis() {
         reinterpret_cast<GetWindowTheme_t>(GetProcAddress(uxtheme, "GetWindowTheme"));
     pGetThemeColor =
         reinterpret_cast<GetThemeColor_t>(GetProcAddress(uxtheme, "GetThemeColor"));
-    pOpenThemeData =
-        reinterpret_cast<OpenThemeData_t>(GetProcAddress(uxtheme, "OpenThemeData"));
-    pOpenThemeDataForDpi = reinterpret_cast<OpenThemeDataForDpi_t>(
-        GetProcAddress(uxtheme, "OpenThemeDataForDpi"));
-    pCloseThemeData =
-        reinterpret_cast<CloseThemeData_t>(GetProcAddress(uxtheme, "CloseThemeData"));
 
     if (!pAllowDarkModeForWindow || !pSetPreferredAppMode || !pSetWindowTheme) {
         Wh_Log(L"uxtheme is missing dark mode entry points "
@@ -802,19 +713,37 @@ void RefreshStatusCache(HWND hWnd) {
 
 // The theme alone left these two white: mmc draws their contents itself. The
 // control messages are the part the control itself still obeys.
+// The process's own system colour, never this mod's answer for it.
+COLORREF RealSystemColour(int index) {
+    if (pGetSysColor) {
+        return pGetSysColor(index);
+    }
+    return GetSysColor(index);
+}
+
 void ColourClassicControl(HWND hWnd, bool dark) {
     WCHAR className[64] = {};
     if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
         return;
     }
 
-    const COLORREF background = dark ? kColorBackground : CLR_DEFAULT;
-    const COLORREF text = dark ? kColorText : CLR_DEFAULT;
+    // Coming back, the colours are the process's own system colours, asked for
+    // through the original function rather than through this mod's hook, and set
+    // explicitly. CLR_DEFAULT was used here before, and on a control that had
+    // dark mode allowed at that moment it resolved to black instead of the
+    // window colour, which is exactly how the console tree came back black.
+    // The fallback chain matters: the trampoline first, and if it is somehow not
+    // there, GetSysColor, which this mod hooks and which answers with the real
+    // colour while the mod is off.
+    const COLORREF background =
+        dark ? kColorBackground : RealSystemColour(COLOR_WINDOW);
+    const COLORREF text = dark ? kColorText : RealSystemColour(COLOR_WINDOWTEXT);
 
     if (wcscmp(className, L"SysTreeView32") == 0) {
         SendToControl(hWnd, TVM_SETBKCOLOR, 0, background);
         SendToControl(hWnd, TVM_SETTEXTCOLOR, 0, text);
-        SendToControl(hWnd, TVM_SETLINECOLOR, 0, dark ? kColorLine : CLR_DEFAULT);
+        SendToControl(hWnd, TVM_SETLINECOLOR, 0,
+                      dark ? kColorLine : RealSystemColour(COLOR_WINDOWTEXT));
         InvalidateRect(hWnd, nullptr, TRUE);
     } else if (wcscmp(className, L"ComboBox") == 0) {
         // Measured before this fix: an Explorer themed combo box field is
@@ -862,8 +791,6 @@ void ColourClassicControl(HWND hWnd, bool dark) {
     }
 }
 
-// Drops the table entry for a window. Used when the window is going away, and
-// when its handle turns out to belong to a different window now.
 // --- the style bits this mod removes, and where to put them back ----------
 
 // Stripping a sunken edge means clearing WS_EX_CLIENTEDGE or WS_BORDER, which is
@@ -935,7 +862,14 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
 void ForgetSubclass(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_stateLock);
     g_subclassed.erase(hWnd);
-    g_hiddenByUs.erase(hWnd);
+    // The bits noted for this window describe a window that is gone. Left behind,
+    // the entry fills the table and a recycled handle could get borders that were
+    // never removed from it.
+    for (int i = 0; i < kMaxStyleFixes; i++) {
+        if (g_styleFixes[i].hWnd == hWnd) {
+            g_styleFixes[i] = {};
+        }
+    }
 }
 
 bool IsSubclassed(HWND hWnd) {
@@ -943,25 +877,70 @@ bool IsSubclassed(HWND hWnd) {
     return g_subclassed.count(hWnd) != 0;
 }
 
-bool HiddenByUs(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_stateLock);
-    return g_hiddenByUs.count(hWnd) != 0;
+// ---------------------------------------------------------------------------
+// Subclassing, without ever waiting on another thread
+//
+// WindhawkUtils can subclass from any thread, but on a foreign thread it does it
+// by sending a message and waiting for the answer. A message to a thread that is
+// not pumping never comes back, and mmc's own thread is not pumping while the
+// process is starting. Sending to it then wedges the process before its first
+// window is shown, which is exactly what happened when this was first written.
+//
+// So a window is only ever subclassed by its own thread. Windows created after
+// the mod loads arrive through the CreateWindowExW hook, which runs on that
+// thread. Windows that already existed are picked up by a walk that is run from
+// that thread the next time it creates any window at all.
+// ---------------------------------------------------------------------------
+
+// Set when a walk found windows it was not allowed to touch. Read from the
+// window creating thread and written from load's thread, so it is atomic.
+std::atomic<bool> g_walkPending{false};
+
+UINT LeaveMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"MMC Dark Mode: leave this window");
+    return message;
 }
 
-void MarkHiddenByUs(HWND hWnd, bool hidden) {
-    std::lock_guard<std::mutex> lock(g_stateLock);
-    if (hidden) {
-        g_hiddenByUs.insert(hWnd);
-    } else {
-        g_hiddenByUs.erase(hWnd);
-    }
+// Asked of a window when the mod is going away. The window's own thread handles
+// it: it puts the window back, repaints it, and drops the subclass. Doing this
+// from the unload thread instead meant resetting windows while their threads were
+// part way through painting them, and a window whose erase was claimed but never
+// painted comes out solid black.
+UINT RestoreMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"MMC Dark Mode: put this window back");
+    return message;
 }
 
-// The wrapper below sends a message to the window's thread, so it is never called
-// with the lock held: that thread can be inside this mod at the same moment. The
-// pending set keeps two threads from subclassing the same window at once.
+std::atomic<int> g_restoring{0};
+
+HANDLE RestoredEvent() {
+    static HANDLE restored = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    return restored;
+}
+
+HANDLE LeftEvent() {
+    static HANDLE left = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    return left;
+}
+
+// Bumped before a window is asked to leave and dropped when it has, so unload can
+// wait for the answers without waiting forever.
+std::atomic<int> g_leaving{0};
+
+void NoteWalkPending() {
+    g_walkPending.store(true);
+}
+
+// The pending set keeps two threads from subclassing the same window at once.
 bool SubclassWith(HWND hWnd, WindowKind kind) {
     if (!hWnd || !IsWindow(hWnd)) {
+        return false;
+    }
+    if (!OnOwningThread(hWnd)) {
+        // Not this thread's window to touch, and asking would block.
+        NoteWalkPending();
         return false;
     }
     {
@@ -973,12 +952,21 @@ bool SubclassWith(HWND hWnd, WindowKind kind) {
     }
     const BOOL added = WindhawkUtils::SetWindowSubclassFromAnyThread(
         hWnd, ModSubclassProc, static_cast<DWORD_PTR>(kind));
+    bool keep = false;
     {
         std::lock_guard<std::mutex> lock(g_stateLock);
         g_adding.erase(hWnd);
-        if (added) {
+        if (added && g_active) {
             g_subclassed.insert(hWnd);
+            keep = true;
         }
+    }
+    if (added && !keep) {
+        // Unload began while this was being added. RemoveAllSubclasses has
+        // already copied the set, so this window would otherwise keep a subclass
+        // pointing into a DLL that is about to go away.
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ModSubclassProc);
+        return false;
     }
     if (!added) {
         WCHAR className[64] = {};
@@ -986,6 +974,57 @@ bool SubclassWith(HWND hWnd, WindowKind kind) {
         Wh_Log(L"could not subclass a %s window", className);
     }
     return added != FALSE;
+}
+
+// Asks every subclassed window to put itself back, on its own thread, and waits
+// for the answers with a limit. Anything that does not answer is then handed back
+// the blunt way, which is still better than leaving a pointer into this DLL.
+void RestoreAllWindows() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        windows.assign(g_subclassed.begin(), g_subclassed.end());
+    }
+    g_restoring = static_cast<int>(windows.size());
+    int posted = 0;
+    for (HWND hWnd : windows) {
+        if (!IsWindow(hWnd)) {
+            --g_restoring;
+            continue;
+        }
+        if (OnOwningThread(hWnd)) {
+            // This is the window's thread already: no message needed.
+            ResetWindow(hWnd);
+            ForceRepaint(hWnd);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
+                                                             ModSubclassProc);
+            ForgetSubclass(hWnd);
+            --g_restoring;
+            continue;
+        }
+        if (PostMessageW(hWnd, RestoreMessage(), 0, 0)) {
+            posted++;
+        } else {
+            --g_restoring;
+        }
+    }
+    if (posted > 0) {
+        HANDLE restored = RestoredEvent();
+        for (int waited = 0; restored && g_restoring.load() > 0 && waited < 2000;
+             waited += 50) {
+            WaitForSingleObject(restored, 50);
+            if (g_restoring.load() <= 0) {
+                break;
+            }
+            ResetEvent(restored);
+        }
+    }
+    if (g_restoring.load() > 0) {
+        Wh_Log(L"%d windows did not put themselves back; their threads are not "
+               L"pumping", g_restoring.load());
+    }
+    // Whatever is left, including entries added while the above ran.
+    RemoveAllSubclasses();
 }
 
 // Hands every subclassed window back to comctl32. Called once, from unload, and
@@ -997,36 +1036,58 @@ void RemoveAllSubclasses() {
         windows.assign(g_subclassed.begin(), g_subclassed.end());
         g_subclassed.clear();
         g_adding.clear();
-        g_hiddenByUs.clear();
     }
     for (HWND hWnd : windows) {
-        if (IsWindow(hWnd)) {
+        if (!IsWindow(hWnd)) {
+            continue;
+        }
+        if (OnOwningThread(hWnd)) {
+            // Same thread: the helper calls comctl32 directly.
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
                                                              ModSubclassProc);
+        } else {
+            // Another thread: post the request and wait a moment for it, never
+            // without a limit.
+            ++g_leaving;
+            if (!PostMessageW(hWnd, LeaveMessage(), 0, 0)) {
+                --g_leaving;
+            }
         }
     }
-}
-
-bool ShouldStayHidden(HWND hWnd) {
-    return IsWindowVisible(hWnd);
+    if (g_leaving > 0) {
+        HANDLE left = LeftEvent();
+        for (int waited = 0; left && g_leaving > 0 && waited < 2000; waited += 50) {
+            WaitForSingleObject(left, 50);
+            if (g_leaving <= 0) {
+                break;
+            }
+            ResetEvent(left);
+        }
+        if (g_leaving > 0) {
+            Wh_Log(L"%d subclassed windows did not answer; their threads are "
+                   L"not pumping", g_leaving.load());
+        }
+    }
 }
 
 // Last line of defence for the console frame itself. If the console keeps the
 // space where a hidden strip used to be, that space shows this background
 // instead of a white band.
 LRESULT HandleBackdrop(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-
     // The colour goes down in the erase, not in a paint of our own: a paint
     // that fills the whole client covers whatever the console drew into its own
     // child windows, and the console does not always draw it again.
     if (message == WM_ERASEBKGND) {
         HDC dc = reinterpret_cast<HDC>(wParam);
-        if (dc && g_backgroundBrush) {
-            RECT client = {};
-            GetClientRect(hWnd, &client);
-            FillRect(dc, &client, g_backgroundBrush);
+        RECT client = {};
+        GetClientRect(hWnd, &client);
+        // Only claim the erase when it actually happened. Returning 1 after a
+        // fill that failed validates the area without painting it, and an
+        // unpainted area on a composited desktop shows as solid black.
+        if (dc && g_backgroundBrush && FillRect(dc, &client, g_backgroundBrush)) {
+            return 1;
         }
-        return 1;
+        return DefSubclassProc(hWnd, message, wParam, lParam);
     }
 
     LRESULT result =
@@ -1054,7 +1115,6 @@ LRESULT HandleBackdrop(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 // one rebar. Nothing here paints it: the theme is asked to do it, and this proc
 // only exists so the band can still be removed if the user turns that on.
 LRESULT HandleStrip(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-
     // The console's toolbars draw a hovered button as a two tone border, which on
     // a dark band shows up as a thin corner. The fill is painted here instead.
     // Everything else about the button is still drawn by the control.
@@ -1099,12 +1159,15 @@ LRESULT HandleStrip(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                   NameContains(className, L"rebar");
     if (isBand && message == WM_ERASEBKGND) {
         HDC dc = reinterpret_cast<HDC>(wParam);
-        if (dc && g_backgroundBrush) {
-            RECT client = {};
-            GetClientRect(hWnd, &client);
-            FillRect(dc, &client, g_backgroundBrush);
+        RECT client = {};
+        GetClientRect(hWnd, &client);
+        // Only claim the erase when it actually happened. Returning 1 after a
+        // fill that failed validates the area without painting it, and an
+        // unpainted area on a composited desktop shows as solid black.
+        if (dc && g_backgroundBrush && FillRect(dc, &client, g_backgroundBrush)) {
+            return 1;
         }
-        return 1;
+        return DefSubclassProc(hWnd, message, wParam, lParam);
     }
 
     LRESULT result =
@@ -1156,7 +1219,6 @@ bool IsBorderHost(PCWSTR name) {
 }
 
 LRESULT HandleNoBorder(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-
     if (message == WM_NCPAINT) {
         return 0;
     }
@@ -1217,7 +1279,7 @@ struct TabEntry {
     RECT items[kMaxTabs];
     WCHAR labels[kMaxTabs][kTabLabelChars];
 };
-TabEntry g_tabEntries[4] = {};
+thread_local TabEntry g_tabEntries[4] = {};
 
 TabEntry* TabEntryFor(HWND hWnd, bool create) {
     const int slots = static_cast<int>(ARRAYSIZE(g_tabEntries));
@@ -1369,12 +1431,15 @@ LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
     if (message == WM_ERASEBKGND) {
         HDC dc = reinterpret_cast<HDC>(wParam);
-        if (dc && g_backgroundBrush) {
-            RECT client = {};
-            GetClientRect(hWnd, &client);
-            FillRect(dc, &client, g_backgroundBrush);
+        RECT client = {};
+        GetClientRect(hWnd, &client);
+        // Only claim the erase when it actually happened. Returning 1 after a
+        // fill that failed validates the area without painting it, and an
+        // unpainted area on a composited desktop shows as solid black.
+        if (dc && g_backgroundBrush && FillRect(dc, &client, g_backgroundBrush)) {
+            return 1;
         }
-        return 1;
+        return DefSubclassProc(hWnd, message, wParam, lParam);
     }
 
     if (message == WM_PAINT) {
@@ -1430,38 +1495,9 @@ LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
 // The strips above and below the console tree. The status bar gets painted by
 // hand because its text colour cannot be set any other way. The band that holds
-// the icon strips is painted dark as well: its icons are dark glyphs, so a dark
-// background erases them, and it is removed rather than recoloured when the
-// user asks for that.
-// The console has two toolbars in that band: the menu bar, whose buttons carry
-// text, and the strip of icons, whose buttons carry no text at all. Only the
-// icon strip is ever hidden, so the menus always stay.
-bool IsIconStrip(HWND hWnd);
-
-bool IsIconStrip(HWND hWnd) {
-    int count = static_cast<int>(SendToControl(hWnd, TB_BUTTONCOUNT, 0, 0));
-    if (count <= 0) {
-        return false;
-    }
-    for (int i = 0; i < count; i++) {
-        TBBUTTON button = {};
-        if (!SendToControl(hWnd, TB_GETBUTTON, i,
-                           reinterpret_cast<LPARAM>(&button))) {
-            continue;
-        }
-        // Only "does this button have a label" is needed, and asking for the text
-        // itself means handing over a buffer with no size in the protocol: the
-        // control writes the whole label wherever it points. Asking with a null
-        // buffer returns the length and writes nothing.
-        const int length = static_cast<int>(
-            SendToControl(hWnd, TB_GETBUTTONTEXTW, button.idCommand, 0));
-        if (length > 0) {
-            return false;
-        }
-    }
-    return true;
-}
-
+// the toolbars is painted dark as well. Nothing here shows or hides a strip: the
+// console's own View > Customize decides that, and a hidden band takes the menu
+// bar with it.
 void DressExtraChrome(HWND hWnd, bool dark) {
     WCHAR className[64] = {};
     if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
@@ -1478,25 +1514,11 @@ void DressExtraChrome(HWND hWnd, bool dark) {
     }
 
     if (NameContains(className, L"toolbar")) {
-        // The icon strip's squares are painted into the console's own button
-        // images, so no colour or theme setting reaches them. Hiding the strip is
-        // the only reliable answer, and every one of its commands is also in the
-        // menus above it.
-        // Asking a toolbar about its buttons sends a message to the thread that
-        // owns it, so it is only asked when the answer can change anything.
-        bool iconStrip = dark && g_settings.hideToolbar && IsIconStrip(hWnd);
-        if (!dark) {
-            // Only a toolbar this mod hid is shown again. Showing every toolbar
-            // would override the console's own View > Customize choices.
-            if (HiddenByUs(hWnd)) {
-                ShowWindow(hWnd, SW_SHOW);
-                MarkHiddenByUs(hWnd, false);
-            }
-            return;
-        }
-        if (iconStrip && !HiddenByUs(hWnd)) {
-            ShowWindow(hWnd, SW_HIDE);
-            MarkHiddenByUs(hWnd, true);
+        // Nothing here changes visibility. The band above the console holds the
+        // menu bar as well as these toolbars, and the console's own View >
+        // Customize already decides what is shown. This is the drawing only.
+        if (dark) {
+            SubclassWith(hWnd, WindowKind::Toolbar);
         }
         return;
     }
@@ -1509,10 +1531,6 @@ void DressExtraChrome(HWND hWnd, bool dark) {
     }
 
     if (!dark) {
-        if (HiddenByUs(hWnd)) {
-            ShowWindow(hWnd, SW_SHOW);
-            MarkHiddenByUs(hWnd, false);
-        }
         return;
     }
 
@@ -1525,21 +1543,6 @@ void DressExtraChrome(HWND hWnd, bool dark) {
         RefreshStatusCache(hWnd);
     }
     InvalidateRect(hWnd, nullptr, TRUE);
-
-    // Visibility is the console's business except where this mod hid something
-    // itself. Hiding is only ever done to a window the user asked about, and the
-    // undo only ever runs on a window this mod hid, so the console's own toolbar
-    // and status bar choices survive untouched.
-    bool hide = isStatusBar ? g_settings.hideStatusBar : g_settings.hideToolbar;
-    if (hide) {
-        if (!HiddenByUs(hWnd)) {
-            ShowWindow(hWnd, SW_HIDE);
-            MarkHiddenByUs(hWnd, true);
-        }
-    } else if (HiddenByUs(hWnd)) {
-        ShowWindow(hWnd, SW_SHOW);
-        MarkHiddenByUs(hWnd, false);
-    }
 }
 
 // A web page drawn inside the console reads the theme and switches its own text
@@ -1558,6 +1561,14 @@ bool IsHtmlHost(HWND hWnd) {
 
 void ApplyToWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    // Only the thread that owns a window may touch it. A walk from another
+    // thread reaches this, and every call below can end up waiting on the owning
+    // thread, so the walk is left for the owning thread to run instead.
+    if (!OnOwningThread(hWnd)) {
+        NoteWalkPending();
         return;
     }
 
@@ -1677,7 +1688,7 @@ struct GroupFont {
     HWND hWnd;
     HFONT font;
 };
-GroupFont g_groupFonts[32] = {};
+thread_local GroupFont g_groupFonts[32] = {};
 
 void RememberGroupFont(HWND hWnd) {
     if (!OnOwningThread(hWnd)) {
@@ -1788,12 +1799,15 @@ LRESULT HandleGroupBox(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
     if (message == WM_ERASEBKGND) {
         HDC dc = reinterpret_cast<HDC>(wParam);
-        if (dc && g_backgroundBrush) {
-            RECT client = {};
-            GetClientRect(hWnd, &client);
-            FillRect(dc, &client, g_backgroundBrush);
+        RECT client = {};
+        GetClientRect(hWnd, &client);
+        // Only claim the erase when it actually happened. Returning 1 after a
+        // fill that failed validates the area without painting it, and an
+        // unpainted area on a composited desktop shows as solid black.
+        if (dc && g_backgroundBrush && FillRect(dc, &client, g_backgroundBrush)) {
+            return 1;
         }
-        return 1;
+        return DefSubclassProc(hWnd, message, wParam, lParam);
     }
 
     if (message == WM_PAINT) {
@@ -1900,9 +1914,8 @@ void PaintClientEdge(HWND hWnd) {
     ReleaseDC(hWnd, dc);
 }
 
-// A classic dialog, including every property sheet the console opens, paints its
-// own background from the system colours. The theme call alone does not reach it,
-// so the colours are answered directly.
+// Fills the table that belongs to this window, on the thread that owns it. Posted
+// by a walk that found a window belonging to another thread.
 LRESULT HandleOwnThreadSetup(HWND hWnd, WindowKind kind) {
     switch (kind) {
         case WindowKind::StatusBar:
@@ -1926,22 +1939,20 @@ LRESULT HandleOwnThreadSetup(HWND hWnd, WindowKind kind) {
 }
 
 LRESULT HandleDialog(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-
-
-    // A destroyed window leaving its handle in the table is how a later window
-    // that reuses the handle inherits the wrong proc.
-
     // The colour goes down in the erase and the paint still reaches the dialog's
     // own proc. Painting the client here and returning early skips the dialog
     // manager, and a property sheet page then draws nothing at all.
     if (message == WM_ERASEBKGND) {
         HDC dc = reinterpret_cast<HDC>(wParam);
-        if (dc && g_backgroundBrush) {
-            RECT client = {};
-            GetClientRect(hWnd, &client);
-            FillRect(dc, &client, g_backgroundBrush);
+        RECT client = {};
+        GetClientRect(hWnd, &client);
+        // Only claim the erase when it actually happened. Returning 1 after a
+        // fill that failed validates the area without painting it, and an
+        // unpainted area on a composited desktop shows as solid black.
+        if (dc && g_backgroundBrush && FillRect(dc, &client, g_backgroundBrush)) {
+            return 1;
         }
-        return 1;
+        return DefSubclassProc(hWnd, message, wParam, lParam);
     }
 
     // A page switched to after the sheet was themed brings children that were
@@ -2020,7 +2031,7 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
     // caption through the theme engine and ignores every colour set here.
     if (wcscmp(className, L"Button") == 0) {
         LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-        if ((style & 0x0f) == BS_GROUPBOX) {
+        if ((style & BS_TYPEMASK) == BS_GROUPBOX) {
             // Unthemed so nothing themed draws it, and painted here because the
             // classic frame comes from the table above.
             SetWindowThemeQuiet(hWnd, L"", L"");
@@ -2061,6 +2072,10 @@ void ThemeDialog(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd) || IsSubclassed(hWnd)) {
         return;
     }
+    if (!OnOwningThread(hWnd)) {
+        NoteWalkPending();
+        return;
+    }
 
     // A property sheet is two dialogs: the page, and the frame that holds the
     // tabs and the buttons. Only the page reaches the dialog hooks, so the frame
@@ -2099,13 +2114,17 @@ void ResetWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
         return;
     }
+    // Dark mode is turned off FIRST. A control that is told dark mode is over
+    // only after its theme was removed resolves the new theme against the dark
+    // style, which is how a tree view ended up painting black; and the app mode
+    // flip then repainted it black a second time. Off first, then the theme.
+    if (pAllowDarkModeForWindow) {
+        pAllowDarkModeForWindow(hWnd, FALSE);
+    }
     // NULL, NULL removes the association the mod made, which is not the same as
     // the empty string: L"" matches no section and turns visual styles off, so a
     // reset that used it left every control drawing in the classic style.
     pSetWindowTheme(hWnd, nullptr, nullptr);
-    if (pAllowDarkModeForWindow) {
-        pAllowDarkModeForWindow(hWnd, FALSE);
-    }
     RestoreRemovedStyles(hWnd);
     ColourClassicControl(hWnd, false);
     DressExtraChrome(hWnd, false);
@@ -2132,6 +2151,8 @@ struct WalkResult {
 };
 
 
+void ForceRepaint(HWND hWnd);
+
 BOOL CALLBACK WalkChild(HWND hWnd, LPARAM lParam) {
     WalkResult* result = reinterpret_cast<WalkResult*>(lParam);
     if (!hWnd || !IsWindow(hWnd)) {
@@ -2157,6 +2178,7 @@ BOOL CALLBACK WalkTop(HWND hWnd, LPARAM lParam) {
         ApplyToWindow(hWnd);
     } else {
         ResetWindow(hWnd);
+        ForceRepaint(hWnd);
     }
     EnumChildWindows(hWnd, WalkChild, lParam);
     result->topLevel++;
@@ -2164,9 +2186,27 @@ BOOL CALLBACK WalkTop(HWND hWnd, LPARAM lParam) {
 }
 
 
+// A window that was reset still shows the pixels this mod last painted into it,
+// because nothing invalidates them: the reset removes a theme and a colour, and
+// the control only redraws when it is asked to. Every top level window is asked,
+// with its children, so the console comes back fully light rather than in
+// patches.
+void ForceRepaint(HWND hWnd) {
+    RedrawWindow(hWnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
 void WalkProcessWindows() {
+    // Reached from window procedures as well as from load and unload, so it can
+    // arrive while it is already running.
+    static bool inWalk = false;
+    if (inWalk) {
+        return;
+    }
+    inWalk = true;
     WalkResult result = {};
     EnumWindows(WalkTop, reinterpret_cast<LPARAM>(&result));
+    inWalk = false;
     Wh_Log(L"%s %d top level windows, %d child windows",
            g_active ? L"themed" : L"restored", result.topLevel,
            result.children);
@@ -2224,8 +2264,6 @@ COLORREF MapSystemColour(int index) {
     }
 }
 
-using GetSysColor_t = DWORD(WINAPI*)(int);
-GetSysColor_t pGetSysColor = nullptr;
 
 DWORD WINAPI GetSysColor_Hook(int nIndex) {
     // Switched off means the real system colours, not a dark answer with the
@@ -2261,6 +2299,12 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, PCWSTR lpClassName,
                                  hInstance, lpParam);
     if (hWnd && g_active) {
         ApplyToWindow(hWnd);
+        if (g_walkPending.load()) {
+            // A walk found windows it was not allowed to touch. This call is on
+            // the thread that owns them, so the same walk is allowed now.
+            g_walkPending.store(false);
+            WalkProcessWindows();
+        }
     }
     return hWnd;
 }
@@ -2382,6 +2426,37 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
         return result;
     }
 
+    // Unload asks every subclassed window to put itself back. Arriving here means
+    // this is the thread that owns the window, which is the only thread allowed to
+    // touch its styles, its theme and its subclass entry.
+    if (message == RestoreMessage()) {
+        ResetWindow(hWnd);
+        ForceRepaint(hWnd);
+        // Same thread, so this is a direct call into comctl32. Removing from
+        // inside the subclass procedure is the documented pattern, and after it
+        // the chain belongs to whoever was underneath: returning without calling
+        // DefSubclassProc is what keeps the message from being handled twice.
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ModSubclassProc);
+        ForgetSubclass(hWnd);
+        --g_restoring;
+        if (HANDLE restored = RestoredEvent()) {
+            SetEvent(restored);
+        }
+        return 0;
+    }
+
+    // Unload asks each window owned by another thread to drop its subclass from
+    // inside that thread, because doing it from here would block on a thread
+    // that may not be pumping. Arriving here means it is.
+    if (message == LeaveMessage()) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ModSubclassProc);
+        --g_leaving;
+        if (HANDLE left = LeftEvent()) {
+            SetEvent(left);
+        }
+        return 0;
+    }
+
     // Switched off: nothing of this mod runs, and the window behaves as it did
     // before the mod ever saw it.
     if (!g_active) {
@@ -2421,8 +2496,6 @@ void LoadSettings() {
     g_settings.darkTitleBar = Wh_GetIntSetting(L"darkTitleBar") != 0;
     g_settings.roundCorners = Wh_GetIntSetting(L"roundCorners") != 0;
     g_settings.darkStatusBar = Wh_GetIntSetting(L"darkStatusBar") != 0;
-    g_settings.hideStatusBar = Wh_GetIntSetting(L"hideStatusBar") != 0;
-    g_settings.hideToolbar = Wh_GetIntSetting(L"hideToolbar") != 0;
 }
 
 // Installed once, at load. The typed wrapper checks at compile time that each
@@ -2437,34 +2510,6 @@ void InstallHooks() {
             // Later calls go through the trampoline, so nothing calls the
             // function that is now a jump back into the hook.
             pSetWindowTheme = pSetWindowThemeHook;
-        }
-    }
-
-    // Which theme handle belongs to a list box has to be known before a colour
-    // question can be answered, so the three handle calls are hooked as well.
-    if (pOpenThemeData) {
-        if (!WindhawkUtils::SetFunctionHook(pOpenThemeData, OpenThemeData_Hook,
-                                            &pOpenThemeDataHook)) {
-            Wh_Log(L"could not hook OpenThemeData");
-        } else {
-            pOpenThemeData = pOpenThemeDataHook;
-        }
-    }
-    if (pOpenThemeDataForDpi) {
-        if (!WindhawkUtils::SetFunctionHook(pOpenThemeDataForDpi,
-                                            OpenThemeDataForDpi_Hook,
-                                            &pOpenThemeDataForDpiHook)) {
-            Wh_Log(L"could not hook OpenThemeDataForDpi");
-        } else {
-            pOpenThemeDataForDpi = pOpenThemeDataForDpiHook;
-        }
-    }
-    if (pCloseThemeData) {
-        if (!WindhawkUtils::SetFunctionHook(pCloseThemeData, CloseThemeData_Hook,
-                                            &pCloseThemeDataHook)) {
-            Wh_Log(L"could not hook CloseThemeData");
-        } else {
-            pCloseThemeData = pCloseThemeDataHook;
         }
     }
 
@@ -2516,6 +2561,7 @@ void Activate() {
         }
     }
 
+    Wh_Log(L"init: brushes ready");
     pSetPreferredAppMode(PreferredAppModeForceDark);
     if (pFlushMenuThemes) {
         pFlushMenuThemes();
@@ -2523,23 +2569,32 @@ void Activate() {
 
     g_active = true;
 
-    // Windows that already exist were created before the hook was in place.
+    // Windows that already exist were created before the hook was in place. Any
+    // of them owned by another thread is left for that thread to pick up, and the
+    // first window it creates runs this walk again from the right place.
     WalkProcessWindows();
+    Wh_Log(L"init: first walk done, further walk %s",
+           g_walkPending.load() ? L"pending" : L"not needed");
 }
 
 }  // namespace
 
+// The log is the only way to see where a startup stops, so each stage says so
+// before it runs, not after.
 BOOL Wh_ModInit() {
     Wh_Log(L"MMC Dark Mode 1.0");
 
     LoadSettings();
+    Wh_Log(L"init: settings read");
 
     if (!ResolveApis()) {
         // Refusing to load is better than loading and half working.
         return FALSE;
     }
 
+    Wh_Log(L"init: apis resolved");
     InstallHooks();
+    Wh_Log(L"init: hooks installed");
 
     if (pShouldAppsUseDarkMode) {
         Wh_Log(L"system dark mode is %d", pShouldAppsUseDarkMode() ? 1 : 0);
@@ -2550,58 +2605,65 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
+    Wh_Log(L"init: activating");
     Activate();
+    Wh_Log(L"init: activated");
 
-    Wh_Log(L"status bar setting=%d, hide toolbar setting=%d",
-           g_settings.darkStatusBar, g_settings.hideToolbar);
+    Wh_Log(L"dark status bar=%d", g_settings.darkStatusBar);
     Wh_Log(L"ready");
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    // Unconditional, and before any early return that could skip it. Every window
-    // is put back before the DLL that owns the window procedure goes away.
+    Wh_Log(L"uninit: start");
     const bool wasActive = g_active;
     g_active = false;
-    if (wasActive) {
-        WalkProcessWindows();
-    }
-    RemoveAllSubclasses();
-    {
-        std::lock_guard<std::mutex> lock(g_themeLock);
-        g_listBoxThemes.clear();
-    }
-    // Callers may have cached the brushes this mod answered with, so they are told
-    // to ask again before the handles go away.
-    BroadcastSysColorChange();
+
+    // The app mode goes back FIRST, before any window is touched, and this order
+    // is the whole point of this block.
+    //
+    // A control that is re-themed while the process is still in forced dark mode
+    // resolves against the dark style. Removing the theme association at that
+    // moment hands it a dark style with no dark style to follow, and it paints
+    // its background black; when the app mode then flips, the control is themed a
+    // second time and repaints black again, a moment after the rest of the window
+    // has already gone light. That is the "turns white, then black a split second
+    // later" seen on the console tree.
+    //
+    // With the app mode already back to default, the same controls resolve
+    // against the light style they started with, which is what they should show.
     if (pSetPreferredAppMode) {
         pSetPreferredAppMode(PreferredAppModeDefault);
     }
     if (pFlushMenuThemes) {
         pFlushMenuThemes();
     }
-    if (g_backgroundBrush) {
-        DeleteObject(g_backgroundBrush);
-        g_backgroundBrush = nullptr;
+    Wh_Log(L"uninit: app mode restored");
+
+    // Then the windows. Subclassed ones put themselves back on their own thread,
+    // which is the only place their styles, theme and subclass entry may be
+    // touched. Everything else is put back by the walk afterwards.
+    if (wasActive) {
+        RestoreAllWindows();
+        WalkProcessWindows();
+        BroadcastSysColorChange();
+    } else {
+        RemoveAllSubclasses();
     }
-    if (g_hoverBrush) {
-        DeleteObject(g_hoverBrush);
-        g_hoverBrush = nullptr;
-    }
-    if (g_lineBrush) {
-        DeleteObject(g_lineBrush);
-        g_lineBrush = nullptr;
-    }
-    if (g_tabSelectedBrush) {
-        DeleteObject(g_tabSelectedBrush);
-        g_tabSelectedBrush = nullptr;
-    }
-    for (int i = 0; i < 23; i++) {
-        if (g_sysBrushes[i]) {
-            DeleteObject(g_sysBrushes[i]);
-            g_sysBrushes[i] = nullptr;
-        }
-    }
+    Wh_Log(L"uninit: windows restored");
+
+    // No GDI object is deleted here, and that is deliberate.
+    //
+    // Every control in the process was handed g_sysBrushes by GetSysColorBrush,
+    // and comctl32 and the controls themselves keep those handles. Deleting one
+    // leaves a window painting with a dead handle, which draws solid black; that
+    // is exactly what happened, and it is why the console came back black after
+    // the mod was switched off. The same is true of the brushes this mod paints
+    // with, which a window may still be holding when the last repaint lands.
+    //
+    // The cost of keeping them is a few dozen GDI handles per load, released by
+    // Windows when mmc.exe exits. The cost of freeing them early is a black
+    // console. The handles win.
 }
 
 // Switching the mod on and off is Windhawk's own toggle, so no setting here
@@ -2609,11 +2671,9 @@ void Wh_ModUninit() {
 // a replay.
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Wh_Log(L"settings changed: darkTitleBar=%d roundCorners=%d darkStatusBar=%d "
-           L"hideToolbar=%d hideStatusBar=%d",
+    Wh_Log(L"settings changed: darkTitleBar=%d roundCorners=%d darkStatusBar=%d",
            g_settings.darkTitleBar, g_settings.roundCorners,
-           g_settings.darkStatusBar, g_settings.hideToolbar,
-           g_settings.hideStatusBar);
+           g_settings.darkStatusBar);
     if (!g_active) {
         // High contrast at load, or uxtheme refusing to cooperate. Nothing is
         // themed, so there is nothing to replay.
