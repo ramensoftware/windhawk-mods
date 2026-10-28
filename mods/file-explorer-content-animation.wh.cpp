@@ -11,7 +11,7 @@
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lole32 -lshell32 -lcomctl32 -ld3d11 -ldxgi
+// @compilerOptions -lgdi32 -lcomctl32 -ld3d11 -ldxgi
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -35,7 +35,7 @@ A big part of the mod was rewritten for this version. The animations now use Dir
 - **Waits for your files** - In slow folders the page waits for the first files to show up before moving, instead of animating an empty view.
 - **No more flashes** - The end of each animation is covered, so the content no longer flashes empty or shows duplicated text.
 - **Responds to you** - Clicking or pressing a key during an animation finishes it quickly, and scrolling hands the content back right away, also with smooth scrolling mods.
-- Requires symbol resolution on explorerframe.dll, plus duser.dll, dui70.dll and windows.storage.dll for staggering and deletions (handled automatically by Windhawk).
+- Requires symbol resolution on explorerframe.dll, dui70.dll and duser.dll, plus windows.storage.dll for deletions (handled automatically by Windhawk). The new **Motion animations** option can be turned off if a Windows update breaks the symbols.
 
 ### Features
 
@@ -53,7 +53,8 @@ A big part of the mod was rewritten for this version. The animations now use Dir
 - **Animation Duration** - Controls how long the slide lasts.
 - **Slide Distance** - Controls how far the content moves before settling.
 - **Fade** - GPU-accelerated fade overlay showing the previous folder content. Compatible with Mica/Acrylic backdrop mods.
-- **Staggered item reveal** - Uses native composition for WinUI AddDelete scale and opacity keyframes, with automatic DirectUI fallback when unavailable. Supported Shell builds also animate actual item removals with a short composition exit. Other items remain visually still until Explorer's final layout is revealed, without a reflow animation. Does not change native layout or XAML views. Disabled by default.
+- **Motion animations** - Moves DirectUI folder content and items through native composition. Enabled by default. If symbol errors appear after a Windows update, turn it off until a Windows update with available symbols, or a mod update that fixes the detection; folders then appear without motion, with the fade when enabled.
+- **Staggered item reveal** - Uses native composition for WinUI AddDelete scale and opacity keyframes, with automatic DirectUI fallback when unavailable. Supported Shell builds also animate actual item removals with a short composition exit. Other items remain visually still until Explorer's final layout is revealed, without a reflow animation. Does not change native layout or XAML views. Requires Motion animations. Disabled by default.
 - **Reverse Direction** - Slide down instead of up. Does not apply to property pages or horizontal transitions.
 - **Page Transitions** - Smart detection of back/forward navigation with distinct animations.
 - **Animate Nav Pane** - Slide the navigation tree in from the left.
@@ -84,7 +85,7 @@ Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo
 - **Espera pelos seus arquivos** - Em pastas lentas a pagina espera os primeiros arquivos aparecerem antes de se mover, em vez de animar uma view vazia.
 - **Sem flashes** - O fim de cada animacao fica coberto, e o conteudo nao pisca mais vazio nem mostra texto duplicado.
 - **Responde a voce** - Clicar ou pressionar uma tecla durante a animacao a conclui rapido, e a rolagem devolve o conteudo na hora, inclusive com mods de rolagem suave.
-- Requer resolucao de simbolos no explorerframe.dll, e tambem duser.dll, dui70.dll e windows.storage.dll para o escalonamento e as exclusoes (feito automaticamente pelo Windhawk).
+- Requer resolucao de simbolos no explorerframe.dll, dui70.dll e duser.dll, e tambem windows.storage.dll para as exclusoes (feito automaticamente pelo Windhawk). A nova opcao **Animacoes de movimento** pode ser desativada se uma atualizacao do Windows quebrar os simbolos.
 
 ### Recursos
 
@@ -102,7 +103,8 @@ Boa parte do mod foi reescrita nesta versao. As animacoes agora usam o mecanismo
 - **Duracao da Animacao** - Define quanto tempo a animacao leva.
 - **Distancia do Slide** - Define o deslocamento inicial.
 - **Fade** - Overlay de fade GPU mostrando o conteudo da pasta anterior. Compativel com mods de backdrop Mica/Acrilico.
-- **Revelacao escalonada dos itens** - Usa composicao nativa para os keyframes de escala e opacidade AddDelete do WinUI, com fallback DirectUI automatico quando indisponivel. Builds Shell suportadas tambem animam a remocao real dos itens com uma saida curta em composicao. Os demais ficam visualmente parados ate revelar o layout final do Explorer, sem animacao de reorganizacao. Nao altera o layout nativo nem views XAML. Desativado por padrao.
+- **Animacoes de movimento** - Move o conteudo e os itens das pastas DirectUI pela composicao nativa. Ativado por padrao. Se aparecerem erros de simbolos depois de uma atualizacao do Windows, desative ate uma nova atualizacao do Windows com simbolos disponiveis, ou uma atualizacao do mod que corrija a deteccao; as pastas passam a aparecer sem movimento, com o fade quando ativado.
+- **Revelacao escalonada dos itens** - Usa composicao nativa para os keyframes de escala e opacidade AddDelete do WinUI, com fallback DirectUI automatico quando indisponivel. Builds Shell suportadas tambem animam a remocao real dos itens com uma saida curta em composicao. Os demais ficam visualmente parados ate revelar o layout final do Explorer, sem animacao de reorganizacao. Nao altera o layout nativo nem views XAML. Requer Animacoes de movimento. Desativado por padrao.
 - **Direcao Reversa** - Faz o conteudo descer ao inves de subir. Nao se aplica a paginas de Propriedades nem a transicoes horizontais.
 - **Transicoes de Pagina** - Deteccao inteligente de navegacao voltar/avancar com animacoes distintas.
 - **Animar Painel de Navegacao** - Desliza a arvore de navegacao da esquerda.
@@ -134,7 +136,7 @@ Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el
 - **Espera a tus archivos** - En carpetas lentas la pagina espera a que aparezcan los primeros archivos antes de moverse, en lugar de animar una vista vacia.
 - **Sin destellos** - El final de cada animacion queda cubierto, y el contenido ya no parpadea vacio ni muestra texto duplicado.
 - **Responde a ti** - Hacer clic o pulsar una tecla durante la animacion la termina rapido, y el desplazamiento devuelve el contenido al instante, tambien con mods de desplazamiento suave.
-- Requiere resolucion de simbolos en explorerframe.dll, y tambien duser.dll, dui70.dll y windows.storage.dll para el escalonado y las eliminaciones (manejado automaticamente por Windhawk).
+- Requiere resolucion de simbolos en explorerframe.dll, dui70.dll y duser.dll, y tambien windows.storage.dll para las eliminaciones (manejado automaticamente por Windhawk). La nueva opcion **Animaciones de movimiento** puede desactivarse si una actualizacion de Windows rompe los simbolos.
 
 ### Caracteristicas
 
@@ -152,7 +154,8 @@ Buena parte del mod se reescribio en esta version. Las animaciones ahora usan el
 - **Duracion de la Animacion** - Controla cuanto dura el efecto.
 - **Distancia del Deslizamiento** - Define el desplazamiento inicial.
 - **Fundido** - Overlay de fundido GPU mostrando el contenido de la carpeta anterior. Compatible con mods de backdrop Mica/Acrilico.
-- **Aparicion escalonada de elementos** - Usa composicion nativa para los keyframes de escala y opacidad AddDelete de WinUI, con alternativa DirectUI automatica cuando no esta disponible. Las versiones Shell compatibles tambien animan las eliminaciones reales con una salida corta en composicion. Los demas permanecen visualmente quietos hasta revelar la distribucion final del Explorador, sin animacion de reorganizacion. No cambia la distribucion nativa ni las vistas XAML. Desactivado por defecto.
+- **Animaciones de movimiento** - Mueve el contenido y los elementos de las carpetas DirectUI mediante composicion nativa. Activado por defecto. Si aparecen errores de simbolos tras una actualizacion de Windows, desactivalo hasta una nueva actualizacion de Windows con simbolos disponibles, o una actualizacion del mod que corrija la deteccion; las carpetas apareceran sin movimiento, con el fundido si esta activado.
+- **Aparicion escalonada de elementos** - Usa composicion nativa para los keyframes de escala y opacidad AddDelete de WinUI, con alternativa DirectUI automatica cuando no esta disponible. Las versiones Shell compatibles tambien animan las eliminaciones reales con una salida corta en composicion. Los demas permanecen visualmente quietos hasta revelar la distribucion final del Explorador, sin animacion de reorganizacion. No cambia la distribucion nativa ni las vistas XAML. Requiere Animaciones de movimiento. Desactivado por defecto.
 - **Direccion Inversa** - Desliza hacia abajo en lugar de hacia arriba. No se aplica a paginas de Propiedades ni a transiciones horizontales.
 - **Transiciones de Pagina** - Deteccion inteligente de navegacion atras/adelante con animaciones distintas.
 - **Animar Panel de Navegacion** - Desliza el arbol desde la izquierda.
@@ -194,6 +197,14 @@ resuelto en builds recientes del canal Insider/Beta.
   $description: Fades the background out smoothly while navigating, using a DirectComposition opacity animation (GPU). Compatible with Mica, Acrylic and transparency mods.
   $description:pt: Faz o fundo desaparecer gradualmente ao navegar, usando animacao de opacidade via DirectComposition (GPU). Compativel com Mica, Acrilico e mods de transparencia.
   $description:es: Desvanece el fondo suavemente al navegar, usando animacion de opacidad via DirectComposition (GPU). Compatible con Mica, Acrilico y mods de transparencia.
+
+- motion: true
+  $name: Motion animations
+  $name:pt: Animacoes de movimento
+  $name:es: Animaciones de movimiento
+  $description: "Moves the DirectUI folder content and its items through DirectUI's native composition, using symbols from dui70.dll, duser.dll and explorerframe.dll. If symbol errors appear after a Windows update, turn this off until a Windows update with available symbols, or a mod update that fixes the detection; folders then appear without motion, with the fade when it is enabled. Home, Gallery and other WinUI pages are not affected. Required by the staggered item reveal."
+  $description:pt: "Move o conteudo das pastas DirectUI e seus itens pela composicao nativa da DirectUI, usando simbolos do dui70.dll, duser.dll e explorerframe.dll. Se aparecerem erros de simbolos depois de uma atualizacao do Windows, desative ate uma nova atualizacao do Windows com simbolos disponiveis, ou uma atualizacao do mod que corrija a deteccao; as pastas passam a aparecer sem movimento, com o fade quando ativado. Inicio, Galeria e outras paginas WinUI nao sao afetadas. Necessario para a revelacao escalonada dos itens."
+  $description:es: "Mueve el contenido de las carpetas DirectUI y sus elementos mediante la composicion nativa de DirectUI, usando simbolos de dui70.dll, duser.dll y explorerframe.dll. Si aparecen errores de simbolos tras una actualizacion de Windows, desactivalo hasta una nueva actualizacion de Windows con simbolos disponibles, o una actualizacion del mod que corrija la deteccion; las carpetas apareceran sin movimiento, con el fundido si esta activado. Inicio, Galeria y otras paginas WinUI no se ven afectadas. Necesario para la aparicion escalonada de elementos."
 
 - stagger: false
   $name: Staggered item reveal
@@ -316,6 +327,7 @@ struct Settings {
     bool animatePropertyPages;
     bool propPageTransitions;
     bool stagger = false;
+    bool motion = true;
 };
 
 static Settings g_s{450, 140, 500, 140, false, false, false, false, false, false};
@@ -335,6 +347,7 @@ static void LoadSettings() {
     fresh.animatePropertyPages = !!Wh_GetIntSetting(L"propertyPages.animate");
     fresh.propPageTransitions  = !!Wh_GetIntSetting(L"propertyPages.tabTransitions");
     fresh.stagger              = !!Wh_GetIntSetting(L"stagger");
+    fresh.motion               = !!Wh_GetIntSetting(L"motion");
 
     AcquireSRWLockExclusive(&g_sLock);
     g_s = fresh;
@@ -419,20 +432,16 @@ static constexpr ULONGLONG PENDING_EXPIRE_MS = 3000;
 // colisao com WM_USER+N que CabinetWClass ou outros mods possam usar.
 // Valores no range 0xC000-0xFFFF, unicos por processo.
 static UINT WM_WH_REMOVE_SUBCLASS = 0;
-static UINT WM_WH_TRY_BROWSER_HOOK = 0;
 static UINT WM_WH_ANIMATION_FRAME = 0;
+static UINT WM_WH_BIND_REMOVAL = 0;
 
 
-// Forward declarations -- definidos mais abaixo, usados no subclass proc
-// e em TrySubclassExplorerWindow que aparecem antes no arquivo.
+// Forward declarations -- definidos mais abaixo. O hook de navegacao e
+// resolvido junto com os demais simbolos do explorerframe no worker de preparo.
 using BrowseObject_t = HRESULT(WINAPI*)(void*, LPCITEMIDLIST, UINT);
 static BrowseObject_t g_origBrowseObject = nullptr;
-// Serializa TryHookBrowseObjectSymbols -- sem isso, duas janelas CabinetWClass
-// criadas quase ao mesmo tempo (ex: restauracao de sessao) podem chamar
-// Wh_SetFunctionHook no mesmo endereco a partir de threads diferentes.
-static std::mutex g_browseObjectHookMtx;
-static std::atomic<bool> g_browserHookInstalled{false};
-static void TryHookBrowseObjectSymbols();
+HRESULT WINAPI HookBrowseObject(void* pThis, LPCITEMIDLIST pidl, UINT wFlags);
+namespace ItemStagger { static void RequestPreparation(); static void BindVisibleViews(HWND root); }
 static constexpr UINT_PTR APPCOMMAND_SUBCLASS_ID = 0xFECA;
 
 static std::unordered_set<HWND> g_subclassedWindows;
@@ -466,15 +475,8 @@ static LRESULT CALLBACK ExplorerSubclassProc(HWND hwnd, UINT msg,
             g_pendingNav[hwnd] = {type, GetTickCount64()};
         }
     }
-    // Retry do hook via simbolos apos a janela estar totalmente inicializada.
-    // Executado no thread STA do Explorer onde COM ja esta ativo.
-    if (msg == WM_WH_TRY_BROWSER_HOOK && !g_unloading.load(std::memory_order_relaxed)) {
-        if (!g_browserHookInstalled.load(std::memory_order_acquire)) {
-            TryHookBrowseObjectSymbols();
-            if (g_browserHookInstalled.load(std::memory_order_acquire) &&
-                !Wh_ApplyHookOperations())
-                Wh_Log(L"[INIT] falha ao aplicar hook de navegacao");
-        }
+    if (WM_WH_BIND_REMOVAL && msg == WM_WH_BIND_REMOVAL) {
+        if (!g_unloading.load(std::memory_order_acquire)) ItemStagger::BindVisibleViews(hwnd);
         return 0;
     }
     // Solicitacao de remocao antes do DLL descarregar (enviada por Wh_ModBeforeUninit).
@@ -538,37 +540,50 @@ static LRESULT CALLBACK PropSheetSubclassProc(HWND hwnd, UINT msg,
 static void TrySubclassPropSheet(HWND hwndSheet, HWND hTab, int buttonRowTop) {
     {
         std::lock_guard<std::mutex> lk(g_propSheetMtx);
-        if (g_propSheets.count(hwndSheet)) return;
+        if (g_unloading.load(std::memory_order_acquire) || g_propSheets.count(hwndSheet)) return;
     }
     // Lock liberado antes da chamada -- SetWindowSubclassFromAnyThread pode
     // bloquear (SendMessage cross-thread) se hwndSheet estiver noutra thread;
     // segurar g_propSheetMtx durante isso travaria PropSheetSubclassProc,
     // Classify() e Wh_ModUninit ate a chamada retornar.
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-            hwndSheet, PropSheetSubclassProc, PROPSHEET_SUBCLASS_ID)) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwndSheet, PropSheetSubclassProc, PROPSHEET_SUBCLASS_ID)) return;
+    // O snapshot do unload e feito sob o mesmo lock depois de g_unloading:
+    // ou ele ve este registro, ou este caminho ve o unload e desfaz a subclass.
+    bool unloading;
+    {
         std::lock_guard<std::mutex> lk(g_propSheetMtx);
-        g_propSheets[hwndSheet] = {hTab, buttonRowTop, -1};
+        unloading = g_unloading.load(std::memory_order_acquire);
+        if (!unloading) g_propSheets[hwndSheet] = {hTab, buttonRowTop, -1};
     }
+    if (unloading)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwndSheet, PropSheetSubclassProc);
 }
 
 static void TrySubclassExplorerWindow(HWND hwnd) {
     {
         std::lock_guard<std::mutex> lk(g_subclassMtx);
-        if (g_subclassedWindows.count(hwnd)) return;
+        if (g_unloading.load(std::memory_order_acquire) || g_subclassedWindows.count(hwnd)) return;
     }
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
             hwnd, ExplorerSubclassProc, APPCOMMAND_SUBCLASS_ID)) {
-        std::lock_guard<std::mutex> lk(g_subclassMtx);
-        g_subclassedWindows.insert(hwnd);
-    } else {
         Wh_Log(L"[SUBCLASS] falhou para hwnd=%p", hwnd);
         return;
     }
-    // Se o hook de navegacao ainda nao foi instalado, postar uma mensagem
-    // para retry depois que a janela estiver totalmente inicializada.
-    // PostMessage adia a resolucao ate o thread da janela processar mensagens.
-    if (!g_browserHookInstalled.load(std::memory_order_acquire))
-        PostMessageW(hwnd, WM_WH_TRY_BROWSER_HOOK, 0, 0);
+    // Mesmo protocolo de TrySubclassPropSheet contra o snapshot do unload.
+    bool unloading;
+    {
+        std::lock_guard<std::mutex> lk(g_subclassMtx);
+        unloading = g_unloading.load(std::memory_order_acquire);
+        if (!unloading) g_subclassedWindows.insert(hwnd);
+    }
+    if (unloading) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ExplorerSubclassProc);
+        return;
+    }
+    // O explorerframe pode carregar depois do worker iniciar; a primeira
+    // janela o acorda para resolver os simbolos fora da UI.
+    ItemStagger::RequestPreparation();
 }
 
 // -----------------------------------------------
@@ -791,6 +806,9 @@ static IDXGIDevice*                g_dxgiDevice = nullptr;
 static std::atomic<IDCompositionDesktopDevice*> g_dcDevice{nullptr};
 // Mantem dcomp.dll carregada enquanto qualquer objeto criado por ela existir.
 static HMODULE g_dcompModule = nullptr;
+// Resolvido uma vez no init thread a partir de g_dcompModule; zerado antes do FreeLibrary.
+using CompositorClockWaitFn = DWORD(WINAPI*)(UINT, const HANDLE*, DWORD);
+static std::atomic<CompositorClockWaitFn> g_compositorClockWait{nullptr};
 
 struct DCompFadeAnim {
     IDCompositionTarget*      pTarget  = nullptr;
@@ -1391,7 +1409,7 @@ static void Reclaim();
 static bool Active();
 static int Views(HWND* out, int max);
 static bool NeedsAlpha(HANDLE node);
-static bool Stage(HMODULE dui, HMODULE shell);
+static bool Stage();
 static void Enable(bool ready);
 static void Uninit();
 }
@@ -1442,6 +1460,10 @@ static void* nativeItemVtable;
 static std::mutex setupMutex;
 static std::atomic<bool> live{false}, stopping{false};
 static std::atomic<bool> setupAttempted{false};
+// O explorerframe e resolvido uma unica vez, numa so chamada: listas
+// diferentes no mesmo modulo invalidariam o cache de simbolos do Windhawk.
+static std::atomic<bool> frameResolved{false};
+static std::atomic<bool> removalAttempted{false};
 static std::mutex preparationMutex;
 static std::condition_variable preparationCv;
 // Apenas os callbacks de lifecycle do Windhawk criam/joinam este worker.
@@ -1452,7 +1474,8 @@ static bool preparationStop = true, preparationRequested = false, preparationDon
 enum { Free, Reserved, Busy };
 constexpr int kMembers = 192;
 constexpr int kFirstBatchWaitMs = 750;
-constexpr int kPreparationWaitMs = 1500;
+// Sem simbolos em cache, a primeira view nao fica vazia esperando o download.
+constexpr int kPreparationWaitMs = 250;
 // AddDeleteThemeTransition calls TAS_ADDTOGRID / TA_ADDTOGRID_ADDED even
 // for list contexts (WinUI LayoutTransition_partial.cpp). ThemeGenerator
 // obtains these transforms from the Windows "Animations" theme. The extra
@@ -1518,9 +1541,16 @@ static Group groups[16];
 static SRWLOCK ownerLock = SRWLOCK_INIT;
 static std::atomic<int> busy{0};
 static thread_local bool inPaint;
+// Movimento DirectUI por composicao nativa; desligado, as paginas so usam o fade.
+static bool MotionEnabled() {
+    AcquireSRWLockShared(&g_sLock);
+    bool enabled = g_s.motion;
+    ReleaseSRWLockShared(&g_sLock);
+    return enabled;
+}
 static bool Enabled() {
     AcquireSRWLockShared(&g_sLock);
-    bool enabled = g_s.stagger;
+    bool enabled = g_s.stagger && g_s.motion;
     ReleaseSRWLockShared(&g_sLock);
     return enabled;
 }
@@ -3212,23 +3242,19 @@ static void STAGGER_MEMBER Deleted(void* collection, const Key* key, ULONG flags
     }
     originalDeleted(collection,key,flags);
 }
-static bool Stage(HMODULE, HMODULE shell) {
+// Os simbolos do explorerframe ja vem de ResolveExplorerFrame.
+static bool Stage() {
     getBounds=reinterpret_cast<BoundsFn>(Export(duiModule,
         "?GetRootRelativeBounds@Element@DirectUI@@QEAAJPEAUtagRECT@@@Z",
         "?GetRootRelativeBounds@Element@DirectUI@@QAEJPAUtagRECT@@@Z"));
     detachVisuals=reinterpret_cast<DetachFn>(GetProcAddress(duserModule,"DetachGadgetVisuals"));
     releaseDetached=reinterpret_cast<ReleaseDetachedFn>(GetProcAddress(duserModule,"ReleaseDetachedObjects"));
 #ifdef _WIN64
-    if (!GetModuleHandleExW(0,L"windows.storage.dll",&storageModule)) {
+    if (!storageModule && !GetModuleHandleExW(0,L"windows.storage.dll",&storageModule)) {
         Wh_Log(L"[DELETE] windows.storage.dll indisponivel: %08X; mantendo remocao nativa", GetLastError());
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[]={
-        {{L"public: virtual long __cdecl UIItem::GetItem(struct IItem * *)"},&getItem,nullptr,true},
-        {{L"public: long __cdecl UIItemsView::EnumUIItems(long (__cdecl*)(class UIItem *,void *),void *)"},&enumItems,nullptr,true},
-        {{L"class UIItemsView * __cdecl GetUIItemsView(class DirectUI::Element *)"},&getView,nullptr,true},
-    };
-    bool views=shell && WindhawkUtils::HookSymbols(shell,explorerframeDllHooks,ARRAYSIZE(explorerframeDllHooks)) && getItem && enumItems && getView;
+    bool views=getItem && enumItems && getView;
     if (!views || !getBounds || !detachVisuals || !releaseDetached || !nativeItemVtable) {
         Wh_Log(L"[DELETE] dependencias indisponiveis: views=%d item=%d enum=%d view=%d bounds=%d detach=%d release=%d type=%d; mantendo remocao nativa",
             views, getItem != nullptr, enumItems != nullptr, getView != nullptr, getBounds != nullptr,
@@ -3297,15 +3323,6 @@ static bool EnsureHooks() {
     getAlpha = STAGGER_EXPORT(AlphaGetFn, "?GetAlpha@Element@DirectUI@@QEAAHXZ", "?GetAlpha@Element@DirectUI@@QAEHXZ");
     setAlpha = STAGGER_EXPORT(AlphaSetFn, "?SetAlpha@Element@DirectUI@@QEAAJH@Z", "?SetAlpha@Element@DirectUI@@QAEJH@Z");
     getId = STAGGER_EXPORT(IdFn, "?GetID@Element@DirectUI@@QEAAGXZ", "?GetID@Element@DirectUI@@QAEGXZ");
-    // Opcional: builds/modos antigos ainda usam as classes do UIFILE.
-    if (GetModuleHandleExW(0, L"ExplorerFrame.dll", &itemModule)) {
-        WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
-            {{L"const UIItem::`vftable'"}, &nativeItemVtable, nullptr, true},
-        };
-        WindhawkUtils::HookSymbols(itemModule, explorerframeDllHooks, ARRAYSIZE(explorerframeDllHooks));
-        if (!nativeItemVtable)
-            Wh_Log(L"[STAGGER] tipo UIItem indisponivel; usando apenas classes visuais");
-    }
     // Este helper e simbolo privado, nao export. Ele verifica a classe antes
     // de consultar o HWND; um UIItem comum nao possui HWND proprio.
     if (!getHwnd) {
@@ -3366,7 +3383,6 @@ static bool EnsureHooks() {
         Wh_Log(L"[STAGGER] APIs de composicao nativa indisponiveis: style=%d flags=%d add=%d release=%d visual=%d",
             getGadgetStyle != nullptr, getGadgetFlags != nullptr, addLayeredRef != nullptr,
             releaseLayeredRef != nullptr, getGadgetVisual != nullptr);
-    bool removalStaged = alphaStaged && NativeCompositionAvailable() && Removal::Stage(duiModule,itemModule);
     // Opcional: sem ele, so a entrada na propria janela retira as camadas.
     auto positionChanged = reinterpret_cast<PositionChangedFn>(Export(duiModule,
         "?OnPositionChanged@BaseScrollBar@DirectUI@@QEAAXPEAVValue@2@@Z",
@@ -3377,14 +3393,71 @@ static bool EnsureHooks() {
     bool applied = Wh_ApplyHookOperations();
     if (!applied) ok = false;
     alphaPaintLive.store(ok && applied && alphaStaged && NativeCompositionAvailable(), std::memory_order_release);
-    Removal::Enable(ok && applied && removalStaged);
     live.store(ok, std::memory_order_release);
     if (!ok) Wh_Log(L"[STAGGER] hooks indisponiveis; mantendo entrance normal");
     return ok;
 }
+// Todos os simbolos do explorerframe numa chamada, fora da UI: navegacao,
+// tipo UIItem e as consultas usadas pela exclusao. Ate o hook de navegacao
+// entrar, voltar/avancar sao reconhecidos pelo WM_APPCOMMAND.
+static void ResolveExplorerFrame() {
+    if (frameResolved.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire) ||
+        !GetModuleHandleExW(0, L"ExplorerFrame.dll", &itemModule)) return;
+    frameResolved.store(true, std::memory_order_release);
+    WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
+        {{
+            LR"(public: virtual long __cdecl CShellBrowser::BrowseObject(struct _ITEMIDLIST_RELATIVE const __unaligned *,unsigned int))",
+            LR"(public: virtual long __cdecl CShellBrowser::BrowseObject(struct _ITEMIDLIST const *,unsigned int))",
+        }, &g_origBrowseObject, HookBrowseObject, true},
+        // Opcional: builds/modos antigos ainda usam as classes do UIFILE.
+        {{L"const UIItem::`vftable'"}, &nativeItemVtable, nullptr, true},
+#ifdef _WIN64
+        {{L"public: virtual long __cdecl UIItem::GetItem(struct IItem * *)"}, &Removal::getItem, nullptr, true},
+        {{L"public: long __cdecl UIItemsView::EnumUIItems(long (__cdecl*)(class UIItem *,void *),void *)"}, &Removal::enumItems, nullptr, true},
+        {{L"class UIItemsView * __cdecl GetUIItemsView(class DirectUI::Element *)"}, &Removal::getView, nullptr, true},
+#endif
+    };
+    WindhawkUtils::HookSymbols(itemModule, explorerframeDllHooks, ARRAYSIZE(explorerframeDllHooks));
+    if (!nativeItemVtable)
+        Wh_Log(L"[STAGGER] tipo UIItem indisponivel; usando apenas classes visuais");
+    if (!g_origBrowseObject)
+        Wh_Log(L"[INIT] BrowseObject indisponivel; usando entrance e APPCOMMAND");
+    else if (!g_unloading.load(std::memory_order_acquire) && !Wh_ApplyHookOperations())
+        Wh_Log(L"[INIT] falha ao aplicar hook de navegacao");
+}
+// Uma view so e vinculada a exclusao durante uma navegacao; as que ja estavam
+// na tela quando a exclusao ficou disponivel sao vinculadas pelo proprio owner.
+static void RequestViewBinding() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lk(g_subclassMtx);
+        windows.assign(g_subclassedWindows.begin(), g_subclassedWindows.end());
+    }
+    for (HWND hwnd : windows) PostMessageW(hwnd, WM_WH_BIND_REMOVAL, 0, 0);
+}
+// A exclusao so e preparada com o escalonamento ligado; ligar a opcao depois
+// tambem a prepara.
+static void StageRemoval() {
+    if (removalAttempted.load(std::memory_order_acquire) || !live.load(std::memory_order_acquire) ||
+        !alphaPaintLive.load(std::memory_order_acquire) || !Enabled() ||
+        stopping.load(std::memory_order_acquire) || g_unloading.load(std::memory_order_acquire)) return;
+    removalAttempted.store(true, std::memory_order_release);
+    bool staged = NativeCompositionAvailable() && Removal::Stage();
+    bool applied = staged && !g_unloading.load(std::memory_order_acquire) && Wh_ApplyHookOperations();
+    if (staged && !applied) Wh_Log(L"[DELETE] falha ao aplicar o hook de exclusao; mantendo remocao nativa");
+    if (applied) {
+        Removal::Enable(true);
+        RequestViewBinding();
+    }
+}
+static bool PreparationPending() {
+    if (!frameResolved.load(std::memory_order_acquire)) return true;
+    if (!MotionEnabled()) return false;
+    if (!live.load(std::memory_order_acquire)) return !preparationFailed.load(std::memory_order_acquire);
+    return !removalAttempted.load(std::memory_order_acquire) && Enabled();
+}
 static void RequestPreparation() {
-    if (!preparationRunning.load(std::memory_order_acquire) ||
-        live.load(std::memory_order_acquire) || preparationFailed.load(std::memory_order_acquire) ||
+    if (!preparationRunning.load(std::memory_order_acquire) || !PreparationPending() ||
         g_unloading.load(std::memory_order_acquire)) return;
     {
         std::lock_guard<std::mutex> lock(preparationMutex);
@@ -3407,7 +3480,9 @@ static void StartPreparation(bool (*prepare)() = EnsureHooks) {
                 if (preparationStop) break;
                 preparationRequested = false;
                 lock.unlock();
-                if (!g_unloading.load(std::memory_order_acquire) &&
+                try { ResolveExplorerFrame(); }
+                catch (...) { Wh_Log(L"[INIT] excecao ao resolver o explorerframe"); }
+                if (!g_unloading.load(std::memory_order_acquire) && MotionEnabled() &&
                     !live.load(std::memory_order_acquire) && !preparationFailed.load(std::memory_order_acquire)) {
                     bool ready = false;
                     try { ready = prepare(); }
@@ -3418,6 +3493,8 @@ static void StartPreparation(bool (*prepare)() = EnsureHooks) {
                     if (!ready && setupAttempted.load(std::memory_order_acquire))
                         preparationFailed.store(true, std::memory_order_release);
                 }
+                try { StageRemoval(); }
+                catch (...) { Wh_Log(L"[DELETE] excecao ao preparar a exclusao; mantendo remocao nativa"); }
                 lock.lock();
             }
             preparationDone = true;
@@ -3472,6 +3549,14 @@ static void TrackRemoval(HWND view) {
     ReleaseSRWLockShared(&ownerLock);
     if (!bound && IsExplorerContent(view) && HasDirectUiPayload(view)) Removal::Bind(view);
 }
+static BOOL CALLBACK BindVisibleView(HWND child, LPARAM) {
+    // Abas inativas ficam ocultas; vincula-las so ocuparia slots de witness.
+    if (IsWindowVisible(child) && IsExplorerContent(child)) TrackRemoval(child);
+    return TRUE;
+}
+static void BindVisibleViews(HWND root) {
+    EnumChildWindows(root, BindVisibleView, 0);
+}
 static ULONGLONG Arm(HWND view, ULONGLONG reveal, int totalMs, bool frameDriven = false,
                      const AnimationTimeline* timeline = nullptr,
                      bool composition = false, const POINT* pageOffset = nullptr, int pageMoveMs = 1,
@@ -3485,7 +3570,7 @@ static ULONGLONG Arm(HWND view, ULONGLONG reveal, int totalMs, bool frameDriven 
     }
     BOOL animations = TRUE;
     SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0);
-    if (!animations) {
+    if (!animations || !MotionEnabled()) {
         return 0;
     }
     if (!live.load(std::memory_order_acquire)) {
@@ -3637,24 +3722,20 @@ static constexpr UINT_PTR SLIDE_SUBCLASS_ID = 0xFECC;
 static std::atomic<UINT_PTR> g_slideGeneration{1};
 
 struct CompositorClock {
-    using WaitFn = DWORD(WINAPI*)(UINT, const HANDLE*, DWORD);
+    using WaitFn = CompositorClockWaitFn;
     enum class Result { Frame, Canceled, Fallback };
-    HMODULE module = nullptr;
     HANDLE wake = nullptr;
     WaitFn wait = nullptr;
     CompositorClock() = default;
     CompositorClock(const CompositorClock&) = delete;
     CompositorClock& operator=(const CompositorClock&) = delete;
     ~CompositorClock() {
-        if (module) FreeLibrary(module);
         if (wake) CloseHandle(wake);
     }
+    // Ate o dcomp.dll do init thread ficar pronto, o worker usa o fallback temporizado.
     void Init() {
         wake = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!wake) return;
-        module = LoadLibraryExW(L"dcomp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (module) wait = reinterpret_cast<WaitFn>(
-            GetProcAddress(module, "DCompositionWaitForCompositorClock"));
+        if (wake) wait = g_compositorClockWait.load(std::memory_order_acquire);
     }
     void Cancel() { if (wake) SetEvent(wake); }
     Result Wait(DWORD timeoutMs) const {
@@ -3837,7 +3918,8 @@ static void ApplySlideFrame(const std::shared_ptr<SlideAnimation>& s) {
         if (available && now < s->preparationDeadline) return;
         s->staggerPending = false;
     }
-    if (!s->started && s->info.nativePage && !ItemStagger::live.load(std::memory_order_acquire) &&
+    if (!s->started && s->info.nativePage && s->settings.motion &&
+        !ItemStagger::live.load(std::memory_order_acquire) &&
         ItemStagger::preparationRunning.load(std::memory_order_acquire) &&
         !ItemStagger::preparationFailed.load(std::memory_order_acquire) && now < s->preparationDeadline) return;
     if (!s->started) {
@@ -4084,7 +4166,7 @@ static bool PrepareSlide(HWND hwnd, AnimInfo info) {
             reinterpret_cast<DWORD_PTR>(hwnd))) s->inputHost = host;
         else { FinishSlide(s); return false; }
     }
-    if (s->settings.stagger && !info.isPropPage &&
+    if (s->settings.stagger && s->settings.motion && !info.isPropPage &&
         info.axis == AnimAxis::Vertical && info.transition == TransitionType::Entrance) {
         s->staggerPending = ItemStagger::HasDirectUiPayload(hwnd);
         s->preparationDeadline = std::max(double(s->startAt), s->timeline.Now()) + ItemStagger::kPreparationWaitMs;
@@ -4557,17 +4639,16 @@ BOOL Wh_ModInit() {
                GetLastError());
         return FALSE;
     }
-    WM_WH_TRY_BROWSER_HOOK = RegisterWindowMessageW(
-        L"Windhawk_FileExplorerContentAnimation_TryBrowserHook");
-    if (!WM_WH_TRY_BROWSER_HOOK) {
-        Wh_Log(L"[INIT] RegisterWindowMessageW(TryBrowserHook) falhou: %lu",
-               GetLastError());
-        return FALSE;
-    }
     WM_WH_ANIMATION_FRAME = RegisterWindowMessageW(
         L"Windhawk_FileExplorerContentAnimation_Frame");
     if (!WM_WH_ANIMATION_FRAME) {
         Wh_Log(L"[INIT] RegisterWindowMessageW(Frame) falhou: %lu", GetLastError());
+        return FALSE;
+    }
+    WM_WH_BIND_REMOVAL = RegisterWindowMessageW(
+        L"Windhawk_FileExplorerContentAnimation_BindRemoval");
+    if (!WM_WH_BIND_REMOVAL) {
+        Wh_Log(L"[INIT] RegisterWindowMessageW(BindRemoval) falhou: %lu", GetLastError());
         return FALSE;
     }
 
@@ -4593,35 +4674,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Apenas simbolos de um modulo ja carregado: nao criar objetos Shell
-    // no startup do processo nem enumerar outras janelas via COM.
-    TryHookBrowseObjectSymbols();
-
     return TRUE;
-}
-
-// O modulo pode carregar depois de Wh_ModInit; a primeira janela tenta de novo.
-static void TryHookBrowseObjectSymbols() {
-    if (g_unloading.load(std::memory_order_acquire) ||
-        g_browserHookInstalled.load(std::memory_order_acquire))
-        return;
-    std::unique_lock<std::mutex> lk(g_browseObjectHookMtx, std::try_to_lock);
-    if (!lk.owns_lock() || g_browserHookInstalled.load(std::memory_order_acquire))
-        return;
-    HMODULE module = GetModuleHandleW(L"explorerframe.dll");
-    if (!module) return;
-    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
-        {{
-            LR"(public: virtual long __cdecl CShellBrowser::BrowseObject(struct _ITEMIDLIST_RELATIVE const __unaligned *,unsigned int))",
-            LR"(public: virtual long __cdecl CShellBrowser::BrowseObject(struct _ITEMIDLIST const *,unsigned int))",
-        }, &g_origBrowseObject, HookBrowseObject, true},
-    };
-    WindhawkUtils::HookSymbols(module, explorerframe_dll_hooks,
-                               ARRAYSIZE(explorerframe_dll_hooks));
-    g_browserHookInstalled.store(g_origBrowseObject != nullptr,
-                                  std::memory_order_release);
-    if (!g_origBrowseObject)
-        Wh_Log(L"[INIT] BrowseObject indisponivel; usando entrance e APPCOMMAND");
 }
 
 static BOOL CALLBACK EnumExplorerWindowsProc(HWND hwnd, LPARAM) {
@@ -4746,6 +4799,9 @@ void Wh_ModAfterInit() {
                     if (SUCCEEDED(hrDComp) && pDC) {
                         g_dcompModule = hDComp;
                         hDComp = nullptr; // ownership transferido para o estado global
+                        g_compositorClockWait.store(reinterpret_cast<CompositorClockWaitFn>(
+                            GetProcAddress(g_dcompModule, "DCompositionWaitForCompositorClock")),
+                            std::memory_order_release);
                         // Store com release publica devices e o modulo retido.
                         g_dcDevice.store(pDC, std::memory_order_release);
                     } else {
@@ -4895,6 +4951,7 @@ void Wh_ModUninit() {
     }
     if (g_dxgiDevice){ g_dxgiDevice->Release(); g_dxgiDevice = nullptr; }
     if (g_d3dDevice) { g_d3dDevice->Release();  g_d3dDevice  = nullptr; }
+    g_compositorClockWait.store(nullptr, std::memory_order_release);
     if (g_dcompModule) {
         // So zera o ponteiro em sucesso -- se FreeLibrary falhar, o modulo
         // continua carregado e a variavel deve continuar a refletir isso.
@@ -4929,6 +4986,9 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    // Exclusao ja preparada: as views abertas com o escalonamento desligado nao foram vinculadas.
+    if (ItemStagger::Removal::ready.load(std::memory_order_acquire) && ItemStagger::Enabled())
+        ItemStagger::RequestViewBinding();
     ItemStagger::StartPreparation();
     ItemStagger::RequestPreparation();
 }
