@@ -25,16 +25,22 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 ## Key Features
 
 * **Full 2D Canvas & Horizontal Scrolling:** Supports natural sideways panning with directional snapping (axis-lock) to prevent diagonal drift.
-* **High-Resolution Micro-Scrolling:** Injects fractional wheel increments for fluid, trackpad-like scrolling in modern desktop apps and web browsers.
-* **Legacy Control Detection:** Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete `WM_VSCROLL` and `WM_HSCROLL` line steps to preserve native line-by-line movement.
-* **Hands-Free Cruising:** Release the Right Mouse Button while continuing to hold `Ctrl` to let the page cruise automatically based on cursor offset along the active axis. Cruising disengages instantly on keypress, mouse click, or `Ctrl` release.
+* **Silky Smooth Motion Filtering:** Integrates a low-pass motion filter to eliminate sensor jitter and micro-stutter, delivering a fluid, trackpad-like glide.
+* **High-Resolution Micro-Scrolling:** Injects fractional wheel increments with exact screen coordinates for smooth, responsive scrolling across modern web browsers and desktop applications.
+* **Legacy Control Detection:** Automatically detects classic Win32 controls (such as standard list views, tree views, and edit boxes) and routes discrete, synchronous `WM_VSCROLL` and `WM_HSCROLL` line steps to preserve native line-by-line movement.
+* **Hands-Free Cruising:** Release the Right Mouse Button while continuing to hold `Ctrl` to let the page cruise automatically based on cursor offset along the active axis. Cruising disengages instantly on any keypress, mouse click, or `Ctrl` release.
+* **Dynamic Velocity Scaling:** Adapts scroll speed to your gesture—move slowly for fine line-by-line reading or flick quickly to glide across large documents.
 * **Zero Zoom Interference:** Dynamically masks `Ctrl` state during scroll dispatch so applications never accidentally trigger browser zoom or editor scaling.
 * **Accidental Click Protection:** Tapping `Ctrl + Right-Click` in place without exceeding the deadzone transparently passes through as a regular right-click.
 
+---
+
 ## Compatibility & Limitations
 
-* **Packaged & Modern UI Surfaces:** Certain modern Windows interfaces (such as the Windows Start Menu or some packaged store apps) do not process standard Win32 mouse-drag messages through the message queue and are not supported.
-* **CAD & 3D Software:** If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to `Ctrl + Right-Click`, you can exclude those executables under the mod's **Advanced** tab in Windhawk.
+* **Microsoft Store & Packaged Apps (Not Supported):** Drag-to-scroll does not work inside apps installed from the Microsoft Store (such as Calculator, Weather, or Windows Settings) or system surfaces like the Start Menu. These run in sandboxed containers (UWP/WinUI) with isolated input pipelines that block standard Win32 mouse hooks.
+* **Older Desktop Utilities (Setting Adjustment):** While modern browsers and editors glide effortlessly with micro-scrolling, some legacy Win32 programs may stutter when receiving fractional wheel deltas. If scrolling feels jumpy or unresponsive in an older application, turn off **Ultra-Smooth Scrolling** in settings to use standard wheel notches instead.
+* **CAD, 3D & Creative Suites (App Conflicts):** Software that already uses `Ctrl + Right-Click` for canvas navigation (such as Blender, AutoCAD, or video games) will conflict with this gesture. You can exclude these specific programs under the mod's **Advanced** tab in Windhawk.
+* **Administrator Windows (UAC Limitation):** The mod cannot interact with applications running as Administrator unless Windhawk itself is also running with administrative privileges, due to Windows User Account Control security restrictions.
 
 ---
 
@@ -51,30 +57,31 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 /*
 - touch_style: true
   $name: "Natural / Touchscreen Scrolling"
-  $description: "When enabled, dragging down pulls the content down (touchscreen style). When disabled, dragging follows traditional mouse wheel direction."
+  $description: "Drag down to pull content down (like a touchscreen). Disable to scroll like a standard mouse wheel."
 - enable_horizontal: true
   $name: "Enable Horizontal Scrolling"
-  $description: "Allows dragging horizontally to scroll sideways using horizontal wheel events and WM_HSCROLL."
+  $description: "Drag left or right to scroll sideways through wide documents, spreadsheets, and web pages."
 - axis_lock: true
   $name: "Prevent Diagonal Drift (Axis Lock)"
-  $description: "Locks scrolling straight vertically or horizontally to prevent accidental drifting in the other direction. Disable for free 2D canvas panning."
+  $description: "Locks movement strictly vertical or horizontal to keep you from drifting sideways by accident. Disable for free diagonal panning."
 - enable_cruising: false
   $name: "Continuous Cruising (Hold Ctrl)"
-  $description: "Releasing Right-Click while holding Ctrl keeps scrolling automatically based on displacement. Stops immediately on any click, keypress, or Ctrl release."
+  $description: "Let go of Right-Click while still holding Ctrl to let the page keep scrolling on its own. Disengages on any click or keypress."
 - pixels_per_notch: 45
-  $name: "Base Drag Distance (Pixels per Notch)"
-  $description: "Pixels required to drag for one full standard scroll notch (120 units). Lower values scroll faster (minimum: 10)."
+  $name: "Scroll Sensitivity (Distance per Step)"
+  $description: "How far you need to move the mouse to scroll. Lower numbers scroll faster; higher numbers make it gentler and more controlled."
 - deadzone: 5
   $name: "Drag Deadzone (Pixels)"
-  $description: "Movement threshold in pixels before drag-scrolling engages. Releasing within this threshold passes through as a standard right-click (minimum: 0)."
+  $description: "Small buffer before scrolling begins. Clicking without dragging still acts like a normal right-click."
 - enable_velocity: true
   $name: "Dynamic Velocity Scaling"
-  $description: "Slow, small movements offer high line-by-line precision; rapid flicks accelerate scrolling smoothly."
+  $description: "Move slowly for precise line-by-line reading, or flick quickly to speed through long pages."
 - smooth_wheel: true
-  $name: "High-Resolution Smooth Scrolling"
-  $description: "Injects high-precision fractional wheel deltas for fluid movement in modern browsers. Disable this if scrolling is unresponsive in older desktop programs."
+  $name: "Ultra-Smooth Scrolling"
+  $description: "Enables silky, trackpad-style smooth scrolling. Disable this if scrolling feels jittery or unresponsive in older programs."
 */
 // ==/WindhawkModSettings==
+
 // clang-format on
 
 #include <windhawk_api.h>
