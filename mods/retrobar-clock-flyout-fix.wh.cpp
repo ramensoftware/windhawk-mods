@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              retrobar-clock-flyout-fix
 // @name            RetroBar Clock Flyout Fix
-// @description     This mod fixes the Aero clock flyout opened by RetroBar by applying thick borders to it
+// @description     This mod fixes the Aero clock flyout opened from RetroBar: thick border and floating position
 // @version         1.0.0
-// @author          babamohammed
+// @author          babamohammed2022
 // @github          https://github.com/babamohammed2022
 // @include         RetroBar.exe
 // @architecture    x86-64
@@ -36,10 +36,10 @@ the window next to the taskbar. This mod therefore runs in `RetroBar.exe` and:
 On Windows 10 the Win32 clock flyout must be available
 (`HKLM\Software\Microsoft\Windows\CurrentVersion\ImmersiveShell\UseWin32TrayClockExperience` = 1).
 
-## Credits / Reference
+## Credits & Reference
 
 * [RetroBar](https://github.com/dremin/RetroBar) by dremin — the taskbar that hosts the Aero clock flyout.
-* [Aero Flyout Fix](https://github.com/aubymori) by aubymori — `timedate.cpl` hooks and flyout positioning logic.
+* [Aero Flyout Fix](https://windhawk.net/mods/aero-flyout-fix) by aubymori — `timedate.cpl` hooks and flyout positioning logic.
 */
 // ==/WindhawkModReadme==
 
@@ -57,38 +57,11 @@ int  g_offset = 8;
 HWND g_hWndFlyout = NULL;
 HMODULE g_hTimedate = NULL;
 
-/* RAII guard: releases the module on scope exit unless dismissed. */
-class HModuleGuard
-{
-public:
-    explicit HModuleGuard(HMODULE h) : m_h(h) {}
-    ~HModuleGuard()
-    {
-        if (m_h && !m_dismissed)
-            FreeLibrary(m_h);
-    }
-    HModuleGuard(const HModuleGuard &) = delete;
-    HModuleGuard &operator=(const HModuleGuard &) = delete;
-
-    void Dismiss() { m_dismissed = true; }
-
-private:
-    HMODULE m_h;
-    bool    m_dismissed = false;
-};
-
 void LoadSettings(void)
 {
-    try
-    {
-        g_offset = Wh_GetIntSetting(L"offset");
-        if (g_offset < 0)
-            g_offset = 0;
-    }
-    catch (...)
-    {
-        Wh_Log(L"LoadSettings: unexpected exception, keeping previous value");
-    }
+    g_offset = Wh_GetIntSetting(L"offset");
+    if (g_offset < 0)
+        g_offset = 0;
 }
 
 void ApplyFlyoutStyles(HWND hWnd)
@@ -156,20 +129,12 @@ HWND IsolationAwareCreateWindowExW_hook(
         nWidth, nHeight, hWndParent
     );
 
-    try
+    if (hWnd
+    && ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0
+    && 0 == wcscmp(lpClassName, L"ClockFlyoutWindow"))
     {
-        if (hWnd
-        && ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0
-        && 0 == wcscmp(lpClassName, L"ClockFlyoutWindow"))
-        {
-            g_hWndFlyout = hWnd;
-            ApplyFlyoutStyles(hWnd);
-        }
-    }
-    catch (...)
-    {
-        /* Never let exceptions cross the native hook boundary. */
-        Wh_Log(L"IsolationAwareCreateWindowExW_hook: exception caught");
+        g_hWndFlyout = hWnd;
+        ApplyFlyoutStyles(hWnd);
     }
 
     return hWnd;
@@ -184,50 +149,42 @@ LRESULT CALLBACK CTrayClock_s_WndProc_hook(
     LPARAM lParam
 )
 {
-    try
+    if (hWnd == g_hWndFlyout)
     {
-        if (hWnd == g_hWndFlyout)
+        if (uMsg == WM_WINDOWPOSCHANGING && lParam)
         {
-            if (uMsg == WM_WINDOWPOSCHANGING && lParam)
+            WINDOWPOS *pwp = (WINDOWPOS *)lParam;
+            if (!(pwp->flags & SWP_NOMOVE))
             {
-                WINDOWPOS *pwp = (WINDOWPOS *)lParam;
-                if (!(pwp->flags & SWP_NOMOVE))
+                int cx = pwp->cx, cy = pwp->cy;
+                if (pwp->flags & SWP_NOSIZE)
                 {
-                    int cx = pwp->cx, cy = pwp->cy;
-                    if (pwp->flags & SWP_NOSIZE)
-                    {
-                        RECT rc;
-                        GetWindowRect(hWnd, &rc);
-                        cx = rc.right - rc.left;
-                        cy = rc.bottom - rc.top;
-                    }
-                    FloatRect(hWnd, &pwp->x, &pwp->y, cx, cy);
+                    RECT rc;
+                    GetWindowRect(hWnd, &rc);
+                    cx = rc.right - rc.left;
+                    cy = rc.bottom - rc.top;
                 }
-            }
-            else if (uMsg == WM_NCHITTEST)
-            {
-                LRESULT lr = CTrayClock_s_WndProc_orig(hWnd, uMsg, wParam, lParam);
-                switch (lr)
-                {
-                    case HTTOP:
-                    case HTTOPRIGHT:
-                    case HTRIGHT:
-                    case HTBOTTOMRIGHT:
-                    case HTBOTTOM:
-                    case HTBOTTOMLEFT:
-                    case HTLEFT:
-                    case HTTOPLEFT:
-                        return HTBORDER;
-                    default:
-                        return lr;
-                }
+                FloatRect(hWnd, &pwp->x, &pwp->y, cx, cy);
             }
         }
-    }
-    catch (...)
-    {
-        /* Never let exceptions cross the native hook boundary. */
-        Wh_Log(L"CTrayClock_s_WndProc_hook: exception caught");
+        else if (uMsg == WM_NCHITTEST)
+        {
+            LRESULT lr = CTrayClock_s_WndProc_orig(hWnd, uMsg, wParam, lParam);
+            switch (lr)
+            {
+                case HTTOP:
+                case HTTOPRIGHT:
+                case HTRIGHT:
+                case HTBOTTOMRIGHT:
+                case HTBOTTOM:
+                case HTBOTTOMLEFT:
+                case HTLEFT:
+                case HTTOPLEFT:
+                    return HTBORDER;
+                default:
+                    return lr;
+            }
+        }
     }
 
     return CTrayClock_s_WndProc_orig(hWnd, uMsg, wParam, lParam);
@@ -252,70 +209,48 @@ const WindhawkUtils::SYMBOL_HOOK timedateCplHooks[] = {
 
 void Wh_ModSettingsChanged(void)
 {
-    try
-    {
-        LoadSettings();
-    }
-    catch (...)
-    {
-        Wh_Log(L"Wh_ModSettingsChanged: exception caught");
-    }
+    LoadSettings();
 }
 
 BOOL Wh_ModInit(void)
 {
-    try
+    LoadSettings();
+
+    /* Load from System32 only: RetroBar is portable and may run from any
+       folder, so a planted timedate.cpl next to RetroBar.exe must not be
+       loaded. COM resolves the class from the registered System32 path, so
+       restricting the search here also ensures the hooks attach to the same
+       module the flyout will be created from. */
+    HMODULE hTimedate = LoadLibraryExW(
+        L"timedate.cpl", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32
+    );
+    if (!hTimedate)
     {
-        LoadSettings();
-
-        /* RetroBar loads timedate.cpl lazily through COM; loading it now
-           makes COM reuse the same (hooked) module. */
-        HMODULE hTimedate = LoadLibraryW(L"timedate.cpl");
-        if (!hTimedate)
-        {
-            Wh_Log(L"Failed to load timedate.cpl");
-            return FALSE;
-        }
-
-        /* RAII: free the module if we bail out before successful hooking. */
-        HModuleGuard timedateGuard(hTimedate);
-
-        if (!WindhawkUtils::HookSymbols(
-            hTimedate,
-            timedateCplHooks,
-            ARRAYSIZE(timedateCplHooks)
-        ))
-        {
-            Wh_Log(L"Failed to hook one or more symbol functions in timedate.cpl");
-            return FALSE;
-        }
-
-        /* Success: keep the module loaded, ownership passes to g_hTimedate. */
-        timedateGuard.Dismiss();
-        g_hTimedate = hTimedate;
-
-        return TRUE;
-    }
-    catch (...)
-    {
-        Wh_Log(L"Wh_ModInit: exception caught");
+        Wh_Log(L"Failed to load timedate.cpl");
         return FALSE;
     }
+
+    if (!WindhawkUtils::HookSymbols(
+        hTimedate,
+        timedateCplHooks,
+        ARRAYSIZE(timedateCplHooks)
+    ))
+    {
+        Wh_Log(L"Failed to hook one or more symbol functions in timedate.cpl");
+        FreeLibrary(hTimedate);
+        return FALSE;
+    }
+
+    g_hTimedate = hTimedate;
+    return TRUE;
 }
 
 void Wh_ModUninit(void)
 {
-    try
+    if (g_hTimedate)
     {
-        if (g_hTimedate)
-        {
-            FreeLibrary(g_hTimedate);
-            g_hTimedate = NULL;
-        }
-        g_hWndFlyout = NULL;
+        FreeLibrary(g_hTimedate);
+        g_hTimedate = NULL;
     }
-    catch (...)
-    {
-        Wh_Log(L"Wh_ModUninit: exception caught");
-    }
+    g_hWndFlyout = NULL;
 }
