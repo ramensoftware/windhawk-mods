@@ -7686,6 +7686,34 @@
         "version": "1.0"
       }
     },
+    "fix-taskmgr-details-icon-size": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793185373000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793185373000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "GF-Huang",
+        "compilerOptions": "-lcomctl32 -lgdi32 -luser32",
+        "description": "Fix task manager details icon size to normal.",
+        "github": "https://github.com/GF-Huang",
+        "include": [
+          "Taskmgr.exe"
+        ],
+        "license": "MIT",
+        "name": "Fix Task Manager Details Icon Size",
+        "version": "0.1"
+      }
+    },
     "fix-windows-tools-view": {
       "details": {
         "defaultSorting": 904,
@@ -12504,21 +12532,21 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793027089000,
+        "updated": 1793185383000,
         "users": 3
       },
       "metadata": {
         "author": "MrSmith",
-        "compilerOptions": "-lgdi32 -luser32",
-        "description": "Dark title bars and frames for the image windows in Corel PaintShop Pro",
+        "compilerOptions": "-lgdi32 -luser32 -lcomctl32",
+        "description": "Darker interface, black title bar, accent color and dark image windows for Corel PaintShop Pro",
         "github": "https://github.com/MrSmith2017",
         "homepage": "https://github.com/MrSmith2017/psp-dark-image-windows",
         "include": [
           "Corel PaintShop Pro.exe"
         ],
         "license": "MIT",
-        "name": "PaintShop Pro Dark Image Windows",
-        "version": "1.0.0"
+        "name": "PaintShop Pro Dark Mode",
+        "version": "2.0.0"
       }
     },
     "quick-explorer-switcher": {
@@ -13669,7 +13697,7 @@
         "ratingUsers": 22,
         "reviews": 2,
         "trendingSorting": 1.8284053415863466,
-        "updated": 1790005398000,
+        "updated": 1793185378000,
         "users": 482
       },
       "metadata": {
@@ -13681,11 +13709,13 @@
         "description": "Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.",
         "github": "https://github.com/Asteski",
         "include": [
-          "explorer.exe"
+          "explorer.exe",
+          "ShellHost.exe",
+          "ShellExperienceHost.exe"
         ],
-        "license": "MIT",
+        "license": "GPL-3.0",
         "name": "Separate System Tray Icons",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "settings-to-control-panel": {

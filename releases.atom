@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-27T20:03:52.000Z</updated>
+    <updated>2026-10-28T11:02:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Task Manager Details Icon Size 0.1]]></title>
+        <id>https://windhawk.net/mods/fix-taskmgr-details-icon-size#9d9f4aca2ef130a7388757f192e9f86946314fb7</id>
+        <link href="https://windhawk.net/mods/fix-taskmgr-details-icon-size"/>
+        <updated>2026-10-28T11:02:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixtaskmanagericonsizes">Fix Task Manager Icon Sizes</h1>
+<p><img src="https://i.imgur.com/3l0CqCH.png" alt="compared" /></p>
+<p>This mod lets you configure the Task Manager Details/Services icon sizes. You need to restart the task manager after modifying the settings.</p>
+<p>I don't know from which version of Windows 11 onwards, the icons on the details page have become as small as ants.</p>
+<hr />
+<p>此模组允许您配置任务管理器中“详细信息/服务”图标的尺寸。修改设置后需要重启任务管理器。</p>
+<p>不知道 Windows 11 从哪个版本起，详细信息页面的图标小得跟蚂蚁一样。</p>]]></content>
+        <author>
+            <name>GF-Huang</name>
+            <uri>https://github.com/GF-Huang</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Radial Window Switcher 1.0.0]]></title>
         <id>https://windhawk.net/mods/radial-window-switcher#b8a9a6b78f6829de7a7e1530ab390be6c0701cae</id>
@@ -1179,66 +1196,6 @@ be kept until Explorer exits to avoid unloading code that is still running.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DeepSeek Balance in Taskbar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/deepseek-balance-tray#0ab510bd7f577ef5e7ea4b1f5d2f528d580c24d3</id>
-        <link href="https://windhawk.net/mods/deepseek-balance-tray"/>
-        <updated>2026-10-24T14:05:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="deepseekbalanceintaskbar">DeepSeek Balance in Taskbar</h1>
-<p>Shows the current DeepSeek API account balance right in the Windows taskbar
-clock:</p>
-<pre><code>0:17
-22.10.2026 | ≈1 058 ₽
-</code></pre>
-<p>Works in <code>explorer.exe</code> on Windows 10 and Windows 11 with the stock taskbar.
-Networking uses the built-in WinHTTP stack and JSON/XML parsing is hand-written,
-so there are no external dependencies.</p>
-<p><img src="https://raw.githubusercontent.com/MrAlexFreeman/deepseek-balance-tray/main/screenshots/clock.png" alt="screenshot" /></p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>The mod hooks <code>GetTimeFormatEx</code> / <code>GetDateFormatEx</code> from <code>kernelbase.dll</code> —
-the functions the taskbar clock uses to format its text (Windows 10:
-<code>ClockButton::UpdateTextStringsIfNecessary</code>, Windows 11:
-<code>ClockSystemTrayIconDataModel::RefreshIcon</code>).</li>
-<li>Formatting is only decorated while the clock is refreshing (a thread-local
-flag), so dates in other Explorer windows are left alone.</li>
-<li>A background thread polls <code>https://api.deepseek.com/user/balance</code> through
-WinHTTP, parses the JSON and updates the clock suffix.</li>
-<li>When a display currency is selected, the mod fetches the official Bank of
-Russia rates (<code>https://www.cbr.ru/scripts/XML_daily.asp</code>, windows-1251),
-caches them for six hours and converts the balance. With the default
-<code>native</code> mode no such request is made.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>DeepSeek API key</strong> — <code>sk-...</code> key stored in Windhawk's mod settings on this
-PC. Leave it empty to use the <code>DEEPSEEK_API_KEY</code> environment variable.</li>
-<li><strong>Refresh interval</strong> — how often to poll the API, in minutes.</li>
-<li><strong>Clock line</strong> — append to the bottom (date) line or the top (time) line.</li>
-<li><strong>Display currency</strong> — <code>native</code> keeps the currency returned by the API;
-<code>CNY</code>, <code>RUB</code> and <code>USD</code> convert the balance with the official Bank of Russia
-rates.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Requires symbols (PDB) for <code>explorer.exe</code> / <code>SystemTray.dll</code>; Windhawk
-downloads them automatically on first start.</li>
-<li>The old Windows 10 taskbar on Windows 11 (ExplorerPatcher) is not supported.</li>
-<li>The API key is stored in plain text in the mod settings: Windhawk has no
-secret setting type. The key is only sent to <code>api.deepseek.com</code> and is never
-logged; no other endpoints are contacted except <code>www.cbr.ru</code>, and only when a
-display currency other than <code>native</code> is selected.
-In a regular (non-portable) Windhawk install the settings are machine-wide,
-so every Windows account on this PC shares the same key.</li>
-<li>Do not enable this mod together with Taskbar Clock Customization: both hook
-the same formatting functions of the clock, and that mod replaces the line
-text, so only one of them can win. Pick one of the two.</li>
-</ul>]]></content>
-        <author>
-            <name>MrAlexFreeman</name>
-            <uri>https://github.com/MrAlexFreeman</uri>
         </author>
     </entry>
 </feed>

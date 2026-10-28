@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-27T22:01:11.000Z</updated>
+    <updated>2026-10-28T11:03:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[PaintShop Pro Dark Mode 2.0.0]]></title>
+        <id>https://windhawk.net/mods/psp-dark-mdi-frames#c7cf229cda461c3c3eb38fb92e0513f04d003a77</id>
+        <link href="https://windhawk.net/mods/psp-dark-mdi-frames"/>
+        <updated>2026-10-28T11:03:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed to "PaintShop Pro Dark Mode"; it now darkens the whole interface, not only the image windows.</li>
+<li>New setting: interface darkness for the dark gray surfaces (tool bars, tool column, palettes, tool options bar, dialogs and the area around the color wheel).</li>
+<li>New setting: title bar color of the main window (black by default).</li>
+<li>New setting: accent color that replaces the orange of the "Edit" tab and of the line below the title bar.</li>
+<li>New setting: hide the eight start tiles in the empty workspace (off by default).</li>
+<li>Image window frames and the flash fix are unchanged.</li>
+</ul>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Separate System Tray Icons 1.1.0]]></title>
+        <id>https://windhawk.net/mods/separate-system-tray-icons#5c80fd1a143de2c86028e8fc91dae73f880ccb51</id>
+        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
+        <updated>2026-10-28T11:02:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="separatesystemtrayiconsv110">Separate System Tray Icons v1.1.0</h1>
+<ul>
+<li>Network, sound, and battery buttons now read Windows native taskbar glyphs and layers. Button and hover-highlight dimensions follow native taskbar sizing and layout, improving consistency across taskbar sizes and orientations. Battery rendering no longer requires manually installing its font.</li>
+<li>Added <em>Swap troubleshooting position</em> for context menus.</li>
+<li>Added <em>Show master volume slider in Sound output</em> flyout.</li>
+<li>Added <em>Show leaf icon in Energy saver</em> mode.</li>
+<li>Added custom middle-click actions across all buttons.</li>
+<li>Trigger <em>Project</em> flyout using the <em>Control Center</em> button.</li>
+<li>Added vertical stacking for the Battery glyph and percentage, adjusted spacing and centering.</li>
+<li>Kept the Battery glyph working through taskbar size and position changes without restarting Explorer.</li>
+<li>Fixed Energy saver and percentage items remaining greyed out when enabling Energy saver.</li>
+<li>Added settings to define horizontal and vertical padding.</li>
+</ul>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fix Task Manager Details Icon Size 0.1]]></title>
+        <id>https://windhawk.net/mods/fix-taskmgr-details-icon-size#9d9f4aca2ef130a7388757f192e9f86946314fb7</id>
+        <link href="https://windhawk.net/mods/fix-taskmgr-details-icon-size"/>
+        <updated>2026-10-28T11:02:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixtaskmanagericonsizes">Fix Task Manager Icon Sizes</h1>
+<p><img src="https://i.imgur.com/3l0CqCH.png" alt="compared" /></p>
+<p>This mod lets you configure the Task Manager Details/Services icon sizes. You need to restart the task manager after modifying the settings.</p>
+<p>I don't know from which version of Windows 11 onwards, the icons on the details page have become as small as ants.</p>
+<hr />
+<p>此模组允许您配置任务管理器中“详细信息/服务”图标的尺寸。修改设置后需要重启任务管理器。</p>
+<p>不知道 Windows 11 从哪个版本起，详细信息页面的图标小得跟蚂蚁一样。</p>]]></content>
+        <author>
+            <name>GF-Huang</name>
+            <uri>https://github.com/GF-Huang</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DynamicDock 1.0.1]]></title>
         <id>https://windhawk.net/mods/dynamicdock#bc98c1452d77b3ef8abfcf840d61acb4f18d9240</id>
@@ -487,94 +545,6 @@ immediately.</li>
         <author>
             <name>MrSmith</name>
             <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 3.0.6]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#1b66e28eee1f1299f896cfa1bd3d8c738210e99b</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-10-26T15:04:43.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed an issue on Windows 11 build 26300.9807+ where the classic Run dialog appeared when shell32.pdb symbols were unavailable on Microsoft's symbol server (HTTP 404), by adding an automatic symbol-less hooking fallback (DialogBoxParamW, DialogBoxIndirectParamW, CreateDialogParamW, CreateDialogIndirectParamW, and ShowWindow) (#6544).</p>
-<p>Added experimental PowerToys Run-style app and command suggestions while typing (enableAppSuggestions), indexing Start Menu shortcuts, Registry App Paths, built-in system tools, and recent history with lazy icon loading and keyboard/mouse navigation (Up/Down, Tab to autocomplete, Enter or click to launch).</p>
-<p>Restored the distinct high-contrast colors and Direct2D vector icons for the 3 bottom action buttons (Browse with folder icon, Run in Fluent Blue with return arrow icon, and Exit in dark crimson with close icon) across all surface themes including Liquid Glass, with dynamic button width adaptation for localized labels.</p>
-<p>Added 10 new display languages (totaling 21 languages): Thai (th), Indonesian (id), Malay (ms), Portuguese (pt), Ukrainian (uk), Polish (pl), Dutch (nl), Turkish (tr), Hindi (hi), and Arabic (ar).</p>]]></content>
-        <author>
-            <name>caotu2k5</name>
-            <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[App Volume Booster 1.0]]></title>
-        <id>https://windhawk.net/mods/app-volume-booster#f7ba2c934c8f67d4488624208f890a0eb4c7614a</id>
-        <link href="https://windhawk.net/mods/app-volume-booster"/>
-        <updated>2026-10-26T15:04:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="appvolumebooster">App Volume Booster</h1>
-<p>Changes the loudness of the audio an app sends to Windows, so it can go past the
-100% limit of the volume mixer.</p>
-<p>This mod doesn't target any process by default.</p>
-<p><strong>Which apps:</strong> open this mod's <em>Advanced</em> tab -&gt; <em>Custom process inclusion list</em> and
-list the exe names you want affected (one per line). Only those processes get the mod.
-Restart an app after adding it to the list.</p>
-<p><em>Note for games:</em> Games are excluded by default in Windhawk. To work with games, they need
-to be specifically added to the inclusion list from Windhawk's Advanced settings:
-<em>Settings > Advanced settings > More advanced settings > Process Inclusion List</em>.</p>
-<p><strong>How loud:</strong> every included app uses the default settings. To give one app its own
-settings, click <strong>+</strong> under <em>Per-app overrides</em>, type its exe name and choose its volume
-and mode. An override only applies to apps that are also in the inclusion list.
-Overrides with an empty process name are ignored.</p>
-<p><strong>Modes</strong></p>
-<ul>
-<li><em>Gain</em> (default): multiplies the audio by the volume %. 100 = unchanged, 200 = twice as
-loud. Anything pushed past full scale is clipped.</li>
-<li><em>Compressor</em>: turns down the loud parts, then applies the volume % as makeup gain, so
-quiet material gets louder with less distortion on loud peaks. Tune it with threshold,
-ratio, attack and release (these settings are shared by all apps).</li>
-</ul>
-<p>Changes apply live. Lower your system volume before starting, boosted audio can be very loud.
-Exclusive-mode streams, spatial audio streams (e.g. Windows Sonic / Dolby Atmos, which bypass
-IAudioRenderClient), and apps that bypass WASAPI entirely may not be affected.</p>
-<p><strong>Troubleshooting:</strong> start the app <em>after</em> enabling the mod (streams created earlier are not seen), then check Windhawk's log for this mod. It reports each stream's format and whether audio is being processed.</p>]]></content>
-        <author>
-            <name>shubho</name>
-            <uri>https://github.com/shubho193</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 0.9.240]]></title>
-        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#6937b85477825dcbee84bf84d05718f0e68436dd</id>
-        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
-        <updated>2026-10-26T15:04:30.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/refs/heads/main/assets/showcase.gif" alt="Showcase GIF" /></p>
-<h1 id="gpuacceleratedexplorerexelistandgridviews">GPU-accelerated <code>explorer.exe</code> list and grid views</h1>
-<p>A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations and modern look.</p>
-<ul>
-<li>Replicates explorer views using hardware accelerated graphics: Details list and icons grid, including thumbnails, sorting and grouping.</li>
-<li>Animated interactions: grouping, sorting, selecting/cutting/copying files, and many more.</li>
-<li>Smooth scrolling, touchpad gestures and inertia scrolling.</li>
-<li>RTL language support.</li>
-<li>Optional button to switch back to native Explorer view; <strong>Ctrl+Alt+F9</strong> also works when the button is hidden.</li>
-<li>Prioritizes responsiveness and animations over efficiency.</li>
-<li>Less likely to break in future Windows updates since it does not modify the default views of explorer but recreates them</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Adjustable Item Height</strong> — Smooth zooming with <code>Ctrl</code>+ mouse wheel or pinch gestures.</li>
-<li><strong>Custom Fonts</strong> — Personalize the appearance with your preferred fonts.</li>
-<li><strong>Text Antialiasing</strong> — Use Windows monitor tuning, smooth grayscale, or no antialiasing while preserving transparent backgrounds.</li>
-<li><strong>Animated Selection & Hover States</strong> — Smooth visual transitions, including a dedicated selection style for file names only.</li>
-<li><strong>Dynamic Zebra Striping</strong> — Animated alternating row colors for improved readability.</li>
-<li><strong>Smooth Scrolling</strong> — Fluid scrolling for a more responsive browsing experience.</li>
-<li><strong>Seamless View Switching</strong> — Overlays the default Explorer views, letting you switch between the modded and native views directly from the Explorer window.</li>
-<li><strong>Faster Loading</strong> — Improves load times through caching and by skipping file pre-sorting.</li>
-<li><strong>Adaptive Image Quality</strong> — Matches icon and thumbnail resolution to visible size and available memory.</li>
-</ul>
-<h2 id="reportbugs">Report bugs</h2>
-<p>Report bugs in the mod's main repository <a href="https://github.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/issues">Here</a>.
-Enable <strong>Enable logging</strong> when reproducing a bug and include Windhawk's log in
-the report. Logs include file names and paths; disable the option afterward.</p>]]></content>
-        <author>
-            <name>DarkionAvey</name>
-            <uri>https://github.com/DarkionAvey</uri>
         </author>
     </entry>
 </feed>
