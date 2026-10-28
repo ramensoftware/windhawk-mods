@@ -2,7 +2,7 @@
 // @id              nested-tray-drawer
 // @name            Nested Tray Drawer
 // @description     Collect rarely used tray icons in a second drawer.
-// @version         0.1.12
+// @version         0.1.13
 // @author          MEI
 // @github          https://github.com/Meidios
 // @include         explorer.exe
@@ -695,6 +695,7 @@ bool DecodeIdentityPrefix(const BYTE* function,
     std::array<IdentityValue, 64> registers{};
     const int first = machine == IdentityMachine::X64 ? 1 : 0;
     const int second = machine == IdentityMachine::X64 ? 2 : 1;
+    const int stack = machine == IdentityMachine::X64 ? 4 : 31;
     registers[getter ? first : second] = {IdentityValue::Source, 0, 8};
     registers[getter ? second : first] = {IdentityValue::Output, 0, 8};
     int64_t candidate = -1;
@@ -721,9 +722,35 @@ bool DecodeIdentityPrefix(const BYTE* function,
             continue;
         if (op.starts_with('b') || op.starts_with('j') || op == "ret")
             return false;
-        if (op == "cmp" || op == "test" || op == "push" || op == "nop" || op == "pacibsp" ||
-            op == "paciasp" || op == "endbr64")
+        if (op == "cmp" || op == "test" || op == "nop" || op == "endbr64")
             continue;
+        if (op == "push" && machine == IdentityMachine::X64 &&
+            registers[stack].kind == IdentityValue::Unknown)
+            continue;
+        if (machine == IdentityMachine::Arm64 && (op == "pacibsp" || op == "paciasp")) {
+            registers[30] = {};  // Pointer authentication writes the link register.
+            continue;
+        }
+        // These stores only save registers to an untracked stack frame. In
+        // particular, STP does not write its two register operands. All other
+        // write-back/pair forms must be rejected, not treated as a single write.
+        if (machine == IdentityMachine::Arm64 && (op == "str" || op == "stur" || op == "stp")) {
+            size_t memoryIndex = op == "stp" ? 2 : 1;
+            if ((args.size() == memoryIndex + 1 || args.size() == memoryIndex + 2) &&
+                registers[stack].kind == IdentityValue::Unknown) {
+                std::string_view memory = args[memoryIndex];
+                bool preIndexed = memory.ends_with('!');
+                if (preIndexed)
+                    memory.remove_suffix(1);
+                int base{};
+                int64_t displacement{}, postIndex{};
+                if (IdentityMemory(memory, machine, base, displacement) && base == stack &&
+                    (args.size() == memoryIndex + 1 ||
+                     (!preIndexed && IdentityNumber(args.back(), postIndex) && postIndex >= -4096 &&
+                      postIndex <= 4096)))
+                    continue;
+            }
+        }
         bool move = op == "mov" || op == "movups" || op == "movdqu" || op == "movdqa";
         bool load = move || op == "ldr" || op == "ldur";
         bool store = move || op == "str" || op == "stur";
@@ -734,6 +761,8 @@ bool DecodeIdentityPrefix(const BYTE* function,
             bool memoryLoad =
                 load && left.index >= 0 && IdentityMemory(args[1], machine, base, displacement);
             if (memoryLoad) {
+                if (left.index == stack)
+                    return false;
                 auto pointer = registers[base];
                 registers[left.index] =
                     pointer.kind == IdentityValue::Source
@@ -773,6 +802,8 @@ bool DecodeIdentityPrefix(const BYTE* function,
                 if ((value.kind == IdentityValue::Source || value.kind == IdentityValue::Output) &&
                     (left.width != 8 || right.width != 8))
                     value = {};
+                if (left.index == stack && value.kind != IdentityValue::Unknown)
+                    return false;
                 registers[left.index] = left.width == right.width ? value : IdentityValue{};
                 continue;
             }
@@ -789,6 +820,8 @@ bool DecodeIdentityPrefix(const BYTE* function,
                 value.offset += displacement;
             else
                 value = {};
+            if (destination.index == stack && value.kind != IdentityValue::Unknown)
+                return false;
             registers[destination.index] = value;
             continue;
         }
@@ -807,16 +840,14 @@ bool DecodeIdentityPrefix(const BYTE* function,
                 value = {};
             if (value.offset < -4096 || value.offset > 4096)
                 return false;
+            if (destination.index == stack && value.kind != IdentityValue::Unknown)
+                return false;
             registers[destination.index] = value;
             continue;
         }
-        // An unrecognized register write invalidates that alias. Stores to the
-        // stack do not make a pointer available for identity field matching.
-        if (!args.empty()) {
-            auto destination = IdentityReg(args[0], machine);
-            if (destination.index >= 0)
-                registers[destination.index] = {};
-        }
+        // Unknown instructions can modify additional or implicit registers.
+        // Reject them instead of leaving a potentially stale tracked alias.
+        return false;
     }
     return false;
 }
