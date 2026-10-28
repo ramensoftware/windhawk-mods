@@ -1,0 +1,14 @@
+{
+  "modId": "file-explorer-content-animation",
+  "reviews": [
+    {
+      "authorName": "John",
+      "content": "I like this mod. Very beautiful motions. The only issue that I have is with large icons showing folders with many images or files. When a folder like this is opened with many files, it looks as if Explorer can’t load the animation fast enough (so the main view shifts up and to the corner). You have to go back and re‑enter the folder, after which all the images display correctly.",
+      "id": 85,
+      "modVersion": "1.0.1",
+      "parentId": null,
+      "timestamp": 1793202833,
+      "votes": 0
+    }
+  ]
+}

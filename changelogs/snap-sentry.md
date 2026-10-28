@@ -1,3 +1,14 @@
+## 0.22.0 ([Oct 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/aa98356ec7e6636ffed55ee598f18d6d9bdad12b/mods/snap-sentry.wh.cpp))
+
+* Before deleting or recycling a screenshot, SnapSentry now checks that it is still the same file with the same contents it copied. A file replaced or edited during the countdown is kept.
+* Each new screenshot is copied straight away instead of waiting behind earlier countdowns. Popups still appear one at a time.
+* Renaming uses the window that was in front when the screenshot appeared, not when it was processed. If another program briefly holds the new file, SnapSentry waits a moment for it rather than skipping the rename.
+* Clipboard writes use a proper owner window and retry briefly when another app holds the clipboard.
+* File and Path modes no longer offer a Delete button, since the clipboard still points at the file.
+* Very large images are left alone, and the number of screenshots waiting at once is limited.
+* New Capture sessions option: start a session from the tray icon or Ctrl+Alt+F8 (any of F1 to F11), then review, include or leave out, reorder and caption the screenshots, and export them as a packet of numbered copies with a contact sheet and a Markdown page. Export runs in the background, and session screenshots are never deleted.
+* The readme now notes that Windows forgets a "notifications off" choice for SnapSentry when the mod is disabled or updated.
+
 ## 0.21.3 ([Oct 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/57d182b9e16e49ebcce006c381dc3331caaded78/mods/snap-sentry.wh.cpp))
 
 * A screenshot taken just as settings change now follows the new settings instead of being skipped.

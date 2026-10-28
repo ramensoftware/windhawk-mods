@@ -2,12 +2,113 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-28T11:03:03.000Z</updated>
+    <updated>2026-10-28T19:01:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enter to Rename in File Explorer 0.5.0]]></title>
+        <id>https://windhawk.net/mods/macos-enter-rename#a2e932eb009c3476b3ae0de439ee3777fe513af0</id>
+        <link href="https://windhawk.net/mods/macos-enter-rename"/>
+        <updated>2026-10-28T19:01:59.000Z</updated>
+        <content type="html"><![CDATA[<p>Extends Enter-to-rename support to selected desktop files and folders in version 0.5.0.</p>
+<p>Desktop support is enabled by default and can be disabled in the mod settings. It applies only to the focused desktop icon list with a nonempty selection. Existing File Explorer behavior is preserved, and Open/Save dialogs remain unaffected.</p>
+<p>Validation:</p>
+<ul>
+<li><p>Passed compilation checks with the bundled Windhawk compiler.</p></li>
+<li><p>Passed automated checks for desktop detection, modifiers, held Enter, key-up handling, and rename confirmation.</p></li>
+<li><p>Manually tested on Windows 11: desktop rename, confirmation and cancellation, held Enter, settings changes, and existing Explorer behavior.</p></li>
+<li><p>Added Enter-to-rename support for selected desktop files and folders.</p></li>
+<li><p>Added a setting to disable desktop support, which is enabled by default.</p></li>
+</ul>]]></content>
+        <author>
+            <name>emagiaco</name>
+            <uri>https://github.com/emagiaco</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win81-start-screen-recreation#bdb2b10f1c0ee2e8a636ed05244e6ed0d846cad5</id>
+        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
+        <updated>2026-10-28T19:01:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the compatibility with StartAllBack (best-effort)</li>
+<li>Improved the graphics of the tiles</li>
+<li>Improved the animations of the Start Screen</li>
+<li>Fixed a defect with the search charm </li>
+<li>Fixed a minor defect with the names of the tiles going off-screen</li>
+<li>Improved the search's algorithm </li>
+<li>Improved the animation of the search charm</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Column View 0.57]]></title>
+        <id>https://windhawk.net/mods/explorer-column-view#979767ccedef11d2768bffb4f82722ea68b4dedc</id>
+        <link href="https://windhawk.net/mods/explorer-column-view"/>
+        <updated>2026-10-28T19:01:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add configurable native column views and a separate This PC view, including Tiles and Content.</li>
+<li>Add optional double-click/Enter folder expansion while keeping keyboard navigation and selection-based previews.</li>
+<li>Share the latest automatic layout and exact icon size across columns and remember it for future windows.</li>
+<li>Route the top View menu to the focused column and preserve manual views through unrelated settings saves.</li>
+<li>Organize settings with clearer labels and a Browsing section while retaining existing preferences.</li>
+<li>Add configurable default column widths, optional Fit window sizing and remembered manual widths across windows.</li>
+<li>Keep Inspector space, held gestures and viewport position stable during fitting; clear saved widths when remembering is disabled.</li>
+<li>Offer valid divider grab-area choices and enable the checked x64 build-26300 menu path with classic fallback.</li>
+<li>Add a Hide Inspector switch that stops previews, frees the space and restores the selected file when shown again.</li>
+<li>Improve Inspector text/control contrast with light and dark transparent backgrounds.</li>
+<li>Keep displayed bitmap previews opaque while preserving the surrounding glass background.</li>
+</ul>]]></content>
+        <author>
+            <name>ItsMikesch</name>
+            <uri>https://github.com/ItsMikesch</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.22.0]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#aa98356ec7e6636ffed55ee598f18d6d9bdad12b</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-10-28T19:01:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Before deleting or recycling a screenshot, SnapSentry now checks that it is still the same file with the same contents it copied. A file replaced or edited during the countdown is kept.</li>
+<li>Each new screenshot is copied straight away instead of waiting behind earlier countdowns. Popups still appear one at a time.</li>
+<li>Renaming uses the window that was in front when the screenshot appeared, not when it was processed. If another program briefly holds the new file, SnapSentry waits a moment for it rather than skipping the rename.</li>
+<li>Clipboard writes use a proper owner window and retry briefly when another app holds the clipboard.</li>
+<li>File and Path modes no longer offer a Delete button, since the clipboard still points at the file.</li>
+<li>Very large images are left alone, and the number of screenshots waiting at once is limited.</li>
+<li>New Capture sessions option: start a session from the tray icon or Ctrl+Alt+F8 (any of F1 to F11), then review, include or leave out, reorder and caption the screenshots, and export them as a packet of numbered copies with a contact sheet and a Markdown page. Export runs in the background, and session screenshots are never deleted.</li>
+<li>The readme now notes that Windows forgets a "notifications off" choice for SnapSentry when the mod is disabled or updated.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock to Left 2.3.15]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-to-left#bfe2a6241a0320f9138140c899b62def49baece7</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
+        <updated>2026-10-28T19:01:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Place only the native clock/notification button in a dedicated left-side container while preserving its text, calendar and notification interactions.</li>
+<li>Follow readable native system-tray background, border and spacing properties, with asymmetric decoration facing the left screen edge.</li>
+<li>Keep clear of fixed system buttons and application buttons without moving applications or reserving their viewport.</li>
+<li>Restore the native clock when placement is unsafe and retry when effective space, text size or layout changes.</li>
+<li>Support one or two clock text lines; return three or more lines to the native position.</li>
+<li>Limit relocation to single-monitor desktops, keep native waiting observers while multiple monitors are connected, and retry when returning to one monitor even if the layout dimensions are unchanged.</li>
+<li>Remove the internal settings and the earlier experimental tray-group migration and viewport-reservation paths.</li>
+</ul>]]></content>
+        <author>
+            <name>pleromyst</name>
+            <uri>https://github.com/pleromyst</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[PaintShop Pro Dark Mode 2.0.0]]></title>
         <id>https://windhawk.net/mods/psp-dark-mdi-frames#c7cf229cda461c3c3eb38fb92e0513f04d003a77</id>
@@ -348,203 +449,6 @@ files or signatures are modified. </p>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flashlight Desktop Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/flashlight-desktop-icons#18d4cc081c7dd2eeb3fdfac4f5ef52385baec3b8</id>
-        <link href="https://windhawk.net/mods/flashlight-desktop-icons"/>
-        <updated>2026-10-26T21:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="flashlightdesktopicons">Flashlight Desktop Icons</h1>
-<p>Makes desktop icons semi-transparent (or completely invisible) when idle. When
-the mouse cursor moves over the desktop, only the icons within the configured
-pixel radius smoothly reveal themselves, and they fade back to their idle
-opacity once the mouse stops moving.</p>
-<p><img src="https://i.imgur.com/UvM4nxK.gif" alt="Flashlight Desktop Icons demo" /></p>
-<ul>
-<li>No overlay windows: each icon's alpha is applied at draw time with GDI custom
-draw, so nothing blocks clicks and no wallpaper layers are duplicated.
-Compatible with Wallpaper Engine and other live wallpapers.</li>
-<li>No background threads and no polling: repainting is driven by mouse events
-and a fade timer running on the desktop's own thread, so the mod does no work
-at all while the mouse is away from the desktop.</li>
-<li>Labels fade together with their icons. Enable the "Hide Icon Labels" setting
-to remove the text under desktop icons entirely.</li>
-<li>Dragging a file over the desktop reveals the icons around the drag cursor,
-so you can see what you are dropping onto.</li>
-<li>Double-clicking empty desktop space hides all icons; double-clicking again
-returns to flashlight mode (rather than making all icons fully visible).</li>
-</ul>
-<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
-<ul>
-<li><a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Transparent Desktop Icons with Spotlight</a>
-reveals icons around the cursor using a DirectComposition overlay mask. This
-mod instead computes each icon's alpha from its distance to the cursor and
-applies it per icon at draw time (GDI custom draw), with no overlay or
-wallpaper layers.</li>
-<li><a href="https://windhawk.net/mods/desktop-icons-transparency">Desktop Icons Transparency</a>
-applies one fixed opacity to all desktop icons. This mod's opacity is
-per-icon and follows the cursor.</li>
-<li><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide & Fluent Hover Reveal</a>
-and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> hide and
-reveal icons in bulk (per section or on toggle). This mod's default
-experience is a continuous visibility gradient around the cursor.</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Faded labels are drawn in the mod's own style (white text with a glow)
-rather than Explorer's shadow style, so a label changes slightly when its
-icon reaches full opacity and Explorer takes over drawing it.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><a href="https://windhawk.net/mods/desktop-icons-transparency">desktop-icons-transparency</a>
-by zed712969-crypto: desktop window discovery and subclassing patterns.</li>
-<li><a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
-by HeyOkay: the drag-and-drop reveal approach (hooking the desktop's
-IDropTarget vtable methods).</li>
-</ul>]]></content>
-        <author>
-            <name>dantepicachu</name>
-            <uri>https://github.com/dantepicachu11-coder</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Cached Context Menu 1.1.1]]></title>
-        <id>https://windhawk.net/mods/custom-cached-context-menu#4d0e9c036ca788eae9817ed8d7b28714cac6e97f</id>
-        <link href="https://windhawk.net/mods/custom-cached-context-menu"/>
-        <updated>2026-10-26T21:02:29.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>A "Background pre-build" setting (on by default). Turning it off skips the
-startup warm-up, which is an extra moment where every registered context-menu
-handler is loaded; handlers then load only for menus that open, as with the
-stock menu. This avoids startup crashes from faulty third-party extensions,
-while a handler that would crash the stock menu still does when its menu is
-built. The first open of each context builds on demand; later opens stay
-instant. The mod's own New submenu and Send to entries are unaffected: their
-lists are built by the invalidation thread, which always runs.</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Extension items on a folder background now invoke their verb on the current
-folder directly when the folder registration runs the same command, instead
-of going through the deferred menu population.</li>
-<li>Labels that embed the selected file's name (for example NanaZip's
-"Extract to "<name>"") are cached as templates and re-rendered with the
-current name, so they no longer show a previous file's name and their
-invocation matches again. Only the start of a quoted label segment is
-templated, and folders keep their full name. Existing caches rebuild once
-after the update.</li>
-<li>The per-thread bitmap and owner-subclass buffers are released on unload
-instead of staying on Explorer's long-lived UI threads.</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>Debug logging now reports when a live-menu match was found but its invocation
-failed.</li>
-</ul>]]></content>
-        <author>
-            <name>BOLT</name>
-            <uri>https://github.com/Bolt-Scripts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.0]]></title>
-        <id>https://windhawk.net/mods/altbinz-dark#4028990b798d125c7ee88e143561bdb17b3eb643</id>
-        <link href="https://windhawk.net/mods/altbinz-dark"/>
-        <updated>2026-10-26T15:05:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="altbinzdarkmode">Alt.Binz Dark Mode</h1>
-<p><img src="https://raw.githubusercontent.com/MrSmith2017/altbinz-dark-mode/main/altbinz-dark-mode.png" alt="Before and after: the light blue Alt.Binz versus the dark one" /></p>
-<p>Alt.Binz draws its whole user interface from a light blue skin. This mod
-re-colors everything that is drawn with GDI: brushes, pens, text colors, system
-colors and the opaque skin bitmaps. Common dialogs and shell menus keep
-Windows' own dark mode.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested with Alt.Binz 0.48.4 (32-bit) at 100% display scaling on Windows 11. Some
-elements (the column header bars, the progress bar fills and the status bar button)
-are recognized by their size and color, so another version may look different.</p>
-<h2 id="surfacecolor">Surface color</h2>
-<p>The blue skin surface (toolbar, tabs, status bar, dialogs, Setup) can get another
-color: enter a hex code (for example <code>2F5A96</code>). Very bright colors are darkened
-so that the light text stays readable.</p>
-<h2 id="surfacegradient">Surface gradient</h2>
-<p>Instead of one color the surface can run between two colors. Enter both as hex
-codes, the angle in degrees (0 = left to right, 90 = top to bottom) and the
-balance: 50 is the middle, a higher value gives the end color more room, a lower
-value the start color. The gradient wins over the single surface color.</p>
-<h2 id="progressbars">Progress bars</h2>
-<p>The fill of the progress bars can get one color or, with a second color, a
-gradient, either from top to bottom or from left to right. Leave both empty for the
-default blue.</p>
-<h2 id="appearance">Appearance</h2>
-<p>These values are applied when Alt.Binz is restarted:</p>
-<ul>
-<li><strong>Background lightness</strong>: how dark the lists and dark areas are (percent).</li>
-<li><strong>Text lightness</strong>: how bright text and lines are (percent). Ignored when a text color is set.</li>
-<li><strong>Text color</strong>: an optional color for text and lines.</li>
-<li><strong>List background color</strong>: an optional color for the large list areas.</li>
-<li><strong>Saturation</strong>: how colorful the blue skin is (percent).</li>
-</ul>
-<p>The <strong>column header color</strong> (the header bars of the lists) and everything else is
-applied live. If you disable the mod, restart Alt.Binz to get the original look
-back completely.</p>]]></content>
-        <author>
-            <name>MrSmith</name>
-            <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray hover expand 1.7.1]]></title>
-        <id>https://windhawk.net/mods/tray-hover-expand#25974f385d970a26b236378ed19cb5df42b62122</id>
-        <link href="https://windhawk.net/mods/tray-hover-expand"/>
-        <updated>2026-10-26T15:04:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Do not suppress hover when the taskbar itself is visible under the cursor, so an auto-hiding taskbar works as soon as it is revealed, and a maximized window is no longer mistaken for a fullscreen app</li>
-</ul>]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PaintShop Pro Dark Image Windows 1.0.0]]></title>
-        <id>https://windhawk.net/mods/psp-dark-mdi-frames#fa09f39b629470ff8b921ca599c14d262d7d9b48</id>
-        <link href="https://windhawk.net/mods/psp-dark-mdi-frames"/>
-        <updated>2026-10-26T15:04:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="paintshopprodarkimagewindows">PaintShop Pro Dark Image Windows</h1>
-<p><img src="https://raw.githubusercontent.com/MrSmith2017/psp-dark-image-windows/main/psp-dark-image-windows.png" alt="Before and after: light blue-gray image window frames versus dark ones" /></p>
-<p>Corel PaintShop Pro has a dark theme, but the image windows inside the
-workspace keep a light blue-gray frame that looks like Windows XP or 7. They
-are classic MDI child windows, and Windows draws their frames itself, with no
-dark variant.</p>
-<p>This mod paints those frames in dark colors instead:</p>
-<ul>
-<li>title bar, border, icon and title text</li>
-<li>minimize, maximize and close buttons with hover and pressed states</li>
-<li>minimized image windows</li>
-</ul>
-<p>Maximized image windows are left to Windows. Everything is drawn by the mod,
-so no theme files or system settings are touched, and the mod only affects
-PaintShop Pro.</p>
-<h2 id="optionalflashfix">Optional flash fix</h2>
-<p>When you switch between images, PaintShop Pro rebuilds the drop-down lists in
-the tool options bar. For a few frames their selection fields flash white,
-because the Windows combo box falls back to its default brush. The flash fix
-paints that field in dark gray instead.</p>
-<h2 id="settings">Settings</h2>
-<p>All colors are entered as hex codes, for example <code>282828</code> or <code>#282828</code>. A
-value that cannot be read falls back to its default. Changes apply right away.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Tested with PaintShop Pro 2022 on Windows 11. Other versions may work, but
-have not been tested.</li>
-<li>If something looks wrong, disable the mod: the original frames come back
-immediately.</li>
-</ul>]]></content>
-        <author>
-            <name>MrSmith</name>
-            <uri>https://github.com/MrSmith2017</uri>
         </author>
     </entry>
 </feed>

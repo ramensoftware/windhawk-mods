@@ -5655,7 +5655,7 @@
         "ratingUsers": 12,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792843381000,
+        "updated": 1793214108000,
         "users": 44
       },
       "metadata": {
@@ -5671,7 +5671,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Column View",
-        "version": "0.43"
+        "version": "0.57"
       }
     },
     "explorer-command-bar": {
@@ -7192,7 +7192,7 @@
         "rating": 9,
         "ratingBreakdown": [14, 4, 13, 35, 271],
         "ratingUsers": 337,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": -0.371200390526071,
         "updated": 1780405609000,
         "users": 27884
@@ -9686,7 +9686,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792771336000,
+        "updated": 1793214119000,
         "users": 94
       },
       "metadata": {
@@ -9698,7 +9698,7 @@
           "explorer.exe"
         ],
         "name": "Enter to Rename in File Explorer",
-        "version": "0.4.0"
+        "version": "0.5.0"
       }
     },
     "macos-minimize-animation": {
@@ -14184,12 +14184,12 @@
         "ratingUsers": 15,
         "reviews": 1,
         "trendingSorting": 0.04785262266734991,
-        "updated": 1791284501000,
+        "updated": 1793214102000,
         "users": 153
       },
       "metadata": {
         "author": "mario0318",
-        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid",
+        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid -lgdi32",
         "description": "Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.",
         "github": "https://github.com/mario0318",
         "include": [
@@ -14197,7 +14197,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.21.3"
+        "version": "0.22.0"
       }
     },
     "snipping-tool-pen-text": {
@@ -15468,7 +15468,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": 0.48877661136484724,
-        "updated": 1790424286000,
+        "updated": 1793214096000,
         "users": 245
       },
       "metadata": {
@@ -15484,7 +15484,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Clock to Left",
-        "version": "2.2"
+        "version": "2.3.15"
       }
     },
     "taskbar-collapse-to-running": {
@@ -20311,7 +20311,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792949481000,
+        "updated": 1793214113000,
         "users": 46
       },
       "metadata": {
@@ -20319,7 +20319,7 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore",
+        "compilerOptions": "-lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32",
         "description": "This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11",
         "github": "https://github.com/babamohammed2022",
         "include": [
@@ -20327,7 +20327,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Windows 8.1 Start Screen Recreation",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "win95-nt4-menubars": {
