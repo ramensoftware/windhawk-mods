@@ -16,16 +16,23 @@
 /*
 # Explorer Color Tags
 
-This is a fork of
-[Explorer Tags](https://github.com/buedgik/explorer-tags), extended with:
+Explorer Color Tags is a separately maintained mod by renegade. It was built
+around the idea of macOS Finder tags and was initially inspired by
+[Explorer Tags](https://github.com/buedgik/explorer-tags). Portions of the
+storage and shortcut-index implementation originate from Explorer Tags under
+its MIT license.
+
+This is not an upstream extension of Explorer Tags. It replaces the
+navigation-pane tag browser with in-place dots, a Tags column, desktop support
+and keyboard tagging:
 
 - `Alt+1` through `Alt+8` assign a tag to the selected files.
 - `Alt+0` removes every tag from the selected files.
 - Colored dots are drawn next to tagged items in File Explorer and on the Desktop.
 - A native **Tags** column can be displayed in Details view as a canvas for compact
   colored pills drawn by the mod.
-- The original context menu remains. The navigation-pane Tags section is
-  removed because it opens cross-folder shortcut views.
+- A classic context menu provides the same tag commands. The navigation-pane
+  Tags section is not shown because it opens cross-folder shortcut views.
 
 The mod keeps an internal shortcut-folder record as a rebuildable index, so
 tags remain valid for every extension and folder. That record is stored in
