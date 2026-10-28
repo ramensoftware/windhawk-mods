@@ -633,6 +633,7 @@ static void ShowMenuFor(HWND target, POINT anchor, bool fromTitlebar) {
     PostMessageW(g_hostWnd, WM_NULL, 0, 0);
     DestroyMenu(menu);
     g_menuOpen = false;
+    g_overButton = nullptr;  // re-established by the next mouse move
 
     if (prevForeground && prevForeground != g_hostWnd &&
         IsWindow(prevForeground)) {
