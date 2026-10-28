@@ -213,6 +213,20 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
             wcsstr(lowerCls, L"richedit") != nullptr);
 }
 
+// Moves whole steps out of `accum` and returns them as one delta.
+int TakeWholeSteps(double& accum, int step) {
+    int delta = 0;
+    while (accum <= -step) {
+        delta -= step;
+        accum += step;
+    }
+    while (accum >= step) {
+        delta += step;
+        accum -= step;
+    }
+    return delta;
+}
+
 void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete) {
     if (isDiscrete && hTarget) {
         UINT scrollLines = 3;
@@ -307,36 +321,14 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
                 cruiseAccumY += unitsThisTickY;
 
-                if (isDiscrete) {
-                    int notches = 0;
-                    while (cruiseAccumY <= -WHEEL_DELTA) {
-                        notches -= WHEEL_DELTA;
-                        cruiseAccumY += WHEEL_DELTA;
-                    }
-                    while (cruiseAccumY >= WHEEL_DELTA) {
-                        notches += WHEEL_DELTA;
-                        cruiseAccumY -= WHEEL_DELTA;
-                    }
-                    if (notches != 0)
-                        DispatchScroll(notches, hTarget, true);
-                } else {
-                    int emitDelta = 0;
-                    while (cruiseAccumY <= -chunk) {
-                        emitDelta -= chunk;
-                        cruiseAccumY += chunk;
-                    }
-                    while (cruiseAccumY >= chunk) {
-                        emitDelta += chunk;
-                        cruiseAccumY -= chunk;
-                    }
-                    if (emitDelta != 0)
-                        DispatchScroll(emitDelta, hTarget, false);
+                int step = isDiscrete ? WHEEL_DELTA : chunk;
+                if (int delta = TakeWholeSteps(cruiseAccumY, step)) {
+                    DispatchScroll(delta, hTarget, isDiscrete);
                 }
             }
 
             // --- Horizontal Cruising ---
             if (ctx.enable_horizontal && std::abs(distX) >= ctx.deadzone) {
-                // Inverted direction compared to Y to match pull-canvas logic
                 double directionX = ctx.touch_style ? -1.0 : 1.0;
                 double notchRateX =
                     (static_cast<double>(distX) / ctx.pixels_per_notch);
@@ -345,30 +337,9 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
                 cruiseAccumX += unitsThisTickX;
 
-                if (isDiscrete) {
-                    int notches = 0;
-                    while (cruiseAccumX <= -WHEEL_DELTA) {
-                        notches -= WHEEL_DELTA;
-                        cruiseAccumX += WHEEL_DELTA;
-                    }
-                    while (cruiseAccumX >= WHEEL_DELTA) {
-                        notches += WHEEL_DELTA;
-                        cruiseAccumX -= WHEEL_DELTA;
-                    }
-                    if (notches != 0)
-                        DispatchHScroll(notches, hTarget, true);
-                } else {
-                    int emitDelta = 0;
-                    while (cruiseAccumX <= -chunk) {
-                        emitDelta -= chunk;
-                        cruiseAccumX += chunk;
-                    }
-                    while (cruiseAccumX >= chunk) {
-                        emitDelta += chunk;
-                        cruiseAccumX -= chunk;
-                    }
-                    if (emitDelta != 0)
-                        DispatchHScroll(emitDelta, hTarget, false);
+                int step = isDiscrete ? WHEEL_DELTA : chunk;
+                if (int delta = TakeWholeSteps(cruiseAccumX, step)) {
+                    DispatchHScroll(delta, hTarget, isDiscrete);
                 }
             }
             if (WaitForSingleObject(g_stopEvent, 20) == WAIT_OBJECT_0)
@@ -611,67 +582,20 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                     double directionY = g_settings.touch_style ? 1.0 : -1.0;
                     g_accumY += (dy * directionY * wheelUnits * velocityFactor);
 
-                    if (isDiscrete) {
-                        int notches = 0;
-                        while (g_accumY <= -WHEEL_DELTA) {
-                            notches -= WHEEL_DELTA;
-                            g_accumY += WHEEL_DELTA;
-                        }
-                        while (g_accumY >= WHEEL_DELTA) {
-                            notches += WHEEL_DELTA;
-                            g_accumY -= WHEEL_DELTA;
-                        }
-                        if (notches != 0)
-                            DispatchScroll(notches, hTarget, true);
-                    } else {
-                        int emitDelta = 0;
-                        while (g_accumY <= -chunk) {
-                            emitDelta -= chunk;
-                            g_accumY += chunk;
-                        }
-                        while (g_accumY >= chunk) {
-                            emitDelta += chunk;
-                            g_accumY -= chunk;
-                        }
-                        if (emitDelta != 0)
-                            DispatchScroll(emitDelta, hTarget, false);
+                    int step = isDiscrete ? WHEEL_DELTA : chunk;
+                    if (int delta = TakeWholeSteps(g_accumY, step)) {
+                        DispatchScroll(delta, hTarget, isDiscrete);
                     }
                 }
 
                 // --- 2. Horizontal Processing ---
                 if (dx != 0 && g_settings.enable_horizontal) {
-                    // In Windows MOUSEEVENTF_HWHEEL:
-                    // positive delta = wheel tilted right (scroll content left,
-                    // viewport moves right) negative delta = wheel tilted left
-                    // (scroll content right, viewport moves left) For natural
-                    // touch (pulling canvas):
                     double directionX = g_settings.touch_style ? -1.0 : 1.0;
                     g_accumX += (dx * directionX * wheelUnits * velocityFactor);
 
-                    if (isDiscrete) {
-                        int notches = 0;
-                        while (g_accumX <= -WHEEL_DELTA) {
-                            notches -= WHEEL_DELTA;
-                            g_accumX += WHEEL_DELTA;
-                        }
-                        while (g_accumX >= WHEEL_DELTA) {
-                            notches += WHEEL_DELTA;
-                            g_accumX -= WHEEL_DELTA;
-                        }
-                        if (notches != 0)
-                            DispatchHScroll(notches, hTarget, true);
-                    } else {
-                        int emitDelta = 0;
-                        while (g_accumX <= -chunk) {
-                            emitDelta -= chunk;
-                            g_accumX += chunk;
-                        }
-                        while (g_accumX >= chunk) {
-                            emitDelta += chunk;
-                            g_accumX -= chunk;
-                        }
-                        if (emitDelta != 0)
-                            DispatchHScroll(emitDelta, hTarget, false);
+                    int step = isDiscrete ? WHEEL_DELTA : chunk;
+                    if (int delta = TakeWholeSteps(g_accumX, step)) {
+                        DispatchHScroll(delta, hTarget, isDiscrete);
                     }
                 }
 
