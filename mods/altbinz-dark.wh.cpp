@@ -50,7 +50,7 @@ default blue.
 
 These values are applied live:
 
-* **Text color**: an optional color for text and lines of the interface (toolbar, menus, dialogs).
+* **Text color**: an optional color for text and lines of the interface (toolbar, menus, dialogs). The text changes live; lines and icons that Alt.Binz has already created follow when it is restarted.
 * **List text color**: an optional color for text and lines in the download queue and the log. Without it the text color is used.
 * **Column text color**: an optional color for the text of the column headers. Without it the text color is used.
 * **Column header color**: an optional color for the header bars of the lists.
@@ -183,10 +183,11 @@ struct Settings {
     COLORREF titleBarColor;  // CLR_INVALID = color of Windows
     bool listTextTint;       // separate text color for the lists
     float listTextHue, listTextSat, listTextLight;
-    COLORREF columnTextColor;  // CLR_INVALID = like the list text
+    COLORREF columnTextColor;  // CLR_INVALID = like the text color
+    float textLight;           // lightness of the text color, only used for text
 };
 static Settings g_cfg = {0.11f, 0.92f, 0.85f, false, RGB(0x2F, 0x5A, 0x96), RGB(0x15, 0x22, 0x38), 90, 0.5f, false, 0.0f, 0.0f, false, 0.0f, 0.0f,
-                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0, CLR_INVALID, false, 0.0f, 0.0f, 0.0f, CLR_INVALID};
+                         false, false, false, false, 0, 0, 0.0f, 0.0f, false, 0, CLR_INVALID, false, 0.0f, 0.0f, 0.0f, CLR_INVALID, 0.0f};
 
 // ---- color mapping ----------------------------------------------------------
 
@@ -234,36 +235,38 @@ static thread_local HWND g_listPaintWnd;
 // The DC a column header bar was just filled on: text drawn on it before its next fill is header text.
 static thread_local HDC g_headerDc;
 
-static void MapRGB(uint8_t& r8, uint8_t& g8, uint8_t& b8) {
+// text is true for the color of text (SetTextColor): only that may take the list text color
+static void MapRGB(uint8_t& r8, uint8_t& g8, uint8_t& b8, bool text = false) {
     if (r8 == 255 && g8 == 0 && b8 == 255) {  // transparency key (clFuchsia)
         return;
     }
     float h, s, l;
     RgbToHsl(r8 / 255.0f, g8 / 255.0f, b8 / 255.0f, &h, &s, &l);
-    const bool listText = g_cfg.listTextTint && g_listPaintWnd;
-    const float lightOut = listText ? g_cfg.listTextLight : g_cfg.lightOut;
-    float l2 = lightOut - (lightOut - g_cfg.darkOut) * l;
+    float l2 = g_cfg.lightOut - (g_cfg.lightOut - g_cfg.darkOut) * l;
     if (g_cfg.listTint && s < 0.12f && l >= 0.9f) {  // white areas (lists, edits)
         HslToRgb8(g_cfg.listHue, g_cfg.listSat, fminf(0.5f, fmaxf(0.0f, l2 + g_cfg.listL - g_cfg.darkOut)), &r8, &g8, &b8);
         return;
     }
-    if (listText && s < 0.12f && l < 0.5f) {  // text in the lists
-        HslToRgb8(g_cfg.listTextHue, g_cfg.listTextSat, l2, &r8, &g8, &b8);
+    // gray and black/white text takes the color of the text setting. The lightness of the text colors is only
+    // used here: the rest of the mapping keeps the range of the text lightness setting, so a dark text color
+    // does not darken the surface, the icons and the borders.
+    if (text && g_cfg.listTextTint && g_listPaintWnd && s < 0.12f && l < 0.5f) {  // text in the lists
+        HslToRgb8(g_cfg.listTextHue, g_cfg.listTextSat, g_cfg.listTextLight - (g_cfg.listTextLight - g_cfg.darkOut) * l, &r8, &g8, &b8);
         return;
     }
-    if (g_cfg.textTint && s < 0.12f && l < 0.5f) {  // gray and black/white text takes the color of the text setting
-        HslToRgb8(g_cfg.textHue, g_cfg.textSat, l2, &r8, &g8, &b8);
+    if (g_cfg.textTint && s < 0.12f && l < 0.5f) {
+        HslToRgb8(g_cfg.textHue, g_cfg.textSat, g_cfg.textLight - (g_cfg.textLight - g_cfg.darkOut) * l, &r8, &g8, &b8);
         return;
     }
     HslToRgb8(h, s * g_cfg.satScale, l2, &r8, &g8, &b8);
 }
 
-static COLORREF MapColor(COLORREF c) {
+static COLORREF MapColor(COLORREF c, bool text = false) {
     if (c & 0xFF000000) {  // palette index / palette relative, leave alone
         return c;
     }
     uint8_t r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
-    MapRGB(r, g, b);
+    MapRGB(r, g, b, text);
     return RGB(r, g, b);
 }
 
@@ -911,7 +914,7 @@ static COLORREF SetMappedColor(std::unordered_map<HDC, COLORREF>* store, SetColo
             keep = false;
         }
     }
-    COLORREF prev = orig(hdc, keep ? c : MapColor(c));
+    COLORREF prev = orig(hdc, keep ? c : MapColor(c, orig == SetTextColor_orig));
     EnterCriticalSection(&g_cs);
     auto it = store->find(hdc);
     if (it != store->end()) {
@@ -1364,7 +1367,7 @@ static void ForgetDcColors(HDC dc) {
 typedef HDC(WINAPI* BeginPaint_t)(HWND, LPPAINTSTRUCT);
 static BeginPaint_t BeginPaint_orig;
 static HDC WINAPI BeginPaint_hook(HWND wnd, LPPAINTSTRUCT ps) {
-    if ((g_cfg.listTextTint || g_cfg.columnTextColor != CLR_INVALID) && !g_listPaintWnd && WindowClassIs(wnd, L"TVirtualStringTree") &&
+    if (g_cfg.listTextTint && !g_listPaintWnd && WindowClassIs(wnd, L"TVirtualStringTree") &&
         !WindowClassIs(GetAncestor(wnd, GA_ROOT), L"TSetupForm")) {
         g_listPaintWnd = wnd;
     }
@@ -1521,8 +1524,8 @@ static void ApplyTitleBar(HWND hWnd, COLORREF color) {
     if (!IsAppWindow(hWnd)) {
         return;
     }
-    DWORD value = color == CLR_INVALID ? 0xFFFFFFFF : (DWORD)color;  // DWMWA_COLOR_DEFAULT
-    DwmSetWindowAttribute(hWnd, 35 /* DWMWA_CAPTION_COLOR */, &value, sizeof(value));
+    DWORD value = color == CLR_INVALID ? DWMWA_COLOR_DEFAULT : (DWORD)color;
+    DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &value, sizeof(value));
 }
 
 static void ApplyDarkTheme(HWND hWnd) {
@@ -1572,6 +1575,15 @@ static BOOL CALLBACK ResetDarkThemeTopLevel(HWND hWnd, LPARAM) {
     if (pid == GetCurrentProcessId()) {
         ResetDarkTheme(hWnd);
         EnumChildWindows(hWnd, ResetDarkThemeEnum, 0);
+    }
+    return TRUE;
+}
+
+static BOOL CALLBACK ApplyTitleBarTopLevel(HWND hWnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        ApplyTitleBar(hWnd, g_cfg.titleBarColor);
     }
     return TRUE;
 }
@@ -1661,27 +1673,22 @@ static int GetAngleSetting() {
 static void LoadSettings() {
     g_cfg.darkOut = GetPercentSetting(L"appearance.backgroundLightness", 11, 1, 40) / 100.0f;
     g_cfg.lightOut = GetPercentSetting(L"appearance.textLightness", 92, 50, 100) / 100.0f;
-    PCWSTR tc = Wh_GetStringSetting(L"appearance.textColor");
-    COLORREF tcc = tc && *tc ? ParseColor(tc, CLR_INVALID) : CLR_INVALID;
-    Wh_FreeStringSetting(tc);
+    COLORREF tcc = GetColorSetting(L"appearance.textColor", CLR_INVALID);
     g_cfg.textTint = tcc != CLR_INVALID;
     if (g_cfg.textTint) {
         float tl;
         RgbToHsl(GetRValue(tcc) / 255.0f, GetGValue(tcc) / 255.0f, GetBValue(tcc) / 255.0f, &g_cfg.textHue, &g_cfg.textSat, &tl);
-        g_cfg.lightOut = tl;
+        g_cfg.textLight = tl;
+        g_cfg.lightOut = fmaxf(0.5f, tl);  // the range of everything that is not text stays as bright as before
     }
-    PCWSTR ltc = Wh_GetStringSetting(L"appearance.listTextColor");
-    COLORREF ltcc = ltc && *ltc ? ParseColor(ltc, CLR_INVALID) : CLR_INVALID;
-    Wh_FreeStringSetting(ltc);
+    COLORREF ltcc = GetColorSetting(L"appearance.listTextColor", CLR_INVALID);
     g_cfg.listTextTint = ltcc != CLR_INVALID;
     if (g_cfg.listTextTint) {
         float tl;
         RgbToHsl(GetRValue(ltcc) / 255.0f, GetGValue(ltcc) / 255.0f, GetBValue(ltcc) / 255.0f, &g_cfg.listTextHue, &g_cfg.listTextSat, &tl);
         g_cfg.listTextLight = tl;
     }
-    PCWSTR ctc = Wh_GetStringSetting(L"appearance.columnTextColor");
-    g_cfg.columnTextColor = ctc && *ctc ? ParseColor(ctc, CLR_INVALID) : CLR_INVALID;
-    Wh_FreeStringSetting(ctc);
+    g_cfg.columnTextColor = GetColorSetting(L"appearance.columnTextColor", CLR_INVALID);
     PCWSTR lc = Wh_GetStringSetting(L"appearance.listColor");
     COLORREF lcc = lc && *lc ? ParseColor(lc, CLR_INVALID) : CLR_INVALID;
     Wh_FreeStringSetting(lc);
@@ -1717,9 +1724,7 @@ static void LoadSettings() {
     }
 
     g_cfg.keepSetupTreeDark = Wh_GetIntSetting(L"appearance.keepSetupTreeDark") != 0;
-    PCWSTR tb = Wh_GetStringSetting(L"appearance.titleBarColor");
-    g_cfg.titleBarColor = tb && *tb ? ParseColor(tb, CLR_INVALID) : CLR_INVALID;
-    Wh_FreeStringSetting(tb);
+    g_cfg.titleBarColor = GetColorSetting(L"appearance.titleBarColor", CLR_INVALID);
     PCWSTR prog = Wh_GetStringSetting(L"progress.colorTop");
     COLORREF pc = prog && *prog ? ParseColor(prog, CLR_INVALID) : CLR_INVALID;
     Wh_FreeStringSetting(prog);
@@ -1867,7 +1872,7 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     RestoreBitmaps();  // the skin bitmaps are re-colored again with the new values on their next use
-    EnumWindows(ApplyDarkThemeTopLevel, 0);  // title bar color
+    EnumWindows(ApplyTitleBarTopLevel, 0);
     for (int i = 0; i < 32; i++) {
         g_sysBrushes[i] = nullptr;  // rebuilt on demand (the old brushes stay alive: they may still be selected)
     }
