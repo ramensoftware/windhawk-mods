@@ -3891,7 +3891,7 @@ static bool InstallWpcInstallStateHook() {
 // =============================================================================
 // Windhawk entry points
 // =============================================================================
-enum class ProcessRole { Other, Explorer, Control, DllHost, ComService };
+enum class ProcessRole { Other, Explorer, Control, DllHost };
 static ProcessRole g_role = ProcessRole::Other;
 
 static std::wstring LowerText(std::wstring value) {
@@ -3937,18 +3937,12 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
     const wchar_t* exeName = wcsrchr(exe, L'\\');
     exeName = exeName ? exeName + 1 : exe;
-    const std::wstring commandLine = LowerText(GetCommandLineW() ? GetCommandLineW() : L"");
 
     if (_wcsicmp(exeName, L"explorer.exe") == 0) g_role = ProcessRole::Explorer;
     else if (_wcsicmp(exeName, L"control.exe") == 0) g_role = ProcessRole::Control;
     else if (_wcsicmp(exeName, L"dllhost.exe") == 0 ||
              _wcsicmp(exeName, L"wpc-initprobe.exe") == 0) g_role = ProcessRole::DllHost;
-    else if (_wcsicmp(exeName, L"svchost.exe") == 0 &&
-             (commandLine.find(L"rpcss") != std::wstring::npos ||
-              commandLine.find(L"dcomlaunch") != std::wstring::npos ||
-              commandLine.find(L"appinfo") != std::wstring::npos)) {
-        g_role = ProcessRole::ComService;
-    } else {
+    else {
         return FALSE;
     }
 
@@ -3957,16 +3951,6 @@ BOOL Wh_ModInit() {
     const std::wstring dlDir = dir + L"\\dl";
     const std::wstring binDir = dir + L"\\bin";
     g_binDirLower = LowerText(binDir + L"\\");
-
-    if (g_role == ProcessRole::ComService) {
-        // Registration must exist before Explorer's first download finishes.
-        // This process never loads a payload and never changes Shell32.
-        vreg::CleanupStaleHives();
-        if (!vreg::InstallHooks(false)) return FALSE;
-        PublishVirtualRegistration(binDir);
-        Wh_Log(L"[com-service] read-only WPC registration view published");
-        return TRUE;
-    }
 
     if (g_role == ProcessRole::Control) {
         if (GetFileAttributesW((binDir + L"\\wpccpl.dll").c_str()) == INVALID_FILE_ATTRIBUTES) return FALSE;
@@ -4040,7 +4024,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     if (languageChanged || forceChanged) {
         WriteTasksXml(binDir);   // refresh localized task names
         if (g_role == ProcessRole::Explorer || g_role == ProcessRole::DllHost ||
-            g_role == ProcessRole::ComService || g_role == ProcessRole::Control) {
+            g_role == ProcessRole::Control) {
             PublishVirtualRegistration(binDir, g_role == ProcessRole::Control);
         }
     }
