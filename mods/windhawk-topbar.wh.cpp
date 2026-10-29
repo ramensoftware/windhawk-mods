@@ -1279,6 +1279,7 @@ LRESULT CALLBACK ShellTrayHostIpcProc(HWND hWnd, UINT msg, WPARAM wParam,
                                       LPARAM lParam);
 void ShellTrayPushToClient();
 
+wuxm::SolidColorBrush FontColorBrush(uint8_t alpha);
 void ApplyAllControlStyles();
 void ApplyControlStylesToPopupRoot(FrameworkElement const& root);
 void UpdateTrayIconRotation();
@@ -2670,6 +2671,18 @@ void AdjustTaskButtonWidths() {
     if (s_adjusting) return;
     if (!g_taskListPanel) return;
     if (g_taskListPanel.Children().Size() == 0) return;
+
+    // Icon-only buttons have a stable compact natural width. Keep that width
+    // even when the task list competes with the center panel; text modes still
+    // use the available-width calculation below.
+    if (g_settings.taskButtonContent == L"iconOnly") {
+        for (auto&& child : g_taskListPanel.Children()) {
+            if (auto button = child.try_as<wuxc::Button>()) {
+                try { button.ClearValue(FrameworkElement::WidthProperty()); } catch (...) {}
+            }
+        }
+        return;
+    }
 
     // Width=Auto mode: never compress. The bar sizes to content and the
     // panels grow to fit. Buttons keep their natural widths so that
@@ -5326,6 +5339,33 @@ void ApplyAllControlStyles() {
     } catch (...) {}
 
     UpdateTrayIconRotation();
+
+    // Theme rules can assign AppTitleText's Foreground after the text block
+    // was created. Reassert the configured global font color after the style
+    // pass, unless the user's own controlStyles explicitly sets this target.
+    if (!g_settings.fontColor.empty()) {
+        bool hasUserForeground = false;
+        for (const auto& rule : g_controlStyleRules) {
+            if (rule.target.find(L"AppTitleText") == std::wstring::npos &&
+                rule.target.find(L"AppTitleButton") == std::wstring::npos) continue;
+            for (const auto& style : rule.styles) {
+                auto trimmed = TrimWs(style);
+                if (trimmed.starts_with(L"Foreground=") ||
+                    trimmed.starts_with(L"Foreground:=")) {
+                    hasUserForeground = true;
+                    break;
+                }
+            }
+            if (hasUserForeground) break;
+        }
+        if (!hasUserForeground) {
+            if (g_appTitleButton) {
+                if (auto text = g_appTitleButton.Content().try_as<wuxc::TextBlock>()) {
+                    try { text.Foreground(FontColorBrush(0xFF)); } catch (...) {}
+                }
+            }
+        }
+    }
 
     bool tintChanged = previousTintColor.A != g_iconTintColor.A ||
                        previousTintColor.R != g_iconTintColor.R ||
@@ -22221,7 +22261,7 @@ static void PrimeSearchPopupForStartup() {
             g_searchPopupPrimeTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
                 if (!g_searchPopupPriming || !g_searchFlyout ||
                     !g_searchFlyout.IsOpen()) {
-                    if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
+                    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
                     FinishSearchPopupPrime(false);
                     return;
                 }
@@ -22238,7 +22278,7 @@ static void PrimeSearchPopupForStartup() {
 
                 if (g_searchPopupPrimeStableTicks >= 2 ||
                     g_searchPopupPrimePollTicks >= 60) {
-                    if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
+                    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
                     bool created = g_searchPopupPrimeStableTicks >= 2;
                     try { if (g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
                     RunOnUiThread([created] { FinishSearchPopupPrime(created); });
@@ -22250,7 +22290,9 @@ static void PrimeSearchPopupForStartup() {
         g_searchPopupPrimeTimer.Stop();
         g_searchPopupPrimeTimer.Start();
     } catch (...) {
-        if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
+        try {
+            if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
+        } catch (...) {}
         try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
         if (g_searchPopupPriming) FinishSearchPopupPrime(false);
     }
@@ -25105,7 +25147,7 @@ void InvalidateStartAndSearchFlyouts() {
     g_searchPopupPrimeAttempted = false;
     g_searchOpenPendingAfterPrime = false;
     g_searchPopupPositionSettleUntil = 0;
-    if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
+    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
     g_searchPopupPrimePollTicks = 0;
     g_searchPopupPrimeStableTicks = 0;
     ++g_searchRenderGeneration;
@@ -40651,6 +40693,19 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             g_searchQueryTimer.Stop();
             g_searchQueryTimer = nullptr;
         }
+        // DispatcherTimer is bound to the dispatcher that created it. Stop
+        // and release the startup-prime timer here, on this UI thread, before
+        // a scale/display restart creates the replacement TopBar thread.
+        if (g_searchPopupPrimeTimer) {
+            try { g_searchPopupPrimeTimer.Stop(); } catch (...) {}
+            g_searchPopupPrimeTimer = nullptr;
+        }
+        g_searchPopupPriming = false;
+        g_searchPopupPrimed = false;
+        g_searchPopupPrimeAttempted = false;
+        g_searchOpenPendingAfterPrime = false;
+        g_searchPopupPrimePollTicks = 0;
+        g_searchPopupPrimeStableTicks = 0;
         StopSearchHeightAnimation();
         g_searchHeightDebounceTimer = nullptr;
         if (g_wideFlyoutCenterTimer) {
