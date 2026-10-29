@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.8.4
+// @version 0.8.5
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -2068,11 +2068,11 @@ void PositionPanel(FrameworkElement target, P::FlyoutBase current) {
 void QueuePanel(FrameworkElement target, int view);
 void ShowQuickMenu(FrameworkElement target);
 void ShowMenu(FrameworkElement target);
-void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int returnView = -1) {
+void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int returnView = -1, C::StackPanel actions = nullptr) {
   C::StackPanel host;
   // All settings pages share one work-area-clamped viewport. Content may
   // scroll, but switching tabs or editing presets never resizes the shell.
-  double width = 520, height = 560;
+  double width = 520, height = 460;
   RECT bar{};
   MONITORINFO mi{sizeof(mi)};
   if (GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &bar) &&
@@ -2095,7 +2095,10 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
   flyout.FlyoutPresenterStyle(presenter);
   host.Spacing(20);
 
-  C::Grid navigation;
+  C::StackPanel navigation;
+  navigation.Orientation(C::Orientation::Horizontal);
+  navigation.Spacing(8);
+  navigation.HorizontalAlignment(HorizontalAlignment::Right);
   C::Button back, close;
   // Use a text arrow, keeping the button label in the normal UI font.
   back.Content(winrt::box_value(returnView == 0   ? L"\u2190  Charge thresholds"
@@ -2114,8 +2117,9 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
   navigation.Height(36);
   scroll.MaxWidth(width);
   scroll.Width(width);
-  scroll.MaxHeight(height - 56);
-  scroll.Height(height - 56);
+  double footerHeight = actions && width < 500 ? 80 : 36;
+  scroll.MaxHeight(height - footerHeight - 42);
+  scroll.Height(height - footerHeight - 42);
   scroll.HorizontalContentAlignment(HorizontalAlignment::Stretch);
   scroll.VerticalContentAlignment(VerticalAlignment::Top);
   if (auto page = scroll.Content().try_as<FrameworkElement>()) {
@@ -2125,8 +2129,30 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
   }
   scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
   scroll.HorizontalScrollMode(C::ScrollMode::Disabled);
+  scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Visible);
+  host.Spacing(10);
   host.Children().Append(scroll);
-  host.Children().Append(navigation);
+  auto more = Text(L"", 12);
+  more.Height(22);
+  auto updateHint = [scroll, more]() {
+    more.Text(scroll.ScrollableHeight() > 1
+      ? (scroll.VerticalOffset() < scroll.ScrollableHeight() - 1
+         ? L"Scroll for more settings \u2193" : L"Scroll up for earlier settings \u2191")
+      : L"");
+  };
+  TrackEvent(scroll.SizeChanged(winrt::auto_revoke, SafeUi([updateHint](auto const&, auto const&) { updateHint(); })));
+  TrackEvent(scroll.ViewChanged(winrt::auto_revoke, SafeUi([updateHint](auto const&, auto const&) { updateHint(); })));
+  host.Children().Append(more);
+  C::Grid footer;
+  footer.Height(footerHeight);
+  if (actions) {
+    actions.HorizontalAlignment(HorizontalAlignment::Left);
+    actions.VerticalAlignment(VerticalAlignment::Top);
+    footer.Children().Append(actions);
+  }
+  navigation.VerticalAlignment(VerticalAlignment::Bottom);
+  footer.Children().Append(navigation);
+  host.Children().Append(footer);
   flyout.Content(host);
 }
 void ShowPanelHost(FrameworkElement target) {
@@ -2675,7 +2701,6 @@ void ShowPresetEditor(FrameworkElement target) {
                           })));
   actions.Children().Append(save);
   actions.Children().Append(cancel);
-  content.Children().Append(actions);
   C::ScrollViewer scroll;
   scroll.Content(content);
   scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
@@ -2688,7 +2713,7 @@ void ShowPresetEditor(FrameworkElement target) {
     scroll.MaxHeight((std::max)(120.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 64));
     scroll.MaxWidth((std::max)(200.0, (mi.rcWork.right - mi.rcWork.left) / scale - 64));
   }
-  SetPanelContent(scroll, target, editor->returnView);
+  SetPanelContent(scroll, target, editor->returnView, actions);
   flyout.Placement(P::FlyoutPlacementMode::TopEdgeAlignedRight);
   TrackEvent(flyout.Opened(
       winrt::auto_revoke, SafeUi([weak, addedCurrent, target](auto const& sender, auto const&) {
@@ -2779,7 +2804,7 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
     if (b.cycles.available)
       row(L"Charge cycles", std::to_wstring(b.cycles.value));
     if (b.temperature.available)
-      row(L"Temperature", std::to_wstring(b.temperature.value) + L" \u00c2\u00b0C");
+      row(L"Temperature", std::to_wstring(b.temperature.value) + L" \u00b0C");
     if (b.voltage.available)
       row(L"Voltage", decimal(b.voltage.value) + L" V");
     if (b.adapter.available)
@@ -2889,7 +2914,7 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
     }
   }
 }
-void PresentContent(FrameworkElement target, C::StackPanel content) {
+void PresentContent(FrameworkElement target, C::StackPanel content, C::StackPanel actions = nullptr) {
   if (!preservePanelHost || !flyout)
     flyout = C::Flyout();
   flyout.ShouldConstrainToRootBounds(false);
@@ -2905,7 +2930,7 @@ void PresentContent(FrameworkElement target, C::StackPanel content) {
     scroll.MaxHeight((std::max)(120.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 64));
     content.Width((std::min)(390.0, (mi.rcWork.right - mi.rcWork.left) / scale - 64));
   }
-  SetPanelContent(scroll, target);
+  SetPanelContent(scroll, target, -1, actions);
   flyout.Placement(P::FlyoutPlacementMode::Top);
   TrackEvent(flyout.Opened(winrt::auto_revoke, SafeUi([weak = winrt::make_weak(target)](
                                                           auto const& sender, auto const&) {
@@ -3165,8 +3190,7 @@ void ShowDualPanel(FrameworkElement target) {
                           })));
   actions.Children().Append(apply);
   actions.Children().Append(cancel);
-  content.Children().Append(actions);
-  PresentContent(target, content);
+  PresentContent(target, content, actions);
 }
 
 void ShowPanel(FrameworkElement target) {
@@ -3392,7 +3416,6 @@ void ShowPanel(FrameworkElement target) {
       cancel.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) { flyout.Hide(); })));
   actions.Children().Append(apply);
   actions.Children().Append(cancel);
-  content.Children().Append(actions);
   C::ScrollViewer scroll;
   scroll.Content(content);
   scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
@@ -3405,7 +3428,7 @@ void ShowPanel(FrameworkElement target) {
     scroll.MaxHeight((std::max)(120.0, (mi.rcWork.bottom - mi.rcWork.top) / scale - 64));
     content.Width((std::min)(340.0, (mi.rcWork.right - mi.rcWork.left) / scale - 64));
   }
-  SetPanelContent(scroll, target);
+  SetPanelContent(scroll, target, -1, actions);
   flyout.Placement(P::FlyoutPlacementMode::Top);
   TrackEvent(flyout.Opened(winrt::auto_revoke, SafeUi([weakTarget = winrt::make_weak(target)](
                                                           auto const& sender, auto const&) {
