@@ -1064,23 +1064,6 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Unloading Drag to Scroll mod");
 
-    if (g_curSizeNS) {
-        DestroyCursor(g_curSizeNS);
-        g_curSizeNS = nullptr;
-    }
-    if (g_curSizeWE) {
-        DestroyCursor(g_curSizeWE);
-        g_curSizeWE = nullptr;
-    }
-    if (g_curCruising) {
-        DestroyCursor(g_curCruising);
-        g_curCruising = nullptr;
-    }
-    if (g_curHand) {
-        DestroyCursor(g_curHand);
-        g_curHand = nullptr;
-    }
-
     g_state.store(ScrollState::Idle);
 
     if (g_captureHwnd && GetCapture() == g_captureHwnd) {
@@ -1088,13 +1071,14 @@ void Wh_ModUninit() {
         g_captureHwnd = nullptr;
     }
 
+    // Wake the worker thread immediately from whatever it was waiting on
     if (g_stopEvent)
         SetEvent(g_stopEvent);
     if (g_cruiseEvent)
         SetEvent(g_cruiseEvent);
 
     if (g_hCruiseThread) {
-        WaitForSingleObject(g_hCruiseThread, 200);
+        WaitForSingleObject(g_hCruiseThread, INFINITE);
         CloseHandle(g_hCruiseThread);
         g_hCruiseThread = nullptr;
     }
@@ -1111,18 +1095,17 @@ void Wh_ModUninit() {
     DeleteCriticalSection(&g_cruiseCs);
     g_threadCreated.store(false);
 
-    HANDLE hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (hThreadSnap != INVALID_HANDLE_VALUE) {
-        THREADENTRY32 te32;
-        te32.dwSize = sizeof(THREADENTRY32);
-        if (Thread32First(hThreadSnap, &te32)) {
-            DWORD pid = GetCurrentProcessId();
-            do {
-                if (te32.th32OwnerProcessID == pid) {
-                    PostThreadMessageW(te32.th32ThreadID, WM_NULL, 0, 0);
-                }
-            } while (Thread32Next(hThreadSnap, &te32));
-        }
-        CloseHandle(hThreadSnap);
+    // Destroy cached custom cursors
+    if (g_curSizeNS) {
+        DestroyCursor(g_curSizeNS);
+        g_curSizeNS = nullptr;
+    }
+    if (g_curSizeWE) {
+        DestroyCursor(g_curSizeWE);
+        g_curSizeWE = nullptr;
+    }
+    if (g_curCruising) {
+        DestroyCursor(g_curCruising);
+        g_curCruising = nullptr;
     }
 }
