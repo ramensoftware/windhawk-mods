@@ -716,7 +716,6 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cstdarg>
 #include <cstdlib>
 #include <memory>
 #include <new>
@@ -927,6 +926,7 @@ constexpr UINT DPI_REINSTALL_DELAY_MS = 250;
 
 // Tool-mod shutdown must not wait forever on nested Shell UI.
 constexpr DWORD TOOL_THREAD_SHUTDOWN_TIMEOUT_MS = 5000;
+constexpr DWORD RECYCLE_WORKER_SHUTDOWN_TIMEOUT_MS = 2000;
 
 constexpr UINT IDM_OPEN = 201;
 constexpr UINT IDM_EMPTY = 202;
@@ -986,6 +986,7 @@ struct TrayState {
     bool dragChevronTracking = false;
     bool dragChevronBlocked = false;
     bool dragChevronProbeUnknown = false;
+    bool dragChevronProbed = false;
     RECT dragChevronRect = { 0 };
     ULONGLONG dragChevronNextProbeTick = 0;
     ULONGLONG oleReleaseDeadline = 0;
@@ -1015,6 +1016,7 @@ inline std::atomic_bool g_dropOverlayArmed{false};
 // lightweight geometry source during active chevron tracking.
 inline IUIAutomation* g_trayUiAutomation = nullptr;
 inline IUIAutomationTreeWalker* g_trayUiAutomationRawWalker = nullptr;
+inline IUIAutomationCacheRequest* g_trayUiAutomationCacheRequest = nullptr;
 inline bool g_trayUiAutomationCreateFailureLogged = false;
 
 struct TrayGeometryCache {
@@ -1208,7 +1210,7 @@ bool RefreshTrayGeometry(HWND hWnd, bool forceRegeneration);
 static HWND GetSafeHwnd();
 const WCHAR* TimerName(UINT timerId);
 bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs);
-bool KillLoggedTimer(HWND hWnd, UINT timerId);
+bool StopTimer(HWND hWnd, UINT timerId);
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
 UniqueIcon g_hCurrentIcon;
 bool g_forceIconRegen = true;
@@ -1768,6 +1770,36 @@ static void RequestRecycleWorkerStop() {
     if (g_hRecycleWorkerEvent) {
         (void)SetEvent(g_hRecycleWorkerEvent);
     }
+}
+
+static void ShutdownRecycleWorkerOnTrayThread() {
+    RequestRecycleWorkerStop();
+
+    if (g_hRecycleWorkerThread) {
+        const DWORD waitResult = WaitForSingleObject(
+            g_hRecycleWorkerThread, RECYCLE_WORKER_SHUTDOWN_TIMEOUT_MS);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"Shutdown: idle recycle worker did not exit within %lu ms; process exit will complete teardown",
+                   RECYCLE_WORKER_SHUTDOWN_TIMEOUT_MS);
+            return;
+        }
+        if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"Shutdown: recycle worker wait failed: %lu; process exit will complete teardown",
+                   GetLastError());
+            return;
+        }
+
+        CloseHandle(g_hRecycleWorkerThread);
+        g_hRecycleWorkerThread = NULL;
+    }
+
+    if (g_hRecycleWorkerEvent) {
+        CloseHandle(g_hRecycleWorkerEvent);
+        g_hRecycleWorkerEvent = NULL;
+    }
+
+    delete TakePendingRecycleWorkerJob();
+    g_recycleWorkerBusy.store(false);
 }
 
 static bool QueueRecycleWorkerJob(HWND owner, std::vector<std::wstring> paths) {
@@ -3774,7 +3806,7 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         // This already runs on the tray thread, so stop its timer immediately
         // instead of queuing a second message behind the settings change.
         if (g_trayState.dragPollTimerActive) {
-            (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+            (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
             g_trayState.dragPollTimerActive = false;
         }
 
@@ -4312,6 +4344,7 @@ static void ResetChevronDragTracking() {
     g_trayState.dragChevronTracking = false;
     g_trayState.dragChevronBlocked = false;
     g_trayState.dragChevronProbeUnknown = false;
+    g_trayState.dragChevronProbed = false;
     g_trayState.dragChevronRect = {};
     g_trayState.dragChevronNextProbeTick = 0;
 }
@@ -4337,10 +4370,30 @@ static bool EnsureTrayUiAutomation() {
     g_trayUiAutomation = automation;
     (void)g_trayUiAutomation->get_RawViewWalker(
         &g_trayUiAutomationRawWalker);
+
+    IUIAutomationCacheRequest* cacheRequest = nullptr;
+    if (SUCCEEDED(g_trayUiAutomation->CreateCacheRequest(&cacheRequest)) &&
+        cacheRequest) {
+        const bool cacheReady =
+            SUCCEEDED(cacheRequest->AddProperty(UIA_ClassNamePropertyId)) &&
+            SUCCEEDED(cacheRequest->AddProperty(UIA_AutomationIdPropertyId)) &&
+            SUCCEEDED(cacheRequest->AddProperty(UIA_BoundingRectanglePropertyId)) &&
+            SUCCEEDED(cacheRequest->put_TreeScope(TreeScope_Element));
+        if (cacheReady) {
+            g_trayUiAutomationCacheRequest = cacheRequest;
+        } else {
+            cacheRequest->Release();
+        }
+    }
+
     return true;
 }
 
 static void ShutdownTrayUiAutomation() {
+    if (g_trayUiAutomationCacheRequest) {
+        g_trayUiAutomationCacheRequest->Release();
+        g_trayUiAutomationCacheRequest = nullptr;
+    }
     if (g_trayUiAutomationRawWalker) {
         g_trayUiAutomationRawWalker->Release();
         g_trayUiAutomationRawWalker = nullptr;
@@ -4368,9 +4421,12 @@ static TrayChevronProbeResult ProbeTrayChevronAtRect(
         rect.top + (rect.bottom - rect.top) / 2,
     };
 
+    const bool useCache = g_trayUiAutomationCacheRequest != nullptr;
     IUIAutomationElement* current = nullptr;
-    const HRESULT elementHr =
-        g_trayUiAutomation->ElementFromPoint(center, &current);
+    const HRESULT elementHr = useCache
+        ? g_trayUiAutomation->ElementFromPointBuildCache(
+              center, g_trayUiAutomationCacheRequest, &current)
+        : g_trayUiAutomation->ElementFromPoint(center, &current);
     if (FAILED(elementHr) || !current) {
         return TrayChevronProbeResult::Unavailable;
     }
@@ -4379,8 +4435,12 @@ static TrayChevronProbeResult ProbeTrayChevronAtRect(
     for (int level = 0; current && level < 8; ++level) {
         BSTR className = nullptr;
         BSTR automationId = nullptr;
-        const HRESULT classHr = current->get_CurrentClassName(&className);
-        const HRESULT idHr = current->get_CurrentAutomationId(&automationId);
+        const HRESULT classHr = useCache
+            ? current->get_CachedClassName(&className)
+            : current->get_CurrentClassName(&className);
+        const HRESULT idHr = useCache
+            ? current->get_CachedAutomationId(&automationId)
+            : current->get_CurrentAutomationId(&automationId);
 
         if (SUCCEEDED(classHr) && SUCCEEDED(idHr)) {
             readAnyIdentity = true;
@@ -4389,7 +4449,10 @@ static TrayChevronProbeResult ProbeTrayChevronAtRect(
             if (wcscmp(cls, L"SystemTray.NormalButton") == 0 &&
                 wcscmp(id, L"SystemTrayIcon") == 0) {
                 RECT candidate = {};
-                if (FAILED(current->get_CurrentBoundingRectangle(&candidate)) ||
+                const HRESULT boundsHr = useCache
+                    ? current->get_CachedBoundingRectangle(&candidate)
+                    : current->get_CurrentBoundingRectangle(&candidate);
+                if (FAILED(boundsHr) ||
                     candidate.right <= candidate.left ||
                     candidate.bottom <= candidate.top) {
                     // The identity is authoritative; keep a conservative
@@ -4412,8 +4475,10 @@ static TrayChevronProbeResult ProbeTrayChevronAtRect(
         }
 
         IUIAutomationElement* parent = nullptr;
-        const HRESULT parentHr =
-            g_trayUiAutomationRawWalker->GetParentElement(current, &parent);
+        const HRESULT parentHr = useCache
+            ? g_trayUiAutomationRawWalker->GetParentElementBuildCache(
+                  current, g_trayUiAutomationCacheRequest, &parent)
+            : g_trayUiAutomationRawWalker->GetParentElement(current, &parent);
         current->Release();
         current = nullptr;
         if (FAILED(parentHr) || !parent) {
@@ -4454,7 +4519,7 @@ void CheckDragStatus(HWND hWnd) {
         ResetChevronDragTracking();
         HideDropOverlay();
         if (g_trayState.dragPollTimerActive) {
-            (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+            (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
             g_trayState.dragPollTimerActive = false;
         }
         return;
@@ -4472,7 +4537,7 @@ void CheckDragStatus(HWND hWnd) {
             ResetChevronDragTracking();
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
-                (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
                 g_trayState.dragPollTimerActive = false;
             }
             return;
@@ -4490,7 +4555,7 @@ void CheckDragStatus(HWND hWnd) {
             ResetChevronDragTracking();
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
-                (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
                 g_trayState.dragPollTimerActive = false;
             }
         }
@@ -4530,6 +4595,7 @@ void CheckDragStatus(HWND hWnd) {
     }
     g_trayState.dragRectRefreshed = true;
 
+    const bool isOverIcon = PtInRect(&iconRect, pt) != FALSE;
     const POINT iconCenter = {
         iconRect.left + (iconRect.right - iconRect.left) / 2,
         iconRect.top + (iconRect.bottom - iconRect.top) / 2,
@@ -4539,7 +4605,8 @@ void CheckDragStatus(HWND hWnd) {
         PtInRect(&g_trayState.dragChevronRect, iconCenter) != FALSE;
 
     const ULONGLONG now = GetTickCount64();
-    bool shouldProbeChevron = firstRectForDrag;
+    bool shouldProbeChevron =
+        isOverIcon && !g_trayState.dragChevronProbed;
     if (!shouldProbeChevron && g_trayState.dragChevronProbeUnknown) {
         shouldProbeChevron = now >= g_trayState.dragChevronNextProbeTick;
     } else if (!shouldProbeChevron && g_trayState.dragChevronTracking) {
@@ -4553,6 +4620,7 @@ void CheckDragStatus(HWND hWnd) {
     }
 
     if (shouldProbeChevron) {
+        g_trayState.dragChevronProbed = true;
         RECT matchedChevronRect = {};
         const TrayChevronProbeResult probe =
             ProbeTrayChevronAtRect(iconRect, matchedChevronRect);
@@ -4603,8 +4671,6 @@ void CheckDragStatus(HWND hWnd) {
         }
         return;
     }
-
-    const bool isOverIcon = PtInRect(&iconRect, pt) != FALSE;
 
     if (isOverIcon) {
         RECT currentRect = { 0 };
@@ -4718,7 +4784,7 @@ bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs) {
     return false;
 }
 
-bool KillLoggedTimer(HWND hWnd, UINT timerId) {
+bool StopTimer(HWND hWnd, UINT timerId) {
     return KillTimer(hWnd, timerId) != FALSE;
 }
 
@@ -4729,13 +4795,13 @@ static void StartStartupRetryTimer(HWND hWnd, UINT initialIntervalMs) {
 }
 
 static void StopStartupRetryTimer(HWND hWnd) {
-    (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
+    (void)StopTimer(hWnd, TIMER_STARTUP_ID);
     g_trayState.startupRetryAttempts = 0;
     g_trayState.startupRetryIntervalMs = 0;
 }
 
 void UpdateRefreshTimer(HWND hWnd) {
-    (void)KillLoggedTimer(hWnd, TIMER_REFRESH_ID);
+    (void)StopTimer(hWnd, TIMER_REFRESH_ID);
 
     if (g_settings.fallbackTimerInterval == 0) {
         Wh_Log(L"Timer REFRESH disabled by settings");
@@ -4750,7 +4816,7 @@ static void StopShellCoalesceTimer(HWND hWnd) {
         return;
     }
 
-    (void)KillLoggedTimer(hWnd, TIMER_SHELL_COALESCE_ID);
+    (void)StopTimer(hWnd, TIMER_SHELL_COALESCE_ID);
     g_trayState.shellCoalesceTimerActive = false;
 }
 
@@ -4779,7 +4845,7 @@ static void ArmShellCoalesceTimer(HWND hWnd) {
 
 static void StopDisplaySettleTimer(HWND hWnd) {
     if (g_trayState.displaySettleTimerActive) {
-        (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
+        (void)StopTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
         g_trayState.displaySettleTimerActive = false;
     }
     g_trayState.displaySettleHasRect = false;
@@ -4791,7 +4857,7 @@ static void StartDisplaySettleTimer(HWND hWnd) {
     // Re-arming the timer is the debounce: a burst of display broadcasts must
     // become quiet before we start judging the tray rectangle as stable.
     if (g_trayState.displaySettleTimerActive) {
-        (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
+        (void)StopTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
     }
 
     g_trayState.displaySettleHasRect = false;
@@ -4835,9 +4901,6 @@ static bool UnregisterShellNotifications(
     return true;
 }
 
-
-// Decode the narrow observed extended-event signature used only to filter
-// a known irrelevant periodic Firefox Jump List notification.
 
 static bool RegisterShellNotifications(HWND hWnd, const wchar_t* reason = L"unspecified") {
     if (!g_firstShellRegistrationGateOpen) {
@@ -4900,6 +4963,10 @@ static void ApplyPendingSettings(HWND hWnd) {
     UpdateTrayState();
 }
 
+
+// Narrow fail-open filter for the observed periodic Firefox Jump List event.
+// If its private Shell payload changes, the event simply falls through to the
+// normal coalesced Recycle Bin refresh path.
 
 struct ExtendedEventInfo {
     bool valid = false;
@@ -5010,7 +5077,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (g_wmTaskbarCreated && msg == g_wmTaskbarCreated) {
         g_iconVisible = false;
         g_pendingDpiShellReinstall = false;
-        (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
+        (void)StopTimer(hWnd, TIMER_DPI_REINSTALL_ID);
         InvalidateTrayPositionAndRenderSize();
 
         // Explorer recreated the notification area. Retire the old subscription
@@ -5019,7 +5086,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         StopShellCoalesceTimer(hWnd);
         g_shellRegistrationRefreshPending = g_shellNotifyLock != 0;
         (void)UnregisterShellNotifications(L"TaskbarCreated", false);
-        (void)KillLoggedTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
+        (void)StopTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
 
         HideDropOverlay();
         g_trayState.dragRectRefreshed = false;
@@ -5078,7 +5145,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_dropOverlayArmed.store(false);
                 HideDropOverlay();
                 if (g_trayState.dragPollTimerActive) {
-                    (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                    (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
                     g_trayState.dragPollTimerActive = false;
                 }
             }
@@ -5098,7 +5165,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_trayState.oleReleaseDeadline = 0;
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
-                (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
                 g_trayState.dragPollTimerActive = false;
             }
             return 0;
@@ -5146,7 +5213,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     (void)SetLoggedTimer(hWnd, TIMER_CLICK_ID, GetDoubleClickTime());
                 }
             } else if (trayMessage == WM_LBUTTONDBLCLK) {
-                (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
+                (void)StopTimer(hWnd, TIMER_CLICK_ID);
                 g_suppressLeftActivationUntil =
                     GetTickCount64() + GetDoubleClickTime();
                 ExecuteAction(g_settings.doubleClickAction, hWnd);
@@ -5197,7 +5264,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_TIMER:
             if (wParam == TIMER_CLICK_ID) {
-                (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
+                (void)StopTimer(hWnd, TIMER_CLICK_ID);
                 ExecuteAction(g_settings.leftClickAction, hWnd);
             } else if (wParam == TIMER_REFRESH_ID) {
                 // Safety polling also rechecks the theme in case a broadcast was missed.
@@ -5224,7 +5291,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (g_trayState.startupRetryAttempts >=
                         STARTUP_RETRY_MAX_ATTEMPTS) {
                         const UINT attempts = g_trayState.startupRetryAttempts;
-                        (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
+                        (void)StopTimer(hWnd, TIMER_STARTUP_ID);
                         g_trayState.startupRetryIntervalMs = 0;
                         Wh_Log(
                             L"Tray: giving up startup recovery after %u attempts (shell=%d tray=%d)",
@@ -5270,14 +5337,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     UpdateTrayState();
                 }
             } else if (wParam == TIMER_SHELL_REGISTRATION_ID) {
-                (void)KillLoggedTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
+                (void)StopTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
 
                 HWND shellWindow = GetShellWindow();
                 HWND trayWindow = FindWindowW(L"Shell_TrayWnd", nullptr);
                 if (!shellWindow || !IsWindow(shellWindow) ||
                     !trayWindow || !IsWindow(trayWindow)) {
-                    (void)SetLoggedTimer(
-                        hWnd, TIMER_SHELL_REGISTRATION_ID, 1000);
+                    Wh_Log(
+                        L"Shell notify: Explorer/taskbar not ready after stabilization window; waiting for TaskbarCreated");
                     return 0;
                 }
 
@@ -5300,7 +5367,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 StopShellCoalesceTimer(hWnd);
                 UpdateTrayState();
             } else if (wParam == TIMER_DPI_REINSTALL_ID) {
-                (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
+                (void)StopTimer(hWnd, TIMER_DPI_REINSTALL_ID);
 
                 if (!g_pendingDpiShellReinstall) {
                     return 0;
@@ -5470,23 +5537,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)DestroyWindow(hWnd);
             return 0;
 
-        case WM_NCDESTROY:
-            return DefWindowProcW(hWnd, msg, wParam, lParam);
-
         case WM_DESTROY:
             InterlockedExchangePointer((PVOID volatile*)&g_hWnd, NULL);
 
             (void)SetDragDropEnabled(hWnd, false);
 
-            (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
-            (void)KillLoggedTimer(hWnd, TIMER_REFRESH_ID);
+            (void)StopTimer(hWnd, TIMER_CLICK_ID);
+            (void)StopTimer(hWnd, TIMER_REFRESH_ID);
             StopStartupRetryTimer(hWnd);
-            (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+            (void)StopTimer(hWnd, TIMER_DRAG_POLL_ID);
             StopShellCoalesceTimer(hWnd);
-            (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
-            (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
-            (void)KillLoggedTimer(hWnd, TIMER_DPI_WATCH_ID);
-            (void)KillLoggedTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
+            (void)StopTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
+            (void)StopTimer(hWnd, TIMER_DPI_REINSTALL_ID);
+            (void)StopTimer(hWnd, TIMER_DPI_WATCH_ID);
+            (void)StopTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
             g_pendingDpiShellReinstall = false;
             g_trayState.displaySettleTimerActive = false;
             g_suppressLeftActivationUntil = 0;
@@ -5641,6 +5705,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     (void)UnregisterShellNotifications(L"message-loop-exit");
     (void)SetDragDropEnabled(hWndNew, false);
+    ShutdownRecycleWorkerOnTrayThread();
     ShutdownTrayUiAutomation();
     g_hCurrentIcon.reset();
 
@@ -5694,74 +5759,38 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     g_shutdownRequested.store(true);
-    RequestRecycleWorkerStop();
 
     HWND hWnd = GetSafeHwnd();
     if (hWnd) {
         (void)PostMessageW(hWnd, WM_USER_SHUTDOWN, 0, 0);
     }
 
-    HANDLE waitHandles[2] = {};
-    DWORD waitCount = 0;
     if (g_hThread) {
-        waitHandles[waitCount++] = g_hThread;
-    }
-    if (g_hRecycleWorkerThread) {
-        waitHandles[waitCount++] = g_hRecycleWorkerThread;
-    }
-
-    if (waitCount != 0) {
-        const DWORD waitResult = WaitForMultipleObjects(
-            waitCount, waitHandles, TRUE, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+        const DWORD waitResult = WaitForSingleObject(
+            g_hThread, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
         if (waitResult == WAIT_TIMEOUT) {
-            Wh_Log(L"Shutdown: tool threads did not exit within %lu ms; process exit will complete teardown",
+            Wh_Log(L"Shutdown: tray thread did not exit within %lu ms; process exit will complete teardown",
                    TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
             if (g_recycleWorkerBusy.load()) {
                 Wh_Log(L"Shutdown: recycle worker was still busy at timeout; the in-flight recycle operation may be interrupted by process exit");
             }
-
-            if (g_hThread) {
-                CloseHandle(g_hThread);
-                g_hThread = NULL;
-            }
-            if (g_hRecycleWorkerThread) {
-                CloseHandle(g_hRecycleWorkerThread);
-                g_hRecycleWorkerThread = NULL;
-            }
+            CloseHandle(g_hThread);
+            g_hThread = NULL;
             return;
         }
         if (waitResult == WAIT_FAILED) {
-            Wh_Log(L"Shutdown: tool thread wait failed: %lu; process exit will complete teardown",
+            Wh_Log(L"Shutdown: tray thread wait failed: %lu; process exit will complete teardown",
                    GetLastError());
-
-            if (g_hThread) {
-                CloseHandle(g_hThread);
-                g_hThread = NULL;
-            }
-            if (g_hRecycleWorkerThread) {
-                CloseHandle(g_hRecycleWorkerThread);
-                g_hRecycleWorkerThread = NULL;
-            }
+            CloseHandle(g_hThread);
+            g_hThread = NULL;
             return;
         }
-    }
 
-    if (g_hThread) {
         CloseHandle(g_hThread);
         g_hThread = NULL;
     }
-    if (g_hRecycleWorkerThread) {
-        CloseHandle(g_hRecycleWorkerThread);
-        g_hRecycleWorkerThread = NULL;
-    }
-    if (g_hRecycleWorkerEvent) {
-        CloseHandle(g_hRecycleWorkerEvent);
-        g_hRecycleWorkerEvent = NULL;
-    }
 
-    delete TakePendingRecycleWorkerJob();
     delete TakePendingSettings();
-
     ShutdownGdiplusIfInitialized();
 }
 
@@ -5770,7 +5799,7 @@ void WhTool_ModUninit() {
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated Windhawk tool-mod host process.
+// The mod will load and run in a dedicated windhawk.exe process.
 //
 // Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
@@ -5905,7 +5934,7 @@ void Wh_ModAfterInit() {
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                  "CreateProcessInternalW");
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
@@ -5917,8 +5946,8 @@ void Wh_ModAfterInit() {
     };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                  nullptr, nullptr, &si, &pi, nullptr)) {
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
