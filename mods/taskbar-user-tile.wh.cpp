@@ -12,10 +12,11 @@
 
 // ==WindhawkModSettings==
 /*
-- taskbarMode: win10
+- taskbarMode: auto
   $name: Taskbar type
-  $description: Select the actual taskbar implementation. Windows 11 uses a native XAML tile before Show Desktop, also classic Windows 10 and ExplorerPatcher remain is available
+  $description: Select the actual taskbar implementation. if you are using windows 11 with the explorer patcher taskbar or if you are using the Win10 taskbar on Win11 24H2 mod(or similar mods) you need to select this option yourself depending on the type of taskbar you have
   $options:
+  - auto: Detect automatically
   - win10: Original Windows 10 classic taskbar
   - explorerpatcher: ExplorerPatcher classic taskbar 
   - win11: Windows 11 native XAML taskbar 
@@ -1036,15 +1037,35 @@ static wx::XamlRoot GetNativeTaskbarXamlRoot(HWND taskbar) {
 
     //The XAML element offset is read from frameheights first instructions
     const BYTE* code = reinterpret_cast<const BYTE*>(g_taskbarHostFrameHeight);
-    if (!ReadableXamlMemory(code, 8) ||
-        !(code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
-          code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 && code[7] <= 0x7F)) {
+    size_t offset = 0;
+#if defined(_M_X64)
+    // 48:83EC 28 | sub rsp,28
+    // 48:83C1 48 | add rcx,48
+    if (ReadableXamlMemory(code, 8) && code[0] == 0x48 && code[1] == 0x83 &&
+        code[2] == 0xEC && code[4] == 0x48 && code[5] == 0x83 &&
+        code[6] == 0xC1 && code[7] <= 0x7F) {
+        offset = code[7];
+    }
+#elif defined(_M_ARM64)
+    // 7f2303d5 pacibsp
+    // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+    // fd030091 mov     fp, sp
+    // 080c41f8 ldr     x8, [x0, #0x10]!
+    const DWORD* p = reinterpret_cast<const DWORD*>(code);
+    if (ReadableXamlMemory(p, 16) && p[0] == 0xD503237F &&
+        (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
+        (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+        offset = (p[3] >> 12) & 0xFF;
+    }
+#else
+#error "Unsupported architecture"
+#endif
+    if (!offset) {
         g_xamlCompatibilityFailed = true;
-        Wh_Log(L"User Tile: unsupported TaskbarHost::FrameHeight prologue; XAML backend disabled for this build.");
+        Wh_Log(L"User Tile: unsupported TaskbarHost::FrameHeight; XAML backend disabled for this build.");
         releaseHost();
         return nullptr;
     }
-    size_t offset = code[7];
     auto hostBytes = static_cast<BYTE*>(hostSharedPtr[0]);
     if (!ReadableXamlMemory(hostBytes + offset, sizeof(IUnknown*))) {
         releaseHost(); return nullptr;
@@ -1438,13 +1459,26 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (setAwareness && oldAwareness) setAwareness(oldAwareness);
     return 0;
 }
+static DWORD GetOsBuildNumber() {
+    typedef LONG(WINAPI* RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto fn = ntdll ? reinterpret_cast<RtlGetVersion_t>(
+                          GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
+    RTL_OSVERSIONINFOW vi = {};
+    vi.dwOSVersionInfoSize = sizeof(vi);
+    if (fn && fn(&vi) == 0) return vi.dwBuildNumber;
+    return 0;
+}
 BOOL Wh_ModInit() {
     g_initialized = false;
     g_stopping = false;
     PCWSTR mode = Wh_GetStringSetting(L"taskbarMode");
+    bool autoMode = !mode || !*mode || wcscmp(mode, L"auto") == 0;
     g_useExplorerPatcher = mode && wcscmp(mode, L"explorerpatcher") == 0;
-    g_nativeWin11Mode = mode && wcscmp(mode, L"win11") == 0;
-    g_win10Mode = mode && (wcscmp(mode, L"win10") == 0 || g_useExplorerPatcher);
+    g_nativeWin11Mode = (mode && wcscmp(mode, L"win11") == 0) ||
+                        (autoMode && GetOsBuildNumber() >= 22000);
+    g_win10Mode = !g_nativeWin11Mode &&
+                  (autoMode || (mode && wcscmp(mode, L"win10") == 0) || g_useExplorerPatcher);
     if (mode) Wh_FreeStringSetting(mode);
     g_tileWidth = (std::clamp)(Wh_GetIntSetting(L"tileWidth"), 28, 80);
     g_pictureSize = (std::clamp)(Wh_GetIntSetting(L"pictureSize"), 20, 64);
