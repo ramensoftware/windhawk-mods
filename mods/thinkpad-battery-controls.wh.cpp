@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.2
+// @version 0.9.3
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -1349,8 +1349,10 @@ void Publish(PCWSTR message = nullptr, int percent = -1) {
   view.slot = record.slot;
   view.target = record.target;
   view.pending = pending;
-  if (message)
+  if (message) {
     view.message = message;
+    Wh_SetStringValue(L"DischargeLastResult", message);
+  }
   if (percent >= 0)
     view.percent = percent;
   view.revision++;
@@ -2431,7 +2433,7 @@ void SetPanelContent(C::ScrollViewer scroll,
   C::StackPanel host;
   // All settings pages share one work-area-clamped viewport. Content may
   // scroll, but switching tabs or editing presets never resizes the shell.
-  double width = 480, height = 420;
+  double width = 520, height = 410;
   RECT bar{};
   MONITORINFO mi{sizeof(mi)};
   if (GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &bar) &&
@@ -2480,23 +2482,29 @@ void SetPanelContent(C::ScrollViewer scroll,
   scroll.MaxWidth(width);
   scroll.Width(width);
   double footerHeight = actions && width < 450 ? 80 : 36;
-  scroll.MaxHeight(height - footerHeight - 42);
-  scroll.Height(height - footerHeight - 42);
+  scroll.MaxHeight(height - footerHeight - 12);
+  scroll.Height(height - footerHeight - 12);
   scroll.HorizontalContentAlignment(HorizontalAlignment::Stretch);
   scroll.VerticalContentAlignment(VerticalAlignment::Top);
   if (auto page = scroll.Content().try_as<FrameworkElement>()) {
-    page.Width((std::max)(120.0, width - 24));
+    page.Width((std::max)(120.0, width - 12));
     page.HorizontalAlignment(HorizontalAlignment::Left);
-    page.Margin(Thickness{0, 4, 0, 16});
+    page.Margin(Thickness{0, 0, 0, 0});
   }
   scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
   scroll.HorizontalScrollMode(C::ScrollMode::Disabled);
-  scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Visible);
-  host.Spacing(10);
+  scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
+  host.Spacing(6);
   host.Children().Append(scroll);
   auto more = Text(L"", 12);
-  more.Height(22);
-  auto updateHint = [scroll, more]() {
+  more.Height(18);
+  more.Visibility(Visibility::Collapsed);
+  auto updateHint = [scroll, more, height, footerHeight]() {
+    bool overflow = scroll.ExtentHeight() > height - footerHeight - 12 + 1;
+    more.Visibility(overflow ? Visibility::Visible : Visibility::Collapsed);
+    double viewport = height - footerHeight - (overflow ? 36 : 12);
+    scroll.MaxHeight(viewport);
+    scroll.Height(viewport);
     more.Text(scroll.ScrollableHeight() > 1
                   ? (scroll.VerticalOffset() < scroll.ScrollableHeight() - 1
                          ? L"Scroll for more settings \u2193"
@@ -2506,6 +2514,9 @@ void SetPanelContent(C::ScrollViewer scroll,
   TrackEvent(scroll.SizeChanged(winrt::auto_revoke,
                                 SafeUi([updateHint](auto const&, auto const&) { updateHint(); })));
   TrackEvent(scroll.ViewChanged(winrt::auto_revoke,
+                                SafeUi([updateHint](auto const&, auto const&) { updateHint(); })));
+  if (auto page = scroll.Content().try_as<FrameworkElement>())
+    TrackEvent(page.SizeChanged(winrt::auto_revoke,
                                 SafeUi([updateHint](auto const&, auto const&) { updateHint(); })));
   host.Children().Append(more);
   C::Grid footer;
@@ -2602,7 +2613,7 @@ void EditorCounts(const std::shared_ptr<PresetEditor>& editor) {
   editor->count.Text(std::to_wstring(editor->rows.size()) + L" of 20 presets  |  " +
                      std::to_wstring(favorites) + L" of 5 quick favorites");
   editor->add.IsEnabled(editor->rows.size() < maxPresets);
-  editor->scroll.Height((std::min)(220.0, (std::max)(38.0, double(editor->rows.size()) * 38 - 6)));
+  editor->scroll.Height((std::min)(180.0, (std::max)(38.0, double(editor->rows.size()) * 38 - 6)));
   for (size_t i = 0; i < editor->rows.size(); i++) {
     editor->rows[i]->up.IsEnabled(i > 0);
     editor->rows[i]->down.IsEnabled(i + 1 < editor->rows.size());
@@ -2926,7 +2937,7 @@ void ShowPresetEditor(FrameworkElement target) {
   content.Children().Append(heading);
   editor->list.Spacing(6);
   editor->scroll.Content(editor->list);
-  editor->scroll.Height(220);
+  editor->scroll.Height(180);
   editor->scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Hidden);
   editor->scroll.VerticalScrollMode(C::ScrollMode::Enabled);
   editor->scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
@@ -3096,13 +3107,25 @@ void ShowPresetEditor(FrameworkElement target) {
 }
 // The Advanced panel is rebuilt only on a completed worker request, never on a hardware poll.
 int advancedTab = 0, advancedBattery = 0;
-void RenderExperimental(C::StackPanel body, FrameworkElement target) {
+void RenderExperimental(C::StackPanel body, FrameworkElement target, bool dismissResult = false) {
+  body.Spacing(8);
   using namespace BatteryControls;
   auto d = ExperimentalDischarge::Read();
   auto a = AdvancedControls::Read().data;
   body.Children().Append(Text(L"Experimental discharge", 18));
-  if (!d.message.empty())
-    body.Children().Append(Text(d.message, 12));
+  if (!d.message.empty() && !dismissResult) {
+    body.Children().Append(Text(d.message, 14));
+    if (!d.pending) {
+      C::Button edit;
+      edit.Content(winrt::box_value(L"Adjust target"));
+      TrackEvent(edit.Click(winrt::auto_revoke, SafeUi([body, target](auto const&, auto const&) {
+                              body.Children().Clear();
+                              RenderExperimental(body, target, true);
+                            })));
+      body.Children().Append(edit);
+      return;
+    }
+  }
   if (d.pending) {
     body.Children().Append(Text(L"Battery " + std::to_wstring(d.slot) + L"  |  Target " +
                                 std::to_wstring(d.target) + L"%"));
@@ -3174,40 +3197,71 @@ void RenderExperimental(C::StackPanel body, FrameworkElement target) {
   body.Children().Append(label);
   body.Children().Append(limit);
   body.Children().Append(
-      Text(L"WARNING: The target is monitored by this mod, not enforced by firmware. If Explorer "
-           L"crashes, Windows sleeps or crashes, or a stop fails, discharge may continue below the "
-           L"target and drain the battery. Work may be interrupted and unsaved data lost.",
-           12));
-  body.Children().Append(
-      Text(L"Rebooting or an empty battery is not a verified reset. Unplug/replug is not "
-           L"guaranteed. You may need this mod or the stop-only recovery tool to disable "
-           L"discharge. Save your work and stay with the laptop. The 30-minute limit and "
-           L"normal-unload cleanup are best effort, not crash protection.",
-           12));
-  C::CheckBox acknowledge;
-  acknowledge.Content(winrt::box_value(L"I understand the risk and have recovery available."));
-  C::Button start;
-  start.Content(winrt::box_value(L"Start discharge"));
-  start.IsEnabled(false);
-  TrackEvent(acknowledge.Checked(
-      winrt::auto_revoke, SafeUi([start](auto const&, auto const&) { start.IsEnabled(true); })));
-  TrackEvent(acknowledge.Unchecked(
-      winrt::auto_revoke, SafeUi([start](auto const&, auto const&) { start.IsEnabled(false); })));
-  int slot = advancedBattery + 1;
-  TrackEvent(start.Click(winrt::auto_revoke,
-                         SafeUi([acknowledge, start, limit, slot](auto const&, auto const&) {
-                           if (acknowledge.IsChecked().Value()) {
-                             start.IsEnabled(false);
-                             start.Content(winrt::box_value(L"Starting..."));
-                             acknowledge.IsEnabled(false);
-                             Send(26, MAKELONG(slot, int(limit.Value())));
-                           }
+      Text(L"Discharge while plugged in. Review the risks before starting.", 12));
+  C::Button review;
+  review.Content(winrt::box_value(L"Review and start..."));
+  TrackEvent(review.Click(
+      winrt::auto_revoke,
+      SafeUi([body, target, limit, slot = advancedBattery + 1](auto const&, auto const&) {
+        int targetPercent = int(limit.Value());
+        body.Children().Clear();
+        body.Spacing(8);
+        body.Children().Append(Text(L"Discharge Battery " + std::to_wstring(slot) + L" to " +
+                                        std::to_wstring(targetPercent) + L"%?",
+                                    18));
+        body.Children().Append(Text(
+            L"WARNING: The target is monitored by this mod, not enforced by firmware. If Explorer "
+            L"crashes, Windows sleeps or crashes, or a stop fails, discharge may continue below "
+            L"the "
+            L"target and drain the battery. Work may be interrupted and unsaved data lost.",
+            12));
+        body.Children().Append(
+            Text(L"Rebooting or an empty battery is not a verified reset. Unplug/replug is not "
+                 L"guaranteed. You may need this mod or the stop-only recovery tool to disable "
+                 L"discharge. Save your work and stay with the laptop. The 30-minute limit and "
+                 L"normal-unload cleanup are best effort, not crash protection.",
+                 12));
+        C::CheckBox acknowledge;
+        acknowledge.Content(
+            winrt::box_value(L"I understand the risk and have recovery available."));
+        C::Button start;
+        start.Content(winrt::box_value(L"Start discharge"));
+        start.IsEnabled(false);
+        TrackEvent(acknowledge.Checked(
+            winrt::auto_revoke,
+            SafeUi([start](auto const&, auto const&) { start.IsEnabled(true); })));
+        TrackEvent(acknowledge.Unchecked(
+            winrt::auto_revoke,
+            SafeUi([start](auto const&, auto const&) { start.IsEnabled(false); })));
+        TrackEvent(start.Click(winrt::auto_revoke, SafeUi([acknowledge, start, targetPercent, slot](
+                                                              auto const&, auto const&) {
+                                 if (acknowledge.IsChecked().Value()) {
+                                   start.IsEnabled(false);
+                                   start.Content(winrt::box_value(L"Starting..."));
+                                   acknowledge.IsEnabled(false);
+                                   Send(26, MAKELONG(slot, targetPercent));
+                                 }
+                               })));
+        body.Children().Append(acknowledge);
+        C::StackPanel confirmActions;
+        confirmActions.Orientation(C::Orientation::Horizontal);
+        confirmActions.Spacing(8);
+        confirmActions.Children().Append(start);
+        C::Button cancel;
+        cancel.Content(winrt::box_value(L"Back"));
+        TrackEvent(
+            cancel.Click(winrt::auto_revoke, SafeUi([body, target](auto const&, auto const&) {
+                           body.Children().Clear();
+                           RenderExperimental(body, target, true);
                          })));
-  body.Children().Append(acknowledge);
-  body.Children().Append(start);
+        confirmActions.Children().Append(cancel);
+        body.Children().Append(confirmActions);
+      })));
+  body.Children().Append(review);
 }
 void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
   body.Children().Clear();
+  body.Spacing(10);
   if (advancedTab == 3) {
     RenderExperimental(body, target);
     return;
@@ -3426,7 +3480,7 @@ void ShowAdvanced(FrameworkElement target) {
   Close();
   C::StackPanel content;
   content.Width(390);
-  content.Spacing(14);
+  content.Spacing(8);
   content.Children().Append(Text(L"Advanced power controls", 22));
   C::StackPanel body;
   body.Spacing(12);
@@ -3468,7 +3522,6 @@ void ShowAdvanced(FrameworkElement target) {
                                  BatteryControls::ExperimentalDischarge::pending)
                                Send(27);
                            })));
-  content.Children().Append(refresh);
   body.Children().Append(Text(L"Checking supported features..."));
   C::Button stop;
   auto updateStop = [stop]() {
@@ -3511,6 +3564,9 @@ void ShowAdvanced(FrameworkElement target) {
       })));
   statusTimer.Start();
   C::StackPanel dischargeActions;
+  dischargeActions.Orientation(C::Orientation::Horizontal);
+  dischargeActions.Spacing(6);
+  dischargeActions.Children().Append(refresh);
   if (experimental) {
     updateStop();
     TrackEvent(stop.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
@@ -3519,7 +3575,7 @@ void ShowAdvanced(FrameworkElement target) {
                           })));
     dischargeActions.Children().Append(stop);
   }
-  PresentContent(target, content, experimental ? dischargeActions : nullptr);
+  PresentContent(target, content, dischargeActions);
   TrackEvent(flyout.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
                              if (statusTimer)
                                statusTimer.Stop();
@@ -4029,39 +4085,65 @@ void ShowSetup(FrameworkElement target) {
   flyout.ShouldConstrainToRootBounds(false);
   C::StackPanel content;
   content.Width(340);
-  content.Spacing(12);
+  content.Spacing(8);
+  C::StackPanel status, help;
+  status.Spacing(8);
+  help.Spacing(6);
+  help.Visibility(Visibility::Collapsed);
   auto title = Text(L"Setup and diagnostics", 22);
   content.Children().Append(title);
+  C::StackPanel tabs;
+  tabs.Orientation(C::Orientation::Horizontal);
+  tabs.Spacing(6);
+  P::ToggleButton statusTab, helpTab;
+  statusTab.Content(winrt::box_value(L"Status"));
+  helpTab.Content(winrt::box_value(L"Downloads and help"));
+  statusTab.IsChecked(true);
+  auto select = [status, help, statusTab, helpTab](bool showHelp) {
+    status.Visibility(showHelp ? Visibility::Collapsed : Visibility::Visible);
+    help.Visibility(showHelp ? Visibility::Visible : Visibility::Collapsed);
+    statusTab.IsChecked(!showHelp);
+    helpTab.IsChecked(showHelp);
+  };
+  TrackEvent(statusTab.Click(winrt::auto_revoke,
+                             SafeUi([select](auto const&, auto const&) { select(false); })));
+  TrackEvent(helpTab.Click(winrt::auto_revoke,
+                           SafeUi([select](auto const&, auto const&) { select(true); })));
+  tabs.Children().Append(statusTab);
+  tabs.Children().Append(helpTab);
+  content.Children().Append(tabs);
+  content.Children().Append(status);
+  content.Children().Append(help);
   auto recent = BatteryControls::RecentStatus();
   if (!recent.empty())
-    content.Children().Append(Text(recent, 12));
+    status.Children().Append(Text(recent, 12));
   auto maker = MachineValue(L"SystemManufacturer"), model = MachineValue(L"SystemProductName"),
        family = MachineValue(L"SystemFamily");
-  content.Children().Append(Text(maker + L" " + family + L"\nModel: " + model));
+  status.Children().Append(Text(maker + L" " + family + L"\nModel: " + model));
   bool lenovo = _wcsicmp(maker.c_str(), L"LENOVO") == 0;
   if (!lenovo)
-    content.Children().Append(
+    status.Children().Append(
         Text(L"A Lenovo manufacturer could not be confirmed. This mod requires compatible Lenovo "
              L"hardware."));
   bool integrated = BatteryControls::IntegratedBackend();
-  content.Children().Append(
+  status.Children().Append(
       Text(integrated ? L"Backend: integrated Lenovo service. No utility download is needed."
                       : L"Backend: Lenovo ChargeThreshold.exe."));
-  content.Children().Append(
+  status.Children().Append(
       Text(L"Choose the charging backend in this mod's Windhawk Settings.", 12));
   if (!integrated) {
-    content.Children().Append(
+    help.Children().Append(
         Text(L"Download Lenovo's utility using the link below, save it in a folder of your choice, "
              L"and set its full path in this mod's Windhawk Settings.",
              12));
     auto path = BatteryControls::UtilityPath();
-    content.Children().Append(
+    help.Children().Append(
         Text(path.empty() ? L"Utility path: not configured." : L"Utility path: " + path, 12));
-    content.Children().Append(Text(BatteryControls::ReadSnapshot().utility == 4
-                                       ? L"Utility: verified."
-                                       : L"Utility has not been verified. Check the path and "
-                                         L"download the linked Lenovo version.",
-                                   12));
+    help.Children().Append(Text(BatteryControls::ReadSnapshot().utility == 4
+                                    ? L"Utility: verified."
+                                    : L"Utility has not been verified. Check the path and "
+                                      L"download the linked Lenovo version.",
+                                12));
   }
   SC_HANDLE manager = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
   std::wstring service = L"Lenovo PM Service: status could not be checked.";
@@ -4081,19 +4163,19 @@ void ShowSetup(FrameworkElement target) {
           L"Lenovo PM Service was not found. Check the power-management packages for your model.";
     CloseServiceHandle(manager);
   }
-  content.Children().Append(Text(service));
+  status.Children().Append(Text(service));
   auto current = BatteryControls::ReadSnapshot().state;
   for (int i = 0; i < 2; i++)
     if (current.packs[i].present) {
       const auto& pack = current.packs[i];
-      content.Children().Append(Text(L"Battery " + std::to_wstring(i + 1) + L": " +
-                                         (pack.enabled ? std::to_wstring(pack.start) + L" to " +
-                                                             std::to_wstring(pack.stop) + L"%"
-                                                       : L"limits off"),
-                                     12));
+      status.Children().Append(Text(L"Battery " + std::to_wstring(i + 1) + L": " +
+                                        (pack.enabled ? std::to_wstring(pack.start) + L" to " +
+                                                            std::to_wstring(pack.stop) + L"%"
+                                                      : L"limits off"),
+                                    12));
     }
   bool valid = (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing);
-  content.Children().Append(Text(
+  status.Children().Append(Text(
       valid ? L"Battery communication: working."
             : L"Battery communication: unavailable. This can mean missing drivers, a stopped "
               L"component, an unsupported battery, or a communication error. Service detection "
@@ -4102,7 +4184,7 @@ void ShowSetup(FrameworkElement target) {
     C::HyperlinkButton b;
     b.Content(winrt::box_value(label));
     b.NavigateUri(winrt::Windows::Foundation::Uri(url));
-    content.Children().Append(b);
+    help.Children().Append(b);
   };
   link(L"Download Lenovo ChargeThreshold.exe",
        L"https://download.lenovo.com/pccbbs/thinkvantage_en/metroapps/Vantage/ChargeThreshold/"
@@ -4113,16 +4195,16 @@ void ShowSetup(FrameworkElement target) {
         L"Drivers for " + (family == L"Unknown" ? model : family) + L" (" + machineType + L")";
     auto url = LenovoDriverUrl(machineType);
     link(label.c_str(), url.c_str());
-    content.Children().Append(
+    help.Children().Append(
         Text(L"Lenovo selects the driver page from your machine type when you open this link. Only "
              L"the four-character machine type is included, not your serial number.",
              12));
   } else
-    content.Children().Append(Text(
+    help.Children().Append(Text(
         L"The machine type could not be identified. Use Lenovo Support below to select your model.",
         12));
   link(L"Find your model on Lenovo Support", L"https://pcsupport.lenovo.com/");
-  content.Children().Append(
+  help.Children().Append(
       Text(L"Check supported models before installing a driver. If Lenovo cannot resolve the link, "
            L"select your model on its support site. Download the utility manually and set its path "
            L"in Windhawk Settings. "
