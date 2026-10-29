@@ -6,7 +6,7 @@
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
-// @compilerOptions -lole32 -lshell32 -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion
+// @compilerOptions -lole32 -lshell32 -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion -lcrypt32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -125,7 +125,7 @@ Type `bm:` to search only bookmarks (`bm: docs`, or `bm:` alone to browse them).
 
 ### Clipboard history
 
-With **Clipboard history** on (it is off by default; turn it on in the mod settings), the launcher keeps the last 30 things you copied and adds a `clip:` prefix that searches them. Text and images are both kept: an image is saved as a compressed PNG inside the mod's own folder and shows its own thumbnail in the list, and copying the same image twice does not keep two copies. Nothing leaves the PC.
+With **Clipboard history** on (it is off by default; turn it on in the mod settings), the launcher keeps the last 30 things you copied and adds a `clip:` prefix that searches them. Text and images are both kept: an image is saved as a compressed PNG and shows its own thumbnail in the list, and copying the same image twice does not keep two copies. Everything is encrypted for your Windows account (DPAPI) before it is written, so another account on the same PC cannot read it, and turning the feature off erases what was saved. Copies that an app marks as private (password managers set that flag) are skipped, the same way Windows' own clipboard history skips them. Nothing leaves the PC.
 
 Type `clip:` on its own to list the history, or `clip: invoice` to filter it (`clip: image` narrows it to pictures). **Enter** pastes the selected entry into the window you came from; **Ctrl + Enter** copies it and keeps the bar open; **Ctrl + D** pins or unpins it; **Ctrl + Shift + R** removes it. Pinned entries stay at the top, show a small pin badge on the clipboard icon, and survive both the 30-entry trim and the retention below. **Clear Clipboard History** in the `>` menu erases everything after a second Enter, image files included.
 
@@ -454,7 +454,7 @@ Copyright (c) 2026-present David Ravelo.
 - Clipboard:
   - ClipboardHistory: false
     $name: Clipboard history
-    $description: Keeps a local history of what you copy and adds a "clip:" prefix that searches it. Text and images are both supported. Enter pastes an entry into the window you came from, Ctrl+Enter copies it, Ctrl+D pins or unpins it, Ctrl+Shift+R removes it, and the "Clear Clipboard History" command erases everything. Images are saved as compressed PNG files inside the mod's own folder and deleted together with their entry. Off by default, stored locally per user and never sent anywhere.
+    $description: Keeps a history of what you copy and adds a "clip:" prefix that searches it. Text and images are both supported. Enter pastes an entry into the window you came from, Ctrl+Enter copies it, Ctrl+D pins or unpins it, Ctrl+Shift+R removes it, and the "Clear Clipboard History" command erases everything. Everything is encrypted for your Windows account (DPAPI) before it is written to the mod's storage, images included, and turning the feature off erases what was saved. Copies that an app marks as private (password managers do) are skipped. Off by default and never sent anywhere.
   - ClipRetentionDays: 3
     $name: Clipboard retention (days)
     $description: Clipboard entries older than this many days are deleted automatically, images and their saved files included. Pinned entries are kept. Use 0 to keep entries until the 30-entry limit removes them. Only used while Clipboard history is enabled.
@@ -484,6 +484,7 @@ Copyright (c) 2026-present David Ravelo.
 
 #include <windows.h>
 #include <winver.h>
+#include <wincrypt.h>
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shobjidl.h>
@@ -1988,6 +1989,7 @@ struct ClipEntry {
     int stamp = 0;  // NowStamp() at capture time, for the retention setting
     int w = 0;      // image width, for the row label
     int h = 0;      // image height
+    std::wstring protectedText;  // the text as stored (DPAPI + base64), encrypted once per capture
 };
 static std::vector<ClipEntry> g_clips;
 
@@ -2445,6 +2447,7 @@ static void UpdateClipboardListener();
 static ID2D1Bitmap* ClipImageThumb(const std::wstring& stored);
 static void DeleteClipImageFile(const std::wstring& stored);
 static bool PurgeExpiredClips();
+static void EraseClipHistory();
 
 static std::wstring ReadTextSetting(const wchar_t* name) {
     PCWSTR s = Wh_GetStringSetting(name);  // never returns NULL
@@ -4537,6 +4540,135 @@ static std::wstring CurrentUserSid() {
     }
     if (sid.empty()) sid = L"shared";  // fallback: degrade to machine-wide if the SID fails
     return sid;
+}
+
+// ===== Protection at rest =====
+// Windhawk storage is machine-wide: another account on the same PC can read what this one saved.
+// Anything private (the clipboard history, in particular) is therefore encrypted with DPAPI for the
+// current Windows account before it is written, and decrypted only to be shown or pasted.
+static bool ProtectBytes(const std::vector<BYTE>& in, std::vector<BYTE>& out) {
+    DATA_BLOB src = {(DWORD)in.size(), (BYTE*)in.data()};
+    DATA_BLOB dst = {};
+    if (!CryptProtectData(&src, L"Spotlight Launcher", nullptr, nullptr, nullptr,
+                          CRYPTPROTECT_UI_FORBIDDEN, &dst)) {
+        return false;
+    }
+    out.assign(dst.pbData, dst.pbData + dst.cbData);
+    LocalFree(dst.pbData);
+    return true;
+}
+
+static bool UnprotectBytes(const std::vector<BYTE>& in, std::vector<BYTE>& out) {
+    DATA_BLOB src = {(DWORD)in.size(), (BYTE*)in.data()};
+    DATA_BLOB dst = {};
+    if (!CryptUnprotectData(&src, nullptr, nullptr, nullptr, nullptr,
+                            CRYPTPROTECT_UI_FORBIDDEN, &dst)) {
+        return false;
+    }
+    out.assign(dst.pbData, dst.pbData + dst.cbData);
+    LocalFree(dst.pbData);
+    return true;
+}
+
+// The storage API only takes strings, and ciphertext is binary: base64 keeps it there.
+static std::string Base64Encode(const std::vector<BYTE>& in) {
+    static const char* const kAlphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((in.size() + 2) / 3 * 4);
+    for (size_t i = 0; i < in.size(); i += 3) {
+        const uint32_t b0 = in[i];
+        const uint32_t b1 = i + 1 < in.size() ? in[i + 1] : 0;
+        const uint32_t b2 = i + 2 < in.size() ? in[i + 2] : 0;
+        const uint32_t v = (b0 << 16) | (b1 << 8) | b2;
+        out.push_back(kAlphabet[(v >> 18) & 63]);
+        out.push_back(kAlphabet[(v >> 12) & 63]);
+        out.push_back(i + 1 < in.size() ? kAlphabet[(v >> 6) & 63] : '=');
+        out.push_back(i + 2 < in.size() ? kAlphabet[v & 63] : '=');
+    }
+    return out;
+}
+
+static bool Base64Decode(const std::string& in, std::vector<BYTE>& out) {
+    auto value = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    out.clear();
+    out.reserve(in.size() / 4 * 3);
+    uint32_t acc = 0;
+    int bits = 0;
+    for (const char c : in) {
+        if (c == '=' || c == '\0') break;
+        const int v = value(c);
+        if (v < 0) return false;
+        acc = (acc << 6) | (uint32_t)v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back((BYTE)((acc >> bits) & 0xFF));
+        }
+    }
+    return true;
+}
+
+// "e" + base64(DPAPI(text as UTF-16)). An empty result means "do not store this".
+static std::wstring ProtectText(const std::wstring& plain) {
+    const BYTE* p = (const BYTE*)plain.data();
+    std::vector<BYTE> enc;
+    if (!ProtectBytes(std::vector<BYTE>(p, p + plain.size() * sizeof(wchar_t)), enc)) {
+        return std::wstring();
+    }
+    const std::string b64 = Base64Encode(enc);
+    return L"e" + std::wstring(b64.begin(), b64.end());
+}
+
+// Values written before encryption existed (or by a debug build) are plain text: read them as they are.
+static bool UnprotectText(const std::wstring& stored, std::wstring& plain) {
+    plain.clear();
+    if (stored.empty()) return false;
+    if (stored[0] != L'e') {
+        plain = stored;
+        return true;
+    }
+    std::vector<BYTE> enc, bytes;
+    if (!Base64Decode(std::string(stored.begin() + 1, stored.end()), enc)) return false;
+    if (!UnprotectBytes(enc, bytes)) return false;
+    if (bytes.size() % sizeof(wchar_t) != 0) return false;
+    plain.assign((const wchar_t*)bytes.data(), bytes.size() / sizeof(wchar_t));
+    return true;
+}
+
+// Where the clipboard images live: Windhawk's own storage, in a folder for this account only, so one
+// account's sweep can never touch another's files (the entries themselves are per user too).
+static std::wstring ClipImageDir() {
+    static std::wstring dir;
+    if (!dir.empty()) return dir;
+    wchar_t buf[MAX_PATH] = L"";
+    if (Wh_GetModStoragePath(buf, ARRAYSIZE(buf)) == 0 || !buf[0]) return dir;
+    dir = std::wstring(buf) + L"\\clips\\" + CurrentUserSid();
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);  // the mod folder may not exist yet
+    if (GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES) dir.clear();
+    return dir;
+}
+
+// "<hash>.dat|1920x1080" -> "<clips>\<sid>\<hash>.dat" (empty when the entry is not an image).
+static std::wstring ClipImagePath(const std::wstring& stored) {
+    const size_t bar = stored.find(L'|');
+    if (bar == std::wstring::npos || bar == 0) return std::wstring();
+    const std::wstring dir = ClipImageDir();
+    return dir.empty() ? std::wstring() : dir + L"\\" + stored.substr(0, bar);
+}
+
+static bool IsClipImagePath(const std::wstring& path) {
+    const std::wstring dir = ClipImageDir();
+    return !dir.empty() && path.size() > dir.size() &&
+           CompareStringOrdinal(path.c_str(), (int)dir.size(), dir.c_str(), (int)dir.size(), TRUE) ==
+               CSTR_EQUAL;
 }
 
 // ===== Custom entries store (managed in-app, persisted by the mod) =====
@@ -6763,7 +6895,9 @@ struct EvListW {
 };
 #pragma pack(pop)
 
-static UINT g_evReplyMessage = 0;    // registered message Everything answers with
+// Everything answers asynchronously: the reply arrives later as a WM_COPYDATA to this window and is
+// finished in WM_APP_EVERYTHING (verified against a running 1.5). The reply is matched to its query by
+// the sequence number carried in dwData (see g_evSeq), so no registered message is needed.
 static std::vector<BYTE> g_evReply;  // raw reply of the last query
 static HWND g_evWindow = nullptr;    // cached Everything notification window
 static double g_evRetryAt = 0;       // wait before probing a missing Everything again
@@ -6838,10 +6972,15 @@ static bool EverythingSendQuery(const std::wstring& query, DWORD seq) {
 static void EverythingParseReply(std::vector<FileEntry>& out, bool& truncated) {
     out.clear();
     truncated = false;
-    if (g_evReply.size() < sizeof(EvListW)) return;
+    // The reply can come from any process at our integrity level that guesses the sequence number,
+    // so the item array is sized against what actually arrived (items[1] is the flexible tail).
+    const size_t header = sizeof(EvListW) - sizeof(EvItemW);
+    if (g_evReply.size() < header) return;
     const auto* list = (const EvListW*)g_evReply.data();
+    const size_t fitting = (g_evReply.size() - header) / sizeof(EvItemW);
     truncated = list->totItems > list->numItems;
-    const DWORD n = std::min<DWORD>(list->numItems, kEverythingMaxHits);
+    const DWORD n =
+        (DWORD)std::min<size_t>(std::min<DWORD>(list->numItems, kEverythingMaxHits), fitting);
     out.reserve(n);
     for (DWORD i = 0; i < n; ++i) {
         const EvItemW& it = list->items[i];
@@ -7569,74 +7708,58 @@ static std::wstring GetTileLogoPath(IShellItem* item) {
     return r;
 }
 
-// Loads an image with WIC as premultiplied BGRA, at most 64 px on its longest side. With
-// `centerSquare` the source is first cropped to its largest centered square: previews are drawn
-// cover-fitted into a square, so huge panoramas and long screenshots (previously rejected by a
-// 4096 px limit) now decode fine and show exactly the same visible area.
-static bool LoadImageFilePixels(IWICImagingFactory* wic,
-                                const std::wstring& path,
-                                std::vector<uint32_t>& px,
-                                int& w,
-                                int& h,
-                                bool centerSquare = false) {
-    if (!wic) {
-        return false;
-    }
-    IWICBitmapDecoder* dec = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
+// Scales a decoded frame down to `maxSide` (cover-cropped to a square when `centerSquare`) and copies
+// it out as premultiplied BGRA. Shared by file previews and the clipboard image thumbnails.
+static bool ScaleFrameToPixels(IWICImagingFactory* wic,
+                               IWICBitmapSource* frame,
+                               UINT fw,
+                               UINT fh,
+                               bool centerSquare,
+                               UINT maxSide,
+                               std::vector<uint32_t>& px,
+                               int& w,
+                               int& h) {
     IWICBitmapClipper* clip = nullptr;
     IWICBitmapScaler* scaler = nullptr;
     IWICFormatConverter* conv = nullptr;
     bool ok = false;
-
-    if (SUCCEEDED(wic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
-                                                 WICDecodeMetadataCacheOnDemand, &dec)) &&
-        dec && SUCCEEDED(dec->GetFrame(0, &frame)) && frame) {
-        UINT fw = 0, fh = 0;
-        frame->GetSize(&fw, &fh);
-        if (fw > 0 && fh > 0) {
-            IWICBitmapSource* src = frame;
-            UINT sw = fw, sh = fh;
-            if (centerSquare && fw != fh) {
-                const UINT side = std::min(fw, fh);
-                WICRect rc = {(INT)((fw - side) / 2), (INT)((fh - side) / 2), (INT)side,
-                              (INT)side};
-                if (SUCCEEDED(wic->CreateBitmapClipper(&clip)) && clip &&
-                    SUCCEEDED(clip->Initialize(frame, &rc))) {
-                    src = clip;
-                    sw = sh = side;
-                }
+    IWICBitmapSource* src = frame;
+    UINT sw = fw, sh = fh;
+    if (centerSquare && fw != fh) {
+        const UINT side = std::min(fw, fh);
+        WICRect rc = {(INT)((fw - side) / 2), (INT)((fh - side) / 2), (INT)side, (INT)side};
+        if (SUCCEEDED(wic->CreateBitmapClipper(&clip)) && clip &&
+            SUCCEEDED(clip->Initialize(frame, &rc))) {
+            src = clip;
+            sw = sh = side;
+        }
+    }
+    // Only refuse absurd images (e.g. a 30000x30000 scan) instead of decoding them.
+    if ((uint64_t)sw * sh <= 64ull * 1000 * 1000) {
+        UINT tw = sw, th = sh;
+        if (sw > maxSide || sh > maxSide) {
+            if (sw >= sh) {
+                tw = maxSide;
+                th = std::max<UINT>(1, (UINT)((uint64_t)sh * maxSide / sw));
+            } else {
+                th = maxSide;
+                tw = std::max<UINT>(1, (UINT)((uint64_t)sw * maxSide / sh));
             }
-            // Only refuse absurd images (e.g. a 30000x30000 scan) instead of decoding them.
-            if ((uint64_t)sw * sh <= 64ull * 1000 * 1000) {
-                UINT tw = sw, th = sh;
-                const UINT kMax = 64;
-                if (sw > kMax || sh > kMax) {
-                    if (sw >= sh) {
-                        tw = kMax;
-                        th = std::max<UINT>(1, (UINT)((uint64_t)sh * kMax / sw));
-                    } else {
-                        th = kMax;
-                        tw = std::max<UINT>(1, (UINT)((uint64_t)sw * kMax / sh));
-                    }
-                }
-                const bool scaled = tw != sw || th != sh;
-                if (!scaled || (SUCCEEDED(wic->CreateBitmapScaler(&scaler)) && scaler &&
-                                SUCCEEDED(scaler->Initialize(src, tw, th,
-                                                             WICBitmapInterpolationModeFant)))) {
-                    if (scaled) src = scaler;
-                    if (SUCCEEDED(wic->CreateFormatConverter(&conv)) && conv &&
-                        SUCCEEDED(conv->Initialize(src, GUID_WICPixelFormat32bppPBGRA,
-                                                   WICBitmapDitherTypeNone, nullptr, 0.0,
-                                                   WICBitmapPaletteTypeCustom))) {
-                        px.assign((size_t)tw * th, 0);
-                        if (SUCCEEDED(conv->CopyPixels(nullptr, tw * 4, (UINT)(px.size() * 4),
-                                                       (BYTE*)px.data()))) {
-                            w = (int)tw;
-                            h = (int)th;
-                            ok = true;
-                        }
-                    }
+        }
+        const bool scaled = tw != sw || th != sh;
+        if (!scaled || (SUCCEEDED(wic->CreateBitmapScaler(&scaler)) && scaler &&
+                        SUCCEEDED(scaler->Initialize(src, tw, th, WICBitmapInterpolationModeFant)))) {
+            if (scaled) src = scaler;
+            if (SUCCEEDED(wic->CreateFormatConverter(&conv)) && conv &&
+                SUCCEEDED(conv->Initialize(src, GUID_WICPixelFormat32bppPBGRA,
+                                           WICBitmapDitherTypeNone, nullptr, 0.0,
+                                           WICBitmapPaletteTypeCustom))) {
+                px.assign((size_t)tw * th, 0);
+                if (SUCCEEDED(conv->CopyPixels(nullptr, tw * 4, (UINT)(px.size() * 4),
+                                               (BYTE*)px.data()))) {
+                    w = (int)tw;
+                    h = (int)th;
+                    ok = true;
                 }
             }
         }
@@ -7644,12 +7767,115 @@ static bool LoadImageFilePixels(IWICImagingFactory* wic,
     SafeRelease(conv);
     SafeRelease(scaler);
     SafeRelease(clip);
+    return ok;
+}
+
+// Loads an image with WIC as premultiplied BGRA, at most 64 px on its longest side. With
+// `centerSquare` the source is first cropped to its largest centered square: previews are drawn
+// cover-fitted into a square, so huge panoramas and long screenshots now decode fine.
+static bool LoadImageFilePixels(IWICImagingFactory* wic,
+                                const std::wstring& path,
+                                std::vector<uint32_t>& px,
+                                int& w,
+                                int& h,
+                                bool centerSquare = false) {
+    if (!wic) return false;
+    IWICBitmapDecoder* dec = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    bool ok = false;
+    if (SUCCEEDED(wic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
+                                                 WICDecodeMetadataCacheOnDemand, &dec)) &&
+        dec && SUCCEEDED(dec->GetFrame(0, &frame)) && frame) {
+        UINT fw = 0, fh = 0;
+        frame->GetSize(&fw, &fh);
+        ok = ScaleFrameToPixels(wic, frame, fw, fh, centerSquare, 64, px, w, h);
+    }
     SafeRelease(frame);
     SafeRelease(dec);
     return ok;
 }
 
 static std::wstring KnownFolderPath(REFKNOWNFOLDERID id);  // defined with the folder watcher
+
+// Reads a file and decrypts it; our clipboard images are DPAPI-protected on disk.
+static bool ReadProtectedFile(const std::wstring& path, std::vector<BYTE>& out) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size = {};
+    bool ok = false;
+    if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart < 64ll * 1024 * 1024) {
+        std::vector<BYTE> enc((size_t)size.QuadPart);
+        DWORD read = 0;
+        ok = ReadFile(f, enc.data(), (DWORD)enc.size(), &read, nullptr) &&
+             read == (DWORD)enc.size() && UnprotectBytes(enc, out);
+    }
+    CloseHandle(f);
+    return ok;
+}
+
+static bool WriteFileBytes(const std::wstring& path, const std::vector<BYTE>& data) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = WriteFile(f, data.data(), (DWORD)data.size(), &written, nullptr) &&
+                    written == (DWORD)data.size();
+    CloseHandle(f);
+    if (!ok) DeleteFileW(path.c_str());
+    return ok;
+}
+
+// A WIC frame decoded from memory, with everything it needs kept alive.
+struct DecodedImage {
+    IStream* stream = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    ~DecodedImage() {
+        SafeRelease(frame);
+        SafeRelease(decoder);
+        SafeRelease(stream);
+    }
+};
+
+static bool DecodeImageBytes(IWICImagingFactory* wic, const std::vector<BYTE>& bytes, DecodedImage& out) {
+    if (!wic || bytes.empty()) return false;
+    HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+    if (!mem) return false;
+    void* p = GlobalLock(mem);
+    if (!p) {
+        GlobalFree(mem);
+        return false;
+    }
+    memcpy(p, bytes.data(), bytes.size());
+    GlobalUnlock(mem);
+    if (FAILED(CreateStreamOnHGlobal(mem, TRUE, &out.stream))) {
+        GlobalFree(mem);
+        return false;
+    }
+    UINT fw = 0, fh = 0;
+    if (SUCCEEDED(wic->CreateDecoderFromStream(out.stream, nullptr, WICDecodeMetadataCacheOnDemand,
+                                               &out.decoder)) &&
+        out.decoder && SUCCEEDED(out.decoder->GetFrame(0, &out.frame)) && out.frame) {
+        out.frame->GetSize(&fw, &fh);
+    }
+    return fw > 0 && fh > 0;
+}
+
+// Thumbnail for a clipboard image: decrypted in memory, never written to a temporary file.
+static bool LoadClipThumbPixels(IWICImagingFactory* wic,
+                                const std::wstring& path,
+                                std::vector<uint32_t>& px,
+                                int& w,
+                                int& h) {
+    std::vector<BYTE> png;
+    if (!ReadProtectedFile(path, png)) return false;
+    DecodedImage img;
+    if (!DecodeImageBytes(wic, png, img)) return false;
+    UINT fw = 0, fh = 0;
+    img.frame->GetSize(&fw, &fh);
+    return ScaleFrameToPixels(wic, img.frame, fw, fh, /*centerSquare=*/true, 64, px, w, h);
+}
 
 static DWORD WINAPI IndexThreadProc(LPVOID param) {
     std::unique_ptr<IndexJob> job((IndexJob*)param);
@@ -9692,9 +9918,11 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
             if (path.empty()) break;
             auto* tr = new ThumbResult();
             tr->path = std::move(path);
-            tr->ok = LoadImageFilePixels(wic, tr->path, tr->px, tr->w, tr->h,
-                                         /*centerSquare=*/true) &&
-                     tr->w > 0 && tr->h > 0;
+            tr->ok = IsClipImagePath(tr->path)
+                         ? LoadClipThumbPixels(wic, tr->path, tr->px, tr->w, tr->h)
+                         : LoadImageFilePixels(wic, tr->path, tr->px, tr->w, tr->h,
+                                               /*centerSquare=*/true);
+            tr->ok = tr->ok && tr->w > 0 && tr->h > 0;
             if (!tr->ok) {
                 tr->px.clear();
                 tr->w = tr->h = 0;
@@ -11796,14 +12024,16 @@ static void DrawPreviewPanel(const SearchResult& res) {
             D2D1_RECT_F dst    = D2D1::RectF(dx, dy, dx + dw, dy + dh);
             g_rt->DrawBitmap(bmp, &dst, a, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         } else {
-            // Thumbnail not yet loaded — show a placeholder tile
+            // "Loading" only while a decode is really queued. A remote file, a failed decode or an
+            // unsupported format never arrives, and redrawing every frame to wait for it kept the
+            // whole window at full frame rate; WM_APP_THUMB redraws when a decode does finish.
+            const bool pending = g_thumbPending.count(res.payload) > 0;
             DrawFileTile(ox + pad + (contentW - 48 * s) / 2.f,
                          contentTop + 12 * s, 48 * s, ext, tileCol, a);
             SetBrush(g_pal.textDim, a);
-            const wchar_t* lbl = L"Loading image…";
+            const wchar_t* lbl = pending ? L"Loading image…" : L"Preview not available";
             D2D1_RECT_F r = D2D1::RectF(ox + pad, contentTop + 70 * s, ox + pw - pad, contentBot);
             g_rt->DrawText(lbl, (UINT32)wcslen(lbl), g_fmtPanelRow, &r, g_brush);
-            MarkDirty();  // keep redrawing until thumb arrives
         }
 
     } else if (g_preview.isText) {
@@ -12888,10 +13118,6 @@ static void RecordUse(AppEntry& a) {
     g_detailsCache.erase(a.id);  // "Uses" / "Last used" change
 }
 
-// Opens a desktop app through its real target. Resolving "shell:AppsFolder\{GUID}\..." from
-// this 32-bit process redirects the FOLDERID_ProgramFilesX64 GUID to "C:\Program Files (x86)",
-// so 64-bit apps installed in "C:\Program Files" fail to launch. System.Link.TargetParsingPath
-// holds the real, unredirected path and is used instead. Store (MSIX) apps use their AUMID.
 // ===== Open-window list and activation =====
 static std::wstring WindowProcessPath(HWND hwnd) {
     DWORD pid = 0;
@@ -13024,6 +13250,10 @@ static HWND FindWindowForProcessPath(const std::wstring& path) {
     return c.found;
 }
 
+// Opens a desktop app through its real target. Resolving "shell:AppsFolder\{GUID}\..." from this
+// 32-bit process redirects the FOLDERID_ProgramFilesX64 GUID to "C:\Program Files (x86)", so 64-bit
+// apps installed there fail to launch; System.Link.TargetParsingPath holds the real, unredirected
+// path. Store (MSIX) apps use their AUMID.
 static void LaunchApp(int appIdx) {
     if (appIdx < 0 || appIdx >= (int)g_apps.size()) {
         return;
@@ -14944,12 +15174,8 @@ static void RunCommand(const std::wstring& id) {
     } else if (id == L"customentries") {
         OpenManager();  // in-app manager; does not hide the launcher
     } else if (id == L"clearclipboard") {
-        for (const ClipEntry& c : g_clips) {
-            if (c.image) DeleteClipImageFile(c.text);
-        }
         const int keep = g_sel;
-        g_clips.clear();
-        SaveClipHistory();
+        EraseClipHistory();  // entries and their image files
         RunSearch();
         g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
         UpdateTargets(false, /*followSelection=*/true);
@@ -15362,31 +15588,45 @@ static std::wstring ClipKey(const std::wstring& suffix) {
     return L"clip." + CurrentUserSid() + L"." + suffix;
 }
 
-// Where the image files live: the folder Windhawk gives the mod (removed together with the mod), or
-// a folder under the user's local app data when that call is not available.
-static std::wstring ClipImageDir() {
-    static std::wstring dir;
-    if (!dir.empty()) return dir;
-    wchar_t buf[MAX_PATH] = L"";
-    Wh_GetModStoragePath(buf, ARRAYSIZE(buf));
-    if (!buf[0] && SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr,
-                                              SHGFP_TYPE_CURRENT, buf))) {
-        wcscat_s(buf, L"\\SpotlightLauncher");
+// True when the app that put the content on the clipboard asked monitors to keep it out of history.
+// Password managers set these, and Windows' own clipboard history honours them. The clipboard can be
+// busy right after a copy, so this retries and, when the flag is there but cannot be read, skips the
+// copy instead of risking a password in the history.
+static bool ClipboardOptedOut() {
+    static const UINT kExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    static const UINT kIgnore = RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
+    static const UINT kHistory = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+    if ((kExclude && IsClipboardFormatAvailable(kExclude)) ||
+        (kIgnore && IsClipboardFormatAvailable(kIgnore))) {
+        return true;
     }
-    if (!buf[0]) return dir;
-    dir = std::wstring(buf) + L"\\clips";
-    // The mod folder itself may be missing (it is created on first use), so create the whole path.
-    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
-    if (GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES) dir.clear();
-    return dir;
+    if (!kHistory || !IsClipboardFormatAvailable(kHistory)) return false;
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (!OpenClipboard(g_hwnd)) {
+            Sleep(10);
+            continue;
+        }
+        bool optedOut = true;  // unreadable: fail safe
+        if (HANDLE h = GetClipboardData(kHistory)) {
+            if (const DWORD* v = (const DWORD*)GlobalLock(h)) {
+                optedOut = *v == 0;
+                GlobalUnlock(h);
+            }
+        }
+        CloseClipboard();
+        return optedOut;
+    }
+    return true;  // could not check it: do not store the copy
 }
 
-// "<hash>.png|1920x1080" -> "<clips>\<hash>.png" (empty when the entry is not an image).
-static std::wstring ClipImagePath(const std::wstring& stored) {
-    const size_t bar = stored.find(L'|');
-    if (bar == std::wstring::npos || bar == 0) return std::wstring();
-    const std::wstring dir = ClipImageDir();
-    return dir.empty() ? std::wstring() : dir + L"\\" + stored.substr(0, bar);
+// Deletes every saved entry and its image, used by "Clear Clipboard History" and when the feature is
+// switched off: turning it off must not leave copies behind.
+static void EraseClipHistory() {
+    for (const ClipEntry& c : g_clips) {
+        if (c.image) DeleteClipImageFile(c.text);
+    }
+    g_clips.clear();
+    SaveClipHistory();
 }
 
 static void DeleteClipImageFile(const std::wstring& stored) {
@@ -15421,7 +15661,7 @@ static void SweepClipImages() {
         keep.push_back(bar == std::wstring::npos ? c.text : c.text.substr(0, bar));
     }
     WIN32_FIND_DATAW fd = {};
-    HANDLE h = FindFirstFileW((dir + L"\\*.png").c_str(), &fd);
+    HANDLE h = FindFirstFileW((dir + L"\\*.dat").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
@@ -15439,15 +15679,18 @@ static void SweepClipImages() {
 }
 
 static void SaveClipHistory() {
-    // Clear the tail as well: items that fell off must not stay in storage.
+    // Clear the tail as well: items that fell off must not stay in storage. Text is encrypted first;
+    // if that ever fails the entry is skipped rather than written in the clear.
     for (int i = 0; i < (int)kMaxClipItems; ++i) {
         const bool has = i < (int)g_clips.size();
         const ClipEntry* c = has ? &g_clips[(size_t)i] : nullptr;
         const std::wstring idx = std::to_wstring(i);
-        Wh_SetStringValue(ClipKey(L"i" + idx).c_str(), c ? c->text.c_str() : L"");
+        std::wstring slot;
+        if (c) slot = c->image ? c->text : c->protectedText;
+        Wh_SetStringValue(ClipKey(L"i" + idx).c_str(), slot.c_str());
         Wh_SetIntValue(ClipKey(L"p" + idx).c_str(), c && c->pinned ? 1 : 0);
         Wh_SetIntValue(ClipKey(L"k" + idx).c_str(), c && c->image ? 1 : 0);
-        Wh_SetIntValue(ClipKey(L"t" + idx).c_str(), c ? c->stamp : 0);
+        Wh_SetIntValue(ClipKey(L"t" + idx).c_str(), c && !slot.empty() ? c->stamp : 0);
     }
     Wh_SetIntValue(ClipKey(L"count").c_str(), (int)g_clips.size());
 }
@@ -15456,17 +15699,19 @@ static void LoadClipHistory() {
     g_clips.clear();
     const int n =
         std::clamp(Wh_GetIntValue(ClipKey(L"count").c_str(), 0), 0, (int)kMaxClipItems);
-    std::vector<wchar_t> buf(kMaxClipChars + 1, 0);
+    // Base64 of the ciphertext is about 2.7 times the plain text, so the read buffer is bigger.
+    std::vector<wchar_t> buf(kMaxClipChars * 3 + 256, 0);
     for (int i = 0; i < n; ++i) {
         const std::wstring idx = std::to_wstring(i);
         const size_t len = Wh_GetStringValue(ClipKey(L"i" + idx).c_str(), buf.data(), buf.size());
         if (len == 0) continue;
         ClipEntry e;
-        e.text.assign(buf.data(), len);
-        e.pinned = Wh_GetIntValue(ClipKey(L"p" + idx).c_str(), 0) != 0;
+        const std::wstring slot(buf.data(), len);
         e.image = Wh_GetIntValue(ClipKey(L"k" + idx).c_str(), 0) != 0;
+        e.pinned = Wh_GetIntValue(ClipKey(L"p" + idx).c_str(), 0) != 0;
         e.stamp = Wh_GetIntValue(ClipKey(L"t" + idx).c_str(), 0);
         if (e.image) {
+            e.text = slot;
             const size_t bar = e.text.find(L'|');
             if (bar != std::wstring::npos) {
                 const std::wstring dims = e.text.substr(bar + 1);
@@ -15476,6 +15721,10 @@ static void LoadClipHistory() {
                     e.h = _wtoi(dims.c_str() + x + 1);
                 }
             }
+        } else if (!UnprotectText(slot, e.text)) {
+            continue;  // copied under another account or a broken blob: drop it
+        } else {
+            e.protectedText = slot;  // keep the encrypted form so saving never re-encrypts it
         }
         g_clips.push_back(std::move(e));
     }
@@ -15513,55 +15762,71 @@ static IWICImagingFactory* NewWicFactory() {
     return wic;
 }
 
+// Encodes the pixels as PNG in memory, encrypts them and writes the file. Nothing readable is left on
+// disk: Windhawk storage is shared by every account on the PC.
 static bool SaveClipPng(const std::wstring& path, const uint32_t* px, int w, int h) {
     IWICImagingFactory* wic = NewWicFactory();
     if (!wic) return false;
     IWICBitmap* bmp = nullptr;
-    IWICStream* stream = nullptr;
+    IStream* stream = nullptr;
     IWICBitmapEncoder* enc = nullptr;
     IWICBitmapFrameEncode* frame = nullptr;
     IPropertyBag2* props = nullptr;
     WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
-    bool ok = false;
+    bool encoded = false;
     const UINT stride = (UINT)w * 4;
     const UINT bytes = (UINT)((size_t)w * h * 4);
-    if (SUCCEEDED(wic->CreateBitmapFromMemory((UINT)w, (UINT)h, GUID_WICPixelFormat32bppBGRA,
+    if (SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) &&
+        SUCCEEDED(wic->CreateBitmapFromMemory((UINT)w, (UINT)h, GUID_WICPixelFormat32bppBGRA,
                                               stride, bytes, (BYTE*)px, &bmp)) &&
-        SUCCEEDED(wic->CreateStream(&stream)) &&
-        SUCCEEDED(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE)) &&
         SUCCEEDED(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)) &&
         SUCCEEDED(enc->Initialize(stream, WICBitmapEncoderNoCache)) &&
         SUCCEEDED(enc->CreateNewFrame(&frame, &props)) &&
         SUCCEEDED(frame->Initialize(props)) && SUCCEEDED(frame->SetSize((UINT)w, (UINT)h)) &&
         SUCCEEDED(frame->SetPixelFormat(&fmt)) &&
         SUCCEEDED(frame->WritePixels((UINT)h, stride, bytes, (BYTE*)px))) {
-        ok = SUCCEEDED(frame->Commit()) && SUCCEEDED(enc->Commit());
+        encoded = SUCCEEDED(frame->Commit()) && SUCCEEDED(enc->Commit());
     }
     SafeRelease(props);
     SafeRelease(frame);
     SafeRelease(enc);
-    SafeRelease(stream);
     SafeRelease(bmp);
+    bool ok = false;
+    if (encoded) {
+        STATSTG stat = {};
+        HGLOBAL hglobal = nullptr;
+        if (SUCCEEDED(stream->Stat(&stat, STATFLAG_NONAME)) && stat.cbSize.QuadPart > 0 &&
+            SUCCEEDED(GetHGlobalFromStream(stream, &hglobal))) {
+            const void* p = GlobalLock(hglobal);
+            if (p) {
+                const std::vector<BYTE> png((const BYTE*)p,
+                                            (const BYTE*)p + (size_t)stat.cbSize.QuadPart);
+                GlobalUnlock(hglobal);
+                std::vector<BYTE> enc2;
+                ok = ProtectBytes(png, enc2) && WriteFileBytes(path, enc2);
+            }
+        }
+    }
+    SafeRelease(stream);
     wic->Release();
     return ok;
 }
 
-// Reads one of our PNG entries back as top-down 32bpp BGRA pixels (for pasting and copying it).
+// Reads one of our encrypted entries back as top-down 32bpp BGRA pixels (for pasting and copying it).
 static bool LoadClipPng(const std::wstring& path, std::vector<uint32_t>& px, int& w, int& h) {
+    std::vector<BYTE> png;
+    if (!ReadProtectedFile(path, png)) return false;
     IWICImagingFactory* wic = NewWicFactory();
     if (!wic) return false;
-    IWICBitmapDecoder* dec = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
-    IWICFormatConverter* conv = nullptr;
+    DecodedImage img;
     bool ok = false;
-    if (SUCCEEDED(wic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
-                                                 WICDecodeMetadataCacheOnDemand, &dec)) &&
-        dec && SUCCEEDED(dec->GetFrame(0, &frame)) && frame) {
+    if (DecodeImageBytes(wic, png, img)) {
         UINT fw = 0, fh = 0;
-        frame->GetSize(&fw, &fh);
+        img.frame->GetSize(&fw, &fh);
+        IWICFormatConverter* conv = nullptr;
         if (fw > 0 && fh > 0 && (uint64_t)fw * fh <= 64ull * 1000 * 1000 &&
             SUCCEEDED(wic->CreateFormatConverter(&conv)) && conv &&
-            SUCCEEDED(conv->Initialize(frame, GUID_WICPixelFormat32bppBGRA,
+            SUCCEEDED(conv->Initialize(img.frame, GUID_WICPixelFormat32bppBGRA,
                                        WICBitmapDitherTypeNone, nullptr, 0.0,
                                        WICBitmapPaletteTypeCustom))) {
             std::vector<uint32_t> out((size_t)fw * fh, 0);
@@ -15573,10 +15838,8 @@ static bool LoadClipPng(const std::wstring& path, std::vector<uint32_t>& px, int
                 ok = true;
             }
         }
+        SafeRelease(conv);
     }
-    SafeRelease(conv);
-    SafeRelease(frame);
-    SafeRelease(dec);
     wic->Release();
     return ok;
 }
@@ -15596,13 +15859,27 @@ static size_t DibBitsOffset(const BITMAPINFOHEADER* bih) {
 // Converts a clipboard DIB (CF_DIB or CF_DIBV5) to top-down 32bpp BGRA, scaled down to the storage
 // limit in the same blit. The alpha channel is forced opaque: Windows leaves it at 0 for screenshots
 // and browser copies, which would otherwise be saved as a fully transparent image.
-static bool DibToPixels(const BYTE* base, std::vector<uint32_t>& px, int& w, int& h) {
+// Converts a clipboard DIB (CF_DIB or CF_DIBV5) to top-down 32bpp BGRA, scaled down to the storage
+// limit in the same blit. `avail` is the size of the clipboard block: the header's dimensions are
+// checked against it, because another app can publish a header that claims more than it sent. The
+// alpha channel is forced opaque: Windows leaves it at 0 for screenshots and browser copies, which
+// would otherwise be saved as a fully transparent image.
+static bool DibToPixels(const BYTE* base,
+                        size_t avail,
+                        std::vector<uint32_t>& px,
+                        int& w,
+                        int& h) {
     if (!base) return false;
     const BITMAPINFOHEADER* bih = (const BITMAPINFOHEADER*)base;
-    if (bih->biSize < sizeof(BITMAPINFOHEADER)) return false;
+    if (bih->biSize < sizeof(BITMAPINFOHEADER) || bih->biSize > avail) return false;
     const int sw = std::abs((int)bih->biWidth);
     const int sh = std::abs((int)bih->biHeight);
     if (sw <= 0 || sh <= 0) return false;
+    // Bound the work and the read: a header can claim any size, the block cannot.
+    if ((uint64_t)sw * sh > 64ull * 1000 * 1000) return false;
+    const size_t off = DibBitsOffset(bih);
+    const size_t stride = (((size_t)sw * bih->biBitCount + 31) / 32) * 4;  // DWORD-aligned rows
+    if (off > avail || stride > (avail - off) / (size_t)sh) return false;
     int tw = sw, th = sh;
     if (sw > kMaxClipImageSide || sh > kMaxClipImageSide) {
         if (sw >= sh) {
@@ -15651,13 +15928,12 @@ static bool DibToPixels(const BYTE* base, std::vector<uint32_t>& px, int& w, int
     return ok;
 }
 
-// 64-bit FNV-1a over a sample of the pixels: enough to recognise the same image again, cheap enough
-// to run on every copy. The hash names the file, so a repeated copy reuses it instead of saving.
+// FNV-1a over every pixel. Sampling (it used to take 1 in ~500) let two different screenshots of the
+// same window share a name, and the second copy then reused the first file and pasted the old image.
 static uint64_t ClipImageHash(const std::vector<uint32_t>& px, int w, int h) {
     uint64_t hash = 14695981039346656037ull;
-    const size_t step = std::max<size_t>(1, px.size() / 4096);
-    for (size_t i = 0; i < px.size(); i += step) {
-        hash = (hash ^ px[i]) * 1099511628211ull;
+    for (const uint32_t p : px) {
+        hash = (hash ^ p) * 1099511628211ull;
     }
     hash = (hash ^ (uint64_t)w) * 1099511628211ull;
     return (hash ^ (uint64_t)h) * 1099511628211ull;
@@ -15693,6 +15969,7 @@ static void AddClipEntry(std::wstring payload, bool image, int w, int h) {
     e.h = h;
     e.pinned = wasPinned;
     e.stamp = NowStamp();
+    if (!image) e.protectedText = ProtectText(e.text);  // encrypt once, not on every save
     g_clips.insert(g_clips.begin(), std::move(e));
     // Drop the oldest unpinned entry, but keep the copy that just arrived. If everything else is
     // pinned, the oldest pin makes room instead of silently losing the new copy.
@@ -15722,7 +15999,7 @@ static bool CaptureClipboardImage() {
     if (dib) {
         const BYTE* base = (const BYTE*)GlobalLock(dib);
         if (base) {
-            DibToPixels(base, px, w, h);
+            DibToPixels(base, GlobalSize(dib), px, w, h);
             GlobalUnlock(dib);
         }
     }
@@ -15731,13 +16008,13 @@ static bool CaptureClipboardImage() {
     const std::wstring dir = ClipImageDir();
     if (dir.empty()) return false;
     wchar_t name[64] = L"";
-    swprintf_s(name, L"%016llx.png", (unsigned long long)ClipImageHash(px, w, h));
+    swprintf_s(name, L"%016llx.dat", (unsigned long long)ClipImageHash(px, w, h));
     const std::wstring file = dir + L"\\" + name;
     // The name is the content hash, so the same image copied twice reuses its file instead of
     // encoding it again.
     if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES &&
         !SaveClipPng(file, px.data(), w, h)) {
-        DeleteFileW(file.c_str());  // never leave a half-written PNG behind
+        DeleteFileW(file.c_str());  // never leave a half-written file behind
         return false;
     }
     AddClipEntry(std::wstring(name) + L"|" + std::to_wstring(w) + L"x" + std::to_wstring(h), true,
@@ -15746,9 +16023,11 @@ static bool CaptureClipboardImage() {
 }
 
 // Called from WM_CLIPBOARDUPDATE: text wins when the copy has it (a link copied from a browser
-// carries both), otherwise the image is saved.
+// carries both), otherwise the image is saved. Copies that ask to stay out of clipboard history
+// (password managers and Windows itself) are ignored.
 static void CaptureClipboard() {
     if (!g_cfg.clipboardHistory) return;
+    if (ClipboardOptedOut()) return;
     std::wstring text = ClipboardText();
     if (!text.empty() && text.size() <= kMaxClipChars && !TrimBlanks(text).empty()) {
         AddClipEntry(std::move(text), false, 0, 0);
@@ -16835,11 +17114,15 @@ static bool HandleFileMenuKey(WPARAM vk, bool ctrl, bool shift) {
     return true;
 }
 
-static bool HandleKeyDown(WPARAM vk) {
+static bool HandleKeyDown(WPARAM vk, bool repeat) {
     const bool ctrl = CtrlDown();
     const bool shift = ShiftDown();
     const int len = (int)g_text.size();
     const bool hasSel = g_anchor != g_caret;
+
+    // Holding a key must not confirm a destructive action: the first press arms it and the repeat
+    // would run it (Enter on "Shut Down", Delete in the entries manager, and so on).
+    if (repeat && (g_confirmCmd >= 0 || g_fileMenuArmed || g_mgr.deleteArmed)) return true;
 
     if (g_bandEdit != BandEdit::None) return HandleBandKey(vk, ctrl, shift);
     if (g_fileMenuOpen) return HandleFileMenuKey(vk, ctrl, shift);
@@ -17421,7 +17704,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             return 0;
 
         case WM_KEYDOWN:
-            if (HandleKeyDown(wp)) return 0;
+            if (HandleKeyDown(wp, (lp & 0x40000000) != 0)) return 0;  // bit 30: key auto-repeat
             break;
 
         case WM_CHAR: {
@@ -17469,7 +17752,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         case WM_SYSKEYDOWN:
             // Alt+key arrives here, not as WM_KEYDOWN: the manager's Shortcut field still needs it.
             if (g_mgr.active && g_mgr.editing && g_mgr.field == kMgrFieldHotkey) {
-                if (HandleKeyDown(wp)) return 0;
+                if (HandleKeyDown(wp, (lp & 0x40000000) != 0)) return 0;
             }
             // Entry shortcuts that use Alt are matched here, only while the bar is open.
             if (!g_mgr.active && !g_form.active && !g_helpOpen && TryRunEntryHotkey(wp)) {
@@ -17888,6 +18171,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
             const bool hadRememberSort = g_cfg.rememberFileSort;
+            const bool hadClipboard = g_cfg.clipboardHistory;
             const FileSort liveSort = g_cfg.fileSort;
             g_legacySettings = false;  // the user saved the new layout: its values are the real ones
             g_movedSettings = false;   // and they now live under the new sections
@@ -17909,6 +18193,9 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             }
             RegisterHotkeyOrWarn();
             UpdateClipboardListener();
+            if (!g_cfg.clipboardHistory && hadClipboard) {
+                EraseClipHistory();  // switching the feature off must not leave copies behind
+            }
             if (g_cfg.clipboardHistory && g_clips.empty()) LoadClipHistory();
             // The global roots or the query context may have changed: start "find:" from scratch.
             CancelGlobalSearch();
@@ -17963,8 +18250,6 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     DetectLegacySettings();
     DetectMovedSettings();
     LoadSettings();
-    // Everything replies to a "find:" query with this message (see EverythingQuery).
-    g_evReplyMessage = RegisterWindowMessageW(L"SpotlightLauncher.Everything.Reply");
     RestoreFileSort();  // the remembered Files order, when "Remember file sort" is on
     LoadCalcHistory();
     LoadCalcAns();
@@ -18001,7 +18286,14 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     RegisterHotkeyOrWarn();
-    if (g_cfg.clipboardHistory) LoadClipHistory();
+    if (g_cfg.clipboardHistory) {
+        LoadClipHistory();
+    } else {
+        // The feature is off: nothing it saved may stay on disk (it may have been switched off while
+        // the mod was not running).
+        LoadClipHistory();
+        EraseClipHistory();
+    }
     LoadLearn();  // learned picks are tiny: always read them, used only while enabled
     UpdateClipboardListener();
     StartBookmarkLoad();  // async: the first open may use an empty list, the next one has it
