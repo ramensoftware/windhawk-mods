@@ -109,6 +109,9 @@ constexpr double kSingleFingerShare = 0.33;
 constexpr double kHandShare = 0.5;
 // Under this, per frame, the most moved finger is resting jitter: the average is followed, which cancels it.
 constexpr double kJitterMm = 0.1;
+// More than this in one frame isn't a finger moving: the touchpad gave a contact's id to another contact,
+// typically when the thumb lands late, and following it would throw the pointer to the thumb.
+constexpr double kJumpMm = 10.0;
 
 struct TapProfile {
     bool on;
@@ -138,7 +141,7 @@ constexpr double kChunkMinMm = 0.5;
 constexpr double kSaveIntervalSec = 30;
 
 // No frame for this long with an armed glide: the lift of the fingers was missed (an elevated window or the
-// secure desktop took the touchpad), and the glide is ended before the next frame.
+// secure desktop took the touchpad), and a timer ends the glide, so that the wheel hook comes off.
 constexpr DWORD kStaleFrameMs = 500;
 // The wheel is only blocked while the touchpad reports: a wheel event without a recent report comes from a
 // mouse, or from a glide whose end was missed.
@@ -170,6 +173,7 @@ HWND g_hWnd;
 HANDLE g_hookThread;
 DWORD g_hookThreadId;
 constexpr UINT kWheelBlockMessage = WM_APP + 1;
+constexpr UINT_PTR kStaleTimerId = 1;
 
 void SetWheelBlock(bool on);
 
@@ -404,6 +408,7 @@ void EndGlide() {
     if (g_state.armed) {
         Wh_Log(L"Glide stopped");
         SetWheelBlock(false);
+        KillTimer(g_hWnd, kStaleTimerId);
     }
     g_state.armed = false;
     g_state.anchorValid = false;
@@ -575,6 +580,7 @@ void ProcessFrame() {
         g_state.armed = true;
         g_state.armTime = now;
         SetWheelBlock(true);
+        SetTimer(g_hWnd, kStaleTimerId, kStaleFrameMs, nullptr);
         Wh_Log(L"Glide started");
     }
 
@@ -627,11 +633,16 @@ void ProcessFrame() {
     double avgY = 0;
     double best = -1;
     double second = 0;
+    int counted = 0;
     for (const Contact* c : used) {
         auto& prev = g_state.last[c->id];
         double fx = c->x - prev.first;
         double fy = c->y - prev.second;
         prev = {c->x, c->y};
+        if (std::hypot(fx, fy) > kJumpMm) {
+            continue;
+        }
+        counted++;
         avgX += fx;
         avgY += fy;
         double d = std::hypot(fx, fy);
@@ -645,16 +656,21 @@ void ProcessFrame() {
         }
     }
 
+    if (!counted) {
+        g_state.lastFrameTime = t;
+        return;
+    }
+
     if (best >= kJitterMm) {
-        if (used.size() == 1 || second < best * kSingleFingerShare) {
+        if (counted == 1 || second < best * kSingleFingerShare) {
             g_state.single = true;
         } else if (second > best * kHandShare) {
             g_state.single = false;
         }
     }
     if (best < kJitterMm || !g_state.single) {
-        dx = avgX / used.size();
-        dy = avgY / used.size();
+        dx = avgX / counted;
+        dy = avgY / counted;
     }
 
     double dt = t - g_state.lastFrameTime;
@@ -916,6 +932,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_INPUT:
             OnRawInput((HRAWINPUT)lParam);
+            break;
+
+        case WM_TIMER:
+            if (wParam == kStaleTimerId) {
+                if (g_state.armed && GetTickCount() - g_state.lastFrameTick > kStaleFrameMs) {
+                    ResetSession();
+                }
+                return 0;
+            }
             break;
 
         // A handle can be reused by another device.
