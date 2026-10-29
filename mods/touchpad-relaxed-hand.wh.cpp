@@ -32,7 +32,7 @@ Right after installing, before anything is learned, the glide uses a default spe
 
 ## Three and four fingers
 
-The options to start with three or four fingers need the Windows swipes for that count turned off, in **Settings → Bluetooth & devices → Touchpad → Three-finger gestures** (or four) **→ Swipes: Nothing**. Otherwise Windows responds to the same swipe. Programs can't change that setting; it has to be done in the Settings app. Taps can keep any action.
+The options to start with three or four fingers need the Windows swipes for that count turned off, in **Settings → Bluetooth & devices → Touchpad → Three-finger gestures** (or four) **→ Swipes: Nothing**. Otherwise Windows responds to the same swipe. Programs can't change that setting; it has to be done in the Settings app. Taps can keep any action. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.
 
 ## Limitations
 
@@ -331,6 +331,10 @@ int NearestBin(double speed) {
 
 void AddSample(double speed, double pxPerMm) {
     Bin& bin = g_curve[NearestBin(speed)];
+    // Far above a trusted range: something else moved the pointer meanwhile (a mouse, a program).
+    if (bin.samples >= kBinTrusted && pxPerMm > bin.pxPerMm * 3) {
+        return;
+    }
     // A plain average for the first samples, then a moving one, to follow setting changes.
     double alpha = std::max(0.05, 1.0 / (bin.samples + 1));
     bin.pxPerMm = bin.samples ? bin.pxPerMm + (pxPerMm - bin.pxPerMm) * alpha : pxPerMm;
@@ -452,15 +456,15 @@ void ResetSession() {
 
 // Output.
 
-void SendButtons(std::initializer_list<DWORD> flags) {
+// SendInput's button flags name the physical buttons: with the buttons swapped, the primary one is the right.
+void SendPrimaryClick() {
+    bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
     INPUT input[2]{};
-    UINT n = 0;
-    for (DWORD f : flags) {
-        input[n].type = INPUT_MOUSE;
-        input[n].mi.dwFlags = f;
-        n++;
-    }
-    SendInput(n, input, sizeof(INPUT));
+    input[0].type = INPUT_MOUSE;
+    input[0].mi.dwFlags = swapped ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
+    input[1].type = INPUT_MOUSE;
+    input[1].mi.dwFlags = swapped ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP;
+    SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
 }
 
 void Move(double dxMm, double dyMm, double dt, double multiplier) {
@@ -522,7 +526,7 @@ void Click(DWORD now) {
         g_state.lastClickTime = now;
         g_state.recentClick = true;
     }
-    SendButtons({MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP});
+    SendPrimaryClick();
     Wh_Log(L"%s", second ? L"Double click" : L"Click");
 }
 
@@ -1032,9 +1036,6 @@ void RunMessageLoop() {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
-    // A safeguard: the windhawk.exe manifest already makes the process Per-Monitor V2, so that
-    // GetCursorPos/SetCursorPos use physical coordinates.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // A delay in scheduling this thread shows as jitter in the pointer.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
