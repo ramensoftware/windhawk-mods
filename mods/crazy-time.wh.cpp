@@ -4,7 +4,7 @@
 // @name:pt-BR      Crazy Time
 // @description     Schedule shutdown, sleep or hibernate from a tray icon, with warnings and weekly repeats.
 // @description:pt-BR Agende desligar, suspender ou hibernar pelo ícone da barra, com avisos e repetição semanal.
-// @version         0.6.1
+// @version         0.6.2
 // @author          caikx11
 // @github          https://github.com/caikx11
 // @license         MIT
@@ -69,7 +69,7 @@ Agendador minimalista de desligar, suspender e hibernar, na área de notificaç�
 agendamento dispara. Salve seu trabalho antes. Uma notificação de aviso aparece
 antes da ação e você pode cancelar ou adiar a ocorrência pelo painel.
 
-**Windows 10 em teste.** Desenvolvido e testado apenas no Windows 11. Deve
+**Não testado no Windows 10.** Desenvolvido e testado apenas no Windows 11. Deve
 funcionar no Windows 10 (versão 1809 ou mais nova para o tema escuro dos
 controles), mas isso não foi verificado. Relate problemas.
 
@@ -1502,7 +1502,7 @@ public:
         switch (action) {
             case Action::Shutdown: {
                 // Normal shutdown lets applications object; EWX_FORCE only with the schedule's explicit opt-in.
-                const UINT flags = EWX_POWEROFF | (force ? EWX_FORCE : 0);
+                const UINT flags = EWX_POWEROFF | (force ? EWX_FORCE : EWX_FORCEIFHUNG);
                 ok = ExitWindowsEx(flags, SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_MAINTENANCE | SHTDN_REASON_FLAG_PLANNED);
                 break;
             }
@@ -1861,7 +1861,7 @@ inline const wchar_t* get_text(unsigned locale, const wchar_t* pt_br, const wcha
             if (wcscmp(pt_br, item.base_pt) == 0) return locale == 1 ? item.en : item.pt;
     return locale == 1 ? en : pt_br;
 }
-inline constexpr wchar_t window_class[] = L"PowerTimer.Simulation.Panel";
+inline constexpr wchar_t window_class[] = L"CrazyTime.Panel";
 inline constexpr UINT tray_message = WM_APP + 1;
 inline constexpr UINT show_message = WM_APP + 2;
 inline constexpr UINT stop_message = WM_APP + 3;
@@ -1914,7 +1914,7 @@ inline std::wstring legacy_data_file() {
 
 inline std::wstring data_file() {
     if (dedicated_process) {
-        wchar_t directory[32768]{};
+        wchar_t directory[MAX_PATH]{};
         const auto sid = current_user_sid();
         if (!mod_storage_path || !mod_storage_path(directory, std::size(directory)) || sid.empty()) return L"";
         const auto path = std::wstring(directory) + L"\\schedules-" + sid + L".dat";
