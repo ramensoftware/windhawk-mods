@@ -4,14 +4,14 @@
 // @name:zh-CN      资源管理器页签路由
 // @description     Reuse and activate Explorer folder tabs, preserve file selection and explicit new windows
 // @description:zh-CN 复用并切换资源管理器页签，保留文件选中状态和明确的新窗口操作
-// @version         1.0.3
+// @version         1.1.0
 // @author          afate123
 // @github          https://github.com/afate123
 // @license         MIT
 // @architecture    x86-64
 // @include         explorer.exe
 // @include         rundll32.exe
-// @compilerOptions -lole32 -loleaut32 -lshlwapi -lshell32 -luuid -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lshlwapi -lshell32 -luuid -lbcrypt
 // ==/WindhawkMod==
 
 /*
@@ -55,11 +55,17 @@ Explorer Tab Router keeps ordinary folder-opening requests together in Windows 1
 
 - **Open a folder externally:** reuse and activate an existing tab for that folder. If the folder is not open, route the new folder window into a tab in an existing Explorer window.
 - **Show a file in its folder:** activate the matching folder tab and preserve the requested file selection.
-- **Open in new tab:** create a new tab and switch to it automatically, including when that folder already has another tab.
+- **Open in new tab from a folder context menu:** create a new tab and switch to it automatically, including when that folder already has another tab. Middle-click, background tab creation, and restored tabs keep their native activation behavior.
 - **Open in new window:** keep the explicitly requested window separate.
 - **Hold Shift while opening a folder:** bypass ordinary window-to-tab routing and keep a separate window.
 
 Enable the mod in Windhawk, then use File Explorer and other applications normally. Folder routing and tab activation do not require a separate application list. Control Panel and unsupported shell locations are allowed to remain in their own windows.
+
+### Settings
+
+Window routing, matching-tab reuse during routing, folder-menu new-tab activation, and ShellWindows lookup activation can be enabled independently. All four are enabled by default.
+
+The lookup compatibility option is needed by some external folder-opening and file-reveal requests. The ShellWindows query interface does not say whether a caller intends to open a folder or only inspect it. With this option enabled, a successful read-only query can also switch tabs. Disable it if query-triggered activation is undesirable; some external requests will then no longer switch an existing tab. Delayed lookup activation is canceled if the user switches to another foreground window or selects a different tab before it runs.
 
 ### Source and conflicting mods
 
@@ -71,7 +77,11 @@ This mod builds on the routing approach introduced by [Explorer Single Window Ta
 
 Windows 11 x64 with native File Explorer tabs is required. This mod uses internal shell symbols, which are checked when it loads. A future Windows update can require a compatibility update.
 
+Ctrl+N and dragging a tab into a separate window can create frames without the explicit folder-menu intent this mod recognizes. Those frames may be routed back into tabs. Disable window routing when you need to retain them as separate windows.
+
 Some requests are handled through a temporary transparent Explorer window before routing completes. This is not a guarantee of entirely window-free navigation. If a request cannot be completed safely, the temporary window is restored instead of discarding the request. Window presentation state, including existing layered transparency, is restored on recovery.
+
+Tab activation uses verified position hints where available. A first activation or a tab reorder can still require intermediate tab switches. Activation has an overall time limit; a routing failure restores the original window. Navigation completion uses browser events with bounded direct-view checks for providers that omit events.
 
 The mod is distributed under the MIT license.
 
@@ -83,11 +93,17 @@ The mod is distributed under the MIT license.
 
 - **从外部应用打开文件夹：** 已有相同目录页签时，复用并切换过去；尚未打开时，将新目录窗口转入现有资源管理器的页签。
 - **在文件夹中显示文件：** 切换到对应目录页签，并保留目标文件的选中状态。
-- **在新标签页中打开：** 新建页签并自动切换，即使相同目录已有其他页签。
+- **文件夹右键菜单中的“在新标签页中打开”：** 新建页签并自动切换，即使相同目录已有其他页签。中键、其他后台创建及启动恢复的页签保持系统原有的激活行为。
 - **在新窗口中打开：** 保留明确请求的独立窗口。
 - **按住 Shift 打开文件夹：** 绕过普通窗口转页签行为，保留独立窗口。
 
 在 Windhawk 中启用后即可正常使用，不需要逐个添加应用名单。控制面板及不支持的 Shell 位置可以保持独立窗口。
+
+### 设置
+
+窗口转页签、路由时复用相同目录、文件夹菜单新页签自动激活、ShellWindows 查询命中后激活，可分别开关；默认全部启用。
+
+查询兼容开关用于部分外部打开目录和文件定位请求。ShellWindows 查询接口不区分“打开文件夹”和“只检查是否已打开”，因此启用后，成功的纯查询也可能切换页签。若不希望查询触发切换，可关闭此项；部分外部请求也会因此不再自动切换已有页签。延迟执行查询激活前，若用户已转到其他前台窗口或切换了不同页签，会取消这次延迟激活。
 
 ### 来源与冲突提示
 
@@ -99,7 +115,11 @@ The mod is distributed under the MIT license.
 
 需要 Windows 11 x64 以及支持原生页签的资源管理器。加载时会检查所需的系统内部符号，未来 Windows 更新可能需要同步更新兼容实现。
 
+Ctrl+N 和将页签拖出为独立窗口，可能不携带本 mod 能识别的文件夹菜单意图，因此产生的窗口仍可能被合并回页签；需要保留这些独立窗口时，可关闭窗口转页签设置。
+
 部分请求会先经过临时透明窗口，再完成页签路由，因此不保证整个过程完全不创建窗口。无法安全完成时会恢复临时窗口，避免丢弃打开请求；恢复时会还原原有窗口显示状态，包括已有的分层透明属性。
+
+页签切换会复用经过验证的位置记录；首次切换或重新排序后仍可能短暂经过其他页签。激活设有总超时限制，路由失败时恢复原窗口。导航完成优先使用浏览器事件；缺少事件时只进行有限次直接视图检查。
 
 本 mod 使用 MIT 许可。
 
@@ -107,28 +127,417 @@ The mod is distributed under the MIT license.
 // ==/WindhawkModReadme==
 // clang-format on
 
+// clang-format off
+// ==WindhawkModSettings==
+/*
+- mergeWindows: true
+  $name: Route ordinary folder windows into tabs
+  $name:zh-CN: 将普通文件夹窗口转入页签
+- reuseTabs: true
+  $name: Reuse matching tabs while routing
+  $name:zh-CN: 路由时复用已有相同目录页签
+- activateNewTabs: true
+  $name: Activate new tabs opened from folder context menus
+  $name:zh-CN: 自动切换文件夹右键菜单打开的新页签
+- activateShellLookups: true
+  $name: Activate shell lookup matches (compatibility)
+  $name:zh-CN: 激活 Shell 查询命中的页签（兼容功能）
+  $description: Needed by some external open/reveal requests. Shell lookups do not identify user intent, so a read-only query can also activate a matching tab. Disable to prevent lookup-triggered activation.
+  $description:zh-CN: 部分外部打开和文件定位请求需要此功能。Shell 查询不提供用户意图，因此纯查询也可能激活对应页签；关闭后不再由查询触发切换。
+*/
+// ==/WindhawkModSettings==
+// clang-format on
+
+#include <bcrypt.h>
 #include <exdisp.h>
+#include <exdispid.h>
+#include <ocidl.h>
+#include <olectl.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <algorithm>
-#include <atomic>
-#include <string>
-
-#include <exdisp.h>
-#include <shlobj.h>
-#include <shlwapi.h>
-#include <windows.h>
 #include <wrl/client.h>
+#include <cwchar>
+#include <iterator>
+
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-#include <array>
-#include <new>
-#include <string_view>
+struct RouterSettings {
+    std::atomic<bool> mergeWindows{true};
+    std::atomic<bool> reuseTabs{true};
+    std::atomic<bool> activateNewTabs{true};
+    std::atomic<bool> activateShellLookups{true};
+};
+static RouterSettings g_settings;
+static void LoadSettings() {
+    g_settings.mergeWindows = Wh_GetIntSetting(L"mergeWindows") != 0;
+    g_settings.reuseTabs = Wh_GetIntSetting(L"reuseTabs") != 0;
+    g_settings.activateNewTabs = Wh_GetIntSetting(L"activateNewTabs") != 0;
+    g_settings.activateShellLookups =
+        Wh_GetIntSetting(L"activateShellLookups") != 0;
+}
+
+namespace etr {
+inline bool HasWindowClass(HWND window, PCWSTR expected) noexcept {
+    wchar_t name[64]{};
+    return GetClassNameW(window, name, static_cast<int>(std::size(name))) &&
+           wcscmp(name, expected) == 0;
+}
+inline bool IsStagingFrame(HWND window) noexcept {
+    if (GetPropW(window, L"ETR.Redirecting"))
+        return true;
+    BYTE alpha = 255;
+    DWORD flags = 0;
+    return GetLayeredWindowAttributes(window, nullptr, &alpha, &flags) &&
+           (flags & LWA_ALPHA) && alpha == 0;
+}
+inline bool CanHostFrame(HWND frame, HWND excluded = nullptr) noexcept {
+    return frame && frame != GetAncestor(excluded, GA_ROOT) &&
+           HasWindowClass(frame, L"CabinetWClass") && IsWindowVisible(frame) &&
+           !IsStagingFrame(frame);
+}
+}  // namespace etr
+
+// Link bcrypt, ole32 and shell32. Win11 x64, same desktop / integrity level.
+// Initialize once before publishing the instance to other threads. Publish
+// anchors must be top-level windows. Explicitly call Close before destroying
+// the instance; its destructor deliberately performs no Win32 cleanup. Caller
+// must join users before destruction. The 128 property cap is a soft concurrent
+// limit: racing publishers can transiently exceed it by the number of in-flight
+// publishers.
+namespace etr {
+enum class IntentPropertyKind { Window, Tab };
+
+class IntentPropertyChannel {
+    static constexpr wchar_t kNamespace[] = L"ETR.Intent.1.";
+    static constexpr ULONGLONG kLifetime = 10000;
+    static constexpr size_t kCapacity = 128;
+    std::atomic<bool> ready_{false};
+    std::atomic<bool> closing_{false};
+    std::atomic<ULONGLONG> sequence_{0};
+    wchar_t
+        origin_[40]{};  // Immutable after Initialize; Close never clears it.
+
+    struct Candidate {
+        std::wstring name;
+        ULONGLONG expiry;
+    };
+    struct Snapshot {
+        std::vector<Candidate> items;
+        const wchar_t* prefix = kNamespace;
+        size_t prefixLength = std::size(kNamespace) - 1;
+        bool failed = false;
+    };
+    static BOOL CALLBACK Collect(HWND,
+                                 LPWSTR name,
+                                 HANDLE value,
+                                 ULONG_PTR data) noexcept {
+        auto& snapshot = *reinterpret_cast<Snapshot*>(data);
+        if (IS_INTRESOURCE(name) ||
+            std::wcsncmp(name, snapshot.prefix, snapshot.prefixLength))
+            return TRUE;
+        try {
+            snapshot.items.push_back(
+                {name,
+                 static_cast<ULONGLONG>(reinterpret_cast<ULONG_PTR>(value))});
+        } catch (...) {
+            snapshot.failed = true;
+            return FALSE;
+        }
+        return TRUE;
+    }
+    static bool Read(HWND anchor, Snapshot& snapshot) noexcept {
+        // EnumPropsEx returns -1 for a window with no properties as well as
+        // some errors; SetProp/RemoveProp remain the authority for those cases.
+        EnumPropsExW(anchor, Collect, reinterpret_cast<LPARAM>(&snapshot));
+        return !snapshot.failed;
+    }
+    static bool ValidKind(IntentPropertyKind kind) noexcept {
+        return kind == IntentPropertyKind::Window ||
+               kind == IntentPropertyKind::Tab;
+    }
+    static wchar_t KindLetter(IntentPropertyKind kind) noexcept {
+        return kind == IntentPropertyKind::Window ? L'W' : L'T';
+    }
+    static bool Hash(PCIDLIST_ABSOLUTE pidl, wchar_t (&hex)[65]) noexcept {
+        if (!pidl)
+            return false;
+        // System-provided, valid PIDLs are required. Include the terminating
+        // item.
+        const UINT bytes = ILGetSize(pidl);
+        if (bytes < sizeof(USHORT))
+            return false;
+        BCRYPT_ALG_HANDLE algorithm = nullptr;
+        BCRYPT_HASH_HANDLE hash = nullptr;
+        unsigned char digest[32]{};
+        NTSTATUS status = BCryptOpenAlgorithmProvider(
+            &algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+        if (status >= 0)
+            status =
+                BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0);
+        if (status >= 0)
+            status = BCryptHashData(
+                hash, reinterpret_cast<PUCHAR>(const_cast<ITEMIDLIST*>(pidl)),
+                bytes, 0);
+        if (status >= 0)
+            status = BCryptFinishHash(hash, digest, sizeof(digest), 0);
+        if (hash)
+            BCryptDestroyHash(hash);
+        if (algorithm)
+            BCryptCloseAlgorithmProvider(algorithm, 0);
+        if (status < 0)
+            return false;
+        constexpr wchar_t digits[] = L"0123456789abcdef";
+        for (size_t i = 0; i < sizeof(digest); ++i) {
+            hex[2 * i] = digits[digest[i] >> 4];
+            hex[2 * i + 1] = digits[digest[i] & 15];
+        }
+        hex[64] = L'\0';
+        return true;
+    }
+    static std::wstring Prefix(IntentPropertyKind kind, const wchar_t* hash) {
+        std::wstring name = kNamespace;
+        name += KindLetter(kind);
+        name += L'.';
+        name += hash;
+        name += L'.';
+        return name;
+    }
+    ULONGLONG Next() noexcept {
+        ULONGLONG previous = sequence_.load(std::memory_order_relaxed);
+        do {
+            if (previous == std::numeric_limits<ULONGLONG>::max())
+                return 0;
+        } while (!sequence_.compare_exchange_weak(previous, previous + 1,
+                                                  std::memory_order_relaxed));
+        return previous + 1;
+    }
+    static size_t Prune(HWND anchor,
+                        Snapshot& snapshot,
+                        ULONGLONG now) noexcept {
+        size_t active = 0;
+        for (const auto& item : snapshot.items) {
+            if (!item.expiry || item.expiry <= now)
+                RemovePropW(anchor, item.name.c_str());
+            else
+                ++active;
+        }
+        return active;
+    }
+    struct Scan {
+        IntentPropertyChannel* self;
+        const wchar_t* prefix;
+        size_t prefixLength;
+        ULONGLONG now;
+        bool consumed = false;
+    };
+    static BOOL CALLBACK ConsumeWindow(HWND window, LPARAM data) noexcept {
+        auto& scan = *reinterpret_cast<Scan*>(data);
+        if (HasWindowClass(window, L"CabinetWClass"))
+            scan.consumed = scan.self->ConsumePrefix(
+                window, scan.prefix, scan.prefixLength, scan.now);
+        return !scan.consumed;
+    }
+    bool ConsumePrefix(HWND anchor,
+                       const wchar_t* prefix,
+                       size_t length,
+                       ULONGLONG now) noexcept {
+        if (Closing())
+            return false;
+        Snapshot snapshot;
+        snapshot.prefix = prefix;
+        snapshot.prefixLength = length;
+        if (!Read(anchor, snapshot))
+            return false;
+        for (const auto& item : snapshot.items) {
+            if (Closing())
+                return false;
+            // RemoveProp atomically returns the exact unique-name ticket.
+            const auto expiry =
+                static_cast<ULONGLONG>(reinterpret_cast<ULONG_PTR>(
+                    RemovePropW(anchor, item.name.c_str())));
+            if (expiry > now)
+                return true;
+        }
+        return false;
+    }
+    struct Cleanup {
+        const IntentPropertyChannel* self;
+        bool all;
+        IntentPropertyKind kind;
+        ULONGLONG token;
+    };
+    static BOOL CALLBACK CleanupWindow(HWND window, LPARAM data) noexcept {
+        auto& cleanup = *reinterpret_cast<Cleanup*>(data);
+        // The callback catches every allocation failure. No property is changed
+        // during EnumPropsEx itself; partial snapshots are safe to clean too.
+        try {
+            Snapshot snapshot;
+            Read(window, snapshot);
+            if (snapshot.items.empty())
+                return TRUE;
+            std::wstring suffix = L".";
+            suffix += cleanup.self->origin_;
+            suffix += L'.';
+            if (!cleanup.all)
+                suffix += std::to_wstring(cleanup.token);
+            for (const auto& item : snapshot.items) {
+                constexpr size_t kindOffset = std::size(kNamespace) - 1;
+                constexpr size_t originOffset = kindOffset + 2 + 64;
+                if (item.name.size() <= originOffset ||
+                    item.name[originOffset] != L'.')
+                    continue;
+                if (cleanup.all) {
+                    if (item.name.compare(originOffset, suffix.size(),
+                                          suffix) == 0)
+                        RemovePropW(window, item.name.c_str());
+                } else if (item.name[kindOffset] == KindLetter(cleanup.kind) &&
+                           item.name.compare(originOffset, std::wstring::npos,
+                                             suffix) == 0)
+                    RemovePropW(window, item.name.c_str());
+            }
+        } catch (...) { /* Best effort; tickets expire independently in 10s. */
+        }
+        return TRUE;
+    }
+
+   public:
+    IntentPropertyChannel() noexcept = default;
+    ~IntentPropertyChannel() = default;  // Never perform Win32 calls at unload.
+    IntentPropertyChannel(const IntentPropertyChannel&) = delete;
+    IntentPropertyChannel& operator=(const IntentPropertyChannel&) = delete;
+
+    bool Initialize() noexcept {
+        static_assert(sizeof(ULONG_PTR) == sizeof(ULONGLONG),
+                      "Intent channel requires x64");
+        if (Closing())
+            return false;
+        if (Ready())
+            return true;
+        GUID guid{};
+        if (FAILED(CoCreateGuid(&guid)) ||
+            !StringFromGUID2(guid, origin_,
+                             static_cast<int>(std::size(origin_))))
+            return false;
+        ready_.store(true, std::memory_order_release);
+        return true;
+    }
+    bool Ready() const noexcept {
+        return ready_.load(std::memory_order_acquire) && !Closing();
+    }
+    bool Closing() const noexcept {
+        return closing_.load(std::memory_order_acquire);
+    }
+
+    ULONGLONG Publish(HWND anchor,
+                      IntentPropertyKind kind,
+                      PCIDLIST_ABSOLUTE pidl,
+                      ULONGLONG now) noexcept {
+        if (!Ready() || !anchor || !ValidKind(kind) ||
+            now > std::numeric_limits<ULONGLONG>::max() - kLifetime)
+            return 0;
+        wchar_t hash[65];
+        if (!Hash(pidl, hash))
+            return 0;
+        try {
+            Snapshot before;
+            if (!Read(anchor, before) ||
+                Prune(anchor, before, now) >= kCapacity || Closing())
+                return 0;
+            const ULONGLONG token = Next();
+            if (!token)
+                return 0;
+            std::wstring name = Prefix(kind, hash);
+            name += origin_;
+            name += L'.';
+            name += std::to_wstring(token);
+            if (Closing() ||
+                !SetPropW(anchor, name.c_str(),
+                          reinterpret_cast<HANDLE>(
+                              static_cast<ULONG_PTR>(now + kLifetime))))
+                return 0;
+            // Always undo a late insertion if Close raced the enumeration.
+            if (Closing()) {
+                RemovePropW(anchor, name.c_str());
+                return 0;
+            }
+            Snapshot after;
+            if (!Read(anchor, after) || Prune(anchor, after, now) > kCapacity ||
+                Closing()) {
+                RemovePropW(anchor, name.c_str());
+                return 0;
+            }
+            return token;
+        } catch (...) {
+            return 0;
+        }
+    }
+    bool ConsumeAt(HWND anchor,
+                   IntentPropertyKind kind,
+                   PCIDLIST_ABSOLUTE pidl,
+                   ULONGLONG now) noexcept {
+        if (!Ready() || !anchor || !ValidKind(kind))
+            return false;
+        wchar_t hash[65];
+        if (!Hash(pidl, hash))
+            return false;
+        try {
+            std::wstring prefix = Prefix(kind, hash);
+            return ConsumePrefix(anchor, prefix.c_str(), prefix.size(), now);
+        } catch (...) {
+        }
+        return false;
+    }
+    bool Consume(IntentPropertyKind kind,
+                 PCIDLIST_ABSOLUTE pidl,
+                 ULONGLONG now) noexcept {
+        if (!Ready() || !pidl || !ValidKind(kind))
+            return false;
+        wchar_t hash[65];
+        if (!Hash(pidl, hash))
+            return false;
+        try {
+            std::wstring prefix = Prefix(kind, hash);
+            Scan scan{this, prefix.c_str(), prefix.size(), now};
+            EnumWindows(ConsumeWindow, reinterpret_cast<LPARAM>(&scan));
+            return scan.consumed;
+        } catch (...) {
+            return false;
+        }
+    }
+    void Cancel(IntentPropertyKind kind, ULONGLONG token) noexcept {
+        if (!ready_.load(std::memory_order_acquire) || !token ||
+            !ValidKind(kind))
+            return;
+        Cleanup cleanup{this, false, kind, token};
+        EnumWindows(CleanupWindow, reinterpret_cast<LPARAM>(&cleanup));
+    }
+    void Close() noexcept {
+        closing_.store(true, std::memory_order_release);
+        if (!ready_.load(std::memory_order_acquire))
+            return;
+        Cleanup cleanup{this, true, IntentPropertyKind::Window, 0};
+        EnumWindows(CleanupWindow, reinterpret_cast<LPARAM>(&cleanup));
+    }
+};
+}  // namespace etr
 
 namespace etr {
 enum class DestinationKind { Unavailable, ShellAlias, ControlPanel, Folder };
@@ -175,15 +584,6 @@ constexpr DestinationKind ClassifyShellDestination(
 }
 }  // namespace etr
 
-#include <exdisp.h>
-#include <shlobj.h>
-#include <windows.h>
-#include <wrl/client.h>
-#include <memory>
-#include <optional>
-#include <string>
-#include <unordered_set>
-
 namespace etr {
 using Microsoft::WRL::ComPtr;
 struct ShellMemoryDeleter {
@@ -191,8 +591,17 @@ struct ShellMemoryDeleter {
 };
 using OwnedPidl = std::unique_ptr<ITEMIDLIST, ShellMemoryDeleter>;
 using OwnedShellText = std::unique_ptr<wchar_t, ShellMemoryDeleter>;
+inline ComPtr<IShellBrowser> AcquireShellBrowser(IDispatch* dispatch) {
+    ComPtr<IServiceProvider> services;
+    ComPtr<IShellBrowser> browser;
+    if (dispatch &&
+        SUCCEEDED(dispatch->QueryInterface(IID_PPV_ARGS(&services))))
+        services->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
+    return browser;
+}
 struct FolderLocation {
-    HWND frame = nullptr, tab = nullptr;
+    ComPtr<IShellBrowser> browser;
+    HWND tab = nullptr;
     ComPtr<IShellView> view;
     OwnedPidl identity;
     std::wstring address;
@@ -203,8 +612,11 @@ struct FolderLocation {
 class ShellTabCatalog {
     ComPtr<IShellWindows> windows_;
     ULONGLONG nextConnectAttempt_ = 0;
+    const DWORD apartmentThread_ = GetCurrentThreadId();
 
     bool EnsureConnection() {
+        if (GetCurrentThreadId() != apartmentThread_)
+            return false;
         if (windows_)
             return true;
         if (GetTickCount64() < nextConnectAttempt_)
@@ -215,13 +627,9 @@ class ShellTabCatalog {
         return windows_ != nullptr;
     }
 
-    static bool HasClass(HWND window, const wchar_t* expected) noexcept {
-        wchar_t name[64]{};
-        return GetClassNameW(window, name, static_cast<int>(std::size(name))) &&
-               wcscmp(name, expected) == 0;
-    }
     struct TabAccess {
         HWND frame, tab;
+        ComPtr<IDispatch> dispatch;
         ComPtr<IShellBrowser> browser;
     };
     template <class Visitor>
@@ -240,24 +648,25 @@ class ShellTabCatalog {
             ComPtr<IDispatch> dispatch;
             if (FAILED(windows_->Item(key, &dispatch)) || !dispatch)
                 continue;
-            ComPtr<IServiceProvider> services;
             TabAccess access{};
-            if (FAILED(dispatch.As(&services)) ||
-                FAILED(services->QueryService(SID_STopLevelBrowser,
-                                              IID_PPV_ARGS(&access.browser))) ||
+            access.dispatch = dispatch;
+            access.browser = AcquireShellBrowser(dispatch.Get());
+            if (!access.browser ||
                 FAILED(access.browser->GetWindow(&access.tab)) ||
-                !HasClass(access.tab, L"ShellTabWindowClass"))
+                !HasWindowClass(access.tab, L"ShellTabWindowClass"))
                 continue;
             access.frame = GetAncestor(access.tab, GA_ROOT);
-            if (!HasClass(access.frame, L"CabinetWClass"))
+            if (!HasWindowClass(access.frame, L"CabinetWClass"))
                 continue;
             if (visitor(access))
                 return;
         }
     }
+
+   private:
     static std::optional<FolderLocation> Inspect(const TabAccess& access) {
         FolderLocation result;
-        result.frame = access.frame;
+        result.browser = access.browser;
         result.tab = access.tab;
         ComPtr<IFolderView> folderView;
         ComPtr<IPersistFolder2> folder;
@@ -274,31 +683,49 @@ class ShellTabCatalog {
         hr = SHGetNameFromIDList(result.identity.get(),
                                  SIGDN_DESKTOPABSOLUTEPARSING, &text);
         OwnedShellText ownedText(text);
-        if (FAILED(hr) || !ownedText || !*ownedText)
-            return std::nullopt;
-        result.address = ownedText.get();
+        if (SUCCEEDED(hr) && ownedText && *ownedText)
+            result.address = ownedText.get();
         return result;
-    }
-    static bool CanHostTabs(HWND frame, HWND excluded) noexcept {
-        if (frame == excluded || !IsWindowVisible(frame) ||
-            GetPropW(frame, L"ETR.Redirecting"))
-            return false;
-        BYTE alpha = 255;
-        DWORD flags = 0;
-        return !(GetLayeredWindowAttributes(frame, nullptr, &alpha, &flags) &&
-                 (flags & LWA_ALPHA) && alpha == 0);
     }
 
    public:
     ShellTabCatalog() { EnsureConnection(); }
+    ShellTabCatalog(const ShellTabCatalog&) = delete;
+    ShellTabCatalog& operator=(const ShellTabCatalog&) = delete;
+    std::optional<TabAccess> FindTab(HWND wanted) {
+        std::optional<TabAccess> result;
+        VisitTabs([&](const TabAccess& access) {
+            if (access.tab != wanted)
+                return false;
+            result = access;
+            return true;
+        });
+        return result;
+    }
+    std::optional<FolderLocation> FindFolder(PCIDLIST_ABSOLUTE requested,
+                                             HWND excluded = nullptr) {
+        std::optional<FolderLocation> result;
+        if (!requested)
+            return result;
+        VisitTabs([&](const TabAccess& access) {
+            if (!CanHostFrame(access.frame, excluded))
+                return false;
+            auto location = Inspect(access);
+            if (!location || !ILIsEqual(location->identity.get(), requested))
+                return false;
+            result = std::move(location);
+            return true;
+        });
+        return result;
+    }
     std::optional<FolderLocation> ReadFrameDestination(HWND target) {
         // An explicit source lookup must accept a transparent staging window.
         if (!IsWindow(target))
             return std::nullopt;
-        HWND frame = HasClass(target, L"ShellTabWindowClass")
+        HWND frame = HasWindowClass(target, L"ShellTabWindowClass")
                          ? GetAncestor(target, GA_ROOT)
                          : target;
-        if (!HasClass(frame, L"CabinetWClass"))
+        if (!HasWindowClass(frame, L"CabinetWClass"))
             return std::nullopt;
         HWND wanted =
             target == frame
@@ -311,6 +738,8 @@ class ShellTabCatalog {
             if (access.frame != frame || access.tab != wanted)
                 return false;
             result = Inspect(access);
+            if (result && result->address.empty())
+                result.reset();
             return true;
         });
         return result;
@@ -323,7 +752,7 @@ class ShellTabCatalog {
         HWND fallback = nullptr;
         std::unordered_set<HWND> inspected;
         VisitTabs([&](const TabAccess& access) {
-            if (!CanHostTabs(access.frame, excluded) ||
+            if (!CanHostFrame(access.frame, excluded) ||
                 access.tab != FindWindowExW(access.frame, nullptr,
                                             L"ShellTabWindowClass", nullptr) ||
                 !inspected.insert(access.frame).second)
@@ -343,10 +772,6 @@ class ShellTabCatalog {
     }
 };
 }  // namespace etr
-
-#include <shellapi.h>
-#include <windows.h>
-#include <string_view>
 
 namespace etr {
 inline bool IsShellWindowsServiceCommand(const wchar_t* command) {
@@ -373,151 +798,391 @@ inline bool IsShellWindowsServiceCommand(const wchar_t* command) {
 using Microsoft::WRL::ComPtr;
 
 static ComPtr<IShellBrowser> GetTabBrowser(IDispatch* dispatch) {
-    ComPtr<IServiceProvider> service;
-    ComPtr<IShellBrowser> browser;
-    if (SUCCEEDED(dispatch->QueryInterface(IID_PPV_ARGS(&service))))
-        service->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
-    return browser;
+    return etr::AcquireShellBrowser(dispatch);
 }
 
 static bool SameFolder(IShellView* view, PCIDLIST_ABSOLUTE requested) {
-    ComPtr<IFolderView> fv;
-    ComPtr<IPersistFolder2> folder;
-    PIDLIST_ABSOLUTE actual = nullptr;
-    if (FAILED(view->QueryInterface(IID_PPV_ARGS(&fv))) ||
-        FAILED(fv->GetFolder(IID_PPV_ARGS(&folder))) ||
-        FAILED(folder->GetCurFolder(&actual)) || !actual)
+    if (!view || !requested)
         return false;
-    bool equal = ILIsEqual(actual, requested);
-    if (!equal) {
-        PWSTR a = nullptr, b = nullptr;
-        if (SUCCEEDED(SHGetNameFromIDList(actual, SIGDN_FILESYSPATH, &a)) &&
-            SUCCEEDED(SHGetNameFromIDList(requested, SIGDN_FILESYSPATH, &b)))
-            equal = CompareStringOrdinal(a, -1, b, -1, TRUE) == CSTR_EQUAL;
-        CoTaskMemFree(a);
-        CoTaskMemFree(b);
-    }
-    CoTaskMemFree(actual);
-    return equal;
+    ComPtr<IFolderView> folderView;
+    ComPtr<IPersistFolder2> folder;
+    PIDLIST_ABSOLUTE raw = nullptr;
+    if (FAILED(view->QueryInterface(IID_PPV_ARGS(&folderView))) ||
+        FAILED(folderView->GetFolder(IID_PPV_ARGS(&folder))))
+        return false;
+    const HRESULT hr = folder->GetCurFolder(&raw);
+    etr::OwnedPidl actual(raw);
+    // PIDLs are the identity. Names and case-folded filesystem paths cannot
+    // prove equality (including on case-sensitive filesystem directories).
+    return SUCCEEDED(hr) && actual && ILIsEqual(actual.get(), requested);
 }
 
-// ExplorerTabUtility uses 0xA221 (Ctrl+1..n). Child z-order is NOT tab order:
-// validate the active HWND after each command instead of guessing an index.
+namespace etr {
+struct SelectionSnapshot {
+    OwnedPidl parent;
+    // IEnumIDList yields children relative to this exact parent view.
+    std::vector<OwnedPidl> children;
+};
+}  // namespace etr
+
+static bool ApplySelection(IShellView* view,
+                           PCIDLIST_ABSOLUTE expected,
+                           const etr::SelectionSnapshot& selection) {
+    if (!view || !expected || !selection.parent ||
+        !ILIsEqual(selection.parent.get(), expected) ||
+        !SameFolder(view, expected))
+        return false;
+    for (size_t i = 0; i < selection.children.size(); ++i) {
+        if (!selection.children[i])
+            return false;
+        UINT select = SVSI_SELECT | SVSI_ENSUREVISIBLE;
+        if (i == 0)
+            select |= SVSI_DESELECTOTHERS | SVSI_FOCUSED;
+        if (FAILED(view->SelectItem(selection.children[i].get(), select)))
+            return false;
+    }
+    return SameFolder(view, expected);
+}
+
+// ExplorerTabUtility documents the existing 0xA221 command. Its sequential
+// search supplies no stable tab-order API. Cache only ordinals actually
+// observed after this command, and always verify the resulting active HWND.
 static bool ActivateShellTab(HWND tab) {
     if (!IsWindow(tab))
         return false;
     HWND frame = GetAncestor(tab, GA_ROOT);
-    WCHAR cls[64]{};
-    GetClassNameW(frame, cls, ARRAYSIZE(cls));
-    if (wcscmp(cls, L"CabinetWClass") != 0)
+    if (!etr::CanHostFrame(frame))
         return false;
-    // Redirect placeholders are transparent but still WS_VISIBLE. Never
-    // activate one while Explorer is resolving a new folder request.
-    if (!IsWindowVisible(frame))
-        return false;
-    if (GetWindowLongW(frame, GWL_EXSTYLE) & WS_EX_LAYERED) {
-        BYTE alpha = 255;
-        DWORD flags = 0;
-        if (GetLayeredWindowAttributes(frame, nullptr, &alpha, &flags) &&
-            (flags & LWA_ALPHA) && alpha == 0)
-            return false;
-    }
     if (IsIconic(frame))
         ShowWindowAsync(frame, SW_RESTORE);
-    if (FindWindowExW(frame, nullptr, L"ShellTabWindowClass", nullptr) != tab) {
-        int count = 0;
-        for (HWND h = nullptr;
-             (h = FindWindowExW(frame, h, L"ShellTabWindowClass", nullptr));)
-            ++count;
-        bool activated = false;
-        for (int i = 1; i <= count; ++i) {
-            DWORD_PTR result = 0;
-            if (!SendMessageTimeoutW(frame, WM_COMMAND, 0xA221, i,
-                                     SMTO_ABORTIFHUNG, 300, &result))
+
+    struct FrameHints {
+        std::vector<HWND> membership;
+        std::unordered_map<HWND, int> ordinal;
+    };
+    // HWND/int metadata only: never an apartment-bound COM pointer.
+    static thread_local std::unordered_map<HWND, FrameHints> hints;
+    for (auto it = hints.begin(); it != hints.end();) {
+        if (!IsWindow(it->first))
+            it = hints.erase(it);
+        else
+            ++it;
+    }
+    if (hints.size() > 64)
+        hints.clear();
+    auto active = [&] {
+        return FindWindowExW(frame, nullptr, L"ShellTabWindowClass", nullptr);
+    };
+    if (active() != tab) {
+        std::vector<HWND> membership;
+        for (HWND child = nullptr;
+             (child = FindWindowExW(frame, child, L"ShellTabWindowClass",
+                                    nullptr));)
+            membership.push_back(child);
+        std::sort(membership.begin(), membership.end(), std::less<HWND>{});
+        if (!std::binary_search(membership.begin(), membership.end(), tab,
+                                std::less<HWND>{}))
+            return false;
+        auto& learned = hints[frame];
+        if (learned.membership != membership) {
+            learned.membership = membership;
+            learned.ordinal.clear();
+        }
+        const ULONGLONG deadline = GetTickCount64() + 1200;
+        auto selectOrdinal = [&](int index) {
+            const ULONGLONG now = GetTickCount64();
+            if (now >= deadline || !IsWindow(tab) ||
+                GetAncestor(tab, GA_ROOT) != frame)
                 return false;
-            if (FindWindowExW(frame, nullptr, L"ShellTabWindowClass",
-                              nullptr) == tab) {
-                activated = true;
-                break;
+            DWORD_PTR result = 0;
+            if (!SendMessageTimeoutW(
+                    frame, WM_COMMAND, 0xA221, index, SMTO_ABORTIFHUNG,
+                    static_cast<UINT>(std::min<ULONGLONG>(300, deadline - now)),
+                    &result))
+                return false;
+            HWND observed = active();
+            if (observed)
+                learned.ordinal[observed] = index;
+            return GetTickCount64() <= deadline;
+        };
+        auto hint = learned.ordinal.find(tab);
+        if (hint != learned.ordinal.end()) {
+            const int index = hint->second;
+            if (!selectOrdinal(index))
+                return false;
+            if (active() != tab)
+                learned.ordinal.clear();  // Reordered tabs: discard every hint.
+        }
+        if (active() != tab) {
+            for (size_t index = 1; index <= membership.size(); ++index) {
+                if (!selectOrdinal(static_cast<int>(index)))
+                    return false;
+                if (active() == tab)
+                    break;
             }
         }
-        if (!activated)
+        if (active() != tab)
             return false;
     }
     SetForegroundWindow(frame);
     return true;
 }
 
-static bool ReuseFolderTab(PCIDLIST_ABSOLUTE folder,
-                           UINT count,
-                           PCUITEMID_CHILD_ARRAY items,
-                           DWORD flags,
-                           HWND exclude = nullptr) {
-    if (!folder || (flags & ~DWORD(OFASI_EDIT | OFASI_OPENDESKTOP)))
-        return false;
-    if (flags & OFASI_OPENDESKTOP)
-        return false;
-    ComPtr<IShellWindows> windows;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
-                                IID_PPV_ARGS(&windows))))
-        return false;
-    long n = 0;
-    windows->get_Count(&n);
-    for (long i = 0; i < n; ++i) {
-        VARIANT idx{};
-        idx.vt = VT_I4;
-        idx.lVal = i;
-        ComPtr<IDispatch> dispatch;
-        if (FAILED(windows->Item(idx, &dispatch)) || !dispatch)
-            continue;
-        auto browser = GetTabBrowser(dispatch.Get());
-        if (!browser)
-            continue;
-        HWND tab = nullptr;
-        if (FAILED(browser->GetWindow(&tab)) || !tab)
-            continue;
-        HWND frame = GetAncestor(tab, GA_ROOT);
-        if (frame == exclude || !IsWindowVisible(frame))
-            continue;
-        ComPtr<IShellView> view;
-        if (FAILED(browser->QueryActiveShellView(&view)) || !view ||
-            !SameFolder(view.Get(), folder))
-            continue;
-        if (!ActivateShellTab(tab))
-            continue;
-        for (UINT j = 0; j < count; ++j) {
-            UINT select = SVSI_SELECT | SVSI_ENSUREVISIBLE;
-            if (j == 0)
-                select |= SVSI_DESELECTOTHERS | SVSI_FOCUSED;
-            if ((flags & OFASI_EDIT) && count == 1)
-                select |= SVSI_EDIT;
-            if (FAILED(view->SelectItem(items[j], select)))
-                return false;
-        }
-        return true;
-    }
-    return false;
+enum class ReuseResult { NoMatch, Completed, FailedAfterMatch };
+
+template <class Catalog>
+static ReuseResult ReuseFolderTab(Catalog& catalog,
+                                  PCIDLIST_ABSOLUTE folder,
+                                  const etr::SelectionSnapshot& selection,
+                                  HWND exclude = nullptr) {
+    if (!folder)
+        return ReuseResult::NoMatch;
+    auto location = catalog.FindFolder(folder, exclude);
+    if (!location)
+        return ReuseResult::NoMatch;
+    // Once an exact match exists, a failed activation or selection must leave
+    // the source recoverable. It must never request a duplicate folder tab.
+    if (!ActivateShellTab(location->tab))
+        return ReuseResult::FailedAfterMatch;
+    // Activation can reenter Explorer: acquire a fresh view and identity.
+    ComPtr<IShellView> view;
+    return location->browser &&
+                   SUCCEEDED(location->browser->QueryActiveShellView(&view)) &&
+                   view && ApplySelection(view.Get(), folder, selection)
+               ? ReuseResult::Completed
+               : ReuseResult::FailedAfterMatch;
 }
 
-#include <mutex>
-#include <unordered_map>
-static std::mutex g_explicitMutex;
-static std::unordered_map<void*, bool> g_folderVerbs;
-struct ExplicitWindowRequest {
-    std::wstring path;
-    ULONGLONG expires;
+// BEGIN INTENT POLICY
+namespace etr {
+enum class FolderIntent { Ordinary, NewTab, NewWindow };
+struct FolderCommand {
+    FolderIntent intent = FolderIntent::Ordinary;
+    bool foreground = false;
+    bool tabSelectionPrepared = false;
+    ULONGLONG revision = 0;
 };
-static std::vector<ExplicitWindowRequest> g_explicitWindows;
+inline FolderCommand ClassifyFolderCommand(PCWSTR name,
+                                           DWORD flags,
+                                           bool initialized) {
+    if (!initialized)
+        return {};
+    if ((name && _wcsicmp(name, L"opennewwindow") == 0) || (flags & 1))
+        return {FolderIntent::NewWindow, false};
+    if (name && _wcsicmp(name, L"opennewtab") == 0)
+        return {FolderIntent::NewTab, true};
+    return {};
+}
+template <typename T>
+class ScopedValue {
+    T& target_;
+    T previous_;
+
+   public:
+    ScopedValue(T& target, T value) : target_(target), previous_(target) {
+        target_ = value;
+    }
+    ~ScopedValue() { target_ = previous_; }
+    ScopedValue(const ScopedValue&) = delete;
+    ScopedValue& operator=(const ScopedValue&) = delete;
+};
+class FolderCommandRegistry {
+    struct Record {
+        FolderCommand command;
+        ULONGLONG expires;
+    };
+    std::unordered_map<void*, Record> commands_;
+    ULONGLONG nextRevision_ = 0;
+    void Prune(ULONGLONG now) {
+        std::erase_if(commands_, [=](const auto& item) {
+            return now >= item.second.expires;
+        });
+    }
+
+   public:
+    void Set(void* identity, FolderCommand command, ULONGLONG now) {
+        Prune(now);
+        if (!identity)
+            return;
+        commands_.erase(identity);
+        if (command.intent == FolderIntent::Ordinary)
+            return;
+        if (commands_.size() >= 256) {
+            auto oldest =
+                std::min_element(commands_.begin(), commands_.end(),
+                                 [](const auto& a, const auto& b) {
+                                     return a.second.expires < b.second.expires;
+                                 });
+            commands_.erase(oldest);
+        }
+        if (++nextRevision_ == 0)
+            ++nextRevision_;
+        command.revision = nextRevision_;
+        command.tabSelectionPrepared = false;
+        commands_.emplace(identity, Record{command, now + 10000});
+    }
+    FolderCommand Get(void* identity, ULONGLONG now) {
+        Prune(now);
+        auto found = commands_.find(identity);
+        if (found == commands_.end())
+            return {};
+        return found->second.command;
+    }
+    bool SetPrepared(void* identity,
+                     ULONGLONG revision,
+                     bool prepared,
+                     ULONGLONG now) {
+        Prune(now);
+        auto found = commands_.find(identity);
+        if (found == commands_.end() ||
+            found->second.command.revision != revision ||
+            found->second.command.intent != FolderIntent::NewTab ||
+            !found->second.command.foreground)
+            return false;
+        found->second.command.tabSelectionPrepared = prepared;
+        return true;
+    }
+    bool MarkPrepared(void* identity, ULONGLONG revision, ULONGLONG now) {
+        return SetPrepared(identity, revision, true, now);
+    }
+    void ClearPrepared(void* identity, ULONGLONG revision, ULONGLONG now) {
+        (void)SetPrepared(identity, revision, false, now);
+    }
+    size_t Size() const noexcept { return commands_.size(); }
+};
+class PidlIntentRegistry {
+    struct Request {
+        OwnedPidl identity;
+        ULONGLONG expires;
+        ULONGLONG token;
+    };
+    std::vector<Request> requests_;
+    ULONGLONG nextToken_ = 0;
+    void Prune(ULONGLONG now) {
+        std::erase_if(requests_, [=](const auto& request) {
+            return now >= request.expires;
+        });
+    }
+
+   public:
+    ULONGLONG Add(PCIDLIST_ABSOLUTE pidl, ULONGLONG now) {
+        Prune(now);
+        if (!pidl)
+            return 0;
+        OwnedPidl identity(ILCloneFull(pidl));
+        if (!identity)
+            return 0;
+        if (requests_.size() >= 128)
+            requests_.erase(requests_.begin());
+        if (++nextToken_ == 0)
+            ++nextToken_;
+        requests_.push_back({std::move(identity), now + 10000, nextToken_});
+        return nextToken_;
+    }
+    bool Consume(PCIDLIST_ABSOLUTE pidl, ULONGLONG now) {
+        Prune(now);
+        if (!pidl)
+            return false;
+        for (auto i = requests_.begin(); i != requests_.end(); ++i) {
+            if (ILIsEqual(i->identity.get(), pidl)) {
+                requests_.erase(i);
+                return true;
+            }
+        }
+        return false;
+    }
+    void Cancel(ULONGLONG token) {
+        std::erase_if(requests_, [=](const auto& request) {
+            return request.token == token;
+        });
+    }
+    size_t Size() const noexcept { return requests_.size(); }
+};
+}  // namespace etr
+static thread_local bool g_foregroundNewTabCall = false;
+// END INTENT POLICY
+static std::mutex g_explicitMutex;
+static etr::FolderCommandRegistry g_folderVerbs;
+static etr::PidlIntentRegistry g_explicitWindows;
+static etr::PidlIntentRegistry g_explicitNewTabs;
+static etr::IntentPropertyChannel g_intentProperties;
+static HWND FastPrimary(HWND exclude);
+static constexpr ULONGLONG kSharedIntent = ULONGLONG{1} << 63;
+
+static etr::PidlIntentRegistry& LocalIntentRegistry(
+    etr::IntentPropertyKind kind) {
+    return kind == etr::IntentPropertyKind::Window ? g_explicitWindows
+                                                   : g_explicitNewTabs;
+}
+static ULONGLONG RegisterFolderIntent(etr::IntentPropertyKind kind,
+                                      PCIDLIST_ABSOLUTE pidl,
+                                      ULONGLONG now) {
+    if (g_intentProperties.Closing())
+        return 0;
+    if (g_intentProperties.Ready()) {
+        const auto token =
+            g_intentProperties.Publish(FastPrimary(nullptr), kind, pidl, now);
+        if (token && !(token & kSharedIntent))
+            return token | kSharedIntent;
+        if (token)
+            g_intentProperties.Cancel(kind, token);
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true))
+            Wh_Log(
+                L"Cross-process intent forwarding unavailable; using local "
+                L"fallback");
+    }
+    std::lock_guard lock(g_explicitMutex);
+    return LocalIntentRegistry(kind).Add(pidl, now);
+}
+static void CancelFolderIntent(etr::IntentPropertyKind kind, ULONGLONG token) {
+    if (!token)
+        return;
+    if (token & kSharedIntent) {
+        g_intentProperties.Cancel(kind, token & ~kSharedIntent);
+        return;
+    }
+    std::lock_guard lock(g_explicitMutex);
+    LocalIntentRegistry(kind).Cancel(token);
+}
+static bool ConsumeFolderIntent(etr::IntentPropertyKind kind,
+                                PCIDLIST_ABSOLUTE pidl,
+                                ULONGLONG now) {
+    if (g_intentProperties.Ready() &&
+        g_intentProperties.Consume(kind, pidl, now))
+        return true;
+    std::lock_guard lock(g_explicitMutex);
+    return LocalIntentRegistry(kind).Consume(pidl, now);
+}
+
 static thread_local bool g_explicitWindowCall = false;
 static thread_local bool g_explicitWindowCreated = false;
 
+// Only a folder-menu invocation establishes foreground intent. Middle-click
+// uses the same opennewtab verb and flags, but never enters this scope.
+static thread_local bool g_foregroundTabCommand = false;
+using InvokeFolderMenu_t = HRESULT (*)(void*,
+                                       IContextMenu*,
+                                       CMINVOKECOMMANDINFOEX*);
+static InvokeFolderMenu_t InvokeFolderMenu_Original;
+static HRESULT InvokeFolderMenu_Hook(void* self,
+                                     IContextMenu* menu,
+                                     CMINVOKECOMMANDINFOEX* request) {
+    etr::ScopedValue invoking(g_foregroundTabCommand, true);
+    return InvokeFolderMenu_Original(self, menu, request);
+}
+
 static void* CommandIdentity(void* self) {
     ComPtr<IUnknown> identity;
-    reinterpret_cast<IUnknown*>(self)->QueryInterface(IID_PPV_ARGS(&identity));
+    if (!self || FAILED(reinterpret_cast<IUnknown*>(self)->QueryInterface(
+                     IID_PPV_ARGS(&identity))))
+        return nullptr;
     return identity.Get();
 }
-static void QueueFocus(HWND tab);
+static void QueueFocus(HWND tab, bool guardInput = true);
 static void ScheduleNewTab(HWND tab) {
+    if (!g_settings.activateNewTabs || !g_foregroundNewTabCall)
+        return;
     HWND frame = GetAncestor(tab, GA_ROOT);
     int count = 0;
     for (HWND t = nullptr;
@@ -525,44 +1190,17 @@ static void ScheduleNewTab(HWND tab) {
         ++count;
     if (count < 2)
         return;
-    QueueFocus(tab);
+    QueueFocus(tab, false);
 }
-static std::wstring PidlPath(PCIDLIST_ABSOLUTE pidl) {
-    PWSTR value = nullptr;
-    std::wstring result;
-    if (pidl && SUCCEEDED(SHGetNameFromIDList(
-                    pidl, SIGDN_DESKTOPABSOLUTEPARSING, &value))) {
-        result = value;
-        CoTaskMemFree(value);
-        while (result.size() > 3 &&
-               (result.back() == L'\\' || result.back() == L'/'))
-            result.pop_back();
-    }
-    return result;
-}
-static bool ConsumeExplicitWindow(const std::wstring& raw) {
-    auto path = raw;
-    while (path.size() > 3 && (path.back() == L'\\' || path.back() == L'/'))
-        path.pop_back();
-    std::lock_guard<std::mutex> lock(g_explicitMutex);
-    ULONGLONG now = GetTickCount64();
-    for (auto i = g_explicitWindows.begin(); i != g_explicitWindows.end();) {
-        if (now > i->expires) {
-            i = g_explicitWindows.erase(i);
-            continue;
-        }
-        if (CompareStringOrdinal(path.c_str(), -1, i->path.c_str(), -1, TRUE) ==
-            CSTR_EQUAL) {
-            g_explicitWindows.erase(i);
-            return true;
-        }
-        ++i;
-    }
-    return false;
+static bool ConsumeExplicitWindow(PCIDLIST_ABSOLUTE pidl) {
+    return ConsumeFolderIntent(etr::IntentPropertyKind::Window, pidl,
+                               GetTickCount64());
 }
 using FolderInitialize_t = HRESULT (*)(void*, PCWSTR, IPropertyBag*);
+using FolderExecute_t = HRESULT (*)(void*);
 using FolderShow_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, bool);
 static FolderInitialize_t FolderInitialize_Original;
+static FolderExecute_t FolderExecute_Original;
 static FolderShow_t FolderShow_Original;
 static HRESULT FolderInitialize_Hook(void* self,
                                      PCWSTR name,
@@ -577,120 +1215,270 @@ static HRESULT FolderInitialize_Hook(void* self,
     void* identity = CommandIdentity(self);
     Wh_Log(L"Initialize self=%p identity=%p name=%s flags=%lu vt=%d", self,
            identity, name ? name : L"", value, flags.vt);
-    std::lock_guard<std::mutex> lock(g_explicitMutex);
-    // Each initialization overwrites the previous value if a COM address is
-    // reused.
-    if (g_folderVerbs.size() >= 256)
-        g_folderVerbs.clear();
-    g_folderVerbs[identity] =
-        SUCCEEDED(hr) &&
-        ((name && _wcsicmp(name, L"opennewwindow") == 0) || (value & 1));
     VariantClear(&flags);
+    auto command = etr::ClassifyFolderCommand(name, value, SUCCEEDED(hr));
+    if (command.intent == etr::FolderIntent::NewTab)
+        command.foreground = g_foregroundTabCommand;
+    // Conservative suppression at both observed command boundaries. This
+    // does not claim to identify every possible asynchronous background input.
+    if (GetKeyState(VK_MBUTTON) & 0x8000)
+        command.foreground = false;
+    {
+        std::lock_guard<std::mutex> lock(g_explicitMutex);
+        g_folderVerbs.Set(identity, command, GetTickCount64());
+    }
     return hr;
 }
 static HRESULT FolderShow_Hook(void* self, PCIDLIST_ABSOLUTE pidl, bool flag) {
-    bool separate = false;
-    auto path = PidlPath(pidl);
+    etr::FolderCommand command;
     void* identity = CommandIdentity(self);
     {
         std::lock_guard<std::mutex> lock(g_explicitMutex);
-        auto i = g_folderVerbs.find(identity);
-        separate = i != g_folderVerbs.end() && i->second;
-        if (separate && !path.empty())
-            g_explicitWindows.push_back({path, GetTickCount64() + 10000});
+        // ShowFolder can arrive later or on another thread, and one command
+        // can show several selected folders. Look up its canonical identity
+        // without consuming it; Initialize overwrites and expiry bounds it.
+        command = g_folderVerbs.Get(identity, GetTickCount64());
     }
-    Wh_Log(L"ShowFolder self=%p identity=%p separate=%d flag=%d path=%s", self,
-           identity, separate, flag, path.c_str());
+    if (GetKeyState(VK_MBUTTON) & 0x8000)
+        command.foreground = false;
+    const bool separate = command.intent == etr::FolderIntent::NewWindow;
+    const bool foregroundTab =
+        command.intent == etr::FolderIntent::NewTab && command.foreground;
+    ULONGLONG windowToken = 0, tabToken = 0;
+    if (separate && !g_explicitWindowCall)
+        windowToken = RegisterFolderIntent(etr::IntentPropertyKind::Window,
+                                           pidl, GetTickCount64());
+    if (foregroundTab && !command.tabSelectionPrepared)
+        tabToken = RegisterFolderIntent(etr::IntentPropertyKind::Tab, pidl,
+                                        GetTickCount64());
+    Wh_Log(L"ShowFolder self=%p identity=%p separate=%d flag=%d pidl=%p", self,
+           identity, separate, flag, pidl);
     bool previous = g_explicitWindowCall,
          previousCreated = g_explicitWindowCreated;
     g_explicitWindowCall = previous || separate;
     g_explicitWindowCreated = false;
     HRESULT hr = FolderShow_Original(self, pidl, flag);
-    if (separate && (g_explicitWindowCreated || FAILED(hr)))
-        ConsumeExplicitWindow(path);
+    if (g_explicitWindowCreated || FAILED(hr))
+        CancelFolderIntent(etr::IntentPropertyKind::Window, windowToken);
+    if (FAILED(hr))
+        CancelFolderIntent(etr::IntentPropertyKind::Tab, tabToken);
+    const bool createdSynchronously = g_explicitWindowCreated;
     g_explicitWindowCall = previous;
-    g_explicitWindowCreated = previousCreated;
+    // A nested explicit scope must report creation to the scope which owns
+    // the pending request. A standalone call restores its caller's TLS.
+    g_explicitWindowCreated =
+        previousCreated || (previous && createdSynchronously);
     return hr;
 }
 
-// Constants
-#define WC_CABINET L"CabinetWClass"
-#define WC_SHELLTAB L"ShellTabWindowClass"
-#define CMD_NEW_TAB 0xA21B  // Internal Explorer "new tab" command
+static bool ReadFolderCommandSelection(
+    void* self,
+    std::vector<etr::OwnedPidl>& destinations) {
+    destinations.clear();
+    ComPtr<IObjectWithSelection> object;
+    ComPtr<IShellItemArray> selection;
+    DWORD count = 0;
+    if (!self ||
+        FAILED(reinterpret_cast<IUnknown*>(self)->QueryInterface(
+            IID_PPV_ARGS(&object))) ||
+        !object || FAILED(object->GetSelection(IID_PPV_ARGS(&selection))) ||
+        !selection || FAILED(selection->GetCount(&count)) || count == 0)
+        return false;
+    try {
+        destinations.reserve(count);
+        for (DWORD i = 0; i < count; ++i) {
+            ComPtr<IShellItem> item;
+            if (FAILED(selection->GetItemAt(i, &item)) || !item) {
+                destinations.clear();
+                return false;
+            }
+            PIDLIST_ABSOLUTE pidl = nullptr;
+            const HRESULT hr = SHGetIDListFromObject(item.Get(), &pidl);
+            etr::OwnedPidl owned(pidl);
+            if (FAILED(hr) || !owned) {
+                destinations.clear();
+                return false;
+            }
+            destinations.push_back(std::move(owned));
+        }
+    } catch (...) {
+        destinations.clear();
+        return false;
+    }
+    return true;
+}
 
-#include <windows.h>
+static HRESULT FolderExecute_Hook(void* self) {
+    void* identity = CommandIdentity(self);
+    etr::FolderCommand command;
+    {
+        std::lock_guard<std::mutex> lock(g_explicitMutex);
+        command = g_folderVerbs.Get(identity, GetTickCount64());
+    }
+    std::vector<ULONGLONG> tokens;
+    bool prepared = false;
+    auto rollback = [&] {
+        for (ULONGLONG token : tokens)
+            CancelFolderIntent(etr::IntentPropertyKind::Tab, token);
+        tokens.clear();
+        if (prepared) {
+            std::lock_guard<std::mutex> lock(g_explicitMutex);
+            g_folderVerbs.ClearPrepared(identity, command.revision,
+                                        GetTickCount64());
+            prepared = false;
+        }
+    };
+    if (command.intent == etr::FolderIntent::NewTab && command.foreground) {
+        std::vector<etr::OwnedPidl> destinations;
+        if (ReadFolderCommandSelection(self, destinations)) {
+            try {
+                tokens.reserve(destinations.size());
+                {
+                    std::lock_guard<std::mutex> lock(g_explicitMutex);
+                    prepared = g_folderVerbs.MarkPrepared(
+                        identity, command.revision, GetTickCount64());
+                }
+                if (prepared) {
+                    for (const auto& pidl : destinations) {
+                        const ULONGLONG token =
+                            RegisterFolderIntent(etr::IntentPropertyKind::Tab,
+                                                 pidl.get(), GetTickCount64());
+                        if (!token) {
+                            rollback();
+                            break;
+                        }
+                        tokens.push_back(token);
+                    }
+                }
+            } catch (...) {
+                rollback();
+            }
+        } else {
+            std::lock_guard<std::mutex> lock(g_explicitMutex);
+            g_folderVerbs.ClearPrepared(identity, command.revision,
+                                        GetTickCount64());
+        }
+    }
+    const HRESULT hr = FolderExecute_Original(self);
+    if (FAILED(hr))
+        rollback();
+    return hr;
+}
 
-#include <atomic>
-#include <condition_variable>
-#include <limits>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <unordered_map>
+using AddTabAtIndex_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, int, int, GUID*);
+static AddTabAtIndex_t AddTabAtIndex_Original;
+static HRESULT AddTabAtIndex_Hook(void* self,
+                                  PCIDLIST_ABSOLUTE pidl,
+                                  int entryPoint,
+                                  int index,
+                                  GUID* id) {
+    const bool foreground = ConsumeFolderIntent(etr::IntentPropertyKind::Tab,
+                                                pidl, GetTickCount64());
+    Wh_Log(L"AddTabAtIndex self=%p entryPoint=%d index=%d foreground=%d", self,
+           entryPoint, index, foreground);
+    // Scope also clears an outer foreground call during unrelated/reentrant
+    // AddTabAtIndex operations. Never infer intent from the entry-point enum.
+    etr::ScopedValue creating(g_foregroundNewTabCall, foreground);
+    return AddTabAtIndex_Original(self, pidl, entryPoint, index, id);
+}
+static constexpr UINT kNewTabCommand = 0xA21B;
 
 namespace etr {
 
 // Owns presentation changes only while the window still carries this entry's
-// token. No window procedure, timer, hook, or per-window thread is installed.
+// token. All bookkeeping uses one mutex; every window API runs outside it.
 class WindowPresentationStore final {
    public:
     static constexpr const wchar_t* PropertyName = L"ETR.Redirecting";
+    static constexpr const wchar_t* ConstructionPropertyName =
+        L"ETR.ConstructionShow";
 
     WindowPresentationStore() = default;
     WindowPresentationStore(const WindowPresentationStore&) = delete;
     WindowPresentationStore& operator=(const WindowPresentationStore&) = delete;
-
     ~WindowPresentationStore() = default;
 
-    [[nodiscard]] std::optional<ULONG_PTR> Stage(HWND window) {
+    [[nodiscard]] std::optional<ULONG_PTR> Stage(
+        HWND window,
+        std::vector<int>* deferredShows = nullptr,
+        HANDLE constructionToken = nullptr) {
         if (!::IsWindow(window) ||
-            ::GetPropW(window, PropertyName) != nullptr) {
+            ::GetPropW(window, PropertyName) != nullptr ||
+            (constructionToken &&
+             ::GetPropW(window, ConstructionPropertyName) !=
+                 constructionToken)) {
             ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
             return std::nullopt;
         }
-
         const auto token = AllocateToken();
         if (!token) {
             ::SetLastError(ERROR_NOT_ENOUGH_MEMORY);
             return std::nullopt;
         }
-
         std::shared_ptr<Entry> entry;
-        std::shared_ptr<Entry> previous;
         try {
             entry = std::make_shared<Entry>(window, *token);
+        } catch (...) {
+            ::SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return std::nullopt;
+        }
+        // Publish the identity and original presentation together. Hook
+        // reentry can read these immutable fields as soon as we reserve it.
+        entry->threadId = ::GetWindowThreadProcessId(window, &entry->processId);
+        if (!entry->threadId || !ReadExStyle(window, entry->exStyle)) {
+            ::SetLastError(LastErrorOr(ERROR_INVALID_WINDOW_HANDLE));
+            return std::nullopt;
+        }
+        if ((entry->exStyle & WS_EX_LAYERED) &&
+            !::GetLayeredWindowAttributes(window, &entry->colorKey,
+                                          &entry->alpha,
+                                          &entry->layeredFlags)) {
+            ::SetLastError(LastErrorOr(ERROR_NOT_SUPPORTED));
+            return std::nullopt;
+        }
+        std::shared_ptr<Entry> previous;
+        DWORD error = ERROR_SUCCESS;
+        try {
             {
-                std::lock_guard lock(entriesMutex_);
+                std::lock_guard lock(mutex_);
                 if (stopping_) {
-                    ::SetLastError(ERROR_OPERATION_ABORTED);
-                    return std::nullopt;
-                }
-                if (const auto old = entries_.find(window);
-                    old != entries_.end()) {
-                    std::lock_guard oldLock(old->second->mutex);
+                    error = ERROR_OPERATION_ABORTED;
+                } else if (const auto old = entries_.find(window);
+                           old != entries_.end()) {
                     if (old->second->state != State::Staged) {
-                        ::SetLastError(ERROR_BUSY);
-                        return std::nullopt;
+                        error = ERROR_BUSY;
+                    } else {
+                        previous = old->second;
+                        previous->state = State::Operating;
                     }
-                    old->second->state = State::Inspecting;
-                    previous = old->second;
                 } else {
                     entries_.emplace(window, entry);
+                    if (deferredShows)
+                        entry->deferredShows.swap(*deferredShows);
                 }
             }
+            if (error) {
+                ::SetLastError(error);
+                return std::nullopt;
+            }
             if (previous) {
-                // Check after reserving the old record: the initial GetProp
-                // snapshot may have raced another completed Stage operation.
                 if (HasToken(*previous)) {
                     SetState(previous, State::Staged);
                     ::SetLastError(ERROR_ALREADY_EXISTS);
                     return std::nullopt;
                 }
                 Finish(previous);
-                std::lock_guard lock(entriesMutex_);
-                if (stopping_ || !entries_.emplace(window, entry).second) {
-                    ::SetLastError(stopping_ ? ERROR_OPERATION_ABORTED
-                                             : ERROR_BUSY);
+                {
+                    std::lock_guard lock(mutex_);
+                    if (stopping_)
+                        error = ERROR_OPERATION_ABORTED;
+                    else if (!entries_.emplace(window, entry).second)
+                        error = ERROR_BUSY;
+                    else if (deferredShows)
+                        entry->deferredShows.swap(*deferredShows);
+                }
+                if (error) {
+                    ::SetLastError(error);
                     return std::nullopt;
                 }
             }
@@ -699,79 +1487,88 @@ class WindowPresentationStore final {
             return std::nullopt;
         }
 
-        entry->threadId = ::GetWindowThreadProcessId(window, &entry->processId);
-        if (entry->threadId == 0) {
-            return StageFailed(entry, ERROR_INVALID_WINDOW_HANDLE);
-        }
-        if (!ReadExStyle(window, entry->exStyle)) {
-            return StageFailed(entry, LastErrorOr(ERROR_INVALID_WINDOW_HANDLE));
-        }
-        entry->wasLayered = (entry->exStyle & WS_EX_LAYERED) != 0;
-        if (entry->wasLayered && !::GetLayeredWindowAttributes(
-                                     window, &entry->colorKey, &entry->alpha,
-                                     &entry->layeredFlags)) {
-            // UpdateLayeredWindow-backed windows need not expose attributes.
-            // Refuse them before making any changes that cannot be undone.
-            return StageFailed(entry, LastErrorOr(ERROR_NOT_SUPPORTED));
-        }
-        entry->captured = true;
-
+        bool installed = false, touched = false;
+        const auto fail = [&](DWORD failure) -> std::optional<ULONG_PTR> {
+            if (installed && touched)
+                (void)Restore(entry, true);
+            else {
+                if (installed)
+                    (void)RemoveOwnedProperty(*entry);
+                if (deferredShows) {
+                    std::lock_guard lock(mutex_);
+                    deferredShows->swap(entry->deferredShows);
+                }
+                Finish(entry);
+            }
+            ::SetLastError(failure);
+            return std::nullopt;
+        };
         if (!SameWindow(*entry) ||
-            ::GetPropW(window, PropertyName) != nullptr) {
-            return StageFailed(entry, ERROR_INVALID_WINDOW_HANDLE);
-        }
-        if (!::SetPropW(window, PropertyName, TokenHandle(entry->token))) {
-            return StageFailed(entry, LastErrorOr(ERROR_ACCESS_DENIED));
-        }
-        entry->propertyInstalled = true;
-        if (!HasToken(*entry)) {
-            return StageFailed(entry, ERROR_INVALID_WINDOW_HANDLE);
-        }
-
-        entry->presentationTouched = true;
-        if (!WriteExStyle(window, entry->exStyle | WS_EX_LAYERED)) {
-            return StageFailed(entry, LastErrorOr(ERROR_ACCESS_DENIED));
-        }
+            ::GetPropW(window, PropertyName) != nullptr ||
+            (constructionToken &&
+             ::GetPropW(window, ConstructionPropertyName) != constructionToken))
+            return fail(ERROR_INVALID_WINDOW_HANDLE);
+        if (!::SetPropW(window, PropertyName, TokenHandle(entry->token)))
+            return fail(LastErrorOr(ERROR_ACCESS_DENIED));
+        installed = true;
+        if (!HasToken(*entry))
+            return fail(ERROR_INVALID_WINDOW_HANDLE);
+        touched = true;
+        if (!WriteExStyle(window, entry->exStyle | WS_EX_LAYERED))
+            return fail(LastErrorOr(ERROR_ACCESS_DENIED));
         if (!HasToken(*entry) ||
-            !::SetLayeredWindowAttributes(window, 0, 0, LWA_ALPHA)) {
-            return StageFailed(entry, LastErrorOr(ERROR_INVALID_WINDOW_HANDLE));
-        }
-        if (!HasToken(*entry)) {
-            return StageFailed(entry, ERROR_INVALID_WINDOW_HANDLE);
-        }
-
+            !::SetLayeredWindowAttributes(window, 0, 0, LWA_ALPHA))
+            return fail(LastErrorOr(ERROR_INVALID_WINDOW_HANDLE));
+        if (!HasToken(*entry))
+            return fail(ERROR_INVALID_WINDOW_HANDLE);
         SetState(entry, State::Staged);
         return entry->token;
     }
 
     [[nodiscard]] bool Owns(HWND window, ULONG_PTR token) const {
         const auto entry = Find(window, token);
-        if (!entry) {
+        if (!entry)
             return false;
-        }
         {
-            std::lock_guard lock(entry->mutex);
+            std::lock_guard lock(mutex_);
             if (entry->state == State::Staging ||
-                entry->state == State::Finished) {
+                entry->state == State::Finished)
                 return false;
-            }
         }
         return HasToken(*entry);
     }
 
-    [[nodiscard]] bool Reveal(HWND window, ULONG_PTR token) {
-        const auto entry = Find(window, token);
-        if (!entry || !Begin(entry, State::Restoring)) {
+    // Return true only after retaining the exact intercepted command. Keeping
+    // the sequence preserves e.g. maximize followed by show-without-activation.
+    [[nodiscard]] bool DeferShow(HWND window, int command) {
+        const auto entry = Find(window);
+        if (!entry || !SameWindow(*entry))
+            return false;
+        const HANDLE property = ::GetPropW(window, PropertyName);
+        std::lock_guard lock(mutex_);
+        if (entry->state == State::Presenting ||
+            entry->state == State::Finished ||
+            (property != TokenHandle(entry->token) &&
+             !(entry->state == State::Staging && property == nullptr)))
+            return false;
+        try {
+            entry->deferredShows.push_back(command);
+            return true;
+        } catch (...) {
+            // A request we cannot retain must reach the native API.
             return false;
         }
-        return Restore(entry, true);
+    }
+
+    [[nodiscard]] bool Reveal(HWND window, ULONG_PTR token) {
+        const auto entry = Find(window, token);
+        return entry && Begin(entry) && Restore(entry, true);
     }
 
     [[nodiscard]] bool Retire(HWND window, ULONG_PTR token) {
         const auto entry = Find(window, token);
-        if (!entry || !Begin(entry, State::Retiring)) {
+        if (!entry || !Begin(entry))
             return false;
-        }
         if (!HasToken(*entry)) {
             Finish(entry);
             ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
@@ -779,190 +1576,111 @@ class WindowPresentationStore final {
         }
         if (!::PostMessageW(window, WM_CLOSE, 0, 0)) {
             const DWORD error = LastErrorOr(ERROR_ACCESS_DENIED);
-            // A failed close must not strand an invisible Explorer window.
             (void)Restore(entry, true);
             ::SetLastError(error);
             return false;
         }
-
-        // Posting the close commits retirement. It must not subsequently be
-        // shown by RestoreAll while WM_CLOSE is still waiting in the queue.
+        // A committed close must not later be shown by RestoreAll.
         (void)RemoveOwnedProperty(*entry);
         Finish(entry);
         return true;
     }
 
-    // The owner must stop/join its worker before shutdown. This also waits for
-    // any already reserved operation; all window calls run without our locks.
+    // The owner stops/joins its worker before shutdown. Retry failed live
+    // records on a later explicit sweep; the destructor never calls this.
     void RestoreAll() {
-        if (restoreSweepActive_.test_and_set(std::memory_order_acquire)) {
-            return;
+        {
+            std::lock_guard lock(mutex_);
+            if (restoreSweepActive_)
+                return;
+            restoreSweepActive_ = true;
+            stopping_ = true;
         }
         struct EndSweep final {
-            std::atomic_flag& active;
-            ~EndSweep() { active.clear(std::memory_order_release); }
-        } endSweep{restoreSweepActive_};
-        {
-            std::lock_guard lock(entriesMutex_);
-            stopping_ = true;
-            for (const auto& item : entries_) {
-                std::lock_guard entryLock(item.second->mutex);
-                item.second->restoreVisited = false;
+            WindowPresentationStore& store;
+            ~EndSweep() {
+                std::lock_guard lock(store.mutex_);
+                store.restoreSweepActive_ = false;
             }
-        }
+        } endSweep{*this};
+        // Tokens never repeat and stopping_ prevents insertion. Walking their
+        // order needs neither a throwing snapshot allocation nor visit flags.
+        ULONG_PTR lastVisited = 0;
         for (;;) {
             std::shared_ptr<Entry> entry;
             {
-                std::lock_guard lock(entriesMutex_);
+                std::unique_lock lock(mutex_);
                 for (const auto& item : entries_) {
-                    std::lock_guard entryLock(item.second->mutex);
-                    if (!item.second->restoreVisited) {
-                        item.second->restoreVisited = true;
+                    if (item.second->token > lastVisited &&
+                        (!entry || item.second->token < entry->token))
                         entry = item.second;
-                        break;
-                    }
                 }
-            }
-            if (!entry) {
-                return;
-            }
-            {
-                std::unique_lock lock(entry->mutex);
-                entry->changed.wait(lock, [&] {
+                if (!entry)
+                    return;
+                lastVisited = entry->token;
+                changed_.wait(lock, [&] {
                     return entry->state == State::Staged ||
                            entry->state == State::Finished;
                 });
-                if (entry->state == State::Finished) {
-                    lock.unlock();
-                    Erase(entry);
+                if (entry->state == State::Finished)
                     continue;
-                }
-                entry->state = State::Restoring;
+                entry->state = State::Operating;
             }
-            // Attempt every entry even if one live window refuses restoration.
-            // A failed live record remains available to a later RestoreAll
-            // call.
             (void)Restore(entry, true);
         }
     }
 
     [[nodiscard]] bool IsStaged(HWND window) const {
         const auto entry = Find(window);
-        if (!entry) {
+        if (!entry)
             return ::GetPropW(window, PropertyName) != nullptr;
-        }
-        bool suppressShow = true;
-        bool staging = false;
-        {
-            std::lock_guard lock(entry->mutex);
-            suppressShow = entry->state != State::Presenting &&
-                           entry->state != State::Finished;
-            staging = entry->state == State::Staging;
-        }
         const HANDLE property = ::GetPropW(window, PropertyName);
-        if (property == TokenHandle(entry->token)) {
-            return suppressShow;
-        }
-        // Before Stage installs the property, reserve the window against a
-        // synchronous ShowWindow interception as well.
-        return property != nullptr || (suppressShow && staging);
+        std::lock_guard lock(mutex_);
+        return entry->state != State::Presenting &&
+               entry->state != State::Finished &&
+               (property == TokenHandle(entry->token) || property != nullptr ||
+                entry->state == State::Staging);
     }
 
     [[nodiscard]] static HWND Root(HWND window) noexcept {
         return window == nullptr ? nullptr : ::GetAncestor(window, GA_ROOT);
     }
-
     [[nodiscard]] static bool IsExplorerFrame(HWND window) noexcept {
-        wchar_t name[64]{};
-        return ::GetClassNameW(window, name, 64) != 0 &&
-               ::lstrcmpiW(name, L"CabinetWClass") == 0;
-    }
-
-    [[nodiscard]] static bool IsShellTab(HWND window) noexcept {
-        wchar_t name[64]{};
-        return ::GetClassNameW(window, name, 64) != 0 &&
-               ::lstrcmpiW(name, L"ShellTabWindowClass") == 0;
-    }
-
-    [[nodiscard]] static bool IsEligibleHost(HWND window,
-                                             HWND exclude = nullptr) noexcept {
-        if (window == nullptr || window == Root(exclude) ||
-            Root(window) != window || !::IsWindowVisible(window) ||
-            !IsExplorerFrame(window) ||
-            ::GetPropW(window, PropertyName) != nullptr) {
-            return false;
-        }
-        LONG_PTR style{};
-        if (!ReadExStyle(window, style)) {
-            return false;
-        }
-        if ((style & WS_EX_LAYERED) != 0) {
-            COLORREF key{};
-            BYTE alpha{};
-            DWORD flags{};
-            if (!::GetLayeredWindowAttributes(window, &key, &alpha, &flags) ||
-                ((flags & LWA_ALPHA) != 0 && alpha == 0)) {
-                return false;
-            }
-        }
-        return true;
+        return HasWindowClass(window, L"CabinetWClass");
     }
 
    private:
-    enum class State {
-        Staging,
-        Staged,
-        Inspecting,
-        Restoring,
-        Retiring,
-        Presenting,
-        Finished
-    };
-
+    enum class State { Staging, Staged, Operating, Presenting, Finished };
     struct Entry final {
         Entry(HWND value, ULONG_PTR identity)
             : window(value), token(identity) {}
-
         const HWND window;
         const ULONG_PTR token;
-        DWORD threadId{};
-        DWORD processId{};
+        DWORD threadId{}, processId{};
         LONG_PTR exStyle{};
         COLORREF colorKey{};
         BYTE alpha{255};
         DWORD layeredFlags{};
-        bool wasLayered{};
-        bool captured{};
-        bool propertyInstalled{};
-        bool presentationTouched{};
-        bool restoreVisited{};
-        std::mutex mutex;
-        std::condition_variable changed;
         State state{State::Staging};
+        std::vector<int> deferredShows;
     };
-
     [[nodiscard]] static HANDLE TokenHandle(ULONG_PTR token) noexcept {
         return reinterpret_cast<HANDLE>(token);
     }
-
     [[nodiscard]] static std::optional<ULONG_PTR> AllocateToken() noexcept {
-        // Never recycle a token, including on unsigned wraparound.
         static std::atomic<ULONG_PTR> next{1};
         ULONG_PTR value = next.load(std::memory_order_relaxed);
         while (value != (std::numeric_limits<ULONG_PTR>::max)()) {
             if (next.compare_exchange_weak(value, value + 1,
-                                           std::memory_order_relaxed)) {
+                                           std::memory_order_relaxed))
                 return value;
-            }
         }
         return std::nullopt;
     }
-
     [[nodiscard]] static DWORD LastErrorOr(DWORD fallback) noexcept {
         const DWORD error = ::GetLastError();
         return error == ERROR_SUCCESS ? fallback : error;
     }
-
     [[nodiscard]] static bool ReadExStyle(HWND window,
                                           LONG_PTR& value) noexcept {
         const DWORD savedError = ::GetLastError();
@@ -976,7 +1694,6 @@ class WindowPresentationStore final {
         ::SetLastError(savedError);
         return true;
     }
-
     [[nodiscard]] static bool WriteExStyle(HWND window,
                                            LONG_PTR value) noexcept {
         const DWORD savedError = ::GetLastError();
@@ -991,131 +1708,116 @@ class WindowPresentationStore final {
         ::SetLastError(savedError);
         return true;
     }
-
     [[nodiscard]] static bool SameWindow(const Entry& entry) noexcept {
         DWORD process{};
         const DWORD thread = ::GetWindowThreadProcessId(entry.window, &process);
         return thread != 0 && thread == entry.threadId &&
                process == entry.processId;
     }
-
     [[nodiscard]] static bool HasToken(const Entry& entry) noexcept {
         return SameWindow(entry) && ::GetPropW(entry.window, PropertyName) ==
                                         TokenHandle(entry.token);
     }
-
     [[nodiscard]] static bool RemoveOwnedProperty(const Entry& entry) noexcept {
         return HasToken(entry) && ::RemovePropW(entry.window, PropertyName) ==
                                       TokenHandle(entry.token);
     }
-
     [[nodiscard]] std::shared_ptr<Entry> Find(HWND window) const {
-        std::lock_guard lock(entriesMutex_);
+        std::lock_guard lock(mutex_);
         const auto found = entries_.find(window);
-        if (found == entries_.end()) {
-            return {};
-        }
-        return found->second;
+        return found == entries_.end() ? std::shared_ptr<Entry>{}
+                                       : found->second;
     }
-
     [[nodiscard]] std::shared_ptr<Entry> Find(HWND window,
                                               ULONG_PTR token) const {
         const auto entry = Find(window);
         return entry && entry->token == token ? entry
                                               : std::shared_ptr<Entry>{};
     }
-
-    [[nodiscard]] static bool Begin(const std::shared_ptr<Entry>& entry,
-                                    State operation) {
-        std::lock_guard lock(entry->mutex);
-        if (entry->state != State::Staged) {
-            ::SetLastError(ERROR_BUSY);
-            return false;
-        }
-        entry->state = operation;
-        return true;
-    }
-
-    static void SetState(const std::shared_ptr<Entry>& entry, State state) {
+    [[nodiscard]] bool Begin(const std::shared_ptr<Entry>& entry) {
+        bool reserved = false;
         {
-            std::lock_guard lock(entry->mutex);
+            std::lock_guard lock(mutex_);
+            if (entry->state == State::Staged) {
+                entry->state = State::Operating;
+                reserved = true;
+            }
+        }
+        if (!reserved)
+            ::SetLastError(ERROR_BUSY);
+        return reserved;
+    }
+    void SetState(const std::shared_ptr<Entry>& entry, State state) {
+        {
+            std::lock_guard lock(mutex_);
             entry->state = state;
         }
-        entry->changed.notify_all();
+        changed_.notify_all();
     }
-
-    void Erase(const std::shared_ptr<Entry>& entry) {
-        std::lock_guard lock(entriesMutex_);
-        const auto found = entries_.find(entry->window);
-        if (found != entries_.end() && found->second == entry) {
-            entries_.erase(found);
-        }
-    }
-
     void Finish(const std::shared_ptr<Entry>& entry) {
-        SetState(entry, State::Finished);
-        Erase(entry);
-    }
-
-    [[nodiscard]] std::optional<ULONG_PTR> StageFailed(
-        const std::shared_ptr<Entry>& entry,
-        DWORD error) {
-        if (entry->propertyInstalled && entry->presentationTouched) {
-            (void)Restore(entry, false);
-        } else {
-            if (entry->propertyInstalled) {
-                (void)RemoveOwnedProperty(*entry);
-            }
-            Finish(entry);
+        {
+            std::lock_guard lock(mutex_);
+            entry->state = State::Finished;
+            const auto found = entries_.find(entry->window);
+            if (found != entries_.end() && found->second == entry)
+                entries_.erase(found);
         }
-        ::SetLastError(error);
-        return std::nullopt;
+        changed_.notify_all();
     }
-
     [[nodiscard]] bool Restore(const std::shared_ptr<Entry>& entry, bool show) {
         if (!HasToken(*entry)) {
             Finish(entry);
             ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
             return false;
         }
-        if (entry->captured && entry->presentationTouched) {
-            if (!WriteExStyle(entry->window, entry->exStyle)) {
-                SetState(entry, State::Staged);
-                return false;
-            }
-            if (!HasToken(*entry)) {
-                Finish(entry);
-                ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
-                return false;
-            }
-            if (entry->wasLayered && !::SetLayeredWindowAttributes(
-                                         entry->window, entry->colorKey,
-                                         entry->alpha, entry->layeredFlags)) {
-                SetState(entry, State::Staged);
-                return false;
-            }
-            if (!HasToken(*entry)) {
-                Finish(entry);
-                ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
-                return false;
-            }
-            if (!::SetWindowPos(entry->window, nullptr, 0, 0, 0, 0,
-                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                                    SWP_NOACTIVATE | SWP_FRAMECHANGED)) {
-                SetState(entry, State::Staged);
-                return false;
-            }
+        if (!WriteExStyle(entry->window, entry->exStyle)) {
+            SetState(entry, State::Staged);
+            return false;
         }
-
-        // Intercepted ShowWindow calls must be allowed at this point. Keep the
-        // token until after ShowWindow so a recycled HWND cannot be mistaken
-        // for this window between the restore and the presentation call.
-        SetState(entry, State::Presenting);
+        if (!HasToken(*entry)) {
+            Finish(entry);
+            ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+            return false;
+        }
+        if ((entry->exStyle & WS_EX_LAYERED) &&
+            !::SetLayeredWindowAttributes(entry->window, entry->colorKey,
+                                          entry->alpha, entry->layeredFlags)) {
+            SetState(entry, State::Staged);
+            return false;
+        }
+        if (!HasToken(*entry)) {
+            Finish(entry);
+            ::SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+            return false;
+        }
+        if (!::SetWindowPos(entry->window, nullptr, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                                SWP_NOACTIVATE | SWP_FRAMECHANGED)) {
+            SetState(entry, State::Staged);
+            return false;
+        }
+        std::vector<int> deferredShows;
+        {
+            std::lock_guard lock(mutex_);
+            entry->state = State::Presenting;
+            deferredShows.swap(entry->deferredShows);
+        }
+        // Keep the identity property through redraw and the full replay. A
+        // ShowWindow hook can reenter the store and must observe Presenting.
         if (HasToken(*entry)) {
             (void)::RedrawWindow(entry->window, nullptr, nullptr,
                                  RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-            if (show && HasToken(*entry)) {
-                (void)::ShowWindow(entry->window, SW_SHOWNOACTIVATE);
+            if (show) {
+                if (deferredShows.empty()) {
+                    if (HasToken(*entry))
+                        (void)::ShowWindow(entry->window, SW_SHOWNOACTIVATE);
+                } else {
+                    for (int command : deferredShows) {
+                        if (!HasToken(*entry))
+                            break;
+                        (void)::ShowWindow(entry->window, command);
+                    }
+                }
             }
             (void)RemoveOwnedProperty(*entry);
         }
@@ -1123,10 +1825,11 @@ class WindowPresentationStore final {
         return true;
     }
 
-    mutable std::mutex entriesMutex_;
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
     std::unordered_map<HWND, std::shared_ptr<Entry>> entries_;
     bool stopping_{};
-    std::atomic_flag restoreSweepActive_ = ATOMIC_FLAG_INIT;
+    bool restoreSweepActive_{};
 };
 
 }  // namespace etr
@@ -1142,8 +1845,6 @@ struct MergeRequest {
 // Routing host and location queries are implemented by etr::ShellTabCatalog
 // above.
 
-#include <atomic>
-#include <deque>
 static std::atomic<bool> g_stop{false};
 static HANDLE g_stopEvent = nullptr, g_wakeEvent = nullptr,
               g_readyEvent = nullptr, g_worker = nullptr;
@@ -1154,9 +1855,13 @@ static std::deque<MergeRequest*> g_redirectQueue;
 struct FocusTask {
     HWND tab;
     ULONGLONG due;
+    HWND foreground;
+    HWND activeBefore;
+    DWORD inputTime;
+    bool guardInput;
 };
 static std::unordered_map<HWND, FocusTask> g_focusQueue;
-static DWORD WINAPI ExecuteMergeRequest(LPVOID);
+static void ExecuteMergeRequest(MergeRequest*);
 static void PumpFocus() {
     std::vector<FocusTask> ready;
     ULONGLONG now = GetTickCount64();
@@ -1174,9 +1879,25 @@ static void PumpFocus() {
                 ++i;
         }
     }
-    for (auto f : ready)
-        if (!g_stop)
+    for (auto f : ready) {
+        if (g_stop)
+            break;
+        if ((f.guardInput && !g_settings.activateShellLookups) ||
+            (!f.guardInput && !g_settings.activateNewTabs))
+            continue;
+        const HWND current = GetForegroundWindow();
+        const HWND frame = GetAncestor(f.tab, GA_ROOT);
+        LASTINPUTINFO input{sizeof(input), 0};
+        const bool inputChanged = f.guardInput && f.inputTime &&
+                                  GetLastInputInfo(&input) &&
+                                  input.dwTime != f.inputTime;
+        const HWND active =
+            FindWindowExW(frame, nullptr, L"ShellTabWindowClass", nullptr);
+        const bool changedTab = inputChanged && current == frame &&
+                                active != f.activeBefore && active != f.tab;
+        if (!changedTab && (current == f.foreground || current == frame))
             ActivateShellTab(f.tab);
+    }
 }
 static bool CooperativeWait(DWORD ms) {
     ULONGLONG until = GetTickCount64() + ms;
@@ -1305,25 +2026,17 @@ static void QueueRedirect(MergeRequest* info) {
     }
 }
 static HWND FastPrimary(HWND exclude) {
+    const HWND preferred = GetAncestor(GetForegroundWindow(), GA_ROOT);
+    if (etr::CanHostFrame(preferred, exclude))
+        return preferred;
     struct Search {
         HWND exclude, result;
-        DWORD pid;
-    } search{exclude, nullptr, GetCurrentProcessId()};
+    } search{exclude, nullptr};
     EnumWindows(
-        [](HWND h, LPARAM p) -> BOOL {
-            auto* s = reinterpret_cast<Search*>(p);
-            WCHAR cls[64]{};
-            DWORD pid = 0;
-            GetWindowThreadProcessId(h, &pid);
-            BYTE alpha = 255;
-            DWORD flags = 0;
-            bool hidden =
-                GetLayeredWindowAttributes(h, nullptr, &alpha, &flags) &&
-                (flags & LWA_ALPHA) && alpha == 0;
-            if (h != s->exclude && pid == s->pid && !hidden &&
-                IsWindowVisible(h) && GetClassNameW(h, cls, 64) &&
-                !wcscmp(cls, L"CabinetWClass")) {
-                s->result = h;
+        [](HWND window, LPARAM parameter) -> BOOL {
+            auto* state = reinterpret_cast<Search*>(parameter);
+            if (etr::CanHostFrame(window, state->exclude)) {
+                state->result = window;
                 return FALSE;
             }
             return TRUE;
@@ -1331,258 +2044,453 @@ static HWND FastPrimary(HWND exclude) {
         reinterpret_cast<LPARAM>(&search));
     return search.result;
 }
-
-static void QueueFocus(HWND tab) {
+static void QueueFocus(HWND tab, bool guardInput) {
     if (g_stop)
         return;
     HWND frame = GetAncestor(tab, GA_ROOT);
+    LASTINPUTINFO input{sizeof(input), 0};
+    const DWORD inputTime = GetLastInputInfo(&input) ? input.dwTime : 0;
+    const HWND foreground = GetForegroundWindow();
+    const HWND activeBefore =
+        FindWindowExW(frame, nullptr, L"ShellTabWindowClass", nullptr);
     std::lock_guard<std::mutex> lock(g_queueMutex);
     if (!g_stop) {
-        g_focusQueue[frame] = {tab, GetTickCount64() + 120};
+        g_focusQueue[frame] = {tab,        GetTickCount64() + 120,
+                               foreground, activeBefore,
+                               inputTime,  guardInput};
         SetEvent(g_wakeEvent);
     }
 }
 
 // Serialize redirects and identify the newly created tab by HWND, never by
 // global IShellWindows counts (which change while other requests are arriving).
-#include <mutex>
 
-static ComPtr<IWebBrowser2> BrowserForTab(HWND wanted) {
-    ComPtr<IShellWindows> windows;
-    CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
-                     IID_PPV_ARGS(&windows));
-    long count = 0;
-    if (windows)
-        windows->get_Count(&count);
-    for (long i = 0; i < count; ++i) {
-        VARIANT index{};
-        index.vt = VT_I4;
-        index.lVal = i;
-        ComPtr<IDispatch> dispatch;
-        windows->Item(index, &dispatch);
-        if (!dispatch)
-            continue;
-        auto browser = GetTabBrowser(dispatch.Get());
-        HWND tab = nullptr;
-        if (browser && SUCCEEDED(browser->GetWindow(&tab)) && tab == wanted) {
-            ComPtr<IWebBrowser2> result;
-            dispatch.As(&result);
-            return result;
+namespace etr {
+struct NavigationState {
+    HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    std::atomic<bool> live{true}, dirty{false}, quit{false};
+    ~NavigationState() {
+        if (event)
+            CloseHandle(event);
+    }
+};
+
+class BrowserEventSink final : public IDispatch {
+    std::atomic<ULONG> references_{1};
+    std::shared_ptr<NavigationState> state_;
+
+   public:
+    explicit BrowserEventSink(std::shared_ptr<NavigationState> state)
+        : state_(std::move(state)) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out)
+            return E_POINTER;
+        *out = nullptr;
+        if (iid != IID_IUnknown && iid != IID_IDispatch &&
+            iid != DIID_DWebBrowserEvents2)
+            return E_NOINTERFACE;
+        *out = static_cast<IDispatch*>(this);
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG left = --references_;
+        if (!left)
+            delete this;
+        return left;
+    }
+    HRESULT STDMETHODCALLTYPE GetTypeInfoCount(UINT* count) override {
+        if (!count)
+            return E_POINTER;
+        *count = 0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetTypeInfo(UINT, LCID, ITypeInfo**) override {
+        return E_NOTIMPL;
+    }
+    HRESULT STDMETHODCALLTYPE
+    GetIDsOfNames(REFIID, LPOLESTR*, UINT, LCID, DISPID*) override {
+        return E_NOTIMPL;
+    }
+    HRESULT STDMETHODCALLTYPE Invoke(DISPID id,
+                                     REFIID,
+                                     LCID,
+                                     WORD,
+                                     DISPPARAMS*,
+                                     VARIANT*,
+                                     EXCEPINFO*,
+                                     UINT*) override {
+        // No browser calls, request pointers, selection or unsubscribe from
+        // this callback. The STA waiter verifies the actual PIDL afterwards.
+        if (!state_->live.load())
+            return S_OK;
+        if (id == DISPID_NAVIGATECOMPLETE2 || id == DISPID_DOCUMENTCOMPLETE ||
+            id == DISPID_NAVIGATEERROR || id == DISPID_ONQUIT) {
+            if (id == DISPID_ONQUIT)
+                state_->quit = true;
+            state_->dirty = true;
+            if (state_->event)
+                SetEvent(state_->event);
         }
+        return S_OK;
+    }
+};
+
+class NavigationSubscription {
+    ComPtr<IConnectionPoint> point_;
+    ComPtr<BrowserEventSink> sink_;
+    std::shared_ptr<NavigationState> state_;
+    DWORD cookie_ = 0;
+
+   public:
+    NavigationSubscription() = default;
+    NavigationSubscription(const NavigationSubscription&) = delete;
+    NavigationSubscription& operator=(const NavigationSubscription&) = delete;
+    ~NavigationSubscription() { Close(); }
+    const std::shared_ptr<NavigationState>& State() const { return state_; }
+    HRESULT Attach(IConnectionPoint* point) {
+        Close();
+        if (!point)
+            return E_POINTER;
+        state_ = std::make_shared<NavigationState>();
+        if (!state_->event)
+            return HRESULT_FROM_WIN32(GetLastError());
+        sink_.Attach(new (std::nothrow) BrowserEventSink(state_));
+        if (!sink_)
+            return E_OUTOFMEMORY;
+        point_ = point;
+        const HRESULT hr = point_->Advise(sink_.Get(), &cookie_);
+        if (FAILED(hr))
+            Close();
+        return hr;
+    }
+    HRESULT Open(IWebBrowser2* browser) {
+        ComPtr<IConnectionPointContainer> container;
+        ComPtr<IConnectionPoint> point;
+        if (!browser)
+            return E_POINTER;
+        HRESULT hr = browser->QueryInterface(IID_PPV_ARGS(&container));
+        if (SUCCEEDED(hr))
+            hr =
+                container->FindConnectionPoint(DIID_DWebBrowserEvents2, &point);
+        return SUCCEEDED(hr) ? Attach(point.Get()) : hr;
+    }
+    void Close() {
+        if (state_) {
+            state_->live = false;
+            state_->dirty = false;
+        }
+        if (point_ && cookie_) {
+            const HRESULT hr = point_->Unadvise(cookie_);
+            cookie_ = 0;
+            if (FAILED(hr) && hr != CONNECT_E_NOCONNECTION) {
+                // A provider can retain a direct sink reference after a
+                // failed Unadvise. CoDisconnectObject only disconnects COM
+                // marshaling; it cannot revoke an arbitrary raw reference.
+                // Pin this image only on that exceptional failure path so
+                // late Invoke/Release can never enter an unloaded vtable.
+                // The disabled sink owns only its inert shared state.
+                HMODULE pinned = nullptr;
+                const BOOL kept =
+                    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                           GET_MODULE_HANDLE_EX_FLAG_PIN,
+                                       reinterpret_cast<LPCWSTR>(
+                                           &NavigationSubscription::PinAnchor),
+                                       &pinned);
+                Wh_Log(
+                    L"Navigation Unadvise failed hr=%08lx; image pin=%d; "
+                    L"disabled sink retained safely until provider release",
+                    hr, kept);
+                CoDisconnectObject(sink_.Get(), 0);
+            }
+        }
+        point_.Reset();
+        sink_.Reset();
+        state_.reset();
+    }
+
+   private:
+    static void PinAnchor() {}
+};
+
+class NavigationCheckSchedule {
+    ULONGLONG start_, deadline_;
+    size_t next_ = 0;
+    static constexpr ULONGLONG offsets_[] = {0,    100,  250, 500,
+                                             1000, 2000, 3500};
+
+   public:
+    NavigationCheckSchedule(ULONGLONG start, ULONGLONG deadline)
+        : start_(start), deadline_(deadline) {}
+    bool ShouldInspect(ULONGLONG now, bool notice) {
+        bool due = false;
+        while (next_ < std::size(offsets_) && now >= start_ + offsets_[next_]) {
+            ++next_;
+            due = true;
+        }
+        return now < deadline_ && (notice || due);
+    }
+    DWORD NextWait(ULONGLONG now) const {
+        ULONGLONG wake = deadline_;
+        if (next_ < std::size(offsets_))
+            wake = std::min(wake, start_ + offsets_[next_]);
+        return static_cast<DWORD>(
+            wake > now ? std::min<ULONGLONG>(25, wake - now) : 0);
+    }
+};
+
+class OwnedVariant {
+   public:
+    VARIANT value{};
+    ~OwnedVariant() { VariantClear(&value); }
+    OwnedVariant() = default;
+    OwnedVariant(const OwnedVariant&) = delete;
+    OwnedVariant& operator=(const OwnedVariant&) = delete;
+};
+}  // namespace etr
+
+static ComPtr<IWebBrowser2> BrowserForTab(
+    etr::ShellTabCatalog& catalog,
+    HWND wanted,
+    ComPtr<IShellBrowser>* shell = nullptr) {
+    auto access = catalog.FindTab(wanted);
+    ComPtr<IWebBrowser2> browser;
+    if (access) {
+        access->dispatch.As(&browser);
+        if (shell)
+            *shell = access->browser;
+    }
+    return browser;
+}
+
+template <class Catalog>
+static std::optional<etr::SelectionSnapshot>
+CaptureSelection(Catalog& catalog, HWND frame, PCIDLIST_ABSOLUTE expected) {
+    auto location = catalog.ReadFrameDestination(frame);
+    if (!location || !expected ||
+        !ILIsEqual(location->identity.get(), expected))
+        return std::nullopt;
+    ComPtr<IFolderView> folderView;
+    ComPtr<IEnumIDList> items;
+    if (FAILED(location->view.As(&folderView)))
+        return std::nullopt;
+    etr::SelectionSnapshot result;
+    result.parent = std::move(location->identity);
+    int selected = -1;
+    if (folderView->ItemCount(SVGIO_SELECTION, &selected) == S_OK &&
+        selected == 0) {
+        // Explorer returns ERROR_NOT_FOUND from Items for an empty selection.
+        // A verified zero count is a valid snapshot, not a routing failure.
+        return SameFolder(location->view.Get(), expected)
+                   ? std::optional<etr::SelectionSnapshot>(std::move(result))
+                   : std::nullopt;
+    }
+    if (FAILED(folderView->Items(SVGIO_SELECTION, IID_PPV_ARGS(&items))) ||
+        !items)
+        return std::nullopt;
+    for (;;) {
+        PITEMID_CHILD raw = nullptr;
+        ULONG fetched = 0;
+        const HRESULT hr = items->Next(1, &raw, &fetched);
+        etr::OwnedPidl child(raw);
+        if (hr == S_FALSE && !fetched)
+            break;
+        if (FAILED(hr) || fetched != 1 || !child)
+            return std::nullopt;
+        result.children.push_back(std::move(child));
+    }
+    if (!SameFolder(location->view.Get(), expected))
+        return std::nullopt;
+    return result;
+}
+
+static HRESULT NavigateToPidl(IWebBrowser2* browser, PCIDLIST_ABSOLUTE folder) {
+    if (!browser || !folder)
+        return E_POINTER;
+    etr::OwnedVariant target;
+    target.value.vt = VT_ARRAY | VT_UI1;
+    target.value.parray = SafeArrayCreateVector(VT_UI1, 0, ILGetSize(folder));
+    if (!target.value.parray)
+        return E_OUTOFMEMORY;
+    void* data = nullptr;
+    HRESULT hr = SafeArrayAccessData(target.value.parray, &data);
+    if (FAILED(hr))
+        return hr;
+    memcpy(data, folder, ILGetSize(folder));
+    hr = SafeArrayUnaccessData(target.value.parray);
+    if (FAILED(hr))
+        return hr;
+    VARIANT empty{};
+    return browser->Navigate2(&target.value, &empty, &empty, &empty, &empty);
+}
+
+static ComPtr<IShellView> WaitForNavigation(IShellBrowser* browser,
+                                            PCIDLIST_ABSOLUTE expected,
+                                            etr::NavigationSubscription& events,
+                                            ULONGLONG deadline) {
+    etr::NavigationCheckSchedule schedule(GetTickCount64(), deadline);
+    const auto state = events.State();
+    while (!g_stop && GetTickCount64() < deadline) {
+        const bool notice = state && state->dirty.exchange(false);
+        if (schedule.ShouldInspect(GetTickCount64(), notice)) {
+            ComPtr<IShellView> view;
+            if (browser && SUCCEEDED(browser->QueryActiveShellView(&view)) &&
+                view && SameFolder(view.Get(), expected))
+                return view;
+        }
+        if (state && state->quit)
+            break;
+        PumpFocus();
+        HANDLE handles[3] = {g_stopEvent, g_wakeEvent,
+                             state ? state->event : nullptr};
+        const DWORD count = handles[2] ? 3 : 2;
+        if (MsgWaitForMultipleObjectsEx(
+                count, handles, schedule.NextWait(GetTickCount64()),
+                QS_ALLINPUT, MWMO_INPUTAVAILABLE) == WAIT_OBJECT_0)
+            break;
+        MSG message;
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+    // A provider with missing events may finish between the last scheduled
+    // fallback and the deadline. Give that completion one final direct-view
+    // check; this still performs no ShellWindows reenumeration.
+    if (!g_stop && browser) {
+        ComPtr<IShellView> view;
+        if (SUCCEEDED(browser->QueryActiveShellView(&view)) && view &&
+            SameFolder(view.Get(), expected))
+            return view;
     }
     return nullptr;
 }
-static std::vector<PIDLIST_ABSOLUTE> CaptureSelection(HWND frame) {
-    std::vector<PIDLIST_ABSOLUTE> result;
-    HWND tab = FindWindowExW(frame, nullptr, L"ShellTabWindowClass", nullptr);
-    auto wb = BrowserForTab(tab);
-    if (!wb)
-        return result;
-    auto browser = GetTabBrowser(wb.Get());
-    ComPtr<IShellView> view;
-    if (!browser || FAILED(browser->QueryActiveShellView(&view)))
-        return result;
-    ComPtr<IFolderView> fv;
-    view.As(&fv);
-    ComPtr<IShellItemArray> items;
-    if (!fv || FAILED(fv->Items(SVGIO_SELECTION, IID_PPV_ARGS(&items))))
-        return result;
-    DWORD count = 0;
-    items->GetCount(&count);
-    for (DWORD i = 0; i < count; ++i) {
-        ComPtr<IShellItem> item;
-        items->GetItemAt(i, &item);
-        PIDLIST_ABSOLUTE pidl = nullptr;
-        if (item && SUCCEEDED(SHGetIDListFromObject(item.Get(), &pidl)) && pidl)
-            result.push_back(pidl);
-    }
-    return result;
-}
-static void ApplySelection(HWND tab,
-                           const std::vector<PIDLIST_ABSOLUTE>& selection) {
-    auto wb = BrowserForTab(tab);
-    if (!wb)
-        return;
-    auto browser = GetTabBrowser(wb.Get());
-    ComPtr<IShellView> view;
-    if (!browser || FAILED(browser->QueryActiveShellView(&view)))
-        return;
-    for (size_t i = 0; i < selection.size(); ++i)
-        view->SelectItem(
-            ILFindLastID(selection[i]),
-            SVSI_SELECT | SVSI_ENSUREVISIBLE |
-                (i == 0 ? (SVSI_DESELECTOTHERS | SVSI_FOCUSED) : 0));
-}
 
-static DWORD WINAPI ExecuteMergeRequest(LPVOID parameter) {
-    auto* info = static_cast<MergeRequest*>(parameter);
-    HWND source = info->stagingFrame, primary = info->destinationHint;
-    ULONG_PTR token = info->lease;
-    delete info;
+// Called only by RouterWorker, whose STA owns every COM reference below.
+// No nested CoInitializeEx/CoUninitialize and no thread-entry-point disguise.
+static void ExecuteMergeRequest(MergeRequest* parameter) {
+    std::unique_ptr<MergeRequest> info(parameter);
+    const HWND source = info->stagingFrame;
+    const ULONG_PTR token = info->lease;
     if (!g_presentations.Owns(source, token))
-        return 0;
-    auto AbortOwned = [&]() {
-        if (g_presentations.Owns(source, token))
-            (void)g_presentations.Reveal(source, token);
+        return;
+    struct RecoverPresentation {
+        HWND source;
+        ULONG_PTR token;
+        ~RecoverPresentation() {
+            if (g_presentations.Owns(source, token))
+                (void)g_presentations.Reveal(source, token);
+        }
+    } recovery{source, token};
+    if (g_stop || !g_settings.mergeWindows)
+        return;
+    const ULONGLONG deadline =
+        info->deadline ? info->deadline : GetTickCount64() + 8000;
+    auto waitWithinDeadline = [&](DWORD delay) {
+        const ULONGLONG now = GetTickCount64();
+        return now < deadline && g_presentations.Owns(source, token) &&
+               CooperativeWait(static_cast<DWORD>(
+                   std::min<ULONGLONG>(delay, deadline - now)));
     };
-
-    if (g_stop) {
-        AbortOwned();
-        return 0;
-    }
-    HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(init)) {
-        AbortOwned();
-        return 1;
-    }
     etr::ShellTabCatalog catalog;
     std::optional<etr::FolderLocation> destination;
-    for (int attempt = 0; attempt < 100 && g_presentations.Owns(source, token);
-         ++attempt) {
-        if (!CooperativeWait(50)) {
-            AbortOwned();
-            CoUninitialize();
-            return 0;
-        }
+    const ULONGLONG sourceDeadline =
+        std::min(deadline, GetTickCount64() + 5000);
+    DWORD sourceDelay = 50;
+    while (!g_stop && GetTickCount64() < sourceDeadline &&
+           g_presentations.Owns(source, token)) {
         destination = catalog.ReadFrameDestination(source);
         if (destination)
             break;
+        if (!waitWithinDeadline(sourceDelay))
+            return;
+        sourceDelay = std::min<DWORD>(500, sourceDelay * 2);
     }
-    primary = catalog.ChooseRoutingHost(source, primary);
+    HWND primary = catalog.ChooseRoutingHost(source, info->destinationHint);
     if (!destination || !primary || primary == source ||
         etr::ClassifyShellDestination(destination->address) !=
-            etr::DestinationKind::Folder) {
-        AbortOwned();
-        CoUninitialize();
-        return 0;
-    }
-    if (ConsumeExplicitWindow(destination->address)) {
-        AbortOwned();
-        CoUninitialize();
-        return 0;
-    }
-    // Preserve the Shell identity from the view; do not stringify and reparse
-    // it.
-    PIDLIST_ABSOLUTE folder = destination->identity.release();
-    struct FolderGuard {
-        PIDLIST_ABSOLUTE& p;
-        ~FolderGuard() {
-            if (p)
-                CoTaskMemFree(p);
-        }
-    } folderGuard{folder};
-    // Allow the originating reveal request to deliver its selection.
-    if (!CooperativeWait(10)) {
-        AbortOwned();
-        CoUninitialize();
-        return 0;
-    }
-    auto selection = CaptureSelection(source);
-    struct SelectionGuard {
-        std::vector<PIDLIST_ABSOLUTE>& s;
-        ~SelectionGuard() {
-            for (auto p : s)
-                CoTaskMemFree(p);
-        }
-    } selectionGuard{selection};
-    std::vector<PCUITEMID_CHILD> children;
-    for (auto pidl : selection)
-        children.push_back(ILFindLastID(pidl));
-    bool complete = ReuseFolderTab(folder, static_cast<UINT>(children.size()),
-                                   children.data(), 0, source);
-    if (!complete) {
+            etr::DestinationKind::Folder ||
+        ConsumeExplicitWindow(destination->identity.get()))
+        return;
+    // Keep the original PIDL from the source view through the entire request.
+    etr::OwnedPidl folder = std::move(destination->identity);
+    if (!waitWithinDeadline(10))
+        return;
+    auto selection = CaptureSelection(catalog, source, folder.get());
+    if (!selection)
+        return;
+    const auto reuse =
+        g_settings.reuseTabs
+            ? ReuseFolderTab(catalog, folder.get(), *selection, source)
+            : ReuseResult::NoMatch;
+    if (reuse == ReuseResult::FailedAfterMatch)
+        return;
+    bool complete = reuse == ReuseResult::Completed;
+    if (reuse == ReuseResult::NoMatch) {
         std::vector<HWND> before;
-        for (HWND t = nullptr;
-             (t = FindWindowExW(primary, t, L"ShellTabWindowClass", nullptr));)
-            before.push_back(t);
+        for (HWND tab = nullptr;
+             (tab = FindWindowExW(primary, tab, L"ShellTabWindowClass",
+                                  nullptr));)
+            before.push_back(tab);
         HWND active =
             FindWindowExW(primary, nullptr, L"ShellTabWindowClass", nullptr);
+        if (!active || !PostMessageW(active, WM_COMMAND, kNewTabCommand, 0))
+            return;
         HWND created = nullptr;
-        if (active)
-            PostMessageW(active, WM_COMMAND, CMD_NEW_TAB, 0);
-        ComPtr<IWebBrowser2> wb;
-        for (int i = 0; i < 60 && IsWindow(primary); ++i) {
-            if (!CooperativeWait(50)) {
-                AbortOwned();
-                CoUninitialize();
-                return 0;
-            }
-            for (HWND t = nullptr;
-                 (t = FindWindowExW(primary, t, L"ShellTabWindowClass",
-                                    nullptr));) {
-                if (std::find(before.begin(), before.end(), t) ==
-                    before.end()) {
-                    created = t;
+        ComPtr<IWebBrowser2> browser;
+        ComPtr<IShellBrowser> shell;
+        const ULONGLONG creationDeadline =
+            std::min(deadline, GetTickCount64() + 3000);
+        ULONGLONG nextBrowserProbe = 0;
+        DWORD browserProbeDelay = 100;
+        while (!g_stop && GetTickCount64() < creationDeadline &&
+               IsWindow(primary)) {
+            for (HWND tab = nullptr;
+                 !created &&
+                 (tab = FindWindowExW(primary, tab, L"ShellTabWindowClass",
+                                      nullptr));)
+                if (std::find(before.begin(), before.end(), tab) ==
+                    before.end())
+                    created = tab;
+            if (created && GetTickCount64() >= nextBrowserProbe) {
+                browser = BrowserForTab(catalog, created, &shell);
+                if (browser && shell)
                     break;
-                }
+                nextBrowserProbe = GetTickCount64() + browserProbeDelay;
+                browserProbeDelay = std::min<DWORD>(500, browserProbeDelay * 2);
             }
-            if (created) {
-                wb = BrowserForTab(created);
-                if (wb)
-                    break;
-            }
+            if (!waitWithinDeadline(50))
+                return;
         }
-        if (wb) {
-            VARIANT target{}, empty{};
-            struct VariantGuard {
-                VARIANT* v;
-                ~VariantGuard() { VariantClear(v); }
-            } variantGuard{&target};
-            target.vt = VT_ARRAY | VT_UI1;
-            target.parray = SafeArrayCreateVector(VT_UI1, 0, ILGetSize(folder));
-            if (target.parray) {
-                void* data = nullptr;
-                if (SUCCEEDED(SafeArrayAccessData(target.parray, &data))) {
-                    memcpy(data, folder, ILGetSize(folder));
-                    SafeArrayUnaccessData(target.parray);
-                    HRESULT hr =
-                        wb->Navigate2(&target, &empty, &empty, &empty, &empty);
-                    if (SUCCEEDED(hr))
-                        for (int i = 0; i < 80; ++i) {
-                            if (!CooperativeWait(50)) {
-                                AbortOwned();
-                                CoUninitialize();
-                                return 0;
-                            }
-                            auto b = GetTabBrowser(wb.Get());
-                            ComPtr<IShellView> v;
-                            if (b && SUCCEEDED(b->QueryActiveShellView(&v)) &&
-                                v && SameFolder(v.Get(), folder)) {
-                                // Capture again after navigation, before
-                                // retiring the source.
-                                auto late = CaptureSelection(source);
-                                if (!late.empty()) {
-                                    for (auto p : selection)
-                                        CoTaskMemFree(p);
-                                    selection = std::move(late);
-                                }
-                                ApplySelection(created, selection);
-                                complete = ActivateShellTab(created);
-                                break;
-                            }
-                        }
-                }
-                VariantClear(&target);
-            }
-        }
+        if (!browser || !shell)
+            return;
+        etr::NavigationSubscription events;
+        // Some Explorer builds expose no events. Missing events remain safe:
+        // at most seven scheduled direct-view checks, without reenumeration.
+        (void)events.Open(browser.Get());
+        if (FAILED(NavigateToPidl(browser.Get(), folder.get())))
+            return;
+        auto view =
+            WaitForNavigation(shell.Get(), folder.get(), events,
+                              std::min(deadline, GetTickCount64() + 4000));
+        events.Close();
+        if (!view || !g_presentations.Owns(source, token))
+            return;
+        auto late = CaptureSelection(catalog, source, folder.get());
+        if (!late)
+            return;
+        if (!late->children.empty())
+            selection = std::move(late);
+        complete = ApplySelection(view.Get(), folder.get(), *selection) &&
+                   ActivateShellTab(created) &&
+                   SameFolder(view.Get(), folder.get());
     }
-    for (auto p : selection)
-        CoTaskMemFree(p);
-    selection.clear();
-    CoTaskMemFree(folder);
-    folder = nullptr;
-    if (complete)
+    if (complete && !g_stop && g_presentations.Owns(source, token))
         (void)g_presentations.Retire(source, token);
-    else if (g_presentations.Owns(source, token))
-        AbortOwned();
-    CoUninitialize();
-    return 0;
 }
 
 // Hook: CreateWindowExW
-
-#include <windows.h>
-#include <string_view>
 
 namespace etr {
 enum class CreatedWindowRole { Other, ExplorerFrame, ExplorerTab };
@@ -1599,20 +2507,132 @@ inline CreatedWindowRole DescribeWindowClass(LPCWSTR name) noexcept {
 }
 
 class ConstructionVisibilityScope {
+   public:
+    struct DeferredShows final {
+        HWND window{};
+        DWORD threadId{}, processId{};
+        ULONG_PTR token{};
+        std::vector<int> commands;
+
+        [[nodiscard]] HANDLE Token() const noexcept {
+            return reinterpret_cast<HANDLE>(token);
+        }
+        [[nodiscard]] bool Owns() const noexcept {
+            DWORD process{};
+            const DWORD thread = ::GetWindowThreadProcessId(window, &process);
+            return thread != 0 && thread == threadId && process == processId &&
+                   ::GetPropW(
+                       window,
+                       WindowPresentationStore::ConstructionPropertyName) ==
+                       Token();
+        }
+        void Release() const noexcept {
+            if (Owns())
+                (void)::RemovePropW(
+                    window, WindowPresentationStore::ConstructionPropertyName);
+        }
+        void Replay(decltype(&ShowWindow) show) {
+            for (int command : commands) {
+                if (!Owns())
+                    break;
+                (void)show(window, command);
+            }
+            commands.clear();
+            Release();
+        }
+    };
+
+   private:
+    inline static thread_local ConstructionVisibilityScope* current_ = nullptr;
     inline static thread_local unsigned pending_ = 0;
+    inline static std::atomic<ULONG_PTR> nextToken_{1};
+    ConstructionVisibilityScope* previous_;
     bool active_;
+    std::unordered_map<HWND, DeferredShows> deferred_;
 
    public:
     explicit ConstructionVisibilityScope(bool active) noexcept
-        : active_(active) {
+        : previous_(current_), active_(active) {
+        current_ = this;
         if (active_)
             ++pending_;
     }
+    // Only restores TLS bookkeeping. The creation hook explicitly transfers
+    // or replays requests before leaving the scope; no window calls here.
     ~ConstructionVisibilityScope() {
         if (active_)
             --pending_;
+        current_ = previous_;
     }
     static bool Pending() noexcept { return pending_ != 0; }
+    static bool DeferShow(HWND window, int command) {
+        auto* scope = current_;
+        // A nested explicit/bypassed creation must not inherit suppression.
+        if (!scope || !scope->active_)
+            return false;
+        auto existing = scope->deferred_.find(window);
+        if (existing != scope->deferred_.end()) {
+            if (existing->second.Owns()) {
+                try {
+                    existing->second.commands.push_back(command);
+                    return true;
+                } catch (...) {
+                    return false;
+                }
+            }
+            scope->deferred_.erase(existing);
+        }
+        if (::GetPropW(window,
+                       WindowPresentationStore::ConstructionPropertyName))
+            return false;
+        DeferredShows record;
+        record.window = window;
+        record.threadId = ::GetWindowThreadProcessId(window, &record.processId);
+        if (!record.threadId)
+            return false;
+        ULONG_PTR value = nextToken_.load(std::memory_order_relaxed);
+        while (value != (std::numeric_limits<ULONG_PTR>::max)()) {
+            if (nextToken_.compare_exchange_weak(value, value + 1,
+                                                 std::memory_order_relaxed))
+                break;
+        }
+        if (value == (std::numeric_limits<ULONG_PTR>::max)())
+            return false;
+        record.token = value;
+        try {
+            record.commands.push_back(command);
+            auto [found, inserted] =
+                scope->deferred_.emplace(window, std::move(record));
+            if (!inserted)
+                return false;
+            if (!::SetPropW(window,
+                            WindowPresentationStore::ConstructionPropertyName,
+                            found->second.Token()) ||
+                !found->second.Owns()) {
+                found->second.Release();
+                scope->deferred_.erase(found);
+                return false;
+            }
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+    [[nodiscard]] DeferredShows* PendingFor(HWND window) {
+        const auto found = deferred_.find(window);
+        return found == deferred_.end() ? nullptr : &found->second;
+    }
+    void ReplayRemaining(decltype(&ShowWindow) show) {
+        if (active_) {
+            active_ = false;
+            --pending_;
+        }
+        // Calls concerning other windows during construction are delayed only
+        // until its return, then replayed rather than discarded.
+        for (auto& item : deferred_)
+            item.second.Replay(show);
+        deferred_.clear();
+    }
     ConstructionVisibilityScope(const ConstructionVisibilityScope&) = delete;
     ConstructionVisibilityScope& operator=(const ConstructionVisibilityScope&) =
         delete;
@@ -1621,6 +2641,7 @@ class ConstructionVisibilityScope {
 
 static decltype(&CreateWindowExW) g_nextWindowBuild = nullptr;
 static decltype(&ShowWindow) g_nextVisibilityChange = nullptr;
+static BOOL WINAPI RouteWindowVisibility(HWND window, int request);
 
 static HWND WINAPI RouteWindowCreation(DWORD extendedStyle,
                                        LPCWSTR classIdentifier,
@@ -1637,42 +2658,48 @@ static HWND WINAPI RouteWindowCreation(DWORD extendedStyle,
     const auto role = etr::DescribeWindowClass(classIdentifier);
     const bool explicitFrame =
         role == etr::CreatedWindowRole::ExplorerFrame && g_explicitWindowCall;
-    const bool permitRouting = role == etr::CreatedWindowRole::ExplorerFrame &&
+    const bool permitRouting = g_settings.mergeWindows &&
+                               role == etr::CreatedWindowRole::ExplorerFrame &&
                                !g_stop.load() && !explicitFrame &&
                                (GetAsyncKeyState(VK_SHIFT) & 0x8000) == 0;
     HWND destinationHint = permitRouting ? FastPrimary(nullptr) : nullptr;
-    HWND result = nullptr;
-    DWORD nativeError = ERROR_SUCCESS;
-    {
-        etr::ConstructionVisibilityScope constructing(destinationHint !=
-                                                      nullptr);
-        result = g_nextWindowBuild(extendedStyle, classIdentifier, caption,
-                                   style, left, top, width, height, owner, menu,
-                                   module, context);
-        nativeError = GetLastError();
-    }
+    etr::ConstructionVisibilityScope constructing(destinationHint != nullptr);
+    HWND result =
+        g_nextWindowBuild(extendedStyle, classIdentifier, caption, style, left,
+                          top, width, height, owner, menu, module, context);
+    const DWORD nativeError = GetLastError();
     if (result) {
         if (explicitFrame)
             g_explicitWindowCreated = true;
         if (role == etr::CreatedWindowRole::ExplorerTab && !g_stop.load())
             ScheduleNewTab(result);
         if (destinationHint) {
+            auto* deferred = constructing.PendingFor(result);
+            std::vector<int> noShows;
             auto lease =
-                !g_stop.load() ? g_presentations.Stage(result) : std::nullopt;
+                !g_stop.load() && (!deferred || deferred->Owns())
+                    ? g_presentations.Stage(
+                          result, deferred ? &deferred->commands : &noShows,
+                          deferred ? deferred->Token() : nullptr)
+                    : std::nullopt;
             if (lease) {
+                if (deferred)
+                    deferred->Release();
+                // Disable scope capture before any native replay, including
+                // synchronous ShowWindow calls from a native window callback.
+                constructing.ReplayRemaining(g_nextVisibilityChange);
                 auto* request = new (std::nothrow)
                     MergeRequest{result, destinationHint, 0, *lease};
                 if (request)
                     QueueRedirect(request);
                 else
                     (void)g_presentations.Reveal(result, *lease);
-            } else if (IsWindow(result)) {
-                // Construction may have deferred a native show request. A
-                // staging refusal must leave the newly built frame usable.
-                g_nextVisibilityChange(result, SW_SHOWNOACTIVATE);
             }
         }
     }
+    // Failure uses the same disabled-scope replay as success. Keep each
+    // construction token through replay so a recycled HWND is never targeted.
+    constructing.ReplayRemaining(g_nextVisibilityChange);
     SetLastError(nativeError);
     return result;
 }
@@ -1680,8 +2707,8 @@ static HWND WINAPI RouteWindowCreation(DWORD extendedStyle,
 static BOOL WINAPI RouteWindowVisibility(HWND window, int request) {
     if (!g_stop.load() &&
         etr::WindowPresentationStore::IsExplorerFrame(window) &&
-        (etr::ConstructionVisibilityScope::Pending() ||
-         g_presentations.IsStaged(window)))
+        (g_presentations.DeferShow(window, request) ||
+         etr::ConstructionVisibilityScope::DeferShow(window, request)))
         return TRUE;
     return g_nextVisibilityChange(window, request);
 }
@@ -1707,8 +2734,8 @@ static HRESULT STDMETHODCALLTYPE FindWindowSW_Hook(void* self,
         FindWindowSW_Original(self, loc, root, cls, frame, options, out);
     Wh_Log(L"FindWindowSW cls=%d options=%d vt=%d hr=%08lx out=%d", cls,
            options, loc ? loc->vt : 0, hr, out && *out ? 1 : 0);
-    if (SUCCEEDED(hr) && hr != S_FALSE && out && *out && cls != SWC_DESKTOP &&
-        (options & SWFO_NEEDDISPATCH) &&
+    if (g_settings.activateShellLookups && SUCCEEDED(hr) && hr != S_FALSE &&
+        out && *out && cls != SWC_DESKTOP && (options & SWFO_NEEDDISPATCH) &&
         !(GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
         auto browser = GetTabBrowser(*out);
         HWND tab = nullptr;
@@ -1723,6 +2750,25 @@ static HRESULT STDMETHODCALLTYPE FindWindowSW_Hook(void* self,
 }
 
 static bool InstallExplorerFrameHooks(bool shellService) {
+    if (!shellService) {
+        HMODULE shell = LoadLibraryExW(L"shell32.dll", nullptr,
+                                       LOAD_LIBRARY_SEARCH_SYSTEM32);
+        WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+            {{L"private: long __cdecl CDefView::_InvokeContextMenu(struct "
+              L"IContextMenu *,struct _CMINVOKECOMMANDINFOEX *)"},
+             &InvokeFolderMenu_Original,
+             InvokeFolderMenu_Hook,
+             true},
+        };
+        if (!shell || !WindhawkUtils::HookSymbols(shell, shell32DllHooks,
+                                                  std::size(shell32DllHooks)))
+            return false;
+        if (!InvokeFolderMenu_Original)
+            Wh_Log(
+                L"Folder-menu activation unavailable: exact menu symbol "
+                L"not found");
+    }
+
     HMODULE module = LoadLibraryExW(L"ExplorerFrame.dll", nullptr,
                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
@@ -1743,12 +2789,29 @@ static bool InstallExplorerFrameHooks(bool shellService) {
           L"_ITEMIDLIST_ABSOLUTE const *,bool)"},
          &FolderShow_Original,
          FolderShow_Hook},
+        {{L"public: virtual long __cdecl CExecuteFolder::Execute(void)"},
+         &FolderExecute_Original,
+         FolderExecute_Hook,
+         true},
+        {{L"public: virtual long __cdecl CExplorerFrame::AddTabAtIndex(struct "
+          L"_ITEMIDLIST_ABSOLUTE const *,enum NewTabEntryPoint,int,struct "
+          L"_GUID *)"},
+         &AddTabAtIndex_Original,
+         AddTabAtIndex_Hook,
+         true},
     };
     const size_t count = shellService ? 1 : std::size(shellHooks);
-    return WindhawkUtils::HookSymbols(module, shellHooks, count);
+    if (!WindhawkUtils::HookSymbols(module, shellHooks, count))
+        return false;
+    if (!shellService && !AddTabAtIndex_Original)
+        Wh_Log(
+            L"Explicit new-tab activation unavailable: exact AddTabAtIndex "
+            L"symbol not found");
+    return true;
 }
 
 BOOL Wh_ModInit() {
+    LoadSettings();
     wchar_t image[MAX_PATH]{};
     GetModuleFileNameW(nullptr, image, static_cast<DWORD>(std::size(image)));
     const bool shellService =
@@ -1765,15 +2828,17 @@ BOOL Wh_ModInit() {
         }
         return TRUE;
     }
+    if (!g_intentProperties.Initialize())
+        Wh_Log(
+            L"Cross-process intent channel initialization failed; local "
+            L"fallback only");
     if (!InstallExplorerFrameHooks(false))
         return FALSE;
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(CreateWindowExW),
-                            reinterpret_cast<void*>(RouteWindowCreation),
-                            reinterpret_cast<void**>(&g_nextWindowBuild)))
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, RouteWindowCreation,
+                                        &g_nextWindowBuild))
         return FALSE;
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(ShowWindow),
-                            reinterpret_cast<void*>(RouteWindowVisibility),
-                            reinterpret_cast<void**>(&g_nextVisibilityChange)))
+    if (!WindhawkUtils::SetFunctionHook(ShowWindow, RouteWindowVisibility,
+                                        &g_nextVisibilityChange))
         return FALSE;
     if (!StartRouter()) {
         StopRouter();
@@ -1785,7 +2850,12 @@ BOOL Wh_ModInit() {
 
 void Wh_ModBeforeUninit() {
     StopRouter();
+    g_intentProperties.Close();
 }
 void Wh_ModUninit() {
     CloseRouter();
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
 }
