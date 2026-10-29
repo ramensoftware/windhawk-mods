@@ -26,7 +26,7 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 
 * **Full 2D Canvas & Horizontal Scrolling:** Supports natural sideways panning with directional snapping (axis-lock) to prevent diagonal drift.
 * **Silky Smooth Motion Filtering:** Integrates a low-pass motion filter to eliminate sensor jitter and micro-stutter, delivering a fluid, trackpad-like glide.
-* **High-Resolution Micro-Scrolling:** Injects fractional wheel increments with exact screen coordinates for smooth, responsive scrolling across modern web browsers and desktop applications.
+* **High-Resolution Micro-Scrolling:** Emits fractional wheel increments (sub-notch deltas) to modern applications and browsers, enabling pixel-smooth, fluid scrolling without stepped jumps.
 * **Legacy Control Detection:** Automatically detects classic Win32 controls (such as standard list views, tree views, and edit boxes) and routes discrete, synchronous `WM_VSCROLL` and `WM_HSCROLL` line steps to preserve native line-by-line movement.
 * **Hands-Free Cruising:** Release the Right Mouse Button while continuing to hold `Ctrl` to let the page cruise automatically based on cursor offset along the active axis. Cruising disengages instantly on any keypress, mouse click, or `Ctrl` release.
 * **Dynamic Velocity Scaling:** Adapts scroll speed to your gesture—move slowly for fine line-by-line reading or flick quickly to glide across large documents.
@@ -37,11 +37,11 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
 
 ## Compatibility & Limitations
 
-* **Microsoft Store & Packaged Apps (Not Supported):** Drag-to-scroll does not work inside apps installed from the Microsoft Store (such as Calculator, Weather, or Windows Settings) or system surfaces like the Start Menu. These run in sandboxed containers (UWP/WinUI) with isolated input pipelines that block standard Win32 mouse hooks.
-* **Windows File Explorer Folder Views:** Modern File Explorer does not support fractional micro-scrolling; it scrolls using standard wheel notches and relies on the global Windows setting for scroll lines per notch (*Settings > Bluetooth & devices > Mouse > Lines to scroll at a time*). Dragging over Explorer moves content by the line count configured in your Windows settings.
-* **Older Desktop Utilities (Setting Adjustment):** While modern browsers and editors glide effortlessly with micro-scrolling, some legacy Win32 programs may stutter when receiving fractional wheel deltas. If scrolling feels jumpy or unresponsive in an older application, turn off **Ultra-Smooth Scrolling** in settings to use standard wheel notches instead.
-* **CAD, 3D & Creative Suites (App Conflicts):** Software that already uses `Ctrl + Right-Click` for canvas navigation (such as Blender, AutoCAD, or video games) will conflict with this gesture. You can exclude these specific programs under the mod's **Advanced** tab in Windhawk.
-* **Administrator Windows (UAC Limitation):** The mod cannot interact with applications running as Administrator unless Windhawk itself is also running with administrative privileges, due to Windows User Account Control security restrictions.
+* **UWP & WinUI Surfaces (Not Supported):** Modern system surfaces and packaged controls (such as the Start menu, Windows Settings, and Calculator) handle pointer input through isolated touch/pointer pipelines without classic `WM_RBUTTONDOWN` or `WM_MOUSEMOVE` messages, so the drag gesture is not detected over them.
+* **Windows File Explorer Folder Views:** Modern File Explorer folder views scroll using standard wheel notches governed by the system mouse settings (*Settings > Bluetooth & devices > Mouse > Lines to scroll at a time*), rather than fractional micro-scrolling.
+* **Portable Windhawk & Elevation:** The mod works in elevated applications when using the standard Windhawk service. If using portable Windhawk not started as Administrator, elevated windows cannot be targeted.
+* **Older Desktop Utilities (Setting Adjustment):** While modern browsers and editors glide effortlessly with micro-scrolling, some legacy Win32 programs may stutter when receiving fractional wheel deltas. If scrolling feels jumpy in an older application, turn off **Ultra-Smooth Scrolling** in settings to use standard wheel notches instead.
+* **CAD, 3D & Creative Suites:** Software with native `Ctrl + Right-Click` shortcuts (such as Blender, AutoCAD, or video games) will conflict with this gesture. You can exclude these specific programs under the mod's **Advanced** tab in Windhawk.
 
 ---
 
@@ -69,8 +69,8 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll smoothly and natural
   $name: "Continuous Cruising (Hold Ctrl)"
   $description: "Let go of Right-Click while still holding Ctrl to let the page keep scrolling on its own. Disengages on any click or keypress."
 - pixels_per_notch: 45
-  $name: "Scroll Sensitivity (Distance per Step)"
-  $description: "How far you need to move the mouse to scroll. Lower numbers scroll faster; higher numbers make it gentler and more controlled."
+  $name: "Drag Distance per Step (Pixels)"
+  $description: "Distance in pixels required to trigger one scroll step (minimum 10 px). Lower numbers scroll faster; higher numbers make it gentler and more controlled."
 - deadzone: 5
   $name: "Drag Deadzone (Pixels)"
   $description: "Small buffer before scrolling begins. Clicking without dragging still acts like a normal right-click."
@@ -171,25 +171,19 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
-void SendMaskedWheelAsync(int deltaY, POINT pt) {
+void SendMaskedWheelAsync(int deltaY) {
     INPUT input = {};
     input.type = INPUT_MOUSE;
-    input.mi.dx = MulDiv(pt.x, 65535, GetSystemMetrics(SM_CXSCREEN) - 1);
-    input.mi.dy = MulDiv(pt.y, 65535, GetSystemMetrics(SM_CYSCREEN) - 1);
-    input.mi.dwFlags =
-        MOUSEEVENTF_WHEEL | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+    input.mi.dwFlags = MOUSEEVENTF_WHEEL;
     input.mi.mouseData = static_cast<DWORD>(deltaY);
     input.mi.dwExtraInfo = MASK_EXTRA_INFO;
     SendInput(1, &input, sizeof(INPUT));
 }
 
-void SendMaskedHWheelAsync(int deltaX, POINT pt) {
+void SendMaskedHWheelAsync(int deltaX) {
     INPUT input = {};
     input.type = INPUT_MOUSE;
-    input.mi.dx = MulDiv(pt.x, 65535, GetSystemMetrics(SM_CXSCREEN) - 1);
-    input.mi.dy = MulDiv(pt.y, 65535, GetSystemMetrics(SM_CYSCREEN) - 1);
-    input.mi.dwFlags =
-        MOUSEEVENTF_HWHEEL | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+    input.mi.dwFlags = MOUSEEVENTF_HWHEEL;
     input.mi.mouseData = static_cast<DWORD>(deltaX);
     input.mi.dwExtraInfo = MASK_EXTRA_INFO;
     SendInput(1, &input, sizeof(INPUT));
@@ -242,31 +236,41 @@ int TakeWholeSteps(double& accum, int step) {
     }
     return delta;
 }
-
-void DispatchScroll(int deltaY, HWND hTarget, bool isDiscrete, POINT pt) {
-    if (isDiscrete && hTarget) {
-        WPARAM scrollCmd = (deltaY > 0) ? SB_LINEUP : SB_LINEDOWN;
-        int steps = std::max(1, std::abs(deltaY) / WHEEL_DELTA);
-        for (int i = 0; i < steps; ++i) {
-            SendMessageW(hTarget, WM_VSCROLL, scrollCmd, 0);
-        }
-        SendMessageW(hTarget, WM_VSCROLL, SB_ENDSCROLL, 0);
-        return;
+void SendScrollMessage(HWND hTarget, UINT msg, WPARAM cmd) {
+    // Synchronous on the window's own thread, never block on another thread.
+    if (GetWindowThreadProcessId(hTarget, nullptr) == GetCurrentThreadId()) {
+        SendMessageW(hTarget, msg, cmd, 0);
+    } else {
+        PostMessageW(hTarget, msg, cmd, 0);
     }
-    SendMaskedWheelAsync(deltaY, pt);
 }
 
-void DispatchHScroll(int deltaX, HWND hTarget, bool isDiscrete, POINT pt) {
+void DispatchScroll(int notchCount, HWND hTarget, bool isDiscrete) {
     if (isDiscrete && hTarget) {
-        WPARAM scrollCmd = (deltaX > 0) ? SB_LINERIGHT : SB_LINELEFT;
-        int steps = std::max(1, std::abs(deltaX) / WHEEL_DELTA);
-        for (int i = 0; i < steps; ++i) {
-            SendMessageW(hTarget, WM_HSCROLL, scrollCmd, 0);
+        WPARAM cmd = (notchCount > 0) ? SB_LINEUP : SB_LINEDOWN;
+        int count = std::abs(notchCount);
+        for (int i = 0; i < count; ++i) {
+            SendScrollMessage(hTarget, WM_VSCROLL, cmd);
         }
-        SendMessageW(hTarget, WM_HSCROLL, SB_ENDSCROLL, 0);
-        return;
+    } else {
+        int deltaY = notchCount * (g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK
+                                                           : WHEEL_DELTA);
+        SendMaskedWheelAsync(deltaY);
     }
-    SendMaskedHWheelAsync(deltaX, pt);
+}
+
+void DispatchHScroll(int notchCount, HWND hTarget, bool isDiscrete) {
+    if (isDiscrete && hTarget) {
+        WPARAM cmd = (notchCount > 0) ? SB_LINERIGHT : SB_LINELEFT;
+        int count = std::abs(notchCount);
+        for (int i = 0; i < count; ++i) {
+            SendScrollMessage(hTarget, WM_HSCROLL, cmd);
+        }
+    } else {
+        int deltaX = notchCount * (g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK
+                                                           : WHEEL_DELTA);
+        SendMaskedHWheelAsync(deltaX);
+    }
 }
 
 DWORD WINAPI CruiseWorkerThread(LPVOID) {
@@ -324,7 +328,7 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
                 int step = isDiscrete ? WHEEL_DELTA : chunk;
                 if (int delta = TakeWholeSteps(cruiseAccumY, step)) {
-                    DispatchScroll(delta, hTarget, isDiscrete, curPt);
+                    DispatchScroll(delta, hTarget, isDiscrete);
                 }
             }
 
@@ -340,7 +344,7 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
                 int step = isDiscrete ? WHEEL_DELTA : chunk;
                 if (int delta = TakeWholeSteps(cruiseAccumX, step)) {
-                    DispatchHScroll(delta, hTarget, isDiscrete, curPt);
+                    DispatchHScroll(delta, hTarget, isDiscrete);
                 }
             }
             if (WaitForSingleObject(g_stopEvent, 20) == WAIT_OBJECT_0)
@@ -559,8 +563,8 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                 g_smoothDx = (g_smoothDx * 0.70) + (rawDx * 0.30);
                 g_smoothDy = (g_smoothDy * 0.70) + (rawDy * 0.30);
 
-                double dx = g_smoothDx;
-                double dy = g_smoothDy;
+                double dx = rawDx;
+                double dy = rawDy;
 
                 // When axis_lock is OFF, g_activeAxis is DragAxis::Free,
                 // so neither dx nor dy will be zeroed out.
@@ -580,7 +584,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                 // jumps
                 double velocityFactor = 1.0;
                 if (g_settings.enable_velocity) {
-                    double dist = std::hypot(dx, dy);
+                    double dist = std::hypot(g_smoothDx, g_smoothDy);
                     velocityFactor = std::clamp(0.6 + (dist * 0.08), 0.6, 2.2);
                 }
 
@@ -591,7 +595,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
 
                     int step = isDiscrete ? WHEEL_DELTA : chunk;
                     if (int delta = TakeWholeSteps(g_accumY, step)) {
-                        DispatchScroll(delta, hTarget, isDiscrete, curPt);
+                        DispatchScroll(delta, hTarget, isDiscrete);
                     }
                 }
 
@@ -602,7 +606,7 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
 
                     int step = isDiscrete ? WHEEL_DELTA : chunk;
                     if (int delta = TakeWholeSteps(g_accumX, step)) {
-                        DispatchHScroll(delta, hTarget, isDiscrete, curPt);
+                        DispatchHScroll(delta, hTarget, isDiscrete);
                     }
                 }
 
