@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.115.2
+// @version         0.115.3
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -1518,59 +1518,82 @@ static bool FindVisualProxyAccessPath(void* function, size_t* ownerOffset,
     {
         return false;
     }
-    const std::regex loadPattern(
-        R"(^mov (r[a-z0-9]+), (?:qword ptr )?\[(r[a-z0-9]+)\s*\+\s*0x([0-9a-f]{1,8})\]$)",
-        std::regex_constants::icase);
-    BYTE* instruction = static_cast<BYTE*>(function);
-    std::string visualRegister;
-    size_t visualOffset = SIZE_MAX;
-    size_t bytesRead = 0;
-    for (int i = 0; i < 32 && bytesRead < 256; i++)
+    // Decode only a two-load getter, optionally guarded by test rax / jz or jnz.
+    // Both return paths must be proven; never scan past an unrelated function.
+    const BYTE* code = static_cast<const BYTE*>(function);
+    auto read = [&](size_t offset, void* output, size_t size)
     {
-        WH_DISASM_RESULT result = {};
-        if (!IsDwmExecutableAddress(instruction) || !Wh_Disasm(instruction, &result) ||
-            result.length == 0)
+        if (offset > 32 || size == 0 || size > 32 - offset ||
+            !IsReadableMemory(code + offset, size) ||
+            !IsDwmExecutableAddress(code + offset) ||
+            !IsDwmExecutableAddress(code + offset + size - 1))
+            return false;
+        memcpy(output, code + offset, size);
+        return true;
+    };
+    auto byteIs = [&](size_t offset, BYTE expected)
+    {
+        BYTE value;
+        return read(offset, &value, 1) && value == expected;
+    };
+    size_t cursor = 0;
+    auto load = [&](BYTE base, size_t& offset)
+    {
+        BYTE prefix[3];
+        if (!read(cursor, prefix, sizeof(prefix)) ||
+            prefix[0] != 0x48 || prefix[1] != 0x8B)
+            return false;
+        const bool wide = prefix[2] == (0x80 | base);
+        if (!wide && prefix[2] != (0x40 | base)) return false;
+        DWORD displacement = 0;
+        const size_t length = wide ? 4 : 1;
+        if (!read(cursor + 3, &displacement, length) ||
+            (!wide && displacement >= 0x80) ||
+            displacement > 0x400 || displacement % sizeof(void*) != 0)
+            return false;
+        offset = displacement;
+        cursor += 3 + length;
+        return true;
+    };
+    size_t owner, proxy;
+    if (!load(1, owner) || owner < 0x80) return false;  // [rcx + owner]
+    BYTE next[3];
+    if (!read(cursor, next, sizeof(next))) return false;
+    size_t zeroReturn = SIZE_MAX;
+    if (next[0] == 0x48 && next[1] == 0x85 && next[2] == 0xC0)
+    {
+        cursor += 3;
+        BYTE branch[2];
+        if (!read(cursor, branch, sizeof(branch)) ||
+            (branch[0] != 0x74 && branch[0] != 0x75) || branch[1] >= 0x80)
+            return false;
+        cursor += 2;
+        const size_t target = cursor + branch[1];
+        if (branch[0] == 0x74)
+            zeroReturn = target;
+        else
         {
-            break;
+            if (!byteIs(cursor++, 0xC3)) return false;
+            while (cursor < target)
+                if (!byteIs(cursor++, 0xCC)) return false;
+            if (cursor != target) return false;
         }
-        std::string text = result.text;
-        std::smatch match;
-        if (std::regex_match(text, match, loadPattern))
-        {
-            const std::string destination = match[1].str();
-            const std::string base = match[2].str();
-            size_t offset = std::stoull(match[3].str(), nullptr, 16);
-            if (base == "rcx" && offset >= 0x80 && offset <= 0x400 &&
-                offset % sizeof(void*) == 0)
-            {
-                visualRegister = destination;
-                visualOffset = offset;
-            }
-            else if (!visualRegister.empty() && destination == "rax" &&
-                     base == visualRegister && offset <= 0x80 &&
-                     offset % sizeof(void*) == 0)
-            {
-                if (*ownerOffset != SIZE_MAX &&
-                    (*ownerOffset != visualOffset || *proxyOffset != offset))
-                {
-                    return false;
-                }
-                *ownerOffset = visualOffset;
-                *proxyOffset = offset;
-            }
-        }
-        if (text == "ret")
-        {
-            break;
-        }
-        instruction += result.length;
-        bytesRead += result.length;
     }
-    return *ownerOffset != SIZE_MAX && *proxyOffset != SIZE_MAX;
+    if (!load(0, proxy) || proxy > 0x80 || !byteIs(cursor++, 0xC3))
+        return false;  // [rax + proxy], ret
+    if (zeroReturn != SIZE_MAX)
+    {
+        while (cursor < zeroReturn)
+            if (!byteIs(cursor++, 0xCC)) return false;
+        if (cursor != zeroReturn || !byteIs(cursor, 0xC3)) return false;
+    }
+    *ownerOffset = owner;
+    *proxyOffset = proxy;
+    return true;
 }
 
-// Follow only the exact native function's reachable local branches. Accept the
-// sprite member only when every reachable AttachBrush call has proven arguments.
+// Accept only straight pointer getters for the native transition wrapper pair.
+// Both getters must establish the same native object member.
 static bool DecodePointerGetter(void* function, size_t* objectOffset,
                                 size_t* memberOffset = nullptr)
 {
@@ -2916,6 +2939,15 @@ static bool InitializeDwmHooks()
     if (g_visualGetVisualProxyForStructure &&
         DecodePointerGetter(reinterpret_cast<void*>(g_visualGetVisualProxyForStructure), &accessorOffset))
         g_visualProxyOffset = accessorOffset;
+    g_transitionVisualProxyOffset = FindTransitionVisualProxyOffset(
+        g_transitionWrapperGetVisualWeakFunction, g_transitionWrapperGetVisualProxyWeakFunction);
+    if (!g_visualGetVisualProxyForStructure && canvasPathDecoded &&
+        g_transitionVisualProxyOffset != SIZE_MAX &&
+        g_transitionVisualProxyOffset != g_visualProxyOffset)
+    {
+        Wh_Log(L"DWM compatibility: Canvas and transition getters disagree on the visual proxy member");
+        return false;
+    }
     if (!g_visualGetVisualProxyForStructure && g_visualProxyOffset == SIZE_MAX)
     {
         Wh_Log(L"DWM compatibility: complete-window proxy unavailable; refusing inner Canvas fallback");
@@ -2924,8 +2956,6 @@ static bool InitializeDwmHooks()
     Wh_Log(L"DWM complete-window access: visualAccessor=%s canvasDecode=%s proxyOffset=0x%zx",
            g_visualGetVisualProxyForStructure ? L"available" : L"unavailable; using decoded member",
            canvasPathDecoded ? L"verified" : L"unavailable", g_visualProxyOffset);
-    g_transitionVisualProxyOffset = FindTransitionVisualProxyOffset(
-        g_transitionWrapperGetVisualWeakFunction, g_transitionWrapperGetVisualProxyWeakFunction);
     Wh_Log(L"Native transition visual: %s proxyOffset=0x%zx",
            hasExactTopLevelWindow3DVtable && g_transitionVisualProxyOffset != SIZE_MAX
                ? L"verified"
