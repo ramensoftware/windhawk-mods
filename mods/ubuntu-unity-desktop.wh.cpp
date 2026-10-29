@@ -6,9 +6,8 @@
 // @author          dion
 // @github          https://github.com/dismedan-dion
 // @include         explorer.exe
-// @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -ldwmapi -lcomctl32 -lgdi32 -lversion -lpdh -lwinhttp -lruntimeobject
+// @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -ldwmapi -lcomctl32 -lgdi32 -lshcore -lpdh -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -41,7 +40,7 @@ program to install, and turning the mod off gives you the normal Windows desktop
 
 **The Dash (Start menu)**
 * Opens with the Windows key, Ctrl+Esc or the button at the top of the launcher.
-* Type to search apps, settings and files; lenses and filters like Unity's; widgets (weather, system, ...) on Home.
+* Type to search apps, settings and files; lenses and filters like Unity's; widgets (clock, music, weather app, system, disks) on Home.
 * Resize it with the grip in its corner (the size is remembered) or maximize it.
 
 **And more**
@@ -53,15 +52,22 @@ program to install, and turning the mod off gives you the normal Windows desktop
 
 Everything can be adjusted in the mod's settings, grouped by panel, launcher, Dash, look, windows and Windows
 integration: sizes, opacity, glass, clock format, which indicators show, animation speed, tabs in the panel, and
-whether the Windows taskbar and Start menu are hidden.
+whether the Windows taskbar is hidden.
 
 ## Good to know
 
-* Windows 11, 64-bit. The shell lives on the main screen; other screens keep their windows as they are.
-* The Windows taskbar is hidden while the mod runs and comes back as it was when you turn the mod off.
+* Windows 11, 64-bit. The shell lives on the main screen. With the taskbar hidden, other screens have no taskbar
+  (and no launcher) at all; their windows stay where they are.
+* **The taskbar's "automatically hide" setting is turned on while the mod runs** (that gives its room on the screen
+  back) and is set back as it was when you turn the mod off. If Explorer is killed or crashes and the mod is
+  removed before it runs again, it may stay on: switch it off under Settings > Personalization > Taskbar.
+* The Windows key and Ctrl+Esc open the Dash; shortcuts like Win+E, Win+R and Win+Shift+S keep working. If
+  Windows' own Start menu opens anyway, the mod closes it and shows the Dash.
 * Tabs in the panel read the window's tabs through Windows' accessibility interface. They work best with
-  Chromium browsers (Brave, Chrome, Edge, Vivaldi, Opera).
-* The Windows key opens the Dash; shortcuts like Win+E, Win+R and Win+Shift+S keep working.
+  Chromium browsers (Brave, Chrome, Edge, Vivaldi, Opera). The new-tab button and the Discord call buttons are
+  found by their names in English and Dutch apps.
+* The shell's texts are in English, or in Dutch when Windows is.
+* The Dash's weather card opens Windows' own Weather app: the mod itself never connects to the internet.
 */
 // ==/WindhawkModReadme==
 
@@ -82,9 +88,9 @@ whether the Windows taskbar and Start menu are hidden.
   - clock: time
     $name: Clock
     $options:
-    - time: Time (01:08)
-    - dayTime: Day and time (wo 01:08)
-    - dateTime: Day, date and time (wo 29 okt 01:08)
+    - time: Time (13:08)
+    - dayTime: Day and time (Wed 13:08)
+    - dateTime: Day, date and time (Wed 29 Oct 13:08)
   - showTray: true
     $name: Arrow for apps running in the background (tray icons)
   - showVolume: true
@@ -131,8 +137,6 @@ whether the Windows taskbar and Start menu are hidden.
     $description: Lower = more glass
   - showWidgets: true
     $name: Widgets on the Home page
-  - weatherCity: ""
-    $name: City for the weather widget (empty = no weather)
   $name: Dash (Start menu)
 - look:
   - tint: accent
@@ -175,17 +179,7 @@ whether the Windows taskbar and Start menu are hidden.
     $name: Hide the Windows taskbar
   - startOpensDash: true
     $name: Windows key / Ctrl+Esc open the Dash
-  - hideStartMenu: true
-    $name: Make Windows' own Start menu invisible
   $name: Windows integration
-- debug:
-  - log: false
-    $name: Write a debug log
-    $description: unity-shell.log in the mod's storage folder
-  - logFolder: ""
-    $name: Debug log folder (optional)
-    $description: Write the debug log here instead, for example a shared folder
-  $name: Troubleshooting
 */
 // ==/WindhawkModSettings==
 
@@ -196,9 +190,8 @@ whether the Windows taskbar and Start menu are hidden.
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
-#include <propkey.h>
-#include <propvarutil.h>
 #include <dwmapi.h>
+#include <shellscalingapi.h>
 #include <uiautomation.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -208,7 +201,6 @@ whether the Windows taskbar and Start menu are hidden.
 #include <audiopolicy.h>
 #include <tlhelp32.h>
 #include <pdh.h>
-#include <winhttp.h>
 #include <windhawk_utils.h>
 
 #undef GetCurrentTime
@@ -218,15 +210,13 @@ whether the Windows taskbar and Start menu are hidden.
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Storage.Search.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <xamlom.h>
-#include <ocidl.h>
 #include <atomic>
 
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -234,10 +224,12 @@ whether the Windows taskbar and Start menu are hidden.
 // settings, logging, small helpers
 // ============================================================================================================
 
+static bool g_dutch;   // Windows is in Dutch: the shell too (see Tr)
+
 struct Settings {
     int panelH, iconSize, dashW, dashH, opacity, panelOpacity, dashOpacity;
-    std::wstring tint, weatherCity, logFolder, panelStyle, glass, clock, doubleClick;
-    bool hideTaskbar, startOpensDash, debugLog, showWidgets, hideStartMenu, mergeMaximized, mergeExplorer, liftTitleBars;
+    std::wstring tint, panelStyle, glass, clock, doubleClick;
+    bool hideTaskbar, startOpensDash, showWidgets, mergeMaximized, mergeExplorer, liftTitleBars;
     bool showTray, showVolume, showMessages, showNetwork, showLanguage;   // the panel's indicators
     bool plainTiles, hoverZoom, mediaControls, discordControls;           // the launcher
     bool windowEffects, tabIcons, fullscreenHides;
@@ -245,13 +237,12 @@ struct Settings {
 } g_set;
 
 static std::wstring StringSetting(const wchar_t* name, const wchar_t* fallback) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring out = v && *v ? v : fallback;
-    Wh_FreeStringSetting(v);
-    return out;
+    auto v = WindhawkUtils::StringSetting::make(name);
+    return v.get() && *v.get() ? std::wstring(v.get()) : std::wstring(fallback);
 }
 
 static void LoadSettings() {
+    g_dutch = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_DUTCH;
     g_set.panelH = std::clamp(Wh_GetIntSetting(L"panel.height"), 20, 40);
     g_set.panelStyle = StringSetting(L"panel.style", L"auto");
     g_set.panelOpacity = std::clamp(Wh_GetIntSetting(L"panel.opacity"), 20, 100);
@@ -277,8 +268,6 @@ static void LoadSettings() {
     g_set.dashH = std::clamp(Wh_GetIntSetting(L"dash.height"), 350, 1400);
     g_set.dashOpacity = std::clamp(Wh_GetIntSetting(L"dash.opacity"), 20, 100);
     g_set.showWidgets = Wh_GetIntSetting(L"dash.showWidgets") != 0;
-    g_set.weatherCity = StringSetting(L"dash.weatherCity", L"");
-    if (g_set.weatherCity.empty()) g_set.weatherCity = StringSetting(L"weatherCity", L"");   // from before the settings had groups
 
     g_set.tint = StringSetting(L"look.tint", L"accent");
     g_set.glass = StringSetting(L"look.glass", L"blur");
@@ -294,36 +283,137 @@ static void LoadSettings() {
 
     g_set.hideTaskbar = Wh_GetIntSetting(L"system.hideTaskbar") != 0;
     g_set.startOpensDash = Wh_GetIntSetting(L"system.startOpensDash") != 0;
-    g_set.hideStartMenu = Wh_GetIntSetting(L"system.hideStartMenu") != 0;
 
-    g_set.debugLog = Wh_GetIntSetting(L"debug.log") != 0;
-    g_set.logFolder = StringSetting(L"debug.logFolder", L"");
 }
 
-static void Debug(const wchar_t* fmt, ...) {
-    wchar_t line[600];
-    va_list args;
-    va_start(args, fmt);
-    vswprintf(line, 600, fmt, args);
-    va_end(args);
-    Wh_Log(L"%s", line);
-    if (!g_set.debugLog) return;
-    wchar_t dir[MAX_PATH];
-    if (!g_set.logFolder.empty()) wcsncpy_s(dir, g_set.logFolder.c_str(), _TRUNCATE);
-    else if (!Wh_GetModStoragePath(dir, MAX_PATH)) return;
-    CreateDirectoryW(dir, nullptr);
-    std::wstring file = std::wstring(dir) + L"\\unity-shell.log";
-    // plain write access and a seek to the end: append-only access fails on some network and VM shares
-    HANDLE h = CreateFileW(file.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, 0, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    SetFilePointer(h, 0, nullptr, FILE_END);
-    SYSTEMTIME t;
-    GetLocalTime(&t);
-    char out[800];
-    int n = snprintf(out, sizeof(out), "%02d:%02d:%02d.%03d %ls\r\n", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, line);
-    DWORD written;
-    if (n > 0) WriteFile(h, out, (DWORD)std::min(n, (int)sizeof(out) - 1), &written, nullptr);
-    CloseHandle(h);
+// the shell's texts: English, or Dutch when Windows itself is in Dutch. The texts are written in Dutch (the
+// filters, app kinds and settings use them as keys too) and shown through Tr, which gives the English one
+static const wchar_t* Tr(const wchar_t* nl) {
+    if (g_dutch) return nl;
+    static const std::map<std::wstring, const wchar_t*> english = {
+        {L"Zoek op je computer", L"Search your computer"},
+        {L"Prullenbak", L"Trash"},
+        {L"Uit groep halen", L"Remove from group"},
+        {L"Openen", L"Open"},
+        {L"Nieuw venster", L"New window"},
+        {L"Als administrator uitvoeren", L"Run as administrator"},
+        {L"Bestandslocatie openen", L"Open file location"},
+        {L"App-instellingen", L"App settings"},
+        {L"Verwijderen", L"Uninstall"},
+        {L"Naam wijzigen", L"Rename"},
+        {L"Groep opheffen", L"Ungroup"},
+        {L"Uit launcher verwijderen", L"Remove from launcher"},
+        {L"Losmaken van launcher", L"Unpin from launcher"},
+        {L"Vastmaken aan launcher", L"Pin to launcher"},
+        {L"Alle vensters sluiten", L"Close all windows"},
+        {L"Venster sluiten", L"Close window"},
+        {L"Zoek op je computer en in instellingen", L"Search your computer and settings"},
+        {L"Zoek applicaties", L"Search applications"},
+        {L"Zoek bestanden en mappen", L"Search files and folders"},
+        {L"Zoek video's", L"Search videos"},
+        {L"Zoek muziek", L"Search music"},
+        {L"Zoek foto's", L"Search photos"},
+        {L"Beeldscherm", L"Display"},
+        {L"Nachtlampje", L"Night light"},
+        {L"Grafische instellingen", L"Graphics"},
+        {L"Geluid", L"Sound"},
+        {L"Volumemixer", L"Volume mixer"},
+        {L"Meldingen", L"Notifications"},
+        {L"Energie en batterij", L"Power & battery"},
+        {L"Opslag", L"Storage"},
+        {L"Klembord", L"Clipboard"},
+        {L"Projecteren naar deze pc", L"Projecting to this PC"},
+        {L"Systeeminfo", L"About"},
+        {L"Herstel", L"Recovery"},
+        {L"Activering", L"Activation"},
+        {L"Bluetooth en apparaten", L"Bluetooth & devices"},
+        {L"Printers en scanners", L"Printers & scanners"},
+        {L"Muis", L"Mouse"},
+        {L"Camera's", L"Cameras"},
+        {L"Automatisch afspelen", L"AutoPlay"},
+        {L"Netwerk en internet", L"Network & internet"},
+        {L"Mobiele hotspot", L"Mobile hotspot"},
+        {L"Vliegtuigmodus", L"Airplane mode"},
+        {L"Achtergrond", L"Background"},
+        {L"Kleuren", L"Colors"},
+        {L"Thema's", L"Themes"},
+        {L"Vergrendelingsscherm", L"Lock screen"},
+        {L"Taakbalk", L"Taskbar"},
+        {L"Lettertypen", L"Fonts"},
+        {L"Geïnstalleerde apps", L"Installed apps"},
+        {L"Standaard-apps", L"Default apps"},
+        {L"Opstarten", L"Startup"},
+        {L"Optionele onderdelen", L"Optional features"},
+        {L"Uw info", L"Your info"},
+        {L"Aanmeldingsopties", L"Sign-in options"},
+        {L"E-mail en accounts", L"Email & accounts"},
+        {L"Datum en tijd", L"Date & time"},
+        {L"Taal en regio", L"Language & region"},
+        {L"Toetsenbord", L"Keyboard"},
+        {L"Spraak", L"Speech"},
+        {L"Gamemodus", L"Game Mode"},
+        {L"Opnames", L"Captures"},
+        {L"Tekstgrootte", L"Text size"},
+        {L"Muisaanwijzer en aanraken", L"Mouse pointer and touch"},
+        {L"Vergrootglas", L"Magnifier"},
+        {L"Kleurfilters", L"Color filters"},
+        {L"Privacy en beveiliging", L"Privacy & security"},
+        {L"Locatie", L"Location"},
+        {L"Microfoon-privacy", L"Microphone privacy"},
+        {L"Camera-privacy", L"Camera privacy"},
+        {L"Windows-beveiliging", L"Windows Security"},
+        {L"Voor ontwikkelaars", L"For developers"},
+        {L"Configuratiescherm", L"Control Panel"},
+        {L"Apparaatbeheer", L"Device Manager"},
+        {L"Taakbeheer", L"Task Manager"},
+        {L"Schijfbeheer", L"Disk Management"},
+        {L"Systeemeigenschappen", L"System Properties"},
+        {L"Energiebeheer (klassiek)", L"Power Options (classic)"},
+        {L"Netwerkverbindingen", L"Network Connections"},
+        {L"Geluid (klassiek)", L"Sound (classic)"},
+        {L"Grafisch", L"Graphics"},
+        {L"Ontwikkeling", L"Development"},
+        {L"Kantoor", L"Office"},
+        {L"Bureau-accessoires", L"Accessories"},
+        {L"Aanpassen", L"Customization"},
+        {L"Overig", L"Other"},
+        {L"Systeem", L"System"},
+        {L"Groep", L"Group"},
+        {L"Categorieën", L"Categories"},
+        {L"Applicaties", L"Applications"},
+        {L"Instellingen", L"Settings"},
+        {L"Bestanden en mappen", L"Files & folders"},
+        {L"Bronnen", L"Sources"},
+        {L"Laatst gewijzigd", L"Last modified"},
+        {L"Afgelopen 7 dagen", L"Last 7 days"},
+        {L"Afgelopen 30 dagen", L"Last 30 days"},
+        {L"Afgelopen jaar", L"Last year"},
+        {L"Documenten", L"Documents"},
+        {L"Mappen", L"Folders"},
+        {L"Afbeeldingen", L"Images"},
+        {L"Video's", L"Videos"},
+        {L"Presentaties", L"Presentations"},
+        {L"Recente bestanden", L"Recent files"},
+        {L"Recent gebruikt", L"Recently used"},
+        {L"Muziek", L"Music"},
+        {L"Foto's", L"Photos"},
+        {L"Vandaag", L"Today"},
+        {L"Nu aan het spelen", L"Now playing"},
+        {L"Er speelt niets", L"Nothing playing"},
+        {L"%.2ls  %.0f GB vrij", L"%.2ls  %.0f GB free"},
+        {L"Weer", L"Weather"},
+        {L"Open de Weer-app", L"Open the Weather app"},
+        {L"Weer-app installeren", L"Install the Weather app"},
+        {L"Resultaten filteren  ▾", L"Filter results  ▾"},
+        {L"Resultaten filteren  ▸", L"Filter results  ▸"},
+        {L"Minder tonen", L"Show less"},
+        {L"Alles tonen", L"Show all"},
+        {L"Zoeken…", L"Search…"},
+        {L"Sorry, er is niets gevonden.", L"Sorry, nothing was found."},
+        {L"Geen filters voor deze lens.", L"No filters for this lens."}
+    };
+    auto it = english.find(nl);
+    return it != english.end() ? it->second : nl;
 }
 
 static std::wstring Lower(std::wstring s) {
@@ -364,7 +454,7 @@ static HINSTANCE ModInstance();
 static bool g_hiddenForFullscreen; // a full-screen game or video is in front: the shell steps aside
 static int g_awayPanel, g_awayLauncher;   // pixels the panel / launcher are slid out of sight (stepping aside)
 // now playing (filled by the media thread, see MediaWorker)
-static CRITICAL_SECTION g_mediaLock;
+static std::mutex g_mediaLock;
 static bool g_mediaReady;          // the lock exists
 static std::wstring g_mTitle, g_mArtist, g_mSource;   // g_mSource: the player's app id
 static bool g_mHas, g_mPlaying;
@@ -375,7 +465,6 @@ static HANDLE g_mediaWake, g_mediaThread;
 
 enum : UINT {
     WM_APP_TOGGLEDASH = WM_APP + 1,
-    WM_APP_APPBAR,
     WM_APP_REFRESH,
 };
 
@@ -383,7 +472,6 @@ enum : UINT_PTR {
     TIMER_REFRESH = 1,
     TIMER_CLOCK,
     TIMER_SOON,
-    TIMER_DASHFADE,
     TIMER_FILESEARCH,
     TIMER_WIDGETS,
     TIMER_TASKBAR,
@@ -523,22 +611,37 @@ struct Surface {
 
 static Surface g_panelS, g_launcherS, g_dashS;
 
+static std::map<std::wstring, IDWriteTextFormat*> g_formats;   // see Text
+
 static void Text(Surface& s, const std::wstring& text, D2D1_RECT_F r, float size, float alpha,
                  DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING, bool wrap = false,
                  const wchar_t* family = nullptr, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL, Rgb colour = {1, 1, 1}) {
-    IDWriteTextFormat* fmt = nullptr;
-    if (FAILED(g_dw->CreateTextFormat(family ? family : g_fontFamily.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-                                      DWRITE_FONT_STRETCH_NORMAL, size, L"nl-nl", &fmt))) return;
-    fmt->SetTextAlignment(align);
-    fmt->SetParagraphAlignment(wrap ? DWRITE_PARAGRAPH_ALIGNMENT_NEAR : DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    fmt->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
-    DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
-    IDWriteInlineObject* ellipsis = nullptr;
-    g_dw->CreateEllipsisTrimmingSign(fmt, &ellipsis);
-    fmt->SetTrimming(&trim, ellipsis);
+    // the format is made once per look (font, size, weight, alignment, wrapping) and kept: animations draw a lot of
+    // text, many times a second
+    const wchar_t* font = family ? family : g_fontFamily.c_str();
+    wchar_t key[160];
+    swprintf(key, 160, L"%s|%.2f|%d|%d|%d", font, size, (int)weight, (int)align, wrap ? 1 : 0);
+    IDWriteTextFormat*& fmt = g_formats[key];
+    if (!fmt) {
+        if (FAILED(g_dw->CreateTextFormat(font, nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"", &fmt)) || !fmt) {
+            g_formats.erase(key);
+            return;
+        }
+        fmt->SetTextAlignment(align);
+        fmt->SetParagraphAlignment(wrap ? DWRITE_PARAGRAPH_ALIGNMENT_NEAR : DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        fmt->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
+        DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+        IDWriteInlineObject* ellipsis = nullptr;
+        g_dw->CreateEllipsisTrimmingSign(fmt, &ellipsis);
+        fmt->SetTrimming(&trim, ellipsis);   // the format keeps its own reference
+        Release(ellipsis);
+    }
     s.rt->DrawText(text.c_str(), (UINT32)text.size(), fmt, r, s.Brush(colour, alpha), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    Release(ellipsis);
-    Release(fmt);
+}
+
+static void FreeFormats() {
+    for (auto& kv : g_formats) Release(kv.second);
+    g_formats.clear();
 }
 
 static void Glyph(Surface& s, const wchar_t* glyph, D2D1_RECT_F r, float size, float alpha, Rgb colour = {1, 1, 1}) {
@@ -714,7 +817,7 @@ static void LoadApps() {
     folder->Release();
     std::sort(g_apps.begin(), g_apps.end(), [](const App& a, const App& b) { return a.nameLower < b.nameLower; });
     g_appsAt = GetTickCount();
-    Debug(L"%d apps", (int)g_apps.size());
+    Wh_Log(L"%d apps", (int)g_apps.size());
 }
 
 static std::wstring ProcessPath(DWORD pid) {
@@ -1022,7 +1125,7 @@ static void Launch(const std::wstring& what, const wchar_t* verb = nullptr) {
     sei.lpVerb = verb;
     sei.lpFile = what.c_str();
     sei.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&sei)) Debug(L"could not open %s (%u)", what.c_str(), GetLastError());
+    if (!ShellExecuteExW(&sei)) Wh_Log(L"could not open %s (%u)", what.c_str(), GetLastError());
 }
 
 // windows looked at again a moment after a restore or minimize: some apps ignore the polite way
@@ -1045,14 +1148,13 @@ static void CheckWindowsNow() {
 // bring a window to the front with the focus, restoring it when minimized (the app's way: borrow the input of the
 // window in front for a moment, so Windows lets us hand the focus over)
 static void Activate(HWND hwnd) {
-    HWND fg = GetForegroundWindow();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0, me = GetCurrentThreadId();
-    bool attached = fgThread && fgThread != me && AttachThreadInput(me, fgThread, TRUE);
     bool wasMinimized = IsIconic(hwnd);
     if (wasMinimized) ShowWindowAsync(hwnd, SW_RESTORE);
-    BringWindowToTop(hwnd);
+    // an empty input event first: Windows then lets the shell hand the focus over, even when the last real input
+    // wasn't for one of its windows (the Dash opened by the Windows key)
+    INPUT none = {};
+    SendInput(1, &none, sizeof(none));
     SetForegroundWindow(hwnd);
-    if (attached) AttachThreadInput(me, fgThread, FALSE);
     if (wasMinimized) CheckLater(hwnd, false);
 }
 
@@ -1060,10 +1162,6 @@ static void Activate(HWND hwnd) {
 static void Minimize(HWND hwnd) {
     PostMessageW(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
     CheckLater(hwnd, true);
-}
-
-static void ShowDesktop() {
-    if (g_tray) PostMessageW(g_tray, WM_COMMAND, 407, 0);   // the taskbar's own "show desktop"
 }
 
 static bool IsPinned(const std::wstring& launch) {
@@ -1136,7 +1234,10 @@ static bool LightTheme() {   // the light panel: chosen, or Windows in light mod
 }
 
 static void Measure() {
-    g_scale = GetDpiForSystem() / 96.0;
+    // the main screen's scale as it is now (the system DPI stays what it was at sign-in)
+    UINT dx = 96, dy = 96;
+    if (FAILED(GetDpiForMonitor(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), MDT_EFFECTIVE_DPI, &dx, &dy))) dx = GetDpiForSystem();
+    g_scale = dx / 96.0;
     g_screen = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
 }
 
@@ -1158,9 +1259,9 @@ static void DecorRestore(HWND h) {
     if (it == g_stripped.end()) return;
     LONG style = it->second;
     g_stripped.erase(it);
-    if (!IsWindow(h)) return;
+    if (!IsWindow(h) || IsHungAppWindow(h)) return;   // a hung app would hold the shell (and its shutdown) up
     SetWindowLongW(h, GWL_STYLE, GetWindowLongW(h, GWL_STYLE) | (style & WS_CAPTION));
-    SetWindowPos(h, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(h, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
 }
 
 static void DecorRestoreAll() {
@@ -1202,7 +1303,7 @@ struct TabInfo {
     std::vector<uint32_t> icon;
     uint32_t iconHash = 0;
 };
-static CRITICAL_SECTION g_tabLock;
+static std::mutex g_tabLock;
 static bool g_tabLockReady;
 static HWND g_tabTarget, g_tabOf;      // whose tabs the reader reads (the shell sets it) / whose these are
 static std::vector<TabInfo> g_tabs;
@@ -1216,12 +1317,28 @@ static const UINT WM_APP_DISCORD = WM_APP + 62;   // news from the Discord threa
 static std::map<HWND, WINDOWPLACEMENT> g_fake;   // windows the shell maximizes itself, and how they were before
 static std::map<HWND, int> g_fakeTries;          // corrections so far (an app that keeps moving is left alone)
 static const CLSID kClsidUIA = {0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+static const CLSID kClsidUIA8 = {0xe22ad333, 0xb25f, 0x460c, {0x83, 0xd0, 0x05, 0x81, 0x10, 0x73, 0x95, 0xc9}};
+
+// UI Automation for a reader thread, with short timeouts: a hung app answers nothing, and the call gives up instead
+// of holding the thread (and the shell's shutdown) up
+static IUIAutomation* MakeUia() {
+    IUIAutomation* uia = nullptr;
+    if (FAILED(CoCreateInstance(kClsidUIA8, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia)) || !uia)
+        CoCreateInstance(kClsidUIA, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia);
+    IUIAutomation2* uia2 = nullptr;
+    if (uia && SUCCEEDED(uia->QueryInterface(__uuidof(IUIAutomation2), (void**)&uia2)) && uia2) {
+        uia2->put_ConnectionTimeout(1500);
+        uia2->put_TransactionTimeout(2500);
+        uia2->Release();
+    }
+    return uia;
+}
 
 // the tabs' site icons: the window's tab bar drawn into a bitmap (PrintWindow draws it even out of sight above the
 // screen), each tab's icon found left in it and cut out, its background taken away ("colour to alpha")
 static void CaptureTabIcons(HWND w, std::vector<TabInfo>& tabs, const std::vector<RECT>& rects) {
     RECT wr;
-    if (!GetWindowRect(w, &wr) || tabs.empty()) return;
+    if (IsHungAppWindow(w) || !GetWindowRect(w, &wr) || tabs.empty()) return;   // PrintWindow waits on the app
     int bottom = 0;
     for (auto& r : rects) bottom = std::max(bottom, (int)(r.bottom - wr.top));
     int W = wr.right - wr.left, H = std::min(bottom + 2, 400);
@@ -1293,8 +1410,7 @@ static void CaptureTabIcons(HWND w, std::vector<TabInfo>& tabs, const std::vecto
 // the reader: its own thread, as UI Automation asks the other app and waits for its answer
 static DWORD WINAPI TabWorker(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    IUIAutomation* uia = nullptr;
-    CoCreateInstance(kClsidUIA, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia);
+    IUIAutomation* uia = MakeUia();
     IUIAutomationCondition *isStrip = nullptr, *isTab = nullptr, *isButton = nullptr;
     if (uia) {
         VARIANT v;
@@ -1312,11 +1428,11 @@ static DWORD WINAPI TabWorker(LPVOID) {
     while (!g_tabStop) {
         WaitForSingleObject(g_tabWake, 600);
         if (g_tabStop) break;
-        EnterCriticalSection(&g_tabLock);
+        g_tabLock.lock();
         HWND target = g_tabTarget;
         auto cmds = g_tabCmds;
         g_tabCmds.clear();
-        LeaveCriticalSection(&g_tabLock);
+        g_tabLock.unlock();
         if (!uia || !isStrip || !target || !IsWindow(target)) continue;
         if (target != cached) {   // find the window's tab strip, and its new-tab button
             Release(strip);
@@ -1483,16 +1599,16 @@ static DWORD WINAPI TabWorker(LPVOID) {
         if (lastKey.empty()) {   // first look at this window: what was found (for windows whose tabs don't show up)
             wchar_t cls[64] = {};
             GetClassNameW(target, cls, 64);
-            Debug(L"tab reader: %s: strip %d, %d tabs, new-tab button %d, bar bottom %d", cls, strip != nullptr, (int)tabs.size(), newTab != nullptr, (int)box.bottom);
+            Wh_Log(L"tab reader: %s: strip %d, %d tabs, new-tab button %d, bar bottom %d", cls, strip != nullptr, (int)tabs.size(), newTab != nullptr, (int)box.bottom);
         }
         lastKey = key;
-        EnterCriticalSection(&g_tabLock);
+        g_tabLock.lock();
         g_tabOf = target;
         g_tabs = tabs;
         g_tabStrip = strip != nullptr;
         g_tabNew = newTab != nullptr;
         g_tabBarBottom = box.bottom;
-        LeaveCriticalSection(&g_tabLock);
+        g_tabLock.unlock();
         if (g_host) PostMessageW(g_host, WM_APP_TABS, 0, 0);
     }
     Release(strip);
@@ -1506,15 +1622,14 @@ static DWORD WINAPI TabWorker(LPVOID) {
 }
 
 static void TabCommand(int kind, int index) {
-    EnterCriticalSection(&g_tabLock);
+    g_tabLock.lock();
     g_tabCmds.push_back({kind, index});
-    LeaveCriticalSection(&g_tabLock);
+    g_tabLock.unlock();
     SetEvent(g_tabWake);
 }
 
 static void StartTabReader() {
     if (!g_tabLockReady) {
-        InitializeCriticalSection(&g_tabLock);
         g_tabLockReady = true;
     }
     g_tabStop = false;
@@ -1526,7 +1641,7 @@ static void StopTabReader() {
     g_tabStop = true;
     if (g_tabWake) SetEvent(g_tabWake);
     if (g_tabThread) {
-        WaitForSingleObject(g_tabThread, 5000);
+        WaitForSingleObject(g_tabThread, INFINITE);   // every call it makes is bounded: it always ends
         CloseHandle(g_tabThread);
     }
     if (g_tabWake) CloseHandle(g_tabWake);
@@ -1631,7 +1746,7 @@ static void FakeMaximize(HWND w) {
     PlaceFake(w, Px(44));   // a first guess; the tab reader measures the bar and it is corrected
     RECT work = WorkArea();   // growing out of where it was into the whole screen
     StartGhost(ScreenRect(before.rcNormalPosition), work, 230, 0.45f, 0);
-    Debug(L"tabs into the panel: %s", WindowTitle(w).c_str());
+    Wh_Log(L"tabs into the panel: %s", WindowTitle(w).c_str());
 }
 
 static void FakeRestore(HWND w, bool maximize) {   // its own restore (or the real maximize back)
@@ -1641,16 +1756,21 @@ static void FakeRestore(HWND w, bool maximize) {   // its own restore (or the re
     RECT full = {};
     if (IsWindow(w)) GetWindowRect(w, &full);
     FakeForget(w);
-    if (!IsWindow(w)) return;
+    if (!IsWindow(w) || IsHungAppWindow(w)) return;
+    if (maximize) {   // its own size and place first (what it remembers), then the real maximize; both queued, never waited on
+        RECT normal = ScreenRect(wp.rcNormalPosition);
+        SetWindowPos(w, nullptr, normal.left, normal.top, normal.right - normal.left, normal.bottom - normal.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+        ShowWindowAsync(w, SW_MAXIMIZE);
+        return;
+    }
     wp.length = sizeof(wp);
     wp.flags = 0;
-    wp.showCmd = maximize ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
-    Transitions(w, maximize);
+    wp.showCmd = SW_SHOWNORMAL;
+    Transitions(w, false);
     SetWindowPlacement(w, &wp);
-    if (!maximize) {   // shrinking back to its own size
-        StartGhost(WorkArea(), ScreenRect(wp.rcNormalPosition), 230, 0.45f, 0);
-        Transitions(w, true);
-    }
+    StartGhost(WorkArea(), ScreenRect(wp.rcNormalPosition), 230, 0.45f, 0);   // shrinking back to its own size
+    Transitions(w, true);
 }
 
 static void FakeRestoreAll() {
@@ -1687,12 +1807,12 @@ static void LiftUpdate() {
         g_fakeTries[fg] = 0;
     }
     HWND want = app && !IsIconic(fg) && (g_fake.count(fg) || (IsZoomed(fg) && OwnTopBar(fg) && OnPanelScreen(fg))) ? fg : nullptr;
-    EnterCriticalSection(&g_tabLock);
+    g_tabLock.lock();
     bool changed = want != g_tabTarget;
     g_tabTarget = want;
     bool strip = want && g_tabOf == want && g_tabStrip;
     int barBottom = g_tabBarBottom;
-    LeaveCriticalSection(&g_tabLock);
+    g_tabLock.unlock();
     if (changed) SetEvent(g_tabWake);
     if (!want) return;
     if (!IsZoomed(want) && CoversMonitor(want)) return;   // gone full screen (a video): hands off until it comes back
@@ -1868,7 +1988,7 @@ static void AppBar(HWND hwnd, UINT edge, RECT r, bool add) {
         SHAppBarMessage(ABM_REMOVE, &abd);
         return;
     }
-    abd.uCallbackMessage = WM_APP_APPBAR;
+    abd.uCallbackMessage = 0;   // no notifications wanted: the shell lays itself out on display changes
     SHAppBarMessage(ABM_NEW, &abd);
     abd.uEdge = edge;
     abd.rc = r;
@@ -1990,9 +2110,18 @@ static bool Confirm(const wchar_t* question) {
 }
 // "Unity settings": the mod's settings live in Windhawk
 static void OpenShellSettings() {
-    wchar_t path[MAX_PATH];
-    ExpandEnvironmentStringsW(L"%ProgramFiles%\\Windhawk\\windhawk.exe", path, MAX_PATH);
-    if (GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) Launch(path);
+    // Windhawk's own engine is loaded in this process: windhawk.exe is a few folders up from it (any install place)
+    wchar_t path[MAX_PATH] = {};
+    HMODULE engine = GetModuleHandleW(L"windhawk.dll");
+    if (!engine || !GetModuleFileNameW(engine, path, MAX_PATH)) return;
+    std::wstring dir = path;
+    for (int up = 0; up < 5; up++) {
+        size_t slash = dir.find_last_of(L'\\');
+        if (slash == std::wstring::npos) return;
+        dir.resize(slash);
+        std::wstring exe = dir + L"\\windhawk.exe";
+        if (GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES) { Launch(exe); return; }
+    }
 }
 
 struct Hot { D2D1_RECT_F r; int id; };
@@ -2033,11 +2162,11 @@ static ID2D1Bitmap* TabIconBitmap(Surface& s, const TabInfo& t) {
 }
 
 static void DrawPanelTabs(Surface& s, HWND w, float left, float right, float H, Rgb ink, float alpha) {
-    EnterCriticalSection(&g_tabLock);
+    g_tabLock.lock();
     std::vector<TabInfo> tabs;
     if (g_tabOf == w) tabs = g_tabs;
     bool canNew = g_tabOf == w && g_tabNew;
-    LeaveCriticalSection(&g_tabLock);
+    g_tabLock.unlock();
     if (tabs.empty()) {   // not read yet: the title meanwhile
         Text(s, WindowTitle(w), D2D1::RectF(left, 0, right, H), 13, alpha, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, ink);
         return;
@@ -2067,7 +2196,7 @@ static void DrawPanelTabs(Surface& s, HWND w, float left, float right, float H, 
         if (withClose) {
             g_panelHot.push_back({cr, HOT_TABCLOSE + i});
             if (g_panelHover == HOT_TABCLOSE + i) s.rt->FillRoundedRectangle(D2D1::RoundedRect(cr, 3, 3), s.Brush(ink, 0.2f * alpha));
-            Glyph(s, L"", cr, 7, alpha, ink);
+            Glyph(s, L"\uE8BB", cr, 7, alpha, ink);
         }
         x += w2;
     }
@@ -2075,11 +2204,11 @@ static void DrawPanelTabs(Surface& s, HWND w, float left, float right, float H, 
         D2D1_RECT_F pr = D2D1::RectF(x + 2, 3, x + 24, H - 3);
         g_panelHot.push_back({pr, HOT_NEWTAB});
         if (g_panelHover == HOT_NEWTAB) s.rt->FillRoundedRectangle(D2D1::RoundedRect(pr, 4, 4), s.Brush(ink, 0.14f * alpha));
-        Glyph(s, L"", pr, 10, alpha, ink);
+        Glyph(s, L"\uE710", pr, 10, alpha, ink);
     }
 }
 
-// the panel's clock, as the clock setting asks: "01:08", "wo 01:08" or "wo 29 okt 01:08"
+// the panel's clock, as the clock setting asks: "13:08", "Wed 13:08" or "Wed 29 Oct 13:08" (in the user's own format)
 static std::wstring PanelClock() {
     SYSTEMTIME st;
     GetLocalTime(&st);
@@ -2200,20 +2329,20 @@ static void RenderPanel() {
         if (g_panelHover == id) s.rt->FillRectangle(r, s.White(0x26 / 255.f));
         return r;
     };
-    Glyph(s, L"", slot(30, HOT_SESSION), 13, 1, ink);
+    Glyph(s, L"\uE7E8", slot(30, HOT_SESSION), 13, 1, ink);
     D2D1_RECT_F cr = slot(cw, HOT_CLOCK);
     Text(s, clock, cr, 13, 1, DWRITE_TEXT_ALIGNMENT_CENTER, false, nullptr, DWRITE_FONT_WEIGHT_NORMAL, ink);
-    const wchar_t* vol = g_muted || g_volume < 0.01f ? L"" : g_volume < 0.34f ? L"" : g_volume < 0.67f ? L"" : L"";
+    const wchar_t* vol = g_muted || g_volume < 0.01f ? L"\uE74F" : g_volume < 0.34f ? L"\uE993" : g_volume < 0.67f ? L"\uE994" : L"\uE995";
     if (g_set.showVolume) Glyph(s, vol, slot(30, HOT_VOLUME), 13, 1, ink);
     if (g_set.showMessages) Glyph(s, L"\uE715", slot(30, HOT_MESSAGES), 13, 1, ink);   // the messaging menu's envelope
-    if (g_set.showNetwork) Glyph(s, L"", slot(30, HOT_NETWORK), 12, 1, ink);
+    if (g_set.showNetwork) Glyph(s, L"\uE839", slot(30, HOT_NETWORK), 12, 1, ink);
     if (g_set.showLanguage) {   // the keyboard language in a little box in the panel's ink, like Unity
         D2D1_RECT_F lr = slot(lw + 18, HOT_LANGUAGE), lb = D2D1::RectF((lr.left + lr.right - lw) / 2, H / 2 - 7.5f, (lr.left + lr.right + lw) / 2, H / 2 + 7.5f);
         s.rt->FillRoundedRectangle(D2D1::RoundedRect(lb, 2, 2), s.Brush(ink, 1));
         Rgb paper = light && u < 0.5f ? Rgb{0xF2 / 255.f, 0xF1 / 255.f, 0xF0 / 255.f} : darkInk;
         Text(s, lang, lb, 11, 1, DWRITE_TEXT_ALIGNMENT_CENTER, false, nullptr, DWRITE_FONT_WEIGHT_BOLD, paper);
     }
-    if (g_set.showTray) Glyph(s, L"", slot(26, HOT_TRAY), 10, 1, ink);   // the apps running in the background (their tray icons)
+    if (g_set.showTray) Glyph(s, L"\uE70D", slot(26, HOT_TRAY), 10, 1, ink);   // the apps running in the background (their tray icons)
     s.End(g_screen.left, g_screen.top - g_awayPanel);
 }
 
@@ -2679,10 +2808,10 @@ static bool ItemPlays(const Item& it, const std::wstring& hint) {
 // after news from the media thread, or a refresh: which icon gets the block, open or closing
 static void UpdateExtension() {
     if (!g_mediaReady) return;
-    EnterCriticalSection(&g_mediaLock);
+    g_mediaLock.lock();
     bool has = g_mHas, playing = g_mPlaying;
     std::wstring hint = MediaHint(g_mSource), key = g_mTitle + L"|" + std::to_wstring(g_mCoverKey);
-    LeaveCriticalSection(&g_mediaLock);
+    g_mediaLock.unlock();
     if (playing) g_extLastPlaying = NowMs();
     int host = -1;
     if (g_set.mediaControls && has && (playing || NowMs() - g_extLastPlaying < 60000))
@@ -2714,14 +2843,14 @@ static void DrawExtension(Surface& s) {
     s.rt->FillRoundedRectangle(box, s.White(0x16 / 255.f * a));
     s.rt->DrawRoundedRectangle(box, s.White(0x38 / 255.f * a), 1);
     // the cover, with rounded corners
-    EnterCriticalSection(&g_mediaLock);
+    g_mediaLock.lock();
     std::wstring coverKey = L"cover#" + std::to_wstring(g_mCoverKey);
     ID2D1Bitmap* cover = nullptr;
     auto cached = s.bitmaps.find(coverKey);
     if (cached != s.bitmaps.end()) cover = cached->second;
     else if (g_mCover) { s.rt->CreateBitmapFromWicBitmap(g_mCover, nullptr, &cover); s.bitmaps[coverKey] = cover; }
     bool playing = g_mPlaying;
-    LeaveCriticalSection(&g_mediaLock);
+    g_mediaLock.unlock();
     ID2D1RoundedRectangleGeometry* round = nullptr;
     ID2D1Layer* layer = nullptr;
     if (cover && SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(parts[0], 4, 4), &round)) && SUCCEEDED(s.rt->CreateLayer(&layer))) {
@@ -2731,7 +2860,7 @@ static void DrawExtension(Surface& s) {
     } else s.rt->FillRoundedRectangle(D2D1::RoundedRect(parts[0], 4, 4), s.White(0.08f * a));
     Release(layer);
     Release(round);
-    const wchar_t* glyphs[4] = {nullptr, playing ? L"" : L"", L"", L""};
+    const wchar_t* glyphs[4] = {nullptr, playing ? L"\uE769" : L"\uE768", L"\uE892", L"\uE893"};
     for (int k = 1; k < 4; k++) {
         float h = parts[k].bottom - parts[k].top;
         if (g_extHover == k) s.rt->FillRoundedRectangle(D2D1::RoundedRect(parts[k], h * 0.3f, h * 0.3f), s.White(0x30 / 255.f * a));
@@ -2823,7 +2952,7 @@ static void DrawDcExtension(Surface& s) {
     s.rt->DrawRoundedRectangle(box, s.White(0x38 / 255.f * a), 1);
     bool deaf = g_dcDeaf, mic = g_dcMic || deaf;   // deafen mutes the mic too, in Discord
     bool alert[3] = {mic, deaf, true};
-    const wchar_t* glyphs[3] = {mic ? L"" : L"", deaf ? L"" : L"", L""};
+    const wchar_t* glyphs[3] = {mic ? L"\uEC54" : L"\uE720", deaf ? L"\uE74F" : L"\uE767", L"\uE717"};
     for (int k = 0; k < 3; k++) {
         float h = parts[k].bottom - parts[k].top, rad = h * 0.3f;
         auto rr = D2D1::RoundedRect(parts[k], rad, rad);
@@ -3006,8 +3135,7 @@ static void ReadDiscordState(IUIAutomation* uia, HWND w, IUIAutomationCondition*
 
 static DWORD WINAPI DiscordWorker(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    IUIAutomation* uia = nullptr;
-    CoCreateInstance(kClsidUIA, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia);
+    IUIAutomation* uia = MakeUia();
     IUIAutomationCondition *toggles = nullptr, *mute = nullptr, *deaf = nullptr, *hang = nullptr;
     if (uia) {
         VARIANT v;
@@ -3037,7 +3165,7 @@ static DWORD WINAPI DiscordWorker(LPVOID) {
         if (uia && cmd == 1) PressInDiscord(uia, w, mute);
         if (uia && cmd == 2) PressInDiscord(uia, w, deaf);
         if (cmd == 3) {   // its window's own Disconnect button; failing that, its thumbnail one (Electron numbers them 0, 1, 2)
-            if (!(uia && PressInDiscord(uia, w, hang)) && w) PostMessageW(w, WM_COMMAND, MAKEWPARAM(2, 0x1800 /* THBN_CLICKED */), 0);
+            if (uia) PressInDiscord(uia, w, hang);
             Sleep(300);
         }
         if (cmd == 1 || cmd == 2) Sleep(400);   // let Discord catch up before reading it back
@@ -3069,7 +3197,7 @@ static void StopDiscordWatch() {
     g_dcStop = true;
     if (g_dcWake) SetEvent(g_dcWake);
     if (g_dcThread) {
-        WaitForSingleObject(g_dcThread, 5000);
+        WaitForSingleObject(g_dcThread, INFINITE);   // every call it makes is bounded: it always ends
         CloseHandle(g_dcThread);
     }
     if (g_dcWake) CloseHandle(g_dcWake);
@@ -3199,7 +3327,7 @@ static float TextWidth(const std::wstring& text, float size, DWRITE_FONT_WEIGHT 
     IDWriteTextLayout* layout = nullptr;
     float w = 0;
     if (SUCCEEDED(g_dw->CreateTextFormat(g_fontFamily.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-                                         DWRITE_FONT_STRETCH_NORMAL, size, L"nl-nl", &fmt)) &&
+                                         DWRITE_FONT_STRETCH_NORMAL, size, L"", &fmt)) &&
         SUCCEEDED(g_dw->CreateTextLayout(text.c_str(), (UINT32)text.size(), fmt, 4000, 100, &layout))) {
         DWRITE_TEXT_METRICS m;
         if (SUCCEEDED(layout->GetMetrics(&m))) w = m.widthIncludingTrailingWhitespace;
@@ -3216,7 +3344,7 @@ static void HideTip() {
 
 static void ShowTip(int index) {
     if (!g_tip || index == g_tipFor) return;
-    std::wstring text = index == -1 ? L"Zoek op je computer" : index == kTrash ? L"Prullenbak"
+    std::wstring text = index == -1 ? Tr(L"Zoek op je computer") : index == kTrash ? Tr(L"Prullenbak")
                       : index >= 0 && index < (int)g_items.size() ? g_items[index].name : L"";
     if (text.empty() || g_dragIndex >= 0) { HideTip(); return; }
     g_tipFor = index;
@@ -3293,7 +3421,7 @@ static void PaintPreview() {
         Text(s, WindowTitle(c.win), D2D1::RectF(hx + 22, hy, (hot ? c.close.left : c.slot.right) - 4, hy + 18), 12, 0.97f);
         if (hot) {
             if (g_previewHoverClose) s.rt->FillRectangle(c.close, s.Brush({0.77f, 0.17f, 0.11f}, 1));
-            Glyph(s, L"", c.close, 9, 1);
+            Glyph(s, L"\uE8BB", c.close, 9, 1);
         }
         s.rt->FillRoundedRectangle(D2D1::RoundedRect(c.slot, 3, 3), s.Brush({0, 0, 0}, 0.25f));
         if (!c.thumb) {   // a minimized window has no live picture: its app's icon instead, like Windows
@@ -3585,7 +3713,7 @@ struct TrayIcon {
     std::wstring tip;
 };
 static std::vector<TrayIcon> g_trayIcons;
-static CRITICAL_SECTION g_trayLock;
+static std::mutex g_trayLock;
 static bool g_trayLockReady;
 static int g_traySerial;
 static const UINT WM_APP_TRAY = WM_APP + 63;   // the tray icons changed
@@ -3617,7 +3745,7 @@ static void TrayNotify(const COPYDATASTRUCT* cds) {
     const TrayNid32& n = d->nid;
     bool byGuid = (n.uFlags & NIF_GUID) && have >= offsetof(TrayNid32, guidItem) + sizeof(GUID);
     HWND hwnd = (HWND)(LONG_PTR)(LONG)n.hWnd;
-    EnterCriticalSection(&g_trayLock);
+    g_trayLock.lock();
     auto it = std::find_if(g_trayIcons.begin(), g_trayIcons.end(), [&](const TrayIcon& t) {
         return byGuid ? t.hasGuid && IsEqualGUID(t.guid, n.guidItem) : !t.hasGuid && t.hwnd == hwnd && t.id == n.uID;
     });
@@ -3659,7 +3787,7 @@ static void TrayNotify(const COPYDATASTRUCT* cds) {
         }
         changed = true;
     }
-    LeaveCriticalSection(&g_trayLock);
+    g_trayLock.unlock();
     if (changed && g_host) PostMessageW(g_host, WM_APP_TRAY, 0, 0);
 }
 
@@ -3667,7 +3795,7 @@ static void TrayNotify(const COPYDATASTRUCT* cds) {
 static std::vector<TrayIcon> TrayIcons() {
     std::vector<TrayIcon> list;
     if (!g_trayLockReady) return list;
-    EnterCriticalSection(&g_trayLock);
+    g_trayLock.lock();
     for (auto it = g_trayIcons.begin(); it != g_trayIcons.end();) {
         if (!IsWindow(it->hwnd)) {   // its app is gone
             if (it->icon) DestroyIcon(it->icon);
@@ -3677,24 +3805,24 @@ static std::vector<TrayIcon> TrayIcons() {
         if (!it->hidden && it->icon) list.push_back(*it);
         ++it;
     }
-    LeaveCriticalSection(&g_trayLock);
+    g_trayLock.unlock();
     return list;
 }
 
 static void StartTrayWatch() {
     if (!g_trayLockReady) {
-        InitializeCriticalSection(&g_trayLock);
         g_trayLockReady = true;
     }
 }
 
+static bool g_unloading;   // the mod is being turned off (not just restarted for a settings change)
 static void StopTrayWatch() {
-    if (!g_trayLockReady) return;
-    EnterCriticalSection(&g_trayLock);
+    if (!g_trayLockReady || !g_unloading) return;   // a restart keeps the list (the apps aren't asked again)
+    g_trayLock.lock();
     for (auto& t : g_trayIcons)
         if (t.icon) DestroyIcon(t.icon);
     g_trayIcons.clear();
-    LeaveCriticalSection(&g_trayLock);
+    g_trayLock.unlock();
 }
 
 // a click on an icon, as the taskbar sends it: version 4 apps get the event and the spot, older ones the id
@@ -3834,8 +3962,8 @@ static void PaintPopup() {
         link(PH_MUTE, g_muted ? L"Unmute" : L"Mute");
         y += 8;
         float cy = y + 10;
-        Glyph(s, L"", D2D1::RectF(x0 + 6, y, x0 + 22, y + 20), 14, 1);
-        Glyph(s, L"", D2D1::RectF(x0 + cw - 22, y, x0 + cw - 6, y + 20), 14, 1);
+        Glyph(s, L"\uE993", D2D1::RectF(x0 + 6, y, x0 + 22, y + 20), 14, 1);
+        Glyph(s, L"\uE995", D2D1::RectF(x0 + cw - 22, y, x0 + cw - 6, y + 20), 14, 1);
         g_popTrack = D2D1::RectF(x0 + 30, cy - 2, x0 + cw - 30, cy + 2);
         g_popHot.push_back({D2D1::RectF(x0 + 22, y, x0 + cw - 22, y + 20), PH_SLIDER});
         float level = g_muted ? 0 : g_volume, fill = g_popTrack.left + (g_popTrack.right - g_popTrack.left) * level;
@@ -3885,8 +4013,8 @@ static void PaintPopup() {
         g_popHot.push_back({next, PH_NEXT});
         if (g_popHover == PH_PREV) s.rt->FillRoundedRectangle(D2D1::RoundedRect(prev, 4, 4), s.White(0x26 / 255.f));
         if (g_popHover == PH_NEXT) s.rt->FillRoundedRectangle(D2D1::RoundedRect(next, 4, 4), s.White(0x26 / 255.f));
-        Glyph(s, L"", prev, 11, 1);
-        Glyph(s, L"", next, 11, 1);
+        Glyph(s, L"\uE76B", prev, 11, 1);
+        Glyph(s, L"\uE76C", next, 11, 1);
         Text(s, DateText(first, L"MMMM yyyy"), D2D1::RectF(x0 + 28, y, x0 + cw - 28, y + 28), 14, 1, DWRITE_TEXT_ALIGNMENT_CENTER, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
         y += 32;
         wchar_t firstDay[4] = L"0";   // 0 = Monday ... 6 = Sunday
@@ -4266,7 +4394,7 @@ static void PaintGroup() {
     Text(s, g_groupEditing ? g_groupEdit + L"\u200A|" : f.name, nameR, 17, 1, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     g_groupEditR = D2D1::RectF(W - 44, 12, W - 14, 40);
     if (g_groupHover == kGroupRename) s.rt->FillRoundedRectangle(D2D1::RoundedRect(g_groupEditR, 6, 6), s.White(0x22 / 255.f));
-    Glyph(s, g_groupEditing ? L"" : L"", g_groupEditR, 13, 0xC0 / 255.f);
+    Glyph(s, g_groupEditing ? L"\uE73E" : L"\uE70F", g_groupEditR, 13, 0xC0 / 255.f);
     for (int k = 0; k < (int)g_groupCells.size(); k++) {
         auto& c = g_groupCells[k];
         if (k == g_groupHover) s.rt->FillRoundedRectangle(D2D1::RoundedRect(c.r, 10, 10), s.White(0x26 / 255.f));
@@ -4310,12 +4438,12 @@ static void MemberMenu(int k) {
     GroupCell c = g_groupCells[k];
     int fi = g_groupFolder;
     std::wstring file = FileOf(c.launch);
-    std::vector<MenuEntry> m = {MHeading(NameFor(c.launch)), MSeparator(), MItem(1, L"Uit groep halen", L""),
-                                MItem(2, c.windows.empty() ? L"Openen" : L"Nieuw venster", L""), MItem(3, L"Als administrator uitvoeren", L"")};
-    if (!file.empty()) m.push_back(MItem(4, L"Bestandslocatie openen", L""));
-    m.push_back(MItem(5, L"App-instellingen", L""));
+    std::vector<MenuEntry> m = {MHeading(NameFor(c.launch)), MSeparator(), MItem(1, Tr(L"Uit groep halen"), L"\uE738"),
+                                MItem(2, c.windows.empty() ? Tr(L"Openen") : Tr(L"Nieuw venster"), L"\uE8A7"), MItem(3, Tr(L"Als administrator uitvoeren"), L"\uEA18")};
+    if (!file.empty()) m.push_back(MItem(4, Tr(L"Bestandslocatie openen"), L"\uE838"));
+    m.push_back(MItem(5, Tr(L"App-instellingen"), L"\uE713"));
     m.push_back(MSeparator());
-    m.push_back(MItem(5, L"Verwijderen", L""));
+    m.push_back(MItem(5, Tr(L"Verwijderen"), L"\uE74D"));
     RECT at = {g_groupX + Px(c.r.left), g_groupY + Px(c.r.top), g_groupX + Px(c.r.right), g_groupY + Px(c.r.bottom)};
     int cmd = ShowMenu(m, at, MENU_BELOW);
     if (cmd) g_groupDone = true;
@@ -4538,8 +4666,8 @@ static void ItemMenu(int index) {
     if (index < 0 || index >= (int)g_items.size()) return;
     if (g_items[index].folder >= 0) {   // a group (the app's menu)
         int fi = g_items[index].folder;
-        std::vector<MenuEntry> m = {MHeading(g_items[index].name), MSeparator(), MItem(1, L"Openen", L"\uE8A7"), MItem(2, L"Naam wijzigen", L"\uE70F"),
-                                    MItem(3, L"Groep opheffen", L"\uE8C6"), MSeparator(), MItem(4, L"Uit launcher verwijderen", L"\uE74D")};
+        std::vector<MenuEntry> m = {MHeading(g_items[index].name), MSeparator(), MItem(1, Tr(L"Openen"), L"\uE8A7"), MItem(2, Tr(L"Naam wijzigen"), L"\uE70F"),
+                                    MItem(3, Tr(L"Groep opheffen"), L"\uE8C6"), MSeparator(), MItem(4, Tr(L"Uit launcher verwijderen"), L"\uE74D")};
         int cmd = ShowMenu(m, at, MENU_RIGHT);
         if (cmd == 1 || cmd == 2) PostMessageW(g_launcher, WM_APP_OPENGROUP, index, cmd == 2);
         else if (cmd == 3) Ungroup(fi);
@@ -4557,14 +4685,14 @@ static void ItemMenu(int index) {
         }
         m.push_back(MSeparator());
     }
-    m.push_back(MItem(1, it.windows.empty() ? L"Openen" : L"Nieuw venster", L"\uE8A7"));
-    m.push_back(MItem(2, L"Als administrator uitvoeren", L"\uEA18"));
-    m.push_back(it.pinned ? MItem(3, L"Losmaken van launcher", L"\uE77A") : MItem(3, L"Vastmaken aan launcher", L"\uE718"));
-    if (!file.empty()) m.push_back(MItem(4, L"Bestandslocatie openen", L"\uE838"));
-    m.push_back(MItem(5, L"App-instellingen", L"\uE713"));
+    m.push_back(MItem(1, it.windows.empty() ? Tr(L"Openen") : Tr(L"Nieuw venster"), L"\uE8A7"));
+    m.push_back(MItem(2, Tr(L"Als administrator uitvoeren"), L"\uEA18"));
+    m.push_back(it.pinned ? MItem(3, Tr(L"Losmaken van launcher"), L"\uE77A") : MItem(3, Tr(L"Vastmaken aan launcher"), L"\uE718"));
+    if (!file.empty()) m.push_back(MItem(4, Tr(L"Bestandslocatie openen"), L"\uE838"));
+    m.push_back(MItem(5, Tr(L"App-instellingen"), L"\uE713"));
     m.push_back(MSeparator());
-    if (!it.windows.empty()) m.push_back(MItem(6, it.windows.size() > 1 ? L"Alle vensters sluiten" : L"Venster sluiten", L"\uE8BB"));
-    m.push_back(MItem(7, L"Verwijderen", L"\uE74D"));
+    if (!it.windows.empty()) m.push_back(MItem(6, it.windows.size() > 1 ? Tr(L"Alle vensters sluiten") : Tr(L"Venster sluiten"), L"\uE8BB"));
+    m.push_back(MItem(7, Tr(L"Verwijderen"), L"\uE74D"));
     int cmd = ShowMenu(m, at, MENU_RIGHT);
     if (cmd >= 100) {
         if (g_dashOpen) ShowDash(false);
@@ -4782,7 +4910,7 @@ struct Section {
 static std::vector<Section> g_sections;
 static std::map<std::wstring, bool> g_expanded;   // "lens/title" -> show all
 
-enum { HIT_TILE, HIT_MORE, HIT_LENS, HIT_MEDIA, HIT_GRIP, HIT_FILTERS, HIT_FGROUP, HIT_FCHIP };
+enum { HIT_TILE, HIT_MORE, HIT_LENS, HIT_MEDIA, HIT_GRIP, HIT_FILTERS, HIT_FGROUP, HIT_FCHIP, HIT_WEATHER };
 static bool g_resizing;   // dragging the Dash's grip
 struct Hit { D2D1_RECT_F r; int kind, a, b; };
 static std::vector<Hit> g_hits;
@@ -4798,7 +4926,7 @@ static std::wstring Trim(const std::wstring& s) {
     return a == std::wstring::npos ? L"" : s.substr(a, b - a + 1);
 }
 
-// ---------------- settings catalogue (Dutch, like the app) ----------------
+// ---------------- settings catalogue (the Dutch names are its keys; they are shown through Tr) ----------------
 
 struct SettingEntry { const wchar_t *name, *words, *open; };
 static const SettingEntry kSettings[] = {
@@ -4882,11 +5010,11 @@ static std::vector<Result> FindSettings(const std::wstring& q) {
         i = j + 1;
     }
     for (auto& e : kSettings) {
-        std::wstring hay = Lower(std::wstring(e.name) + L" " + e.words);
+        std::wstring hay = Lower(std::wstring(e.name) + L" " + Tr(e.name) + L" " + e.words);   // either language finds it
         bool all = !words.empty();
         for (auto& w : words)
             if (hay.find(w) == std::wstring::npos) all = false;
-        if (all) out.push_back({e.name, e.open, RK_SETTING});
+        if (all) out.push_back({Tr(e.name), e.open, RK_SETTING});
     }
     return out;
 }
@@ -4920,7 +5048,7 @@ static void RecordRecent(const std::wstring& launch) {
 // ---------------- files: recent, Downloads and Windows Search, on a worker thread ----------------
 
 struct FileReq { int gen, type, lens; std::wstring query; };   // type: 0 recent, 1 recent + downloads, 2 search
-static CRITICAL_SECTION g_fileLock;
+static std::mutex g_fileLock;
 static FileReq g_fileReq;
 static bool g_fileReqPending;
 static std::vector<Result> g_fileResults;
@@ -5008,18 +5136,15 @@ static std::vector<Result> DownloadFiles(size_t max) {
     return out;
 }
 
-static std::wstring UrlEncode(const std::wstring& s) {
-    std::string utf8;
-    int n = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0, nullptr, nullptr);
-    utf8.resize(n);
-    WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.size(), utf8.data(), n, nullptr, nullptr);
-    std::wstring out;
-    wchar_t buf[4];
-    for (unsigned char c : utf8) {
-        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') out += (wchar_t)c;
-        else { swprintf(buf, 4, L"%%%02X", c); out += buf; }
+// a WinRT call waited on for at most this long, then cancelled: a slow search or a hung media app never holds a
+// worker thread (and with it the shell's shutdown) up
+template <typename Op>
+static auto Await(Op const& op, int ms) {
+    if (op.wait_for(std::chrono::milliseconds(ms)) != winrt::Windows::Foundation::AsyncStatus::Completed) {
+        try { op.Cancel(); } catch (...) {}
+        throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
     }
-    return out;
+    return op.GetResults();
 }
 
 // Windows Search: the Storage query API uses the search index (and walks the folders where there is none)
@@ -5036,12 +5161,12 @@ static std::vector<Result> SearchFiles(const std::wstring& query, int lens, size
     std::wstring root = profile ? profile : L"C:\\";
     CoTaskMemFree(profile);
     try {
-        auto folder = StorageFolder::GetFolderFromPathAsync(root).get();
+        auto folder = Await(StorageFolder::GetFolderFromPathAsync(root), 2000);
         QueryOptions opts;
         opts.FolderDepth(FolderDepth::Deep);
         opts.IndexerOption(IndexerOption::UseIndexerWhenAvailable);
         opts.UserSearchFilter(Trim(aqs));
-        auto items = folder.CreateItemQueryWithOptions(opts).GetItemsAsync(0, (uint32_t)max).get();
+        auto items = Await(folder.CreateItemQueryWithOptions(opts).GetItemsAsync(0, (uint32_t)max), 4000);
         for (auto const& item : items) {
             if (g_workersStop) break;
             std::wstring path(item.Path()), name(item.Name());
@@ -5049,7 +5174,7 @@ static std::vector<Result> SearchFiles(const std::wstring& query, int lens, size
             out.push_back({name.empty() ? FileName(path) : name, path, RK_FILE, lens == LENS_PHOTOS || lens == LENS_VIDEO || IsImageOrVideo(path), 0});
         }
     } catch (winrt::hresult_error const& e) {
-        Debug(L"file search failed: 0x%08X %s", (unsigned)e.code(), e.message().c_str());
+        Wh_Log(L"file search failed: 0x%08X %s", (unsigned)e.code(), e.message().c_str());
     } catch (...) {
     }
     return out;
@@ -5061,11 +5186,11 @@ static DWORD WINAPI FileWorker(LPVOID) {
     try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
     while (WaitForSingleObject(g_fileWake, INFINITE) == WAIT_OBJECT_0 && !g_workersStop) {
         FileReq req;
-        EnterCriticalSection(&g_fileLock);
+        g_fileLock.lock();
         bool pending = g_fileReqPending;
         req = g_fileReq;
         g_fileReqPending = false;
-        LeaveCriticalSection(&g_fileLock);
+        g_fileLock.unlock();
         if (!pending) continue;
         std::vector<Result> out;
         if (req.type == 2) out = SearchFiles(req.query, req.lens, 48);
@@ -5076,12 +5201,12 @@ static DWORD WINAPI FileWorker(LPVOID) {
                 out.insert(out.end(), dl.begin(), dl.end());
             }
         }
-        EnterCriticalSection(&g_fileLock);
+        g_fileLock.lock();
         if (req.gen == g_fileGen) {
             g_fileResults = std::move(out);
             g_fileResultsGen = req.gen;
         }
-        LeaveCriticalSection(&g_fileLock);
+        g_fileLock.unlock();
         if (g_host) PostMessageW(g_host, WM_APP_FILES, req.gen, 0);
     }
     winrt::uninit_apartment();
@@ -5095,13 +5220,13 @@ static void RequestFiles() {
     if (g_lens == LENS_HOME) type = q.empty() ? 0 : 2;
     else if (g_lens == LENS_FILES) type = q.empty() ? 1 : 2;
     else if (g_lens >= LENS_VIDEO) type = 2;
-    EnterCriticalSection(&g_fileLock);
+    g_fileLock.lock();
     g_fileGen++;
     if (type >= 0) {
         g_fileReq = {g_fileGen, type, g_lens, q};
         g_fileReqPending = true;
     }
-    LeaveCriticalSection(&g_fileLock);
+    g_fileLock.unlock();
     if (type >= 0) SetEvent(g_fileWake);
 }
 
@@ -5152,122 +5277,6 @@ static void SampleStats() {
     PushHist(g_ramHist, g_ramTotal > 0 ? g_ramUsed / g_ramTotal : 0);
 }
 
-// weather: Open-Meteo (free, no account); only the city name and its coordinates are sent
-static CRITICAL_SECTION g_weatherLock;
-static bool g_weatherOk, g_weatherBusy;
-static float g_weatherTemp;
-static int g_weatherCode = -1;
-static std::wstring g_weatherPlace, g_weatherFor;
-static DWORD g_weatherAt;
-
-static std::string HttpGet(const wchar_t* host, const std::wstring& path) {
-    std::string body;
-    HINTERNET s = WinHttpOpen(L"UnityShell/0.3", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!s) return body;
-    WinHttpSetTimeouts(s, 5000, 5000, 8000, 8000);
-    HINTERNET c = WinHttpConnect(s, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET r = c ? WinHttpOpenRequest(c, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
-    if (r && WinHttpSendRequest(r, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(r, nullptr)) {
-        DWORD avail = 0;
-        while (WinHttpQueryDataAvailable(r, &avail) && avail) {
-            std::string chunk(avail, '\0');
-            DWORD read = 0;
-            if (!WinHttpReadData(r, chunk.data(), avail, &read) || !read) break;
-            body.append(chunk.data(), read);
-        }
-    }
-    if (r) WinHttpCloseHandle(r);
-    if (c) WinHttpCloseHandle(c);
-    WinHttpCloseHandle(s);
-    return body;
-}
-
-// tiny JSON helpers: the first number / string after "key": (from a given position)
-static bool JsonNumber(const std::string& j, const char* key, size_t from, double& out) {
-    std::string k = std::string("\"") + key + "\":";
-    size_t p = j.find(k, from);
-    if (p == std::string::npos) return false;
-    out = strtod(j.c_str() + p + k.size(), nullptr);
-    return true;
-}
-
-static std::wstring JsonString(const std::string& j, const char* key) {
-    std::string k = std::string("\"") + key + "\":\"";
-    size_t p = j.find(k);
-    if (p == std::string::npos) return L"";
-    size_t e = j.find('"', p + k.size());
-    std::string v = j.substr(p + k.size(), e - p - k.size());
-    std::wstring w(MultiByteToWideChar(CP_UTF8, 0, v.c_str(), (int)v.size(), nullptr, 0), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, v.c_str(), (int)v.size(), w.data(), (int)w.size());
-    return w;
-}
-
-static DWORD WINAPI WeatherWorker(LPVOID param) {
-    std::wstring city = *(std::wstring*)param;
-    delete (std::wstring*)param;
-    bool ok = false;
-    double temp = 0, code = -1, lat = 0, lon = 0;
-    std::wstring place = city;
-    std::string geo = HttpGet(L"geocoding-api.open-meteo.com", L"/v1/search?count=1&language=nl&name=" + UrlEncode(city));
-    if (JsonNumber(geo, "latitude", 0, lat) && JsonNumber(geo, "longitude", 0, lon)) {
-        std::wstring n = JsonString(geo, "name");
-        if (!n.empty()) place = n;
-        wchar_t path[200];
-        swprintf(path, 200, L"/v1/forecast?current=temperature_2m,weather_code&timezone=auto&latitude=%.4f&longitude=%.4f", lat, lon);
-        std::string fc = HttpGet(L"api.open-meteo.com", path);
-        size_t cur = fc.find("\"current\":{");
-        if (cur != std::string::npos && JsonNumber(fc, "temperature_2m", cur, temp) && JsonNumber(fc, "weather_code", cur, code)) ok = true;
-    }
-    EnterCriticalSection(&g_weatherLock);
-    g_weatherOk = ok;
-    g_weatherTemp = (float)temp;
-    g_weatherCode = (int)code;
-    g_weatherPlace = ok ? place : L"Geen verbinding";
-    g_weatherBusy = false;
-    g_weatherAt = GetTickCount();
-    LeaveCriticalSection(&g_weatherLock);
-    if (g_host) PostMessageW(g_host, WM_APP_WEATHER, 0, 0);
-    return 0;
-}
-
-static void RefreshWeather() {
-    if (g_set.weatherCity.empty()) return;
-    EnterCriticalSection(&g_weatherLock);
-    bool stale = g_weatherFor != g_set.weatherCity || GetTickCount() - g_weatherAt > 15 * 60 * 1000;
-    bool start = stale && !g_weatherBusy;
-    if (start) { g_weatherBusy = true; g_weatherFor = g_set.weatherCity; }
-    LeaveCriticalSection(&g_weatherLock);
-    if (start) {
-        HANDLE t = CreateThread(nullptr, 0, WeatherWorker, new std::wstring(g_set.weatherCity), 0, nullptr);
-        if (t) CloseHandle(t); else g_weatherBusy = false;
-    }
-}
-
-static const wchar_t* WeatherIcon(int c) {
-    if (c == 0) return L"\u2600";
-    if (c <= 2) return L"\u26C5";
-    if (c == 3) return L"\u2601";
-    if (c == 45 || c == 48) return L"\U0001F32B";
-    if (c >= 95) return L"\u26C8";
-    if ((c >= 71 && c <= 77) || c == 85 || c == 86) return L"\u2744";
-    if (c >= 51) return L"\U0001F327";
-    return L"\u2601";
-}
-
-static const wchar_t* WeatherText(int c) {
-    if (c == 0) return L"Zonnig";
-    if (c == 1) return L"Overwegend helder";
-    if (c == 2) return L"Half bewolkt";
-    if (c == 3) return L"Bewolkt";
-    if (c == 45 || c == 48) return L"Mist";
-    if (c >= 51 && c <= 57) return L"Motregen";
-    if (c >= 61 && c <= 67) return L"Regen";
-    if ((c >= 71 && c <= 77) || c == 85 || c == 86) return L"Sneeuw";
-    if (c >= 80 && c <= 82) return L"Buien";
-    if (c >= 95) return L"Onweer";
-    return L"";
-}
-
 // now playing: Windows' media controls (Spotify, browsers, ...) through WinRT, on its own thread
 
 static IWICBitmapSource* DecodeImage(const BYTE* data, UINT size) {
@@ -5295,7 +5304,7 @@ static DWORD WINAPI MediaWorker(LPVOID) {
     using namespace winrt::Windows::Media::Control;
     try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
     GlobalSystemMediaTransportControlsSessionManager mgr{nullptr};
-    try { mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get(); } catch (...) {}
+    try { mgr = Await(GlobalSystemMediaTransportControlsSessionManager::RequestAsync(), 3000); } catch (...) {}
     std::wstring lastKey;
     while (!g_workersStop) {
         WaitForSingleObject(g_mediaWake, 1500);
@@ -5309,35 +5318,35 @@ static DWORD WINAPI MediaWorker(LPVOID) {
                 if (!session && x.GetPlaybackInfo().PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) session = x;
             }
             if (!session) session = mgr.GetCurrentSession();
-            if (session && cmd == 1) session.TrySkipPreviousAsync().get();
-            if (session && cmd == 2) session.TryTogglePlayPauseAsync().get();
-            if (session && cmd == 3) session.TrySkipNextAsync().get();
+            if (session && cmd == 1) Await(session.TrySkipPreviousAsync(), 1500);
+            if (session && cmd == 2) Await(session.TryTogglePlayPauseAsync(), 1500);
+            if (session && cmd == 3) Await(session.TrySkipNextAsync(), 1500);
             if (!session) {
-                EnterCriticalSection(&g_mediaLock);
+                g_mediaLock.lock();
                 g_mHas = false;
                 g_mPlaying = false;
-                LeaveCriticalSection(&g_mediaLock);
+                g_mediaLock.unlock();
                 lastKey.clear();
                 if (g_host) PostMessageW(g_host, WM_APP_MEDIA, 0, 0);
                 continue;
             }
             bool playing = session.GetPlaybackInfo().PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-            auto props = session.TryGetMediaPropertiesAsync().get();
+            auto props = Await(session.TryGetMediaPropertiesAsync(), 1500);
             std::wstring title(props.Title()), artist(props.Artist());
             IWICBitmapSource* cover = nullptr;
             bool newCover = title + L"|" + artist != lastKey;
             if (newCover) {
                 lastKey = title + L"|" + artist;
                 if (auto thumb = props.Thumbnail()) {
-                    auto stream = thumb.OpenReadAsync().get();
+                    auto stream = Await(thumb.OpenReadAsync(), 1500);
                     UINT size = (UINT)std::min<uint64_t>(stream.Size(), 8u << 20);
                     winrt::Windows::Storage::Streams::Buffer buf(size);
-                    auto got = stream.ReadAsync(buf, size, winrt::Windows::Storage::Streams::InputStreamOptions::None).get();
+                    auto got = Await(stream.ReadAsync(buf, size, winrt::Windows::Storage::Streams::InputStreamOptions::None), 1500);
                     cover = DecodeImage(got.data(), got.Length());
                 }
             }
             std::wstring source(session.SourceAppUserModelId());
-            EnterCriticalSection(&g_mediaLock);
+            g_mediaLock.lock();
             g_mHas = !title.empty();
             g_mSource = source;
             g_mTitle = title;
@@ -5348,7 +5357,7 @@ static DWORD WINAPI MediaWorker(LPVOID) {
                 g_mCover = cover;
                 g_mCoverKey++;
             }
-            LeaveCriticalSection(&g_mediaLock);
+            g_mediaLock.unlock();
             if (g_host) PostMessageW(g_host, WM_APP_MEDIA, 0, 0);
         } catch (...) {
         }
@@ -5364,15 +5373,7 @@ static void MediaCommand(LONG cmd) {
 }
 
 static void StartWorkers() {
-    // the locks live as long as Explorer: a weather request can still be on its way when the shell restarts
-    static bool locks;
-    if (!locks) {
-        InitializeCriticalSection(&g_fileLock);
-        InitializeCriticalSection(&g_weatherLock);
-        InitializeCriticalSection(&g_mediaLock);
-        g_mediaReady = true;
-        locks = true;
-    }
+    g_mediaReady = true;
     g_workersStop = false;
     g_fileWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_mediaWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -5385,7 +5386,7 @@ static void StopWorkers() {
     SetEvent(g_fileWake);
     SetEvent(g_mediaWake);
     for (HANDLE* t : {&g_fileThread, &g_mediaThread})
-        if (*t) { WaitForSingleObject(*t, 5000); CloseHandle(*t); *t = nullptr; }
+        if (*t) { WaitForSingleObject(*t, INFINITE); CloseHandle(*t); *t = nullptr; }   // their calls are bounded: they always end
     CloseHandle(g_fileWake);
     CloseHandle(g_mediaWake);
     Release(g_mCover);
@@ -5429,16 +5430,16 @@ static std::vector<Result> RecentAppResults() {
 
 struct AppKind { const wchar_t *name, *glyph, *words; };
 static const AppKind kAppKinds[] = {
-    {L"Games", L"", L"steam|battle.net|epic games|ea app|ea desktop|ubisoft|gog galaxy|minecraft|curseforge|crossout|riot|xbox|game|roblox|lutris|playnite"},
-    {L"Internet", L"", L"brave|chrome|firefox|edge|opera|vivaldi|discord|teams|whatsapp|telegram|zoom|outlook|mail|thunderbird|skype|slack|chatgpt|claude"},
-    {L"Media", L"", L"spotify|vlc|media|music|video|player|crunchyroll|netflix|obs|audacity|camera|clipchamp|foto|photos|movies|itunes|plex"},
-    {L"Grafisch", L"", L"blender|photoshop|gimp|krita|paint|inkscape|affinity|figma|illustrator|aseprite|substance|3d|image"},
-    {L"Ontwikkeling", L"", L"visual studio|code|godot|git|python|node|terminal|powershell|command prompt|java|unity|android studio|cmake|developer|sdk|wsl|ubuntu"},
-    {L"Kantoor", L"", L"word|excel|powerpoint|onenote|libreoffice|pdf|acrobat|microsoft access|publisher|notion|obsidian"},
-    {L"Bureau-accessoires", L"", L"calculator|rekenmachine|notepad|kladblok|snipping|knipprogramma|clock|klok|alarm|sticky|character map|wordpad|7-zip|winrar|kalender|calendar"},
-    {L"Aanpassen", L"", L"windhawk|wallpaper|powertoys|rainmeter|start11|stardock|unity"},
-    {L"Overig", L"", L""},
-    {L"Systeem", L"", L"settings|instellingen|control panel|configuratiescherm|task manager|taakbeheer|management|beheer|disk|nvidia|amd|intel|core temp|cpu-z|hwmonitor|asrock|msi|equalizer|benchmark|registry|services|tools|explorer|verkenner|defender|beveiliging|recovery|driver|update|uefi|recycle"},
+    {L"Games", L"\uE7FC", L"steam|battle.net|epic games|ea app|ea desktop|ubisoft|gog galaxy|minecraft|curseforge|crossout|riot|xbox|game|roblox|lutris|playnite"},
+    {L"Internet", L"\uE774", L"brave|chrome|firefox|edge|opera|vivaldi|discord|teams|whatsapp|telegram|zoom|outlook|mail|thunderbird|skype|slack|chatgpt|claude"},
+    {L"Media", L"\uE8B2", L"spotify|vlc|media|music|video|player|crunchyroll|netflix|obs|audacity|camera|clipchamp|foto|photos|movies|itunes|plex"},
+    {L"Grafisch", L"\uE790", L"blender|photoshop|gimp|krita|paint|inkscape|affinity|figma|illustrator|aseprite|substance|3d|image"},
+    {L"Ontwikkeling", L"\uE943", L"visual studio|code|godot|git|python|node|terminal|powershell|command prompt|java|unity|android studio|cmake|developer|sdk|wsl|ubuntu"},
+    {L"Kantoor", L"\uE8A5", L"word|excel|powerpoint|onenote|libreoffice|pdf|acrobat|microsoft access|publisher|notion|obsidian"},
+    {L"Bureau-accessoires", L"\uE8EF", L"calculator|rekenmachine|notepad|kladblok|snipping|knipprogramma|clock|klok|alarm|sticky|character map|wordpad|7-zip|winrar|kalender|calendar"},
+    {L"Aanpassen", L"\uE771", L"windhawk|wallpaper|powertoys|rainmeter|start11|stardock|unity"},
+    {L"Overig", L"\uE74C", L""},
+    {L"Systeem", L"\uE770", L"settings|instellingen|control panel|configuratiescherm|task manager|taakbeheer|management|beheer|disk|nvidia|amd|intel|core temp|cpu-z|hwmonitor|asrock|msi|equalizer|benchmark|registry|services|tools|explorer|verkenner|defender|beveiliging|recovery|driver|update|uefi|recycle"},
 };
 static const int kOtherKind = 8;
 
@@ -5453,7 +5454,7 @@ static std::wstring GroupNameFor(const std::wstring& a, const std::wstring& b) {
         return kOtherKind;
     };
     int ka = kindOf(a), kb = kindOf(b);
-    return ka == kb && ka != kOtherKind ? kAppKinds[ka].name : L"Groep";
+    return ka == kb && ka != kOtherKind ? Tr(kAppKinds[ka].name) : Tr(L"Groep");
 }
 
 static int KindOf(const App& a) {
@@ -5538,16 +5539,16 @@ static bool WantsApp(const std::wstring& launch) {
 // a file's kind for the Type filter, from its extension
 static std::wstring FileKind(const std::wstring& path) {
     DWORD attr = GetFileAttributesW(path.c_str());
-    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) return L"Mappen";
+    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) return Tr(L"Mappen");
     size_t dot = path.find_last_of(L'.');
     std::wstring ext = dot == std::wstring::npos ? L"" : Lower(path.substr(dot)) + L".";
     auto in = [&](const wchar_t* list) { return !ext.empty() && std::wstring(list).find(ext) != std::wstring::npos; };
-    if (in(L".doc.docx.pdf.txt.rtf.odt.xls.xlsx.csv.md.ods.")) return L"Documenten";
-    if (in(L".png.jpg.jpeg.gif.bmp.webp.heic.tif.tiff.svg.ico.")) return L"Afbeeldingen";
+    if (in(L".doc.docx.pdf.txt.rtf.odt.xls.xlsx.csv.md.ods.")) return Tr(L"Documenten");
+    if (in(L".png.jpg.jpeg.gif.bmp.webp.heic.tif.tiff.svg.ico.")) return Tr(L"Afbeeldingen");
     if (in(L".mp3.wav.flac.ogg.m4a.aac.wma.opus.")) return L"Audio";
-    if (in(L".mp4.mkv.avi.mov.wmv.webm.m4v.")) return L"Video's";
-    if (in(L".ppt.pptx.odp.key.")) return L"Presentaties";
-    return L"Overig";
+    if (in(L".mp4.mkv.avi.mov.wmv.webm.m4v.")) return Tr(L"Video's");
+    if (in(L".ppt.pptx.odp.key.")) return Tr(L"Presentaties");
+    return Tr(L"Overig");
 }
 
 // how many days ago a file was last changed (cached: the lists come back on every keystroke)
@@ -5571,7 +5572,7 @@ static double FileAgeDays(const std::wstring& path) {
 
 static std::vector<Result> FilterFiles(const std::vector<Result>& files) {
     std::vector<Result> out;
-    bool byDate = AnyFilter(L"Laatst gewijzigd"), byType = g_lens == LENS_FILES && AnyFilter(L"Type");
+    bool byDate = AnyFilter(Tr(L"Laatst gewijzigd")), byType = g_lens == LENS_FILES && AnyFilter(L"Type");
     for (auto& f : files) {
         if (byDate) {
             double age = FileAgeDays(f.open);
@@ -5598,10 +5599,10 @@ static void BuildSections() {
     g_sections.clear();
     std::wstring q = Lower(Trim(g_query));
     std::vector<Result> files;
-    EnterCriticalSection(&g_fileLock);
+    g_fileLock.lock();
     bool current = g_fileResultsGen == g_fileGen;
     if (current) files = g_fileResults;
-    LeaveCriticalSection(&g_fileLock);
+    g_fileLock.unlock();
     g_filesPending = !current && g_lens != LENS_APPS;
     std::vector<Result> group0, group1;
     for (auto& f : files) (f.group == 1 ? group1 : group0).push_back(f);
@@ -5614,18 +5615,18 @@ static void BuildSections() {
             if (q.empty()) {
                 auto recent = RecentAppResults();
                 if (recent.empty()) recent = RankedApps(L"", 12);
-                if (wantApps) g_sections.push_back({L"Applicaties", L"\uE71D", OnlyWanted(recent), 1});
-                if (wantFiles) g_sections.push_back({L"Recente bestanden", L"\uE8B7", group0, 1});
+                if (wantApps) g_sections.push_back({Tr(L"Applicaties"), L"\uE71D", OnlyWanted(recent), 1});
+                if (wantFiles) g_sections.push_back({Tr(L"Recente bestanden"), L"\uE8B7", group0, 1});
             } else {
-                if (wantApps) g_sections.push_back({L"Applicaties", L"\uE71D", OnlyWanted(RankedApps(q, 60)), 2});
-                if (Wants(L"Categorieën", L"Instellingen") && Wants(L"Bronnen", L"Instellingen")) g_sections.push_back({L"Instellingen", L"\uE713", FindSettings(q), 1});
-                if (wantFiles) g_sections.push_back({L"Bestanden en mappen", L"\uE8B7", group0, 2});
+                if (wantApps) g_sections.push_back({Tr(L"Applicaties"), L"\uE71D", OnlyWanted(RankedApps(q, 60)), 2});
+                if (Wants(L"Categorieën", L"Instellingen") && Wants(L"Bronnen", L"Instellingen")) g_sections.push_back({Tr(L"Instellingen"), L"\uE713", FindSettings(q), 1});
+                if (wantFiles) g_sections.push_back({Tr(L"Bestanden en mappen"), L"\uE8B7", group0, 2});
             }
             break;
         case LENS_APPS:
             if (q.empty()) {
                 // browsing: recently used, then one group per kind of app (system tools last)
-                if (!AnyFilter(L"Type") && !AnyFilter(L"Bronnen")) g_sections.push_back({L"Recent gebruikt", L"\uE81C", RecentAppResults(), 1});
+                if (!AnyFilter(L"Type") && !AnyFilter(Tr(L"Bronnen"))) g_sections.push_back({Tr(L"Recent gebruikt"), L"\uE81C", RecentAppResults(), 1});
                 std::vector<Result> byKind[ARRAYSIZE(kAppKinds)];
                 for (auto& a : g_apps) {
                     int k = KindOf(a);
@@ -5633,7 +5634,7 @@ static void BuildSections() {
                     if (Wants(L"Type", kAppKinds[k].name) && WantsApp(r.open)) byKind[k].push_back(r);
                 }
                 for (int k = 0; k < (int)ARRAYSIZE(kAppKinds); k++)
-                    g_sections.push_back({kAppKinds[k].name, kAppKinds[k].glyph, byKind[k], k == ARRAYSIZE(kAppKinds) - 1 ? 1 : 2});
+                    g_sections.push_back({Tr(kAppKinds[k].name), kAppKinds[k].glyph, byKind[k], k == ARRAYSIZE(kAppKinds) - 1 ? 1 : 2});
             } else {
                 std::vector<Result> found;
                 for (auto& r : RankedApps(q, 200))
@@ -5643,8 +5644,8 @@ static void BuildSections() {
                             if (std::wstring(kAppsFolder) + a.id == r.open) kindOk = Wants(L"Type", kAppKinds[KindOf(a)].name);
                         if (kindOk) found.push_back(r);
                     }
-                g_sections.push_back({L"Applicaties", L"\uE71D", found, 100});
-                g_sections.push_back({L"Instellingen", L"\uE713", FindSettings(q), 1});
+                g_sections.push_back({Tr(L"Applicaties"), L"\uE71D", found, 100});
+                g_sections.push_back({Tr(L"Instellingen"), L"\uE713", FindSettings(q), 1});
             }
             break;
         case LENS_FILES:
@@ -5652,11 +5653,11 @@ static void BuildSections() {
                 g_sections.push_back({L"Recent", L"\uE81C", group0, 2});
                 g_sections.push_back({L"Downloads", L"\uE896", group1, 2});
             } else {
-                g_sections.push_back({L"Bestanden en mappen", L"\uE8B7", group0, 100});
+                g_sections.push_back({Tr(L"Bestanden en mappen"), L"\uE8B7", group0, 100});
             }
             break;
         default:
-            g_sections.push_back({g_lens == LENS_VIDEO ? L"Video's" : g_lens == LENS_MUSIC ? L"Muziek" : L"Foto's", kLensGlyph[g_lens], group0, 100});
+            g_sections.push_back({g_lens == LENS_VIDEO ? Tr(L"Video's") : g_lens == LENS_MUSIC ? Tr(L"Muziek") : Tr(L"Foto's"), kLensGlyph[g_lens], group0, 100});
             break;
     }
     g_sections.erase(std::remove_if(g_sections.begin(), g_sections.end(), [](const Section& s) { return s.items.empty(); }), g_sections.end());
@@ -5676,6 +5677,14 @@ static int DashCols() {
 
 static bool ShowWidgets() {
     return g_set.showWidgets && g_lens == LENS_HOME && Trim(g_query).empty();
+}
+
+// Windows' Weather app is there (it registers the bingweather: link)
+static bool WeatherAppInstalled() {
+    HKEY k;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"bingweather", 0, KEY_READ, &k) != ERROR_SUCCESS) return false;
+    RegCloseKey(k);
+    return true;
 }
 
 static void Card(Surface& s, D2D1_RECT_F r, const wchar_t* glyph, const wchar_t* title) {
@@ -5714,31 +5723,23 @@ static float DrawWidgets(Surface& s, float y, float W) {
         return D2D1::RectF(x, top, x + colW * span + gap * (span - 1), top + cardH);
     };
 
-    // weather
+    // today: the time and the date, large
     D2D1_RECT_F wr = cell(0, 0, 1);
-    Card(s, wr, L"\uE753", L"Weer");
-    EnterCriticalSection(&g_weatherLock);
-    bool ok = g_weatherOk;
-    float temp = g_weatherTemp;
-    int code = g_weatherCode;
-    std::wstring place = g_weatherPlace;
-    LeaveCriticalSection(&g_weatherLock);
-    if (g_set.weatherCity.empty())
-        Text(s, L"Vul je stad in bij de instellingen van de mod", D2D1::RectF(wr.left + 12, wr.top + 34, wr.right - 10, wr.bottom - 8), 12, 0.7f, DWRITE_TEXT_ALIGNMENT_LEADING, true);
-    else if (!ok)
-        Text(s, place.empty() ? L"Laden…" : place, D2D1::RectF(wr.left + 12, wr.top + 60, wr.right - 10, wr.top + 90), 13, 0.75f);
-    else {
-        Text(s, WeatherIcon(code), D2D1::RectF(wr.left + 10, wr.top + 34, wr.left + 60, wr.top + 90), 34, 1, DWRITE_TEXT_ALIGNMENT_CENTER, false, L"Segoe UI Emoji");
-        wchar_t t[16];
-        swprintf(t, 16, L"%d°", (int)lroundf(temp));
-        Text(s, t, D2D1::RectF(wr.left + 64, wr.top + 34, wr.right - 8, wr.top + 90), 30, 1);
-        Text(s, std::wstring(WeatherText(code)) + L" · " + place, D2D1::RectF(wr.left + 12, wr.top + 100, wr.right - 8, wr.top + 122), 12, 0.8f);
-    }
+    Card(s, wr, L"\uE823", Tr(L"Vandaag"));
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    wchar_t tm[32] = {}, day[64] = {}, date[64] = {};
+    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &now, nullptr, tm, 32);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &now, L"dddd", day, 64, nullptr);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &now, L"d MMMM yyyy", date, 64, nullptr);
+    Text(s, tm, D2D1::RectF(wr.left + 12, wr.top + 34, wr.right - 8, wr.top + 80), 32, 1);
+    Text(s, day, D2D1::RectF(wr.left + 12, wr.top + 84, wr.right - 8, wr.top + 104), 13, 0.9f, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    Text(s, date, D2D1::RectF(wr.left + 12, wr.top + 104, wr.right - 8, wr.top + 124), 12, 0.75f);
 
     // now playing
     D2D1_RECT_F mr = cell(1, 0, 2);
-    Card(s, mr, L"\uE8D6", L"Nu aan het spelen");
-    EnterCriticalSection(&g_mediaLock);
+    Card(s, mr, L"\uE8D6", Tr(L"Nu aan het spelen"));
+    g_mediaLock.lock();
     bool has = g_mHas, playing = g_mPlaying;
     std::wstring title = g_mTitle, artist = g_mArtist;
     std::wstring coverKey = L"cover#" + std::to_wstring(g_mCoverKey);
@@ -5746,11 +5747,11 @@ static float DrawWidgets(Surface& s, float y, float W) {
     auto cached = s.bitmaps.find(coverKey);
     if (cached != s.bitmaps.end()) cover = cached->second;
     else if (g_mCover) { s.rt->CreateBitmapFromWicBitmap(g_mCover, nullptr, &cover); s.bitmaps[coverKey] = cover; }
-    LeaveCriticalSection(&g_mediaLock);
+    g_mediaLock.unlock();
     D2D1_RECT_F cr = D2D1::RectF(mr.left + 12, mr.top + 32, mr.left + 108, mr.top + 128);
     s.rt->FillRoundedRectangle(D2D1::RoundedRect(cr, 8, 8), s.White(0.08f));
     if (cover && has) s.rt->DrawBitmap(cover, cr, 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-    Text(s, has ? title : L"Er speelt niets", D2D1::RectF(cr.right + 14, mr.top + 40, mr.right - 10, mr.top + 62), 15, 1, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    Text(s, has ? title : Tr(L"Er speelt niets"), D2D1::RectF(cr.right + 14, mr.top + 40, mr.right - 10, mr.top + 62), 15, 1, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     Text(s, artist, D2D1::RectF(cr.right + 14, mr.top + 62, mr.right - 10, mr.top + 80), 12, 0.75f);
     const wchar_t* glyphs[3] = {L"\uE892", playing ? L"\uE769" : L"\uE768", L"\uE893"};
     for (int k = 0; k < 3; k++) {
@@ -5763,7 +5764,7 @@ static float DrawWidgets(Surface& s, float y, float W) {
 
     // disks
     D2D1_RECT_F dr = cell(3, 0, 1);
-    Card(s, dr, L"\uEDA2", L"Opslag");
+    Card(s, dr, L"\uEDA2", Tr(L"Opslag"));
     wchar_t drives[256];
     DWORD len = GetLogicalDriveStringsW(255, drives);
     float dy = dr.top + 34;
@@ -5773,7 +5774,7 @@ static float DrawWidgets(Surface& s, float y, float W) {
         if (!GetDiskFreeSpaceExW(d, nullptr, &total, &freeB) || !total.QuadPart) continue;
         float used = 1 - (float)((double)freeB.QuadPart / total.QuadPart);
         wchar_t label[64];
-        swprintf(label, 64, L"%.2ls  %.0f GB vrij", d, freeB.QuadPart / 1073741824.0);
+        swprintf(label, 64, Tr(L"%.2ls  %.0f GB vrij"), d, freeB.QuadPart / 1073741824.0);
         Text(s, label, D2D1::RectF(dr.left + 12, dy, dr.right - 10, dy + 18), 12, 0.9f);
         D2D1_RECT_F bar = D2D1::RectF(dr.left + 12, dy + 20, dr.right - 12, dy + 24);
         s.rt->FillRoundedRectangle(D2D1::RoundedRect(bar, 2, 2), s.White(0.15f));
@@ -5784,7 +5785,7 @@ static float DrawWidgets(Surface& s, float y, float W) {
 
     // CPU / GPU / RAM
     D2D1_RECT_F sr = cell(0, 1, 2);
-    Card(s, sr, L"\uE9D9", L"Systeem");
+    Card(s, sr, L"\uE9D9", Tr(L"Systeem"));
     wchar_t v[32];
     struct Row { const wchar_t* label; float value; const std::vector<float>* hist; bool ram; } rows[3] = {
         {L"CPU", g_cpu, &g_cpuHist, false}, {L"GPU", g_gpu, &g_gpuHist, false}, {L"RAM", g_ramUsed, &g_ramHist, true}};
@@ -5796,6 +5797,14 @@ static float DrawWidgets(Surface& s, float y, float W) {
         Text(s, v, D2D1::RectF(sr.left + 52, ry, sr.left + 122, ry + 28), 12.5f, 0.85f);
         Sparkline(s, *rows[k].hist, D2D1::RectF(sr.left + 126, ry + 4, sr.right - 14, ry + 26));
     }
+    // the weather: Windows' own Weather app (the mod itself fetches nothing from the internet)
+    D2D1_RECT_F wa = cell(2, 1, 1);
+    int weatherHit = (int)g_hits.size();
+    g_hits.push_back({wa, HIT_WEATHER, 0, 0});
+    if (g_hoverHit == weatherHit) s.rt->FillRoundedRectangle(D2D1::RoundedRect(wa, 10, 10), s.White(0.06f));
+    Card(s, wa, L"\uE753", Tr(L"Weer"));
+    Text(s, L"⛅", D2D1::RectF(wa.left + 10, wa.top + 34, wa.right - 10, wa.top + 92), 38, 1, DWRITE_TEXT_ALIGNMENT_CENTER, false, L"Segoe UI Emoji");
+    Text(s, WeatherAppInstalled() ? Tr(L"Open de Weer-app") : Tr(L"Weer-app installeren"), D2D1::RectF(wa.left + 12, wa.top + 100, wa.right - 10, wa.top + 122), 12, 0.8f, DWRITE_TEXT_ALIGNMENT_CENTER);
     return y + 2 * (cardH + gap);
 }
 
@@ -5847,7 +5856,7 @@ static void RenderDash() {
 
     // the search box (the app's: dark, rounded, a light rim) and "Filter results" on the right
     float CW = W - (g_filtersOpen ? kFilterW : 0);   // the results' width, beside the sidebar
-    std::wstring filterLabel = g_filtersOpen ? L"Resultaten filteren  ▾" : L"Resultaten filteren  ▸";
+    std::wstring filterLabel = g_filtersOpen ? Tr(L"Resultaten filteren  ▾") : Tr(L"Resultaten filteren  ▸");
     float filterW = TextWidth(filterLabel, 17) + 4;
     D2D1_RECT_F sb = D2D1::RectF(10, 10, 10 + std::min(640.f, W - 28 - filterW - 24), 54);   // up to the filter toggle
     s.rt->FillRoundedRectangle(D2D1::RoundedRect(sb, 10, 10), s.Brush({0, 0, 0}, 0x55 / 255.f));
@@ -5856,10 +5865,10 @@ static void RenderDash() {
     bool empty = g_query.empty();
     if (empty) {
         IDWriteTextFormat* fmt = nullptr;   // the hint in italics, like the app
-        if (SUCCEEDED(g_dw->CreateTextFormat(g_fontFamily.c_str(), nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STRETCH_NORMAL, 19, L"nl-nl", &fmt))) {
+        if (SUCCEEDED(g_dw->CreateTextFormat(g_fontFamily.c_str(), nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STRETCH_NORMAL, 19, L"", &fmt))) {
             fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-            std::wstring hint = kLensHint[g_lens];
+            std::wstring hint = Tr(kLensHint[g_lens]);
             s.rt->DrawText(hint.c_str(), (UINT32)hint.size(), fmt, D2D1::RectF(sb.left + 42, sb.top, sb.right - 10, sb.bottom), s.White(0x99 / 255.f), D2D1_DRAW_TEXT_OPTIONS_CLIP);
             fmt->Release();
         }
@@ -5922,7 +5931,7 @@ static void RenderDash() {
         enter(row);
         D2D1_RECT_F band = header(sec.glyph, sec.title, (int)sec.items.size(), si == selSection);
         if ((int)sec.items.size() > sec.rows * cols) {   // "show all" / "show less", a pill on the right
-            std::wstring label = open ? L"Minder tonen" : L"Alles tonen";
+            std::wstring label = open ? Tr(L"Minder tonen") : Tr(L"Alles tonen");
             float pw = TextWidth(label, 12) + 40, cy = (band.top + band.bottom) / 2;
             D2D1_RECT_F mb = D2D1::RectF(band.right - 8 - pw, cy - 12, band.right - 8, cy + 12);
             int hit = (int)g_hits.size();
@@ -5969,7 +5978,7 @@ static void RenderDash() {
         y += (float)((limit + cols - 1) / cols) * kTileH;
     }
     if (g_sections.empty()) {
-        const wchar_t* msg = g_filesPending ? L"Zoeken…" : L"Sorry, er is niets gevonden.";
+        const wchar_t* msg = g_filesPending ? Tr(L"Zoeken…") : Tr(L"Sorry, er is niets gevonden.");
         Text(s, msg, D2D1::RectF(0, y + 40, CW, y + 70), 16, 0.7f, DWRITE_TEXT_ALIGNMENT_CENTER);
         y += 80;
     }
@@ -5996,7 +6005,7 @@ static void RenderDash() {
         }
         float fx = CW + 14, fw = kFilterW - 30, fy = top;
         auto groups = LensFilters();
-        if (groups.empty()) Text(s, L"Geen filters voor deze lens.", D2D1::RectF(fx, fy + 8, fx + fw, fy + 30), 14, 0x99 / 255.f);
+        if (groups.empty()) Text(s, Tr(L"Geen filters voor deze lens."), D2D1::RectF(fx, fy + 8, fx + fw, fy + 30), 14, 0x99 / 255.f);
         for (int gi = 0; gi < (int)groups.size(); gi++) {
             auto& g = groups[gi];
             bool shut = g_filterShut[FilterKey(g.name)];
@@ -6004,7 +6013,7 @@ static void RenderDash() {
             D2D1_RECT_F hr = D2D1::RectF(fx, fy, fx + fw, fy + 24);
             int hit = (int)g_hits.size();
             g_hits.push_back({hr, HIT_FGROUP, gi, 0});
-            Text(s, g.name + (shut ? L"  \u25B8" : L"  \u25BE"), hr, 17, g_hoverHit == hit ? 1.f : 0.95f);
+            Text(s, std::wstring(Tr(g.name.c_str())) + (shut ? L"  \u25B8" : L"  \u25BE"), hr, 17, g_hoverHit == hit ? 1.f : 0.95f);
             fy += 34;
             if (shut) continue;
             float chipW = (fw - 10) / 2;
@@ -6016,7 +6025,7 @@ static void RenderDash() {
                 g_hits.push_back({cr, HIT_FCHIP, gi, vi});
                 s.rt->FillRoundedRectangle(D2D1::RoundedRect(cr, 4, 4), s.White((on ? 0x2C : g_hoverHit == chit ? 0x16 : 0x06) / 255.f));
                 s.rt->DrawRoundedRectangle(D2D1::RoundedRect(cr, 4, 4), s.White((on ? 0xF0 : 0x60) / 255.f), on ? 1.6f : 1);
-                Text(s, g.values[vi], D2D1::RectF(cr.left + 6, cr.top, cr.right - 6, cr.bottom), 14, 1, DWRITE_TEXT_ALIGNMENT_CENTER);
+                Text(s, Tr(g.values[vi].c_str()), D2D1::RectF(cr.left + 6, cr.top, cr.right - 6, cr.bottom), 14, 1, DWRITE_TEXT_ALIGNMENT_CENTER);
             }
             fy += ((g.values.size() + 1) / 2) * 42.f;
         }
@@ -6206,7 +6215,6 @@ static void ShowDash(bool show) {
     RequestFiles();
     g_dashOpen = true;
     SampleStats();
-    RefreshWeather();
     SetEvent(g_mediaWake);
     // Unity fades the Dash in with a slight zoom out of its top-left corner (near the Dash button)
     bool fromHidden = !DashShown();
@@ -6281,7 +6289,7 @@ static int HitAt(float x, float y) {
     for (int i = (int)g_hits.size() - 1; i >= 0; i--) {
         auto& h = g_hits[i];
         if (!Inside(h.r, x, y)) continue;
-        if ((h.kind == HIT_TILE || h.kind == HIT_MORE || h.kind == HIT_MEDIA) && (y < top || y > bottom)) continue;   // scrolled out of view
+        if ((h.kind == HIT_TILE || h.kind == HIT_MORE || h.kind == HIT_MEDIA || h.kind == HIT_WEATHER) && (y < top || y > bottom)) continue;   // scrolled out of view
         return i;
     }
     return -1;
@@ -6305,6 +6313,10 @@ static void Activate(const Hit& h) {
         }
         case HIT_LENS: SetLens(h.a); break;
         case HIT_MEDIA: MediaCommand(h.a); break;
+        case HIT_WEATHER:   // Windows' own Weather app, or its Store page to install it
+            ShowDash(false);
+            Launch(WeatherAppInstalled() ? L"bingweather:" : L"ms-windows-store://pdp/?ProductId=9WZDNCRFJ3Q2");
+            break;
         case HIT_FILTERS:
             g_filtersOpen = !g_filtersOpen;
             if (g_filtersOpen) {
@@ -6351,13 +6363,13 @@ static void ResultMenu(const Result& r, POINT pt) {
     std::wstring file;
     if (r.kind == RK_APP) {
         file = FileOf(r.open);
-        m.push_back(MItem(1, L"Openen", L"\uE8A7"));
-        m.push_back(MItem(2, L"Als administrator uitvoeren", L"\uEA18"));
-        m.push_back(IsPinned(r.open) ? MItem(3, L"Losmaken van launcher", L"\uE77A") : MItem(3, L"Vastmaken aan launcher", L"\uE718"));
-        if (!file.empty()) m.push_back(MItem(4, L"Bestandslocatie openen", L"\uE838"));
-        m.push_back(MItem(5, L"App-instellingen", L"\uE713"));
+        m.push_back(MItem(1, Tr(L"Openen"), L"\uE8A7"));
+        m.push_back(MItem(2, Tr(L"Als administrator uitvoeren"), L"\uEA18"));
+        m.push_back(IsPinned(r.open) ? MItem(3, Tr(L"Losmaken van launcher"), L"\uE77A") : MItem(3, Tr(L"Vastmaken aan launcher"), L"\uE718"));
+        if (!file.empty()) m.push_back(MItem(4, Tr(L"Bestandslocatie openen"), L"\uE838"));
+        m.push_back(MItem(5, Tr(L"App-instellingen"), L"\uE713"));
         m.push_back(MSeparator());
-        m.push_back(MItem(5, L"Verwijderen", L"\uE74D"));
+        m.push_back(MItem(5, Tr(L"Verwijderen"), L"\uE74D"));
     } else if (r.kind == RK_SETTING) {
         m.push_back(MItem(1, L"Open"));
     } else {
@@ -6418,7 +6430,6 @@ static LRESULT CALLBACK DashProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == TIMER_WIDGETS) {
                 if (ShowWidgets()) {
                     SampleStats();
-                    RefreshWeather();
                     RenderDash();
                 }
             }
@@ -6535,7 +6546,7 @@ static void GuardTaskbar() {
     if (!g_set.hideTaskbar || !g_running) return;
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (tray && tray != g_tray) {
-        Debug(L"the taskbar window was re-created");
+        Wh_Log(L"the taskbar window was re-created");
         if (g_tray) WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tray, TraySubclass);
         g_tray = tray;
         WindhawkUtils::SetWindowSubclassFromAnyThread(g_tray, TraySubclass, 0);
@@ -6546,23 +6557,12 @@ static void GuardTaskbar() {
 
 // the keyboard hook's thread (see KeyProc), so Start getting through can renew the hook
 static DWORD g_keyThreadId;
-static std::atomic<long> g_hookCalls{0};       // diagnostics: is the hook still being called?
-static std::atomic<DWORD> g_lastWinKey{0};      // when it last saw the Windows key
 static const UINT WM_APP_RENEWHOOK = WM_APP + 50;
 static bool IsStartMenu(HWND h);
 static void StartOpened();
 
 static void GuardStart() {
     HWND fg = GetForegroundWindow();
-    static HWND lastFg;
-    if (fg != lastFg) {   // diagnostics: what comes to the front
-        lastFg = fg;
-        wchar_t cls[64] = {};
-        GetClassNameW(fg, cls, 64);
-        DWORD pid = 0;
-        GetWindowThreadProcessId(fg, &pid);
-        Debug(L"foreground: %s | %s | %s", FileName(ProcessPath(pid)).c_str(), cls, WindowTitle(fg).c_str());
-    }
     if (g_set.startOpensDash && g_running && IsStartMenu(fg)) StartOpened();
 }
 
@@ -6583,8 +6583,7 @@ static bool IsStartMenu(HWND h) {
 }
 
 static void StartOpened() {
-    Debug(L"Windows Start opened anyway -> Dash (key hook: %ld calls, Windows key seen %lu ms ago)", g_hookCalls.load(),
-          g_lastWinKey ? GetTickCount() - g_lastWinKey : 0);
+    Wh_Log(L"Windows Start opened anyway -> Dash");
     if (g_keyThreadId) PostThreadMessageW(g_keyThreadId, WM_APP_RENEWHOOK, 0, 0);
     if (!IsWindowVisible(g_dash)) ShowDash(true);   // taking the focus closes Start
     SetTimer(g_host, TIMER_STARTESC, 250, nullptr);
@@ -6911,7 +6910,7 @@ static LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             Refresh();
             return 0;
         case WM_APP_TOGGLEDASH:
-            if (wp == 1) Debug(L"Windows key tapped -> Dash");
+            if (wp == 1) Wh_Log(L"Windows key tapped -> Dash");
             if (GetTickCount() - g_lastToggle > 250) ToggleDash();   // one press can arrive twice (hook + taskbar)
             g_lastToggle = GetTickCount();
             return 0;
@@ -6944,6 +6943,7 @@ static LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             Refresh();
             return 0;
         case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:   // a new resolution, scale or main screen: everything measured and laid out again
             PostThreadMessageW(GetCurrentThreadId(), WM_APP_REFRESH, 0, 0);
             return 0;
     }
@@ -6957,7 +6957,7 @@ static LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 static LRESULT CALLBACK TraySubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
     if (msg == WM_COPYDATA) TrayNotify((const COPYDATASTRUCT*)lp);   // an app's tray icon (see the tray popup)
-    if (msg == WM_SYSCOMMAND) Debug(L"taskbar: WM_SYSCOMMAND 0x%IX", wp);
+    if (msg == WM_SYSCOMMAND) Wh_Log(L"taskbar: WM_SYSCOMMAND 0x%IX", wp);
     if (msg == WM_SYSCOMMAND && (wp & 0xFFF0) == SC_TASKLIST && g_set.startOpensDash && g_running && g_host) {
         PostMessageW(g_host, WM_APP_TOGGLEDASH, 0, 0);
         return 0;
@@ -6986,9 +6986,7 @@ static void InjectKey(DWORD vk, DWORD scan, bool extended, bool up) {
 
 static LRESULT CALLBACK KeyProc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION || !g_running || !g_set.startOpensDash) return CallNextHookEx(nullptr, code, wp, lp);
-    g_hookCalls++;
     auto* k = (KBDLLHOOKSTRUCT*)lp;
-    if (k->vkCode == VK_LWIN || k->vkCode == VK_RWIN) g_lastWinKey = GetTickCount();
     if (k->flags & LLKHF_INJECTED) return CallNextHookEx(nullptr, code, wp, lp);
     bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
     if ((g_win == WIN_HELD || g_win == WIN_PASSED) && k->time - g_winTime > 10000 && !(GetAsyncKeyState(g_winVk) & 0x8000)) g_win = WIN_UP;   // its key-up got lost
@@ -7022,18 +7020,18 @@ static LRESULT CALLBACK KeyProc(int code, WPARAM wp, LPARAM lp) {
 
 static DWORD WINAPI KeyThread(LPVOID) {
     HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyProc, GetModuleHandleW(nullptr), 0);
-    Debug(hook ? L"keyboard hook installed" : L"keyboard hook failed (%u)", GetLastError());
-    // Windows silently drops a low-level hook that once answered too slowly (a busy PC), so renew it now and then,
-    // and right away when Start got through anyway
-    SetTimer(nullptr, 0, 10000, nullptr);
+    if (hook) Wh_Log(L"keyboard hook installed");
+    else Wh_Log(L"keyboard hook failed (%u)", GetLastError());
+    // Windows silently drops a low-level hook that once answered too slowly (a busy PC): it is renewed only when
+    // that shows, Start getting through anyway (renewing it more often would keep moving it ahead of other apps' hooks)
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) {
-        if (m.message != WM_TIMER && m.message != WM_APP_RENEWHOOK) continue;
+        if (m.message != WM_APP_RENEWHOOK) continue;
         if (HHOOK fresh = SetWindowsHookExW(WH_KEYBOARD_LL, KeyProc, GetModuleHandleW(nullptr), 0)) {
             if (hook) UnhookWindowsHookEx(hook);
             hook = fresh;
-        } else Debug(L"keyboard hook renewal failed (%u)", GetLastError());
-        if (m.message == WM_APP_RENEWHOOK) Debug(L"keyboard hook renewed");
+        } else Wh_Log(L"keyboard hook renewal failed (%u)", GetLastError());
+        if (m.message == WM_APP_RENEWHOOK) Wh_Log(L"keyboard hook renewed");
     }
     if (hook) UnhookWindowsHookEx(hook);
     return 0;
@@ -7058,7 +7056,11 @@ static HWND MakeWindow(const wchar_t* cls, WNDPROC proc, DWORD exStyle, bool dbl
     wc.lpszClassName = cls;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.style = dblclk ? CS_DBLCLKS : 0;
-    if (RegisterClassExW(&wc)) g_classes.push_back(cls);
+    if (!RegisterClassExW(&wc)) {   // never a class left by someone else: its code may be gone
+        Wh_Log(L"window class %s could not be registered (%u)", cls, GetLastError());
+        return nullptr;
+    }
+    g_classes.push_back(cls);
     return CreateWindowExW(exStyle, cls, cls, WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, wc.hInstance, nullptr);
 }
 
@@ -7092,7 +7094,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2d);
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&g_dw);
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_wic));
-    if (!g_d2d || !g_dw || !g_wic) { Debug(L"graphics init failed"); CoUninitialize(); return 0; }
+    if (!g_d2d || !g_dw || !g_wic) { Wh_Log(L"graphics init failed"); CoUninitialize(); return 0; }
     PickFont();
     ReadColours();
     Measure();
@@ -7127,6 +7129,21 @@ static DWORD WINAPI UiThread(LPVOID) {
     ghost.lpszClassName = L"UnityShellGhost";
     if (RegisterClassExW(&ghost)) g_classes.push_back(ghost.lpszClassName);
     g_preview = MakeWindow(L"UnityShellPreviews", PreviewProc, WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE);
+    // any window missing: the shell doesn't start (what was made goes again)
+    HWND made[] = {g_host, g_panel, g_launcher, g_dash, g_corner, g_strip, g_dashFoot, g_dashTip, g_tip, g_menu, g_pop, g_group, g_preview};
+    if (std::any_of(std::begin(made), std::end(made), [](HWND h) { return !h; })) {
+        Wh_Log(L"the shell's windows could not be made: not starting");
+        for (HWND h : made)
+            if (h) DestroyWindow(h);
+        for (auto& c : g_classes) UnregisterClassW(c.c_str(), ModInstance());
+        g_classes.clear();
+        g_host = g_panel = g_launcher = g_dash = g_corner = g_strip = g_dashFoot = g_dashTip = g_tip = g_menu = g_pop = g_group = g_preview = nullptr;
+        Release(g_wic);
+        Release(g_dw);
+        Release(g_d2d);
+        CoUninitialize();
+        return 0;
+    }
     int round = 2;   // DWMWCP_ROUND
     DwmSetWindowAttribute(g_preview, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &round, sizeof(round));
     for (HWND h : {g_panel, g_launcher, g_dash, g_dashFoot, g_strip}) BlurBehind(h);
@@ -7159,15 +7176,20 @@ static DWORD WINAPI UiThread(LPVOID) {
     SetTimer(g_host, TIMER_REFRESH, 2000, nullptr);
     SetTimer(g_host, TIMER_CLOCK, 5000, nullptr);
     SetTimer(g_host, TIMER_TASKBAR, 500, nullptr);
-    g_keyThread = CreateThread(nullptr, 0, KeyThread, nullptr, 0, &g_keyThreadId);
+    if (g_set.startOpensDash) g_keyThread = CreateThread(nullptr, 0, KeyThread, nullptr, 0, &g_keyThreadId);   // the Windows key opens the Dash
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     g_moveHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WindowMoved, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_moveEndHook = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, nullptr, MoveEnded, 0, 0, WINEVENT_OUTOFCONTEXT);
     StartTrayWatch();
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(g_tray, TraySubclass, 0)) Debug(L"listening for Start on the taskbar");
-    // every app hands its tray icons over again, as when Explorer starts (so the ones from before are known too)
-    PostMessageW(HWND_BROADCAST, RegisterWindowMessageW(L"TaskbarCreated"), 0, 0);
-    Debug(L"shell up (scale %.2f) mergeMaximized=%d liftTitleBars=%d", g_scale, g_set.mergeMaximized, g_set.liftTitleBars);
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(g_tray, TraySubclass, 0)) Wh_Log(L"listening for Start on the taskbar");
+    // every app hands its tray icons over again, as when Explorer starts (so the ones from before are known too);
+    // once: the list stays while the shell restarts for a settings change
+    static bool asked;
+    if (!asked) {
+        asked = true;
+        PostMessageW(HWND_BROADCAST, RegisterWindowMessageW(L"TaskbarCreated"), 0, 0);
+    }
+    Wh_Log(L"shell up (scale %.2f) mergeMaximized=%d liftTitleBars=%d", g_scale, g_set.mergeMaximized, g_set.liftTitleBars);
 
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -7187,7 +7209,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     StopDiscordWatch();
     if (g_keyThread) {
         PostThreadMessageW(g_keyThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_keyThread, 3000);
+        WaitForSingleObject(g_keyThread, INFINITE);   // every call it makes is bounded: it always ends
         CloseHandle(g_keyThread);
         g_keyThread = nullptr;
     }
@@ -7222,6 +7244,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     DestroyWindow(g_panel);
     DestroyWindow(g_host);
     g_dash = g_launcher = g_panel = g_host = nullptr;
+    FreeFormats();
     for (auto& c : g_classes) UnregisterClassW(c.c_str(), ModInstance());
     g_classes.clear();
     Release(g_wic);
@@ -7238,256 +7261,9 @@ static void StartUi() {
 static void StopUi() {
     if (!g_uiThread) return;
     PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
-    WaitForSingleObject(g_uiThread, 10000);
+    WaitForSingleObject(g_uiThread, INFINITE);   // every call it makes is bounded: it always ends
     CloseHandle(g_uiThread);
     g_uiThread = nullptr;
-}
-
-// ============================================================================================================
-// inside Windows' Start process (StartMenuExperienceHost.exe): make Start's own XAML invisible and click-through,
-// so even when something opens it, nothing shows (the Dash takes over in Explorer). This uses Windows' XAML
-// diagnostics interface, the same way the "Windows 11 Start Menu Styler" mod does: Windows loads a tiny COM
-// object from this mod's DLL, which hears about every XAML element Start creates. Everything goes back to normal
-// when the mod is turned off.
-// ============================================================================================================
-
-static bool g_inStartHost;
-static std::atomic<DWORD> g_startUiThread{0};
-static std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement>> g_hiddenParts;
-
-static HMODULE ThisModule() {
-    HMODULE module = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&ThisModule, &module);
-    return module;
-}
-
-// the frames that make up Start (old and new layout), the same ones a "make Start invisible" Styler theme targets
-static bool IsStartPart(const wchar_t* type, const std::wstring& name) {
-    static const wchar_t* types[] = {L"StartDocked.StartSizingFrame", L"StartMenu.StartBlendedFlexFrame", L"StartMenu.StartInnerFrame"};
-    for (auto t : types)
-        if (type && !wcscmp(type, t)) return true;
-    return name == L"RootContent" || name == L"AcrylicBorder" || name == L"AppBorder" || name == L"LayerBorder";
-}
-
-static void HidePart(winrt::Windows::UI::Xaml::FrameworkElement const& el) {
-    el.Opacity(0);
-    el.IsHitTestVisible(false);
-    g_hiddenParts.push_back(winrt::make_weak(el));
-}
-
-static void ShowParts() {
-    using winrt::Windows::UI::Xaml::UIElement;
-    for (auto& weak : g_hiddenParts)
-        if (auto el = weak.get()) {
-            el.ClearValue(UIElement::OpacityProperty());
-            el.ClearValue(UIElement::IsHitTestVisibleProperty());
-        }
-    g_hiddenParts.clear();
-}
-
-class StartTreeWatcher : public winrt::implements<StartTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile> {
-public:
-    explicit StartTreeWatcher(winrt::com_ptr<IUnknown> site) : m_diag(site.as<IXamlDiagnostics>()) {
-        // advising from this thread can hang Start; the Styler does it from a helper thread
-        HANDLE t = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
-            auto* self = (StartTreeWatcher*)p;
-            HRESULT hr = self->m_diag.as<IVisualTreeService3>()->AdviseVisualTreeChange(self);
-            if (FAILED(hr)) Debug(L"Start: advise failed 0x%08X", (unsigned)hr);
-            self->Release();
-            return 0;
-        }, this, 0, nullptr);
-        if (t) {
-            AddRef();
-            CloseHandle(t);
-        }
-    }
-
-    void Unadvise() { m_diag.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this); }
-
-private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutation) override try {
-        if (GetCurrentThreadId() != g_startUiThread || mutation != Add) return S_OK;
-        winrt::Windows::Foundation::IInspectable obj;
-        winrt::check_hresult(m_diag->GetIInspectableFromHandle(element.Handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(obj))));
-        if (auto fe = obj.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-            std::wstring name(fe.Name());
-            if (IsStartPart(element.Type, name)) {
-                HidePart(fe);
-                Debug(L"Start: hid %s %s", element.Type, name.c_str());
-            }
-        }
-        return S_OK;
-    } catch (...) {
-        return S_OK;   // an error would stop further notifications
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle, VisualElementState, LPCWSTR) noexcept override { return S_OK; }
-
-    winrt::com_ptr<IXamlDiagnostics> m_diag;
-};
-
-static winrt::com_ptr<StartTreeWatcher> g_startWatcher;
-
-// {7B0D4E2A-3C61-4F7E-9A55-1D2E8C9B6F31}
-static constexpr CLSID CLSID_UnityShellTap = {0x7b0d4e2a, 0x3c61, 0x4f7e, {0x9a, 0x55, 0x1d, 0x2e, 0x8c, 0x9b, 0x6f, 0x31}};
-
-class UnityShellTap : public winrt::implements<UnityShellTap, IObjectWithSite, winrt::non_agile> {
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override try {
-        if (g_startWatcher) {
-            g_startWatcher->Unadvise();
-            g_startWatcher = nullptr;
-        }
-        m_site.copy_from(site);
-        if (m_site) {
-            FreeLibrary(ThisModule());   // balance the load done by InitializeXamlDiagnosticsEx
-            g_startWatcher = winrt::make_self<StartTreeWatcher>(m_site);
-        }
-        return S_OK;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void** ppv) noexcept override { return m_site.as(riid, ppv); }
-
-private:
-    winrt::com_ptr<IUnknown> m_site;
-};
-
-struct UnityShellTapFactory : winrt::implements<UnityShellTapFactory, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* outer, REFIID riid, void** ppv) override try {
-        *ppv = nullptr;
-        if (outer) return CLASS_E_NOAGGREGATION;
-        return winrt::make<UnityShellTap>().as(riid, ppv);
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override { return S_OK; }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-__declspec(dllexport) STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) try {
-    if (rclsid != CLSID_UnityShellTap) return CLASS_E_CLASSNOTAVAILABLE;
-    *ppv = nullptr;
-    return winrt::make<UnityShellTapFactory>().as(riid, ppv);
-} catch (...) {
-    return winrt::to_hresult();
-}
-
-__declspec(dllexport) STDAPI DllCanUnloadNow() {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
-}
-#pragma clang diagnostic pop
-
-static HRESULT InjectTap() {
-    wchar_t location[MAX_PATH];
-    DWORD n = GetModuleFileNameW(ThisModule(), location, ARRAYSIZE(location));
-    if (!n || n == ARRAYSIZE(location)) return HRESULT_FROM_WIN32(GetLastError());
-    HMODULE wux = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!wux) return HRESULT_FROM_WIN32(GetLastError());
-    auto ixde = (decltype(&InitializeXamlDiagnosticsEx))GetProcAddress(wux, "InitializeXamlDiagnosticsEx");
-    if (!ixde) return HRESULT_FROM_WIN32(GetLastError());
-    // XAML only accepts a connection name it isn't using yet; try them in turn
-    HRESULT hr = E_FAIL;
-    for (int i = 1; i <= 10000; i++) {
-        wchar_t name[64];
-        swprintf(name, 64, L"VisualDiagConnection%d", i);
-        hr = ixde(name, GetCurrentProcessId(), L"", location, CLSID_UnityShellTap, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) break;
-    }
-    return hr;
-}
-
-static void StartHideInit() {
-    DWORD none = 0;
-    if (!g_startUiThread.compare_exchange_strong(none, GetCurrentThreadId())) return;
-    HRESULT hr = InjectTap();
-    Debug(L"Start: XAML hook 0x%08X", (unsigned)hr);
-}
-
-static void StartHideUninit() {
-    ShowParts();
-    g_startUiThread = 0;
-}
-
-// run a function on the thread that owns a window (Start's UI thread), the way the Styler does it
-using ThreadProc_t = void (*)();
-static void RunOnWindowThread(HWND hwnd, ThreadProc_t proc) {
-    static const UINT msg = RegisterWindowMessageW(L"UnityShell_RunOnWindowThread");
-    DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
-    if (!tid) return;
-    if (tid == GetCurrentThreadId()) { proc(); return; }
-    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, [](int code, WPARAM wp, LPARAM lp) -> LRESULT {
-        if (code == HC_ACTION) {
-            auto* cwp = (const CWPSTRUCT*)lp;
-            static const UINT m = RegisterWindowMessageW(L"UnityShell_RunOnWindowThread");
-            if (cwp->message == m) ((ThreadProc_t)cwp->lParam)();
-        }
-        return CallNextHookEx(nullptr, code, wp, lp);
-    }, nullptr, tid);
-    if (!hook) return;
-    SendMessageW(hwnd, msg, 0, (LPARAM)proc);
-    UnhookWindowsHookEx(hook);
-}
-
-static HWND StartCoreWindow() {
-    HWND found = nullptr;
-    EnumWindows([](HWND h, LPARAM l) -> BOOL {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(h, &pid);
-        wchar_t cls[64];
-        if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, 64) && !wcscmp(cls, L"Windows.UI.Core.CoreWindow")) {
-            *(HWND*)l = h;
-            return FALSE;
-        }
-        return TRUE;
-    }, (LPARAM)&found);
-    return found;
-}
-
-static bool StartHideWanted() { return g_set.hideStartMenu && g_set.startOpensDash; }
-
-// Start's window may be created after the mod loads: catch it as it is made
-using CreateWindowInBand_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, PVOID, DWORD);
-static CreateWindowInBand_t CreateWindowInBand_Original;
-static HWND WINAPI CreateWindowInBand_Hook(DWORD ex, LPCWSTR cls, LPCWSTR title, DWORD style, int x, int y, int w, int h, HWND parent,
-                                           HMENU menu, HINSTANCE inst, PVOID param, DWORD band) {
-    HWND hwnd = CreateWindowInBand_Original(ex, cls, title, style, x, y, w, h, parent, menu, inst, param, band);
-    if (hwnd && ((ULONG_PTR)cls & ~(ULONG_PTR)0xFFFF) && !_wcsicmp(cls, L"Windows.UI.Core.CoreWindow") && StartHideWanted()) StartHideInit();
-    return hwnd;
-}
-
-using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, PVOID, DWORD, DWORD);
-static CreateWindowInBandEx_t CreateWindowInBandEx_Original;
-static HWND WINAPI CreateWindowInBandEx_Hook(DWORD ex, LPCWSTR cls, LPCWSTR title, DWORD style, int x, int y, int w, int h, HWND parent,
-                                             HMENU menu, HINSTANCE inst, PVOID param, DWORD band, DWORD flags) {
-    HWND hwnd = CreateWindowInBandEx_Original(ex, cls, title, style, x, y, w, h, parent, menu, inst, param, band, flags);
-    if (hwnd && ((ULONG_PTR)cls & ~(ULONG_PTR)0xFFFF) && !_wcsicmp(cls, L"Windows.UI.Core.CoreWindow") && StartHideWanted()) StartHideInit();
-    return hwnd;
-}
-
-static void StartHostInit() {
-    Debug(L"loaded in Start's process (hide: %d)", StartHideWanted());
-    HMODULE user32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!user32) return;
-    if (void* p = (void*)GetProcAddress(user32, "CreateWindowInBand"))
-        Wh_SetFunctionHook(p, (void*)CreateWindowInBand_Hook, (void**)&CreateWindowInBand_Original);
-    if (void* p = (void*)GetProcAddress(user32, "CreateWindowInBandEx"))
-        Wh_SetFunctionHook(p, (void*)CreateWindowInBandEx_Hook, (void**)&CreateWindowInBandEx_Original);
-}
-
-static void StartHostAfterInit() {
-    if (!StartHideWanted()) return;
-    if (HWND core = StartCoreWindow()) RunOnWindowThread(core, StartHideInit);
-}
-
-static void StartHostUninit() {
-    if (g_startWatcher) {
-        g_startWatcher->Unadvise();
-        g_startWatcher = nullptr;
-    }
-    if (HWND core = StartCoreWindow()) RunOnWindowThread(core, StartHideUninit);
 }
 
 // ============================================================================================================
@@ -7496,35 +7272,18 @@ static void StartHostUninit() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    wchar_t exe[MAX_PATH];
-    GetModuleFileNameW(nullptr, exe, MAX_PATH);
-    g_inStartHost = Lower(exe).ends_with(L"\\startmenuexperiencehost.exe");
-    if (g_inStartHost) {   // in Start's process the mod only hides Start
-        StartHostInit();
-        return TRUE;
-    }
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook, &ShowWindow_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
     StartUi();   // waits for the taskbar first, by which time the hooks above are in place
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    if (g_inStartHost) StartHostAfterInit();
-}
-
 void Wh_ModUninit() {
-    if (g_inStartHost) { StartHostUninit(); return; }
+    g_unloading = true;
     StopUi();
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_inStartHost) {
-        StartHostUninit();
-        LoadSettings();
-        StartHostAfterInit();
-        return;
-    }
     // simplest and safest: rebuild the whole shell with the new settings
     StopUi();
     LoadSettings();
