@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.14
+// @version 0.9.15
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -277,7 +277,6 @@ enum class LockOutcome {
   Acquired,           // Held; both records were reread.
   AcquiredAbandoned,  // Held after the previous holder exited without releasing it.
   Contended,          // Another session held it for the whole wait.
-  Unavailable,        // The mutex could not be created or opened, or the wait failed.
   Uncoordinated,      // Lock unusable or persistently held: proceeding without it.
   Shutdown            // This mod is unloading.
 };
@@ -810,6 +809,11 @@ bool (*persistWritePending)(bool) = nullptr;
 HANDLE cancellationEvent = nullptr;
 std::atomic<ULONGLONG>* shutdownBudget = nullptr;
 thread_local ULONGLONG operationDeadline = 0;
+void BeginWritePhase() noexcept {
+  // Each write gets five seconds plus one for readback. Reads and connection
+  // discovery do not renew this budget; the shutdown deadline always wins.
+  operationDeadline = (std::max)(operationDeadline, GetTickCount64() + 6000);
+}
 template <typename... Args>
 DWORD BeginAsync(RPC_ASYNC_STATE* state, const unsigned char* proc, Args... args) noexcept {
   __try {
@@ -825,6 +829,8 @@ DWORD Call(const unsigned char* proc, Args... args) noexcept {
   ULONGLONG shutdown = shutdownBudget ? shutdownBudget->load() : 0;
   bool writes = proc == procSetThreshold || proc == procSetUsb || proc == procStartReset ||
                 proc == procStopReset;
+  if (writes)
+    BeginWritePhase();
   ULONGLONG deadline = now + (writes ? 5000 : 1000);
   if (operationDeadline && operationDeadline < deadline)
     deadline = operationDeadline;
@@ -1136,10 +1142,7 @@ bool Run(const std::wstring& command, State& output, ULONGLONG deadline, DWORD& 
     if (!b.capable)
       continue;
     if (setting) {
-      if (GetTickCount64() >= deadline) {
-        error = ERROR_TIMEOUT;
-        return false;
-      }
+      // Call starts a fresh write phase and still enforces the shutdown deadline.
       error = Write(session.context, i + 1, start, stop);
       if (error)
         return false;
@@ -1690,6 +1693,9 @@ bool ApplySeparate(unsigned value) {
   if (!ok) {
     // Best-effort rollback only when this operation's exact value is still present.
     for (int i = 0; i < attempted; i++) {
+      // Revalidate before rollback with a fresh phase budget, even when the
+      // failed operation consumed its session budget. Call still caps shutdown.
+      NativeRpc::BeginWritePhase();
       NativeRpc::Battery now;
       if (!NativeRpc::Read(s.context, i + 1, &now) && now.capable == 1 &&
           now.enabled == target[i].enabled &&
@@ -2207,13 +2213,16 @@ struct UiRequest {
   std::atomic<bool> done = false;
 };
 std::atomic<UiRequest*> pendingUiRequest = nullptr;
-const UINT uiMessage = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+UINT UiMessage() {
+  static const UINT message = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+  return message;
+}
 LRESULT CALLBACK UiHook(int code, WPARAM w, LPARAM l) {
   if (code == HC_ACTION) {
     auto msg = reinterpret_cast<CWPSTRUCT*>(l);
     auto request = reinterpret_cast<UiRequest*>(msg->wParam);
     // Claim only the request this message names, exactly once.
-    if (msg->message == uiMessage && request &&
+    if (msg->message == UiMessage() && request &&
         pendingUiRequest.compare_exchange_strong(request, nullptr)) {
       request->proc(request->parameter);
       request->done = true;
@@ -2233,6 +2242,9 @@ bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, void* para
     return true;
   }
   std::lock_guard lock(uiInvokeMutex);
+  const UINT uiMessage = UiMessage();
+  if (!uiMessage)
+    return false;
   HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, UiHook, nullptr, thread);
   if (!hook)
     return false;
