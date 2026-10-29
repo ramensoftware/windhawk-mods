@@ -109,6 +109,14 @@ constexpr double kSingleFingerShare = 0.33;
 constexpr double kHandShare = 0.5;
 // Under this, per frame, the most moved finger is resting jitter: the average is followed, which cancels it.
 constexpr double kJitterMm = 0.1;
+// A single finger counts as moving alone only past this, per frame: the uneven tails of a stopping hand stay
+// under it, and following the most moved of them made the pointer slide on after the hand stopped.
+constexpr double kSingleStartMm = 0.3;
+// After a stop the touchpad keeps reporting the resting fingers creeping at 2–4 mm/s for a few hundred ms,
+// which Windows doesn't turn into pointer movement and the glide did: the pointer slid on. Under the first
+// speed the pointer stops, and it only starts again over the second.
+constexpr double kStopSpeed = 4.0;
+constexpr double kStartSpeed = 7.0;
 // More than this in one frame isn't a finger moving: the touchpad gave a contact's id to another contact,
 // typically when the thumb lands late, and following it would throw the pointer to the thumb.
 constexpr double kJumpMm = 10.0;
@@ -222,6 +230,7 @@ struct {
     POINT lastClickPos;
     double lastFrameTime;  // s
     double speed;          // mm/s, smoothed
+    bool stopped;
     DWORD lastFrameTick;
 } g_state;
 
@@ -285,9 +294,9 @@ void LogCurve() {
 void LoadCurve() {
     for (int i = 0; i < kBinCount; i++) {
         WCHAR name[16];
-        swprintf_s(name, L"bin%d", i);
+        swprintf_s(name, L"curve%d", i);
         g_curve[i].pxPerMm = Wh_GetIntValue(name, 0) / 1000.0;
-        swprintf_s(name, L"bin%dn", i);
+        swprintf_s(name, L"curve%dn", i);
         g_curve[i].samples = Wh_GetIntValue(name, 0);
     }
     LogCurve();
@@ -299,9 +308,9 @@ void SaveCurve() {
     }
     for (int i = 0; i < kBinCount; i++) {
         WCHAR name[16];
-        swprintf_s(name, L"bin%d", i);
+        swprintf_s(name, L"curve%d", i);
         Wh_SetIntValue(name, (int)std::lround(g_curve[i].pxPerMm * 1000));
-        swprintf_s(name, L"bin%dn", i);
+        swprintf_s(name, L"curve%dn", i);
         Wh_SetIntValue(name, g_curve[i].samples);
     }
     g_curveDirty = false;
@@ -329,7 +338,19 @@ void AddSample(double speed, double pxPerMm) {
     g_curveDirty = true;
 }
 
-// Interpolates in log speed between the neighboring trusted ranges; outside them, the nearest one.
+// Interpolates in log speed between the neighboring trusted ranges; outside them, the nearest one. A range is
+// never above a faster one: the slowest, fed by few samples, came out above the next and raised the gain of a
+// stopping hand.
+double TrustedBin(int i) {
+    double v = g_curve[i].pxPerMm;
+    for (int j = i + 1; j < kBinCount; j++) {
+        if (g_curve[j].samples >= kBinTrusted) {
+            v = std::min(v, g_curve[j].pxPerMm);
+        }
+    }
+    return v;
+}
+
 double CurveAt(double speed) {
     double ls = std::log(std::max(speed, 1e-3));
     int lo = -1;
@@ -348,15 +369,15 @@ double CurveAt(double speed) {
         return kDefaultPxPerMm;
     }
     if (lo < 0) {
-        return g_curve[hi].pxPerMm;
+        return TrustedBin(hi);
     }
     if (hi < 0) {
-        return g_curve[lo].pxPerMm;
+        return TrustedBin(lo);
     }
     double a = std::log(kSpeedBins[lo]);
     double b = std::log(kSpeedBins[hi]);
     double t = (ls - a) / (b - a);
-    return g_curve[lo].pxPerMm + (g_curve[hi].pxPerMm - g_curve[lo].pxPerMm) * t;
+    return TrustedBin(lo) + (TrustedBin(hi) - TrustedBin(lo)) * t;
 }
 
 // The pointer stops at the edge while the finger goes on: samples there would underestimate the curve.
@@ -391,7 +412,9 @@ void Learn(const std::vector<const Contact*>& fingers, int touching, double t) {
         }
         double mm = std::hypot(c->x - g_learn.fx0, c->y - g_learn.fy0);
         double px = std::hypot((double)(cursor.x - g_learn.c0.x), (double)(cursor.y - g_learn.c0.y));
-        if (mm >= kChunkMinMm && px > 0 && !NearMonitorEdge(g_learn.c0) && !NearMonitorEdge(cursor)) {
+        // Samples where Windows didn't move the pointer (px = 0) are learned too: skipping them pushed the slow
+        // end of the curve up, and the glide slid on after the hand stopped.
+        if (mm >= kChunkMinMm && !NearMonitorEdge(g_learn.c0) && !NearMonitorEdge(cursor)) {
             AddSample(mm / dt, px / mm);
         }
     }
@@ -413,6 +436,7 @@ void EndGlide() {
     g_state.armed = false;
     g_state.anchorValid = false;
     g_state.speed = 0;
+    g_state.stopped = true;
     g_state.tracks.clear();
     g_learn.active = false;
     if (g_curveDirty && Now() - g_lastSave >= kSaveIntervalSec) {
@@ -442,7 +466,17 @@ void SendButtons(std::initializer_list<DWORD> flags) {
 void Move(double dxMm, double dyMm, double dt, double multiplier) {
     if (dt > 0) {
         double v = std::hypot(dxMm, dyMm) / std::max(dt, kMinFrameSec);
-        g_state.speed = g_state.speed > 0 ? g_state.speed + (v - g_state.speed) * 0.3 : v;
+        if (g_state.stopped ? v < kStartSpeed : v < kStopSpeed) {
+            g_state.stopped = true;
+            g_state.speed = v;
+            g_state.accX = 0;
+            g_state.accY = 0;
+            return;
+        }
+        g_state.stopped = false;
+        // Smoothed when speeding up, which absorbs spikes, but followed at once when slowing down: a slow
+        // drop kept the last millimeters of a stop on the fast part of the curve, and the pointer slid on.
+        g_state.speed = v < g_state.speed ? v : g_state.speed + (v - g_state.speed) * 0.3;
     }
 
     double pxPerMm = CurveAt(g_state.speed) * multiplier;
@@ -661,21 +695,21 @@ void ProcessFrame() {
         return;
     }
 
-    if (best >= kJitterMm) {
-        if (counted == 1 || second < best * kSingleFingerShare) {
-            g_state.single = true;
-        } else if (second > best * kHandShare) {
-            g_state.single = false;
-        }
+    if (best < kJitterMm) {
+        g_state.single = false;
+    } else if (best >= kSingleStartMm && second < best * kSingleFingerShare) {
+        g_state.single = true;
+    } else if (second > best * kHandShare) {
+        g_state.single = false;
     }
-    if (best < kJitterMm || !g_state.single) {
+    if (!g_state.single) {
         dx = avgX / counted;
         dy = avgY / counted;
     }
 
     double dt = t - g_state.lastFrameTime;
     g_state.lastFrameTime = t;
-    Move(dx, dy, dt, g_state.single ? g_multOne.load() : g_multFive.load());
+    Move(dx, dy, dt, g_state.single || counted == 1 ? g_multOne.load() : g_multFive.load());
 }
 
 // The touchpad.
