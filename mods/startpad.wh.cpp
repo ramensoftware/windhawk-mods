@@ -54,6 +54,11 @@ Click the **`...`** button inside the right side of the search bar to access:
 - **Legacy Icon Cleanup**: Automatically detects and removes the thin 1px border frame Windows adds around small legacy Win32 icons (such as 7-Zip) and smoothly upscales them.
 - **Localized UI**: Built-in translations for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and Korean.
 
+## How StartPad differs from "fullscreen-start" mod
+Both mods replace the Start menu with a fullscreen app launcher, and **they cannot be enabled at the same time** because both intercept `XamlLauncher::ShowStartView`.
+- **StartPad** focuses on a **paginated macOS Launchpad workflow**: horizontal pages with spring physics, **folders** (creation, renaming, ungrouping), **drag-and-drop icon reordering** with persistent layout storage, **hiding apps**, a **right-click context menu** (Run as administrator, Open file location), an integrated **Power menu**, a **Windows 11 Fluent visual style**, and **multilingual UI strings**.
+- **Fullscreen Start (`fullscreen-start`)** by Rafael Mendes focuses on a single **vertically scrolled grid** with Direct2D rendering, live DWM Acrylic/Blur backdrops, `Ctrl+V` clipboard paste in search, keeping the taskbar visible, and integration with the Standalone Dock mod.
+
 ## Credits & License
 - Hooking `XamlLauncher::ShowStartView` in `twinui.pcshell.dll` (`kShowMethodKeyboard` / `kShowFlagKeyboard`), secondary folder-process detection (`IsFolderWindowsProcess`), and thread initialization/uninitialization structure are adapted from [**Fullscreen Start (Launchpad style)** (`fullscreen-start`)](https://github.com/RafaelMendes1407) by **Rafael Mendes**, licensed under the MIT License (Copyright (c) Rafael Mendes).
 - Licensed under the **MIT License**.
