@@ -2,7 +2,7 @@
 // @id              taskbar-free-float
 // @name            Taskbar Free Float (experimental)
 // @description     Ctrl+drag the original Windows 11 app bar and tray/clock independently
-// @version         0.1.4
+// @version         0.1.5
 // @author          Rikyz
 // @github          https://github.com/RikyZ90
 // @include         explorer.exe
@@ -33,7 +33,8 @@ XAML popup windows. The tray block includes its system icons and clock.
 The optional **Anchor Start menu to floating Start button** setting is
 experimental and disabled by default. It positions Start near its button when
 opened, preferring above, then below, then beside it, within the work area.
-Placement is applied once after the opening animation and mouse release.
+Placement uses native layout properties when the container has room for the
+whole menu. Unsupported or undersized containers keep their native placement.
 It supports the classic and redesigned Windows 11 Start layouts on the primary
 monitor. It does not follow a drag while the menu stays open. Start menu settings
 in Shell Flyout Positions must remain at **Windows default** with **zero shifts**;
@@ -89,7 +90,6 @@ and reserved space remain at the original edge.
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -1012,13 +1012,14 @@ struct State {
     Window window{nullptr};
     FrameworkElement content{nullptr};
     FrameworkElement frame{nullptr};
-    Media::Transform originalTransform{nullptr};
-    winrt::Windows::Foundation::IInspectable originalLocalValue{nullptr};
-    Media::TransformGroup transform{nullptr};
-    Media::TranslateTransform offset{nullptr};
-    DispatcherTimer openingTimer{nullptr};
+    struct Property {
+        DependencyProperty property{nullptr};
+        winrt::Windows::Foundation::IInspectable original{nullptr};
+        winrt::Windows::Foundation::IInspectable applied{nullptr};
+    };
+    std::array<Property, 5> properties;
+    size_t propertyCount = 0;
     winrt::event_token visibilityToken{};
-    winrt::event_token timerToken{};
     winrt::event_token closedToken{};
     bool updating = false;
     bool bindingLogged = false;
@@ -1058,42 +1059,99 @@ bool ReadAnchor(RECT* rect) {
            rect->right - rect->left <= 100000 && rect->bottom - rect->top <= 100000;
 }
 
-void Restore() {
-    if (!g_state) return;
-    if (g_state->frame && g_state->transform && g_state->frame.RenderTransform() == g_state->transform) {
-        if (g_state->originalLocalValue == DependencyProperty::UnsetValue()) {
-            g_state->frame.ClearValue(UIElement::RenderTransformProperty());
-        } else {
-            g_state->frame.SetValue(UIElement::RenderTransformProperty(), g_state->originalLocalValue);
-        }
+bool EqualLayoutValue(DependencyProperty property,
+    winrt::Windows::Foundation::IInspectable const& first,
+    winrt::Windows::Foundation::IInspectable const& second) {
+    if (!first || !second) return first == second;
+    if (property == FrameworkElement::HorizontalAlignmentProperty()) {
+        return winrt::unbox_value<HorizontalAlignment>(first) ==
+               winrt::unbox_value<HorizontalAlignment>(second);
     }
-    g_state->frame = nullptr;
-    g_state->transform = nullptr;
-    g_state->originalTransform = nullptr;
-    g_state->originalLocalValue = nullptr;
-    g_state->offset = nullptr;
+    if (property == FrameworkElement::VerticalAlignmentProperty()) {
+        return winrt::unbox_value<VerticalAlignment>(first) ==
+               winrt::unbox_value<VerticalAlignment>(second);
+    }
+    if (property == FrameworkElement::MarginProperty()) {
+        const auto a = winrt::unbox_value<Thickness>(first);
+        const auto b = winrt::unbox_value<Thickness>(second);
+        return a.Left == b.Left && a.Top == b.Top &&
+               a.Right == b.Right && a.Bottom == b.Bottom;
+    }
+    const auto a = winrt::unbox_value<double>(first);
+    const auto b = winrt::unbox_value<double>(second);
+    return a == b || (std::isnan(a) && std::isnan(b));
 }
 
-bool ApplyTransform(FrameworkElement frame) {
-    if (!g_state || !frame) return false;
-    if (frame.GetBindingExpression(UIElement::RenderTransformProperty())) {
-        Restore();
-        if (!g_state->bindingLogged) {
-            Wh_Log(L"Start menu RenderTransform has a binding; anchoring skipped");
-            g_state->bindingLogged = true;
-        }
-        return false;
+void RefreshLayout(FrameworkElement frame) {
+    frame.InvalidateMeasure();
+    if (auto parent = Media::VisualTreeHelper::GetParent(frame).try_as<FrameworkElement>()) {
+        // Refresh the arranged slot too, so native clipping follows the new layout.
+        parent.InvalidateMeasure();
+        parent.InvalidateArrange();
+        parent.UpdateLayout();
     }
-    if (frame == g_state->frame && frame.RenderTransform() == g_state->transform) return true;
+}
+
+void Restore() {
+    if (!g_state) return;
+    auto frame = std::exchange(g_state->frame, nullptr);
+    const size_t count = std::exchange(g_state->propertyCount, 0);
+    auto properties = std::exchange(g_state->properties, {});
+    if (frame) {
+        for (size_t i = 0; i < count; ++i) {
+            auto& saved = properties[i];
+            if (saved.applied && EqualLayoutValue(saved.property,
+                    frame.GetValue(saved.property), saved.applied)) {
+                if (saved.original == DependencyProperty::UnsetValue()) {
+                    frame.ClearValue(saved.property);
+                } else {
+                    frame.SetValue(saved.property, saved.original);
+                }
+            }
+        }
+        RefreshLayout(frame);
+    }
+}
+
+bool PlaceFrame(FrameworkElement frame, bool canvas, double left, double top) {
+    if (!g_state || !frame) return false;
     Restore();
+    std::array<DependencyProperty, 5> properties{nullptr, nullptr, nullptr, nullptr, nullptr};
+    std::array<winrt::Windows::Foundation::IInspectable, 5> values;
+    const size_t count = canvas ? 2 : 5;
+    if (canvas) {
+        properties[0] = Canvas::LeftProperty();
+        properties[1] = Canvas::TopProperty();
+        values[0] = winrt::box_value(left);
+        values[1] = winrt::box_value(top);
+    } else {
+        if (frame.ActualWidth() <= 0 || frame.ActualHeight() <= 0) return false;
+        properties = {FrameworkElement::WidthProperty(), FrameworkElement::HeightProperty(),
+            FrameworkElement::HorizontalAlignmentProperty(),
+            FrameworkElement::VerticalAlignmentProperty(), FrameworkElement::MarginProperty()};
+        values = {winrt::box_value(frame.ActualWidth()), winrt::box_value(frame.ActualHeight()),
+            winrt::box_value(HorizontalAlignment::Left), winrt::box_value(VerticalAlignment::Top),
+            winrt::box_value(Thickness{left, top, 0, 0})};
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (frame.GetBindingExpression(properties[i])) {
+            if (!g_state->bindingLogged) {
+                Wh_Log(L"Start menu layout has a binding; anchoring skipped");
+                g_state->bindingLogged = true;
+            }
+            return false;
+        }
+    }
     g_state->frame = frame;
-    g_state->originalLocalValue = frame.ReadLocalValue(UIElement::RenderTransformProperty());
-    g_state->originalTransform = frame.RenderTransform();
-    g_state->offset = Media::TranslateTransform();
-    g_state->transform = Media::TransformGroup();
-    if (g_state->originalTransform) g_state->transform.Children().Append(g_state->originalTransform);
-    g_state->transform.Children().Append(g_state->offset);
-    frame.RenderTransform(g_state->transform);
+    for (size_t i = 0; i < count; ++i) {
+        auto& saved = g_state->properties[i];
+        saved.property = properties[i];
+        saved.original = frame.ReadLocalValue(properties[i]);
+        saved.applied = values[i];
+        ++g_state->propertyCount;
+        frame.SetValue(properties[i], values[i]);
+    }
+    RefreshLayout(frame);
     return true;
 }
 
@@ -1124,13 +1182,15 @@ void UpdateImpl() {
         }
     }
     if (!frame) { Restore(); return; }
-    if (!ApplyTransform(frame)) return;
+    auto parent = Media::VisualTreeHelper::GetParent(frame).try_as<FrameworkElement>();
+    const bool canvas = parent && parent.try_as<Canvas>();
+    if (!parent || (!canvas && !parent.try_as<Grid>())) { Restore(); return; }
 
     const auto root = content.XamlRoot();
     const double scale = root ? root.RasterizationScale() : 0;
-    const auto bounds = frame.TransformToVisual(content).TransformBounds(
-        Rect{0, 0, static_cast<float>(frame.ActualWidth()),
-                   static_cast<float>(frame.ActualHeight())});
+    const auto bounds = parent.TransformToVisual(content).TransformBounds(
+        Rect{0, 0, static_cast<float>(parent.ActualWidth()),
+                   static_cast<float>(parent.ActualHeight())});
     POINT origin{};
     if (!std::isfinite(scale) || scale <= 0 ||
         !ClientToScreen(g_state->hwnd, &origin) ||
@@ -1139,20 +1199,33 @@ void UpdateImpl() {
         !std::isfinite(bounds.X * scale) || !std::isfinite(bounds.Y * scale) ||
         std::abs(bounds.X * scale) > 1000000 || std::abs(bounds.Y * scale) > 1000000 ||
         bounds.Width <= 0 || bounds.Height <= 0 ||
+        frame.ActualWidth() <= 0 || frame.ActualHeight() <= 0 ||
+        !std::isfinite(frame.ActualWidth()) || !std::isfinite(frame.ActualHeight()) ||
+        frame.ActualWidth() * scale > 100000 || frame.ActualHeight() * scale > 100000 ||
         bounds.Width * scale > 100000 || bounds.Height * scale > 100000) {
         Restore();
         return;
     }
-    const RECT current{
+    const RECT container{
         origin.x + static_cast<LONG>(std::floor(bounds.X * scale)),
         origin.y + static_cast<LONG>(std::floor(bounds.Y * scale)),
         origin.x + static_cast<LONG>(std::ceil((bounds.X + bounds.Width) * scale)),
         origin.y + static_cast<LONG>(std::ceil((bounds.Y + bounds.Height) * scale))};
-    const auto target = Geometry::AnchorStartMenu(button, current.right - current.left,
-        current.bottom - current.top, info.rcWork,
+    RECT available{};
+    const LONG width = static_cast<LONG>(std::ceil(frame.ActualWidth() * scale));
+    const LONG height = static_cast<LONG>(std::ceil(frame.ActualHeight() * scale));
+    if (!IntersectRect(&available, &container, &info.rcWork) ||
+        available.right - available.left < width || available.bottom - available.top < height) {
+        Restore();
+        Wh_Log(L"Start menu container cannot fit the full panel; keeping native placement");
+        return;
+    }
+    const auto target = Geometry::AnchorStartMenu(button, width, height, available,
         std::max<LONG>(1, std::lround(std::min(100000.0, 8 * scale))));
-    if (current.left != target.x) g_state->offset.X(g_state->offset.X() + (target.x - current.left) / scale);
-    if (current.top != target.y) g_state->offset.Y(g_state->offset.Y() + (target.y - current.top) / scale);
+    if (PlaceFrame(frame, canvas, (target.x - container.left) / scale,
+                   (target.y - container.top) / scale)) {
+        frame.UpdateLayout();
+    }
 }
 
 void Update() {
@@ -1169,25 +1242,10 @@ void Update() {
 
 void Uninit();
 
-void OpeningTick() {
-    if (!g_state || !g_state->openingTimer) return;
-    auto timer = g_state->openingTimer;
-    timer.Stop();
-    if (g_unloading || !g_state->window || !g_state->window.Visible()) return;
-    // The taskbar press can open Start before its release; let that click finish.
-    if (LeftButtonDown()) {
-        timer.Start();
-        return;
-    }
-    Update();
-}
-
 void VisibilityChanged(bool visible) {
-    if (!g_state || !g_state->openingTimer) return;
-    g_state->openingTimer.Stop();
-    if (g_unloading) return;
+    if (!g_state || g_unloading) return;
     if (visible) {
-        g_state->openingTimer.Start();
+        Update();
     } else {
         Restore();
     }
@@ -1204,13 +1262,6 @@ void Init() {
         g_state->hwnd = hwnd;
         g_window = hwnd;
         g_state->window = window;
-        g_state->openingTimer = DispatcherTimer();
-        g_state->openingTimer.Interval(std::chrono::milliseconds(300));
-        g_state->timerToken = g_state->openingTimer.Tick(
-            [](auto const&, auto const&) {
-                try { OpeningTick(); }
-                catch (...) { Wh_Log(L"Start menu opening update failed"); }
-            });
         g_state->visibilityToken = window.VisibilityChanged(
             [](auto const&, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
                 try { VisibilityChanged(args.Visible()); }
@@ -1227,18 +1278,11 @@ void Init() {
 void Uninit() {
     if (!g_state) return;
     try {
-        if (g_state->openingTimer) {
-            g_state->openingTimer.Stop();
-            if (g_state->timerToken.value) g_state->openingTimer.Tick(g_state->timerToken);
-        }
-    } catch (...) { g_callbackCleanupFailed = true; }
-    try {
         if (g_state->window && g_state->visibilityToken.value) g_state->window.VisibilityChanged(g_state->visibilityToken);
     } catch (...) { g_callbackCleanupFailed = true; }
     try {
         if (g_state->window && g_state->closedToken.value) g_state->window.Closed(g_state->closedToken);
     } catch (...) { g_callbackCleanupFailed = true; }
-    g_state->timerToken = {};
     g_state->visibilityToken = {};
     g_state->closedToken = {};
     try { Restore(); } catch (...) {}
