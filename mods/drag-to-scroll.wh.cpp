@@ -223,19 +223,23 @@ bool GetScrollTargetInfo(POINT pt, HWND& outTarget) {
             wcsstr(lowerCls, L"richedit") != nullptr);
 }
 
-// Moves whole steps out of `accum` and returns them as one delta.
+// Moves whole steps out of `accum` and returns the step count (notches)
 int TakeWholeSteps(double& accum, int step) {
-    int delta = 0;
+    if (step <= 0)
+        return 0;
+
+    int notches = 0;
     while (accum <= -step) {
-        delta -= step;
+        notches -= 1;
         accum += step;
     }
     while (accum >= step) {
-        delta += step;
+        notches += 1;
         accum -= step;
     }
-    return delta;
+    return notches;
 }
+
 void SendScrollMessage(HWND hTarget, UINT msg, WPARAM cmd) {
     // Synchronous on the window's own thread, never block on another thread.
     if (GetWindowThreadProcessId(hTarget, nullptr) == GetCurrentThreadId()) {
@@ -246,6 +250,9 @@ void SendScrollMessage(HWND hTarget, UINT msg, WPARAM cmd) {
 }
 
 void DispatchScroll(int notchCount, HWND hTarget, bool isDiscrete) {
+    if (notchCount == 0)
+        return;
+
     if (isDiscrete && hTarget) {
         WPARAM cmd = (notchCount > 0) ? SB_LINEUP : SB_LINEDOWN;
         int count = std::abs(notchCount);
@@ -253,13 +260,17 @@ void DispatchScroll(int notchCount, HWND hTarget, bool isDiscrete) {
             SendScrollMessage(hTarget, WM_VSCROLL, cmd);
         }
     } else {
-        int deltaY = notchCount * (g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK
-                                                           : WHEEL_DELTA);
+        int chunkSize =
+            g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
+        int deltaY = notchCount * chunkSize;
         SendMaskedWheelAsync(deltaY);
     }
 }
 
 void DispatchHScroll(int notchCount, HWND hTarget, bool isDiscrete) {
+    if (notchCount == 0)
+        return;
+
     if (isDiscrete && hTarget) {
         WPARAM cmd = (notchCount > 0) ? SB_LINERIGHT : SB_LINELEFT;
         int count = std::abs(notchCount);
@@ -267,8 +278,9 @@ void DispatchHScroll(int notchCount, HWND hTarget, bool isDiscrete) {
             SendScrollMessage(hTarget, WM_HSCROLL, cmd);
         }
     } else {
-        int deltaX = notchCount * (g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK
-                                                           : WHEEL_DELTA);
+        int chunkSize =
+            g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
+        int deltaX = notchCount * chunkSize;
         SendMaskedHWheelAsync(deltaX);
     }
 }
@@ -314,21 +326,28 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
 
             HWND hTarget = nullptr;
             bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
-            int chunk = ctx.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
 
             // --- Vertical Cruising ---
             if (std::abs(distY) >= ctx.deadzone) {
                 double directionY = ctx.touch_style ? 1.0 : -1.0;
                 double notchRateY =
                     (static_cast<double>(distY) / ctx.pixels_per_notch);
-                double unitsThisTickY =
-                    notchRateY * directionY * WHEEL_DELTA * 0.035;
 
-                cruiseAccumY += unitsThisTickY;
-
-                int step = isDiscrete ? WHEEL_DELTA : chunk;
-                if (int delta = TakeWholeSteps(cruiseAccumY, step)) {
-                    DispatchScroll(delta, hTarget, isDiscrete);
+                if (isDiscrete) {
+                    cruiseAccumY += notchRateY * directionY *
+                                    2.0;  // Steady line progression
+                    if (int lines = TakeWholeSteps(cruiseAccumY, 1)) {
+                        DispatchScroll(lines, hTarget, true);
+                    }
+                } else {
+                    double unitsThisTickY =
+                        notchRateY * directionY * WHEEL_DELTA * 0.035;
+                    cruiseAccumY += unitsThisTickY;
+                    int step =
+                        ctx.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
+                    if (int chunks = TakeWholeSteps(cruiseAccumY, step)) {
+                        DispatchScroll(chunks, hTarget, false);
+                    }
                 }
             }
 
@@ -337,14 +356,21 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
                 double directionX = ctx.touch_style ? -1.0 : 1.0;
                 double notchRateX =
                     (static_cast<double>(distX) / ctx.pixels_per_notch);
-                double unitsThisTickX =
-                    notchRateX * directionX * WHEEL_DELTA * 0.035;
 
-                cruiseAccumX += unitsThisTickX;
-
-                int step = isDiscrete ? WHEEL_DELTA : chunk;
-                if (int delta = TakeWholeSteps(cruiseAccumX, step)) {
-                    DispatchHScroll(delta, hTarget, isDiscrete);
+                if (isDiscrete) {
+                    cruiseAccumX += notchRateX * directionX * 2.0;
+                    if (int chars = TakeWholeSteps(cruiseAccumX, 1)) {
+                        DispatchHScroll(chars, hTarget, true);
+                    }
+                } else {
+                    double unitsThisTickX =
+                        notchRateX * directionX * WHEEL_DELTA * 0.035;
+                    cruiseAccumX += unitsThisTickX;
+                    int step =
+                        ctx.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
+                    if (int chunks = TakeWholeSteps(cruiseAccumX, step)) {
+                        DispatchHScroll(chunks, hTarget, false);
+                    }
                 }
             }
             if (WaitForSingleObject(g_stopEvent, 20) == WAIT_OBJECT_0)
@@ -577,36 +603,72 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
                 bool isDiscrete = GetScrollTargetInfo(curPt, hTarget);
                 double wheelUnits = (static_cast<double>(WHEEL_DELTA) /
                                      g_settings.pixels_per_notch);
-                int chunk =
-                    g_settings.smooth_wheel ? SMOOTH_SCROLL_CHUNK : WHEEL_DELTA;
 
-                // Smooth continuous velocity curve without sudden threshold
-                // jumps
+                // Smooth continuous velocity curve
                 double velocityFactor = 1.0;
                 if (g_settings.enable_velocity) {
-                    double dist = std::hypot(g_smoothDx, g_smoothDy);
-                    velocityFactor = std::clamp(0.6 + (dist * 0.08), 0.6, 2.2);
+                    // Combine instantaneous movement and smoothed filter for
+                    // responsive acceleration
+                    double instantDist = std::hypot(rawDx, rawDy);
+                    double smoothDist = std::hypot(g_smoothDx, g_smoothDy);
+                    double speed = (instantDist * 0.7) + (smoothDist * 0.3);
+
+                    // Dynamic curve: 0.8x at slow crawl, scaling up to 4.5x on
+                    // rapid gestures
+                    velocityFactor = std::clamp(0.8 + (speed * 0.12), 0.8, 4.5);
                 }
 
                 // --- 1. Vertical Processing ---
                 if (dy != 0) {
                     double directionY = g_settings.touch_style ? 1.0 : -1.0;
-                    g_accumY += (dy * directionY * wheelUnits * velocityFactor);
 
-                    int step = isDiscrete ? WHEEL_DELTA : chunk;
-                    if (int delta = TakeWholeSteps(g_accumY, step)) {
-                        DispatchScroll(delta, hTarget, isDiscrete);
+                    if (isDiscrete) {
+                        // Accumulate effective pixel travel distance for
+                        // classic line-by-line controls
+                        g_accumY += (dy * directionY * velocityFactor);
+                        int stepPx =
+                            static_cast<int>(g_settings.pixels_per_notch);
+                        if (int lines = TakeWholeSteps(g_accumY, stepPx)) {
+                            DispatchScroll(lines, hTarget, true);
+                        }
+                    } else {
+                        // Accumulate wheel units for high-resolution
+                        // micro-scrolling
+                        g_accumY +=
+                            (dy * directionY * wheelUnits * velocityFactor);
+                        int stepUnits = g_settings.smooth_wheel
+                                            ? SMOOTH_SCROLL_CHUNK
+                                            : WHEEL_DELTA;
+                        if (int chunks = TakeWholeSteps(g_accumY, stepUnits)) {
+                            DispatchScroll(chunks, hTarget, false);
+                        }
                     }
                 }
 
                 // --- 2. Horizontal Processing ---
                 if (dx != 0 && g_settings.enable_horizontal) {
                     double directionX = g_settings.touch_style ? -1.0 : 1.0;
-                    g_accumX += (dx * directionX * wheelUnits * velocityFactor);
 
-                    int step = isDiscrete ? WHEEL_DELTA : chunk;
-                    if (int delta = TakeWholeSteps(g_accumX, step)) {
-                        DispatchHScroll(delta, hTarget, isDiscrete);
+                    if (isDiscrete) {
+                        // Accumulate effective pixel travel distance for
+                        // classic line-by-line controls
+                        g_accumX += (dx * directionX * velocityFactor);
+                        int stepPx =
+                            static_cast<int>(g_settings.pixels_per_notch);
+                        if (int chars = TakeWholeSteps(g_accumX, stepPx)) {
+                            DispatchHScroll(chars, hTarget, true);
+                        }
+                    } else {
+                        // Accumulate wheel units for high-resolution
+                        // micro-scrolling
+                        g_accumX +=
+                            (dx * directionX * wheelUnits * velocityFactor);
+                        int stepUnits = g_settings.smooth_wheel
+                                            ? SMOOTH_SCROLL_CHUNK
+                                            : WHEEL_DELTA;
+                        if (int chunks = TakeWholeSteps(g_accumX, stepUnits)) {
+                            DispatchHScroll(chunks, hTarget, false);
+                        }
                     }
                 }
 
