@@ -2,11 +2,10 @@
 // @id              taskbar-free-float
 // @name            Taskbar Free Float (experimental)
 // @description     Ctrl+drag the original Windows 11 app bar and tray/clock independently
-// @version         0.1.5
+// @version         0.1.6
 // @author          Rikyz
 // @github          https://github.com/RikyZ90
 // @include         explorer.exe
-// @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lcomctl32
 // @license         GPL-3.0-only
@@ -14,8 +13,6 @@
 
 // Taskbar host discovery adapted from m417z's GPL-3.0 taskbar-tray-show-on-hover.
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-show-on-hover.wh.cpp
-// Start menu initialization adapted from m417z's GPL-3.0 shell-flyout-positions.
-// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/shell-flyout-positions.wh.cpp
 
 // ==WindhawkModReadme==
 /*
@@ -29,16 +26,6 @@ XAML popup windows. The tray block includes its system icons and clock.
 - Drag a floating block over its original slot and release to dock it there.
 - Escape while dragging: cancel this move.
 - A Ctrl+click without dragging is passed through to the taskbar as usual.
-
-The optional **Anchor Start menu to floating Start button** setting is
-experimental and disabled by default. It positions Start near its button when
-opened, preferring above, then below, then beside it, within the work area.
-Placement uses native layout properties when the container has room for the
-whole menu. Unsupported or undersized containers keep their native placement.
-It supports the classic and redesigned Windows 11 Start layouts on the primary
-monitor. It does not follow a drag while the menu stays open. Start menu settings
-in Shell Flyout Positions must remain at **Windows default** with **zero shifts**;
-its Notification Center and Action Center settings can remain enabled.
 
 ## Installation and removal
 
@@ -77,16 +64,6 @@ and reserved space remain at the original edge.
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- anchorStartMenu: false
-  $name: Anchor Start menu to floating Start button (experimental)
-  $description: >-
-    Reposition Start when it opens near the floating Start button. Keep Shell
-    Flyout Positions' Start menu settings at Windows default with zero shifts.
-*/
-// ==/WindhawkModSettings==
-
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -97,19 +74,14 @@ and reserved space remain at the original edge.
 
 #include <windhawk_utils.h>
 #include <shellapi.h>
-#include <roapi.h>
-#include <winstring.h>
 #include <windowsx.h>
 
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
 namespace Geometry {
@@ -122,29 +94,6 @@ Position Clamp(Position p, LONG width, LONG height, const RECT& monitor) {
         static_cast<int64_t>(monitor.bottom) - std::max<LONG>(height, 1));
     return {static_cast<LONG>(std::clamp<int64_t>(p.x, monitor.left, right)),
             static_cast<LONG>(std::clamp<int64_t>(p.y, monitor.top, bottom))};
-}
-
-Position AnchorStartMenu(const RECT& button, LONG width, LONG height,
-                         const RECT& work, LONG gap) {
-    const int64_t above = static_cast<int64_t>(button.top) - gap - height;
-    const int64_t below = static_cast<int64_t>(button.bottom) + gap;
-    int64_t x = (static_cast<int64_t>(button.left) + button.right - width) / 2;
-    int64_t y = above;
-    if (above < work.top) {
-        y = below;
-        if (below + height > work.bottom) {
-            const int64_t left = static_cast<int64_t>(button.left) - work.left;
-            const int64_t right = static_cast<int64_t>(work.right) - button.right;
-            x = right >= left ? static_cast<int64_t>(button.right) + gap
-                              : static_cast<int64_t>(button.left) - gap - width;
-            y = (static_cast<int64_t>(button.top) + button.bottom - height) / 2;
-        }
-    }
-    x = std::clamp<int64_t>(x, std::numeric_limits<LONG>::min(),
-                            std::numeric_limits<LONG>::max());
-    y = std::clamp<int64_t>(y, std::numeric_limits<LONG>::min(),
-                            std::numeric_limits<LONG>::max());
-    return Clamp({static_cast<LONG>(x), static_cast<LONG>(y)}, width, height, work);
 }
 
 size_t HostOffsetX64(const BYTE* code) {
@@ -204,37 +153,11 @@ using namespace winrt::Windows::UI::Xaml::Controls::Primitives;
 using winrt::Windows::Foundation::Rect;
 
 std::atomic<bool> g_unloading{false};
-std::atomic<bool> g_callbackCleanupFailed{false};
-bool g_anchorStartMenu = false;
-bool g_isStartHost = false;
-uintptr_t g_anchorSequence = 0;
 std::atomic<HWND> g_taskbar{nullptr};
 std::atomic<DWORD> g_uiThread{0};
 UINT g_controlMessage;
 constexpr UINT_PTR kTimer = 0x4652464C;
 constexpr UINT_PTR kDragTimer = 0x4652464D;
-constexpr PCWSTR kAnchorProperties[] = {
-    L"Windhawk.FreeFloat.Start.left", L"Windhawk.FreeFloat.Start.top",
-    L"Windhawk.FreeFloat.Start.right", L"Windhawk.FreeFloat.Start.bottom",
-    L"Windhawk.FreeFloat.Start.sequence"};
-
-void ClearStartAnchor(HWND hwnd) {
-    if (hwnd) {
-        RemovePropW(hwnd, kAnchorProperties[4]);
-        for (size_t i = 0; i < 4; ++i) RemovePropW(hwnd, kAnchorProperties[i]);
-    }
-}
-
-void PublishStartAnchor();
-
-void KeepFailedCallbacksMapped() {
-    if (!g_callbackCleanupFailed) return;
-    // shortcut: failed UI-thread cleanup retains this DLL until the host exits.
-    HMODULE module = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-        reinterpret_cast<PCWSTR>(&g_callbackCleanupFailed), &module);
-    Wh_Log(L"XAML callback cleanup incomplete; restart the affected shell process");
-}
 
 void* g_taskBandVtable;
 using GetHost_t = void*(WINAPI*)(void*, void**);
@@ -276,24 +199,6 @@ struct State {
     Geometry::Position startPosition{};
     HWND previousForeground = nullptr;
     unsigned retries = 0;
-    FrameworkElement layoutSource{nullptr};
-    winrt::event_token layoutToken{};
-    RECT anchorBounds{};
-    bool anchorPublished = false;
-
-    void RevokeLayout() {
-        if (layoutSource && layoutToken.value) {
-            try { layoutSource.LayoutUpdated(layoutToken); }
-            catch (...) { g_callbackCleanupFailed = true; }
-        }
-        layoutToken = {};
-        layoutSource = nullptr;
-    }
-
-    ~State() {
-        RevokeLayout();
-        ClearStartAnchor(taskbar);
-    }
 };
 
 // Owned and destroyed exclusively on the taskbar's UI thread.
@@ -416,72 +321,12 @@ RECT Bounds(FrameworkElement frame) {
 
 RECT Bounds(Block& block) { return Bounds(block.frame); }
 
-FrameworkElement FindStartButton(DependencyObject node, int depth = 0) {
-    if (!node || depth > 16) return nullptr;
-    if (auto element = node.try_as<FrameworkElement>()) {
-        if (Automation::AutomationProperties::GetAutomationId(element) == L"StartButton" ||
-            element.Name() == L"LaunchListButton") return element;
-    }
-    const int count = Media::VisualTreeHelper::GetChildrenCount(node);
-    for (int i = 0; i < count; ++i) {
-        auto button = FindStartButton(Media::VisualTreeHelper::GetChild(node, i), depth + 1);
-        if (button) return button;
-    }
-    return nullptr;
-}
-
-void PublishStartAnchor() {
-    if (!g_state) return;
-    try {
-        auto& state = *g_state;
-        if (!g_anchorStartMenu || g_unloading || !state.blocks[0].popup) {
-            ClearStartAnchor(state.taskbar);
-            state.anchorPublished = false;
-            return;
-        }
-        auto button = FindStartButton(state.blocks[0].frame);
-        if (!button || button.Visibility() != Visibility::Visible) {
-            ClearStartAnchor(state.taskbar);
-            state.anchorPublished = false;
-            return;
-        }
-        const RECT rect = Bounds(button);
-        if (state.anchorPublished && EqualRect(&rect, &state.anchorBounds)) return;
-        if (!SetPropW(state.taskbar, kAnchorProperties[4], nullptr)) {
-            ClearStartAnchor(state.taskbar);
-            state.anchorPublished = false;
-            return;
-        }
-        const LONG values[]{rect.left, rect.top, rect.right, rect.bottom};
-        for (size_t i = 0; i < ARRAYSIZE(values); ++i) {
-            if (!SetPropW(state.taskbar, kAnchorProperties[i],
-                          reinterpret_cast<HANDLE>(static_cast<INT_PTR>(values[i])))) {
-                ClearStartAnchor(state.taskbar);
-                state.anchorPublished = false;
-                return;
-            }
-        }
-        if (++g_anchorSequence == 0) ++g_anchorSequence;
-        state.anchorPublished = SetPropW(state.taskbar, kAnchorProperties[4],
-            reinterpret_cast<HANDLE>(g_anchorSequence));
-        state.anchorBounds = rect;
-        if (!state.anchorPublished) ClearStartAnchor(state.taskbar);
-    } catch (...) {
-        ClearStartAnchor(g_state->taskbar);
-        g_state->anchorPublished = false;
-    }
-}
-
 bool AutoHide() {
     APPBARDATA data{sizeof(data)};
     return (SHAppBarMessage(ABM_GETSTATE, &data) & ABS_AUTOHIDE) != 0;
 }
 
 void Dock(Block& block) {
-    if (g_state && &block == &g_state->blocks[0]) {
-        ClearStartAnchor(g_state->taskbar);
-        g_state->anchorPublished = false;
-    }
     if (!block.popup) return;
     block.popup.IsOpen(false);
     auto hosted = block.host.Children();
@@ -530,7 +375,6 @@ void Position(Block& block, Geometry::Position desired) {
     block.popup.VerticalOffset(block.popup.VerticalOffset() +
                                 (desired.y - current.top) / scale);
     block.frame.UpdateLayout();
-    if (&block == &g_state->blocks[0]) PublishStartAnchor();
 }
 
 HWND FindPopupWindow(const RECT& bounds) {
@@ -740,11 +584,6 @@ bool Initialize(HWND hwnd) {
     g_state->blocks[0].storageKey = L"apps.position";
     g_state->blocks[1].frame = tray;
     g_state->blocks[1].storageKey = L"tray.position";
-    if (g_anchorStartMenu) {
-        g_state->layoutSource = root.Content().as<FrameworkElement>();
-        g_state->layoutToken = g_state->layoutSource.LayoutUpdated(
-            [](auto const&, auto const&) { PublishStartAnchor(); });
-    }
     Wh_Log(L"Ready: Ctrl+drag apps or tray; release to finish");
     RestoreSavedPositions();
     return true;
@@ -913,8 +752,6 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
         if (message == g_controlMessage) {
             if (wp == 1) {
                 KillTimer(hwnd, kTimer);
-                if (g_state) g_state->RevokeLayout();
-                ClearStartAnchor(hwnd);
                 if (DockAll()) {
                     delete g_state;
                     g_state = nullptr;
@@ -967,8 +804,6 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
         }
         if (message == WM_NCDESTROY) {
             KillTimer(hwnd, kTimer);
-            if (g_state) g_state->RevokeLayout();
-            ClearStartAnchor(hwnd);
             const bool restored = DockAll();
             State* oldState = std::exchange(g_state, nullptr);
             if (restored) delete oldState;
@@ -1005,345 +840,7 @@ void WINAPI StartHook(void* self) {
     Attach();
 }
 
-namespace StartMenu {
-std::atomic<HWND> g_window{nullptr};
-struct State {
-    HWND hwnd = nullptr;
-    Window window{nullptr};
-    FrameworkElement content{nullptr};
-    FrameworkElement frame{nullptr};
-    struct Property {
-        DependencyProperty property{nullptr};
-        winrt::Windows::Foundation::IInspectable original{nullptr};
-        winrt::Windows::Foundation::IInspectable applied{nullptr};
-    };
-    std::array<Property, 5> properties;
-    size_t propertyCount = 0;
-    winrt::event_token visibilityToken{};
-    winrt::event_token closedToken{};
-    bool updating = false;
-    bool bindingLogged = false;
-};
-State* g_state = nullptr;
-
-HWND FindCoreWindow() {
-    HWND result = nullptr;
-    EnumWindows([](HWND hwnd, LPARAM param) -> BOOL {
-        DWORD processId = 0;
-        GetWindowThreadProcessId(hwnd, &processId);
-        WCHAR name[64]{};
-        if (processId == GetCurrentProcessId() &&
-            GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
-            wcscmp(name, L"Windows.UI.Core.CoreWindow") == 0) {
-            *reinterpret_cast<HWND*>(param) = hwnd;
-            return FALSE;
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&result));
-    return result;
-}
-
-bool ReadAnchor(RECT* rect) {
-    const HWND taskbar = ::FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!taskbar) return false;
-    const HANDLE sequence = GetPropW(taskbar, kAnchorProperties[4]);
-    if (!sequence) return false;
-    LONG* values[]{&rect->left, &rect->top, &rect->right, &rect->bottom};
-    for (size_t i = 0; i < ARRAYSIZE(values); ++i) {
-        const INT_PTR value = reinterpret_cast<INT_PTR>(GetPropW(taskbar, kAnchorProperties[i]));
-        if (value < -1000000 || value > 1000000) return false;
-        *values[i] = static_cast<LONG>(value);
-    }
-    return GetPropW(taskbar, kAnchorProperties[4]) == sequence &&
-           rect->right > rect->left && rect->bottom > rect->top &&
-           rect->right - rect->left <= 100000 && rect->bottom - rect->top <= 100000;
-}
-
-bool EqualLayoutValue(DependencyProperty property,
-    winrt::Windows::Foundation::IInspectable const& first,
-    winrt::Windows::Foundation::IInspectable const& second) {
-    if (!first || !second) return first == second;
-    if (property == FrameworkElement::HorizontalAlignmentProperty()) {
-        return winrt::unbox_value<HorizontalAlignment>(first) ==
-               winrt::unbox_value<HorizontalAlignment>(second);
-    }
-    if (property == FrameworkElement::VerticalAlignmentProperty()) {
-        return winrt::unbox_value<VerticalAlignment>(first) ==
-               winrt::unbox_value<VerticalAlignment>(second);
-    }
-    if (property == FrameworkElement::MarginProperty()) {
-        const auto a = winrt::unbox_value<Thickness>(first);
-        const auto b = winrt::unbox_value<Thickness>(second);
-        return a.Left == b.Left && a.Top == b.Top &&
-               a.Right == b.Right && a.Bottom == b.Bottom;
-    }
-    const auto a = winrt::unbox_value<double>(first);
-    const auto b = winrt::unbox_value<double>(second);
-    return a == b || (std::isnan(a) && std::isnan(b));
-}
-
-void RefreshLayout(FrameworkElement frame) {
-    frame.InvalidateMeasure();
-    if (auto parent = Media::VisualTreeHelper::GetParent(frame).try_as<FrameworkElement>()) {
-        // Refresh the arranged slot too, so native clipping follows the new layout.
-        parent.InvalidateMeasure();
-        parent.InvalidateArrange();
-        parent.UpdateLayout();
-    }
-}
-
-void Restore() {
-    if (!g_state) return;
-    auto frame = std::exchange(g_state->frame, nullptr);
-    const size_t count = std::exchange(g_state->propertyCount, 0);
-    auto properties = std::exchange(g_state->properties, {});
-    if (frame) {
-        for (size_t i = 0; i < count; ++i) {
-            auto& saved = properties[i];
-            if (saved.applied && EqualLayoutValue(saved.property,
-                    frame.GetValue(saved.property), saved.applied)) {
-                if (saved.original == DependencyProperty::UnsetValue()) {
-                    frame.ClearValue(saved.property);
-                } else {
-                    frame.SetValue(saved.property, saved.original);
-                }
-            }
-        }
-        RefreshLayout(frame);
-    }
-}
-
-bool PlaceFrame(FrameworkElement frame, bool canvas, double left, double top) {
-    if (!g_state || !frame) return false;
-    Restore();
-    std::array<DependencyProperty, 5> properties{nullptr, nullptr, nullptr, nullptr, nullptr};
-    std::array<winrt::Windows::Foundation::IInspectable, 5> values;
-    const size_t count = canvas ? 2 : 5;
-    if (canvas) {
-        properties[0] = Canvas::LeftProperty();
-        properties[1] = Canvas::TopProperty();
-        values[0] = winrt::box_value(left);
-        values[1] = winrt::box_value(top);
-    } else {
-        if (frame.ActualWidth() <= 0 || frame.ActualHeight() <= 0) return false;
-        properties = {FrameworkElement::WidthProperty(), FrameworkElement::HeightProperty(),
-            FrameworkElement::HorizontalAlignmentProperty(),
-            FrameworkElement::VerticalAlignmentProperty(), FrameworkElement::MarginProperty()};
-        values = {winrt::box_value(frame.ActualWidth()), winrt::box_value(frame.ActualHeight()),
-            winrt::box_value(HorizontalAlignment::Left), winrt::box_value(VerticalAlignment::Top),
-            winrt::box_value(Thickness{left, top, 0, 0})};
-    }
-    for (size_t i = 0; i < count; ++i) {
-        if (frame.GetBindingExpression(properties[i])) {
-            if (!g_state->bindingLogged) {
-                Wh_Log(L"Start menu layout has a binding; anchoring skipped");
-                g_state->bindingLogged = true;
-            }
-            return false;
-        }
-    }
-    g_state->frame = frame;
-    for (size_t i = 0; i < count; ++i) {
-        auto& saved = g_state->properties[i];
-        saved.property = properties[i];
-        saved.original = frame.ReadLocalValue(properties[i]);
-        saved.applied = values[i];
-        ++g_state->propertyCount;
-        frame.SetValue(properties[i], values[i]);
-    }
-    RefreshLayout(frame);
-    return true;
-}
-
-void Update();
-
-void UpdateImpl() {
-    if (g_unloading || !g_state || !g_state->window) return;
-    auto content = g_state->window.Content().try_as<FrameworkElement>();
-    if (!content) { Restore(); return; }
-    g_state->content = content;
-    RECT button{};
-    if (!ReadAnchor(&button)) { Restore(); return; }
-    if (!g_state->window.Visible()) return;
-    const HMONITOR monitor = MonitorFromRect(&button, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO info{sizeof(info)};
-    if (MonitorFromWindow(g_state->hwnd, MONITOR_DEFAULTTONEAREST) != monitor ||
-        !GetMonitorInfoW(monitor, &info)) { Restore(); return; }
-
-    FrameworkElement frame{nullptr};
-    const auto className = winrt::get_class_name(content);
-    if (className == L"Windows.UI.Xaml.Controls.Canvas") {
-        frame = FindFrame(content, L"StartDocked.StartSizingFrame");
-    } else if (className == L"StartMenu.StartBlendedFlexFrame") {
-        const int count = Media::VisualTreeHelper::GetChildrenCount(content);
-        for (int i = 0; i < count; ++i) {
-            auto child = Media::VisualTreeHelper::GetChild(content, i).try_as<FrameworkElement>();
-            if (child && child.Name() == L"FrameRoot") { frame = child; break; }
-        }
-    }
-    if (!frame) { Restore(); return; }
-    auto parent = Media::VisualTreeHelper::GetParent(frame).try_as<FrameworkElement>();
-    const bool canvas = parent && parent.try_as<Canvas>();
-    if (!parent || (!canvas && !parent.try_as<Grid>())) { Restore(); return; }
-
-    const auto root = content.XamlRoot();
-    const double scale = root ? root.RasterizationScale() : 0;
-    const auto bounds = parent.TransformToVisual(content).TransformBounds(
-        Rect{0, 0, static_cast<float>(parent.ActualWidth()),
-                   static_cast<float>(parent.ActualHeight())});
-    POINT origin{};
-    if (!std::isfinite(scale) || scale <= 0 ||
-        !ClientToScreen(g_state->hwnd, &origin) ||
-        !std::isfinite(bounds.X) || !std::isfinite(bounds.Y) ||
-        !std::isfinite(bounds.Width) || !std::isfinite(bounds.Height) ||
-        !std::isfinite(bounds.X * scale) || !std::isfinite(bounds.Y * scale) ||
-        std::abs(bounds.X * scale) > 1000000 || std::abs(bounds.Y * scale) > 1000000 ||
-        bounds.Width <= 0 || bounds.Height <= 0 ||
-        frame.ActualWidth() <= 0 || frame.ActualHeight() <= 0 ||
-        !std::isfinite(frame.ActualWidth()) || !std::isfinite(frame.ActualHeight()) ||
-        frame.ActualWidth() * scale > 100000 || frame.ActualHeight() * scale > 100000 ||
-        bounds.Width * scale > 100000 || bounds.Height * scale > 100000) {
-        Restore();
-        return;
-    }
-    const RECT container{
-        origin.x + static_cast<LONG>(std::floor(bounds.X * scale)),
-        origin.y + static_cast<LONG>(std::floor(bounds.Y * scale)),
-        origin.x + static_cast<LONG>(std::ceil((bounds.X + bounds.Width) * scale)),
-        origin.y + static_cast<LONG>(std::ceil((bounds.Y + bounds.Height) * scale))};
-    RECT available{};
-    const LONG width = static_cast<LONG>(std::ceil(frame.ActualWidth() * scale));
-    const LONG height = static_cast<LONG>(std::ceil(frame.ActualHeight() * scale));
-    if (!IntersectRect(&available, &container, &info.rcWork) ||
-        available.right - available.left < width || available.bottom - available.top < height) {
-        Restore();
-        Wh_Log(L"Start menu container cannot fit the full panel; keeping native placement");
-        return;
-    }
-    const auto target = Geometry::AnchorStartMenu(button, width, height, available,
-        std::max<LONG>(1, std::lround(std::min(100000.0, 8 * scale))));
-    if (PlaceFrame(frame, canvas, (target.x - container.left) / scale,
-                   (target.y - container.top) / scale)) {
-        frame.UpdateLayout();
-    }
-}
-
-void Update() {
-    if (!g_state || g_state->updating) return;
-    State* state = g_state;
-    state->updating = true;
-    try { UpdateImpl(); }
-    catch (...) {
-        Wh_Log(L"Start menu anchor unavailable; keeping native placement");
-        try { Restore(); } catch (...) {}
-    }
-    if (g_state == state) state->updating = false;
-}
-
-void Uninit();
-
-void VisibilityChanged(bool visible) {
-    if (!g_state || g_unloading) return;
-    if (visible) {
-        Update();
-    } else {
-        Restore();
-    }
-}
-
-void Init() {
-    if (g_unloading || g_state) return;
-    try {
-        auto window = Window::Current();
-        if (!window) return;
-        const HWND hwnd = FindCoreWindow();
-        if (!hwnd || GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) return;
-        g_state = new State;
-        g_state->hwnd = hwnd;
-        g_window = hwnd;
-        g_state->window = window;
-        g_state->visibilityToken = window.VisibilityChanged(
-            [](auto const&, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
-                try { VisibilityChanged(args.Visible()); }
-                catch (...) { Wh_Log(L"Start menu visibility update failed"); }
-            });
-        g_state->closedToken = window.Closed([](auto const&, auto const&) { Uninit(); });
-        VisibilityChanged(window.Visible());
-    } catch (...) {
-        Uninit();
-        Wh_Log(L"Start menu anchor initialization failed");
-    }
-}
-
-void Uninit() {
-    if (!g_state) return;
-    try {
-        if (g_state->window && g_state->visibilityToken.value) g_state->window.VisibilityChanged(g_state->visibilityToken);
-    } catch (...) { g_callbackCleanupFailed = true; }
-    try {
-        if (g_state->window && g_state->closedToken.value) g_state->window.Closed(g_state->closedToken);
-    } catch (...) { g_callbackCleanupFailed = true; }
-    g_state->visibilityToken = {};
-    g_state->closedToken = {};
-    try { Restore(); } catch (...) {}
-    delete std::exchange(g_state, nullptr);
-    g_window = nullptr;
-}
-
-bool RunFromWindowThread(HWND hwnd, void (*proc)()) {
-    static const UINT message = RegisterWindowMessageW(L"Windhawk.FreeFloat.StartThread." WH_MOD_ID);
-    DWORD processId = 0;
-    const DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
-    if (!message || !threadId || processId != GetCurrentProcessId()) return false;
-    if (threadId == GetCurrentThreadId()) { proc(); return true; }
-    struct Call { void (*proc)(); bool completed = false; } call{proc};
-    static std::atomic<Call*> pending{nullptr};
-    const HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC,
-        [](int code, WPARAM wp, LPARAM lp) -> LRESULT {
-            if (code == HC_ACTION) {
-                const auto* data = reinterpret_cast<const CWPSTRUCT*>(lp);
-                auto* call = pending.load();
-                if (call && data->message == message &&
-                    data->lParam == reinterpret_cast<LPARAM>(call)) {
-                    call->proc();
-                    call->completed = true;
-                }
-            }
-            return CallNextHookEx(nullptr, code, wp, lp);
-        }, nullptr, threadId);
-    if (!hook) return false;
-    pending = &call;
-    SendMessageW(hwnd, message, 0, reinterpret_cast<LPARAM>(&call));
-    pending = nullptr;
-    UnhookWindowsHookEx(hook);
-    return call.completed;
-}
-
-using Activation_t = decltype(&RoGetActivationFactory);
-Activation_t g_activation;
-HRESULT WINAPI ActivationHook(HSTRING id, REFIID iid, void** factory) {
-    thread_local bool inHook = false;
-    if (!g_unloading && !inHook &&
-        wcscmp(WindowsGetStringRawBuffer(id, nullptr), L"Windows.UI.Xaml.Hosting.XamlIsland") == 0) {
-        inHook = true;
-        Init();
-        inHook = false;
-    }
-    return g_activation(id, iid, factory);
-}
-}
-
 BOOL Wh_ModInit() {
-    g_anchorStartMenu = Wh_GetIntSetting(L"anchorStartMenu") != 0;
-    WCHAR path[MAX_PATH]{};
-    const DWORD pathLength = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!pathLength || pathLength >= ARRAYSIZE(path)) return FALSE;
-    PCWSTR name = wcsrchr(path, L'\\');
-    g_isStartHost = name && _wcsicmp(name + 1, L"StartMenuExperienceHost.exe") == 0;
-    if (g_isStartHost) {
-        return g_anchorStartMenu && WindhawkUtils::SetFunctionHook(
-            RoGetActivationFactory, StartMenu::ActivationHook, &StartMenu::g_activation);
-    }
     HMODULE taskbar = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!taskbar) return FALSE;
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
@@ -1366,25 +863,10 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    if (g_isStartHost) {
-        if (HWND hwnd = StartMenu::FindCoreWindow()) StartMenu::RunFromWindowThread(hwnd, StartMenu::Init);
-    } else {
-        Attach();
-    }
-}
+void Wh_ModAfterInit() { Attach(); }
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    if (g_isStartHost) {
-        if (HWND hwnd = StartMenu::g_window) {
-            if (!StartMenu::RunFromWindowThread(hwnd, StartMenu::Uninit)) {
-                g_callbackCleanupFailed = true;
-            }
-        }
-        KeepFailedCallbacksMapped();
-        return;
-    }
     const HWND hwnd = g_taskbar;
     if (hwnd && IsWindow(hwnd)) {
         if (!SendMessageW(hwnd, g_controlMessage, 1, 0)) {
@@ -1394,10 +876,4 @@ void Wh_ModBeforeUninit() {
     }
     g_taskbar = nullptr;
     g_uiThread = 0;
-    KeepFailedCallbacksMapped();
-}
-
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    *reload = TRUE;
-    return TRUE;
 }
