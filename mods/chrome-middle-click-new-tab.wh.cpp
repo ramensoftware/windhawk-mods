@@ -80,6 +80,8 @@ Ctrl+T), so no keyboard input is simulated.
 
 #include <windhawk_utils.h>
 
+#include <atomic>
+
 #include <commctrl.h>
 #include <propsys.h>
 #include <shobjidl.h>
@@ -122,6 +124,10 @@ struct {
 // Used as the timer id, which only has to be unique for the window.
 #define HELD_RELEASE_TIMER_ID ((UINT_PTR)&g_pendingClick)
 constexpr UINT kHeldReleaseTimeoutMs = 1000;
+
+// Set in Wh_ModUninit before a held release is passed on and the subclasses
+// are removed, so that no new release is held in between.
+std::atomic<bool> g_unloading;
 
 UINT GetDpiForWindowWithFallback(HWND hWnd) {
     using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
@@ -582,6 +588,28 @@ void DeliverHeldRelease(HWND hWnd, bool complete) {
     DefSubclassProc(hWnd, WM_MBUTTONUP, upWParam, upLParam);
 }
 
+// Passes on a held release, without opening a tab, before another button is
+// pressed. Otherwise the browser would see the middle button as still pressed
+// and could send the new press to the middle-clicked element.
+void FlushHeldRelease(HWND hWnd) {
+    if (!g_pendingClick.hWnd || !g_pendingClick.releaseHeld) {
+        return;
+    }
+
+    if (g_pendingClick.hWnd == hWnd) {
+        DeliverHeldRelease(hWnd, false);
+        return;
+    }
+
+    // Mouse capture makes this unlikely. DefSubclassProc can only be used for
+    // the current window, so send it.
+    HWND pendingWnd = g_pendingClick.hWnd;
+    g_pendingClick.hWnd = nullptr;
+    KillTimer(pendingWnd, HELD_RELEASE_TIMER_ID);
+    SendMessage(pendingWnd, WM_MBUTTONUP, g_pendingClick.upWParam,
+                g_pendingClick.upLParam);
+}
+
 LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
                                            UINT uMsg,
                                            WPARAM wParam,
@@ -612,6 +640,7 @@ LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
         // A quick second click arrives as a double click, treat it as another
         // click.
         case WM_NCMBUTTONDBLCLK:
+            FlushHeldRelease(hWnd);
             g_middleButtonDownWnd = nullptr;
             if (wParam == HTCAPTION &&
                 IsEmptyTabBarArea(hWnd, GET_X_LPARAM(lParam),
@@ -623,33 +652,35 @@ LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
 
         // A press in the client area means that a release on the tab bar
         // doesn't complete a click that started there.
+        //
         // Edge doesn't do anything on a middle-click on the empty area below
         // vertical tabs, so the press isn't swallowed. The check starts in the
         // background, and a tab is opened on release if the area is empty.
         case WM_MBUTTONDOWN:
         case WM_MBUTTONDBLCLK:
             g_middleButtonDownWnd = nullptr;
-            if (g_pendingClick.hWnd && g_pendingClick.releaseHeld) {
-                if (g_pendingClick.hWnd == hWnd) {
-                    DeliverHeldRelease(hWnd, false);
-                } else {
-                    // Mouse capture makes this unlikely. DefSubclassProc can
-                    // only be used for the current window, so send it.
-                    HWND pendingWnd = g_pendingClick.hWnd;
-                    g_pendingClick.hWnd = nullptr;
-                    KillTimer(pendingWnd, HELD_RELEASE_TIMER_ID);
-                    SendMessage(pendingWnd, WM_MBUTTONUP,
-                                g_pendingClick.upWParam,
-                                g_pendingClick.upLParam);
-                }
-            }
-
+            FlushHeldRelease(hWnd);
             OnClientMiddleButtonDown(hWnd, lParam);
+            break;
+
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONDBLCLK:
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONDBLCLK:
+        case WM_NCLBUTTONDOWN:
+        case WM_NCLBUTTONDBLCLK:
+        case WM_NCRBUTTONDOWN:
+        case WM_NCRBUTTONDBLCLK:
+        case WM_NCXBUTTONDOWN:
+        case WM_NCXBUTTONDBLCLK:
+            FlushHeldRelease(hWnd);
             break;
 
         case WM_MBUTTONUP:
             if (g_pendingClick.hWnd == hWnd && !g_pendingClick.releaseHeld) {
-                if (!g_pendingClick.done) {
+                if (!g_pendingClick.done && !g_unloading) {
                     g_pendingClick.releaseHeld = true;
                     g_pendingClick.upWParam = wParam;
                     g_pendingClick.upLParam = lParam;
@@ -854,6 +885,8 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    g_unloading = true;
 
     if (g_uiThreadId != 0) {
         EnumThreadWindows(g_uiThreadId, EnumBrowserWindowsUnsubclassFunc, 0);
