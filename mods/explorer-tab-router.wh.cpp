@@ -4,7 +4,7 @@
 // @name:zh-CN      资源管理器页签路由
 // @description     Reuse and activate Explorer folder tabs, preserve file selection and explicit new windows
 // @description:zh-CN 复用并切换资源管理器页签，保留文件选中状态和明确的新窗口操作
-// @version         1.0.2
+// @version         1.0.3
 // @author          afate123
 // @github          https://github.com/afate123
 // @license         MIT
@@ -17,6 +17,7 @@
 /*
 MIT License
 
+Copyright (c) ALMAS CP
 Copyright (c) Explorer Tab Router contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -39,91 +40,72 @@ SOFTWARE.
 
 */
 
+// clang-format off
 // ==WindhawkModReadme==
 /*
 # Explorer Tab Router / 资源管理器页签路由
 
+![External folder requests become tabs; reopening reuses a tab / 外部打开转为页签，重复请求复用页签](https://raw.githubusercontent.com/afate123/windhawk-mods/d3c374a386345b893a2318a483ff1adb0690dd2f/assets/explorer-tab-router.gif)
+
 ## English
 
-Explorer Tab Router
- * keeps ordinary folder-opening requests together in Windows 11 File Explorer
- * while preserving explicit requests for a separate window.
+Explorer Tab Router keeps ordinary folder-opening requests together in Windows 11 File Explorer while preserving explicit requests for a separate window.
 
 ### Behavior
 
--
- * **Open a folder externally:** reuse and activate an existing tab for that
- * folder. If the folder is not open, route the new folder window into a tab in
- * an existing Explorer window.
-- **Show a file in its folder:** activate the
- * matching folder tab and preserve the requested file selection.
-- **Open in
- * new tab:** create a new tab and switch to it automatically, including when
- * that folder already has another tab.
-- **Open in new window:** keep the
- * explicitly requested window separate.
-- **Hold Shift while opening a
- * folder:** bypass ordinary window-to-tab routing and keep a separate
- * window.
+- **Open a folder externally:** reuse and activate an existing tab for that folder. If the folder is not open, route the new folder window into a tab in an existing Explorer window.
+- **Show a file in its folder:** activate the matching folder tab and preserve the requested file selection.
+- **Open in new tab:** create a new tab and switch to it automatically, including when that folder already has another tab.
+- **Open in new window:** keep the explicitly requested window separate.
+- **Hold Shift while opening a folder:** bypass ordinary window-to-tab routing and keep a separate window.
 
-Enable the mod in Windhawk, then use File Explorer and other
- * applications normally. Folder routing and tab activation do not require a
- * separate application list. Control Panel and unsupported shell locations are
- * allowed to remain in their own windows.
+Enable the mod in Windhawk, then use File Explorer and other applications normally. Folder routing and tab activation do not require a separate application list. Control Panel and unsupported shell locations are allowed to remain in their own windows.
 
-### Compatibility and
- * limitations
+### Source and conflicting mods
 
-Windows 11 x64 with native File Explorer tabs is required. This
- * mod uses internal shell symbols, which are checked when it loads. A future
- * Windows update can require a compatibility update.
+This mod builds on the routing approach introduced by [Explorer Single Window Tabs](https://windhawk.net/mods/explorer-single-window-tabs) by [ALMAS CP](https://github.com/almas-cp). It adds existing-tab reuse and activation, file-selection preservation, explicit-window handling, automatic new-tab activation, and managed presentation recovery.
 
-Some requests are handled
- * through a temporary transparent Explorer window before routing completes.
- * This is not a guarantee of entirely window-free navigation. If a request
- * cannot be completed safely, the temporary window is restored instead of
- * discarding the request. Window presentation state, including existing layered
- * transparency, is restored on recovery.
+**Do not enable Explorer Single Window Tabs and Explorer Tab Router together. Disable the other routing mod first.**
 
-The mod is distributed under the MIT
- * license.
+### Compatibility and limitations
+
+Windows 11 x64 with native File Explorer tabs is required. This mod uses internal shell symbols, which are checked when it loads. A future Windows update can require a compatibility update.
+
+Some requests are handled through a temporary transparent Explorer window before routing completes. This is not a guarantee of entirely window-free navigation. If a request cannot be completed safely, the temporary window is restored instead of discarding the request. Window presentation state, including existing layered transparency, is restored on recovery.
+
+The mod is distributed under the MIT license.
 
 ## 简体中文
 
-资源管理器页签路由将普通的文件夹打开请求集中到 Windows
- * 11 资源管理器页签中，同时保留明确要求打开独立窗口的操作。
+资源管理器页签路由将普通的文件夹打开请求集中到 Windows 11 资源管理器页签中，同时保留明确要求打开独立窗口的操作。
 
 ### 使用行为
 
--
- * **从外部应用打开文件夹：**
- * 已有相同目录页签时，复用并切换过去；尚未打开时，将新目录窗口转入现有资源管理器的页签。
--
- * **在文件夹中显示文件：** 切换到对应目录页签，并保留目标文件的选中状态。
--
- * **在新标签页中打开：** 新建页签并自动切换，即使相同目录已有其他页签。
--
- * **在新窗口中打开：** 保留明确请求的独立窗口。
-- **按住 Shift 打开文件夹：**
- * 绕过普通窗口转页签行为，保留独立窗口。
+- **从外部应用打开文件夹：** 已有相同目录页签时，复用并切换过去；尚未打开时，将新目录窗口转入现有资源管理器的页签。
+- **在文件夹中显示文件：** 切换到对应目录页签，并保留目标文件的选中状态。
+- **在新标签页中打开：** 新建页签并自动切换，即使相同目录已有其他页签。
+- **在新窗口中打开：** 保留明确请求的独立窗口。
+- **按住 Shift 打开文件夹：** 绕过普通窗口转页签行为，保留独立窗口。
 
-在 Windhawk
- * 中启用后即可正常使用，不需要逐个添加应用名单。控制面板及不支持的 Shell
- * 位置可以保持独立窗口。
+在 Windhawk 中启用后即可正常使用，不需要逐个添加应用名单。控制面板及不支持的 Shell 位置可以保持独立窗口。
+
+### 来源与冲突提示
+
+本 mod 基于 [ALMAS CP](https://github.com/almas-cp) 的 [Explorer Single Window Tabs](https://windhawk.net/mods/explorer-single-window-tabs) 路由思路扩展，增加已有页签复用与切换、文件选中保留、明确的新窗口请求识别、新页签自动激活，以及窗口状态恢复管理。
+
+**请勿同时启用 Explorer Single Window Tabs 与 Explorer Tab Router；启用前先停用另一个路由 mod。**
 
 ### 兼容性与限制
 
-需要 Windows 11 x64
- * 以及支持原生页签的资源管理器。加载时会检查所需的系统内部符号，未来 Windows
- * 更新可能需要同步更新兼容实现。
+需要 Windows 11 x64 以及支持原生页签的资源管理器。加载时会检查所需的系统内部符号，未来 Windows 更新可能需要同步更新兼容实现。
 
 部分请求会先经过临时透明窗口，再完成页签路由，因此不保证整个过程完全不创建窗口。无法安全完成时会恢复临时窗口，避免丢弃打开请求；恢复时会还原原有窗口显示状态，包括已有的分层透明属性。
 
-本
- * mod 使用 MIT 许可。
+本 mod 使用 MIT 许可。
 
 */
 // ==/WindhawkModReadme==
+// clang-format on
 
 #include <exdisp.h>
 #include <shlobj.h>
@@ -517,7 +499,6 @@ static bool ReuseFolderTab(PCIDLIST_ABSOLUTE folder,
     return false;
 }
 
-// ---------------------------------------------------------------------------
 #include <mutex>
 #include <unordered_map>
 static std::mutex g_explicitMutex;
@@ -529,9 +510,7 @@ struct ExplicitWindowRequest {
 static std::vector<ExplicitWindowRequest> g_explicitWindows;
 static thread_local bool g_explicitWindowCall = false;
 static thread_local bool g_explicitWindowCreated = false;
-static void MenuTrace(const wchar_t* message) {
-    Wh_Log(L"%s", message);
-}
+
 static void* CommandIdentity(void* self) {
     ComPtr<IUnknown> identity;
     reinterpret_cast<IUnknown*>(self)->QueryInterface(IID_PPV_ARGS(&identity));
@@ -596,11 +575,8 @@ static HRESULT FolderInitialize_Hook(void* self,
                   : flags.vt == VT_I4 ? flags.lVal
                                       : 0;
     void* identity = CommandIdentity(self);
-    wchar_t trace[512];
-    swprintf_s(trace,
-               L"Initialize self=%p identity=%p name=%s flags=%lu vt=%d\r\n",
-               self, identity, name ? name : L"", value, flags.vt);
-    MenuTrace(trace);
+    Wh_Log(L"Initialize self=%p identity=%p name=%s flags=%lu vt=%d", self,
+           identity, name ? name : L"", value, flags.vt);
     std::lock_guard<std::mutex> lock(g_explicitMutex);
     // Each initialization overwrites the previous value if a COM address is
     // reused.
@@ -623,12 +599,8 @@ static HRESULT FolderShow_Hook(void* self, PCIDLIST_ABSOLUTE pidl, bool flag) {
         if (separate && !path.empty())
             g_explicitWindows.push_back({path, GetTickCount64() + 10000});
     }
-    wchar_t trace[1024];
-    swprintf_s(
-        trace,
-        L"ShowFolder self=%p identity=%p separate=%d flag=%d path=%s\r\n", self,
-        identity, separate, flag, path.c_str());
-    MenuTrace(trace);
+    Wh_Log(L"ShowFolder self=%p identity=%p separate=%d flag=%d path=%s", self,
+           identity, separate, flag, path.c_str());
     bool previous = g_explicitWindowCall,
          previousCreated = g_explicitWindowCreated;
     g_explicitWindowCall = previous || separate;
@@ -640,33 +612,8 @@ static HRESULT FolderShow_Hook(void* self, PCIDLIST_ABSOLUTE pidl, bool flag) {
     g_explicitWindowCreated = previousCreated;
     return hr;
 }
-static bool HookMenus() {
-    HMODULE module = GetModuleHandleW(L"ExplorerFrame.dll");
-    WH_FIND_SYMBOL symbol{};
-    HANDLE search = Wh_FindFirstSymbol(module, nullptr, &symbol);
-    if (!search)
-        return false;
-    void *initialize = nullptr, *show = nullptr;
-    do {
-        if (!symbol.symbol)
-            continue;
-        if (wcsstr(symbol.symbol, L" CExecuteFolder::Initialize("))
-            initialize = symbol.address;
-        if (wcsstr(symbol.symbol, L" CExecuteFolder::ShowFolder("))
-            show = symbol.address;
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    if (!initialize || !show)
-        return false;
-    return Wh_SetFunctionHook(
-               initialize, reinterpret_cast<void*>(FolderInitialize_Hook),
-               reinterpret_cast<void**>(&FolderInitialize_Original)) &&
-           Wh_SetFunctionHook(show, reinterpret_cast<void*>(FolderShow_Hook),
-                              reinterpret_cast<void**>(&FolderShow_Original));
-}
 
 // Constants
-// ---------------------------------------------------------------------------
 #define WC_CABINET L"CabinetWClass"
 #define WC_SHELLTAB L"ShellTabWindowClass"
 #define CMD_NEW_TAB 0xA21B  // Internal Explorer "new tab" command
@@ -693,7 +640,7 @@ class WindowPresentationStore final {
     WindowPresentationStore(const WindowPresentationStore&) = delete;
     WindowPresentationStore& operator=(const WindowPresentationStore&) = delete;
 
-    ~WindowPresentationStore() { RestoreAll(); }
+    ~WindowPresentationStore() = default;
 
     [[nodiscard]] std::optional<ULONG_PTR> Stage(HWND window) {
         if (!::IsWindow(window) ||
@@ -1192,27 +1139,9 @@ struct MergeRequest {
     ULONG_PTR lease = 0;
 };
 
-// ---------------------------------------------------------------------------
-// Destination policy is defined in etr::ClassifyShellDestination above.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Restore a window that was hidden for redirect but needs to be shown
-// (e.g. Control Panel, or abort cases).
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Routing host and location queries are implemented by etr::ShellTabCatalog
 // above.
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Location resolution keeps the active tab PIDL throughout the request.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// COM: Count current IShellWindows entries
-// ---------------------------------------------------------------------------
 #include <atomic>
 #include <deque>
 static std::atomic<bool> g_stop{false};
@@ -1650,9 +1579,7 @@ static DWORD WINAPI ExecuteMergeRequest(LPVOID parameter) {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // Hook: CreateWindowExW
-// ---------------------------------------------------------------------------
 
 #include <windows.h>
 #include <string_view>
@@ -1759,12 +1686,8 @@ static BOOL WINAPI RouteWindowVisibility(HWND window, int request) {
     return g_nextVisibilityChange(window, request);
 }
 
-// ---------------------------------------------------------------------------
 // Mod lifecycle
-// ---------------------------------------------------------------------------
-static void ReceiverLog(const wchar_t* message) {
-    Wh_Log(L"%s", message);
-}
+
 using FindWindowSW_t = HRESULT(STDMETHODCALLTYPE*)(void*,
                                                    VARIANT*,
                                                    VARIANT*,
@@ -1782,10 +1705,8 @@ static HRESULT STDMETHODCALLTYPE FindWindowSW_Hook(void* self,
                                                    IDispatch** out) {
     HRESULT hr =
         FindWindowSW_Original(self, loc, root, cls, frame, options, out);
-    wchar_t msg[256];
-    swprintf_s(msg, L"FindWindowSW cls=%d options=%d vt=%d hr=%08lx out=%d\r\n",
-               cls, options, loc ? loc->vt : 0, hr, out && *out ? 1 : 0);
-    ReceiverLog(msg);
+    Wh_Log(L"FindWindowSW cls=%d options=%d vt=%d hr=%08lx out=%d", cls,
+           options, loc ? loc->vt : 0, hr, out && *out ? 1 : 0);
     if (SUCCEEDED(hr) && hr != S_FALSE && out && *out && cls != SWC_DESKTOP &&
         (options & SWFO_NEEDDISPATCH) &&
         !(GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
@@ -1795,38 +1716,36 @@ static HRESULT STDMETHODCALLTYPE FindWindowSW_Hook(void* self,
             // Return from the ShellWindows RPC before issuing frame commands;
             // the UI command can itself need a Shell/WinRT apartment callback.
             QueueFocus(tab);
-            swprintf_s(msg, L"Queued activation for tab=%p\r\n", tab);
-            ReceiverLog(msg);
+            Wh_Log(L"Queued activation for tab=%p", tab);
         }
     }
     return hr;
 }
-static bool HookReceiver() {
-    auto module = LoadLibraryW(L"ExplorerFrame.dll");
-    if (!module)
-        return false;
-    WH_FIND_SYMBOL symbol{};
-    HANDLE search = Wh_FindFirstSymbol(module, nullptr, &symbol);
-    if (!search) {
-        ReceiverLog(L"Symbol enumeration failed\r\n");
+
+static bool InstallExplorerFrameHooks(bool shellService) {
+    HMODULE module = LoadLibraryExW(L"ExplorerFrame.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
         return false;
     }
-    void* address = nullptr;
-    do {
-        if (symbol.symbol &&
-            wcsstr(symbol.symbol, L"CSDWindows::FindWindowSW(")) {
-            address = symbol.address;
-            break;
-        }
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    bool ok =
-        address &&
-        Wh_SetFunctionHook(address, reinterpret_cast<void*>(FindWindowSW_Hook),
-                           reinterpret_cast<void**>(&FindWindowSW_Original));
-    ReceiverLog(ok ? L"Receiver hook installed\r\n"
-                   : L"Receiver hook failed\r\n");
-    return ok;
+    // ExplorerFrame.dll
+    WindhawkUtils::SYMBOL_HOOK shellHooks[] = {
+        {{L"public: virtual long __cdecl CSDWindows::FindWindowSW(struct "
+          L"tagVARIANT *,struct tagVARIANT *,int,long *,int,struct IDispatch * "
+          L"*)"},
+         &FindWindowSW_Original,
+         FindWindowSW_Hook},
+        {{L"public: virtual long __cdecl CExecuteFolder::Initialize(unsigned "
+          L"short const *,struct IPropertyBag *)"},
+         &FolderInitialize_Original,
+         FolderInitialize_Hook},
+        {{L"protected: long __cdecl CExecuteFolder::ShowFolder(struct "
+          L"_ITEMIDLIST_ABSOLUTE const *,bool)"},
+         &FolderShow_Original,
+         FolderShow_Hook},
+    };
+    const size_t count = shellService ? 1 : std::size(shellHooks);
+    return WindhawkUtils::HookSymbols(module, shellHooks, count);
 }
 
 BOOL Wh_ModInit() {
@@ -1837,7 +1756,7 @@ BOOL Wh_ModInit() {
     if (shellService) {
         if (!etr::IsShellWindowsServiceCommand(GetCommandLineW()))
             return FALSE;
-        if (!HookReceiver())
+        if (!InstallExplorerFrameHooks(true))
             return FALSE;
         if (!StartRouter()) {
             StopRouter();
@@ -1846,7 +1765,7 @@ BOOL Wh_ModInit() {
         }
         return TRUE;
     }
-    if (!HookReceiver() || !HookMenus())
+    if (!InstallExplorerFrameHooks(false))
         return FALSE;
     if (!Wh_SetFunctionHook(reinterpret_cast<void*>(CreateWindowExW),
                             reinterpret_cast<void*>(RouteWindowCreation),
