@@ -154,6 +154,7 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -1225,7 +1226,8 @@ namespace tb
     };
 
     // XAML objects must never be destroyed off the UI thread / at process exit.
-    [[clang::no_destroy]] static std::vector<std::shared_ptr<Entry>> g_entries;
+    [[clang::no_destroy]] static std::optional<
+        std::vector<std::shared_ptr<Entry>>> g_entries{std::in_place};
     static std::mutex g_entMtx;
     static std::map<DWORD, HWND> g_msgWnds;
     static std::map<DWORD, UINT> g_msgTickMs; // current timer interval of each message window
@@ -1964,20 +1966,24 @@ namespace tb
         std::vector<std::shared_ptr<Entry>> r;
         std::lock_guard<std::mutex> g(g_entMtx);
         DWORD tid = GetCurrentThreadId();
-        for (auto &e : g_entries)
-            if (e->tid == tid)
-                r.push_back(e);
+        if (g_entries)
+            for (auto &e : *g_entries)
+                if (e->tid == tid)
+                    r.push_back(e);
         return r;
     }
 
     static void DropEntries(bool all)
     {
         std::lock_guard<std::mutex> g(g_entMtx);
+        if (!g_entries)
+            return;
         DWORD tid = GetCurrentThreadId();
-        g_entries.erase(std::remove_if(g_entries.begin(), g_entries.end(),
-                                       [&](const std::shared_ptr<Entry> &e)
-                                       { return e->tid == tid && (all || !e->clock); }),
-                        g_entries.end());
+        auto &entries = *g_entries;
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                     [&](const std::shared_ptr<Entry> &e)
+                                     { return e->tid == tid && (all || !e->clock); }),
+                      entries.end());
     }
 
     // Sets the interval of this thread's message-window timer (only when it changes).
@@ -2134,6 +2140,9 @@ namespace tb
     {
         DWORD tid = GetCurrentThreadId();
         std::lock_guard<std::mutex> g(g_msgMtx);
+        // Do not create a new taskbar message window once unload cleanup has begun.
+        if (g_shuttingDown.load())
+            return false;
         if (g_msgWnds.count(tid))
             return true;
         if (!g_msgClassRegistered)
@@ -2173,7 +2182,9 @@ namespace tb
     static std::shared_ptr<Entry> FindEntry(wux::FrameworkElement const &fe)
     {
         std::lock_guard<std::mutex> g(g_entMtx);
-        for (auto &e : g_entries)
+        if (!g_entries)
+            return nullptr;
+        for (auto &e : *g_entries)
             if (e->clock && e->clock == fe)
                 return e;
         return nullptr;
@@ -2181,6 +2192,8 @@ namespace tb
 
     static void AdoptClock(wux::FrameworkElement const &fe, bool retemplated)
     {
+        if (g_shuttingDown.load())
+            return;
         auto en = FindEntry(fe);
         if (en)
         {
@@ -2199,7 +2212,10 @@ namespace tb
         en->clock = fe;
         {
             std::lock_guard<std::mutex> g(g_entMtx);
-            g_entries.push_back(en);
+            // Cleanup may have started while this hook was finding the clock.
+            if (g_shuttingDown.load() || !g_entries)
+                return;
+            g_entries->push_back(en);
         }
         Wh_Log(L"adopted clock element (tid %u)", en->tid);
         SetTickMs(100); // a new clock: start with the fast tick until it is set up
@@ -2451,6 +2467,13 @@ namespace tb
             // A plain SendMessage: the taskbar thread never waits on the Windhawk thread, so this cannot deadlock,
             // and the unload must not continue while that thread could still run code from this module.
             SendMessageW(h, WM_TD_CLEANUP, 0, 0);
+        }
+        {
+            // Each taskbar thread has now released its own XAML references. Reset only when
+            // no entries remain, so their thread-affine objects can never be destroyed here.
+            std::lock_guard<std::mutex> g(g_entMtx);
+            if (g_entries && g_entries->empty())
+                g_entries.reset(); // also releases the vector's retained allocation
         }
         if (g_msgClassRegistered)
         {
