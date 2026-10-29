@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              background-dimmer
 // @name            Background Dimmer
-// @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in its own configuration window 
+// @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in its own configuration window
 // @version         1.0.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
@@ -13,13 +13,13 @@
 /*
 # Background Dimmer
 
-Overlays innactive windows so the active one stands out, keeping the background readable. Spetially usefull on side by side window configurations.
+Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.
 
 The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.
 
 ## Live configuration
 
-The look is tuned in the mod's own **configuration window**, where every change shows up immediately on screen. Open it with the **configuration hotkey** (**Win+Alt+B** by default, changeable in the mod settings).
+The look is tuned in the mod's own **configuration window**, where every change shows up immediately on screen. Open it with the **configuration hotkey** (**Win+Ctrl+Alt+D** by default, changeable in the mod settings).
 
 The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved.
 
@@ -33,7 +33,7 @@ Changes made in the configuration window are saved automatically. Dimming can be
 - **Size**: the size of the checkerboard squares or the width of the stripes, in pixels.
 - **Base color**: tints the layer. White gives neutral gray tones.
 
-Brightness and contrast set the two pattern tones as *brightness ± contrast / 2*, so one controls how dark the layer is and the other how visible the pattern is.
+Brightness and contrast set the two pattern tones as *brightness ± contrast / 2*, so one controls how dark the layer is and the other how visible the pattern is. Near the ends of the range a tone is clipped to black or white, which keeps the pattern visible over a black base, as in the default look.
 
 ## Behavior
 
@@ -41,16 +41,18 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 - The taskbar, Start, Alt+Tab and menus never move the layer.
 - When the desktop has focus, the layer can either hide or cover everything (option in the configuration window).
 - The mod runs in its own Windhawk process and does not inject into Explorer or any other program.
+- Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).
+- The appearance is stored per computer, so all Windows users of the same PC share it.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- configHotkey: Win+Alt+B
+- configHotkey: Win+Ctrl+Alt+D
   $name: Configuration window hotkey
   $description: >-
     Opens the live configuration window. Modifiers (Ctrl, Alt, Shift, Win)
-    and one key, joined with +, for example Win+Alt+B or Ctrl+Shift+F9. If
+    and one key, joined with +, for example Win+Ctrl+Alt+D or Ctrl+Shift+F9. If
     empty, the configuration window opens whenever these settings are saved.
 - toggleHotkey: ""
   $name: On/off hotkey
@@ -99,11 +101,12 @@ struct Appearance {
     int slider[SL_COUNT];   // opacity/brightness/contrast in %, size in px
     int colorRgb;           // 0xRRGGBB
     bool hideOnDesktop;
+    bool hideFromCapture;
     bool active;
     wchar_t image[MAX_PATH];
 };
 
-const Appearance kDefaults = {PAT_DIAGONAL, {20, 0, 60, 16}, 0xFFFFFF, true, true, L""};
+const Appearance kDefaults = {PAT_DIAGONAL, {20, 0, 60, 16}, 0xFFFFFF, true, false, true, L""};
 const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size"};
 const int kSliderMin[SL_COUNT] = {0, 0, 0, 1};
 const int kSliderMax[SL_COUNT] = {100, 100, 100, 200};
@@ -128,8 +131,6 @@ bool g_configHotkeyActive;
 bool g_savePending;
 ULONG_PTR g_gdiplusToken;
 HICON g_icon;
-HANDLE g_actCtx = INVALID_HANDLE_VALUE;
-ULONG_PTR g_actCookie;
 
 constexpr wchar_t kMainClass[] = L"BackgroundDimmer_Main";
 constexpr wchar_t kOverlayClass[] = L"BackgroundDimmer_Overlay";
@@ -149,6 +150,7 @@ void LoadAppearance() {
         g_ap.slider[i] = Clamp(Wh_GetIntValue(kSliderKeys[i], kDefaults.slider[i]), kSliderMin[i], kSliderMax[i]);
     g_ap.colorRgb = Wh_GetIntValue(L"color", kDefaults.colorRgb) & 0xFFFFFF;
     g_ap.hideOnDesktop = Wh_GetIntValue(L"hideOnDesktop", kDefaults.hideOnDesktop) != 0;
+    g_ap.hideFromCapture = Wh_GetIntValue(L"hideFromCapture", kDefaults.hideFromCapture) != 0;
     g_ap.active = Wh_GetIntValue(L"active", kDefaults.active) != 0;
     g_ap.image[0] = L'\0';
     Wh_GetStringValue(L"image", g_ap.image, ARRAYSIZE(g_ap.image));
@@ -161,6 +163,7 @@ void SaveAppearance() {
         Wh_SetIntValue(kSliderKeys[i], g_ap.slider[i]);
     Wh_SetIntValue(L"color", g_ap.colorRgb);
     Wh_SetIntValue(L"hideOnDesktop", g_ap.hideOnDesktop);
+    Wh_SetIntValue(L"hideFromCapture", g_ap.hideFromCapture);
     Wh_SetIntValue(L"active", g_ap.active);
     Wh_SetStringValue(L"image", g_ap.image);
 }
@@ -382,6 +385,16 @@ void BuildBrush() {
         InvalidateRect(g_hwndOverlay, nullptr, TRUE);
 }
 
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
+// The layer stays on screen but is left out of screenshots, recordings and screen sharing (Windows 10 2004+).
+void ApplyCaptureExclusion() {
+    if (!SetWindowDisplayAffinity(g_hwndOverlay, g_ap.hideFromCapture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE))
+        Wh_Log(L"SetWindowDisplayAffinity failed: %u", GetLastError());
+}
+
 void ApplyOpacity() {
     SetLayeredWindowAttributes(g_hwndOverlay, 0, (BYTE)Pct255(g_ap.slider[SL_OPACITY]), LWA_ALPHA);
 }
@@ -414,6 +427,14 @@ bool IsIgnoredClass(const wchar_t* cls) {
     return false;
 }
 
+// Moves the layer to the top of the non-topmost band, unless it is already there.
+void RaiseOverlayToTop() {
+    HWND prev = GetWindow(g_hwndOverlay, GW_HWNDPREV);
+    if (!prev || (GetWindowLongPtrW(prev, GWL_EXSTYLE) & WS_EX_TOPMOST))
+        return;
+    SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+}
+
 void Reposition() {
     if (!g_hwndOverlay)
         return;
@@ -432,7 +453,7 @@ void Reposition() {
             ShowOverlay(false);
         } else {
             ShowOverlay(true);
-            SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+            RaiseOverlayToTop();
         }
         return;
     }
@@ -441,16 +462,14 @@ void Reposition() {
     HWND root = GetAncestor(fg, GA_ROOTOWNER);
     if (!root)
         root = fg;
-    HWND after;
     if (GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOPMOST) {
         // Inserting the layer behind a topmost window would make it topmost too; go to the top of the normal band instead.
-        after = HWND_TOP;
-    } else {
-        if (GetWindow(root, GW_HWNDNEXT) == g_hwndOverlay)
-            return;
-        after = root;
+        RaiseOverlayToTop();
+        return;
     }
-    SetWindowPos(g_hwndOverlay, after, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+    if (GetWindow(root, GW_HWNDNEXT) == g_hwndOverlay)
+        return;
+    SetWindowPos(g_hwndOverlay, root, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
@@ -481,6 +500,7 @@ enum {
     ID_IMAGE,
     ID_BROWSE,
     ID_HIDE_DESKTOP,
+    ID_HIDE_CAPTURE,
     ID_ACTIVE,
     ID_RESET,
 };
@@ -539,6 +559,7 @@ void SyncControls() {
         SendMessageW(Ctl(ID_SLIDER + i), TBM_SETPOS, TRUE, g_ap.slider[i]);
     SetWindowTextW(Ctl(ID_IMAGE), g_ap.image);
     CheckDlgButton(g_hwndConfig, ID_HIDE_DESKTOP, g_ap.hideOnDesktop ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(g_hwndConfig, ID_HIDE_CAPTURE, g_ap.hideFromCapture ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(g_hwndConfig, ID_ACTIVE, g_ap.active ? BST_CHECKED : BST_UNCHECKED);
     UpdateValueLabels();
     UpdateEnabled();
@@ -576,9 +597,10 @@ void OnPatternChanged() {
     int sel = (int)SendMessageW(Ctl(ID_PATTERN), CB_GETCURSEL, 0, 0);
     if (sel < 0)
         return;
+    int previous = g_ap.pattern;
     g_ap.pattern = sel;
     if (sel == PAT_IMAGE && GetFileAttributesW(g_ap.image) == INVALID_FILE_ATTRIBUTES && !PickImage())
-        g_ap.pattern = PAT_CHECKER;
+        g_ap.pattern = previous;
     SyncControls();
     BuildBrush();
     ScheduleSave();
@@ -607,6 +629,7 @@ void ResetDefaults() {
     wcscpy_s(g_ap.image, image);
     SyncControls();
     ApplyOpacity();
+    ApplyCaptureExclusion();
     BuildBrush();
     Reposition();
     ScheduleSave();
@@ -624,7 +647,7 @@ BOOL CALLBACK SetFontProc(HWND child, LPARAM font) {
 }
 
 // Layout in 96-dpi pixels, scaled to the DPI of the current monitor.
-const int kClientW = 396, kClientH = 344;
+const int kClientW = 440, kClientH = 370;
 
 void LayoutConfig(UINT dpi) {
     g_ui.dpi = dpi;
@@ -655,9 +678,11 @@ void LayoutConfig(UINT dpi) {
     MoveCtl(ID_IMAGE, cx, y + 1, 220, 24);
     MoveCtl(ID_BROWSE, cx + 226, y, 32, 26);
     y += row + 8;
-    MoveCtl(ID_HIDE_DESKTOP, lx, y, 368, 22);
+    MoveCtl(ID_HIDE_DESKTOP, lx, y, kClientW - 2 * lx, 22);
     y += 26;
-    MoveCtl(ID_ACTIVE, lx, y, 368, 22);
+    MoveCtl(ID_HIDE_CAPTURE, lx, y, kClientW - 2 * lx, 22);
+    y += 26;
+    MoveCtl(ID_ACTIVE, lx, y, kClientW - 2 * lx, 22);
     y += 38;
     MoveCtl(ID_RESET, lx, y, 140, 28);
     MoveCtl(IDCANCEL, kClientW - 14 - 92, y, 92, 28);
@@ -683,7 +708,8 @@ void ResizeConfigForDpi(UINT dpi, const RECT* suggested) {
         y = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - h) / 2;
     }
     SetWindowPos(g_hwndConfig, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
-    LayoutConfig(dpi);
+    // The window's current DPI, not the argument: the move above may have sent a nested WM_DPICHANGED.
+    LayoutConfig(GetDpiForWindow(g_hwndConfig));
 }
 
 HWND AddCtl(const wchar_t* cls, const wchar_t* text, DWORD style, int id, DWORD exStyle = 0) {
@@ -713,6 +739,8 @@ void CreateConfigControls() {
     AddCtl(L"EDIT", L"", ES_AUTOHSCROLL | ES_READONLY, ID_IMAGE, WS_EX_CLIENTEDGE);
     AddCtl(L"BUTTON", L"…", BS_PUSHBUTTON | WS_TABSTOP, ID_BROWSE);
     AddCtl(L"BUTTON", L"Don't dim while the desktop has focus", BS_AUTOCHECKBOX | WS_TABSTOP, ID_HIDE_DESKTOP);
+    AddCtl(L"BUTTON", L"Hide the layer from screenshots and screen sharing", BS_AUTOCHECKBOX | WS_TABSTOP,
+           ID_HIDE_CAPTURE);
     AddCtl(L"BUTTON", L"Active", BS_AUTOCHECKBOX | WS_TABSTOP, ID_ACTIVE);
     AddCtl(L"BUTTON", L"Reset to defaults", BS_PUSHBUTTON | WS_TABSTOP, ID_RESET);
     AddCtl(L"BUTTON", L"Close", BS_DEFPUSHBUTTON | WS_TABSTOP, IDCANCEL);
@@ -760,6 +788,11 @@ LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     Reposition();
                     ScheduleSave();
                     return 0;
+                case ID_HIDE_CAPTURE:
+                    g_ap.hideFromCapture = IsDlgButtonChecked(hwnd, ID_HIDE_CAPTURE) == BST_CHECKED;
+                    ApplyCaptureExclusion();
+                    ScheduleSave();
+                    return 0;
                 case ID_ACTIVE:
                     SetActive(IsDlgButtonChecked(hwnd, ID_ACTIVE) == BST_CHECKED);
                     return 0;
@@ -800,8 +833,14 @@ void OpenConfig() {
         SetForegroundWindow(g_hwndConfig);
         return;
     }
+    // Created on the monitor under the cursor, so it starts with that monitor's DPI.
+    POINT pt;
+    GetCursorPos(&pt);
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
     g_hwndConfig = CreateWindowExW(WS_EX_CONTROLPARENT | WS_EX_DLGMODALFRAME, kConfigClass, L"Background Dimmer",
-                                   WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 100, 100,
+                                   WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, mi.rcWork.left, mi.rcWork.top, 100, 100,
                                    nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!g_hwndConfig)
         return;
@@ -901,21 +940,6 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
 // ───────────── Thread ─────────────
 
-// The Windhawk process may not declare Common Controls v6; shell32's manifest (resource 124) enables them on this thread.
-void ActivateVisualStyles() {
-    wchar_t path[MAX_PATH];
-    GetSystemDirectoryW(path, MAX_PATH);
-    wcscat_s(path, L"\\shell32.dll");
-    ACTCTXW ctx = {};
-    ctx.cbSize = sizeof(ctx);
-    ctx.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID;
-    ctx.lpSource = path;
-    ctx.lpResourceName = MAKEINTRESOURCEW(124);
-    g_actCtx = CreateActCtxW(&ctx);
-    if (g_actCtx != INVALID_HANDLE_VALUE)
-        ActivateActCtx(g_actCtx, &g_actCookie);
-}
-
 void RegisterClasses(HINSTANCE inst) {
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
@@ -938,8 +962,6 @@ void RegisterClasses(HINSTANCE inst) {
 }
 
 DWORD WINAPI ThreadProc(void*) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    ActivateVisualStyles();
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_BAR_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&icc);
     GdiplusStartupInputFlat gdiplusInput = {1, nullptr, FALSE, FALSE};
@@ -948,7 +970,6 @@ DWORD WINAPI ThreadProc(void*) {
     g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, GetDpiForSystem()));
 
     LoadAppearance();
-    LoadModSettings();
 
     HINSTANCE inst = GetModuleHandleW(nullptr);
     RegisterClasses(inst);
@@ -958,9 +979,12 @@ DWORD WINAPI ThreadProc(void*) {
                                  nullptr, inst, nullptr);
     g_hwndOverlay = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
                                     kOverlayClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
+    // Read after g_hwndMain exists, so a settings change saved meanwhile is queued as WM_APP_RELOAD, not lost.
+    LoadModSettings();
     if (g_hwndMain && g_hwndOverlay) {
         BuildBrush();
         ApplyOpacity();
+        ApplyCaptureExclusion();
         FitOverlay();
         g_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0,
                                  WINEVENT_OUTOFCONTEXT);
@@ -995,10 +1019,6 @@ DWORD WINAPI ThreadProc(void*) {
     UnregisterClassW(kOverlayClass, inst);
     UnregisterClassW(kMainClass, inst);
     GdiplusShutdown(g_gdiplusToken);
-    if (g_actCtx != INVALID_HANDLE_VALUE) {
-        DeactivateActCtx(0, g_actCookie);
-        ReleaseActCtx(g_actCtx);
-    }
     return 0;
 }
 
