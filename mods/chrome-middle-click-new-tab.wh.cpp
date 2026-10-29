@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              chrome-middle-click-new-tab
-// @name            Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave)
-// @description     Middle-click the empty area of the tab bar to open a new tab
-// @version         1.0
+// @name            Middle-Click New Tab Chrome/Edge/Brave
+// @description     Middle-click the empty area of the tab bar to open a new tab (Chrome/Edge/Brave)
+// @version         1.1
 // @author          erenalpars
 // @github          https://github.com/erenalpars
 // @include         chrome.exe
 // @include         msedge.exe
 // @include         brave.exe
-// @compilerOptions -lcomctl32 -lgdi32 -lole32 -lshell32
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lshell32 -luuid
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -22,7 +22,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave)
+# Middle-Click New Tab Chrome/Edge/Brave
 
 Middle-click the empty area of the tab bar (between the "+" button and the
 minimize/maximize/close buttons) to open a new tab, just like clicking "+".
@@ -39,6 +39,14 @@ as client area. By default, only caption areas that have a tab or a button
 between them and the side away from the window buttons are used, so the thin
 drag strip above the tabs and the area before the first tab are ignored. This
 also works with right-to-left UI languages, where the tab bar is mirrored.
+
+With vertical tabs, the empty area below the tabs works too. Chrome and Brave
+report it as a caption area as well, but Edge reports it as client area, so in
+Edge it's detected with UI Automation instead: the mod looks for the tab strip
+at the clicked point, without querying the web page itself. As a side effect,
+Edge enables its native accessibility API support (shown in
+`edge://accessibility`), but not web content accessibility. This can be turned
+off in the settings.
 
 Installed web apps (PWAs) are ignored, since they have a title bar instead of a
 tab bar.
@@ -58,22 +66,39 @@ Ctrl+T), so no keyboard input is simulated.
     works, including the thin strip above the tabs and the title bar of windows
     without tabs, such as popups and DevTools; there, a new tab opens in a
     regular browser window.
+- edgeVerticalTabs: true
+  $name: Edge vertical tabs
+  $description: >-
+    In Edge, also react to the empty area below the vertical tabs. Uses UI
+    Automation, see the description for details.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#include <atomic>
+
 #include <commctrl.h>
 #include <propsys.h>
 #include <shobjidl.h>
+#include <uiautomation.h>
 #include <windowsx.h>
 
 struct {
     bool onlyNextToTabs;
+    bool edgeVerticalTabs;
 } g_settings;
 
+bool g_isEdge;
 DWORD g_uiThreadId;
 HWND g_middleButtonDownWnd;
+
+// A middle-button press in the client area, for Edge vertical tabs.
+HWND g_clientMiddleButtonDownWnd;
+POINT g_clientMiddleButtonDownPt;
+
+std::atomic<bool> g_verticalTabsCheckRunning;
+std::atomic<bool> g_unloading;
 
 UINT GetDpiForWindowWithFallback(HWND hWnd) {
     using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
@@ -141,10 +166,36 @@ bool AreWindowButtonsOnLeft(HWND hWnd, const RECT& rect, UINT dpi) {
     return SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(x, y)) == HTCLOSE;
 }
 
+// Steps from the point in the given direction while the window reports a
+// caption area, and checks whether a client area element (a tab or a button)
+// is reached.
+bool IsClientAreaInDirection(HWND hWnd,
+                             const RECT& rect,
+                             int xPos,
+                             int yPos,
+                             int xStep,
+                             int yStep) {
+    for (int x = xPos + xStep, y = yPos + yStep;
+         x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+         x += xStep, y += yStep) {
+        LRESULT hitTest = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(x, y));
+        if (hitTest == HTCLIENT) {
+            return true;
+        }
+
+        if (hitTest != HTCAPTION) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 // Checks whether there's a client area element (a tab or the "+" button) on the
-// same row, on the side away from the window buttons. This is true for the
-// empty area after the tabs, but not for the drag strip above the tabs or the
-// area before the first tab.
+// same row, on the side away from the window buttons, or above the point. The
+// former is true for the empty area after the tabs, the latter for the empty
+// area below vertical tabs. Neither is true for the drag strip above the tabs
+// or the area before the first tab.
 bool IsNextToTabs(HWND hWnd, int xPos, int yPos) {
     RECT rect{};
     GetWindowRect(hWnd, &rect);
@@ -156,22 +207,19 @@ bool IsNextToTabs(HWND hWnd, int xPos, int yPos) {
         step = 1;
     }
 
+    int xStep = -step;
     if (AreWindowButtonsOnLeft(hWnd, rect, dpi)) {
         Wh_Log(L"Window buttons are on the left, scanning to the right");
-    } else {
-        step = -step;
+        xStep = step;
     }
 
-    for (int x = xPos + step; x >= rect.left && x < rect.right; x += step) {
-        LRESULT hitTest =
-            SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(x, yPos));
-        if (hitTest == HTCLIENT) {
-            return true;
-        }
+    if (IsClientAreaInDirection(hWnd, rect, xPos, yPos, xStep, 0)) {
+        return true;
+    }
 
-        if (hitTest != HTCAPTION) {
-            return false;
-        }
+    if (IsClientAreaInDirection(hWnd, rect, xPos, yPos, 0, -step)) {
+        Wh_Log(L"Found a client area element above, assuming vertical tabs");
+        return true;
     }
 
     return false;
@@ -199,6 +247,247 @@ void OpenNewTab(HWND hWnd) {
                 MAKELPARAM(0, FAPPCOMMAND_MOUSE | APPCOMMAND_NEW));
 }
 
+// Edge vertical tabs: the empty area below the tabs is a client area, so it's
+// found with UI Automation. Only the frame views and the tab container are
+// queried. Querying the web page's elements, even listing them, makes the
+// browser enable web content accessibility, which is expensive.
+
+// The views between the window and the tab container, e.g. BrowserRootView ->
+// NonClientView -> EdgeBrowserFrameViewWin -> BrowserView.
+bool IsFrameViewClassName(PCWSTR className) {
+    return wcscmp(className, L"BrowserRootView") == 0 ||
+           wcscmp(className, L"NonClientView") == 0 ||
+           wcsstr(className, L"FrameView") || wcsstr(className, L"BrowserView");
+}
+
+struct UiaElementInfo {
+    CONTROLTYPEID controlType;
+    WCHAR className[64];
+    RECT rect;
+};
+
+bool GetCachedElementInfo(IUIAutomationElement* element, UiaElementInfo* info) {
+    *info = {};
+
+    if (FAILED(element->get_CachedControlType(&info->controlType)) ||
+        FAILED(element->get_CachedBoundingRectangle(&info->rect))) {
+        return false;
+    }
+
+    BSTR className = nullptr;
+    if (SUCCEEDED(element->get_CachedClassName(&className)) && className) {
+        wcsncpy_s(info->className, className, _TRUNCATE);
+        SysFreeString(className);
+    }
+
+    return true;
+}
+
+// Returns the last child that contains the point, which is the topmost one, as
+// views paint later children on top of earlier ones.
+IUIAutomationElement* GetChildAtPoint(IUIAutomationElement* element,
+                                      IUIAutomationCondition* condition,
+                                      IUIAutomationCacheRequest* cacheRequest,
+                                      POINT pt,
+                                      bool (*filter)(const UiaElementInfo&),
+                                      UiaElementInfo* info) {
+    IUIAutomationElementArray* children = nullptr;
+    if (FAILED(element->FindAllBuildCache(TreeScope_Children, condition,
+                                          cacheRequest, &children)) ||
+        !children) {
+        return nullptr;
+    }
+
+    IUIAutomationElement* result = nullptr;
+
+    int length = 0;
+    children->get_Length(&length);
+    for (int i = 0; i < length; i++) {
+        IUIAutomationElement* child = nullptr;
+        if (FAILED(children->GetElement(i, &child)) || !child) {
+            continue;
+        }
+
+        UiaElementInfo childInfo;
+        if (GetCachedElementInfo(child, &childInfo) &&
+            PtInRect(&childInfo.rect, pt) && (!filter || filter(childInfo))) {
+            if (result) {
+                result->Release();
+            }
+
+            result = child;
+            *info = childInfo;
+        } else {
+            child->Release();
+        }
+    }
+
+    children->Release();
+
+    return result;
+}
+
+bool IsTabContainerOrFrameView(const UiaElementInfo& info) {
+    return info.controlType == UIA_TabControlTypeId ||
+           IsFrameViewClassName(info.className);
+}
+
+bool IsEmptyVerticalTabArea(IUIAutomation* automation, HWND hWnd, POINT pt) {
+    IUIAutomationCacheRequest* cacheRequest = nullptr;
+    IUIAutomationCondition* condition = nullptr;
+    IUIAutomationElement* element = nullptr;
+    bool result = false;
+
+    if (FAILED(automation->CreateCacheRequest(&cacheRequest)) ||
+        FAILED(automation->get_RawViewCondition(&condition))) {
+        goto cleanup;
+    }
+
+    cacheRequest->AddProperty(UIA_ControlTypePropertyId);
+    cacheRequest->AddProperty(UIA_ClassNamePropertyId);
+    cacheRequest->AddProperty(UIA_BoundingRectanglePropertyId);
+    cacheRequest->put_TreeFilter(condition);
+
+    if (FAILED(automation->ElementFromHandleBuildCache(hWnd, cacheRequest,
+                                                       &element)) ||
+        !element) {
+        goto cleanup;
+    }
+
+    {
+        // Go down the frame views until reaching a tab container. Other
+        // elements, such as the web page container, aren't entered.
+        UiaElementInfo info{};
+        bool foundTabContainer = false;
+        for (int depth = 0; depth < 8; depth++) {
+            IUIAutomationElement* child =
+                GetChildAtPoint(element, condition, cacheRequest, pt,
+                                IsTabContainerOrFrameView, &info);
+            element->Release();
+            element = child;
+            if (!element) {
+                break;
+            }
+
+            if (info.controlType == UIA_TabControlTypeId) {
+                foundTabContainer = true;
+                break;
+            }
+        }
+
+        if (!foundTabContainer) {
+            Wh_Log(L"No tab container at the point");
+            goto cleanup;
+        }
+
+        Wh_Log(L"Tab container: %s", info.className);
+
+        // Go down to the topmost element at the point. The empty area is a
+        // plain view right below a tab container, while a tab, a button or
+        // the views wrapping a tab are something else or deeper.
+        int levelsBelowTabContainer = 0;
+        for (int depth = 0; depth < 12; depth++) {
+            IUIAutomationElement* child = GetChildAtPoint(
+                element, condition, cacheRequest, pt, nullptr, &info);
+            if (!child) {
+                break;
+            }
+
+            element->Release();
+            element = child;
+
+            if (info.controlType == UIA_TabControlTypeId) {
+                levelsBelowTabContainer = 0;
+            } else if (info.controlType == UIA_PaneControlTypeId) {
+                levelsBelowTabContainer++;
+            } else {
+                Wh_Log(L"Element at the point: %s (control type %d)",
+                       info.className, info.controlType);
+                goto cleanup;
+            }
+        }
+
+        Wh_Log(L"Element at the point: %s, %d levels below a tab container",
+               info.className, levelsBelowTabContainer);
+        result = levelsBelowTabContainer <= 1;
+    }
+
+cleanup:
+    if (element) {
+        element->Release();
+    }
+
+    if (condition) {
+        condition->Release();
+    }
+
+    if (cacheRequest) {
+        cacheRequest->Release();
+    }
+
+    return result;
+}
+
+struct VerticalTabsCheckParam {
+    HWND hWnd;
+    POINT pt;
+    HMODULE module;
+};
+
+DWORD WINAPI VerticalTabsCheckThread(void* parameter) {
+    VerticalTabsCheckParam param = *(VerticalTabsCheckParam*)parameter;
+    delete (VerticalTabsCheckParam*)parameter;
+
+    // UI Automation calls are forwarded to the window's thread, which must
+    // keep processing messages, so they can't be made on that thread.
+    if (SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+        IUIAutomation* automation = nullptr;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr,
+                                       CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARGS(&automation)))) {
+            if (IsEmptyVerticalTabArea(automation, param.hWnd, param.pt) &&
+                !g_unloading) {
+                OpenNewTab(param.hWnd);
+            }
+
+            automation->Release();
+        }
+
+        CoUninitialize();
+    }
+
+    g_verticalTabsCheckRunning = false;
+
+    // The thread holds a reference to the mod's module, so that the mod isn't
+    // unloaded while the thread is running.
+    FreeLibraryAndExitThread(param.module, 0);
+}
+
+void StartVerticalTabsCheck(HWND hWnd, POINT pt) {
+    if (g_verticalTabsCheckRunning.exchange(true)) {
+        Wh_Log(L"A check is already running, ignoring");
+        return;
+    }
+
+    HMODULE module = nullptr;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           (PCWSTR)&StartVerticalTabsCheck, &module)) {
+        g_verticalTabsCheckRunning = false;
+        return;
+    }
+
+    auto* param = new VerticalTabsCheckParam{hWnd, pt, module};
+    HANDLE thread =
+        CreateThread(nullptr, 0, VerticalTabsCheckThread, param, 0, nullptr);
+    if (thread) {
+        CloseHandle(thread);
+    } else {
+        delete param;
+        FreeLibrary(module);
+        g_verticalTabsCheckRunning = false;
+    }
+}
+
 LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
                                            UINT uMsg,
                                            WPARAM wParam,
@@ -221,7 +510,31 @@ LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
         // A press in the client area means that a release on the tab bar
         // doesn't complete a click that started there.
         case WM_MBUTTONDOWN:
+        case WM_MBUTTONDBLCLK:
             g_middleButtonDownWnd = nullptr;
+            g_clientMiddleButtonDownWnd = hWnd;
+            g_clientMiddleButtonDownPt = {GET_X_LPARAM(lParam),
+                                          GET_Y_LPARAM(lParam)};
+            break;
+
+        // Edge doesn't do anything on a middle-click on the empty area below
+        // vertical tabs, so the click isn't swallowed. The check runs in the
+        // background and opens a tab if the area is empty.
+        case WM_MBUTTONUP:
+            if (g_clientMiddleButtonDownWnd == hWnd) {
+                g_clientMiddleButtonDownWnd = nullptr;
+
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                if (g_isEdge && g_settings.edgeVerticalTabs &&
+                    abs(pt.x - g_clientMiddleButtonDownPt.x) <=
+                        GetSystemMetrics(SM_CXDRAG) &&
+                    abs(pt.y - g_clientMiddleButtonDownPt.y) <=
+                        GetSystemMetrics(SM_CYDRAG) &&
+                    !IsWebAppWindow(hWnd)) {
+                    ClientToScreen(hWnd, &pt);
+                    StartVerticalTabsCheck(hWnd, pt);
+                }
+            }
             break;
 
         case WM_NCMBUTTONUP:
@@ -369,6 +682,7 @@ bool IsBrowserProcess() {
 
 void LoadSettings() {
     g_settings.onlyNextToTabs = Wh_GetIntSetting(L"onlyNextToTabs");
+    g_settings.edgeVerticalTabs = Wh_GetIntSetting(L"edgeVerticalTabs");
 }
 
 BOOL Wh_ModInit() {
@@ -380,6 +694,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    g_isEdge = !!GetModuleHandle(L"msedge.exe");
+
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
                                    &pOriginalCreateWindowExW);
 
@@ -390,6 +706,8 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    g_unloading = true;
 
     if (g_uiThreadId != 0) {
         EnumThreadWindows(g_uiThreadId, EnumBrowserWindowsUnsubclassFunc, 0);
