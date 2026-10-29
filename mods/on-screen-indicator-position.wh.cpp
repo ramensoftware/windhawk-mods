@@ -639,7 +639,7 @@ bool g_virtualDesktopUndetectable = false;
 
 constexpr PCWSTR kVirtualDesktopUndetectableMessage =
     L"ShowText thunk did not resolve, so the virtual desktop popup uses the "
-    L"Other indicators position. Text and virtual desktop hiding are unavailable";
+    L"Other indicators position";
 
 struct Placement {
     Position position;
@@ -958,11 +958,27 @@ void* WINAPI ShowTextAsync_Hook(void* pThis,
                                 void* retval,
                                 void* text,
                                 bool value) {
-// The original owns the by-value hstring. Always forward so it is destroyed;
+    // The original owns the by-value hstring. Always forward so it is destroyed;
     // text hiding is handled by the public thunk with its borrowed string.
     g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
                                                   : Indicator::text);
     return ShowTextAsync_Original(pThis, retval, text, value);
+}
+
+// Called at startup and after settings changes, including when another missing
+// entry point has disabled per-indicator placement. Hiding is independent of it.
+void LogUnavailableHiding(const Settings& settings) {
+    if (!ShowTextThunk_Original &&
+        (settings.perIndicator[(size_t)Indicator::text] == Position::hidden ||
+         settings.perIndicator[(size_t)Indicator::virtualDesktop] == Position::hidden)) {
+        Wh_Log(L"ShowText thunk did not resolve; Hidden is unavailable for text "
+               L"and virtual desktop indicators");
+    }
+    if (!ShowMicrophoneMutedThunk_Original &&
+        settings.perIndicator[(size_t)Indicator::microphone] == Position::hidden) {
+        Wh_Log(L"ShowMicrophoneMuted thunk did not resolve; Hidden is unavailable "
+               L"for the microphone indicator");
+    }
 }
 
 // The control hides itself two ways and Windows picks the animated one. Handing
@@ -1476,6 +1492,7 @@ BOOL Wh_ModInit() {
             Position::inherit) {
         Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
     }
+    LogUnavailableHiding(*settings);
 
     // Every threadpool timer in Explorer goes through these hooks, so they are
     // only installed while Seconds on screen is in use. Turning it on or off
@@ -1523,6 +1540,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
             Position::inherit) {
         Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
     }
+    LogUnavailableHiding(*settings);
 
     return TRUE;
 }
