@@ -1,3 +1,12 @@
+## 1.3.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dd4a1eb36146f43188ef7f099ec9ef0cc7387d03/mods/taskbar-audio-flipper.wh.cpp))
+
+* The widget is part of the taskbar's own layout now, which makes room for it, rather than a window placed over it. The new **Position** setting puts it left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. It's no longer dragged.
+* With Taskbar Snipper or Taskbar RDP Launcher in the same position, the widgets sit side by side: **Move left** and **Move right** in the right-click menu change their order. They replace **Link widgets**.
+* The output's volume flyout has a volume mixer, like Windows': each app using the output, with its icon (click it to mute the app) and its volume, a gear for Windows' volume mixer settings, and **More volume settings**. The input's has **More sound settings**.
+* The flyouts and menus are Windows' own XAML ones, and the flyout closes once the mouse moves off it and its section.
+* Each section is as wide as its text, without dividers.
+* The mod needs Windows 11 now. The first time it starts, Windhawk downloads the taskbar's symbols.
+
 ## 1.2.0 ([Oct 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fa94df932028eee4def35698ec8a469ac68a030b/mods/taskbar-audio-flipper.wh.cpp))
 
 * The widget is inside the taskbar now: the mod is loaded into Explorer instead of running in a windhawk.exe process of its own. It moves and auto-hides with the taskbar, and full-screen apps and the Start menu cover it as they do the rest of the taskbar.

@@ -1,3 +1,10 @@
+## 1.4.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/590b7a1607109715a953f2f8e6d2ed85b7449319/mods/hide-taskbar-tooltips.wh.cpp))
+
+- Added instant hover delay option (`-1`) and custom delay support (`1` to `10000` ms) for visible tooltips.
+- The hover delay is now the total delay instead of an extra delay on top of native timing. If you set it before 1.4.0, adjust it.
+- Confined hover delay overrides strictly to the taskbar thread and Windows.UI.Xaml.dll.
+- Cleaned up README and settings documentation.
+
 ## 1.3.1 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6774848bf06023622d0918a8b2d2110e315a7c9e/mods/hide-taskbar-tooltips.wh.cpp))
 
 - Add `hideStartButtonTooltip` setting to hide or show the Windows Start button tooltip independently of taskbar applications.

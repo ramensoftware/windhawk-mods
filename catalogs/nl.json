@@ -520,7 +520,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793131438000,
+        "updated": 1793239536000,
         "users": 13
       },
       "metadata": {
@@ -528,14 +528,14 @@
           "x86"
         ],
         "author": "MrSmith",
-        "compilerOptions": "-lgdi32 -luser32 -luxtheme",
+        "compilerOptions": "-lgdi32 -luser32 -luxtheme -ldwmapi",
         "description": "Dark colors for the skinned user interface of Alt.Binz, with a custom surface color, gradients and colored progress bars",
         "github": "https://github.com/MrSmith2017",
         "include": [
           "altbinz.exe"
         ],
         "name": "Alt.Binz Dark Mode",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "always-allow-ctrl-shift-enter": {
@@ -8402,7 +8402,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 1.6912283095338263,
-        "updated": 1792967860000,
+        "updated": 1793239513000,
         "users": 176
       },
       "metadata": {
@@ -8411,7 +8411,7 @@
         ],
         "author": "gilnett",
         "compilerOptions": "-lruntimeobject",
-        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional delayed hover display.",
+        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering and optional hover delay tuning.",
         "donateUrl": "https://buymeacoffee.com/gilnett",
         "github": "https://github.com/gilnett",
         "include": [
@@ -8419,7 +8419,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Hide Taskbar Tooltips",
-        "version": "1.3.1"
+        "version": "1.4.0"
       }
     },
     "hide-titlebar-elements": {
@@ -11312,6 +11312,34 @@
         ],
         "name": "Notification Bell Highlighter",
         "version": "0.5.2"
+      }
+    },
+    "notification-center-follows-taskbar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793239509000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793239509000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Asteski",
+        "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Correct Notification Center placement for all taskbar positions, with an optional calendar/notifications swap.",
+        "github": "https://github.com/Asteski",
+        "include": [
+          "explorer.exe",
+          "ShellExperienceHost.exe"
+        ],
+        "name": "Notification Center Follows Taskbar",
+        "version": "1.0.0"
       }
     },
     "notifications-placement": {
@@ -14876,12 +14904,15 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792688516000,
+        "updated": 1793239523000,
         "users": 85
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "Lucidic15",
-        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -luuid -lsetupapi -lcfgmgr32",
+        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lsetupapi -lcfgmgr32 -lversion -lruntimeobject",
         "description": "A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off",
         "github": "https://github.com/Lucidic15",
         "include": [
@@ -14889,7 +14920,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Audio Flipper",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "taskbar-auto-hide-custom-activation-area": {
@@ -16633,12 +16664,15 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792688523000,
+        "updated": 1793239527000,
         "users": 21
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "Lucidic15",
-        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lcomdlg32",
+        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lcomdlg32 -lruntimeobject",
         "description": "A taskbar widget that starts Remote Desktop full screen on the number of displays you pick",
         "github": "https://github.com/Lucidic15",
         "include": [
@@ -16646,7 +16680,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar RDP Launcher",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "taskbar-recent-focus-highlight": {
@@ -16875,12 +16909,15 @@
         "ratingUsers": 11,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792688531000,
+        "updated": 1793239532000,
         "users": 93
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "Lucidic15",
-        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -luuid -lcomdlg32 -lmsimg32 -lmfplat -lmfreadwrite -lmfuuid -ld3d11",
+        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -luuid -lcomdlg32 -lmsimg32 -lmfplat -lmfreadwrite -lmfuuid -ld3d11 -loleaut32 -lruntimeobject",
         "description": "Print Screen, or a button on the taskbar, selects part of the screen to mark up and copy or save; Win+Shift+R records it as a video to trim and copy or save",
         "github": "https://github.com/Lucidic15",
         "include": [
@@ -16888,7 +16925,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Snipper",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "taskbar-spatial-order": {
@@ -19085,6 +19122,30 @@
         ],
         "name": "Win+D per monitor(show desktop)",
         "version": "1.5.260416"
+      }
+    },
+    "win-e-reuse-explorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793239518000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793239518000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Asteski",
+        "compilerOptions": "-ldwmapi",
+        "description": "Restore an existing File Explorer window with Win+E, or open one normally if none exists",
+        "github": "https://github.com/Asteski",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Win+E Reuse File Explorer",
+        "version": "1.0.0"
       }
     },
     "win-x-hotcorners": {

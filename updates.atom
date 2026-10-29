@@ -2,12 +2,152 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-29T01:03:24.000Z</updated>
+    <updated>2026-10-29T02:05:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.2]]></title>
+        <id>https://windhawk.net/mods/altbinz-dark#1a497a6d23a99e14899d4c101d7e0f86ea5f457e</id>
+        <link href="https://windhawk.net/mods/altbinz-dark"/>
+        <updated>2026-10-29T02:05:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New setting "Title bar color" (default black, Windows 11 only): colors the window title bars of Alt.Binz. Leave it empty to keep the color of Windows.</li>
+<li>New setting "List text color" for the text and lines in the download queue and the log. Without it the text color is used.</li>
+<li>New setting "Column text color" for the text of the column headers.</li>
+<li>The text colors are applied live, without restarting Alt.Binz, and can now be dark (they were limited to at least 50% lightness before).</li>
+</ul>]]></content>
+        <author>
+            <name>MrSmith</name>
+            <uri>https://github.com/MrSmith2017</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Snipper 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-snipper#3e2422875c4232c20bb802f54806a8c81b71f58e</id>
+        <link href="https://windhawk.net/mods/taskbar-snipper"/>
+        <updated>2026-10-29T02:05:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The screenshot and record buttons are part of the taskbar's own layout now, which makes room for them, rather than a window placed over it. The new <strong>Position</strong> setting puts them left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. They're no longer dragged.</li>
+<li>With Taskbar Audio Flipper or Taskbar RDP Launcher in the same position, the widgets sit side by side: <strong>Move left</strong> and <strong>Move right</strong> in the right-click menu change their order. They replace <strong>Link widgets</strong>.</li>
+<li>The menu is Windows' own XAML menu.</li>
+<li>The mod needs Windows 11 now. The first time it starts, Windhawk downloads the taskbar's symbols.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar RDP Launcher 1.3.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-rdp-launcher#72291cdf01bb95ba90b95e01c9a46317ddd63903</id>
+        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
+        <updated>2026-10-29T02:05:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The widget is part of the taskbar's own layout now, which makes room for it, rather than a window placed over it. The new <strong>Position</strong> setting puts it left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. It's no longer dragged.</li>
+<li>With Taskbar Snipper or Taskbar Audio Flipper in the same position, the widgets sit side by side: <strong>Move left</strong> and <strong>Move right</strong> in the right-click menu change their order. They replace <strong>Link widgets</strong>.</li>
+<li>The display map is a XAML flyout, opened by hovering a number and closed once the mouse moves off it and the number, and the menu is Windows' own XAML menu.</li>
+<li>The computer's name and address are as wide as their text, without a divider.</li>
+<li>The mod needs Windows 11 now. The first time it starts, Windhawk downloads the taskbar's symbols.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Audio Flipper 1.3.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-flipper#dd4a1eb36146f43188ef7f099ec9ef0cc7387d03</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
+        <updated>2026-10-29T02:05:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The widget is part of the taskbar's own layout now, which makes room for it, rather than a window placed over it. The new <strong>Position</strong> setting puts it left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. It's no longer dragged.</li>
+<li>With Taskbar Snipper or Taskbar RDP Launcher in the same position, the widgets sit side by side: <strong>Move left</strong> and <strong>Move right</strong> in the right-click menu change their order. They replace <strong>Link widgets</strong>.</li>
+<li>The output's volume flyout has a volume mixer, like Windows': each app using the output, with its icon (click it to mute the app) and its volume, a gear for Windows' volume mixer settings, and <strong>More volume settings</strong>. The input's has <strong>More sound settings</strong>.</li>
+<li>The flyouts and menus are Windows' own XAML ones, and the flyout closes once the mouse moves off it and its section.</li>
+<li>Each section is as wide as its text, without dividers.</li>
+<li>The mod needs Windows 11 now. The first time it starts, Windhawk downloads the taskbar's symbols.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win+E Reuse File Explorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win-e-reuse-explorer#a1cc0d670623bccd12cc445fd4a292e8ed1958aa</id>
+        <link href="https://windhawk.net/mods/win-e-reuse-explorer"/>
+        <updated>2026-10-29T02:05:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winereusefileexplorer">Win+E Reuse File Explorer</h1>
+<p>Press <strong>Win+E</strong> to bring the most recently active File Explorer window forward.
+Minimized windows are restored. If Explorer is already focused, it stays focused.</p>
+<p>If no Explorer window exists on the current virtual desktop, Windows handles
+Win+E normally and opens a new window. Extra modifiers (Ctrl, Shift, or Alt)
+are left unchanged. There are no settings.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.4.0]]></title>
+        <id>https://windhawk.net/mods/hide-taskbar-tooltips#590b7a1607109715a953f2f8e6d2ed85b7449319</id>
+        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
+        <updated>2026-10-29T02:05:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added instant hover delay option (<code>-1</code>) and custom delay support (<code>1</code> to <code>10000</code> ms) for visible tooltips.</li>
+<li>The hover delay is now the total delay instead of an extra delay on top of native timing. If you set it before 1.4.0, adjust it.</li>
+<li>Confined hover delay overrides strictly to the taskbar thread and Windows.UI.Xaml.dll.</li>
+<li>Cleaned up README and settings documentation.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Notification Center Follows Taskbar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/notification-center-follows-taskbar#1907c287c41d51fff2e08a72301dbb8b2715f174</id>
+        <link href="https://windhawk.net/mods/notification-center-follows-taskbar"/>
+        <updated>2026-10-29T02:05:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="notificationcenterfollowstaskbar">Notification Center Follows Taskbar</h1>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png" alt="Demonstration" /></p>
+<p>Keeps the Windows 11 Notification Center (Win+N, including its calendar)
+correctly positioned with top, bottom, left, and right taskbars. Detects the
+taskbar on the flyout's monitor automatically. Adds the missing correction for
+top taskbars, with an 8 logical pixel vertical gap; retains the horizontal
+position chosen by Windows or other mods. Auto-hidden taskbars use the monitor's
+working area.</p>
+<p>Install alongside your taskbar positioning mod. Close and reopen
+Notification Center after enabling, disabling, or moving the taskbar.</p>
+<p>Enable <strong>Swap notifications and calendar</strong> to put the calendar above the
+notifications. The panels exchange their visual positions while Windows keeps
+control of their native layout sizes and scrolling. The combined outer bounds
+stay fixed: the swap doesn't move the host window or change row definitions.
+No fixed notification height is used. Expanding/collapsing the calendar and
+changing display size use Windows' normal layout calculations.</p>
+<p>Remove any Notification Center Styler rules that swap these panels or force
+their heights, row definitions, or row positions before enabling this option.
+Cosmetic styling can remain. Switching the option off restores the original
+transforms, including bindings. The positioning fix works without the swap.</p>
+<h2 id="otherpositioningmods">Other positioning mods</h2>
+<p>The top-taskbar fix changes only Y by default, so horizontal alignment from
+Shell Flyout Positions is preserved. This mod and Shell Flyout Positions both
+observe the flyout being uncloaked; they should not both force its X coordinate.</p>
+<p><strong>Repair right-edge position after Explorer restarts</strong> is optional. It forces
+right alignment for top taskbars and overrides a left/center alignment selected
+in another mod. Leave it off when using Shell Flyout Positions. It is retained
+because we observed a surviving shell host occasionally reopening on the left
+after Explorer/taskbar recreation; forcing right alignment corrected that case.</p>
+<p>ShellExperienceHost loads this mod only while panel swapping is enabled. Window
+creation only schedules initialization; XAML is accessed later on its UI thread.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.1]]></title>
         <id>https://windhawk.net/mods/start-everything#b8729d42ac533b163188e9849b14ccf4f8c9e106</id>
@@ -278,186 +418,6 @@ in the foreground. Alt+Tab works there too, through Explorer.</li>
         <author>
             <name>kotikdetka</name>
             <uri>https://github.com/kotikdetka</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Secondary windows on the active monitor 2.1]]></title>
-        <id>https://windhawk.net/mods/secondary-windows-on-active-monitor#9400327e0c12f02a83208e7c2fc6e686a7bcd2e3</id>
-        <link href="https://windhawk.net/mods/secondary-windows-on-active-monitor"/>
-        <updated>2026-10-27T20:03:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="secondarywindowsontheactivemonitor">Secondary windows on the active monitor</h1>
-<p>Useful if you have <strong>several monitors</strong>. Many apps remember which monitor a
-secondary window (media viewer, player, dialog) was opened on and open it there
-again, even if you now work with the app on another monitor. For example,
-Telegram Desktop opens photos and videos on the monitor where the viewer was
-last time, not where the chat is.</p>
-<p><img src="https://raw.githubusercontent.com/limpompo/windhawk-mods-limpompo/main/mods/secondary-windows-on-active-monitor/demo.gif" alt="Demo" /></p>
-<p>The mod intercepts the showing of secondary windows of the apps from the
-<em>Applications</em> list and, if a window is about to appear on a different monitor
-than the app's active window, moves it to the active window's monitor before
-it is shown. By default the list contains a placeholder (<code>test.exe</code>), replace it with your app, for example Telegram Desktop (<code>Telegram.exe</code>);
-add any other app by its executable name in the mod settings.</p>
-<p>For apps that are not built with Qt, the mod decides which windows are regular
-ones by a heuristic (it skips menus, tooltips, tool windows and the like), so
-it may move something it shouldn't, such as a drop-down list or a splash
-screen. Telegram is the only app the mod was tested with; if another app
-misbehaves, use the <em>Window title filter</em> of that app.</p>
-<p>Which windows are moved: <strong>all</strong> secondary windows of the app that get their
-own window - for Telegram also picture-in-picture video, call windows and
-chats opened in a separate window. Menus, tooltips, notifications and tool
-windows are not moved. If you keep some windows on another monitor on purpose,
-set a <em>Window title filter</em> for the app to limit the mod to windows with a
-given title.</p>
-<p>How a window is placed:</p>
-<ul>
-<li>it keeps its relative position on the screen (a window in the top right
-corner of one monitor appears in the top right corner of the other);</li>
-<li>a window larger than the target monitor is shrunk to fit;</li>
-<li>a fullscreen window stays fullscreen;</li>
-<li>a maximized window stays maximized, and when restored it stays on the new
-monitor;</li>
-<li>monitors with different scaling are taken into account.</li>
-</ul>
-<p>Keeping the position and accounting for scaling can each be turned off in the
-settings.</p>
-<p>The mod is loaded into every process and unloads itself at once from those that
-are not in the <em>Applications</em> list. An app added to the list starts to work
-after it is restarted; removing an app from the list applies immediately.</p>
-<p>System files and app data are not modified.</p>]]></content>
-        <author>
-            <name>limpompo</name>
-            <uri>https://github.com/limpompo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Alt+Tab Recreation 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win-7-8-alt-tab-recreation#9db79e280da974f6d53332e0c3d05ed9fd459da0</id>
-        <link href="https://windhawk.net/mods/win-7-8-alt-tab-recreation"/>
-        <updated>2026-10-27T19:01:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for CTRL+ALT+TAB (so that pressing it keeps the switcher open)</li>
-<li>Improved support for minimized Windows so that they show their preview</li>
-<li>Improved the accuracy to Windows 7 (credits to Budgeto for the feedback)</li>
-<li>Applied minor improvements</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Picker 1.5.8]]></title>
-        <id>https://windhawk.net/mods/explorer-picker#e83b7162f8110307067bffd208695737f5709f80</id>
-        <link href="https://windhawk.net/mods/explorer-picker"/>
-        <updated>2026-10-27T19:01:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook only the in-process dialog implementation in comdlg32. A dialog created for another apartment (a COM proxy) keeps the native dialog instead of having shared proxy code hooked, which could crash the application.</li>
-<li>Replace dialogs created through the class object (.NET WinForms, WPF, PowerShell) or <code>CoCreateInstanceEx</code>; a dialog reached through several activation paths is tracked once.</li>
-<li>Attach the Explorer panel in the folder window's own DPI context, fixing an empty area above the file list when another mod scales folder windows at high DPI.</li>
-<li>Treat a program as running as administrator only when Explorer has fewer rights, so programs are not treated as elevated with User Account Control turned off; the English/Russian readme says so.</li>
-<li>Disable the owner's top-level window while the picker is open, as a native modal dialog does.</li>
-<li>Keep path buffers off the stack and pass <code>LoadLibraryExW</code> calls straight through once comdlg32 is hooked.</li>
-</ul>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[App Owned Frame 1.45]]></title>
-        <id>https://windhawk.net/mods/app-owned-frame#069667fd60723342d8decaaf94058f21ef32ff32</id>
-        <link href="https://windhawk.net/mods/app-owned-frame"/>
-        <updated>2026-10-27T19:01:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the extra system frame returning in Photoshop and other apps while a file open/save dialog or another modal dialog is open, and staying after it closes.</li>
-<li><code>WM_NCACTIVATE</code> now always returns the default window procedure's result, so the optional DWM caption delegation can never block deactivation.</li>
-<li>Hooks use the type-checked <code>WindhawkUtils::SetFunctionHook</code>, and string settings use <code>WindhawkUtils::StringSetting</code>.</li>
-<li>Setting descriptions name the visible "Use the application's own title bar" option, and Photoshop's default profile no longer enables the inert DWM caption delegation.</li>
-<li>DWM attributes use the named <code>DWMWA_*</code> constants.</li>
-</ul>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.1.0]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#115a3db9089965b3a37c711a88b166ef3fc27321</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-10-27T19:01:42.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="fixed">Fixed</h3>
-<ul>
-<li>After an Explorer restart the bleed didn't appear until the taskbar was hovered or a window clicked. The mod loads before the taskbar exists, and the <code>Taskbar.View.dll</code> layout hooks fire while the taskbar is still being built (band and XAML host not ready), so the early attach attempts failed and nothing re-triggered them. The tracker now retries the direct <code>taskbar.dll</code> attach while any taskbar window of the process lacks an island (1 s, then 10 s after the first minute) — which also covers a secondary taskbar that wasn't ready when the primary attached, and a taskbar rebuilt while another kept its island.</li>
-<li>Switching the Windows mode (light/dark) while a panel was showing left the taskbar in the old mode after the panel hid. The root's <code>RequestedTheme</code> is now watched: the taskbar's own write becomes the value to restore, the forced theme is re-asserted 500 ms later instead of synchronously (so the taskbar computes its background under the real mode), and on hide an explicit original is only trusted while the Windows mode is unchanged — otherwise the current mode is restored. Covers windows that stay dark and windows that follow the system theme, on primary and secondary taskbars.</li>
-</ul>
-<h3 id="added">Added</h3>
-<ul>
-<li>Experimental <strong>Any taskbar position</strong> option (off by default): with it on, taskbars docked at the bottom, left or right are painted as well. The color still comes from the maximized window's title bar, so a bottom taskbar takes the title bar's color. Vertical taskbars always get the flat color, since the panel rotates with the frame and a gradient would run along the bar. The strip's taskbar guard now applies only when the sampled rows actually overlap the taskbar, which a bottom or side taskbar never does.</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>Wording: the mod description, README, settings and comments say "title bar" rather than "top edge".</li>
-</ul>
-<h3 id="notes">Notes</h3>
-<ul>
-<li>Version 1.1.0 (a new option on top of the fixes). Tested on Windows 11 26H2 (26300.9711), two monitors, Taskbar Styler enabled, Windows mode toggled both ways with dark-only and theme-following maximized windows; the any-position option tested with the taskbar at the bottom and, with vertical taskbar, at the left and right</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.5.0]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#a9748e5fc7e051d9899daff9d1664b18ea152a83</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-10-27T07:01:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Each indicator can now use its own horizontal and vertical offset, including zero, or keep the main offset.</li>
-<li>Each indicator can be left at the Windows default position on its own; the offsets still apply to it.</li>
-<li>New display profiles change placement by monitor name, number of monitors in use, and indicator.</li>
-<li>New Seconds on screen setting changes how long the indicator stays up, from 1 to 60 seconds. When it is off, the mod leaves Explorer's timers alone.</li>
-<li>Offsets are scaled using the actual scale of the monitor the indicator is on.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Task Manager Navigation Border 0.1]]></title>
-        <id>https://windhawk.net/mods/disable-taskmgr-navigation-border#d3c74881949732caeed9c3045880d991110129d4</id>
-        <link href="https://windhawk.net/mods/disable-taskmgr-navigation-border"/>
-        <updated>2026-10-27T00:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disabletaskmanagernavigationborder">Disable Task Manager Navigation Border</h1>
-<p><img src="https://i.imgur.com/00TkdHI.png" alt="Compared" /></p>
-<p>Disables the ugly focus borders in Windows 11 Task Manager.</p>
-<p>It works by replacing the following functions with empty implementations:</p>
-<ul>
-<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
-<li><code>SetBorderUponNavigatingIntoElement</code></li>
-</ul>
-<p>Functions are located using symbols for the running Taskmgr.exe version, not
-fixed addresses. First use may require internet access to download symbols.
-Initialization fails if any required symbol is unavailable.</p>
-<p>This MOD targets x64 Task Manager versions providing these methods. No system
-files or signatures are modified. </p>
-<hr />
-<p>禁用 Windows 11 任务管理器上丑陋的焦点边框。</p>
-<p>实现原理是将以下方法替换为空实现：</p>
-<ul>
-<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
-<li><code>SetBorderUponNavigatingIntoElement</code></li>
-</ul>
-<p>这些函数是通过当前运行的 Taskmgr.exe 版本的符号信息进行定位，而非固定内存地址。首次使用可能需要联网下载符号文件。若缺少任何所需符号，初始化将失败。</p>
-<p>此 MOD 适用于包含上述方法的 x64 版本任务管理器。不会修改任何系统文件或签名。</p>]]></content>
-        <author>
-            <name>GF-Huang</name>
-            <uri>https://github.com/GF-Huang</uri>
         </author>
     </entry>
 </feed>

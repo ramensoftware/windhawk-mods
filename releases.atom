@@ -2,12 +2,69 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-28T11:02:53.000Z</updated>
+    <updated>2026-10-29T02:05:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win+E Reuse File Explorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win-e-reuse-explorer#a1cc0d670623bccd12cc445fd4a292e8ed1958aa</id>
+        <link href="https://windhawk.net/mods/win-e-reuse-explorer"/>
+        <updated>2026-10-29T02:05:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winereusefileexplorer">Win+E Reuse File Explorer</h1>
+<p>Press <strong>Win+E</strong> to bring the most recently active File Explorer window forward.
+Minimized windows are restored. If Explorer is already focused, it stays focused.</p>
+<p>If no Explorer window exists on the current virtual desktop, Windows handles
+Win+E normally and opens a new window. Extra modifiers (Ctrl, Shift, or Alt)
+are left unchanged. There are no settings.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Notification Center Follows Taskbar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/notification-center-follows-taskbar#1907c287c41d51fff2e08a72301dbb8b2715f174</id>
+        <link href="https://windhawk.net/mods/notification-center-follows-taskbar"/>
+        <updated>2026-10-29T02:05:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="notificationcenterfollowstaskbar">Notification Center Follows Taskbar</h1>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png" alt="Demonstration" /></p>
+<p>Keeps the Windows 11 Notification Center (Win+N, including its calendar)
+correctly positioned with top, bottom, left, and right taskbars. Detects the
+taskbar on the flyout's monitor automatically. Adds the missing correction for
+top taskbars, with an 8 logical pixel vertical gap; retains the horizontal
+position chosen by Windows or other mods. Auto-hidden taskbars use the monitor's
+working area.</p>
+<p>Install alongside your taskbar positioning mod. Close and reopen
+Notification Center after enabling, disabling, or moving the taskbar.</p>
+<p>Enable <strong>Swap notifications and calendar</strong> to put the calendar above the
+notifications. The panels exchange their visual positions while Windows keeps
+control of their native layout sizes and scrolling. The combined outer bounds
+stay fixed: the swap doesn't move the host window or change row definitions.
+No fixed notification height is used. Expanding/collapsing the calendar and
+changing display size use Windows' normal layout calculations.</p>
+<p>Remove any Notification Center Styler rules that swap these panels or force
+their heights, row definitions, or row positions before enabling this option.
+Cosmetic styling can remain. Switching the option off restores the original
+transforms, including bindings. The positioning fix works without the swap.</p>
+<h2 id="otherpositioningmods">Other positioning mods</h2>
+<p>The top-taskbar fix changes only Y by default, so horizontal alignment from
+Shell Flyout Positions is preserved. This mod and Shell Flyout Positions both
+observe the flyout being uncloaked; they should not both force its X coordinate.</p>
+<p><strong>Repair right-edge position after Explorer restarts</strong> is optional. It forces
+right alignment for top taskbars and overrides a left/center alignment selected
+in another mod. Leave it off when using Shell Flyout Positions. It is retained
+because we observed a surviving shell host occasionally reopening on the left
+after Explorer/taskbar recreation; forcing right alignment corrected that case.</p>
+<p>ShellExperienceHost loads this mod only while panel swapping is enabled. Window
+creation only schedules initialization; XAML is accessed later on its UI thread.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Task Manager Details Icon Size 0.1]]></title>
         <id>https://windhawk.net/mods/fix-taskmgr-details-icon-size#9d9f4aca2ef130a7388757f192e9f86946314fb7</id>
@@ -1073,129 +1130,6 @@ pressed. UAC's secure desktop is outside the scope of the mod.</p>]]></content>
         <author>
             <name>Tyler</name>
             <uri>https://github.com/snowtyler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Minecraft launcher region detection spoof 0.1.0]]></title>
-        <id>https://windhawk.net/mods/minecraft-launcher-region-spoof#59268a9c67ff2f2a6709162c426e1eacbf525832</id>
-        <link href="https://windhawk.net/mods/minecraft-launcher-region-spoof"/>
-        <updated>2026-10-24T18:00:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="minecraftlauncherregiondetectionspoof">Minecraft launcher region detection spoof</h1>
-<p>Presents Singapore region information to PCL CE and HMCL to bypass their
-mainland China restrictions on downloading, installing and repairing Minecraft.
-The purpose is to give users the same choice of launcher features across regions.</p>
-<h2 id="regionandtimezone">Region and time zone</h2>
-<ul>
-<li>PCL CE: user region <code>SG</code>, Windows device region GeoID <code>215</code>, and
-<code>Singapore Standard Time</code>.</li>
-<li>HMCL: Windows user GeoID <code>215</code>, JVM country <code>SG</code>, and JVM time zone
-<code>Asia/Singapore</code>. Existing <code>user.country</code> and <code>user.timezone</code> JVM options are
-replaced, and legacy <code>user.region</code> options are removed.</li>
-<li>The affected launcher's time zone is fixed to UTC+8, without daylight saving
-time. Local times shown by the launcher use UTC+8 even when Windows is set to
-another time zone.</li>
-<li>Language settings are preserved. Locale-dependent formats can reflect the
-Singapore region. The overrides apply within the target processes.</li>
-</ul>
-<h2 id="targetprocesses">Target processes</h2>
-<p>Supports 64-bit x64 and ARM64 processes with these executable names:</p>
-<ul>
-<li><code>PCL2_CE*.exe</code> for PCL CE.</li>
-<li><code>HMCL*.exe</code> for HMCL executables.</li>
-<li><code>java.exe</code> and <code>javaw.exe</code> when the command line launches <code>HMCL*.jar</code>,
-a JAR embedded in <code>HMCL*.exe</code>, or the main class <code>org.jackhuang.hmcl.Main</code>.</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<p>Enable the mod before starting HMCL so that its region options are set before
-JVM creation. Restart PCL CE after enabling the mod to refresh its cached region
-and local time zone. To restore the original region behavior, disable the mod and
-fully restart the affected launcher.</p>
-<h2 id="upstreamchanges">Upstream changes</h2>
-<ul>
-<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3673">PCL CE #3673</a> introduces
-mainland China restrictions for Minecraft and modpack downloads, installation
-and repair, using Windows region, locale, language and time zone signals.</li>
-<li><a href="https://github.com/PCL-Community/PCL-CE/pull/3676">PCL CE #3676</a> adds the Windows
-device region as an additional detection signal.</li>
-<li><a href="https://github.com/HMCL-dev/HMCL/pull/7017">HMCL #7017</a> introduces mainland China
-restrictions for game downloads.</li>
-</ul>]]></content>
-        <author>
-            <name>Creeam</name>
-            <uri>https://github.com/HaHaWTH</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8 Network Flyout Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win8-network-flyout-restorer#35d6cd4fc00a4f4967d447e43526abc262498e88</id>
-        <link href="https://windhawk.net/mods/win8-network-flyout-restorer"/>
-        <updated>2026-10-24T16:33:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows8networkflyoutrestorer">Windows 8 Network Flyout Restorer</h1>
-<p>This mod restores the Windows 8-style network panel from the taskbar network icon.
-The panel provides access to Wi-Fi networks, wired connections, VPN connections
-and Airplane mode, where supported by Windows and the installed hardware.</p>
-<p>This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<p>On builds that still contain the legacy network components, the mod uses them
-directly and downloads nothing; the result is usually closer to the original
-Windows 8 panel, since the system's own providers are used. On newer builds,
-the required Microsoft components are downloaded from Microsoft's Symbol Server
-and verified with SHA-256 before use.</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/winserverpicture.png" alt="winserverpicture" /></p>
-<p>Note: This is a best-effort modification. The Windows 8 network flyout and its dependencies had been removed in Windows 11 24H2+ and the restoration is done within modern Windows' limitations.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>64-bit Windows 10 (build 17763 or later) or Windows 11.</li>
-<li>Windhawk 1.4 or later.</li>
-<li>An internet connection for the first download, if additional components are needed.</li>
-<li>Native ARM64 Windows is not supported: fallback artifacts are AMD64-only and
-the native component route is unavailable on ARM64 builds.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>Compatible Windows components already on the computer are used when available.
-Otherwise, the required Microsoft components are downloaded from Microsoft's
-Symbol Server and kept in Windhawk's private storage. System files are not replaced.
-Compatibility depends on the Windows build; the panel may not work on every system.</p>
-<p>Downloaded files are checked with SHA-256 before use. Damaged cached downloads are
-replaced automatically when possible. If verification still fails, the downloaded
-panel remains inactive rather than loading an unverified file.</p>
-<h2 id="options">Options</h2>
-<p>The classic network icon is optional and disabled by default. If enabling it
-causes Explorer to restart, leave it disabled and use the alternative network icon.
-The settings control the classic network icon, the optional Win+Shift+N shortcut
-and the panel language. The downloaded panel supports English, Italian, Spanish,
-French and Brazilian Portuguese. When built-in Windows components are used, their
-original Windows language is retained. Restart Explorer after changing the panel language.</p>
-<h2 id="privacyandsystemchanges">Privacy and system changes</h2>
-<p>The mod does not create or modify entries in the live HKCU/HKLM registry and
-does not create system-wide COM registrations. In fallback mode, registry access
-needed by the legacy components is redirected to a private application hive
-loaded with <code>RegLoadAppKeyW</code> from a unique file in this mod's Windhawk storage.
-Each <code>explorer.exe</code> instance gets its own hive file, so concurrent Explorer
-processes do not contend for one backing file. The hive is not mounted under
-HKCU/HKLM and is not visible to other processes. On normal unload the mod closes
-the hive and attempts to remove its file; a crash can leave an orphaned hive
-file in mod storage. Downloaded components are also kept in Windhawk storage to
-avoid downloading them at every start.</p>
-<p>If you used an earlier release, its <code>HKCU\Software\Windhawk\Mods\win8-network-flyout-restorer\VirtualRegistry</code>
-subtree (or the older <code>windows-8-network-flyout-restorer</code> name) may still be
-present. This release does not delete old registry data automatically; after
-all older mod/Explorer instances have stopped, remove those legacy entries
-manually if you want to clean them up.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If a handled C++ error occurs, the mod stops accepting requests for that session
-and attempts to shut down its features. Restart Explorer before trying again.
-This does not protect Explorer from every possible error in legacy Windows components.</p>
-<p>If the panel does not open, check the internet connection and Windhawk's mod log.
-An SHA-256 mismatch is not ignored. Disabling the mod and restarting Explorer
-restores the normal Windows behavior. If shutdown gets stuck, some resources may
-be kept until Explorer exits to avoid unloading code that is still running.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdministratoX - Testing on Windows 11 25H2</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
