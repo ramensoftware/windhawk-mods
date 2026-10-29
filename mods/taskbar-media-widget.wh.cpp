@@ -2,13 +2,13 @@
 // @id taskbar-media-widget
 // @name Taskbar Media Widget
 // @description Compact media controls integrated into the Windows 10/11 taskbar.
-// @version 0.3.1
+// @version 0.3.2
 // @author uMk0
 // @github https://github.com/umk0
 // @license MIT
 // @include explorer.exe
 // @architecture x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luser32 -lgdi32 -lmsimg32 -lshell32 -lshlwapi -lwindowscodecs -lwindowsapp -ldwmapi -lshcore -luuid -lksuser
+// @compilerOptions -lole32 -lruntimeobject -luser32 -lgdi32 -lmsimg32 -lshell32 -lshlwapi -lwindowscodecs -lwindowsapp -lshcore -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,9 +19,9 @@ A compact media widget for the Windows 10 and Windows 11 taskbar. It reads
 metadata and controls playback through Global System Media Transport Controls.
 
 On Windows 11, the widget is inserted into the native tray XAML layout and
-tracks the taskbar height automatically. On the classic Windows 10 taskbar,
-including ExplorerPatcher configurations, it uses a DPI-aware Win32 surface
-because that taskbar has no XAML tree.
+tracks the taskbar height automatically. On the classic 64-bit Windows 10
+taskbar, including ExplorerPatcher configurations, it uses a DPI-aware Win32
+surface because that taskbar has no XAML tree.
 
 The native Windows 11 bottom, top, left and right taskbar positions are
 supported. Left and right taskbars use a compact vertical player that keeps
@@ -46,10 +46,13 @@ Features:
 - compact idle launchers for configured music apps that skip pinned apps
 - automatic layout updates when the taskbar edge or thickness changes
 
-Unlike the existing taskbar media mods, this mod combines a native Windows 11
-tray insertion with a Windows 10/classic-taskbar backend, keeps transport
-controls visible, and includes the idle launcher and real audio visualizer in
-the same compact surface.
+Taskbar Fluent Media Player and Island Media Controls already provide rich
+Windows 11 playback widgets, including audio visualization. This mod focuses
+on a different compatibility and layout scope: the same UI also supports the
+64-bit Windows 10/classic taskbar, native top/left/right taskbar positions, and
+an idle state that becomes a compact launcher for unpinned music apps. Those
+features require a second Win32 rendering backend and a distinct launcher
+state rather than a small option in either Windows 11-only layout.
 */
 // ==/WindhawkModReadme==
 
@@ -149,10 +152,12 @@ the same compact surface.
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -231,7 +236,6 @@ struct Settings {
 
 struct MediaState {
     bool hasSession = false;
-    bool playOnlySession = false;
     bool isPlaying = false;
     bool canPrevious = false;
     bool canNext = false;
@@ -245,7 +249,6 @@ struct MediaState {
     int64_t positionMs = 0;
     int64_t durationMs = 0;
     ULONGLONG updatedTick = 0;
-    IRandomAccessStreamReference thumbnail{nullptr};
     std::vector<uint8_t> thumbnailBytes;
     bool hasAccentColor = false;
     COLORREF accentColor = RGB(46, 168, 255);
@@ -268,9 +271,11 @@ Settings g_settings;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_workersStopping = false;
 std::atomic<bool> g_uiDirty = false;
+std::atomic<bool> g_idleAppsChanged = false;
 std::atomic<bool> g_taskbarHooksInstalled = false;
 std::atomic<bool> g_modernWidgetAttached = false;
-std::atomic<bool> g_classicBackendStarted = false;
+std::atomic<bool> g_modernWidgetVisible = false;
+std::atomic<bool> g_classicWidgetVisible = false;
 std::atomic<TaskbarEdge> g_injectedTaskbarEdge = TaskbarEdge::Unknown;
 std::atomic<int> g_injectedTaskbarThicknessPx = 0;
 // Raw pointers are intentional: their destructors must not run during
@@ -280,17 +285,20 @@ std::thread* g_mediaThread = nullptr;
 std::thread* g_tickThread = nullptr;
 std::thread* g_audioThread = nullptr;
 std::thread* g_classicWidgetThread = nullptr;
+std::thread* g_commandThread = nullptr;
 std::mutex g_mediaMutex;
 std::mutex g_visualizerMutex;
+std::mutex g_idleAppsMutex;
 MediaState g_mediaState;
-GlobalSystemMediaTransportControlsSession g_mediaSession{nullptr};
+[[clang::no_destroy]] GlobalSystemMediaTransportControlsSession g_mediaSession{
+    nullptr};
 std::array<float, kVisualizerMaxBarCount> g_visualizerBands{};
 ULONGLONG g_visualizerUpdatedTick = 0;
 ULONGLONG g_missingMediaSinceTick = 0;
 
 HWND g_taskbarWnd = nullptr;
-Grid g_widgetGrid{nullptr};
-FrameworkElement g_injectionParent{nullptr};
+[[clang::no_destroy]] Grid g_widgetGrid{nullptr};
+[[clang::no_destroy]] FrameworkElement g_injectionParent{nullptr};
 int g_widgetColumn = -1;
 int g_widgetRow = -1;
 HWND g_classicWidgetWnd = nullptr;
@@ -299,38 +307,42 @@ bool g_verticalWidgetLayout = false;
 double g_verticalWidgetWidth = 40.0;
 double g_verticalSessionHeight = 144.0;
 
-FrameworkElement g_coverContainer{nullptr};
-FrameworkElement g_textContainer{nullptr};
-FrameworkElement g_rightContainer{nullptr};
-Grid g_visualizerGrid{nullptr};
-Grid g_progressGrid{nullptr};
-RowDefinition g_progressRow{nullptr};
-StackPanel g_idlePanel{nullptr};
-Image g_coverImage{nullptr};
-TextBlock g_titleText{nullptr};
-TextBlock g_artistText{nullptr};
-TextBlock g_timeText{nullptr};
-Border g_prevButton{nullptr};
-Border g_playButton{nullptr};
-Border g_nextButton{nullptr};
-TextBlock g_prevButtonIcon{nullptr};
-TextBlock g_playButtonIcon{nullptr};
-TextBlock g_nextButtonIcon{nullptr};
-Border g_progressHoverTip{nullptr};
-TextBlock g_progressToolTipText{nullptr};
-Border g_progressTrack{nullptr};
-Border g_progressFill{nullptr};
-winrt::Windows::UI::Xaml::Shapes::Ellipse g_progressThumb{nullptr};
-TranslateTransform g_titleTransform{nullptr};
-TranslateTransform g_artistTransform{nullptr};
-Canvas g_titleCanvas{nullptr};
-Canvas g_artistCanvas{nullptr};
+[[clang::no_destroy]] FrameworkElement g_coverContainer{nullptr};
+[[clang::no_destroy]] FrameworkElement g_textContainer{nullptr};
+[[clang::no_destroy]] FrameworkElement g_rightContainer{nullptr};
+[[clang::no_destroy]] Grid g_visualizerGrid{nullptr};
+[[clang::no_destroy]] Grid g_progressGrid{nullptr};
+[[clang::no_destroy]] RowDefinition g_progressRow{nullptr};
+[[clang::no_destroy]] StackPanel g_idlePanel{nullptr};
+[[clang::no_destroy]] Image g_coverImage{nullptr};
+[[clang::no_destroy]] TextBlock g_titleText{nullptr};
+[[clang::no_destroy]] TextBlock g_artistText{nullptr};
+[[clang::no_destroy]] TextBlock g_timeText{nullptr};
+[[clang::no_destroy]] Border g_prevButton{nullptr};
+[[clang::no_destroy]] Border g_playButton{nullptr};
+[[clang::no_destroy]] Border g_nextButton{nullptr};
+[[clang::no_destroy]] TextBlock g_prevButtonIcon{nullptr};
+[[clang::no_destroy]] TextBlock g_playButtonIcon{nullptr};
+[[clang::no_destroy]] TextBlock g_nextButtonIcon{nullptr};
+[[clang::no_destroy]] Border g_progressHoverTip{nullptr};
+[[clang::no_destroy]] TextBlock g_progressToolTipText{nullptr};
+[[clang::no_destroy]] Border g_progressTrack{nullptr};
+[[clang::no_destroy]] Border g_progressFill{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Shapes::Ellipse
+    g_progressThumb{nullptr};
+[[clang::no_destroy]] TranslateTransform g_titleTransform{nullptr};
+[[clang::no_destroy]] TranslateTransform g_artistTransform{nullptr};
+[[clang::no_destroy]] Canvas g_titleCanvas{nullptr};
+[[clang::no_destroy]] Canvas g_artistCanvas{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_uiTimer{nullptr};
+event_token g_uiTimerToken{};
+bool g_uiTimerHasToken = false;
+int g_uiTimerIntervalMs = 0;
 TextScrollState g_titleScroll;
 TextScrollState g_artistScroll;
 bool g_progressHover = false;
 std::wstring g_loadedThumbnailKey;
 std::vector<IdleApp> g_idleApps;
-std::vector<Border> g_visualizerBars;
 int g_visualizerBarCount = kVisualizerMinBarCount;
 std::wstring g_playButtonGlyph;
 bool g_prevButtonHover = false;
@@ -339,6 +351,46 @@ bool g_nextButtonHover = false;
 bool g_prevButtonEnabled = true;
 bool g_playButtonEnabled = true;
 bool g_nextButtonEnabled = true;
+HANDLE g_audioWakeEvent = nullptr;
+
+enum class CommandType {
+    OpenMediaApp,
+    LaunchShortcut,
+    MediaControl,
+    ChangeVolume,
+    Seek,
+};
+
+struct CommandRequest {
+    CommandType type;
+    std::wstring text;
+    int command = 0;
+    int wheelDelta = 0;
+    float volumeDelta = 0;
+    int64_t positionMs = 0;
+};
+
+std::mutex g_commandMutex;
+std::condition_variable g_commandCondition;
+std::deque<CommandRequest> g_commandQueue;
+
+void WakeAudioThread() {
+    if (g_audioWakeEvent) {
+        SetEvent(g_audioWakeEvent);
+    }
+}
+
+void SetModernWidgetVisible(bool visible) {
+    if (g_modernWidgetVisible.exchange(visible) != visible) {
+        WakeAudioThread();
+    }
+}
+
+void SetClassicWidgetVisible(bool visible) {
+    if (g_classicWidgetVisible.exchange(visible) != visible) {
+        WakeAudioThread();
+    }
+}
 
 struct LayoutMetrics {
     int widgetHeight = 40;
@@ -705,8 +757,35 @@ void ScanIdleApps() {
         }
     }
 
-    g_idleApps = std::move(found);
-    Wh_Log(L"Idle apps found: %u", static_cast<unsigned>(g_idleApps.size()));
+    size_t count = found.size();
+    {
+        std::lock_guard lock(g_idleAppsMutex);
+        g_idleApps = std::move(found);
+    }
+    Wh_Log(L"Idle apps found: %u", static_cast<unsigned>(count));
+    g_idleAppsChanged = true;
+    g_uiDirty = true;
+}
+
+std::vector<IdleApp> IdleAppsSnapshot() {
+    std::lock_guard lock(g_idleAppsMutex);
+    return g_idleApps;
+}
+
+size_t IdleAppCount() {
+    std::lock_guard lock(g_idleAppsMutex);
+    return g_idleApps.size();
+}
+
+void QueueCommand(CommandRequest request) {
+    if (g_unloading || g_workersStopping) {
+        return;
+    }
+    {
+        std::lock_guard lock(g_commandMutex);
+        g_commandQueue.push_back(std::move(request));
+    }
+    g_commandCondition.notify_one();
 }
 
 winrt::Windows::UI::Color XamlColor(COLORREF color, BYTE alpha = 0xFF) {
@@ -785,15 +864,7 @@ void OpenCurrentMediaApp() {
         return;
     }
 
-    std::thread([appId]() {
-        std::wstring shellPath = L"shell:AppsFolder\\" + appId;
-        HINSTANCE result = ShellExecuteW(nullptr, L"open", shellPath.c_str(),
-                                         nullptr, nullptr, SW_SHOWNORMAL);
-        if (reinterpret_cast<intptr_t>(result) <= 32) {
-            Wh_Log(L"OpenCurrentMediaApp failed: appId=%s code=%Id",
-                   appId.c_str(), reinterpret_cast<intptr_t>(result));
-        }
-    }).detach();
+    QueueCommand({CommandType::OpenMediaApp, std::move(appId)});
 }
 
 LayoutMetrics CalculateLayout(double availableHeight) {
@@ -861,7 +932,6 @@ void ResetWidgetElementReferences() {
     g_artistTransform = nullptr;
     g_titleCanvas = nullptr;
     g_artistCanvas = nullptr;
-    g_visualizerBars.clear();
     g_loadedThumbnailKey.clear();
     g_progressHover = false;
     g_playButtonGlyph.clear();
@@ -874,7 +944,7 @@ void ResetWidgetElementReferences() {
 }
 
 double VerticalIdleWidgetHeight() {
-    size_t count = std::min<size_t>(g_idleApps.size(), 6);
+    size_t count = std::min<size_t>(IdleAppCount(), 6);
     if (count == 0) {
         return g_verticalWidgetWidth;
     }
@@ -883,7 +953,7 @@ double VerticalIdleWidgetHeight() {
 }
 
 double IdleWidgetWidth() {
-    size_t count = std::min<size_t>(g_idleApps.size(), 6);
+    size_t count = std::min<size_t>(IdleAppCount(), 6);
     if (count == 0) {
         return 0;
     }
@@ -1166,6 +1236,18 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
         bytes[1] == 0x83 && bytes[2] == 0xEC && bytes[4] == 0x48 &&
         bytes[5] == 0x83 && bytes[6] == 0xC1 && bytes[7] <= 0x7F) {
         taskbarElementIUnknownOffset = static_cast<size_t>(bytes[7]);
+        frameHeightPatternRecognized = true;
+    }
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    auto instructions =
+        reinterpret_cast<DWORD const*>(TaskbarHost_FrameHeight_Original);
+    if (IsReadableMemoryRange(instructions, sizeof(DWORD) * 4) &&
+        instructions[0] == 0xD503237F &&
+        (instructions[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        instructions[2] == 0x910003FD &&
+        (instructions[3] & 0xFFF00FE0) == 0xF8400C00) {
+        taskbarElementIUnknownOffset =
+            static_cast<size_t>((instructions[3] >> 12) & 0xFF);
         frameHeightPatternRecognized = true;
     }
 #endif
@@ -1519,30 +1601,30 @@ Border MakeButton(PCWSTR name,
     button.UseLayoutRounding(true);
     iconTarget = MakeIconText(glyph, 13.0);
     button.Child(iconTarget);
-    button.PointerEntered([button, hoverState, enabledState](
-                              IInspectable const&,
-                              PointerRoutedEventArgs const&) mutable {
+    button.PointerEntered([hoverState, enabledState](
+                              IInspectable const& sender,
+                              PointerRoutedEventArgs const&) {
         if (enabledState && !*enabledState) {
             return;
         }
         if (hoverState) {
             *hoverState = true;
         }
-        SetButtonHoverBackground(button, true);
+        SetButtonHoverBackground(sender.as<Border>(), true);
     });
-    button.PointerExited([button, hoverState](IInspectable const&,
-                                              PointerRoutedEventArgs const&) mutable {
+    button.PointerExited([hoverState](IInspectable const& sender,
+                                      PointerRoutedEventArgs const&) {
         if (hoverState) {
             *hoverState = false;
         }
-        SetButtonHoverBackground(button, false);
+        SetButtonHoverBackground(sender.as<Border>(), false);
     });
-    button.PointerPressed([button, enabledState, command](IInspectable const&,
-                                                         PointerRoutedEventArgs const& e) {
+    button.PointerPressed([enabledState, command](IInspectable const& sender,
+                                                 PointerRoutedEventArgs const& e) {
         if (!enabledState || !*enabledState) {
             return;
         }
-        SetButtonHoverBackground(button, true);
+        SetButtonHoverBackground(sender.as<Border>(), true);
         SendMediaCommand(command);
         e.Handled(true);
     });
@@ -1554,14 +1636,7 @@ void LaunchIdleApp(std::wstring shortcutPath) {
         return;
     }
 
-    std::thread([shortcutPath]() {
-        HINSTANCE result = ShellExecuteW(nullptr, L"open", shortcutPath.c_str(),
-                                         nullptr, nullptr, SW_SHOWNORMAL);
-        if (reinterpret_cast<intptr_t>(result) <= 32) {
-            Wh_Log(L"LaunchIdleApp failed: path=%s code=%Id",
-                   shortcutPath.c_str(), reinterpret_cast<intptr_t>(result));
-        }
-    }).detach();
+    QueueCommand({CommandType::LaunchShortcut, std::move(shortcutPath)});
 }
 
 Button MakeIdleButton(IdleApp const& app) {
@@ -1612,13 +1687,14 @@ Button MakeIdleButton(IdleApp const& app) {
     }
 
     ToolTipService::SetToolTip(button, box_value(app.name));
-    button.PointerEntered([button](IInspectable const&,
-                                   PointerRoutedEventArgs const&) mutable {
-        button.Background(MakeBrush(ButtonHoverColor(), UseLightTheme() ? 28 : 42));
+    button.PointerEntered([](IInspectable const& sender,
+                             PointerRoutedEventArgs const&) {
+        sender.as<Button>().Background(
+            MakeBrush(ButtonHoverColor(), UseLightTheme() ? 28 : 42));
     });
-    button.PointerExited([button](IInspectable const&,
-                                  PointerRoutedEventArgs const&) mutable {
-        button.Background(MakeBrush(RGB(0, 0, 0), 0));
+    button.PointerExited([](IInspectable const& sender,
+                            PointerRoutedEventArgs const&) {
+        sender.as<Button>().Background(MakeBrush(RGB(0, 0, 0), 0));
     });
 
     std::wstring shortcut = app.shortcutPath;
@@ -1654,7 +1730,8 @@ Canvas MakeMarqueeLine(TextBlock& textBlock,
     Canvas::SetTop(textBlock, 0);
 
     canvas.Children().Append(textBlock);
-    canvas.SizeChanged([canvas](IInspectable const&, SizeChangedEventArgs const&) {
+    canvas.SizeChanged([](IInspectable const& sender, SizeChangedEventArgs const&) {
+        auto canvas = sender.as<Canvas>();
         if (auto geometry = canvas.Clip().try_as<RectangleGeometry>()) {
             geometry.Rect({0, 0, static_cast<float>(canvas.ActualWidth()),
                            static_cast<float>(canvas.ActualHeight())});
@@ -1665,38 +1742,7 @@ Canvas MakeMarqueeLine(TextBlock& textBlock,
 }
 
 void SendMediaCommand(int command) {
-    std::thread([command]() {
-        ApartmentScope apartment;
-        GlobalSystemMediaTransportControlsSession session{nullptr};
-        {
-            std::lock_guard lock(g_mediaMutex);
-            session = g_mediaSession;
-        }
-        if (!session) {
-            return;
-        }
-
-        try {
-            if (command == 1) {
-                session.TrySkipPreviousAsync().get();
-            } else if (command == 2) {
-                auto controls = session.GetPlaybackInfo().Controls();
-                if (controls.IsPlayPauseToggleEnabled()) {
-                    session.TryTogglePlayPauseAsync().get();
-                } else if (controls.IsPlayEnabled()) {
-                    session.TryPlayAsync().get();
-                }
-            } else if (command == 3) {
-                session.TrySkipNextAsync().get();
-            }
-            g_uiDirty = true;
-        } catch (hresult_error const& e) {
-            Wh_Log(L"SendMediaCommand failed: 0x%08X %s",
-                   static_cast<uint32_t>(e.code()), e.message().c_str());
-        } catch (...) {
-            Wh_Log(L"SendMediaCommand failed");
-        }
-    }).detach();
+    QueueCommand({CommandType::MediaControl, {}, command});
 }
 
 bool AdjustAppVolumeByAumid(std::wstring const& aumid, float delta) {
@@ -1800,12 +1846,124 @@ void ChangeVolumeFromWheel(int wheelDelta) {
 
     float delta = static_cast<float>(wheelDelta > 0 ? g_settings.volumeStep
                                                     : -g_settings.volumeStep);
-    std::thread([sourceAppId, delta, wheelDelta]() {
-        ApartmentScope apartment;
-        if (!AdjustAppVolumeByAumid(sourceAppId, delta)) {
-            ChangeSystemVolume(wheelDelta > 0);
+    CommandRequest request{};
+    request.type = CommandType::ChangeVolume;
+    request.text = std::move(sourceAppId);
+    request.wheelDelta = wheelDelta;
+    request.volumeDelta = delta;
+    QueueCommand(std::move(request));
+}
+
+void SeekMedia(int64_t absoluteTargetMs) {
+    CommandRequest request{};
+    request.type = CommandType::Seek;
+    request.positionMs = absoluteTargetMs;
+    QueueCommand(std::move(request));
+}
+
+template <typename T>
+bool WaitForMediaOperation(T const& operation) {
+    if (operation.wait_for(std::chrono::seconds(3)) == AsyncStatus::Completed) {
+        operation.GetResults();
+        return true;
+    }
+    operation.Cancel();
+    return false;
+}
+
+void ExecuteShellOpen(std::wstring const& target, bool appsFolder) {
+    std::wstring path = appsFolder ? L"shell:AppsFolder\\" + target : target;
+    HINSTANCE result = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr,
+                                     nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<intptr_t>(result) <= 32) {
+        Wh_Log(L"Shell open failed: target=%s code=%Id", target.c_str(),
+               reinterpret_cast<intptr_t>(result));
+    }
+}
+
+void ExecuteMediaControl(int command) {
+    GlobalSystemMediaTransportControlsSession session{nullptr};
+    {
+        std::lock_guard lock(g_mediaMutex);
+        session = g_mediaSession;
+    }
+    if (!session) {
+        return;
+    }
+
+    if (command == 1) {
+        WaitForMediaOperation(session.TrySkipPreviousAsync());
+    } else if (command == 2) {
+        auto controls = session.GetPlaybackInfo().Controls();
+        if (controls.IsPlayPauseToggleEnabled()) {
+            WaitForMediaOperation(session.TryTogglePlayPauseAsync());
+        } else if (controls.IsPlayEnabled()) {
+            WaitForMediaOperation(session.TryPlayAsync());
         }
-    }).detach();
+    } else if (command == 3) {
+        WaitForMediaOperation(session.TrySkipNextAsync());
+    }
+    g_uiDirty = true;
+}
+
+void ExecuteSeek(int64_t positionMs) {
+    GlobalSystemMediaTransportControlsSession session{nullptr};
+    {
+        std::lock_guard lock(g_mediaMutex);
+        session = g_mediaSession;
+    }
+    if (session && WaitForMediaOperation(
+                       session.TryChangePlaybackPositionAsync(positionMs * 10000))) {
+        g_uiDirty = true;
+    }
+}
+
+void CommandThread() {
+    ApartmentScope apartment;
+    for (;;) {
+        CommandRequest request{};
+        request.type = CommandType::MediaControl;
+        {
+            std::unique_lock lock(g_commandMutex);
+            g_commandCondition.wait(lock, [] {
+                return g_unloading || g_workersStopping ||
+                       !g_commandQueue.empty();
+            });
+            if ((g_unloading || g_workersStopping) && g_commandQueue.empty()) {
+                break;
+            }
+            request = std::move(g_commandQueue.front());
+            g_commandQueue.pop_front();
+        }
+
+        try {
+            switch (request.type) {
+                case CommandType::OpenMediaApp:
+                    ExecuteShellOpen(request.text, true);
+                    break;
+                case CommandType::LaunchShortcut:
+                    ExecuteShellOpen(request.text, false);
+                    break;
+                case CommandType::MediaControl:
+                    ExecuteMediaControl(request.command);
+                    break;
+                case CommandType::ChangeVolume:
+                    if (!AdjustAppVolumeByAumid(request.text,
+                                                request.volumeDelta)) {
+                        ChangeSystemVolume(request.wheelDelta > 0);
+                    }
+                    break;
+                case CommandType::Seek:
+                    ExecuteSeek(request.positionMs);
+                    break;
+            }
+        } catch (hresult_error const& e) {
+            Wh_Log(L"Command worker failed: 0x%08X %s",
+                   static_cast<uint32_t>(e.code()), e.message().c_str());
+        } catch (...) {
+            Wh_Log(L"Command worker failed");
+        }
+    }
 }
 
 bool AudioFormatIsFloat(WAVEFORMATEX const* format) {
@@ -1938,6 +2096,17 @@ void DecayVisualizerBands(float amount) {
     g_visualizerUpdatedTick = GetTickCount64();
 }
 
+bool VisualizerShouldCapture() {
+    if (!g_settings.visualizerEnabled || g_unloading || g_workersStopping) {
+        return false;
+    }
+    if (!g_modernWidgetVisible.load() && !g_classicWidgetVisible.load()) {
+        return false;
+    }
+    std::lock_guard lock(g_mediaMutex);
+    return g_mediaState.hasSession && g_mediaState.isPlaying;
+}
+
 bool RunAudioCaptureSession() {
     com_ptr<IMMDeviceEnumerator> deviceEnumerator;
     HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
@@ -2000,8 +2169,7 @@ bool RunAudioCaptureSession() {
     std::array<float, kVisualizerMaxBarCount> smoothed{};
     ULONGLONG lastPacketTick = GetTickCount64();
 
-    while (!g_unloading && !g_workersStopping &&
-           g_settings.visualizerEnabled) {
+    while (VisualizerShouldCapture()) {
         UINT32 packetFrames = 0;
         hr = captureClient->GetNextPacketSize(&packetFrames);
         if (FAILED(hr)) {
@@ -2057,15 +2225,15 @@ bool RunAudioCaptureSession() {
 void AudioVisualizerThread() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     while (!g_unloading && !g_workersStopping) {
-        if (!g_settings.visualizerEnabled) {
-            DecayVisualizerBands(0.75f);
-            Sleep(120);
+        if (!VisualizerShouldCapture()) {
+            DecayVisualizerBands(0.0f);
+            WaitForSingleObject(g_audioWakeEvent, INFINITE);
             continue;
         }
 
         if (!RunAudioCaptureSession()) {
             DecayVisualizerBands(0.55f);
-            Sleep(1000);
+            WaitForSingleObject(g_audioWakeEvent, 1000);
         }
     }
     DecayVisualizerBands(0.0f);
@@ -2179,8 +2347,9 @@ Grid BuildVerticalWidgetGrid(double availableWidth) {
     g_idlePanel.VerticalAlignment(VerticalAlignment::Center);
     g_idlePanel.Margin({0, 4, 0, 4});
     g_idlePanel.Visibility(Visibility::Collapsed);
-    for (size_t i = 0; i < g_idleApps.size() && i < 6; i++) {
-        g_idlePanel.Children().Append(MakeIdleButton(g_idleApps[i]));
+    auto idleApps = IdleAppsSnapshot();
+    for (size_t i = 0; i < idleApps.size() && i < 6; i++) {
+        g_idlePanel.Children().Append(MakeIdleButton(idleApps[i]));
     }
     Grid::SetRow(g_idlePanel, 0);
     wrapper.Children().Append(g_idlePanel);
@@ -2256,23 +2425,7 @@ Grid BuildVerticalWidgetGrid(double availableWidth) {
         double ratio = ClampDouble(point.X / width, 0.0, 1.0);
         int64_t targetMs = static_cast<int64_t>(state.durationMs * ratio);
         int64_t absoluteTargetMs = state.timelineStartMs + targetMs;
-        std::thread([absoluteTargetMs]() {
-            ApartmentScope apartment;
-            GlobalSystemMediaTransportControlsSession session{nullptr};
-            {
-                std::lock_guard lock(g_mediaMutex);
-                session = g_mediaSession;
-            }
-            if (session) {
-                try {
-                    session.TryChangePlaybackPositionAsync(
-                        absoluteTargetMs * 10000)
-                        .get();
-                    g_uiDirty = true;
-                } catch (...) {
-                }
-            }
-        }).detach();
+        SeekMedia(absoluteTargetMs);
     };
 
     g_progressGrid.PointerEntered([](IInspectable const&, PointerRoutedEventArgs const&) {
@@ -2372,7 +2525,6 @@ Grid BuildWidgetGrid(double availableHeight) {
     wrapper.RowDefinitions().Append(contentRow);
     wrapper.RowDefinitions().Append(g_progressRow);
 
-    g_visualizerBars.clear();
     g_visualizerBarCount =
         VisualizerBarCountForWidth(static_cast<double>(g_settings.widgetWidth));
     g_visualizerGrid = Grid();
@@ -2400,7 +2552,6 @@ Grid BuildWidgetGrid(double availableHeight) {
         bar.HorizontalAlignment(HorizontalAlignment::Center);
         Grid::SetColumn(bar, i);
         g_visualizerGrid.Children().Append(bar);
-        g_visualizerBars.push_back(bar);
     }
     wrapper.Children().Append(g_visualizerGrid);
 
@@ -2524,8 +2675,9 @@ Grid BuildWidgetGrid(double availableHeight) {
     g_idlePanel.HorizontalAlignment(HorizontalAlignment::Left);
     g_idlePanel.Margin({4, 0, 0, 0});
     g_idlePanel.Visibility(Visibility::Collapsed);
-    for (size_t i = 0; i < g_idleApps.size() && i < 6; i++) {
-        g_idlePanel.Children().Append(MakeIdleButton(g_idleApps[i]));
+    auto idleApps = IdleAppsSnapshot();
+    for (size_t i = 0; i < idleApps.size() && i < 6; i++) {
+        g_idlePanel.Children().Append(MakeIdleButton(idleApps[i]));
     }
     Grid::SetColumn(g_idlePanel, 0);
     Grid::SetColumnSpan(g_idlePanel, 3);
@@ -2604,23 +2756,7 @@ Grid BuildWidgetGrid(double availableHeight) {
         int64_t targetMs = static_cast<int64_t>(state.durationMs * ratio);
         int64_t absoluteTargetMs = state.timelineStartMs + targetMs;
 
-        std::thread([absoluteTargetMs]() {
-            ApartmentScope apartment;
-            GlobalSystemMediaTransportControlsSession session{nullptr};
-            {
-                std::lock_guard lock(g_mediaMutex);
-                session = g_mediaSession;
-            }
-            if (session) {
-                try {
-                    session.TryChangePlaybackPositionAsync(
-                        absoluteTargetMs * 10000)
-                        .get();
-                    g_uiDirty = true;
-                } catch (...) {
-                }
-            }
-        }).detach();
+        SeekMedia(absoluteTargetMs);
     };
 
     g_progressGrid.PointerEntered([](IInspectable const&, PointerRoutedEventArgs const&) {
@@ -2699,7 +2835,28 @@ Grid BuildWidgetGrid(double availableHeight) {
     return wrapper;
 }
 
+void RefreshWidgetContents();
+void TickWidgetUi();
+
+void StopWidgetUiTimer() {
+    if (!g_uiTimer) {
+        return;
+    }
+    try {
+        g_uiTimer.Stop();
+        if (g_uiTimerHasToken) {
+            g_uiTimer.Tick(g_uiTimerToken);
+            g_uiTimerHasToken = false;
+        }
+        g_uiTimer = nullptr;
+        g_uiTimerIntervalMs = 0;
+    } catch (...) {
+    }
+}
+
 void RemoveWidgetGrid() {
+    StopWidgetUiTimer();
+    SetModernWidgetVisible(false);
     if (!g_injectionParent) {
         g_widgetGrid = nullptr;
         g_widgetColumn = -1;
@@ -2824,11 +2981,18 @@ void UpdateVisualizerBars(MediaState const& state) {
     double availableHeight = std::max(4.0, g_visualizerGrid.ActualHeight());
     double maxHeight = std::max(2.0, availableHeight - 5.0);
 
-    for (size_t i = 0; i < g_visualizerBars.size(); i++) {
-        double band = active ? ClampDouble(bands[i], 0.0, 1.0) : 0.0;
+    uint32_t barCount = g_visualizerGrid.Children().Size();
+    for (uint32_t i = 0; i < barCount; i++) {
+        auto bar = g_visualizerGrid.Children().GetAt(i).try_as<Border>();
+        if (!bar) {
+            continue;
+        }
+        size_t bandIndex = static_cast<size_t>(i) * kVisualizerMaxBarCount /
+                           std::max<uint32_t>(1, barCount);
+        double band = active ? ClampDouble(bands[bandIndex], 0.0, 1.0) : 0.0;
         double height = band > 0.015 ? 1.0 + band * maxHeight : 1.0;
-        g_visualizerBars[i].Height(height);
-        g_visualizerBars[i].Background(MakeBrush(accent, alpha));
+        bar.Height(height);
+        bar.Background(MakeBrush(accent, alpha));
     }
 }
 
@@ -2907,9 +3071,10 @@ void RefreshWidgetContents() {
         state = g_mediaState;
     }
 
-    bool idleVisible = !state.hasSession && !g_idleApps.empty();
+    bool idleVisible = !state.hasSession && IdleAppCount() != 0;
     bool visible = state.hasSession || idleVisible || !g_settings.hideWhenNoMedia;
     g_widgetGrid.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+    SetModernWidgetVisible(visible);
     if (g_verticalWidgetLayout) {
         g_widgetGrid.Width(g_verticalWidgetWidth);
         g_widgetGrid.Height(idleVisible ? VerticalIdleWidgetHeight()
@@ -3064,6 +3229,54 @@ void TickWidgetUi() {
                       g_artistScroll);
 }
 
+bool WidgetNeedsFastTicks(MediaState const& state) {
+    if (state.hasSession && state.isPlaying && g_settings.visualizerEnabled) {
+        return true;
+    }
+    auto textOverflows = [](Canvas const& canvas, TextBlock const& text) {
+        return canvas && text && text.ActualWidth() > canvas.ActualWidth() + 4.0;
+    };
+    return textOverflows(g_titleCanvas, g_titleText) ||
+           textOverflows(g_artistCanvas, g_artistText);
+}
+
+void WidgetUiTimerTick(IInspectable const&, IInspectable const&) {
+    if (g_unloading || !g_modernWidgetAttached.load()) {
+        return;
+    }
+
+    if (g_uiDirty.exchange(false)) {
+        RefreshWidgetContents();
+    } else {
+        TickWidgetUi();
+    }
+
+    MediaState state;
+    {
+        std::lock_guard lock(g_mediaMutex);
+        state = g_mediaState;
+    }
+    int interval = WidgetNeedsFastTicks(state) ? 33 : 1000;
+    if (g_uiTimer && interval != g_uiTimerIntervalMs) {
+        g_uiTimer.Interval(TimeSpan{std::chrono::milliseconds(interval)});
+        g_uiTimerIntervalMs = interval;
+    }
+}
+
+void StartWidgetUiTimer() {
+    StopWidgetUiTimer();
+    try {
+        g_uiTimer = DispatcherTimer();
+        g_uiTimerIntervalMs = 33;
+        g_uiTimer.Interval(TimeSpan{std::chrono::milliseconds(33)});
+        g_uiTimerToken = g_uiTimer.Tick(&WidgetUiTimerTick);
+        g_uiTimerHasToken = true;
+        g_uiTimer.Start();
+    } catch (...) {
+        StopWidgetUiTimer();
+    }
+}
+
 bool InjectWidgetGrid() {
     g_modernWidgetAttached = false;
     HWND hwnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
@@ -3145,6 +3358,7 @@ bool InjectWidgetGrid() {
         g_injectedTaskbarThicknessPx = TaskbarThicknessPx(hwnd, edge);
         g_modernWidgetAttached = true;
         RefreshWidgetContents();
+        StartWidgetUiTimer();
         return true;
     } catch (hresult_error const& e) {
         Wh_Log(L"InjectWidgetGrid failed: 0x%08X %s",
@@ -3159,7 +3373,6 @@ bool HasMeaningfulMedia(hstring const& title,
                         hstring const& artist,
                         TimeSpan start,
                         TimeSpan end,
-                        GlobalSystemMediaTransportControlsSessionPlaybackControls const& controls,
                         IRandomAccessStreamReference const& thumbnail) {
     std::wstring titleText = Trim(std::wstring(title.c_str()));
     std::wstring artistText = Trim(std::wstring(artist.c_str()));
@@ -3197,7 +3410,7 @@ void PollMedia() {
             auto properties = nextSession.TryGetMediaPropertiesAsync().get();
             bool meaningful = HasMeaningfulMedia(
                 properties.Title(), properties.Artist(), timeline.StartTime(),
-                timeline.EndTime(), controls, properties.Thumbnail());
+                timeline.EndTime(), properties.Thumbnail());
 
             if (!meaningful) {
                 nextSession = nullptr;
@@ -3223,7 +3436,6 @@ void PollMedia() {
                     TimelinePositionMs(timeline, nextState.isPlaying);
                 nextState.durationMs = TimelineDurationMs(timeline);
                 nextState.updatedTick = GetTickCount64();
-                nextState.thumbnail = properties.Thumbnail();
                 nextState.thumbnailKey =
                     nextState.sourceAppId + L"|" + nextState.title + L"|" +
                     nextState.artist;
@@ -3281,6 +3493,9 @@ void PollMedia() {
         g_mediaSession = nextSession;
     }
     g_uiDirty = true;
+    if (g_audioWakeEvent) {
+        SetEvent(g_audioWakeEvent);
+    }
 }
 
 // Windows 10's taskbar is a classic Win32 surface. Keeping this backend in the
@@ -3503,23 +3718,7 @@ void SeekClassicWidget(double ratio) {
 
     int64_t targetMs = static_cast<int64_t>(state.durationMs * ratio);
     int64_t absoluteTargetMs = state.timelineStartMs + targetMs;
-    std::thread([absoluteTargetMs]() {
-        ApartmentScope apartment;
-        GlobalSystemMediaTransportControlsSession session{nullptr};
-        {
-            std::lock_guard lock(g_mediaMutex);
-            session = g_mediaSession;
-        }
-        if (!session) {
-            return;
-        }
-        try {
-            session.TryChangePlaybackPositionAsync(absoluteTargetMs * 10000)
-                .get();
-            g_uiDirty = true;
-        } catch (...) {
-        }
-    }).detach();
+    SeekMedia(absoluteTargetMs);
 }
 
 RECT ClassicIdleIconRect(HWND hwnd, size_t index, size_t count) {
@@ -3540,11 +3739,12 @@ RECT ClassicIdleIconRect(HWND hwnd, size_t index, size_t count) {
 }
 
 int ClassicDesiredWidth(HWND hwnd, MediaState const& state) {
-    if (state.hasSession || g_idleApps.empty()) {
+    size_t idleCount = IdleAppCount();
+    if (state.hasSession || idleCount == 0) {
         return ClassicScale(hwnd, g_settings.widgetWidth);
     }
 
-    size_t count = std::min<size_t>(g_idleApps.size(), 6);
+    size_t count = std::min<size_t>(idleCount, 6);
     int iconSize = ClassicScale(hwnd, 28);
     int gap = ClassicScale(hwnd, 4);
     int width = ClassicScale(hwnd, 8) + static_cast<int>(count) * iconSize +
@@ -3645,7 +3845,8 @@ void PaintClassicWidget(HWND hwnd, HDC targetDc) {
     }
 
     if (!state.hasSession) {
-        size_t count = std::min<size_t>(g_idleApps.size(), 6);
+        auto idleApps = IdleAppsSnapshot();
+        size_t count = std::min<size_t>(idleApps.size(), 6);
         if (g_classicIdleImages.size() != count) {
             g_classicIdleImages.clear();
             g_classicIdleImages.resize(count);
@@ -3656,17 +3857,17 @@ void PaintClassicWidget(HWND hwnd, HDC targetDc) {
             CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         for (size_t i = 0; i < count; i++) {
             RECT iconRect = ClassicIdleIconRect(hwnd, i, count);
-            if (!g_idleApps[i].iconBytes.empty() &&
-                DecodeClassicImage(g_idleApps[i].iconBytes,
-                                   g_idleApps[i].shortcutPath,
+            if (!idleApps[i].iconBytes.empty() &&
+                DecodeClassicImage(idleApps[i].iconBytes,
+                                   idleApps[i].shortcutPath,
                                    iconRect.right - iconRect.left,
                                    g_classicIdleImages[i])) {
                 DrawClassicImage(dc, g_classicIdleImages[i], iconRect,
                                  ClassicScale(hwnd, 7));
             } else {
-                std::wstring letter = g_idleApps[i].name.empty()
+                std::wstring letter = idleApps[i].name.empty()
                                           ? L"\x266A"
-                                          : g_idleApps[i].name.substr(0, 1);
+                                          : idleApps[i].name.substr(0, 1);
                 HGDIOBJ oldFont = SelectObject(dc, fallbackFont);
                 SetTextColor(dc, textColor);
                 SetBkMode(dc, TRANSPARENT);
@@ -3829,14 +4030,6 @@ void PaintClassicWidget(HWND hwnd, HDC targetDc) {
     DeleteDC(dc);
 }
 
-bool HasClassicTaskbarHierarchy(HWND taskbarWnd) {
-    if (!taskbarWnd) {
-        return false;
-    }
-    return FindWindowExW(taskbarWnd, nullptr, L"ReBarWindow32", nullptr) ||
-           FindWindowExW(taskbarWnd, nullptr, L"TrayNotifyWnd", nullptr);
-}
-
 bool IsFullscreenWindowOnTaskbarMonitor(HWND taskbarWnd) {
     HWND foreground = GetForegroundWindow();
     if (!foreground || foreground == taskbarWnd ||
@@ -3861,12 +4054,11 @@ bool IsFullscreenWindowOnTaskbarMonitor(HWND taskbarWnd) {
            foregroundRect.bottom >= monitorRect.bottom - kTolerance;
 }
 
-bool ClassicBackendWanted(HWND taskbarWnd) {
+bool ClassicBackendWanted() {
     if (g_modernWidgetAttached.load()) {
         return false;
     }
-    if (HasClassicTaskbarHierarchy(taskbarWnd) ||
-        !g_taskbarHooksInstalled.load()) {
+    if (!g_taskbarHooksInstalled.load()) {
         return true;
     }
     return GetTickCount64() - g_backendDetectionStartedTick >= 8000;
@@ -3875,10 +4067,11 @@ bool ClassicBackendWanted(HWND taskbarWnd) {
 void RepositionClassicWidget() {
     HWND hwnd = g_classicWidgetWnd;
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hwnd || !taskbarWnd || !ClassicBackendWanted(taskbarWnd)) {
+    if (!hwnd || !taskbarWnd || !ClassicBackendWanted()) {
         if (hwnd) {
             ShowWindow(hwnd, SW_HIDE);
         }
+        SetClassicWidgetVisible(false);
         return;
     }
 
@@ -3887,17 +4080,19 @@ void RepositionClassicWidget() {
         std::lock_guard lock(g_mediaMutex);
         state = g_mediaState;
     }
-    bool idleVisible = !state.hasSession && !g_idleApps.empty();
+    bool idleVisible = !state.hasSession && IdleAppCount() != 0;
     bool shouldShow = state.hasSession || idleVisible ||
                       !g_settings.hideWhenNoMedia;
     if (!shouldShow || IsFullscreenWindowOnTaskbarMonitor(taskbarWnd)) {
         ShowWindow(hwnd, SW_HIDE);
+        SetClassicWidgetVisible(false);
         return;
     }
 
     RECT taskbarRect{};
     if (!GetWindowRect(taskbarWnd, &taskbarRect)) {
         ShowWindow(hwnd, SW_HIDE);
+        SetClassicWidgetVisible(false);
         return;
     }
 
@@ -3913,6 +4108,7 @@ void RepositionClassicWidget() {
         int y = taskbarRect.top + 4;
         SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height,
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetClassicWidgetVisible(true);
         return;
     }
 
@@ -3944,6 +4140,7 @@ void RepositionClassicWidget() {
 
     SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetClassicWidgetVisible(true);
 }
 
 int ClassicHotButtonAt(HWND hwnd, POINT point) {
@@ -4007,7 +4204,7 @@ LRESULT CALLBACK ClassicWidgetWndProc(HWND hwnd,
                                   PointInClassicRect(
                                       ClassicProgressHitRect(hwnd), point);
                 } else {
-                    size_t count = std::min<size_t>(g_idleApps.size(), 6);
+                    size_t count = std::min<size_t>(IdleAppCount(), 6);
                     for (size_t i = 0; i < count; i++) {
                         interactive = interactive || PointInClassicRect(
                                                            ClassicIdleIconRect(
@@ -4062,11 +4259,12 @@ LRESULT CALLBACK ClassicWidgetWndProc(HWND hwnd,
                 state = g_mediaState;
             }
             if (!state.hasSession) {
-                size_t count = std::min<size_t>(g_idleApps.size(), 6);
+                auto idleApps = IdleAppsSnapshot();
+                size_t count = std::min<size_t>(idleApps.size(), 6);
                 for (size_t i = 0; i < count; i++) {
                     if (PointInClassicRect(
                             ClassicIdleIconRect(hwnd, i, count), point)) {
-                        LaunchIdleApp(g_idleApps[i].shortcutPath);
+                        LaunchIdleApp(idleApps[i].shortcutPath);
                         return 0;
                     }
                 }
@@ -4130,8 +4328,7 @@ void ClassicWidgetThread() {
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = L"WindhawkTaskbarMediaWidgetClassic";
-    if (!RegisterClassW(&windowClass) &&
-        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassW(&windowClass)) {
         Wh_Log(L"Classic backend: RegisterClass failed: %u", GetLastError());
         return;
     }
@@ -4147,7 +4344,6 @@ void ClassicWidgetThread() {
         return;
     }
 
-    g_classicBackendStarted = true;
     RepositionClassicWidget();
     MSG message{};
     while (!g_unloading && !g_workersStopping &&
@@ -4158,12 +4354,13 @@ void ClassicWidgetThread() {
     if (g_classicWidgetWnd) {
         DestroyWindow(g_classicWidgetWnd);
     }
+    SetClassicWidgetVisible(false);
     UnregisterClassW(windowClass.lpszClassName, instance);
-    g_classicBackendStarted = false;
 }
 
 void MediaThread() {
     ApartmentScope apartment;
+    ScanIdleApps();
     while (!g_unloading && !g_workersStopping) {
         PollMedia();
         for (int i = 0;
@@ -4171,26 +4368,38 @@ void MediaThread() {
             Sleep(100);
         }
     }
+    {
+        std::lock_guard lock(g_mediaMutex);
+        g_mediaSession = nullptr;
+    }
 }
 
 bool HookTaskbarDllSymbols();
 
 void UiTickThread() {
-    ULONGLONG lastHookAttempt = 0;
     ULONGLONG lastInjectAttempt = 0;
 
     while (!g_unloading && !g_workersStopping) {
         ULONGLONG now = GetTickCount64();
-        int nextTickDelay = 250;
-
-        if (!g_taskbarHooksInstalled.load() && now - lastHookAttempt > 1000) {
-            HookTaskbarDllSymbols();
-            lastHookAttempt = now;
-        }
-
-        HWND hwnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
-        if (hwnd) {
+        if (g_taskbarHooksInstalled.load()) {
+            HWND hwnd =
+                g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+            if (!hwnd) {
+                Sleep(1000);
+                continue;
+            }
             g_taskbarWnd = hwnd;
+            if (g_modernWidgetAttached.load() &&
+                g_idleAppsChanged.exchange(false)) {
+                RunFromWindowThread(
+                    hwnd,
+                    [](void*) {
+                        RemoveWidgetGrid();
+                        InjectWidgetGrid();
+                    },
+                    nullptr);
+                lastInjectAttempt = now;
+            }
             TaskbarEdge currentEdge = DetectTaskbarEdge(hwnd);
             int currentThickness = TaskbarThicknessPx(hwnd, currentEdge);
             if (g_modernWidgetAttached.load() &&
@@ -4213,28 +4422,11 @@ void UiTickThread() {
                                     nullptr);
                 lastInjectAttempt = now;
             }
-
-            if (g_modernWidgetAttached.load() && g_uiDirty.exchange(false)) {
-                RunFromWindowThread(hwnd, [](void*) { RefreshWidgetContents(); },
-                                    nullptr);
-            } else if (g_modernWidgetAttached.load()) {
-                RunFromWindowThread(hwnd, [](void*) { TickWidgetUi(); },
-                                    nullptr);
-            }
-
-            if (g_modernWidgetAttached.load()) {
-                MediaState state;
-                {
-                    std::lock_guard lock(g_mediaMutex);
-                    state = g_mediaState;
-                }
-                nextTickDelay = state.hasSession && state.isPlaying ? 33 : 1000;
-            }
         }
         for (int slept = 0;
-             slept < nextTickDelay && !g_unloading && !g_workersStopping;
+             slept < 1000 && !g_unloading && !g_workersStopping;
              slept += 25) {
-            Sleep(std::min(25, nextTickDelay - slept));
+            Sleep(25);
         }
     }
 }
@@ -4288,6 +4480,7 @@ bool HookTaskbarDllSymbols() {
 
     if (!WindhawkUtils::HookSymbols(taskbarDll, taskbarDllHooks,
                                     ARRAYSIZE(taskbarDllHooks))) {
+        FreeLibrary(taskbarDll);
         return false;
     }
 
@@ -4305,7 +4498,6 @@ BOOL Wh_ModInit() {
     g_workersStopping = false;
     g_backendDetectionStartedTick = GetTickCount64();
     LoadSettings();
-    ScanIdleApps();
     HookTaskbarDllSymbols();
     return TRUE;
 }
@@ -4323,27 +4515,56 @@ void JoinAndDeleteThread(std::thread*& thread) {
 
 void StartWorkerThreads() {
     g_workersStopping = false;
+    {
+        std::lock_guard lock(g_commandMutex);
+        g_commandQueue.clear();
+    }
+    g_commandThread = new std::thread(CommandThread);
     g_mediaThread = new std::thread(MediaThread);
-    g_audioThread = new std::thread(AudioVisualizerThread);
+    if (g_settings.visualizerEnabled) {
+        g_audioWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (g_audioWakeEvent) {
+            g_audioThread = new std::thread(AudioVisualizerThread);
+        }
+    }
     g_tickThread = new std::thread(UiTickThread);
     g_classicWidgetThread = new std::thread(ClassicWidgetThread);
 }
 
 void StopWorkerThreads() {
     g_workersStopping = true;
+    {
+        std::lock_guard lock(g_commandMutex);
+        g_commandQueue.clear();
+    }
+    g_commandCondition.notify_all();
+    if (g_audioWakeEvent) {
+        SetEvent(g_audioWakeEvent);
+    }
     if (g_classicWidgetWnd) {
         PostMessageW(g_classicWidgetWnd, WM_CLOSE, 0, 0);
     }
 
+    JoinAndDeleteThread(g_commandThread);
     JoinAndDeleteThread(g_mediaThread);
     JoinAndDeleteThread(g_audioThread);
     JoinAndDeleteThread(g_tickThread);
     JoinAndDeleteThread(g_classicWidgetThread);
+    if (g_audioWakeEvent) {
+        CloseHandle(g_audioWakeEvent);
+        g_audioWakeEvent = nullptr;
+    }
+    {
+        std::lock_guard lock(g_commandMutex);
+        g_commandQueue.clear();
+    }
 }
 
 void Wh_ModAfterInit() {
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
-    ApplyWidgetOnTaskbarThread();
+    if (g_taskbarHooksInstalled.load()) {
+        ApplyWidgetOnTaskbarThread();
+    }
     StartWorkerThreads();
 }
 
@@ -4367,9 +4588,7 @@ void Wh_ModSettingsChanged() {
     }
 
     LoadSettings();
-    ScanIdleApps();
-
-    if (hwnd) {
+    if (hwnd && g_taskbarHooksInstalled.load()) {
         RunFromWindowThread(hwnd, [](void*) { InjectWidgetGrid(); }, nullptr);
     }
     StartWorkerThreads();
