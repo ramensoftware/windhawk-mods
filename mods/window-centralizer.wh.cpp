@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              window-centralizer
 // @name            Window Centralizer
-// @description     Previsibly centers new windows and dialogs to their parent or to the mouse cursor, with a configurable threshold and exclusion list.
+// @description     Predictably centers new windows and dialogs to their parent or to the mouse cursor, with a configurable threshold and exclusion list.
 // @version         1.0.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         *
-// @compilerOptions -lcomctl32 -lgdi32
+// @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -35,9 +35,13 @@ In both modes the window is kept inside the monitor's work area.
 
 Press **Win+Alt+C** while a window is active to stop centering it (press again to undo). The rule matches the program, the window class and the window title. A short notification confirms the change.
 
-**Ignored windows** list accessible with **Win+Ctrl+Alt+C** shortcut, where entries can be removed. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
+The **Ignored windows** list opens with **Win+Ctrl+Alt+C**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
 Both hotkeys can be changed in the mod settings.
+
+## Compatibility
+
+Don't use this mod together with [Center New Windows](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp). Both reposition windows as they are shown, so the same window would be moved twice, especially dialogs when that mod's "Always center dialogs" option is on.
 */
 // ==/WindhawkModReadme==
 
@@ -68,7 +72,6 @@ Both hotkeys can be changed in the mod settings.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <commctrl.h>
 #include <stdio.h>
 #include <wchar.h>
 #include <wctype.h>
@@ -389,10 +392,11 @@ HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD s
 
 // ───────────── Host: hotkeys, notification, ignored windows list ─────────────
 //
-// Runs in a single explorer.exe process (the first one to take the mutex).
+// Runs in one explorer.exe process at a time: the one that owns the host mutex.
 
 HANDLE g_hostMutex;
 HANDLE g_hostThread;
+HANDLE g_hostStopEvent;
 HWND g_hwndHost;     // hidden window: hotkeys and timers
 HWND g_hwndList;     // "Ignored windows" window
 HWND g_hwndToast;
@@ -402,7 +406,7 @@ constexpr wchar_t kHostClass[] = L"WindowCentralizer_Host";
 constexpr wchar_t kListClass[] = L"WindowCentralizer_List";
 constexpr wchar_t kToastClass[] = L"WindowCentralizer_Toast";
 
-enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT };
+enum { WM_APP_RELOAD = WM_APP + 1 };
 enum { HK_IGNORE = 1, HK_LIST = 2 };
 enum { TIMER_TOAST = 1 };
 enum { ID_LIST = 100, ID_REMOVE, ID_HINT };
@@ -567,7 +571,7 @@ void ToggleIgnoreActive() {
     wchar_t process[MAX_PATH], cls[256], title[512];
     ProcessNameOf(hwnd, process, ARRAYSIZE(process));
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    TitleOf(hwnd, title, ARRAYSIZE(title));
     if (!process[0])
         return;
     for (wchar_t* p = title; *p; p++)
@@ -713,22 +717,22 @@ void FillListBox() {
     SendMessageW(lb, LB_SETHORIZONTALEXTENT, widest + MulDiv(16, (int)GetDpiForWindow(lb), 96), 0);
 }
 
-LRESULT CALLBACK ListBoxSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
-    if (msg == WM_MOUSEWHEEL && (GET_KEYSTATE_WPARAM(wParam) & MK_SHIFT)) {
-        WPARAM dir = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINELEFT : SB_LINERIGHT;
-        for (int i = 0; i < 3; i++)
-            SendMessageW(hwnd, WM_HSCROLL, dir, 0);
-        return 0;
-    }
-    if (msg == WM_NCDESTROY)
-        RemoveWindowSubclass(hwnd, ListBoxSubclass, 0);
-    return DefSubclassProc(hwnd, msg, wParam, lParam);
+/// Shift+wheel over the list box scrolls it horizontally, which the stock list box doesn't do.
+bool HandleListShiftWheel(const MSG& msg) {
+    if (msg.message != WM_MOUSEWHEEL || !g_hwndList || msg.hwnd != ListCtl(ID_LIST) ||
+        !(GET_KEYSTATE_WPARAM(msg.wParam) & MK_SHIFT))
+        return false;
+    WPARAM dir = GET_WHEEL_DELTA_WPARAM(msg.wParam) > 0 ? SB_LINELEFT : SB_LINERIGHT;
+    for (int i = 0; i < 3; i++)
+        SendMessageW(msg.hwnd, WM_HSCROLL, dir, 0);
+    return true;
 }
 
 HFONT g_listFont;
-constexpr int kListClientW = 420, kListClientH = 300;
+constexpr int kListClientW = 420;
 
-void LayoutList(UINT dpi) {
+/// Applies the font and places the controls for dpi, sizing the hint to its wrapped text. Returns the client height needed.
+int LayoutList(UINT dpi) {
     HFONT font = CreateUiFont(dpi, 0, false);
     const int ids[] = {ID_HINT, ID_LIST, ID_REMOVE, IDCANCEL};
     for (int id : ids)
@@ -737,21 +741,39 @@ void LayoutList(UINT dpi) {
         DeleteObject(g_listFont);
     g_listFont = font;
     auto s = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
-    SetWindowPos(ListCtl(ID_HINT), nullptr, s(14), s(12), s(392), s(36), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(ListCtl(ID_LIST), nullptr, s(14), s(52), s(392), s(190), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(ListCtl(ID_REMOVE), nullptr, s(14), s(254), s(140), s(28), SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(ListCtl(IDCANCEL), nullptr, s(314), s(254), s(92), s(28), SWP_NOZORDER | SWP_NOACTIVATE);
+
+    wchar_t hint[256] = L"";
+    GetWindowTextW(ListCtl(ID_HINT), hint, ARRAYSIZE(hint));
+    RECT tr = {0, 0, s(392), 0};
+    HDC dc = GetDC(g_hwndList);
+    HGDIOBJ old = SelectObject(dc, font);
+    DrawTextW(dc, hint, -1, &tr, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    SelectObject(dc, old);
+    ReleaseDC(g_hwndList, dc);
+
+    int listY = s(12) + tr.bottom + s(8);
+    int buttonY = listY + s(190) + s(12);
+    SetWindowPos(ListCtl(ID_HINT), nullptr, s(14), s(12), s(392), tr.bottom, SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(ListCtl(ID_LIST), nullptr, s(14), listY, s(392), s(190), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(ListCtl(ID_REMOVE), nullptr, s(14), buttonY, s(140), s(28), SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(ListCtl(IDCANCEL), nullptr, s(314), buttonY, s(92), s(28), SWP_NOZORDER | SWP_NOACTIVATE);
+    return buttonY + s(28) + s(18);
 }
 
-void ResizeList(UINT dpi, const RECT* suggested) {
-    RECT rc = {0, 0, MulDiv(kListClientW, (int)dpi, 96), MulDiv(kListClientH, (int)dpi, 96)};
+/// Sizes the window to its content. Position: the suggested rect if given, else centered on the cursor's
+/// monitor when center is set, else unchanged.
+void ResizeList(UINT dpi, const RECT* suggested, bool center) {
+    RECT rc = {0, 0, MulDiv(kListClientW, (int)dpi, 96), LayoutList(dpi)};
     AdjustWindowRectExForDpi(&rc, (DWORD)GetWindowLongPtrW(g_hwndList, GWL_STYLE), FALSE,
                              (DWORD)GetWindowLongPtrW(g_hwndList, GWL_EXSTYLE), dpi);
-    int w = rc.right - rc.left, h = rc.bottom - rc.top, x, y;
+    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+    RECT cur;
+    GetWindowRect(g_hwndList, &cur);
+    int x = cur.left, y = cur.top;
     if (suggested) {
         x = suggested->left;
         y = suggested->top;
-    } else {
+    } else if (center) {
         POINT pt;
         GetCursorPos(&pt);
         MONITORINFO mi = {};
@@ -761,7 +783,6 @@ void ResizeList(UINT dpi, const RECT* suggested) {
         y = mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - h) / 2;
     }
     SetWindowPos(g_hwndList, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
-    LayoutList(dpi);
 }
 
 void UpdateHint() {
@@ -778,14 +799,22 @@ LRESULT CALLBACK ListProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_COMMAND:
             if (LOWORD(wParam) == ID_REMOVE) {
-                int sel = (int)SendMessageW(ListCtl(ID_LIST), LB_GETCURSEL, 0, 0);
-                if (sel >= 0) {
+                HWND lb = ListCtl(ID_LIST);
+                int count = (int)SendMessageW(lb, LB_GETSELCOUNT, 0, 0);
+                int* items = count > 0 ? (int*)HeapAlloc(GetProcessHeap(), 0, count * sizeof(int)) : nullptr;
+                if (items) {
+                    count = (int)SendMessageW(lb, LB_GETSELITEMS, count, (LPARAM)items);
                     HostLoadList();
-                    RemoveRuleAt(sel);
+                    // Indices come in ascending order; removing from the end keeps the earlier ones valid.
+                    for (int i = count - 1; i >= 0; i--)
+                        RemoveRuleAt(items[i]);
                     HostSaveList();
+                    int next = items[0];
+                    HeapFree(GetProcessHeap(), 0, items);
                     FillListBox();
-                    int count = (int)SendMessageW(ListCtl(ID_LIST), LB_GETCOUNT, 0, 0);
-                    SendMessageW(ListCtl(ID_LIST), LB_SETCURSEL, sel < count ? sel : count - 1, 0);
+                    int total = (int)SendMessageW(lb, LB_GETCOUNT, 0, 0);
+                    if (total > 0)
+                        SendMessageW(lb, LB_SETSEL, TRUE, next < total ? next : total - 1);
                 }
                 return 0;
             }
@@ -795,11 +824,12 @@ LRESULT CALLBACK ListProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             break;
         case WM_APP_RELOAD:
-            FillListBox();
             UpdateHint();
+            ResizeList(GetDpiForWindow(hwnd), nullptr, false);
+            FillListBox();
             return 0;
         case WM_DPICHANGED:
-            ResizeList(HIWORD(wParam), (const RECT*)lParam);
+            ResizeList(HIWORD(wParam), (const RECT*)lParam, false);
             FillListBox();
             return 0;
         case WM_CLOSE:
@@ -832,14 +862,14 @@ void OpenList() {
                                (HMENU)(INT_PTR)id, inst, nullptr);
     };
     add(L"STATIC", L"", SS_LEFT, ID_HINT, 0);
-    HWND lb = add(L"LISTBOX", L"", LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, ID_LIST,
-                  WS_EX_CLIENTEDGE);
-    SetWindowSubclass(lb, ListBoxSubclass, 0, 0);
+    add(L"LISTBOX", L"",
+        LBS_NOTIFY | LBS_EXTENDEDSEL | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, ID_LIST,
+        WS_EX_CLIENTEDGE);
     add(L"BUTTON", L"Remove selected", BS_PUSHBUTTON | WS_TABSTOP, ID_REMOVE, 0);
     add(L"BUTTON", L"Close", BS_DEFPUSHBUTTON | WS_TABSTOP, IDCANCEL, 0);
-    ResizeList(GetDpiForWindow(g_hwndList), nullptr);
-    FillListBox();
     UpdateHint();
+    ResizeList(GetDpiForWindow(g_hwndList), nullptr, true);
+    FillListBox();
     ShowWindow(g_hwndList, SW_SHOW);
     SetForegroundWindow(g_hwndList);
 }
@@ -866,15 +896,6 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_RELOAD:
             ApplyHostSettings(true);
             return 0;
-        case WM_APP_EXIT:
-            UnregisterHotKey(hwnd, HK_IGNORE);
-            UnregisterHotKey(hwnd, HK_LIST);
-            if (g_hwndList)
-                DestroyWindow(g_hwndList);
-            if (g_hwndToast)
-                DestroyWindow(g_hwndToast);
-            DestroyWindow(hwnd);
-            return 0;
         case WM_DESTROY:
             g_hwndHost = nullptr;
             PostQuitMessage(0);
@@ -883,7 +904,32 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+void RunHostLoop() {
+    for (;;) {
+        if (MsgWaitForMultipleObjects(1, &g_hostStopEvent, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0)
+            return;
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT)
+                return;
+            if (HandleListShiftWheel(msg))
+                continue;
+            if (g_hwndList && IsDialogMessageW(g_hwndList, &msg))
+                continue;
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
 DWORD WINAPI HostThread(void*) {
+    // Every Explorer instance waits here. When the hosting process exits, its ownership is abandoned
+    // and the next waiter takes over, so the hotkeys survive short-lived folder-window processes.
+    HANDLE waits[] = {g_hostStopEvent, g_hostMutex};
+    DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+    if (r != WAIT_OBJECT_0 + 1 && r != WAIT_ABANDONED_0 + 1)
+        return 0;
+
     HINSTANCE inst = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
@@ -891,33 +937,48 @@ DWORD WINAPI HostThread(void*) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpfnWndProc = HostProc;
     wc.lpszClassName = kHostClass;
-    RegisterClassExW(&wc);
+    ATOM hostAtom = RegisterClassExW(&wc);
     wc.lpfnWndProc = ToastProc;
     wc.lpszClassName = kToastClass;
-    RegisterClassExW(&wc);
+    ATOM toastAtom = RegisterClassExW(&wc);
     wc.lpfnWndProc = ListProc;
     wc.lpszClassName = kListClass;
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
-    RegisterClassExW(&wc);
+    ATOM listAtom = RegisterClassExW(&wc);
 
-    g_hwndHost = CreateWindowExW(0, kHostClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
-    if (g_hwndHost) {
-        ApplyHostSettings(false);
-        MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            if (g_hwndList && IsDialogMessageW(g_hwndList, &msg))
-                continue;
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    // A failed registration can mean a class left by an earlier load, whose window procedure points
+    // into an unloaded image; creating a window from it would crash Explorer.
+    if (hostAtom && toastAtom && listAtom) {
+        g_hwndHost = CreateWindowExW(0, kHostClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
+        if (g_hwndHost) {
+            ApplyHostSettings(false);
+            RunHostLoop();
         }
+    } else {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
     }
 
-    UnregisterClassW(kListClass, inst);
-    UnregisterClassW(kToastClass, inst);
-    UnregisterClassW(kHostClass, inst);
+    if (g_hwndHost) {
+        UnregisterHotKey(g_hwndHost, HK_IGNORE);
+        UnregisterHotKey(g_hwndHost, HK_LIST);
+    }
+    if (g_hwndList)
+        DestroyWindow(g_hwndList);
+    if (g_hwndToast)
+        DestroyWindow(g_hwndToast);
+    if (g_hwndHost)
+        DestroyWindow(g_hwndHost);
+
+    if (listAtom)
+        UnregisterClassW(kListClass, inst);
+    if (toastAtom)
+        UnregisterClassW(kToastClass, inst);
+    if (hostAtom)
+        UnregisterClassW(kHostClass, inst);
     if (g_hostList)
         HeapFree(GetProcessHeap(), 0, g_hostList);
     g_hostList = nullptr;
+    ReleaseMutex(g_hostMutex);
     return 0;
 }
 
@@ -951,12 +1012,9 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     if (_wcsicmp(g_processName, L"explorer.exe") != 0)
         return;
+    g_hostStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hostMutex = CreateMutexW(nullptr, FALSE, L"Local\\windhawk-window-centralizer-host");
-    if (g_hostMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_hostMutex);
-        g_hostMutex = nullptr;
-    }
-    if (g_hostMutex)
+    if (g_hostStopEvent && g_hostMutex)
         g_hostThread = CreateThread(nullptr, 0, HostThread, nullptr, 0, nullptr);
 }
 
@@ -968,11 +1026,14 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_hostThread) {
-        if (g_hwndHost)
-            PostMessageW(g_hwndHost, WM_APP_EXIT, 0, 0);
-        WaitForSingleObject(g_hostThread, 5000);
+        SetEvent(g_hostStopEvent);
+        WaitForSingleObject(g_hostThread, INFINITE);
         CloseHandle(g_hostThread);
         g_hostThread = nullptr;
+    }
+    if (g_hostStopEvent) {
+        CloseHandle(g_hostStopEvent);
+        g_hostStopEvent = nullptr;
     }
     if (g_hostMutex) {
         CloseHandle(g_hostMutex);
