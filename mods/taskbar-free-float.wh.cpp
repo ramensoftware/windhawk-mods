@@ -23,12 +23,13 @@ Moves the original Windows 11 app block and tray/clock into independent native
 XAML popup windows. The tray block includes its system icons and clock.
 
 - Ctrl + left mouse drag: float/move the app block or the entire tray/clock block.
+- Drag a floating block over its original slot and release to dock it there.
 - Escape while dragging: cancel this move.
 - A Ctrl+click without dragging is passed through to the taskbar as usual.
 
 ## Installation and removal
 
-The mod attaches to an already-running Explorer process and restores the native
+The mod attempts to attach to a running Explorer process and restore the native
 frames when disabled. If the log reports an incomplete restore, restart Explorer
 manually after saving any file operations. The mod never restarts Explorer.
 
@@ -68,6 +69,7 @@ and reserved space remain at the original edge.
 
 #include <windhawk_utils.h>
 #include <shellapi.h>
+#include <windowsx.h>
 
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -181,7 +183,10 @@ struct State {
     std::array<Block, 2> blocks;
     int dragging = -1;
     int dragCandidate = -1;
+    HWND inputWindow = nullptr;
     HWND captureWindow = nullptr;
+    bool pointerInput = false;
+    UINT32 pointerId = 0;
     bool wasFloating = false;
     POINT startCursor{};
     Geometry::Position startPosition{};
@@ -283,13 +288,13 @@ double Scale() {
     return dpi ? dpi / 96.0 : g_state->root.RasterizationScale();
 }
 
-RECT Bounds(Block& block) {
+RECT Bounds(FrameworkElement frame) {
     const double scale = Scale();
     if (!std::isfinite(scale) || scale <= 0) winrt::throw_hresult(E_UNEXPECTED);
     auto content = g_state->root.Content();
-    auto rect = block.frame.TransformToVisual(content).TransformBounds(
-        Rect{0, 0, static_cast<float>(block.frame.ActualWidth()),
-                   static_cast<float>(block.frame.ActualHeight())});
+    auto rect = frame.TransformToVisual(content).TransformBounds(
+        Rect{0, 0, static_cast<float>(frame.ActualWidth()),
+                   static_cast<float>(frame.ActualHeight())});
     POINT origin{};
     if (!ClientToScreen(g_state->bridge, &origin) ||
         !std::isfinite(rect.X) || !std::isfinite(rect.Y) ||
@@ -306,6 +311,8 @@ RECT Bounds(Block& block) {
             origin.x + static_cast<LONG>(std::ceil((rect.X + rect.Width) * scale)),
             origin.y + static_cast<LONG>(std::ceil((rect.Y + rect.Height) * scale))};
 }
+
+RECT Bounds(Block& block) { return Bounds(block.frame); }
 
 bool AutoHide() {
     APPBARDATA data{sizeof(data)};
@@ -472,14 +479,16 @@ void EndDrag(bool cancel) {
     if (g_state->dragging < 0) {
         if (g_state->dragCandidate < 0) return;
         g_state->dragCandidate = -1;
-        const HWND captureWindow = std::exchange(g_state->captureWindow, nullptr);
-        if (cancel && IsWindow(captureWindow)) SendMessageW(captureWindow, WM_CANCELMODE, 0, 0);
-        if (GetCapture() == captureWindow) ReleaseCapture();
+        g_state->inputWindow = nullptr;
+        g_state->pointerInput = false;
+        g_state->pointerId = 0;
         return;
     }
     const int index = std::exchange(g_state->dragging, -1);
     auto& block = g_state->blocks[index];
     const HWND captureWindow = std::exchange(g_state->captureWindow, nullptr);
+    g_state->pointerInput = false;
+    g_state->pointerId = 0;
     if (GetCapture() == captureWindow) ReleaseCapture();
     const HWND foreground = std::exchange(g_state->previousForeground, nullptr);
     if (IsWindow(foreground)) SetForegroundWindow(foreground);
@@ -487,6 +496,15 @@ void EndDrag(bool cancel) {
         if (g_state->wasFloating) Position(block, g_state->startPosition);
         else Dock(block);
     } else {
+        POINT cursor{};
+        if (block.placeholder && GetCursorPos(&cursor)) {
+            const RECT slot = Bounds(block.placeholder);
+            if (PtInRect(&slot, cursor)) {
+                Dock(block);
+                Wh_DeleteValue(block.storageKey);
+                return;
+            }
+        }
         Save(block);
     }
 }
@@ -550,91 +568,134 @@ bool Initialize(HWND hwnd) {
 
 bool MouseInput(const MSG* msg) {
     if (!g_state || !g_state->root) return false;
+    const bool pointer = msg->message == WM_POINTERDOWN ||
+                         msg->message == WM_POINTERUPDATE ||
+                         msg->message == WM_POINTERUP;
+    const UINT32 pointerId = pointer ? GET_POINTERID_WPARAM(msg->wParam) : 0;
+    const bool down = msg->message == WM_LBUTTONDOWN ||
+                      msg->message == WM_LBUTTONDBLCLK ||
+                      msg->message == WM_POINTERDOWN;
+    const bool move = msg->message == WM_MOUSEMOVE ||
+                      msg->message == WM_POINTERUPDATE;
+    const bool up = msg->message == WM_LBUTTONUP ||
+                    msg->message == WM_POINTERUP;
+
     if (g_state->dragCandidate >= 0) {
-        // Preserve the original click until the Windows drag threshold is crossed.
         if (msg->message == WM_KEYDOWN && msg->wParam == VK_ESCAPE) {
             EndDrag(true);
             return true;
         }
-        if (msg->message == WM_CAPTURECHANGED && msg->hwnd == g_state->captureWindow &&
-            reinterpret_cast<HWND>(msg->lParam) != g_state->captureWindow) {
-            EndDrag(true);
-            return false;
-        }
-        if (msg->message == WM_MOUSEMOVE) {
-            if (!(msg->wParam & MK_LBUTTON)) {
+        if (down) {
+            EndDrag(false);
+        } else if (pointer == g_state->pointerInput &&
+                   (!pointer || pointerId == g_state->pointerId)) {
+            if (up) {
                 EndDrag(false);
                 return false;
-            } else {
+            }
+            if (move) {
+                const bool held = pointer
+                    ? IS_POINTER_INCONTACT_WPARAM(msg->wParam) &&
+                      IS_POINTER_FIRSTBUTTON_WPARAM(msg->wParam)
+                    : (msg->wParam & MK_LBUTTON) != 0;
+                if (!held) {
+                    EndDrag(false);
+                    return false;
+                }
                 POINT cursor{};
-                if (GetCursorPos(&cursor) && Geometry::DragThresholdExceeded(
+                if (pointer) {
+                    cursor = {GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam)};
+                } else if (!GetCursorPos(&cursor)) {
+                    return false;
+                }
+                if (!Geometry::DragThresholdExceeded(
                         g_state->startCursor, cursor, GetSystemMetrics(SM_CXDRAG),
-                        GetSystemMetrics(SM_CYDRAG))) {
-                    const int index = g_state->dragCandidate;
-                    const HWND clickTarget = g_state->captureWindow;
-                    const bool wasFloating = static_cast<bool>(g_state->blocks[index].popup);
-                    g_state->captureWindow = g_state->taskbar;
-                    SetCapture(g_state->taskbar);
-                    if (GetCapture() != g_state->taskbar) {
-                        g_state->captureWindow = clickTarget;
-                        EndDrag(true);
-                        return true;
-                    }
-                    g_state->dragCandidate = -1;
-                    g_state->dragging = index;
-                    g_state->wasFloating = wasFloating;
-                    g_state->previousForeground = GetForegroundWindow();
-                    SetForegroundWindow(g_state->taskbar);
-                    SendMessageW(clickTarget, WM_CANCELMODE, 0, 0);
-                    if (!Float(g_state->blocks[index])) {
-                        EndDrag(true);
-                        return true;
-                    }
-                    Position(g_state->blocks[index],
-                        {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
-                         g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+                        GetSystemMetrics(SM_CYDRAG))) return false;
+
+                const int index = g_state->dragCandidate;
+                const HWND clickTarget = g_state->inputWindow;
+                const bool wasFloating = static_cast<bool>(g_state->blocks[index].popup);
+                const HWND foreground = GetForegroundWindow();
+                g_state->dragCandidate = -1;
+                g_state->inputWindow = nullptr;
+                if (IsWindow(clickTarget)) SendMessageW(clickTarget, WM_CANCELMODE, 0, 0);
+                SetForegroundWindow(g_state->taskbar);
+                SetCapture(g_state->taskbar);
+                if (GetCapture() != g_state->taskbar) {
+                    g_state->pointerInput = false;
+                    g_state->pointerId = 0;
+                    if (IsWindow(foreground)) SetForegroundWindow(foreground);
+                    Wh_Log(L"Mouse capture refused; drag cancelled");
                     return true;
                 }
+                g_state->captureWindow = g_state->taskbar;
+                g_state->dragging = index;
+                g_state->wasFloating = wasFloating;
+                g_state->previousForeground = foreground;
+                if (!Float(g_state->blocks[index])) {
+                    EndDrag(true);
+                    return true;
+                }
+                Position(g_state->blocks[index],
+                    {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
+                     g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+                return true;
             }
             return false;
-        }
-        if (msg->message == WM_LBUTTONUP) {
-            EndDrag(false);
+        } else {
             return false;
         }
-        return false;
     }
     if (g_state->dragging >= 0) {
         if (msg->message == WM_KEYDOWN && msg->wParam == VK_ESCAPE) {
             EndDrag(true);
             return true;
         }
-        if (msg->message == WM_MOUSEMOVE) {
-            if (!(msg->wParam & MK_LBUTTON)) {
+        if (pointer && (!g_state->pointerInput || pointerId != g_state->pointerId)) {
+            return false;
+        }
+        if (!pointer && (move || up || down) &&
+            msg->hwnd != g_state->captureWindow) return false;
+        if (move) {
+            const bool held = pointer
+                ? IS_POINTER_INCONTACT_WPARAM(msg->wParam) &&
+                  IS_POINTER_FIRSTBUTTON_WPARAM(msg->wParam)
+                : (msg->wParam & MK_LBUTTON) != 0;
+            if (!held) {
                 EndDrag(false);
             } else {
                 POINT cursor{};
-                if (GetCursorPos(&cursor)) {
-                    Position(g_state->blocks[g_state->dragging],
-                        {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
-                         g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+                if (pointer) {
+                    cursor = {GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam)};
+                } else {
+                    if (!GetCursorPos(&cursor)) return true;
                 }
+                Position(g_state->blocks[g_state->dragging],
+                    {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
+                     g_state->startPosition.y + cursor.y - g_state->startCursor.y});
             }
             return true;
         }
-        if (msg->message == WM_LBUTTONUP) {
+        if (up) {
             EndDrag(false);
             return true;
         }
-        if (msg->message == WM_LBUTTONDOWN || msg->message == WM_LBUTTONDBLCLK) return true;
+        if (down) return true;
         return false;
     }
-    if ((msg->message != WM_LBUTTONDOWN && msg->message != WM_LBUTTONDBLCLK) ||
-        !(msg->wParam & MK_CONTROL) || !(msg->wParam & MK_LBUTTON) ||
-        !IsWindow(msg->hwnd)) return false;
+    if (!down || !IsWindow(msg->hwnd)) return false;
 
     POINT cursor{};
-    if (!GetCursorPos(&cursor)) return false;
+    if (pointer) {
+        POINTER_INFO info{};
+        if (!IS_POINTER_FIRSTBUTTON_WPARAM(msg->wParam) ||
+            !GetPointerInfo(pointerId, &info) || info.pointerType != PT_MOUSE ||
+            !(info.dwKeyStates & POINTER_MOD_CTRL)) return false;
+        cursor = {GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam)};
+    } else {
+        if (!(msg->wParam & MK_CONTROL) || !(msg->wParam & MK_LBUTTON) ||
+            !GetCursorPos(&cursor)) return false;
+    }
     const HWND inputRoot = GetAncestor(msg->hwnd, GA_ROOT);
     // The tray is more specific when a theme gives the app frame the full width.
     for (int i = static_cast<int>(g_state->blocks.size()) - 1; i >= 0; --i) {
@@ -645,10 +706,11 @@ bool MouseInput(const MSG* msg) {
         if (inputRoot != (block.popup ? block.popupWindow : g_state->taskbar)) continue;
         RECT rect = Bounds(block);
         if (!PtInRect(&rect, cursor)) continue;
-        SetCapture(msg->hwnd);
-        if (GetCapture() != msg->hwnd) return false;
+        // Keep the native click untouched until the drag threshold is crossed.
         g_state->dragCandidate = static_cast<int>(i);
-        g_state->captureWindow = msg->hwnd;
+        g_state->inputWindow = msg->hwnd;
+        g_state->pointerInput = pointer;
+        g_state->pointerId = pointerId;
         g_state->startCursor = cursor;
         g_state->startPosition = {rect.left, rect.top};
         return false;
@@ -705,16 +767,21 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
             }
             return 0;
         }
-        if (message == WM_CAPTURECHANGED && g_state &&
-            (g_state->dragging >= 0 || g_state->dragCandidate >= 0) &&
-            reinterpret_cast<HWND>(lp) != hwnd) EndDrag(true);
+        if ((message == WM_CAPTURECHANGED || message == WM_CANCELMODE) &&
+            g_state && g_state->dragging >= 0 &&
+            (message == WM_CANCELMODE || reinterpret_cast<HWND>(lp) != hwnd)) {
+            EndDrag(true);
+        }
         if (message == WM_DISPLAYCHANGE || message == WM_DPICHANGED) {
             if (DockAll()) { delete g_state; g_state = nullptr; }
             if (!g_unloading) SetTimer(hwnd, kTimer, 500, nullptr);
         }
         if (message == WM_SETTINGCHANGE) {
             if (AutoHide()) DockAll();
-            else RestoreSavedPositions();
+            else if (!g_state ||
+                     (g_state->dragging < 0 && g_state->dragCandidate < 0)) {
+                RestoreSavedPositions();
+            }
         }
         if (message == WM_NCDESTROY) {
             KillTimer(hwnd, kTimer);
