@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-29T02:05:36.000Z</updated>
+    <updated>2026-10-29T15:43:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.3.11]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#3188655e208afff19e3cd85523aaeb949df54315</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2026-10-29T15:43:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with the latest Windows 11 update.</li>
+<li>Improved compatibility with non-standard DPI settings.</li>
+<li>Fixed the layout of the small weather widget when a 32 pixels height is used.</li>
+<li>Fixed tray icons not clickable when a 24 pixels height is used.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.2]]></title>
         <id>https://windhawk.net/mods/altbinz-dark#1a497a6d23a99e14899d4c101d7e0f86ea5f457e</id>
@@ -375,49 +391,6 @@ creation only schedules initialization; XAML is accessed later on its UI thread.
         <author>
             <name>MrSmith</name>
             <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Radial Window Switcher 1.0.0]]></title>
-        <id>https://windhawk.net/mods/radial-window-switcher#b8a9a6b78f6829de7a7e1530ab390be6c0701cae</id>
-        <link href="https://windhawk.net/mods/radial-window-switcher"/>
-        <updated>2026-10-27T20:03:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="radialwindowswitcher">Radial Window Switcher</h1>
-<p><img src="https://raw.githubusercontent.com/kotikdetka/radial-window-switcher/6fe413c441dce347eaf6f80ea5c2bb8c68d17b27/photo_2026-10-26_18-49-46.jpg" alt="Radial Window Switcher" /></p>
-<p>Replaces the standard Alt+Tab with a radial switcher: the icons of open
-windows are arranged in a ring in the center of the screen, the name of the
-selected app is shown in the middle, and a live preview of the selected window
-appears next to its sector.</p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Hold <strong>Alt</strong> and press <strong>Tab</strong> to open the ring.</li>
-<li>While holding Alt, press <strong>Tab</strong> for the next window, <strong>Shift+Tab</strong> for the
-previous one. Arrow keys also work.</li>
-<li>Release <strong>Alt</strong> to switch to the selected window.</li>
-<li>Press <strong>Esc</strong> to close the ring without switching.</li>
-<li>A quick Alt+Tab switches to the previous window, just like the standard one.</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li>Smooth animations: the ring spins in, sectors pop out one by one, the
-selection glows and a pointer glides to the selected app.</li>
-<li>Live window previews (DWM thumbnails), like the standard Alt+Tab.</li>
-<li>The selected sector uses the Windows accent color.</li>
-<li>Per-monitor DPI aware; the ring opens on the monitor with the cursor.</li>
-<li>Can use Alt+` or Alt+Q instead of Alt+Tab, keeping the standard switcher.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The switcher runs in its own Windhawk process. Only a small part runs in
-Explorer: it catches Explorer's Alt+Tab hotkey and hands it to the
-switcher, so the standard switcher doesn't open as well.</li>
-<li>Minimized windows have no preview: Windows doesn't render them.</li>
-<li>Alt+` and Alt+Q can't be caught while an elevated (administrator) window is
-in the foreground. Alt+Tab works there too, through Explorer.</li>
-</ul>]]></content>
-        <author>
-            <name>kotikdetka</name>
-            <uri>https://github.com/kotikdetka</uri>
         </author>
     </entry>
 </feed>

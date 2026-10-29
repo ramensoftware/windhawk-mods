@@ -1,3 +1,10 @@
+## 1.3.11 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3188655e208afff19e3cd85523aaeb949df54315/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed compatibility with the latest Windows 11 update.
+* Improved compatibility with non-standard DPI settings.
+* Fixed the layout of the small weather widget when a 32 pixels height is used.
+* Fixed tray icons not clickable when a 24 pixels height is used.
+
 ## 1.3.10 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/49b891e1e34d158d345b06f3ac86c8124a7ae129/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed the mod incorrectly affecting the search icon inside the search bar.
