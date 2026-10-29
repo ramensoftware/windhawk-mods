@@ -11,7 +11,6 @@
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -ladvapi32 -luser32 -lole32 -loleaut32 -lgdi32 -lgdiplus -lshlwapi
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
 # Recycle Bin Tray
@@ -25,6 +24,8 @@ The icon follows the current Recycle Bin state, can optionally disappear when th
 The mod is designed to remain lightweight and self-contained while integrating with the native Windows Shell wherever possible.
 
 ## Features
+
+> ⚠️ **Drag & Drop is disabled by default. Enable `Enable drag & drop` in the mod settings to use this feature.**
 
 * **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format. Deletion follows the Windows Recycle Bin policy for each source drive. If the icon is in the `^` notification-area overflow menu, open the menu and drop directly onto the Recycle Bin icon.
 * **Live Recycle Bin state** — updates when items are added to or removed from the Recycle Bin.
@@ -57,10 +58,10 @@ The mod is designed to remain lightweight and self-contained while integrating w
 
 1. Install and open [Windhawk](https://windhawk.net/).
 2. Click **Create Mod**.
-3. Replace the template code with the contents of `mod.wh.cpp`.
+3. Copy the mod source code and paste it over the template code.
 4. Click **Compile Mod** and enable the mod.
 
-The mod runs in a dedicated `windhawk.exe` process rather than being injected into `explorer.exe`, isolating it from the Windows Shell (see [Mods as tools](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process)).
+The mod runs as a dedicated Windhawk tool mod rather than being injected into `explorer.exe`, isolating it from the Windows Shell (see [Mods as tools](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process)).
 
 No separate installation, executable, or Windows service is required. Windhawk manages the process automatically.
 
@@ -91,7 +92,9 @@ Single-click execution is deferred by the Windows double-click interval so that 
 
 ## Drag & Drop
 
-The Recycle Bin tray icon can be used as a normal drag & drop destination for files and folders.
+Drag & Drop is disabled by default. Enable **Enable drag & drop** in the mod settings before using this feature. When enabled, the feature uses a global low-level mouse hook (`WH_MOUSE_LL`) to detect the start of drag gestures.
+
+The Recycle Bin tray icon can then be used as a normal drag & drop destination for files and folders.
 
 Simply drag one or more items from:
 
@@ -301,13 +304,11 @@ When a custom file cannot be loaded, the mod automatically falls back to the Win
 
 The mod uses Windows Shell APIs to query the current Recycle Bin state and register for Shell notifications.
 
-Shell notifications allow the icon to react quickly when items are added to or removed from the Recycle Bin.
+The current state and tray icon are initialized immediately. The first Shell notification subscription is established after a short Explorer/taskbar stabilization window and uses Windows' `SHCNRF_NewDelivery` delivery mode.
 
-Because Shell notifications can occasionally be missed, a configurable fallback timer periodically checks the actual Recycle Bin state.
+Shell notifications allow the icon to react quickly when items are added to or removed from the Recycle Bin. A configurable fallback timer periodically checks the actual state in case a notification is missed.
 
-The default fallback interval is **300 seconds** and can be changed in the Windhawk settings. DPI and tray-geometry changes are handled through Windows display/DPI events and the Shell-reported tray rectangle.
-
-Initialization checks the Shell and tray immediately. A one-second startup retry is armed only if Shell notification registration or tray creation is not ready yet.
+The default fallback interval is **300 seconds** and can be changed in the Windhawk settings. DPI and tray-geometry changes are handled through Windows display/DPI events and the Shell-reported tray rectangle. Bounded startup retries handle cases where the Shell or tray is not yet ready.
 
 ## Theme and DPI Handling
 
@@ -341,8 +342,8 @@ This allows the icon to recover without requiring the Windhawk mod to be manuall
 
 * The tray icon is hosted by a hidden top-level tool window owned by the mod's dedicated tray thread.
 * Drag & drop uses the standard Windows OLE `IDropTarget` mechanism and accepts dropped file lists exposed through `CF_HDROP`.
-* Dropped items are processed asynchronously on a dedicated STA worker through `IFileOperation`, so Shell UI or slow storage does not block the source application's `DoDragDrop` call.
-* A passive `IFileOperationProgressSink` records recycle, permanent-delete, cancellation, and failure results for diagnostics without changing the Shell operation.
+* Dropped items are processed asynchronously on a dedicated STA worker through `IFileOperation`, so Shell UI or slow storage does not block the source application's `DoDragDrop` call. The worker is created lazily on the first accepted drop.
+* A passive `IFileOperationProgressSink` tracks operation results and logs failures without changing the Shell operation.
 * The mod does not create a separate executable or Windows service.
 * GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. Once initialized, it stays available for the lifetime of the tool and is released during final teardown.
 * Tray timers are explicitly cancelled during window destruction before icon and Shell resources are released.
@@ -441,15 +442,17 @@ This project is licensed under the GNU General Public License Version 3.0.
     $name:fr-FR: "Masquer si vide"
     $description: "Automatically hide the tray icon when the Recycle Bin contains no items. If the bin is empty when enabled, the icon disappears immediately. Drag & Drop is disabled while this option is enabled."
     $description:fr-FR: "Masquer automatiquement l'icône lorsque la corbeille est vide. Si elle est déjà vide au moment de l'activation, l'icône disparaît immédiatement. Le glisser-déposer est désactivé lorsque cette option est activée."
-  - enableDragDrop: true
+  - enableDragDrop: false
     $name: "Enable drag & drop"
     $name:fr-FR: "Autoriser le glisser-déposer"
     $description: |-
-      Allow dropping files and folders onto the tray icon. Windows uses the Recycle Bin policy of each source drive, so items may be permanently deleted if a drive is configured to bypass the Recycle Bin. If the icon is in the ^ overflow menu, open it and drop onto the Recycle Bin icon. The icon does not need to stay permanently visible in the main system tray to work, but keeping it visible is recommended for quicker access.
+      Allow dropping files and folders onto the tray icon.
+      Windows uses the Recycle Bin policy of each source drive, so items may be permanently deleted if a drive is configured to bypass the Recycle Bin. If the icon is in the ^ overflow menu, open it and drop onto the Recycle Bin icon. The icon does not need to stay permanently visible in the main system tray to work, but keeping it visible is recommended for quicker access. This feature uses a global mouse hook.
 
       ⚠ Drag & Drop is disabled while "Hide when empty" is enabled.
     $description:fr-FR: |-
-      Permet de déposer des fichiers et dossiers sur l'icône de la Corbeille. Windows applique la stratégie de Corbeille de chaque lecteur source ; les éléments peuvent donc être supprimés définitivement si un lecteur est configuré pour contourner la Corbeille. Si l'icône se trouve dans le menu ^, ouvrez-le puis déposez les éléments sur l'icône de la Corbeille. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale pour fonctionner, mais la garder visible permet un accès plus rapide.
+      Permet de déposer des fichiers et dossiers sur l'icône de la Corbeille.
+      Windows applique la stratégie de Corbeille de chaque lecteur source ; les éléments peuvent donc être supprimés définitivement si un lecteur est configuré pour contourner la Corbeille. Si l'icône se trouve dans le menu ^, ouvrez-le puis déposez les éléments sur l'icône de la Corbeille. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale pour fonctionner, mais la garder visible permet un accès plus rapide. Cette fonctionnalité utilise un hook global de souris.
 
       ⚠ Le glisser-déposer est désactivé lorsque "Masquer si vide" est activé.
   - iconStyle: system
@@ -713,6 +716,7 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdarg>
 #include <cstdlib>
 #include <memory>
 #include <new>
@@ -876,6 +880,21 @@ constexpr UINT WM_TRAYICON = WM_USER + 1;
 constexpr UINT WM_SHELLNOTIFY = WM_USER + 2;
 constexpr UINT WM_APPLY_SETTINGS = WM_USER + 3;
 
+// Targeted Recycle Bin notification mask under continued real-Windows observation.
+// SHCNE_EXTENDED_EVENT is intentionally retained because full->full changes
+// can otherwise update the item count/size without any standard event.
+static constexpr LONG kRecycleBinShellChangeMask =
+    SHCNE_RENAMEITEM |
+    SHCNE_CREATE |
+    SHCNE_DELETE |
+    SHCNE_MKDIR |
+    SHCNE_RMDIR |
+    SHCNE_UPDATEDIR |
+    SHCNE_UPDATEITEM |
+    SHCNE_UPDATEIMAGE |
+    SHCNE_RENAMEFOLDER |
+    SHCNE_EXTENDED_EVENT;
+
 constexpr UINT TIMER_CLICK_ID = 101;
 constexpr UINT TIMER_REFRESH_ID = 102;
 constexpr UINT TIMER_STARTUP_ID = 103;
@@ -884,7 +903,9 @@ constexpr UINT TIMER_DISPLAY_SETTLE_ID = 106;
 constexpr UINT TIMER_SHELL_COALESCE_ID = 107;
 constexpr UINT TIMER_DPI_REINSTALL_ID = 108;
 constexpr UINT TIMER_DPI_WATCH_ID = 109;
-constexpr UINT DPI_WATCH_INTERVAL_MS = 3000;
+constexpr UINT TIMER_SHELL_REGISTRATION_ID = 110;
+constexpr UINT SHELL_REGISTRATION_DELAY_MS = 15000;
+constexpr UINT DPI_WATCH_INTERVAL_MS = 30000;
 
 // Active drag polling runs only while a physical left-button gesture is in progress.
 constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 40;
@@ -1165,10 +1186,19 @@ NOTIFYICONDATAW g_nid = {0};
 ULONG g_shellNotifyLock = 0;
 bool g_iconVisible = false;
 ULONGLONG g_suppressLeftActivationUntil = 0;
+ULONGLONG g_trayModifyFailureCount = 0;
 bool g_trayVersion4 = false;
 bool g_loggedInitialState = false;
 std::atomic_bool g_shutdownRequested{false};
 UINT g_shellModalDepth = 0; // Tray-thread only; protects the hidden Shell UI owner.
+
+// Delay the first SHChangeNotifyRegister call until Explorer and the taskbar
+// have been present for a short stabilization window. Later Explorer restarts
+// can re-register immediately through the bounded startup-recovery path.
+bool g_firstShellRegistrationGateOpen = false;
+// Set when Explorer restarts until a fresh Shell subscription is committed.
+bool g_shellRegistrationRefreshPending = false;
+
 bool g_hostDpiProbeActive = false;
 bool g_pendingDpiShellReinstall = false;
 bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh);
@@ -1244,31 +1274,30 @@ static std::wstring GetParentPath(const std::wstring& path) {
 }
 
 static void NotifyShellSourceChanged(const std::vector<RecycleDroppedItem>& items) {
+    // IFileOperation can occasionally leave an open Explorer source view stale.
+    // Refresh each unique source parent once without synthesizing per-item
+    // SHCNE_DELETE/SHCNE_RMDIR notifications.
     std::vector<std::wstring> notifiedParents;
     notifiedParents.reserve(items.size());
 
     for (const auto& item : items) {
-        SHChangeNotify(
-            item.isDirectory ? SHCNE_RMDIR : SHCNE_DELETE,
-            SHCNF_PATHW | SHCNF_FLUSH,
-            item.path.c_str(),
-            NULL);
-
         if (!item.parentPath.empty() &&
             std::find(notifiedParents.begin(), notifiedParents.end(),
                       item.parentPath) == notifiedParents.end()) {
             SHChangeNotify(
                 SHCNE_UPDATEDIR,
-                SHCNF_PATHW | SHCNF_FLUSH,
+                SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
                 item.parentPath.c_str(),
                 NULL);
             notifiedParents.push_back(item.parentPath);
         }
     }
 
-    Wh_Log(L"D&D: Shell source refresh notifications sent (%u item(s), %u parent(s))",
-           static_cast<UINT>(items.size()),
-           static_cast<UINT>(notifiedParents.size()));
+    Wh_Log(
+        L"D&D: source parent refresh sent "
+        L"(%u item(s), %u unique parent(s))",
+        static_cast<UINT>(items.size()),
+        static_cast<UINT>(notifiedParents.size()));
 }
 
 static bool IsUserCancellation(HRESULT hr) {
@@ -1276,7 +1305,7 @@ static bool IsUserCancellation(HRESULT hr) {
            hr == HRESULT_FROM_WIN32(ERROR_CANCELLED);
 }
 
-// Passive IFileOperation diagnostics. Callbacks never alter Shell behavior;
+// Passive IFileOperation result tracking. Callbacks never alter Shell behavior;
 // they only retain compact result counters and log failures/unexpected deletes.
 class RecycleOperationProgressSink final : public IFileOperationProgressSink {
 public:
@@ -1518,7 +1547,7 @@ static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
     bool progressAdvised = false;
 
     if (!progressSink) {
-        Wh_Log(L"D&D sink: allocation failed; continuing without diagnostics");
+        Wh_Log(L"D&D sink: allocation failed; continuing without result tracking");
     } else {
         const HRESULT hrAdvise = pfo->Advise(progressSink, &progressCookie);
         if (FAILED(hrAdvise)) {
@@ -1572,8 +1601,8 @@ static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
             Wh_Log(L"D&D worker: one or more file operations were aborted");
         } else {
             completed = true;
-            Wh_Log(L"D&D worker: %u item(s) processed asynchronously",
-                   static_cast<UINT>(items.size()));
+            // Refresh each affected source directory once after a completed
+            // recycle operation.
             NotifyShellSourceChanged(items);
         }
     }
@@ -1594,6 +1623,10 @@ static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
 }
 
 static DWORD WINAPI RecycleWorkerProc(LPVOID) {
+    if (g_shutdownRequested.load() || g_recycleWorkerStop.load()) {
+        return 0;
+    }
+
     ThreadDpiAwarenessGuard dpiAwareness;
     if (!dpiAwareness) {
         Wh_Log(L"D&D worker: failed to enable Per-Monitor V2 awareness: %lu",
@@ -1605,8 +1638,6 @@ static DWORD WINAPI RecycleWorkerProc(LPVOID) {
         Wh_Log(L"D&D worker: OleInitialize failed: 0x%08X", oleInit.GetResult());
         return 0;
     }
-
-    Wh_Log(L"D&D worker: started");
 
     for (;;) {
         // This is an STA worker, so keep dispatching its message queue while
@@ -1640,8 +1671,9 @@ static DWORD WINAPI RecycleWorkerProc(LPVOID) {
             HWND hWnd = GetSafeHwnd();
             if (hWnd && IsWindow(hWnd)) {
                 // Refresh state regardless of success/abort; Shell may have
-                // completed only part of a multi-item operation.
-                (void)PostMessageW(hWnd, WM_SHELLNOTIFY, 0, 0);
+                // completed only part of a multi-item operation. The completion
+                // message is internal; WM_SHELLNOTIFY is reserved for genuine
+                // SHCNRF_NewDelivery messages from the Shell.
                 (void)PostMessageW(
                     hWnd, WM_USER_RECYCLE_WORK_COMPLETE, 0, 0);
             }
@@ -1654,18 +1686,60 @@ static DWORD WINAPI RecycleWorkerProc(LPVOID) {
 
     delete TakePendingRecycleWorkerJob();
     g_recycleWorkerBusy.store(false);
-    Wh_Log(L"D&D worker: stopped");
     return 0;
 }
 
 static bool InitializeRecycleWorker() {
+    if (g_shutdownRequested.load()) {
+        return false;
+    }
+
+    if (g_hRecycleWorkerThread && g_hRecycleWorkerEvent) {
+        const DWORD state = WaitForSingleObject(g_hRecycleWorkerThread, 0);
+        if (state == WAIT_TIMEOUT) {
+            return true;
+        }
+
+        if (state == WAIT_FAILED) {
+            Wh_Log(L"D&D worker: existing thread state check failed: %lu",
+                   GetLastError());
+        } else {
+            Wh_Log(L"D&D worker: previous thread exited; recreating lazily");
+        }
+        CloseHandle(g_hRecycleWorkerThread);
+        g_hRecycleWorkerThread = NULL;
+        CloseHandle(g_hRecycleWorkerEvent);
+        g_hRecycleWorkerEvent = NULL;
+    } else {
+        if (g_hRecycleWorkerThread) {
+            CloseHandle(g_hRecycleWorkerThread);
+            g_hRecycleWorkerThread = NULL;
+        }
+        if (g_hRecycleWorkerEvent) {
+            CloseHandle(g_hRecycleWorkerEvent);
+            g_hRecycleWorkerEvent = NULL;
+        }
+    }
+
     g_recycleWorkerStop.store(false);
     g_recycleWorkerBusy.store(false);
     delete TakePendingRecycleWorkerJob();
 
+    if (g_shutdownRequested.load()) {
+        g_recycleWorkerStop.store(true);
+        return false;
+    }
+
     g_hRecycleWorkerEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!g_hRecycleWorkerEvent) {
         Wh_Log(L"D&D worker: CreateEvent failed: %lu", GetLastError());
+        return false;
+    }
+
+    if (g_shutdownRequested.load()) {
+        g_recycleWorkerStop.store(true);
+        CloseHandle(g_hRecycleWorkerEvent);
+        g_hRecycleWorkerEvent = NULL;
         return false;
     }
 
@@ -1675,6 +1749,14 @@ static bool InitializeRecycleWorker() {
         Wh_Log(L"D&D worker: CreateThread failed: %lu", GetLastError());
         CloseHandle(g_hRecycleWorkerEvent);
         g_hRecycleWorkerEvent = NULL;
+        return false;
+    }
+
+    if (g_shutdownRequested.load()) {
+        g_recycleWorkerStop.store(true);
+        if (g_hRecycleWorkerEvent) {
+            (void)SetEvent(g_hRecycleWorkerEvent);
+        }
         return false;
     }
 
@@ -1689,8 +1771,19 @@ static void RequestRecycleWorkerStop() {
 }
 
 static bool QueueRecycleWorkerJob(HWND owner, std::vector<std::wstring> paths) {
-    if (paths.empty() || g_shutdownRequested.load() ||
-        !g_hRecycleWorkerThread || !g_hRecycleWorkerEvent) {
+    if (paths.empty() || g_shutdownRequested.load()) {
+        return false;
+    }
+
+    if (!InitializeRecycleWorker()) {
+        if (!g_shutdownRequested.load()) {
+            Wh_Log(L"D&D worker: lazy initialization failed; rejecting drop");
+        }
+        return false;
+    }
+
+    if (g_shutdownRequested.load()) {
+        RequestRecycleWorkerStop();
         return false;
     }
 
@@ -1713,8 +1806,6 @@ static bool QueueRecycleWorkerJob(HWND owner, std::vector<std::wstring> paths) {
     job->owner = owner;
     job->paths = std::move(paths);
 
-    // Transfer ownership to the atomic pending slot. If the slot is already
-    // occupied, immediately reclaim the object locally before returning.
     RecycleWorkerJob* raw = job.release();
     PVOID previous = InterlockedCompareExchangePointer(
         reinterpret_cast<PVOID volatile*>(&g_pendingRecycleWorkerJob),
@@ -1724,6 +1815,13 @@ static bool QueueRecycleWorkerJob(HWND owner, std::vector<std::wstring> paths) {
         std::unique_ptr<RecycleWorkerJob> rejectedJob(raw);
         g_recycleWorkerBusy.store(false);
         Wh_Log(L"D&D worker: pending job slot unexpectedly occupied");
+        return false;
+    }
+
+    if (g_shutdownRequested.load()) {
+        std::unique_ptr<RecycleWorkerJob> cancelledJob(TakePendingRecycleWorkerJob());
+        g_recycleWorkerBusy.store(false);
+        RequestRecycleWorkerStop();
         return false;
     }
 
@@ -1896,7 +1994,7 @@ public:
         }
 
         // Once entered, OLE owns the session; the mouse hook must not hide the target before Drop().
-        const ULONGLONG generation = g_oleDragGeneration.fetch_add(1) + 1;
+        (void)g_oleDragGeneration.fetch_add(1);
         g_dragGestureSawOle = true;
         g_trayState.oleReleaseDeadline = 0;
         g_oleDragActive.store(m_hasValidFormat);
@@ -1906,10 +2004,8 @@ public:
 
         if (m_hasValidFormat && (*pdwEffect & DROPEFFECT_MOVE)) {
             *pdwEffect = DROPEFFECT_MOVE;
-            Wh_Log(L"D&D: DragEnter (CF_HDROP accepted), session=%llu", generation);
         } else {
             *pdwEffect = DROPEFFECT_NONE;
-            Wh_Log(L"D&D: DragEnter rejected, session=%llu", generation);
         }
         return S_OK;
     }
@@ -1927,12 +2023,9 @@ public:
 
     STDMETHODIMP DragLeave() override {
         m_hasValidFormat = false;
-        const ULONGLONG generation = g_oleDragGeneration.load();
         g_oleDragActive.store(false);
 
         // DragLeave is temporary; keep the target armed so OLE can DragEnter again on re-entry.
-        Wh_Log(L"D&D: DragLeave, session=%llu (target kept armed for re-entry)", generation);
-
         (void)SetCursor(LoadCursor(NULL, IDC_ARROW));
         return S_OK;
     }
@@ -1944,8 +2037,8 @@ public:
             m_hasValidFormat = false;
             const ULONGLONG generation = g_oleDragGeneration.load();
             g_oleDragActive.store(false);
-            if (g_hWnd) {
-                (void)PostMessageW(g_hWnd, WM_USER_END_OLE_DRAG, static_cast<WPARAM>(generation), 0);
+            if (HWND hWnd = GetSafeHwnd()) {
+                (void)PostMessageW(hWnd, WM_USER_END_OLE_DRAG, static_cast<WPARAM>(generation), 0);
             }
             return E_POINTER;
         }
@@ -1968,13 +2061,12 @@ public:
                 if (queued) {
                     // Ownership of the operation is now ours. Report NONE so the
                     // source returns from DoDragDrop without deleting the items itself.
-                    const bool effectReported =
-                        ReportPerformedDropEffect(pDataObj, DROPEFFECT_NONE);
+                    if (!ReportPerformedDropEffect(pDataObj, DROPEFFECT_NONE)) {
+                        Wh_Log(
+                            L"D&D: performed drop effect could not be reported; "
+                            L"using pdwEffect fallback");
+                    }
                     *pdwEffect = DROPEFFECT_NONE;
-                    Wh_Log(
-                        L"D&D: Drop queued for asynchronous recycle (CF_HDROP); "
-                        L"performed effect%s",
-                        effectReported ? L" reported" : L" fallback via pdwEffect");
                 } else {
                     *pdwEffect = DROPEFFECT_NONE;
                     Wh_Log(L"D&D: Drop rejected (CF_HDROP)");
@@ -1994,8 +2086,8 @@ public:
         g_oleDragActive.store(false);
 
         // Post cleanup after OLE returns; the generation rejects stale completion messages.
-        if (g_hWnd) {
-            (void)PostMessageW(g_hWnd, WM_USER_END_OLE_DRAG, static_cast<WPARAM>(generation), 0);
+        if (HWND hWnd = GetSafeHwnd()) {
+            (void)PostMessageW(hWnd, WM_USER_END_OLE_DRAG, static_cast<WPARAM>(generation), 0);
         }
 
         (void)SetCursor(LoadCursor(NULL, IDC_ARROW));
@@ -2056,27 +2148,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         return 0;
     }
 
-    case WM_LBUTTONUP:
-        if (g_hWnd) {
-            PostMessageW(g_hWnd, WM_TRAYICON, 0,
-                         g_trayVersion4 ? NIN_SELECT : WM_LBUTTONUP);
-        }
-        return 0;
 
-    case WM_LBUTTONDBLCLK:
-        if (g_hWnd) PostMessageW(g_hWnd, WM_TRAYICON, 0, WM_LBUTTONDBLCLK);
-        return 0;
-
-    case WM_MBUTTONUP:
-        if (g_hWnd) PostMessageW(g_hWnd, WM_TRAYICON, 0, WM_MBUTTONUP);
-        return 0;
-
-    case WM_RBUTTONUP:
-        if (g_hWnd) {
-            PostMessageW(g_hWnd, WM_TRAYICON, 0,
-                         g_trayVersion4 ? WM_CONTEXTMENU : WM_RBUTTONUP);
-        }
-        return 0;
     }
     return DefWindowProcW(hWnd, message, wParam, lParam);
 }
@@ -2362,8 +2434,7 @@ static UINT GetDpiForReferenceWindow(HWND hWnd) {
 }
 
 // Read the effective DPI from the real window currently occupying the tray
-// rectangle. Unlike the old fallback probe, this doesn't move or show our
-// topmost drag overlay.
+// rectangle without moving or showing our topmost drag overlay.
 static UINT GetDpiForTrayRect(const RECT& rect) {
     if (rect.right <= rect.left || rect.bottom <= rect.top) {
         return GetDpiForReferenceWindow(g_hOverlayWnd);
@@ -3057,7 +3128,7 @@ HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::w
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-        
+
         g.DrawImage(&bigBmp, 0, 0, cx, cy);
     }
 
@@ -3085,8 +3156,8 @@ static HICON LoadShellStockIcon(SHSTOCKICONID iconId, int iconSize) {
         }
     }
 
-    // Fallback to the Shell-provided small stock icon if explicit extraction
-    // fails for any reason. This preserves the previous behavior.
+    // Fall back to the Shell-provided small stock icon if explicit extraction
+    // fails for any reason.
     SHSTOCKICONINFO info = { sizeof(info) };
     return SUCCEEDED(
                SHGetStockIconInfo(iconId, SHGSI_ICON | SHGSI_SMALLICON, &info))
@@ -3325,8 +3396,6 @@ HICON LoadCustomIcon(
     if (path.empty()) return NULL;
 
     const std::wstring pathStr(path);
-
-    Wh_Log(L"LoadCustomIcon attempting to load path: %s", pathStr.c_str());
 
     const int size = iconSize;
 
@@ -3571,7 +3640,6 @@ static DWORD WINAPI MouseHookThreadProc(LPVOID parameter) {
             (void)UnhookWindowsHookEx(hook);
         }
         g_mouseHookInstalled.store(false);
-        Wh_Log(L"D&D hook: thread stopped");
         return 0;
     }
 
@@ -3593,7 +3661,6 @@ static DWORD WINAPI MouseHookThreadProc(LPVOID parameter) {
     }
 
     g_mouseHookInstalled.store(false);
-    Wh_Log(L"D&D hook: thread stopped");
     return 0;
 }
 
@@ -3695,8 +3762,6 @@ static bool StartMouseHookThread() {
         return false;
     }
 
-    Wh_Log(L"D&D hook: dedicated thread started (tid=%lu)",
-           g_mouseHookThreadId);
     return true;
 }
 
@@ -3730,9 +3795,9 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
             g_pDropTarget = nullptr;
         }
 
-        // UI Automation is created lazily only for R50 chevron safety. Release
-        // it together with the rest of the D&D runtime state when D&D becomes
-        // ineffective (for example while Hide when empty is enabled).
+        // UI Automation is created lazily only for notification-area overflow
+        // safety. Release it with the rest of the D&D runtime state when D&D
+        // becomes ineffective (for example while Hide when empty is enabled).
         ShutdownTrayUiAutomation();
         g_oleDragActive.store(false);
         return true;
@@ -3761,7 +3826,6 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         }
 
         g_pDropTarget = target;
-        Wh_Log(L"D&D: RegisterDragDrop succeeded.");
     }
 
     if (!StartMouseHookThread()) {
@@ -3788,7 +3852,98 @@ static void SetTrayIdentity(bool useGuid) {
     }
 }
 
-static bool AddTrayIconAndNegotiateVersion(HWND hWnd, bool reInstantiation) {
+static bool ProbeTrayIconPresence(
+    HWND hWnd, RECT* rectOut = nullptr, HRESULT* hrOut = nullptr) {
+    NOTIFYICONIDENTIFIER nid = { sizeof(nid) };
+    nid.hWnd = hWnd;
+    if (g_trayUseGuid) {
+        nid.guidItem = TRAY_ICON_GUID;
+    } else {
+        nid.uID = TRAY_ICON_ID;
+    }
+
+    RECT fresh = {};
+    const HRESULT hr = Shell_NotifyIconGetRect(&nid, &fresh);
+    if (hrOut) {
+        *hrOut = hr;
+    }
+
+    const bool present =
+        SUCCEEDED(hr) &&
+        fresh.right > fresh.left &&
+        fresh.bottom > fresh.top;
+    if (!present) {
+        return false;
+    }
+
+    if (rectOut) {
+        *rectOut = fresh;
+    }
+    return true;
+}
+
+static void CacheTrayIconRect(const RECT& rect) {
+    g_trayState.cachedIconRect = rect;
+    g_trayState.isIconRectValid = true;
+}
+
+static bool RemoveTrayIcon(HWND hWnd) {
+    if (!g_iconVisible) {
+        return true;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    if (Shell_NotifyIconW(NIM_DELETE, &g_nid)) {
+        g_iconVisible = false;
+        g_trayVersion4 = false;
+        InvalidateIconRectCache();
+        return true;
+    }
+
+    const DWORD firstError = GetLastError();
+    RECT existingRect = {};
+    HRESULT presenceHr = E_FAIL;
+    if (!ProbeTrayIconPresence(hWnd, &existingRect, &presenceHr)) {
+        g_iconVisible = false;
+        g_trayVersion4 = false;
+        InvalidateIconRectCache();
+        Wh_Log(
+            L"Tray: NIM_DELETE failed (error=%lu) but Shell no longer reports the icon; treating it as absent",
+            firstError);
+        return true;
+    }
+
+    CacheTrayIconRect(existingRect);
+    SetLastError(ERROR_SUCCESS);
+    if (Shell_NotifyIconW(NIM_DELETE, &g_nid)) {
+        g_iconVisible = false;
+        g_trayVersion4 = false;
+        InvalidateIconRectCache();
+        Wh_Log(
+            L"Tray: NIM_DELETE recovered on retry after initial error=%lu",
+            firstError);
+        return true;
+    }
+
+    const DWORD retryError = GetLastError();
+    if (!ProbeTrayIconPresence(hWnd, nullptr, &presenceHr)) {
+        g_iconVisible = false;
+        g_trayVersion4 = false;
+        InvalidateIconRectCache();
+        Wh_Log(
+            L"Tray: NIM_DELETE retry failed (first=%lu retry=%lu) but icon absence was confirmed",
+            firstError, retryError);
+        return true;
+    }
+
+    Wh_Log(
+        L"Tray: NIM_DELETE failed twice (first=%lu retry=%lu hr=0x%08lX); keeping internalVisible=1 because Shell presence is confirmed",
+        firstError, retryError, static_cast<unsigned long>(presenceHr));
+    return false;
+}
+
+
+static bool AddTrayIconAndNegotiateVersion(HWND hWnd) {
     if (!Shell_NotifyIconW(NIM_ADD, &g_nid)) {
         if (!g_trayUseGuid || g_trayGuidValidated) {
             return false;
@@ -3811,17 +3966,10 @@ static bool AddTrayIconAndNegotiateVersion(HWND hWnd, bool reInstantiation) {
         g_trayGuidValidated = true;
     }
 
-    if (reInstantiation) {
-        Wh_Log(L"Tray: NIM_ADD succeeded (re-instantiation).");
-    } else {
-        Wh_Log(L"Tray: NIM_ADD succeeded.");
-    }
-
     g_nid.uVersion = NOTIFYICON_VERSION_4;
 
     if (Shell_NotifyIconW(NIM_SETVERSION, &g_nid)) {
         g_trayVersion4 = true;
-        Wh_Log(L"Tray: NIM_SETVERSION(4) succeeded.");
     } else {
         g_trayVersion4 = false;
         Wh_Log(L"Tray: NIM_SETVERSION(4) failed: %lu (fallback to legacy)",
@@ -3869,11 +4017,11 @@ bool UpdateTrayState() {
 
     // Hide the notification icon when requested and the bin is empty.
     if (isEmpty && g_settings.hideWhenEmpty) {
-        if (g_iconVisible) {
-            Shell_NotifyIconW(NIM_DELETE, &g_nid);
-            g_iconVisible = false;
-            InvalidateIconRectCache();
+        if (!RemoveTrayIcon(hWnd)) {
+            UpdateOverlayState();
+            return false;
         }
+
         g_hCurrentIcon.reset();
         g_trayState.lastKey = {};
 
@@ -3890,8 +4038,8 @@ bool UpdateTrayState() {
     const IconCacheKey currentKey = BuildIconCacheKey(isEmpty, isDark, iconSize);
 
     // Re-render only when content, theme, size or settings changed.
-    const bool iconUnchanged = !g_forceIconRegen && 
-                               g_hCurrentIcon && 
+    const bool iconUnchanged = !g_forceIconRegen &&
+                               g_hCurrentIcon &&
                                (currentKey == g_trayState.lastKey);
 
 
@@ -3936,20 +4084,92 @@ bool UpdateTrayState() {
 
     g_forceIconRegen = false;
 
-    // Add or update the notification-area icon.
+    // Add or update the notification-area icon. Keep our internal visibility
+    // flag reconciled with the Shell: one transient NIM_MODIFY failure must not
+    // strand g_iconVisible=false while the GUID-backed icon still exists.
     bool success = false;
+
+    const bool trayIdentityWasEstablished =
+        !g_trayUseGuid || g_trayGuidValidated;
+    if (!g_iconVisible && trayIdentityWasEstablished) {
+        RECT existingRect = {};
+        HRESULT presenceHr = E_FAIL;
+        if (ProbeTrayIconPresence(hWnd, &existingRect, &presenceHr)) {
+            g_iconVisible = true;
+            CacheTrayIconRect(existingRect);
+            Wh_Log(
+                L"Tray: visibility reconciled: internalVisible=0 shellPresent=1 identity=%s "
+                L"getRectHr=0x%08lX rect=%ld,%ld-%ld,%ld",
+                g_trayUseGuid ? L"GUID" : L"hWnd+uID",
+                static_cast<unsigned long>(presenceHr),
+                existingRect.left, existingRect.top,
+                existingRect.right, existingRect.bottom);
+        }
+    }
+
     if (!g_iconVisible) {
-        success = AddTrayIconAndNegotiateVersion(hWnd, false);
-    } else if (Shell_NotifyIconW(NIM_MODIFY, &g_nid)) {
-        success = true;
+        success = AddTrayIconAndNegotiateVersion(hWnd);
     } else {
-        // Re-add the icon if Explorer lost it.
-        g_iconVisible = false;
-        success = AddTrayIconAndNegotiateVersion(hWnd, true);
+        SetLastError(ERROR_SUCCESS);
+        if (Shell_NotifyIconW(NIM_MODIFY, &g_nid)) {
+            success = true;
+        } else {
+            const DWORD modifyLastError = GetLastError();
+            ++g_trayModifyFailureCount;
+
+            RECT existingRect = {};
+            HRESULT presenceHr = E_FAIL;
+            const bool shellPresent =
+                ProbeTrayIconPresence(hWnd, &existingRect, &presenceHr);
+            if (shellPresent) {
+                CacheTrayIconRect(existingRect);
+            }
+
+            Wh_Log(
+                L"Tray: NIM_MODIFY failure #%llu: lastError=%lu internalVisible=1 "
+                L"identity=%s getRectHr=0x%08lX shellPresent=%d rect=%ld,%ld-%ld,%ld",
+                static_cast<unsigned long long>(g_trayModifyFailureCount),
+                static_cast<unsigned long>(modifyLastError),
+                g_trayUseGuid ? L"GUID" : L"hWnd+uID",
+                static_cast<unsigned long>(presenceHr),
+                shellPresent ? 1 : 0,
+                existingRect.left, existingRect.top,
+                existingRect.right, existingRect.bottom);
+            if (shellPresent) {
+                // The Shell still owns our icon. Preserve g_iconVisible so D&D
+                // remains available and retry the transient update once.
+                SetLastError(ERROR_SUCCESS);
+                success = Shell_NotifyIconW(NIM_MODIFY, &g_nid) != FALSE;
+                if (success) {
+                    Wh_Log(
+                        L"Tray: NIM_MODIFY retry recovered #%llu",
+                        static_cast<unsigned long long>(g_trayModifyFailureCount));
+                } else {
+                    const DWORD retryLastError = GetLastError();
+                    Wh_Log(
+                        L"Tray: NIM_MODIFY retry failed #%llu: lastError=%lu; "
+                        L"keeping internalVisible=1 because Shell presence was confirmed",
+                        static_cast<unsigned long long>(g_trayModifyFailureCount),
+                        static_cast<unsigned long>(retryLastError));
+                }
+            } else {
+                // Only treat the icon as absent after a fresh Shell presence
+                // probe fails. If re-add also fails, the next refresh probes
+                // Shell again before trying another NIM_ADD, so a transient
+                // mismatch cannot become a permanent false state.
+                g_iconVisible = false;
+                success = AddTrayIconAndNegotiateVersion(hWnd);
+                Wh_Log(
+                    L"Tray: re-add after NIM_MODIFY failure #%llu: result=%d internalVisible=%d",
+                    static_cast<unsigned long long>(g_trayModifyFailureCount),
+                    success ? 1 : 0, g_iconVisible ? 1 : 0);
+            }
+        }
     }
 
     if (!success) {
-        Wh_Log(L"Shell_NotifyIcon failed, last error: %lu", GetLastError());
+        Wh_Log(L"Shell_NotifyIcon update failed; internalVisible=%d",
+               g_iconVisible ? 1 : 0);
     }
 
     // Keep a visible drag overlay aligned with the current icon.
@@ -4215,22 +4435,12 @@ bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
         return true;
     }
 
-    NOTIFYICONIDENTIFIER nid = { sizeof(nid) };
-    nid.hWnd = hWnd;
-    if (g_trayUseGuid) {
-        nid.guidItem = TRAY_ICON_GUID;
-    } else {
-        nid.uID = TRAY_ICON_ID;
-    }
-
     RECT fresh = {};
-    const HRESULT hr = Shell_NotifyIconGetRect(&nid, &fresh);
-    if (FAILED(hr) || fresh.right <= fresh.left || fresh.bottom <= fresh.top) {
+    if (!ProbeTrayIconPresence(hWnd, &fresh, nullptr)) {
         return false;
     }
 
-    g_trayState.cachedIconRect = fresh;
-    g_trayState.isIconRectValid = true;
+    CacheTrayIconRect(fresh);
     rect = fresh;
     return true;
 }
@@ -4374,9 +4584,6 @@ void CheckDragStatus(HWND hWnd) {
             } else {
                 g_trayState.dragChevronNextProbeTick = 0;
             }
-            if (wasBlocked && g_trayState.dragChevronTracking) {
-                Wh_Log(L"D&D: real overflow icon resolved; drop target available");
-            }
         } else {
             // Destructive action: if chevron classification is unavailable,
             // fail closed for this gesture and retry UIA at a bounded rate.
@@ -4496,28 +4703,23 @@ const WCHAR* TimerName(UINT timerId) {
         case TIMER_SHELL_COALESCE_ID: return L"SHELL_COALESCE";
         case TIMER_DPI_REINSTALL_ID: return L"DPI_REINSTALL";
         case TIMER_DPI_WATCH_ID: return L"DPI_WATCH";
+        case TIMER_SHELL_REGISTRATION_ID: return L"SHELL_REGISTRATION";
         default: return L"UNKNOWN";
     }
 }
 
 bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs) {
-    const UINT_PTR result = SetTimer(hWnd, timerId, intervalMs, NULL);
-    if (result != 0) {
-        if (timerId != TIMER_DRAG_POLL_ID) {
-            Wh_Log(L"Timer START %s: %u ms", TimerName(timerId), intervalMs);
-        }
+    if (SetTimer(hWnd, timerId, intervalMs, NULL) != 0) {
         return true;
     }
-    Wh_Log(L"Timer START %s FAILED: interval=%u ms error=%lu", TimerName(timerId), intervalMs, GetLastError());
+
+    Wh_Log(L"Timer START %s FAILED: interval=%u ms error=%lu",
+           TimerName(timerId), intervalMs, GetLastError());
     return false;
 }
 
 bool KillLoggedTimer(HWND hWnd, UINT timerId) {
-    const BOOL result = KillTimer(hWnd, timerId);
-    if (result && timerId != TIMER_DRAG_POLL_ID) {
-        Wh_Log(L"Timer STOP %s", TimerName(timerId));
-    }
-    return result != FALSE;
+    return KillTimer(hWnd, timerId) != FALSE;
 }
 
 static void StartStartupRetryTimer(HWND hWnd, UINT initialIntervalMs) {
@@ -4601,21 +4803,56 @@ static void StartDisplaySettleTimer(HWND hWnd) {
         SetLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID, DISPLAY_SETTLE_INTERVAL_MS);
 }
 
-static void UnregisterShellNotifications() {
+
+static bool UnregisterShellNotifications(
+    const wchar_t* reason = L"unspecified",
+    bool preserveIdOnFailure = true) {
     if (!g_shellNotifyLock) {
-        return;
+        return true;
     }
 
-    if (!SHChangeNotifyDeregister(g_shellNotifyLock)) {
-        Wh_Log(L"Shell notify: deregistration failed for id=%lu",
-               g_shellNotifyLock);
+    const ULONG oldId = g_shellNotifyLock;
+    SetLastError(ERROR_SUCCESS);
+    const BOOL ok = SHChangeNotifyDeregister(oldId);
+    const DWORD lastError = GetLastError();
+    if (!ok) {
+        if (preserveIdOnFailure) {
+            Wh_Log(
+                L"Shell notify: deregistration failed for id=%lu reason=%s error=%lu; preserving id for retry",
+                oldId, reason, lastError);
+        } else {
+            // TaskbarCreated marks a new Explorer/Shell generation. Do not let
+            // an old, no-longer-deregisterable id block a fresh subscription.
+            g_shellNotifyLock = 0;
+            Wh_Log(
+                L"Shell notify: deregistration failed for old Shell generation id=%lu reason=%s error=%lu; discarding stale id",
+                oldId, reason, lastError);
+        }
+        return false;
     }
 
     g_shellNotifyLock = 0;
+    return true;
 }
 
-static bool RegisterShellNotifications(HWND hWnd) {
-    UnregisterShellNotifications();
+
+// Decode the narrow observed extended-event signature used only to filter
+// a known irrelevant periodic Firefox Jump List notification.
+
+static bool RegisterShellNotifications(HWND hWnd, const wchar_t* reason = L"unspecified") {
+    if (!g_firstShellRegistrationGateOpen) {
+        return false;
+    }
+
+    // Never lose track of an existing subscription. If deregistration fails,
+    // leave its id intact and let the bounded recovery timer retry later.
+    if (g_shellNotifyLock &&
+        !UnregisterShellNotifications(L"pre-register replacement")) {
+        Wh_Log(
+            L"Shell notify: replacement deferred because deregistration failed; reason=%s id=%lu",
+            reason, g_shellNotifyLock);
+        return false;
+    }
 
     PIDLIST_ABSOLUTE pidlBin = NULL;
     const HRESULT hr =
@@ -4626,27 +4863,31 @@ static bool RegisterShellNotifications(HWND hWnd) {
         return false;
     }
 
-    // Include child changes so restores trigger promptly.
     SHChangeNotifyEntry entry = { pidlBin, TRUE };
     const ULONG registration = SHChangeNotifyRegister(
         hWnd,
-        SHCNRF_InterruptLevel | SHCNRF_ShellLevel,
-        SHCNE_ALLEVENTS,
+        SHCNRF_InterruptLevel | SHCNRF_ShellLevel | SHCNRF_NewDelivery,
+        kRecycleBinShellChangeMask,
         WM_SHELLNOTIFY,
         1,
         &entry);
-
     CoTaskMemFree(pidlBin);
 
     if (!registration) {
-        Wh_Log(L"Shell notify: registration failed");
+        Wh_Log(L"Shell notify: registration failed; reason=%s", reason);
         return false;
     }
 
     g_shellNotifyLock = registration;
-    Wh_Log(L"Shell notify: registered id=%lu", g_shellNotifyLock);
+    g_shellRegistrationRefreshPending = false;
+    Wh_Log(
+        L"Shell notify: registered id=%lu mask=0x%08lX delivery=NewDelivery reason=%s",
+        g_shellNotifyLock,
+        static_cast<unsigned long>(kRecycleBinShellChangeMask),
+        reason);
     return true;
 }
+
 
 static void ApplyPendingSettings(HWND hWnd) {
     if (!ConsumePendingSettings()) return;
@@ -4658,6 +4899,106 @@ static void ApplyPendingSettings(HWND hWnd) {
     (void)SetDragDropEnabled(hWnd, IsDragDropEffectivelyEnabled());
     UpdateTrayState();
 }
+
+
+struct ExtendedEventInfo {
+    bool valid = false;
+    unsigned short item1Cb = 0;
+    unsigned short item2Cb = 0;
+    unsigned long ordinal = 0;
+    unsigned long param = 0;
+    const unsigned char* item2Bytes = nullptr;
+};
+
+static ExtendedEventInfo DecodeExtendedEventPidls(
+    const ITEMIDLIST* const* pidls) {
+    ExtendedEventInfo info{};
+    if (!pidls) {
+        return info;
+    }
+
+    const ITEMIDLIST* pidl1 = pidls[0];
+    const ITEMIDLIST* pidl2 = pidls[1];
+
+    if (pidl1) {
+        const auto* bytes = reinterpret_cast<const unsigned char*>(pidl1);
+        memcpy(&info.item1Cb, bytes, sizeof(info.item1Cb));
+
+        // SHChangeDWORDAsIDList is byte-packed:
+        // USHORT cb @0, DWORD dwItem1 @2, DWORD dwItem2 @6.
+        if (info.item1Cb >= 10) {
+            memcpy(&info.ordinal, bytes + 2, sizeof(info.ordinal));
+            memcpy(&info.param, bytes + 6, sizeof(info.param));
+            info.valid = true;
+        }
+    }
+
+    if (pidl2) {
+        info.item2Bytes =
+            reinterpret_cast<const unsigned char*>(pidl2);
+        memcpy(&info.item2Cb, info.item2Bytes, sizeof(info.item2Cb));
+    }
+
+    return info;
+}
+
+static bool IsAsciiHexWchar(wchar_t ch) {
+    return (ch >= L'0' && ch <= L'9') ||
+           (ch >= L'A' && ch <= L'F') ||
+           (ch >= L'a' && ch <= L'f');
+}
+
+static bool LooksLikeObservedFirefoxInstallHashPidl(
+    const ExtendedEventInfo& info) {
+    // The observed Firefox Jump List notification carries a 522-byte SHITEMID:
+    // USHORT cb + a 260-WCHAR payload whose beginning is Firefox's
+    // 16-character hexadecimal installation hash (e.g. 308046B0AF4A39CB).
+    constexpr size_t kHashChars = 16;
+    constexpr size_t kRequiredBytes =
+        sizeof(unsigned short) + kHashChars * sizeof(wchar_t);
+
+    if (!info.item2Bytes ||
+        info.item2Cb != 522 ||
+        info.item2Cb < kRequiredBytes) {
+        return false;
+    }
+
+    wchar_t hash[kHashChars];
+    memcpy(hash,
+           info.item2Bytes + sizeof(unsigned short),
+           sizeof(hash));
+
+    for (wchar_t ch : hash) {
+        if (!IsAsciiHexWchar(ch)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool IsKnownIrrelevantExtendedEvent(
+    const ITEMIDLIST* const* pidls) {
+    const ExtendedEventInfo info = DecodeExtendedEventPidls(pidls);
+    if (!info.valid) {
+        return false;
+    }
+
+    // Real-Windows observation:
+    // Firefox's periodic Windows Jump List refresh produces a global/private
+    // SHCNE_EXTENDED_EVENT with ordinal 25, param 0 and the PIDL shape below.
+    // Do not assign a semantic name to ordinal 25: it is undocumented.
+    //
+    // Keep all other extended events, including unknown ordinals, so the mod
+    // doesn't depend on private Shell numbering (Recycle Bin changes observed
+    // on this build used another private ordinal).
+    return info.ordinal == 25 &&
+           info.param == 0 &&
+           info.item1Cb == 10 &&
+           info.item2Cb == 522 &&
+           LooksLikeObservedFirefoxInstallHashPidl(info);
+}
+
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_DPICHANGED && g_hostDpiProbeActive) {
@@ -4672,21 +5013,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
         InvalidateTrayPositionAndRenderSize();
 
-        // Shell-level change-notification registrations can become stale when
-        // Explorer is recreated. Re-establish ours after the Shell settles.
+        // Explorer recreated the notification area. Retire the old subscription
+        // without losing its id on failure, then let bounded recovery establish
+        // a fresh subscription.
         StopShellCoalesceTimer(hWnd);
-        UnregisterShellNotifications();
+        g_shellRegistrationRefreshPending = g_shellNotifyLock != 0;
+        (void)UnregisterShellNotifications(L"TaskbarCreated", false);
+        (void)KillLoggedTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
 
-        // Hide stale drag feedback after an Explorer/taskbar restart.
         HideDropOverlay();
         g_trayState.dragRectRefreshed = false;
         ResetChevronDragTracking();
 
         UpdateTrayState();
 
-        // Retry once Explorer has rebuilt the notification area. A fresh
-        // TaskbarCreated broadcast starts a new bounded recovery sequence.
+        // Later Explorer restarts can recover promptly once the process has
+        // completed its first safe registration. Before that, restart the full
+        // stabilization window from this TaskbarCreated generation.
         StartStartupRetryTimer(hWnd, 250);
+        if (!g_firstShellRegistrationGateOpen) {
+            (void)SetLoggedTimer(
+                hWnd, TIMER_SHELL_REGISTRATION_ID,
+                SHELL_REGISTRATION_DELAY_MS);
+        }
         return 0;
     }
 
@@ -4858,9 +5207,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
                 UpdateTrayState();
             } else if (wParam == TIMER_STARTUP_ID) {
-                bool shellReady = g_shellNotifyLock != 0;
-                if (!shellReady) {
-                    shellReady = RegisterShellNotifications(hWnd);
+                bool shellReady =
+                    g_shellNotifyLock != 0 &&
+                    !g_shellRegistrationRefreshPending;
+
+                if (!shellReady && g_firstShellRegistrationGateOpen) {
+                    shellReady = RegisterShellNotifications(
+                        hWnd, L"startup-retry");
                 }
 
                 const bool trayReady = UpdateTrayState();
@@ -4890,6 +5243,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (wParam == TIMER_DRAG_POLL_ID) {
                 CheckDragStatus(hWnd);
             } else if (wParam == TIMER_DPI_WATCH_ID) {
+                // Avoid cross-process tray work inside nested Shell modal loops.
+                // This is a periodic fallback, so skipping one tick is harmless.
+                if (g_shellModalDepth != 0) {
+                    return 0;
+                }
+
                 // A primary-display switch can move the notification area to
                 // another monitor without producing a useful display event here.
                 // Read the DPI passively from the real Shell window under the tray
@@ -4910,6 +5269,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     g_forceIconRegen = true;
                     UpdateTrayState();
                 }
+            } else if (wParam == TIMER_SHELL_REGISTRATION_ID) {
+                (void)KillLoggedTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
+
+                HWND shellWindow = GetShellWindow();
+                HWND trayWindow = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (!shellWindow || !IsWindow(shellWindow) ||
+                    !trayWindow || !IsWindow(trayWindow)) {
+                    (void)SetLoggedTimer(
+                        hWnd, TIMER_SHELL_REGISTRATION_ID, 1000);
+                    return 0;
+                }
+
+                if (!g_firstShellRegistrationGateOpen) {
+                    g_firstShellRegistrationGateOpen = true;
+                    Wh_Log(
+                        L"Shell notify: first-registration stabilization window completed (%u ms)",
+                        SHELL_REGISTRATION_DELAY_MS);
+                }
+
+                const bool shellReady = RegisterShellNotifications(
+                    hWnd, L"first-delayed-post-Shell");
+                const bool trayReady = UpdateTrayState();
+                if (shellReady && trayReady) {
+                    StopStartupRetryTimer(hWnd);
+                } else {
+                    StartStartupRetryTimer(hWnd, 1000);
+                }
             } else if (wParam == TIMER_SHELL_COALESCE_ID) {
                 StopShellCoalesceTimer(hWnd);
                 UpdateTrayState();
@@ -4917,6 +5303,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
 
                 if (!g_pendingDpiShellReinstall) {
+                    return 0;
+                }
+
+                // A nested Shell modal loop can dispatch WM_TIMER while the owner
+                // window is in use. Defer the one-shot reinstall until it unwinds.
+                if (g_shellModalDepth != 0) {
+                    (void)SetLoggedTimer(
+                        hWnd, TIMER_DPI_REINSTALL_ID, DPI_REINSTALL_DELAY_MS);
                     return 0;
                 }
 
@@ -4998,15 +5392,50 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
 
-        case WM_SHELLNOTIFY:
-            ArmShellCoalesceTimer(hWnd);
+        case WM_SHELLNOTIFY: {
+            PIDLIST_ABSOLUTE* pidls = nullptr;
+            LONG eventId = 0;
+            SetLastError(ERROR_SUCCESS);
+            HANDLE changeLock = SHChangeNotification_Lock(
+                reinterpret_cast<HANDLE>(wParam),
+                static_cast<DWORD>(lParam),
+                &pidls,
+                &eventId);
+            if (!changeLock) {
+                Wh_Log(
+                    L"Shell notify: SHChangeNotification_Lock failed: %lu",
+                    GetLastError());
+                return 0;
+            }
+
+            const LONG eventWithoutInterrupt = eventId & ~SHCNE_INTERRUPT;
+            const bool ignoreEvent =
+                eventWithoutInterrupt == SHCNE_EXTENDED_EVENT &&
+                IsKnownIrrelevantExtendedEvent(
+                    reinterpret_cast<const ITEMIDLIST* const*>(pidls));
+
+            if (!SHChangeNotification_Unlock(changeLock)) {
+                Wh_Log(
+                    L"Shell notify: SHChangeNotification_Unlock failed: %lu",
+                    GetLastError());
+            }
+
+            if (!ignoreEvent) {
+                ArmShellCoalesceTimer(hWnd);
+            }
             return 0;
+        }
 
         case WM_APPLY_SETTINGS:
             ApplyPendingSettings(hWnd);
             return 0;
 
         case WM_USER_RECYCLE_WORK_COMPLETE:
+            // Always refresh state after an asynchronous recycle operation.
+            // Coalescing also absorbs genuine Shell events generated by
+            // IFileOperation around the same time.
+            ArmShellCoalesceTimer(hWnd);
+
             // The worker has released the hidden owner. Complete a shutdown that
             // was deferred while IFileOperation was active.
             if (g_shutdownRequested.load() && CanCloseTrayHost()) {
@@ -5041,10 +5470,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)DestroyWindow(hWnd);
             return 0;
 
+        case WM_NCDESTROY:
+            return DefWindowProcW(hWnd, msg, wParam, lParam);
+
         case WM_DESTROY:
             InterlockedExchangePointer((PVOID volatile*)&g_hWnd, NULL);
 
-            // Stop input tracking and release the OLE target before tray teardown.
             (void)SetDragDropEnabled(hWnd, false);
 
             (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
@@ -5055,6 +5486,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
             (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
             (void)KillLoggedTimer(hWnd, TIMER_DPI_WATCH_ID);
+            (void)KillLoggedTimer(hWnd, TIMER_SHELL_REGISTRATION_ID);
             g_pendingDpiShellReinstall = false;
             g_trayState.displaySettleTimerActive = false;
             g_suppressLeftActivationUntil = 0;
@@ -5064,7 +5496,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ResetChevronDragTracking();
             g_trayState.oleReleaseDeadline = 0;
 
-            UnregisterShellNotifications();
+            (void)UnregisterShellNotifications(L"host-WM_DESTROY");
             if (g_iconVisible) {
                 (void)Shell_NotifyIconW(NIM_DELETE, &g_nid);
                 g_iconVisible = false;
@@ -5072,24 +5504,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_hCurrentIcon.reset();
             PostQuitMessage(0);
             return 0;
+
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
 DWORD WINAPI TrayThreadProc(LPVOID) {
     const HINSTANCE hInstance = g_hThisModule;
+
+    g_firstShellRegistrationGateOpen = false;
+    g_shellRegistrationRefreshPending = false;
+
     ThreadDpiAwarenessGuard dpiAwareness;
-    if (!dpiAwareness) {
-        Wh_Log(L"DPI: failed to enable Per-Monitor V2 awareness: %lu", GetLastError());
-    }
 
     OleInitGuard oleInit;
     if (!oleInit) {
         Wh_Log(L"D&D: OleInitialize failed: 0x%08X", oleInit.GetResult());
         return 0;
     }
-    Wh_Log(L"D&D: OLE initialized.");
-
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
@@ -5102,8 +5534,6 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    // Use a real hidden top-level owner for broadcasts and tray UI.
-    // Layered alpha keeps DPI synchronization visually hidden.
     HWND hWndNew = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         TRAY_WINDOW_CLASS,
@@ -5112,23 +5542,20 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         0, 0, 0, 0,
         NULL, NULL, hInstance, NULL);
     if (!hWndNew) {
-        Wh_Log(L"Tray: Failed to create host window: %lu", GetLastError());
+        const DWORD error = GetLastError();
+        Wh_Log(L"Tray: Failed to create host window: %lu", error);
         (void)UnregisterClassW(TRAY_WINDOW_CLASS, hInstance);
-        return 0; // OleInitGuard handles OleUninitialize().
+        return 0;
     }
 
     (void)SetLayeredWindowAttributes(hWndNew, 0, 1, LWA_ALPHA);
 
-    // SHChangeNotify can originate in the medium-integrity Shell while this
-    // tool process is elevated. Allow only our Shell callback through UIPI.
     if (!ChangeWindowMessageFilterEx(
             hWndNew, WM_SHELLNOTIFY, MSGFLT_ALLOW, nullptr)) {
         Wh_Log(L"Shell notify: ChangeWindowMessageFilterEx failed: %lu",
                GetLastError());
     }
 
-    // Explorer can broadcast TaskbarCreated from a lower-integrity process.
-    // Allow only this registered restart notification through UIPI.
     if (g_wmTaskbarCreated &&
         !ChangeWindowMessageFilterEx(
             hWndNew, g_wmTaskbarCreated, MSGFLT_ALLOW, nullptr)) {
@@ -5144,10 +5571,8 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         return 0;
     }
 
-    // Apply the newest settings snapshot if it arrived while the window was starting.
     (void)ConsumePendingSettings();
 
-    // Keep a transparent physical window as the per-monitor DPI reference.
     WNDCLASSW wcOverlay = {0};
     wcOverlay.style = CS_DBLCLKS;
     wcOverlay.lpfnWndProc = OverlayWndProc;
@@ -5155,8 +5580,8 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     wcOverlay.hCursor = LoadCursor(NULL, IDC_ARROW);
     wcOverlay.lpszClassName = DROP_OVERLAY_CLASS;
     if (!RegisterClassW(&wcOverlay)) {
-        Wh_Log(L"DPI: overlay window class registration failed: %lu",
-               GetLastError());
+        const DWORD error = GetLastError();
+        Wh_Log(L"DPI: overlay window class registration failed: %lu", error);
         (void)DestroyWindow(hWndNew);
         (void)UnregisterClassW(TRAY_WINDOW_CLASS, hInstance);
         return 0;
@@ -5165,11 +5590,9 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     g_hOverlayWnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         DROP_OVERLAY_CLASS, L"", WS_POPUP,
-        0, 0, 0, 0, NULL, NULL, hInstance, NULL
-    );
+        0, 0, 0, 0, NULL, NULL, hInstance, NULL);
 
     if (g_hOverlayWnd) {
-        Wh_Log(L"DPI: reference overlay created (HWND: 0x%p)", g_hOverlayWnd);
         SetLayeredWindowAttributes(g_hOverlayWnd, 0, 1, LWA_ALPHA);
     } else {
         Wh_Log(L"DPI: reference overlay creation failed: %lu", GetLastError());
@@ -5183,16 +5606,18 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     g_nid.uCallbackMessage = WM_TRAYICON;
     g_nid.uVersion = NOTIFYICON_VERSION_4;
 
-    const bool shellReady = RegisterShellNotifications(hWndNew);
+    // Startup stability mitigation: the first SHChangeNotifyRegister call in this
+    // process is intentionally delayed until Shell/taskbar stabilization.
+    (void)SetLoggedTimer(
+        hWndNew, TIMER_SHELL_REGISTRATION_ID,
+        SHELL_REGISTRATION_DELAY_MS);
 
     UpdateRefreshTimer(hWndNew);
     (void)SetLoggedTimer(hWndNew, TIMER_DPI_WATCH_ID, DPI_WATCH_INTERVAL_MS);
     (void)SetDragDropEnabled(hWndNew, IsDragDropEffectivelyEnabled());
     const bool trayReady = UpdateTrayState();
 
-    // A healthy startup needs no retry timer. Keep bounded recovery only for
-    // Shell/tray startup failures.
-    if (!shellReady || !trayReady) {
+    if (!trayReady || !g_shellNotifyLock) {
         StartStartupRetryTimer(hWndNew, 1000);
     }
 
@@ -5214,10 +5639,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         g_iconVisible = false;
     }
 
-    // Fallback cleanup if the message loop exited unexpectedly.
-    UnregisterShellNotifications();
-
-    // Fallback cleanup if WM_DESTROY wasn't reached.
+    (void)UnregisterShellNotifications(L"message-loop-exit");
     (void)SetDragDropEnabled(hWndNew, false);
     ShutdownTrayUiAutomation();
     g_hCurrentIcon.reset();
@@ -5230,7 +5652,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     UnregisterClassW(DROP_OVERLAY_CLASS, hInstance);
     UnregisterClassW(TRAY_WINDOW_CLASS, hInstance);
 
-    return 0; // OleInitGuard handles OleUninitialize().
+    return 0;
 }
 
 // Windhawk tool callbacks
@@ -5245,20 +5667,11 @@ BOOL WhTool_ModInit() {
 
     LoadSettings();
 
-    if (!InitializeRecycleWorker()) {
-        return FALSE;
-    }
-
-    // Dedicated UI/tray thread.
+    // Dedicated UI/tray thread. The recycle worker is created lazily only
+    // when an accepted drag-and-drop operation actually needs it.
     g_hThread = CreateThread(NULL, 0, TrayThreadProc, NULL, 0, NULL);
     if (!g_hThread) {
         Wh_Log(L"CreateThread failed");
-        RequestRecycleWorkerStop();
-        (void)WaitForSingleObject(g_hRecycleWorkerThread, INFINITE);
-        CloseHandle(g_hRecycleWorkerThread);
-        g_hRecycleWorkerThread = NULL;
-        CloseHandle(g_hRecycleWorkerEvent);
-        g_hRecycleWorkerEvent = NULL;
         return FALSE;
     }
 
@@ -5303,6 +5716,9 @@ void WhTool_ModUninit() {
         if (waitResult == WAIT_TIMEOUT) {
             Wh_Log(L"Shutdown: tool threads did not exit within %lu ms; process exit will complete teardown",
                    TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+            if (g_recycleWorkerBusy.load()) {
+                Wh_Log(L"Shutdown: recycle worker was still busy at timeout; the in-flight recycle operation may be interrupted by process exit");
+            }
 
             if (g_hThread) {
                 CloseHandle(g_hThread);
@@ -5354,7 +5770,7 @@ void WhTool_ModUninit() {
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process.
+// The mod will load and run in a dedicated Windhawk tool-mod host process.
 //
 // Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
