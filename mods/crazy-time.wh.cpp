@@ -2298,7 +2298,7 @@ class Panel {
             ListView_SetTextColor(list_, ink_);
             ListView_SetTextBkColor(list_, high_contrast_ ? bg_ : CLR_NONE);
             ListView_SetBkColor(list_, high_contrast_ ? bg_ : field_color());
-            apply(list_, L"DarkMode_Explorer");
+            apply(list_, L"DarkMode_ItemsView"); // Explorer theme draws column separators
             apply(ListView_GetHeader(list_), L"DarkMode_ItemsView");
         }
     }
@@ -3285,7 +3285,25 @@ public:
                 // Rows: rounded accent-tinted selection and subtle hover, painted before the text.
                 if (!self->high_contrast_ && self->list_ && header->code == NM_CUSTOMDRAW && header->hwndFrom == self->list_) {
                     auto* rows = reinterpret_cast<NMLVCUSTOMDRAW*>(lparam);
-                    if (rows->nmcd.dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;
+                    if (rows->nmcd.dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW | CDRF_NOTIFYPOSTPAINT;
+                    if (rows->nmcd.dwDrawStage == CDDS_POSTPAINT) {
+                        // Some Windows 11 builds draw column separators in the empty area; cover it.
+                        RECT empty{}, header{};
+                        GetClientRect(self->list_, &empty);
+                        GetWindowRect(ListView_GetHeader(self->list_), &header);
+                        empty.top = header.bottom - header.top;
+                        if (const int count = ListView_GetItemCount(self->list_); count > 0) {
+                            RECT last{};
+                            if (ListView_GetItemRect(self->list_, count - 1, &last, LVIR_BOUNDS))
+                                empty.top = (std::max)(empty.top, static_cast<LONG>(last.bottom));
+                        }
+                        if (empty.top < empty.bottom) {
+                            HBRUSH brush = CreateSolidBrush(self->field_color());
+                            FillRect(rows->nmcd.hdc, &empty, brush);
+                            DeleteObject(brush);
+                        }
+                        return CDRF_DODEFAULT;
+                    }
                     if (rows->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
                         const int row = static_cast<int>(rows->nmcd.dwItemSpec);
                         const bool selected = ListView_GetItemState(self->list_, row, LVIS_SELECTED) != 0;
