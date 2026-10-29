@@ -2,12 +2,145 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-29T16:37:51.000Z</updated>
+    <updated>2026-10-29T18:02:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magic Pointer 1.0.4]]></title>
+        <id>https://windhawk.net/mods/magic-pointer#03aa5d1759a850ce6b8df6f9a68dc63b99c12cf9</id>
+        <link href="https://windhawk.net/mods/magic-pointer"/>
+        <updated>2026-10-29T18:02:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added ChatGPT and Claude next to Gemini. The one API key setting accepts a key from any of the three and the mod recognizes which service it is for. That service then answers questions and follow-ups and powers Smart suggestions and Translate. Without a key, Gemini in the browser works as before.</li>
+<li>The Model setting is now a level (Fast, Balanced, Smartest) that maps to each service's own models, and the separate suggestions model setting is gone. Gemini model names saved by 1.0.3 are still honored.</li>
+<li>When the chosen model is busy, slow to start or not available on the key's plan, a faster model answers instead and the card says so.</li>
+<li>New Start typing to ask setting (on by default): as soon as the pointer appears, start typing and the card opens at the pointer with your text and no image, and Enter asks. Turn it off to keep typing in the app you were using.</li>
+<li>New Custom pointer file setting to use your own .cur or .ani file (animated cursors included) instead of the pointer arrow. It only replaces the pointer while the Magic Pointer is on screen, scales with Pointer size and display scaling, and gets the same glow. The hint moves aside for large cursors.</li>
+<li>More reliable hand-off to Gemini in the browser: the image and question are retried when Gemini redraws its message box after loading, so an attachment is no longer sometimes left out.</li>
+<li>Translated the new texts and settings and updated the documentation. The new translations were written with AI assistance, so corrections are welcome on GitHub.</li>
+</ul>]]></content>
+        <author>
+            <name>Rono</name>
+            <uri>https://github.com/rono-zeroseven</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.2.0]]></title>
+        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#bd41dcabf387671a682e2083042fdfd54188ecca</id>
+        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
+        <updated>2026-10-29T18:02:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added "aim boundary" feature.</li>
+<li>Off by default. While thumbnail previews are open and the pointer moves from their taskbar button toward them, crossing other taskbar buttons no longer switches the previews, and leaving the taskbar no longer starts closing them. </li>
+<li>A movement counts as heading toward the previews when its direction lies between two boundary lines: one from the button's left edge to the previews' bottom-left corner, and one from the button's right edge to the previews' bottom-right corner.</li>
+<li>Hover changes held back during the movement are applied in order once the pointer reaches the previews, heads outside the boundary lines, or a mouse button is pressed. Buttons that were only crossed on the way are skipped.</li>
+<li>"Aim boundary height on the button (%)" setting, default 100. It sets where the boundary lines meet the button's edges, measured down from the button's top edge (0 is the top edge, 100 the bottom edge).</li>
+<li>The aim boundary feature doesn't work with vertical taskbars.</li>
+<li>Cleaned up README section</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0.2]]></title>
+        <id>https://windhawk.net/mods/file-explorer-content-animation#a0fb63a19b61b5169b38433d5b72357cd84d9f3e</id>
+        <link href="https://windhawk.net/mods/file-explorer-content-animation"/>
+        <updated>2026-10-29T18:02:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Rewrote most of the mod: DirectUI pages now animate through DirectUI's standard layer mechanism and run on the compositor, staying smooth while thumbnails and large folders load.</li>
+<li>New WinUI defaults: 450 ms timeline and 140 DIP entrance; entering a folder uses the entrance transition.</li>
+<li>Optional staggered item reveal with WinUI AddDelete curves, plus a short exit for deleted items.</li>
+<li>Pages wait for the first files to appear instead of animating an empty view.</li>
+<li>Clicking or pressing a key finishes the animation quickly; scrolling hands the content back at once, including with smooth scrolling mods.</li>
+<li>The mod no longer loads in the Control Panel process.</li>
+<li>The DirectComposition fade now also plays when opening Explorer, new tabs and the navigation pane.</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Command Bar 1.2.0]]></title>
+        <id>https://windhawk.net/mods/explorer-command-bar#8b1dc4b804cb693384afa25f56c06c120cf78492</id>
+        <link href="https://windhawk.net/mods/explorer-command-bar"/>
+        <updated>2026-10-29T18:02:34.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="new">New</h3>
+<ul>
+<li>Settings window: a cog button in the command bar opens a Windows 11 style settings window with a live preview of the command bar</li>
+<li>Toolbar items and menus are edited as a tree, with pickers for programs, icons, internal commands and placeholders</li>
+<li>Import and export settings as YAML or JSON</li>
+<li>Show Explorer Command Bar Settings Item and Settings Item Order settings</li>
+<li>Keyboard shortcuts for buttons and menu entries, e.g. <code>Ctrl+Shift+T</code>,<code>Alt+N</code> or <code>F9</code></li>
+<li>Internal commands: <code>internal:TogglePreview</code>, <code>internal:ToggleDetails</code>,<code>internal:OpenWith</code> and <code>internal:FolderOptions</code> (<code>int:</code> also works)</li>
+<li><code>%sel_each%</code> placeholder runs the command per selected item (up to 20)</li>
+<li>Show label and Custom Label Text settings show text next to a button's icon</li>
+<li>Place buttons on the right side setting docks the buttons next to the Details/Preview toggles</li>
+<li>Theme-aware icons with the <code>Light | Dark</code> syntax, e.g. <code>E706 | E708</code></li>
+<li>Icons reload automatically when the Windows theme changes</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li><code>%sel%</code> now expands to all selected items, each in quotes, instead of only the first one</li>
+<li>Every setting now has a description</li>
+<li>Readme updated with the new features</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Buttons now appear in File Explorer windows that were already open when the mod loaded, without opening a new tab or navigating first</li>
+<li>Other bug fixes.</li>
+</ul>]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.6]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#7c0eb2df5fdc4a39f3f0fc1065c8d7b2bf50fffd</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
+        <updated>2026-10-29T18:02:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>new "Single line" option (on by default)</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.4.2]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#fb4b682804d2a506db5efda8d58bf5159580a812</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-10-29T18:02:24.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Addition:</strong></p>
+<ul>
+<li>Added Start Menu &amp; Search settings for hiding pinned apps, adding folders, and support for different start menu &amp; search menu's display alignment(top, center, bottom, etc).</li>
+<li>Added support for setting the TopBar height directly through control styles.</li>
+<li>Added Neon Blue and Neon Blue (Island) themes.</li>
+</ul>
+<p><strong>Updates:</strong></p>
+<ul>
+<li>Updated the Start menu with pinned apps, several other ui changes, optimized its initial loading time, and improved the styling support.</li>
+<li>Improved the Top Bar Search by adding more searches, Quick controls directly through search results(dark mode, night light, power plan, etc) without opening any app.</li>
+<li>Fixed the TopBar appearing in fullscreen apps.</li>
+<li>Fixed Island mode (Width=Auto) causing the Start Menu and Search flyouts to misalign and block mouse inputs.</li>
+<li>Improved the Navigation Panel UI in Settings app.</li>
+<li>Updated the Media Player flyout to remove unnecessary top padding.</li>
+<li>Updated theme: Midnight Neon - remove the Width=Auto causing it to be a island.</li>
+<li>Improved the Styling support</li>
+<li>Other minor updates.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.12]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#3b7ea07a8027c893b0744f6a9356a4ccc0623110</id>
@@ -281,116 +414,6 @@ creation only schedules initialization; XAML is accessed later on its UI thread.
         <author>
             <name>ItsMikesch</name>
             <uri>https://github.com/ItsMikesch</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.22.0]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#aa98356ec7e6636ffed55ee598f18d6d9bdad12b</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-10-28T19:01:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Before deleting or recycling a screenshot, SnapSentry now checks that it is still the same file with the same contents it copied. A file replaced or edited during the countdown is kept.</li>
-<li>Each new screenshot is copied straight away instead of waiting behind earlier countdowns. Popups still appear one at a time.</li>
-<li>Renaming uses the window that was in front when the screenshot appeared, not when it was processed. If another program briefly holds the new file, SnapSentry waits a moment for it rather than skipping the rename.</li>
-<li>Clipboard writes use a proper owner window and retry briefly when another app holds the clipboard.</li>
-<li>File and Path modes no longer offer a Delete button, since the clipboard still points at the file.</li>
-<li>Very large images are left alone, and the number of screenshots waiting at once is limited.</li>
-<li>New Capture sessions option: start a session from the tray icon or Ctrl+Alt+F8 (any of F1 to F11), then review, include or leave out, reorder and caption the screenshots, and export them as a packet of numbered copies with a contact sheet and a Markdown page. Export runs in the background, and session screenshots are never deleted.</li>
-<li>The readme now notes that Windows forgets a "notifications off" choice for SnapSentry when the mod is disabled or updated.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock to Left 2.3.15]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-to-left#bfe2a6241a0320f9138140c899b62def49baece7</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
-        <updated>2026-10-28T19:01:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Place only the native clock/notification button in a dedicated left-side container while preserving its text, calendar and notification interactions.</li>
-<li>Follow readable native system-tray background, border and spacing properties, with asymmetric decoration facing the left screen edge.</li>
-<li>Keep clear of fixed system buttons and application buttons without moving applications or reserving their viewport.</li>
-<li>Restore the native clock when placement is unsafe and retry when effective space, text size or layout changes.</li>
-<li>Support one or two clock text lines; return three or more lines to the native position.</li>
-<li>Limit relocation to single-monitor desktops, keep native waiting observers while multiple monitors are connected, and retry when returning to one monitor even if the layout dimensions are unchanged.</li>
-<li>Remove the internal settings and the earlier experimental tray-group migration and viewport-reservation paths.</li>
-</ul>]]></content>
-        <author>
-            <name>pleromyst</name>
-            <uri>https://github.com/pleromyst</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PaintShop Pro Dark Mode 2.0.0]]></title>
-        <id>https://windhawk.net/mods/psp-dark-mdi-frames#c7cf229cda461c3c3eb38fb92e0513f04d003a77</id>
-        <link href="https://windhawk.net/mods/psp-dark-mdi-frames"/>
-        <updated>2026-10-28T11:03:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed to "PaintShop Pro Dark Mode"; it now darkens the whole interface, not only the image windows.</li>
-<li>New setting: interface darkness for the dark gray surfaces (tool bars, tool column, palettes, tool options bar, dialogs and the area around the color wheel).</li>
-<li>New setting: title bar color of the main window (black by default).</li>
-<li>New setting: accent color that replaces the orange of the "Edit" tab and of the line below the title bar.</li>
-<li>New setting: hide the eight start tiles in the empty workspace (off by default).</li>
-<li>Image window frames and the flash fix are unchanged.</li>
-</ul>]]></content>
-        <author>
-            <name>MrSmith</name>
-            <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Separate System Tray Icons 1.1.0]]></title>
-        <id>https://windhawk.net/mods/separate-system-tray-icons#5c80fd1a143de2c86028e8fc91dae73f880ccb51</id>
-        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
-        <updated>2026-10-28T11:02:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="separatesystemtrayiconsv110">Separate System Tray Icons v1.1.0</h1>
-<ul>
-<li>Network, sound, and battery buttons now read Windows native taskbar glyphs and layers. Button and hover-highlight dimensions follow native taskbar sizing and layout, improving consistency across taskbar sizes and orientations. Battery rendering no longer requires manually installing its font.</li>
-<li>Added <em>Swap troubleshooting position</em> for context menus.</li>
-<li>Added <em>Show master volume slider in Sound output</em> flyout.</li>
-<li>Added <em>Show leaf icon in Energy saver</em> mode.</li>
-<li>Added custom middle-click actions across all buttons.</li>
-<li>Trigger <em>Project</em> flyout using the <em>Control Center</em> button.</li>
-<li>Added vertical stacking for the Battery glyph and percentage, adjusted spacing and centering.</li>
-<li>Kept the Battery glyph working through taskbar size and position changes without restarting Explorer.</li>
-<li>Fixed Energy saver and percentage items remaining greyed out when enabling Energy saver.</li>
-<li>Added settings to define horizontal and vertical padding.</li>
-</ul>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Task Manager Details Icon Size 0.1]]></title>
-        <id>https://windhawk.net/mods/fix-taskmgr-details-icon-size#9d9f4aca2ef130a7388757f192e9f86946314fb7</id>
-        <link href="https://windhawk.net/mods/fix-taskmgr-details-icon-size"/>
-        <updated>2026-10-28T11:02:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixtaskmanagericonsizes">Fix Task Manager Icon Sizes</h1>
-<p><img src="https://i.imgur.com/3l0CqCH.png" alt="compared" /></p>
-<p>This mod lets you configure the Task Manager Details/Services icon sizes. You need to restart the task manager after modifying the settings.</p>
-<p>I don't know from which version of Windows 11 onwards, the icons on the details page have become as small as ants.</p>
-<hr />
-<p>此模组允许您配置任务管理器中“详细信息/服务”图标的尺寸。修改设置后需要重启任务管理器。</p>
-<p>不知道 Windows 11 从哪个版本起，详细信息页面的图标小得跟蚂蚁一样。</p>]]></content>
-        <author>
-            <name>GF-Huang</name>
-            <uri>https://github.com/GF-Huang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DynamicDock 1.0.1]]></title>
-        <id>https://windhawk.net/mods/dynamicdock#bc98c1452d77b3ef8abfcf840d61acb4f18d9240</id>
-        <link href="https://windhawk.net/mods/dynamicdock"/>
-        <updated>2026-10-27T22:01:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Readme is updated to list other mods for compatible use with this mod.</li>
-</ul>]]></content>
-        <author>
-            <name>IIKiiNGsLYII</name>
-            <uri>https://github.com/IIKiiNGsLYII</uri>
         </author>
     </entry>
 </feed>

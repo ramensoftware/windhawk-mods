@@ -1,3 +1,13 @@
+## 1.0.2 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a0fb63a19b61b5169b38433d5b72357cd84d9f3e/mods/file-explorer-content-animation.wh.cpp))
+
+- Rewrote most of the mod: DirectUI pages now animate through DirectUI's standard layer mechanism and run on the compositor, staying smooth while thumbnails and large folders load.
+- New WinUI defaults: 450 ms timeline and 140 DIP entrance; entering a folder uses the entrance transition.
+- Optional staggered item reveal with WinUI AddDelete curves, plus a short exit for deleted items.
+- Pages wait for the first files to appear instead of animating an empty view.
+- Clicking or pressing a key finishes the animation quickly; scrolling hands the content back at once, including with smooth scrolling mods.
+- The mod no longer loads in the Control Panel process.
+- The DirectComposition fade now also plays when opening Explorer, new tabs and the navigation pane.
+
 ## 1.0.1 ([Jun 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ff269b026fa0e4628a625cbfb59da891642bb872/mods/file-explorer-content-animation.wh.cpp))
 
 - GPU-accelerated fade - The fade effect now uses a DirectComposition overlay capturing the previous folder's content (including Mica/Acrylic). The overlay fades out on the GPU compositor thread, fully independent of CPU load from thumbnail rendering.

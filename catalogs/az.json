@@ -5679,7 +5679,7 @@
         "ratingUsers": 41,
         "reviews": 0,
         "trendingSorting": 0.8262850260544631,
-        "updated": 1785947860000,
+        "updated": 1793296954000,
         "users": 1039
       },
       "metadata": {
@@ -5687,8 +5687,9 @@
           "x86-64"
         ],
         "author": "DanRotaru",
-        "compilerOptions": "-ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid",
+        "compilerOptions": "-ladvapi32 -lcomctl32 -ldwmapi -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid",
         "description": "Customize the Windows 11 File Explorer command bar with commands, menus, New+, and a shell context-menu button",
+        "donateUrl": "https://buymeacoffee.com/widget/page/danrotaru",
         "github": "https://github.com/DanRotaru",
         "homepage": "https://dan13.me/",
         "include": [
@@ -5696,7 +5697,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Command Bar",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "explorer-context-menu-classic": {
@@ -7190,7 +7191,7 @@
         "ratingUsers": 334,
         "reviews": 1,
         "trendingSorting": -0.5132575693657203,
-        "updated": 1780405609000,
+        "updated": 1793296960000,
         "users": 27938
       },
       "metadata": {
@@ -7198,7 +7199,7 @@
           "x86-64"
         ],
         "author": "crazyboyybs",
-        "compilerOptions": "-lgdi32 -lole32 -lshell32 -lcomctl32 -ld3d11 -ldxgi",
+        "compilerOptions": "-lgdi32 -lcomctl32 -ld3d11 -ldxgi",
         "description": "Smooth WinUI-like page transition animations for the File Explorer content area.",
         "github": "https://github.com/crazyboyybs",
         "include": [
@@ -7206,7 +7207,7 @@
         ],
         "license": "MIT",
         "name": "File Explorer WinUI-Like Content Animation",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "file-explorer-details-autofit-columns": {
@@ -8796,7 +8797,7 @@
         "ratingUsers": 70,
         "reviews": 0,
         "trendingSorting": 3.336487758525663,
-        "updated": 1790928340000,
+        "updated": 1793296965000,
         "users": 3998
       },
       "metadata": {
@@ -8812,7 +8813,7 @@
         ],
         "license": "MIT",
         "name": "Instant Taskbar Thumbnail Previews",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "internet-status-indicator": {
@@ -9783,19 +9784,19 @@
         "ratingUsers": 94,
         "reviews": 0,
         "trendingSorting": 13.540971363312565,
-        "updated": 1792339266000,
+        "updated": 1793296970000,
         "users": 1485
       },
       "metadata": {
         "author": "Rono",
         "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -loleaut32 -lwinhttp -limm32",
-        "description": "Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini AI about it",
+        "description": "Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini, ChatGPT or Claude about it",
         "github": "https://github.com/rono-zeroseven",
         "include": [
           "windhawk.exe"
         ],
         "name": "Magic Pointer",
-        "version": "1.0.3"
+        "version": "1.0.4"
       }
     },
     "magnifier-headless": {
@@ -17190,7 +17191,7 @@
         "ratingUsers": 48,
         "reviews": 0,
         "trendingSorting": 2.9784742269528808,
-        "updated": 1792965735000,
+        "updated": 1793296949000,
         "users": 608
       },
       "metadata": {
@@ -17206,7 +17207,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Thumbnail Stats",
-        "version": "1.5"
+        "version": "1.6"
       }
     },
     "taskbar-thumbnails": {
@@ -20493,7 +20494,7 @@
         "ratingUsers": 93,
         "reviews": 0,
         "trendingSorting": 1.8610935507795514,
-        "updated": 1792868539000,
+        "updated": 1793296944000,
         "users": 1432
       },
       "metadata": {
@@ -20501,7 +20502,7 @@
           "x86-64"
         ],
         "author": "WasiXGamer",
-        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme",
+        "compilerOptions": "-lwtsapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme",
         "description": "A working TopBar with Flyouts for Windows through Windhawk.",
         "donateUrl": "https://www.patreon.com/WasiXGamer/join",
         "github": "https://github.com/wasixgamer",
@@ -20509,7 +20510,7 @@
           "explorer.exe"
         ],
         "name": "TopBar for Windows",
-        "version": "1.4.1"
+        "version": "1.4.2"
       }
     },
     "window-border-customizer": {

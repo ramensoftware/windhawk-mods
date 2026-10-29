@@ -1,3 +1,13 @@
+## 1.0.4 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/03aa5d1759a850ce6b8df6f9a68dc63b99c12cf9/mods/magic-pointer.wh.cpp))
+
+* Added ChatGPT and Claude next to Gemini. The one API key setting accepts a key from any of the three and the mod recognizes which service it is for. That service then answers questions and follow-ups and powers Smart suggestions and Translate. Without a key, Gemini in the browser works as before.
+* The Model setting is now a level (Fast, Balanced, Smartest) that maps to each service's own models, and the separate suggestions model setting is gone. Gemini model names saved by 1.0.3 are still honored.
+* When the chosen model is busy, slow to start or not available on the key's plan, a faster model answers instead and the card says so.
+* New Start typing to ask setting (on by default): as soon as the pointer appears, start typing and the card opens at the pointer with your text and no image, and Enter asks. Turn it off to keep typing in the app you were using.
+* New Custom pointer file setting to use your own .cur or .ani file (animated cursors included) instead of the pointer arrow. It only replaces the pointer while the Magic Pointer is on screen, scales with Pointer size and display scaling, and gets the same glow. The hint moves aside for large cursors.
+* More reliable hand-off to Gemini in the browser: the image and question are retried when Gemini redraws its message box after loading, so an attachment is no longer sometimes left out.
+* Translated the new texts and settings and updated the documentation. The new translations were written with AI assistance, so corrections are welcome on GitHub.
+
 ## 1.0.3 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2cb665613f187b4f2160998718b76a5600c22011/mods/magic-pointer.wh.cpp))
 
 * Added translations. The hint, the card with its buttons and messages, and the Google Lens helper page now follow your Windows display language. Available in Arabic, Bengali, Chinese (Simplified and Traditional), Croatian, Czech, Danish, Dutch, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian, Persian, Polish, Portuguese (Brazil), Romanian, Russian, Spanish, Swedish, Tamil, Thai, Turkish, Ukrainian and Vietnamese, including right-to-left layouts. To make things easier the translations were written with AI assistance, so corrections are welcome on GitHub.

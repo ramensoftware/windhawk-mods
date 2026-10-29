@@ -1,3 +1,7 @@
+## 1.6 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7c0eb2df5fdc4a39f3f0fc1065c8d7b2bf50fffd/mods/taskbar-thumbnail-stats.wh.cpp))
+
+* new "Single line" option (on by default)
+
 ## 1.5 ([Oct 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3aff1348b40c8c1409004dff596106fdca888445/mods/taskbar-thumbnail-stats.wh.cpp))
 
 * option to measure RAM as private bytes (like System Informer)

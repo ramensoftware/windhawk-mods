@@ -1,3 +1,22 @@
+## 1.4.2 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fb4b682804d2a506db5efda8d58bf5159580a812/mods/windhawk-topbar.wh.cpp))
+
+**Addition:**
+
+* Added Start Menu & Search settings for hiding pinned apps, adding folders, and support for different start menu & search menu's display alignment(top, center, bottom, etc).
+* Added support for setting the TopBar height directly through control styles.
+* Added Neon Blue and Neon Blue (Island) themes.
+
+**Updates:**
+* Updated the Start menu with pinned apps, several other ui changes, optimized its initial loading time, and improved the styling support.
+* Improved the Top Bar Search by adding more searches, Quick controls directly through search results(dark mode, night light, power plan, etc) without opening any app.
+* Fixed the TopBar appearing in fullscreen apps.
+* Fixed Island mode (Width=Auto) causing the Start Menu and Search flyouts to misalign and block mouse inputs.
+* Improved the Navigation Panel UI in Settings app.
+* Updated the Media Player flyout to remove unnecessary top padding.
+* Updated theme: Midnight Neon - remove the Width=Auto causing it to be a island.
+* Improved the Styling support
+* Other minor updates.
+
 ## 1.4.1 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc988a903bbf7aad82025e31a485561824478fa2/mods/windhawk-topbar.wh.cpp))
 
 **Addition:**
