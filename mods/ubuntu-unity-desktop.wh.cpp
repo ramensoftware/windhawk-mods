@@ -2432,6 +2432,9 @@ static void PullOut(HWND w, POINT at) {
 
 static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
+        case WM_DPICHANGED:   // the main screen's scale changed: everything measured and laid out again
+            PostThreadMessageW(GetCurrentThreadId(), WM_APP_REFRESH, 0, 0);
+            return 0;
         case WM_LBUTTONDOWN: {
             float x = GET_X_LPARAM(lp) / (float)g_scale, y = GET_Y_LPARAM(lp) / (float)g_scale;
             bool onSomething = false;
@@ -5537,18 +5540,19 @@ static bool WantsApp(const std::wstring& launch) {
 }
 
 // a file's kind for the Type filter, from its extension
+// its kind, as the Type filter's key (Dutch, like all filter keys; shown through Tr)
 static std::wstring FileKind(const std::wstring& path) {
     DWORD attr = GetFileAttributesW(path.c_str());
-    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) return Tr(L"Mappen");
+    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) return L"Mappen";
     size_t dot = path.find_last_of(L'.');
     std::wstring ext = dot == std::wstring::npos ? L"" : Lower(path.substr(dot)) + L".";
     auto in = [&](const wchar_t* list) { return !ext.empty() && std::wstring(list).find(ext) != std::wstring::npos; };
-    if (in(L".doc.docx.pdf.txt.rtf.odt.xls.xlsx.csv.md.ods.")) return Tr(L"Documenten");
-    if (in(L".png.jpg.jpeg.gif.bmp.webp.heic.tif.tiff.svg.ico.")) return Tr(L"Afbeeldingen");
+    if (in(L".doc.docx.pdf.txt.rtf.odt.xls.xlsx.csv.md.ods.")) return L"Documenten";
+    if (in(L".png.jpg.jpeg.gif.bmp.webp.heic.tif.tiff.svg.ico.")) return L"Afbeeldingen";
     if (in(L".mp3.wav.flac.ogg.m4a.aac.wma.opus.")) return L"Audio";
-    if (in(L".mp4.mkv.avi.mov.wmv.webm.m4v.")) return Tr(L"Video's");
-    if (in(L".ppt.pptx.odp.key.")) return Tr(L"Presentaties");
-    return Tr(L"Overig");
+    if (in(L".mp4.mkv.avi.mov.wmv.webm.m4v.")) return L"Video's";
+    if (in(L".ppt.pptx.odp.key.")) return L"Presentaties";
+    return L"Overig";
 }
 
 // how many days ago a file was last changed (cached: the lists come back on every keystroke)
@@ -5572,7 +5576,7 @@ static double FileAgeDays(const std::wstring& path) {
 
 static std::vector<Result> FilterFiles(const std::vector<Result>& files) {
     std::vector<Result> out;
-    bool byDate = AnyFilter(Tr(L"Laatst gewijzigd")), byType = g_lens == LENS_FILES && AnyFilter(L"Type");
+    bool byDate = AnyFilter(L"Laatst gewijzigd"), byType = g_lens == LENS_FILES && AnyFilter(L"Type");
     for (auto& f : files) {
         if (byDate) {
             double age = FileAgeDays(f.open);
@@ -5626,7 +5630,7 @@ static void BuildSections() {
         case LENS_APPS:
             if (q.empty()) {
                 // browsing: recently used, then one group per kind of app (system tools last)
-                if (!AnyFilter(L"Type") && !AnyFilter(Tr(L"Bronnen"))) g_sections.push_back({Tr(L"Recent gebruikt"), L"\uE81C", RecentAppResults(), 1});
+                if (!AnyFilter(L"Type") && !AnyFilter(L"Bronnen")) g_sections.push_back({Tr(L"Recent gebruikt"), L"\uE81C", RecentAppResults(), 1});
                 std::vector<Result> byKind[ARRAYSIZE(kAppKinds)];
                 for (auto& a : g_apps) {
                     int k = KindOf(a);
@@ -5680,7 +5684,9 @@ static bool ShowWidgets() {
 }
 
 // Windows' Weather app is there (it registers the bingweather: link)
-static bool WeatherAppInstalled() {
+static bool g_weatherApp;   // looked up when the Dash opens (see ShowDash)
+static bool WeatherAppInstalled() { return g_weatherApp; }
+static bool FindWeatherApp() {
     HKEY k;
     if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"bingweather", 0, KEY_READ, &k) != ERROR_SUCCESS) return false;
     RegCloseKey(k);
@@ -6214,6 +6220,7 @@ static void ShowDash(bool show) {
     QueryChanged();
     RequestFiles();
     g_dashOpen = true;
+    g_weatherApp = FindWeatherApp();
     SampleStats();
     SetEvent(g_mediaWake);
     // Unity fades the Dash in with a slight zoom out of its top-left corner (near the Dash button)
@@ -6716,7 +6723,9 @@ static LRESULT CALLBACK GhostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+static bool g_ghostClass;
 static void StartGhost(RECT from, RECT to, double ms, float a0, float a1) {
+    if (!g_ghostClass) return;
     if (g_ghosts.size() >= 6 || !g_set.windowEffects || g_set.animScale <= 0) return;   // the window effects setting
     ms *= g_set.animScale;
     HWND h = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, L"UnityShellGhost", L"", WS_POPUP,
@@ -7127,7 +7136,8 @@ static DWORD WINAPI UiThread(LPVOID) {
     ghost.lpfnWndProc = GhostProc;
     ghost.hInstance = ModInstance();
     ghost.lpszClassName = L"UnityShellGhost";
-    if (RegisterClassExW(&ghost)) g_classes.push_back(ghost.lpszClassName);
+    g_ghostClass = RegisterClassExW(&ghost) != 0;   // no class of our own: no ghosts (never someone else's class)
+    if (g_ghostClass) g_classes.push_back(ghost.lpszClassName);
     g_preview = MakeWindow(L"UnityShellPreviews", PreviewProc, WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE);
     // any window missing: the shell doesn't start (what was made goes again)
     HWND made[] = {g_host, g_panel, g_launcher, g_dash, g_corner, g_strip, g_dashFoot, g_dashTip, g_tip, g_menu, g_pop, g_group, g_preview};
@@ -7208,8 +7218,8 @@ static DWORD WINAPI UiThread(LPVOID) {
     StopTabReader();
     StopDiscordWatch();
     if (g_keyThread) {
-        PostThreadMessageW(g_keyThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_keyThread, INFINITE);   // every call it makes is bounded: it always ends
+        do PostThreadMessageW(g_keyThreadId, WM_QUIT, 0, 0);   // again until it ends (see StopUi)
+        while (WaitForSingleObject(g_keyThread, 100) == WAIT_TIMEOUT);
         CloseHandle(g_keyThread);
         g_keyThread = nullptr;
     }
@@ -7260,8 +7270,9 @@ static void StartUi() {
 
 static void StopUi() {
     if (!g_uiThread) return;
-    PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
-    WaitForSingleObject(g_uiThread, INFINITE);   // every call it makes is bounded: it always ends
+    // posted again until the thread ends: a thread that hasn't made its message queue yet would lose it
+    do PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+    while (WaitForSingleObject(g_uiThread, 100) == WAIT_TIMEOUT);
     CloseHandle(g_uiThread);
     g_uiThread = nullptr;
 }
