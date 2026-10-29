@@ -167,6 +167,7 @@ std::atomic<int> g_tapProfile{2};
 struct Bin {
     double pxPerMm = 0;
     int samples = 0;
+    int rejected = 0;  // in a row, not saved
 };
 
 // Loaded before the touchpad thread starts, saved by it every kSaveIntervalSec and by WhTool_ModUninit
@@ -331,10 +332,15 @@ int NearestBin(double speed) {
 
 void AddSample(double speed, double pxPerMm) {
     Bin& bin = g_curve[NearestBin(speed)];
-    // Far above a trusted range: something else moved the pointer meanwhile (a mouse, a program).
+    // Far above a trusted range: something else moved the pointer meanwhile (a mouse, a program). Several in a
+    // row mean the range itself is off (the touchpad speed was raised, or it sank to 0): it's learned again.
     if (bin.samples >= kBinTrusted && pxPerMm > bin.pxPerMm * 3) {
-        return;
+        if (++bin.rejected < 5) {
+            return;
+        }
+        bin.samples = 0;
     }
+    bin.rejected = 0;
     // A plain average for the first samples, then a moving one, to follow setting changes.
     double alpha = std::max(0.05, 1.0 / (bin.samples + 1));
     bin.pxPerMm = bin.samples ? bin.pxPerMm + (pxPerMm - bin.pxPerMm) * alpha : pxPerMm;
@@ -394,6 +400,23 @@ bool NearMonitorEdge(POINT p) {
     return p.x - r.left < 3 || r.right - 1 - p.x < 3 || p.y - r.top < 3 || r.bottom - 1 - p.y < 3;
 }
 
+// A hidden or clipped pointer (games, 3D viewports, slider drags) is moved back or held, and doesn't show
+// Windows' movement.
+bool PointerCaptured() {
+    CURSORINFO ci{.cbSize = sizeof(ci)};
+    if (GetCursorInfo(&ci) && !(ci.flags & CURSOR_SHOWING)) {
+        return true;
+    }
+    RECT clip;
+    if (!GetClipCursor(&clip)) {
+        return false;
+    }
+    int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    return clip.left > x || clip.top > y || clip.right < x + GetSystemMetrics(SM_CXVIRTUALSCREEN) ||
+           clip.bottom < y + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+}
+
 // Outside a glide, with one finger, Windows moves the pointer: compares the finger's displacement with the
 // pointer's over kChunkSec windows.
 void Learn(const std::vector<const Contact*>& fingers, int touching, double t) {
@@ -404,7 +427,7 @@ void Learn(const std::vector<const Contact*>& fingers, int touching, double t) {
 
     const Contact* c = fingers[0];
     POINT cursor;
-    if (!GetCursorPos(&cursor)) {
+    if (!GetCursorPos(&cursor) || PointerCaptured()) {
         g_learn.active = false;
         return;
     }
