@@ -32,7 +32,7 @@ Adds a modern, interactive seek bar and live playback timestamps directly to the
 - **Auto-Restoring:** Cleanly restores the native media player card when the mod is disabled or unloaded.
 
 ### Credits
-- ControlCenter discovery logic adapted with appreciation from *Refined Quick Settings and Sound* by [pro-m-i](https://github.com/pro-m-i).
+- ControlCenter discovery logic adapted with appreciation from [Refined Quick Settings and Sound](https://windhawk.net/mods/refined-quick-settings-and-sound) by [HeyOkay](https://github.com/HeyOkay).
 */
 // ==/WindhawkModReadme==
 
@@ -134,61 +134,13 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(positionStr);
 
-    PCWSTR strAbove = Wh_GetStringSetting(L"verticalOffsetAbove");
-    if (strAbove && *strAbove) {
-        g_settings.verticalOffsetAbove = _wtoi(strAbove);
-        Wh_FreeStringSetting(strAbove);
-    } else {
-        // Fallback for previous verticalOffset setting
-        PCWSTR strLegacy = Wh_GetStringSetting(L"verticalOffset");
-        if (strLegacy && *strLegacy) {
-            g_settings.verticalOffsetAbove = _wtoi(strLegacy);
-            Wh_FreeStringSetting(strLegacy);
-        } else {
-            g_settings.verticalOffsetAbove = 33;
-        }
-    }
-
-    PCWSTR strBelow = Wh_GetStringSetting(L"verticalOffsetBelow");
-    if (strBelow && *strBelow) {
-        g_settings.verticalOffsetBelow = _wtoi(strBelow);
-        Wh_FreeStringSetting(strBelow);
-    } else {
-        g_settings.verticalOffsetBelow = -12;
-    }
-
-    PCWSTR showTimestampsVal = Wh_GetStringSetting(L"showTimestamps");
-    if (showTimestampsVal) {
-        g_settings.showTimestamps = (wcscmp(showTimestampsVal, L"0") != 0 && _wcsicmp(showTimestampsVal, L"false") != 0);
-        Wh_FreeStringSetting(showTimestampsVal);
-    } else {
-        g_settings.showTimestamps = true;
-    }
-
-    PCWSTR remainingTimeVal = Wh_GetStringSetting(L"remainingTime");
-    if (remainingTimeVal) {
-        g_settings.remainingTime = (wcscmp(remainingTimeVal, L"1") == 0 || _wcsicmp(remainingTimeVal, L"true") == 0);
-        Wh_FreeStringSetting(remainingTimeVal);
-    } else {
-        g_settings.remainingTime = false;
-    }
-
-    PCWSTR accentVal = Wh_GetStringSetting(L"accentColorTrack");
-    if (accentVal) {
-        g_settings.accentColorTrack = (wcscmp(accentVal, L"0") != 0 && _wcsicmp(accentVal, L"false") != 0);
-        Wh_FreeStringSetting(accentVal);
-    } else {
-        g_settings.accentColorTrack = true;
-    }
-
-    PCWSTR seekStepStr = Wh_GetStringSetting(L"seekStepSeconds");
-    if (seekStepStr && *seekStepStr) {
-        g_settings.seekStepSeconds = _wtoi(seekStepStr);
-        if (g_settings.seekStepSeconds <= 0) g_settings.seekStepSeconds = 5;
-        Wh_FreeStringSetting(seekStepStr);
-    } else {
-        g_settings.seekStepSeconds = 5;
-    }
+    g_settings.verticalOffsetAbove = Wh_GetIntSetting(L"verticalOffsetAbove");
+    g_settings.verticalOffsetBelow = Wh_GetIntSetting(L"verticalOffsetBelow");
+    g_settings.showTimestamps = Wh_GetIntSetting(L"showTimestamps") != 0;
+    g_settings.remainingTime = Wh_GetIntSetting(L"remainingTime") != 0;
+    g_settings.accentColorTrack = Wh_GetIntSetting(L"accentColorTrack") != 0;
+    g_settings.seekStepSeconds = Wh_GetIntSetting(L"seekStepSeconds");
+    if (g_settings.seekStepSeconds <= 0) g_settings.seekStepSeconds = 5;
 
     PCWSTR autoRestartVal = Wh_GetStringSetting(L"autoRestartShellHost");
     if (autoRestartVal) {
@@ -201,13 +153,13 @@ void LoadSettings() {
 
 // Media Session and UI State
 std::atomic<bool> g_unloading{false};
-wmc::GlobalSystemMediaTransportControlsSessionManager g_sessionManager{nullptr};
-wmc::GlobalSystemMediaTransportControlsSession g_currentSession{nullptr};
+[[clang::no_destroy]] wmc::GlobalSystemMediaTransportControlsSessionManager g_sessionManager{nullptr};
+[[clang::no_destroy]] wmc::GlobalSystemMediaTransportControlsSession g_currentSession{nullptr};
 winrt::event_token g_timelineToken{};
 winrt::event_token g_playbackToken{};
 winrt::event_token g_sessionToken{};
 
-wux::DispatcherTimer g_updateTimer{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_updateTimer{nullptr};
 bool g_isUserScrubbing = false;
 bool g_isInternalValueUpdate = false;
 double g_currentDurationSeconds = 0.0;
@@ -259,15 +211,7 @@ void SeekTo(double positionSeconds) {
 
         Wh_Log(L"SeekTo: Requesting seek to %.2f seconds (%lld ticks)", positionSeconds, ticks);
 
-        auto asyncOp = g_currentSession.TryChangePlaybackPositionAsync(ticks);
-        asyncOp.Completed([](winrt::Windows::Foundation::IAsyncOperation<bool> const& op, winrt::Windows::Foundation::AsyncStatus status) {
-            if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
-                bool res = op.GetResults();
-                Wh_Log(L"SeekTo: TryChangePlaybackPositionAsync result: %s", res ? L"TRUE (accepted)" : L"FALSE (rejected)");
-            } else {
-                Wh_Log(L"SeekTo: TryChangePlaybackPositionAsync status: %d", (int)status);
-            }
-        });
+        g_currentSession.TryChangePlaybackPositionAsync(ticks);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"SeekTo: HRESULT error 0x%08X: %ls", (uint32_t)ex.code(), ex.message().c_str());
     } catch (...) {
@@ -1009,20 +953,15 @@ void SetupProgressBarUI(wux::FrameworkElement const& mtc) {
 }
 
 void RestoreUI() {
-    if (auto mtc = g_weakMtc.get()) {
-        if (auto grid = g_attachedProgressGrid.get()) {
-            if (auto rootGrid = FindChildByName(mtc, L"MediaTransportControlsRoot").try_as<wux::Controls::Grid>()) {
+    if (auto grid = g_attachedProgressGrid.get()) {
+        try {
+            if (auto parent = wux::Media::VisualTreeHelper::GetParent(grid).try_as<wux::Controls::Panel>()) {
                 uint32_t index = 0;
-                if (rootGrid.Children().IndexOf(grid, index)) {
-                    rootGrid.Children().RemoveAt(index);
-                }
-            } else if (auto root = mtc.try_as<wux::Controls::Grid>()) {
-                uint32_t index = 0;
-                if (root.Children().IndexOf(grid, index)) {
-                    root.Children().RemoveAt(index);
+                if (parent.Children().IndexOf(grid, index)) {
+                    parent.Children().RemoveAt(index);
                 }
             }
-        }
+        } catch (...) {}
     }
 
     g_attachedProgressGrid = nullptr;
