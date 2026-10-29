@@ -2,7 +2,7 @@
 // @id taskbar-media-widget
 // @name Taskbar Media Widget
 // @description Compact media controls integrated into the Windows 10/11 taskbar.
-// @version 0.3.2
+// @version 0.3.3
 // @author uMk0
 // @github https://github.com/umk0
 // @license MIT
@@ -352,6 +352,7 @@ bool g_prevButtonEnabled = true;
 bool g_playButtonEnabled = true;
 bool g_nextButtonEnabled = true;
 HANDLE g_audioWakeEvent = nullptr;
+HANDLE g_stopEvent = nullptr;
 
 enum class CommandType {
     OpenMediaApp,
@@ -3241,7 +3242,7 @@ bool WidgetNeedsFastTicks(MediaState const& state) {
 }
 
 void WidgetUiTimerTick(IInspectable const&, IInspectable const&) {
-    if (g_unloading || !g_modernWidgetAttached.load()) {
+    if (g_unloading || g_workersStopping || !g_modernWidgetAttached.load()) {
         return;
     }
 
@@ -4363,9 +4364,8 @@ void MediaThread() {
     ScanIdleApps();
     while (!g_unloading && !g_workersStopping) {
         PollMedia();
-        for (int i = 0;
-             i < 10 && !g_unloading && !g_workersStopping; i++) {
-            Sleep(100);
+        if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
+            break;
         }
     }
     {
@@ -4373,8 +4373,6 @@ void MediaThread() {
         g_mediaSession = nullptr;
     }
 }
-
-bool HookTaskbarDllSymbols();
 
 void UiTickThread() {
     ULONGLONG lastInjectAttempt = 0;
@@ -4385,7 +4383,9 @@ void UiTickThread() {
             HWND hwnd =
                 g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
             if (!hwnd) {
-                Sleep(1000);
+                if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
+                    break;
+                }
                 continue;
             }
             g_taskbarWnd = hwnd;
@@ -4423,10 +4423,8 @@ void UiTickThread() {
                 lastInjectAttempt = now;
             }
         }
-        for (int slept = 0;
-             slept < 1000 && !g_unloading && !g_workersStopping;
-             slept += 25) {
-            Sleep(25);
+        if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
+            break;
         }
     }
 }
@@ -4498,6 +4496,22 @@ BOOL Wh_ModInit() {
     g_workersStopping = false;
     g_backendDetectionStartedTick = GetTickCount64();
     LoadSettings();
+    // Both events live across settings reloads. UI callbacks may signal the
+    // audio event until the widget has been removed on the taskbar thread.
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_audioWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_audioWakeEvent) {
+        Wh_Log(L"Failed to create worker events: %u", GetLastError());
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+        if (g_audioWakeEvent) {
+            CloseHandle(g_audioWakeEvent);
+            g_audioWakeEvent = nullptr;
+        }
+        return FALSE;
+    }
     HookTaskbarDllSymbols();
     return TRUE;
 }
@@ -4514,6 +4528,8 @@ void JoinAndDeleteThread(std::thread*& thread) {
 }
 
 void StartWorkerThreads() {
+    ResetEvent(g_stopEvent);
+    ResetEvent(g_audioWakeEvent);
     g_workersStopping = false;
     {
         std::lock_guard lock(g_commandMutex);
@@ -4522,17 +4538,17 @@ void StartWorkerThreads() {
     g_commandThread = new std::thread(CommandThread);
     g_mediaThread = new std::thread(MediaThread);
     if (g_settings.visualizerEnabled) {
-        g_audioWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (g_audioWakeEvent) {
-            g_audioThread = new std::thread(AudioVisualizerThread);
-        }
+        g_audioThread = new std::thread(AudioVisualizerThread);
     }
-    g_tickThread = new std::thread(UiTickThread);
+    if (g_taskbarHooksInstalled.load()) {
+        g_tickThread = new std::thread(UiTickThread);
+    }
     g_classicWidgetThread = new std::thread(ClassicWidgetThread);
 }
 
 void StopWorkerThreads() {
     g_workersStopping = true;
+    SetEvent(g_stopEvent);
     {
         std::lock_guard lock(g_commandMutex);
         g_commandQueue.clear();
@@ -4550,10 +4566,6 @@ void StopWorkerThreads() {
     JoinAndDeleteThread(g_audioThread);
     JoinAndDeleteThread(g_tickThread);
     JoinAndDeleteThread(g_classicWidgetThread);
-    if (g_audioWakeEvent) {
-        CloseHandle(g_audioWakeEvent);
-        g_audioWakeEvent = nullptr;
-    }
     {
         std::lock_guard lock(g_commandMutex);
         g_commandQueue.clear();
@@ -4576,6 +4588,10 @@ void Wh_ModUninit() {
     if (hwnd) {
         RunFromWindowThread(hwnd, [](void*) { RemoveWidgetGrid(); }, nullptr);
     }
+    CloseHandle(g_audioWakeEvent);
+    g_audioWakeEvent = nullptr;
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
