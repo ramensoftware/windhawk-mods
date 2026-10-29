@@ -20,6 +20,36 @@ or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.
 The manufacturer should have made these everyday controls part of the Windows
 battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.
 
+## Screenshots
+
+**Battery menu**
+
+![Battery menu](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-menu.png)
+
+**Charge thresholds**
+
+![Charge thresholds](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charge-thresholds.png)
+
+**Quick charging presets**
+
+![Quick charging presets](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/charging-presets.png)
+
+**Manage presets**
+
+![Manage presets](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/manage-presets.png)
+
+**Battery health**
+
+![Battery health](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/battery-health.png)
+
+**Power controls**
+
+![Power controls](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/power-controls.png)
+
+**Calibration confirmation**
+
+![Calibration confirmation](https://raw.githubusercontent.com/billbauman/windhawk-mods/480d1a4955a11fa40e2fe41dafa80dbaca887402/screenshots/calibration-confirmation.png)
+
 ## Setup
 Choose a backend in Windhawk Settings:
 - **Integrated Lenovo service** (default): no utility download. Requires compatible
