@@ -18,11 +18,14 @@ permissions:
   contents: read
 
 # One run at a time per pull request, so that two events don't act on the same
-# labels at once. Runs aren't cancelled, so that one isn't stopped between adding
-# the new label and removing the old one.
+# labels at once. pr_commands.yml joins the same group, with the same settings.
+# Runs aren't cancelled, so that one isn't stopped between adding the new label
+# and removing the old one. Each run has its own event to act on, so pending runs
+# queue up instead of replacing each other.
 concurrency:
   group: pr-flow-labels-${{ github.event.pull_request.number }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   run:

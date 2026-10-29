@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         0.7.0
+// @version         0.7.1
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -109,7 +109,11 @@ Searching for a common settings page (for example `bluetooth`, `display`, `sound
 
 ### Files
 
-A folder button at the right of the search box switches between apps and files (the **Tab** key does the same, except while a calculation is on screen). The **File browser** setting can turn the whole mode off, hiding the button and leaving Tab for the app list. In file mode the bar shows a **Files** chip, a row of location chips (Home, Downloads, Documents, Pictures, Music, Videos) and a **path bar** with the folder you are in. When the path is long, the start is shortened (`…\MDG\logs`) so the last folders always stay visible.
+A folder button at the right of the search box switches between apps and files (the **Tab** key does the same, except while a calculation is on screen). The **File browser** setting can turn the whole mode off, hiding the button and leaving Tab for the app list. In file mode the bar shows a **Files** chip, a row of location chips (Home, Downloads, Documents, Pictures, Music, Videos) and a **path bar** with the folder you are in. When you have two or more drives, a **second row of drive chips** (`C:`, `D:`, `X:`, …) appears below the location row. When the path is long, the start is shortened (`…\MDG\logs`) so the last folders always stay visible.
+
+The location chips live inside your user profile (and follow each folder to its real location, so they keep working when Documents, Downloads and the rest have been moved to another drive or redirected). The drive chips, on their own row, cover everything else: one per fixed or removable drive that is ready (an empty card reader is skipped, and so are network drives), shown only when there are two or more. **Ctrl + Tab** cycles forward through the drive chips and **Ctrl + Shift + Tab** backward, so the files you keep on `D:`, `X:` and the rest — and the deep search over them — are one keystroke away. **Ctrl + 1…9** jumps straight to a chip, and you can still type a path such as `D:\` in the path bar. The drive the browser opens on the first time you use it in a session is set by the **Start drive** option (empty = Home).
+
+Going up from a drive root (**←** or **Backspace** on an empty box, or **Alt + ↑**) opens a **This PC** view that lists every drive, so you can move between drives with the arrows without Ctrl + Tab; **Enter** or **→** opens the highlighted one.
 
 * **Browse inside the launcher**: **Enter** on a folder goes into it; **Enter** on a file opens it. Very large folders stop at 5,000 folders and 5,000 files, and the path bar shows how many of the total are listed; typing searches past that cap.
 * **Deep search**: whatever you type is searched in the current folder *and all its subfolders* (results show the folder they live in). Closer matches come first and appear while the search is still running. Dot-folders such as `.config` are included; other hidden/system items and offline/cloud folders are skipped. The scan stops when the bar closes.
@@ -133,12 +137,13 @@ For example `report *.pdf` or `dir: projects`. The active filters are shown in t
 | Shortcut | Action |
 | --- | --- |
 | **Enter** / **→** | Open the file / enter the highlighted folder |
-| **←** (empty box) | Go to the parent folder |
-| **Backspace** (empty box) | Go up one folder (at a location root it leaves file mode) |
+| **←** (empty box) | Go to the parent folder (from a drive root, the **This PC** drives view) |
+| **Backspace** (empty box) | Go up one folder (a drive root goes to **This PC**; a location root leaves file mode) |
 | **Alt + ←** / **Alt + →** | Back / forward in the folder history (mouse back/forward buttons too) |
 | **Alt + ↑** | Parent folder |
 | **Alt + Home** | Home |
-| **Ctrl + 1…6** / **Ctrl + ←/→** (empty box) | Jump to a location chip |
+| **Ctrl + 1…9** / **Ctrl + ←/→** (empty box) | Jump to a location or drive chip |
+| **Ctrl + Tab** / **Ctrl + Shift + Tab** | Switch to the next / previous drive (`C:`, `D:`, `X:`, …) |
 | **Ctrl + L** / **Alt + D** | Edit the path |
 | **Ctrl + I** | Actions menu |
 | **Ctrl + Enter** | Show in your default file manager |
@@ -164,6 +169,7 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 
 * Six background effects (**Acrylic**, **Mica**, **Glass**, **Frosted**, **Aurora**, **Solid**) and 12 colours.
 * Each effect is built from a blurred view of whatever is behind the bar, finished with a colour tint, subtle grain and light highlights, so the bar looks the same on Windows 10 and 11.
+* The blurred effects (every one except **Solid**) need Windows' **Transparency effects** turned on (Settings → Personalization → Colours → Transparency effects). With it off, Windows draws no blur and the bar falls back to a flat colour; switch to **Solid** (or turn Transparency effects back on) for the intended look.
 * **Live acrylic**: Acrylic, Glass, Frosted and Aurora follow what is behind the bar in real time. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. It is on by default and can be changed in the settings.
 * Adjustable panel opacity, blur strength and layout. Blur strength applies to Mica, and to the other effects while Live acrylic is off; with it on, Windows sets their blur strength.
 * Looks sharp on every monitor, even high-resolution ones or a mix of several.
@@ -251,7 +257,7 @@ Copyright (c) 2026-present David Ravelo.
     $description: How solid the colour of the bar is, from 70 to 100. A lower value lets more of the background show through and a higher value makes the colour stronger (Glass stays see-through in any case). Ignored with "Solid", which is always fully opaque.
   - Effect: acrylic
     $name: Background effect
-    $description: The background style of the bar. Acrylic, Mica, Glass, Frosted and Aurora show a blurred view of whatever is behind the bar, each with its own look; "Solid" shows a plain colour with no blur.
+    $description: The background style of the bar. Acrylic, Mica, Glass, Frosted and Aurora show a blurred view of whatever is behind the bar, each with its own look; "Solid" shows a plain colour with no blur. The blurred effects rely on Windows' "Transparency effects" (Settings > Personalization > Colors); with that turned off, Windows draws no blur and these effects fall back to a flat colour. Only "Solid" is unaffected.
     $options:
       - acrylic: Acrylic
       - mica: Mica
@@ -334,7 +340,10 @@ Copyright (c) 2026-present David Ravelo.
 - Features:
   - FilesEnabled: true
     $name: File browser
-    $description: Adds the Files mode, which browses drives and folders, previews images and manages files. Press Tab or the folder button in the bar to switch between apps and files. When off, the folder button is hidden and Tab moves through the app list.
+    $description: Adds the Files mode, which browses drives and folders, previews images and manages files. Press Tab or the folder button in the bar to switch between apps and files. When off, the folder button is hidden and Tab moves through the app list. A chip is shown for each of your drives after the Home, Downloads, Documents, Pictures, Music and Videos locations; Ctrl + Tab (Ctrl + Shift + Tab) cycles through the drives and Ctrl + 1…9 jumps to a chip.
+  - StartDrive: ""
+    $name: Start drive
+    $description: Which drive the file browser opens on the first time you use it in a session, as a single letter (for example D or E). Leave it empty to open on Home (your user folder), which is also where it falls back if the drive is not available.
   - CalculatorEnabled: true
     $name: Calculator
     $description: While you type, the text is also tried as a calculation (for example "12*8", "100+15%" or "sqrt(2)+pi") and the result is shown. It only reacts when the whole text looks like a maths expression, so ordinary searches are left alone. Press Enter to copy the result, which is also saved to a small history you can reuse.
@@ -1407,7 +1416,8 @@ static const float kFooterH = 40.f;    // footer with shortcuts (expanded only)
 static const float kSectionH = 26.f;   // section header ("Recent" / "Suggestions")
 static const float kHeroH = 84.f;      // calculator result card, reserved above the list
 static const float kHistRowH = 34.f;   // compact row for the calculator history
-static const float kChipH = 44.f;      // file-mode filter band (location chips)
+static const float kChipH = 44.f;      // file-mode filter band (location chips), first row
+static const float kDriveRowH = 34.f;  // second chip row (drive chips), only shown with 2+ drives
 static const float kPathH = 30.f;      // file-mode path band (breadcrumb)
 
 // Details panel (card to the right of the search bar)
@@ -1427,6 +1437,10 @@ static const size_t kMaxRecents = 4;
 static const wchar_t kTxtPlaceholder[] = L"Search applications…";
 static const wchar_t kTxtPlaceholderFiles[] = L"Search files…  (try *.pdf or dir:)";
 static const wchar_t kTxtFilesMode[] = L"Files";
+// Sentinel "folder" for the drives overview (reached by going up from a drive root). It is never a
+// real path, so folder walking and editing must treat it specially (see InPcRoot).
+static const wchar_t kPcRoot[] = L"::ThisPC";
+static const wchar_t kTxtThisPc[] = L"This PC";
 static const wchar_t kTxtFolder[] = L"Folder";
 static const wchar_t kTxtOpen[] = L"Open";
 static const wchar_t kTxtRun[] = L"Run";
@@ -1518,6 +1532,7 @@ struct LauncherSettings {
     bool webSearch = true;   // offer a "search the web" result for the query
     WebEngine webEngine = WebEngine::Google;
     bool filesEnabled = true;  // show the file browser mode (Tab and the folder button)
+    wchar_t startDrive = 0;    // drive letter the browser opens on first (0 = Home), see LoadSettings
 };
 
 struct AppEntry {
@@ -2057,6 +2072,13 @@ static void LoadSettings() {
     }
 
     c.filesEnabled = GetIntSetting(L"Features.FilesEnabled") != 0;
+    {
+        // A single drive letter; anything else (empty, a word, a colon) means "open on Home".
+        std::wstring sd = GetStringSetting(L"Features.StartDrive");
+        size_t a = 0;
+        while (a < sd.size() && (sd[a] == L' ' || sd[a] == L'\t')) ++a;
+        c.startDrive = (a < sd.size() && iswalpha(sd[a])) ? (wchar_t)towupper(sd[a]) : 0;
+    }
 
     g_cfg = c;
 }
@@ -2646,7 +2668,8 @@ static bool ModeIsWeb() {
 enum class CmdGlyph {
     Lock, Moon, Bars, Sliders, Chip, List, Key, Globe, Update, Grid, Monitor, Speaker, Bluetooth,
     Printer, Terminal, Folder, Gear, Power, Restart, SignOut, Hibernate, Recycle, Wifi, Clock, Bell,
-    Camera, Mic, Doc, Home, Download, Image, Music, Video, Close, ExternalLink, ChevronRight, ChevronLeft
+    Camera, Mic, Doc, Home, Download, Image, Music, Video, Close, ExternalLink, ChevronRight, ChevronLeft,
+    Drive
 };
 
 struct CommandDef {
@@ -2807,17 +2830,24 @@ static const SettingDef kSettings[] = {
 static const int kSettingCount = (int)(sizeof(kSettings) / sizeof(kSettings[0]));
 
 // ===== File browsing (toggled by the folder button next to the search box) =====
-// The chips at the top of file mode scope the listing to a folder inside the user profile.
+// The chips at the top of file mode scope the listing to one of the user's known folders. `folder`
+// is the real location, which follows the folder when Windows has moved it to another drive or
+// redirected it (OneDrive-backed Documents, a relocated Downloads, …); `sub` is only a fallback
+// when the known folder cannot be resolved.
 struct FileLocationDef {
     const wchar_t* label;
-    const wchar_t* sub;  // relative to %USERPROFILE% (empty = the profile itself)
+    const wchar_t* sub;              // relative to %USERPROFILE% (empty = the profile itself)
+    const KNOWNFOLDERID* folder;     // real location; nullptr to use `sub` only
     CmdGlyph glyph;
 };
 
 static const FileLocationDef kFileLocations[] = {
-    {L"Home", L"", CmdGlyph::Home},         {L"Downloads", L"Downloads", CmdGlyph::Download},
-    {L"Documents", L"Documents", CmdGlyph::Doc}, {L"Pictures", L"Pictures", CmdGlyph::Image},
-    {L"Music", L"Music", CmdGlyph::Music},  {L"Videos", L"Videos", CmdGlyph::Video},
+    {L"Home", L"", &FOLDERID_Profile, CmdGlyph::Home},
+    {L"Downloads", L"Downloads", &FOLDERID_Downloads, CmdGlyph::Download},
+    {L"Documents", L"Documents", &FOLDERID_Documents, CmdGlyph::Doc},
+    {L"Pictures", L"Pictures", &FOLDERID_Pictures, CmdGlyph::Image},
+    {L"Music", L"Music", &FOLDERID_Music, CmdGlyph::Music},
+    {L"Videos", L"Videos", &FOLDERID_Videos, CmdGlyph::Video},
 };
 static const int kFileLocationCount = (int)(sizeof(kFileLocations) / sizeof(kFileLocations[0]));
 
@@ -2838,8 +2868,26 @@ static bool g_fileMode = false;                 // file mode active (folder butt
 static int g_fileLoc = 0;                       // chip index containing the current folder, or -1
 static double g_chipSelPos = 0;                 // animated position of the location-chip highlight
 static double g_chipSelTarget = 0;
-static std::wstring g_fileCur;                  // folder being browsed
+
+// The chips shown in file mode: the six profile locations above, then one per ready drive. Built
+// on entering file mode (RebuildFileChips), so the drive list is current without re-scanning every
+// frame. g_fileLoc indexes into this.
+struct FileChip {
+    std::wstring label;  // "Home", "Downloads", … or "C:", "D:", …
+    std::wstring path;   // resolved folder (profile location) or drive root ("C:\\")
+    CmdGlyph glyph;
+    bool isDrive;
+};
+static std::vector<FileChip> g_chips;
+static bool g_fileStartUsed = false;  // the "start drive" setting is honoured once per mod session
+static std::wstring g_fileCur;                  // folder being browsed (or kPcRoot: the drives view)
 static std::wstring g_fileDir;                  // folder currently listed ("" = needs refresh)
+
+static std::vector<std::wstring> ReadyDrives();  // defined with the drive helpers further down
+
+// True while the drives overview ("This PC") is showing. It is a synthetic listing of drives, not
+// a real folder, so folder actions (rename, delete, new, deep search, path editing) are skipped.
+static bool InPcRoot() { return g_fileCur == kPcRoot; }
 static std::vector<FileEntry> g_fileEntries;    // its children (capped, see kMaxListed*)
 static bool g_fileListTrunc = false;            // the listing hit the cap
 static size_t g_fileListTotal = 0;              // entries the folder has (listing cap included)
@@ -3088,9 +3136,17 @@ static void ClearFileDeep() {
     g_fileDeepDone = false;
 }
 
-// Resolves the folder of a file location, or an empty string on failure.
+static std::wstring KnownFolderPath(REFKNOWNFOLDERID id);  // defined further down
+
+// Resolves the folder of a file location, or an empty string on failure. The known folder is
+// preferred so a moved or redirected folder is followed to wherever it now lives (even another
+// drive); %USERPROFILE%\sub is only the fallback.
 static std::wstring ResolveFileLocation(int loc) {
     if (loc < 0 || loc >= kFileLocationCount) return L"";
+    if (kFileLocations[loc].folder) {
+        std::wstring kf = KnownFolderPath(*kFileLocations[loc].folder);
+        if (!kf.empty()) return kf;
+    }
     wchar_t base[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"USERPROFILE", base, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return L"";
@@ -3128,12 +3184,15 @@ static bool SamePath(const std::wstring& a, const std::wstring& b) {
     return _wcsicmp(trim(a).c_str(), trim(b).c_str()) == 0;
 }
 
-// Chip whose folder is the deepest ancestor of (or equal to) the path, or -1.
+// Chip whose folder is the deepest ancestor of (or equal to) the path, or -1. Works for both the
+// profile locations and the drive roots (a drive chip's path ends in "\\", so it is compared
+// without the trailing separator; a folder inside the profile still wins over its drive chip).
 static int LocationForPath(const std::wstring& path) {
     int best = -1;
     size_t bestLen = 0;
-    for (int i = 0; i < kFileLocationCount; ++i) {
-        const std::wstring loc = ResolveFileLocation(i);
+    for (int i = 0; i < (int)g_chips.size(); ++i) {
+        std::wstring loc = g_chips[i].path;
+        while (loc.size() > 2 && loc.back() == L'\\') loc.pop_back();  // "C:\" -> "C:"
         if (loc.empty() || path.size() < loc.size()) continue;
         if (_wcsnicmp(path.c_str(), loc.c_str(), loc.size()) != 0) continue;
         if (path.size() > loc.size() && path[loc.size()] != L'\\') continue;
@@ -3166,6 +3225,24 @@ static std::wstring FormatFileSize(uint64_t bytes) {
         swprintf_s(buf, L"%.0f %s", v, units[u]);
     }
     return buf;
+}
+
+// Subtitle for a drive row in the drives overview: volume label and free/total space when they can
+// be read. The error mode is suppressed per thread so a slow or unready drive cannot pop a dialog.
+static std::wstring DriveMetaLine(const std::wstring& root) {
+    DWORD prevMode = 0;
+    SetThreadErrorMode(SEM_FAILCRITICALERRORS, &prevMode);
+    wchar_t label[MAX_PATH] = {};
+    GetVolumeInformationW(root.c_str(), label, MAX_PATH, nullptr, nullptr, nullptr, nullptr, 0);
+    ULARGE_INTEGER freeB = {}, totB = {};
+    const BOOL okSpace = GetDiskFreeSpaceExW(root.c_str(), nullptr, &totB, &freeB);
+    SetThreadErrorMode(prevMode, nullptr);
+    std::wstring name = label[0] ? label : L"Drive";
+    if (okSpace && totB.QuadPart) {
+        return name + L" · " + FormatFileSize(freeB.QuadPart) + L" free of " +
+               FormatFileSize(totB.QuadPart);
+    }
+    return name;
 }
 
 // Uppercase extension of a file name (without the dot); empty when it has none.
@@ -3237,6 +3314,22 @@ static void RefreshFileListing() {
     g_fileListTotal = 0;
     g_fileDir = g_fileCur;
     if (g_fileDir.empty()) return;
+    if (g_fileDir == kPcRoot) {
+        // The drives overview: one row per ready drive instead of a folder listing.
+        for (const std::wstring& root : ReadyDrives()) {
+            FileEntry e;
+            e.name = root.substr(0, 2);  // "C:"
+            e.folded = FoldString(e.name);
+            e.path = root;               // "C:\"
+            e.dir = kPcRoot;
+            e.isDir = true;
+            e.attr = FILE_ATTRIBUTE_DIRECTORY;
+            e.meta = DriveMetaLine(root);
+            g_fileEntries.push_back(std::move(e));
+        }
+        g_fileListTotal = g_fileEntries.size();
+        return;
+    }
     const std::wstring pattern = JoinPath(g_fileDir, L"*");
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch,
@@ -3665,9 +3758,24 @@ static double HeroH() {
     return HeroShown() ? kHeroH : 0.0;
 }
 
-// Height (DIP) of the file-mode filter band (the location chips) above the list.
+// The drive chips sit on their own second row, kept apart from the location chips. The row only
+// exists when there are drive chips (i.e. 2+ drives; see RebuildFileChips).
+static bool HasDriveChips() {
+    for (const auto& c : g_chips) {
+        if (c.isDrive) return true;
+    }
+    return false;
+}
+
+// Height (DIP) of the chip row(s) above the path band: the location row, plus the drive row when
+// it is shown.
+static float FileChipRowsH() {
+    return kChipH + (HasDriveChips() ? kDriveRowH : 0.f);
+}
+
+// Height (DIP) of the whole file-mode band (chip rows + path band) above the list.
 static double FileChipsH() {
-    return g_fileMode ? kChipH + kPathH : 0.0;
+    return g_fileMode ? FileChipRowsH() + kPathH : 0.0;
 }
 
 // True when the calculation is actually visible (card or inline text).
@@ -6351,6 +6459,12 @@ static void DrawCommandGlyph(CmdGlyph g, float x, float y, float size, const D2D
             fe(17.4f, 12.f, 1.1f);
             fe(17.4f, 15.4f, 1.1f);
             break;
+        case CmdGlyph::Drive:
+            // A disk drive: a rounded body, a seam and a small activity light.
+            rr(4.5f, 7.5f, 19.5f, 16.5f, 2.f);
+            ln(6.5f, 12.f, 17.5f, 12.f);
+            fe(15.5f, 14.4f, 0.9f);
+            break;
         case CmdGlyph::Close:
             ln(8.f, 8.f, 16.f, 16.f);
             ln(16.f, 8.f, 8.f, 16.f);
@@ -7104,7 +7218,7 @@ static void FitPathTail(const std::wstring& path, IDWriteTextFormat* fh, IDWrite
 
 static D2D1_RECT_F FilePathBackRect(float cx, float cy) {
     const float s = (float)g_scale;
-    const float mid = cy + (kBarH + kChipH + kPathH / 2) * s;
+    const float mid = cy + (kBarH + FileChipRowsH() + kPathH / 2) * s;
     return D2D1::RectF(cx + 10 * s, mid - 12 * s, cx + 34 * s, mid + 12 * s);
 }
 
@@ -7115,7 +7229,7 @@ static const wchar_t* BandPrefix() { return g_bandEdit == BandEdit::Rename ? L"R
 // Rectangle of the editable field that replaces the breadcrumb while editing.
 static void BandFieldRect(float cx, float cy, float cw, float& x0, float& y0, float& x1, float& y1) {
     const float s = (float)g_scale;
-    const float top = cy + (kBarH + kChipH) * s;
+    const float top = cy + (kBarH + FileChipRowsH()) * s;
     x0 = cx + 38 * s;
     x1 = cx + cw - 14 * s;
     y0 = top + 4 * s;
@@ -7188,7 +7302,7 @@ static void DrawBandEditor(float cx, float cy, float cw) {
     if (caretX - g_bandScroll < 0) g_bandScroll = caretX;
     if (g_bandScroll < 0) g_bandScroll = 0;
     const float ox = tx - g_bandScroll;
-    const float top = cy + (kBarH + kChipH) * s;
+    const float top = cy + (kBarH + FileChipRowsH()) * s;
 
     D2D1_RECT_F clip = D2D1::RectF(tx, y0, tr, y1);
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
@@ -7215,7 +7329,7 @@ static void DrawBandEditor(float cx, float cy, float cw) {
 // Breadcrumb band: back button, folder icon, the path (tail kept when it is long) and a status.
 static void DrawPathBand(float cx, float cy, float cw) {
     const float s = (float)g_scale;
-    const float top = cy + (kBarH + kChipH) * s;
+    const float top = cy + (kBarH + FileChipRowsH()) * s;
     const float mid = top + kPathH * s / 2;
     SetBrush(g_pal.separator, 0.7f);
     D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, top, cx + cw - 12 * s, top + 1.f);
@@ -7278,7 +7392,8 @@ static void DrawPathBand(float cx, float cy, float cw) {
         }
     }
     std::wstring head, tail;
-    FitPathTail(g_fileCur, g_fmtMeta, g_fmtPath, x1 - x0, head, tail);
+    const std::wstring shownPath = InPcRoot() ? std::wstring(kTxtThisPc) : g_fileCur;
+    FitPathTail(shownPath, g_fmtMeta, g_fmtPath, x1 - x0, head, tail);
     D2D1_RECT_F clip = D2D1::RectF(x0, top + 1.f, x1 + 2 * s, top + kPathH * s);
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
     const float hw = TextWidth(head.c_str(), g_fmtMeta);
@@ -7354,16 +7469,19 @@ static D2D1_RECT_F FileToggleRect(float cx, float cy) {
 // Rectangle (surface pixels) of the i-th location chip in the file-mode filter band.
 static float FileChipWidth(int i) {
     const float s = (float)g_scale;
+    if (i < 0 || i >= (int)g_chips.size()) return 0.f;
     // Sized with the bold format so the active (emphasized) label still fits.
-    return 30 * s + TextWidth(kFileLocations[i].label, g_fmtKeyBold) + 9 * s;
+    return 30 * s + TextWidth(g_chips[i].label.c_str(), g_fmtKeyBold) + 9 * s;
 }
 
 static D2D1_RECT_F FileChipRect(float cx, float cy, int i) {
     const float s = (float)g_scale;
-    const float mid = cy + (kBarH + kChipH / 2) * s;
+    const bool drv = (i >= 0 && i < (int)g_chips.size()) && g_chips[i].isDrive;
+    // Location chips on the first row; drive chips on the second, each laid out independently.
+    const float mid = drv ? cy + (kBarH + kChipH + kDriveRowH / 2) * s : cy + (kBarH + kChipH / 2) * s;
     float x = cx + 14 * s;
     for (int j = 0; j < i; ++j) {
-        x += FileChipWidth(j) + 8 * s;
+        if (((bool)g_chips[j].isDrive) == drv) x += FileChipWidth(j) + 8 * s;
     }
     const float w = FileChipWidth(i);
     return D2D1::RectF(x, mid - 14 * s, x + w, mid + 14 * s);
@@ -8053,7 +8171,8 @@ static const HelpRow kHelpFileRows[] = {
     {L"Enter / →", L"Open the file or folder"},
     {L"Backspace", L"Go up one folder"},
     {L"Alt + ← / →", L"Back and forward"},
-    {L"Ctrl + 1…6", L"Jump to a location"},
+    {L"Ctrl + 1…9", L"Jump to a location or drive"},
+    {L"Ctrl + Tab", L"Switch drive (C:, D:, …)"},
     {L"F2", L"Rename"},
     {L"Ctrl + Shift + N", L"New folder"},
     {L"Ctrl + T", L"Terminal in this folder"},
@@ -8404,37 +8523,42 @@ static void Render() {
         g_rt->FillRectangle(&sep, g_brush);
     }
 
-    // File-mode filter band: a chip per location, each with its own icon. The highlight
-    // slides between chips when the active location changes (animated via g_chipSelPos).
-    if (g_fileMode && kFileLocationCount > 0) {
-        const float chipMid = listTop + kChipH * s / 2;
-        float lefts[kFileLocationCount];
-        float widths[kFileLocationCount];
-        float chipX = cx + 14 * s;
-        for (int i = 0; i < kFileLocationCount; ++i) {
-            lefts[i] = chipX;
-            widths[i] = FileChipWidth(i);
-            chipX += widths[i] + 8 * s;
-        }
-        const double pos = std::clamp(g_chipSelPos, 0.0, (double)(kFileLocationCount - 1));
+    // File-mode filter band: location chips on the first row, drive chips on a second row below
+    // them (kept apart so the two groups do not read as one list). The highlight slides between
+    // the active chip and its neighbour, across rows when needed (animated via g_chipSelPos).
+    if (g_fileMode && !g_chips.empty()) {
+        const int nc = std::min((int)g_chips.size(), 6 + 26);  // profile locations + A..Z
+        D2D1_RECT_F rects[6 + 26];
+        for (int i = 0; i < nc; ++i) rects[i] = FileChipRect(cx, cy, i);
+        // Keep the chips inside the card: a long row is clipped on the right rather than drawn
+        // over the rounded edge.
+        const D2D1_RECT_F chipClip = D2D1::RectF(cx + 10 * s, listTop + 1.f, cx + cw - 10 * s,
+                                                 listTop + FileChipRowsH() * s);
+        g_rt->PushAxisAlignedClip(&chipClip, D2D1_ANTIALIAS_MODE_ALIASED);
+        const double pos = std::clamp(g_chipSelPos, 0.0, (double)(nc - 1));
         const int a = (int)pos;
-        const int b = std::min(a + 1, kFileLocationCount - 1);
+        const int b = std::min(a + 1, nc - 1);
         const float tl = (float)(pos - a);
-        const float hx = lefts[a] + (lefts[b] - lefts[a]) * tl;
-        const float hw = widths[a] + (widths[b] - widths[a]) * tl;
-        if (g_fileLoc >= 0) {
-            FillRR(hx, chipMid - 14 * s, hx + hw, chipMid + 14 * s, 14 * s, g_pal.accent, 0.18f);
+        const float aw = rects[a].right - rects[a].left, bw = rects[b].right - rects[b].left;
+        const float hx = rects[a].left + (rects[b].left - rects[a].left) * tl;
+        const float hy = rects[a].top + (rects[b].top - rects[a].top) * tl;
+        const float hw = aw + (bw - aw) * tl;
+        if (g_fileLoc >= 0 && g_fileLoc < nc) {
+            FillRR(hx, hy, hx + hw, hy + (rects[a].bottom - rects[a].top), 14 * s, g_pal.accent,
+                   0.18f);
         }
-        for (int i = 0; i < kFileLocationCount; ++i) {
-            const wchar_t* label = kFileLocations[i].label;
+        for (int i = 0; i < nc; ++i) {
             const bool on = (i == g_fileLoc);
             const D2D1_COLOR_F fg = on ? g_pal.accentInk : g_pal.textDim;
             const D2D1_COLOR_F lc = on ? g_pal.accentStrong : g_pal.textDim;
             IDWriteTextFormat* lfmt = on ? g_fmtKeyBold : g_fmtKey;
-            DrawCommandGlyph(kFileLocations[i].glyph, lefts[i] + 9 * s, chipMid - 7 * s, 14 * s, fg, fg);
-            DrawLabel(label, lfmt, lefts[i] + 30 * s, chipMid - 14 * s, lefts[i] + widths[i] - 9 * s,
-                      chipMid + 14 * s, lc, 1.f);
+            const D2D1_RECT_F& r = rects[i];
+            const float cmid = (r.top + r.bottom) / 2;
+            DrawCommandGlyph(g_chips[i].glyph, r.left + 9 * s, cmid - 7 * s, 14 * s, fg, fg);
+            DrawLabel(g_chips[i].label.c_str(), lfmt, r.left + 30 * s, r.top, r.right - 9 * s,
+                      r.bottom, lc, 1.f);
         }
+        g_rt->PopAxisAlignedClip();
         DrawPathBand(cx, cy, cw);
     }
 
@@ -9161,7 +9285,7 @@ static void CancelFileSearch() {
 
 // Called after the query changes: shows local matches now and starts the deep search shortly.
 static void ScheduleFileSearch() {
-    if (!g_fileMode || g_activator >= 0 || !FileQueryActive()) {
+    if (!g_fileMode || g_activator >= 0 || !FileQueryActive() || InPcRoot()) {
         CancelFileSearch();
         return;
     }
@@ -9175,7 +9299,7 @@ static void ScheduleFileSearch() {
 }
 
 static void StartFileSearch() {
-    if (!g_fileMode || !FileQueryActive() || g_fileCur.empty()) {
+    if (!g_fileMode || !FileQueryActive() || g_fileCur.empty() || InPcRoot()) {
         g_fileSearching = false;
         return;
     }
@@ -9201,8 +9325,10 @@ static void StartFileSearch() {
 
 static void FileGoTo(const std::wstring dir, bool record, const std::wstring select) {
     if (dir.empty()) return;
-    const DWORD at = GetFileAttributesW(dir.c_str());
-    if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY)) return;
+    if (dir != kPcRoot) {  // the drives view is synthetic; every real folder must exist
+        const DWORD at = GetFileAttributesW(dir.c_str());
+        if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY)) return;
+    }
     if (record && !g_fileCur.empty() && !SamePath(dir, g_fileCur)) {
         g_fileBack.push_back(g_fileCur);
         if (g_fileBack.size() > 64) g_fileBack.erase(g_fileBack.begin());
@@ -9263,15 +9389,102 @@ static void FileForward() {
 }
 
 static void FileUp() {
+    if (InPcRoot()) return;  // already at the top
     const std::wstring parent = ParentDir(g_fileCur);
-    if (parent.empty()) return;
+    if (parent.empty()) {
+        // At a drive root: step up to the drives overview instead of going nowhere.
+        FileGoTo(kPcRoot, true, g_fileCur);
+        return;
+    }
     FileGoTo(parent, true, g_fileCur);
 }
 
-// A chip jump (Ctrl+1..6, Ctrl+Left/Right, click).
+// A chip jump (Ctrl+1..9, Ctrl+Left/Right, click).
 static void SetFileLocation(int loc) {
-    if (loc < 0 || loc >= kFileLocationCount) return;
-    FileGoTo(ResolveFileLocation(loc), true, L"");
+    if (loc < 0 || loc >= (int)g_chips.size()) return;
+    FileGoTo(g_chips[loc].path, true, L"");
+}
+
+// ---- Drives ----
+// Roots of the fixed and removable drives worth showing, in A..Z order. A removable or optical
+// drive is listed only when a volume is actually present, so touching it never raises a "there is
+// no disk" dialog; network and unknown drives are left out. The error mode is set per thread (not
+// SetErrorMode, which would change it for the whole host process).
+static std::vector<std::wstring> ReadyDrives() {
+    std::vector<std::wstring> drives;
+    const DWORD mask = GetLogicalDrives();
+    DWORD prevMode = 0;
+    SetThreadErrorMode(SEM_FAILCRITICALERRORS, &prevMode);
+    for (int i = 0; i < 26; ++i) {
+        if (!(mask & (1u << i))) continue;
+        wchar_t root[4] = {(wchar_t)(L'A' + i), L':', L'\\', 0};
+        const UINT type = GetDriveTypeW(root);
+        if (type != DRIVE_FIXED && type != DRIVE_REMOVABLE && type != DRIVE_CDROM) continue;
+        if (type == DRIVE_REMOVABLE || type == DRIVE_CDROM) {
+            // Only include these when media is inserted; the call fails quietly otherwise.
+            if (!GetVolumeInformationW(root, nullptr, 0, nullptr, nullptr, nullptr, nullptr, 0)) {
+                continue;
+            }
+        }
+        drives.push_back(root);
+    }
+    SetThreadErrorMode(prevMode, nullptr);
+    return drives;
+}
+
+// Rebuilds the chip row: the six profile locations, then one chip per ready drive. Called when
+// entering file mode, so the drive list reflects what is plugged in without scanning every frame.
+static void RebuildFileChips() {
+    g_chips.clear();
+    for (int i = 0; i < kFileLocationCount; ++i) {
+        g_chips.push_back({kFileLocations[i].label, ResolveFileLocation(i), kFileLocations[i].glyph,
+                           false});
+    }
+    // Drive chips go on their own second row. With a single drive they add nothing (it is the one
+    // you are already on), so they appear only when there are two or more.
+    const std::vector<std::wstring> drives = ReadyDrives();
+    if (drives.size() >= 2) {
+        for (const std::wstring& root : drives) {
+            g_chips.push_back({root.substr(0, 2), root, CmdGlyph::Drive, true});  // "C:" -> "C:\"
+        }
+    }
+}
+
+// Drive root ("X:\\") the browser should open on the first time it is used in a session, or "" to
+// use Home. The letter comes from settings; an empty or missing letter, or a drive that is not
+// there (an unplugged USB stick), falls back to Home with no prompt.
+static std::wstring StartDrivePath() {
+    if (!g_cfg.startDrive) return L"";
+    wchar_t root[4] = {g_cfg.startDrive, L':', L'\\', 0};
+    DWORD prevMode = 0;
+    SetThreadErrorMode(SEM_FAILCRITICALERRORS, &prevMode);
+    const DWORD at = GetFileAttributesW(root);
+    SetThreadErrorMode(prevMode, nullptr);
+    if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY)) return L"";
+    return root;
+}
+
+// Ctrl+Tab hops between the drive chips only (the profile locations are a separate idea); dir is
+// +1 for the next drive, -1 for the previous. Nothing happens when there are no drive chips.
+static void CycleDrive(int dir) {
+    std::vector<int> drives;  // indices of the drive chips, in order
+    for (int i = 0; i < (int)g_chips.size(); ++i) {
+        if (g_chips[i].isDrive) drives.push_back(i);
+    }
+    if (drives.empty()) return;
+    // Which drive chip the current folder sits on (-1 when browsing a profile location or a UNC).
+    const int here = LocationForPath(g_fileCur);
+    int at = -1;
+    for (int k = 0; k < (int)drives.size(); ++k) {
+        if (drives[k] == here) {
+            at = k;
+            break;
+        }
+    }
+    const int m = (int)drives.size();
+    const int next = (at < 0) ? (dir > 0 ? 0 : m - 1) : (((at + dir) % m) + m) % m;
+    if (at >= 0 && next == at) return;  // a single drive: nothing to switch to
+    SetFileLocation(drives[next]);
 }
 
 static bool SelectedFileIsDir() {
@@ -9367,7 +9580,7 @@ static std::wstring AbsFromInput(std::wstring in) {
 }
 
 static void BeginPathEdit() {
-    if (!g_fileMode || g_fileCur.empty()) return;
+    if (!g_fileMode || g_fileCur.empty() || InPcRoot()) return;  // nothing to type in the drives view
     g_fileMenuOpen = false;
     g_bandEdit = BandEdit::Path;
     g_bandText = g_fileCur;
@@ -9556,7 +9769,7 @@ static void CommitRename() {
 
 // Creates "New folder" in the folder being browsed and starts renaming it.
 static void FileNewFolder() {
-    if (!g_fileMode || g_fileCur.empty()) return;
+    if (!g_fileMode || g_fileCur.empty() || InPcRoot()) return;
     std::wstring path;
     for (int i = 1; i < 1000; ++i) {
         const std::wstring name = i == 1 ? L"New folder" : L"New folder (" + std::to_wstring(i) + L")";
@@ -9578,7 +9791,7 @@ static void FileNewFolder() {
 // the extension is selected, so typing replaces it and the extension stays unless the user
 // edits it.
 static void FileNewFile() {
-    if (!g_fileMode || g_fileCur.empty()) return;
+    if (!g_fileMode || g_fileCur.empty() || InPcRoot()) return;
     std::wstring path;
     for (int i = 1; i < 1000; ++i) {
         const std::wstring base =
@@ -9772,6 +9985,7 @@ static void BuildFileMenu() {
 }
 
 static void OpenFileMenu() {
+    if (InPcRoot()) return;  // drive rows have no file actions
     CaptureFileTarget();
     BuildFileMenu();
     g_fileMenuSel = 0;
@@ -9842,9 +10056,22 @@ static void ToggleFileMode() {
     g_fileFwd.clear();
     g_pendingSelect.clear();
     g_fileSrc = &g_fileEntries;
-    g_fileCur = g_fileMode ? ResolveFileLocation(0) : std::wstring();
-    g_fileLoc = 0;
-    g_chipSelPos = g_chipSelTarget = 0;  // no slide when entering/leaving the mode
+    if (g_fileMode) {
+        RebuildFileChips();
+        // Home, except the first open in a session when a valid start drive is configured.
+        std::wstring dest = ResolveFileLocation(0);
+        if (!g_fileStartUsed) {
+            g_fileStartUsed = true;
+            const std::wstring sd = StartDrivePath();
+            if (!sd.empty()) dest = sd;
+        }
+        g_fileCur = dest;
+        g_fileLoc = LocationForPath(g_fileCur);
+    } else {
+        g_fileCur.clear();
+        g_fileLoc = 0;
+    }
+    g_chipSelPos = g_chipSelTarget = (g_fileLoc >= 0) ? g_fileLoc : 0;  // no slide on enter/leave
     g_fileDir.clear();  // force a fresh listing next RunSearch
     // Switching context starts from a clean slate: the query is not carried over.
     g_text.clear();
@@ -9880,7 +10107,9 @@ static void CloseHelp() {
 
 static void OpenHelp() {
     if (g_helpOpen) return;
-    if (g_fileMode) ToggleFileMode();  // the sheet replaces the file browser
+    // The sheet is only an overlay: the view underneath (file browser, calculator, the current
+    // folder, query and selection) is left untouched so closing it returns exactly where the user
+    // was. Only transient popups are dismissed so they do not linger behind the sheet.
     g_helpOpen = true;
     g_helpPage = 0;
     g_bandEdit = BandEdit::None;
@@ -10235,7 +10464,7 @@ static bool HandleKeyDown(WPARAM vk) {
             return true;
         }
         if (!ctrl && !shift && vk == VK_F2) {
-            if (CaptureFileTarget()) BeginRename(g_fileMenuTarget);
+            if (!InPcRoot() && CaptureFileTarget()) BeginRename(g_fileMenuTarget);
             return true;
         }
         if (ctrl && shift && vk == 'N') {
@@ -10315,7 +10544,9 @@ static bool HandleKeyDown(WPARAM vk) {
     }
 
     if (g_fileMode && g_activator < 0 && ctrl && !shift) {
-        if (vk >= '1' && vk <= '0' + kFileLocationCount) {
+        // Ctrl+1..9 jumps to the Nth chip (locations first, then drives); more than nine chips are
+        // reached with Ctrl+Left/Right or Ctrl+Tab.
+        if (vk >= '1' && vk <= '9' && (int)(vk - '1') < (int)g_chips.size()) {
             SetFileLocation((int)(vk - '1'));
             return true;
         }
@@ -10325,7 +10556,7 @@ static bool HandleKeyDown(WPARAM vk) {
                 SetFileLocation(0);
             } else {
                 SetFileLocation(std::clamp(g_fileLoc + (vk == VK_LEFT ? -1 : 1), 0,
-                                           kFileLocationCount - 1));
+                                           (int)g_chips.size() - 1));
             }
             return true;
         }
@@ -10394,6 +10625,12 @@ static bool HandleKeyDown(WPARAM vk) {
             SelectDelta(-1);
             return true;
         case VK_TAB:
+            // Ctrl+Tab hops to the next ready drive in the file browser (Ctrl+Shift+Tab the
+            // previous one); the profile's drive lands on Home, the others on their root.
+            if (g_fileMode && g_activator < 0 && ctrl) {
+                CycleDrive(shift ? -1 : 1);
+                return true;
+            }
             // In a calculator context Tab keeps its meaning: pull a history row in for editing,
             // otherwise move the selection.
             if (CalcHistoryVisible() || CalcShown()) {
@@ -10457,12 +10694,13 @@ static bool HandleKeyDown(WPARAM vk) {
                 ReplaceSelection(L"");
                 Sound::OnErase();
             } else if (g_fileMode && g_activator < 0 && g_text.empty()) {
-                // Empty field: go up a folder; at a chip root (or a drive root) leave file mode.
-                bool atRoot = ParentDir(g_fileCur).empty();
-                for (int i = 0; i < kFileLocationCount && !atRoot; ++i) {
-                    if (SamePath(ResolveFileLocation(i), g_fileCur)) atRoot = true;
+                // Empty field: the drives view and a location chip root leave file mode; a drive
+                // root steps up to the drives view (FileUp); anything else goes up a folder.
+                bool leave = InPcRoot();
+                for (int i = 0; i < kFileLocationCount && !leave; ++i) {
+                    if (SamePath(ResolveFileLocation(i), g_fileCur)) leave = true;
                 }
-                if (atRoot) {
+                if (leave) {
                     ToggleFileMode();
                 } else {
                     FileUp();
@@ -10835,7 +11073,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         ToggleFileMode();  // the chip's close button leaves file mode
                         return 0;
                     }
-                    for (int i = 0; i < kFileLocationCount; ++i) {
+                    for (int i = 0; i < (int)g_chips.size(); ++i) {
                         const D2D1_RECT_F cr = FileChipRect(ocx, ocy, i);
                         if (mx >= cr.left && mx < cr.right && my >= cr.top && my < cr.bottom) {
                             SetFileLocation(i);
@@ -10853,7 +11091,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     FileBack();
                     return 0;
                 }
-                const float bandTop = bcy + (kBarH + kChipH) * (float)g_scale;
+                const float bandTop = bcy + (kBarH + FileChipRowsH()) * (float)g_scale;
                 if (px >= bcx + 38 * (float)g_scale && px < bcx + kWidth * (float)g_scale &&
                     py >= bandTop && py < bandTop + kPathH * (float)g_scale) {
                     BeginPathEdit();  // click on the path: edit it
@@ -10992,6 +11230,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             const bool oldHideUtility = g_cfg.hideUtility;
             g_legacySettings = false;  // the user saved the new layout: its values are the real ones
             LoadSettings();
+            g_fileStartUsed = false;  // re-arm the start drive so a freshly set value takes effect
             Sound::Configure();
             Sound::ApplyVolume();
             if (g_cfg.hideUtility != oldHideUtility) {

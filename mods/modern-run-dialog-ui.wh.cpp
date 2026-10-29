@@ -2,9 +2,9 @@
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 10 & 11
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
-// @description     Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, Windows Blur, and instant history execution.
-// @description:vi-VN Biến đổi hộp thoại Run cổ điển trên Windows 10 & 11 thành giao diện Fluent UI hiện đại với hiệu ứng Liquid Glass, phông chữ DirectWrite sắc nét và chạy lệnh nhanh từ lịch sử.
-// @version         3.0.4
+// @description     Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, app suggestions while typing, and instant history execution.
+// @description:vi-VN Biến đổi hộp thoại Run cổ điển trên Windows 10 & 11 thành giao diện Fluent UI hiện đại với hiệu ứng Liquid Glass, gợi ý ứng dụng khi gõ, phông chữ DirectWrite sắc nét và chạy lệnh nhanh từ lịch sử.
+// @version         3.0.6
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
@@ -16,27 +16,36 @@
 /*
 # Modern Run Dialog UI For Windows 10 & 11
 
-![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/liquidglass.png)
+![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306liquidglass.png)
 
 Modern Run Dialog UI Preview (Liquid Glass)
 
-![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/windowsblur.png)
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306windowsblur.png)
 
 Modern Run Dialog UI Preview (Windows Blur)
+
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306goiyungdung.png)
+
+Modern Run Dialog UI Preview (Application recommendation system)
 
 ---
 
 ## 🌐 English
 
-**Modern Run Dialog UI For Windows 10 & 11** replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid Glass / Fluent Design** command palette powered by **Direct2D & DirectWrite**, fully compatible with both **Windows 10** and **Windows 11**.
+**Modern Run Dialog UI For Windows 10 & 11** replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid Glass / Fluent Design** command palette powered by **Direct2D & DirectWrite**, fully compatible with both **Windows 10** and **Windows 11** (including Insider builds without public PDB symbols such as build 26300.9807+).
 
 ### ✨ Key Features
 
-- **Full Windows 10 & Windows 11 Compatibility:**
-  * Works seamlessly on both **Windows 10** and **Windows 11** (`x86-64`), automatically anchoring right above the Taskbar and supporting Per-Monitor DPI scaling across both operating systems.
+- **Full Windows 10 & Windows 11 Compatibility (Symbol-Less Fallback Included):**
+  * Works seamlessly on both **Windows 10** and **Windows 11** (`x86-64`), automatically anchoring right above the Taskbar and supporting Per-Monitor DPI scaling.
+  * Includes an automatic **symbol-less hooking fallback** (`DialogBoxParamW`) targeting the Run dialog resource (`#1003`) so the mod works reliably even when Microsoft's symbol server returns HTTP 404 for `shell32.pdb` on newer Insider or cumulative builds.
+
+- **PowerToys Run-Style App & Command Suggestions (Experimental):**
+  * Dynamically suggests installed applications (Start Menu shortcuts, Registry `App Paths`), built-in system tools (`cmd`, `regedit`, `dxdiag`, `services.msc`, `control`, etc.), and recent commands while you type.
+  * Navigate suggestions with `Up` / `Down` arrows, press `Tab` to autocomplete, `Enter` to launch, or click any row to execute immediately.
 
 - **Liquid Glass, Windows Blur & Opaque Themes:**
-  * **Liquid Glass:** Translucent low-tint glass backdrop paired with dual refractive rim strokes, pointer-following specular highlights, and glass-styled pill buttons.
+  * **Liquid Glass:** Translucent low-tint glass backdrop paired with dual refractive rim strokes and pointer-following specular highlights, while keeping high-contrast color-coded action buttons (**Browse** with folder icon, **Run** in Fluent Blue with return arrow icon, and **Exit** in dark crimson with close icon) for optimal usability.
   * **16×16 Luminance Contrast Adaptation:** Automatically switches glass text contrast between light and dark based on a temporary 16×16 luminance sample of the backdrop.
   * **Windows Blur & Opaque Fallbacks:** Respects High Contrast mode and automatically falls back to Windows Blur on older unsupported CPUs.
 
@@ -47,40 +56,34 @@ Modern Run Dialog UI Preview (Windows Blur)
   * Displays up to **10 recently executed commands** with native icons, friendly app names, and execution timestamps.
   * **Click any history item to execute it immediately** without cluttering the input box.
   * Maintains a per-user command and timestamp history in Windhawk mod storage (`HistoryTimestamps_<SID>`), allowing the mod's history list to work even when Windows' own `RunMRU` tracking is disabled.
-  * **Clearing History (Non-Destructive):** Enable **History · Clear Stored History** in the mod settings and click Save (or press `Delete` on a hovered/selected history row) to clear the mod's displayed history for the current user without deleting Windows' native `RunMRU` registry entries, or set **History · Max Items** to `0` to disable history completely.
 
 - **Quality-of-Life Enhancements:**
   * **Taskbar Icon & `Win + R` Toggle:** Click the Run icon on the Taskbar to minimize/restore, or press `Win + R` while open to close immediately.
-  * **Seamless IME & Multilingual Support:** Works smoothly with Windows IME (Vietnamese Telex/VNI, CJK), Unikey, and EVKey, and supports 11 display languages (including Italian).
+  * **Seamless IME & Multilingual Support:** Works smoothly with Windows IME (Vietnamese Telex/VNI, CJK, Thai, Arabic, Hindi), Unikey, and EVKey, and supports **21 display languages** (including Thai, Indonesian, Malay, Portuguese, Turkish, Polish, Dutch, Ukrainian, Hindi, and Arabic).
 
 ---
 
 ## 🇻🇳 Tiếng Việt
 
-**Modern Run Dialog UI For Windows 10 & 11** thay thế hộp thoại **Run (`Win + R`)** cổ điển bằng giao diện **Liquid Glass / Fluent Design** không viền hiện đại, được kết xuất trực tiếp bằng **Direct2D & DirectWrite** và tương thích hoàn hảo với cả **Windows 10** lẫn **Windows 11**.
+**Modern Run Dialog UI For Windows 10 & 11** thay thế hộp thoại **Run (`Win + R`)** cổ điển bằng giao diện **Liquid Glass / Fluent Design** không viền hiện đại, được kết xuất trực tiếp bằng **Direct2D & DirectWrite** và tương thích hoàn hảo với cả **Windows 10** lẫn **Windows 11** (bao gồm cả các bản build mới chưa có PDB trên máy chủ Microsoft như 26300.9807+).
 
 ### ✨ Tính năng nổi bật
 
-- **Tương thích tốt với cả Windows 10 & Windows 11:**
+- **Tương thích hoàn hảo Windows 10 & Windows 11 (Hỗ trợ chạy không cần Symbol PDB):**
   * Hoạt động mượt mà, ổn định trên cả **Windows 10** và **Windows 11** (`x86-64`), tự động căn chỉnh vị trí sát thanh Taskbar và co giãn chuẩn theo DPI từng màn hình.
+  * Tích hợp cơ chế **hook dự phòng không phụ thuộc `shell32.pdb`**, khắc phục triệt để lỗi hiện hộp thoại Run cổ điển khi máy chủ Symbol của Microsoft trả về lỗi HTTP 404 trên các bản Windows 11 mới.
 
-- **3 Chế độ bề mặt (Liquid Glass, Làm mờ Windows & Nền đặc):**
-  * **Liquid Glass:** Lớp nền kính trong suốt kết hợp viền khúc xạ ánh sáng 2 lớp, hiệu ứng phản sáng chạy theo trỏ chuột và các nút bấm dạng viên thuốc bằng kính.
-  * **Tự động thích ứng độ tương phản (Mẫu 16×16):** Tự động chuyển đổi màu chữ và sắc độ kính giữa Sáng và Tối dựa trên mẫu đo độ sáng 16×16 tạm thời của vùng nền phía sau.
-  * **Làm mờ Windows & Nền đặc tương thích:** Tôn trọng chế độ Tương phản cao (High Contrast) của hệ thống và tự động chuyển về Làm mờ Windows trên các dòng CPU đời cũ.
+- **Gợi ý ứng dụng & lệnh khi gõ như PowerToys Run (Thử nghiệm):**
+  * Tự động tìm kiếm và gợi ý ứng dụng đã cài đặt (Start Menu, `App Paths`), công cụ hệ thống (`dxdiag`, `regedit`, `cmd`, `services.msc`...) và lịch sử ngay khi bạn gõ phím.
+  * Dùng phím mũi tên `Lên` / `Xuống` để chọn gợi ý, nhấn `Tab` để điền nhanh vào ô nhập, nhấn `Enter` hoặc click chuột trực tiếp vào dòng gợi ý để mở ngay.
 
-- **Phông chữ DirectWrite sắc nét:**
-  * Kết xuất bằng **DirectWrite (`IDWriteTextLayout`)** và **Direct2D** mang lại chất lượng chữ sắc nét: tên lệnh Semibold nổi bật, tên ứng dụng Regular cân đối, hiển thị tiếng Việt có dấu đều đặn và tự co giãn chuẩn theo DPI màn hình.
+- **3 Chế độ bề mặt & Bộ 3 nút hành động trực quan:**
+  * **Liquid Glass:** Lớp nền kính trong suốt kết hợp viền khúc xạ ánh sáng 2 lớp và hiệu ứng phản sáng chạy theo trỏ chuột, đồng thời giữ nguyên màu sắc đặc trưng và biểu tượng trực quan của 3 nút bấm phía dưới (**Duyệt** kèm icon thư mục, **Chạy** màu xanh dương kèm icon Enter, **Thoát** màu đỏ trầm kèm icon đóng) giúp thao tác dễ nhìn và không bị chói.
+  * **Tự động thích ứng độ tương phản (Mẫu 16×16):** Tự động chuyển đổi màu chữ và sắc độ kính giữa Sáng và Tối dựa trên mẫu đo độ sáng 16×16 của vùng nền phía sau.
 
 - **Lịch sử thông minh — Bấm là chạy ngay (Lưu trữ riêng theo từng User):**
-  * Hiển thị tối đa **10 lệnh chạy gần nhất** kèm biểu tượng gốc, tên ứng dụng thân thiện (`lệnh · Tên ứng dụng`) và thời gian thực thi.
-  * **Bấm trực tiếp vào bất kỳ mục lịch sử nào để chạy lệnh ngay lập tức** mà không cần đẩy xuống ô nhập liệu.
-  * Lưu lịch sử và thời gian chạy riêng biệt cho từng tài khoản người dùng Windows (`HistoryTimestamps_<SID>`), giúp lịch sử hoạt động ổn định kể cả khi bạn tắt tính năng lưu lịch sử `RunMRU` của Windows.
-  * **Xóa lịch sử an toàn:** Bật tùy chọn **Xóa lịch sử đã lưu** trong phần Cài đặt mod rồi bấm Lưu (hoặc nhấn phím `Delete` khi đang trỏ chuột/chọn một dòng lịch sử) để làm sạch danh sách lịch sử hiển thị trong mod mà không xóa dữ liệu `RunMRU` gốc của Windows, hoặc đặt **Số mục lịch sử tối đa** về `0` để tắt hẳn.
-
-- **Tiện ích nâng cao trải nghiệm (Quality-of-Life):**
-  * **Đóng/mở nhanh từ Taskbar & `Win + R`:** Bấm vào biểu tượng Run dưới Taskbar để thu nhỏ/khôi phục cửa sổ, hoặc nhấn lại `Win + R` khi hộp thoại đang mở để đóng nhanh.
-  * **Tương thích bộ gõ Tiếng Việt & Đa ngôn ngữ:** Hoạt động mượt mà với Unikey, EVKey, bộ gõ Windows IME và hỗ trợ 11 ngôn ngữ hiển thị.
+  * Hiển thị tối đa **10 lệnh chạy gần nhất** kèm biểu tượng gốc, tên ứng dụng thân thiện (`lệnh - Tên ứng dụng`) và thời gian thực thi.
+  * **Tương thích bộ gõ Tiếng Việt & 21 Ngôn ngữ:** Hoạt động mượt mà với Unikey, EVKey, bộ gõ Windows IME và hỗ trợ 21 ngôn ngữ hiển thị (bổ sung Tiếng Thái, Tiếng Indonesia, Mã Lai, Bồ Đào Nha, Thổ Nhĩ Kỳ, Ba Lan, Hà Lan, Ukraina, Hindi, Ả Rập...).
 */
 // ==/WindhawkModReadme==
 
@@ -95,6 +98,9 @@ Modern Run Dialog UI Preview (Windows Blur)
   - auto: Tự động theo Windows
   - en: English (Tiếng Anh)
   - vi: Tiếng Việt
+  - th: ไทย (Tiếng Thái)
+  - id: Bahasa Indonesia (Tiếng Indonesia)
+  - ms: Bahasa Melayu (Tiếng Mã Lai)
   - ja: 日本語 (Tiếng Nhật)
   - zh_cn: 简体中文 (Tiếng Trung Giản thể)
   - zh_tw: 繁體中文 (Tiếng Trung Phồn thể)
@@ -102,12 +108,22 @@ Modern Run Dialog UI Preview (Windows Blur)
   - fr: Français (Tiếng Pháp)
   - de: Deutsch (Tiếng Đức)
   - es: Español (Tiếng Tây Ban Nha)
+  - pt: Português (Tiếng Bồ Đào Nha)
   - it: Italiano (Tiếng Ý)
   - ru: Русский (Tiếng Nga)
+  - uk: Українська (Tiếng Ukraina)
+  - pl: Polski (Tiếng Ba Lan)
+  - nl: Nederlands (Tiếng Hà Lan)
+  - tr: Türkçe (Tiếng Thổ Nhĩ Kỳ)
+  - hi: हिन्दी (Tiếng Hindi)
+  - ar: العربية (Tiếng Ả Rập)
   $options:
   - auto: Auto – System Default
   - en: English
   - vi: Tiếng Việt (Vietnamese)
+  - th: ไทย (Thai)
+  - id: Bahasa Indonesia (Indonesian)
+  - ms: Bahasa Melayu (Malay)
   - ja: 日本語 (Japanese)
   - zh_cn: 简体中文 (Simplified Chinese)
   - zh_tw: 繁體中文 (Traditional Chinese)
@@ -115,8 +131,15 @@ Modern Run Dialog UI Preview (Windows Blur)
   - fr: Français (French)
   - de: Deutsch (German)
   - es: Español (Spanish)
+  - pt: Português (Portuguese)
   - it: Italiano (Italian)
   - ru: Русский (Russian)
+  - uk: Українська (Ukrainian)
+  - pl: Polski (Polish)
+  - nl: Nederlands (Dutch)
+  - tr: Türkçe (Turkish)
+  - hi: हिन्दी (Hindi)
+  - ar: العربية (Arabic)
 - surfaceTheme: glass
   $name: Appearance · Surface Theme
   $name:vi-VN: Giao diện bề mặt
@@ -148,11 +171,16 @@ Modern Run Dialog UI Preview (Windows Blur)
   $name:vi-VN: Độ đậm nền Blur (0–255)
   $description: Background tint opacity when using Windows Blur (0–255, default is 170).
   $description:vi-VN: Độ đậm lớp phủ nền khi dùng Làm mờ Windows (0–255, mặc định là 170).
+- enableAppSuggestions: true
+  $name: Experimental · App Suggestions While Typing
+  $name:vi-VN: Thử nghiệm · Gợi ý ứng dụng khi gõ (kiểu PowerToys)
+  $description: Suggest installed apps (Start Menu, App Paths) and system commands dynamically while typing — similar to PowerToys Run.
+  $description:vi-VN: Tự động gợi ý các ứng dụng đã cài đặt (Start Menu, App Paths) và lệnh hệ thống khi đang gõ — tương tự PowerToys Run.
 - maxHistoryItems: 5
   $name: History · Max Items (0–10)
-  $name:vi-VN: Số mục lịch sử tối đa (0–10)
-  $description: Maximum number of recent commands shown in the top list (0–10, set 0 to disable).
-  $description:vi-VN: Số lượng lệnh gần đây hiển thị ở phần phía trên (0–10, nhập 0 để tắt).
+  $name:vi-VN: Số mục lịch sử / gợi ý tối đa (0–10)
+  $description: Maximum number of recent commands or app suggestions shown in the top list (0–10, set 0 to disable).
+  $description:vi-VN: Số lượng lệnh gần đây hoặc gợi ý ứng dụng hiển thị ở phần phía trên (0–10, nhập 0 để tắt).
 - showTimestamp: true
   $name: History · Show Last Executed Time
   $name:vi-VN: Hiển thị thời gian chạy lệnh gần nhất
@@ -193,6 +221,7 @@ Modern Run Dialog UI Preview (Windows Blur)
 #include <commdlg.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <shlwapi.h>
 #include <commctrl.h>
 #include <d2d1.h>
@@ -222,6 +251,11 @@ Modern Run Dialog UI Preview (Windows Blur)
 #define DWMWA_BORDER_COLOR 34
 #endif
 
+// Classic Windows Run Dialog resource & control IDs in shell32.dll
+constexpr WORD kRunDialogResourceId = 1003;
+constexpr int kRunDlgComboId        = 12298; // 0x300A (IDD_COMMAND)
+constexpr int kRunDlgBrowseId       = 12288; // 0x3000 (IDD_BROWSE)
+
 enum ACCENT_STATE {
     ACCENT_DISABLED = 0,
     ACCENT_ENABLE_GRADIENT = 1,
@@ -248,13 +282,16 @@ using SetWindowCompositionAttribute_t = BOOL(WINAPI*)(HWND, WINDOWCOMPOSITIONATT
 using ShowWindow_t = decltype(&ShowWindow);
 using SetForegroundWindow_t = decltype(&SetForegroundWindow);
 using SwitchToThisWindow_t = decltype(&SwitchToThisWindow);
+using DialogBoxParamW_t = decltype(&DialogBoxParamW);
 using RunDlgProc_t = INT_PTR(CALLBACK*)(HWND, UINT, WPARAM, LPARAM);
 
 ShowWindow_t ShowWindow_Orig = nullptr;
 SetForegroundWindow_t SetForegroundWindow_Orig = nullptr;
 SwitchToThisWindow_t SwitchToThisWindow_Orig = nullptr;
+DialogBoxParamW_t DialogBoxParamW_Orig = nullptr;
 RunDlgProc_t RunDlgProc_Orig = nullptr;
 
+HMODULE g_hShell32 = nullptr;
 ID2D1Factory* g_pD2DFactory = nullptr;
 IDWriteFactory* g_pDWriteFactory = nullptr;
 
@@ -340,6 +377,7 @@ struct LocalizedStrings {
     const wchar_t* todayPrefix;
     const wchar_t* browseTitle;
     const wchar_t* browseFilter;
+    const wchar_t* appTag;
 };
 
 struct ModSettings {
@@ -348,6 +386,7 @@ struct ModSettings {
     ColorMode colorMode = ColorMode::Auto;
     bool taskbarCloseInsteadOfMinimize = false;
     int blurOpacity = 170;
+    bool enableAppSuggestions = true;
     int maxHistoryItems = 5;
     bool showTimestamp = true;
     bool clearInitialInput = true;
@@ -363,7 +402,8 @@ LocalizedStrings g_i18n = {
     L"Exit",
     L"Today",
     L"Select an executable program",
-    L"Programs (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0All Files (*.*)\0*.*\0\0"
+    L"Programs (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0All Files (*.*)\0*.*\0\0",
+    L"Application"
 };
 
 UINT g_msgUninit = 0;
@@ -424,7 +464,7 @@ D2D1_COLOR_F GetSystemAccentColorF() {
             return D2D1::ColorF(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
         }
     }
-    return D2D1::ColorF(0.44f, 0.38f, 0.88f, 1.0f);
+    return D2D1::ColorF(0.10f, 0.47f, 0.83f, 1.0f);
 }
 
 // Temporary 16x16 background luminance sampler to adapt Liquid Glass text contrast
@@ -511,6 +551,9 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
         WORD sub  = SUBLANGID(lid);
         switch (prim) {
             case LANG_VIETNAMESE: lang = L"vi"; break;
+            case LANG_THAI:       lang = L"th"; break;
+            case LANG_INDONESIAN: lang = L"id"; break;
+            case LANG_MALAY:      lang = L"ms"; break;
             case LANG_JAPANESE:   lang = L"ja"; break;
             case LANG_CHINESE:
                 lang = (sub == SUBLANG_CHINESE_SIMPLIFIED || sub == SUBLANG_CHINESE_SINGAPORE)
@@ -520,8 +563,15 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             case LANG_FRENCH:     lang = L"fr"; break;
             case LANG_GERMAN:     lang = L"de"; break;
             case LANG_SPANISH:    lang = L"es"; break;
+            case LANG_PORTUGUESE: lang = L"pt"; break;
             case LANG_ITALIAN:    lang = L"it"; break;
             case LANG_RUSSIAN:    lang = L"ru"; break;
+            case LANG_UKRAINIAN:  lang = L"uk"; break;
+            case LANG_POLISH:     lang = L"pl"; break;
+            case LANG_DUTCH:      lang = L"nl"; break;
+            case LANG_TURKISH:    lang = L"tr"; break;
+            case LANG_HINDI:      lang = L"hi"; break;
+            case LANG_ARABIC:     lang = L"ar"; break;
             default:              lang = L"en"; break;
         }
     }
@@ -534,7 +584,44 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Thoát",
             L"Hôm nay",
             L"Chọn chương trình (.exe) để đưa vào ô nhập",
-            L"Chương trình (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tất cả tệp (*.*)\0*.*\0\0"
+            L"Chương trình (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tất cả tệp (*.*)\0*.*\0\0",
+            L"Ứng dụng"
+        };
+    }
+    if (lang == L"th") {
+        return {
+            L"พิมพ์ชื่อคำสั่งหรือโปรแกรมเพื่อเรียกใช้งาน",
+            L"เรียกดู",
+            L"เรียกใช้",
+            L"ออก",
+            L"วันนี้",
+            L"เลือกโปรแกรมที่ต้องการเรียกใช้งาน",
+            L"โปรแกรม (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0ไฟล์ทั้งหมด (*.*)\0*.*\0\0",
+            L"แอปพลิเคชัน"
+        };
+    }
+    if (lang == L"id") {
+        return {
+            L"Ketik nama perintah atau program untuk dijalankan",
+            L"Telusuri",
+            L"Jalankan",
+            L"Keluar",
+            L"Hari ini",
+            L"Pilih program yang akan dijalankan",
+            L"Program (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Semua File (*.*)\0*.*\0\0",
+            L"Aplikasi"
+        };
+    }
+    if (lang == L"ms") {
+        return {
+            L"Taip nama arahan atau program untuk dijalankan",
+            L"Semak",
+            L"Jalankan",
+            L"Keluar",
+            L"Hari ini",
+            L"Pilih program untuk dijalankan",
+            L"Program (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Semua Fail (*.*)\0*.*\0\0",
+            L"Aplikasi"
         };
     }
     if (lang == L"ja") {
@@ -545,7 +632,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"閉じる",
             L"今日",
             L"実行するプログラムを選択",
-            L"プログラム (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0すべてのファイル (*.*)\0*.*\0\0"
+            L"プログラム (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0すべてのファイル (*.*)\0*.*\0\0",
+            L"アプリケーション"
         };
     }
     if (lang == L"zh_cn") {
@@ -556,7 +644,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"退出",
             L"今天",
             L"选择要运行的程序",
-            L"程序 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0所有文件 (*.*)\0*.*\0\0"
+            L"程序 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0所有文件 (*.*)\0*.*\0\0",
+            L"应用程序"
         };
     }
     if (lang == L"zh_tw") {
@@ -567,7 +656,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"退出",
             L"今天",
             L"選擇要執行的程式",
-            L"程式 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0所有檔案 (*.*)\0*.*\0\0"
+            L"程式 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0所有檔案 (*.*)\0*.*\0\0",
+            L"應用程式"
         };
     }
     if (lang == L"ko") {
@@ -578,7 +668,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"닫기",
             L"오늘",
             L"실행할 프로그램 선택",
-            L"프로그램 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0모든 파일 (*.*)\0*.*\0\0"
+            L"프로그램 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0모든 파일 (*.*)\0*.*\0\0",
+            L"애플리케이션"
         };
     }
     if (lang == L"fr") {
@@ -589,7 +680,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Quitter",
             L"Aujourd'hui",
             L"Sélectionner un programme",
-            L"Programmes (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tous les fichiers (*.*)\0*.*\0\0"
+            L"Programmes (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tous les fichiers (*.*)\0*.*\0\0",
+            L"Application"
         };
     }
     if (lang == L"de") {
@@ -600,7 +692,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Schließen",
             L"Heute",
             L"Programm auswählen",
-            L"Programme (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Alle Dateien (*.*)\0*.*\0\0"
+            L"Programme (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Alle Dateien (*.*)\0*.*\0\0",
+            L"Anwendung"
         };
     }
     if (lang == L"es") {
@@ -611,18 +704,32 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Salir",
             L"Hoy",
             L"Seleccionar un programa",
-            L"Programas (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Todos los archivos (*.*)\0*.*\0\0"
+            L"Programas (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Todos los archivos (*.*)\0*.*\0\0",
+            L"Aplicación"
+        };
+    }
+    if (lang == L"pt") {
+        return {
+            L"Digite o nome de um comando ou programa para executar",
+            L"Procurar",
+            L"Executar",
+            L"Sair",
+            L"Hoje",
+            L"Selecionar um programa executável",
+            L"Programas (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Todos os arquivos (*.*)\0*.*\0\0",
+            L"Aplicativo"
         };
     }
     if (lang == L"it") {
         return {
             L"Digitare il nome del programma da eseguire",
-            L"Sfoglia...",
-            L"OK",
-            L"Annulla",
+            L"Sfoglia",
+            L"Esegui",
+            L"Esci",
             L"Oggi",
             L"Seleziona un programma da eseguire",
-            L"Programmi (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tutti i file (*.*)\0*.*\0\0"
+            L"Programmi (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tutti i file (*.*)\0*.*\0\0",
+            L"Applicazione"
         };
     }
     if (lang == L"ru") {
@@ -633,7 +740,80 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Выход",
             L"Сегодня",
             L"Выберите программу",
-            L"Программы (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Все файлы (*.*)\0*.*\0\0"
+            L"Программы (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Все файлы (*.*)\0*.*\0\0",
+            L"Приложение"
+        };
+    }
+    if (lang == L"uk") {
+        return {
+            L"Введіть ім'я команди або програми для виконання",
+            L"Огляд",
+            L"Виконати",
+            L"Вихід",
+            L"Сьогодні",
+            L"Виберіть програму для виконання",
+            L"Програми (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Усі файли (*.*)\0*.*\0\0",
+            L"Програма"
+        };
+    }
+    if (lang == L"pl") {
+        return {
+            L"Wpisz nazwę polecenia lub programu do uruchomienia",
+            L"Przeglądaj",
+            L"Uruchom",
+            L"Wyjdź",
+            L"Dzisiaj",
+            L"Wybierz program do uruchomienia",
+            L"Programy (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Wszystkie pliki (*.*)\0*.*\0\0",
+            L"Aplikacja"
+        };
+    }
+    if (lang == L"nl") {
+        return {
+            L"Typ de naam van een opdracht of programma",
+            L"Bladeren",
+            L"Uitvoeren",
+            L"Sluiten",
+            L"Vandaag",
+            L"Selecteer een uitvoerbaar programma",
+            L"Programma's (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Alle bestanden (*.*)\0*.*\0\0",
+            L"Toepassing"
+        };
+    }
+    if (lang == L"tr") {
+        return {
+            L"Çalıştırmak istediğiniz komutun adını yazın",
+            L"Gözat",
+            L"Çalıştır",
+            L"Çıkış",
+            L"Bugün",
+            L"Çalıştırılacak bir program seçin",
+            L"Programlar (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tüm Dosyalar (*.*)\0*.*\0\0",
+            L"Uygulama"
+        };
+    }
+    if (lang == L"hi") {
+        return {
+            L"चलाने के लिए किसी कमांड या प्रोग्राम का नाम टाइप करें",
+            L"ब्राउज़",
+            L"चलाएँ",
+            L"बंद करें",
+            L"आज",
+            L"चलाने के लिए एक प्रोग्राम चुनें",
+            L"प्रोग्राम (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0सभी फ़ाइलें (*.*)\0*.*\0\0",
+            L"एप्लिकेशन"
+        };
+    }
+    if (lang == L"ar") {
+        return {
+            L"اكتب اسم أمر أو برنامج لتشغيله",
+            L"استعراض",
+            L"تشغيل",
+            L"خروج",
+            L"اليوم",
+            L"اختر برنامجاً لتشغيله",
+            L"البرامج (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0كل الملفات (*.*)\0*.*\0\0",
+            L"تطبيق"
         };
     }
 
@@ -644,7 +824,8 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
         L"Exit",
         L"Today",
         L"Select an executable program",
-        L"Programs (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0All Files (*.*)\0*.*\0\0"
+        L"Programs (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0All Files (*.*)\0*.*\0\0",
+        L"Application"
     };
 }
 
@@ -663,12 +844,16 @@ std::wstring TrimCommandString(const std::wstring& cmd) {
     return res;
 }
 
-std::wstring NormalizeCmdKey(const std::wstring& cmd) {
-    std::wstring res = TrimCommandString(cmd);
+std::wstring ToLowerString(std::wstring_view sv) {
+    std::wstring res(sv);
     for (wchar_t& ch : res) {
         ch = towlower(ch);
     }
     return res;
+}
+
+std::wstring NormalizeCmdKey(const std::wstring& cmd) {
+    return ToLowerString(TrimCommandString(cmd));
 }
 
 std::wstring GetCurrentUserSidString() {
@@ -774,8 +959,6 @@ void RemoveCommandFromHiddenMru(const std::wstring& cmd) {
     }
 }
 
-// Clears the mod's per-user history and hides any commands currently in Windows' RunMRU
-// without modifying or deleting Windows' native RunMRU registry values.
 void ClearCurrentUserStoredHistory() {
     Wh_DeleteValue(GetHistoryStorageKey().c_str());
 
@@ -840,6 +1023,7 @@ void LoadSettings(bool fromSettingsChanged = false) {
 
     newSettings.taskbarCloseInsteadOfMinimize = (wcscmp(tbAction.get(), L"close") == 0);
     newSettings.blurOpacity = std::clamp(Wh_GetIntSetting(L"blurOpacity"), 0, 255);
+    newSettings.enableAppSuggestions = Wh_GetIntSetting(L"enableAppSuggestions") != 0;
     newSettings.maxHistoryItems = std::clamp(Wh_GetIntSetting(L"maxHistoryItems"), 0, 10);
     newSettings.showTimestamp = Wh_GetIntSetting(L"showTimestamp") != 0;
     newSettings.clearInitialInput = Wh_GetIntSetting(L"clearInitialInput") != 0;
@@ -870,9 +1054,20 @@ void LoadSettings(bool fromSettingsChanged = false) {
 
 struct HistoryItem {
     std::wstring cmd;
+    std::wstring execTarget;
     std::wstring appName;
     std::wstring timeStr;
     HICON hIcon = nullptr;
+    bool ownsIcon = true;
+    bool isSuggestion = false;
+    bool isShortcutFile = false;
+};
+
+struct ActionButtonsLayout {
+    RECT rcBrowse;
+    RECT rcRun;
+    RECT rcClose;
+    RECT rcEdit;
 };
 
 struct RunDialogState {
@@ -885,6 +1080,8 @@ struct RunDialogState {
     HFONT hFontEditCtl = nullptr;
     HICON hRunIcon = nullptr;
     std::vector<HistoryItem> history;
+    std::vector<HistoryItem> suggestions;
+    bool showingSuggestions = false;
 
     ModSettings settings;
     LocalizedStrings i18n = {};
@@ -911,11 +1108,18 @@ struct RunDialogState {
     bool caretVisible = true;
     bool isTriggeringRun = false;
     bool isBrowsingFile = false;
+    bool suppressSuggestionUpdate = false;
     bool pendingUninit = false;
 };
 
+const std::vector<HistoryItem>& GetActiveRowItems(const RunDialogState* state) {
+    return state->showingSuggestions ? state->suggestions : state->history;
+}
+
 // Atomic state shared safely across threads
 std::atomic<HWND> g_hActiveRunDlg{nullptr};
+std::atomic<HWND> g_hFallbackInterceptedDlg{nullptr};
+std::atomic<int> g_fallbackDialogRefCount{0};
 std::atomic<ULONGLONG> g_openTick{0};
 std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
@@ -1015,6 +1219,9 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
 void PerformDialogUninit(HWND hWnd, RunDialogState* state);
+void RecomputeDialogMetrics(RunDialogState* state);
+void UpdateDialogEditFont(RunDialogState* state);
+void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& query);
 
 int GetDlgWidth(const RunDialogState* state) {
     return DpiScale(kBaseDlgWidth, state->dpi);
@@ -1036,7 +1243,6 @@ int GetInputBarHeight(const RunDialogState* state) {
     return DpiScale(kBaseInputBarHeight, state->dpi);
 }
 
-// Computes the initial dialog position anchored right next to the Taskbar
 void GetDefaultTaskbarAnchoredPosition(HWND hDlg, int width, int height, UINT dpi, int* outX, int* outY) {
     HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
@@ -1092,6 +1298,19 @@ void ClampDialogToMonitorWorkArea(HWND hDlg, int* inOutX, int* inOutY, int width
     }
     if (*inOutX < rcWork.left + margin) {
         *inOutX = rcWork.left + margin;
+    }
+}
+
+void ResizeDialogPreservingBottomAnchor(RunDialogState* state, int oldHeight) {
+    if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
+    if (oldHeight == state->totalHeight) return;
+
+    state->normalY += (oldHeight - state->totalHeight);
+    int dlgW = GetDlgWidth(state);
+    ClampDialogToMonitorWorkArea(state->hDlg, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
+    if (!IsIconic(state->hDlg)) {
+        SetWindowPos(state->hDlg, nullptr, state->normalX, state->normalY, dlgW, state->totalHeight,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
 
@@ -1208,10 +1427,12 @@ void OpenBrowseExecutableDialog(RunDialogState* state) {
             formattedPath = L"\"" + formattedPath + L"\"";
         }
 
+        state->suppressSuggestionUpdate = true;
         if (state->hModernEdit && IsWindow(state->hModernEdit)) {
             SetWindowTextW(state->hModernEdit, formattedPath.c_str());
             SendMessageW(state->hModernEdit, EM_SETSEL, formattedPath.size(), formattedPath.size());
         }
+        state->suppressSuggestionUpdate = false;
         SyncInputToNativeCombo(state, formattedPath.c_str());
         state->selectedRow = -1;
     }
@@ -1299,7 +1520,6 @@ void SaveCommandTimestamp(const std::wstring& cmd) {
     std::wstring keyName = NormalizeCmdKey(cleanCmd);
     if (keyName.empty()) return;
 
-    // Unhide the command if it was previously hidden
     RemoveCommandFromHiddenMru(cleanCmd);
 
     FILETIME ft = {};
@@ -1332,7 +1552,6 @@ void RemoveCommandFromHistoryStorage(const std::wstring& cmd) {
         SaveStoredTimestamps(entries);
     }
 
-    // Also mark as hidden in HiddenRunMru_<SID> so it isn't re-imported from Windows' RunMRU
     AddCommandToHiddenMru(cmd);
 }
 
@@ -1440,12 +1659,30 @@ void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride) 
     }
 }
 
-void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand) {
+void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& item) {
     if (!state || !state->hDlg || state->isTriggeringRun) return;
+
+    // For Start Menu shortcut files (.lnk / .appref-ms), launch directly via ShellExecuteExW
+    // so we don't pollute the native RunMRU box with a long Start Menu path, while recording
+    // the friendly shortcut or command in our history.
+    if (item.isShortcutFile && !item.execTarget.empty()) {
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.fMask = SEE_MASK_DOENVSUBST;
+        sei.hwnd = state->hDlg;
+        sei.lpVerb = nullptr;
+        sei.lpFile = item.execTarget.c_str();
+        sei.nShow = SW_SHOWNORMAL;
+        if (ShellExecuteExW(&sei)) {
+            CloseRunDialog(state->hDlg);
+            return;
+        }
+    }
+
+    const std::wstring& targetCmd = !item.execTarget.empty() ? item.execTarget : item.cmd;
     state->isTriggeringRun = true;
 
     wchar_t rawBuf[MAX_PATH] = {};
-    wcsncpy_s(rawBuf, rawCommand.c_str(), _TRUNCATE);
+    wcsncpy_s(rawBuf, targetCmd.c_str(), _TRUNCATE);
     PathRemoveBlanksW(rawBuf);
 
     if (rawBuf[0] == L'\0') {
@@ -1453,7 +1690,7 @@ void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawComma
         return;
     }
 
-    SaveCommandTimestamp(rawBuf);
+    SaveCommandTimestamp(item.cmd.empty() ? rawBuf : item.cmd);
 
     SyncInputToNativeCombo(state, rawBuf);
     if (state->hCombo) {
@@ -1473,6 +1710,13 @@ void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawComma
     }
 }
 
+void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand) {
+    HistoryItem tempItem;
+    tempItem.cmd = rawCommand;
+    tempItem.execTarget = rawCommand;
+    ExecuteHistoryOrSuggestionItem(state, tempItem);
+}
+
 void TriggerRunCommand(RunDialogState* state) {
     if (!state || !state->hDlg || state->isTriggeringRun) return;
 
@@ -1482,6 +1726,13 @@ void TriggerRunCommand(RunDialogState* state) {
             ImmNotifyIME(hImc, NI_COMPOSITIONSTR, CPS_COMPLETE, 0);
             ImmReleaseContext(state->hModernEdit, hImc);
         }
+    }
+
+    const auto& activeRows = GetActiveRowItems(state);
+    if (state->showingSuggestions && state->selectedRow >= 0 && state->selectedRow < (int)activeRows.size()) {
+        HistoryItem chosen = activeRows[state->selectedRow];
+        ExecuteHistoryOrSuggestionItem(state, chosen);
+        return;
     }
 
     std::wstring effectiveText = GetEffectiveInputText(state->hModernEdit);
@@ -1550,64 +1801,80 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
     pSetWCA(hDlg, &data);
 }
 
-std::wstring GetFriendlyBuiltinName(const std::wstring& baseLower) {
-    struct BuiltinMap { const wchar_t* key; const wchar_t* name; };
-    static const BuiltinMap kMap[] = {
-        { L"winver",       L"Windows Version" },
-        { L"cmd",          L"Command Prompt" },
-        { L"powershell",   L"Windows PowerShell" },
-        { L"pwsh",         L"PowerShell" },
-        { L"wt",           L"Windows Terminal" },
-        { L"notepad",      L"Notepad" },
-        { L"regedit",      L"Registry Editor" },
-        { L"calc",         L"Calculator" },
-        { L"mspaint",      L"Paint" },
-        { L"taskmgr",      L"Task Manager" },
-        { L"msconfig",     L"System Configuration" },
-        { L"control",      L"Control Panel" },
-        { L"explorer",     L"File Explorer" },
-        { L"mstsc",        L"Remote Desktop Connection" },
-        { L"cleanmgr",     L"Disk Cleanup" },
-        { L"dxdiag",       L"DirectX Diagnostic Tool" },
-        { L"charmap",      L"Character Map" },
-        { L"magnify",      L"Magnifier" },
-        { L"osk",          L"On-Screen Keyboard" },
-        { L"snippingtool", L"Snipping Tool" },
-        { L"winword",      L"Microsoft Word" },
-        { L"excel",        L"Microsoft Excel" },
-        { L"powerpnt",     L"Microsoft PowerPoint" },
-        { L"msedge",       L"Microsoft Edge" },
-        { L"chrome",       L"Google Chrome" },
-        { L"code",         L"Visual Studio Code" },
-        { L"sysdm.cpl",    L"System Properties" },
-        { L"main.cpl",     L"Mouse Properties" },
-        { L"ncpa.cpl",     L"Network Connections" },
-        { L"appwiz.cpl",   L"Programs and Features" },
-        { L"mmsys.cpl",    L"Sound" },
-        { L"timedate.cpl", L"Date and Time" },
-        { L"desk.cpl",     L"Display Settings" },
-        { L"inetcpl.cpl",  L"Internet Properties" },
-        { L"powercfg.cpl", L"Power Options" },
-        { L"firewall.cpl", L"Windows Defender Firewall" },
-        { L"colorcpl",     L"Color Management" },
-        { L"services.msc", L"Services" },
-        { L"devmgmt.msc",  L"Device Manager" },
-        { L"diskmgmt.msc", L"Disk Management" },
-        { L"eventvwr.msc", L"Event Viewer" },
-        { L"gpedit.msc",   L"Local Group Policy Editor" },
-        { L"lusrmgr.msc",  L"Local Users and Groups" },
-        { L"perfmon.msc",  L"Performance Monitor" },
-        { L"resmon",       L"Resource Monitor" },
-        { L"secpol.msc",   L"Local Security Policy" },
-        { L"taskschd.msc", L"Task Scheduler" }
-    };
+struct BuiltinCommandEntry {
+    const wchar_t* key;
+    const wchar_t* name;
+};
 
-    for (const auto& entry : kMap) {
+static constexpr BuiltinCommandEntry kBuiltinCommands[] = {
+    { L"winver",           L"Windows Version" },
+    { L"cmd",              L"Command Prompt" },
+    { L"powershell",       L"Windows PowerShell" },
+    { L"pwsh",             L"PowerShell" },
+    { L"wt",               L"Windows Terminal" },
+    { L"notepad",          L"Notepad" },
+    { L"regedit",          L"Registry Editor" },
+    { L"calc",             L"Calculator" },
+    { L"mspaint",          L"Paint" },
+    { L"taskmgr",          L"Task Manager" },
+    { L"msconfig",         L"System Configuration" },
+    { L"control",          L"Control Panel" },
+    { L"explorer",         L"File Explorer" },
+    { L"mstsc",            L"Remote Desktop Connection" },
+    { L"cleanmgr",         L"Disk Cleanup" },
+    { L"dxdiag",           L"DirectX Diagnostic Tool" },
+    { L"charmap",          L"Character Map" },
+    { L"magnify",          L"Magnifier" },
+    { L"osk",              L"On-Screen Keyboard" },
+    { L"snippingtool",     L"Snipping Tool" },
+    { L"winword",          L"Microsoft Word" },
+    { L"excel",            L"Microsoft Excel" },
+    { L"powerpnt",         L"Microsoft PowerPoint" },
+    { L"msedge",           L"Microsoft Edge" },
+    { L"chrome",           L"Google Chrome" },
+    { L"firefox",          L"Mozilla Firefox" },
+    { L"code",             L"Visual Studio Code" },
+    { L"sysdm.cpl",        L"System Properties" },
+    { L"main.cpl",         L"Mouse Properties" },
+    { L"ncpa.cpl",         L"Network Connections" },
+    { L"appwiz.cpl",       L"Programs and Features" },
+    { L"mmsys.cpl",        L"Sound" },
+    { L"timedate.cpl",     L"Date and Time" },
+    { L"desk.cpl",         L"Display Settings" },
+    { L"inetcpl.cpl",      L"Internet Properties" },
+    { L"powercfg.cpl",     L"Power Options" },
+    { L"firewall.cpl",     L"Windows Defender Firewall" },
+    { L"colorcpl",         L"Color Management" },
+    { L"services.msc",     L"Services" },
+    { L"devmgmt.msc",      L"Device Manager" },
+    { L"diskmgmt.msc",     L"Disk Management" },
+    { L"eventvwr.msc",     L"Event Viewer" },
+    { L"gpedit.msc",       L"Local Group Policy Editor" },
+    { L"lusrmgr.msc",      L"Local Users and Groups" },
+    { L"perfmon.msc",      L"Performance Monitor" },
+    { L"resmon",           L"Resource Monitor" },
+    { L"secpol.msc",       L"Local Security Policy" },
+    { L"taskschd.msc",     L"Task Scheduler" },
+    { L"sndvol",           L"Volume Mixer" },
+    { L"mdsched",          L"Windows Memory Diagnostic" },
+    { L"mrt",              L"Malicious Software Removal Tool" },
+    { L"optionalfeatures", L"Windows Features" },
+    { L"shrpubw",          L"Create Shared Folder Wizard" },
+    { L"sigverif",         L"File Signature Verification" },
+    { L"utilman",          L"Ease of Access" },
+    { L"verifier",         L"Driver Verifier Manager" },
+    { L"wmimgmt.msc",      L"WMI Management" },
+    { L"wsreset",          L"Microsoft Store Reset" },
+    { L"write",            L"WordPad" }
+};
+
+std::wstring GetFriendlyBuiltinName(const std::wstring& baseLower) {
+    for (const auto& entry : kBuiltinCommands) {
         if (baseLower == entry.key) return entry.name;
     }
     if (baseLower.size() > 4 && baseLower.substr(baseLower.size() - 4) == L".exe") {
         std::wstring noExe = baseLower.substr(0, baseLower.size() - 4);
-        for (const auto& entry : kMap) {
+        for (const auto& entry : kBuiltinCommands) {
             if (noExe == entry.key) return entry.name;
         }
     }
@@ -1660,8 +1927,7 @@ void ResolveCommandMetadata(const std::wstring& rawCmd, HICON* outIcon, std::wst
     if (cmdOnly[0] == L'\0') return;
 
     std::wstring baseName = PathFindFileNameW(cmdOnly);
-    std::wstring baseLower = baseName;
-    std::transform(baseLower.begin(), baseLower.end(), baseLower.begin(), ::towlower);
+    std::wstring baseLower = ToLowerString(baseName);
 
     std::wstring builtinName = GetFriendlyBuiltinName(baseLower);
 
@@ -1737,9 +2003,382 @@ void ResolveCommandMetadata(const std::wstring& rawCmd, HICON* outIcon, std::wst
     }
 }
 
+// --- PowerToys Run-Style App & Command Suggestion Catalog ---
+
+struct AppSuggestionCandidate {
+    std::wstring cmd;           // Short command or shortcut name shown in Semibold
+    std::wstring execTarget;    // Command or full .lnk path to execute
+    std::wstring subtitle;      // Friendly app name or folder category
+    std::wstring iconSource;    // Path for lazy icon/description lookup
+    std::wstring cmdLower;
+    std::wstring subLower;
+    HICON cachedIcon = nullptr;
+    bool iconResolved = false;
+    bool descResolved = false;
+    bool isShortcutFile = false;
+    bool isBuiltin = false;
+};
+
+std::mutex g_catalogMutex;
+std::vector<AppSuggestionCandidate> g_appCatalog;
+ULONGLONG g_catalogLastBuildTick = 0;
+
+bool IsNoiseShortcutName(std::wstring_view nameLower) {
+    static constexpr std::wstring_view kSkipTokens[] = {
+        L"uninstall", L"uninst", L"gỡ cài đặt", L"readme", L"release notes",
+        L"help", L"documentation", L"website", L"license", L"changelog"
+    };
+    for (auto tok : kSkipTokens) {
+        if (nameLower.find(tok) != std::wstring_view::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ScanShortcutDirectoryRecursive(const std::wstring& dirPath,
+                                    const std::wstring& folderLabel,
+                                    int depth,
+                                    std::vector<AppSuggestionCandidate>& outList) {
+    if (depth > 3 || outList.size() >= 450) return;
+
+    std::wstring pattern = dirPath + L"\\*";
+    WIN32_FIND_DATAW fd = {};
+    HANDLE hFind = FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd,
+                                    FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+
+    do {
+        if (fd.cFileName[0] == L'.') continue;
+        std::wstring fullPath = dirPath + L"\\" + fd.cFileName;
+
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (!(fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) {
+                ScanShortcutDirectoryRecursive(fullPath, fd.cFileName, depth + 1, outList);
+            }
+            continue;
+        }
+
+        const wchar_t* ext = PathFindExtensionW(fd.cFileName);
+        if (!ext) continue;
+        if (_wcsicmp(ext, L".lnk") != 0 && _wcsicmp(ext, L".appref-ms") != 0) {
+            continue;
+        }
+
+        std::wstring title(fd.cFileName, ext - fd.cFileName);
+        title = TrimCommandString(title);
+        if (title.empty()) continue;
+
+        std::wstring titleLower = ToLowerString(title);
+        if (IsNoiseShortcutName(titleLower)) continue;
+
+        bool exists = false;
+        for (const auto& item : outList) {
+            if (item.cmdLower == titleLower || item.subLower == titleLower) {
+                exists = true;
+                break;
+            }
+        }
+        if (exists) continue;
+
+        AppSuggestionCandidate cand;
+        cand.cmd = title;
+        cand.execTarget = fullPath;
+        cand.subtitle = folderLabel;
+        cand.iconSource = fullPath;
+        cand.cmdLower = std::move(titleLower);
+        cand.subLower = ToLowerString(folderLabel);
+        cand.isShortcutFile = true;
+        cand.descResolved = true;
+        outList.push_back(std::move(cand));
+    } while (FindNextFileW(hFind, &fd) && outList.size() < 450);
+
+    FindClose(hFind);
+}
+
+void EnumerateAppPathsRegistry(HKEY hRootKey, std::vector<AppSuggestionCandidate>& outList) {
+    HKEY hAppPaths = nullptr;
+    if (RegOpenKeyExW(hRootKey, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+                      0, KEY_READ, &hAppPaths) != ERROR_SUCCESS) {
+        return;
+    }
+
+    wchar_t subKeyName[MAX_PATH] = {};
+    for (DWORD idx = 0; idx < 300; ++idx) {
+        DWORD cchName = ARRAYSIZE(subKeyName);
+        if (RegEnumKeyExW(hAppPaths, idx, subKeyName, &cchName, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) {
+            break;
+        }
+
+        wchar_t targetPath[MAX_PATH] = {};
+        DWORD cbTarget = sizeof(targetPath);
+        if (RegGetValueW(hAppPaths, subKeyName, nullptr, RRF_RT_REG_SZ, nullptr, targetPath, &cbTarget) != ERROR_SUCCESS) {
+            continue;
+        }
+        PathRemoveBlanksW(targetPath);
+        PathUnquoteSpacesW(targetPath);
+        if (targetPath[0] == L'\0') continue;
+
+        wchar_t expandedPath[MAX_PATH] = {};
+        if (ExpandEnvironmentStringsW(targetPath, expandedPath, MAX_PATH) > 0 && expandedPath[0] != L'\0') {
+            wcsncpy_s(targetPath, expandedPath, _TRUNCATE);
+        }
+        if (!PathFileExistsW(targetPath)) continue;
+
+        std::wstring cmdName = subKeyName;
+        const wchar_t* ext = PathFindExtensionW(subKeyName);
+        if (ext && _wcsicmp(ext, L".exe") == 0) {
+            cmdName.assign(subKeyName, ext - subKeyName);
+        }
+        std::wstring cmdLower = ToLowerString(cmdName);
+        if (cmdLower.empty() || IsNoiseShortcutName(cmdLower)) continue;
+
+        bool duplicate = false;
+        for (const auto& existing : outList) {
+            if (existing.cmdLower == cmdLower) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) continue;
+
+        AppSuggestionCandidate cand;
+        cand.cmd = cmdName;
+        cand.execTarget = cmdName;
+        cand.subtitle = GetFriendlyBuiltinName(cmdLower);
+        cand.iconSource = targetPath;
+        cand.cmdLower = std::move(cmdLower);
+        cand.subLower = ToLowerString(cand.subtitle);
+        cand.isShortcutFile = false;
+        cand.descResolved = !cand.subtitle.empty();
+        outList.push_back(std::move(cand));
+    }
+
+    RegCloseKey(hAppPaths);
+}
+
+void EnsureAppCatalogPopulated() {
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
+    ULONGLONG now = GetTickCount64();
+    if (!g_appCatalog.empty() && (now - g_catalogLastBuildTick < 120000)) {
+        return;
+    }
+    if (!g_appCatalog.empty()) {
+        return;
+    }
+    g_catalogLastBuildTick = now;
+
+    // 1. Add built-in Windows commands & CPL/MSC tools
+    for (const auto& entry : kBuiltinCommands) {
+        AppSuggestionCandidate cand;
+        cand.cmd = entry.key;
+        cand.execTarget = entry.key;
+        cand.subtitle = entry.name;
+        cand.cmdLower = ToLowerString(cand.cmd);
+        cand.subLower = ToLowerString(cand.subtitle);
+        cand.isBuiltin = true;
+        cand.descResolved = true;
+        g_appCatalog.push_back(std::move(cand));
+    }
+
+    // 2. Add Registry App Paths (HKCU + HKLM)
+    EnumerateAppPathsRegistry(HKEY_CURRENT_USER, g_appCatalog);
+    EnumerateAppPathsRegistry(HKEY_LOCAL_MACHINE, g_appCatalog);
+
+    // 3. Add Start Menu Programs (User + Common)
+    wchar_t folderPath[MAX_PATH] = {};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAMS, nullptr, SHGFP_TYPE_CURRENT, folderPath))) {
+        ScanShortcutDirectoryRecursive(folderPath, L"", 0, g_appCatalog);
+    }
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_COMMON_PROGRAMS, nullptr, SHGFP_TYPE_CURRENT, folderPath))) {
+        ScanShortcutDirectoryRecursive(folderPath, L"", 0, g_appCatalog);
+    }
+}
+
+void LazilyResolveCandidateMetadata(AppSuggestionCandidate& cand, const wchar_t* defaultAppTag) {
+    if (!cand.descResolved) {
+        cand.descResolved = true;
+        if (!cand.iconSource.empty()) {
+            std::wstring desc = GetExecutableDescription(cand.iconSource.c_str());
+            if (!desc.empty()) {
+                cand.subtitle = std::move(desc);
+                cand.subLower = ToLowerString(cand.subtitle);
+            }
+        }
+    }
+    if (cand.subtitle.empty() && defaultAppTag) {
+        cand.subtitle = defaultAppTag;
+        cand.subLower = ToLowerString(cand.subtitle);
+    }
+
+    if (!cand.iconResolved) {
+        cand.iconResolved = true;
+        if (!cand.iconSource.empty()) {
+            SHFILEINFOW sfi = {};
+            if (SHGetFileInfoW(cand.iconSource.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                cand.cachedIcon = sfi.hIcon;
+            }
+        }
+        if (!cand.cachedIcon) {
+            std::wstring dummyName;
+            ResolveCommandMetadata(cand.cmd, &cand.cachedIcon, &dummyName);
+            if (cand.subtitle.empty() && !dummyName.empty()) {
+                cand.subtitle = std::move(dummyName);
+                cand.subLower = ToLowerString(cand.subtitle);
+            }
+        }
+    }
+}
+
+int ScoreCandidateAgainstQuery(const std::wstring& cmdLower,
+                               const std::wstring& subLower,
+                               const std::wstring& queryLower,
+                               int baseBonus) {
+    if (queryLower.empty()) return -1;
+
+    if (cmdLower == queryLower) return 1000 + baseBonus;
+    if (cmdLower.find(queryLower) == 0) {
+        return 850 + baseBonus - (int)(std::min)(cmdLower.size(), (size_t)60);
+    }
+    if (subLower == queryLower) return 800 + baseBonus;
+    if (subLower.find(queryLower) == 0) {
+        return 720 + baseBonus - (int)(std::min)(subLower.size(), (size_t)60);
+    }
+
+    // Word boundary match in command or subtitle
+    size_t posCmd = cmdLower.find(queryLower);
+    if (posCmd != std::wstring::npos) {
+        bool wordStart = (posCmd == 0 || cmdLower[posCmd - 1] == L' ' || cmdLower[posCmd - 1] == L'-' || cmdLower[posCmd - 1] == L'_');
+        return (wordStart ? 650 : 520) + baseBonus - (int)posCmd;
+    }
+
+    size_t posSub = subLower.find(queryLower);
+    if (posSub != std::wstring::npos) {
+        bool wordStart = (posSub == 0 || subLower[posSub - 1] == L' ' || subLower[posSub - 1] == L'-');
+        return (wordStart ? 580 : 420) + baseBonus - (int)posSub;
+    }
+
+    return -1;
+}
+
+void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& rawQuery) {
+    if (!state) return;
+
+    std::wstring trimmed = TrimCommandString(rawQuery);
+    int maxItems = state->settings.maxHistoryItems;
+
+    if (!state->settings.enableAppSuggestions || maxItems <= 0 || trimmed.empty()) {
+        if (state->showingSuggestions || !state->suggestions.empty()) {
+            int oldHeight = state->totalHeight;
+            state->showingSuggestions = false;
+            state->suggestions.clear();
+            state->hoveredRow = -1;
+            state->pressedRow = -1;
+            state->selectedRow = -1;
+            RecomputeDialogMetrics(state);
+            ResizeDialogPreservingBottomAnchor(state, oldHeight);
+        }
+        return;
+    }
+
+    EnsureAppCatalogPopulated();
+
+    std::wstring queryLower = ToLowerString(trimmed);
+    struct ScoredMatch {
+        int score;
+        HistoryItem item;
+    };
+    std::vector<ScoredMatch> matches;
+
+    // 1. Score recent history items first (giving them a slight recency bonus and keeping their timestamp)
+    for (size_t i = 0; i < state->history.size(); ++i) {
+        const auto& h = state->history[i];
+        std::wstring cmdL = ToLowerString(h.cmd);
+        std::wstring subL = ToLowerString(h.appName);
+        int score = ScoreCandidateAgainstQuery(cmdL, subL, queryLower, 45 - (int)i * 2);
+        if (score > 0) {
+            HistoryItem copy = h;
+            copy.execTarget = h.cmd;
+            copy.ownsIcon = false;
+            copy.isSuggestion = false;
+            matches.push_back({ score, std::move(copy) });
+        }
+    }
+
+    // 2. Score catalog items (Built-in commands, App Paths, Start Menu apps)
+    {
+        std::lock_guard<std::mutex> lock(g_catalogMutex);
+        for (auto& cand : g_appCatalog) {
+            int bonus = cand.isBuiltin ? 25 : (cand.isShortcutFile ? 0 : 15);
+            int score = ScoreCandidateAgainstQuery(cand.cmdLower, cand.subLower, queryLower, bonus);
+            if (score <= 0) continue;
+
+            bool alreadyInMatches = false;
+            for (const auto& m : matches) {
+                if (ToLowerString(m.item.cmd) == cand.cmdLower ||
+                    (!cand.subtitle.empty() && ToLowerString(m.item.cmd) == cand.subLower)) {
+                    alreadyInMatches = true;
+                    break;
+                }
+            }
+            if (alreadyInMatches) continue;
+
+            HistoryItem item;
+            item.cmd = cand.cmd;
+            item.execTarget = cand.execTarget;
+            item.appName = cand.subtitle.empty() ? state->i18n.appTag : cand.subtitle;
+            item.timeStr.clear();
+            item.hIcon = cand.cachedIcon;
+            item.ownsIcon = false;
+            item.isSuggestion = true;
+            item.isShortcutFile = cand.isShortcutFile;
+            matches.push_back({ score, std::move(item) });
+        }
+    }
+
+    std::stable_sort(matches.begin(), matches.end(),
+                     [](const ScoredMatch& a, const ScoredMatch& b) { return a.score > b.score; });
+
+    if ((int)matches.size() > maxItems) {
+        matches.resize(maxItems);
+    }
+
+    // Lazily resolve icons & descriptions only for the top visible matches
+    {
+        std::lock_guard<std::mutex> lock(g_catalogMutex);
+        for (auto& m : matches) {
+            if (!m.item.isSuggestion || m.item.hIcon != nullptr) continue;
+            std::wstring keyL = ToLowerString(m.item.cmd);
+            for (auto& cand : g_appCatalog) {
+                if (cand.cmdLower == keyL) {
+                    LazilyResolveCandidateMetadata(cand, state->i18n.appTag);
+                    m.item.hIcon = cand.cachedIcon;
+                    if (!cand.subtitle.empty()) {
+                        m.item.appName = cand.subtitle;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    int oldHeight = state->totalHeight;
+    state->suggestions.clear();
+    for (auto& m : matches) {
+        state->suggestions.push_back(std::move(m.item));
+    }
+    state->showingSuggestions = true;
+    state->hoveredRow = -1;
+    state->pressedRow = -1;
+    state->selectedRow = -1;
+
+    RecomputeDialogMetrics(state);
+    ResizeDialogPreservingBottomAnchor(state, oldHeight);
+}
+
 void LoadHistoryItems(RunDialogState* state) {
     for (auto& item : state->history) {
-        if (item.hIcon) DestroyIcon(item.hIcon);
+        if (item.hIcon && item.ownsIcon) DestroyIcon(item.hIcon);
     }
     state->history.clear();
 
@@ -1785,7 +2424,10 @@ void LoadHistoryItems(RunDialogState* state) {
 
         HistoryItem item;
         item.cmd = cleanText;
+        item.execTarget = cleanText;
         ResolveCommandMetadata(cleanText, &item.hIcon, &item.appName);
+        item.ownsIcon = true;
+        item.isSuggestion = false;
         item.timeStr = LookupOrInitTimestamp(
             cleanText, ftRunMruWrite, state->i18n.todayPrefix, storedTimestamps, &timestampsModified);
         state->history.push_back(std::move(item));
@@ -1839,62 +2481,96 @@ void LoadHistoryItems(RunDialogState* state) {
     }
 }
 
-// Action Button & Input Bar Layout Rectangles
-RECT GetBrowseButtonRect(const RunDialogState* state) {
+// Measure button label width in DIPs at 96 DPI so buttons fit both text and right-side icon cleanly
+int MeasureButtonWidthAt96Dpi(const wchar_t* label, int minWidth96) {
+    if (!label || !label[0]) return minWidth96;
+    int textWidth96 = (int)wcslen(label) * 7;
+    if (g_pDWriteFactory) {
+        IDWriteTextFormat* pFmt = nullptr;
+        if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
+                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"", &pFmt))) {
+            IDWriteTextLayout* pLayout = nullptr;
+            if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
+                    label, (UINT32)wcslen(label), pFmt, 400.0f, 30.0f, &pLayout))) {
+                DWRITE_TEXT_METRICS tm = {};
+                if (SUCCEEDED(pLayout->GetMetrics(&tm))) {
+                    textWidth96 = (int)std::ceil(tm.widthIncludingTrailingWhitespace);
+                }
+                pLayout->Release();
+            }
+            pFmt->Release();
+        }
+    }
+    // 12px left pad + textWidth + 12px gap + 14px icon + 10px right pad = textWidth + 48
+    int computed = textWidth96 + 48;
+    return std::clamp(computed, minWidth96, 132);
+}
+
+ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
     int dlgW = GetDlgWidth(state);
     int barH = GetInputBarHeight(state);
     int btnH = DpiScale(30, state->dpi);
     int top  = state->topAreaHeight + (barH - btnH) / 2;
-    RECT rc  = { dlgW - DpiScale(266, state->dpi), top, dlgW - DpiScale(182, state->dpi), top + btnH };
-    return rc;
+    int gap  = DpiScale(8, state->dpi);
+    int rightMargin = DpiScale(12, state->dpi);
+
+    int wBrowse = DpiScale(MeasureButtonWidthAt96Dpi(state->i18n.browseBtn, 88), state->dpi);
+    int wRun    = DpiScale(MeasureButtonWidthAt96Dpi(state->i18n.runBtn,    82), state->dpi);
+    int wClose  = DpiScale(MeasureButtonWidthAt96Dpi(state->i18n.exitBtn,   78), state->dpi);
+
+    ActionButtonsLayout layout = {};
+    layout.rcClose  = { dlgW - rightMargin - wClose, top, dlgW - rightMargin, top + btnH };
+    layout.rcRun    = { layout.rcClose.left - gap - wRun, top, layout.rcClose.left - gap, top + btnH };
+    layout.rcBrowse = { layout.rcRun.left - gap - wBrowse, top, layout.rcRun.left - gap, top + btnH };
+
+    int editH = DpiScale(24, state->dpi);
+    int editTop = state->topAreaHeight + (barH - editH) / 2;
+    layout.rcEdit = {
+        DpiScale(46, state->dpi),
+        editTop,
+        layout.rcBrowse.left - DpiScale(12, state->dpi),
+        editTop + editH
+    };
+    return layout;
+}
+
+RECT GetBrowseButtonRect(const RunDialogState* state) {
+    return GetActionButtonsLayout(state).rcBrowse;
 }
 
 RECT GetRunButtonRect(const RunDialogState* state) {
-    int dlgW = GetDlgWidth(state);
-    int barH = GetInputBarHeight(state);
-    int btnH = DpiScale(30, state->dpi);
-    int top  = state->topAreaHeight + (barH - btnH) / 2;
-    RECT rc  = { dlgW - DpiScale(174, state->dpi), top, dlgW - DpiScale(94, state->dpi), top + btnH };
-    return rc;
+    return GetActionButtonsLayout(state).rcRun;
 }
 
 RECT GetCloseButtonRect(const RunDialogState* state) {
-    int dlgW = GetDlgWidth(state);
-    int barH = GetInputBarHeight(state);
-    int btnH = DpiScale(30, state->dpi);
-    int top  = state->topAreaHeight + (barH - btnH) / 2;
-    RECT rc  = { dlgW - DpiScale(86, state->dpi), top, dlgW - DpiScale(12, state->dpi), top + btnH };
-    return rc;
+    return GetActionButtonsLayout(state).rcClose;
 }
 
 RECT GetModernEditRect(const RunDialogState* state) {
-    int dlgW  = GetDlgWidth(state);
-    int barH  = GetInputBarHeight(state);
-    int editH = DpiScale(24, state->dpi);
-    int top   = state->topAreaHeight + (barH - editH) / 2;
-    RECT rc   = { DpiScale(46, state->dpi), top, dlgW - DpiScale(278, state->dpi), top + editH };
-    return rc;
+    return GetActionButtonsLayout(state).rcEdit;
 }
 
 int HitTestHistoryRow(const RunDialogState* state, POINT pt) {
+    const auto& activeRows = GetActiveRowItems(state);
     int padTop = GetListPadTop(state);
     int padBot = GetListPadBottom(state);
     int rowH   = GetRowHeight(state);
     int dlgW   = GetDlgWidth(state);
     int padX   = DpiScale(10, state->dpi);
 
-    if (state->history.empty() || pt.y < padTop || pt.y >= state->topAreaHeight - padBot) {
+    if (activeRows.empty() || pt.y < padTop || pt.y >= state->topAreaHeight - padBot) {
         return -1;
     }
     if (pt.x < padX || pt.x > dlgW - padX) return -1;
     int idx = (pt.y - padTop) / rowH;
-    if (idx >= 0 && idx < (int)state->history.size()) {
+    if (idx >= 0 && idx < (int)activeRows.size()) {
         return idx;
     }
     return -1;
 }
 
-// --- Direct2D Liquid Glass & DirectWrite Rendering Helpers ---
+// --- Direct2D Liquid Glass, Vector Icons & DirectWrite Rendering Helpers ---
 
 void DrawD2DGlassRim(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT dpi, bool isLight, float outerThicknessDip = 1.2f) {
     D2D1_GRADIENT_STOP stops[5] = {
@@ -2005,17 +2681,56 @@ void DrawD2DClockVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeS
                   D2D1::Point2F(cx + DpiScaleF(2.5f, dpi), cy + DpiScaleF(1.8f, dpi)), pBrush, sw, pStroke);
 }
 
-void RecomputeDialogMetrics(RunDialogState* state) {
+// Folder outline icon for the Browse ("Duyệt") button
+void DrawD2DFolderVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
+                         float cx, float cy, UINT dpi) {
+    float hw = DpiScaleF(5.8f, dpi);
+    float hh = DpiScaleF(4.4f, dpi);
+    float left   = cx - hw;
+    float right  = cx + hw;
+    float top    = cy - hh;
+    float bottom = cy + hh;
+    float tabW   = DpiScaleF(4.4f, dpi);
+    float tabH   = DpiScaleF(1.8f, dpi);
+    float sw     = DpiScaleF(1.3f, dpi);
+
+    // Top-left folder tab + outer folder body
+    pRT->DrawLine(D2D1::Point2F(left, top), D2D1::Point2F(left + tabW, top), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(left + tabW, top), D2D1::Point2F(left + tabW + DpiScaleF(1.4f, dpi), top + tabH), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(left, top + tabH), D2D1::Point2F(right, top + tabH), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(right, top + tabH), D2D1::Point2F(right, bottom), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(right, bottom), D2D1::Point2F(left, bottom), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(left, bottom), D2D1::Point2F(left, top), pBrush, sw, pStroke);
+}
+
+// Return/Enter arrow icon ("↵") for the Run ("Chạy") button
+void DrawD2DReturnArrowVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
+                              float cx, float cy, UINT dpi) {
+    float sw = DpiScaleF(1.4f, dpi);
+    float rightX = cx + DpiScaleF(4.4f, dpi);
+    float leftX  = cx - DpiScaleF(4.4f, dpi);
+    float topY   = cy - DpiScaleF(3.8f, dpi);
+    float midY   = cy + DpiScaleF(1.4f, dpi);
+    float arrowW = DpiScaleF(2.9f, dpi);
+    float arrowH = DpiScaleF(2.7f, dpi);
+
+    pRT->DrawLine(D2D1::Point2F(rightX, topY), D2D1::Point2F(rightX, midY), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(rightX, midY), D2D1::Point2F(leftX, midY), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(leftX + arrowW, midY - arrowH), D2D1::Point2F(leftX, midY), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(leftX + arrowW, midY + arrowH), D2D1::Point2F(leftX, midY), pBrush, sw, pStroke);
+}
+
+// Close cross icon ("✕") for the Exit ("Thoát") button
+void DrawD2DCloseCrossVector(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
+                             float cx, float cy, UINT dpi) {
+    float r  = DpiScaleF(3.8f, dpi);
+    float sw = DpiScaleF(1.4f, dpi);
+    pRT->DrawLine(D2D1::Point2F(cx - r, cy - r), D2D1::Point2F(cx + r, cy + r), pBrush, sw, pStroke);
+    pRT->DrawLine(D2D1::Point2F(cx + r, cy - r), D2D1::Point2F(cx - r, cy + r), pBrush, sw, pStroke);
+}
+
+void UpdateDialogEditFont(RunDialogState* state) {
     if (!state) return;
-    int histCount = (int)state->history.size();
-    int padTop = GetListPadTop(state);
-    int padBot = GetListPadBottom(state);
-    int rowH   = GetRowHeight(state);
-    int barH   = GetInputBarHeight(state);
-
-    state->topAreaHeight = (histCount > 0) ? (padTop + histCount * rowH + padBot) : 0;
-    state->totalHeight   = state->topAreaHeight + barH;
-
     if (state->hFontEditCtl) {
         DeleteObject(state->hFontEditCtl);
     }
@@ -2026,6 +2741,18 @@ void RecomputeDialogMetrics(RunDialogState* state) {
     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
         SendMessageW(state->hModernEdit, WM_SETFONT, (WPARAM)state->hFontEditCtl, FALSE);
     }
+}
+
+void RecomputeDialogMetrics(RunDialogState* state) {
+    if (!state) return;
+    int rowCount = (int)GetActiveRowItems(state).size();
+    int padTop = GetListPadTop(state);
+    int padBot = GetListPadBottom(state);
+    int rowH   = GetRowHeight(state);
+    int barH   = GetInputBarHeight(state);
+
+    state->topAreaHeight = (rowCount > 0) ? (padTop + rowCount * rowH + padBot) : 0;
+    state->totalHeight   = state->topAreaHeight + barH;
 }
 
 LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -2046,7 +2773,22 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             TriggerRunCommand(state);
             return 0;
         }
-        if (wParam == VK_DELETE && !state->history.empty()) {
+        if (wParam == VK_TAB) {
+            const auto& activeRows = GetActiveRowItems(state);
+            if (!activeRows.empty()) {
+                int idx = (state->selectedRow >= 0 && state->selectedRow < (int)activeRows.size())
+                          ? state->selectedRow : 0;
+                std::wstring fillCmd = activeRows[idx].cmd;
+                state->suppressSuggestionUpdate = true;
+                SetWindowTextW(hWnd, fillCmd.c_str());
+                SendMessageW(hWnd, EM_SETSEL, fillCmd.size(), fillCmd.size());
+                state->suppressSuggestionUpdate = false;
+                SyncInputToNativeCombo(state, fillCmd.c_str());
+                InvalidateRect(state->hDlg, nullptr, FALSE);
+                return 0;
+            }
+        }
+        if (wParam == VK_DELETE && !state->showingSuggestions && !state->history.empty()) {
             int targetIdx = (state->hoveredRow >= 0 && state->hoveredRow < (int)state->history.size())
                             ? state->hoveredRow
                             : state->selectedRow;
@@ -2057,32 +2799,35 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 state->selectedRow = -1;
                 LoadHistoryItems(state);
                 RecomputeDialogMetrics(state);
-                state->normalY += (oldHeight - state->totalHeight);
-                int dlgW = GetDlgWidth(state);
-                ClampDialogToMonitorWorkArea(state->hDlg, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
-                SetWindowPos(state->hDlg, nullptr, state->normalX, state->normalY, dlgW, state->totalHeight,
-                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                ResizeDialogPreservingBottomAnchor(state, oldHeight);
                 InvalidateRect(state->hDlg, nullptr, TRUE);
                 return 0;
             }
         }
-        if ((wParam == VK_UP || wParam == VK_DOWN) && !state->history.empty()) {
-            int n = (int)state->history.size();
-            if (wParam == VK_UP) {
-                state->selectedRow = (state->selectedRow <= 0) ? (n - 1) : (state->selectedRow - 1);
-            } else {
-                state->selectedRow = (state->selectedRow >= n - 1) ? 0 : (state->selectedRow + 1);
+        if (wParam == VK_UP || wParam == VK_DOWN) {
+            const auto& activeRows = GetActiveRowItems(state);
+            if (!activeRows.empty()) {
+                int n = (int)activeRows.size();
+                if (wParam == VK_UP) {
+                    state->selectedRow = (state->selectedRow <= 0) ? (n - 1) : (state->selectedRow - 1);
+                } else {
+                    state->selectedRow = (state->selectedRow >= n - 1) ? 0 : (state->selectedRow + 1);
+                }
+                if (!state->showingSuggestions) {
+                    const auto& cmd = activeRows[state->selectedRow].cmd;
+                    state->suppressSuggestionUpdate = true;
+                    SetWindowTextW(hWnd, cmd.c_str());
+                    SendMessageW(hWnd, EM_SETSEL, cmd.size(), cmd.size());
+                    state->suppressSuggestionUpdate = false;
+                    SyncInputToNativeCombo(state, cmd.c_str());
+                }
+                InvalidateRect(state->hDlg, nullptr, FALSE);
+                return 0;
             }
-            const auto& cmd = state->history[state->selectedRow].cmd;
-            SetWindowTextW(hWnd, cmd.c_str());
-            SendMessageW(hWnd, EM_SETSEL, cmd.size(), cmd.size());
-            SyncInputToNativeCombo(state, cmd.c_str());
-            InvalidateRect(state->hDlg, nullptr, FALSE);
-            return 0;
         }
     }
 
-    if (uMsg == WM_CHAR && (wParam == VK_RETURN || wParam == VK_ESCAPE)) {
+    if (uMsg == WM_CHAR && (wParam == VK_RETURN || wParam == VK_ESCAPE || wParam == VK_TAB)) {
         return 0;
     }
 
@@ -2110,6 +2855,8 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
     KillTimer(hWnd, kTimerLuminance);
     HWND expected = hWnd;
     g_hActiveRunDlg.compare_exchange_strong(expected, nullptr);
+    HWND expectedFallback = hWnd;
+    g_hFallbackInterceptedDlg.compare_exchange_strong(expectedFallback, nullptr);
     g_isBrowsingFile.store(false);
     StopKeyHookThread();
     RemovePropW(hWnd, L"WindhawkModernRunApplied");
@@ -2121,9 +2868,10 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
             state->hModernEdit = nullptr;
         }
         for (auto& item : state->history) {
-            if (item.hIcon) DestroyIcon(item.hIcon);
+            if (item.hIcon && item.ownsIcon) DestroyIcon(item.hIcon);
         }
         state->history.clear();
+        state->suggestions.clear();
         if (state->hFontEditCtl) {
             DeleteObject(state->hFontEditCtl);
             state->hFontEditCtl = nullptr;
@@ -2155,8 +2903,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         if (!state) {
             return 1;
         }
-        // If the dialog thread is inside a nested modal call (Browse file picker or IDOK error box),
-        // close the modal popup and return 0 so Wh_ModBeforeUninit retries after the modal loop exits.
         if (state->isBrowsingFile || state->isTriggeringRun) {
             if (!state->pendingUninit) {
                 state->pendingUninit = true;
@@ -2195,14 +2941,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     state->i18n = g_i18n;
                 }
                 LoadHistoryItems(state);
+                std::wstring curText = GetEffectiveInputText(state->hModernEdit);
+                UpdateAppSuggestionsForQuery(state, curText);
                 RecomputeDialogMetrics(state);
-                state->normalY += (oldHeight - state->totalHeight);
-                int dlgW = GetDlgWidth(state);
-                ClampDialogToMonitorWorkArea(hWnd, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
-                if (!IsIconic(hWnd)) {
-                    SetWindowPos(hWnd, nullptr, state->normalX, state->normalY, dlgW, state->totalHeight,
-                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-                }
+                ResizeDialogPreservingBottomAnchor(state, oldHeight);
                 ApplyWindowAppearance(hWnd, state);
                 InvalidateRect(hWnd, nullptr, TRUE);
                 break;
@@ -2242,6 +2984,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_DPICHANGED: {
             if (state) {
                 state->dpi = HIWORD(wParam);
+                UpdateDialogEditFont(state);
                 RecomputeDialogMetrics(state);
                 const RECT* prcSuggested = reinterpret_cast<const RECT*>(lParam);
                 int dlgW = GetDlgWidth(state);
@@ -2333,9 +3076,15 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (LOWORD(wParam) == kModernEditId && (HIWORD(wParam) == EN_CHANGE || HIWORD(wParam) == EN_UPDATE)) {
                 if (state) {
                     state->caretVisible = true;
-                    SyncInputToNativeCombo(state);
-                    RECT rcBar = { 0, state->topAreaHeight, GetDlgWidth(state), state->totalHeight };
-                    InvalidateRect(hWnd, &rcBar, FALSE);
+                    std::wstring curText = GetEffectiveInputText(state->hModernEdit);
+                    SyncInputToNativeCombo(state, curText.c_str());
+                    if (HIWORD(wParam) == EN_CHANGE && !state->suppressSuggestionUpdate) {
+                        UpdateAppSuggestionsForQuery(state, curText);
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                    } else {
+                        RECT rcBar = { 0, state->topAreaHeight, GetDlgWidth(state), state->totalHeight };
+                        InvalidateRect(hWnd, &rcBar, FALSE);
+                    }
                 }
                 return 0;
             }
@@ -2365,12 +3114,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_MOUSEMOVE: {
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             int newHoverRow = HitTestHistoryRow(state, pt);
-            RECT rcBrowse = GetBrowseButtonRect(state);
-            RECT rcBtn    = GetRunButtonRect(state);
-            RECT rcClose  = GetCloseButtonRect(state);
-            bool newBrowseHover = PtInRect(&rcBrowse, pt);
-            bool newBtnHover    = PtInRect(&rcBtn, pt);
-            bool newCloseHover  = PtInRect(&rcClose, pt);
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
+            bool newBrowseHover = PtInRect(&layout.rcBrowse, pt);
+            bool newBtnHover    = PtInRect(&layout.rcRun, pt);
+            bool newCloseHover  = PtInRect(&layout.rcClose, pt);
 
             bool pointerMoved = (state->effectiveSurface == SurfaceTheme::Glass) &&
                                 (pt.x != state->mousePt.x || pt.y != state->mousePt.y);
@@ -2415,35 +3162,32 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
         case WM_LBUTTONDOWN: {
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            RECT rcBrowse = GetBrowseButtonRect(state);
-            RECT rcBtn    = GetRunButtonRect(state);
-            RECT rcClose  = GetCloseButtonRect(state);
-            RECT rcEdit   = GetModernEditRect(state);
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
 
-            if (PtInRect(&rcBrowse, pt)) {
+            if (PtInRect(&layout.rcBrowse, pt)) {
                 state->browsePressed = true;
                 SetCapture(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            if (PtInRect(&rcBtn, pt)) {
+            if (PtInRect(&layout.rcRun, pt)) {
                 state->btnPressed = true;
                 SetCapture(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            if (PtInRect(&rcClose, pt)) {
+            if (PtInRect(&layout.rcClose, pt)) {
                 state->closePressed = true;
                 SetCapture(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            if (PtInRect(&rcEdit, pt) && state->hModernEdit) {
+            if (PtInRect(&layout.rcEdit, pt) && state->hModernEdit) {
                 SetFocus(state->hModernEdit);
                 int len = GetWindowTextLengthW(state->hModernEdit);
                 SendMessageW(state->hModernEdit, EM_SETSEL, len, len);
                 state->caretVisible = true;
-                InvalidateRect(hWnd, &rcEdit, FALSE);
+                InvalidateRect(hWnd, &layout.rcEdit, FALSE);
                 return 0;
             }
 
@@ -2462,9 +3206,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
         case WM_LBUTTONUP: {
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            RECT rcBrowse = GetBrowseButtonRect(state);
-            RECT rcBtn    = GetRunButtonRect(state);
-            RECT rcClose  = GetCloseButtonRect(state);
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
 
             if (state->pressedRow != -1) {
                 int targetRow = state->pressedRow;
@@ -2472,8 +3214,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 ReleaseCapture();
                 InvalidateRect(hWnd, nullptr, FALSE);
                 int releasedRow = HitTestHistoryRow(state, pt);
-                if (releasedRow == targetRow && targetRow >= 0 && targetRow < (int)state->history.size()) {
-                    ExecuteCommandImmediate(state, state->history[targetRow].cmd);
+                const auto& activeRows = GetActiveRowItems(state);
+                if (releasedRow == targetRow && targetRow >= 0 && targetRow < (int)activeRows.size()) {
+                    HistoryItem chosen = activeRows[targetRow];
+                    ExecuteHistoryOrSuggestionItem(state, chosen);
                 }
                 return 0;
             }
@@ -2481,7 +3225,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 state->browsePressed = false;
                 ReleaseCapture();
                 InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&rcBrowse, pt)) {
+                if (PtInRect(&layout.rcBrowse, pt)) {
                     OpenBrowseExecutableDialog(state);
                 }
                 return 0;
@@ -2490,14 +3234,14 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 state->btnPressed = false;
                 ReleaseCapture();
                 InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&rcBtn, pt)) TriggerRunCommand(state);
+                if (PtInRect(&layout.rcRun, pt)) TriggerRunCommand(state);
                 return 0;
             }
             if (state->closePressed) {
                 state->closePressed = false;
                 ReleaseCapture();
                 InvalidateRect(hWnd, nullptr, FALSE);
-                if (PtInRect(&rcClose, pt)) CloseRunDialog(hWnd);
+                if (PtInRect(&layout.rcClose, pt)) CloseRunDialog(hWnd);
                 return 0;
             }
             break;
@@ -2520,6 +3264,8 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             bool isLight = state->isLightMode;
             SurfaceTheme surface = state->effectiveSurface;
             bool highContrast = IsHighContrastActive();
+            const auto& activeRows = GetActiveRowItems(state);
+            ActionButtonsLayout layout = GetActionButtonsLayout(state);
 
             if (w > 0 && h > 0) {
                 HDC hMemDC = CreateCompatibleDC(hdc);
@@ -2627,7 +3373,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                             DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(13.5f, dpi), L"", &pFmtInput);
                         g_pDWriteFactory->CreateTextFormat(
-                            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
                             DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(13.0f, dpi), L"", &pFmtBtn);
 
                         if (pFmtRow) {
@@ -2650,7 +3396,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             pFmtInput->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
                         }
                         if (pFmtBtn) {
-                            pFmtBtn->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                            pFmtBtn->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                             pFmtBtn->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                             pFmtBtn->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
                         }
@@ -2660,8 +3406,8 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         float pillRadius = DpiScaleF(6.5f, dpi);
                         float textLeftX = DpiScaleF(46.0f, dpi);
 
-                        // 4. Draw History Rows
-                        for (size_t i = 0; i < state->history.size(); ++i) {
+                        // 4. Draw History or App Suggestion Rows
+                        for (size_t i = 0; i < activeRows.size(); ++i) {
                             float rowTop = (float)(padTop + (int)i * rowHInt);
                             float rowH   = (float)rowHInt;
                             bool isHovered  = ((int)i == state->hoveredRow);
@@ -2690,34 +3436,38 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
 
                             float rightLimit = (float)w - DpiScaleF(18.0f, dpi);
+                            const auto& rowItem = activeRows[i];
 
-                            if (state->settings.showTimestamp && pFmtTime && pBrTime) {
+                            if (!rowItem.isSuggestion && state->settings.showTimestamp && pFmtTime && pBrTime && !rowItem.timeStr.empty()) {
                                 rightLimit = (float)w - DpiScaleF(42.0f, dpi);
-                                const std::wstring& tStr = state->history[i].timeStr;
-                                if (!tStr.empty()) {
-                                    IDWriteTextLayout* pTimeLayout = nullptr;
-                                    if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
-                                            tStr.c_str(), (UINT32)tStr.size(), pFmtTime, DpiScaleF(160.0f, dpi), rowH, &pTimeLayout))) {
-                                        DWRITE_TEXT_METRICS tm = {};
-                                        pTimeLayout->GetMetrics(&tm);
-                                        float timeRight = (float)w - DpiScaleF(42.0f, dpi);
-                                        pRT->DrawTextLayout(D2D1::Point2F(timeRight - DpiScaleF(160.0f, dpi), rowTop),
-                                                            pTimeLayout, pBrTime);
-                                        rightLimit = timeRight - tm.widthIncludingTrailingWhitespace - DpiScaleF(12.0f, dpi);
-                                        pTimeLayout->Release();
-                                    }
+                                const std::wstring& tStr = rowItem.timeStr;
+                                IDWriteTextLayout* pTimeLayout = nullptr;
+                                if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
+                                        tStr.c_str(), (UINT32)tStr.size(), pFmtTime, DpiScaleF(160.0f, dpi), rowH, &pTimeLayout))) {
+                                    DWRITE_TEXT_METRICS tm = {};
+                                    pTimeLayout->GetMetrics(&tm);
+                                    float timeRight = (float)w - DpiScaleF(42.0f, dpi);
+                                    pRT->DrawTextLayout(D2D1::Point2F(timeRight - DpiScaleF(160.0f, dpi), rowTop),
+                                                        pTimeLayout, pBrTime);
+                                    rightLimit = timeRight - tm.widthIncludingTrailingWhitespace - DpiScaleF(12.0f, dpi);
+                                    pTimeLayout->Release();
                                 }
                                 DrawD2DClockVector(pRT, pBrTime, pRoundStroke,
                                                    (float)w - DpiScaleF(26.0f, dpi), rowTop + rowH * 0.5f, dpi);
+                            } else if (rowItem.isSuggestion && pBrTime && pRoundStroke) {
+                                // Subtle Return arrow on the right for live app suggestions
+                                rightLimit = (float)w - DpiScaleF(38.0f, dpi);
+                                DrawD2DReturnArrowVector(pRT, pBrTime, pRoundStroke,
+                                                         (float)w - DpiScaleF(25.0f, dpi), rowTop + rowH * 0.5f, dpi);
                             }
 
-                            // Single IDWriteTextLayout for "cmd · App Name" so Semibold + Regular share the exact same baseline
+                            // Single IDWriteTextLayout for "cmd  -  App Name" so Semibold + Regular share the exact same baseline
                             if (pFmtRow && pBrPrimary) {
-                                const std::wstring& cmdStr = state->history[i].cmd;
-                                const std::wstring& appStr = state->history[i].appName;
+                                const std::wstring& cmdStr = rowItem.cmd;
+                                const std::wstring& appStr = rowItem.appName;
                                 std::wstring fullStr = cmdStr;
-                                if (!appStr.empty()) {
-                                    fullStr += L"  \u00B7  " + appStr;
+                                if (!appStr.empty() && _wcsicmp(cmdStr.c_str(), appStr.c_str()) != 0) {
+                                    fullStr += L"  -  " + appStr;
                                 }
 
                                 float availW = (std::max)(DpiScaleF(40.0f, dpi), rightLimit - textLeftX);
@@ -2727,7 +3477,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                     DWRITE_TEXT_RANGE cmdRange = { 0, (UINT32)cmdStr.size() };
                                     pRowLayout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD, cmdRange);
 
-                                    if (!appStr.empty() && pBrSecondary) {
+                                    if (fullStr.size() > cmdStr.size() && pBrSecondary) {
                                         DWRITE_TEXT_RANGE appRange = {
                                             (UINT32)cmdStr.size(),
                                             (UINT32)(fullStr.size() - cmdStr.size())
@@ -2742,7 +3492,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         }
 
-                        // Subtle divider line between history list and input bar
+                        // Subtle divider line between history/suggestion list and input bar
                         if (state->topAreaHeight > 0) {
                             ID2D1SolidColorBrush* pDivBr = nullptr;
                             D2D1_COLOR_F divCol = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f)
@@ -2757,7 +3507,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         }
 
                         // 5. Draw Input Box with DirectWrite HitTestTextPosition for caret & selection placement
-                        RECT rcEditWin = GetModernEditRect(state);
+                        RECT rcEditWin = layout.rcEdit;
                         D2D1_RECT_F rcEdit = D2D1::RectF((float)rcEditWin.left, (float)rcEditWin.top,
                                                          (float)rcEditWin.right, (float)rcEditWin.bottom);
                         float editW = rcEdit.right - rcEdit.left;
@@ -2840,62 +3590,94 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                         pRT->PopAxisAlignedClip();
 
-                        // 6. Draw Action Pill Buttons
-                        auto drawPillButton = [&](RECT rWin, const wchar_t* label, bool isPrimaryAccent,
-                                                  bool hovered, bool pressed) {
+                        // 6. Draw the 3 Action Buttons with distinct colors & right-side vector icons
+                        //    (Neutral Dark Slate for Browse + Folder icon, Fluent Blue for Run + Return arrow,
+                        //     Dark Crimson for Exit + Close X) across all themes including Liquid Glass.
+                        enum class ActionBtnKind { Browse, Run, Exit };
+                        auto drawActionButton = [&](RECT rWin, const wchar_t* label, ActionBtnKind kind,
+                                                    bool hovered, bool pressed) {
                             D2D1_RECT_F rcBtn = D2D1::RectF((float)rWin.left, (float)rWin.top,
                                                             (float)rWin.right, (float)rWin.bottom);
-                            if (surface == SurfaceTheme::Glass) {
-                                D2D1_COLOR_F overlay = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.0f);
-                                if (isPrimaryAccent) {
-                                    D2D1_COLOR_F acc = GetSystemAccentColorF();
-                                    float alpha = pressed ? 0.44f : (hovered ? 0.36f : 0.28f);
-                                    overlay = D2D1::ColorF(acc.r, acc.g, acc.b, alpha);
+                            D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rcBtn, pillRadius, pillRadius);
+
+                            D2D1_COLOR_F fillCol = {};
+                            D2D1_COLOR_F borderCol = {};
+                            D2D1_COLOR_F contentCol = {};
+
+                            if (kind == ActionBtnKind::Browse) {
+                                if (isLight) {
+                                    fillCol = D2D1::ColorF(0.87f, 0.88f, 0.91f, pressed ? 0.96f : (hovered ? 0.92f : 0.84f));
+                                    borderCol = D2D1::ColorF(0.0f, 0.0f, 0.0f, hovered ? 0.24f : 0.14f);
+                                    contentCol = D2D1::ColorF(0.10f, 0.11f, 0.14f, 1.0f);
                                 } else {
-                                    overlay = isLight
-                                        ? D2D1::ColorF(1.0f, 1.0f, 1.0f, pressed ? 0.22f : (hovered ? 0.14f : 0.06f))
-                                        : D2D1::ColorF(1.0f, 1.0f, 1.0f, pressed ? 0.14f : (hovered ? 0.08f : 0.03f));
+                                    fillCol = D2D1::ColorF(0.17f, 0.18f, 0.22f, pressed ? 0.94f : (hovered ? 0.90f : 0.84f));
+                                    borderCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, hovered ? 0.26f : 0.15f);
+                                    contentCol = D2D1::ColorF(0.98f, 0.98f, 0.99f, 1.0f);
                                 }
-                                DrawD2DGlassButton(pRT, rcBtn, pillRadius, dpi, overlay, hovered, pressed, isLight);
+                            } else if (kind == ActionBtnKind::Run) {
+                                fillCol = pressed
+                                    ? D2D1::ColorF(0.07f, 0.40f, 0.74f, 0.96f)
+                                    : (hovered ? D2D1::ColorF(0.14f, 0.52f, 0.89f, 0.98f)
+                                               : D2D1::ColorF(0.09f, 0.47f, 0.83f, 0.95f));
+                                borderCol = D2D1::ColorF(0.38f, 0.68f, 0.98f, hovered ? 0.65f : 0.40f);
+                                contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
                             } else {
-                                D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rcBtn, pillRadius, pillRadius);
-                                D2D1_COLOR_F fillCol;
-                                if (isPrimaryAccent) {
-                                    D2D1_COLOR_F acc = GetSystemAccentColorF();
-                                    fillCol = D2D1::ColorF(acc.r, acc.g, acc.b, pressed ? 0.80f : (hovered ? 0.95f : 0.88f));
-                                } else {
-                                    fillCol = isLight
-                                        ? D2D1::ColorF(0.0f, 0.0f, 0.0f, pressed ? 0.14f : (hovered ? 0.09f : 0.06f))
-                                        : D2D1::ColorF(1.0f, 1.0f, 1.0f, pressed ? 0.18f : (hovered ? 0.12f : 0.08f));
-                                }
-                                ID2D1SolidColorBrush* pFillBr = nullptr;
-                                if (SUCCEEDED(pRT->CreateSolidColorBrush(fillCol, &pFillBr))) {
-                                    pRT->FillRoundedRectangle(rr, pFillBr);
-                                    pFillBr->Release();
-                                }
+                                // Exit button: Dark Crimson / Wine Red matching reference screenshot
+                                fillCol = pressed
+                                    ? D2D1::ColorF(0.25f, 0.11f, 0.14f, 0.94f)
+                                    : (hovered ? D2D1::ColorF(0.39f, 0.16f, 0.21f, 0.96f)
+                                               : D2D1::ColorF(0.31f, 0.13f, 0.17f, 0.90f));
+                                borderCol = D2D1::ColorF(0.66f, 0.28f, 0.34f, hovered ? 0.62f : 0.40f);
+                                contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
                             }
 
-                            if (pFmtBtn) {
-                                D2D1_COLOR_F txtCol = (isPrimaryAccent && surface != SurfaceTheme::Glass)
-                                    ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f)
-                                    : colPrimary;
-                                if (pressed && surface == SurfaceTheme::Glass) {
-                                    txtCol.a *= 0.78f;
+                            if (pressed) {
+                                contentCol.a *= 0.86f;
+                            }
+
+                            ID2D1SolidColorBrush* pFillBr = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(fillCol, &pFillBr))) {
+                                pRT->FillRoundedRectangle(rr, pFillBr);
+                                pFillBr->Release();
+                            }
+
+                            ID2D1SolidColorBrush* pBorderBr = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(borderCol, &pBorderBr))) {
+                                pRT->DrawRoundedRectangle(rr, pBorderBr, DpiScaleF(1.0f, dpi));
+                                pBorderBr->Release();
+                            }
+
+                            ID2D1SolidColorBrush* pContentBr = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(contentCol, &pContentBr))) {
+                                if (pFmtBtn && label) {
+                                    D2D1_RECT_F rcText = D2D1::RectF(
+                                        rcBtn.left + DpiScaleF(12.0f, dpi),
+                                        rcBtn.top,
+                                        rcBtn.right - DpiScaleF(26.0f, dpi),
+                                        rcBtn.bottom);
+                                    pRT->DrawText(label, (UINT32)wcslen(label), pFmtBtn, rcText, pContentBr);
                                 }
-                                ID2D1SolidColorBrush* pTxtBr = nullptr;
-                                if (SUCCEEDED(pRT->CreateSolidColorBrush(txtCol, &pTxtBr))) {
-                                    pRT->DrawText(label, (UINT32)wcslen(label), pFmtBtn, rcBtn, pTxtBr);
-                                    pTxtBr->Release();
+
+                                float iconCx = rcBtn.right - DpiScaleF(15.5f, dpi);
+                                float iconCy = (rcBtn.top + rcBtn.bottom) * 0.5f;
+                                if (kind == ActionBtnKind::Browse) {
+                                    DrawD2DFolderVector(pRT, pContentBr, pRoundStroke, iconCx, iconCy, dpi);
+                                } else if (kind == ActionBtnKind::Run) {
+                                    DrawD2DReturnArrowVector(pRT, pContentBr, pRoundStroke, iconCx, iconCy, dpi);
+                                } else {
+                                    DrawD2DCloseCrossVector(pRT, pContentBr, pRoundStroke, iconCx, iconCy, dpi);
                                 }
+
+                                pContentBr->Release();
                             }
                         };
 
-                        drawPillButton(GetBrowseButtonRect(state), state->i18n.browseBtn, false,
-                                       state->browseHovered, state->browsePressed);
-                        drawPillButton(GetRunButtonRect(state), state->i18n.runBtn, true,
-                                       state->btnHovered, state->btnPressed);
-                        drawPillButton(GetCloseButtonRect(state), state->i18n.exitBtn, false,
-                                       state->closeHovered, state->closePressed);
+                        drawActionButton(layout.rcBrowse, state->i18n.browseBtn, ActionBtnKind::Browse,
+                                         state->browseHovered, state->browsePressed);
+                        drawActionButton(layout.rcRun, state->i18n.runBtn, ActionBtnKind::Run,
+                                         state->btnHovered, state->btnPressed);
+                        drawActionButton(layout.rcClose, state->i18n.exitBtn, ActionBtnKind::Exit,
+                                         state->closeHovered, state->closePressed);
 
                         // 7. Draw Outer Window Liquid Glass Dual Rim
                         if (surface == SurfaceTheme::Glass && !highContrast) {
@@ -2926,10 +3708,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     int rowHInt  = GetRowHeight(state);
                     int barH     = GetInputBarHeight(state);
 
-                    for (size_t i = 0; i < state->history.size(); ++i) {
-                        if (state->history[i].hIcon) {
+                    for (size_t i = 0; i < activeRows.size(); ++i) {
+                        if (activeRows[i].hIcon) {
                             int iconY = padTop + (int)i * rowHInt + (rowHInt - iconSize) / 2;
-                            DrawIconEx(hMemDC, iconX, iconY, state->history[i].hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+                            DrawIconEx(hMemDC, iconX, iconY, activeRows[i].hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
                         }
                     }
 
@@ -3019,6 +3801,7 @@ void TransformRunDialog(HWND hDlg) {
     }
 
     LoadHistoryItems(state);
+    UpdateDialogEditFont(state);
     RecomputeDialogMetrics(state);
 
     int dlgW = GetDlgWidth(state);
@@ -3045,6 +3828,7 @@ void TransformRunDialog(HWND hDlg) {
     if (state->hModernEdit) {
         SendMessageW(state->hModernEdit, WM_SETFONT, (WPARAM)state->hFontEditCtl, FALSE);
 
+        state->suppressSuggestionUpdate = true;
         if (state->settings.clearInitialInput) {
             SetWindowTextW(state->hModernEdit, L"");
             SyncInputToNativeCombo(state, L"");
@@ -3060,6 +3844,7 @@ void TransformRunDialog(HWND hDlg) {
             SendMessageW(state->hModernEdit, EM_SETSEL, 0, -1);
             SyncInputToNativeCombo(state, latestCmd.c_str());
         }
+        state->suppressSuggestionUpdate = false;
         SetWindowSubclass(state->hModernEdit, ModernEditSubclassProc, 1, (DWORD_PTR)state);
     }
 
@@ -3083,6 +3868,91 @@ void TransformRunDialog(HWND hDlg) {
         SetFocus(state->hModernEdit);
     }
     InvalidateRect(hDlg, nullptr, TRUE);
+}
+
+// --- Symbol-Less Run Dialog Detection & Fallback Hooking (Fixes #6544 on build 26300.9807+) ---
+
+bool IsRunDialogWindow(HWND hDlg) {
+    if (!hDlg || !IsWindow(hDlg)) return false;
+
+    // Classic Run dialog in shell32.dll always contains ComboBox (12298) and Browse Button (12288)
+    HWND hCombo  = GetDlgItem(hDlg, kRunDlgComboId);
+    HWND hBrowse = GetDlgItem(hDlg, kRunDlgBrowseId);
+    if (hCombo && hBrowse && GetDlgItem(hDlg, IDOK) && GetDlgItem(hDlg, IDCANCEL)) {
+        wchar_t cls[32] = {};
+        if (GetClassNameW(hCombo, cls, ARRAYSIZE(cls)) && _wcsicmp(cls, L"ComboBox") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsRunDialogTemplate(HINSTANCE hInstance, LPCWSTR lpTemplateName) {
+    return !g_unloading.load() &&
+           lpTemplateName &&
+           IS_INTRESOURCE(lpTemplateName) &&
+           LOWORD(reinterpret_cast<ULONG_PTR>(lpTemplateName)) == kRunDialogResourceId &&
+           hInstance &&
+           g_hShell32 &&
+           hInstance == g_hShell32;
+}
+
+thread_local DLGPROC tl_pendingShellDlgProc = nullptr;
+
+INT_PTR CALLBACK FallbackRunDlgProcWrapper(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    auto origProc = reinterpret_cast<DLGPROC>(GetPropW(hDlg, L"WindhawkOrigShellDlgProc"));
+    if (!origProc && tl_pendingShellDlgProc) {
+        origProc = tl_pendingShellDlgProc;
+        tl_pendingShellDlgProc = nullptr;
+        SetPropW(hDlg, L"WindhawkOrigShellDlgProc", reinterpret_cast<HANDLE>(origProc));
+        g_hFallbackInterceptedDlg.store(hDlg);
+    }
+
+    if (uMsg == WM_INITDIALOG) {
+        // Hand DWLP_DLGPROC back to shell32's original dialog procedure immediately so
+        // the window no longer points to FallbackRunDlgProcWrapper after WM_INITDIALOG.
+        if (origProc) {
+            SetWindowLongPtrW(hDlg, DWLP_DLGPROC, reinterpret_cast<LONG_PTR>(origProc));
+        }
+        RemovePropW(hDlg, L"WindhawkOrigShellDlgProc");
+
+        INT_PTR ret = origProc ? origProc(hDlg, uMsg, wParam, lParam) : FALSE;
+
+        if (!g_unloading.load() && IsRunDialogWindow(hDlg)) {
+            TransformRunDialog(hDlg);
+            if (HWND hModernEdit = GetDlgItem(hDlg, kModernEditId)) {
+                SetFocus(hModernEdit);
+                return FALSE;
+            }
+        }
+        return ret;
+    }
+
+    INT_PTR ret = origProc ? origProc(hDlg, uMsg, wParam, lParam) : FALSE;
+
+    if (uMsg == WM_NCDESTROY) {
+        RemovePropW(hDlg, L"WindhawkOrigShellDlgProc");
+        HWND expected = hDlg;
+        g_hFallbackInterceptedDlg.compare_exchange_strong(expected, nullptr);
+    }
+
+    return ret;
+}
+
+INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE hInstance, LPCWSTR lpTemplateName, HWND hWndParent,
+                                    DLGPROC lpDialogFunc, LPARAM dwInitParam) {
+    if (!lpDialogFunc || !IsRunDialogTemplate(hInstance, lpTemplateName)) {
+        return DialogBoxParamW_Orig(hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
+    }
+
+    g_fallbackDialogRefCount.fetch_add(1);
+    DLGPROC prevPending = tl_pendingShellDlgProc;
+    tl_pendingShellDlgProc = lpDialogFunc;
+    INT_PTR res = DialogBoxParamW_Orig(hInstance, lpTemplateName, hWndParent,
+                                       FallbackRunDlgProcWrapper, dwInitParam);
+    tl_pendingShellDlgProc = prevPending;
+    g_fallbackDialogRefCount.fetch_sub(1);
+    return res;
 }
 
 INT_PTR CALLBACK RunDlgProc_Hook(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -3162,7 +4032,30 @@ BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
     return SetForegroundWindow_Orig(hWnd);
 }
 
+std::wstring GetModulePeSignature(HMODULE hMod) {
+    if (!hMod) return L"";
+    auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(hMod);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return L"";
+    auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+        reinterpret_cast<const BYTE*>(hMod) + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return L"";
+    wchar_t buf[64] = {};
+    swprintf_s(buf, L"%08X_%08X", nt->FileHeader.TimeDateStamp, nt->OptionalHeader.SizeOfImage);
+    return buf;
+}
+
 void ReleaseGlobalResources() {
+    {
+        std::lock_guard<std::mutex> lock(g_catalogMutex);
+        for (auto& cand : g_appCatalog) {
+            if (cand.cachedIcon) {
+                DestroyIcon(cand.cachedIcon);
+                cand.cachedIcon = nullptr;
+            }
+        }
+        g_appCatalog.clear();
+        g_appCatalog.shrink_to_fit();
+    }
     if (g_pDWriteFactory) {
         g_pDWriteFactory->Release();
         g_pDWriteFactory = nullptr;
@@ -3198,28 +4091,47 @@ BOOL Wh_ModInit() {
     g_msgUninit = RegisterWindowMessageW(L"Windhawk_Uninit_" WH_MOD_ID);
     g_msgToggle = RegisterWindowMessageW(L"Windhawk_Toggle_" WH_MOD_ID);
 
-    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hShell32) {
-        Wh_Log(L"Failed to load shell32.dll");
+    g_hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!g_hShell32) {
+        Wh_Log(L"Failed to get shell32.dll module handle");
         ReleaseGlobalResources();
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
-        {
-            {
-                L"__int64 __cdecl RunDlgProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
-            },
-            &RunDlgProc_Orig,
-            RunDlgProc_Hook,
-            false
-        }
-    };
+    // Attempt symbol hook for RunDlgProc, but remember if the current shell32.dll build
+    // lacks public Microsoft PDB symbols (e.g., HTTP 404 on Windows 11 build 26300.9807)
+    // so we immediately activate our symbol-less DialogBoxParamW fallback hook.
+    std::wstring currentShell32Sig = GetModulePeSignature(g_hShell32);
+    wchar_t cachedFailedSig[64] = {};
+    Wh_GetStringValue(L"SkipSymbolShell32Sig", cachedFailedSig, ARRAYSIZE(cachedFailedSig));
 
-    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
-        Wh_Log(L"Failed to hook RunDlgProc in shell32.dll");
-        ReleaseGlobalResources();
-        return FALSE;
+    if (!currentShell32Sig.empty() && currentShell32Sig == cachedFailedSig) {
+        Wh_Log(L"Using symbol-less DialogBoxParamW fallback hook for shell32.dll (%s)", currentShell32Sig.c_str());
+    } else {
+        WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+            {
+                {
+                    L"__int64 __cdecl RunDlgProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+                },
+                &RunDlgProc_Orig,
+                RunDlgProc_Hook,
+                true
+            }
+        };
+
+        if (!WindhawkUtils::HookSymbols(g_hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks)) ||
+            RunDlgProc_Orig == nullptr) {
+            Wh_Log(L"Symbol resolution for RunDlgProc in shell32.dll unavailable; activating DialogBoxParamW fallback hook");
+            if (!currentShell32Sig.empty()) {
+                Wh_SetStringValue(L"SkipSymbolShell32Sig", currentShell32Sig.c_str());
+            }
+        } else {
+            Wh_DeleteValue(L"SkipSymbolShell32Sig");
+        }
+    }
+
+    if (RunDlgProc_Orig == nullptr) {
+        WindhawkUtils::SetFunctionHook(DialogBoxParamW, DialogBoxParamW_Hook, &DialogBoxParamW_Orig);
     }
 
     WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook, &ShowWindow_Orig);
@@ -3243,10 +4155,22 @@ void Wh_ModBeforeUninit() {
            SendMessageW(hDlg, g_msgUninit, 0, 0) != 1) {
         Sleep(50);
     }
+
+    // If a fallback-intercepted dialog is still open (even if not transformed), close it
+    // so its modal DialogBoxParamW loop exits promptly before Wh_ModUninit waits on ref count.
+    if (HWND hFallback = g_hFallbackInterceptedDlg.exchange(nullptr)) {
+        if (IsWindow(hFallback)) {
+            CloseRunDialog(hFallback);
+        }
+    }
+
     StopKeyHookThread();
 }
 
 void Wh_ModUninit() {
+    while (g_fallbackDialogRefCount.load() > 0) {
+        Sleep(200);
+    }
     StopKeyHookThread();
     ReleaseGlobalResources();
 }

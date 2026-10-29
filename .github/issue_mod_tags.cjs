@@ -1,15 +1,21 @@
 // @ts-check
 // Tags an issue with the mod it's about: a public mod/<mod-id> label, the Mod
 // field of the windhawk-mods organization project, a title in the issue template
-// format ("[Mod Name] Summary"), and, if the issue is open and the author isn't
-// tagged yet, a "Mod author: @handle" line in the body. The mod is matched
-// against the catalog by the issue title and the tagged author, and Copilot CLI
-// picks it when those don't settle it. When the mod still isn't known, the
-// opener is asked to name it, unless the issue isn't about a specific mod, and
-// the title only loses the template placeholders. Titles are put in English.
+// format ("[Mod Name] Summary"), and, if the issue is open, a comment for the
+// mod's author that lists the commands they can manage the issue with. The
+// mod is matched against the catalog by the issue title and the tagged author,
+// and Copilot CLI picks it when those don't settle it. When the mod still isn't
+// known, the opener is asked to name it, unless the issue isn't about a specific
+// mod, and the title only loses the template placeholders. Titles are put in
+// English.
 //
-// Loaded by actions/github-script from the issue_mod_tags workflow. The issue is
-// changed with the workflow token, the project with PROJECT_TOKEN.
+// The commands, which go in comments, let the author of a mod close, reopen,
+// rename, and label the issues tagged with it, which takes access to the
+// repository otherwise.
+//
+// Loaded by actions/github-script from the issue_mod_tags and issue_commands
+// workflows. The issue is changed with the workflow token, the project with
+// PROJECT_TOKEN.
 
 const childProcess = require('node:child_process');
 const fs = require('node:fs');
@@ -17,11 +23,15 @@ const os = require('node:os');
 const path = require('node:path');
 const util = require('node:util');
 
+const { react, commentOnFailure } = require('./comment_commands.cjs');
+
 /** @typedef {import('@actions/github-script').AsyncFunctionArguments} ScriptArguments */
 /** @typedef {ScriptArguments['github']} Github */
 /** @typedef {ScriptArguments['context']} Context */
 /** @typedef {ScriptArguments['core']} Core */
 /** @typedef {ScriptArguments['getOctokit']} GetOctokit */
+
+/** @typedef {import('@octokit/webhooks-types').IssueCommentCreatedEvent} IssueCommentEvent */
 
 /** @typedef {Awaited<ReturnType<Github['rest']['issues']['get']>>['data']} RestIssue */
 
@@ -48,6 +58,12 @@ const util = require('node:util');
  * @property {string} author The opener's login.
  */
 
+/**
+ * @typedef {object} Command
+ * @property {string} name The command, lowercase and without the slash.
+ * @property {string} argument The rest of the command's line, or an empty string.
+ */
+
 const CATALOG_URL = 'https://mods.windhawk.net/catalog.json';
 
 const PROJECT_OWNER = 'ramensoftware';
@@ -70,8 +86,8 @@ const TRUNCATION_MARK = '...';
 const NEW_MOD_IDEA_LABEL = 'new-mod-idea';
 
 // The bug report and feature request templates start the title as "[Mod Name]
-// Bug description" and put the author placeholder line in the body. Openers
-// also use parentheses, fullwidth brackets, or a brace typed for a bracket.
+// Bug description". Openers also use parentheses, fullwidth brackets, or a
+// brace typed for a bracket.
 const TITLE_PREFIX_PATTERN = /^\s*(?:[[{]([^\]}]*)[\]}]|\(([^)]*)\)|\u3010([^\u3011]*)\u3011)\s*/;
 const TITLE_MOD_PLACEHOLDER = 'Mod Name';
 const TITLE_SUMMARY_PLACEHOLDER_PATTERN = /^(?:bug|feature) description\b/i;
@@ -83,7 +99,6 @@ const TITLE_NAME_JOINER_PATTERN = /^\s*(?:[/+&]|(?:and|with|or|aka|vs)\b)/i;
 const TITLE_MAX_LENGTH = 256;
 // Titles are in English, so a letter of another script marks one to translate.
 const NON_LATIN_LETTER_PATTERN = /(?!\p{Script=Latin})\p{L}/u;
-const AUTHOR_PLACEHOLDER_PATTERN = /@username\b(?: \(GitHub profile handle\))?/g;
 
 // A shorter catalog name or id matches too much ordinary text.
 const MIN_MATCHED_NAME_LENGTH = 6;
@@ -97,16 +112,36 @@ const COPILOT_TIMEOUT_MS = 3 * 60 * 1000;
 const COPILOT_BODY_MAX_LENGTH = 8000;
 const COPILOT_SUMMARY_MAX_LENGTH = 80;
 
-// Marks the comment that asks for the mod, so that it's posted once.
+// Marks the comment that's posted once per issue.
 const MOD_REQUEST_MARKER = '<!-- issue-mod-tags:mod-request -->';
+
 const MOD_REQUEST_COMMENT =
-  `${MOD_REQUEST_MARKER}\n` +
   'Thanks for the report! It isn\'t clear which mod this issue is about. Please ' +
   'edit the title to start with the mod\'s name in brackets, for example ' +
-  '`[Windows 11 Taskbar Styler] Icons are cut off`, and tag the mod\'s author in ' +
-  'the description with `Mod author: @handle`. The mod page on ' +
-  '[windhawk.net](https://windhawk.net/mods) shows both. The issue is tagged ' +
-  'automatically once the title names the mod.';
+  '`[Windows 11 Taskbar Styler] Icons are cut off`. The mods are listed on ' +
+  '[windhawk.net](https://windhawk.net/mods). Once the title names the mod, the ' +
+  'issue is tagged automatically and the mod\'s author is notified.';
+
+// A command is a line of its own in a comment by the author of the issue's mod,
+// with nothing before it. The argument's leading whitespace is trimmed after
+// matching, since a \s+ before it would backtrack quadratically on a long line.
+const COMMAND_PATTERN = /^\/(close|reject|duplicate|open|rename|tag)(?:\s(.*))?$/i;
+// The labels that /tag sets, which are also the ones the templates apply.
+const TAG_LABELS = new Map([
+  ['bug', 'mod-bug'],
+  ['enhancement', 'mod-enhancement'],
+]);
+// The issue number in the /duplicate example isn't a reference, since an issue
+// reference in a comment would add an event to that issue.
+const COMMANDS_TABLE =
+  '| Command | Effect |\n' +
+  '| --- | --- |\n' +
+  '| `/close` | Close the issue as completed |\n' +
+  '| `/reject` | Close the issue as not planned |\n' +
+  '| `/duplicate 1234` | Close the issue as a duplicate of issue 1234 |\n' +
+  '| `/open` | Reopen the issue |\n' +
+  '| `/rename New title` | Rename the issue, keeping the `[Mod Name]` prefix if the new title has none |\n' +
+  '| `/tag bug`, `/tag enhancement` | Label the issue as a bug or an enhancement, replacing the other label |';
 
 /**
  * Lowercases the text and reduces it to words separated by single spaces, with
@@ -195,6 +230,14 @@ function labelName(mod) {
   return name.length <= LABEL_NAME_MAX_LENGTH
     ? name
     : name.slice(0, LABEL_NAME_MAX_LENGTH - TRUNCATION_MARK.length) + TRUNCATION_MARK;
+}
+
+/**
+ * @param {RestIssue} issue
+ * @returns {string[]}
+ */
+function labelNames(issue) {
+  return issue.labels.map((label) => (typeof label === 'string' ? label : (label.name ?? '')));
 }
 
 /**
@@ -612,25 +655,52 @@ async function templateTitle({ core, issue, mod, copilotSummary, mayAskCopilot }
 }
 
 /**
- * The body with the mod author tagged, or null if it needs no change: the
- * author is tagged already, or opened the issue. The template placeholder is
- * replaced if it's still there, otherwise a line is appended.
+ * The title for renaming an issue about the mod to the text. Unless the text
+ * starts with a prefix that names the mod, it gets the prefix of the current
+ * title, or the mod's name if the current title has no such prefix.
  *
- * @param {IssueText} issue
+ * @param {string} title The current title.
+ * @param {string} text
  * @param {CatalogMod} mod
- * @returns {string | null}
+ * @returns {string}
  */
-function bodyWithModAuthor(issue, mod) {
-  const handle = mod.handle;
-  if (!handle || issue.author.toLowerCase() === handle.toLowerCase()) {
-    return null;
-  }
-  if (mentionedHandles(stripHtmlComments(issue.body)).has(handle.toLowerCase())) {
-    return null;
+function renamedTitle(title, text, mod) {
+  const textPrefix = titlePrefix(text);
+  if (textPrefix && textNamesMod(textPrefix.text, mod)) {
+    return text;
   }
 
-  const replaced = issue.body.replace(AUTHOR_PLACEHOLDER_PATTERN, `@${handle}`);
-  return replaced !== issue.body ? replaced : `${issue.body.trimEnd()}\n\nMod author: @${handle}\n`;
+  const prefix = titlePrefix(title);
+  return `[${prefix && textNamesMod(prefix.text, mod) ? prefix.text : mod.name}] ${text}`;
+}
+
+/**
+ * Marks the comment for the mod's author. It's posted once per mod, so that if
+ * the issue is relabeled with another mod, that mod's author gets it too.
+ *
+ * @param {CatalogMod} mod
+ * @returns {string}
+ */
+function modAuthorMarker(mod) {
+  return `<!-- issue-mod-tags:mod-author:${mod.id} -->`;
+}
+
+/**
+ * The comment for the mod's author on an issue about the mod.
+ *
+ * @param {CatalogMod} mod
+ * @param {boolean} mention Whether to mention the author, which notifies them.
+ * @returns {string}
+ */
+function modAuthorComment(mod, mention) {
+  // Some mod names have brackets, which would end the link text.
+  const linkText = mod.name.replace(/[\\[\]]/g, '\\$&');
+  const author = mention ? `@${mod.handle}` : mod.handle;
+  return (
+    `This issue is about [${linkText}](https://windhawk.net/mods/${mod.id}) by ${author}. ` +
+    'As the mod\'s author, you can manage it by commenting with these commands, ' +
+    `each on a line of its own:\n\n${COMMANDS_TABLE}`
+  );
 }
 
 /**
@@ -802,6 +872,33 @@ async function setProjectField({ projectGithub, core, issue, mod }) {
 }
 
 /**
+ * Posts a comment with the marker, unless the issue has one already.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {number} params.issueNumber
+ * @param {string} params.marker
+ * @param {string} params.body
+ * @returns {Promise<boolean>} Whether the comment was posted.
+ */
+async function commentOnce({ github, owner, repo, issueNumber, marker, body }) {
+  const comments = await github.paginate(github.rest.issues.listComments, {
+    owner,
+    repo,
+    issue_number: issueNumber,
+    per_page: 100,
+  });
+  if (comments.some((comment) => comment.body?.includes(marker))) {
+    return false;
+  }
+
+  await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `${marker}\n${body}` });
+  return true;
+}
+
+/**
  * Asks the opener to name the mod, unless that was asked already.
  *
  * @param {object} params
@@ -812,25 +909,46 @@ async function setProjectField({ projectGithub, core, issue, mod }) {
  * @param {number} params.issueNumber
  */
 async function requestMod({ github, core, owner, repo, issueNumber }) {
-  const comments = await github.paginate(github.rest.issues.listComments, {
-    owner,
-    repo,
-    issue_number: issueNumber,
-    per_page: 100,
-  });
-  if (comments.some((comment) => comment.body?.includes(MOD_REQUEST_MARKER))) {
+  if (await commentOnce({ github, owner, repo, issueNumber, marker: MOD_REQUEST_MARKER, body: MOD_REQUEST_COMMENT })) {
+    core.info(`Asked the opener of issue #${issueNumber} to name the mod`);
+  } else {
     core.info(`Issue #${issueNumber} was already asked to name the mod`);
+  }
+}
+
+/**
+ * Posts the comment for the mod's author, unless it was posted for the mod
+ * already, or the author opened the issue. The author is tagged in it unless the
+ * body mentions them, which notified them already.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {Core} params.core
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {number} params.issueNumber
+ * @param {IssueText} params.issue
+ * @param {CatalogMod} params.mod
+ */
+async function tagModAuthor({ github, core, owner, repo, issueNumber, issue, mod }) {
+  if (!mod.handle || mod.handle.toLowerCase() === issue.author.toLowerCase()) {
     return;
   }
 
-  await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: MOD_REQUEST_COMMENT });
-  core.info(`Asked the opener of issue #${issueNumber} to name the mod`);
+  const mentioned = mentionedHandles(stripHtmlComments(issue.body)).has(mod.handle.toLowerCase());
+  const body = modAuthorComment(mod, !mentioned);
+  if (await commentOnce({ github, owner, repo, issueNumber, marker: modAuthorMarker(mod), body })) {
+    core.info(`Posted the comment for @${mod.handle}${mentioned ? ', who is mentioned in the body' : ''}`);
+  } else {
+    core.info(`The comment for @${mod.handle} was already posted`);
+  }
 }
 
 /**
  * Handles an opened or edited issue, or a manual run for the issue number in the
  * issue-number input. A manual run also works on an issue that has a mod label
- * already, and brings its title and body in line with that mod.
+ * already, and brings its title and the comment for the author in line with
+ * that mod.
  *
  * @param {object} params
  * @param {Github} params.github
@@ -849,7 +967,7 @@ async function handleIssueEvent({ github, getOctokit, context, core }) {
   // The payload holds the issue from the moment the event fired, and a manual
   // run has no issue in it at all.
   const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
-  const labels = issue.labels.map((label) => (typeof label === 'string' ? label : (label.name ?? '')));
+  const labels = labelNames(issue);
   if (issue.pull_request) {
     core.info(`#${issueNumber} is a pull request`);
     return;
@@ -902,9 +1020,6 @@ async function handleIssueEvent({ github, getOctokit, context, core }) {
     }
   }
 
-  /** @type {{ title?: string, body?: string }} */
-  const update = {};
-
   const title = await templateTitle({
     core,
     issue: issueText,
@@ -913,26 +1028,16 @@ async function handleIssueEvent({ github, getOctokit, context, core }) {
     mayAskCopilot: mayAskCopilotForSummary,
   });
   if (title !== null) {
-    update.title = title;
-  }
-
-  const body = mod && issue.state === 'open' ? bodyWithModAuthor(issueText, mod) : null;
-  if (body !== null) {
-    update.body = body;
-  }
-
-  if (update.title !== undefined || update.body !== undefined) {
-    await github.rest.issues.update({ owner, repo, issue_number: issueNumber, ...update });
-    if (update.title !== undefined) {
-      core.info(`Changed the title to: ${update.title}`);
-    }
-    if (update.body !== undefined) {
-      core.info(`Tagged @${mod?.handle} in the body`);
-    }
+    await github.rest.issues.update({ owner, repo, issue_number: issueNumber, title });
+    core.info(`Changed the title to: ${title}`);
   }
 
   if (!mod) {
     return;
+  }
+
+  if (issue.state === 'open') {
+    await tagModAuthor({ github, core, owner, repo, issueNumber, issue: issueText, mod });
   }
 
   const projectToken = process.env.PROJECT_TOKEN;
@@ -943,6 +1048,261 @@ async function handleIssueEvent({ github, getOctokit, context, core }) {
   await setProjectField({ projectGithub: getOctokit(projectToken), core, issue, mod });
 }
 
+/**
+ * The commands in a comment, in the order of their lines.
+ *
+ * @param {string} body
+ * @returns {Command[]}
+ */
+function parseCommands(body) {
+  return body.split('\n').flatMap((line) => {
+    const match = line.trimEnd().match(COMMAND_PATTERN);
+    return match ? [{ name: match[1].toLowerCase(), argument: match[2]?.trimStart() ?? '' }] : [];
+  });
+}
+
+/**
+ * Closes the issue for the reason. A closed issue is reopened first, so that
+ * it's closed again with the new reason, and if that fails, it's closed again
+ * with the reason it had.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {Core} params.core
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {RestIssue} params.issue
+ * @param {'COMPLETED' | 'NOT_PLANNED' | 'DUPLICATE'} params.reason
+ * @param {string} [params.duplicateOfId] The node id of the issue that this one duplicates.
+ */
+async function closeIssue({ github, core, owner, repo, issue, reason, duplicateOfId }) {
+  const reopened = issue.state === 'closed';
+  if (reopened) {
+    await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'open' });
+  }
+
+  try {
+    // Only the GraphQL API can tell which issue this one duplicates.
+    await github.graphql(
+      `mutation($issue: ID!, $reason: IssueClosedStateReason!, $duplicateOf: ID) {
+        closeIssue(input: { issueId: $issue, stateReason: $reason, duplicateIssueId: $duplicateOf }) {
+          clientMutationId
+        }
+      }`,
+      { issue: issue.node_id, reason, duplicateOf: duplicateOfId ?? null },
+    );
+  } catch (error) {
+    if (reopened) {
+      try {
+        await github.rest.issues.update({
+          owner,
+          repo,
+          issue_number: issue.number,
+          state: 'closed',
+          state_reason: issue.state_reason,
+        });
+      } catch (restoreError) {
+        core.warning(`Failed to close issue #${issue.number} again: ${restoreError}`);
+      }
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Runs a command on an issue about the mod.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {Core} params.core
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {RestIssue} params.issue
+ * @param {CatalogMod} params.mod
+ * @param {Command} params.command
+ * @returns {Promise<string | null>} The reason the command was refused, or null
+ *   when it was carried out.
+ */
+async function runCommand({ github, core, owner, repo, issue, mod, command }) {
+  const { name, argument } = command;
+  const issueNumber = issue.number;
+  if (argument && ['close', 'reject', 'open'].includes(name)) {
+    return 'it doesn\'t take an argument.';
+  }
+
+  switch (name) {
+    case 'close':
+      if (issue.state === 'closed' && issue.state_reason === 'completed') {
+        return 'the issue is already closed as completed.';
+      }
+      await closeIssue({ github, core, owner, repo, issue, reason: 'COMPLETED' });
+      return null;
+
+    case 'reject':
+      if (issue.state === 'closed' && issue.state_reason === 'not_planned') {
+        return 'the issue is already closed as not planned.';
+      }
+      await closeIssue({ github, core, owner, repo, issue, reason: 'NOT_PLANNED' });
+      return null;
+
+    case 'duplicate': {
+      const number = Number(argument.match(/^#?(\d+)$/)?.[1]);
+      if (!number) {
+        return 'it needs the number of the issue that this one duplicates, as in `/duplicate 1234`.';
+      }
+      if (number === issueNumber) {
+        return 'an issue can\'t be a duplicate of itself.';
+      }
+
+      let original;
+      try {
+        ({ data: original } = await github.rest.issues.get({ owner, repo, issue_number: number }));
+      } catch (error) {
+        // A deleted issue is gone (410) rather than missing (404).
+        const status = /** @type {{ status?: number }} */ (error).status;
+        if (status !== 404 && status !== 410) {
+          throw error;
+        }
+        return `issue ${number} doesn't exist.`;
+      }
+      if (original.pull_request) {
+        return `${number} is a pull request, not an issue.`;
+      }
+
+      await closeIssue({ github, core, owner, repo, issue, reason: 'DUPLICATE', duplicateOfId: original.node_id });
+      return null;
+    }
+
+    case 'open':
+      if (issue.state === 'open') {
+        return 'the issue is already open.';
+      }
+      await github.rest.issues.update({ owner, repo, issue_number: issueNumber, state: 'open' });
+      return null;
+
+    case 'rename': {
+      if (!argument) {
+        return 'it needs the new title, as in `/rename New title`.';
+      }
+      const title = renamedTitle(issue.title, argument, mod);
+      if (title.length > TITLE_MAX_LENGTH) {
+        return `the title would be longer than ${TITLE_MAX_LENGTH} characters.`;
+      }
+      await github.rest.issues.update({ owner, repo, issue_number: issueNumber, title });
+      return null;
+    }
+
+    case 'tag': {
+      const label = TAG_LABELS.get(argument.toLowerCase());
+      if (!label) {
+        return 'it needs `bug` or `enhancement`, as in `/tag bug`.';
+      }
+      const labels = labelNames(issue);
+      if (!labels.includes(label)) {
+        await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: [label] });
+      }
+      for (const other of TAG_LABELS.values()) {
+        if (other !== label && labels.includes(other)) {
+          await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: other });
+        }
+      }
+      return null;
+    }
+
+    default:
+      throw new Error(`Unknown command: ${name}`);
+  }
+}
+
+/**
+ * Handles a new comment on an issue. If the commenter is the author of a mod
+ * the issue is tagged with, the commands in the comment are run in order, and
+ * a refused command is answered with the reason, without running the ones
+ * after it. Commands from anyone else get a thumbs down.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {Context} params.context
+ * @param {Core} params.core
+ */
+async function handleComment({ github, context, core }) {
+  const { owner, repo } = context.repo;
+  const payload = /** @type {IssueCommentEvent} */ (context.payload);
+  const { comment } = payload;
+  const issueNumber = payload.issue.number;
+  if (payload.issue.pull_request || comment.user.type === 'Bot') {
+    return;
+  }
+
+  const commands = parseCommands(comment.body);
+  if (commands.length === 0) {
+    core.info('The comment has no commands');
+    return;
+  }
+
+  await commentOnFailure(
+    {
+      github,
+      context,
+      core,
+      issueNumber,
+      message: `@${comment.user.login} Something went wrong while running the commands in your comment.`,
+    },
+    () => runCommands({ github, core, owner, repo, issueNumber, comment, commands }),
+  );
+}
+
+/**
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {Core} params.core
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {number} params.issueNumber
+ * @param {IssueCommentEvent['comment']} params.comment
+ * @param {Command[]} params.commands
+ */
+async function runCommands({ github, core, owner, repo, issueNumber, comment, commands }) {
+  const login = comment.user.login;
+  // The payload holds the labels from the moment the comment was posted.
+  let { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+  const labels = labelNames(issue);
+  const mods = await loadCatalog();
+  const mod = mods.find(
+    (candidate) => labels.includes(labelName(candidate)) && candidate.handle.toLowerCase() === login.toLowerCase(),
+  );
+  if (!mod) {
+    core.info(`Ignoring the commands of @${login}, who isn't the author of a mod the issue is tagged with`);
+    await react({ github, core, owner, repo, commentId: comment.id, content: '-1' });
+    return;
+  }
+
+  for (const [index, command] of commands.entries()) {
+    if (index > 0) {
+      // The command before may have changed the issue.
+      ({ data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber }));
+    }
+    const refusal = await runCommand({ github, core, owner, repo, issue, mod, command });
+    if (refusal) {
+      core.info(`Refused /${command.name}: ${refusal}`);
+      const notRun = index < commands.length - 1 ? ' The commands after it weren\'t run.' : '';
+      await react({ github, core, owner, repo, commentId: comment.id, content: 'confused' });
+      await github.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        body: `@${login} \`/${command.name}\` can't be applied: ${refusal}${notRun}`,
+      });
+      return;
+    }
+    core.info(`Ran /${command.name}`);
+  }
+
+  await react({ github, core, owner, repo, commentId: comment.id, content: '+1' });
+}
+
 module.exports = {
   handleIssueEvent,
+  handleComment,
 };

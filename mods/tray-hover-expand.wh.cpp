@@ -2,7 +2,7 @@
 // @id              tray-hover-expand
 // @name            Tray hover expand
 // @description     Open the hidden tray icons flyout on hover instead of clicking the chevron; optionally collapse it when the cursor leaves
-// @version         1.7.0
+// @version         1.7.1
 // @author          wygodad
 // @github          https://github.com/wygodad
 // @include         windhawk.exe
@@ -61,9 +61,11 @@ selected. Among those, detection goes:
 - Windows shows a tooltip for the chevron: "Show hidden icons" before the flyout
   opens, which can appear ahead of it, and "Hide" once it is open, which can cover
   the bottom row of icons. Enable "Hide the chevron tooltip" to suppress both.
-- By default the flyout is not opened while a fullscreen app is in the foreground
-  (e.g. a fullscreen video or a game), so it can't pop up over the content. Turn
-  off "Do not activate over fullscreen apps" to always activate.
+- By default the flyout is not opened while the chevron's location is covered by
+  a fullscreen app (e.g. a fullscreen video or a game), so it can't pop up over
+  the content. It still opens whenever the taskbar itself is visible there, so an
+  auto-hidden taskbar works as usual once revealed. Turn off "Do not activate
+  over fullscreen apps" to always activate.
 
 ---
 
@@ -117,10 +119,11 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
   schowka, która potrafi wyprzedzić jego pojawienie się, oraz „Ukryj" po otwarciu,
   która zasłania dolny rząd ikon. Włącz „Ukryj podpowiedź strzałki", aby wyłączyć
   obie.
-- Domyślnie schowek nie otwiera się, gdy na pierwszym planie jest aplikacja
-  pełnoekranowa (np. film na pełnym ekranie lub gra), więc nie wyskoczy on na
-  wierzchu treści. Wyłącz „Nie aktywuj na aplikacjach pełnoekranowych", aby
-  aktywować zawsze.
+- Domyślnie schowek nie otwiera się, gdy miejsce strzałki jest zakryte przez
+  aplikację pełnoekranową (np. film na pełnym ekranie lub grę), więc nie wyskoczy
+  on na wierzchu treści. Otwiera się natomiast zawsze, gdy widoczny jest tam sam
+  pasek zadań, więc automatycznie ukrywany pasek po odsłonięciu działa normalnie.
+  Wyłącz „Nie aktywuj na aplikacjach pełnoekranowych", aby aktywować zawsze.
 */
 // ==/WindhawkModReadme==
 
@@ -169,8 +172,8 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
 - suppressInFullscreen: true
   $name: Do not activate over fullscreen apps
   $name:pl-PL: Nie aktywuj na aplikacjach pełnoekranowych
-  $description: When a fullscreen app is in the foreground (e.g. a fullscreen video or a game), hovering the chevron's location will not open the flyout, so it can't pop up over the content.
-  $description:pl-PL: Gdy na pierwszym planie jest aplikacja pełnoekranowa (np. film na pełnym ekranie lub gra), najechanie w miejsce strzałki nie otworzy schowka, więc nie wyskoczy on na wierzchu treści.
+  $description: When the chevron's location is covered by a fullscreen app (e.g. a fullscreen video or a game), hovering it will not open the flyout, so it can't pop up over the content. It still opens whenever the taskbar itself is visible there, including an auto-hidden one you have just revealed.
+  $description:pl-PL: Gdy miejsce strzałki jest zakryte przez aplikację pełnoekranową (np. film na pełnym ekranie lub grę), najechanie na nie nie otworzy schowka, więc nie wyskoczy on na wierzchu treści. Schowek nadal otwiera się, gdy widoczny jest tam sam pasek zadań, także automatycznie ukrywany, który właśnie odsłoniłeś.
 - hideTooltip: false
   $name: Hide the chevron tooltip
   $name:pl-PL: Ukryj podpowiedź strzałki
@@ -655,13 +658,31 @@ static void HideChevronTooltip(const Settings& s, const RECT& chevron,
     }
 }
 
-// True when the foreground window covers the whole monitor that the chevron is
-// on, i.e. a fullscreen app (a fullscreen video, a game, etc.) whose content the
-// flyout would pop up over. Maximized windows stop at the work area and
-// therefore do not match, and a fullscreen app on another monitor does not
-// suppress a taskbar that is fully visible here. The desktop and shell windows
-// are excluded so an empty desktop is not mistaken for a fullscreen app.
-static bool IsFullscreenOverChevron(const RECT& chevron) {
+// True when the chevron's position is covered by a fullscreen app (a fullscreen
+// video, a game, etc.) whose content the flyout would pop up over, rather than
+// by the taskbar itself. A fullscreen app on another monitor does not suppress a
+// taskbar that is fully visible here, and the desktop and shell windows are
+// excluded so an empty desktop is not mistaken for a fullscreen app.
+static bool IsFullscreenOverChevron(const RECT& chevron, POINT pt) {
+    // What is actually drawn under the cursor decides this. If that is the
+    // taskbar, the user has either revealed an auto-hidden one or is using a
+    // visible one, so they are deliberately reaching for the tray and the
+    // flyout would cover nothing. The window-size test below cannot tell those
+    // apart on its own: with an auto-hiding taskbar the work area is the whole
+    // monitor, so an ordinary maximized window covers it too and would be taken
+    // for a fullscreen app, leaving hover dead until the user clicks the
+    // taskbar and makes it the foreground window.
+    HWND under = WindowFromPoint(pt);
+    HWND underRoot = under ? GetAncestor(under, GA_ROOT) : nullptr;
+    if (underRoot) {
+        WCHAR ucls[64];
+        if (GetClassNameW(underRoot, ucls, ARRAYSIZE(ucls)) &&
+            (wcscmp(ucls, L"Shell_TrayWnd") == 0 ||
+             wcscmp(ucls, L"Shell_SecondaryTrayWnd") == 0)) {
+            return false;
+        }
+    }
+
     HWND hwnd = GetForegroundWindow();
     if (!hwnd || hwnd == GetShellWindow()) return false;
 
@@ -945,7 +966,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // on idle ticks.
             if (enterEdge && !flyoutVisible) {
                 dwellFired = true;      // at most one attempt per stay
-                if (!(s.suppressInFullscreen && IsFullscreenOverChevron(cachedRect))) {
+                if (!(s.suppressInFullscreen &&
+                      IsFullscreenOverChevron(cachedRect, pt))) {
                     DoExpand(pBtn);
                     lastActionAt = now;
                     flyoutBelievedOpen = true;
