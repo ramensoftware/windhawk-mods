@@ -4,7 +4,7 @@
 // @name:pt-BR      Crazy Time
 // @description     Schedule shutdown, sleep or hibernate from a tray icon, with warnings and weekly repeats.
 // @description:pt-BR Agende desligar, suspender ou hibernar pelo ícone da barra, com avisos e repetição semanal.
-// @version         0.6.0
+// @version         0.6.1
 // @author          caikx11
 // @github          https://github.com/caikx11
 // @license         MIT
@@ -18,6 +18,11 @@
 
 A minimalist scheduler for shutdown, sleep and hibernate, living in the
 notification area. Português abaixo.
+
+![Crazy Time panel](https://raw.githubusercontent.com/caikx11/Crazy-timer/be7f37d596ba221e65c336a6472a9bd11677c073/docs/images/crazy-time-panel.jpg)
+
+Screenshot of the standalone preview using simulated actions. The mod itself
+performs real power actions as described below.
 
 > **This mod really shuts down, sleeps or hibernates your computer** when a
 > schedule fires. Save your work first. A warning notification appears before
@@ -46,8 +51,15 @@ notification area. Português abaixo.
 2. Pick the action and how it is scheduled, then press **Add schedule**.
 3. Click the tray icon to open the panel again. Closing the panel keeps the
    countdown running; right-click the icon or use **Options** to exit.
+   **Exit** stops scheduling until Windhawk restarts or the mod is toggled off
+   and on again; Windhawk still lists the mod as enabled.
 4. Disabling the mod stops everything and removes the icon. Schedules are saved
    per user; occurrences that expired while the mod was off are not run.
+
+Schedules are stored in Windhawk's mod storage, in a file named with your user
+SID. On first use, an existing legacy LocalAppData schedule file is copied there
+without overwriting an existing destination. The legacy file is kept as a backup.
+Removing the mod deletes Windhawk's managed storage; the legacy backup remains.
 
 ## Português
 
@@ -65,6 +77,8 @@ controles), mas isso não foi verificado. Relate problemas.
 duração, data e hora, ou repetição semanal) e clique em **Adicionar
 agendamento**. Clique no ícone da barra para reabrir o painel; fechar o
 painel não interrompe a contagem. Desativar o mod encerra tudo.
+**Sair** interrompe os agendamentos até reiniciar o Windhawk ou desativar e
+reativar o mod; ele ainda aparece como ativado no Windhawk.
 */
 // ==/WindhawkModReadme==
 
@@ -77,7 +91,6 @@ painel não interrompe a contagem. Desativar o mod encerra tudo.
   $description:pt-BR: Reproduzir um som quando os avisos e notificações de contagem regressiva aparecerem.
 */
 // ==/WindhawkModSettings==
-
 /*
 MIT License
 
@@ -102,7 +115,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-
 // Source: src/scheduler.hpp
 
 #include <cstdint>
@@ -1074,13 +1086,14 @@ public:
 
     // Setter for theme preference
     bool set_theme(unsigned theme) {
-        if (theme > 2) return false;
+        if (!ready_ || theme > 2) return false;
         auto candidate = snapshot_;
         candidate.theme = theme;
         return commit(candidate);
     }
 
     bool set_sound_enabled(bool enabled) {
+        if (!ready_) return false;
         if (snapshot_.sound_enabled == enabled) return true;
         auto candidate = snapshot_;
         candidate.sound_enabled = enabled;
@@ -1099,7 +1112,7 @@ public:
 
     // Setter for locale
     bool set_locale(unsigned locale) {
-        if (locale > 1) return false;
+        if (!ready_ || locale > 1) return false;
         auto candidate = snapshot_;
         candidate.locale = locale;
         return commit(candidate);
@@ -1121,7 +1134,7 @@ public:
 // Source: src/strings.hpp
 
 namespace power_timer::text {
-// UI catalog boundary. Locale selection and English arrive in ticket 11.
+// Portuguese UI catalog; strings_en.hpp provides the English counterpart.
 inline constexpr auto title = L"Crazy Time";
 inline constexpr auto theme_label = L"Tema";
 inline constexpr auto language_label = L"Idioma";
@@ -1187,7 +1200,7 @@ inline constexpr auto theme_light = L"Claro";
 inline constexpr auto theme_dark = L"Escuro";
 inline constexpr const wchar_t* theme_strings[] = {theme_auto, theme_light, theme_dark};
 inline constexpr auto notification_settings = L"Visibilidade do ícone no Windows";
-inline constexpr auto exit = L"Sair do Crazy Time";
+inline constexpr auto exit = L"Sair até reativar o mod";
 inline constexpr auto settings_note = L"Duração e ação são configuradas neste painel.";
 inline constexpr auto settings_error = L"Não foi possível abrir as configurações do Windows.";
 inline constexpr auto tray_error = L"Ícone indisponível. Tentando reconectar à barra…";
@@ -1301,7 +1314,7 @@ inline constexpr auto theme_light = L"Light";
 inline constexpr auto theme_dark = L"Dark";
 inline constexpr const wchar_t* theme_strings[] = {theme_auto, theme_light, theme_dark};
 inline constexpr auto notification_settings = L"Icon visibility in Windows";
-inline constexpr auto exit = L"Exit Crazy Time";
+inline constexpr auto exit = L"Exit until mod restart";
 inline constexpr auto settings_note = L"Duration and action are configured in this panel.";
 inline constexpr auto settings_error = L"Could not open Windows settings.";
 inline constexpr auto tray_error = L"Icon unavailable. Trying to reconnect to taskbar…";
@@ -1353,6 +1366,7 @@ inline constexpr auto language_label = L"Language";
 inline constexpr auto portuguese = L"Portuguese";
 inline constexpr auto english = L"English";
 }
+
 // Source: src/warning_tracker.hpp
 
 #include <array>
@@ -1459,8 +1473,8 @@ public:
 
 namespace power_timer::windows {
 
-// Real Windows power actions. Used only when the user turns on "real actions" in
-// the mod settings. powrprof.dll is resolved at run time so the mod needs no
+// Real Windows power actions, used by the mod; the standalone preview simulates.
+// powrprof.dll is resolved at run time so the mod needs no
 // extra import library.
 class WindowsPowerBackend : public PowerBackend {
 public:
@@ -1512,7 +1526,7 @@ private:
     static const Functions& functions() {
         static const Functions loaded = [] {
             Functions result;
-            if (const auto module = LoadLibraryW(L"powrprof.dll")) {
+            if (const auto module = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
                 result.get_capabilities = reinterpret_cast<GetCapsFn>(reinterpret_cast<void*>(GetProcAddress(module, "GetPwrCapabilities")));
                 result.set_suspend_state = reinterpret_cast<SuspendFn>(reinterpret_cast<void*>(GetProcAddress(module, "SetSuspendState")));
             }
@@ -1851,7 +1865,6 @@ inline constexpr wchar_t window_class[] = L"PowerTimer.Simulation.Panel";
 inline constexpr UINT tray_message = WM_APP + 1;
 inline constexpr UINT show_message = WM_APP + 2;
 inline constexpr UINT stop_message = WM_APP + 3;
-inline constexpr UINT sound_message = WM_APP + 4; // wparam: 0 off, 1 on
 inline constexpr UINT_PTR timer_id = 1;
 inline HANDLE stop_event{}, ready_event{}, ui_thread{};
 inline std::atomic<HWND> host_window{};
@@ -1860,6 +1873,8 @@ inline std::atomic_bool user_requested_exit{};
 inline bool show_on_start = true;
 inline bool dedicated_process = false;
 inline void (*log_message)(const wchar_t*) = nullptr;
+inline size_t (*mod_storage_path)(wchar_t*, size_t) = nullptr;
+inline bool (*notification_sound_setting)() = nullptr;
 
 enum ControlId { action_id = 100, duration_id, schedule_id, cancel_id,
                  preset_id = 110, open_id = 120, settings_id, visibility_id, exit_id, menu_id,
@@ -1874,12 +1889,53 @@ inline ClockSample clock_sample() {
     return {(ticks.QuadPart - 116444736000000000ULL) / 10000, GetTickCount64()};
 }
 
+inline std::wstring current_user_sid() {
+    HANDLE token{};
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return L"";
+    DWORD length = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &length);
+    std::vector<BYTE> data(length);
+    const bool ok = length && GetTokenInformation(token, TokenUser, data.data(), length, &length);
+    CloseHandle(token);
+    if (!ok) return L"";
+    LPWSTR sid{};
+    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid, &sid)) return L"";
+    const std::wstring result(sid);
+    LocalFree(sid);
+    return result;
+}
+
+inline std::wstring legacy_data_file() {
+    wchar_t local[MAX_PATH]{};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, local))) return L"";
+    const auto directory = std::wstring(local) + L"\\PowerTimer";
+    return directory + L"\\schedules-v1.dat";
+}
+
 inline std::wstring data_file() {
+    if (dedicated_process) {
+        wchar_t directory[32768]{};
+        const auto sid = current_user_sid();
+        if (!mod_storage_path || !mod_storage_path(directory, std::size(directory)) || sid.empty()) return L"";
+        const auto path = std::wstring(directory) + L"\\schedules-" + sid + L".dat";
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES) return path;
+        if (GetLastError() != ERROR_FILE_NOT_FOUND) return L"";
+        const auto legacy = legacy_data_file();
+        if (legacy.empty()) return L"";
+        if (!legacy.empty() && !CopyFileW(legacy.c_str(), path.c_str(), TRUE)) {
+            const DWORD error = GetLastError();
+            // Never replace an existing destination or hide a failed migration.
+            if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND &&
+                error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS) return L"";
+        }
+        return path;
+    }
     wchar_t local[MAX_PATH]{};
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, local))) return L"";
     const auto directory = std::wstring(local) + L"\\PowerTimer";
     if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) return L"";
-    return directory + (dedicated_process ? L"\\schedules-v1.dat" : L"\\preview-v1.dat");
+    return directory + L"\\preview-v1.dat";
 }
 
 inline void set_text(HWND window, const std::wstring& value) {
@@ -1963,16 +2019,46 @@ class Panel {
     NOTIFYICONDATAW tray_{};
     UINT taskbar_created_{};
     UINT dpi_ = 96;
+    int scroll_offset_ = 0;
     bool tray_added_ = false;
     std::uint64_t last_tray_try_{};
     COLORREF bg_ = RGB(247, 249, 252), ink_ = RGB(24, 35, 53), accent_ = RGB(0, 120, 212);
     bool high_contrast_ = false, dark_ = false;
     unsigned theme_value_ = 0; // 0=automatic, 1=light, 2=dark
-    unsigned locale_ = 0; // 0=pt-BR, 1=English
+    unsigned locale_ = 1; // 0=pt-BR, 1=English
+    bool initialize_locale_ = false;
 
     int px(int value) const { return MulDiv(value, static_cast<int>(dpi_), 96); }
+    void scroll_to(int position) {
+        if (!window_) return;
+        RECT client{};
+        GetClientRect(window_, &client);
+        const int limit = (std::max)(0, px(920) - static_cast<int>(client.bottom));
+        scroll_offset_ = (std::clamp)(position, 0, limit);
+        SCROLLINFO info{};
+        info.cbSize = sizeof(info);
+        info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+        info.nMin = 0;
+        info.nMax = px(920) - 1;
+        info.nPage = static_cast<UINT>(client.bottom);
+        info.nPos = scroll_offset_;
+        SetScrollInfo(window_, SB_VERT, &info, TRUE);
+        for (const auto& item : items_)
+            MoveWindow(item.handle, px(item.x), px(item.y) - scroll_offset_, px(item.width), px(item.height), TRUE);
+        InvalidateRect(window_, nullptr, TRUE);
+    }
+    void reveal(HWND control) {
+        if (!control || !window_) return;
+        RECT bounds{}, client{};
+        GetWindowRect(control, &bounds);
+        MapWindowPoints(nullptr, window_, reinterpret_cast<POINT*>(&bounds), 2);
+        GetClientRect(window_, &client);
+        if (bounds.top < 0) scroll_to(scroll_offset_ + bounds.top);
+        else if (bounds.bottom > client.bottom) scroll_to(scroll_offset_ + bounds.bottom - client.bottom);
+    }
     HWND add(const wchar_t* type, const wchar_t* label, DWORD style, int id,
              int x, int y, int width, int height, int font = 0, DWORD ex = 0) {
+        if (wcscmp(type, L"BUTTON") == 0) style |= BS_NOTIFY;
         HWND control = CreateWindowExW(ex, type, label, WS_CHILD | WS_VISIBLE | style,
             px(x), px(y), px(width), px(height), window_,
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
@@ -2051,7 +2137,7 @@ class Panel {
                 FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                 CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         for (const auto& item : items_) {
-            MoveWindow(item.handle, px(item.x), px(item.y), px(item.width), px(item.height), TRUE);
+            MoveWindow(item.handle, px(item.x), px(item.y) - scroll_offset_, px(item.width), px(item.height), TRUE);
             SendMessageW(item.handle, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_[item.font]), TRUE);
         }
         if (list_) {
@@ -2141,7 +2227,7 @@ class Panel {
     void apply_control_themes() {
         using SetWindowThemeFn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
         static const auto set_theme = reinterpret_cast<SetWindowThemeFn>(
-            [] { const auto module = LoadLibraryW(L"uxtheme.dll"); return module ? GetProcAddress(module, "SetWindowTheme") : nullptr; }());
+            [] { const auto module = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); return module ? GetProcAddress(module, "SetWindowTheme") : nullptr; }());
         if (!set_theme) return;
         const bool dark = dark_ && !high_contrast_;
         const auto apply = [&](HWND control, const wchar_t* dark_name) {
@@ -2200,7 +2286,6 @@ class Panel {
                 24 + 136 * i, 315, 124, 32, 2));
         once_controls_.push_back(add_l(L"STATIC", text::date_label, text_en::date_label, 0, 0, 24, 240, 254, 22));
         date_ = add(DATETIMEPICK_CLASSW, L"", WS_TABSTOP | DTS_SHORTDATEFORMAT, date_id, 24, 265, 254, 34);
-        SendMessageW(date_, DTM_SETFORMATW, 0, reinterpret_cast<LPARAM>(L"dd/MM/yyyy"));
         SYSTEMTIME range[2]{}; range[0].wYear = 1970; range[0].wMonth = 1; range[0].wDay = 1;
         range[1].wYear = 9999; range[1].wMonth = 12; range[1].wDay = 31;
         DateTime_SetRange(date_, GDTR_MIN | GDTR_MAX, range);
@@ -2306,7 +2391,8 @@ class Panel {
         wcsncpy_s(notice.szInfoTitle, title, _TRUNCATE);
         wcsncpy_s(notice.szInfo, body, _TRUNCATE);
         // Respect sound setting: NIIF_NOSOUND only if sound disabled
-        const UINT sound_flag = book_.get_sound_enabled() ? 0 : NIIF_NOSOUND;
+        const bool sound = notification_sound_setting ? notification_sound_setting() : book_.get_sound_enabled();
+        const UINT sound_flag = sound ? 0 : NIIF_NOSOUND;
         notice.dwInfoFlags = NIIF_INFO | sound_flag | NIIF_RESPECT_QUIET_TIME;
         Shell_NotifyIconW(NIM_MODIFY, &notice);
     }
@@ -2328,7 +2414,7 @@ class Panel {
     }
     void show_error() {
         if (book_.error() == BookError::Conflict) {
-            std::wstring message = std::wstring(get_text(locale_, text::conflict_error, text_en::conflict_error)) + text::schedule_number + std::to_wstring(book_.conflicting_id());
+            std::wstring message = std::wstring(get_text(locale_, text::conflict_error, text_en::conflict_error)) + get_text(locale_, text::schedule_number, text_en::schedule_number) + std::to_wstring(book_.conflicting_id());
             for (const auto& record : book_.list()) if (record.id == book_.conflicting_id()) {
                 message += std::wstring(get_text(locale_, text::separator, text_en::separator)) + get_text(locale_, text::actions[static_cast<int>(record.action)], text_en::actions[static_cast<int>(record.action)]) +
                     std::wstring(get_text(locale_, text::separator, text_en::separator)) + local_time_at(effective_due_utc_ms(record), locale_);
@@ -2648,13 +2734,7 @@ class Panel {
         const bool primary = draw.CtlID == schedule_id;
         const bool disabled = (draw.itemState & ODS_DISABLED) != 0;
 
-        // Check if theme is dark
-        bool use_dark = false;
-        switch (theme_value_) {
-            case 0: use_dark = get_system_dark_theme(); break;
-            case 1: use_dark = false; break;
-            case 2: use_dark = true; break;
-        }
+        const bool use_dark = dark_ && !high_contrast_;
 
         const COLORREF fill = primary && !disabled ? accent_ : high_contrast_ ? GetSysColor(COLOR_BTNFACE) :
             disabled ? (use_dark ? RGB(44, 44, 44) : RGB(238, 241, 246)) :
@@ -2716,7 +2796,9 @@ public:
         if (loaded.status == power_timer::LoadStatus::Loaded) {
             theme_value_ = loaded.snapshot.theme;
             locale_ = loaded.snapshot.locale;
-            book_.set_locale(locale_);
+        } else if (loaded.status == LoadStatus::Missing) {
+            locale_ = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_PORTUGUESE ? 0 : 1;
+            initialize_locale_ = true;
         }
         // Apply theme immediately
         colors();
@@ -2756,7 +2838,7 @@ public:
         cls.hIcon = icon_;
         cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         cls.lpszClassName = window_class;
-        if (!RegisterClassW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
+        if (!RegisterClassW(&cls)) return false;
         dpi_ = GetDpiForSystem();
         RECT work{};
         // Position window on the monitor where the tray icon / cursor is
@@ -2768,13 +2850,24 @@ public:
         GetMonitorInfoW(monitor, &mi);
         work = mi.rcWork;
         RECT size{0, 0, px(580), px(920)};
-        constexpr DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+        constexpr DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VSCROLL;
         AdjustWindowRectExForDpi(&size, style, FALSE, WS_EX_CONTROLPARENT, dpi_);
-        const int width = size.right - size.left, height = size.bottom - size.top;
+        const int width = size.right - size.left;
+        const int height = (std::min)(size.bottom - size.top, work.bottom - work.top);
         window_ = CreateWindowExW(WS_EX_CONTROLPARENT, window_class, get_text(locale_, text::title, text_en::title), style,
             work.right - width - px(20), (std::max)(work.top, work.bottom - height - px(20)),
             width, height, nullptr, nullptr, cls.hInstance, this);
         if (!window_) return false;
+        if (const UINT dpi = GetDpiForWindow(window_); dpi && dpi != dpi_) {
+            dpi_ = dpi;
+            RECT actual{0, 0, px(580), px(920)};
+            AdjustWindowRectExForDpi(&actual, style, FALSE, WS_EX_CONTROLPARENT, dpi_);
+            const int actual_width = actual.right - actual.left;
+            const int actual_height = (std::min)(actual.bottom - actual.top, work.bottom - work.top);
+            SetWindowPos(window_, nullptr, work.right - actual_width - px(20),
+                (std::max)(work.top, work.bottom - actual_height - px(20)),
+                actual_width, actual_height, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
         // Explorer may have lower integrity than the tool host. Allow only its
         // inert tray-recreation broadcast, never commands or our WM_APP channel.
         if (!taskbar_created_ || !ChangeWindowMessageFilterEx(window_, taskbar_created_, MSGFLT_ALLOW, nullptr)) {
@@ -2782,8 +2875,10 @@ public:
             DestroyWindow(window_);
             return false;
         }
-        book_.initialize(clock_sample());
+        if (book_.initialize(clock_sample()) && initialize_locale_)
+            book_.set_locale(locale_);
         try { controls(); } catch (...) { DestroyWindow(window_); return false; }
+        scroll_to(0);
         tray_.cbSize = sizeof(tray_);
         tray_.hWnd = window_;
         tray_.uID = 1;
@@ -2811,7 +2906,37 @@ public:
             self->tray_added_ = false; self->add_tray(); return 0;
         }
         switch (message) {
+            case WM_SIZE:
+                self->scroll_to(self->scroll_offset_); return 0;
+            case WM_VSCROLL: {
+                RECT client{};
+                GetClientRect(window, &client);
+                int position = self->scroll_offset_;
+                switch (LOWORD(wparam)) {
+                    case SB_LINEUP: position -= self->px(20); break;
+                    case SB_LINEDOWN: position += self->px(20); break;
+                    case SB_PAGEUP: position -= client.bottom; break;
+                    case SB_PAGEDOWN: position += client.bottom; break;
+                    case SB_TOP: position = 0; break;
+                    case SB_BOTTOM: position = self->px(920); break;
+                    case SB_THUMBTRACK: {
+                        SCROLLINFO info{};
+                        info.cbSize = sizeof(info);
+                        info.fMask = SIF_TRACKPOS;
+                        GetScrollInfo(window, SB_VERT, &info);
+                        position = info.nTrackPos;
+                        break;
+                    }
+                    default: return 0;
+                }
+                self->scroll_to(position); return 0;
+            }
+            case WM_MOUSEWHEEL:
+                self->scroll_to(self->scroll_offset_ - GET_WHEEL_DELTA_WPARAM(wparam) * self->px(60) / WHEEL_DELTA);
+                return 0;
             case WM_COMMAND:
+                if (HIWORD(wparam) == EN_SETFOCUS || HIWORD(wparam) == CBN_SETFOCUS || HIWORD(wparam) == BN_SETFOCUS)
+                    self->reveal(reinterpret_cast<HWND>(lparam));
                 if (LOWORD(wparam) == duration_id && HIWORD(wparam) == EN_CHANGE) {
                     self->preview();
                 }
@@ -2820,14 +2945,14 @@ public:
                 else if (LOWORD(wparam) == kind_id && HIWORD(wparam) == CBN_SELCHANGE) self->show_kind();
                 else if (LOWORD(wparam) == theme_id && HIWORD(wparam) == CBN_SELCHANGE) {
                     self->theme_value_ = static_cast<unsigned>(SendMessageW(self->theme_combo_, CB_GETCURSEL, 0, 0));
-                    self->book_.set_theme(self->theme_value_);
+                    if (!self->book_.set_theme(self->theme_value_)) self->show_error();
                     self->colors();
                     self->refresh_locale_text();
                     return 0;
                 }
                 else if (LOWORD(wparam) == locale_id && HIWORD(wparam) == CBN_SELCHANGE) {
                     unsigned locale = static_cast<unsigned>(SendMessageW(self->locale_combo_, CB_GETCURSEL, 0, 0));
-                    self->book_.set_locale(locale);
+                    if (!self->book_.set_locale(locale)) self->show_error();
                     self->locale_ = locale;
                     self->refresh_locale_text();
                     return 0;
@@ -2836,6 +2961,7 @@ public:
                 return 0;
             case WM_NOTIFY: {
                 const auto* header = reinterpret_cast<NMHDR*>(lparam);
+                if (header->code == NM_SETFOCUS) self->reveal(header->hwndFrom);
                 // Dark theme: the column header ignores the list text colour, so force light text.
                 if (self->dark_ && !self->high_contrast_ && self->list_ && header->code == NM_CUSTOMDRAW &&
                     header->hwndFrom == ListView_GetHeader(self->list_)) {
@@ -2873,9 +2999,6 @@ public:
                 }
                 return 0;
             case show_message: self->show(true); return 0;
-            case sound_message:
-                if (self->book_.writable() && !self->book_.set_sound_enabled(wparam != 0)) self->show_error();
-                return 0;
             case WM_CONTEXTMENU: self->menu(); return 0;
             case stop_message: EndMenu(); DestroyWindow(window); return 0;
             case WM_CLOSE: ShowWindow(window, SW_HIDE); return 0;
@@ -2909,6 +3032,7 @@ public:
                         SetWindowPos(window, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
                     }
                 }
+                self->scroll_to(self->scroll_offset_);
                 return 0;
             }
             case WM_SETTINGCHANGE:
@@ -2942,18 +3066,9 @@ public:
 };
 
 inline HANDLE user_mutex() {
-    HANDLE token{};
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return nullptr;
-    DWORD length{};
-    GetTokenInformation(token, TokenUser, nullptr, 0, &length);
-    std::vector<BYTE> data(length);
-    const bool ok = GetTokenInformation(token, TokenUser, data.data(), length, &length) != FALSE;
-    CloseHandle(token);
-    if (!ok) return nullptr;
-    LPWSTR sid{};
-    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid, &sid)) return nullptr;
-    const std::wstring name = std::wstring(L"Global\\PowerTimer.Simulation.") + sid;
-    LocalFree(sid);
+    const auto sid = current_user_sid();
+    if (sid.empty()) return nullptr;
+    const std::wstring name = std::wstring(L"Global\\CrazyTime.") + (dedicated_process ? L"Mod." : L"Preview.") + sid;
     return CreateMutexW(nullptr, FALSE, name.c_str());
 }
 
@@ -3042,14 +3157,18 @@ inline bool start(bool visible, void (*logger)(const wchar_t*) = nullptr, bool d
 
 
 BOOL WhTool_ModInit() {
+    power_timer::windows::mod_storage_path = [](wchar_t* buffer, size_t count) {
+        return Wh_GetModStoragePath(buffer, count);
+    };
+    power_timer::windows::notification_sound_setting = [] {
+        return Wh_GetIntSetting(L"soundEnabled") != 0;
+    };
     return power_timer::windows::start(false,
         [](const wchar_t* message) { Wh_Log(L"%s", message); }, true);
 }
 
 void WhTool_ModSettingsChanged() {
-    if (HWND window = power_timer::windows::host_window.load())
-        PostMessageW(window, power_timer::windows::sound_message,
-            Wh_GetIntSetting(L"soundEnabled") != 0 ? 1 : 0, 0);
+    // Notifications read the current Windhawk setting when they are emitted.
 }
 
 void WhTool_ModUninit() {
