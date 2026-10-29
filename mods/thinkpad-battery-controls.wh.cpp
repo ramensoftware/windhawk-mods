@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.8.5
+// @version 0.8.6
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -3211,11 +3211,12 @@ void ShowPanel(FrameworkElement target) {
   flyout.ShouldConstrainToRootBounds(false);
   C::StackPanel content;
   content.Width(340);
-  content.Spacing(14);
+  content.Spacing(6);
   auto title = Text(L"Battery protection", 22);
   title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-  content.Children().Append(title);
-  content.Children().Append(Text(L"Choose when charging starts and stops."));
+  C::Grid header;
+  header.Children().Append(title);
+  title.VerticalAlignment(VerticalAlignment::Center);
   auto batteryState = BatteryControls::ReadSnapshot().state;
   if (batteryState.packs[0].present && batteryState.packs[1].present)
     content.Children().Append(Text(
@@ -3232,9 +3233,13 @@ void ShowPanel(FrameworkElement target) {
                                        12));
       }
   }
-  p->enabled.Header(winrt::box_value(L"Limit charging"));
+  p->enabled.OnContent(winrt::box_value(L"Limit charging"));
+  p->enabled.OffContent(winrt::box_value(L"Limits off"));
+  p->enabled.HorizontalAlignment(HorizontalAlignment::Right);
+  Automation::AutomationProperties::SetName(p->enabled, L"Limit charging");
   p->enabled.IsOn(initial.enabled || BatteryControls::Active());
-  content.Children().Append(p->enabled);
+  header.Children().Append(p->enabled);
+  content.Children().Append(header);
   auto library = ReadPresets();
   std::erase_if(library, [](const Preset& preset) { return !preset.quick; });
   auto choose = [weak](const Preset& preset) {
@@ -3256,7 +3261,7 @@ void ShowPanel(FrameworkElement target) {
   if (!library.empty())
     content.Children().Append(heading);
   C::StackPanel choices;
-  choices.Spacing(4);
+  choices.Spacing(3);
   for (const auto& preset : library) {
     P::ToggleButton button;
     // Selection is a native checked state, including hover and pressed states.
@@ -3278,7 +3283,9 @@ void ShowPanel(FrameworkElement target) {
     button.Content(PresetDisplay(preset));
     button.HorizontalAlignment(HorizontalAlignment::Stretch);
     button.HorizontalContentAlignment(HorizontalAlignment::Stretch);
-    button.Padding(Thickness{10, 6, 10, 6});
+    button.Padding(Thickness{10, 2, 10, 2});
+    button.MinHeight(0);
+    button.Height(28);
     Automation::AutomationProperties::SetName(button, PresetLabel(preset));
     TrackEvent(button.Click(winrt::auto_revoke, SafeUi([choose, preset](auto const&, auto const&) {
                               choose(preset);
@@ -3286,12 +3293,7 @@ void ShowPanel(FrameworkElement target) {
     p->choices.emplace_back(button, preset.start, preset.stop);
     choices.Children().Append(button);
   }
-  C::ScrollViewer presetList;
-  presetList.Content(choices);
-  presetList.MaxHeight(164);
-  presetList.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
-  presetList.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
-  content.Children().Append(presetList);
+  content.Children().Append(choices);
   C::Button manage;
   manage.Content(winrt::box_value(L"Manage presets..."));
   TrackEvent(manage.Click(winrt::auto_revoke, SafeUi([target, weak](auto const&, auto const&) {
@@ -3301,7 +3303,7 @@ void ShowPanel(FrameworkElement target) {
                             presetReturnView = 0;
                             QueuePanel(target, 2);
                           })));
-  content.Children().Append(manage);
+
   if (library.empty())
     content.Children().Append(Text(
         L"No quick presets selected. Choose favorites in Manage presets, or use the sliders below.",
@@ -3322,10 +3324,24 @@ void ShowPanel(FrameworkElement target) {
   p->stopLabel.Text(L"Stop at " + std::to_wstring(int(p->stop.Value())) + L"%");
   Automation::AutomationProperties::SetName(p->start, L"Start charging below percentage");
   Automation::AutomationProperties::SetName(p->stop, L"Stop charging at percentage");
-  content.Children().Append(p->startLabel);
-  content.Children().Append(p->start);
-  content.Children().Append(p->stopLabel);
-  content.Children().Append(p->stop);
+  C::Grid ranges;
+  ranges.ColumnSpacing(24);
+  for (int i = 0; i < 2; ++i) {
+    C::ColumnDefinition column;
+    column.Width(GridLength{1, GridUnitType::Star});
+    ranges.ColumnDefinitions().Append(column);
+  }
+  C::StackPanel startRange, stopRange;
+  startRange.Children().Append(p->startLabel);
+  startRange.Children().Append(p->start);
+  stopRange.Children().Append(p->stopLabel);
+  stopRange.Children().Append(p->stop);
+  p->start.Height(32);
+  p->stop.Height(32);
+  C::Grid::SetColumn(stopRange, 1);
+  ranges.Children().Append(startRange);
+  ranges.Children().Append(stopRange);
+  content.Children().Append(ranges);
   TrackEvent(p->start.ValueChanged(
       winrt::auto_revoke, SafeUi([weak](auto const&, auto const&) {
         if (auto p = weak.lock()) {
@@ -3387,17 +3403,20 @@ void ShowPanel(FrameworkElement target) {
                                    QueuePanel(target, 2);
                                  }
                                })));
-  content.Children().Append(saveCurrent);
+  C::StackPanel presetTools;
+  presetTools.Orientation(C::Orientation::Horizontal);
+  presetTools.Spacing(8);
+  presetTools.Children().Append(manage);
+  presetTools.Children().Append(saveCurrent);
+  content.Children().Append(presetTools);
   auto hint = Text(
       L"Above the limit? Charging pauses and the level may fall slowly while plugged in. Unplug to "
       L"reach your selected range sooner.",
       12);
   hint.Opacity(.75);
+  if (BatteryControls::Active())
+    hint.Text(L"Applying these limits ends the temporary full-charge override.");
   content.Children().Append(hint);
-  if (BatteryControls::Active()) {
-    auto notice = Text(L"A full-charge override is active. Applying changes will end it.", 12);
-    content.Children().Append(notice);
-  }
   C::StackPanel actions;
   actions.Orientation(C::Orientation::Horizontal);
   actions.Spacing(8);
