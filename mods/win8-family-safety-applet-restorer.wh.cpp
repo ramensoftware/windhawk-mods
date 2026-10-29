@@ -19,6 +19,15 @@
 
 This mod restores the classic Windows 8/8.1 Family Safety (Parental Controls) Control Panel applet that was removed from modern versions of Windows.
 
+## Screenshots 
+
+![family1](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety1.png)
+
+![family2](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety2.png)
+
+## About 
+
+
 The mod downloads the original Windows binaries from Microsoft’s public symbol server on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches in memory, and registers the applet virtually so that no permanent system files are modified.
 
 It supports 6 languages: English, Italian, Persian, Spanish, French and Portuguese.  
@@ -29,7 +38,7 @@ The applet appears under **User Accounts** in Control Panel Category view and ca
 Note: it might take a minute to load the applet because the mod downloads the required dependencies.
 ## Credits 
 
-- AdministratoX - Original implementation
+- AdministratoX - Original implementation and screenshots 
 */
 // ==/WindhawkModReadme==
 
