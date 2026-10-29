@@ -754,8 +754,13 @@ void ColourClassicControl(HWND hWnd, bool dark) {
     if (wcscmp(className, L"SysTreeView32") == 0) {
         SendToControl(hWnd, TVM_SETBKCOLOR, 0, background);
         SendToControl(hWnd, TVM_SETTEXTCOLOR, 0, text);
+        // The line colour is the one of the three that can go back to its
+        // default. CLR_DEFAULT is not a resolved colour that dark mode can
+        // darken: the control looks its own default drawing colour up when it
+        // draws, which is the grey the console had before the mod ran. The two
+        // above cannot do this, and the reason is recorded above them.
         SendToControl(hWnd, TVM_SETLINECOLOR, 0,
-                      dark ? kColorLine : RealSystemColour(COLOR_WINDOWTEXT));
+                      dark ? kColorLine : CLR_DEFAULT);
         InvalidateRect(hWnd, nullptr, TRUE);
     } else if (wcscmp(className, L"ComboBox") == 0) {
         // Measured before this fix: an Explorer themed combo box field is
@@ -2142,9 +2147,11 @@ BOOL CALLBACK WalkTop(HWND hWnd, LPARAM lParam) {
     }
     WalkResult* result = reinterpret_cast<WalkResult*>(lParam);
     if (!OnOwningThread(hWnd)) {
-        // Not this thread's to touch. That thread is asked to walk its own
-        // windows, which is the only way this window ever gets themed.
-        NoteWalkPendingFor(hWnd);
+        // Unreachable as the code stands: the only caller is WalkOwnedInTree, and
+        // it calls this only for windows the current thread owns. It stays as a
+        // guard rather than being deleted, because the cost is one comparison and
+        // the alternative, if this is ever reached from a new walk, is ResetWindow
+        // running against another thread's window.
         return TRUE;
     }
     if (g_active) {
@@ -2281,11 +2288,11 @@ LRESULT CALLBACK RemoteCallHook(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// How long a thread is given to answer while the mod is going about its work
-// with the console still in use. It is only used where a thread that does not
-// answer leaves nothing behind: the thread keeps its windows unthemed or reset
-// until it next creates one, and the deferral in the window creation hook picks
-// it up then.
+// How long a thread is given to answer while the mod is going about its work with
+// the console still in use. It is only used where a thread that does not answer
+// leaves nothing behind: WalkEveryThread records such a thread in
+// g_pendingThreads, and the deferral in the window creation hook then walks its
+// windows the next time it creates one.
 constexpr UINT kRemoteCallTimeoutMs = 2000;
 
 // Runs proc in the thread that owns hWnd, and returns once that thread has run it
@@ -2394,13 +2401,28 @@ void WalkEveryThread(bool waitForIt) {
     Wh_Log(L"%s %zu threads%s", g_active ? L"theming" : L"restoring",
            threads.size(), waitForIt ? L", waiting for each" : L"");
     int done = 0;
+    int deferred = 0;
     for (const auto& entry : threads) {
         if (RunOnWindowThread(entry.second, WalkThisThread, waitForIt)) {
             done++;
+            continue;
+        }
+        // The thread was busy past the limit. Its windows keep whatever they have
+        // until somebody walks them, and nothing else would: record the thread and
+        // ask it again, which means the deferred walk in the window creation hook
+        // runs for it the next time it creates any window. Without this line the
+        // comment in RunOnWindowThread about that deferral was simply untrue.
+        //
+        // Not at unload: there g_active is clear and the hook is on its way out, so
+        // there is no later for anyone to pick this up in, and posting would only
+        // leave a message in a queue that is about to be torn down.
+        if (!waitForIt) {
+            NoteWalkPendingFor(entry.second);
+            deferred++;
         }
     }
-    Wh_Log(L"%s done on %d of %zu threads", g_active ? L"theme" : L"restore",
-           done, threads.size());
+    Wh_Log(L"%s done on %d of %zu threads, %d deferred", g_active ? L"theme"
+           : L"restore", done, threads.size(), deferred);
 }
 
 // ---------------------------------------------------------------------------
