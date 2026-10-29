@@ -4263,7 +4263,7 @@ static void PaintGroup() {
     PinGroup& f = g_folders[g_groupFolder];
     D2D1_RECT_F nameR = D2D1::RectF(18, 12, W - 52, 40);
     if (g_groupEditing) s.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(12, 10, W - 48, 42), 6, 6), s.White(0.1f));
-    Text(s, g_groupEditing ? g_groupEdit + L" |" : f.name, nameR, 17, 1, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    Text(s, g_groupEditing ? g_groupEdit + L"\u200A|" : f.name, nameR, 17, 1, DWRITE_TEXT_ALIGNMENT_LEADING, false, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     g_groupEditR = D2D1::RectF(W - 44, 12, W - 14, 40);
     if (g_groupHover == kGroupRename) s.rt->FillRoundedRectangle(D2D1::RoundedRect(g_groupEditR, 6, 6), s.White(0x22 / 255.f));
     Glyph(s, g_groupEditing ? L"" : L"", g_groupEditR, 13, 0xC0 / 255.f);
