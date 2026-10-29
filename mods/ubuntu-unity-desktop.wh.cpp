@@ -1325,7 +1325,29 @@ static DWORD WINAPI TabWorker(LPVOID) {
             lastKey.clear();
             IUIAutomationElement* root = nullptr;
             if (SUCCEEDED(uia->ElementFromHandle(target, &root)) && root) {
-                root->FindFirst(TreeScope_Descendants, isStrip, &strip);
+                // the window's own tab row sits at its very top; a web page's tabs (GitHub's Write / Preview, ...)
+                // lie further down, under the address bar, and are no tab row of the window's
+                RECT wr = {};
+                GetWindowRect(target, &wr);
+                int reach = (int)(90 * GetDpiForWindow(target) / 96), best = INT_MAX;
+                IUIAutomationElementArray* strips = nullptr;
+                if (SUCCEEDED(root->FindAll(TreeScope_Descendants, isStrip, &strips)) && strips) {
+                    int count = 0;
+                    strips->get_Length(&count);
+                    for (int i = 0; i < count; i++) {
+                        IUIAutomationElement* e = nullptr;
+                        RECT r = {};
+                        if (SUCCEEDED(strips->GetElement(i, &e)) && e && SUCCEEDED(e->get_CurrentBoundingRectangle(&r)) &&
+                            r.right > r.left && r.top - wr.top < reach && r.top < best) {
+                            best = r.top;
+                            Release(strip);
+                            strip = e;
+                            e = nullptr;
+                        }
+                        Release(e);
+                    }
+                }
+                Release(strips);
                 // the new-tab button sits near the strip: look around it, a level further out each time (up to three)
                 IUIAutomationTreeWalker* walker = nullptr;
                 IUIAutomationElement* around = nullptr;
@@ -1580,6 +1602,9 @@ static void FakeForget(HWND w) {
 }
 
 static void PlaceFake(HWND w, int hidden) {
+    // never more than a tab row's height out of sight: anything else is a misreading (it would push the window up
+    // off the screen, onto a screen above this one)
+    hidden = std::clamp(hidden, 0, (int)(110 * GetDpiForWindow(w) / 96));
     // out of the real maximize first; where it lands doesn't matter (an old size, or a snap layout Windows picks):
     // it is placed explicitly right after
     Transitions(w, false);
