@@ -66,7 +66,7 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   $description: Turn off the four-finger swipes in the touchpad settings, otherwise Windows responds too.
 - multiplierFive: "2.0"
   $name: Glide speed multiplier
-  $description: With two to five fingers resting. 1.0 is the native touchpad speed and acceleration, 1.5 is 50% faster.
+  $description: With two to five fingers resting. 1.0 is the native touchpad speed and acceleration, 1.5 is 50% faster. Defaults to 2.0 since the resting hand has less room to travel on the touchpad.
 - multiplierOne: "1.0"
   $name: One-finger speed multiplier
   $description: When a single finger moves or is left resting, after the 'more fingers' glide is activated. 1.0 is native.
@@ -81,6 +81,8 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 #include <hidpi.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <atomic>
@@ -135,7 +137,17 @@ constexpr double kChunkSec = 0.1;         // window of each sample
 constexpr double kChunkMinMm = 0.5;
 constexpr double kSaveIntervalSec = 30;
 
-std::atomic<double> g_multFive{1.0};
+// No frame for this long with an armed glide: the lift of the fingers was missed (an elevated window or the
+// secure desktop took the touchpad), and the glide is ended before the next frame.
+constexpr DWORD kStaleFrameMs = 500;
+// The wheel is only blocked while the touchpad reports: a wheel event without a recent report comes from a
+// mouse, or from a glide whose end was missed.
+constexpr DWORD kWheelReportMs = 250;
+// Frames processed back to back would give a near-zero interval and spike the measured speed.
+constexpr double kMinFrameSec = 0.005;
+
+std::atomic<double> g_multFive{2.0};
+std::atomic<DWORD> g_lastReportTick;
 std::atomic<double> g_multOne{1.0};
 std::atomic<bool> g_armThree;
 std::atomic<bool> g_armFour;
@@ -206,6 +218,7 @@ struct {
     POINT lastClickPos;
     double lastFrameTime;  // s
     double speed;          // mm/s, smoothed
+    DWORD lastFrameTick;
 } g_state;
 
 // Sample under way of native one-finger movement.
@@ -228,34 +241,27 @@ double Now() {
     return (double)counter.QuadPart / frequency.QuadPart;
 }
 
-double ReadMultiplier(PCWSTR name) {
-    PCWSTR text = Wh_GetStringSetting(name);
-    std::wstring value = text ? text : L"";
-    if (text) {
-        Wh_FreeStringSetting(text);
-    }
+double ReadMultiplier(PCWSTR name, double fallback) {
+    std::wstring value = WindhawkUtils::StringSetting::make(name).get();
     std::replace(value.begin(), value.end(), L',', L'.');
     double d = wcstod(value.c_str(), nullptr);
-    return d > 0 ? std::clamp(d, 0.05, 10.0) : 1.0;
+    return d > 0 ? std::clamp(d, 0.05, 10.0) : fallback;
 }
 
 void LoadSettings() {
-    g_multFive = ReadMultiplier(L"multiplierFive");
-    g_multOne = ReadMultiplier(L"multiplierOne");
+    g_multFive = ReadMultiplier(L"multiplierFive", 2.0);
+    g_multOne = ReadMultiplier(L"multiplierOne", 1.0);
     g_armThree = Wh_GetIntSetting(L"armThree");
     g_armFour = Wh_GetIntSetting(L"armFour");
 
-    PCWSTR tap = Wh_GetStringSetting(L"tapToClick");
+    auto tap = WindhawkUtils::StringSetting::make(L"tapToClick");
     int profile = 2;
-    if (tap) {
-        if (wcscmp(tap, L"off") == 0) {
-            profile = 0;
-        } else if (wcscmp(tap, L"strict") == 0) {
-            profile = 1;
-        } else if (wcscmp(tap, L"lenient") == 0) {
-            profile = 3;
-        }
-        Wh_FreeStringSetting(tap);
+    if (wcscmp(tap, L"off") == 0) {
+        profile = 0;
+    } else if (wcscmp(tap, L"strict") == 0) {
+        profile = 1;
+    } else if (wcscmp(tap, L"lenient") == 0) {
+        profile = 3;
     }
     g_tapProfile = profile;
 }
@@ -394,20 +400,25 @@ void Learn(const std::vector<const Contact*>& fingers, int touching, double t) {
     g_learn.c0 = cursor;
 }
 
-void ResetSession() {
+void EndGlide() {
     if (g_state.armed) {
         Wh_Log(L"Glide stopped");
         SetWheelBlock(false);
     }
     g_state.armed = false;
     g_state.anchorValid = false;
+    g_state.speed = 0;
     g_state.tracks.clear();
-    g_frame.clear();
-    g_frameExpected = 0;
     g_learn.active = false;
     if (g_curveDirty && Now() - g_lastSave >= kSaveIntervalSec) {
         SaveCurve();
     }
+}
+
+void ResetSession() {
+    EndGlide();
+    g_frame.clear();
+    g_frameExpected = 0;
 }
 
 // Output.
@@ -425,7 +436,7 @@ void SendButtons(std::initializer_list<DWORD> flags) {
 
 void Move(double dxMm, double dyMm, double dt, double multiplier) {
     if (dt > 0) {
-        double v = std::hypot(dxMm, dyMm) / dt;
+        double v = std::hypot(dxMm, dyMm) / std::max(dt, kMinFrameSec);
         g_state.speed = g_state.speed > 0 ? g_state.speed + (v - g_state.speed) * 0.3 : v;
     }
 
@@ -522,6 +533,10 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
 void ProcessFrame() {
     DWORD now = GetTickCount();
     double t = Now();
+    if (g_state.armed && now - g_state.lastFrameTick > kStaleFrameMs) {
+        EndGlide();
+    }
+    g_state.lastFrameTick = now;
     for (const Contact& c : g_frame) {
         if (c.conf) {
             g_seenConfidence = true;
@@ -835,6 +850,7 @@ void OnRawInput(HRAWINPUT hRawInput) {
     if (!dev) {
         return;
     }
+    g_lastReportTick = GetTickCount();
 
     const RAWHID& hid = raw->data.hid;
     for (DWORD i = 0; i < hid.dwCount; i++) {
@@ -846,7 +862,8 @@ void OnRawInput(HRAWINPUT hRawInput) {
 // gliding it's dropped here. The hook only exists during a glide: while installed, every mouse message of
 // the system goes through it.
 LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL)) {
+    if (nCode == HC_ACTION && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL) &&
+        GetTickCount() - g_lastReportTick < kWheelReportMs) {
         return 1;
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -945,7 +962,8 @@ void RunMessageLoop() {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
-    // Physical coordinates for GetCursorPos/SetCursorPos.
+    // A safeguard: the windhawk.exe manifest already makes the process Per-Monitor V2, so that
+    // GetCursorPos/SetCursorPos use physical coordinates.
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // A delay in scheduling this thread shows as jitter in the pointer.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
