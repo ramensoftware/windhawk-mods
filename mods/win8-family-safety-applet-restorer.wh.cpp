@@ -8,7 +8,6 @@
 // @include         explorer.exe
 // @include         control.exe
 // @include         dllhost.exe
-// @include         svchost.exe
 // @architecture    x86-64
 // @compilerOptions -lwininet -ladvapi32 -lole32
 // ==/WindhawkMod==
@@ -27,9 +26,8 @@ This mod restores the classic Windows 8/8.1 Family Safety (Parental Controls) Co
 
 ## About 
 
-
 The mod downloads the original Windows binaries from Microsoft’s public symbol server on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches in memory, and registers the applet virtually so that no permanent system files are modified.
-
+It has been tested on Windows 11 24H2 and Windows 11 25H2.
 It supports 6 languages: English, Italian, Persian, Spanish, French and Portuguese.  
 The language can follow the Windows UI language or be forced to a specific locale.
 
