@@ -77,7 +77,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 ### Settings
 * Taskbar previews, preview layout, notification icon, 12/24-hour time (applied everywhere),
   panel material (acrylic or simple) and default timer / alarm sounds.
-* **Sync time now** (Windows asks for administrator permission whenever it is needed) and **Quit WinKlok**.
+* **Sync time now** (Windows asks for administrator permission whenever it is needed).
 * A compact **About** card with the version, developer and project links.
 
 
@@ -89,9 +89,9 @@ tone for both timers and alarms.
 
 ## Getting started
 1. Install and enable the mod in Windhawk.
-2. Restart the Windows Explorer from task manager if changes does not appear.
+2. WinKlok takes over the taskbar clock within a second or so. If the clock does not change, restart
+   Windows Explorer from Task Manager.
 3. Have fun...
-
 
 ## Tips
 * Scroll over the tab bar to reveal more tabs, or click a tab to slide it to the centre.
@@ -103,8 +103,7 @@ tone for both timers and alarms.
 * Do not combine with other mods that rebuild the taskbar clock area (for example *Taskbar Clock
   Customization*) until you have verified they coexist.
 * WinKlok does not change the taskbar height. Use the *Taskbar height and icon size* mod for that.
-* *Quit WinKlok* hands the clock back to Windows immediately. Bring it back by reloading the mod
-  (disable and enable it in Windhawk).
+* To turn WinKlok off, disable the mod in Windhawk: the taskbar clock goes back to Windows immediately.
 * If something misbehaves, enable logging for this mod in Windhawk and check the log.
 
 ## For developers
@@ -199,7 +198,6 @@ WinKlok is free and open source software released under the **GNU General Public
 #define WK_TAGLINE L"A calmer, smarter clock mod for Windows 11 taskbar."
 #define WK_WINDHAWK_URL L"https://windhawk.net/mods/winklok"
 
-static std::atomic<bool> g_quitRequested{false}; // Quit button pressed
 static std::atomic<bool> g_shuttingDown{false};  // mod is being unloaded
 
 // The mod's own module handle. Window classes are registered with it (not with Explorer's handle), so they
@@ -214,7 +212,7 @@ static HINSTANCE ModInst()
 
 static inline bool WkActive()
 {
-    return !g_quitRequested.load() && !g_shuttingDown.load();
+    return !g_shuttingDown.load();
 }
 
 // ============================================================================
@@ -2289,6 +2287,9 @@ namespace tb
     // Modules where the symbol lookup already failed: each candidate DLL is looked up at most once.
     static std::vector<HMODULE> g_failedModules;
     static std::mutex g_failedMtx;
+    // Two threads can return from LoadLibraryExW for the same candidate DLL at once; one lookup at a time
+    // (recursive: HookSymbols may load modules itself, which comes back through the LoadLibraryExW hook).
+    static std::recursive_mutex g_hookMtx;
 
     static bool ModuleAlreadyFailed(HMODULE h)
     {
@@ -2334,6 +2335,7 @@ namespace tb
 
     static bool TryHookModule(HMODULE h)
     {
+        std::lock_guard<std::recursive_mutex> hookLock(g_hookMtx);
         if (!h || g_hooksReady.load())
             return g_hooksReady.load();
         if (ModuleAlreadyFailed(h))
@@ -3777,7 +3779,7 @@ namespace ui
     {
         if (g_wheelHook)
             return;
-        g_wheelHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelWheelProc, GetModuleHandleW(nullptr), 0);
+        g_wheelHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelWheelProc, ModInst(), 0);
         if (!g_wheelHook)
             Wh_Log(L"could not install the wheel hook (%u); wheel messages are used instead", GetLastError());
     }
@@ -7055,7 +7057,6 @@ namespace ui
         ID_ST_ASOUND,
         ID_ST_ASOUND_PLAY,
         ID_ST_SYNC,
-        ID_ST_QUIT,
         ID_ABOUT_TOGGLE,
         ID_ABOUT_WINDHAWK,
         ID_ABOUT_GITHUB,
@@ -10589,9 +10590,7 @@ namespace ui
             SoundRow(y, L"Default alarm sound", S.alarmSound.load(), ID_ST_ASOUND, ID_ST_ASOUND_PLAY);
             y += 86;
             Btn(RF(16, y, 340, 38), ID_ST_SYNC, 0, syncBusy ? L"Syncing time\u2026" : L"Sync time now", 0, 13.5f);
-            y += 46;
-            Btn(RF(16, y, 340, 38), ID_ST_QUIT, 0, L"Quit WinKlok", 3, 13.5f);
-            y += 38 + 30; // a little air between the functions and the About card
+            y += 38 + 30; // a little air between the function and the About card
             settingsAboutTop = y;
             PaintAbout(y);
         }
@@ -10900,11 +10899,6 @@ namespace ui
                     SetStatus(L"Syncing time\u2026");
                 }
                 break;
-            case ID_ST_QUIT:
-                g_quitRequested = true;
-                HidePanel();
-                tb::PostRefreshAll();
-                return;
             }
             ResizePanelToContent();
             Invalidate();
