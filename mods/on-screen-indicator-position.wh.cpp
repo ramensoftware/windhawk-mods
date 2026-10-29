@@ -74,6 +74,9 @@ own settings. Change it back to any position to show it again.
 Hiding applies to the indicator type on every monitor. Display profiles only
 change placement. If Windows changes an entry point that the mod needs, that
 indicator may remain visible; check the mod log for missing entry points.
+Microphone and text indicators, including the virtual desktop name, need their
+public show entry points for hiding. If those are unavailable on your Windows
+build, these indicators remain visible even when set to **Hidden**.
 
 ## Skip the slide out animation
 
@@ -619,8 +622,8 @@ PCWSTR IndicatorName(Indicator indicator) {
 
 // Logged from both Wh_ModInit and Wh_ModSettingsChanged.
 constexpr PCWSTR kKindUnreliableMessage =
-    L"An indicator entry point didn't resolve, so the position per indicator "
-    L"settings are ignored and everything uses the main position";
+    L"An indicator entry point did not resolve, so per-indicator positions and "
+    L"offsets are ignored. Hidden still applies where a suppressing hook resolved";
 
 // Set once in Wh_ModInit when either half of the hide pair didn't resolve.
 bool g_hideAnimationUnavailable = false;
@@ -636,7 +639,7 @@ bool g_virtualDesktopUndetectable = false;
 
 constexpr PCWSTR kVirtualDesktopUndetectableMessage =
     L"ShowText thunk did not resolve, so the virtual desktop popup uses the "
-    L"Other indicators position";
+    L"Other indicators position. Text and virtual desktop hiding are unavailable";
 
 struct Placement {
     Position position;
@@ -933,12 +936,16 @@ DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledAsync,
 // holds because the mod is 64-bit only, x64 and arm64 both, where arguments go
 // in registers and the caller does the cleaning up. On a 32-bit stdcall build
 // the callee pops its own arguments and the same mismatch would walk the stack.
-DEFINE_RECORDER_HOOK(ShowMicrophoneMutedAsync,
-                     void*,
-                     Indicator::microphone,
-                     (void* pThis, void* retval, int value, void* text),
-                     (pThis, retval, value, text),
-                     retval);
+// Never suppress this ramp: the original destroys its by-value hstring on
+// current builds. Older signatures have no string, so inspecting the extra
+// register here would be unsafe. The public microphone thunk handles hiding.
+using ShowMicrophoneMutedAsync_t = void*(WINAPI*)(void*, void*, int, void*);
+ShowMicrophoneMutedAsync_t ShowMicrophoneMutedAsync_Original;
+void* WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, void* retval,
+                                         int value, void* text) {
+    g_currentIndicator.store(Indicator::microphone);
+    return ShowMicrophoneMutedAsync_Original(pThis, retval, value, text);
+}
 
 #undef DEFINE_RECORDER_HOOK
 
@@ -951,10 +958,8 @@ void* WINAPI ShowTextAsync_Hook(void* pThis,
                                 void* retval,
                                 void* text,
                                 bool value) {
-    const auto kind =
-        g_textCallFromTwinui ? Indicator::virtualDesktop : Indicator::text;
-    if (ShouldHideIndicator(kind))
-        return retval;
+// The original owns the by-value hstring. Always forward so it is destroyed;
+    // text hiding is handled by the public thunk with its borrowed string.
     g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
                                                   : Indicator::text);
     return ShowTextAsync_Original(pThis, retval, text, value);
