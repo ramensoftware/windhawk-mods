@@ -1,3 +1,8 @@
+## 1.3.12 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3b7ea07a8027c893b0744f6a9356a4ccc0623110/mods/taskbar-grouping.wh.cpp))
+
+* Fixed compatibility with the latest Windows 11 update.
+* Fixed custom shortcut icon only applied for the first taskbar item.
+
 ## 1.3.11 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/eae5841a485e04316a4a06dccb7da5f1d86a7b5d/mods/taskbar-grouping.wh.cpp))
 
 * Added an option for defining a list of per-app exceptions for the "Use window icons" option.
