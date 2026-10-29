@@ -9,6 +9,7 @@
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,6 +30,9 @@ Adds a modern, interactive seek bar and live playback timestamps directly to the
 - **Multi-Session Support:** Seamlessly switches timeline and position when switching between active media apps using the Quick Settings arrows.
 - **Zero XAML Diagnostics Conflicts:** Uses direct COM-interface symbol hooks in `ControlCenter.dll`, completely avoiding XAML Diagnostics. Fully compatible with Windows 11 Taskbar Styler, Notification Center Styler, and File Explorer Styler.
 - **Auto-Restoring:** Cleanly restores the native media player card when the mod is disabled or unloaded.
+
+### Credits
+- ControlCenter discovery logic adapted with appreciation from *Refined Quick Settings and Sound* by [pro-m-i](https://github.com/pro-m-i).
 */
 // ==/WindhawkModReadme==
 
