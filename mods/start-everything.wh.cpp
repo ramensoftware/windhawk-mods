@@ -28,7 +28,7 @@ Version **2.1.1** separates installed-app management from ordinary search and im
 ## Version 2.1.1 Changes
 
 - Keeps ordinary search focused on launchable apps and Windows Settings, avoiding duplicate installed-only entries.
-- Adds `/all installed` for managing desktop registrations and all current-user packages, including hidden components. Uninstall uses the exact product registration or package version, asks for confirmation, and respects protected components.
+- Adds `/all` for managing desktop registrations and all current-user packages, including hidden components. Uninstall uses the exact product registration or package version, asks for confirmation, and respects protected components.
 - Loads the first 20 inventory entries and appends 20 more near the bottom, preserving existing cards and your scroll position. Filters and the command name are customizable.
 - Lets keyboard remappers process opening keys before search captures them, preserving their replacement keys and Unicode text. Automated remapper tests pass; testing with EPKL itself remains pending.
 
@@ -36,7 +36,7 @@ Version **2.1.1** separates installed-app management from ordinary search and im
 
 - Updates Apps independently of file searches, reuses result cards, and keeps existing files visible until replacements arrive.
 - Warms app, Settings and installed-program catalogs in the background and refreshes them after registry, package or shortcut changes.
-- Keeps ordinary search focused on launchable apps and Settings. Use `/all installed` for a separate management list of registered programs and every current-user package, including hidden components.
+- Includes installed-only programs with friendly names, icons, launcher detection, installation-folder actions and confirmed uninstall actions.
 - Adds configurable Quick Tools names, weather/forecast cards, currency and crypto conversions, a bounded connection test, live hardware graphs and service management.
 - Keeps online cards off on a fresh install. After enabling them, weather, currency and crypto load automatically after a short typing pause, with cached results shown immediately. Speed tests require Run or Enter and have finite payload caps, reduced on metered connections.
 
@@ -58,8 +58,8 @@ Version **2.1.1** separates installed-app management from ordinary search and im
 
 - **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Windows Settings, Control Panel applets, and Windows tools. Settings names and keywords come from Windows' own local search database and navigation metadata, cached in memory and refreshed with the app index when the Windows catalog changes. Additional Windows tools stay available, and an audited built-in list is used if native data is missing or incompatible. No Windows Search indexing service or extra database software is required. Shell icons are rendered at your display's exact pixel size.
-- **Installed App Management**: Type `/all installed` for registered desktop programs and every current-user package, including frameworks, resources and hidden Windows components. This list comes directly from uninstall registrations and the package catalog, without AppsFolder launch entries. It never launches a program: click or press Enter to open its management menu. Right-click offers **Uninstall** when Windows permits it, with confirmation, plus **Open file location**, **Copy path** and **Copy name** where available. Protected components are read-only. Search within the list with `/all installed office`; browse all matches by scrolling; the list starts with 20 entries and appends 20 more near the bottom. Ordinary search excludes installed-only records, and registered metadata continues to provide aliases for real launchers. Missing launchers can still be recovered through a unique, verified GUI executable in the product folder.
-- **Reusable Apps Cards**: Ordinary app, Settings and installed-only results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. The pool grows as needed up to **Max App Results** and resets when settings change. Rich Quick Tools cards keep their own layouts.
+- **Installed App Management**: Type `/all` for registered desktop programs and every current-user package, including frameworks, resources and hidden Windows components. This list comes directly from uninstall registrations and the package catalog, without AppsFolder launch entries. It never launches a program: click or press Enter to open its management menu. Right-click offers **Uninstall** when Windows permits it, with confirmation, plus **Open file location**, **Copy path** and **Copy name** where available. Protected components are read-only. Search within the list with `/all office`; browse all matches by scrolling; the list starts with 20 entries and appends 20 more near the bottom. Ordinary search excludes installed-only records, and registered metadata continues to provide aliases for real launchers. Missing launchers can still be recovered through a unique, verified GUI executable in the product folder.
+- **Reusable Apps Cards**: App and Settings results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. Ordinary search stays bounded by **Max App Results**. The installed inventory uses the same reusable cards and grows only for its loaded batches. Rich Quick Tools cards keep their own layouts.
 - **Silent App-list Updates**: Windows registry, Store/MSIX package and Start-menu shortcut notifications refresh the catalog after changes settle. Install/update/remove events bypass the installed-metadata cache. Reopening search keeps a safety refresh with a five-second minimum; otherwise unchanged installation metadata is reused for up to 30 seconds. A native background worker builds a replacement catalog and loads icons while app matching continues against the last complete snapshot. No network requests or periodic polling are needed for these listeners.
 - **Background Catalog Warmup**: After the taskbar is available, app, Settings and installed-program metadata load on a background worker. First search reuses that catalog. The search window and its XAML UI remain deferred until needed.
 - **Independent App Results**: App results update without waiting for Everything's file search. Cached icons appear immediately; missing icons fill in afterward. File results arrive separately and preserve the app selection.
@@ -206,9 +206,11 @@ Results are cached in memory: weather for 10 minutes, currency pairs for an hour
 
 ## Installed programs and packages
 
-Use `/all installed` to manage all named desktop uninstall registrations and the packages registered for the current Windows user. This includes frameworks, resource packages, bundles and hidden system components. It does not enumerate other users or add launch shortcuts from `shell:AppsFolder`.
+Use `/all` to manage all named desktop uninstall registrations and the packages registered for the current Windows user. This includes frameworks, resource packages, bundles and hidden system components. It does not enumerate other users or add launch shortcuts from `shell:AppsFolder`.
 
-Add a name, publisher or package identity to filter, for example `/all installed office` or `/all installed Microsoft.VCLibs`. Results are alphabetical when unfiltered. The list starts with 20 products and appends up to 20 more as you scroll near the bottom. Existing cards and the scroll position stay in place. A tall viewport can request another batch to fill its available space. There are no navigation pages, and this list is independent of **Max App Results**. Changing the filter returns to the first 20 entries and scrolls to the top. **Quick Tools → Installed Inventory Command Name** renames `/all`; a renamed command can also be used directly, without the optional `installed` word.
+Add a name, publisher or package identity to filter, for example `/all office` or `/all Microsoft.VCLibs`. Results are alphabetical when unfiltered. The list starts with 20 products and appends up to 20 more as you scroll near the bottom. Existing cards and the scroll position stay in place. A tall viewport can request another batch to fill its available space. There are no navigation pages, and this list is independent of **Max App Results**. Changing the filter returns to the first 20 entries and scrolls to the top. **Quick Tools → Installed Inventory Command Name** renames `/all`; the renamed command takes the same optional search terms.
+
+Package rows show their architecture beside the publisher and version, so x86, x64 and neutral packages can be distinguished. Technical package identities are searchable only in this management list. If `/all` is already used by a custom command or another Quick Tool, rename either command in settings; the conflict warning prevents either action from running accidentally.
 
 Clicking a product or pressing Enter opens its management menu. There is no app **Open**, **Run** or administrator-launch action in this list. **Uninstall** asks for confirmation and uses the exact registry registration or listed package version. Protected components have no uninstall action. Available installation folders can be opened or copied, and product names can be copied. The list uses the existing background catalog and change listeners; searching it performs no file search, network request or fresh inventory scan.
 
@@ -669,7 +671,7 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
     $description: Search Windows services by name or description. Right-click a result to start, stop or restart it, copy its name/details, or open Windows Services. Operations request administrator approval when needed. Works offline; startup settings are not changed.
   - installedName: all
     $name: Installed Inventory Command Name
-    $description: Use /all installed to browse launchable apps, installed programs and all current-user packages, including frameworks and hidden components. Add a name to filter, for example /all installed office. Enter a single word here to rename /all. Works offline; protected components are read-only.
+    $description: Use /all to manage registered desktop programs and all current-user packages, including frameworks and hidden components. Add a name to filter, for example /all office. Entries open management actions instead of launching apps. Enter a single word here to rename /all; choose a different name if another tool or custom command already uses it. Works offline; protected components are read-only.
   - weatherPastDays: "2"
     $name: Past Weather Days
     $description: Recent days shown before Today, inside each location's weather card.
@@ -1028,7 +1030,6 @@ enum class Key {
     ServiceRestart,
     NoServices,
     CopyDetails,
-    NotLaunchable,
     ManageInstalled,
     InstalledApp,
     InstalledApps,
@@ -1177,7 +1178,6 @@ inline constexpr Locale kLocales[] = {
         L"Restart", // ServiceRestart
         L"No matching services", // NoServices
         L"Copy details", // CopyDetails
-        L"No launcher found", // NotLaunchable
         L"Manage in Installed apps", // ManageInstalled
         L"Installed app", // InstalledApp
         L"Installed apps", // InstalledApps
@@ -1320,7 +1320,6 @@ inline constexpr Locale kLocales[] = {
         L"Herbegin", // ServiceRestart
         L"Geen ooreenstemmende dienste nie", // NoServices
         L"Kopieer besonderhede", // CopyDetails
-        L"Geen beginpunt gevind", // NotLaunchable
         L"Bestuur in Geïnstalleerde programme", // ManageInstalled
         L"Geïnstalleerde toepassing", // InstalledApp
         L"Geïnstalleerde toepassings", // InstalledApps
@@ -1463,7 +1462,6 @@ inline constexpr Locale kLocales[] = {
         L"Рестартиране", // ServiceRestart
         L"Няма съответстващи услуги", // NoServices
         L"Копиране на подробности", // CopyDetails
-        L"Не е намерен начин за стартиране", // NotLaunchable
         L"Управление в инсталираните приложения", // ManageInstalled
         L"Инсталирано приложение", // InstalledApp
         L"Инсталирани приложения", // InstalledApps
@@ -1606,7 +1604,6 @@ inline constexpr Locale kLocales[] = {
         L"পুনরায় চালু করুন", // ServiceRestart
         L"কোনো মিলযুক্ত পরিষেবা নেই", // NoServices
         L"বিস্তারিত কপি করুন", // CopyDetails
-        L"চালু করার উপায় পাওয়া যায়নি", // NotLaunchable
         L"ইনস্টল করা অ্যাপে পরিচালনা করুন", // ManageInstalled
         L"ইনস্টল করা অ্যাপ", // InstalledApp
         L"ইনস্টল করা অ্যাপ", // InstalledApps
@@ -1749,7 +1746,6 @@ inline constexpr Locale kLocales[] = {
         L"Ponovo pokreni", // ServiceRestart
         L"Nema odgovarajućih servisa", // NoServices
         L"Kopiraj detalje", // CopyDetails
-        L"Nije pronađen pokretač", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
         L"Instalirane aplikacije", // InstalledApps
@@ -1892,7 +1888,6 @@ inline constexpr Locale kLocales[] = {
         L"Reinicia", // ServiceRestart
         L"No hi ha serveis coincidents", // NoServices
         L"Copia els detalls", // CopyDetails
-        L"No s’ha trobat cap iniciador", // NotLaunchable
         L"Gestiona a Aplicacions instal·lades", // ManageInstalled
         L"Aplicació instal·lada", // InstalledApp
         L"Aplicacions instal·lades", // InstalledApps
@@ -2035,7 +2030,6 @@ inline constexpr Locale kLocales[] = {
         L"Restartovat", // ServiceRestart
         L"Žádné odpovídající služby", // NoServices
         L"Kopírovat podrobnosti", // CopyDetails
-        L"Spouštěč nenalezen", // NotLaunchable
         L"Spravovat v nainstalovaných aplikacích", // ManageInstalled
         L"Nainstalovaná aplikace", // InstalledApp
         L"Nainstalované aplikace", // InstalledApps
@@ -2178,7 +2172,6 @@ inline constexpr Locale kLocales[] = {
         L"Genstart", // ServiceRestart
         L"Ingen matchende tjenester", // NoServices
         L"Kopiér detaljer", // CopyDetails
-        L"Ingen startgenvej fundet", // NotLaunchable
         L"Administrer i Installerede apps", // ManageInstalled
         L"Installeret app", // InstalledApp
         L"Installerede apps", // InstalledApps
@@ -2321,7 +2314,6 @@ inline constexpr Locale kLocales[] = {
         L"Neu starten", // ServiceRestart
         L"Keine passenden Dienste", // NoServices
         L"Details kopieren", // CopyDetails
-        L"Kein Programmstarter gefunden", // NotLaunchable
         L"In installierten Apps verwalten", // ManageInstalled
         L"Installierte App", // InstalledApp
         L"Installierte Apps", // InstalledApps
@@ -2464,7 +2456,6 @@ inline constexpr Locale kLocales[] = {
         L"Επανεκκίνηση", // ServiceRestart
         L"Δεν βρέθηκαν αντίστοιχες υπηρεσίες", // NoServices
         L"Αντιγραφή λεπτομερειών", // CopyDetails
-        L"Δεν βρέθηκε εκκινητής", // NotLaunchable
         L"Διαχείριση στις εγκατεστημένες εφαρμογές", // ManageInstalled
         L"Εγκατεστημένη εφαρμογή", // InstalledApp
         L"Εγκατεστημένες εφαρμογές", // InstalledApps
@@ -2607,7 +2598,6 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"No hay servicios coincidentes", // NoServices
         L"Copiar detalles", // CopyDetails
-        L"No se encontró un iniciador", // NotLaunchable
         L"Administrar en Aplicaciones instaladas", // ManageInstalled
         L"Aplicación instalada", // InstalledApp
         L"Aplicaciones instaladas", // InstalledApps
@@ -2750,7 +2740,6 @@ inline constexpr Locale kLocales[] = {
         L"Taaskäivita", // ServiceRestart
         L"Vastavaid teenuseid pole", // NoServices
         L"Kopeeri üksikasjad", // CopyDetails
-        L"Käivitajat ei leitud", // NotLaunchable
         L"Halda installitud rakendustes", // ManageInstalled
         L"Installitud rakendus", // InstalledApp
         L"Installitud rakendused", // InstalledApps
@@ -2893,7 +2882,6 @@ inline constexpr Locale kLocales[] = {
         L"Käynnistä uudelleen", // ServiceRestart
         L"Ei vastaavia palveluita", // NoServices
         L"Kopioi tiedot", // CopyDetails
-        L"Käynnistintä ei löytynyt", // NotLaunchable
         L"Hallitse asennetuissa sovelluksissa", // ManageInstalled
         L"Asennettu sovellus", // InstalledApp
         L"Asennetut sovellukset", // InstalledApps
@@ -3036,7 +3024,6 @@ inline constexpr Locale kLocales[] = {
         L"I-restart", // ServiceRestart
         L"Walang tumutugmang serbisyo", // NoServices
         L"Kopyahin ang mga detalye", // CopyDetails
-        L"Walang nakitang panglunsad", // NotLaunchable
         L"Pamahalaan sa Mga naka-install na app", // ManageInstalled
         L"Naka-install na app", // InstalledApp
         L"Mga naka-install na app", // InstalledApps
@@ -3179,7 +3166,6 @@ inline constexpr Locale kLocales[] = {
         L"Redémarrer", // ServiceRestart
         L"Aucun service correspondant", // NoServices
         L"Copier les détails", // CopyDetails
-        L"Aucun lanceur trouvé", // NotLaunchable
         L"Gérer dans Applications installées", // ManageInstalled
         L"Application installée", // InstalledApp
         L"Applications installées", // InstalledApps
@@ -3322,7 +3308,6 @@ inline constexpr Locale kLocales[] = {
         L"पुनः प्रारंभ करें", // ServiceRestart
         L"कोई मेल खाती सेवा नहीं", // NoServices
         L"विवरण कॉपी करें", // CopyDetails
-        L"लॉन्चर नहीं मिला", // NotLaunchable
         L"इंस्टॉल किए गए ऐप्स में प्रबंधित करें", // ManageInstalled
         L"इंस्टॉल किया गया ऐप", // InstalledApp
         L"इंस्टॉल किए गए ऐप", // InstalledApps
@@ -3465,7 +3450,6 @@ inline constexpr Locale kLocales[] = {
         L"Ponovno pokreni", // ServiceRestart
         L"Nema odgovarajućih servisa", // NoServices
         L"Kopiraj pojedinosti", // CopyDetails
-        L"Pokretač nije pronađen", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
         L"Instalirane aplikacije", // InstalledApps
@@ -3608,7 +3592,6 @@ inline constexpr Locale kLocales[] = {
         L"Újraindítás", // ServiceRestart
         L"Nincs megfelelő szolgáltatás", // NoServices
         L"Részletek másolása", // CopyDetails
-        L"Nem található indító", // NotLaunchable
         L"Kezelés a telepített alkalmazásoknál", // ManageInstalled
         L"Telepített alkalmazás", // InstalledApp
         L"Telepített alkalmazások", // InstalledApps
@@ -3751,7 +3734,6 @@ inline constexpr Locale kLocales[] = {
         L"Վերագործարկել", // ServiceRestart
         L"Համապատասխան ծառայություններ չկան", // NoServices
         L"Պատճենել մանրամասները", // CopyDetails
-        L"Գործարկիչ չի գտնվել", // NotLaunchable
         L"Կառավարել տեղադրված հավելվածներում", // ManageInstalled
         L"Տեղադրված հավելված", // InstalledApp
         L"Տեղադրված հավելվածներ", // InstalledApps
@@ -3894,7 +3876,6 @@ inline constexpr Locale kLocales[] = {
         L"Mulai ulang", // ServiceRestart
         L"Tidak ada layanan yang cocok", // NoServices
         L"Salin detail", // CopyDetails
-        L"Peluncur tidak ditemukan", // NotLaunchable
         L"Kelola di Aplikasi terinstal", // ManageInstalled
         L"Aplikasi terinstal", // InstalledApp
         L"Aplikasi terinstal", // InstalledApps
@@ -4037,7 +4018,6 @@ inline constexpr Locale kLocales[] = {
         L"Endurræsa", // ServiceRestart
         L"Engar samsvarandi þjónustur", // NoServices
         L"Afrita upplýsingar", // CopyDetails
-        L"Ræsir fannst ekki", // NotLaunchable
         L"Stjórna í Uppsett forrit", // ManageInstalled
         L"Uppsett forrit", // InstalledApp
         L"Uppsett forrit", // InstalledApps
@@ -4180,7 +4160,6 @@ inline constexpr Locale kLocales[] = {
         L"Riavvia", // ServiceRestart
         L"Nessun servizio corrispondente", // NoServices
         L"Copia dettagli", // CopyDetails
-        L"Nessun programma di avvio trovato", // NotLaunchable
         L"Gestisci in App installate", // ManageInstalled
         L"App installata", // InstalledApp
         L"App installate", // InstalledApps
@@ -4323,7 +4302,6 @@ inline constexpr Locale kLocales[] = {
         L"再起動", // ServiceRestart
         L"一致するサービスがありません", // NoServices
         L"詳細をコピー", // CopyDetails
-        L"起動方法が見つかりません", // NotLaunchable
         L"インストールされているアプリで管理", // ManageInstalled
         L"インストール済みアプリ", // InstalledApp
         L"インストールされているアプリ", // InstalledApps
@@ -4466,7 +4444,6 @@ inline constexpr Locale kLocales[] = {
         L"ხელახლა გაშვება", // ServiceRestart
         L"შესაბამისი სერვისები ვერ მოიძებნა", // NoServices
         L"დეტალების კოპირება", // CopyDetails
-        L"გამშვები ვერ მოიძებნა", // NotLaunchable
         L"მართვა დაინსტალირებულ აპებში", // ManageInstalled
         L"დაყენებული აპი", // InstalledApp
         L"დაინსტალირებული აპები", // InstalledApps
@@ -4609,7 +4586,6 @@ inline constexpr Locale kLocales[] = {
         L"다시 시작", // ServiceRestart
         L"일치하는 서비스 없음", // NoServices
         L"세부 정보 복사", // CopyDetails
-        L"실행 경로를 찾지 못함", // NotLaunchable
         L"설치된 앱에서 관리", // ManageInstalled
         L"설치된 앱", // InstalledApp
         L"설치된 앱", // InstalledApps
@@ -4752,7 +4728,6 @@ inline constexpr Locale kLocales[] = {
         L"Paleisti iš naujo", // ServiceRestart
         L"Atitinkančių tarnybų nėra", // NoServices
         L"Kopijuoti išsamią informaciją", // CopyDetails
-        L"Paleidimo priemonė nerasta", // NotLaunchable
         L"Tvarkyti įdiegtose programose", // ManageInstalled
         L"Įdiegta programa", // InstalledApp
         L"Įdiegtos programėlės", // InstalledApps
@@ -4895,7 +4870,6 @@ inline constexpr Locale kLocales[] = {
         L"Restartēt", // ServiceRestart
         L"Nav atbilstošu pakalpojumu", // NoServices
         L"Kopēt informāciju", // CopyDetails
-        L"Palaidējs nav atrasts", // NotLaunchable
         L"Pārvaldīt instalētajās programmās", // ManageInstalled
         L"Instalēta programma", // InstalledApp
         L"Instalētās programmas", // InstalledApps
@@ -5038,7 +5012,6 @@ inline constexpr Locale kLocales[] = {
         L"Рестартирај", // ServiceRestart
         L"Нема соодветни услуги", // NoServices
         L"Копирај детали", // CopyDetails
-        L"Не е пронајден стартер", // NotLaunchable
         L"Управувај во инсталираните апликации", // ManageInstalled
         L"Инсталирана апликација", // InstalledApp
         L"Инсталирани апликации", // InstalledApps
@@ -5181,7 +5154,6 @@ inline constexpr Locale kLocales[] = {
         L"Mula semula", // ServiceRestart
         L"Tiada perkhidmatan yang sepadan", // NoServices
         L"Salin butiran", // CopyDetails
-        L"Pelancar tidak ditemukan", // NotLaunchable
         L"Urus dalam Aplikasi dipasang", // ManageInstalled
         L"Aplikasi dipasang", // InstalledApp
         L"Aplikasi dipasang", // InstalledApps
@@ -5324,7 +5296,6 @@ inline constexpr Locale kLocales[] = {
         L"Start på nytt", // ServiceRestart
         L"Ingen samsvarende tjenester", // NoServices
         L"Kopier detaljer", // CopyDetails
-        L"Ingen oppstartssnarvei funnet", // NotLaunchable
         L"Administrer i Installerte apper", // ManageInstalled
         L"Installert app", // InstalledApp
         L"Installerte apper", // InstalledApps
@@ -5467,7 +5438,6 @@ inline constexpr Locale kLocales[] = {
         L"Opnieuw starten", // ServiceRestart
         L"Geen overeenkomende services", // NoServices
         L"Details kopiëren", // CopyDetails
-        L"Geen startpunt gevonden", // NotLaunchable
         L"Beheren in Geïnstalleerde apps", // ManageInstalled
         L"Geïnstalleerde app", // InstalledApp
         L"Geïnstalleerde apps", // InstalledApps
@@ -5610,7 +5580,6 @@ inline constexpr Locale kLocales[] = {
         L"Uruchom ponownie", // ServiceRestart
         L"Brak pasujących usług", // NoServices
         L"Kopiuj szczegóły", // CopyDetails
-        L"Nie znaleziono programu uruchamiającego", // NotLaunchable
         L"Zarządzaj w Zainstalowanych aplikacjach", // ManageInstalled
         L"Zainstalowana aplikacja", // InstalledApp
         L"Zainstalowane aplikacje", // InstalledApps
@@ -5753,7 +5722,6 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"Nenhum serviço correspondente", // NoServices
         L"Copiar detalhes", // CopyDetails
-        L"Nenhum inicializador encontrado", // NotLaunchable
         L"Gerenciar em Aplicativos instalados", // ManageInstalled
         L"Aplicativo instalado", // InstalledApp
         L"Aplicativos instalados", // InstalledApps
@@ -5896,7 +5864,6 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"Nenhum serviço correspondente", // NoServices
         L"Copiar detalhes", // CopyDetails
-        L"Nenhum iniciador encontrado", // NotLaunchable
         L"Gerir em Aplicações instaladas", // ManageInstalled
         L"Aplicação instalada", // InstalledApp
         L"Aplicações instaladas", // InstalledApps
@@ -6039,7 +6006,6 @@ inline constexpr Locale kLocales[] = {
         L"Repornire", // ServiceRestart
         L"Nu există servicii corespunzătoare", // NoServices
         L"Copiază detaliile", // CopyDetails
-        L"Nu s-a găsit un lansator", // NotLaunchable
         L"Gestionează în Aplicații instalate", // ManageInstalled
         L"Aplicație instalată", // InstalledApp
         L"Aplicații instalate", // InstalledApps
@@ -6182,7 +6148,6 @@ inline constexpr Locale kLocales[] = {
         L"Перезапустить", // ServiceRestart
         L"Нет подходящих служб", // NoServices
         L"Копировать сведения", // CopyDetails
-        L"Способ запуска не найден", // NotLaunchable
         L"Управление в установленных приложениях", // ManageInstalled
         L"Установленное приложение", // InstalledApp
         L"Установленные приложения", // InstalledApps
@@ -6325,7 +6290,6 @@ inline constexpr Locale kLocales[] = {
         L"Reštartovať", // ServiceRestart
         L"Žiadne zodpovedajúce služby", // NoServices
         L"Kopírovať podrobnosti", // CopyDetails
-        L"Spúšťač sa nenašiel", // NotLaunchable
         L"Spravovať v nainštalovaných aplikáciách", // ManageInstalled
         L"Nainštalovaná aplikácia", // InstalledApp
         L"Nainštalované aplikácie", // InstalledApps
@@ -6468,7 +6432,6 @@ inline constexpr Locale kLocales[] = {
         L"Znova zaženi", // ServiceRestart
         L"Ni ustreznih storitev", // NoServices
         L"Kopiraj podrobnosti", // CopyDetails
-        L"Zaganjalnik ni bil najden", // NotLaunchable
         L"Upravljaj v nameščenih aplikacijah", // ManageInstalled
         L"Nameščena aplikacija", // InstalledApp
         L"Nameščene aplikacije", // InstalledApps
@@ -6611,7 +6574,6 @@ inline constexpr Locale kLocales[] = {
         L"Rinis", // ServiceRestart
         L"Nuk ka shërbime që përputhen", // NoServices
         L"Kopjo hollësitë", // CopyDetails
-        L"Nuk u gjet nisës", // NotLaunchable
         L"Menaxho te aplikacionet e instaluara", // ManageInstalled
         L"Aplikacion i instaluar", // InstalledApp
         L"Aplikacionet e instaluara", // InstalledApps
@@ -6754,7 +6716,6 @@ inline constexpr Locale kLocales[] = {
         L"Ponovo pokreni", // ServiceRestart
         L"Nema odgovarajućih usluga", // NoServices
         L"Kopiraj detalje", // CopyDetails
-        L"Pokretač nije pronađen", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
         L"Instalirane aplikacije", // InstalledApps
@@ -6897,7 +6858,6 @@ inline constexpr Locale kLocales[] = {
         L"Starta om", // ServiceRestart
         L"Inga matchande tjänster", // NoServices
         L"Kopiera information", // CopyDetails
-        L"Ingen startgenväg hittades", // NotLaunchable
         L"Hantera i Installerade appar", // ManageInstalled
         L"Installerad app", // InstalledApp
         L"Installerade appar", // InstalledApps
@@ -7040,7 +7000,6 @@ inline constexpr Locale kLocales[] = {
         L"Anzisha upya", // ServiceRestart
         L"Hakuna huduma zinazolingana", // NoServices
         L"Nakili maelezo", // CopyDetails
-        L"Kizindua hakikupatikana", // NotLaunchable
         L"Dhibiti katika Programu zilizosakinishwa", // ManageInstalled
         L"Programu iliyosakinishwa", // InstalledApp
         L"Programu zilizosakinishwa", // InstalledApps
@@ -7183,7 +7142,6 @@ inline constexpr Locale kLocales[] = {
         L"மீண்டும் தொடங்கு", // ServiceRestart
         L"பொருந்தும் சேவைகள் இல்லை", // NoServices
         L"விவரங்களை நகலெடு", // CopyDetails
-        L"தொடங்கும் வழி கிடைக்கவில்லை", // NotLaunchable
         L"நிறுவப்பட்ட பயன்பாடுகளில் நிர்வகி", // ManageInstalled
         L"நிறுவப்பட்ட செயலி", // InstalledApp
         L"நிறுவப்பட்ட பயன்பாடுகள்", // InstalledApps
@@ -7326,7 +7284,6 @@ inline constexpr Locale kLocales[] = {
         L"పునఃప్రారంభించు", // ServiceRestart
         L"సరిపోలే సేవలు లేవు", // NoServices
         L"వివరాలను కాపీ చేయి", // CopyDetails
-        L"ప్రారంభించే మార్గం కనుగొనబడలేదు", // NotLaunchable
         L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలలో నిర్వహించు", // ManageInstalled
         L"ఇన్\u200cస్టాల్ చేసిన యాప్", // InstalledApp
         L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలు", // InstalledApps
@@ -7469,7 +7426,6 @@ inline constexpr Locale kLocales[] = {
         L"เริ่มใหม่", // ServiceRestart
         L"ไม่พบบริการที่ตรงกัน", // NoServices
         L"คัดลอกรายละเอียด", // CopyDetails
-        L"ไม่พบตัวเรียกใช้", // NotLaunchable
         L"จัดการในแอปที่ติดตั้ง", // ManageInstalled
         L"แอปที่ติดตั้ง", // InstalledApp
         L"แอปที่ติดตั้ง", // InstalledApps
@@ -7612,7 +7568,6 @@ inline constexpr Locale kLocales[] = {
         L"Yeniden başlat", // ServiceRestart
         L"Eşleşen hizmet yok", // NoServices
         L"Ayrıntıları kopyala", // CopyDetails
-        L"Başlatıcı bulunamadı", // NotLaunchable
         L"Yüklü uygulamalarda yönet", // ManageInstalled
         L"Yüklü uygulama", // InstalledApp
         L"Yüklü uygulamalar", // InstalledApps
@@ -7755,7 +7710,6 @@ inline constexpr Locale kLocales[] = {
         L"Перезапустити", // ServiceRestart
         L"Немає відповідних служб", // NoServices
         L"Копіювати відомості", // CopyDetails
-        L"Спосіб запуску не знайдено", // NotLaunchable
         L"Керувати у встановлених програмах", // ManageInstalled
         L"Установлена програма", // InstalledApp
         L"Інстальовані програми", // InstalledApps
@@ -7898,7 +7852,6 @@ inline constexpr Locale kLocales[] = {
         L"Khởi động lại", // ServiceRestart
         L"Không có dịch vụ phù hợp", // NoServices
         L"Sao chép chi tiết", // CopyDetails
-        L"Không tìm thấy trình khởi chạy", // NotLaunchable
         L"Quản lý trong Ứng dụng đã cài đặt", // ManageInstalled
         L"Ứng dụng đã cài đặt", // InstalledApp
         L"Ứng dụng đã cài đặt", // InstalledApps
@@ -8041,7 +7994,6 @@ inline constexpr Locale kLocales[] = {
         L"重新启动", // ServiceRestart
         L"没有匹配的服务", // NoServices
         L"复制详细信息", // CopyDetails
-        L"未找到启动入口", // NotLaunchable
         L"在已安装的应用中管理", // ManageInstalled
         L"已安装的应用", // InstalledApp
         L"已安装的应用", // InstalledApps
@@ -8184,7 +8136,6 @@ inline constexpr Locale kLocales[] = {
         L"重新啟動", // ServiceRestart
         L"沒有符合的服務", // NoServices
         L"複製詳細資料", // CopyDetails
-        L"找不到啟動方式", // NotLaunchable
         L"在已安裝的應用程式中管理", // ManageInstalled
         L"已安裝的應用程式", // InstalledApp
         L"已安裝的應用程式", // InstalledApps
@@ -8338,7 +8289,6 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Network traffic", Key::NetworkTraffic},
         {L"Next", Key::Next},
         {L"No active network interfaces", Key::NoNetwork},
-        {L"No launcher found", Key::NotLaunchable},
         {L"No matching applications", Key::NoApps},
         {L"No matching files", Key::NoFiles},
         {L"No matching services", Key::NoServices},
@@ -10475,6 +10425,8 @@ struct Record {
     REGSAM registryView = 0;
     std::wstring launcher;
     bool inventoryOnly = false; // hidden components and non-application packages
+    std::vector<std::wstring> inventoryAliases;
+    std::wstring architecture;
 };
 struct Key {
     HKEY value = nullptr;
@@ -10875,7 +10827,10 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
         namespace model = winrt::Windows::ApplicationModel;
         winrt::Windows::Management::Deployment::PackageManager manager;
         std::set<std::wstring> seen;
-        for (const auto& package : manager.FindPackagesForUser(L""))
+        using PackageTypes = winrt::Windows::Management::Deployment::PackageTypes;
+        const auto types = PackageTypes::Main | PackageTypes::Framework | PackageTypes::Resource |
+            PackageTypes::Bundle | PackageTypes::Optional;
+        for (const auto& package : manager.FindPackagesForUserWithPackageTypes(L"", types))
             try {
                 if (cancel && cancel->load())
                     return {};
@@ -10887,7 +10842,7 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
                 if (!seen.insert(record.packageFullName).second)
                     continue;
                 record.id = L"package:" + record.packageFullName;
-                record.name = package.DisplayName().c_str();
+                try { record.name = package.DisplayName().c_str(); } catch (...) {}
                 if (record.name.empty() || record.name.starts_with(L"ms-resource:"))
                     record.name = package.Id().Name().c_str();
                 const auto originalName = record.name;
@@ -10901,11 +10856,20 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
                         record.name = friendly;
                 } catch (...) {
                 }
-                if (originalName != record.name)
+                if (originalName != record.name && _wcsicmp(originalName.c_str(), package.Id().Name().c_str()))
                     record.aliases.push_back(originalName);
-                record.aliases.push_back(package.Id().Name().c_str());
-                record.aliases.push_back(record.packageFullName);
-                record.publisher = package.PublisherDisplayName().c_str();
+                record.inventoryAliases.push_back(package.Id().Name().c_str());
+                record.inventoryAliases.push_back(record.packageFullName);
+                using Architecture = winrt::Windows::System::ProcessorArchitecture;
+                switch (package.Id().Architecture()) {
+                    case Architecture::X86: record.architecture=L"x86"; break;
+                    case Architecture::X64: record.architecture=L"x64"; break;
+                    case Architecture::Arm: record.architecture=L"ARM"; break;
+                    case Architecture::Arm64: record.architecture=L"ARM64"; break;
+                    case Architecture::Neutral: record.architecture=L"neutral"; break;
+                    default: break;
+                }
+                try { record.publisher = package.PublisherDisplayName().c_str(); } catch (...) {}
                 const auto version = package.Id().Version();
                 record.version =
                     std::to_wstring(version.Major) + L"." + std::to_wstring(version.Minor) + L"." +
@@ -10968,7 +10932,7 @@ struct App {
     bool installedOnly=false,inventoryOnly=false;
     bool targetExists=false,linkExists=false;
     std::wstring installedId,installedName,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
-    std::wstring installedLocation,installedFamily,installedKey;
+    std::wstring installedLocation,installedFamily,installedKey,installedArchitecture;
     HKEY installedHive=nullptr;
     REGSAM installedView=0;
 };
@@ -11459,6 +11423,7 @@ inline void AttachInstalledMetadata(App& app,const installed::Record& record) {
     app.installedVersion=record.version;app.installedIcon=record.icon;
     app.installedPackage=record.packageFullName;app.inventoryOnly=record.inventoryOnly;
     app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
+    app.installedArchitecture=record.architecture;
     app.installedHive=record.registryHive;app.installedView=record.registryView;
 }
 inline std::vector<App> InstalledInventory(const std::vector<installed::Record>& records) {
@@ -11470,6 +11435,7 @@ inline std::vector<App> InstalledInventory(const std::vector<installed::Record>&
         app.targetPath=L"ms-settings:appsfeatures";
         AttachInstalledMetadata(app,record);
         for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
+        for(const auto& alias:record.inventoryAliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
         if(!record.publisher.empty())app.aliases.push_back(ToLower(record.publisher));
         std::wistringstream words(app.nameLower);std::wstring word;
         while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
@@ -11490,7 +11456,7 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             executableNames[i]=installed::LauncherName(filename.substr(0,filename.size()-4));
     }
     for(const auto& record:records) {
-        if(record.name.empty() || !added.insert(record.id).second)continue;
+        if(record.name.empty() || record.inventoryOnly || !added.insert(record.id).second)continue;
         const auto name=ToLower(record.name);bool represented=false;
         const auto familyOf=[](const App& app) {
             const auto& identity=app.shellIdentity.empty()?app.targetPath:app.shellIdentity;
@@ -11534,7 +11500,7 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             }
             represented=true;
         }
-        if(represented)continue;
+        if(represented || record.launcher.empty())continue;
         App app;app.name=record.name;app.nameLower=name;app.installedOnly=true;
         // Until a verified application is found, use a management destination.
         // Never run an icon/uninstaller path as the installed product.
@@ -11548,6 +11514,7 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
                 app.targetExists=true;PopulateAppAliases(app);
             }
         }
+        if(app.installedOnly)continue;
         for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
         std::wistringstream words(name);std::wstring word;
         while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
@@ -11588,9 +11555,8 @@ inline std::vector<Match> MatchCatalog(const std::vector<App>& apps,const std::w
     for(const auto& hit:hits) {
         if(shown.size()>=limit)break;
         if(hit.score>=cutoff)continue;
-        const bool seen=std::any_of(shown.begin(),shown.end(),[&](const Match& kept) {
-            if(scope==SearchScope::Installed && !kept.app->installedId.empty() && !hit.app->installedId.empty())
-                return kept.app->installedId==hit.app->installedId;
+        // InstalledInventory already guarantees unique registration identities.
+        const bool seen=scope==SearchScope::Normal && std::any_of(shown.begin(),shown.end(),[&](const Match& kept) {
             return SameResult(*kept.app,*hit.app);
         });
         if(!seen)shown.push_back(hit);
@@ -11622,9 +11588,17 @@ class Index {
             hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&e));
             folder->Release();
         }
+        const bool shellAvailable=SUCCEEDED(hr) && e;
+        // Keep a complete published catalog if a later shell refresh fails.
+        // A first inventory build can still work without AppsFolder.
+        if(!shellAvailable && hasLaunchCatalog_) {
+            if(e)e->Release();
+            return false;
+        }
 
         IShellItem* item = nullptr;
-        while (e && !cancelled() && e->Next(1, &item, nullptr) == S_OK && item) {
+        HRESULT enumeration=S_FALSE;
+        while (e && !cancelled() && (enumeration=e->Next(1, &item, nullptr)) == S_OK && item) {
             if (cancelled()) {
                 item->Release();
                 e->Release();
@@ -11712,7 +11686,7 @@ class Index {
             item = nullptr;
         }
         if(e)e->Release();
-        if (cancelled()) return false;
+        if (cancelled() || FAILED(enumeration)) return false;
 
         // Supplement launch entries on this background thread. Cache product
         // metadata across frequent shell refreshes, rather than per keystroke.
@@ -11804,6 +11778,7 @@ class Index {
         std::lock_guard<std::mutex> lock(mutex_);
         apps_ = std::move(fresh);
         inventory_ = std::move(inventory);
+        hasLaunchCatalog_=shellAvailable;
         return true;
     }
 
@@ -11814,6 +11789,7 @@ class Index {
         // Published snapshots never call Rebuild again. Copying their private
         // metadata caches needs no lock shared with the matching worker.
         next->nativeSettings_=nativeSettings_;next->installed_=installed_;
+        next->hasLaunchCatalog_=hasLaunchCatalog_;
         next->installedWhen_=inventoryChanged?0:installedWhen_;
         return next->Rebuild(cancel)?next:nullptr;
     }
@@ -11866,6 +11842,7 @@ class Index {
     settings::NativeCatalog nativeSettings_;
     std::vector<installed::Record> installed_;
     ULONGLONG installedWhen_=0;
+    bool hasLaunchCatalog_=false;
     mutable std::mutex mutex_;
     std::vector<App> apps_;
     std::vector<App> inventory_;
@@ -14653,11 +14630,6 @@ Match Parse(std::wstring_view query, const Names& names) {
     if (kind == Kind::None && Equal(names.crypto, L"crypto") && Equal(token, L"price")) kind = Kind::Crypto;
     if (kind == Kind::None && Equal(names.speed, L"speedtest") && Equal(token, L"speed")) kind = Kind::Speed;
     auto args=end == std::wstring::npos ? std::wstring() : Trim(std::wstring_view(text).substr(end));
-    if(kind==Kind::Installed) {
-        const auto split=args.find_first_of(L" \t\r\n");
-        if(Equal(std::wstring_view(args).substr(0,split),L"installed"))
-            args=split==args.npos?std::wstring():Trim(std::wstring_view(args).substr(split));
-    }
     return {kind,std::move(args)};
 }
 template<class CustomCommands>
@@ -14672,9 +14644,8 @@ Match Parse(std::wstring_view query, const Names& names, const CustomCommands& c
     if (token.empty()) return match;
     for (const auto& command : custom) {
         const auto name = Trim(command.name);
-        const bool installedAlias=match.kind==Kind::Installed && Equal(name,L"/"+names.installed+L" installed");
         if (!Trim(command.command).empty() && name.starts_with(L"/") &&
-            (Equal(token, Normalize(name)) || installedAlias) && ++count > 1) {
+            Equal(token, Normalize(name)) && ++count > 1) {
             match.kind = Kind::Conflict;
             break;
         }
@@ -19253,6 +19224,11 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     KeepHandler(appsScroll,appsScroll.SizeChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
         CheckInstalledScroll(sender.as<wuxc::ScrollViewer>());
     }));
+    // Scroll extents may still be stale during SizeChanged. Recheck only
+    // after XAML completes layout, including an appended inventory batch.
+    KeepHandler(appsScroll,appsScroll.LayoutUpdated(winrt::auto_revoke,[](wf::IInspectable const&,auto const&) {
+        if(g_appsScroll)CheckInstalledScroll(g_appsScroll);
+    }));
     appsScroll.IsTabStop(false);
     appsScroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     appsScroll.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
@@ -20217,7 +20193,7 @@ bool g_plainPoolAttached=false;
 uint64_t g_plainPoolSettings=0;
 
 bool PlainAppRow(const Row& row) {
-    return row.appIndex>=0 && row.sectionTitle.empty() && row.serviceName.empty() &&
+    return row.appIndex>=0 && (row.sectionTitle.empty() || row.installedOnly) && row.serviceName.empty() &&
         row.copyText.empty() && row.commandLine.empty() && row.customGlyph.empty() &&
         row.customIconText.empty() && !row.infoOnly && !row.isError && row.weatherDays.empty() && !row.speed && !row.usage;
 }
@@ -20297,6 +20273,8 @@ bool RenderPlainApps(const std::vector<Row>& rows,bool force) {
     if(rows.empty() || !std::all_of(rows.begin(),rows.end(),PlainAppRow))return false;
     size_t limit;
     {std::lock_guard lock(g_settingsMutex);limit=static_cast<size_t>(std::clamp(g_settings.maxAppResults,1,30));}
+    if(rows.front().installedOnly && std::all_of(rows.begin(),rows.end(),[](const Row& row){return row.installedOnly;}))
+        limit=rows.size(); // Only the batches explicitly requested for inventory.
     if(rows.size()>limit)return false;
     const auto settingsRevision=g_settingsRevision.load();
     if(!g_plainAppPool || g_plainPoolSettings!=settingsRevision || g_plainAppPool->size()>limit) {
@@ -25363,6 +25341,7 @@ void SearchThreadMain() {
                 if(row.installedOnly) {
                     row.subtitle=m.app->installedPublisher;
                     if(!m.app->installedVersion.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedVersion;
+                    if(!m.app->installedArchitecture.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedArchitecture;
                     row.cardSignature=L"installed:"+m.app->installedId;
                     canAdmin=false;
                 } else if (isSettingItem) {
@@ -25723,15 +25702,16 @@ bool DeliverNativeSearchKey(SearchWindowInput const& input) {
 LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) {
     if (code != HC_ACTION || g_searchWindowInputStop.load())
         return CallNextHookEx(nullptr, code, message, param);
+    // Other hooks already saw the physical key before this IME handoff.
+    // Deliver our replay to Windows without notifying those hooks again.
+    const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
+    if (key.dwExtraInfo == kSearchWindowImeReplayTag) return 0;
     // Give keyboard remappers (for example EPKL/AutoHotkey) first refusal.
     // They may replace a physical key with injected input. Capture only the
     // surviving event, and never call the remaining hook chain twice.
     const LRESULT downstream = CallNextHookEx(nullptr, code, message, param);
     if (downstream) return downstream;
     try {
-        const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
-        if (key.dwExtraInfo == kSearchWindowImeReplayTag)
-            return downstream;
         const UINT vk = key.vkCode;
         if (vk >= 256) return downstream;
         const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
