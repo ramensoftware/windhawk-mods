@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.8.3
+// @version 0.8.4
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -2019,7 +2019,7 @@ void Send(int command, int limits = 0) {
 }
 // Taskbar XAML islands are only taskbar-sized. Place the measured popup in
 // physical monitor coordinates instead of trusting their automatic placement.
-void PositionPanel(FrameworkElement target, C::Flyout current) {
+void PositionPanel(FrameworkElement target, P::FlyoutBase current) {
   auto root = target.XamlRoot();
   RECT bar{};
   MONITORINFO mi{sizeof(mi)};
@@ -2028,16 +2028,24 @@ void PositionPanel(FrameworkElement target, C::Flyout current) {
     return;
   double scale = root.RasterizationScale(), gap = 12 * scale;
   for (auto popup : Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(root)) {
-    auto presenter = popup.Child().try_as<C::FlyoutPresenter>();
-    if (!presenter || presenter.Content() != current.Content())
+    auto presenter = popup.Child().try_as<FrameworkElement>();
+    bool owned = false;
+    if (auto panel = current.try_as<C::Flyout>()) {
+      auto p = presenter.try_as<C::FlyoutPresenter>();
+      owned = p && p.Content() == panel.Content();
+    } else if (auto quick = current.try_as<C::MenuFlyout>()) {
+      auto p = presenter.try_as<C::MenuFlyoutPresenter>();
+      owned = p && p.Items().Size() && quick.Items().Size() &&
+              p.Items().GetAt(0) == quick.Items().GetAt(0);
+    }
+    if (!owned)
       continue;
     presenter.UpdateLayout();
     auto origin = presenter.TransformToVisual(root.Content()).TransformPoint({0, 0});
-    auto anchor = target.TransformToVisual(root.Content()).TransformPoint({0, 0});
     double width = presenter.ActualWidth() * scale, height = presenter.ActualHeight() * scale;
     if (width <= 0 || height <= 0)
       return;
-    double x = bar.left + (anchor.X + target.ActualWidth()) * scale - width;
+    double x = mi.rcWork.right - gap - width;
     double y = bar.top - gap - height;
     if (bar.right - bar.left >= bar.bottom - bar.top) {
       if (bar.top - mi.rcMonitor.top <= mi.rcMonitor.bottom - bar.bottom)
@@ -2064,7 +2072,7 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
   C::StackPanel host;
   // All settings pages share one work-area-clamped viewport. Content may
   // scroll, but switching tabs or editing presets never resizes the shell.
-  double width = 560, height = 680;
+  double width = 520, height = 560;
   RECT bar{};
   MONITORINFO mi{sizeof(mi)};
   if (GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &bar) &&
@@ -2075,7 +2083,16 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
   }
   host.Width(width);
   host.Height(height);
-  host.Margin(Thickness{8, 8, 8, 8});
+  Style presenter;
+  presenter.TargetType(winrt::Windows::UI::Xaml::Interop::TypeName{
+      L"Windows.UI.Xaml.Controls.FlyoutPresenter",
+      winrt::Windows::UI::Xaml::Interop::TypeKind::Metadata});
+  presenter.Setters().Append(Setter(C::Control::PaddingProperty(), winrt::box_value(Thickness{16, 16, 16, 16})));
+  presenter.Setters().Append(Setter(FrameworkElement::MinWidthProperty(), winrt::box_value(0.0)));
+  presenter.Setters().Append(Setter(FrameworkElement::MinHeightProperty(), winrt::box_value(0.0)));
+  presenter.Setters().Append(Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(width + 34)));
+  presenter.Setters().Append(Setter(FrameworkElement::MaxHeightProperty(), winrt::box_value(height + 34)));
+  flyout.FlyoutPresenterStyle(presenter);
   host.Spacing(20);
 
   C::Grid navigation;
@@ -2094,7 +2111,6 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
   TrackEvent(close.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) { Close(); })));
   navigation.Children().Append(back);
   navigation.Children().Append(close);
-  host.Children().Append(navigation);
   navigation.Height(36);
   scroll.MaxWidth(width);
   scroll.Width(width);
@@ -2107,7 +2123,10 @@ void SetPanelContent(C::ScrollViewer scroll, FrameworkElement target, int return
     page.HorizontalAlignment(HorizontalAlignment::Left);
     page.Margin(Thickness{0, 4, 0, 16});
   }
+  scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
+  scroll.HorizontalScrollMode(C::ScrollMode::Disabled);
   host.Children().Append(scroll);
+  host.Children().Append(navigation);
   flyout.Content(host);
 }
 void ShowPanelHost(FrameworkElement target) {
@@ -2672,7 +2691,8 @@ void ShowPresetEditor(FrameworkElement target) {
   SetPanelContent(scroll, target, editor->returnView);
   flyout.Placement(P::FlyoutPlacementMode::TopEdgeAlignedRight);
   TrackEvent(flyout.Opened(
-      winrt::auto_revoke, SafeUi([weak, addedCurrent](auto const&, auto const&) {
+      winrt::auto_revoke, SafeUi([weak, addedCurrent, target](auto const& sender, auto const&) {
+        PositionPanel(target, sender.template as<P::FlyoutBase>());
         if (addedCurrent)
           if (auto editor = weak.lock())
             if (!editor->rows.empty()) {
@@ -2913,7 +2933,10 @@ void ShowAdvanced(FrameworkElement target) {
     tab.Content(winrt::box_value(label));
     tab.IsChecked(index == advancedTab);
     TrackEvent(
-        tab.Click(winrt::auto_revoke, SafeUi([target, body, index](auto const&, auto const&) {
+        tab.Click(winrt::auto_revoke, SafeUi([target, body, tabs, index](auto const&, auto const&) {
+                    // Tabs are mutually exclusive; clicking the active tab cannot turn it off.
+                    for (unsigned i = 0; i < tabs.Children().Size(); ++i)
+                      tabs.Children().GetAt(i).as<P::ToggleButton>().IsChecked(i == unsigned(index));
                     advancedTab = index;
                     RenderAdvanced(body, target);
                   })));
@@ -3751,6 +3774,10 @@ void ShowMenu(FrameworkElement target) {
                              statusTimer.Stop();
                          })));
   menu.Placement(P::FlyoutPlacementMode::Top);
+  menu.ShouldConstrainToRootBounds(false);
+  TrackEvent(menu.Opened(winrt::auto_revoke, SafeUi([target](auto const& sender, auto const&) {
+    PositionPanel(target, sender.template as<P::FlyoutBase>());
+  })));
   menu.ShowAt(target);
 }
 void ShowQuickMenu(FrameworkElement target) {
@@ -3811,6 +3838,10 @@ void ShowQuickMenu(FrameworkElement target) {
                              statusTimer.Stop();
                          })));
   menu.Placement(P::FlyoutPlacementMode::Top);
+  menu.ShouldConstrainToRootBounds(false);
+  TrackEvent(menu.Opened(winrt::auto_revoke, SafeUi([target](auto const& sender, auto const&) {
+    PositionPanel(target, sender.template as<P::FlyoutBase>());
+  })));
   menu.ShowAt(target);
 }
 void QueueMenu(FrameworkElement target) {
