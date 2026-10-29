@@ -6,7 +6,7 @@
 // @author          Rikyz
 // @github          https://github.com/RikyZ90
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lcomctl32
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
@@ -24,14 +24,13 @@ XAML popup windows. The tray block includes its system icons and clock.
 
 - Ctrl + left mouse drag: float/move the app block or the entire tray/clock block.
 - Escape while dragging: cancel this move.
-- Ctrl + Shift + left click on a block: dock that block and forget its position.
-- Disable this mod, then restart Explorer to complete restoration on the tested setup.
+- A Ctrl+click without dragging is passed through to the taskbar as usual.
 
 ## Installation and removal
 
-On the locally tested setup, restart explorer.exe after enabling or disabling
-the mod. Save any file operations in progress and restart Windows Explorer from
-Task Manager. The mod never restarts Explorer automatically.
+The mod attaches to an already-running Explorer process and restores the native
+frames when disabled. If the log reports an incomplete restore, restart Explorer
+manually after saving any file operations. The mod never restarts Explorer.
 
 Only the primary Windows 11 XAML taskbar is targeted. Auto-hide is unsupported;
 the mod refuses to detach anything while it is enabled. Movement stays on the
@@ -43,28 +42,22 @@ large changes to the icon count or theme. A display/DPI change docks the blocks
 before rebuilding their placement. Windows still reserves taskbar space at the
 original edge.
 
-Developed on Windows 11 build 26300.9818 with Windhawk 1.7.3. Local user testing
-confirmed dragging; the 0.1.1 Auto-column layout fix also passed an isolated
-native XAML regression. The compile/link, popup lifecycle, repeated docking and
-cancellation checks passed locally. This is an experimental release: native
-menus, Explorer restart, full-screen apps and compatibility with other mods
-have not been systematically verified. Changing the visual ancestors of native
-controls can affect these features. Disabling attempts to reinsert the original
-frames; an Explorer restart is required locally to complete the transition.
+This is an experimental release. Native menus, full-screen apps and compatibility
+with other mods have not been systematically verified. Changing the visual
+ancestors of native controls can affect these features.
 
 Taskbar host discovery is adapted from m417z's taskbar-tray-show-on-hover mod,
 published under GNU GPL version 3. This mod is released under GPL-3.0-only.
 
 ## Illustrated controls
 
-![Illustrated independent dragging and per-block reset](https://raw.githubusercontent.com/RikyZ90/windhawk-mods/taskbar-free-float-demo/taskbar-free-float-demo.gif)
+![Illustrated independent dragging and release-to-finish](https://raw.githubusercontent.com/RikyZ90/windhawk-mods/taskbar-free-float-demo/taskbar-free-float-demo.gif)
 
-Illustrated interaction, not a screen recording. Restart Explorer after enabling
-or disabling the mod on the locally tested setup.
+Illustrated interaction, not a screen recording. The native taskbar background
+and reserved space remain at the original edge.
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -72,6 +65,17 @@ or disabling the mod on the locally tested setup.
 #include <cstdint>
 #include <limits>
 #include <utility>
+
+#include <windhawk_utils.h>
+#include <shellapi.h>
+
+#undef GetCurrentTime
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 
 namespace Geometry {
 struct Position { LONG x; LONG y; };
@@ -85,7 +89,7 @@ Position Clamp(Position p, LONG width, LONG height, const RECT& monitor) {
             static_cast<LONG>(std::clamp<int64_t>(p.y, monitor.top, bottom))};
 }
 
-size_t HostOffset(const BYTE* code) {
+size_t HostOffsetX64(const BYTE* code) {
     // Fail closed when the private TaskbarHost layout no longer matches.
     if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
         code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
@@ -95,19 +99,46 @@ size_t HostOffset(const BYTE* code) {
     }
     return 0;
 }
+
+size_t HostOffsetArm64(const BYTE* code) {
+    // Match the known ARM64 prologue and decode its pre-indexed host pointer offset.
+    const auto* p = reinterpret_cast<const DWORD*>(code);
+    if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+        return (p[3] >> 12) & 0xFF;
+    }
+    return 0;
 }
 
-#include <windhawk_utils.h>
-#include <shellapi.h>
-#include <vector>
+size_t HostOffset(const BYTE* code) {
+#if defined(_M_X64) || defined(__x86_64__)
+    return HostOffsetX64(code);
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    return HostOffsetArm64(code);
+#else
+    return 0;
+#endif
+}
 
-#undef GetCurrentTime
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
+size_t HostOffsetSize() {
+#if defined(_M_X64) || defined(__x86_64__)
+    return 8;
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    return 16;
+#else
+    return 0;
+#endif
+}
+
+bool DragThresholdExceeded(POINT start, POINT current, LONG cx, LONG cy) {
+    const int64_t dx = static_cast<int64_t>(current.x) - start.x;
+    const int64_t dy = static_cast<int64_t>(current.y) - start.y;
+    cx = std::max<LONG>(cx, 1);
+    cy = std::max<LONG>(cy, 1);
+    return dx <= -static_cast<int64_t>(cx) || dx >= cx ||
+           dy <= -static_cast<int64_t>(cy) || dy >= cy;
+}
+}
 
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
@@ -149,6 +180,8 @@ struct State {
     XamlRoot root{nullptr};
     std::array<Block, 2> blocks;
     int dragging = -1;
+    int dragCandidate = -1;
+    HWND captureWindow = nullptr;
     bool wasFloating = false;
     POINT startCursor{};
     Geometry::Position startPosition{};
@@ -435,10 +468,19 @@ void Save(Block& block) {
 }
 
 void EndDrag(bool cancel) {
-    if (!g_state || g_state->dragging < 0) return;
+    if (!g_state) return;
+    if (g_state->dragging < 0) {
+        if (g_state->dragCandidate < 0) return;
+        g_state->dragCandidate = -1;
+        const HWND captureWindow = std::exchange(g_state->captureWindow, nullptr);
+        if (cancel && IsWindow(captureWindow)) SendMessageW(captureWindow, WM_CANCELMODE, 0, 0);
+        if (GetCapture() == captureWindow) ReleaseCapture();
+        return;
+    }
     const int index = std::exchange(g_state->dragging, -1);
     auto& block = g_state->blocks[index];
-    if (GetCapture() == g_state->taskbar) ReleaseCapture();
+    const HWND captureWindow = std::exchange(g_state->captureWindow, nullptr);
+    if (GetCapture() == captureWindow) ReleaseCapture();
     const HWND foreground = std::exchange(g_state->previousForeground, nullptr);
     if (IsWindow(foreground)) SetForegroundWindow(foreground);
     if (cancel) {
@@ -471,6 +513,19 @@ bool DockAll() {
     return restored;
 }
 
+void RestoreSavedPositions() {
+    if (!g_state || !g_state->root || AutoHide()) return;
+    for (auto& block : g_state->blocks) {
+        SavedPosition saved;
+        if (Wh_GetBinaryValue(block.storageKey, &saved, sizeof(saved)) == sizeof(saved) &&
+            saved.version == 1 && std::abs(static_cast<int64_t>(saved.point.x)) <= 1000000 &&
+            std::abs(static_cast<int64_t>(saved.point.y)) <= 1000000) {
+            try { if (Float(block)) Position(block, saved.point); }
+            catch (...) { Dock(block); Wh_Log(L"Saved position could not be restored"); }
+        }
+    }
+}
+
 bool Initialize(HWND hwnd) {
     if (g_state && g_state->root) return true;
     auto root = TaskbarRoot(hwnd);
@@ -488,30 +543,74 @@ bool Initialize(HWND hwnd) {
     g_state->blocks[0].storageKey = L"apps.position";
     g_state->blocks[1].frame = tray;
     g_state->blocks[1].storageKey = L"tray.position";
-    Wh_Log(L"Ready: Ctrl+drag apps or tray; other mod settings unchanged");
-    if (!AutoHide()) {
-        for (auto& block : g_state->blocks) {
-            SavedPosition saved;
-            if (Wh_GetBinaryValue(block.storageKey, &saved, sizeof(saved)) == sizeof(saved) &&
-                saved.version == 1 && std::abs(static_cast<int64_t>(saved.point.x)) <= 1000000 &&
-                std::abs(static_cast<int64_t>(saved.point.y)) <= 1000000) {
-                try { if (Float(block)) Position(block, saved.point); }
-                catch (...) { Dock(block); Wh_Log(L"Saved position could not be restored"); }
-            }
-        }
-    }
+    Wh_Log(L"Ready: Ctrl+drag apps or tray; release to finish");
+    RestoreSavedPositions();
     return true;
 }
 
 bool MouseInput(const MSG* msg) {
     if (!g_state || !g_state->root) return false;
+    if (g_state->dragCandidate >= 0) {
+        // Preserve the original click until the Windows drag threshold is crossed.
+        if (msg->message == WM_KEYDOWN && msg->wParam == VK_ESCAPE) {
+            EndDrag(true);
+            return true;
+        }
+        if (msg->message == WM_CAPTURECHANGED && msg->hwnd == g_state->captureWindow &&
+            reinterpret_cast<HWND>(msg->lParam) != g_state->captureWindow) {
+            EndDrag(true);
+            return false;
+        }
+        if (msg->message == WM_MOUSEMOVE) {
+            if (!(msg->wParam & MK_LBUTTON)) {
+                EndDrag(false);
+                return false;
+            } else {
+                POINT cursor{};
+                if (GetCursorPos(&cursor) && Geometry::DragThresholdExceeded(
+                        g_state->startCursor, cursor, GetSystemMetrics(SM_CXDRAG),
+                        GetSystemMetrics(SM_CYDRAG))) {
+                    const int index = g_state->dragCandidate;
+                    const HWND clickTarget = g_state->captureWindow;
+                    const bool wasFloating = static_cast<bool>(g_state->blocks[index].popup);
+                    g_state->captureWindow = g_state->taskbar;
+                    SetCapture(g_state->taskbar);
+                    if (GetCapture() != g_state->taskbar) {
+                        g_state->captureWindow = clickTarget;
+                        EndDrag(true);
+                        return true;
+                    }
+                    g_state->dragCandidate = -1;
+                    g_state->dragging = index;
+                    g_state->wasFloating = wasFloating;
+                    g_state->previousForeground = GetForegroundWindow();
+                    SetForegroundWindow(g_state->taskbar);
+                    SendMessageW(clickTarget, WM_CANCELMODE, 0, 0);
+                    if (!Float(g_state->blocks[index])) {
+                        EndDrag(true);
+                        return true;
+                    }
+                    Position(g_state->blocks[index],
+                        {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
+                         g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (msg->message == WM_LBUTTONUP) {
+            EndDrag(false);
+            return false;
+        }
+        return false;
+    }
     if (g_state->dragging >= 0) {
         if (msg->message == WM_KEYDOWN && msg->wParam == VK_ESCAPE) {
             EndDrag(true);
             return true;
         }
-        if (msg->message == WM_MOUSEMOVE || msg->message == WM_POINTERUPDATE) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+        if (msg->message == WM_MOUSEMOVE) {
+            if (!(msg->wParam & MK_LBUTTON)) {
                 EndDrag(false);
             } else {
                 POINT cursor{};
@@ -523,17 +622,16 @@ bool MouseInput(const MSG* msg) {
             }
             return true;
         }
-        if (msg->message == WM_LBUTTONUP || msg->message == WM_POINTERUP) {
+        if (msg->message == WM_LBUTTONUP) {
             EndDrag(false);
             return true;
         }
-        if (msg->message == WM_LBUTTONDOWN || msg->message == WM_LBUTTONDBLCLK ||
-            msg->message == WM_POINTERDOWN) return true;
+        if (msg->message == WM_LBUTTONDOWN || msg->message == WM_LBUTTONDBLCLK) return true;
         return false;
     }
-    if ((msg->message != WM_LBUTTONDOWN && msg->message != WM_LBUTTONDBLCLK &&
-         msg->message != WM_POINTERDOWN) || !(GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
-        !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return false;
+    if ((msg->message != WM_LBUTTONDOWN && msg->message != WM_LBUTTONDBLCLK) ||
+        !(msg->wParam & MK_CONTROL) || !(msg->wParam & MK_LBUTTON) ||
+        !IsWindow(msg->hwnd)) return false;
 
     POINT cursor{};
     if (!GetCursorPos(&cursor)) return false;
@@ -547,29 +645,13 @@ bool MouseInput(const MSG* msg) {
         if (inputRoot != (block.popup ? block.popupWindow : g_state->taskbar)) continue;
         RECT rect = Bounds(block);
         if (!PtInRect(&rect, cursor)) continue;
-        if (GetAsyncKeyState(VK_SHIFT) & 0x8000) {
-            Dock(block);
-            Wh_DeleteValue(block.storageKey);
-            return true;
-        }
-        const bool wasFloating = static_cast<bool>(block.popup);
-        if (!Float(block)) return true;
-        rect = Bounds(block);
-        HWND foreground = GetForegroundWindow();
-        SetForegroundWindow(g_state->taskbar);
-        SetCapture(g_state->taskbar);
-        if (GetCapture() != g_state->taskbar) {
-            if (!wasFloating) Dock(block);
-            if (IsWindow(foreground)) SetForegroundWindow(foreground);
-            Wh_Log(L"Mouse capture refused; drag cancelled");
-            return true;
-        }
-        g_state->dragging = static_cast<int>(i);
-        g_state->wasFloating = wasFloating;
+        SetCapture(msg->hwnd);
+        if (GetCapture() != msg->hwnd) return false;
+        g_state->dragCandidate = static_cast<int>(i);
+        g_state->captureWindow = msg->hwnd;
         g_state->startCursor = cursor;
         g_state->startPosition = {rect.left, rect.top};
-        g_state->previousForeground = foreground;
-        return true;
+        return false;
     }
     return false;
 }
@@ -601,9 +683,9 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
                 if (DockAll()) {
                     delete g_state;
                     g_state = nullptr;
+                    return 1;
                 } else {
-                    // Retain rollback references if XAML rejects restoration.
-                    Wh_Log(L"Incomplete restore; original references retained. Restart Explorer to recover.");
+                    Wh_Log(L"Incomplete restore; at least one original frame remains in its popup");
                 }
                 return 0;
             }
@@ -613,19 +695,27 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
         if (message == WM_TIMER && wp == kTimer) {
             if (g_unloading) return 0;
             if (!g_state) { g_state = new State; g_state->taskbar = hwnd; }
-            if (Initialize(hwnd) || ++g_state->retries >= 20) {
+            const unsigned retries = ++g_state->retries;
+            bool initialized = false;
+            try { initialized = Initialize(hwnd); }
+            catch (...) { Wh_Log(L"Taskbar initialization attempt failed"); }
+            if (initialized || retries >= 20) {
                 KillTimer(hwnd, kTimer);
                 if (!g_state->root) Wh_Log(L"Native taskbar not ready/unsupported; no changes made");
             }
             return 0;
         }
-        if (message == WM_CAPTURECHANGED && g_state && g_state->dragging >= 0 &&
+        if (message == WM_CAPTURECHANGED && g_state &&
+            (g_state->dragging >= 0 || g_state->dragCandidate >= 0) &&
             reinterpret_cast<HWND>(lp) != hwnd) EndDrag(true);
         if (message == WM_DISPLAYCHANGE || message == WM_DPICHANGED) {
             if (DockAll()) { delete g_state; g_state = nullptr; }
             if (!g_unloading) SetTimer(hwnd, kTimer, 500, nullptr);
         }
-        if (message == WM_SETTINGCHANGE && AutoHide()) DockAll();
+        if (message == WM_SETTINGCHANGE) {
+            if (AutoHide()) DockAll();
+            else RestoreSavedPositions();
+        }
         if (message == WM_NCDESTROY) {
             KillTimer(hwnd, kTimer);
             const bool restored = DockAll();
@@ -644,12 +734,17 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
 void Attach() {
     if (g_unloading) return;
     HWND hwnd = FindTaskbar();
-    if (!hwnd) return;
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarProc, 0)) {
-        g_taskbar = hwnd;
-        g_uiThread = GetWindowThreadProcessId(hwnd, nullptr);
-        SendMessageW(hwnd, g_controlMessage, 0, 0);
+    if (!hwnd) {
+        Wh_Log(L"Taskbar window not found; waiting for StartTaskbar");
+        return;
     }
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarProc, 0)) {
+        Wh_Log(L"Could not subclass the running taskbar window");
+        return;
+    }
+    g_taskbar = hwnd;
+    g_uiThread = GetWindowThreadProcessId(hwnd, nullptr);
+    SendMessageW(hwnd, g_controlMessage, 0, 0);
 }
 
 using Start_t = void(WINAPI*)(void*);
@@ -670,7 +765,8 @@ BOOL Wh_ModInit() {
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &g_start, StartHook},
     };
     if (!WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)) ||
-        !Readable(g_frameHeight, 8) ||
+        !Geometry::HostOffsetSize() ||
+        !Readable(g_frameHeight, Geometry::HostOffsetSize()) ||
         !Geometry::HostOffset(static_cast<const BYTE*>(g_frameHeight))) {
         Wh_Log(L"Unsupported taskbar symbols/ABI; refusing to load");
         return FALSE;
@@ -687,11 +783,11 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
     const HWND hwnd = g_taskbar;
     if (hwnd && IsWindow(hwnd)) {
-        SendMessageW(hwnd, g_controlMessage, 1, 0);
+        if (!SendMessageW(hwnd, g_controlMessage, 1, 0)) {
+            Wh_Log(L"Disable could not restore every taskbar frame; restart Explorer to recover");
+        }
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TaskbarProc);
     }
     g_taskbar = nullptr;
     g_uiThread = 0;
 }
-
-void Wh_ModUninit() {}
