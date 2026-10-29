@@ -8,7 +8,7 @@
 // @include         chrome.exe
 // @include         msedge.exe
 // @include         brave.exe
-// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lshell32 -luuid
+// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lshell32
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -42,11 +42,15 @@ also works with right-to-left UI languages, where the tab bar is mirrored.
 
 With vertical tabs, the empty area below the tabs works too. Chrome and Brave
 report it as a caption area as well, but Edge reports it as client area, so in
-Edge it's detected with UI Automation instead: the mod looks for the tab strip
-at the clicked point, without querying the web page itself. As a side effect,
-Edge enables its native accessibility API support (shown in
-`edge://accessibility`), but not web content accessibility. This can be turned
-off in the settings.
+Edge it's detected with UI Automation instead: on a middle-click in Edge's
+client area, the mod looks for the tab strip at the clicked point, without
+querying the web page itself. This happens with any tab layout, e.g. also when
+middle-clicking a bookmark, except in the rows of a horizontal tab strip.
+Middle-clicks on web pages, such as on links, aren't checked, as Edge doesn't
+pass them on as regular mouse messages. As a side effect, after the first
+checked click, Edge enables its native accessibility API support (shown in
+`edge://accessibility`) until it's restarted, but not web content
+accessibility. To avoid this, turn off the "Edge vertical tabs" setting.
 
 Installed web apps (PWAs) are ignored, since they have a title bar instead of a
 tab bar.
@@ -76,8 +80,6 @@ Ctrl+T), so no keyboard input is simulated.
 
 #include <windhawk_utils.h>
 
-#include <atomic>
-
 #include <commctrl.h>
 #include <propsys.h>
 #include <shobjidl.h>
@@ -93,12 +95,33 @@ bool g_isEdge;
 DWORD g_uiThreadId;
 HWND g_middleButtonDownWnd;
 
-// A middle-button press in the client area, for Edge vertical tabs.
-HWND g_clientMiddleButtonDownWnd;
-POINT g_clientMiddleButtonDownPt;
+// Edge vertical tabs: a middle-click in the client area is checked in the
+// background, starting on press. Used on the UI thread, except for the thread
+// handle, which Wh_ModUninit also waits for.
+UINT g_verticalTabsCheckDoneMsg;
+HANDLE g_verticalTabsCheckThread;
+DWORD g_lastClickId;
 
-std::atomic<bool> g_verticalTabsCheckRunning;
-std::atomic<bool> g_unloading;
+struct {
+    // The window of the click being checked, or null if there's none.
+    HWND hWnd;
+    // Passed to the check thread and back, to match its result to the click.
+    DWORD id;
+    // Client coordinates.
+    POINT downPt;
+    bool done;
+    bool isEmpty;
+    // If the button is released before the check completes, the release is
+    // held until then. Chromium closes a tab on release, which would make the
+    // point look empty if the check saw the tab strip after that.
+    bool releaseHeld;
+    WPARAM upWParam;
+    LPARAM upLParam;
+} g_pendingClick;
+
+// Used as the timer id, which only has to be unique for the window.
+#define HELD_RELEASE_TIMER_ID ((UINT_PTR)&g_pendingClick)
+constexpr UINT kHeldReleaseTimeoutMs = 1000;
 
 UINT GetDpiForWindowWithFallback(HWND hWnd) {
     using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
@@ -431,12 +454,14 @@ cleanup:
 struct VerticalTabsCheckParam {
     HWND hWnd;
     POINT pt;
-    HMODULE module;
+    DWORD clickId;
 };
 
 DWORD WINAPI VerticalTabsCheckThread(void* parameter) {
     VerticalTabsCheckParam param = *(VerticalTabsCheckParam*)parameter;
     delete (VerticalTabsCheckParam*)parameter;
+
+    bool isEmpty = false;
 
     // UI Automation calls are forwarded to the window's thread, which must
     // keep processing messages, so they can't be made on that thread.
@@ -445,47 +470,116 @@ DWORD WINAPI VerticalTabsCheckThread(void* parameter) {
         if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr,
                                        CLSCTX_INPROC_SERVER,
                                        IID_PPV_ARGS(&automation)))) {
-            if (IsEmptyVerticalTabArea(automation, param.hWnd, param.pt) &&
-                !g_unloading) {
-                OpenNewTab(param.hWnd);
-            }
-
+            isEmpty = IsEmptyVerticalTabArea(automation, param.hWnd, param.pt);
             automation->Release();
         }
 
         CoUninitialize();
     }
 
-    g_verticalTabsCheckRunning = false;
+    PostMessage(param.hWnd, g_verticalTabsCheckDoneMsg, param.clickId, isEmpty);
 
-    // The thread holds a reference to the mod's module, so that the mod isn't
-    // unloaded while the thread is running.
-    FreeLibraryAndExitThread(param.module, 0);
+    return 0;
 }
 
-void StartVerticalTabsCheck(HWND hWnd, POINT pt) {
-    if (g_verticalTabsCheckRunning.exchange(true)) {
-        Wh_Log(L"A check is already running, ignoring");
-        return;
+bool StartVerticalTabsCheck(HWND hWnd, POINT pt, DWORD clickId) {
+    if (g_verticalTabsCheckThread) {
+        if (WaitForSingleObject(g_verticalTabsCheckThread, 0) == WAIT_TIMEOUT) {
+            Wh_Log(L"A check is already running, ignoring");
+            return false;
+        }
+
+        CloseHandle(g_verticalTabsCheckThread);
+        g_verticalTabsCheckThread = nullptr;
     }
 
-    HMODULE module = nullptr;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                           (PCWSTR)&StartVerticalTabsCheck, &module)) {
-        g_verticalTabsCheckRunning = false;
-        return;
-    }
-
-    auto* param = new VerticalTabsCheckParam{hWnd, pt, module};
-    HANDLE thread =
+    auto* param = new VerticalTabsCheckParam{hWnd, pt, clickId};
+    g_verticalTabsCheckThread =
         CreateThread(nullptr, 0, VerticalTabsCheckThread, param, 0, nullptr);
-    if (thread) {
-        CloseHandle(thread);
-    } else {
+    if (!g_verticalTabsCheckThread) {
         delete param;
-        FreeLibrary(module);
-        g_verticalTabsCheckRunning = false;
+        return false;
     }
+
+    return true;
+}
+
+// A horizontal tab strip has caption area next to the tabs, while the rows of
+// a vertical tab strip have none. Clicks in a row with caption area, such as a
+// middle-click that closes a horizontal tab, don't need a check.
+bool RowHasCaptionArea(HWND hWnd, int yPos) {
+    RECT rect{};
+    GetWindowRect(hWnd, &rect);
+
+    int step = MulDiv(8, GetDpiForWindowWithFallback(hWnd), 96);
+    if (step < 1) {
+        step = 1;
+    }
+
+    for (int x = rect.left; x < rect.right; x += step) {
+        if (SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(x, yPos)) ==
+            HTCAPTION) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void OnClientMiddleButtonDown(HWND hWnd, LPARAM lParam) {
+    g_pendingClick.hWnd = nullptr;
+
+    if (!g_isEdge || !g_settings.edgeVerticalTabs || IsWebAppWindow(hWnd)) {
+        return;
+    }
+
+    POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    POINT screenPt = pt;
+    ClientToScreen(hWnd, &screenPt);
+
+    if (RowHasCaptionArea(hWnd, screenPt.y)) {
+        return;
+    }
+
+    DWORD clickId = ++g_lastClickId;
+    if (!StartVerticalTabsCheck(hWnd, screenPt, clickId)) {
+        return;
+    }
+
+    g_pendingClick = {};
+    g_pendingClick.hWnd = hWnd;
+    g_pendingClick.id = clickId;
+    g_pendingClick.downPt = pt;
+}
+
+// Opens a tab if the click was on the empty area below vertical tabs and the
+// button was released close to where it was pressed, like a regular click.
+void CompletePendingClick(HWND hWnd, LPARAM upLParam) {
+    int dx = GET_X_LPARAM(upLParam) - g_pendingClick.downPt.x;
+    int dy = GET_Y_LPARAM(upLParam) - g_pendingClick.downPt.y;
+    bool isClick = abs(dx) <= GetSystemMetrics(SM_CXDRAG) &&
+                   abs(dy) <= GetSystemMetrics(SM_CYDRAG);
+
+    if (g_pendingClick.isEmpty && isClick) {
+        OpenNewTab(hWnd);
+    }
+
+    g_pendingClick.hWnd = nullptr;
+}
+
+// Passes a held release on to the browser, opening a tab first if needed.
+void DeliverHeldRelease(HWND hWnd, bool complete) {
+    KillTimer(hWnd, HELD_RELEASE_TIMER_ID);
+
+    WPARAM upWParam = g_pendingClick.upWParam;
+    LPARAM upLParam = g_pendingClick.upLParam;
+    if (complete) {
+        CompletePendingClick(hWnd, upLParam);
+    } else {
+        g_pendingClick.hWnd = nullptr;
+    }
+
+    DefSubclassProc(hWnd, WM_MBUTTONUP, upWParam, upLParam);
 }
 
 LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
@@ -493,6 +587,26 @@ LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
                                            WPARAM wParam,
                                            LPARAM lParam,
                                            DWORD_PTR dwRefData) {
+    // The check result, or with a zero id, a request to pass on a held release
+    // before the mod is unloaded.
+    if (uMsg == g_verticalTabsCheckDoneMsg) {
+        if (g_pendingClick.hWnd == hWnd) {
+            if (wParam == 0) {
+                if (g_pendingClick.releaseHeld) {
+                    DeliverHeldRelease(hWnd, false);
+                }
+            } else if (wParam == g_pendingClick.id) {
+                g_pendingClick.done = true;
+                g_pendingClick.isEmpty = lParam;
+                if (g_pendingClick.releaseHeld) {
+                    DeliverHeldRelease(hWnd, true);
+                }
+            }
+        }
+
+        return 0;
+    }
+
     switch (uMsg) {
         case WM_NCMBUTTONDOWN:
         // A quick second click arrives as a double click, treat it as another
@@ -509,31 +623,57 @@ LRESULT CALLBACK BrowserWindowSubclassProc(HWND hWnd,
 
         // A press in the client area means that a release on the tab bar
         // doesn't complete a click that started there.
+        // Edge doesn't do anything on a middle-click on the empty area below
+        // vertical tabs, so the press isn't swallowed. The check starts in the
+        // background, and a tab is opened on release if the area is empty.
         case WM_MBUTTONDOWN:
         case WM_MBUTTONDBLCLK:
             g_middleButtonDownWnd = nullptr;
-            g_clientMiddleButtonDownWnd = hWnd;
-            g_clientMiddleButtonDownPt = {GET_X_LPARAM(lParam),
-                                          GET_Y_LPARAM(lParam)};
+            if (g_pendingClick.hWnd && g_pendingClick.releaseHeld) {
+                if (g_pendingClick.hWnd == hWnd) {
+                    DeliverHeldRelease(hWnd, false);
+                } else {
+                    // Mouse capture makes this unlikely. DefSubclassProc can
+                    // only be used for the current window, so send it.
+                    HWND pendingWnd = g_pendingClick.hWnd;
+                    g_pendingClick.hWnd = nullptr;
+                    KillTimer(pendingWnd, HELD_RELEASE_TIMER_ID);
+                    SendMessage(pendingWnd, WM_MBUTTONUP,
+                                g_pendingClick.upWParam,
+                                g_pendingClick.upLParam);
+                }
+            }
+
+            OnClientMiddleButtonDown(hWnd, lParam);
             break;
 
-        // Edge doesn't do anything on a middle-click on the empty area below
-        // vertical tabs, so the click isn't swallowed. The check runs in the
-        // background and opens a tab if the area is empty.
         case WM_MBUTTONUP:
-            if (g_clientMiddleButtonDownWnd == hWnd) {
-                g_clientMiddleButtonDownWnd = nullptr;
-
-                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-                if (g_isEdge && g_settings.edgeVerticalTabs &&
-                    abs(pt.x - g_clientMiddleButtonDownPt.x) <=
-                        GetSystemMetrics(SM_CXDRAG) &&
-                    abs(pt.y - g_clientMiddleButtonDownPt.y) <=
-                        GetSystemMetrics(SM_CYDRAG) &&
-                    !IsWebAppWindow(hWnd)) {
-                    ClientToScreen(hWnd, &pt);
-                    StartVerticalTabsCheck(hWnd, pt);
+            if (g_pendingClick.hWnd == hWnd && !g_pendingClick.releaseHeld) {
+                if (!g_pendingClick.done) {
+                    g_pendingClick.releaseHeld = true;
+                    g_pendingClick.upWParam = wParam;
+                    g_pendingClick.upLParam = lParam;
+                    SetTimer(hWnd, HELD_RELEASE_TIMER_ID, kHeldReleaseTimeoutMs,
+                             nullptr);
+                    return 0;
                 }
+
+                CompletePendingClick(hWnd, lParam);
+            }
+            break;
+
+        // Don't hold the release for too long if the check is slow.
+        case WM_TIMER:
+            if (wParam == HELD_RELEASE_TIMER_ID) {
+                Wh_Log(L"The check took too long");
+                if (g_pendingClick.hWnd == hWnd &&
+                    g_pendingClick.releaseHeld) {
+                    DeliverHeldRelease(hWnd, false);
+                } else {
+                    KillTimer(hWnd, HELD_RELEASE_TIMER_ID);
+                }
+
+                return 0;
             }
             break;
 
@@ -609,6 +749,9 @@ BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam) {
 BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam) {
     if (IsBrowserWindow(hWnd)) {
         Wh_Log(L"Browser window to unsubclass: %08X", (DWORD)(ULONG_PTR)hWnd);
+
+        // Pass on a release that's held for a check.
+        SendMessage(hWnd, g_verticalTabsCheckDoneMsg, 0, 0);
 
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hWnd, BrowserWindowSubclassProc);
@@ -696,6 +839,11 @@ BOOL Wh_ModInit() {
 
     g_isEdge = !!GetModuleHandle(L"msedge.exe");
 
+    // Registered before subclassing, since the subclass procedure compares
+    // messages to it.
+    g_verticalTabsCheckDoneMsg = RegisterWindowMessage(
+        L"Windhawk_VerticalTabsCheckDone_" WH_MOD_ID);
+
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
                                    &pOriginalCreateWindowExW);
 
@@ -707,10 +855,16 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    g_unloading = true;
-
     if (g_uiThreadId != 0) {
         EnumThreadWindows(g_uiThreadId, EnumBrowserWindowsUnsubclassFunc, 0);
+    }
+
+    // No new check can start once the subclasses are removed. The check's UI
+    // Automation calls are handled by the UI thread, which isn't blocked here.
+    if (g_verticalTabsCheckThread) {
+        WaitForSingleObject(g_verticalTabsCheckThread, INFINITE);
+        CloseHandle(g_verticalTabsCheckThread);
+        g_verticalTabsCheckThread = nullptr;
     }
 }
 
