@@ -2,7 +2,7 @@
 // @id              taskbar-free-float
 // @name            Taskbar Free Float (experimental)
 // @description     Ctrl+drag the original Windows 11 app bar and tray/clock independently
-// @version         0.1.1
+// @version         0.1.2
 // @author          Rikyz
 // @github          https://github.com/RikyZ90
 // @include         explorer.exe
@@ -32,6 +32,11 @@ XAML popup windows. The tray block includes its system icons and clock.
 The mod attempts to attach to a running Explorer process and restore the native
 frames when disabled. If the log reports an incomplete restore, restart Explorer
 manually after saving any file operations. The mod never restarts Explorer.
+
+For a manual restart, use Task Manager or the optional
+[Taskbar Restart Explorer](https://windhawk.net/mods/taskbar-restart-explorer)
+mod, which adds a command to the taskbar context menu and remains available
+after disabling this mod.
 
 Only the primary Windows 11 XAML taskbar is targeted. Auto-hide is unsupported;
 the mod refuses to detach anything while it is enabled. Movement stays on the
@@ -507,7 +512,7 @@ void EndDrag(bool cancel) {
     const HWND captureWindow = std::exchange(g_state->captureWindow, nullptr);
     g_state->pointerInput = false;
     g_state->pointerId = 0;
-    if (GetCapture() == captureWindow) ReleaseCapture();
+    if (captureWindow && GetCapture() == captureWindow) ReleaseCapture();
     const HWND foreground = std::exchange(g_state->previousForeground, nullptr);
     if (IsWindow(foreground)) SetForegroundWindow(foreground);
     if (cancel) {
@@ -644,15 +649,8 @@ bool MouseInput(const MSG* msg) {
                 }
                 SetForegroundWindow(g_state->taskbar);
                 SetCapture(g_state->taskbar);
-                if (GetCapture() != g_state->taskbar) {
-                    g_state->pointerInput = false;
-                    g_state->pointerId = 0;
-                    if (IsWindow(foreground)) SetForegroundWindow(foreground);
-                    if (!wasFloating) Dock(g_state->blocks[index]);
-                    Wh_Log(L"Mouse capture refused; drag cancelled");
-                    return true;
-                }
-                g_state->captureWindow = g_state->taskbar;
+                g_state->captureWindow = GetCapture() == g_state->taskbar
+                    ? g_state->taskbar : nullptr;
                 g_state->dragging = index;
                 g_state->wasFloating = wasFloating;
                 g_state->previousForeground = foreground;
@@ -779,9 +777,12 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
             }
             return 0;
         }
+        // XAML can retake capture; track until physical release or Escape.
         if (message == WM_TIMER && wp == kDragTimer) {
             if (!g_state || g_state->dragging < 0) {
                 KillTimer(hwnd, kDragTimer);
+            } else if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+                EndDrag(true);
             } else if (!LeftButtonDown()) {
                 EndDrag(false);
             } else {
@@ -789,11 +790,6 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
                 if (GetCursorPos(&cursor)) MoveDrag(cursor);
             }
             return 0;
-        }
-        if ((message == WM_CAPTURECHANGED || message == WM_CANCELMODE) &&
-            g_state && g_state->dragging >= 0 &&
-            (message == WM_CANCELMODE || reinterpret_cast<HWND>(lp) != hwnd)) {
-            EndDrag(true);
         }
         if (message == WM_DISPLAYCHANGE || message == WM_DPICHANGED) {
             if (DockAll()) { delete g_state; g_state = nullptr; }
