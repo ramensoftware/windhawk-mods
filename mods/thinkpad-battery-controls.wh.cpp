@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.1
+// @version 0.9.2
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -1211,8 +1211,10 @@ struct State {
   DWORD error = 0;
 };
 std::atomic<bool> stalled = false;
+DWORD lastError = 0;
 // Exact vendor query/set operations only. No caller-selected IOCTL or buffers.
 bool Exchange(bool write, DWORD input, DWORD& output) {
+  lastError = ERROR_TIMEOUT;
   if (stalled)
     return false;
   struct Request {
@@ -1235,6 +1237,7 @@ bool Exchange(bool write, DWORD input, DWORD& output) {
     HeapFree(GetProcessHeap(), 0, r);
   };
   if (!r->overlapped.hEvent || r->device == INVALID_HANDLE_VALUE) {
+    lastError = GetLastError();
     release();
     return false;
   }
@@ -1257,6 +1260,10 @@ bool Exchange(bool write, DWORD input, DWORD& output) {
   }
   output = r->output;
   bool valid = ok && bytes == 4 && !(output & 0x80000000);
+  lastError = valid                   ? 0
+              : !ok                   ? GetLastError()
+              : (output & 0x80000000) ? ERROR_NOT_SUPPORTED
+                                      : ERROR_INVALID_DATA;
   release();
   return valid;
 }
@@ -1282,7 +1289,12 @@ bool Set(int slot, bool enabled) {
   bool written = Exchange(
       true, (DWORD(slot) << 8) | (enabled ? 1u : 0u) | (enabled && before.acBreak ? 2u : 0u),
       result);
+  DWORD writeError = lastError;
   auto after = Query(slot);
+  if (!written)
+    lastError = writeError;
+  else if (after.valid && after.enabled != enabled)
+    lastError = ERROR_WRITE_FAULT;
   return written && after.valid && after.enabled == enabled;
 }
 }  // namespace DischargeDriver
@@ -1433,6 +1445,11 @@ void Start(int slot, int target) {
   SYSTEM_POWER_STATUS power{};
   auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
   auto status = DischargeDriver::Query(slot);
+  if (slot >= 1 && slot <= 2 && a.batteries[slot - 1].percent.available &&
+      a.batteries[slot - 1].percent.value <= target) {
+    Publish(L"Already at or below the target. Discharge was not started.");
+    return;
+  }
   if (!Enabled() || !IntegratedBackend() || pending || Active() || slot < 1 || slot > 2 ||
       target < 50 || target > 95 || !GetSystemPowerStatus(&power) || power.ACLineStatus != 1 ||
       !a.connected || !a.resetKnown || a.resetBattery || a.resetStage ||
@@ -1454,7 +1471,13 @@ void Start(int slot, int target) {
     return;
   }
   if (!DischargeDriver::Set(slot, true)) {
-    Stop(slot);
+    DWORD error = DischargeDriver::lastError;
+    bool stopped = Stop(slot);
+    std::wstring message =
+        L"Start was not confirmed (driver error " + std::to_wstring(error) + L"). " +
+        (stopped ? L"Cleanup verified discharge is off. Do not retry until this is reviewed."
+                 : L"STOP NOT CONFIRMED. Use recovery now.");
+    Publish(message.c_str());
     return;
   }
   running = true;
@@ -3175,6 +3198,8 @@ void RenderExperimental(C::StackPanel body, FrameworkElement target) {
                          SafeUi([acknowledge, start, limit, slot](auto const&, auto const&) {
                            if (acknowledge.IsChecked().Value()) {
                              start.IsEnabled(false);
+                             start.Content(winrt::box_value(L"Starting..."));
+                             acknowledge.IsEnabled(false);
                              Send(26, MAKELONG(slot, int(limit.Value())));
                            }
                          })));
@@ -3471,10 +3496,17 @@ void ShowAdvanced(FrameworkElement target) {
         updateStop();
         auto next = BatteryControls::AdvancedControls::Read().revision;
         auto dischargeNext = BatteryControls::ExperimentalDischarge::Read().revision;
-        if (next != *revision || dischargeNext != *dischargeRevision) {
+        bool dischargeChanged = dischargeNext != *dischargeRevision;
+        if (next != *revision || dischargeChanged) {
           *dischargeRevision = dischargeNext;
           *revision = next;
           RenderAdvanced(body, target);
+          if (dischargeChanged && advancedTab == 3 && flyout) {
+            if (auto host = flyout.Content().try_as<C::StackPanel>())
+              if (host.Children().Size())
+                if (auto scroll = host.Children().GetAt(0).try_as<C::ScrollViewer>())
+                  scroll.ChangeView(nullptr, 0.0, nullptr, true);
+          }
         }
       })));
   statusTimer.Start();
