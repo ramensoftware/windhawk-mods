@@ -2,13 +2,13 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.10
+// @version 0.9.13
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
 // @include explorer.exe
 // @architecture x86-64
-// @compilerOptions -lshell32 -luser32 -lole32 -lruntimeobject -lwindowsapp -lbcrypt -ladvapi32 -lcrypt32 -luuid -lkernel32 -lrpcrt4 -lversion -fms-extensions
+// @compilerOptions -lshell32 -luser32 -lruntimeobject -lwindowsapp -lbcrypt -ladvapi32 -lkernel32 -lrpcrt4 -lversion -fms-extensions
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -74,16 +74,16 @@ Charge to full saves the original limits, disables them temporarily, then restor
 at 100% or after eight hours. Cancel restores immediately. A newer enabled range
 from Vantage is preserved. The integrated backend restores each battery separately;
 Lenovo's executable cannot restore different ranges on two batteries. Select the
-integrated backend for that situation. Missing batteries defer restoration safely.
+integrated backend for that situation. Present batteries restore independently; recovery for a missing battery is retained.
 
-Charging limits belong to the laptop, not to one Windows account. When several
-people are signed in, any of them can cancel a full-charge request, and whichever
-session is running restores the limits at 100% or after eight hours. Those sessions
-coordinate through a machine-wide lock. If it cannot be opened, the mod changes
-nothing: the menu summary ends with (changes paused), readings still refresh, and
-it retries every 30 seconds. A saved full-charge request stays in force meanwhile.
-After ten failed checks in a row, about five minutes, it continues without
-coordination and the summary says (not coordinated) until the lock opens again.
+Charging limits belong to the laptop, not to one Windows account. Signed-in
+sessions share recovery records and normally coordinate through a machine-wide
+lock. If the lock cannot be used, charging commands and recovery continue without
+coordination immediately. If a holder blocks ten consecutive periodic checks
+(about five minutes), they also continue without coordination. The menu then says
+(not coordinated). The mod retries the lock and resumes coordination when it
+acquires it. During fallback, simultaneous changes in different sessions can
+overwrite one another. This favors restoring charge limits over waiting indefinitely.
 
 **Thresholds persist after this mod is disabled or removed.** Disabling or updating
 the mod ends a pending full-charge request early: it tries to restore your limits
@@ -94,9 +94,15 @@ run, limits may remain off and charging can continue to 100% until the mod runs
 again or you set limits in Vantage. Removing the mod also removes its Windhawk
 recovery data. Restore protection before removal.
 
+If a write cannot be confirmed, further changes and recovery pause to avoid racing
+a command still running in Lenovo's service. Saved limits are retained. Restart
+Windows, then use Setup and diagnostics to acknowledge the restart and resume
+recovery. This applies to both backends; cancelling a client cannot undo a server write.
+
 ## Advanced controls
 Battery health shows supported readings. Power offers the verified three-state USB
-control. Calibration requires a separate confirmation and connected power; it saves
+control. Always-on USB settings persist after disabling or removing the mod.
+Advanced > Experimental groups calibration and independent two-battery limits. Both have simulated test coverage, but independent ranges have not been tested on a two-battery laptop and calibration has not completed a real hardware cycle. It requires a separate confirmation and connected power; it saves
 current limits and blocks charging edits while running. Cancellation also requires
 confirmation. Removing the mod during calibration loses saved recovery: check its
 state and charging limits in Vantage. Cooling and airplane controls remain omitted
@@ -104,7 +110,7 @@ until supported behavior is verified. Calibration is not a battery-health treatm
 
 ## Compatibility
 Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
-mock coverage but needs a two-battery hardware report. The executable backend
+mock coverage only and is experimental until a two-battery hardware test is completed. The executable backend
 requires English output. Private taskbar symbols can change after Windows updates.
 The tray icon hook is placed in SystemTray.dll, an older Taskbar.View.dll or
 ExplorerExtensions.dll, as Taskbar tray system icon tweaks does.
@@ -129,7 +135,6 @@ No Lenovo or Microsoft endorsement is implied.
 // ==/WindhawkModSettings==
 #include <windows.h>
 #include <shellapi.h>
-#include <shlobj.h>
 #include <windhawk_api.h>
 // Windhawk 1.6.1 puts WINAPI after a lambda parameter list. With MS extensions
 // that expands to syntax Clang rejects. On our 64-bit targets WINAPI does not
@@ -146,8 +151,6 @@ No Lenovo or Microsoft endorsement is implied.
 #include <charconv>
 #include <ctime>
 #include <bcrypt.h>
-#include <wincrypt.h>
-#include <aclapi.h>
 #include <sddl.h>
 #include <vector>
 #include <atomic>
@@ -156,6 +159,7 @@ No Lenovo or Microsoft endorsement is implied.
 #include <algorithm>
 #include <functional>
 #include <rpc.h>
+#include <rpcasync.h>
 #include <rpcndr.h>
 #include <sstream>
 
@@ -218,6 +222,24 @@ void Summarize(State& s) {
   if (s.mixed)
     s.start = s.stop = 0;
 }
+// Single-pack Apply uses two 16-bit words; separate-pack Apply uses two
+// 16-bit ranges, each containing an 8-bit start and stop.
+bool AppliedStateMatches(const State& state, int action, unsigned values) {
+  if (!state.valid || (action != 31 && action != 32 && action != 34))
+    return false;
+  for (int i = 0; i < 2; ++i) {
+    const auto& pack = state.packs[i];
+    if (!pack.present)
+      continue;
+    unsigned range = action == 34 ? (values >> (i * 16)) & 0xffff : values;
+    bool enabled = action == 31 || (action == 34 && range != 0);
+    int start = action == 34 ? int(range & 255) : int(LOWORD(values));
+    int stop = action == 34 ? int((range >> 8) & 255) : int(HIWORD(values));
+    if (bool(pack.enabled) != enabled || (enabled && (pack.start != start || pack.stop != stop)))
+      return false;
+  }
+  return true;
+}
 struct Recovery {
   DWORD magic = 0x54424332, version = 2, active = 0, reserved = 0;
   ULONGLONG deadline = 0;
@@ -239,7 +261,7 @@ enum class LockOutcome {
   AcquiredAbandoned,  // Held after the previous holder exited without releasing it.
   Contended,          // Another session held it for the whole wait.
   Unavailable,        // The mutex could not be created or opened, or the wait failed.
-  Uncoordinated,      // Unavailable for ten consecutive checks: proceeding without it.
+  Uncoordinated,      // Lock unusable or persistently held: proceeding without it.
   Shutdown            // This mod is unloading.
 };
 State Parse(std::string_view text) {
@@ -521,136 +543,208 @@ bool Run(const std::wstring& args, std::string& output) {
   return done && !overflow && code == 0;
 }
 namespace NativeRpc {
-// Generated NDR descriptors from research/lenovo-rpc/native.idl using Windows SDK MIDL.
+// Some bundled MinGW headers omit this documented Windows Vista+ RPC API.
+extern "C" int RPC_ENTRY RpcExceptionFilter(unsigned long ExceptionCode);
+// Interface provenance: threshold signatures and operation numbers were reconstructed
+// from Lenovo ChargeThreshold.exe 1.0.0.2 RPC metadata (SHA-256
+// C919EE2FAEA907169FE0222BD8B1BD07E03E6A8E106DFEA7EE0A9A9CE5EE8380).
+// Additional signatures were documented by https://github.com/alandau/LenPwrCtl/blob/master/pwrmgr.idl
+// and checked with read-only service queries. This is a reverse-engineered private
+// interface, not a Lenovo-supported API contract. Reserved methods are never called.
+// Generated x64 asynchronous NDR descriptors using Windows SDK MIDL and the
+// ACF below. Async changes client scheduling, not the on-wire interface.
 // Only explicitly named, typed operations are callable. No Lenovo executable code is embedded.
-// Each procedure string is self-contained (its operation number is at bytes 6 and 7), so
-// only the descriptors a production call uses are embedded; the IDL keeps the whole
-// interface, and tools/verify-native-descriptors.py checks every embedded one against it.
+// Each procedure string carries its operation number at bytes 6 and 7. Only used
+// descriptors are embedded; reserved declarations retain the original numbering.
+/*
+[uuid(af8abfc6-2132-4870-bf8d-bca541ffcf0b),version(1.0)] interface ThresholdProbe {
+void Open([in] handle_t binding,[out][context_handle] void **context);
+void Close([in,out][context_handle] void **context);
+void Reserved2([in][context_handle] void *context);
+void Reserved3([in][context_handle] void *context);
+void CoolCap([in][context_handle] void *context,[out] short *value);
+void CoolingCap([in][context_handle] void *context,[out] short *value);
+void Reserved6([in][context_handle] void *context);
+void Reserved7([in][context_handle] void *context);
+void AirplaneCap([in][context_handle] void *context,[out] short *value);
+void UsbCap([in][context_handle] void *context,[out] short *value);
+void Reserved10([in][context_handle] void *context);
+void Reserved11([in][context_handle] void *context);
+void Reserved12([in][context_handle] void *context);
+void Reserved13([in][context_handle] void *context);
+void Reserved14([in][context_handle] void *context);
+void UsbValue([in][context_handle] void *context,[out] long *value);
+void Reserved16([in][context_handle] void *context);
+void Reserved17([in][context_handle] void *context);
+void Reserved18([in][context_handle] void *context);
+void Reserved19([in][context_handle] void *context);
+void AirplaneValue([in][context_handle] void *context,[out] short *value);
+void CoolingAuto([in][context_handle] void *context,[out] short *value);
+void CoolingValue([in][context_handle] void *context,[out] short *value);
+void CoolValue([in][context_handle] void *context,[out] short *value);
+void Reserved24([in][context_handle] void *context);
+void Reserved25([in][context_handle] void *context);
+void Reserved26([in][context_handle] void *context);
+void Reserved27([in][context_handle] void *context);
+void SetAirplane([in][context_handle] void *context,[in] short value);
+void SetCoolingAuto([in][context_handle] void *context,[in] short value);
+void SetCooling([in][context_handle] void *context,[in] short value);
+void Reserved31([in][context_handle] void *context);
+void Reserved32([in][context_handle] void *context);
+void SetUsb([in][context_handle] void *context,[in] long value);
+void ResetCap([in][context_handle] void *context,[out] short *value,[in] long battery);
+void Query([in][context_handle] void *context,[in] long battery,[out] short *capable,[out] short *enabled,[out] long *start,[out] long *stop);
+
+void ResetState([in][context_handle] void *context,[out] long *battery,[out] long *stage,[out] long *stages);
+void Reserved37([in][context_handle] void *context);
+void StartReset([in][context_handle] void *context,[in] long battery);
+void StopReset([in][context_handle] void *context,[in] long battery);
+void SetThreshold([in][context_handle] void *context,[in] long battery,[in] long start,[in] long stop);
+void FullCapacity([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void DesignCapacity([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void DesignVoltage([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Reserved44([in][context_handle] void *context);
+void AdapterWatts([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Voltage([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Current([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Temperature([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Cycles([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Percent([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Remaining([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void RemainingTime([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void CompletionTime([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void ChargeStatus([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Chemistry([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+void Health([in][context_handle] void *context,[in] long battery,[out] long *value,[out] short *capable);
+};
+*/
+/*
+interface ThresholdProbe {
+  [async] Open();
+  [async] Close();
+  [async] UsbCap();
+  [async] UsbValue();
+  [async] SetUsb();
+  [async] ResetCap();
+  [async] Query();
+  [async] ResetState();
+  [async] StartReset();
+  [async] StopReset();
+  [async] SetThreshold();
+  [async] FullCapacity();
+  [async] DesignCapacity();
+  [async] AdapterWatts();
+  [async] Voltage();
+  [async] Temperature();
+  [async] Cycles();
+  [async] Percent();
+}
+*/
 const unsigned char types[] = {
     0x00, 0x00, 0x11, 0x04, 0x02, 0x00, 0x30, 0xa0, 0x00, 0x00, 0x11, 0x04, 0x02, 0x00, 0x30, 0xe1,
     0x00, 0x00, 0x30, 0x41, 0x00, 0x00, 0x11, 0x0c, 0x06, 0x5c, 0x11, 0x0c, 0x08, 0x5c, 0x00,
 };
 const unsigned char procOpen[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x32, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x40, 0x01, 0x0a, 0x01, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x01, 0x08, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00, 0x32, 0x00,
+    0x08, 0x00, 0x00, 0x00, 0x38, 0x00, 0xc0, 0x01, 0x0a, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x01, 0x10, 0x00, 0x06, 0x00,
 };
 const unsigned char procClose[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x30, 0xe0, 0x00,
-    0x00, 0x00, 0x00, 0x38, 0x00, 0x38, 0x00, 0x40, 0x01, 0x0a, 0x01, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x01, 0x00, 0x00, 0x0e, 0x00,
-};
-const unsigned char procCoolingCap[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
-};
-const unsigned char procAirplaneCap[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x30, 0xe0, 0x08,
+    0x00, 0x00, 0x00, 0x38, 0x00, 0x38, 0x00, 0xc0, 0x01, 0x0a, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x01, 0x08, 0x00, 0x0e, 0x00,
 };
 const unsigned char procUsbCap[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x18, 0x00, 0x30, 0x40, 0x08, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1a, 0x00, 0xc0, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x50, 0x21, 0x10, 0x00, 0x06, 0x00,
 };
 const unsigned char procUsbValue[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1c, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x08, 0x00,
-};
-const unsigned char procAirplaneValue[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
-};
-const unsigned char procCoolingValue[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x18, 0x00, 0x30, 0x40, 0x08, 0x00, 0x00,
+    0x00, 0x24, 0x00, 0x1c, 0x00, 0xc0, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00,
 };
 const unsigned char procSetUsb[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x2c, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x18, 0x00, 0x30, 0x40, 0x08, 0x00, 0x00,
+    0x00, 0x2c, 0x00, 0x00, 0x00, 0xc0, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00,
 };
 const unsigned char procResetCap[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x22, 0x00, 0x18, 0x00, 0x30, 0x40, 0x00,
-    0x00, 0x00, 0x00, 0x2c, 0x00, 0x1a, 0x00, 0x40, 0x03, 0x0a, 0x01, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50,
-    0x21, 0x08, 0x00, 0x06, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x22, 0x00, 0x20, 0x00, 0x30, 0x40, 0x08,
+    0x00, 0x00, 0x00, 0x2c, 0x00, 0x1a, 0x00, 0xc0, 0x03, 0x0a, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x50,
+    0x21, 0x10, 0x00, 0x06, 0x00, 0x48, 0x00, 0x18, 0x00, 0x08, 0x00,
 };
 const unsigned char procQuery[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x30, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x6c, 0x00, 0x40, 0x06, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x06, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-    0x50, 0x21, 0x20, 0x00, 0x08, 0x00, 0x50, 0x21, 0x28, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x38, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x6c, 0x00, 0xc0, 0x06, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
+    0x50, 0x21, 0x28, 0x00, 0x08, 0x00, 0x50, 0x21, 0x30, 0x00, 0x08, 0x00,
 };
 const unsigned char procResetState[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x24, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x24, 0x00, 0x54, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x24, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x24, 0x00, 0x54, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x50, 0x21, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x08, 0x00,
 };
 const unsigned char procStartReset[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x2c, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x18, 0x00, 0x30, 0x40, 0x08, 0x00, 0x00,
+    0x00, 0x2c, 0x00, 0x00, 0x00, 0xc0, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00,
 };
 const unsigned char procStopReset[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x27, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x2c, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x27, 0x00, 0x18, 0x00, 0x30, 0x40, 0x08, 0x00, 0x00,
+    0x00, 0x2c, 0x00, 0x00, 0x00, 0xc0, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00,
 };
 const unsigned char procSetThreshold[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x48, 0x00, 0x10, 0x00, 0x08, 0x00, 0x48, 0x00, 0x18, 0x00, 0x08, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x48, 0x00, 0x18, 0x00, 0x08, 0x00, 0x48, 0x00, 0x20, 0x00, 0x08, 0x00,
 };
 const unsigned char procFullCapacity[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x29, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x29, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const unsigned char procDesignCapacity[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const unsigned char procAdapterWatts[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const unsigned char procVoltage[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2e, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2e, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const unsigned char procTemperature[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const unsigned char procCycles[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x31, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x31, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const unsigned char procPercent[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x32, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
+    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x32, 0x00, 0x28, 0x00, 0x30, 0x40, 0x08, 0x00,
+    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0xc0, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x12, 0x00, 0x48, 0x00, 0x10, 0x00,
+    0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x08, 0x00, 0x50, 0x21, 0x20, 0x00, 0x06, 0x00,
 };
 const RPC_CLIENT_INTERFACE client = {
     sizeof(RPC_CLIENT_INTERFACE),
@@ -689,19 +783,93 @@ const MIDL_STUB_DESC stub = {const_cast<RPC_CLIENT_INTERFACE*>(&client),
                              nullptr,
                              nullptr,
                              nullptr};
+// Async state, event and out-parameters live until completion is consumed.
+std::atomic<bool> writePending = false;
+bool (*persistWritePending)(bool) = nullptr;
+HANDLE cancellationEvent = nullptr;
+std::atomic<ULONGLONG>* shutdownBudget = nullptr;
+thread_local ULONGLONG operationDeadline = 0;
+template <typename... Args>
+DWORD BeginAsync(RPC_ASYNC_STATE* state, const unsigned char* proc, Args... args) noexcept {
+  __try {
+    NdrAsyncClientCall(&stub, const_cast<unsigned char*>(proc), state, args...);
+    return 0;
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
+    return GetExceptionCode();
+  }
+}
+template <typename... Args>
+DWORD Call(const unsigned char* proc, Args... args) noexcept {
+  ULONGLONG now = GetTickCount64();
+  ULONGLONG shutdown = shutdownBudget ? shutdownBudget->load() : 0;
+  ULONGLONG deadline = now + 1000;
+  if (operationDeadline && operationDeadline < deadline)
+    deadline = operationDeadline;
+  if (shutdown && shutdown < deadline)
+    deadline = shutdown;
+  if (deadline <= now)
+    return ERROR_TIMEOUT;
+  // Recovery calls during unload use its remaining budget. In-flight calls
+  // started before unload are interrupted immediately by the stop event.
+  HANDLE stop = shutdown ? nullptr : cancellationEvent;
+  if (stop && WaitForSingleObject(stop, 0) == WAIT_OBJECT_0)
+    return RPC_S_CALL_CANCELLED;
+  RPC_ASYNC_STATE state{};
+  HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!done)
+    return GetLastError();
+  DWORD error = RpcAsyncInitializeHandle(&state, sizeof(state));
+  if (!error) {
+    state.NotificationType = RpcNotificationTypeEvent;
+    state.u.hEvent = done;
+    bool writes = proc == procSetThreshold || proc == procSetUsb || proc == procStartReset ||
+                  proc == procStopReset;
+    if (writes && writePending)
+      error = ERROR_BUSY;
+    if (!error && writes) {
+      if (persistWritePending && !persistWritePending(true))
+        error = ERROR_WRITE_FAULT;
+      else
+        writePending = true;
+    }
+    if (!error)
+      error = BeginAsync(&state, proc, args...);
+    if (!error) {
+      HANDLE events[] = {done, stop};
+      now = GetTickCount64();
+      DWORD wait = WaitForMultipleObjects(stop ? 2 : 1, events, FALSE,
+                                          DWORD(deadline > now ? deadline - now : 0));
+      if (wait != WAIT_OBJECT_0) {
+        // Cancellation is issued only after successful async initiation. It
+        // releases the client, but cannot undo a write received by the server.
+        RpcAsyncCancelCall(&state, TRUE);
+        WaitForSingleObject(done, INFINITE);
+      }
+      error = RpcAsyncCompleteCall(&state, nullptr);
+      if (!error && writes) {
+        if (persistWritePending && !persistWritePending(false))
+          error = ERROR_WRITE_FAULT;
+        else
+          writePending = false;
+      }
+    }
+  }
+  CloseHandle(done);
+  return error;
+}
 // These tiny SEH boundaries contain only plain data, never C++ objects with destructors.
 DWORD Open(RPC_BINDING_HANDLE binding, void** context) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(procOpen), binding, context);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(procOpen, binding, context);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
 void Close(void** context) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(procClose), context);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    if (Call(procClose, context))
+      RpcSmDestroyClientContext(context);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     RpcSmDestroyClientContext(context);
   }
 }
@@ -711,19 +879,16 @@ struct Battery {
 };
 DWORD Read(void* context, long battery, Battery* result) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(procQuery), context, battery, &result->capable,
-                   &result->enabled, &result->start, &result->stop);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(procQuery, context, battery, &result->capable, &result->enabled, &result->start,
+                &result->stop);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
 DWORD Write(void* context, long battery, long start, long stop) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(procSetThreshold), context, battery, start,
-                   stop);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(procSetThreshold, context, battery, start, stop);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
@@ -742,6 +907,7 @@ struct Session {
   Session(const Session&) = delete;
   Session& operator=(const Session&) = delete;
   DWORD Connect(ULONGLONG deadline) {
+    operationDeadline = deadline;
     DWORD error = RPC_S_SERVER_UNAVAILABLE;
     for (int i = 0; i < 10 && GetTickCount64() < deadline; i++) {
       wchar_t endpoint[64];
@@ -754,8 +920,6 @@ struct Session {
         error = RpcBindingFromStringBindingW(text, &binding);
       if (text)
         RpcStringFreeW(&text);
-      if (!error)
-        error = RpcBindingSetOption(binding, RPC_C_OPT_CALL_TIMEOUT, 1000);
       if (!error)
         error = Open(binding, &context);
       if (!error && context)
@@ -775,17 +939,15 @@ struct Session {
 // Advanced calls use fixed, generated signatures. No caller-controlled operation numbers.
 DWORD ShortRead(void* ctx, const unsigned char* proc, short* value) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(proc, ctx, value);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
 DWORD LongRead(void* ctx, const unsigned char* proc, long* value) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(proc, ctx, value);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
@@ -795,33 +957,29 @@ DWORD MetricRead(void* ctx,
                  long* value,
                  short* capable) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, slot, value, capable);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(proc, ctx, slot, value, capable);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
 DWORD ResetCapability(void* ctx, long slot, short* capable) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(procResetCap), ctx, capable, slot);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(procResetCap, ctx, capable, slot);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
 DWORD CalibrationState(void* ctx, long* battery, long* stage, long* stages) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(procResetState), ctx, battery, stage, stages);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(procResetState, ctx, battery, stage, stages);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
 DWORD LongWrite(void* ctx, const unsigned char* proc, long value) noexcept {
   __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return Call(proc, ctx, value);
+  } __except (RpcExceptionFilter(GetExceptionCode())) {
     return GetExceptionCode();
   }
 }
@@ -834,9 +992,8 @@ struct AdvancedBattery {
   Metric full, design, temperature, cycles, percent, voltage, adapter;
 };
 struct Advanced {
-  bool connected = false, usbSupported = false, airplaneSupported = false, coolingSupported = false;
+  bool connected = false, usbSupported = false;
   long usb = 0;
-  short airplane = 0, cooling = 0;
   bool resetKnown = false;
   long resetBattery = 0, resetStage = 0, resetStages = 0;
   AdvancedBattery batteries[2];
@@ -847,18 +1004,10 @@ Advanced ReadAdvanced(ULONGLONG deadline) {
   if (session.Connect(deadline))
     return a;
   a.connected = true;
-  auto boolean = [&](const unsigned char* cap, const unsigned char* getter, short& value) {
-    short supported = 0;
-    return GetTickCount64() < deadline && !ShortRead(session.context, cap, &supported) &&
-           supported == 1 && !ShortRead(session.context, getter, &value) &&
-           (value == 0 || value == 1);
-  };
   short usb = 0;
   a.usbSupported = GetTickCount64() < deadline && !ShortRead(session.context, procUsbCap, &usb) &&
                    usb == 1 && !LongRead(session.context, procUsbValue, &a.usb) && a.usb >= 0 &&
                    a.usb <= 2;
-  a.airplaneSupported = boolean(procAirplaneCap, procAirplaneValue, a.airplane);
-  a.coolingSupported = boolean(procCoolingCap, procCoolingValue, a.cooling);
   a.resetKnown =
       GetTickCount64() < deadline &&
       !CalibrationState(session.context, &a.resetBattery, &a.resetStage, &a.resetStages) &&
@@ -891,13 +1040,17 @@ Advanced ReadAdvanced(ULONGLONG deadline) {
   return a;
 }
 // Implements the utility's documented status/off/on STOP [START] command contract.
-// Both battery slots are enumerated, just as in the utility. The app's Parse gate
-// retains both battery slots before any UI-originated write.
-bool Run(const std::wstring& command, std::string& output, ULONGLONG deadline, DWORD& error) {
+// Both battery slots are validated before any write. Native results stay typed;
+// only the external utility backend needs text parsing.
+bool Run(const std::wstring& command, State& output, ULONGLONG deadline, DWORD& error) {
+  output = {};
   error = ERROR_INVALID_PARAMETER;
   std::wistringstream input(command);
   std::wstring verb, extra;
   input >> verb;
+  for (auto& c : verb)
+    if (c >= L'A' && c <= L'Z')
+      c += L'a' - L'A';
   bool setting = false;
   int start = 0, stop = 0;
   if (verb == L"on") {
@@ -972,39 +1125,68 @@ bool Run(const std::wstring& command, std::string& output, ULONGLONG deadline, D
         error = ERROR_WRITE_FAULT;
         return false;
       }
-    } else {
-      output += "Charge threshold for Battery #" + std::to_string(i + 1) + ": ";
-      output += b.enabled ? "Start at " + std::to_string(b.start) + "%, Stop at " +
-                                std::to_string(b.stop) + "%.\n"
-                          : "OFF.\n";
+      b = actual;
     }
   }
+  State result;
+  for (int i = 0; i < 2; ++i) {
+    const auto& b = batteries[i];
+    if (b.capable)
+      result.packs[i] = {1, DWORD(b.enabled), b.enabled ? int(b.start) : 0,
+                         b.enabled ? int(b.stop) : 0};
+  }
+  Summarize(result);
+  output = result;
   return true;
 }
 }  // namespace NativeRpc
 
 // Snapshot the setting once per operation so a settings change cannot split a write/readback.
+bool NativeWriteUncertain() {
+  return NativeRpc::writePending.load();
+}
 bool IntegratedBackend() {
   return std::wstring(WindhawkUtils::StringSetting::make(L"backend").get()) != L"executable";
 }
-bool RunSelected(bool integrated, const std::wstring& args, std::string& output) {
-  if (!integrated)
-    return Run(args, output);
+bool RunSelected(bool integrated,
+                 const std::wstring& args,
+                 std::string& output,
+                 State* state = nullptr) {
+  if (!integrated) {
+    bool writes = args != L"status";
+    if (writes) {
+      if (NativeRpc::writePending ||
+          (NativeRpc::persistWritePending && !NativeRpc::persistWritePending(true)))
+        return false;
+      NativeRpc::writePending = true;
+    }
+    bool ok = Run(args, output);
+    if (ok && writes) {
+      if (NativeRpc::persistWritePending && !NativeRpc::persistWritePending(false))
+        return false;
+      NativeRpc::writePending = false;
+    }
+    return ok;
+  }
   auto shutdown = shutdownDeadline.load();
   if ((shutdown && GetTickCount64() >= shutdown) ||
       (!shutdown && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0))
     return false;
   DWORD error = 0;
-  bool ok = NativeRpc::Run(args, output, shutdown ? shutdown : GetTickCount64() + 5000, error);
+  State nativeState;
+  bool ok = NativeRpc::Run(args, nativeState, shutdown ? shutdown : GetTickCount64() + 5000, error);
+  if (state)
+    *state = nativeState;
   Wh_Log(L"nativeRpcError=%d", int(error));
   SetUtility(ok ? 5 : 6);
   return ok;
 }
 State QueryWith(bool integrated) {
   std::string output;
-  if (!RunSelected(integrated, L"status", output))
+  State state;
+  if (!RunSelected(integrated, L"status", output, &state))
     return {};
-  return Parse(output);
+  return integrated ? state : Parse(output);
 }
 State Query() {
   return QueryWith(IntegratedBackend());
@@ -1066,6 +1248,7 @@ bool Save(const Recovery& value) {
 // Also called again before each recovery decision: every signed-in user's Explorer
 // shares this record, so another session may have saved or cleared it.
 void Load() {
+  NativeRpc::writePending = Wh_GetIntValue(L"NativeWritePending", 0) != 0;
   Recovery candidate{};
   auto bytes = Wh_GetBinaryValue(L"Recovery", &candidate, sizeof(candidate));
   if (!bytes) {
@@ -1085,6 +1268,8 @@ void Load() {
   active = candidate.active != 0;
 }
 bool Clear() {
+  if (NativeWriteUncertain())
+    return false;
   Recovery empty;
   if (!Save(empty))
     return false;
@@ -1092,6 +1277,8 @@ bool Clear() {
   return true;
 }
 bool Restore() {
+  if (NativeWriteUncertain())
+    return false;
   if (recoveryInvalid || !ValidRecovery(recovery, Now()))
     return false;
   if (!Active())
@@ -1099,35 +1286,55 @@ bool Restore() {
   State current = Query();
   if (!current.valid)
     return false;
-  bool needed = false;
-  for (int i = 0; i < 2; i++) {
-    if (current.packs[i].present != recovery.prior[i].present)
-      return false;
-    if (recovery.prior[i].enabled && !current.packs[i].enabled)
-      needed = true;
-  }
-  if (!needed)
-    return Clear();
+  Recovery pending = recovery;
   if (IntegratedBackend()) {
-    for (int i = 0; i < 2; i++)
-      if (recovery.prior[i].enabled && !current.packs[i].enabled)
-        if (!RestorePack(i + 1, recovery.prior[i]))
-          return false;
+    for (int i = 0; i < 2; ++i) {
+      if (!pending.prior[i].enabled) {
+        pending.prior[i] = {};
+        continue;
+      }
+      if (!current.packs[i].present)
+        continue;
+      // Preserve newer enabled limits. Restore only packs still present and disabled.
+      if (!current.packs[i].enabled && !RestorePack(i + 1, pending.prior[i]))
+        continue;
+      pending.prior[i] = {};
+    }
   } else {
     State prior;
-    std::copy(std::begin(recovery.prior), std::end(recovery.prior), prior.packs);
-    Summarize(prior);
-    // The vendor CLI cannot select a battery. Never overwrite another battery's newer range.
-    if (prior.mixed || current.enabled) {
-      Status(
-          L"Individual battery restoration requires the integrated backend. Select it in Windhawk "
-          L"Settings or restore the limits in Vantage.");
-      return false;
+    for (int i = 0; i < 2; ++i) {
+      if (!pending.prior[i].enabled || (current.packs[i].present && current.packs[i].enabled))
+        pending.prior[i] = {};
+      if (current.packs[i].present && pending.prior[i].enabled)
+        prior.packs[i] = pending.prior[i];
     }
-    if (!Set({true, true, prior.start, prior.stop}))
-      return false;
+    Summarize(prior);
+    if (prior.valid) {
+      // The CLI writes every present pack. Do not touch a new pack or newer limits.
+      bool safe = !prior.mixed;
+      for (int i = 0; i < 2; ++i)
+        if (current.packs[i].present && !prior.packs[i].present)
+          safe = false;
+      if (!safe) {
+        Status(
+            L"Individual battery restoration requires the integrated backend. Select it in "
+            L"Windhawk Settings or restore the limits in Vantage.");
+        return false;
+      }
+      if (!Set({true, true, prior.start, prior.stop}))
+        return false;
+      for (int i = 0; i < 2; ++i)
+        if (prior.packs[i].present)
+          pending.prior[i] = {};
+    }
   }
-  return Clear();
+  if (!pending.prior[0].enabled && !pending.prior[1].enabled)
+    return Clear();
+  // Retain only unresolved packs. A failed save leaves the original recovery intact.
+  if (!Save(pending))
+    return false;
+  Status(L"Present batteries restored where possible. Recovery is saved for remaining batteries.");
+  return false;
 }
 void Full() {
   if (Active() || recoveryInvalid)
@@ -1281,6 +1488,8 @@ void LoadCalibration() {
     Status(L"Calibration recovery is invalid. Check charging limits in Lenovo Vantage.");
 }
 bool ThresholdWritesAllowed() {
+  if (NativeWriteUncertain())
+    return false;
   if (!IntegratedBackend())
     return !calibration.slot && !invalidCalibration;
   if (calibration.slot || invalidCalibration)
@@ -1289,7 +1498,12 @@ bool ThresholdWritesAllowed() {
   if (s.Connect(GetTickCount64() + 3000))
     return false;
   long b = 0, stage = 0, stages = 0;
-  return !NativeRpc::CalibrationState(s.context, &b, &stage, &stages) && b == 0 && stage == 0;
+  DWORD error = NativeRpc::CalibrationState(s.context, &b, &stage, &stages);
+  if (error == ERROR_NOT_SUPPORTED || error == ERROR_CALL_NOT_IMPLEMENTED ||
+      error == RPC_S_PROCNUM_OUT_OF_RANGE)
+    return true;
+  // An unavailable or malformed response is not evidence that calibration is idle.
+  return !error && b == 0 && stage == 0;
 }
 void RefreshAdvanced() {
   if (!IntegratedBackend()) {
@@ -1317,6 +1531,12 @@ void ApplyUsb(int value) {
                 : L"USB change was not confirmed. Refresh to check its current value.");
 }
 void CheckCalibration() {
+  if (NativeWriteUncertain()) {
+    Publish({},
+            L"A Lenovo write was not confirmed. Saved calibration limits are retained. "
+            L"Open Setup and diagnostics for recovery.");
+    return;
+  }
   if (!calibration.slot || invalidCalibration || !IntegratedBackend())
     return;
   auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
@@ -1459,24 +1679,17 @@ bool ApplySeparate(unsigned value) {
 // check and write one step across sessions. It holds no owner data: a holder that
 // crashes leaves it abandoned and the next session takes it over. Worker-owned.
 //
-// While the lock cannot be opened the mod does not write: no command, no restoration
-// and no calibration check runs. Running uncoordinated could let one session's clear
-// delete another session's newer request. Blocking has its own cost, which the UI
-// states: a saved full-charge request stays in force. The lock is retried every 30 s.
-// Bill's decision (0.9.10): after ten consecutive 30-second checks with the lock
-// unavailable, about five minutes, the mod continues without coordination, logs it
-// once and shows it in the UI, so restoration is not held up indefinitely by an
-// unopenable lock. A live holder (contention) never counts toward that: it is a
-// different condition and is never bypassed. The first successful open ends the
-// uncoordinated state and resets the count.
+// If the lock is unavailable, continue immediately without coordination. Persistent
+// contention also permits fallback after ten periodic checks, preventing a hostile
+// holder from blocking recovery indefinitely. A successful acquisition restores
+// coordination. Without it, concurrent sessions can overwrite one another's changes.
 HANDLE sharedLock = nullptr;
 DWORD sharedLockError = 0;                          // Last create/open failure. Worker-only.
 std::atomic<bool> sharedLockMissing = false;        // Read by the UI.
 std::atomic<bool> sharedLockUncoordinated = false;  // Read by the UI.
 std::atomic<bool> sharedLockAbandonedSeen = false;
 constexpr int uncoordinatedAfterChecks = 10;
-int lockUnavailableChecks =
-    0;  // Consecutive periodic checks with the lock unavailable. Worker-only.
+int lockContendedChecks = 0;  // Consecutive periodic checks blocked by a holder. Worker-only.
 bool OpenSharedLock() {
   if (sharedLock)
     return true;
@@ -1499,51 +1712,57 @@ bool OpenSharedLock() {
     if (!sharedLockMissing.exchange(true))
       Wh_Log(
           L"Cross-session lock unavailable (create %u, open %u); charging changes are "
-          L"paused until it can be opened",
+          L"continuing without coordination",
           unsigned(createError), unsigned(sharedLockError));
     return false;
   }
   if (sharedLockMissing.exchange(false))
     Wh_Log(L"Cross-session lock available again");
-  if (sharedLockUncoordinated.exchange(false))
-    Wh_Log(L"Cross-session coordination resumed");
-  lockUnavailableChecks = 0;
   return true;
 }
-// Called by the worker after each periodic check. Only consecutive unavailable checks
-// count; any other outcome means the lock exists, and OpenSharedLock reset the count.
+// Only periodic contention counts. Ordinary commands do not accelerate fallback.
 void NotePeriodicCheck(LockOutcome outcome) {
-  if (outcome != LockOutcome::Unavailable)
-    return;
-  if (++lockUnavailableChecks == uncoordinatedAfterChecks &&
-      !sharedLockUncoordinated.exchange(true))
-    Wh_Log(
-        L"Cross-session lock unavailable for %d consecutive checks (error %u); continuing "
-        L"without coordination until it can be opened",
-        uncoordinatedAfterChecks, unsigned(sharedLockError));
+  if (outcome == LockOutcome::Contended) {
+    if (++lockContendedChecks >= uncoordinatedAfterChecks &&
+        !sharedLockUncoordinated.exchange(true))
+      Wh_Log(L"Cross-session lock persistently held; continuing without coordination");
+  } else if (outcome != LockOutcome::Uncoordinated) {
+    lockContendedChecks = 0;
+  }
+}
+LockOutcome UncoordinatedRecords() {
+  if (!sharedLockUncoordinated.exchange(true))
+    Wh_Log(L"Continuing without cross-session coordination");
+  Load();
+  AdvancedControls::LoadCalibration();
+  return LockOutcome::Uncoordinated;
 }
 // Acquired outcomes mean the caller holds the lock and both records are freshly read.
 // Uncoordinated means no lock is held but the policy above allows acting, with both
 // records freshly read. With `stoppable`, unload ends the wait early.
 LockOutcome LockSharedRecords(DWORD wait, bool stoppable) {
+  if (stoppable && stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)
+    return LockOutcome::Shutdown;
   if (!OpenSharedLock()) {
-    if (!sharedLockUncoordinated)
-      return LockOutcome::Unavailable;
-    Load();
-    AdvancedControls::LoadCalibration();
-    return LockOutcome::Uncoordinated;
+    lockContendedChecks = 0;
+    return UncoordinatedRecords();
   }
   HANDLE events[] = {sharedLock, stopEvent};
-  DWORD result = WaitForMultipleObjects(stoppable && stopEvent ? 2 : 1, events, FALSE, wait);
+  DWORD result = WaitForMultipleObjects(stoppable && stopEvent ? 2 : 1, events, FALSE,
+                                        sharedLockUncoordinated ? 0 : wait);
   if (result == WAIT_OBJECT_0 + 1)
     return LockOutcome::Shutdown;
   if (result == WAIT_TIMEOUT)
-    return LockOutcome::Contended;
+    return sharedLockUncoordinated ? UncoordinatedRecords() : LockOutcome::Contended;
   if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED_0) {
     sharedLockError = GetLastError();
     Wh_Log(L"Cross-session lock wait failed (%u)", unsigned(sharedLockError));
-    return LockOutcome::Unavailable;
+    lockContendedChecks = 0;
+    return UncoordinatedRecords();
   }
+  lockContendedChecks = 0;
+  if (sharedLockUncoordinated.exchange(false))
+    Wh_Log(L"Cross-session coordination resumed");
   if (result == WAIT_ABANDONED_0 && !sharedLockAbandonedSeen.exchange(true))
     Wh_Log(L"Cross-session lock was abandoned by another session; records reread");
   Load();
@@ -1604,6 +1823,22 @@ void Dispatch(int action, int values) {
     return;
   }
 
+  if (action == 25) {
+    auto state = Query();
+    if (state.valid && Wh_SetIntValue(L"NativeWritePending", 0)) {
+      NativeRpc::writePending = false;
+      Status(L"Unconfirmed-write warning cleared. Saved recovery will be checked again.");
+    } else
+      Status(L"Lenovo communication or recovery storage is unavailable. Nothing cleared.");
+    Refresh();
+    return;
+  }
+  if (NativeWriteUncertain() && action != 0 && action != 20 && action != 4) {
+    Status(
+        L"A Lenovo write was not confirmed. Restart Windows, then open Setup and "
+        L"diagnostics to review recovery before making more changes.");
+    return;
+  }
   if (action >= 20 && action <= 24) {
     if (action == 20)
       AdvancedControls::RefreshAdvanced();
@@ -1682,9 +1917,7 @@ void Refused(LockOutcome outcome, int action) {
   if (outcome == LockOutcome::Unavailable)
     Status((L"Nothing was changed. Charging changes are paused because this mod cannot "
             L"coordinate with other signed-in sessions (lock error " +
-            std::to_wstring(sharedLockError) +
-            L"). Saved recovery is kept and the lock is retried every 30 seconds; after ten "
-            L"failed checks the mod continues without coordination.")
+            std::to_wstring(sharedLockError) + L"). Saved recovery is kept.")
                .c_str());
   else if (outcome == LockOutcome::Shutdown)
     Status(L"Nothing was changed. The mod is unloading.");
@@ -1700,6 +1933,11 @@ void Refused(LockOutcome outcome, int action) {
   Refresh();
 }
 DWORD WINAPI Thread(void*) noexcept {
+  NativeRpc::cancellationEvent = stopEvent;
+  NativeRpc::shutdownBudget = &shutdownDeadline;
+  NativeRpc::persistWritePending = [](bool pending) {
+    return Wh_SetIntValue(L"NativeWritePending", pending ? 1 : 0) != FALSE;
+  };
   try {
     // Only the actual shell process owns charging/recovery, even at shell startup.
     for (;;) {
@@ -1720,7 +1958,7 @@ DWORD WINAPI Thread(void*) noexcept {
     if (recoveryInvalid)
       Status(L"Recovery data invalid. Apply your desired limits manually.");
     if (!OpenSharedLock())
-      Status((L"Charging changes are paused: the cross-session lock could not be opened (error " +
+      Status((L"Cross-session lock could not be opened; continuing without coordination (error " +
               std::to_wstring(sharedLockError) + L"). Saved recovery is kept.")
                  .c_str());
     ULONGLONG checkAt = 0;
@@ -1784,16 +2022,9 @@ DWORD WINAPI Thread(void*) noexcept {
       DWORD delay = DWORD(checkAt > now ? checkAt - now : 0);
 
       HANDLE events[] = {stopEvent, wakeEvent};
-      DWORD result = MsgWaitForMultipleObjects(2, events, FALSE, delay, QS_ALLINPUT);
+      DWORD result = WaitForMultipleObjects(2, events, FALSE, delay);
       if (result == WAIT_OBJECT_0)
         break;
-      if (result == WAIT_OBJECT_0 + 2) {
-        MSG msg;
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-          TranslateMessage(&msg);
-          DispatchMessageW(&msg);
-        }
-      }
     }
     ULONGLONG empty = 0;
     shutdownDeadline.compare_exchange_strong(empty, GetTickCount64() + 4000);
@@ -1813,14 +2044,6 @@ DWORD WINAPI Thread(void*) noexcept {
 
 // Taskbar XAML access helpers adapted from Taskbar tray system icon tweaks.
 // Copyright (c) Michael Maltsev (m417z), MIT; see THIRD-PARTY-NOTICES.txt.
-// Windhawk 1.6.1 puts WINAPI after a lambda parameter list. With MS extensions
-// that expands to syntax Clang rejects. On our 64-bit targets WINAPI does not
-// select a different calling convention; scope this compatibility fix to the header.
-#pragma push_macro("WINAPI")
-#undef WINAPI
-#define WINAPI
-#include <windhawk_utils.h>
-#pragma pop_macro("WINAPI")
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
@@ -3244,10 +3467,18 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
              L"verified.",
              12));
   } else {
-    body.Children().Append(Text(L"Battery-gauge reset", 17));
+    body.Children().Append(Text(L"Experimental features", 17));
+    body.Children().Append(Text(L"Simulated tests pass; real hardware validation is still needed.", 12));
+    if (a.batteries[0].present && a.batteries[1].present) {
+      button(L"Independent battery limits...", [target](auto const&, auto const&) {
+        QueuePanel(target, 0);
+      });
+    }
+    body.Children().Append(Text(L"Battery calibration", 17));
     body.Children().Append(
         Text(L"Recalibrate an inaccurate charge estimate. This does not restore worn battery "
-             L"capacity. A full discharge and recharge can take several hours.",
+             L"capacity. A complete hardware cycle has not been tested. Discharge and recharge "
+             L"can take several hours.",
              12));
     if (!b.resetCapable || !a.resetKnown) {
       body.Children().Append(Text(L"Calibration is not available for this battery."));
@@ -3284,7 +3515,8 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
       button(L"Review and start...", [body, target, slot = advancedBattery + 1](auto const&,
                                                                                 auto const&) {
         body.Children().Clear();
-        body.Children().Append(Text(L"Calibrate Battery " + std::to_wstring(slot) + L"?", 18));
+        body.Children().Append(
+            Text(L"Experimental: calibrate Battery " + std::to_wstring(slot) + L"?", 18));
         body.Children().Append(Text(
             L"Save your work and leave the laptop plugged in for several hours. Lenovo controls "
             L"the discharge and recharge cycle. Charging edits are blocked while it runs.",
@@ -3365,7 +3597,7 @@ void ShowAdvanced(FrameworkElement target) {
   tabs.Orientation(C::Orientation::Horizontal);
   tabs.Spacing(6);
   int index = 0;
-  std::vector<PCWSTR> labels = {L"Battery health", L"Power", L"Calibration"};
+  std::vector<PCWSTR> labels = {L"Battery health", L"Power", L"Experimental"};
   if (advancedTab >= int(labels.size()))
     advancedTab = 0;
   for (auto label : labels) {
@@ -3442,18 +3674,8 @@ void ApplyInPlace(C::Button button, C::TextBlock feedback, int action, int value
         auto result = BatteryControls::ReadApplyResult();
         if (result.revision != revision) {
           auto state = BatteryControls::ReadSnapshot().state;
-          bool confirmed = result.succeeded && state.valid;
-          for (int i = 0; i < 2; ++i) {
-            auto p = state.packs[i];
-            if (!p.present)
-              continue;
-            unsigned range =
-                action == 34 ? (unsigned(values) >> (i * 16)) & 0xffff : unsigned(values);
-            bool enabled = action == 31 || (action == 34 && range);
-            confirmed =
-                confirmed && bool(p.enabled) == enabled &&
-                (!enabled || (p.start == int(range & 255) && p.stop == int((range >> 8) & 255)));
-          }
+          bool confirmed = result.succeeded &&
+                           BatteryControls::AppliedStateMatches(state, action, unsigned(values));
           if (confirmed && baseline)
             *baseline = submittedDraft;
           feedback.Text(result.message);
@@ -3489,8 +3711,9 @@ void ShowDualPanel(FrameworkElement target) {
   C::StackPanel content;
   content.Width(390);
   content.Spacing(12);
-  content.Children().Append(Text(L"Battery protection", 22));
-  content.Children().Append(Text(L"Choose each battery's range. Apply saves both.", 12));
+  content.Children().Append(Text(L"Experimental battery limits", 22));
+  content.Children().Append(Text(
+      L"Experimental: two-battery changes have mock tests only. Apply saves both ranges.", 12));
   if (!BatteryControls::IntegratedBackend()) {
     content.Children().Append(
         Text(L"Separate battery ranges require Integrated Lenovo service. Select it in Windhawk "
@@ -4021,21 +4244,37 @@ void ShowSetup(FrameworkElement target) {
   status.Children().Append(
       Text(integrated ? L"Backend: integrated Lenovo service. No utility download is needed."
                       : L"Backend: Lenovo ChargeThreshold.exe."));
+  if (BatteryControls::NativeWriteUncertain()) {
+    status.Children().Append(Text(
+        L"A Lenovo write was not confirmed and may have completed after cancellation. "
+        L"Further writes and recovery are paused. Restart Windows first to end outstanding "
+        L"service calls, then review the current battery state here. Saved limits are retained.",
+        12));
+    C::CheckBox acknowledged;
+    acknowledged.Content(winrt::box_value(L"I restarted Windows after this warning."));
+    status.Children().Append(acknowledged);
+    C::Button resume;
+    resume.Content(winrt::box_value(L"Recheck and resume recovery"));
+    resume.IsEnabled(false);
+    TrackEvent(acknowledged.Checked(winrt::auto_revoke, SafeUi([resume](auto const&, auto const&) {
+                                      resume.IsEnabled(true);
+                                    })));
+    TrackEvent(acknowledged.Unchecked(
+        winrt::auto_revoke,
+        SafeUi([resume](auto const&, auto const&) { resume.IsEnabled(false); })));
+    TrackEvent(resume.Click(winrt::auto_revoke, SafeUi([resume](auto const&, auto const&) {
+                              resume.IsEnabled(false);
+                              Send(25);
+                            })));
+    status.Children().Append(resume);
+  }
   if (BatteryControls::sharedLockUncoordinated)
     status.Children().Append(
         Text(L"Charging changes are not coordinated with other signed-in sessions. The "
-             L"machine-wide lock this mod uses for that has been unavailable for ten checks in a "
-             L"row, so it continues without it: commands and restoration work, but if another "
+             L"machine-wide lock is unavailable or has blocked ten consecutive checks. "
+             L"Commands and restoration continue, but if another "
              L"signed-in user changes charging at the same moment, one change can undo the "
              L"other. The lock is still retried every 30 seconds."));
-  else if (BatteryControls::sharedLockMissing)
-    status.Children().Append(
-        Text(L"Charging changes are paused. This mod coordinates its saved records with other "
-             L"signed-in sessions through a machine-wide lock, and that lock cannot be opened "
-             L"right now. Readings still refresh. Nothing is written until the lock is available "
-             L"again; it is retried every 30 seconds, and after ten failed checks the mod "
-             L"continues without coordination. A saved full-charge request stays in force "
-             L"meanwhile. To change limits sooner, use Lenovo Vantage."));
   status.Children().Append(
       Text(L"Choose the charging backend in this mod's Windhawk Settings.", 12));
   if (!integrated) {
@@ -4750,7 +4989,8 @@ void Wh_ModBeforeUninit() {
   shutdownDeadline = GetTickCount64() + 4000;
   if (stopEvent)
     SetEvent(stopEvent);
-  // Every worker path is bounded by shutdownDeadline and the 1 s RPC timeout.
+  // The stop event cancels an active async RPC. Recovery calls use the remaining
+  // shutdown budget. Completion is consumed before worker state is released.
   // Returning with a live worker would be unsafe, so a slow one is only logged.
   if (threadHandle && WaitForSingleObject(threadHandle, 8000) == WAIT_TIMEOUT) {
     Wh_Log(L"Battery worker still stopping after 8 s; waiting for it");
