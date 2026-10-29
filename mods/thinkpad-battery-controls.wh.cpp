@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.13
+// @version 0.9.14
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -94,15 +94,20 @@ run, limits may remain off and charging can continue to 100% until the mod runs
 again or you set limits in Vantage. Removing the mod also removes its Windhawk
 recovery data. Restore protection before removal.
 
-If a write cannot be confirmed, further changes and recovery pause to avoid racing
-a command still running in Lenovo's service. Saved limits are retained. Restart
+If an initiated write is cancelled before completion, or its utility process is
+terminated while running, further changes and recovery pause to avoid racing
+a command still running in Lenovo's service. Ordinary launch failures and completed
+errors do not trigger this warning. The menu header links the paused state to setup. Saved limits are retained. Restart
 Windows, then use Setup and diagnostics to acknowledge the restart and resume
 recovery. This applies to both backends; cancelling a client cannot undo a server write.
 
 ## Advanced controls
 Battery health shows supported readings. Power offers the verified three-state USB
 control. Always-on USB settings persist after disabling or removing the mod.
-Advanced > Experimental groups calibration and independent two-battery limits. Both have simulated test coverage, but independent ranges have not been tested on a two-battery laptop and calibration has not completed a real hardware cycle. It requires a separate confirmation and connected power; it saves
+Advanced > Experimental groups calibration and independent two-battery limits.
+Both have simulated coverage, not complete physical validation. Set charge threshold
+applies one range to both batteries; separate ranges are available only through
+Experimental. Calibration requires a separate confirmation and connected power; it saves
 current limits and blocks charging edits while running. Cancellation also requires
 confirmation. Removing the mod during calibration loses saved recovery: check its
 state and charging limits in Vantage. Cooling and airplane controls remain omitted
@@ -251,6 +256,18 @@ bool ValidRecovery(const Recovery& r, ULONGLONG) {
     return false;
   return !r.active || ((r.prior[0].enabled || r.prior[1].enabled) && r.deadline > 0 &&
                        r.deadline <= 0x7fffffffffffffffULL);
+}
+bool WaitingForMissingBattery(const Recovery& saved, const State& current) {
+  if (!saved.active || !current.valid)
+    return false;
+  bool missing = false;
+  for (int i = 0; i < 2; ++i)
+    if (saved.prior[i].enabled) {
+      missing |= !current.packs[i].present;
+      if (current.packs[i].present && !current.packs[i].enabled)
+        return false;
+    }
+  return missing;
 }
 bool RecoveryDue(const Recovery& r, ULONGLONG now) {
   return r.active && (now >= r.deadline || r.deadline - now > 8 * 3600 + 300);
@@ -427,7 +444,9 @@ bool LockUtility(const std::wstring& path, Handle& file, std::vector<HANDLE>& di
                                     0xEE, 0x0A, 0x9A, 0x9C, 0xE5, 0xEE, 0x83, 0x80};
   return ok && memcmp(digest, expected, 32) == 0;
 }
-bool Run(const std::wstring& args, std::string& output) {
+bool Run(const std::wstring& args, std::string& output, bool* interrupted = nullptr) {
+  if (interrupted)
+    *interrupted = false;
   auto shutdown = shutdownDeadline.load();
   if ((shutdown && GetTickCount64() >= shutdown) ||
       (!shutdown && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0))
@@ -533,6 +552,8 @@ bool Run(const std::wstring& args, std::string& output) {
       Sleep(20);
   }
   if (!done) {
+    if (interrupted && WaitForSingleObject(process, 0) != WAIT_OBJECT_0)
+      *interrupted = true;
     TerminateJobObject(job, 1);
     WaitForSingleObject(process, 1000);
   }
@@ -784,7 +805,7 @@ const MIDL_STUB_DESC stub = {const_cast<RPC_CLIENT_INTERFACE*>(&client),
                              nullptr,
                              nullptr};
 // Async state, event and out-parameters live until completion is consumed.
-std::atomic<bool> writePending = false;
+std::atomic<bool> writePending = false, unpersistedWrite = false;
 bool (*persistWritePending)(bool) = nullptr;
 HANDLE cancellationEvent = nullptr;
 std::atomic<ULONGLONG>* shutdownBudget = nullptr;
@@ -802,15 +823,17 @@ template <typename... Args>
 DWORD Call(const unsigned char* proc, Args... args) noexcept {
   ULONGLONG now = GetTickCount64();
   ULONGLONG shutdown = shutdownBudget ? shutdownBudget->load() : 0;
-  ULONGLONG deadline = now + 1000;
+  bool writes = proc == procSetThreshold || proc == procSetUsb || proc == procStartReset ||
+                proc == procStopReset;
+  ULONGLONG deadline = now + (writes ? 5000 : 1000);
   if (operationDeadline && operationDeadline < deadline)
     deadline = operationDeadline;
   if (shutdown && shutdown < deadline)
     deadline = shutdown;
   if (deadline <= now)
     return ERROR_TIMEOUT;
-  // Recovery calls during unload use its remaining budget. In-flight calls
-  // started before unload are interrupted immediately by the stop event.
+  // Reads cancel promptly on unload. An in-flight write gets the remaining
+  // shutdown budget to finish before cancellation makes its result uncertain.
   HANDLE stop = shutdown ? nullptr : cancellationEvent;
   if (stop && WaitForSingleObject(stop, 0) == WAIT_OBJECT_0)
     return RPC_S_CALL_CANCELLED;
@@ -822,36 +845,41 @@ DWORD Call(const unsigned char* proc, Args... args) noexcept {
   if (!error) {
     state.NotificationType = RpcNotificationTypeEvent;
     state.u.hEvent = done;
-    bool writes = proc == procSetThreshold || proc == procSetUsb || proc == procStartReset ||
-                  proc == procStopReset;
     if (writes && writePending)
       error = ERROR_BUSY;
-    if (!error && writes) {
-      if (persistWritePending && !persistWritePending(true))
-        error = ERROR_WRITE_FAULT;
-      else
-        writePending = true;
-    }
     if (!error)
       error = BeginAsync(&state, proc, args...);
     if (!error) {
-      HANDLE events[] = {done, stop};
-      now = GetTickCount64();
-      DWORD wait = WaitForMultipleObjects(stop ? 2 : 1, events, FALSE,
-                                          DWORD(deadline > now ? deadline - now : 0));
+      DWORD wait = WAIT_TIMEOUT;
+      for (;;) {
+        now = GetTickCount64();
+        shutdown = shutdownBudget ? shutdownBudget->load() : 0;
+        auto end = shutdown ? (std::min)(deadline, shutdown) : deadline;
+        HANDLE events[] = {done, stop};
+        wait =
+            WaitForMultipleObjects(stop ? 2 : 1, events, FALSE, DWORD(end > now ? end - now : 0));
+        if (writes && stop && wait == WAIT_OBJECT_0 + 1 && shutdownBudget &&
+            shutdownBudget->load() > GetTickCount64()) {
+          stop = nullptr;
+          continue;
+        }
+        break;
+      }
       if (wait != WAIT_OBJECT_0) {
-        // Cancellation is issued only after successful async initiation. It
-        // releases the client, but cannot undo a write received by the server.
+        // Only an initiated call whose completion was not observed is uncertain.
+        // Persist before aborting; the service may still execute the write.
+        if (writes) {
+          writePending = true;
+          if (persistWritePending && !persistWritePending(true)) {
+            unpersistedWrite = true;
+            Wh_Log(
+                L"Unable to persist unconfirmed Lenovo write; recovery is paused in this process");
+          }
+        }
         RpcAsyncCancelCall(&state, TRUE);
         WaitForSingleObject(done, INFINITE);
       }
       error = RpcAsyncCompleteCall(&state, nullptr);
-      if (!error && writes) {
-        if (persistWritePending && !persistWritePending(false))
-          error = ERROR_WRITE_FAULT;
-        else
-          writePending = false;
-      }
     }
   }
   CloseHandle(done);
@@ -1154,17 +1182,16 @@ bool RunSelected(bool integrated,
                  State* state = nullptr) {
   if (!integrated) {
     bool writes = args != L"status";
-    if (writes) {
-      if (NativeRpc::writePending ||
-          (NativeRpc::persistWritePending && !NativeRpc::persistWritePending(true)))
-        return false;
+    if (writes && NativeRpc::writePending)
+      return false;
+    bool interrupted = false;
+    bool ok = Run(args, output, &interrupted);
+    if (writes && interrupted) {
       NativeRpc::writePending = true;
-    }
-    bool ok = Run(args, output);
-    if (ok && writes) {
-      if (NativeRpc::persistWritePending && !NativeRpc::persistWritePending(false))
-        return false;
-      NativeRpc::writePending = false;
+      if (NativeRpc::persistWritePending && !NativeRpc::persistWritePending(true)) {
+        NativeRpc::unpersistedWrite = true;
+        Wh_Log(L"Unable to persist interrupted utility write; recovery is paused in this process");
+      }
     }
     return ok;
   }
@@ -1248,7 +1275,8 @@ bool Save(const Recovery& value) {
 // Also called again before each recovery decision: every signed-in user's Explorer
 // shares this record, so another session may have saved or cleared it.
 void Load() {
-  NativeRpc::writePending = Wh_GetIntValue(L"NativeWritePending", 0) != 0;
+  NativeRpc::writePending =
+      NativeRpc::unpersistedWrite || Wh_GetIntValue(L"NativeWritePending", 0) != 0;
   Recovery candidate{};
   auto bytes = Wh_GetBinaryValue(L"Recovery", &candidate, sizeof(candidate));
   if (!bytes) {
@@ -1276,7 +1304,10 @@ bool Clear() {
   recoveryInvalid = false;
   return true;
 }
+bool restoreDeferred = false;
+std::atomic<bool> restorationPending = false;
 bool Restore() {
+  restoreDeferred = false;
   if (NativeWriteUncertain())
     return false;
   if (recoveryInvalid || !ValidRecovery(recovery, Now()))
@@ -1333,6 +1364,7 @@ bool Restore() {
   // Retain only unresolved packs. A failed save leaves the original recovery intact.
   if (!Save(pending))
     return false;
+  restoreDeferred = true;
   Status(L"Present batteries restored where possible. Recovery is saved for remaining batteries.");
   return false;
 }
@@ -1422,6 +1454,7 @@ void RestoreRememberedRanges(State& state, const RememberedRanges& remembered) {
 }
 void Refresh() {
   State state = Query();
+  restorationPending = WaitingForMissingBattery(recovery, state);
   // Firmware can return zeroes when disabled. Remember ranges independently
   // without claiming that disabled limits are active or writing to hardware.
   if (state.valid && state.enabled)
@@ -1826,6 +1859,7 @@ void Dispatch(int action, int values) {
   if (action == 25) {
     auto state = Query();
     if (state.valid && Wh_SetIntValue(L"NativeWritePending", 0)) {
+      NativeRpc::unpersistedWrite = false;
       NativeRpc::writePending = false;
       Status(L"Unconfirmed-write warning cleared. Saved recovery will be checked again.");
     } else
@@ -1867,9 +1901,10 @@ void Dispatch(int action, int values) {
   if (action == 1)
     Full();
   else if (action == 2) {
-    if (!Restore())
-      Error();
-    else
+    if (!Restore()) {
+      if (!restoreDeferred)
+        Error();
+    } else
       Status(L"Battery protection restored.");
   } else if (action == 5) {
     int start = LOWORD(values), stop = HIWORD(values);
@@ -1914,12 +1949,7 @@ bool Submit(int action, int values = 0) noexcept {
 }
 // The lock was not held, so nothing was written. Say why, and finish a pending Apply.
 void Refused(LockOutcome outcome, int action) {
-  if (outcome == LockOutcome::Unavailable)
-    Status((L"Nothing was changed. Charging changes are paused because this mod cannot "
-            L"coordinate with other signed-in sessions (lock error " +
-            std::to_wstring(sharedLockError) + L"). Saved recovery is kept.")
-               .c_str());
-  else if (outcome == LockOutcome::Shutdown)
+  if (outcome == LockOutcome::Shutdown)
     Status(L"Nothing was changed. The mod is unloading.");
   else
     Status(L"Another signed-in user is changing battery settings. Try again in a moment.");
@@ -1980,16 +2010,14 @@ DWORD WINAPI Thread(void*) noexcept {
           SYSTEM_POWER_STATUS power{};
           if (Active() && ((GetSystemPowerStatus(&power) && power.BatteryLifePercent == 100) ||
                            RecoveryDue(recovery, Now()))) {
-            if (!Restore())
+            if (!Restore() && !restoreDeferred)
               Error();
             Refresh();
           }
         } else if (records.outcome != lastCheck && records.outcome != LockOutcome::Shutdown) {
           // Log transitions only. The lock itself is retried by every attempt.
           Wh_Log(L"Periodic recovery check skipped: %s%s",
-                 records.outcome == LockOutcome::Unavailable
-                     ? L"cross-session lock unavailable"
-                     : L"another session holds the cross-session lock",
+                 L"another session holds the cross-session lock",
                  Active() ? L"; a saved full-charge request stays in force until it returns" : L"");
         }
         lastCheck = records.outcome;
@@ -2544,7 +2572,7 @@ enum class Navigation { Leave, ConfirmDiscard, WaitForApply };
 Navigation DecideNavigation(int view) {
   if (BatteryControls::applyPending)
     return Navigation::WaitForApply;
-  if (HasUnsavedDraft() || (view != 0 && suspendedThresholdDirty))
+  if (HasUnsavedDraft() || (view != 0 && view != 5 && suspendedThresholdDirty))
     return Navigation::ConfirmDiscard;
   return Navigation::Leave;
 }
@@ -2686,8 +2714,8 @@ void SetPanelContent(C::ScrollViewer scroll,
   navigation.HorizontalAlignment(HorizontalAlignment::Right);
   C::Button back, close;
   // Use a text arrow, keeping the button label in the normal UI font.
-  back.Content(
-      winrt::box_value(returnView == 0 ? L"\u2190  Charge thresholds" : L"\u2190  Battery menu"));
+  back.Content(winrt::box_value((returnView == 0 || returnView == 5) ? L"\u2190  Charge thresholds"
+                                                                     : L"\u2190  Battery menu"));
   back.HorizontalAlignment(HorizontalAlignment::Left);
   close.Content(winrt::box_value(L"\u00d7"));
   close.HorizontalAlignment(HorizontalAlignment::Right);
@@ -2774,7 +2802,7 @@ void SetPanelContent(C::ScrollViewer scroll,
   shell.Children().Append(confirmation);
   auto destination = std::make_shared<int>(-2);
   auto leave = [target](int view) {
-    if (view != 0)
+    if (view != 0 && view != 5)
       DiscardDrafts();
     if (view == -2)
       Close();
@@ -3468,11 +3496,11 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
              12));
   } else {
     body.Children().Append(Text(L"Experimental features", 17));
-    body.Children().Append(Text(L"Simulated tests pass; real hardware validation is still needed.", 12));
+    body.Children().Append(
+        Text(L"Simulated tests pass; real hardware validation is still needed.", 12));
     if (a.batteries[0].present && a.batteries[1].present) {
-      button(L"Independent battery limits...", [target](auto const&, auto const&) {
-        QueuePanel(target, 0);
-      });
+      button(L"Independent battery limits...",
+             [target](auto const&, auto const&) { QueuePanel(target, 6); });
     }
     body.Children().Append(Text(L"Battery calibration", 17));
     body.Children().Append(
@@ -3854,7 +3882,7 @@ void ShowDualPanel(FrameworkElement target) {
   manage.Content(winrt::box_value(L"Manage presets..."));
   TrackEvent(manage.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
                             suspendedThresholdDirty = HasUnsavedDraft();
-                            presetReturnView = 0;
+                            presetReturnView = 5;
                             QueuePanel(target, 2);
                           })));
   content.Children().Append(manage);
@@ -3865,7 +3893,7 @@ void ShowDualPanel(FrameworkElement target) {
                           auto p = dualDraft.packs[dualDraft.selected];
                           addPresetDraft = {true, bool(p.enabled), p.start, p.stop};
                           suspendedThresholdDirty = HasUnsavedDraft();
-                          presetReturnView = 0;
+                          presetReturnView = 5;
                           QueuePanel(target, 2);
                         })));
   content.Children().Append(save);
@@ -3894,11 +3922,6 @@ void ShowDualPanel(FrameworkElement target) {
 }
 
 void ShowPanel(FrameworkElement target) {
-  auto dualState = BatteryControls::ReadSnapshot().state;
-  if (dualState.packs[0].present && dualState.packs[1].present) {
-    ShowDualPanel(target);
-    return;
-  }
   if (unloading || !target || !target.XamlRoot())
     return;
   Close();
@@ -4268,7 +4291,7 @@ void ShowSetup(FrameworkElement target) {
                             })));
     status.Children().Append(resume);
   }
-  if (BatteryControls::sharedLockUncoordinated)
+  if (BatteryControls::sharedLockUncoordinated || BatteryControls::sharedLockMissing)
     status.Children().Append(
         Text(L"Charging changes are not coordinated with other signed-in sessions. The "
              L"machine-wide lock is unavailable or has blocked ten consecutive checks. "
@@ -4394,7 +4417,15 @@ void QueuePanel(FrameworkElement target, int view) {
       ShowMenu(target);
     else if (view == 4)
       ShowAdvanced(target);
-    else if (view == 2)
+    else if (view == 5 || view == 6) {
+      if (view == 6)
+        dualDraft.valid = false;
+      auto state = BatteryControls::ReadSnapshot().state;
+      if (state.packs[0].present && state.packs[1].present)
+        ShowDualPanel(target);
+      else
+        ShowPanel(target);
+    } else if (view == 2)
       ShowPresetEditor(target);
     else if (view == 1)
       ShowSetup(target);
@@ -4443,16 +4474,17 @@ void ShowMenu(FrameworkElement target) {
     return item;
   };
   std::wstring status =
-      active                                        ? L"Charge to 100% (temporary)"
+      BatteryControls::restorationPending           ? L"Battery recovery pending"
+      : active                                      ? L"Charge to 100% (temporary)"
       : !valid                                      ? L"Charging status unavailable"
       : BatteryControls::ReadSnapshot().state.mixed ? L"Different battery limits"
       : enabled ? L"Charge: " + std::to_wstring(BatteryControls::ReadSnapshot().state.start) +
                       L" to " + std::to_wstring(BatteryControls::ReadSnapshot().state.stop) + L"%"
                 : L"Charge to 100% (limits off)";
-  if (BatteryControls::sharedLockUncoordinated)
+  if (BatteryControls::sharedLockUncoordinated || BatteryControls::sharedLockMissing)
     status += L" (not coordinated)";
-  else if (BatteryControls::sharedLockMissing)
-    status += L" (changes paused)";
+  if (BatteryControls::NativeWriteUncertain())
+    status += L" (changes paused: open setup)";
   C::MenuFlyoutItem header;
   header.Text(status);
   header.FontSize(12);
@@ -4537,17 +4569,18 @@ void ShowMenu(FrameworkElement target) {
     auto snap = BatteryControls::ReadSnapshot();
     bool waiting = BatteryControls::refreshing, valid = snap.state.valid && !waiting,
          active = BatteryControls::Active();
-    std::wstring text = waiting              ? L"Checking charging..."
-                        : active             ? L"Charge to 100% (temporary)"
-                        : !valid             ? L"Charging status unavailable"
-                        : snap.state.mixed   ? L"Different battery limits"
+    std::wstring text = waiting                               ? L"Checking charging..."
+                        : BatteryControls::restorationPending ? L"Battery recovery pending"
+                        : active                              ? L"Charge to 100% (temporary)"
+                        : !valid                              ? L"Charging status unavailable"
+                        : snap.state.mixed                    ? L"Different battery limits"
                         : snap.state.enabled ? L"Charge: " + std::to_wstring(snap.state.start) +
                                                    L" to " + std::to_wstring(snap.state.stop) + L"%"
                                              : L"Charge to 100% (limits off)";
-    if (BatteryControls::sharedLockUncoordinated)
+    if (BatteryControls::sharedLockUncoordinated || BatteryControls::sharedLockMissing)
       text += L" (not coordinated)";
-    else if (BatteryControls::sharedLockMissing)
-      text += L" (changes paused)";
+    if (BatteryControls::NativeWriteUncertain())
+      text += L" (changes paused: open setup)";
     header.Text(text);
     Automation::AutomationProperties::SetName(header, text + L". Open setup and diagnostics");
     full.Text(active ? L"Cancel charge to full" : fullLabel);
