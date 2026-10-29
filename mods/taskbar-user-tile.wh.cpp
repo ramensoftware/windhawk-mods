@@ -2,12 +2,12 @@
 // @id              taskbar-user-tile
 // @name            Taskbar User Tile
 // @description     Recreation of Early Windows 8 style User tile flyout 
-// @version         0.6.1
+// @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lgdi32 -lshell32 -lwtsapi32 -ladvapi32 -lsecur32 -lnetapi32 -lgdiplus -lcomctl32 -luxtheme -lole32 -lruntimeobject -luuid -lwindowsapp
+// @compilerOptions -luser32 -lgdi32 -lshell32 -lwtsapi32 -ladvapi32 -lsecur32 -lnetapi32 -lgdiplus -lcomctl32 -luxtheme -lole32 -lruntimeobject -luuid -lwindowsapp -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -30,6 +30,38 @@
 - enableHotkey: true
   $name: Enable keyboard shortcut
   $description: Toggle the flyout with Ctrl+Alt+U. Turn this off to open the flyout only from the taskbar button (and to free the key combination for other apps)
+- language: auto
+  $name: Language
+  $description: Language of the flyout text
+  $options:
+  - auto: Detect automatically
+  - en: English
+  - it: Italiano
+  - es: Español
+  - de: Deutsch
+  - fr: Français
+  - pt-BR: Português (Brasil)
+  - ru: Русский
+  - zh-CN: 简体中文
+  - ja: 日本語
+  - pl: Polski
+  - tr: Türkçe
+  - fa: فارسی
+- theme: auto
+  $name: Flyout theme
+  $description: Color theme of the flyout. Auto follows the Windows taskbar theme
+  $options:
+  - auto: Follow Windows (Auto)
+  - dark: Dark
+  - light: Light
+- borderColor: auto
+  $name: Flyout border
+  $description: Native uses the real window border drawn by Windows (accent color, shadow, rounded corners on Windows 11) like the system flyouts. The other options draw the border inside the flyout. Follow Windows uses the accent color only when "Show accent color on Start and taskbar" is turned on in Windows settings
+  $options:
+  - native: Native Windows border
+  - auto: Follow Windows (drawn border)
+  - accent: Always use the accent color (drawn border)
+  - neutral: Always neutral gray (drawn border)
 */
 // ==/WindhawkModSettings==
 
@@ -82,8 +114,10 @@ Usertile button does not appers when taskbar sized verticaly!
 #include <mutex>
 #include <commctrl.h>
 #include <uxtheme.h>
+#include <dwmapi.h>
 #include <vsstyle.h>
 #include <cstddef>
+#include <cwctype>
 using std::nullptr_t;
 #include <windhawk_utils.h>
 #include <cmath>
@@ -128,7 +162,7 @@ static LRESULT CALLBACK TileProc(HWND, UINT, WPARAM, LPARAM);
 
 static HWND g_flyout = nullptr;
 static HANDLE g_thread = nullptr, g_ready = nullptr;
-static HFONT g_font = nullptr;
+static HFONT g_font = nullptr, g_fontUnderline = nullptr;
 static ULONG_PTR g_gdip = 0;
 static std::unique_ptr<Gdiplus::Bitmap> g_picture;
 static std::wstring g_displayName;
@@ -143,6 +177,9 @@ static bool g_flyoutAnchorValid = false;
 #define HOTKEY_VK 'U'
 #define WM_SHOWFLYOUT (WM_APP + 1)
 #define WM_SHOWFLYOUT_AT (WM_APP + 2)
+#ifndef WM_DWMCOLORIZATIONCOLORCHANGED
+#define WM_DWMCOLORIZATIONCOLORCHANGED 0x0320
+#endif
 
 enum Action { ACT_NONE = -1, ACT_SETTINGS, ACT_LOOK, ACT_SWITCH,
               ACT_LOGOFF, ACT_LOCK, ACT_COUNT };
@@ -156,6 +193,84 @@ static const Item g_items[ACT_COUNT] = {
     {L"Log off",     {0, 158, W, 187}},
     {L"Lock PC",     {0, 187, W, H}},
 };
+enum Lang {
+    LANG_EN, LANG_IT, LANG_ES,
+    LANG_DE, LANG_FR, LANG_PT_BR, LANG_RU,
+    LANG_ZH_CN, LANG_JA, LANG_PL, LANG_TR, LANG_FA,
+    LANG_COUNT
+};
+static Lang g_lang = LANG_EN;
+
+// order: My Settings, My Look, Switch user, Log off, Lock PC
+static const wchar_t* kTexts[LANG_COUNT][ACT_COUNT] = {
+    { L"My Settings", L"My Look", L"Switch user", L"Log off", L"Lock PC" },
+    { L"Impostazioni", L"Aspetto", L"Cambia utente", L"Disconnetti", L"Blocca PC" },
+    { L"Mi configuración", L"Mi apariencia", L"Cambiar de usuario", L"Cerrar sesión", L"Bloquear PC" },
+    { L"Einstellungen", L"Aussehen", L"Benutzer wechseln", L"Abmelden", L"PC sperren" },
+    { L"Mes paramètres", L"Mon apparence", L"Changer d’utilisateur", L"Fermer la session", L"Verrouiller le PC" },
+    { L"Configurações", L"Aparência", L"Trocar usuário", L"Sair", L"Bloquear PC" },
+    { L"Параметры", L"Вид", L"Сменить пользователя", L"Выйти", L"Заблокировать ПК" },
+    { L"我的设置", L"我的外观", L"切换用户", L"注销", L"锁定电脑" },
+    { L"マイ設定", L"マイ外観", L"ユーザーの切り替え", L"サインアウト", L"PC をロック" },
+    { L"Ustawienia", L"Wygląd", L"Przełącz użytkownika", L"Wyloguj", L"Zablokuj komputer" },
+    { L"Ayarlar", L"Görünüm", L"Kullanıcı değiştir", L"Oturumu kapat", L"Bilgisayarı kilitle" },
+    { L"تنظیمات من", L"ظاهر من", L"تعویض کاربر", L"خروج از سیستم", L"قفل کردن رایانه" },
+};
+
+static const wchar_t* kUserFallback[LANG_COUNT] = {
+    L"User", L"Utente", L"Usuario", L"Benutzer", L"Utilisateur", L"Usuário",
+    L"Пользователь", L"用户", L"ユーザー", L"Użytkownik", L"Kullanıcı", L"کاربر"
+};
+
+static const wchar_t* kLangCodes[LANG_COUNT] = {
+    L"en", L"it", L"es", L"de", L"fr", L"pt-BR",
+    L"ru", L"zh-CN", L"ja", L"pl", L"tr", L"fa"
+};
+
+static int DetectSystemLanguage() {
+    //get default UI language
+    LANGID langid = GetUserDefaultUILanguage();
+    WORD primary = PRIMARYLANGID(langid);
+
+    switch (primary) {
+        case LANG_ENGLISH:    return LANG_EN;
+        case LANG_ITALIAN:    return LANG_IT;
+        case LANG_SPANISH:    return LANG_ES;
+        case LANG_GERMAN:     return LANG_DE;
+        case LANG_FRENCH:     return LANG_FR;
+        case LANG_PORTUGUESE: return LANG_PT_BR; 
+        case LANG_RUSSIAN:    return LANG_RU;
+        case LANG_CHINESE:    return LANG_ZH_CN; 
+        case LANG_JAPANESE:   return LANG_JA;
+        case LANG_POLISH:     return LANG_PL;
+        case LANG_TURKISH:    return LANG_TR;
+        case LANG_FARSI:      return LANG_FA;
+        default:              return LANG_EN;
+    }
+}
+
+static void LoadLanguageSetting() {
+    PCWSTR value = Wh_GetStringSetting(L"language");
+    if (value) {
+        if (wcscmp(value, L"auto") == 0) {
+            g_lang = (Lang)DetectSystemLanguage();
+        } else {
+            g_lang = LANG_EN;
+            for (int i = 0; i < LANG_COUNT; i++)
+                if (wcscmp(value, kLangCodes[i]) == 0) { g_lang = (Lang)i; break; }
+        }
+        Wh_FreeStringSetting(value);
+    }
+}
+static bool StartsWithRtl(const std::wstring& text) {
+    for (wchar_t c : text) {
+        if (c >= 0x0590 && c <= 0x08FF) return true;
+        if (c >= 0xFB1D && c <= 0xFDFF) return true;
+        if (c >= 0xFE70 && c <= 0xFEFF) return true;
+        if (iswalpha(c)) return false;
+    }
+    return false;
+}
 static int S(int value) { return MulDiv(value, g_dpi, 96); }
 static RECT Scaled(RECT r) { return {S(r.left), S(r.top), S(r.right), S(r.bottom)}; }
 static void Fill(HDC dc, RECT r, COLORREF c) {
@@ -182,7 +297,7 @@ static std::wstring AccountDisplayName() {
         }
         return login;
     }
-    return L"User";
+    return kUserFallback[g_lang];
 }
 static std::wstring CurrentSid() {
     HANDLE token = nullptr;
@@ -283,6 +398,11 @@ static void SetDpi(UINT dpi) {
     g_font = CreateFontW(-S(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    //same font with underline, used for the hovered "My Settings"/"My Look" links
+    if (g_fontUnderline) DeleteObject(g_fontUnderline);
+    g_fontUnderline = CreateFontW(-S(12), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 }
 static UINT MonitorDpi(HMONITOR monitor) {
     UINT x = 96, y = 96;
@@ -315,6 +435,132 @@ static int HitTest(int x, int y) {
     }
     return ACT_NONE;
 }
+struct Theme {
+    COLORREF bg, titleBar, titleText, pictureBg, separator,
+             hoverBg, link, linkHover;
+};
+static const Theme kDark = {
+    RGB(32, 32, 32), RGB(160, 160, 160), RGB(245, 245, 245), RGB(247, 247, 247),
+    RGB(60, 60, 60), RGB(50, 50, 50), RGB(110, 205, 235), RGB(255, 255, 255)
+};
+static const Theme kLight = {
+    RGB(255, 255, 255), RGB(130, 130, 130), RGB(0, 0, 0), RGB(247, 247, 247),
+    RGB(200, 200, 200), RGB(229, 241, 251), RGB(30, 100, 200), RGB(0, 60, 140)
+};
+static int g_themeSetting = 0;      // 0 = auto 1 = dark 2 = light
+static bool g_isLight = false;
+
+static bool WindowsUsesLightTheme() {
+    DWORD value = 0, size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS)
+        return true;
+    return value != 0;
+}
+static void UpdateTheme() {
+    g_isLight = g_themeSetting == 2 || (g_themeSetting == 0 && WindowsUsesLightTheme());
+}
+static const Theme& T() { return g_isLight ? kLight : kDark; }
+static void LoadThemeSetting() {
+    PCWSTR v = Wh_GetStringSetting(L"theme");
+    g_themeSetting = 0;
+    if (v) {
+        if (wcscmp(v, L"dark") == 0) g_themeSetting = 1;
+        else if (wcscmp(v, L"light") == 0) g_themeSetting = 2;
+        Wh_FreeStringSetting(v);
+    }
+    UpdateTheme();
+}
+static int g_borderSetting = 0;
+static bool g_accentBorder = false;
+static COLORREF g_accentColor = 0;
+
+static bool ReadUserDword(const wchar_t* key, const wchar_t* name, DWORD* out) {
+    DWORD size = sizeof(*out);
+    return RegGetValueW(HKEY_CURRENT_USER, key, name, RRF_RT_REG_DWORD,
+                        nullptr, out, &size) == ERROR_SUCCESS;
+}
+static void UpdateBorder() {
+    DWORD accent = 0;
+    bool haveAccent =
+        ReadUserDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+                      L"AccentColorMenu", &accent) ||
+        ReadUserDword(L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", &accent);
+    DWORD prevalence = 0;
+    ReadUserDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                  L"ColorPrevalence", &prevalence);
+    g_accentColor = accent & 0x00FFFFFF; 
+    g_accentBorder = haveAccent && (g_borderSetting == 1 || (g_borderSetting == 0 && prevalence != 0));
+}
+static void LoadBorderSetting() {
+    PCWSTR v = Wh_GetStringSetting(L"borderColor");
+    g_borderSetting = 0;
+    if (v) {
+        if (wcscmp(v, L"auto") == 0) g_borderSetting = 0;
+        else if (wcscmp(v, L"accent") == 0) g_borderSetting = 1;
+        else if (wcscmp(v, L"neutral") == 0) g_borderSetting = 2;
+        else if (wcscmp(v, L"native") == 0) g_borderSetting = 3;
+        Wh_FreeStringSetting(v);
+    }
+    UpdateBorder();
+}
+static bool g_nativeFrame = false;
+static constexpr int kNativeOffsetX = 6; 
+static constexpr int kNativeOffsetY = 6; 
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+static DWORD FlyoutStyle() { return WS_POPUP | (g_nativeFrame ? (WS_BORDER | WS_THICKFRAME) : 0); }
+static DWORD FlyoutExStyle() { return WS_EX_TOOLWINDOW | WS_EX_TOPMOST; }
+static void OuterSize(int* width, int* height) {
+    RECT r = {0, 0, S(W), S(H)};
+    if (g_nativeFrame) {
+        using Fn = BOOL (WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+        auto fn = reinterpret_cast<Fn>(GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                     "AdjustWindowRectExForDpi"));
+        if (fn) fn(&r, FlyoutStyle(), FALSE, FlyoutExStyle(), g_dpi);
+        else AdjustWindowRectEx(&r, FlyoutStyle(), FALSE, FlyoutExStyle());
+    }
+    *width = r.right - r.left; *height = r.bottom - r.top;
+}
+static void UpdateNativeFrameTheme(HWND hwnd) {
+    if (!g_nativeFrame || !hwnd) return;
+    BOOL dark = !g_isLight;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+static void ApplyNativeFrame(HWND hwnd) {
+    if (!g_nativeFrame || !hwnd) return;
+    DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
+    DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
+    int corner = 2; 
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    MARGINS margins = {0, 0, 0, 1};
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+    UpdateNativeFrameTheme(hwnd);
+}
+static void SnapToVisible(HWND hwnd, int wantedRight, int wantedEdgeY, bool useBottom) {
+    RECT visible = {}, window = {};
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &visible, sizeof(visible))) ||
+        !GetWindowRect(hwnd, &window)) return;
+    int dx = wantedRight - visible.right;
+    int dy = (useBottom ? wantedEdgeY - visible.bottom : wantedEdgeY - visible.top);
+    if (dx || dy)
+        SetWindowPos(hwnd, nullptr, window.left + dx, window.top + dy, 0, 0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+static bool DrawThemeHover(HWND hwnd, HDC dc, const RECT& r) {
+    HTHEME theme = OpenThemeData(hwnd, g_isLight ? L"Explorer::ListView" : L"DarkMode_Explorer::ListView");
+    if (!theme) return false;
+    HRESULT hr = DrawThemeBackground(theme, dc, LVP_LISTITEM, LISS_HOT, &r, nullptr);
+    CloseThemeData(theme);
+    return SUCCEEDED(hr);
+}
 static void Paint(HWND hwnd) {
     std::lock_guard<std::recursive_mutex> lock(g_accountMutex);
     PAINTSTRUCT ps;
@@ -323,16 +569,18 @@ static void Paint(HWND hwnd) {
     HDC dc = CreateCompatibleDC(target);
     HBITMAP buffer = CreateCompatibleBitmap(target, client.right, client.bottom);
     HGDIOBJ oldBitmap = SelectObject(dc, buffer);
-    Fill(dc, client, RGB(32, 32, 32));
-    Fill(dc, Scaled({0, 0, W, 16}), RGB(160, 160, 160));
+    const Theme& theme = T();  
+    Fill(dc, client, theme.bg);
+    Fill(dc, Scaled({0, 0, W, 16}), theme.titleBar);
     HGDIOBJ oldFont = SelectObject(dc, g_font);
     SetBkMode(dc, TRANSPARENT);
-    SetTextColor(dc, RGB(245, 245, 245));
+    SetTextColor(dc, theme.titleText);
     RECT title = Scaled({2, 0, W - 3, 16});
-    DrawTextW(dc, g_displayName.c_str(), -1, &title,
-        DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX);
+    UINT titleFlags = DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS | DT_NOPREFIX;
+    if (StartsWithRtl(g_displayName)) titleFlags |= DT_RTLREADING;
+    DrawTextW(dc, g_displayName.c_str(), -1, &title, titleFlags);
     RECT picture = Scaled(kPicture);
-    Fill(dc, picture, RGB(247, 247, 247));
+    Fill(dc, picture, theme.pictureBg);
     if (g_gdip) {
         Gdiplus::Graphics graphics(dc);
         graphics.SetClip(Gdiplus::Rect(picture.left, picture.top,
@@ -357,13 +605,22 @@ static void Paint(HWND hwnd) {
             body.CloseFigure(); graphics.FillPath(&ink, &body);
         }
     }
-    Fill(dc, {0, S(129), client.right, S(129) + 1}, RGB(60, 60, 60));
+    Fill(dc, {0, S(129), client.right, S(129) + 1}, theme.separator);
     for (int i = 0; i < ACT_COUNT; ++i) {
         RECT r = Scaled(g_items[i].rc);
-        if (i == g_hover && i >= ACT_SWITCH) Fill(dc, r, RGB(50, 50, 50));
-        SetTextColor(dc, i == g_hover ? RGB(255, 255, 255) : RGB(110, 205, 235));
+        if (i == g_hover && i >= ACT_SWITCH && !DrawThemeHover(hwnd, dc, r)) Fill(dc, r, theme.hoverBg);
+        SetTextColor(dc, i == g_hover ? theme.linkHover : theme.link);
         if (i >= ACT_SWITCH) r.left += S(22);
-        DrawTextW(dc, g_items[i].text, -1, &r, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX);
+        UINT flags = DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_END_ELLIPSIS;
+        if (g_lang == LANG_FA) flags |= DT_RTLREADING;
+        //the two links at the top get underlined while hovered
+        SelectObject(dc, (i == g_hover && i < ACT_SWITCH && g_fontUnderline) ? g_fontUnderline : g_font);
+        DrawTextW(dc, kTexts[g_lang][i], -1, &r, flags);
+    }
+    if (!g_nativeFrame) { //in native mode DWM draws the border
+        HBRUSH border = CreateSolidBrush(g_accentBorder ? g_accentColor : theme.separator);
+        FrameRect(dc, &client, border);
+        DeleteObject(border);
     }
     SelectObject(dc, oldFont);
     BitBlt(target, 0, 0, client.right, client.bottom, dc, 0, 0, SRCCOPY);
@@ -396,17 +653,36 @@ static void PositionAndShow(HWND hwnd, HWND anchor = nullptr, const RECT* screen
     RefreshWin11TileImage();
     if (IsWindow(g_tile.load())) InvalidateRect(g_tile.load(), nullptr, FALSE);
     g_hover = g_pressed = ACT_NONE;
-    //default spot is a bottom right corner with a small gap
-    int width = S(W), height = S(H);
-    int x = (std::max)(mi.rcWork.left, mi.rcWork.right - width - S(8));
-    int y = (std::max)(mi.rcWork.top, mi.rcWork.bottom - height - S(8));
+    int outerW = S(W), outerH = S(H);
+    if (g_nativeFrame) OuterSize(&outerW, &outerH);
+
+    int x = (std::max)(mi.rcWork.left, mi.rcWork.right - outerW - S(8));
+    int y = (std::max)(mi.rcWork.top, mi.rcWork.bottom - outerH - S(8));
     if (anchor) {
-        x = anchorRect.right - width;
-        if (anchorRect.top >= mi.rcWork.bottom) y = mi.rcWork.bottom - height - S(8);
-        else y = mi.rcWork.top + S(8); //taskbar on top
-        x = (std::max)(static_cast<int>(mi.rcWork.left), (std::min)(x, static_cast<int>(mi.rcWork.right) - width));
+        x = anchorRect.right - outerW;
+        if (anchorRect.top >= mi.rcWork.bottom)
+            y = mi.rcWork.bottom - outerH - S(8);
+        else
+            y = mi.rcWork.top + S(8); //taskbar on top
+        x = (std::max)(static_cast<int>(mi.rcWork.left),
+            (std::min)(x, static_cast<int>(mi.rcWork.right) - outerW));
     }
-    SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW);
+    bool fromBottom = !anchor || anchorRect.top >= mi.rcWork.bottom;
+
+    if (g_nativeFrame) {
+        int frameOffsetX = S(kNativeOffsetX);
+        int frameOffsetY = S(kNativeOffsetY);
+        x -= frameOffsetX;
+        y += fromBottom ? -frameOffsetY : frameOffsetY;
+        x = (std::max)(static_cast<int>(mi.rcWork.left),
+            (std::min)(x, static_cast<int>(mi.rcWork.right) - outerW));
+        y = (std::max)(static_cast<int>(mi.rcWork.top),
+            (std::min)(y, static_cast<int>(mi.rcWork.bottom) - outerH));
+    }
+
+    SetWindowPos(hwnd, HWND_TOPMOST, x, y, outerW, outerH, SWP_SHOWWINDOW);
+    if (g_nativeFrame)
+        SnapToVisible(hwnd, x + outerW, fromBottom ? y + outerH : y, fromBottom);
     SetForegroundWindow(hwnd);
     InvalidateRect(hwnd, nullptr, FALSE);
 }
@@ -440,12 +716,44 @@ static LRESULT CALLBACK FlyoutProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (wp == kDiscoveryTimer && !g_stopping) DiscoverTaskbar();
         return 0;
+    case WM_SETTINGCHANGE:
+    if (lp && wcscmp(reinterpret_cast<LPCWSTR>(lp), L"ImmersiveColorSet") == 0) {
+        UpdateTheme();
+        UpdateBorder();
+        UpdateNativeFrameTheme(hwnd);
+        InvalidateRect(hwnd, nullptr, FALSE);
+    }
+    return 0;
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+        UpdateBorder();
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    case WM_SETCURSOR:
+        if (LOWORD(lp) == HTCLIENT) {
+            POINT p = {}; GetCursorPos(&p); ScreenToClient(hwnd, &p);
+            int over = HitTest(p.x, p.y);
+            if (over == ACT_SETTINGS || over == ACT_LOOK) {
+                SetCursor(LoadCursorW(nullptr, MAKEINTRESOURCEW(32649))); //IDC_HAND
+                return TRUE;
+            }
+        }
+        break;
+    case WM_NCHITTEST: {
+        LRESULT hit = DefWindowProcW(hwnd, msg, wp, lp);
+        if (g_nativeFrame && (hit == HTTOP || hit == HTTOPLEFT || hit == HTTOPRIGHT ||
+            hit == HTBOTTOM || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT ||
+            hit == HTLEFT || hit == HTRIGHT))
+            return HTBORDER; //keep the thick frame from letting the flyout be resized
+        return hit;
+    }
     case WM_PAINT: Paint(hwnd); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_DPICHANGED: {
         SetDpi(HIWORD(wp));
         RECT* r = reinterpret_cast<RECT*>(lp);
-        SetWindowPos(hwnd, nullptr, r->left, r->top, S(W), S(H), SWP_NOZORDER | SWP_NOACTIVATE);
+        int outerW = S(W), outerH = S(H);
+        if (g_nativeFrame) OuterSize(&outerW, &outerH);
+        SetWindowPos(hwnd, nullptr, r->left, r->top, outerW, outerH, SWP_NOZORDER | SWP_NOACTIVATE);
         InvalidateRect(hwnd, nullptr, FALSE); return 0;
     }
     case WM_MOUSEMOVE: {
@@ -1035,7 +1343,7 @@ static wx::XamlRoot GetNativeTaskbarXamlRoot(HWND taskbar) {
     };
     if (!hostSharedPtr[0]) { releaseHost(); return nullptr; }
 
-    //The XAML element offset is read from frameheights first instructions
+    //Xaml
     const BYTE* code = reinterpret_cast<const BYTE*>(g_taskbarHostFrameHeight);
     size_t offset = 0;
 #if defined(_M_X64)
@@ -1428,9 +1736,11 @@ static DWORD WINAPI UiThread(LPVOID) {
     tileClass.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     ATOM tileAtom = RegisterClassW(&tileClass);
     SetDpi(96);
-    if (atom) g_flyout = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-        cls, L"User Tile", WS_POPUP, 0, 0, W, H, nullptr, nullptr, wc.hInstance, nullptr);
+    g_nativeFrame = g_borderSetting == 3;
+    if (atom) g_flyout = CreateWindowExW(FlyoutExStyle(),
+        cls, L"User Tile", FlyoutStyle(), 0, 0, W, H, nullptr, nullptr, wc.hInstance, nullptr);
     if (g_flyout) {
+        ApplyNativeFrame(g_flyout);
         g_initialized = true;
         if (!g_hotkeyEnabled) {
             Wh_Log(L"User Tile: keyboard shortcut disabled in settings.");
@@ -1455,6 +1765,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (tileAtom) UnregisterClassW(kTileClass, wc.hInstance);
     if (g_gdip) { Gdiplus::GdiplusShutdown(g_gdip); g_gdip = 0; }
     if (g_font) { DeleteObject(g_font); g_font = nullptr; }
+    if (g_fontUnderline) { DeleteObject(g_fontUnderline); g_fontUnderline = nullptr; }
     if (atom) UnregisterClassW(cls, wc.hInstance);
     if (setAwareness && oldAwareness) setAwareness(oldAwareness);
     return 0;
@@ -1483,6 +1794,9 @@ BOOL Wh_ModInit() {
     g_tileWidth = (std::clamp)(Wh_GetIntSetting(L"tileWidth"), 28, 80);
     g_pictureSize = (std::clamp)(Wh_GetIntSetting(L"pictureSize"), 20, 64);
     g_hotkeyEnabled = Wh_GetIntSetting(L"enableHotkey") != 0;
+    LoadLanguageSetting();
+    LoadThemeSetting();
+    LoadBorderSetting();
     g_setupMsg = RegisterWindowMessageW(L"WhUserTileV04.Setup");
     g_cleanupMsg = RegisterWindowMessageW(L"WhUserTileV04.Cleanup");
     if (!g_setupMsg || !g_cleanupMsg) return FALSE;
