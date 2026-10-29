@@ -8,7 +8,5 @@ assignees: ''
 ---
 
 <!--
-Include the mod name in the title, and tag the mod's author using their GitHub handle.
+Include the mod name in the title.
 -->
-
-Mod author: @username (GitHub profile handle)

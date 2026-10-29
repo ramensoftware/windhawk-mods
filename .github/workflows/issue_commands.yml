@@ -1,0 +1,50 @@
+name: Issue commands
+
+on:
+  issue_comment:
+    types:
+      - created
+
+# The workflow token closes, reopens, renames, and labels issues, and comments.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  run:
+    # A cheap prefilter, so that an ordinary comment doesn't start a runner. The
+    # comment is parsed properly in issue_mod_tags.cjs, where a command starts a
+    # line, so a comment without a line that starts with a slash is skipped. The
+    # fromJSON call makes a newline, which a string literal can't hold. Only the
+    # author of a mod the issue is tagged with can run commands, so an untagged
+    # issue is skipped too.
+    if: >-
+      github.event.comment.user.type != 'Bot' &&
+      !github.event.issue.pull_request &&
+      contains(join(github.event.issue.labels.*.name, ' '), 'mod/') &&
+      (startsWith(github.event.comment.body, '/') ||
+       contains(github.event.comment.body, fromJSON('"\n/"')))
+    # One run at a time per issue, so that two comments don't act on it at once.
+    # Each run has its own comment's commands, so pending runs queue up instead
+    # of replacing each other. It's set on the job so that a comment filtered out
+    # above doesn't join the queue.
+    concurrency:
+      group: issue-commands-${{ github.event.issue.number }}
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Only the script is needed, so the mod sources are skipped.
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Run the commands
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const tags = require('${{ github.workspace }}/.github/issue_mod_tags.cjs');
+            await tags.handleComment({ github, context, core });

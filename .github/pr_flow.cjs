@@ -6,6 +6,8 @@
 // Loaded by actions/github-script from the pr_labels and pr_commands workflows.
 // All API calls run as the windhawk-reviewer app.
 
+const { react, commentOnFailure } = require('./comment_commands.cjs');
+
 /** @typedef {import('@actions/github-script').AsyncFunctionArguments} ScriptArguments */
 /** @typedef {ScriptArguments['github']} Github */
 /** @typedef {ScriptArguments['context']} Context */
@@ -19,7 +21,6 @@
 
 /** @typedef {Awaited<ReturnType<Github['rest']['pulls']['get']>>['data']} RestPullRequest */
 /** @typedef {Awaited<ReturnType<Github['rest']['issues']['listComments']>>['data'][number]} RestComment */
-/** @typedef {NonNullable<Parameters<Github['rest']['reactions']['createForIssueComment']>[0]>['content']} ReactionContent */
 
 const WAITING_FOR_AUTHOR = 'waiting-for-author';
 const WAITING_FOR_AI_REVIEW = 'waiting-for-ai-review';
@@ -218,36 +219,6 @@ function postComment({ github, owner, repo, prNumber, body }) {
     issue_number: prNumber,
     body,
   });
-}
-
-/**
- * Adds a reaction to a comment. A reaction is a best-effort acknowledgement, so
- * a comment that was deleted in the meantime is logged and ignored instead of
- * failing the command it acknowledges.
- *
- * @param {object} params
- * @param {Github} params.github
- * @param {Core} params.core
- * @param {string} params.owner
- * @param {string} params.repo
- * @param {number} params.commentId
- * @param {ReactionContent} params.content
- */
-async function react({ github, core, owner, repo, commentId, content }) {
-  try {
-    await github.rest.reactions.createForIssueComment({
-      owner,
-      repo,
-      comment_id: commentId,
-      content,
-    });
-  } catch (error) {
-    if (/** @type {{ status?: number }} */ (error).status !== 404) {
-      throw error;
-    }
-
-    core.info(`Skipped the ${content} reaction, comment ${commentId} is gone`);
-  }
 }
 
 /**
@@ -581,26 +552,16 @@ async function handleComment({ github, context, core, botLogin }) {
     return;
   }
 
-  try {
-    await runComment({ github, core, owner, repo, payload, comment, issue, botLogin });
-  } catch (error) {
-    // Tell the commenter, then let the run fail so that the error is visible.
-    try {
-      await postComment({
-        github,
-        owner,
-        repo,
-        prNumber: issue.number,
-        body:
-          `Something went wrong while handling this comment. ` +
-          `See [the workflow run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}) for details.`,
-      });
-    } catch (reportError) {
-      core.info(`Failed to report the error: ${reportError}`);
-    }
-
-    throw error;
-  }
+  await commentOnFailure(
+    {
+      github,
+      context,
+      core,
+      issueNumber: issue.number,
+      message: 'Something went wrong while handling this comment.',
+    },
+    () => runComment({ github, core, owner, repo, payload, comment, issue, botLogin }),
+  );
 }
 
 /**
