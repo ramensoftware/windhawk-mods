@@ -4568,8 +4568,9 @@ void* WINAPI IconViewConstructorHook(void* self) {
   }
   return result;
 }
+// Taskbar.View.dll only before version 2604; see NextTrayCandidate.
 bool HookTray(HMODULE module) {
-  // SystemTray.dll, Taskbar.View.dll (before 2604), ExplorerExtensions.dll
+  // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
   WindhawkUtils::SYMBOL_HOOK hooks[] = {
       {{LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
        &iconViewConstructorOriginal,
