@@ -152,6 +152,7 @@ std::atomic<HWND> g_taskbar{nullptr};
 std::atomic<DWORD> g_uiThread{0};
 UINT g_controlMessage;
 constexpr UINT_PTR kTimer = 0x4652464C;
+constexpr UINT_PTR kDragTimer = 0x4652464D;
 
 void* g_taskBandVtable;
 using GetHost_t = void*(WINAPI*)(void*, void**);
@@ -189,6 +190,7 @@ struct State {
     UINT32 pointerId = 0;
     bool wasFloating = false;
     POINT startCursor{};
+    POINT lastCursor{};
     Geometry::Position startPosition{};
     HWND previousForeground = nullptr;
     unsigned retries = 0;
@@ -474,10 +476,25 @@ void Save(Block& block) {
     }
 }
 
+bool LeftButtonDown() {
+    const int button = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+    return (GetAsyncKeyState(button) & 0x8000) != 0;
+}
+
+void MoveDrag(POINT cursor) {
+    if (!g_state || g_state->dragging < 0 ||
+        (cursor.x == g_state->lastCursor.x && cursor.y == g_state->lastCursor.y)) {
+        return;
+    }
+    g_state->lastCursor = cursor;
+    Position(g_state->blocks[g_state->dragging],
+        {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
+         g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+}
+
 void EndDrag(bool cancel) {
     if (!g_state) return;
     if (g_state->dragging < 0) {
-        if (g_state->dragCandidate < 0) return;
         g_state->dragCandidate = -1;
         g_state->inputWindow = nullptr;
         g_state->pointerInput = false;
@@ -485,6 +502,7 @@ void EndDrag(bool cancel) {
         return;
     }
     const int index = std::exchange(g_state->dragging, -1);
+    KillTimer(g_state->taskbar, kDragTimer);
     auto& block = g_state->blocks[index];
     const HWND captureWindow = std::exchange(g_state->captureWindow, nullptr);
     g_state->pointerInput = false;
@@ -619,12 +637,18 @@ bool MouseInput(const MSG* msg) {
                 g_state->dragCandidate = -1;
                 g_state->inputWindow = nullptr;
                 if (IsWindow(clickTarget)) SendMessageW(clickTarget, WM_CANCELMODE, 0, 0);
+                // Opening the popup can cancel capture, so acquire it afterward.
+                if (!Float(g_state->blocks[index])) {
+                    EndDrag(true);
+                    return true;
+                }
                 SetForegroundWindow(g_state->taskbar);
                 SetCapture(g_state->taskbar);
                 if (GetCapture() != g_state->taskbar) {
                     g_state->pointerInput = false;
                     g_state->pointerId = 0;
                     if (IsWindow(foreground)) SetForegroundWindow(foreground);
+                    if (!wasFloating) Dock(g_state->blocks[index]);
                     Wh_Log(L"Mouse capture refused; drag cancelled");
                     return true;
                 }
@@ -632,13 +656,12 @@ bool MouseInput(const MSG* msg) {
                 g_state->dragging = index;
                 g_state->wasFloating = wasFloating;
                 g_state->previousForeground = foreground;
-                if (!Float(g_state->blocks[index])) {
+                g_state->lastCursor = g_state->startCursor;
+                if (!SetTimer(g_state->taskbar, kDragTimer, 16, nullptr)) {
                     EndDrag(true);
                     return true;
                 }
-                Position(g_state->blocks[index],
-                    {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
-                     g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+                MoveDrag(cursor);
                 return true;
             }
             return false;
@@ -657,22 +680,11 @@ bool MouseInput(const MSG* msg) {
         if (!pointer && (move || up || down) &&
             msg->hwnd != g_state->captureWindow) return false;
         if (move) {
-            const bool held = pointer
-                ? IS_POINTER_INCONTACT_WPARAM(msg->wParam) &&
-                  IS_POINTER_FIRSTBUTTON_WPARAM(msg->wParam)
-                : (msg->wParam & MK_LBUTTON) != 0;
-            if (!held) {
+            if (!LeftButtonDown()) {
                 EndDrag(false);
             } else {
                 POINT cursor{};
-                if (pointer) {
-                    cursor = {GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam)};
-                } else {
-                    if (!GetCursorPos(&cursor)) return true;
-                }
-                Position(g_state->blocks[g_state->dragging],
-                    {g_state->startPosition.x + cursor.x - g_state->startCursor.x,
-                     g_state->startPosition.y + cursor.y - g_state->startCursor.y});
+                if (GetCursorPos(&cursor)) MoveDrag(cursor);
             }
             return true;
         }
@@ -764,6 +776,17 @@ LRESULT CALLBACK TaskbarProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
             if (initialized || retries >= 20) {
                 KillTimer(hwnd, kTimer);
                 if (!g_state->root) Wh_Log(L"Native taskbar not ready/unsupported; no changes made");
+            }
+            return 0;
+        }
+        if (message == WM_TIMER && wp == kDragTimer) {
+            if (!g_state || g_state->dragging < 0) {
+                KillTimer(hwnd, kDragTimer);
+            } else if (!LeftButtonDown()) {
+                EndDrag(false);
+            } else {
+                POINT cursor{};
+                if (GetCursorPos(&cursor)) MoveDrag(cursor);
             }
             return 0;
         }
