@@ -2075,42 +2075,56 @@ public:
             return E_POINTER;
         }
 
-        // Revalidate the format at the exact Drop point rather than relying on
-        // the state captured by DragEnter/DragOver.
-        FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-        STGMEDIUM medium = { 0 };
+        // Revalidate the live tray slot at the exact Drop point. The overlay
+        // may have been armed before Explorer moved the icon (for example when
+        // an overflow flyout closes), so never recycle from a stale location.
+        RECT currentIconRect = {};
+        const POINT dropPoint = { pt.x, pt.y };
+        const bool currentTargetValid =
+            QueryTrayIconRect(m_hMainWnd, currentIconRect, true) &&
+            PtInRect(&currentIconRect, dropPoint) != FALSE;
 
-        HRESULT hr = pDataObj->GetData(&fmt, &medium);
-        if (SUCCEEDED(hr)) {
-            HDROP hDrop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
-            if (hDrop) {
-                std::vector<std::wstring> paths;
-                const bool extracted = ExtractDroppedPaths(hDrop, paths);
-                (void)GlobalUnlock(medium.hGlobal);
+        if (!currentTargetValid) {
+            *pdwEffect = DROPEFFECT_NONE;
+            Wh_Log(L"D&D: Drop rejected because tray icon moved or is unavailable");
+        } else {
+            // Revalidate the format at the exact Drop point rather than relying on
+            // the state captured by DragEnter/DragOver.
+            FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+            STGMEDIUM medium = { 0 };
 
-                const bool queued = extracted &&
-                    QueueRecycleWorkerJob(m_hMainWnd, std::move(paths));
-                if (queued) {
-                    // Ownership of the operation is now ours. Report NONE so the
-                    // source returns from DoDragDrop without deleting the items itself.
-                    if (!ReportPerformedDropEffect(pDataObj, DROPEFFECT_NONE)) {
-                        Wh_Log(
-                            L"D&D: performed drop effect could not be reported; "
-                            L"using pdwEffect fallback");
+            HRESULT hr = pDataObj->GetData(&fmt, &medium);
+            if (SUCCEEDED(hr)) {
+                HDROP hDrop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
+                if (hDrop) {
+                    std::vector<std::wstring> paths;
+                    const bool extracted = ExtractDroppedPaths(hDrop, paths);
+                    (void)GlobalUnlock(medium.hGlobal);
+
+                    const bool queued = extracted &&
+                        QueueRecycleWorkerJob(m_hMainWnd, std::move(paths));
+                    if (queued) {
+                        // Ownership of the operation is now ours. Report NONE so the
+                        // source returns from DoDragDrop without deleting the items itself.
+                        if (!ReportPerformedDropEffect(pDataObj, DROPEFFECT_NONE)) {
+                            Wh_Log(
+                                L"D&D: performed drop effect could not be reported; "
+                                L"using pdwEffect fallback");
+                        }
+                        *pdwEffect = DROPEFFECT_NONE;
+                    } else {
+                        *pdwEffect = DROPEFFECT_NONE;
+                        Wh_Log(L"D&D: Drop rejected (CF_HDROP)");
                     }
-                    *pdwEffect = DROPEFFECT_NONE;
                 } else {
                     *pdwEffect = DROPEFFECT_NONE;
-                    Wh_Log(L"D&D: Drop rejected (CF_HDROP)");
+                    Wh_Log(L"D&D: GlobalLock failed for CF_HDROP");
                 }
+                ReleaseStgMedium(&medium);
             } else {
                 *pdwEffect = DROPEFFECT_NONE;
-                Wh_Log(L"D&D: GlobalLock failed for CF_HDROP");
+                Wh_Log(L"D&D: IDataObject::GetData(CF_HDROP) failed: 0x%08X", hr);
             }
-            ReleaseStgMedium(&medium);
-        } else {
-            *pdwEffect = DROPEFFECT_NONE;
-            Wh_Log(L"D&D: IDataObject::GetData(CF_HDROP) failed: 0x%08X", hr);
         }
 
         m_hasValidFormat = false;
@@ -4374,11 +4388,28 @@ static bool EnsureTrayUiAutomation() {
     IUIAutomationCacheRequest* cacheRequest = nullptr;
     if (SUCCEEDED(g_trayUiAutomation->CreateCacheRequest(&cacheRequest)) &&
         cacheRequest) {
-        const bool cacheReady =
+        bool cacheReady =
             SUCCEEDED(cacheRequest->AddProperty(UIA_ClassNamePropertyId)) &&
             SUCCEEDED(cacheRequest->AddProperty(UIA_AutomationIdPropertyId)) &&
             SUCCEEDED(cacheRequest->AddProperty(UIA_BoundingRectanglePropertyId)) &&
             SUCCEEDED(cacheRequest->put_TreeScope(TreeScope_Element));
+
+        // The probe walks the raw UIA tree. Match the cache request to that
+        // view so raw-only template elements still carry the cached identity
+        // properties when encountered during the parent walk.
+        if (cacheReady) {
+            IUIAutomationCondition* trueCondition = nullptr;
+            if (SUCCEEDED(g_trayUiAutomation->CreateTrueCondition(
+                    &trueCondition)) &&
+                trueCondition) {
+                cacheReady =
+                    SUCCEEDED(cacheRequest->put_TreeFilter(trueCondition));
+                trueCondition->Release();
+            } else {
+                cacheReady = false;
+            }
+        }
+
         if (cacheReady) {
             g_trayUiAutomationCacheRequest = cacheRequest;
         } else {
