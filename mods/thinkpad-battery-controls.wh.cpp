@@ -2,13 +2,13 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.8
+// @version 0.9.10
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
 // @include explorer.exe
 // @architecture x86-64
-// @compilerOptions -lshell32 -luser32 -lole32 -lruntimeobject -lwindowsapp -lbcrypt -ladvapi32 -lcrypt32 -luuid -lkernel32 -lrpcrt4 -fms-extensions
+// @compilerOptions -lshell32 -luser32 -lole32 -lruntimeobject -lwindowsapp -lbcrypt -ladvapi32 -lcrypt32 -luuid -lkernel32 -lrpcrt4 -lversion -fms-extensions
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -78,7 +78,12 @@ integrated backend for that situation. Missing batteries defer restoration safel
 
 Charging limits belong to the laptop, not to one Windows account. When several
 people are signed in, any of them can cancel a full-charge request, and whichever
-session is running restores the limits at 100% or after eight hours.
+session is running restores the limits at 100% or after eight hours. Those sessions
+coordinate through a machine-wide lock. If it cannot be opened, the mod changes
+nothing: the menu summary ends with (changes paused), readings still refresh, and
+it retries every 30 seconds. A saved full-charge request stays in force meanwhile.
+After ten failed checks in a row, about five minutes, it continues without
+coordination and the summary says (not coordinated) until the lock opens again.
 
 **Thresholds persist after this mod is disabled or removed.** Disabling or updating
 the mod ends a pending full-charge request early: it tries to restore your limits
@@ -101,6 +106,8 @@ until supported behavior is verified. Calibration is not a battery-health treatm
 Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
 mock coverage but needs a two-battery hardware report. The executable backend
 requires English output. Private taskbar symbols can change after Windows updates.
+The tray icon hook is placed in SystemTray.dll, an older Taskbar.View.dll or
+ExplorerExtensions.dll, as Taskbar tray system icon tweaks does.
 
 Author/publisher: Bill Bauman. Apache-2.0. Project-name trademark and attribution
 terms are in the source repository; Lenovo's executable remains separately licensed.
@@ -226,6 +233,15 @@ bool ValidRecovery(const Recovery& r, ULONGLONG) {
 bool RecoveryDue(const Recovery& r, ULONGLONG now) {
   return r.active && (now >= r.deadline || r.deadline - now > 8 * 3600 + 300);
 }
+// Result of one attempt to take the cross-session records lock.
+enum class LockOutcome {
+  Acquired,           // Held; both records were reread.
+  AcquiredAbandoned,  // Held after the previous holder exited without releasing it.
+  Contended,          // Another session held it for the whole wait.
+  Unavailable,        // The mutex could not be created or opened, or the wait failed.
+  Uncoordinated,      // Unavailable for ten consecutive checks: proceeding without it.
+  Shutdown            // This mod is unloading.
+};
 State Parse(std::string_view text) {
   State s;
   auto number = [](std::string_view value, int& out) {
@@ -507,6 +523,9 @@ bool Run(const std::wstring& args, std::string& output) {
 namespace NativeRpc {
 // Generated NDR descriptors from research/lenovo-rpc/native.idl using Windows SDK MIDL.
 // Only explicitly named, typed operations are callable. No Lenovo executable code is embedded.
+// Each procedure string is self-contained (its operation number is at bytes 6 and 7), so
+// only the descriptors a production call uses are embedded; the IDL keeps the whole
+// interface, and tools/verify-native-descriptors.py checks every embedded one against it.
 const unsigned char types[] = {
     0x00, 0x00, 0x11, 0x04, 0x02, 0x00, 0x30, 0xa0, 0x00, 0x00, 0x11, 0x04, 0x02, 0x00, 0x30, 0xe1,
     0x00, 0x00, 0x30, 0x41, 0x00, 0x00, 0x11, 0x0c, 0x06, 0x5c, 0x11, 0x0c, 0x08, 0x5c, 0x00,
@@ -520,11 +539,6 @@ const unsigned char procClose[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x30, 0xe0, 0x00,
     0x00, 0x00, 0x00, 0x38, 0x00, 0x38, 0x00, 0x40, 0x01, 0x0a, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x01, 0x00, 0x00, 0x0e, 0x00,
-};
-const unsigned char procCoolCap[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
 };
 const unsigned char procCoolingCap[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
@@ -551,35 +565,10 @@ const unsigned char procAirplaneValue[] = {
     0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
 };
-const unsigned char procCoolingAuto[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x15, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
-};
 const unsigned char procCoolingValue[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
     0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
-};
-const unsigned char procCoolValue[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x17, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x24, 0x00, 0x1a, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x50, 0x21, 0x08, 0x00, 0x06, 0x00,
-};
-const unsigned char procSetAirplane[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x2a, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x06, 0x00,
-};
-const unsigned char procSetCoolingAuto[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x2a, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x06, 0x00,
-};
-const unsigned char procSetCooling[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
-    0x00, 0x2a, 0x00, 0x00, 0x00, 0x40, 0x02, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00, 0x06, 0x00,
 };
 const unsigned char procSetUsb[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x10, 0x00, 0x30, 0x40, 0x00, 0x00, 0x00,
@@ -633,12 +622,6 @@ const unsigned char procDesignCapacity[] = {
     0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
     0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
 };
-const unsigned char procDesignVoltage[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
 const unsigned char procAdapterWatts[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2d, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
     0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
@@ -647,12 +630,6 @@ const unsigned char procAdapterWatts[] = {
 };
 const unsigned char procVoltage[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2e, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procCurrent[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
     0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
     0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
@@ -671,42 +648,6 @@ const unsigned char procCycles[] = {
 };
 const unsigned char procPercent[] = {
     0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x32, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procRemaining[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x33, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procRemainingTime[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x34, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procCompletionTime[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x35, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procChargeStatus[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procChemistry[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x37, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
-    0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
-};
-const unsigned char procHealth[] = {
-    0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x20, 0x00, 0x30, 0x40, 0x00, 0x00,
     0x00, 0x00, 0x2c, 0x00, 0x36, 0x00, 0x40, 0x04, 0x0a, 0x01, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x12, 0x00, 0x48, 0x00, 0x08, 0x00,
     0x08, 0x00, 0x50, 0x21, 0x10, 0x00, 0x08, 0x00, 0x50, 0x21, 0x18, 0x00, 0x06, 0x00,
@@ -871,14 +812,6 @@ DWORD ResetCapability(void* ctx, long slot, short* capable) noexcept {
 DWORD CalibrationState(void* ctx, long* battery, long* stage, long* stages) noexcept {
   __try {
     NdrClientCall2(&stub, const_cast<unsigned char*>(procResetState), ctx, battery, stage, stages);
-    return 0;
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    return GetExceptionCode();
-  }
-}
-DWORD ShortWrite(void* ctx, const unsigned char* proc, short value) noexcept {
-  __try {
-    NdrClientCall2(&stub, const_cast<unsigned char*>(proc), ctx, value);
     return 0;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return GetExceptionCode();
@@ -1525,48 +1458,120 @@ bool ApplySeparate(unsigned value) {
 // over the same recovery and calibration records. This lock makes each reload,
 // check and write one step across sessions. It holds no owner data: a holder that
 // crashes leaves it abandoned and the next session takes it over. Worker-owned.
+//
+// While the lock cannot be opened the mod does not write: no command, no restoration
+// and no calibration check runs. Running uncoordinated could let one session's clear
+// delete another session's newer request. Blocking has its own cost, which the UI
+// states: a saved full-charge request stays in force. The lock is retried every 30 s.
+// Bill's decision (0.9.10): after ten consecutive 30-second checks with the lock
+// unavailable, about five minutes, the mod continues without coordination, logs it
+// once and shows it in the UI, so restoration is not held up indefinitely by an
+// unopenable lock. A live holder (contention) never counts toward that: it is a
+// different condition and is never bypassed. The first successful open ends the
+// uncoordinated state and resets the count.
 HANDLE sharedLock = nullptr;
-void OpenSharedLock() {
+DWORD sharedLockError = 0;                          // Last create/open failure. Worker-only.
+std::atomic<bool> sharedLockMissing = false;        // Read by the UI.
+std::atomic<bool> sharedLockUncoordinated = false;  // Read by the UI.
+std::atomic<bool> sharedLockAbandonedSeen = false;
+constexpr int uncoordinatedAfterChecks = 10;
+int lockUnavailableChecks =
+    0;  // Consecutive periodic checks with the lock unavailable. Worker-only.
+bool OpenSharedLock() {
+  if (sharedLock)
+    return true;
   PSECURITY_DESCRIPTOR sd = nullptr;
   // Wait and release for any signed-in user; full access for SYSTEM and administrators.
+  // A later session normally fails this create with access denied (the first session
+  // owns the object) and opens it with the lesser rights below.
   if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
           L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x100001;;;AU)", SDDL_REVISION_1, &sd, nullptr)) {
     SECURITY_ATTRIBUTES sa{sizeof(sa), sd, FALSE};
     sharedLock = CreateMutexW(&sa, FALSE, L"Global\\" WH_MOD_ID L".SharedRecords");
     LocalFree(sd);
   }
+  DWORD createError = sharedLock ? 0 : GetLastError();
   if (!sharedLock)
     sharedLock = OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
                             L"Global\\" WH_MOD_ID L".SharedRecords");
-  if (!sharedLock)
-    Wh_Log(L"Cross-session lock unavailable (%u); records are not coordinated",
-           unsigned(GetLastError()));
-}
-// On success the caller holds the lock and both records are freshly read. With
-// `stoppable`, unload ends the wait early.
-bool LockSharedRecords(DWORD wait, bool stoppable) {
-  if (sharedLock) {
-    HANDLE events[] = {sharedLock, stopEvent};
-    DWORD result = WaitForMultipleObjects(stoppable ? 2 : 1, events, FALSE, wait);
-    if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED_0)
-      return false;
+  if (!sharedLock) {
+    sharedLockError = GetLastError();
+    if (!sharedLockMissing.exchange(true))
+      Wh_Log(
+          L"Cross-session lock unavailable (create %u, open %u); charging changes are "
+          L"paused until it can be opened",
+          unsigned(createError), unsigned(sharedLockError));
+    return false;
   }
+  if (sharedLockMissing.exchange(false))
+    Wh_Log(L"Cross-session lock available again");
+  if (sharedLockUncoordinated.exchange(false))
+    Wh_Log(L"Cross-session coordination resumed");
+  lockUnavailableChecks = 0;
+  return true;
+}
+// Called by the worker after each periodic check. Only consecutive unavailable checks
+// count; any other outcome means the lock exists, and OpenSharedLock reset the count.
+void NotePeriodicCheck(LockOutcome outcome) {
+  if (outcome != LockOutcome::Unavailable)
+    return;
+  if (++lockUnavailableChecks == uncoordinatedAfterChecks &&
+      !sharedLockUncoordinated.exchange(true))
+    Wh_Log(
+        L"Cross-session lock unavailable for %d consecutive checks (error %u); continuing "
+        L"without coordination until it can be opened",
+        uncoordinatedAfterChecks, unsigned(sharedLockError));
+}
+// Acquired outcomes mean the caller holds the lock and both records are freshly read.
+// Uncoordinated means no lock is held but the policy above allows acting, with both
+// records freshly read. With `stoppable`, unload ends the wait early.
+LockOutcome LockSharedRecords(DWORD wait, bool stoppable) {
+  if (!OpenSharedLock()) {
+    if (!sharedLockUncoordinated)
+      return LockOutcome::Unavailable;
+    Load();
+    AdvancedControls::LoadCalibration();
+    return LockOutcome::Uncoordinated;
+  }
+  HANDLE events[] = {sharedLock, stopEvent};
+  DWORD result = WaitForMultipleObjects(stoppable && stopEvent ? 2 : 1, events, FALSE, wait);
+  if (result == WAIT_OBJECT_0 + 1)
+    return LockOutcome::Shutdown;
+  if (result == WAIT_TIMEOUT)
+    return LockOutcome::Contended;
+  if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED_0) {
+    sharedLockError = GetLastError();
+    Wh_Log(L"Cross-session lock wait failed (%u)", unsigned(sharedLockError));
+    return LockOutcome::Unavailable;
+  }
+  if (result == WAIT_ABANDONED_0 && !sharedLockAbandonedSeen.exchange(true))
+    Wh_Log(L"Cross-session lock was abandoned by another session; records reread");
   Load();
   AdvancedControls::LoadCalibration();
-  return true;
+  return result == WAIT_ABANDONED_0 ? LockOutcome::AcquiredAbandoned : LockOutcome::Acquired;
 }
 void UnlockSharedRecords() {
   if (sharedLock)
     ReleaseMutex(sharedLock);
 }
 struct SharedRecordsLock {
-  bool held;
-  SharedRecordsLock(DWORD wait, bool stoppable) : held(LockSharedRecords(wait, stoppable)) {}
+  LockOutcome outcome;
+  bool held;     // The mutex is owned and must be released.
+  bool allowed;  // The caller may read, decide and write: held, or uncoordinated by policy.
+  SharedRecordsLock(DWORD wait, bool stoppable)
+      : outcome(LockSharedRecords(wait, stoppable)),
+        held(outcome == LockOutcome::Acquired || outcome == LockOutcome::AcquiredAbandoned),
+        allowed(held || outcome == LockOutcome::Uncoordinated) {}
   ~SharedRecordsLock() {
     if (held)
       UnlockSharedRecords();
   }
 };
+// Refreshes (0) and Advanced reads (20) only read, so they always run. Everything else
+// writes records or hardware and needs the lock, or the uncoordinated policy state.
+bool CommandAllowed(const SharedRecordsLock& records, int action) {
+  return records.allowed || action == 0 || action == 20;
+}
 
 struct ApplyResult {
   bool succeeded = false;
@@ -1672,9 +1677,19 @@ bool Submit(int action, int values = 0) noexcept {
     return false;
   }
 }
-// Another session held the shared records for the whole wait. Nothing was written.
-void Unavailable(int action) {
-  Status(L"Another signed-in user is changing battery settings. Try again in a moment.");
+// The lock was not held, so nothing was written. Say why, and finish a pending Apply.
+void Refused(LockOutcome outcome, int action) {
+  if (outcome == LockOutcome::Unavailable)
+    Status((L"Nothing was changed. Charging changes are paused because this mod cannot "
+            L"coordinate with other signed-in sessions (lock error " +
+            std::to_wstring(sharedLockError) +
+            L"). Saved recovery is kept and the lock is retried every 30 seconds; after ten "
+            L"failed checks the mod continues without coordination.")
+               .c_str());
+  else if (outcome == LockOutcome::Shutdown)
+    Status(L"Nothing was changed. The mod is unloading.");
+  else
+    Status(L"Another signed-in user is changing battery settings. Try again in a moment.");
   if (action == 31 || action == 32 || action == 34) {
     std::lock_guard lock(applyMutex);
     applyResult.message = RecentStatus();
@@ -1704,8 +1719,12 @@ DWORD WINAPI Thread(void*) noexcept {
 
     if (recoveryInvalid)
       Status(L"Recovery data invalid. Apply your desired limits manually.");
-    OpenSharedLock();
+    if (!OpenSharedLock())
+      Status((L"Charging changes are paused: the cross-session lock could not be opened (error " +
+              std::to_wstring(sharedLockError) + L"). Saved recovery is kept.")
+                 .c_str());
     ULONGLONG checkAt = 0;
+    LockOutcome lastCheck = LockOutcome::Acquired;
     Submit(0);
     for (;;) {
       if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)
@@ -1715,7 +1734,9 @@ DWORD WINAPI Thread(void*) noexcept {
       // Every 30 s, with freshly read records, so a request saved by another
       // session is still restored after that session signs out.
       if (now >= checkAt) {
-        if (SharedRecordsLock records(1000, true); records.held) {
+        SharedRecordsLock records(1000, true);
+        NotePeriodicCheck(records.outcome);
+        if (records.allowed) {
           if (AdvancedControls::calibration.slot)
             AdvancedControls::CheckCalibration();
           SYSTEM_POWER_STATUS power{};
@@ -1725,7 +1746,15 @@ DWORD WINAPI Thread(void*) noexcept {
               Error();
             Refresh();
           }
+        } else if (records.outcome != lastCheck && records.outcome != LockOutcome::Shutdown) {
+          // Log transitions only. The lock itself is retried by every attempt.
+          Wh_Log(L"Periodic recovery check skipped: %s%s",
+                 records.outcome == LockOutcome::Unavailable
+                     ? L"cross-session lock unavailable"
+                     : L"another session holds the cross-session lock",
+                 Active() ? L"; a saved full-charge request stays in force until it returns" : L"");
         }
+        lastCheck = records.outcome;
         checkAt = GetTickCount64() + 30000;
       }
       std::pair<int, int> command{};
@@ -1742,11 +1771,10 @@ DWORD WINAPI Thread(void*) noexcept {
         busy = true;
         try {
           SharedRecordsLock records(15000, true);
-          // Refreshes only read, so they run even while another session holds the lock.
-          if (records.held || command.first == 0 || command.first == 20)
+          if (CommandAllowed(records, command.first))
             Dispatch(command.first, command.second);
           else
-            Unavailable(command.first);
+            Refused(records.outcome, command.first);
         } catch (...) {
           Error();
         }
@@ -1771,7 +1799,7 @@ DWORD WINAPI Thread(void*) noexcept {
     shutdownDeadline.compare_exchange_strong(empty, GetTickCount64() + 4000);
     auto now = GetTickCount64(), deadline = shutdownDeadline.load();
     SharedRecordsLock records(DWORD(deadline > now ? deadline - now : 0), false);
-    if (Active() && (!records.held || !Restore()))
+    if (Active() && (!records.allowed || !Restore()))
       Status(L"Restoration deferred. Saved recovery will be checked next time the mod runs.");
   } catch (...) {
     Error();
@@ -3993,6 +4021,21 @@ void ShowSetup(FrameworkElement target) {
   status.Children().Append(
       Text(integrated ? L"Backend: integrated Lenovo service. No utility download is needed."
                       : L"Backend: Lenovo ChargeThreshold.exe."));
+  if (BatteryControls::sharedLockUncoordinated)
+    status.Children().Append(
+        Text(L"Charging changes are not coordinated with other signed-in sessions. The "
+             L"machine-wide lock this mod uses for that has been unavailable for ten checks in a "
+             L"row, so it continues without it: commands and restoration work, but if another "
+             L"signed-in user changes charging at the same moment, one change can undo the "
+             L"other. The lock is still retried every 30 seconds."));
+  else if (BatteryControls::sharedLockMissing)
+    status.Children().Append(
+        Text(L"Charging changes are paused. This mod coordinates its saved records with other "
+             L"signed-in sessions through a machine-wide lock, and that lock cannot be opened "
+             L"right now. Readings still refresh. Nothing is written until the lock is available "
+             L"again; it is retried every 30 seconds, and after ten failed checks the mod "
+             L"continues without coordination. A saved full-charge request stays in force "
+             L"meanwhile. To change limits sooner, use Lenovo Vantage."));
   status.Children().Append(
       Text(L"Choose the charging backend in this mod's Windhawk Settings.", 12));
   if (!integrated) {
@@ -4167,6 +4210,10 @@ void ShowMenu(FrameworkElement target) {
       : enabled ? L"Charge: " + std::to_wstring(BatteryControls::ReadSnapshot().state.start) +
                       L" to " + std::to_wstring(BatteryControls::ReadSnapshot().state.stop) + L"%"
                 : L"Charge to 100% (limits off)";
+  if (BatteryControls::sharedLockUncoordinated)
+    status += L" (not coordinated)";
+  else if (BatteryControls::sharedLockMissing)
+    status += L" (changes paused)";
   C::MenuFlyoutItem header;
   header.Text(status);
   header.FontSize(12);
@@ -4258,6 +4305,10 @@ void ShowMenu(FrameworkElement target) {
                         : snap.state.enabled ? L"Charge: " + std::to_wstring(snap.state.start) +
                                                    L" to " + std::to_wstring(snap.state.stop) + L"%"
                                              : L"Charge to 100% (limits off)";
+    if (BatteryControls::sharedLockUncoordinated)
+      text += L" (not coordinated)";
+    else if (BatteryControls::sharedLockMissing)
+      text += L" (changes paused)";
     header.Text(text);
     Automation::AutomationProperties::SetName(header, text + L". Open setup and diagnostics");
     full.Text(active ? L"Cancel charge to full" : fullLabel);
@@ -4460,16 +4511,15 @@ FrameworkElement IconViewElement(void* self) {
   void* table = nullptr;
   HMODULE owner = nullptr;
   SIZE_T read = 0;
-  bool readable =
-      self &&
-      ReadProcessMemory(GetCurrentProcess(), static_cast<void**>(self) + 1, &inner, sizeof(inner),
-                        &read) &&
-      read == sizeof(inner) && inner &&
-      ReadProcessMemory(GetCurrentProcess(), inner, &table, sizeof(table), &read) &&
-      read == sizeof(table) &&
-      GetModuleHandleExW(
-          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-          static_cast<LPCWSTR>(table), &owner);
+  bool readable = self &&
+                  ReadProcessMemory(GetCurrentProcess(), static_cast<void**>(self) + 1, &inner,
+                                    sizeof(inner), &read) &&
+                  read == sizeof(inner) && inner &&
+                  ReadProcessMemory(GetCurrentProcess(), inner, &table, sizeof(table), &read) &&
+                  read == sizeof(table) &&
+                  GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                     static_cast<LPCWSTR>(table), &owner);
   static std::atomic<bool> logged = false;
   if (!logged.exchange(true)) {
     wchar_t name[MAX_PATH] = L"none";
@@ -4518,30 +4568,120 @@ void* WINAPI IconViewConstructorHook(void* self) {
   }
   return result;
 }
-std::atomic<bool> trayHooked = false;
-HMODULE TrayModule() {
-  auto module = GetModuleHandleW(L"SystemTray.dll");
-  if (!module)
-    module = GetModuleHandleW(L"Taskbar.View.dll");
-  return module;
-}
 bool HookTray(HMODULE module) {
-  // SystemTray.dll, Taskbar.View.dll
+  // SystemTray.dll, Taskbar.View.dll (before 2604), ExplorerExtensions.dll
   WindhawkUtils::SYMBOL_HOOK hooks[] = {
       {{LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
        &iconViewConstructorOriginal,
        IconViewConstructorHook}};
   return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
+// File version major of a loaded module, or 0 if it has no readable version resource.
+WORD TrayModuleMajor(HMODULE module) {
+  // 16 is RT_VERSION; spelled out so the line does not depend on the UNICODE macro.
+  HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), MAKEINTRESOURCEW(16));
+  HGLOBAL global = resource ? LoadResource(module, resource) : nullptr;
+  void* data = global ? LockResource(global) : nullptr;
+  VS_FIXEDFILEINFO* info = nullptr;
+  UINT size = 0;
+  if (data && VerQueryValueW(data, L"\\", reinterpret_cast<void**>(&info), &size) &&
+      size >= sizeof(*info))
+    return HIWORD(info->dwFileVersionMS);
+  return 0;
+}
+// Tray module selection follows taskbar-tray-system-icon-tweaks 1.3.1 (windhawk-mods
+// commit 0effe742, 2026-10-09). SystemTray.dll comes first. Taskbar.View.dll counts only
+// while its file version major is below 2604: from 2604.8002.200.6000 the SystemTray
+// types live in SystemTray.dll, and an unreadable version is skipped as well.
+// ExplorerExtensions.dll is the last resort. Each loaded candidate is tried once, in
+// that order, until one hook succeeds: at startup and again whenever one of them loads
+// later. A failed or ineligible module therefore never suppresses a better one.
+constexpr PCWSTR trayCandidates[] = {L"SystemTray.dll", L"Taskbar.View.dll",
+                                     L"ExplorerExtensions.dll"};
+std::mutex trayHookMutex;  // One attempt at a time. Taken once more by Wh_ModBeforeUninit.
+std::atomic<DWORD> trayHookOwner = 0;             // Thread inside an attempt, for reentrancy.
+std::atomic<HMODULE> trayHookedModule = nullptr;  // The module whose constructor is hooked.
+HMODULE trayTried[8] = {};                        // Under trayHookMutex.
+int trayTriedCount = 0;
+std::atomic<bool> trayHookPending = false;
+bool TrayCandidate(HMODULE module) {
+  if (!module)
+    return false;
+  for (auto name : trayCandidates)
+    if (GetModuleHandleW(name) == module)
+      return true;
+  return false;
+}
+bool TrayTried(HMODULE module) {
+  for (int i = 0; i < trayTriedCount; i++)
+    if (trayTried[i] == module)
+      return true;
+  return false;
+}
+// The best loaded candidate not yet tried, or null. Ineligible modules count as tried.
+HMODULE NextTrayCandidate() {
+  for (int i = 0; i < 3 && trayTriedCount < 8; i++) {
+    HMODULE module = GetModuleHandleW(trayCandidates[i]);
+    if (!module || TrayTried(module))
+      continue;
+    if (i == 1) {
+      WORD major = TrayModuleMajor(module);
+      if (!major || major >= 2604) {
+        Wh_Log(L"Skipping Taskbar.View.dll version %u; its tray types live in SystemTray.dll",
+               unsigned(major));
+        trayTried[trayTriedCount++] = module;
+        continue;
+      }
+    }
+    return module;
+  }
+  return nullptr;
+}
+// Called from Wh_ModInit (apply false: Windhawk applies init hooks itself), from
+// Wh_ModAfterInit and from the loader hook, on any thread, as often as modules load.
+// A call from inside a running attempt (HookTray loading a library on this thread)
+// returns at once; a call while another thread's attempt runs also returns at once,
+// and that attempt rechecks the candidates before it finishes, so no load is lost.
+void TryHookTray(bool apply) {
+  if (trayHookOwner == GetCurrentThreadId())
+    return;
+  trayHookPending = true;
+  while (!trayHookedModule && !unloading) {
+    std::unique_lock lock(trayHookMutex, std::try_to_lock);
+    if (!lock)
+      return;
+    trayHookOwner = GetCurrentThreadId();
+    trayHookPending = false;
+    while (!trayHookedModule && !unloading) {
+      HMODULE module = NextTrayCandidate();
+      if (!module)
+        break;
+      trayTried[trayTriedCount++] = module;
+      wchar_t name[MAX_PATH] = L"?";
+      GetModuleFileNameW(module, name, MAX_PATH);
+      if (HookTray(module)) {
+        trayHookedModule = module;
+        if (apply)
+          Wh_ApplyHookOperations();
+        Wh_Log(L"Tray icon creation hook installed in %s", name);
+      } else {
+        Wh_Log(
+            L"Tray icon creation hook unavailable in %s; only icons present at startup get "
+            L"the menu unless another tray module loads",
+            name);
+      }
+    }
+    trayHookOwner = 0;
+    lock.unlock();
+    if (!trayHookPending)
+      return;
+  }
+}
 decltype(&LoadLibraryExW) loadLibraryOriginal = nullptr;
 HMODULE WINAPI LoadLibraryHook(PCWSTR name, HANDLE file, DWORD flags) {
   HMODULE module = loadLibraryOriginal(name, file, flags);
-  if (!unloading && module && module == TrayModule() && !trayHooked.exchange(true)) {
-    if (HookTray(module))
-      Wh_ApplyHookOperations();
-    else
-      Wh_Log(L"Tray creation hook unavailable");
-  }
+  if (!unloading && !trayHookedModule && TrayCandidate(module))
+    TryHookTray(true);
   return module;
 }
 BOOL Wh_ModInit() {
@@ -4560,12 +4700,9 @@ BOOL Wh_ModInit() {
     }
     if (!symbolsReady)
       Wh_Log(L"Taskbar symbols unavailable; recovery worker remains active.");
-    auto tray = TrayModule();
-    if (tray) {
-      trayHooked = true;
-      if (!HookTray(tray))
-        Wh_Log(L"Tray creation hook unavailable");
-    } else {
+    TryHookTray(false);
+    if (!trayHookedModule) {
+      // No eligible tray module is hooked yet: watch for one to load.
       auto load = reinterpret_cast<decltype(&LoadLibraryExW)>(
           GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"));
       if (!WindhawkUtils::SetFunctionHook(load, LoadLibraryHook, &loadLibraryOriginal))
@@ -4595,12 +4732,7 @@ BOOL Wh_ModInit() {
   }
 }
 void Wh_ModAfterInit() {
-  if (!trayHooked)
-    if (auto tray = TrayModule())
-      if (!trayHooked.exchange(true)) {
-        if (HookTray(tray))
-          Wh_ApplyHookOperations();
-      }
+  TryHookTray(true);
   AttachNativeMenu();
 }
 void Wh_ModSettingsChanged() {
@@ -4608,6 +4740,11 @@ void Wh_ModSettingsChanged() {
 }
 void Wh_ModBeforeUninit() {
   unloading = true;
+  // A hook attempt in flight finishes first: hook operations are not allowed after this
+  // callback returns, and every later attempt sees `unloading` and refuses.
+  {
+    std::lock_guard lock(trayHookMutex);
+  }
   using namespace BatteryControls;
   shutdownDeadline = GetTickCount64() + 4000;
   if (stopEvent)
