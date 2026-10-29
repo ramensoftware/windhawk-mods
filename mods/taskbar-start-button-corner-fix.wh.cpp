@@ -2,13 +2,13 @@
 // @id              taskbar-start-button-corner-fix
 // @name            Start Menu Corner Click Fix
 // @description     Fixes the issue where clicking in the corner of the taskbar doesn't open the Start menu on multi monitor setups.
-// @version         2.0
+// @version         2.1
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -loleacc
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,13 +17,9 @@
 
 Fixes the issue where clicking the bottom-left corner of a left-aligned taskbar doesn't reliably open the Start menu when another monitor is adjacent to that edge.
 
-If `openStartWhenButtonUnavailable` is enabled and no Start button is exposed
-through UI Automation, the mod presses the Windows key. UI Automation errors
-and activation failures don't trigger this fallback.
+The mod presses the taskbar's own Start button through the accessibility interface Explorer provides for it. Start opens the same way as when the button itself is clicked, without first moving focus to the taskbar. If `openStartWhenButtonUnavailable` is enabled and the taskbar has no Start button, the mod presses the Windows key instead. Errors while pressing an existing Start button don't trigger this fallback.
 
-Windows normally opens a keyboard-triggered Start menu on the primary monitor.
-To open the Start menu on the monitor containing the mouse pointer,
-install the [Start menu open location](https://windhawk.net/mods/start-menu-open-location) mod and use its default cursor-based monitor setting.
+Windows normally opens a keyboard-triggered Start menu on the primary monitor. To open the Start menu on the monitor containing the mouse pointer, install the [Start menu open location](https://windhawk.net/mods/start-menu-open-location) mod and use its default cursor-based monitor setting.
 
 ## Requirements
 
@@ -43,17 +39,15 @@ install the [Start menu open location](https://windhawk.net/mods/start-menu-open
   $description: Length of each arm in pixels at 100% scaling
 - openStartWhenButtonUnavailable: true
   $name: Open Start when button unavailable
-  $description: Press the Windows key if the taskbar exposes no Start button through UI Automation
+  $description: Press the Windows key if the taskbar has no Start button
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
-#include <objbase.h>
-#include <uiautomation.h>
+#include <oleacc.h>
 
 #include <atomic>
-#include <unordered_map>
 
 #include <winrt/base.h>
 
@@ -67,14 +61,13 @@ constexpr wchar_t kContentBridgeClassName[] =
     L"Windows.UI.Composition.DesktopWindowContentBridge";
 constexpr wchar_t kPrimaryTaskbarClassName[] = L"Shell_TrayWnd";
 constexpr wchar_t kSecondaryTaskbarClassName[] = L"Shell_SecondaryTrayWnd";
-constexpr wchar_t kStartButtonAutomationID[] = L"StartButton";
+constexpr wchar_t kStartButtonClassName[] = L"Start";
 constexpr wchar_t kExplorerAdvancedRegistryPath[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 constexpr wchar_t kTaskbarAlignmentRegistryValue[] = L"TaskbarAl";
 constexpr int kDefaultEdgeThickness = 5;
 constexpr int kDefaultEdgeLength = 15;
 constexpr DWORD kLeftTaskbarAlignment = 0;
-constexpr DWORD kUIAutomationTimeoutMilliseconds = 1000;
 
 struct Settings {
     std::atomic<int> edgeThickness{kDefaultEdgeThickness};
@@ -95,9 +88,6 @@ enum class StartButtonOperationResult {
     Failed,
 };
 
-using StartButtonCache =
-    std::unordered_map<HWND, winrt::com_ptr<IUIAutomationElement>>;
-
 Settings g_settings;
 thread_local CornerPointerState g_cornerPointerState;
 
@@ -107,12 +97,6 @@ WNDPROC g_inputSiteWindowProcOriginal = nullptr;
 bool g_inputSiteWindowProcHookPending = false;
 bool g_hookLifecycleUnloading = false;
 std::atomic<bool> g_initialized{false};
-
-SRWLOCK g_startMenuActivationLock = SRWLOCK_INIT;
-HANDLE g_startMenuActivationEvent = nullptr;
-HANDLE g_startMenuActivationThread = nullptr;
-std::atomic<HWND> g_pendingStartMenuActivation{nullptr};
-std::atomic<bool> g_acceptStartMenuActivations{true};
 
 using CreateWindowInBand_t = HWND(WINAPI*)(DWORD extendedStyle,
                                            LPCWSTR className,
@@ -277,184 +261,50 @@ bool IsActiveCornerPointer(HWND inputSiteWindow, UINT32 pointerID) {
            g_cornerPointerState.pointerID == pointerID;
 }
 
-// Creates the reusable condition used to find each taskbar's Start button
-winrt::com_ptr<IUIAutomationCondition> CreateStartButtonCondition(
-    IUIAutomation* automation) {
-    BSTR automationID = SysAllocString(kStartButtonAutomationID);
-    if (!automationID) {
-        Wh_Log(L"Failed to allocate the Start button automation ID");
-        return {};
-    }
-
-    VARIANT automationIDValue = {};
-    automationIDValue.vt = VT_BSTR;
-    automationIDValue.bstrVal = automationID;
-
-    winrt::com_ptr<IUIAutomationCondition> condition;
-    HRESULT operationResult = automation->CreatePropertyCondition(
-        UIA_AutomationIdPropertyId, automationIDValue, condition.put());
-    SysFreeString(automationID);
-
-    if (FAILED(operationResult) || !condition) {
-        Wh_Log(L"Failed to create the Start button condition (error: "
-               L"0x%08X)",
-               static_cast<unsigned int>(operationResult));
-        return {};
-    }
-
-    return condition;
-}
-
-void RemoveInvalidCachedStartButtons(StartButtonCache& startButtonCache) {
-    StartButtonCache::iterator cachedStartButton =
-        startButtonCache.begin();
-    while (cachedStartButton != startButtonCache.end()) {
-        if (IsTaskbarWindow(cachedStartButton->first)) {
-            ++cachedStartButton;
-            continue;
-        }
-
-        cachedStartButton = startButtonCache.erase(cachedStartButton);
-    }
-}
-
-StartButtonOperationResult GetTaskbarStartButton(
-    IUIAutomation* automation,
-    IUIAutomationCondition* condition,
-    StartButtonCache& startButtonCache,
-    HWND taskbarWindow,
-    winrt::com_ptr<IUIAutomationElement>& startButton) {
-    startButton = nullptr;
-
-    StartButtonCache::iterator cachedStartButton =
-        startButtonCache.find(taskbarWindow);
-    if (cachedStartButton != startButtonCache.end()) {
-        startButton = cachedStartButton->second;
-        return StartButtonOperationResult::Succeeded;
-    }
-
-    winrt::com_ptr<IUIAutomationElement> taskbarElement;
-    HRESULT operationResult =
-        automation->ElementFromHandle(taskbarWindow, taskbarElement.put());
-    if (FAILED(operationResult) || !taskbarElement) {
-        Wh_Log(L"Failed to get the UI Automation element for taskbar %p "
-               L"(error: 0x%08X)",
-               taskbarWindow, static_cast<unsigned int>(operationResult));
+// Every taskbar keeps a hidden legacy Start button window. Its accessible
+// default action asks Explorer's Start coordinator to toggle Start without
+// going through the XAML Start button.
+StartButtonOperationResult PressTaskbarStartButton(HWND taskbarWindow) {
+    if (!IsTaskbarWindow(taskbarWindow)) {
+        Wh_Log(L"Taskbar %p no longer exists", taskbarWindow);
         return StartButtonOperationResult::Failed;
     }
 
-    operationResult = taskbarElement->FindFirst(
-        TreeScope_Descendants, condition, startButton.put());
-    if (FAILED(operationResult)) {
-        Wh_Log(L"Failed to find the Start button for taskbar %p (error: "
-               L"0x%08X)",
-               taskbarWindow, static_cast<unsigned int>(operationResult));
-        return StartButtonOperationResult::Failed;
-    }
-
-    if (!startButton) {
+    HWND startButtonWindow =
+        FindWindowExW(taskbarWindow, nullptr, kStartButtonClassName, nullptr);
+    if (!startButtonWindow) {
         Wh_Log(L"No Start button is available for taskbar %p",
                taskbarWindow);
         return StartButtonOperationResult::Unavailable;
     }
 
-    startButtonCache.emplace(taskbarWindow, startButton);
-    return StartButtonOperationResult::Succeeded;
-}
-
-bool TryActivateStartButton(
-    const winrt::com_ptr<IUIAutomationElement>& startButton,
-    HWND taskbarWindow) {
-    winrt::com_ptr<IUIAutomationTogglePattern> togglePattern;
-    HRESULT operationResult = startButton->GetCurrentPatternAs(
-        UIA_TogglePatternId, __uuidof(IUIAutomationTogglePattern),
-        togglePattern.put_void());
-    if (SUCCEEDED(operationResult) && togglePattern) {
-        operationResult = togglePattern->Toggle();
-        if (SUCCEEDED(operationResult)) {
-            Wh_Log(L"Toggled the Start button for taskbar %p",
-                   taskbarWindow);
-            return true;
-        }
-
-        Wh_Log(L"Failed to toggle the Start button for taskbar %p (error: "
-               L"0x%08X)",
-               taskbarWindow, static_cast<unsigned int>(operationResult));
-    } else {
-        Wh_Log(L"The Start button toggle pattern isn't available for "
-               L"taskbar %p (error: 0x%08X)",
-               taskbarWindow, static_cast<unsigned int>(operationResult));
+    winrt::com_ptr<IAccessible> startButton;
+    HRESULT operationResult = AccessibleObjectFromWindow(
+        startButtonWindow, static_cast<DWORD>(OBJID_CLIENT),
+        __uuidof(IAccessible), startButton.put_void());
+    if (FAILED(operationResult) || !startButton) {
+        Wh_Log(L"Failed to get the accessible Start button %p for taskbar %p "
+               L"(error: 0x%08X)",
+               startButtonWindow, taskbarWindow,
+               static_cast<unsigned int>(operationResult));
+        return StartButtonOperationResult::Failed;
     }
 
-    winrt::com_ptr<IUIAutomationInvokePattern> invokePattern;
-    operationResult = startButton->GetCurrentPatternAs(
-        UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
-        invokePattern.put_void());
-    if (FAILED(operationResult) || !invokePattern) {
-        Wh_Log(L"The Start button invoke pattern isn't available for "
-               L"taskbar %p (error: 0x%08X)",
-               taskbarWindow, static_cast<unsigned int>(operationResult));
-        return false;
-    }
-
-    operationResult = invokePattern->Invoke();
+    VARIANT self = {};
+    self.vt = VT_I4;
+    self.lVal = CHILDID_SELF;
+    operationResult = startButton->accDoDefaultAction(self);
     if (FAILED(operationResult)) {
-        Wh_Log(L"Failed to invoke the Start button for taskbar %p (error: "
-               L"0x%08X)",
-               taskbarWindow, static_cast<unsigned int>(operationResult));
-        return false;
-    }
-
-    Wh_Log(L"Invoked the Start button for taskbar %p", taskbarWindow);
-    return true;
-}
-
-// Activates the Start button belonging to the specified taskbar
-StartButtonOperationResult ActivateTaskbarStartButton(
-    IUIAutomation* automation,
-    IUIAutomationCondition* condition,
-    StartButtonCache& startButtonCache,
-    HWND taskbarWindow) {
-    RemoveInvalidCachedStartButtons(startButtonCache);
-    if (!automation || !condition ||
-        !IsTaskbarWindow(taskbarWindow)) {
+        Wh_Log(L"Failed to press the Start button %p for taskbar %p "
+               L"(error: 0x%08X)",
+               startButtonWindow, taskbarWindow,
+               static_cast<unsigned int>(operationResult));
         return StartButtonOperationResult::Failed;
     }
 
-    bool startButtonWasCached =
-        startButtonCache.find(taskbarWindow) != startButtonCache.end();
-    winrt::com_ptr<IUIAutomationElement> startButton;
-    StartButtonOperationResult lookupResult = GetTaskbarStartButton(
-        automation, condition, startButtonCache, taskbarWindow,
-        startButton);
-    if (lookupResult != StartButtonOperationResult::Succeeded) {
-        return lookupResult;
-    }
-
-    if (TryActivateStartButton(startButton, taskbarWindow)) {
-        return StartButtonOperationResult::Succeeded;
-    }
-
-    startButtonCache.erase(taskbarWindow);
-    if (!startButtonWasCached) {
-        return StartButtonOperationResult::Failed;
-    }
-
-    Wh_Log(L"Refreshing the cached Start button for taskbar %p",
+    Wh_Log(L"Pressed the Start button %p for taskbar %p", startButtonWindow,
            taskbarWindow);
-    lookupResult = GetTaskbarStartButton(
-        automation, condition, startButtonCache, taskbarWindow,
-        startButton);
-    if (lookupResult != StartButtonOperationResult::Succeeded) {
-        return lookupResult;
-    }
-
-    if (TryActivateStartButton(startButton, taskbarWindow)) {
-        return StartButtonOperationResult::Succeeded;
-    }
-
-    startButtonCache.erase(taskbarWindow);
-    return StartButtonOperationResult::Failed;
+    return StartButtonOperationResult::Succeeded;
 }
 
 bool SendWindowsKeyPress() {
@@ -491,225 +341,6 @@ void HandleUnavailableStartButton(HWND taskbarWindow) {
            L"Windows key",
            taskbarWindow);
     SendWindowsKeyPress();
-}
-
-// Processes UI Automation away from the taskbar input thread
-DWORD WINAPI StartMenuActivationThreadProc(void* parameter) {
-    HANDLE activationEvent = static_cast<HANDLE>(parameter);
-
-    HRESULT COMInitializationResult =
-        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    struct COMUninitializer {
-        HRESULT initializationResult;
-
-        ~COMUninitializer() {
-            if (SUCCEEDED(initializationResult)) {
-                CoUninitialize();
-            }
-        }
-    } COMScope{COMInitializationResult};
-
-    bool COMInitialized = SUCCEEDED(COMInitializationResult);
-    if (!COMInitialized) {
-        Wh_Log(L"Failed to initialize COM on the Start menu activation "
-               L"thread (error: 0x%08X)",
-               static_cast<unsigned int>(COMInitializationResult));
-    }
-
-    winrt::com_ptr<IUIAutomation2> automation;
-    winrt::com_ptr<IUIAutomationCondition> startButtonCondition;
-    if (COMInitialized) {
-        automation = winrt::try_create_instance<IUIAutomation2>(
-            __uuidof(CUIAutomation8));
-        if (!automation) {
-            Wh_Log(L"Failed to create the UI Automation instance");
-        } else {
-            // Bound provider calls so unload can't wait indefinitely
-            HRESULT connectionTimeoutResult =
-                automation->put_ConnectionTimeout(
-                    kUIAutomationTimeoutMilliseconds);
-            if (FAILED(connectionTimeoutResult)) {
-                Wh_Log(L"Failed to set the UI Automation connection timeout "
-                       L"(error: 0x%08X)",
-                       static_cast<unsigned int>(connectionTimeoutResult));
-            }
-
-            HRESULT transactionTimeoutResult =
-                automation->put_TransactionTimeout(
-                    kUIAutomationTimeoutMilliseconds);
-            if (FAILED(transactionTimeoutResult)) {
-                Wh_Log(L"Failed to set the UI Automation transaction timeout "
-                       L"(error: 0x%08X)",
-                       static_cast<unsigned int>(transactionTimeoutResult));
-            }
-
-            startButtonCondition =
-                CreateStartButtonCondition(automation.get());
-        }
-    }
-
-    StartButtonCache startButtonCache;
-    while (true) {
-        DWORD waitResult =
-            WaitForSingleObject(activationEvent, INFINITE);
-        if (waitResult != WAIT_OBJECT_0) {
-            DWORD error =
-                waitResult == WAIT_FAILED ? GetLastError() : ERROR_SUCCESS;
-            Wh_Log(L"Start menu activation thread wait failed "
-                   L"(result: 0x%08X, error: %lu)",
-                   waitResult, error);
-            break;
-        }
-
-        if (!g_acceptStartMenuActivations.load(
-                std::memory_order_acquire)) {
-            break;
-        }
-
-        HWND taskbarWindow = g_pendingStartMenuActivation.exchange(
-            nullptr, std::memory_order_acq_rel);
-        if (!taskbarWindow) {
-            continue;
-        }
-
-        StartButtonOperationResult activationResult =
-            ActivateTaskbarStartButton(
-                automation.get(), startButtonCondition.get(),
-                startButtonCache, taskbarWindow);
-        if (activationResult ==
-            StartButtonOperationResult::Unavailable) {
-            HandleUnavailableStartButton(taskbarWindow);
-        }
-    }
-
-    return 0;
-}
-
-// The caller holds g_startMenuActivationLock exclusively
-bool InitializeStartMenuActivationWorkerLocked() {
-    if (g_startMenuActivationThread) {
-        return true;
-    }
-
-    HANDLE activationEvent =
-        CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!activationEvent) {
-        Wh_Log(L"Failed to create the Start menu activation event "
-               L"(error: %lu)",
-               GetLastError());
-        return false;
-    }
-
-    DWORD activationThreadID = 0;
-    HANDLE activationThread = CreateThread(
-        nullptr, 0, StartMenuActivationThreadProc, activationEvent, 0,
-        &activationThreadID);
-    if (!activationThread) {
-        DWORD error = GetLastError();
-        CloseHandle(activationEvent);
-        Wh_Log(L"Failed to create the Start menu activation thread "
-               L"(error: %lu)",
-               error);
-        return false;
-    }
-
-    g_startMenuActivationEvent = activationEvent;
-    g_startMenuActivationThread = activationThread;
-    Wh_Log(L"Started the Start menu activation thread %lu",
-           activationThreadID);
-    return true;
-}
-
-void ShutdownStartMenuActivationWorker() {
-    HANDLE activationThread = nullptr;
-    HANDLE activationEvent = nullptr;
-    DWORD error = ERROR_SUCCESS;
-
-    AcquireSRWLockExclusive(&g_startMenuActivationLock);
-    g_acceptStartMenuActivations.store(
-        false, std::memory_order_release);
-    g_pendingStartMenuActivation.store(
-        nullptr, std::memory_order_release);
-    activationThread = g_startMenuActivationThread;
-    activationEvent = g_startMenuActivationEvent;
-    if (activationEvent && !SetEvent(activationEvent)) {
-        error = GetLastError();
-    }
-    ReleaseSRWLockExclusive(&g_startMenuActivationLock);
-
-    if (error != ERROR_SUCCESS) {
-        Wh_Log(L"Failed to signal the Start menu activation thread to stop "
-               L"(error: %lu)",
-               error);
-    }
-
-    if (activationThread) {
-        DWORD waitResult =
-            WaitForSingleObject(activationThread, INFINITE);
-        if (waitResult != WAIT_OBJECT_0) {
-            Wh_Log(L"Failed to wait for the Start menu activation thread "
-                   L"(result: 0x%08X, error: %lu)",
-                   waitResult, GetLastError());
-        }
-    }
-
-    AcquireSRWLockExclusive(&g_startMenuActivationLock);
-    if (g_startMenuActivationThread) {
-        CloseHandle(g_startMenuActivationThread);
-        g_startMenuActivationThread = nullptr;
-    }
-    if (g_startMenuActivationEvent) {
-        CloseHandle(g_startMenuActivationEvent);
-        g_startMenuActivationEvent = nullptr;
-    }
-    ReleaseSRWLockExclusive(&g_startMenuActivationLock);
-}
-
-bool QueueStartMenuActivation(HWND taskbarWindow) {
-    if (!taskbarWindow) {
-        Wh_Log(L"Rejected Start menu activation without a taskbar window");
-        return false;
-    }
-
-    bool activationQueued = false;
-    bool activationsAccepted = false;
-    DWORD error = ERROR_SUCCESS;
-
-    AcquireSRWLockExclusive(&g_startMenuActivationLock);
-    activationsAccepted = g_acceptStartMenuActivations.load(
-        std::memory_order_acquire);
-    if (activationsAccepted &&
-        InitializeStartMenuActivationWorkerLocked()) {
-        // Coalesce pending clicks by keeping the newest taskbar
-        g_pendingStartMenuActivation.store(
-            taskbarWindow, std::memory_order_release);
-        if (SetEvent(g_startMenuActivationEvent)) {
-            activationQueued = true;
-        } else {
-            error = GetLastError();
-            HWND expectedTaskbarWindow = taskbarWindow;
-            g_pendingStartMenuActivation.compare_exchange_strong(
-                expectedTaskbarWindow, nullptr,
-                std::memory_order_acq_rel);
-        }
-    }
-    ReleaseSRWLockExclusive(&g_startMenuActivationLock);
-
-    if (!activationQueued) {
-        if (!activationsAccepted) {
-            Wh_Log(L"Rejected Start menu activation for taskbar %p during "
-                   L"shutdown",
-                   taskbarWindow);
-        } else if (error != ERROR_SUCCESS) {
-            Wh_Log(L"Failed to queue Start menu activation for taskbar %p "
-                   L"(error: %lu)",
-                   taskbarWindow, error);
-        }
-        return false;
-    }
-
-    Wh_Log(L"Queued Start menu activation for taskbar %p", taskbarWindow);
-    return true;
 }
 
 LRESULT HandleInputSiteWindowMessage(WNDPROC originalWindowProc,
@@ -800,7 +431,10 @@ LRESULT HandleInputSiteWindowMessage(WNDPROC originalWindowProc,
                 Wh_Log(L"Intercepted corner pointer up at (%ld, %ld), "
                        L"pointer %u",
                        point.x, point.y, pointerID);
-                QueueStartMenuActivation(clickedTaskbarWindow);
+                if (PressTaskbarStartButton(clickedTaskbarWindow) ==
+                    StartButtonOperationResult::Unavailable) {
+                    HandleUnavailableStartButton(clickedTaskbarWindow);
+                }
             } else {
                 if (pointerCanceled) {
                     Wh_Log(L"Canceled corner click after pointer cancellation");
@@ -1046,8 +680,6 @@ void Wh_ModBeforeUninit() {
     AcquireSRWLockExclusive(&g_hookOperationLock);
     g_hookLifecycleUnloading = true;
     ReleaseSRWLockExclusive(&g_hookOperationLock);
-
-    ShutdownStartMenuActivationWorker();
 }
 
 void Wh_ModUninit() {
