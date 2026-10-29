@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.5
+// @version 0.9.6
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -2167,7 +2167,7 @@ void SetPanelContent(C::ScrollViewer scroll,
   C::StackPanel host;
   // All settings pages share one work-area-clamped viewport. Content may
   // scroll, but switching tabs or editing presets never resizes the shell.
-  double width = presetEditor ? 520 : 460, height = 410;
+  double width = 460, height = 410;
   auto presets = ReadPresets();
   auto favorites =
       std::count_if(presets.begin(), presets.end(), [](const Preset& p) { return p.quick; });
@@ -2325,7 +2325,6 @@ struct PresetEditorRow {
   C::Grid grid{nullptr};
   C::TextBox name, start, stop;
   C::CheckBox quick;
-  C::Button up, down;
   C::Border grip;
   Media::TranslateTransform translation;
 };
@@ -2355,10 +2354,6 @@ void EditorCounts(const std::shared_ptr<PresetEditor>& editor) {
                      std::to_wstring(favorites) + L" of 5 quick favorites");
   editor->add.IsEnabled(editor->rows.size() < maxPresets);
   editor->scroll.Height((std::min)(140.0, (std::max)(38.0, double(editor->rows.size()) * 38 - 6)));
-  for (size_t i = 0; i < editor->rows.size(); i++) {
-    editor->rows[i]->up.IsEnabled(i > 0);
-    editor->rows[i]->down.IsEnabled(i + 1 < editor->rows.size());
-  }
 }
 template <class T>
 bool MovePresetRow(std::vector<T>& rows, size_t from, size_t slot) {
@@ -2391,7 +2386,7 @@ void AddEditorRow(const std::shared_ptr<PresetEditor>& editor, const Preset& pre
   auto row = std::make_shared<PresetEditorRow>();
   row->grid = C::Grid();
   row->grid.ColumnSpacing(6);
-  for (double width : {28.0, 40.0, 0.0, 64.0, 64.0, 28.0, 28.0}) {
+  for (double width : {28.0, 40.0, 0.0, 64.0, 64.0, 28.0}) {
     C::ColumnDefinition column;
     column.Width(GridLength{width ? width : 1, width ? GridUnitType::Pixel : GridUnitType::Star});
     row->grid.ColumnDefinitions().Append(column);
@@ -2446,43 +2441,9 @@ void AddEditorRow(const std::shared_ptr<PresetEditor>& editor, const Preset& pre
   Cell(row->grid, row->name, 2);
   Cell(row->grid, row->start, 3);
   Cell(row->grid, row->stop, 4);
-  C::StackPanel arrows;
-  arrows.Children().Append(row->up);
-  arrows.Children().Append(row->down);
-  Cell(row->grid, arrows, 5);
-  Cell(row->grid, row->grip, 6);
-  row->up.Content(winrt::box_value(L"\u2191"));
-  row->down.Content(winrt::box_value(L"\u2193"));
-  for (auto button : {row->up, row->down}) {
-    button.MinWidth(0);
-    button.MinHeight(0);
-    button.Height(16);
-    button.Width(28);
-    button.FontSize(12);
-    button.Padding(Thickness{0, 0, 0, 0});
-  }
-  Automation::AutomationProperties::SetName(row->up, L"Move preset up");
-  Automation::AutomationProperties::SetName(row->down, L"Move preset down");
-  C::ToolTipService::SetToolTip(row->up, winrt::box_value(L"Move up"));
-  C::ToolTipService::SetToolTip(row->down, winrt::box_value(L"Move down"));
+  Cell(row->grid, row->grip, 5);
   std::weak_ptr<PresetEditor> weak = editor;
   std::weak_ptr<PresetEditorRow> weakRow = row;
-  auto move = [weak, weakRow](int delta) {
-    if (auto editor = weak.lock())
-      if (auto row = weakRow.lock()) {
-        auto it = std::find(editor->rows.begin(), editor->rows.end(), row);
-        if (it == editor->rows.end())
-          return;
-        int from = int(it - editor->rows.begin()), to = from + delta;
-        if (to < 0 || to >= int(editor->rows.size()))
-          return;
-        MoveEditorRow(editor, row, size_t(delta > 0 ? from + 2 : from - 1));
-      }
-  };
-  TrackEvent(
-      row->up.Click(winrt::auto_revoke, SafeUi([move](auto const&, auto const&) { move(-1); })));
-  TrackEvent(
-      row->down.Click(winrt::auto_revoke, SafeUi([move](auto const&, auto const&) { move(1); })));
   // Pointer capture avoids OS drag/drop initialization inside Explorer's taskbar XAML island.
   TrackEvent(row->grip.PointerPressed(
       winrt::auto_revoke, SafeUi([weak, weakRow](auto const&, auto const& args) {
@@ -2651,7 +2612,7 @@ void ShowPresetEditor(FrameworkElement target) {
     flyout = C::Flyout();
   flyout.ShouldConstrainToRootBounds(false);
   C::StackPanel content;
-  content.Width(520);
+  content.Width(460);
   content.Spacing(10);
   Style presenter;
   presenter.TargetType(winrt::Windows::UI::Xaml::Interop::TypeName{
@@ -2666,7 +2627,7 @@ void ShowPresetEditor(FrameworkElement target) {
   C::Grid heading;
   heading.ColumnSpacing(6);
   heading.Margin(Thickness{0, 0, 26, 0});
-  for (double width : {28.0, 40.0, 0.0, 64.0, 64.0, 28.0, 28.0}) {
+  for (double width : {28.0, 40.0, 0.0, 64.0, 64.0, 28.0}) {
     C::ColumnDefinition column;
     column.Width(GridLength{width ? width : 1, width ? GridUnitType::Pixel : GridUnitType::Star});
     heading.ColumnDefinitions().Append(column);
