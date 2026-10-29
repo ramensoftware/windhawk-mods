@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.7
+// @version 0.9.8
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -58,6 +58,8 @@ Choose a backend in Windhawk Settings:
   save it wherever you prefer on a local drive, and enter its full path in Settings.
   The mod verifies the reviewed executable before running it. It never downloads,
   installs or elevates anything. Setup and diagnostics includes the download link.
+  Only Lenovo's version 1.0.0.2 build is accepted; a newer Lenovo build needs a mod
+  update. Choose a folder that other accounts cannot change.
 
 The gear beside the charge summary opens diagnostics and a driver link based on
 this machine's detected model. No serial number is read or sent. Drivers are installed separately.
@@ -74,11 +76,18 @@ from Vantage is preserved. The integrated backend restores each battery separate
 Lenovo's executable cannot restore different ranges on two batteries. Select the
 integrated backend for that situation. Missing batteries defer restoration safely.
 
-**Thresholds persist after this mod is disabled or removed.** Disabling attempts
-restoration of a pending full-charge request. If restoration fails, Explorer crashes,
-or the mod is removed while it cannot run, limits may remain off and charging can
-continue to 100% until the mod runs again or you set limits in Vantage. Removing
-the mod also removes its Windhawk recovery data. Restore protection before removal.
+Charging limits belong to the laptop, not to one Windows account. When several
+people are signed in, any of them can cancel a full-charge request, and whichever
+session is running restores the limits at 100% or after eight hours.
+
+**Thresholds persist after this mod is disabled or removed.** Disabling or updating
+the mod ends a pending full-charge request early: it tries to restore your limits
+first. Signing out, restarting, shutting down or an Explorer crash skips that step;
+the saved request is then restored the next time the mod runs, at 100% or once its
+eight hours have passed. If restoration fails, or the mod is removed while it cannot
+run, limits may remain off and charging can continue to 100% until the mod runs
+again or you set limits in Vantage. Removing the mod also removes its Windhawk
+recovery data. Restore protection before removal.
 
 ## Advanced controls
 Battery health shows supported readings. Power offers the verified three-state USB
@@ -1121,17 +1130,24 @@ bool Save(const Recovery& value) {
   active = value.active != 0;
   return true;
 }
+// Also called again before each recovery decision: every signed-in user's Explorer
+// shares this record, so another session may have saved or cleared it.
 void Load() {
   Recovery candidate{};
   auto bytes = Wh_GetBinaryValue(L"Recovery", &candidate, sizeof(candidate));
   if (!bytes) {
     recoveryInvalid = Wh_GetIntValue(L"RecoveryPresent", 0) != 0;
+    if (!recoveryInvalid) {
+      recovery = Recovery{};
+      active = false;
+    }
     return;
   }
   if (bytes != sizeof(candidate) || !ValidRecovery(candidate, Now())) {
     recoveryInvalid = true;
     return;
   }
+  recoveryInvalid = false;
   recovery = candidate;
   active = candidate.active != 0;
 }
@@ -1198,8 +1214,18 @@ void Full() {
   next.active = 1;
   next.deadline = Now() + 8 * 3600;
   std::copy(std::begin(state.packs), std::end(state.packs), next.prior);
-  if (!Save(next) || !Set({true, false, 0, 0})) {
+  if (!Save(next)) {
     Error();
+    return;
+  }
+  if (!Set({true, false, 0, 0})) {
+    // The write may have reached one battery. Restore() reads both back: it clears the
+    // record if nothing changed and turns limits back on for any battery that lost
+    // them. If it cannot confirm either, the record stays and the worker retries.
+    if (Restore())
+      Status(L"Charge to full could not be started. Your charge limits are unchanged.");
+    else
+      Error();
     return;
   }
   Status(L"Charge-to-full request saved.");
@@ -1306,7 +1332,10 @@ bool SaveCalibration(CalibrationRecord next) {
   invalidCalibration = false;
   return true;
 }
+// Reloaded like Load(): another session may have started or finished calibration.
 void LoadCalibration() {
+  bool wasInvalid = invalidCalibration;
+  calibration = CalibrationRecord{};
   DWORD n = Wh_GetBinaryValue(L"Calibration", &calibration, sizeof(calibration));
   invalidCalibration =
       (n != sizeof(calibration) && (n || Wh_GetIntValue(L"CalibrationPresent", 0))) ||
@@ -1315,7 +1344,7 @@ void LoadCalibration() {
   for (auto p : calibration.prior)
     if (p.present > 1 || p.enabled > 1 || (p.enabled && !ValidRange(p.start, p.stop)))
       invalidCalibration = true;
-  if (invalidCalibration)
+  if (invalidCalibration && !wasInvalid)
     Status(L"Calibration recovery is invalid. Check charging limits in Lenovo Vantage.");
 }
 bool ThresholdWritesAllowed() {
@@ -1492,6 +1521,53 @@ bool ApplySeparate(unsigned value) {
 }
 }  // namespace AdvancedControls
 
+// Windhawk storage is machine-wide, so every signed-in user's Explorer runs a worker
+// over the same recovery and calibration records. This lock makes each reload,
+// check and write one step across sessions. It holds no owner data: a holder that
+// crashes leaves it abandoned and the next session takes it over. Worker-owned.
+HANDLE sharedLock = nullptr;
+void OpenSharedLock() {
+  PSECURITY_DESCRIPTOR sd = nullptr;
+  // Wait and release for any signed-in user; full access for SYSTEM and administrators.
+  if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+          L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x100001;;;AU)", SDDL_REVISION_1, &sd, nullptr)) {
+    SECURITY_ATTRIBUTES sa{sizeof(sa), sd, FALSE};
+    sharedLock = CreateMutexW(&sa, FALSE, L"Global\\" WH_MOD_ID L".SharedRecords");
+    LocalFree(sd);
+  }
+  if (!sharedLock)
+    sharedLock = OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
+                            L"Global\\" WH_MOD_ID L".SharedRecords");
+  if (!sharedLock)
+    Wh_Log(L"Cross-session lock unavailable (%u); records are not coordinated",
+           unsigned(GetLastError()));
+}
+// On success the caller holds the lock and both records are freshly read. With
+// `stoppable`, unload ends the wait early.
+bool LockSharedRecords(DWORD wait, bool stoppable) {
+  if (sharedLock) {
+    HANDLE events[] = {sharedLock, stopEvent};
+    DWORD result = WaitForMultipleObjects(stoppable ? 2 : 1, events, FALSE, wait);
+    if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED_0)
+      return false;
+  }
+  Load();
+  AdvancedControls::LoadCalibration();
+  return true;
+}
+void UnlockSharedRecords() {
+  if (sharedLock)
+    ReleaseMutex(sharedLock);
+}
+struct SharedRecordsLock {
+  bool held;
+  SharedRecordsLock(DWORD wait, bool stoppable) : held(LockSharedRecords(wait, stoppable)) {}
+  ~SharedRecordsLock() {
+    if (held)
+      UnlockSharedRecords();
+  }
+};
+
 struct ApplyResult {
   bool succeeded = false;
   ULONGLONG revision = 0;
@@ -1596,6 +1672,18 @@ bool Submit(int action, int values = 0) noexcept {
     return false;
   }
 }
+// Another session held the shared records for the whole wait. Nothing was written.
+void Unavailable(int action) {
+  Status(L"Another signed-in user is changing battery settings. Try again in a moment.");
+  if (action == 31 || action == 32 || action == 34) {
+    std::lock_guard lock(applyMutex);
+    applyResult.message = RecentStatus();
+    applyResult.succeeded = false;
+    ++applyResult.revision;
+    applyPending = false;
+  }
+  Refresh();
+}
 DWORD WINAPI Thread(void*) noexcept {
   try {
     // Only the actual shell process owns charging/recovery, even at shell startup.
@@ -1616,27 +1704,29 @@ DWORD WINAPI Thread(void*) noexcept {
 
     if (recoveryInvalid)
       Status(L"Recovery data invalid. Apply your desired limits manually.");
-    ULONGLONG checkAt = 0, calibrationCheckAt = 0;
+    OpenSharedLock();
+    ULONGLONG checkAt = 0;
     Submit(0);
     for (;;) {
       if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)
         break;
       auto now = GetTickCount64();
 
-      if (AdvancedControls::calibration.slot && now >= calibrationCheckAt) {
-        AdvancedControls::CheckCalibration();
-        calibrationCheckAt = GetTickCount64() + 30000;
-      }
-
-      if (Active() && now >= checkAt) {
-        SYSTEM_POWER_STATUS power{};
-        if ((GetSystemPowerStatus(&power) && power.BatteryLifePercent == 100) ||
-            RecoveryDue(recovery, Now())) {
-          if (!Restore())
-            Error();
-          Refresh();
+      // Every 30 s, with freshly read records, so a request saved by another
+      // session is still restored after that session signs out.
+      if (now >= checkAt) {
+        if (SharedRecordsLock records(1000, true); records.held) {
+          if (AdvancedControls::calibration.slot)
+            AdvancedControls::CheckCalibration();
+          SYSTEM_POWER_STATUS power{};
+          if (Active() && ((GetSystemPowerStatus(&power) && power.BatteryLifePercent == 100) ||
+                           RecoveryDue(recovery, Now()))) {
+            if (!Restore())
+              Error();
+            Refresh();
+          }
         }
-        checkAt = now + 30000;
+        checkAt = GetTickCount64() + 30000;
       }
       std::pair<int, int> command{};
       bool have = false;
@@ -1651,18 +1741,19 @@ DWORD WINAPI Thread(void*) noexcept {
       if (have) {
         busy = true;
         try {
-          Dispatch(command.first, command.second);
+          SharedRecordsLock records(15000, true);
+          // Refreshes only read, so they run even while another session holds the lock.
+          if (records.held || command.first == 0 || command.first == 20)
+            Dispatch(command.first, command.second);
+          else
+            Unavailable(command.first);
         } catch (...) {
           Error();
         }
         busy = false;
         continue;
       }
-      DWORD delay = AdvancedControls::calibration.slot
-                        ? DWORD(calibrationCheckAt > now ? calibrationCheckAt - now : 0)
-                        : INFINITE;
-      if (Active())
-        delay = (std::min)(delay, DWORD(checkAt > now ? checkAt - now : 0));
+      DWORD delay = DWORD(checkAt > now ? checkAt - now : 0);
 
       HANDLE events[] = {stopEvent, wakeEvent};
       DWORD result = MsgWaitForMultipleObjects(2, events, FALSE, delay, QS_ALLINPUT);
@@ -1678,12 +1769,16 @@ DWORD WINAPI Thread(void*) noexcept {
     }
     ULONGLONG empty = 0;
     shutdownDeadline.compare_exchange_strong(empty, GetTickCount64() + 4000);
-
-    if (Active() && !Restore())
+    auto now = GetTickCount64(), deadline = shutdownDeadline.load();
+    SharedRecordsLock records(DWORD(deadline > now ? deadline - now : 0), false);
+    if (Active() && (!records.held || !Restore()))
       Status(L"Restoration deferred. Saved recovery will be checked next time the mod runs.");
   } catch (...) {
     Error();
   }
+  if (sharedLock)
+    CloseHandle(sharedLock);
+  sharedLock = nullptr;
   return 0;
 }
 }  // namespace BatteryControls
@@ -1821,24 +1916,35 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void*);
 std::mutex uiInvokeMutex;
+// Every XAML object and handler this mod creates belongs to this one thread.
+std::atomic<DWORD> uiThread = 0;
+bool ClaimUiThread() {
+  DWORD expected = 0, current = GetCurrentThreadId();
+  return uiThread.compare_exchange_strong(expected, current) || expected == current;
+}
 struct UiRequest {
   RunFromWindowThreadProc_t proc;
   void* parameter;
-  bool done = false;
+  std::atomic<bool> done = false;
 };
-UiRequest* pendingUiRequest = nullptr;
+std::atomic<UiRequest*> pendingUiRequest = nullptr;
 const UINT uiMessage = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 LRESULT CALLBACK UiHook(int code, WPARAM w, LPARAM l) {
   if (code == HC_ACTION) {
     auto msg = reinterpret_cast<CWPSTRUCT*>(l);
-    if (msg->message == uiMessage && pendingUiRequest && !pendingUiRequest->done) {
-      auto request = pendingUiRequest;
-      request->done = true;
+    auto request = reinterpret_cast<UiRequest*>(msg->wParam);
+    // Claim only the request this message names, exactly once.
+    if (msg->message == uiMessage && request &&
+        pendingUiRequest.compare_exchange_strong(request, nullptr)) {
       request->proc(request->parameter);
+      request->done = true;
     }
   }
   return CallNextHookEx(nullptr, code, w, l);
 }
+// The request lives on this stack. That is safe because SendMessageW has no timeout:
+// it returns only after the hook finished or the message can no longer be delivered,
+// and the request is withdrawn before this frame ends.
 bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, void* parameter) {
   DWORD pid = 0, thread = GetWindowThreadProcessId(window, &pid);
   if (!thread || pid != GetCurrentProcessId())
@@ -1853,10 +1959,70 @@ bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, void* para
     return false;
   UiRequest request{proc, parameter};
   pendingUiRequest = &request;
-  SendMessageW(window, uiMessage, 0, 0);
+  SendMessageW(window, uiMessage, reinterpret_cast<WPARAM>(&request), 0);
   pendingUiRequest = nullptr;
   UnhookWindowsHookEx(hook);
   return request.done;
+}
+HWND UiThreadWindow(DWORD thread) {
+  DWORD pid = 0;
+  HWND found = FindWindowW(L"Shell_TrayWnd", nullptr);
+  if (found && GetWindowThreadProcessId(found, &pid) == thread && pid == GetCurrentProcessId())
+    return found;
+  // A recreated or missing taskbar window: any window of the same thread will do.
+  found = nullptr;
+  EnumThreadWindows(
+      thread,
+      [](HWND window, LPARAM result) -> BOOL {
+        *reinterpret_cast<HWND*>(result) = window;
+        return FALSE;
+      },
+      reinterpret_cast<LPARAM>(&found));
+  return found;
+}
+bool ThreadAlive(DWORD id) {
+  HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, id);
+  if (!thread)
+    return false;
+  bool alive = WaitForSingleObject(thread, 0) == WAIT_TIMEOUT;
+  CloseHandle(thread);
+  return alive;
+}
+// Teardown dispatch. Runs proc on the thread that owns the mod's XAML objects.
+// Waits without limit while that thread is busy or hung; retries a stale window for
+// up to ten seconds. Returns false only if proc never ran; Wh_ModUninit then keeps
+// the module loaded until every handler has been released.
+bool RunOnUiThread(RunFromWindowThreadProc_t proc, void* parameter) {
+  DWORD thread = uiThread;
+  if (!thread)
+    return true;  // No XAML object or handler was ever created.
+  for (int attempt = 0; attempt < 100 && ThreadAlive(thread); attempt++) {
+    if (HWND window = UiThreadWindow(thread))
+      if (RunFromWindowThread(window, proc, parameter))
+        return true;
+    if (attempt % 20 == 0)
+      Wh_Log(L"Taskbar cleanup not delivered (attempt %d); retrying", attempt + 1);
+    Sleep(100);
+  }
+  Wh_Log(L"Taskbar cleanup could not run on the taskbar thread");
+  return false;
+}
+// After the last handler is released, wait until the UI thread reaches a message
+// pump once more. Code that released a handler has then returned from this module.
+void UiBarrier() {
+  DWORD thread = uiThread;
+  while (thread && ThreadAlive(thread)) {
+    if (HWND window = UiThreadWindow(thread)) {
+      DWORD_PTR ignored = 0;
+      if (SendMessageTimeoutW(window, WM_NULL, 0, 0, SMTO_BLOCK, 5000, &ignored))
+        return;
+      if (GetLastError() == ERROR_TIMEOUT) {
+        Wh_Log(L"Taskbar thread has not responded for 5 s; still waiting");
+        continue;
+      }
+    }
+    Sleep(100);
+  }
 }
 
 bool HookTaskbarDllSymbols() {
@@ -2119,7 +2285,23 @@ bool HasUnsavedDraft() {
 std::wstring RangeStamp(bool enabled, int start, int stop) {
   return std::to_wstring(enabled) + L":" + std::to_wstring(start) + L":" + std::to_wstring(stop);
 }
+enum class Navigation { Leave, ConfirmDiscard, WaitForApply };
+// The single rule for user navigation away from a panel: X, Back, light dismissal,
+// Escape and taskbar icon context requests. View 0 returns from presets to the
+// threshold draft, so only that view keeps a suspended threshold draft. Teardown and
+// internal panel replacement do not ask.
+Navigation DecideNavigation(int view) {
+  if (BatteryControls::applyPending)
+    return Navigation::WaitForApply;
+  if (HasUnsavedDraft() || (view != 0 && suspendedThresholdDirty))
+    return Navigation::ConfirmDiscard;
+  return Navigation::Leave;
+}
+// Set while a panel is open. Returns true if leaving may proceed now; otherwise
+// it shows the panel's confirmation and the user decides.
+[[clang::no_destroy]] std::function<bool(int)> confirmLeave;
 void Close() {
+  confirmLeave = {};
   readDraft = {};
   draftBaseline.reset();
   RevokeUiEvents();
@@ -2348,12 +2530,11 @@ void SetPanelContent(C::ScrollViewer scroll,
     else
       QueuePanel(target, view);
   };
-  auto request = [=](int view) {
-    bool pending = BatteryControls::applyPending.load();
-    if (!pending && !HasUnsavedDraft() && !(view != 0 && suspendedThresholdDirty)) {
-      leave(view);
-      return;
-    }
+  auto confirm = [=](int view) {
+    auto decision = DecideNavigation(view);
+    if (decision == Navigation::Leave)
+      return true;
+    bool pending = decision == Navigation::WaitForApply;
     *destination = view;
     heading.Text(pending ? L"Changes are being applied" : L"Discard unsaved changes?");
     explanation.Text(pending ? L"Wait for the Apply result before leaving this panel."
@@ -2363,7 +2544,13 @@ void SetPanelContent(C::ScrollViewer scroll,
     host.Visibility(Visibility::Collapsed);
     confirmation.Visibility(Visibility::Visible);
     keep.Focus(FocusState::Programmatic);
+    return false;
   };
+  auto request = [=](int view) {
+    if (confirm(view))
+      leave(view);
+  };
+  confirmLeave = confirm;
   TrackEvent(keep.Click(winrt::auto_revoke, SafeUi([=](auto const&, auto const&) {
                           confirmation.Visibility(Visibility::Collapsed);
                           host.Visibility(Visibility::Visible);
@@ -2376,8 +2563,7 @@ void SetPanelContent(C::ScrollViewer scroll,
   TrackEvent(
       close.Click(winrt::auto_revoke, SafeUi([=](auto const&, auto const&) { request(-2); })));
   TrackEvent(flyout.Closing(winrt::auto_revoke, SafeUi([=](auto const&, auto const& args) {
-                              if (HasUnsavedDraft() || suspendedThresholdDirty ||
-                                  BatteryControls::applyPending) {
+                              if (DecideNavigation(-2) != Navigation::Leave) {
                                 args.Cancel(true);
                                 request(-2);
                               }
@@ -4115,7 +4301,14 @@ void ShowMenu(FrameworkElement target) {
 void QueueMenu(FrameworkElement target) {
   if (unloading)
     return;
+  // A context request while a panel is open is navigation to the battery menu.
+  // Call a copy: Close() below clears confirmLeave.
+  if (flyout && flyout.IsOpen() && confirmLeave)
+    if (auto confirm = confirmLeave; !confirm(-1))
+      return;
   BatteryControls::Submit(0);
+  // No panel remains open here, so any suspended draft has no owner.
+  DiscardDrafts();
   Close();
   pendingMenu = DispatcherTimer();
   pendingMenu.Interval(std::chrono::milliseconds(50));
@@ -4228,7 +4421,7 @@ void AttachNativeMenu() {
   RunFromWindowThread(
       found,
       [](void*) {
-        if (unloading)
+        if (unloading || !ClaimUiThread())
           return;
         try {
           // Most checks stop here: no full-tree traversal while the binding lives.
@@ -4257,23 +4450,64 @@ using IconViewConstructor = void*(WINAPI*)(void*);
 IconViewConstructor iconViewConstructorOriginal = nullptr;
 [[clang::no_destroy]] std::optional<std::list<FrameworkElement::Loaded_revoker>> iconLoadedEvents{
     std::in_place};
+// IconView is a private class. Like taskbar-tray-system-icon-tweaks, read the composed
+// XAML element from its second pointer field. Accept it only if the pointer and its
+// interface table can be read and the table lies in a loaded module image; otherwise
+// skip integration for this icon. This rules out an unreadable or heap value; it is
+// a layout check, not proof of the type.
+FrameworkElement IconViewElement(void* self) {
+  void* inner = nullptr;
+  void* table = nullptr;
+  HMODULE owner = nullptr;
+  SIZE_T read = 0;
+  bool readable =
+      self &&
+      ReadProcessMemory(GetCurrentProcess(), static_cast<void**>(self) + 1, &inner, sizeof(inner),
+                        &read) &&
+      read == sizeof(inner) && inner &&
+      ReadProcessMemory(GetCurrentProcess(), inner, &table, sizeof(table), &read) &&
+      read == sizeof(table) &&
+      GetModuleHandleExW(
+          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          static_cast<LPCWSTR>(table), &owner);
+  static std::atomic<bool> logged = false;
+  if (!logged.exchange(true)) {
+    wchar_t name[MAX_PATH] = L"none";
+    if (owner)
+      GetModuleFileNameW(owner, name, MAX_PATH);
+    Wh_Log(L"Tray icon layout %s (interface table in %s)",
+           readable ? L"recognized" : L"not recognized; only icons present at startup get the menu",
+           name);
+  }
+  if (!readable)
+    return nullptr;
+  FrameworkElement view = nullptr;
+  static_cast<IUnknown*>(inner)->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                                winrt::put_abi(view));
+  return view;
+}
 void* WINAPI IconViewConstructorHook(void* self) {
   void* result = iconViewConstructorOriginal(self);
-  if (unloading)
+  if (unloading || !ClaimUiThread())
     return result;
   try {
-    FrameworkElement view = nullptr;
-    reinterpret_cast<IUnknown**>(self)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                                          winrt::put_abi(view));
+    FrameworkElement view = IconViewElement(self);
     if (!view)
       return result;
     auto item = iconLoadedEvents->emplace(iconLoadedEvents->end());
     *item = view.Loaded(winrt::auto_revoke, [item](auto const& sender, auto const&) noexcept {
-      iconLoadedEvents->erase(item);
-      if (unloading)
+      // While unloading, keep this handler registered; teardown removes it on this
+      // thread, and Wh_ModUninit waits for it, so the module outlives this call.
+      if (unloading || !iconLoadedEvents)
         return;
+      // One-shot. After this erase the handler reads only its arguments and globals,
+      // never its own captures, so it does not rely on XAML keeping it alive.
+      iconLoadedEvents->erase(item);
       try {
-        taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        HWND found = FindWindowW(L"Shell_TrayWnd", nullptr);
+        DWORD pid = 0;
+        if (found && GetWindowThreadProcessId(found, &pid) && pid == GetCurrentProcessId())
+          taskbar = found;
         Scan(sender.template as<DependencyObject>());
       } catch (...) {
         Wh_Log(L"Unable to attach newly loaded tray icon");
@@ -4378,28 +4612,46 @@ void Wh_ModBeforeUninit() {
   shutdownDeadline = GetTickCount64() + 4000;
   if (stopEvent)
     SetEvent(stopEvent);
-  if (threadHandle)
+  // Every worker path is bounded by shutdownDeadline and the 1 s RPC timeout.
+  // Returning with a live worker would be unsafe, so a slow one is only logged.
+  if (threadHandle && WaitForSingleObject(threadHandle, 8000) == WAIT_TIMEOUT) {
+    Wh_Log(L"Battery worker still stopping after 8 s; waiting for it");
     WaitForSingleObject(threadHandle, INFINITE);
+  }
   auto cleanup = [](void*) {
-    ModernUI::Close();
+    try {
+      ModernUI::Close();
+    } catch (...) {
+      Wh_Log(L"Battery controls panel cleanup failed");
+    }
     ModernUI::uiRevokers.reset();
     for (auto& binding : *bindings)
-      if (auto element = binding.element.get()) {
-        element.ContextRequested(binding.token);
-        element.RemoveHandler(UIElement::RightTappedEvent(), binding.rightHandler);
-        element.RemoveHandler(UIElement::KeyDownEvent(), binding.keyHandler);
+      try {
+        if (auto element = binding.element.get()) {
+          element.ContextRequested(binding.token);
+          element.RemoveHandler(UIElement::RightTappedEvent(), binding.rightHandler);
+          element.RemoveHandler(UIElement::KeyDownEvent(), binding.keyHandler);
+        }
+      } catch (...) {
+        Wh_Log(L"Unable to detach a battery icon handler");
       }
     bindings.reset();
     iconLoadedEvents.reset();
   };
-  if (taskbar)
-    RunFromWindowThread(taskbar, cleanup, nullptr);
+  if (!RunOnUiThread(cleanup, nullptr))
+    Wh_Log(L"Taskbar handlers remain attached; unload waits until Explorer releases them");
 }
 void Wh_ModUninit() {
   using namespace BatteryControls;
-  // UI handlers and worker are gone; wait for delegates already being released by XAML.
-  while (winrt::get_module_lock() != 0)
-    Sleep(10);
+  // Every handler this mod gives to XAML holds the C++/WinRT module lock until it is
+  // destroyed. Returning while any exists would let Explorer call unloaded code.
+  for (ULONGLONG next = GetTickCount64() + 5000; winrt::get_module_lock() != 0; Sleep(10))
+    if (GetTickCount64() >= next) {
+      Wh_Log(L"Waiting for %u taskbar handlers to be released",
+             unsigned(uint32_t(winrt::get_module_lock())));
+      next = GetTickCount64() + 30000;
+    }
+  UiBarrier();
   if (threadHandle)
     CloseHandle(threadHandle);
   if (stopEvent)
