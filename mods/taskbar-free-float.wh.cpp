@@ -2,7 +2,7 @@
 // @id              taskbar-free-float
 // @name            Taskbar Free Float (experimental)
 // @description     Ctrl+drag the original Windows 11 app bar and tray/clock independently
-// @version         0.1.3
+// @version         0.1.4
 // @author          Rikyz
 // @github          https://github.com/RikyZ90
 // @include         explorer.exe
@@ -33,6 +33,7 @@ XAML popup windows. The tray block includes its system icons and clock.
 The optional **Anchor Start menu to floating Start button** setting is
 experimental and disabled by default. It positions Start near its button when
 opened, preferring above, then below, then beside it, within the work area.
+Placement is applied once after the opening animation and mouse release.
 It supports the classic and redesigned Windows 11 Start layouts on the primary
 monitor. It does not follow a drag while the menu stays open. Start menu settings
 in Shell Flyout Positions must remain at **Windows default** with **zero shifts**;
@@ -88,6 +89,7 @@ and reserved space remain at the original edge.
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -1014,8 +1016,9 @@ struct State {
     winrt::Windows::Foundation::IInspectable originalLocalValue{nullptr};
     Media::TransformGroup transform{nullptr};
     Media::TranslateTransform offset{nullptr};
+    DispatcherTimer openingTimer{nullptr};
     winrt::event_token visibilityToken{};
-    winrt::event_token layoutToken{};
+    winrt::event_token timerToken{};
     winrt::event_token closedToken{};
     bool updating = false;
     bool bindingLogged = false;
@@ -1100,11 +1103,7 @@ void UpdateImpl() {
     if (g_unloading || !g_state || !g_state->window) return;
     auto content = g_state->window.Content().try_as<FrameworkElement>();
     if (!content) { Restore(); return; }
-    if (g_state->content != content) {
-        if (g_state->content && g_state->layoutToken.value) g_state->content.LayoutUpdated(g_state->layoutToken);
-        g_state->content = content;
-        g_state->layoutToken = content.LayoutUpdated([](auto const&, auto const&) { Update(); });
-    }
+    g_state->content = content;
     RECT button{};
     if (!ReadAnchor(&button)) { Restore(); return; }
     if (!g_state->window.Visible()) return;
@@ -1170,6 +1169,30 @@ void Update() {
 
 void Uninit();
 
+void OpeningTick() {
+    if (!g_state || !g_state->openingTimer) return;
+    auto timer = g_state->openingTimer;
+    timer.Stop();
+    if (g_unloading || !g_state->window || !g_state->window.Visible()) return;
+    // The taskbar press can open Start before its release; let that click finish.
+    if (LeftButtonDown()) {
+        timer.Start();
+        return;
+    }
+    Update();
+}
+
+void VisibilityChanged(bool visible) {
+    if (!g_state || !g_state->openingTimer) return;
+    g_state->openingTimer.Stop();
+    if (g_unloading) return;
+    if (visible) {
+        g_state->openingTimer.Start();
+    } else {
+        Restore();
+    }
+}
+
 void Init() {
     if (g_unloading || g_state) return;
     try {
@@ -1181,12 +1204,20 @@ void Init() {
         g_state->hwnd = hwnd;
         g_window = hwnd;
         g_state->window = window;
+        g_state->openingTimer = DispatcherTimer();
+        g_state->openingTimer.Interval(std::chrono::milliseconds(300));
+        g_state->timerToken = g_state->openingTimer.Tick(
+            [](auto const&, auto const&) {
+                try { OpeningTick(); }
+                catch (...) { Wh_Log(L"Start menu opening update failed"); }
+            });
         g_state->visibilityToken = window.VisibilityChanged(
             [](auto const&, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
-                if (args.Visible()) Update();
+                try { VisibilityChanged(args.Visible()); }
+                catch (...) { Wh_Log(L"Start menu visibility update failed"); }
             });
         g_state->closedToken = window.Closed([](auto const&, auto const&) { Uninit(); });
-        Update();
+        VisibilityChanged(window.Visible());
     } catch (...) {
         Uninit();
         Wh_Log(L"Start menu anchor initialization failed");
@@ -1196,7 +1227,10 @@ void Init() {
 void Uninit() {
     if (!g_state) return;
     try {
-        if (g_state->content && g_state->layoutToken.value) g_state->content.LayoutUpdated(g_state->layoutToken);
+        if (g_state->openingTimer) {
+            g_state->openingTimer.Stop();
+            if (g_state->timerToken.value) g_state->openingTimer.Tick(g_state->timerToken);
+        }
     } catch (...) { g_callbackCleanupFailed = true; }
     try {
         if (g_state->window && g_state->visibilityToken.value) g_state->window.VisibilityChanged(g_state->visibilityToken);
@@ -1204,7 +1238,7 @@ void Uninit() {
     try {
         if (g_state->window && g_state->closedToken.value) g_state->window.Closed(g_state->closedToken);
     } catch (...) { g_callbackCleanupFailed = true; }
-    g_state->layoutToken = {};
+    g_state->timerToken = {};
     g_state->visibilityToken = {};
     g_state->closedToken = {};
     try { Restore(); } catch (...) {}
