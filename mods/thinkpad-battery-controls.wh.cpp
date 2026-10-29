@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.4
+// @version 0.9.5
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -1174,19 +1174,65 @@ void Full() {
   }
   Status(L"Charge-to-full request saved.");
 }
+struct RememberedRanges {
+  DWORD version = 1;
+  int start[2]{}, stop[2]{};
+};
+RememberedRanges ReadRememberedRanges() {
+  RememberedRanges value;
+  auto bytes = Wh_GetBinaryValue(L"RememberedRanges", &value, sizeof(value));
+  if (bytes != sizeof(value) || value.version != 1)
+    return {};
+  for (int i = 0; i < 2; ++i)
+    if ((value.start[i] || value.stop[i]) && !ValidRange(value.start[i], value.stop[i]))
+      return {};
+  return value;
+}
+bool RememberRanges(const State& state, bool includeDisabled = false) {
+  if (!state.valid)
+    return false;
+  auto value = ReadRememberedRanges(), before = value;
+  for (int i = 0; i < 2; ++i)
+    if (state.packs[i].present && (state.packs[i].enabled || includeDisabled) &&
+        ValidRange(state.packs[i].start, state.packs[i].stop)) {
+      value.start[i] = state.packs[i].start;
+      value.stop[i] = state.packs[i].stop;
+    }
+  return memcmp(&value, &before, sizeof(value)) == 0 ||
+         Wh_SetBinaryValue(L"RememberedRanges", &value, sizeof(value));
+}
+bool RememberOffDraft(int values) {
+  auto state = Query();
+  int start = LOWORD(values), stop = HIWORD(values);
+  if (ValidRange(start, stop))
+    for (auto& p : state.packs)
+      if (p.present) {
+        p.start = start;
+        p.stop = stop;
+      }
+  return RememberRanges(state, true);
+}
+void RestoreRememberedRanges(State& state, const RememberedRanges& remembered) {
+  if (!state.valid)
+    return;
+  for (int i = 0; i < 2; ++i) {
+    auto& p = state.packs[i];
+    if (p.present && !p.enabled && ValidRange(remembered.start[i], remembered.stop[i])) {
+      p.start = remembered.start[i];
+      p.stop = remembered.stop[i];
+    }
+  }
+  Summarize(state);
+}
 void Refresh() {
   State state = Query();
+  // Firmware can return zeroes when disabled. Remember ranges independently
+  // without claiming that disabled limits are active or writing to hardware.
+  if (state.valid && state.enabled)
+    RememberRanges(state);
+  RestoreRememberedRanges(state, ReadRememberedRanges());
   {
     std::lock_guard lock(stateMutex);
-    if (state.valid && !state.enabled) {
-      if (Active() && ValidRange(recovery.prior[0].start, recovery.prior[0].stop)) {
-        state.start = recovery.prior[0].start;
-        state.stop = recovery.prior[0].stop;
-      } else if (ValidRange(snapshot.state.start, snapshot.state.stop)) {
-        state.start = snapshot.state.start;
-        state.stop = snapshot.state.stop;
-      }
-    }
     snapshot.state = state;
     snapshot.revision++;
     refreshing = false;
@@ -1377,7 +1423,8 @@ bool ApplySeparate(unsigned value) {
     target[i] = {1, DWORD(stop != 0), start, stop};
   }
   auto before = Query();
-  if (!before.valid || !before.packs[0].present || !before.packs[1].present)
+  if (!before.valid || !before.packs[0].present || !before.packs[1].present ||
+      !RememberRanges(before))
     return false;
   NativeRpc::Session s;
   if (s.Connect(GetTickCount64() + 3000))
@@ -1415,7 +1462,33 @@ bool ApplySeparate(unsigned value) {
 }
 }  // namespace AdvancedControls
 
+struct ApplyResult {
+  ULONGLONG revision = 0;
+  std::wstring message;
+};
+std::mutex applyMutex;
+std::atomic<bool> applyPending = false;
+ApplyResult applyResult;
+ApplyResult ReadApplyResult() {
+  std::lock_guard lock(applyMutex);
+  return applyResult;
+}
 void Dispatch(int action, int values) {
+  if (action == 31 || action == 32 || action == 34) {
+    try {
+      Dispatch(action == 31 ? 5 : action == 32 ? 6 : 24, values);
+    } catch (...) {
+      Error();
+    }
+    auto message = RecentStatus();
+    std::lock_guard lock(applyMutex);
+    applyResult.message =
+        message.empty() ? L"Apply was not confirmed. Check diagnostics." : message;
+    ++applyResult.revision;
+    applyPending = false;
+    return;
+  }
+
   if (action >= 20 && action <= 24) {
     if (action == 20)
       AdvancedControls::RefreshAdvanced();
@@ -1451,21 +1524,22 @@ void Dispatch(int action, int values) {
   } else if (action == 5) {
     int start = LOWORD(values), stop = HIWORD(values);
     if (ValidRange(start, stop) && Set({true, true, start, stop}) && Clear())
-      Status(L"Charge thresholds applied.");
+      Status((L"Applied: " + std::to_wstring(start) + L" to " + std::to_wstring(stop) + L"%.")
+                 .c_str());
     else
       Error();
   } else if (action == 6) {
-    if (Clear() && Set({true, false, 0, 0}))
+    if (RememberOffDraft(values) && Set({true, false, 0, 0}) && Clear())
       Status(L"Charge limits off.");
     else
       Error();
   }
   Refresh();
 }
-void Submit(int action, int values = 0) noexcept {
+bool Submit(int action, int values = 0) noexcept {
   try {
     if (unloading || !wakeEvent) {
-      return;
+      return false;
     }
     std::lock_guard lock(queueMutex);
     // Bound work and coalesce repeated UI commands, including refresh requests.
@@ -1474,16 +1548,18 @@ void Submit(int action, int values = 0) noexcept {
       refreshing = true;
     if (!commands.empty() && commands.back().first == action) {
       commands.back().second = values;
-      return;
+      return true;
     }
     if (commands.size() >= 8) {
       Status(L"Another battery operation is pending.");
-      return;
+      return false;
     }
     commands.emplace_back(action, values);
     SetEvent(wakeEvent);
+    return true;
   } catch (...) {
     Status(L"Unable to queue battery operation.");
+    return false;
   }
 }
 DWORD WINAPI Thread(void*) noexcept {
@@ -2083,7 +2159,6 @@ void PositionPanel(FrameworkElement target, P::FlyoutBase current) {
   }
 }
 void QueuePanel(FrameworkElement target, int view);
-void ShowQuickMenu(FrameworkElement target);
 void ShowMenu(FrameworkElement target);
 void SetPanelContent(C::ScrollViewer scroll,
                      FrameworkElement target,
@@ -2092,7 +2167,7 @@ void SetPanelContent(C::ScrollViewer scroll,
   C::StackPanel host;
   // All settings pages share one work-area-clamped viewport. Content may
   // scroll, but switching tabs or editing presets never resizes the shell.
-  double width = 520, height = 360;
+  double width = presetEditor ? 520 : 460, height = 410;
   auto presets = ReadPresets();
   auto favorites =
       std::count_if(presets.begin(), presets.end(), [](const Preset& p) { return p.quick; });
@@ -2132,9 +2207,8 @@ void SetPanelContent(C::ScrollViewer scroll,
   navigation.HorizontalAlignment(HorizontalAlignment::Right);
   C::Button back, close;
   // Use a text arrow, keeping the button label in the normal UI font.
-  back.Content(winrt::box_value(returnView == 0   ? L"\u2190  Charge thresholds"
-                                : returnView == 3 ? L"\u2190  Charging presets"
-                                                  : L"\u2190  Battery menu"));
+  back.Content(
+      winrt::box_value(returnView == 0 ? L"\u2190  Charge thresholds" : L"\u2190  Battery menu"));
   back.HorizontalAlignment(HorizontalAlignment::Left);
   close.Content(winrt::box_value(L"\u00d7"));
   close.HorizontalAlignment(HorizontalAlignment::Right);
@@ -3048,6 +3122,37 @@ void ShowAdvanced(FrameworkElement target) {
                            })));
   Send(20);
 }
+void ApplyInPlace(C::Button button, C::TextBlock feedback, int action, int values) {
+  bool expected = false;
+  if (!BatteryControls::applyPending.compare_exchange_strong(expected, true)) {
+    feedback.Text(L"Previous changes are still being applied. Please wait.");
+    return;
+  }
+  auto revision = BatteryControls::ReadApplyResult().revision;
+  if (!BatteryControls::Submit(action, values)) {
+    BatteryControls::applyPending = false;
+    feedback.Text(
+        L"Could not queue changes. Please try again when the current operation finishes.");
+    return;
+  }
+  button.IsEnabled(false);
+  feedback.Opacity(1);
+  feedback.Text(L"Applying changes...");
+  if (statusTimer)
+    statusTimer.Stop();
+  statusTimer = DispatcherTimer();
+  statusTimer.Interval(std::chrono::milliseconds(200));
+  TrackEvent(statusTimer.Tick(winrt::auto_revoke,
+                              SafeUi([button, feedback, revision](auto const&, auto const&) {
+                                auto result = BatteryControls::ReadApplyResult();
+                                if (result.revision != revision) {
+                                  feedback.Text(result.message);
+                                  button.IsEnabled(true);
+                                  statusTimer.Stop();
+                                }
+                              })));
+  statusTimer.Start();
+}
 struct DualDraft {
   bool valid = false, linked = false;
   int selected = 0;
@@ -3222,17 +3327,15 @@ void ShowDualPanel(FrameworkElement target) {
   actions.Spacing(8);
   C::Button apply, cancel;
   apply.Content(winrt::box_value(L"Apply both ranges"));
-  cancel.Content(winrt::box_value(L"Cancel"));
-  TrackEvent(apply.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
+  cancel.Content(winrt::box_value(L"Close"));
+  TrackEvent(apply.Click(winrt::auto_revoke, SafeUi([apply, summary](auto const&, auto const&) {
                            unsigned value = 0;
                            for (int i = 0; i < 2; i++) {
                              auto p = dualDraft.packs[i];
                              if (p.enabled)
                                value |= (unsigned(p.start) | (unsigned(p.stop) << 8)) << (i * 16);
                            }
-                           Send(24, int(value));
-                           dualDraft.valid = false;
-                           flyout.Hide();
+                           ApplyInPlace(apply, summary, 34, int(value));
                          })));
   TrackEvent(cancel.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
                             dualDraft.valid = false;
@@ -3374,21 +3477,15 @@ void ShowPanel(FrameworkElement target) {
   p->stopLabel.Text(L"Stop at " + std::to_wstring(int(p->stop.Value())) + L"%");
   Automation::AutomationProperties::SetName(p->start, L"Start charging below percentage");
   Automation::AutomationProperties::SetName(p->stop, L"Stop charging at percentage");
-  C::Grid ranges;
-  ranges.ColumnSpacing(24);
-  for (int i = 0; i < 2; ++i) {
-    C::ColumnDefinition column;
-    column.Width(GridLength{1, GridUnitType::Star});
-    ranges.ColumnDefinitions().Append(column);
-  }
+  C::StackPanel ranges;
+  ranges.Spacing(8);
   C::StackPanel startRange, stopRange;
   startRange.Children().Append(p->startLabel);
   startRange.Children().Append(p->start);
   stopRange.Children().Append(p->stopLabel);
   stopRange.Children().Append(p->stop);
-  p->start.Height(32);
-  p->stop.Height(32);
-  C::Grid::SetColumn(stopRange, 1);
+  p->start.Height(28);
+  p->stop.Height(28);
   ranges.Children().Append(startRange);
   ranges.Children().Append(stopRange);
   C::Border rangeGroup;
@@ -3474,15 +3571,14 @@ void ShowPanel(FrameworkElement target) {
   actions.Spacing(8);
   C::Button apply;
   apply.Content(winrt::box_value(L"Apply changes"));
-  TrackEvent(apply.Click(winrt::auto_revoke, SafeUi([weak](auto const&, auto const&) {
+  TrackEvent(apply.Click(winrt::auto_revoke, SafeUi([weak, apply, hint](auto const&, auto const&) {
                            if (auto p = weak.lock()) {
-                             Send(p->enabled.IsOn() ? 5 : 6,
-                                  MAKELONG(int(p->start.Value()), int(p->stop.Value())));
-                             flyout.Hide();
+                             ApplyInPlace(apply, hint, p->enabled.IsOn() ? 31 : 32,
+                                          MAKELONG(int(p->start.Value()), int(p->stop.Value())));
                            }
                          })));
   C::Button cancel;
-  cancel.Content(winrt::box_value(L"Cancel"));
+  cancel.Content(winrt::box_value(L"Close"));
   TrackEvent(
       cancel.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) { flyout.Hide(); })));
   actions.Children().Append(apply);
@@ -3706,14 +3802,12 @@ void ShowSetup(FrameworkElement target) {
 void QueuePanel(FrameworkElement target, int view) {
   if (unloading || !target || !target.XamlRoot())
     return;
-  preservePanelHost = flyout && flyout.IsOpen() && view != 3 && view != -1;
+  preservePanelHost = flyout && flyout.IsOpen() && view != -1;
   try {
     if (view == -1)
       ShowMenu(target);
     else if (view == 4)
       ShowAdvanced(target);
-    else if (view == 3)
-      ShowQuickMenu(target);
     else if (view == 2)
       ShowPresetEditor(target);
     else if (view == 1)
@@ -3835,7 +3929,7 @@ void ShowMenu(FrameworkElement target) {
   managePresets.Text(L"Manage presets...");
   TrackEvent(managePresets.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
                                    returningDraft.valid = false;
-                                   presetReturnView = 3;
+                                   presetReturnView = -1;
                                    QueuePanel(target, 2);
                                  })));
   quick.Items().Append(managePresets);
@@ -3888,70 +3982,6 @@ void ShowMenu(FrameworkElement target) {
                                   update();
                                 }
                               })));
-  statusTimer.Start();
-  TrackEvent(menu.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
-                           if (statusTimer)
-                             statusTimer.Stop();
-                         })));
-  menu.Placement(P::FlyoutPlacementMode::Top);
-  menu.ShouldConstrainToRootBounds(false);
-  TrackEvent(menu.Opened(winrt::auto_revoke, SafeUi([target](auto const& sender, auto const&) {
-                           PositionPanel(target, sender.template as<P::FlyoutBase>());
-                         })));
-  menu.ShowAt(target);
-}
-void ShowQuickMenu(FrameworkElement target) {
-  if (unloading || !target || !target.XamlRoot())
-    return;
-  Close();
-  menu = C::MenuFlyout();
-  C::MenuFlyoutItem heading;
-  heading.Text(L"Apply charging preset");
-  heading.IsEnabled(false);
-  menu.Items().Append(heading);
-  std::vector<std::pair<C::MenuFlyoutItem, Preset>> quickItems;
-  bool valid = (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing);
-  int shown = 0;
-  for (const auto& preset : ReadPresets()) {
-    if (!preset.quick || shown++ >= 5)
-      continue;
-    C::MenuFlyoutItem item;
-    item.Text(PresetLabel(preset));
-    item.IsEnabled(valid);
-    MarkApplied(item, preset);
-    TrackEvent(item.Click(winrt::auto_revoke, SafeUi([preset](auto const&, auto const&) {
-                            Send(5, MAKELONG(preset.start, preset.stop));
-                          })));
-    menu.Items().Append(item);
-    quickItems.emplace_back(item, preset);
-  }
-  menu.Items().Append(C::MenuFlyoutSeparator());
-  C::MenuFlyoutItem manage;
-  manage.Text(L"Manage presets...");
-  TrackEvent(manage.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
-                            returningDraft.valid = false;
-                            presetReturnView = 3;
-                            QueuePanel(target, 2);
-                          })));
-  menu.Items().Append(manage);
-  statusTimer = DispatcherTimer();
-  statusTimer.Interval(std::chrono::milliseconds(200));
-  auto stamp = std::make_shared<ULONGLONG>(~0ULL);
-  TrackEvent(statusTimer.Tick(
-      winrt::auto_revoke, SafeUi([quickItems, stamp](auto const&, auto const&) {
-        auto snap = BatteryControls::ReadSnapshot();
-        auto current = snap.revision * 4 + (BatteryControls::refreshing ? 2 : 0) +
-                       (BatteryControls::Active() ? 1 : 0);
-        if (current == *stamp)
-          return;
-        *stamp = current;
-        for (auto& [item, preset] : quickItems) {
-          item.IsEnabled(
-              (BatteryControls::ReadSnapshot().state.valid && !BatteryControls::refreshing));
-          item.Icon(nullptr);
-          MarkApplied(item, preset);
-        }
-      })));
   statusTimer.Start();
   TrackEvent(menu.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
                            if (statusTimer)
