@@ -529,13 +529,13 @@ static LPSIZE WINAPI CalcMinimumHook(void* object, LPSIZE result, SIZE constrain
     return answer;
 }
 static bool InitTaskbarSymbols() {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {{L"public: struct tagSIZE __cdecl ClockButton::CalculateMinimumSize(struct tagSIZE)"},
             &g_calcMinimum, CalcMinimumHook},
         {{L"protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool)"},
             &g_updateClockState},
     };
-    g_symbolsReady = WindhawkUtils::HookSymbols(GetModuleHandleW(nullptr), hooks, ARRAYSIZE(hooks));
+    g_symbolsReady = WindhawkUtils::HookSymbols(GetModuleHandleW(nullptr), explorerExeHooks, ARRAYSIZE(explorerExeHooks));
     if (!g_symbolsReady)
         Wh_Log(L"User Tile: Windows 10 clock symbols unavailable. Keeping flyout/hotkey only.");
     return g_symbolsReady;
@@ -1360,7 +1360,7 @@ static bool InitXamlTaskbarSymbols() {
         Wh_Log(L"User Tile: taskbar.dll could not be loaded for native XAML backend.");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{L"const CTaskBand::`vftable'{for `ITaskListWndSite'}"},
             &g_ctaskBandSiteVftable},
         {{L"public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const "},
@@ -1374,7 +1374,7 @@ static bool InitXamlTaskbarSymbols() {
     };
     g_xamlCompatibilityFailed = false;
     g_xamlSymbolsReady = WindhawkUtils::HookSymbols(
-        taskbarModule, hooks, ARRAYSIZE(hooks));
+    taskbarModule, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
     if (!g_xamlSymbolsReady)
         Wh_Log(L"User Tile: native XAML taskbar symbols unavailable; keeping flyout/hotkey only.");
     return g_xamlSymbolsReady;
