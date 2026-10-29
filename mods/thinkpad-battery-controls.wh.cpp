@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.6
+// @version 0.9.7
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -1463,6 +1463,7 @@ bool ApplySeparate(unsigned value) {
 }  // namespace AdvancedControls
 
 struct ApplyResult {
+  bool succeeded = false;
   ULONGLONG revision = 0;
   std::wstring message;
 };
@@ -1473,8 +1474,10 @@ ApplyResult ReadApplyResult() {
   std::lock_guard lock(applyMutex);
   return applyResult;
 }
+bool commandSucceeded = false;  // Worker-thread-only result for an Apply request.
 void Dispatch(int action, int values) {
   if (action == 31 || action == 32 || action == 34) {
+    commandSucceeded = false;
     try {
       Dispatch(action == 31 ? 5 : action == 32 ? 6 : 24, values);
     } catch (...) {
@@ -1484,6 +1487,7 @@ void Dispatch(int action, int values) {
     std::lock_guard lock(applyMutex);
     applyResult.message =
         message.empty() ? L"Apply was not confirmed. Check diagnostics." : message;
+    applyResult.succeeded = commandSucceeded;
     ++applyResult.revision;
     applyPending = false;
     return;
@@ -1497,7 +1501,7 @@ void Dispatch(int action, int values) {
     if (action == 22 || action == 23)
       AdvancedControls::Calibration(values, action == 23);
     if (action == 24) {
-      if (AdvancedControls::ApplySeparate(static_cast<unsigned>(values)))
+      if ((commandSucceeded = AdvancedControls::ApplySeparate(static_cast<unsigned>(values))))
         Status(L"Both battery ranges applied.");
       else
         Error();
@@ -1523,13 +1527,13 @@ void Dispatch(int action, int values) {
       Status(L"Battery protection restored.");
   } else if (action == 5) {
     int start = LOWORD(values), stop = HIWORD(values);
-    if (ValidRange(start, stop) && Set({true, true, start, stop}) && Clear())
+    if ((commandSucceeded = ValidRange(start, stop) && Set({true, true, start, stop}) && Clear()))
       Status((L"Applied: " + std::to_wstring(start) + L" to " + std::to_wstring(stop) + L"%.")
                  .c_str());
     else
       Error();
   } else if (action == 6) {
-    if (RememberOffDraft(values) && Set({true, false, 0, 0}) && Clear())
+    if ((commandSucceeded = RememberOffDraft(values) && Set({true, false, 0, 0}) && Clear()))
       Status(L"Charge limits off.");
     else
       Error();
@@ -2075,7 +2079,19 @@ struct ThresholdDraft {
 ThresholdDraft returningDraft, addPresetDraft;
 int presetReturnView = 0;
 bool preservePanelHost = false;
+[[clang::no_destroy]] std::function<std::wstring()> readDraft;
+std::shared_ptr<std::wstring> draftBaseline, thresholdBaseline;
+bool suspendedThresholdDirty = false;
+void DiscardDrafts();
+bool HasUnsavedDraft() {
+  return readDraft && draftBaseline && readDraft() != *draftBaseline;
+}
+std::wstring RangeStamp(bool enabled, int start, int stop) {
+  return std::to_wstring(enabled) + L":" + std::to_wstring(start) + L":" + std::to_wstring(stop);
+}
 void Close() {
+  readDraft = {};
+  draftBaseline.reset();
   RevokeUiEvents();
   if (statusTimer)
     statusTimer.Stop();
@@ -2213,10 +2229,6 @@ void SetPanelContent(C::ScrollViewer scroll,
   close.Content(winrt::box_value(L"\u00d7"));
   close.HorizontalAlignment(HorizontalAlignment::Right);
   Automation::AutomationProperties::SetName(close, L"Close battery controls");
-  TrackEvent(back.Click(winrt::auto_revoke, SafeUi([target, returnView](auto const&, auto const&) {
-                          QueuePanel(target, returnView);
-                        })));
-  TrackEvent(close.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) { Close(); })));
   navigation.Children().Append(back);
   navigation.Children().Append(close);
   navigation.Height(36);
@@ -2270,7 +2282,79 @@ void SetPanelContent(C::ScrollViewer scroll,
   navigation.VerticalAlignment(VerticalAlignment::Bottom);
   footer.Children().Append(navigation);
   host.Children().Append(footer);
-  flyout.Content(host);
+  // Keep the draft alive beneath a same-sized confirmation layer.
+  C::Grid shell;
+  shell.Children().Append(host);
+  C::Border confirmation;
+  confirmation.Visibility(Visibility::Collapsed);
+  confirmation.Background(Media::SolidColorBrush(winrt::Windows::UI::Color{255, 40, 40, 40}));
+  confirmation.Padding(Thickness{20, 20, 20, 20});
+  C::StackPanel prompt;
+  prompt.VerticalAlignment(VerticalAlignment::Center);
+  prompt.Spacing(16);
+  auto heading = Text(L"Discard unsaved changes?", 22);
+  auto explanation = Text(
+      L"Your unapplied or unsaved edits will be lost. Changes already applied or saved will "
+      L"remain.");
+  prompt.Children().Append(heading);
+  prompt.Children().Append(explanation);
+  C::StackPanel buttons;
+  buttons.Orientation(C::Orientation::Horizontal);
+  buttons.Spacing(8);
+  C::Button keep, discard;
+  keep.Content(winrt::box_value(L"Keep editing"));
+  discard.Content(winrt::box_value(L"Discard changes"));
+  buttons.Children().Append(keep);
+  buttons.Children().Append(discard);
+  prompt.Children().Append(buttons);
+  confirmation.Child(prompt);
+  shell.Children().Append(confirmation);
+  auto destination = std::make_shared<int>(-2);
+  auto leave = [target](int view) {
+    if (view != 0)
+      DiscardDrafts();
+    if (view == -2)
+      Close();
+    else
+      QueuePanel(target, view);
+  };
+  auto request = [=](int view) {
+    bool pending = BatteryControls::applyPending.load();
+    if (!pending && !HasUnsavedDraft() && !(view != 0 && suspendedThresholdDirty)) {
+      leave(view);
+      return;
+    }
+    *destination = view;
+    heading.Text(pending ? L"Changes are being applied" : L"Discard unsaved changes?");
+    explanation.Text(pending ? L"Wait for the Apply result before leaving this panel."
+                             : L"Your unapplied or unsaved edits will be lost. Changes already "
+                               L"applied or saved will remain.");
+    discard.Visibility(pending ? Visibility::Collapsed : Visibility::Visible);
+    host.Visibility(Visibility::Collapsed);
+    confirmation.Visibility(Visibility::Visible);
+    keep.Focus(FocusState::Programmatic);
+  };
+  TrackEvent(keep.Click(winrt::auto_revoke, SafeUi([=](auto const&, auto const&) {
+                          confirmation.Visibility(Visibility::Collapsed);
+                          host.Visibility(Visibility::Visible);
+                          close.Focus(FocusState::Programmatic);
+                        })));
+  TrackEvent(discard.Click(winrt::auto_revoke,
+                           SafeUi([=](auto const&, auto const&) { leave(*destination); })));
+  TrackEvent(back.Click(winrt::auto_revoke,
+                        SafeUi([=](auto const&, auto const&) { request(returnView); })));
+  TrackEvent(
+      close.Click(winrt::auto_revoke, SafeUi([=](auto const&, auto const&) { request(-2); })));
+  TrackEvent(flyout.Closing(winrt::auto_revoke, SafeUi([=](auto const&, auto const& args) {
+                              if (HasUnsavedDraft() || suspendedThresholdDirty ||
+                                  BatteryControls::applyPending) {
+                                args.Cancel(true);
+                                request(-2);
+                              }
+                            })));
+  shell.Width(width);
+  shell.Height(height);
+  flyout.Content(shell);
 }
 void ShowPanelHost(FrameworkElement target) {
   if (!flyout.IsOpen())
@@ -2549,19 +2633,18 @@ void AddEditorRow(const std::shared_ptr<PresetEditor>& editor, const Preset& pre
                                                 editor->message.Text(L"");
                                               }
                                           })));
-  TrackEvent(remove.Click(
-      winrt::auto_revoke, SafeUi([weak, weakRow](auto const&, auto const&) {
-        if (auto editor = weak.lock())
-          if (auto row = weakRow.lock()) {
-            uint32_t index;
-            if (editor->list.Children().IndexOf(row->grid, index))
-              editor->list.Children().RemoveAt(index);
-            std::erase(editor->rows, row);
-            EditorCounts(editor);
-            editor->message.Text(
-                L"Preset deleted from this draft. Save to keep the change, or Cancel to undo.");
-          }
-      })));
+  TrackEvent(remove.Click(winrt::auto_revoke, SafeUi([weak, weakRow](auto const&, auto const&) {
+                            if (auto editor = weak.lock())
+                              if (auto row = weakRow.lock()) {
+                                uint32_t index;
+                                if (editor->list.Children().IndexOf(row->grid, index))
+                                  editor->list.Children().RemoveAt(index);
+                                std::erase(editor->rows, row);
+                                EditorCounts(editor);
+                                editor->message.Text(
+                                    L"Preset deleted from this draft. Save to keep the change.");
+                              }
+                          })));
   auto changed = [weak, weakRow](auto const&, auto const&) {
     if (auto editor = weak.lock())
       if (auto row = weakRow.lock()) {
@@ -2685,6 +2768,17 @@ void ShowPresetEditor(FrameworkElement target) {
       })));
   for (auto& preset : ReadPresets())
     AddEditorRow(editor, preset);
+  readDraft = [weak]() {
+    std::wstring result;
+    if (auto e = weak.lock())
+      for (auto& row : e->rows) {
+        for (auto text : {row->name.Text(), row->start.Text(), row->stop.Text()})
+          result += std::to_wstring(text.size()) + L":" + std::wstring(text);
+        result += row->quick.IsChecked().Value() ? L"1;" : L"0;";
+      }
+    return result;
+  };
+  draftBaseline = std::make_shared<std::wstring>(readDraft());
   editor->add.Content(winrt::box_value(L"+ Add preset"));
   TrackEvent(editor->add.Click(winrt::auto_revoke, SafeUi([weak](auto const&, auto const&) {
                                  if (auto editor = weak.lock()) {
@@ -2699,16 +2793,16 @@ void ShowPresetEditor(FrameworkElement target) {
   libraryActions.Children().Append(editor->add);
   C::Button defaults;
   defaults.Content(winrt::box_value(L"Restore defaults"));
-  TrackEvent(defaults.Click(
-      winrt::auto_revoke, SafeUi([weak](auto const&, auto const&) {
-        if (auto editor = weak.lock()) {
-          editor->list.Children().Clear();
-          editor->rows.clear();
-          for (auto& preset : DefaultPresets())
-            AddEditorRow(editor, preset);
-          editor->message.Text(L"Default presets restored. Save to keep them, or Cancel to undo.");
-        }
-      })));
+  TrackEvent(defaults.Click(winrt::auto_revoke, SafeUi([weak](auto const&, auto const&) {
+                              if (auto editor = weak.lock()) {
+                                editor->list.Children().Clear();
+                                editor->rows.clear();
+                                for (auto& preset : DefaultPresets())
+                                  AddEditorRow(editor, preset);
+                                editor->message.Text(
+                                    L"Default presets restored. Save to keep them.");
+                              }
+                            })));
   libraryActions.Children().Append(defaults);
   content.Children().Append(libraryActions);
   EditorCounts(editor);
@@ -2771,14 +2865,7 @@ void ShowPresetEditor(FrameworkElement target) {
           QueuePanel(target, editor->returnView);
         }
       })));
-  C::Button cancel;
-  cancel.Content(winrt::box_value(L"Cancel"));
-  TrackEvent(cancel.Click(winrt::auto_revoke, SafeUi([target, weak](auto const&, auto const&) {
-                            if (auto editor = weak.lock())
-                              QueuePanel(target, editor->returnView);
-                          })));
   actions.Children().Append(save);
-  actions.Children().Append(cancel);
   C::ScrollViewer scroll;
   scroll.Content(content);
   scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Auto);
@@ -2984,7 +3071,7 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
                                })));
         body.Children().Append(start);
         C::Button cancel;
-        cancel.Content(winrt::box_value(L"Cancel"));
+        cancel.Content(winrt::box_value(L"Not now"));
         TrackEvent(cancel.Click(
             winrt::auto_revoke,
             SafeUi([target, body](auto const&, auto const&) { RenderAdvanced(body, target); })));
@@ -3089,6 +3176,8 @@ void ApplyInPlace(C::Button button, C::TextBlock feedback, int action, int value
     feedback.Text(L"Previous changes are still being applied. Please wait.");
     return;
   }
+  auto baseline = draftBaseline;
+  auto submittedDraft = readDraft ? readDraft() : std::wstring{};
   auto revision = BatteryControls::ReadApplyResult().revision;
   if (!BatteryControls::Submit(action, values)) {
     BatteryControls::applyPending = false;
@@ -3103,15 +3192,31 @@ void ApplyInPlace(C::Button button, C::TextBlock feedback, int action, int value
     statusTimer.Stop();
   statusTimer = DispatcherTimer();
   statusTimer.Interval(std::chrono::milliseconds(200));
-  TrackEvent(statusTimer.Tick(winrt::auto_revoke,
-                              SafeUi([button, feedback, revision](auto const&, auto const&) {
-                                auto result = BatteryControls::ReadApplyResult();
-                                if (result.revision != revision) {
-                                  feedback.Text(result.message);
-                                  button.IsEnabled(true);
-                                  statusTimer.Stop();
-                                }
-                              })));
+  TrackEvent(statusTimer.Tick(
+      winrt::auto_revoke, SafeUi([button, feedback, revision, baseline, submittedDraft, action,
+                                  values](auto const&, auto const&) {
+        auto result = BatteryControls::ReadApplyResult();
+        if (result.revision != revision) {
+          auto state = BatteryControls::ReadSnapshot().state;
+          bool confirmed = result.succeeded && state.valid;
+          for (int i = 0; i < 2; ++i) {
+            auto p = state.packs[i];
+            if (!p.present)
+              continue;
+            unsigned range =
+                action == 34 ? (unsigned(values) >> (i * 16)) & 0xffff : unsigned(values);
+            bool enabled = action == 31 || (action == 34 && range);
+            confirmed =
+                confirmed && bool(p.enabled) == enabled &&
+                (!enabled || (p.start == int(range & 255) && p.stop == int((range >> 8) & 255)));
+          }
+          if (confirmed && baseline)
+            *baseline = submittedDraft;
+          feedback.Text(result.message);
+          button.IsEnabled(true);
+          statusTimer.Stop();
+        }
+      })));
   statusTimer.Start();
 }
 struct DualDraft {
@@ -3120,9 +3225,17 @@ struct DualDraft {
   BatteryControls::Pack packs[2]{};
 };
 DualDraft dualDraft;
+void DiscardDrafts() {
+  returningDraft.valid = false;
+  addPresetDraft.valid = false;
+  dualDraft.valid = false;
+  thresholdBaseline.reset();
+  suspendedThresholdDirty = false;
+}
 void ShowDualPanel(FrameworkElement target) {
   Close();
   auto state = BatteryControls::ReadSnapshot().state;
+  bool freshDraft = !dualDraft.valid;
   if (!dualDraft.valid) {
     dualDraft.valid = true;
     dualDraft.selected = 0;
@@ -3141,6 +3254,16 @@ void ShowDualPanel(FrameworkElement target) {
     PresentContent(target, content);
     return;
   }
+  readDraft = []() {
+    std::wstring result;
+    for (auto p : dualDraft.packs)
+      result += RangeStamp(p.enabled, p.start, p.stop) + L";";
+    return result;
+  };
+  if (freshDraft || !thresholdBaseline)
+    thresholdBaseline = std::make_shared<std::wstring>(readDraft());
+  draftBaseline = thresholdBaseline;
+  suspendedThresholdDirty = false;
   C::ToggleSwitch linked;
   linked.Header(winrt::box_value(L"Use the same limits"));
   linked.IsOn(dualDraft.linked);
@@ -3263,6 +3386,7 @@ void ShowDualPanel(FrameworkElement target) {
   C::Button manage;
   manage.Content(winrt::box_value(L"Manage presets..."));
   TrackEvent(manage.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
+                            suspendedThresholdDirty = HasUnsavedDraft();
                             presetReturnView = 0;
                             QueuePanel(target, 2);
                           })));
@@ -3273,6 +3397,7 @@ void ShowDualPanel(FrameworkElement target) {
   TrackEvent(save.Click(winrt::auto_revoke, SafeUi([target](auto const&, auto const&) {
                           auto p = dualDraft.packs[dualDraft.selected];
                           addPresetDraft = {true, bool(p.enabled), p.start, p.stop};
+                          suspendedThresholdDirty = HasUnsavedDraft();
                           presetReturnView = 0;
                           QueuePanel(target, 2);
                         })));
@@ -3286,9 +3411,8 @@ void ShowDualPanel(FrameworkElement target) {
   C::StackPanel actions;
   actions.Orientation(C::Orientation::Horizontal);
   actions.Spacing(8);
-  C::Button apply, cancel;
+  C::Button apply;
   apply.Content(winrt::box_value(L"Apply both ranges"));
-  cancel.Content(winrt::box_value(L"Close"));
   TrackEvent(apply.Click(winrt::auto_revoke, SafeUi([apply, summary](auto const&, auto const&) {
                            unsigned value = 0;
                            for (int i = 0; i < 2; i++) {
@@ -3298,12 +3422,7 @@ void ShowDualPanel(FrameworkElement target) {
                            }
                            ApplyInPlace(apply, summary, 34, int(value));
                          })));
-  TrackEvent(cancel.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
-                            dualDraft.valid = false;
-                            flyout.Hide();
-                          })));
   actions.Children().Append(apply);
-  actions.Children().Append(cancel);
   PresentContent(target, content, actions);
 }
 
@@ -3414,6 +3533,7 @@ void ShowPanel(FrameworkElement target) {
                             if (auto p = weak.lock())
                               returningDraft = {true, p->enabled.IsOn(), int(p->start.Value()),
                                                 int(p->stop.Value())};
+                            suspendedThresholdDirty = HasUnsavedDraft();
                             presetReturnView = 0;
                             QueuePanel(target, 2);
                           })));
@@ -3487,6 +3607,15 @@ void ShowPanel(FrameworkElement target) {
                                   if (auto p = weak.lock())
                                     p->UpdatePresets();
                                 })));
+  readDraft = [weak]() {
+    if (auto p = weak.lock())
+      return RangeStamp(p->enabled.IsOn(), int(p->start.Value()), int(p->stop.Value()));
+    return std::wstring{};
+  };
+  if (!returningDraft.valid || !thresholdBaseline)
+    thresholdBaseline = std::make_shared<std::wstring>(readDraft());
+  draftBaseline = thresholdBaseline;
+  suspendedThresholdDirty = false;
   if (returningDraft.valid) {
     p->adjusting = true;
     p->start.Value(returningDraft.start);
@@ -3512,6 +3641,7 @@ void ShowPanel(FrameworkElement target) {
                                    returningDraft = {true, p->enabled.IsOn(), int(p->start.Value()),
                                                      int(p->stop.Value())};
                                    addPresetDraft = returningDraft;
+                                   suspendedThresholdDirty = HasUnsavedDraft();
                                    presetReturnView = 0;
                                    QueuePanel(target, 2);
                                  }
@@ -3538,12 +3668,7 @@ void ShowPanel(FrameworkElement target) {
                                           MAKELONG(int(p->start.Value()), int(p->stop.Value())));
                            }
                          })));
-  C::Button cancel;
-  cancel.Content(winrt::box_value(L"Close"));
-  TrackEvent(
-      cancel.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) { flyout.Hide(); })));
   actions.Children().Append(apply);
-  actions.Children().Append(cancel);
   C::ScrollViewer scroll;
   scroll.Content(content);
   scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
@@ -3761,6 +3886,8 @@ void ShowSetup(FrameworkElement target) {
   ShowPanelHost(target);
 }
 void QueuePanel(FrameworkElement target, int view) {
+  if (BatteryControls::applyPending)
+    return;
   if (unloading || !target || !target.XamlRoot())
     return;
   preservePanelHost = flyout && flyout.IsOpen() && view != -1;
