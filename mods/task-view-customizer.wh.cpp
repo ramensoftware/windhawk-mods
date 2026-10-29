@@ -38,12 +38,6 @@ the native controls.
 The mod does not change Alt+Tab or the desktop preview shown when hovering
 over the taskbar's Task View button.
 
-## Screenshots
-
-| Full Task View with Desktops list at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
-| :---: | :---: | :---: |
-| ![Full Task View with Desktops list at the top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/1.png) | ![No Task View with Desktops list at the center + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png) | ![Windows default + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png) |
-
 ## Settings
 
 ### Task View behavior
@@ -65,7 +59,7 @@ selection of desktop thumbnails. Click a desktop to switch instead. The option
 applies to all Task View modes and leaves keyboard navigation available.
 **Desktop hover switching delay (ms)** sets the wait before that preview switches.
 The default is **400 ms**, matching the current Windows mouse-hover delay read
-by Task View. Enter 0-600000; blank or invalid text preserves the native delay.
+by Task View. Enter 0–600000; blank or invalid text preserves the native delay.
 Prevent switching desktops on hover takes priority over this setting.
 
 ### New desktop button
@@ -137,7 +131,7 @@ saved native layout properties, brushes and bindings.
 
 Task View is detected through Switcher's native Loaded callbacks and animation
 targets. No Taskbar Styler or other XAML diagnostics consumer is required.
-Windhawk downloads Windows debugging symbols when needed.
+The mod uses public WinRT interfaces and does not require Windows debugging symbols.
 
 ## Compatibility
 
@@ -176,7 +170,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Disables entrance and exit motion. Independent of background material and transparency."
     - scrollAnimationSpeed: 100
       $name: Desktop scroll animation speed (%)
-      $description: "100 = current Windows speed (default). 50 = half speed. 200 = double speed. Range: 10-500. Applies to horizontal scrolling that reveals a desktop tile."
+      $description: "100 = current Windows speed (default). 50 = half speed. 200 = double speed. Range: 10–500. Applies to horizontal scrolling that reveals a desktop tile."
   $name: Animations and scrolling
 - DesktopList:
     - preventHoverSwitch: false
@@ -184,7 +178,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Require a click to switch desktops instead of the delayed mouse-hover preview. Applies to Task View in all modes. Keyboard switching remains available. Reopen Task View after changing this option."
     - hoverSwitchDelayMs: "400"
       $name: Desktop hover switching delay (ms)
-      $description: "Time before hovering a desktop switches its preview. Windows currently uses 400 ms (the system mouse-hover delay). Enter 0-600000; blank or invalid input follows the system delay. Prevent switching desktops on hover overrides this value. Reopen Task View after changing."
+      $description: "Time before hovering a desktop switches its preview. Windows currently uses 400 ms (the system mouse-hover delay). Enter 0–600000; blank or invalid input follows the system delay. Prevent switching desktops on hover overrides this value. Reopen Task View after changing."
     - desktopFrameWidth: "full"
       $name: Desktop list background width
       $options:
@@ -193,10 +187,10 @@ with other shell customization mods can depend on the Windows build.
       - percent: Percentage of screen
     - desktopFramePercent: 70
       $name: Desktop list width (% of screen)
-      $description: "Used with Percentage of screen. Range: 10-100. Overflowing desktop tiles remain scrollable."
+      $description: "Used with Percentage of screen. Range: 10–100. Overflowing desktop tiles remain scrollable."
     - desktopFrameMargin: 8
       $name: Virtual desktop list frame margin (px)
-      $description: "Extra space around the desktop list frame, outside the taskbar area. Taskbar clearance follows its actual edge, size and monitor DPI, including small taskbars. Default: 8. Range: 0-200."
+      $description: "Extra space around the desktop list frame, outside the taskbar area. Taskbar clearance follows its actual edge, size and monitor DPI, including small taskbars. Default: 8. Range: 0–200."
   $name: Desktop list layout
 - NewDesktop:
     - moveToRight: false
@@ -243,7 +237,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Solid starts opaque; the transparency percentage can make it translucent without blur. Acrylic blurs content behind panels. Clear removes the material. Mica uses blurred wallpaper with a theme-colored tint, falling back to solid if unavailable. Disable desktop list background takes priority."
     - materialTransparency: -1
       $name: Task View background material transparency (%)
-      $description: "0 = default material strength; 100 = clear for Native, Solid and Acrylic. For Mica, reduces tint/luminosity to reveal more wallpaper while keeping the wallpaper layer opaque. Thumbnails and labels stay solid. Outside 0-100 uses default strength (-1). Hidden strip settings take priority. Reopen Task View after changing."
+      $description: "0 = default material strength; 100 = clear for Native, Solid and Acrylic. For Mica, reduces tint/luminosity to reveal more wallpaper while keeping the wallpaper layer opaque. Thumbnails and labels stay solid. Outside 0–100 uses default strength (-1). Hidden strip settings take priority. Reopen Task View after changing."
     - removeListBorder: false
       $name: Remove desktop list background border
       $description: "Removes the outer desktop strip frame, without removing desktop selection borders."
@@ -261,7 +255,7 @@ with other shell customization mods can depend on the Windows build.
       - both: Border and background
     - highlightOpacity: 20
       $name: Highlight background opacity (%)
-      $description: "Accent-colored fill for hovered or selected desktops. Range: 0-100. Used with Background only and Border and background."
+      $description: "Accent-colored fill for hovered or selected desktops. Range: 0–100. Used with Background only and Border and background."
   $name: Desktop highlights
 - Colors:
     - backgroundColorDark: "native"
@@ -287,7 +281,7 @@ with other shell customization mods can depend on the Windows build.
       $description: "Separate from panel materials. An explicit backdrop selection overrides Disable full-screen background blur. Acrylic uses a live XAML backdrop, rather than SWS's captured snapshot; Windows may use its solid fallback when system transparency is disabled."
     - backdropDimOpacity: 18
       $name: Backdrop Dim Opacity (%)
-      $description: "Black tint strength of the Acrylic backdrop. Range: 0-100. Separate from panel transparency."
+      $description: "Black tint strength of the Acrylic backdrop, 0–100. Separate from panel transparency."
     - disableFullscreenBlur: true
       $name: Disable full-screen background blur
       $description: "Keep the wallpaper clear even when Windows transparency effects are enabled. Independent of the desktop thumbnail strip background. Applies to every Task View mode. Reopen Task View after changing this setting."
@@ -2284,213 +2278,133 @@ void ObserveElement(xaml::FrameworkElement const& element, bool walkAncestors) {
 
 struct AnimationTarget {
     winrt::weak_ref<animation::Timeline> timeline;
-    winrt::weak_ref<xaml::FrameworkElement> target;
+    winrt::weak_ref<xaml::DependencyObject> target;
 };
 thread_local std::vector<AnimationTarget> g_animationTargets;
-void ClearAnimationTargets() { g_animationTargets.clear(); }
+void ClearAnimationTargets() {
+    if (g_stopping) { g_animationTargets.clear(); return; }
+    // Unloaded roots can be reattached with the same cached storyboards.
+    // Keep only weak associations; restore the keyframe values separately.
+    std::erase_if(g_animationTargets, [](auto const& saved) {
+        return !saved.timeline.get() || !saved.target.get();
+    });
+}
+
+void TrackAnimationTarget(animation::Timeline const& timeline, xaml::DependencyObject const& target) {
+    std::erase_if(g_animationTargets, [&](auto const& saved) {
+        auto existing = saved.timeline.get();
+        return !existing || existing == timeline || !saved.target.get();
+    });
+    if (timeline && target) g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(target)});
+}
+
+xaml::DependencyObject AnimationTargetFor(animation::Timeline const& timeline) {
+    for (auto const& saved : g_animationTargets)
+        if (saved.timeline.get() == timeline) return saved.target.get();
+    // Markup storyboards can use a namescope instead of SetTarget.
+    auto name = animation::Storyboard::GetTargetName(timeline);
+    if (name.empty()) return nullptr;
+    std::lock_guard lock(g_statesMutex);
+    for (auto const& state : *g_states) {
+        if (state->threadId != GetCurrentThreadId() || state->detached) continue;
+        if (auto root = state->root.get())
+            if (auto target = root.FindName(name).try_as<xaml::DependencyObject>()) return target;
+    }
+    return nullptr;
+}
+
 bool IsTaskViewAnimation(animation::Timeline const& timeline) {
-    for (auto const& tracked : g_animationTargets)
-        if (tracked.timeline.get() == timeline) return true;
-    if (auto storyboard = timeline.try_as<animation::Storyboard>())
-        for (auto const& child : storyboard.Children())
-            if (IsTaskViewAnimation(child)) return true;
+    if (auto storyboard = timeline.try_as<animation::Storyboard>()) {
+        for (auto const& child : storyboard.Children()) if (IsTaskViewAnimation(child)) return true;
+        return false;
+    }
+    auto target = AnimationTargetFor(timeline);
+    if (!target) return false;
+    for (auto element = target.try_as<xaml::FrameworkElement>(); element;
+         element = media::VisualTreeHelper::GetParent(element).try_as<xaml::FrameworkElement>()) {
+        if (winrt::get_class_name(element) == L"WindowsInternal.ComposableShell.Experiences.Switcher.TaskViewTimeline") return true;
+    }
+    std::lock_guard lock(g_statesMutex);
+    for (auto const& state : *g_states) {
+        if (state->threadId != GetCurrentThreadId() || state->detached) continue;
+        if (auto bar = state->desktops.get(); bar && target == bar.RenderTransform()) return true;
+    }
     return false;
 }
-using GetPeer_t = HRESULT(WINAPI*)(void*, GUID const&, void**);
-GetPeer_t GetPeer;
-using CoreSetTarget_t = HRESULT(WINAPI*)(void*, void*);
-CoreSetTarget_t CoreSetTarget_Original;
-HRESULT WINAPI CoreSetTarget_Hook(void* self, void* target) {
-    HRESULT result = CoreSetTarget_Original(self, target);
-    if (SUCCEEDED(result) && !g_stopping && target) {
+
+// Public IStoryboardStatics::SetTarget ABI, verified against the SDK (slot 12).
+// Retain weak associations even before a target joins the visual tree. Resolve
+// its Task View ownership at Begin, when its parent/namescope is available.
+using StoryboardSetTarget_t = HRESULT(WINAPI*)(void*, void*, void*);
+StoryboardSetTarget_t StoryboardSetTarget_Original;
+HRESULT WINAPI StoryboardSetTarget_Hook(void* self, void* timelineArg, void* targetArg) {
+    auto result = StoryboardSetTarget_Original(self, timelineArg, targetArg);
+    if (SUCCEEDED(result) && !g_stopping && timelineArg && IsSwitcherCode(__builtin_return_address(0))) {
         try {
-            animation::Timeline timeline{nullptr};
-            xaml::FrameworkElement element{nullptr};
-            HRESULT timelineResult = GetPeer(self, winrt::guid_of<animation::ITimeline>(), winrt::put_abi(timeline));
-            HRESULT targetResult = GetPeer(target, winrt::guid_of<xaml::IFrameworkElement>(), winrt::put_abi(element));
-            if (SUCCEEDED(timelineResult) && SUCCEEDED(targetResult) && timeline && element) {
-                auto ancestor = element;
-                bool fullTaskView = false;
-                for (int depth = 0; ancestor && depth < 16; depth++) {
-                    if (winrt::get_class_name(ancestor) ==
-                        L"WindowsInternal.ComposableShell.Experiences.Switcher.TaskViewTimeline") {
-                        fullTaskView = true;
-                        break;
-                    }
-                    ancestor = media::VisualTreeHelper::GetParent(ancestor).try_as<xaml::FrameworkElement>();
-                }
-                if (!fullTaskView) return result;
-                ObserveElement(element, true);
-                for (auto it = g_animationTargets.begin(); it != g_animationTargets.end();) {
-                    auto existing = it->timeline.get();
-                    if (!existing || existing == timeline) it = g_animationTargets.erase(it);
-                    else ++it;
-                }
-                g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(element)});
-            }
-        } catch (...) {}
+            animation::Timeline timeline{nullptr}; winrt::copy_from_abi(timeline, timelineArg);
+            xaml::DependencyObject target{nullptr}; if (targetArg) winrt::copy_from_abi(target, targetArg);
+            TrackAnimationTarget(timeline, target);
+            static thread_local bool recorded = false;
+            if (!recorded) { recorded = true; Wh_Log(L"Tracked public Switcher animation target"); }
+        } catch (...) { Wh_Log(L"Storyboard target tracking failed: %08X", winrt::to_hresult()); }
     }
     return result;
 }
+
 void ApplyDesktopSlideDirection(animation::Timeline const& timeline) {
     if (auto storyboard = timeline.try_as<animation::Storyboard>()) {
         for (auto const& child : storyboard.Children()) ApplyDesktopSlideDirection(child);
         return;
     }
+    auto target = AnimationTargetFor(timeline);
+    if (!target) return;
+    if (auto element = target.try_as<xaml::FrameworkElement>()) ObserveElementCore(element, true);
     auto property = animation::Storyboard::GetTargetProperty(timeline);
-    for (auto const& tracked : g_animationTargets) {
-        if (tracked.timeline.get() != timeline) continue;
-        if (auto target = tracked.target.get()) {
-        }
-    }
     if (property != L"(UIElement.RenderTransform).(TranslateTransform.Y)" &&
         property != L"(UIElement.RenderTransform).(CompositeTransform.TranslateY)" &&
         property != L"(UIElement.Translation).Y" && property != L"Y" && property != L"TranslateY") return;
     auto keyframes = timeline.try_as<animation::DoubleAnimationUsingKeyFrames>();
     if (!keyframes) return;
-    for (auto const& tracked : g_animationTargets) {
-        if (tracked.timeline.get() != timeline) continue;
-        auto target = tracked.target.get();
-        if (!target) return;
+    std::shared_ptr<LayoutState> owner;
+    {
         std::lock_guard lock(g_statesMutex);
         for (auto const& state : *g_states) {
-            if (state->threadId != GetCurrentThreadId() || state->desktops.get() != target) continue;
-            auto frames = keyframes.KeyFrames();
-            if (frames.Size() == 0) return;
-            auto& savedFrames = state->animationFrames[frames.GetAt(0).Value() == 0 ? 1 : 0];
-            for (auto const& frame : frames) {
-                auto saved = std::find_if(savedFrames.begin(), savedFrames.end(), [&](auto const& item) {
-                    return item.frame == frame;
-                });
-                if (saved == savedFrames.end()) savedFrames.push_back({frame, frame.Value()});
-                frame.Value(g_desktopSlideFromTop ? -std::abs(frame.Value()) : std::abs(frame.Value()));
-            }
-            return;
+            if (state->threadId != GetCurrentThreadId() || state->detached) continue;
+            if (auto bar = state->desktops.get(); bar && (target == bar || target == bar.RenderTransform())) { owner = state; break; }
         }
     }
-}
-
-// Verified MSVC x64 ABI: the xref_ptr result is constructed in the caller's
-// second argument and returned unchanged. Its ownership stays with the caller.
-using TimelineGetTarget_t = void*(WINAPI*)(void*, void**);
-TimelineGetTarget_t TimelineGetTarget_Original;
-// Symbol-resolved helpers, not global hooks. Their calling conventions and
-// matching ownership operations were checked against the installed DLL/PDB.
-using QueryNativePeer_t = HRESULT(WINAPI*)(void**, void*);
-using ReleaseNativePeer_t = void(WINAPI*)(void**);
-using NativePeerHandle_t = void*(WINAPI*)(void*);
-using CoreRelease_t = void(WINAPI*)(void*);
-QueryNativePeer_t QueryNativePeer;
-ReleaseNativePeer_t ReleaseNativePeer;
-NativePeerHandle_t NativePeerHandle;
-CoreRelease_t CoreRelease;
-
-void ResolveDesktopSlideTargets(animation::Timeline const& timeline) {
-    if (auto storyboard = timeline.try_as<animation::Storyboard>()) {
-        for (auto const& child : storyboard.Children()) ResolveDesktopSlideTargets(child);
-        return;
+    if (!owner) return;
+    auto frames = keyframes.KeyFrames();
+    if (frames.Size() == 0) return;
+    auto& savedFrames = owner->animationFrames[frames.GetAt(0).Value() == 0 ? 1 : 0];
+    for (auto const& frame : frames) {
+        auto saved = std::find_if(savedFrames.begin(), savedFrames.end(), [&](auto const& item) { return item.frame == frame; });
+        if (saved == savedFrames.end()) savedFrames.push_back({frame, frame.Value()});
+        frame.Value(g_desktopSlideFromTop ? -std::abs(frame.Value()) : std::abs(frame.Value()));
     }
-    if (!timeline.try_as<animation::DoubleAnimationUsingKeyFrames>()) return;
-    struct NativePeer {
-        void* value = nullptr;
-        ~NativePeer() { if (value) ReleaseNativePeer(&value); }
-    } peer;
-    if (FAILED(QueryNativePeer(&peer.value, winrt::get_abi(timeline))) || !peer.value) return;
-    auto core = NativePeerHandle(peer.value);
-    if (!core) return;
-    struct CoreTarget {
-        void* value = nullptr;
-        ~CoreTarget() { if (value) CoreRelease(value); }
-    } coreTarget;
-    TimelineGetTarget_Original(core, &coreTarget.value);
-    if (coreTarget.value) {
-            xaml::DependencyObject target{nullptr};
-            if (FAILED(GetPeer(coreTarget.value, winrt::guid_of<xaml::IDependencyObject>(), winrt::put_abi(target)))) return;
-            // Discovery from a Switcher animation does not require any other
-            // diagnostics consumer. Identity checks below still gate mutation.
-            ObserveElementCore(target.try_as<xaml::FrameworkElement>(), true);
-            xaml::FrameworkElement bar{nullptr};
-            {
-                std::lock_guard lock(g_statesMutex);
-                for (auto const& state : *g_states) {
-                    if (state->threadId != GetCurrentThreadId() || state->detached) continue;
-                    auto candidate = state->desktops.get();
-                    if (candidate && (target == candidate || target == candidate.RenderTransform())) {
-                        bar = candidate;
-                        break;
-                    }
-                }
-            }
-            if (!bar) return;
-            std::erase_if(g_animationTargets, [&](auto const& entry) {
-                auto existing = entry.timeline.get();
-                return !existing || existing == timeline;
-            });
-            g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(bar)});
-            ApplyDesktopSlideDirection(timeline);
-    }
-}
-
-using CoreStoryboardBegin_t = HRESULT(WINAPI*)(void*, unsigned int);
-CoreStoryboardBegin_t CoreStoryboardBegin_Original;
-HRESULT WINAPI CoreStoryboardBegin_Hook(void* self, unsigned int flags) {
-    bool taskViewThread = false;
-    if (!g_stopping && !g_insideLayout) {
-        std::lock_guard lock(g_statesMutex);
-        for (auto const& state : *g_states)
-            if (state->threadId == GetCurrentThreadId() && !state->detached) {
-                taskViewThread = true;
-                break;
-            }
-    }
-    if (!g_stopping && !g_insideLayout && !taskViewThread) {
-        auto foreground = GetForegroundWindow();
-        DWORD process = 0;
-        auto foregroundThread = GetWindowThreadProcessId(foreground, &process);
-        if (process == GetCurrentProcessId() && foregroundThread == GetCurrentThreadId()) {
-            wchar_t name[80]{};
-            GetClassNameW(foreground, name, ARRAYSIZE(name));
-            taskViewThread = wcscmp(name, L"MultitaskingViewFrame") == 0 ||
-                             wcscmp(name, L"XamlExplorerHostIslandWindow") == 0;
-        }
-        taskViewThread = taskViewThread || IsSwitcherCode(__builtin_return_address(0));
-    }
-    if (taskViewThread) {
-        LayoutGuard guard;
-        try {
-            animation::Timeline timeline{nullptr};
-            if (SUCCEEDED(GetPeer(self, winrt::guid_of<animation::ITimeline>(), winrt::put_abi(timeline))) && timeline) {
-                ResolveDesktopSlideTargets(timeline);
-            }
-        } catch (...) { Wh_Log(L"Native storyboard inspection failed: %08X", winrt::to_hresult()); }
-    }
-    return CoreStoryboardBegin_Original(self, flags);
+    static thread_local bool recorded = false;
+    if (!recorded) { recorded = true; Wh_Log(L"Applied desktop slide direction through public Storyboard API"); }
 }
 
 using StoryboardBegin_t = HRESULT(WINAPI*)(void*);
 StoryboardBegin_t StoryboardBegin_Original;
 HRESULT WINAPI StoryboardBegin_Hook(void* self) {
     bool skip = false;
-    if (!g_stopping && !g_insideLayout) {
+    if (!g_stopping && !g_insideLayout &&
+        (!g_animationTargets.empty() || IsSwitcherCode(__builtin_return_address(0)))) {
+        LayoutGuard guard;
         try {
-            animation::IStoryboard storyboardInterface{nullptr};
-            winrt::copy_from_abi(storyboardInterface, self);
+            animation::IStoryboard storyboardInterface{nullptr}; winrt::copy_from_abi(storyboardInterface, self);
             auto storyboard = storyboardInterface.as<animation::Storyboard>();
+            ApplyDesktopSlideDirection(storyboard);
             skip = g_disableListAnimations && IsTaskViewAnimation(storyboard);
-            { LayoutGuard guard; ApplyDesktopSlideDirection(storyboard); }
-            // Windows reuses storyboards and can start unrelated storyboards
-            // between SetTarget and Begin. Keep weak target associations until
-            // the timeline expires instead of discarding them after any Begin.
-            std::erase_if(g_animationTargets, [](auto const& entry) {
-                return !entry.timeline.get() || !entry.target.get();
-            });
-        } catch (...) {}
+            std::erase_if(g_animationTargets, [](auto const& saved) { return !saved.timeline.get() || !saved.target.get(); });
+        } catch (...) { Wh_Log(L"Public storyboard inspection failed: %08X", winrt::to_hresult()); }
     }
     auto result = StoryboardBegin_Original(self);
     if (SUCCEEDED(result) && skip) {
         try {
-            animation::IStoryboard storyboard{nullptr};
-            winrt::copy_from_abi(storyboard, self);
+            animation::IStoryboard storyboard{nullptr}; winrt::copy_from_abi(storyboard, self);
             storyboard.as<animation::Storyboard>().SkipToFill();
         } catch (...) {}
     }
@@ -2632,6 +2546,10 @@ void InstallXamlHooks() {
         auto storyboardVtable = *reinterpret_cast<void***>(winrt::get_abi(storyboardInterface));
         bool begin = WindhawkUtils::SetFunctionHook(reinterpret_cast<StoryboardBegin_t>(storyboardVtable[9]),
                                       StoryboardBegin_Hook, &StoryboardBegin_Original);
+        auto storyboardStatics = winrt::get_activation_factory<animation::Storyboard, animation::IStoryboardStatics>();
+        auto storyboardStaticsVtable = *reinterpret_cast<void***>(winrt::get_abi(storyboardStatics));
+        bool setTarget = WindhawkUtils::SetFunctionHook(reinterpret_cast<StoryboardSetTarget_t>(storyboardStaticsVtable[12]),
+            StoryboardSetTarget_Hook, &StoryboardSetTarget_Original);
         // Published IUIElement ABI slots, verified against the SDK headers.
         // Observe timer starts only while a verified desktop-hover delegate runs.
         xaml::DispatcherTimer timerProbe;
@@ -2658,7 +2576,7 @@ void InstallXamlHooks() {
             if (moveAdd) Wh_RemoveFunctionHook(uiVtable[59]);
             if (moveRemove) Wh_RemoveFunctionHook(uiVtable[60]);
         }
-        if (begin && scrollOffset && changeView && loadedAdd && loadedRemove) {
+        if (begin && setTarget && scrollOffset && changeView && loadedAdd && loadedRemove) {
             Wh_ApplyHookOperations();
             g_hooksReady = true;
             Wh_Log(L"Installed XAML Task View event and animation hooks");
@@ -2669,6 +2587,7 @@ void InstallXamlHooks() {
             if (scrollOffset) Wh_RemoveFunctionHook(scrollVtable[58]);
             if (changeView) Wh_RemoveFunctionHook(scrollVtable2[15]);
             if (begin) Wh_RemoveFunctionHook(storyboardVtable[9]);
+            if (setTarget) Wh_RemoveFunctionHook(storyboardStaticsVtable[12]);
             if (hoverHooks) {
                 Wh_RemoveFunctionHook(uiVtable[63]); Wh_RemoveFunctionHook(uiVtable[64]);
                 Wh_RemoveFunctionHook(uiVtable[59]); Wh_RemoveFunctionHook(uiVtable[60]);
@@ -2748,29 +2667,7 @@ BOOL Wh_ModInit() {
     int speed = Wh_GetIntSetting(L"Animations.scrollAnimationSpeed");
     g_scrollSpeed = (std::max)(10, (std::min)(speed > 0 ? speed : 100, 500));
     g_nativeScrollDuration = 250;
-    HMODULE xamlModule = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr,
-                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!xamlModule) return FALSE;
-    // Windows.UI.Xaml.dll
-    WindhawkUtils::SYMBOL_HOOK windowsUiXamlHooks[] = {
-        {{L"long __cdecl DirectUI::DXamlServices::GetPeer(class CDependencyObject *,struct _GUID const &,void * *)"},
-         &GetPeer},
-        {{L"long __cdecl Storyboard_SetTarget(class CTimeline *,class CDependencyObject *)"},
-         &CoreSetTarget_Original, CoreSetTarget_Hook},
-        {{L"public: class xref_ptr<class CDependencyObject> __cdecl CTimeline::GetTargetObject(void)const "},
-         &TimelineGetTarget_Original},
-        {{L"long __cdecl ctl::do_query_interface<class DirectUI::DependencyObject,struct IInspectable>(class ctl::ComPtr<class DirectUI::DependencyObject> &,struct IInspectable *)"}, &QueryNativePeer},
-        {{L"protected: void __cdecl ctl::ComPtr<class DirectUI::DependencyObject>::InternalRelease(void)"}, &ReleaseNativePeer},
-        {{L"public: class CDependencyObject * __cdecl DirectUI::DependencyObject::GetHandle(void)const "}, &NativePeerHandle},
-        {{L"public: void __cdecl CDependencyObject::Release(void)"}, &CoreRelease},
-        {{L"public: long __cdecl CStoryboard::BeginPrivate(unsigned int)"}, &CoreStoryboardBegin_Original, CoreStoryboardBegin_Hook},
-    };
-    if (!WindhawkUtils::HookSymbols(xamlModule, windowsUiXamlHooks,
-                                    ARRAYSIZE(windowsUiXamlHooks))) {
-        Wh_Log(L"Required XAML animation symbols are unavailable");
-        return FALSE;
-    }
-    Wh_Log(L"Installed XAML animation symbol hooks");
+    Wh_Log(L"Using public XAML interfaces; no debugging symbols required");
     g_threadMessage = RegisterWindowMessageW(
         L"Windhawk.TaskViewCustomizer.RunOnThread");
     return g_threadMessage && WindhawkUtils::SetFunctionHook(
