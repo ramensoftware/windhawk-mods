@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.115.3
+// @version         0.115.4
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -326,8 +326,7 @@ POINT g_lastMousePosition = {};
 bool g_hasLastMousePosition = false;
 HMONITOR g_dragCursorMonitor = nullptr;
 ULONGLONG g_monitorTransitionRebaseUntil = 0;
-using CTopLevelWindowGetVisualProxy_t = void*(__cdecl*)(void* pThis);
-CTopLevelWindowGetVisualProxy_t g_getCanvasRootVisualProxy = nullptr;
+void* g_getCanvasRootVisualProxy = nullptr;
 using CVisualGetVisualProxy_t = void*(__cdecl*)(void* pThis);
 CVisualGetVisualProxy_t g_visualGetVisualProxyForStructure = nullptr;
 using CTopLevelWindowGetRootVisual_t = void*(__cdecl*)(void* pThis, int rootVisualType);
@@ -426,7 +425,6 @@ void* g_containerVisualProxyVtableSymbol = nullptr;
 void* g_matrixTransformProxyVtableSymbol = nullptr;
 size_t g_desktopManagerCompositorOffset = SIZE_MAX;
 size_t g_desktopManagerThreadIdOffset = SIZE_MAX;
-size_t g_canvasVisualOwnerOffset = SIZE_MAX;
 size_t g_visualProxyOffset = SIZE_MAX;
 size_t g_transitionVisualProxyOffset = SIZE_MAX;
 size_t g_topLevelWindowWindowDataOffset = SIZE_MAX;
@@ -654,7 +652,6 @@ struct WindowAnimationSlot
     bool identityApplied;
     ULONGLONG lastMatrixErrorLog;
     ULONGLONG lastBindFailureLog;
-    ULONGLONG lastDiagnosticTransformLog;
 };
 
 thread_local bool g_insideWobblyScenePass = false;
@@ -1592,8 +1589,7 @@ static bool FindVisualProxyAccessPath(void* function, size_t* ownerOffset,
     return true;
 }
 
-// Accept only straight pointer getters for the native transition wrapper pair.
-// Both getters must establish the same native object member.
+// Accept only straight pointer getters ending in ret, without other work.
 static bool DecodePointerGetter(void* function, size_t* objectOffset,
                                 size_t* memberOffset = nullptr)
 {
@@ -2932,9 +2928,9 @@ static bool InitializeDwmHooks()
         return false;
     }
     Wh_Log(L"DWM compatibility: compositor primary vftable verified by PDB");
+    size_t canvasOwnerOffset = SIZE_MAX;
     const bool canvasPathDecoded = FindVisualProxyAccessPath(
-        reinterpret_cast<void*>(g_getCanvasRootVisualProxy),
-        &g_canvasVisualOwnerOffset, &g_visualProxyOffset);
+        g_getCanvasRootVisualProxy, &canvasOwnerOffset, &g_visualProxyOffset);
     size_t accessorOffset = SIZE_MAX;
     if (g_visualGetVisualProxyForStructure &&
         DecodePointerGetter(reinterpret_cast<void*>(g_visualGetVisualProxyForStructure), &accessorOffset))
@@ -3036,14 +3032,14 @@ static bool InitializeDwmHooks()
         Wh_Log(L"DWM compatibility: existing-window transition mapping unavailable");
     }
     Wh_Log(L"DWM compatibility ABI: HWND lookup=pointer transition lookup=%s "
-           L"matrix=%s visual=complete-root ownerOffset=0x%zx proxyOffset=0x%zx "
+           L"matrix=%s visual=complete-root proxyOffset=0x%zx "
            L"compositorOffset=0x%zx "
            L"threadIdOffset=0x%zx TLW3DDataOffset=0x%zx",
            g_getSyncedWindowDataVoid
                ? L"void"
                : (g_getSyncedWindowDataLong ? L"HRESULT" : L"unavailable"),
            g_cMatrixTransformProxyUpdate ? L"double" : L"float",
-           g_canvasVisualOwnerOffset, g_visualProxyOffset,
+           g_visualProxyOffset,
            g_desktopManagerCompositorOffset, g_desktopManagerThreadIdOffset,
            g_topLevelWindow3DWindowDataOffset);
     void* compositor = FindDwmCompositor();
@@ -4629,7 +4625,6 @@ static void RetireAnimationSlot(int slotIndex, HWND expectedWindow)
     }
     bool wasDragSlot = g_dragAnimationSlot == slotIndex;
     HWND sceneWakeWindow = nullptr;
-    HWND retiredWindow = nullptr;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
     WindowAnimationSlot& slot = g_animationSlots[slotIndex];
     if (expectedWindow && (!slot.active || slot.hwnd != expectedWindow))
@@ -4639,7 +4634,6 @@ static void RetireAnimationSlot(int slotIndex, HWND expectedWindow)
     }
     if (slot.active)
     {
-        retiredWindow = slot.hwnd;
         slot.active = false;
         slot.retiring = true;
         slot.dragging = false;
@@ -4670,8 +4664,6 @@ static void RetireAnimationSlot(int slotIndex, HWND expectedWindow)
     }
     if (wasDragSlot)
     {
-        Wh_Log(L"HOTFIX DIAG drag slot retired: HWND=%p slot=%d", retiredWindow,
-               slotIndex);
         ResetDragInputState();
     }
     StopAnimationClockIfIdle();
@@ -5040,7 +5032,6 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
             slot.nextWindowValidation = GetTickCount64() + 250;
             slot.nextVisualValidation = 0;
             slot.lastBindFailureLog = 0;
-            slot.lastDiagnosticTransformLog = 0;
             slot.order = ++g_animationOrderCounter;
             slot.identityApplied = false;
             slot.meshIdentityPending = false;
@@ -5086,7 +5077,6 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
         slot.nextWindowValidation = GetTickCount64() + 250;
         slot.nextVisualValidation = 0;
         slot.lastBindFailureLog = 0;
-        slot.lastDiagnosticTransformLog = 0;
         slot.order = ++g_animationOrderCounter;
         slot.meshRevision++;
         slotIndex = i;
@@ -5144,20 +5134,14 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
     slot.identityApplied = false;
     slot.lastMatrixErrorLog = 0;
     slot.lastBindFailureLog = 0;
-    slot.lastDiagnosticTransformLog = 0;
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
     return slotIndex;
 }
 
 static void HandleMoveSizeStart(HWND hwnd)
 {
-    bool validWindow = hwnd && IsWindow(hwnd);
-    bool visibleWindow = validWindow && IsWindowVisible(hwnd);
-    bool interactive = visibleWindow && IsInteractiveMoveSizeLoop(hwnd);
-    if (!interactive)
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || !IsInteractiveMoveSizeLoop(hwnd))
     {
-        Wh_Log(L"HOTFIX DIAG move-start rejected: HWND=%p valid=%d visible=%d "
-               L"interactive=%d", hwnd, validWindow, visibleWindow, interactive);
         return;
     }
     // Reset Snap state so the same side can trigger again.
@@ -5167,20 +5151,17 @@ static void HandleMoveSizeStart(HWND hwnd)
     RECT rect = {};
     if (!GetWindowRect(hwnd, &rect))
     {
-        Wh_Log(L"HOTFIX DIAG move-start rejected: HWND=%p reason=WindowRect", hwnd);
         return;
     }
     POINT mousePosition = {};
     if (!GetCursorPos(&mousePosition))
     {
-        Wh_Log(L"HOTFIX DIAG move-start rejected: HWND=%p reason=CursorPos", hwnd);
         return;
     }
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
     if (width <= 0 || height <= 0)
     {
-        Wh_Log(L"HOTFIX DIAG move-start rejected: HWND=%p reason=WindowSize", hwnd);
         return;
     }
     WobblySettings activeSettings = GetSettingsSnapshot();
@@ -5192,7 +5173,6 @@ static void HandleMoveSizeStart(HWND hwnd)
                               ClassifyMoveSizeOperation(hwnd, mousePosition, operationResizing);
     if (operationTypeKnown && operationResizing && !activeSettings.resizeWobbleEnabled)
     {
-        Wh_Log(L"HOTFIX DIAG move-start rejected: HWND=%p reason=ResizeDisabled", hwnd);
         return;
     }
     g_resizeCoordinateScale =
@@ -5208,7 +5188,6 @@ static void HandleMoveSizeStart(HWND hwnd)
         AcquireAnimationSlot(hwnd, activeSettings, meshWidth, meshHeight, localMousePosition);
     if (slotIndex < 0)
     {
-        Wh_Log(L"HOTFIX DIAG move-start rejected: HWND=%p reason=NoAnimationSlot", hwnd);
         return;
     }
     AcquireSRWLockExclusive(&g_animationSlotsLock);
@@ -5241,9 +5220,6 @@ static void HandleMoveSizeStart(HWND hwnd)
     g_realResizing = operationTypeKnown && operationResizing;
     g_moveTypeKnown = operationTypeKnown;
     g_dragResizeWobbleEnabled = activeSettings.resizeWobbleEnabled;
-    Wh_Log(L"HOTFIX DIAG move-start accepted: HWND=%p slot=%d resizing=%d "
-           L"zoomed=%d sceneThread=%lu", hwnd, slotIndex, g_realResizing,
-           startedWindowZoomed, g_dwmSceneThreadId.load(std::memory_order_acquire));
     if (!EnsureAnimationClockRunning(hwnd))
     {
         Wh_Log(L"Failed to start drag animation timer");
@@ -5299,14 +5275,9 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
     {
         return;
     }
-    MilMatrix3x2D submittedMatrix = {1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
     auto finishUpdate = [&](long updateResult, bool appliedIdentity)
     {
-        ULONGLONG now = GetTickCount64();
         bool logFailure = false;
-        bool logSuccess = false;
-        bool transformAttached = false;
-        void* boundVisual = nullptr;
         AcquireSRWLockExclusive(&g_animationSlotsLock);
         WindowAnimationSlot& currentSlot = g_animationSlots[slotIndex];
         if (currentSlot.generation == snapshot.generation &&
@@ -5316,15 +5287,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
             {
                 currentSlot.submittedMeshRevision = snapshot.meshRevision;
                 currentSlot.identityApplied = appliedIdentity;
-                if (!appliedIdentity && currentSlot.dragging &&
-                    (currentSlot.lastDiagnosticTransformLog == 0 ||
-                     now - currentSlot.lastDiagnosticTransformLog >= 1000))
-                {
-                    currentSlot.lastDiagnosticTransformLog = now;
-                    transformAttached = currentSlot.transformAttached;
-                    boundVisual = currentSlot.boundTopLevelVisualProxy;
-                    logSuccess = true;
-                }
                 if (appliedIdentity && currentSlot.meshRevision == snapshot.meshRevision)
                 {
                     currentSlot.meshIdentityPending = false;
@@ -5332,6 +5294,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
             }
             else
             {
+                ULONGLONG now = GetTickCount64();
                 if (now - currentSlot.lastMatrixErrorLog >= 1000)
                 {
                     currentSlot.lastMatrixErrorLog = now;
@@ -5345,15 +5308,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
         {
             Wh_Log(L"Matrix update failed for HWND=%p: 0x%08X", snapshot.hwnd,
                    static_cast<unsigned int>(updateResult));
-        }
-        if (logSuccess)
-        {
-            Wh_Log(L"HOTFIX DIAG matrix submitted: HWND=%p slot=%d revision=%llu "
-                   L"attached=%d visual=%p matrix=[%.3f %.3f %.3f %.3f %.1f %.1f]",
-                   snapshot.hwnd, slotIndex, snapshot.meshRevision,
-                   transformAttached, boundVisual, submittedMatrix.m11,
-                   submittedMatrix.m12, submittedMatrix.m21,
-                   submittedMatrix.m22, submittedMatrix.dx, submittedMatrix.dy);
         }
     };
     if (identityUpdate)
@@ -5479,7 +5433,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
     translationX = std::clamp(translationX, -emergencyTranslationLimit, emergencyTranslationLimit);
     translationY = std::clamp(translationY, -emergencyTranslationLimit, emergencyTranslationLimit);
     MilMatrix3x2D matrix = {m11, m12, m21, m22, translationX, translationY};
-    submittedMatrix = matrix;
     long updateResult = UpdateMatrixTransformProxy(snapshot.matrixTransformProxy, matrix);
     finishUpdate(updateResult, false);
 }
@@ -6923,9 +6876,6 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK, DWORD event, HWND hwnd, LON
     }
     case EVENT_SYSTEM_MOVESIZEEND:
     {
-        Wh_Log(L"HOTFIX DIAG move-end event: HWND=%p dragged=%p slot=%d active=%d",
-               hwnd, g_realDraggedWindow.load(std::memory_order_relaxed),
-               g_dragAnimationSlot, g_realDragging.load(std::memory_order_relaxed));
         HandleMoveSizeEnd(hwnd);
         break;
     }
@@ -6933,9 +6883,6 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK, DWORD event, HWND hwnd, LON
     {
         HWND previousForeground = g_lastForegroundWindow;
         g_lastForegroundWindow = hwnd;
-        Wh_Log(L"HOTFIX DIAG foreground: previous=%p current=%p dragged=%p",
-               previousForeground, hwnd,
-               g_realDraggedWindow.load(std::memory_order_relaxed));
         if (previousForeground && previousForeground != hwnd &&
             IsDesktopHiddenAppWindow(previousForeground))
         {
