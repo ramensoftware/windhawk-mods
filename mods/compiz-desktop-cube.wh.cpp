@@ -7,7 +7,7 @@
 // @github          https://github.com/Soham-Barate
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lwindowscodecs -lshell32
+// @compilerOptions -lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lwindowscodecs -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -228,6 +228,14 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
   $description: Write detailed traces to the Windhawk log.
 */
 // ==/WindhawkModSettings==
+
+// Target Windows 10 and later. Defined here (before any SDK header) instead of through compiler flags.
+#ifndef WINVER
+#define WINVER 0x0A00
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 
 #include <windows.h>
 #include <windowsx.h>
