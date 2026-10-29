@@ -4,7 +4,7 @@
 // @name:pt-BR      Crazy Time
 // @description     Schedule shutdown, sleep or hibernate from a tray icon, with warnings and weekly repeats.
 // @description:pt-BR Agende desligar, suspender ou hibernar pelo ícone da barra, com avisos e repetição semanal.
-// @version         0.6.2
+// @version         0.7.0
 // @author          caikx11
 // @github          https://github.com/caikx11
 // @license         MIT
@@ -1205,6 +1205,7 @@ inline constexpr auto settings_note = L"Duração e ação são configuradas nes
 inline constexpr auto settings_error = L"Não foi possível abrir as configurações do Windows.";
 inline constexpr auto tray_error = L"Ícone indisponível. Tentando reconectar à barra…";
 inline constexpr auto clock_empty = L"— — : — —";
+inline constexpr auto no_active_schedule = L"Nenhum agendamento ativo";
 inline constexpr auto countdown_notification = L"Falta 1 minuto. Abra o painel para acompanhar ou cancelar.";
 inline constexpr auto unavailable_time = L"Horário indisponível";
 inline constexpr auto add_schedule = L"Adicionar agendamento";
@@ -1319,6 +1320,7 @@ inline constexpr auto settings_note = L"Duration and action are configured in th
 inline constexpr auto settings_error = L"Could not open Windows settings.";
 inline constexpr auto tray_error = L"Icon unavailable. Trying to reconnect to taskbar…";
 inline constexpr auto clock_empty = L"— — : — —";
+inline constexpr auto no_active_schedule = L"No active schedule";
 inline constexpr auto countdown_notification = L"1 minute remaining. Open the panel to monitor or cancel.";
 inline constexpr auto unavailable_time = L"Time unavailable";
 inline constexpr auto add_schedule = L"Add schedule";
@@ -1880,6 +1882,8 @@ enum ControlId { action_id = 100, duration_id, schedule_id, cancel_id,
                  preset_id = 110, open_id = 120, settings_id, visibility_id, exit_id, menu_id,
                  list_id = 130, edit_id, pause_id, erase_id, new_id, postpone_id,
                  force_id = 180, kind_id = 140, date_id, time_id, daily_id, weekday_id = 150, theme_id = 160, locale_id = 170 };
+inline constexpr int content_height = 888; // logical px of scrollable content, tallest footer state (countdown + error)
+inline constexpr DWORD window_style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VSCROLL;
 
 inline ClockSample clock_sample() {
     FILETIME file{};
@@ -1961,11 +1965,14 @@ inline std::wstring local_time_at(std::uint64_t utc_ms, unsigned locale) {
     return std::wstring(date) + get_text(locale, text::separator, text_en::separator) + time;
 }
 
-inline HICON make_icon() {
+// Clock glyph rendered at the exact icon size with 4x4 supersampling, so the
+// tray never shows a downscaled, aliased bitmap.
+inline HICON make_icon(int size) {
+    size = (std::max)(size, 16);
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    info.bmiHeader.biWidth = 32;
-    info.bmiHeader.biHeight = -32;
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
     info.bmiHeader.biPlanes = 1;
     info.bmiHeader.biBitCount = 32;
     info.bmiHeader.biCompression = BI_RGB;
@@ -1973,15 +1980,33 @@ inline HICON make_icon() {
     HBITMAP color = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
     if (!color) return nullptr;
     auto* pixels = static_cast<DWORD*>(bits);
-    for (int y = 0; y < 32; ++y) for (int x = 0; x < 32; ++x) {
-        const double dx = x - 15.5, dy = y - 15.5;
-        const double radius = std::sqrt(dx * dx + dy * dy);
-        const bool clock = (radius > 9.0 && radius < 11.0) ||
-            (x >= 15 && x <= 16 && y >= 8 && y <= 16) ||
-            (x >= 16 && x <= 22 && y >= 15 && y <= 16);
-        pixels[y * 32 + x] = radius > 15.3 ? 0 : clock ? 0xFFFFFFFF : 0xFF0078D4;
+    const double s = size, c = s / 2, stroke = (std::max)(s * 0.085, 1.25) / 2;
+    const auto capsule = [](double px, double py, double ax, double ay, double bx, double by) {
+        const double vx = bx - ax, vy = by - ay;
+        const double t = (std::clamp)(((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy), 0.0, 1.0);
+        return std::hypot(px - ax - vx * t, py - ay - vy * t);
+    };
+    for (int y = 0; y < size; ++y) for (int x = 0; x < size; ++x) {
+        double alpha = 0, white = 0, shade = 0;
+        for (int sy = 0; sy < 4; ++sy) for (int sx = 0; sx < 4; ++sx) {
+            const double px = x + (sx + 0.5) / 4, py = y + (sy + 0.5) / 4;
+            const double r = std::hypot(px - c, py - c);
+            if (r > s * 0.47) continue;
+            alpha += 1;
+            shade += py / s;
+            if (std::abs(r - s * 0.31) < stroke || capsule(px, py, c, c, c, c - s * 0.2) < stroke ||
+                capsule(px, py, c, c, c + s * 0.15, c + s * 0.06) < stroke) white += 1;
+        }
+        if (alpha == 0) { pixels[y * size + x] = 0; continue; }
+        // Vertical gradient from #2B8FE8 to #0063B1, white glyph on top.
+        const double t = shade / alpha, w = white / alpha;
+        const auto mix = [&](double top, double bottom) {
+            return static_cast<DWORD>(std::lround((top + (bottom - top) * t) * (1 - w) + 255 * w));
+        };
+        pixels[y * size + x] = (static_cast<DWORD>(std::lround(alpha / 16 * 255)) << 24) |
+            (mix(0x2B, 0x00) << 16) | (mix(0x8F, 0x63) << 8) | mix(0xE8, 0xB1);
     }
-    HBITMAP mask = CreateBitmap(32, 32, 1, 1, nullptr);
+    HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
     ICONINFO icon_info{TRUE, 0, 0, mask, color};
     HICON icon = mask ? CreateIconIndirect(&icon_info) : nullptr;
     if (mask) DeleteObject(mask);
@@ -1993,16 +2018,19 @@ inline HICON make_icon() {
 class Panel {
     struct Item { HWND handle; int x, y, width, height, font; };
     std::vector<Item> items_;
-    HFONT fonts_[4]{};
+    HFONT fonts_[5]{};
     HBRUSH background_{}, field_brush_{};
-    HICON icon_{};
+    HICON icon_{}, big_icon_{};
     SimulatedBackend simulated_backend_;
     WindowsPowerBackend real_backend_;
     PowerBackend& backend() { return simulation_mode ? static_cast<PowerBackend&>(simulated_backend_) : real_backend_; }
     HWND force_{};
     std::vector<std::pair<HWND, std::pair<const wchar_t*, const wchar_t*>>> localized_;
     bool force_on_ = false;
-    HWND window_{}, action_{}, duration_{}, preview_{}, status_{}, countdown_{}, detail_{}, error_{}, start_{}, cancel_{}, postpone_{}, theme_combo_{}, locale_combo_{};
+    HWND window_{}, action_{}, duration_{}, preview_{}, status_{}, countdown_{}, detail_{}, empty_{}, error_{}, start_{}, cancel_{}, postpone_{};
+    HWND footer_notes_[2]{};
+    int footer_state_ = -1, content_ = content_height, hot_row_ = -1;
+    HWND hot_button_{};
     FileScheduleStorage storage_;
     WindowsCalendar calendar_;
     ScheduleBook book_;
@@ -2022,7 +2050,7 @@ class Panel {
     int scroll_offset_ = 0;
     bool tray_added_ = false;
     std::uint64_t last_tray_try_{};
-    COLORREF bg_ = RGB(247, 249, 252), ink_ = RGB(24, 35, 53), accent_ = RGB(0, 120, 212);
+    COLORREF bg_ = RGB(247, 249, 252), ink_ = RGB(24, 35, 53), accent_ = RGB(0, 120, 212), muted_ = RGB(96, 106, 122);
     bool high_contrast_ = false, dark_ = false;
     unsigned theme_value_ = 0; // 0=automatic, 1=light, 2=dark
     unsigned locale_ = 1; // 0=pt-BR, 1=English
@@ -2033,13 +2061,13 @@ class Panel {
         if (!window_) return;
         RECT client{};
         GetClientRect(window_, &client);
-        const int limit = (std::max)(0, px(920) - static_cast<int>(client.bottom));
+        const int limit = (std::max)(0, px(content_) - static_cast<int>(client.bottom));
         scroll_offset_ = (std::clamp)(position, 0, limit);
         SCROLLINFO info{};
         info.cbSize = sizeof(info);
         info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
         info.nMin = 0;
-        info.nMax = px(920) - 1;
+        info.nMax = px(content_) - 1;
         info.nPage = static_cast<UINT>(client.bottom);
         info.nPos = scroll_offset_;
         SetScrollInfo(window_, SB_VERT, &info, TRUE);
@@ -2063,6 +2091,7 @@ class Panel {
             px(x), px(y), px(width), px(height), window_,
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
         if (!control) throw GetLastError();
+        if (wcscmp(type, L"BUTTON") == 0 && (style & BS_TYPEMASK) == BS_OWNERDRAW) SetWindowSubclass(control, button_proc, 2, reinterpret_cast<DWORD_PTR>(this));
         items_.push_back({control, x, y, width, height, font});
         return control;
     }
@@ -2074,12 +2103,6 @@ class Panel {
         return control;
     }
     void fill_choice_combos() {
-        if (theme_combo_) {
-            SendMessageW(theme_combo_, CB_RESETCONTENT, 0, 0);
-            for (std::size_t i = 0; i < std::size(text::theme_strings); ++i)
-                SendMessageW(theme_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(get_text(locale_, text::theme_strings[i], text_en::theme_strings[i])));
-            SendMessageW(theme_combo_, CB_SETCURSEL, static_cast<WPARAM>(theme_value_), 0);
-        }
         if (action_) {
             const auto keep = SendMessageW(action_, CB_GETCURSEL, 0, 0);
             SendMessageW(action_, CB_RESETCONTENT, 0, 0);
@@ -2102,12 +2125,6 @@ class Panel {
         // Texts that depend on state.
         set_text(start_, editing_id_ ? get_text(locale_, text::save_schedule, text_en::save_schedule) : get_text(locale_, text::add_schedule, text_en::add_schedule));
         if (pause_) set_text(pause_, selected_record() && selected_record()->paused ? get_text(locale_, text::resume, text_en::resume) : get_text(locale_, text::pause, text_en::pause));
-        if (locale_combo_) {
-            SendMessageW(locale_combo_, CB_RESETCONTENT, 0, 0);
-            SendMessageW(locale_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(get_text(locale_, text::portuguese, text_en::portuguese)));
-            SendMessageW(locale_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(get_text(locale_, text::english, text_en::english)));
-            SendMessageW(locale_combo_, CB_SETCURSEL, static_cast<WPARAM>(locale_), 0);
-        }
         fill_choice_combos();
         for (int i = 0; i < static_cast<int>(std::size(text::presets)); ++i)
             if (HWND preset = GetDlgItem(window_, preset_id + i)) SetWindowTextW(preset, get_text(locale_, text::presets[i].label, text_en::presets[i].label));
@@ -2131,9 +2148,9 @@ class Panel {
 
     void fonts_and_layout() {
         for (auto& font : fonts_) { if (font) DeleteObject(font); font = nullptr; }
-        const int sizes[] = {14, 25, 11, 40};
-        for (int i = 0; i < 4; ++i)
-            fonts_[i] = CreateFontW(-px(sizes[i]), 0, 0, 0, i == 1 || i == 3 ? FW_SEMIBOLD : FW_NORMAL,
+        const int sizes[] = {14, 25, 11, 40, 12};
+        for (int i = 0; i < 5; ++i)
+            fonts_[i] = CreateFontW(-px(sizes[i]), 0, 0, 0, i == 1 || i == 3 || i == 4 ? FW_SEMIBOLD : FW_NORMAL,
                 FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                 CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         for (const auto& item : items_) {
@@ -2143,6 +2160,16 @@ class Panel {
         if (list_) {
             const int widths[] = {40, 80, 172, 130, 80};
             for (int i = 0; i < 5; ++i) ListView_SetColumnWidth(list_, i, px(widths[i]));
+        }
+        if (list_) { // a 12 x 32 image list gives the rows their height and left padding
+            if (const auto images = ImageList_Create(px(12), px(32), ILC_COLOR, 1, 1)) {
+                if (const auto old = ListView_SetImageList(list_, images, LVSIL_SMALL)) ImageList_Destroy(old);
+            }
+        }
+        round_controls();
+        for (HWND combo : {action_, kind_}) if (combo) {
+            SendMessageW(combo, CB_SETITEMHEIGHT, static_cast<WPARAM>(-1), px(24));
+            SendMessageW(combo, CB_SETITEMHEIGHT, 0, px(36));
         }
     }
     // Get system theme preference: 0=dark, 1=light
@@ -2185,6 +2212,7 @@ class Panel {
             bg_ = GetSysColor(COLOR_WINDOW);
             ink_ = GetSysColor(COLOR_WINDOWTEXT);
             accent_ = GetSysColor(COLOR_HIGHLIGHT);
+            muted_ = GetSysColor(COLOR_GRAYTEXT);
         } else {
             bool use_dark = false;
             switch (theme_value_) {
@@ -2205,42 +2233,71 @@ class Panel {
                 bg_ = RGB(30, 30, 30);
                 ink_ = RGB(240, 240, 240);
                 accent_ = RGB(0, 120, 212); // Keep our brand blue
+                muted_ = RGB(165, 165, 165);
             } else {
                 // Light theme colors
                 bg_ = RGB(247, 249, 252);
                 ink_ = RGB(24, 35, 53);
                 accent_ = RGB(0, 120, 212); // Our brand blue
+                muted_ = RGB(96, 106, 122);
             }
         }
 
         if (background_) DeleteObject(background_);
         background_ = CreateSolidBrush(bg_);
-        if (window_) RedrawWindow(window_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        if (window_) RedrawWindow(window_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
         if (list_) {
             ListView_SetTextColor(list_, ink_);
-            ListView_SetTextBkColor(list_, bg_);
+            ListView_SetTextBkColor(list_, high_contrast_ ? bg_ : CLR_NONE);
         }
         apply_control_themes();
     }
     // Dark variants of the stock edit/combo/list/scrollbar visuals (Windows 10 1809+ / 11).
     // Looked up at run time so the mod needs no extra import library; harmless if missing.
+    // Rounded outline for the edit and the list: clip them to a round rect, the frame is painted in paint_frame.
+    void round_controls() {
+        for (HWND control : {list_, date_, time_}) if (control) {
+            RECT bounds{}; GetWindowRect(control, &bounds);
+            SetWindowRgn(control, high_contrast_ ? nullptr : CreateRoundRectRgn(0, 0, bounds.right - bounds.left + 1, bounds.bottom - bounds.top + 1, px(16), px(16)), TRUE);
+        }
+    }
+    // Caption blends into the body: dark/light caption plus body-coloured caption and border (Windows 11).
+    void apply_caption() {
+        if (!window_) return;
+        using DwmSetFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+        static const auto set_attribute = reinterpret_cast<DwmSetFn>(
+            [] { const auto module = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); return module ? GetProcAddress(module, "DwmSetWindowAttribute") : nullptr; }());
+        if (!set_attribute) return;
+        constexpr DWORD dark_attribute = 20, border_attribute = 34, caption_attribute = 35, corner_attribute = 33;
+        const DWORD corner = high_contrast_ ? 0 : 2; // DWMWCP_ROUND
+        set_attribute(window_, corner_attribute, &corner, sizeof(corner));
+        const BOOL dark = dark_ && !high_contrast_;
+        const COLORREF color = high_contrast_ ? 0xFFFFFFFF : bg_;
+        set_attribute(window_, dark_attribute, &dark, sizeof(dark));
+        set_attribute(window_, caption_attribute, &color, sizeof(color));
+        set_attribute(window_, border_attribute, &color, sizeof(color));
+    }
     void apply_control_themes() {
         using SetWindowThemeFn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
         static const auto set_theme = reinterpret_cast<SetWindowThemeFn>(
             [] { const auto module = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); return module ? GetProcAddress(module, "SetWindowTheme") : nullptr; }());
+        apply_caption();
         if (!set_theme) return;
         const bool dark = dark_ && !high_contrast_;
         const auto apply = [&](HWND control, const wchar_t* dark_name) {
             if (control) set_theme(control, dark ? dark_name : nullptr, nullptr);
         };
         apply(duration_, L"DarkMode_CFD");
-        for (HWND combo : {action_, kind_, theme_combo_, locale_combo_}) apply(combo, L"DarkMode_CFD");
+        for (HWND combo : {action_, kind_}) apply(combo, L"DarkMode_CFD");
+        for (HWND day : days_) apply(day, L"DarkMode_Explorer");
+        apply(window_, L"DarkMode_Explorer");
+        round_controls();
         apply(date_, L"DarkMode_CFD");
         apply(time_, L"DarkMode_CFD");
         if (list_) {
             ListView_SetTextColor(list_, ink_);
-            ListView_SetTextBkColor(list_, bg_);
-            ListView_SetBkColor(list_, bg_);
+            ListView_SetTextBkColor(list_, high_contrast_ ? bg_ : CLR_NONE);
+            ListView_SetBkColor(list_, high_contrast_ ? bg_ : field_color());
             apply(list_, L"DarkMode_Explorer");
             apply(ListView_GetHeader(list_), L"DarkMode_ItemsView");
         }
@@ -2249,68 +2306,55 @@ class Panel {
         add_l(L"STATIC", text::brand, text_en::brand, 0, 0, 24, 20, 360, 36, 1);
         if (simulation_mode) add_l(L"STATIC", text::simulation, text_en::simulation, SS_RIGHT, 0, 454, 28, 102, 20, 2);
         add_l(L"STATIC", text::subtitle, text_en::subtitle, 0, 0, 24, 60, 360, 22);
-        add_l(L"BUTTON", text::options, text_en::options, WS_TABSTOP | BS_OWNERDRAW, menu_id, 484, 58, 72, 28, 2);
+        add_l(L"BUTTON", text::options, text_en::options, WS_TABSTOP | BS_OWNERDRAW, menu_id, 484, 56, 72, 32, 4);
 
-        // Theme selection near other combos for logical tab order
-        add_l(L"STATIC", text::theme_label, text_en::theme_label, 0, 0, 24, 100, 254, 22);
-        theme_combo_ = add(L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
-                     theme_id, 24, 125, 254, 180);
-        SendMessageW(theme_combo_, CB_SETCURSEL, static_cast<WPARAM>(theme_value_), 0);
-
-        // Language selection
-        add_l(L"STATIC", text::language_label, text_en::language_label, 0, 0, 24, 170, 254, 22);
-        locale_combo_ = add(L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
-                     locale_id, 24, 195, 254, 180);
-        SendMessageW(locale_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(get_text(locale_, text::portuguese, text_en::portuguese)));
-
-        // Kind selection: right column, same row as language
-        add_l(L"STATIC", text::kind_label, text_en::kind_label, 0, 0, 304, 170, 252, 22);
-        kind_ = add(L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
-                    kind_id, 304, 195, 252, 160);
-        SendMessageW(locale_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(get_text(locale_, text::english, text_en::english)));
-        SendMessageW(locale_combo_, CB_SETCURSEL, static_cast<WPARAM>(book_.get_locale()), 0);
-
-        add_l(L"STATIC", text::action_label, text_en::action_label, 0, 0, 304, 100, 252, 22);
-        action_ = add(L"COMBOBOX", L"", WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
-                      action_id, 304, 125, 252, 180);
+        constexpr DWORD combo_style = WS_TABSTOP | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_VSCROLL;
+        add_l(L"STATIC", text::action_label, text_en::action_label, 0, 0, 24, 104, 254, 22);
+        action_ = add(L"COMBOBOX", L"", combo_style, action_id, 24, 128, 254, 180);
+        add_l(L"STATIC", text::kind_label, text_en::kind_label, 0, 0, 304, 104, 252, 22);
+        kind_ = add(L"COMBOBOX", L"", combo_style, kind_id, 304, 128, 252, 160);
+        for (HWND combo : {action_, kind_}) SetWindowSubclass(combo, combo_proc, 1, reinterpret_cast<DWORD_PTR>(this));
         SendMessageW(action_, CB_SETCURSEL, 0, 0);
         SendMessageW(kind_, CB_SETCURSEL, 0, 0);
-        duration_controls_.push_back(add_l(L"STATIC", text::duration_label, text_en::duration_label, 0, 0, 24, 240, 254, 22));
+        duration_controls_.push_back(add_l(L"STATIC", text::duration_label, text_en::duration_label, 0, 0, 24, 176, 254, 22));
         duration_ = add(L"EDIT", L"30", WS_TABSTOP | ES_AUTOHSCROLL, duration_id,
-                        24, 265, 254, 34, 0, WS_EX_CLIENTEDGE);
+                        36, 206, 230, 20); // the rounded field around it is painted by paint_duration_field
+        SendMessageW(duration_, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(0, 0));
         duration_controls_.push_back(duration_);
         SendMessageW(duration_, EM_SETLIMITTEXT, 32, 0);
-        duration_controls_.push_back(add_l(L"STATIC", text::duration_hint, text_en::duration_hint, 0, 0, 304, 272, 252, 22, 2));
+        duration_controls_.push_back(add_l(L"STATIC", text::duration_hint, text_en::duration_hint, 0, 0, 304, 206, 252, 22, 2));
         for (int i = 0; i < static_cast<int>(std::size(text::presets)); ++i)
             duration_controls_.push_back(add(L"BUTTON", get_text(locale_, text::presets[i].label, text_en::presets[i].label), WS_TABSTOP | BS_OWNERDRAW, preset_id + i,
-                24 + 136 * i, 315, 124, 32, 2));
-        once_controls_.push_back(add_l(L"STATIC", text::date_label, text_en::date_label, 0, 0, 24, 240, 254, 22));
-        date_ = add(DATETIMEPICK_CLASSW, L"", WS_TABSTOP | DTS_SHORTDATEFORMAT, date_id, 24, 265, 254, 34);
+                24 + 135 * i, 248, 127, 32, 4));
+        once_controls_.push_back(add_l(L"STATIC", text::date_label, text_en::date_label, 0, 0, 24, 176, 254, 22));
+        date_ = add(DATETIMEPICK_CLASSW, L"", WS_TABSTOP | DTS_SHORTDATEFORMAT, date_id, 24, 200, 254, 32);
         SYSTEMTIME range[2]{}; range[0].wYear = 1970; range[0].wMonth = 1; range[0].wDay = 1;
         range[1].wYear = 9999; range[1].wMonth = 12; range[1].wDay = 31;
         DateTime_SetRange(date_, GDTR_MIN | GDTR_MAX, range);
         once_controls_.push_back(date_);
-        calendar_controls_.push_back(add_l(L"STATIC", text::time_label, text_en::time_label, 0, 0, 304, 240, 252, 22));
-        time_ = add(DATETIMEPICK_CLASSW, L"", WS_TABSTOP | DTS_TIMEFORMAT | DTS_UPDOWN, time_id, 304, 265, 252, 34);
+        calendar_controls_.push_back(add_l(L"STATIC", text::time_label, text_en::time_label, 0, 0, 304, 176, 252, 22));
+        time_ = add(DATETIMEPICK_CLASSW, L"", WS_TABSTOP | DTS_TIMEFORMAT | DTS_UPDOWN, time_id, 304, 200, 252, 32);
         SendMessageW(time_, DTM_SETFORMATW, 0, reinterpret_cast<LPARAM>(L"HH:mm"));
+        for (HWND picker : {date_, time_}) SetWindowSubclass(picker, picker_proc, 1, reinterpret_cast<DWORD_PTR>(this));
         calendar_controls_.push_back(time_);
-        weekly_controls_.push_back(add_l(L"STATIC", text::weekly_label, text_en::weekly_label, 0, 0, 24, 240, 254, 22, 2));
-        weekly_controls_.push_back(add_l(L"BUTTON", text::daily, text_en::daily, WS_TABSTOP | BS_OWNERDRAW, daily_id, 24, 265, 254, 34, 2));
+        weekly_controls_.push_back(add_l(L"STATIC", text::weekly_label, text_en::weekly_label, 0, 0, 24, 176, 254, 22, 2));
+        weekly_controls_.push_back(add_l(L"BUTTON", text::daily, text_en::daily, WS_TABSTOP | BS_OWNERDRAW, daily_id, 24, 200, 254, 32, 4));
         for (int i = 0; i < 7; ++i) {
             days_[i] = add(L"BUTTON", get_text(locale_, text::weekdays[i], text_en::weekdays[i]), WS_TABSTOP | BS_AUTOCHECKBOX, weekday_id + i,
-                           24 + 76 * i, 315, 74, 30, 2);
+                           24 + 77 * i, 248, 70, 32, 2);
             SendMessageW(days_[i], BM_SETCHECK, BST_CHECKED, 0);
             weekly_controls_.push_back(days_[i]);
         }
-        preview_ = add(L"STATIC", L"", 0, 0, 24, 360, 300, 30, 2);
-        force_ = add_l(L"BUTTON", text::force_label, text_en::force_label, WS_TABSTOP | BS_OWNERDRAW, force_id, 330, 360, 226, 30, 2);
+        preview_ = add(L"STATIC", L"", 0, 0, 24, 296, 300, 32, 2);
+        force_ = add_l(L"BUTTON", text::force_label, text_en::force_label, WS_TABSTOP | BS_OWNERDRAW, force_id, 330, 296, 226, 32, 4);
         start_ = add_l(L"BUTTON", text::add_schedule, text_en::add_schedule, WS_TABSTOP | BS_OWNERDRAW, schedule_id,
-                     24, 400, 344, 36);
-        add_l(L"BUTTON", text::new_schedule, text_en::new_schedule, WS_TABSTOP | BS_OWNERDRAW, new_id, 380, 400, 176, 36);
-        add_l(L"STATIC", text::schedules, text_en::schedules, 0, 0, 24, 450, 532, 22);
-        list_ = add(WC_LISTVIEWW, L"", WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
-                    list_id, 24, 476, 532, 120, 2, WS_EX_CLIENTEDGE);
+                     24, 344, 348, 40, 4);
+        add_l(L"BUTTON", text::new_schedule, text_en::new_schedule, WS_TABSTOP | BS_OWNERDRAW, new_id, 380, 344, 176, 40, 4);
+        add_l(L"STATIC", text::schedules, text_en::schedules, 0, 0, 24, 400, 532, 22);
+        list_ = add(WC_LISTVIEWW, L"", WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER,
+                    list_id, 24, 424, 532, 160, 2);
         ListView_SetExtendedListViewStyle(list_, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+        SetWindowSubclass(list_, list_proc, 1, reinterpret_cast<DWORD_PTR>(this));
         const wchar_t* labels[] = {get_text(locale_, text::id_column, text_en::id_column), get_text(locale_, text::action_column, text_en::action_column), get_text(locale_, text::due_column, text_en::due_column), get_text(locale_, text::state_column, text_en::state_column), get_text(locale_, text::rule_column, text_en::rule_column)};
         const int widths[] = {40, 80, 172, 130, 80};
         for (int i = 0; i < 5; ++i) {
@@ -2318,21 +2362,58 @@ class Panel {
             column.pszText = const_cast<wchar_t*>(labels[i]); column.cx = px(widths[i]);
             ListView_InsertColumn(list_, i, &column);
         }
-        edit_ = add_l(L"BUTTON", text::edit, text_en::edit, WS_TABSTOP | BS_OWNERDRAW, edit_id, 24, 608, 76, 36, 2);
-        pause_ = add_l(L"BUTTON", text::pause, text_en::pause, WS_TABSTOP | BS_OWNERDRAW, pause_id, 108, 608, 84, 36, 2);
-        erase_ = add_l(L"BUTTON", text::erase, text_en::erase, WS_TABSTOP | BS_OWNERDRAW, erase_id, 200, 608, 76, 36, 2);
-        cancel_ = add_l(L"BUTTON", text::cancel, text_en::cancel, WS_TABSTOP | BS_OWNERDRAW, cancel_id, 284, 608, 140, 36, 2);
-        postpone_ = add_l(L"BUTTON", text::postpone, text_en::postpone, WS_TABSTOP | BS_OWNERDRAW, postpone_id, 432, 608, 124, 36, 2);
-        status_ = add_l(L"STATIC", text::idle, text_en::idle, SS_CENTER, 0, 24, 660, 532, 24);
-        countdown_ = add_l(L"STATIC", text::clock_empty, text_en::clock_empty, SS_CENTER, 0, 24, 688, 532, 56, 3);
-        detail_ = add_l(L"STATIC", text::idle_detail, text_en::idle_detail, SS_CENTER, 0, 24, 748, 532, 40, 2);
-        error_ = add(L"STATIC", L"", SS_CENTER, 0, 24, 792, 532, 42, 2);
-        add_l(L"STATIC", text::simulation_note, text_en::simulation_note, SS_CENTER, 0, 24, 842, 532, 22, 2);
-        add_l(L"STATIC", text::settings_note, text_en::settings_note, SS_CENTER, 0, 24, 872, 532, 22, 2);
+        edit_ = add_l(L"BUTTON", text::edit, text_en::edit, WS_TABSTOP | BS_OWNERDRAW, edit_id, 24, 596, 76, 32, 4);
+        pause_ = add_l(L"BUTTON", text::pause, text_en::pause, WS_TABSTOP | BS_OWNERDRAW, pause_id, 108, 596, 84, 32, 4);
+        erase_ = add_l(L"BUTTON", text::erase, text_en::erase, WS_TABSTOP | BS_OWNERDRAW, erase_id, 200, 596, 76, 32, 4);
+        cancel_ = add_l(L"BUTTON", text::cancel, text_en::cancel, WS_TABSTOP | BS_OWNERDRAW, cancel_id, 284, 596, 140, 32, 4);
+        postpone_ = add_l(L"BUTTON", text::postpone, text_en::postpone, WS_TABSTOP | BS_OWNERDRAW, postpone_id, 432, 596, 124, 32, 4);
+        status_ = add_l(L"STATIC", text::idle, text_en::idle, SS_CENTER, 0, 24, 648, 532, 24);
+        countdown_ = add_l(L"STATIC", text::clock_empty, text_en::clock_empty, SS_CENTER, 0, 24, 672, 532, 56, 3);
+        detail_ = add_l(L"STATIC", text::idle_detail, text_en::idle_detail, SS_CENTER, 0, 24, 732, 532, 40, 2);
+        empty_ = add_l(L"STATIC", text::no_active_schedule, text_en::no_active_schedule, SS_CENTER, 0, 24, 648, 532, 20, 2);
+        error_ = add(L"STATIC", L"", SS_CENTER, 0, 24, 780, 532, 32, 2);
+        footer_notes_[0] = add_l(L"STATIC", text::simulation_note, text_en::simulation_note, SS_CENTER, 0, 24, 820, 532, 22, 2);
+        if (simulation_mode) footer_notes_[1] = add_l(L"STATIC", text::settings_note, text_en::settings_note, SS_CENTER, 0, 24, 844, 532, 22, 2);
         fill_choice_combos();
         apply_control_themes();
         fonts_and_layout();
         show_kind();
+    }
+    // Window height follows the footer, keeping the bottom edge in place.
+    void fit_window() {
+        if (!window_ || IsIconic(window_)) return;
+        RECT bounds{}, size{0, 0, px(580), px(content_)};
+        GetWindowRect(window_, &bounds);
+        MONITORINFO info{}; info.cbSize = sizeof(info);
+        if (!GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &info)) return;
+        AdjustWindowRectExForDpi(&size, window_style, FALSE, WS_EX_CONTROLPARENT, dpi_);
+        const int height = (std::min)(static_cast<int>(size.bottom - size.top), static_cast<int>(info.rcWork.bottom - info.rcWork.top));
+        SetWindowPos(window_, nullptr, bounds.left, (std::max)(static_cast<int>(info.rcWork.top), static_cast<int>(bounds.bottom) - height),
+            bounds.right - bounds.left, height, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    // Footer height follows the state: 0 = countdown, 1 = status + detail only, 2 = nothing active.
+    void layout_footer(int state, bool has_error, int lines) {
+        const int key = (state * 2 + has_error) * 4 + lines;
+        if (!status_ || key == footer_state_) return;
+        footer_state_ = key;
+        ShowWindow(status_, state == 2 ? SW_HIDE : SW_SHOW);
+        ShowWindow(countdown_, state == 0 ? SW_SHOW : SW_HIDE);
+        ShowWindow(detail_, state == 2 ? SW_HIDE : SW_SHOW);
+        ShowWindow(empty_, state == 2 ? SW_SHOW : SW_HIDE);
+        const int detail_top = state == 0 ? 732 : 680, detail_height = 16 * lines;
+        const int end = state == 0 || state == 1 ? detail_top + detail_height : 668;
+        const auto place = [&](HWND handle, int y, int height = 0) { for (auto& item : items_) if (item.handle == handle) { item.y = y; if (height) item.height = height; } };
+        if (state != 2) place(detail_, detail_top, detail_height);
+        else { place(status_, 648); place(detail_, 648, detail_height); }
+        if (state != 0) place(countdown_, state == 1 ? 680 : 648); // hidden, kept inside the content area
+        if (state == 0) place(countdown_, 672);
+        const int block = end + (has_error ? 40 : 0);
+        place(error_, end + 8);
+        place(footer_notes_[0], block + 16);
+        place(footer_notes_[1], block + 46);
+        content_ = block + (footer_notes_[1] ? 46 : 16) + 22 + 16;
+        fit_window();
+        scroll_to(scroll_offset_);
     }
     std::wstring duration_text() const {
         wchar_t value[64]{};
@@ -2523,6 +2604,7 @@ class Panel {
             if (!conflicts.empty()) notify(get_text(locale_, text::state_conflict, text_en::state_conflict), get_text(locale_, text::conflict_notification, text_en::conflict_notification));
         }
         sync_list();
+        int want = 2, lines = 1;
         const auto* record = selected_record();
         const bool writable = book_.writable();
         const bool scheduled = record && record->state == OccurrenceState::Scheduled;
@@ -2541,7 +2623,8 @@ class Panel {
                 wchar_t value[48]{};
                 swprintf_s(value, L"%02llu:%02llu:%02llu", seconds / 3600, (seconds / 60) % 60, seconds % 60);
                 set_text(countdown_, value);
-            } else set_text(countdown_, get_text(locale_, text::clock_empty, text_en::clock_empty));
+                want = 0;
+            } else { set_text(countdown_, get_text(locale_, text::clock_empty, text_en::clock_empty)); want = 1; }
             const wchar_t* note = record->state == OccurrenceState::Uncertain ? get_text(locale_, text::uncertain_detail, text_en::uncertain_detail) :
                 record->paused && scheduled ? get_text(locale_, text::paused_detail, text_en::paused_detail) : nullptr;
             std::wstring detail = note ? std::wstring(note) : std::wstring(get_text(locale_, text::actions[static_cast<int>(record->action)], text_en::actions[static_cast<int>(record->action)])) +
@@ -2557,12 +2640,14 @@ class Panel {
                 }
             }
             set_text(detail_, detail);
+            lines = 1 + static_cast<int>(std::count(detail.begin(), detail.end(), L'\n'));
         } else {
             set_text(status_, get_text(locale_, text::idle, text_en::idle));
             set_text(countdown_, get_text(locale_, text::clock_empty, text_en::clock_empty));
             set_text(detail_, get_text(locale_, text::idle_detail, text_en::idle_detail));
         }
         if (!writable) show_error();
+        layout_footer(want, GetWindowTextLengthW(error_) > 0, (std::min)(lines, 2));
         preview();
         if (!tray_added_ && now.monotonic_ms - last_tray_try_ >= 5000) add_tray();
     }
@@ -2655,14 +2740,23 @@ class Panel {
             preview();
         } else if (id >= weekday_id && id < weekday_id + 7) {
             preview();
+        } else if (id >= theme_id && id < theme_id + static_cast<int>(std::size(text::theme_strings))) {
+            theme_value_ = static_cast<unsigned>(id - theme_id);
+            if (!book_.set_theme(theme_value_)) show_error();
+            colors();
+            refresh_locale_text();
+        } else if (id == locale_id || id == locale_id + 1) {
+            const auto locale = static_cast<unsigned>(id - locale_id);
+            if (!book_.set_locale(locale)) show_error();
+            locale_ = locale;
+            refresh_locale_text();
         } else if (id == open_id || id == settings_id) {
             show(true);
-            if (id == settings_id && theme_combo_) {
-                // Settings are theme and language: jump to them and open the theme list.
+            if (id == settings_id) {
+                // Settings (theme, language) live in the Options menu.
                 set_text(error_, L"");
-                SetFocus(theme_combo_);
-                SendMessageW(theme_combo_, CB_SHOWDROPDOWN, TRUE, 0);
-            } else if (id == open_id) {
+                PostMessageW(window_, WM_COMMAND, menu_id, 0);
+            } else {
                 SetWindowPos(window_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                 FlashWindow(window_, FALSE);
             }
@@ -2684,6 +2778,25 @@ class Panel {
             AppendMenuW(menu, MF_STRING, open_id, get_text(locale_, text::open, text_en::open));
             AppendMenuW(menu, MF_STRING, settings_id, get_text(locale_, text::settings, text_en::settings));
         }
+        const auto radio = [&](const wchar_t* title, int first, const wchar_t* const* pt, const wchar_t* const* en, std::size_t count, unsigned current) {
+            HMENU sub = CreatePopupMenu();
+            if (!sub) return;
+            for (std::size_t i = 0; i < count; ++i) {
+                MENUITEMINFOW item{}; item.cbSize = sizeof(item);
+                item.fMask = MIIM_STRING | MIIM_ID | MIIM_FTYPE | MIIM_STATE;
+                item.fType = MFT_STRING | MFT_RADIOCHECK;
+                item.fState = i == current ? MFS_CHECKED : MFS_UNCHECKED;
+                item.wID = static_cast<UINT>(first + static_cast<int>(i));
+                item.dwTypeData = const_cast<wchar_t*>(get_text(locale_, pt[i], en[i]));
+                InsertMenuItemW(sub, static_cast<UINT>(i), TRUE, &item);
+            }
+            AppendMenuW(menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(sub), title);
+        };
+        const wchar_t* const languages_pt[] = {text::portuguese, text::english};
+        const wchar_t* const languages_en[] = {text_en::portuguese, text_en::english};
+        radio(get_text(locale_, text::theme_label, text_en::theme_label), theme_id, text::theme_strings, text_en::theme_strings, std::size(text::theme_strings), theme_value_);
+        radio(get_text(locale_, text::language_label, text_en::language_label), locale_id, languages_pt, languages_en, 2, locale_);
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, visibility_id, get_text(locale_, text::notification_settings, text_en::notification_settings));
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING | (book_.writable() && selected_record() && selected_record()->state == OccurrenceState::Scheduled ? MF_ENABLED : MF_GRAYED), postpone_id, get_text(locale_, text::postpone, text_en::postpone));
@@ -2709,7 +2822,7 @@ class Panel {
         HPEN pen = CreatePen(PS_SOLID, px(2), edge);
         const auto old_brush = SelectObject(draw.hDC, brush);
         const auto old_pen = SelectObject(draw.hDC, pen);
-        RoundRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom, px(10), px(10));
+        RoundRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom, px(16), px(16));
         const int box = px(18), top = (draw.rcItem.top + draw.rcItem.bottom - box) / 2, left = draw.rcItem.left + px(10);
         SelectObject(draw.hDC, GetStockObject(NULL_BRUSH));
         Rectangle(draw.hDC, left, top, left + box, top + box);
@@ -2720,7 +2833,7 @@ class Panel {
         }
         SelectObject(draw.hDC, old_brush); SelectObject(draw.hDC, old_pen);
         DeleteObject(brush); DeleteObject(pen);
-        HFONT old_font = fonts_[2] ? static_cast<HFONT>(SelectObject(draw.hDC, fonts_[2])) : nullptr;
+        HFONT old_font = fonts_[4] ? static_cast<HFONT>(SelectObject(draw.hDC, fonts_[4])) : nullptr;
         wchar_t label[128]{};
         GetWindowTextW(draw.hwndItem, label, 128);
         SetBkMode(draw.hDC, TRANSPARENT);
@@ -2730,64 +2843,283 @@ class Panel {
         if (draw.itemState & ODS_FOCUS) { RECT focus = draw.rcItem; InflateRect(&focus, -px(3), -px(3)); DrawFocusRect(draw.hDC, &focus); }
         if (old_font) SelectObject(draw.hDC, old_font);
     }
+    // Combo selection field and list rows, owner-drawn so they follow light/dark/high contrast.
+    void draw_combo_item(const DRAWITEMSTRUCT& draw) {
+        if (draw.itemID == static_cast<UINT>(-1)) return;
+        const bool use_dark = dark_ && !high_contrast_;
+        const bool field = (draw.itemState & ODS_COMBOBOXEDIT) != 0;
+        const bool selected = (draw.itemState & ODS_SELECTED) != 0 && !field;
+        const COLORREF fill = high_contrast_ ? GetSysColor(selected ? COLOR_HIGHLIGHT : COLOR_WINDOW) : field_color();
+        const COLORREF text = high_contrast_ ? GetSysColor(selected ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT) : ink_;
+        HBRUSH brush = CreateSolidBrush(fill);
+        FillRect(draw.hDC, &draw.rcItem, brush);
+        DeleteObject(brush);
+        if (selected && !high_contrast_) { // rounded accent-tinted highlight
+            const COLORREF tint = use_dark ? RGB(29, 71, 103) : RGB(205, 229, 247);
+            RECT bounds = draw.rcItem; InflateRect(&bounds, -px(4), -px(2));
+            HBRUSH tint_brush = CreateSolidBrush(tint);
+            HPEN tint_pen = CreatePen(PS_SOLID, 1, tint);
+            const auto old_brush = SelectObject(draw.hDC, tint_brush);
+            const auto old_pen = SelectObject(draw.hDC, tint_pen);
+            RoundRect(draw.hDC, bounds.left, bounds.top, bounds.right, bounds.bottom, px(16), px(16));
+            SelectObject(draw.hDC, old_brush); SelectObject(draw.hDC, old_pen);
+            DeleteObject(tint_brush); DeleteObject(tint_pen);
+        }
+        wchar_t label[128]{};
+        SendMessageW(draw.hwndItem, CB_GETLBTEXT, draw.itemID, reinterpret_cast<LPARAM>(label));
+        HFONT old_font = fonts_[0] ? static_cast<HFONT>(SelectObject(draw.hDC, fonts_[0])) : nullptr;
+        SetBkMode(draw.hDC, TRANSPARENT);
+        SetTextColor(draw.hDC, text);
+        RECT rect = draw.rcItem; rect.left += px(12); rect.right -= px(12);
+        DrawTextW(draw.hDC, label, -1, &rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        if (old_font) SelectObject(draw.hDC, old_font);
+    }
+    COLORREF field_color() const { return dark_ ? RGB(45, 45, 45) : RGB(255, 255, 255); }
+    COLORREF border_color() const { return dark_ ? RGB(78, 78, 78) : RGB(196, 205, 220); }
+    // Rounded field behind the duration edit (the edit itself has no border).
+    void paint_duration_field(HDC dc) {
+        if (!duration_ || high_contrast_ || !IsWindowVisible(duration_)) return;
+        const RECT field{px(24), px(200) - scroll_offset_, px(278), px(232) - scroll_offset_};
+        HBRUSH brush = CreateSolidBrush(field_color());
+        HPEN pen = CreatePen(PS_SOLID, 1, border_color());
+        const auto old_brush = SelectObject(dc, brush);
+        const auto old_pen = SelectObject(dc, pen);
+        RoundRect(dc, field.left, field.top, field.right, field.bottom, px(16), px(16));
+        SelectObject(dc, old_brush); SelectObject(dc, old_pen);
+        DeleteObject(brush); DeleteObject(pen);
+        if (GetFocus() == duration_) {
+            HPEN line = CreatePen(PS_SOLID, px(2), accent_);
+            const auto before = SelectObject(dc, line);
+            MoveToEx(dc, field.left + px(6), field.bottom - 1 - px(1), nullptr); LineTo(dc, field.right - px(6), field.bottom - 1 - px(1));
+            SelectObject(dc, before); DeleteObject(line);
+        }
+    }
+    void paint_frame(HWND window) {
+        HDC dc = GetWindowDC(window);
+        if (!dc) return;
+        RECT rect{}; GetWindowRect(window, &rect); OffsetRect(&rect, -rect.left, -rect.top);
+        const int thick = GetSystemMetricsForDpi(SM_CXBORDER, dpi_);
+        HBRUSH brush = CreateSolidBrush(border_color());
+        RECT edge = rect;
+        for (int i = 0; i < thick; ++i) { FrameRect(dc, &edge, brush); InflateRect(&edge, -1, -1); }
+        DeleteObject(brush);
+        HPEN pen = CreatePen(PS_SOLID, thick, border_color());
+        const auto old_pen = SelectObject(dc, pen);
+        const auto old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+        RoundRect(dc, rect.left, rect.top, rect.right, rect.bottom, px(16), px(16));
+        SelectObject(dc, old_pen); SelectObject(dc, old_brush); DeleteObject(pen);
+        ReleaseDC(window, dc);
+    }
+    // Date/time pickers paint their own box; add the same rounded outline on top.
+    static LRESULT CALLBACK picker_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR reference) {
+        auto* self = reinterpret_cast<Panel*>(reference);
+        const LRESULT result = DefSubclassProc(window, message, wparam, lparam);
+        if ((message == WM_PAINT || message == WM_NCPAINT) && !self->high_contrast_) self->paint_frame(window);
+        if (message == WM_NCDESTROY) RemoveWindowSubclass(window, picker_proc, 1);
+        return result;
+    }
+    // Closed combo (light and dark): the stock control paints a boxed drop button, so draw all of it.
+    void paint_combo(HWND combo) {
+        PAINTSTRUCT paint{};
+        HDC dc = BeginPaint(combo, &paint);
+        RECT client{};
+        GetClientRect(combo, &client);
+        const bool dropped = SendMessageW(combo, CB_GETDROPPEDSTATE, 0, 0) != 0;
+        const bool focused = GetFocus() == combo || dropped;
+        const bool hot = hot_button_ == combo;
+        FillRect(dc, &client, background_);
+        const COLORREF fill = hot && !focused ? (dark_ ? RGB(52, 52, 52) : RGB(250, 251, 253)) : field_color();
+        HBRUSH brush = CreateSolidBrush(fill);
+        HPEN pen = CreatePen(PS_SOLID, 1, hot ? (dark_ ? RGB(100, 100, 100) : RGB(160, 172, 192)) : border_color());
+        const auto old_brush = SelectObject(dc, brush);
+        const auto old_pen = SelectObject(dc, pen);
+        RoundRect(dc, client.left, client.top, client.right - 1, client.bottom - 1, px(16), px(16));
+        SelectObject(dc, old_brush); SelectObject(dc, old_pen);
+        DeleteObject(brush); DeleteObject(pen);
+        if (focused) { // WinUI-style 2px accent line along the bottom edge
+            HPEN line = CreatePen(PS_SOLID, px(2), accent_);
+            const auto before_line = SelectObject(dc, line);
+            const int y = client.bottom - 1 - px(1);
+            MoveToEx(dc, client.left + px(6), y, nullptr); LineTo(dc, client.right - 1 - px(6), y);
+            SelectObject(dc, before_line); DeleteObject(line);
+        }
+        wchar_t label[128]{};
+        const auto row = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+        if (row >= 0) SendMessageW(combo, CB_GETLBTEXT, static_cast<WPARAM>(row), reinterpret_cast<LPARAM>(label));
+        HFONT old_font = fonts_[0] ? static_cast<HFONT>(SelectObject(dc, fonts_[0])) : nullptr;
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, ink_);
+        RECT rect = client; rect.left += px(12); rect.right -= px(36);
+        DrawTextW(dc, label, -1, &rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        if (old_font) SelectObject(dc, old_font);
+        HPEN arrow = CreatePen(PS_SOLID, px(2), muted_);
+        const auto before = SelectObject(dc, arrow);
+        const int half = px(5), cx = client.right - px(12) - half, cy = (client.top + client.bottom) / 2;
+        MoveToEx(dc, cx - half, cy - half / 2, nullptr);
+        LineTo(dc, cx, cy + half / 2 + 1);
+        LineTo(dc, cx + half + 1, cy - half / 2 - 1);
+        SelectObject(dc, before); DeleteObject(arrow);
+        EndPaint(combo, &paint);
+    }
+    static LRESULT CALLBACK combo_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR reference) {
+        auto* self = reinterpret_cast<Panel*>(reference);
+        if (!self->high_contrast_) {
+            if (message == WM_MOUSEMOVE || message == WM_MOUSELEAVE) self->track_hot(window, message);
+            if (message == WM_ERASEBKGND) return 1;
+            if (message == WM_PAINT) { self->paint_combo(window); return 0; }
+        }
+        if (message == WM_NCDESTROY) RemoveWindowSubclass(window, combo_proc, 1);
+        return DefSubclassProc(window, message, wparam, lparam);
+    }
+    // The header reports to its parent list view: paint it flat, without separators, and track the hot row.
+    static LRESULT CALLBACK list_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR reference) {
+        auto* self = reinterpret_cast<Panel*>(reference);
+        if (message == WM_NCPAINT && !self->high_contrast_) {
+            const LRESULT result = DefSubclassProc(window, message, wparam, lparam);
+            self->paint_frame(window);
+            return result;
+        }
+        if (message == WM_MOUSEMOVE || message == WM_MOUSELEAVE) {
+            int row = -1;
+            if (message == WM_MOUSEMOVE) {
+                LVHITTESTINFO hit{}; hit.pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+                row = ListView_HitTest(window, &hit);
+                TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, window, 0};
+                TrackMouseEvent(&track);
+            }
+            if (row != self->hot_row_) {
+                const int old = self->hot_row_;
+                self->hot_row_ = row;
+                if (old >= 0) ListView_RedrawItems(window, old, old);
+                if (row >= 0) ListView_RedrawItems(window, row, row);
+            }
+        }
+        if (message == WM_NOTIFY && !self->high_contrast_ &&
+            reinterpret_cast<NMHDR*>(lparam)->code == NM_CUSTOMDRAW && reinterpret_cast<NMHDR*>(lparam)->hwndFrom == ListView_GetHeader(window)) {
+            const auto* draw = reinterpret_cast<NMCUSTOMDRAW*>(lparam);
+            if (draw->dwDrawStage == CDDS_PREPAINT) {
+                RECT bounds{}; GetClientRect(draw->hdr.hwndFrom, &bounds);
+                HBRUSH brush = CreateSolidBrush(self->field_color());
+                FillRect(draw->hdc, &bounds, brush); DeleteObject(brush);
+                return CDRF_NOTIFYITEMDRAW | CDRF_NOTIFYPOSTPAINT;
+            }
+            if (draw->dwDrawStage == CDDS_ITEMPREPAINT) { self->draw_header_item(*draw); return CDRF_SKIPDEFAULT; }
+            if (draw->dwDrawStage == CDDS_POSTPAINT) {
+                // Repaint whatever the header draws beyond its last column, keeping the single divider.
+                RECT bounds{}, last{}; GetClientRect(draw->hdr.hwndFrom, &bounds);
+                const int count = Header_GetItemCount(draw->hdr.hwndFrom);
+                if (count > 0 && Header_GetItemRect(draw->hdr.hwndFrom, count - 1, &last)) {
+                    bounds.left = last.right;
+                    HBRUSH brush = CreateSolidBrush(self->field_color());
+                    FillRect(draw->hdc, &bounds, brush); DeleteObject(brush);
+                    HPEN pen = CreatePen(PS_SOLID, 1, self->divider_color());
+                    const auto old_pen = SelectObject(draw->hdc, pen);
+                    MoveToEx(draw->hdc, bounds.left, bounds.bottom - 1, nullptr); LineTo(draw->hdc, bounds.right, bounds.bottom - 1);
+                    SelectObject(draw->hdc, old_pen); DeleteObject(pen);
+                }
+            }
+            return CDRF_DODEFAULT;
+        }
+        if (message == WM_NCDESTROY) RemoveWindowSubclass(window, list_proc, 1);
+        return DefSubclassProc(window, message, wparam, lparam);
+    }
+    COLORREF divider_color() const { return dark_ ? RGB(70, 70, 70) : RGB(226, 231, 239); }
+    void draw_header_item(const NMCUSTOMDRAW& draw) {
+        HBRUSH brush = CreateSolidBrush(field_color());
+        FillRect(draw.hdc, &draw.rc, brush);
+        DeleteObject(brush);
+        HPEN pen = CreatePen(PS_SOLID, 1, divider_color());
+        const auto old_pen = SelectObject(draw.hdc, pen);
+        MoveToEx(draw.hdc, draw.rc.left, draw.rc.bottom - 1, nullptr); LineTo(draw.hdc, draw.rc.right, draw.rc.bottom - 1);
+        SelectObject(draw.hdc, old_pen); DeleteObject(pen);
+        wchar_t label[64]{};
+        HDITEMW header_item{}; header_item.mask = HDI_TEXT; header_item.pszText = label; header_item.cchTextMax = 64;
+        Header_GetItem(draw.hdr.hwndFrom, static_cast<int>(draw.dwItemSpec), &header_item);
+        const auto font = reinterpret_cast<HFONT>(SendMessageW(draw.hdr.hwndFrom, WM_GETFONT, 0, 0));
+        HFONT old_font = font ? static_cast<HFONT>(SelectObject(draw.hdc, font)) : nullptr;
+        SetBkMode(draw.hdc, TRANSPARENT);
+        SetTextColor(draw.hdc, muted_);
+        RECT rect = draw.rc; rect.left += draw.dwItemSpec == 0 ? px(16) : px(6); rect.right -= px(4);
+        DrawTextW(draw.hdc, label, -1, &rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        if (old_font) SelectObject(draw.hdc, old_font);
+    }
+    // Owner-draw buttons and combos get no hover notification, so the mouse is tracked here.
+    void track_hot(HWND window, UINT message) {
+        if (message == WM_MOUSEMOVE && hot_button_ != window) {
+            const HWND old = hot_button_;
+            hot_button_ = window;
+            if (old) InvalidateRect(old, nullptr, FALSE);
+            InvalidateRect(window, nullptr, FALSE);
+            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, window, 0};
+            TrackMouseEvent(&track);
+        } else if (message == WM_MOUSELEAVE && hot_button_ == window) {
+            hot_button_ = nullptr;
+            InvalidateRect(window, nullptr, FALSE);
+        }
+    }
+    static LRESULT CALLBACK button_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR reference) {
+        auto* self = reinterpret_cast<Panel*>(reference);
+        self->track_hot(window, message);
+        if (message == WM_NCDESTROY) RemoveWindowSubclass(window, button_proc, 2);
+        return DefSubclassProc(window, message, wparam, lparam);
+    }
     void draw_button(const DRAWITEMSTRUCT& draw) {
         const bool primary = draw.CtlID == schedule_id;
         const bool disabled = (draw.itemState & ODS_DISABLED) != 0;
-
         const bool use_dark = dark_ && !high_contrast_;
-
-        const COLORREF fill = primary && !disabled ? accent_ : high_contrast_ ? GetSysColor(COLOR_BTNFACE) :
-            disabled ? (use_dark ? RGB(44, 44, 44) : RGB(238, 241, 246)) :
-            use_dark ? RGB(60, 60, 60) : RGB(233, 239, 248);
-        const COLORREF foreground = disabled ? (high_contrast_ ? GetSysColor(COLOR_GRAYTEXT) : use_dark ? RGB(130, 130, 130) : RGB(140, 150, 165)) : primary ?
-            (high_contrast_ ? GetSysColor(COLOR_BTNTEXT) : RGB(255, 255, 255)) :
-            use_dark ? RGB(240, 240, 240) : RGB(24, 35, 53);
-
         if (draw.CtlID == force_id) { draw_force(draw, use_dark, disabled); return; }
-        // Pressed buttons darken; a thin border separates buttons from the page; disabled ones stay flat.
         const bool pressed = (draw.itemState & ODS_SELECTED) != 0 && !disabled;
+        const bool hot = draw.hwndItem == hot_button_ && !disabled;
         const auto shade = [](COLORREF c, int delta) {
             const auto clamp = [](int v) { return v < 0 ? 0 : v > 255 ? 255 : v; };
             return RGB(clamp(GetRValue(c) + delta), clamp(GetGValue(c) + delta), clamp(GetBValue(c) + delta));
         };
-        const COLORREF body = pressed ? shade(fill, use_dark ? 22 : -18) : fill;
-        const COLORREF edge = high_contrast_ ? GetSysColor(COLOR_BTNTEXT) : disabled ? fill :
-            primary ? shade(accent_, -40) : use_dark ? RGB(96, 96, 96) : RGB(190, 203, 224);
-        // Owner-draw leaves the rounded corners untouched: paint the page colour first.
+        COLORREF fill, edge, foreground;
+        if (high_contrast_) {
+            fill = GetSysColor(COLOR_BTNFACE); edge = GetSysColor(COLOR_BTNTEXT);
+            foreground = GetSysColor(disabled ? COLOR_GRAYTEXT : COLOR_BTNTEXT);
+        } else if (disabled) {
+            fill = edge = use_dark ? RGB(48, 48, 48) : RGB(232, 236, 243);
+            foreground = use_dark ? RGB(160, 160, 160) : RGB(96, 106, 122);
+        } else if (primary) {
+            fill = edge = pressed ? shade(accent_, -30) : hot ? shade(accent_, 18) : accent_;
+            foreground = RGB(255, 255, 255);
+        } else {
+            const COLORREF base = use_dark ? RGB(58, 58, 58) : RGB(236, 240, 247);
+            fill = pressed ? shade(base, use_dark ? -10 : -22) : hot ? shade(base, use_dark ? 12 : -10) : base;
+            edge = use_dark ? RGB(84, 84, 84) : RGB(205, 214, 228);
+            foreground = ink_;
+        }
+        // Owner-draw leaves the corners untouched: paint the page colour first.
         FillRect(draw.hDC, &draw.rcItem, background_);
-        HBRUSH brush = CreateSolidBrush(body);
+        HBRUSH brush = CreateSolidBrush(fill);
         HPEN pen = CreatePen(PS_SOLID, 1, edge);
         const auto old_brush = SelectObject(draw.hDC, brush);
         const auto old_pen = SelectObject(draw.hDC, pen);
-        RoundRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom, px(14), px(14));
+        const bool chip = draw.CtlID >= preset_id && draw.CtlID < preset_id + std::size(text::presets);
+        const int diameter = chip ? draw.rcItem.bottom - draw.rcItem.top : px(16);
+        RoundRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom, diameter, diameter);
         SelectObject(draw.hDC, old_brush); SelectObject(draw.hDC, old_pen);
         DeleteObject(brush); DeleteObject(pen);
-
-        // Find font for this button
-        int font_index = 2; // default font
-        for (const auto& item : items_) {
-            if (item.handle == draw.hwndItem) {
-                font_index = item.font;
-                break;
-            }
-        }
-        HFONT old_font = nullptr;
-        if (fonts_[font_index]) {
-            old_font = static_cast<HFONT>(SelectObject(draw.hDC, fonts_[font_index]));
-        }
-
+        HFONT old_font = fonts_[4] ? static_cast<HFONT>(SelectObject(draw.hDC, fonts_[4])) : nullptr;
         wchar_t label[128]{};
         GetWindowTextW(draw.hwndItem, label, 128);
         SetBkMode(draw.hDC, TRANSPARENT);
         SetTextColor(draw.hDC, foreground);
         RECT rect = draw.rcItem;
-        if (draw.itemState & ODS_SELECTED) OffsetRect(&rect, 0, 1);
+        if (pressed) OffsetRect(&rect, 0, 1);
         DrawTextW(draw.hDC, label, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        if (draw.itemState & ODS_FOCUS) { InflateRect(&rect, -px(4), -px(4)); DrawFocusRect(draw.hDC, &rect); }
-
-        if (old_font) {
-            SelectObject(draw.hDC, old_font);
+        if ((draw.itemState & ODS_FOCUS) && !(draw.itemState & ODS_NOFOCUSRECT)) {
+            if (high_contrast_) { RECT focus = draw.rcItem; InflateRect(&focus, -px(4), -px(4)); DrawFocusRect(draw.hDC, &focus); }
+            else {
+                HPEN ring = CreatePen(PS_SOLID, px(2), accent_);
+                const auto before_pen = SelectObject(draw.hDC, ring);
+                const auto before_brush = SelectObject(draw.hDC, GetStockObject(NULL_BRUSH));
+                RoundRect(draw.hDC, draw.rcItem.left + px(1), draw.rcItem.top + px(1), draw.rcItem.right - px(1), draw.rcItem.bottom - px(1), diameter, diameter);
+                SelectObject(draw.hDC, before_pen); SelectObject(draw.hDC, before_brush); DeleteObject(ring);
+            }
         }
+        if (old_font) SelectObject(draw.hDC, old_font);
     }
 public:
     Panel() : storage_(data_file()), book_(storage_, calendar_) {
@@ -2810,6 +3142,7 @@ public:
         if (background_) DeleteObject(background_);
         if (field_brush_) DeleteObject(field_brush_);
         if (icon_) DestroyIcon(icon_);
+        if (big_icon_) DestroyIcon(big_icon_);
     }
     void show(bool activate) {
         ShowWindow(window_, activate ? SW_RESTORE : SW_SHOWNOACTIVATE);
@@ -2830,12 +3163,13 @@ public:
     }
     bool create() {
         colors();
-        icon_ = make_icon();
+        icon_ = make_icon(GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForSystem()));
+        big_icon_ = make_icon(GetSystemMetricsForDpi(SM_CXICON, GetDpiForSystem()));
         taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
         WNDCLASSW cls{};
         cls.lpfnWndProc = procedure;
         cls.hInstance = GetModuleHandleW(nullptr);
-        cls.hIcon = icon_;
+        cls.hIcon = big_icon_;
         cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         cls.lpszClassName = window_class;
         if (!RegisterClassW(&cls)) return false;
@@ -2849,8 +3183,8 @@ public:
         mi.cbSize = sizeof(mi);
         GetMonitorInfoW(monitor, &mi);
         work = mi.rcWork;
-        RECT size{0, 0, px(580), px(920)};
-        constexpr DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VSCROLL;
+        RECT size{0, 0, px(580), px(content_height)};
+        constexpr DWORD style = window_style;
         AdjustWindowRectExForDpi(&size, style, FALSE, WS_EX_CONTROLPARENT, dpi_);
         const int width = size.right - size.left;
         const int height = (std::min)(size.bottom - size.top, work.bottom - work.top);
@@ -2858,9 +3192,10 @@ public:
             work.right - width - px(20), (std::max)(work.top, work.bottom - height - px(20)),
             width, height, nullptr, nullptr, cls.hInstance, this);
         if (!window_) return false;
+        SendMessageW(window_, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon_));
         if (const UINT dpi = GetDpiForWindow(window_); dpi && dpi != dpi_) {
             dpi_ = dpi;
-            RECT actual{0, 0, px(580), px(920)};
+            RECT actual{0, 0, px(580), px(content_height)};
             AdjustWindowRectExForDpi(&actual, style, FALSE, WS_EX_CONTROLPARENT, dpi_);
             const int actual_width = actual.right - actual.left;
             const int actual_height = (std::min)(actual.bottom - actual.top, work.bottom - work.top);
@@ -2887,8 +3222,6 @@ public:
         wcsncpy_s(tray_.szTip, get_text(locale_, text::title, text_en::title), _TRUNCATE);
         if (!SetTimer(window_, timer_id, 250, nullptr)) { DestroyWindow(window_); return false; }
         add_tray();
-        // Initialize theme combo selection after controls created
-        if (theme_combo_) SendMessageW(theme_combo_, CB_SETCURSEL, static_cast<WPARAM>(theme_value_), 0);
         refresh();
         host_window.store(window_);
         if (show_on_start) show(true);
@@ -2918,7 +3251,7 @@ public:
                     case SB_PAGEUP: position -= client.bottom; break;
                     case SB_PAGEDOWN: position += client.bottom; break;
                     case SB_TOP: position = 0; break;
-                    case SB_BOTTOM: position = self->px(920); break;
+                    case SB_BOTTOM: position = self->px(self->content_); break;
                     case SB_THUMBTRACK: {
                         SCROLLINFO info{};
                         info.cbSize = sizeof(info);
@@ -2937,37 +3270,42 @@ public:
             case WM_COMMAND:
                 if (HIWORD(wparam) == EN_SETFOCUS || HIWORD(wparam) == CBN_SETFOCUS || HIWORD(wparam) == BN_SETFOCUS)
                     self->reveal(reinterpret_cast<HWND>(lparam));
+                if (LOWORD(wparam) == duration_id && (HIWORD(wparam) == EN_SETFOCUS || HIWORD(wparam) == EN_KILLFOCUS)) InvalidateRect(window, nullptr, TRUE);
                 if (LOWORD(wparam) == duration_id && HIWORD(wparam) == EN_CHANGE) {
                     self->preview();
                 }
                 else if (LOWORD(wparam) == action_id && HIWORD(wparam) == CBN_SELCHANGE) { self->sync_force(); self->preview(); }
                 else if (LOWORD(wparam) == force_id && HIWORD(wparam) == BN_CLICKED) self->confirm_force();
                 else if (LOWORD(wparam) == kind_id && HIWORD(wparam) == CBN_SELCHANGE) self->show_kind();
-                else if (LOWORD(wparam) == theme_id && HIWORD(wparam) == CBN_SELCHANGE) {
-                    self->theme_value_ = static_cast<unsigned>(SendMessageW(self->theme_combo_, CB_GETCURSEL, 0, 0));
-                    if (!self->book_.set_theme(self->theme_value_)) self->show_error();
-                    self->colors();
-                    self->refresh_locale_text();
-                    return 0;
-                }
-                else if (LOWORD(wparam) == locale_id && HIWORD(wparam) == CBN_SELCHANGE) {
-                    unsigned locale = static_cast<unsigned>(SendMessageW(self->locale_combo_, CB_GETCURSEL, 0, 0));
-                    if (!self->book_.set_locale(locale)) self->show_error();
-                    self->locale_ = locale;
-                    self->refresh_locale_text();
-                    return 0;
-                }
                 else if (HIWORD(wparam) == BN_CLICKED) self->command(LOWORD(wparam));
                 return 0;
             case WM_NOTIFY: {
                 const auto* header = reinterpret_cast<NMHDR*>(lparam);
                 if (header->code == NM_SETFOCUS) self->reveal(header->hwndFrom);
-                // Dark theme: the column header ignores the list text colour, so force light text.
-                if (self->dark_ && !self->high_contrast_ && self->list_ && header->code == NM_CUSTOMDRAW &&
-                    header->hwndFrom == ListView_GetHeader(self->list_)) {
-                    const auto* draw = reinterpret_cast<NMCUSTOMDRAW*>(lparam);
-                    if (draw->dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;
-                    if (draw->dwDrawStage == CDDS_ITEMPREPAINT) { SetTextColor(draw->hdc, self->ink_); return CDRF_NEWFONT; }
+                // Rows: rounded accent-tinted selection and subtle hover, painted before the text.
+                if (!self->high_contrast_ && self->list_ && header->code == NM_CUSTOMDRAW && header->hwndFrom == self->list_) {
+                    auto* rows = reinterpret_cast<NMLVCUSTOMDRAW*>(lparam);
+                    if (rows->nmcd.dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;
+                    if (rows->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                        const int row = static_cast<int>(rows->nmcd.dwItemSpec);
+                        const bool selected = ListView_GetItemState(self->list_, row, LVIS_SELECTED) != 0;
+                        if (selected || row == self->hot_row_) {
+                            RECT bounds{};
+                            ListView_GetItemRect(self->list_, row, &bounds, LVIR_BOUNDS);
+                            InflateRect(&bounds, -self->px(6), -self->px(2));
+                            const COLORREF fill = selected ? (self->dark_ ? RGB(29, 71, 103) : RGB(205, 229, 247)) : (self->dark_ ? RGB(56, 56, 56) : RGB(240, 244, 249));
+                            HBRUSH brush = CreateSolidBrush(fill);
+                            HPEN pen = CreatePen(PS_SOLID, 1, fill);
+                            const auto old_brush = SelectObject(rows->nmcd.hdc, brush);
+                            const auto old_pen = SelectObject(rows->nmcd.hdc, pen);
+                            RoundRect(rows->nmcd.hdc, bounds.left, bounds.top, bounds.right, bounds.bottom, self->px(12), self->px(12));
+                            SelectObject(rows->nmcd.hdc, old_brush); SelectObject(rows->nmcd.hdc, old_pen);
+                            DeleteObject(brush); DeleteObject(pen);
+                        }
+                        rows->clrText = self->ink_; rows->clrTextBk = CLR_NONE;
+                        rows->nmcd.uItemState &= ~static_cast<UINT>(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
+                        return CDRF_NEWFONT;
+                    }
                     return CDRF_DODEFAULT;
                 }
                 if ((header->idFrom == date_id || header->idFrom == time_id) && header->code == DTN_DATETIMECHANGE) self->preview();
@@ -3052,14 +3390,18 @@ public:
                 }
                 break;
             case WM_CTLCOLORSTATIC:
-                SetTextColor(reinterpret_cast<HDC>(wparam), self->ink_);
+                SetTextColor(reinterpret_cast<HDC>(wparam), reinterpret_cast<HWND>(lparam) == self->empty_ ? self->muted_ : self->ink_);
                 SetBkColor(reinterpret_cast<HDC>(wparam), self->bg_);
                 return reinterpret_cast<LRESULT>(self->background_);
             case WM_ERASEBKGND: {
                 RECT rect{}; GetClientRect(window, &rect);
-                FillRect(reinterpret_cast<HDC>(wparam), &rect, self->background_); return 1;
+                FillRect(reinterpret_cast<HDC>(wparam), &rect, self->background_);
+                self->paint_duration_field(reinterpret_cast<HDC>(wparam)); return 1;
             }
-            case WM_DRAWITEM: self->draw_button(*reinterpret_cast<DRAWITEMSTRUCT*>(lparam)); return TRUE;
+            case WM_DRAWITEM:
+                if (reinterpret_cast<DRAWITEMSTRUCT*>(lparam)->CtlType == ODT_COMBOBOX) self->draw_combo_item(*reinterpret_cast<DRAWITEMSTRUCT*>(lparam));
+                else self->draw_button(*reinterpret_cast<DRAWITEMSTRUCT*>(lparam));
+                return TRUE;
         }
         return DefWindowProcW(window, message, wparam, lparam);
     }
