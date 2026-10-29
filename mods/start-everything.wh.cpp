@@ -210,7 +210,7 @@ Use `/all` to manage all named desktop uninstall registrations and the packages 
 
 Add a name, publisher or package identity to filter, for example `/all office` or `/all Microsoft.VCLibs`. Results are alphabetical when unfiltered. The list starts with 20 products and appends up to 20 more as you scroll near the bottom. Existing cards and the scroll position stay in place. A tall viewport can request another batch to fill its available space. There are no navigation pages, and this list is independent of **Max App Results**. Changing the filter returns to the first 20 entries and scrolls to the top. **Quick Tools → Installed Inventory Command Name** renames `/all`; the renamed command takes the same optional search terms.
 
-Package rows show their architecture beside the publisher and version, so x86, x64 and neutral packages can be distinguished. Technical package identities are searchable only in this management list. If `/all` is already used by a custom command or another Quick Tool, rename either command in settings; the conflict warning prevents either action from running accidentally.
+Package rows identify main, framework, resource, bundle and optional packages, with resource identifiers such as `split.scale-150` or `split.language-de` when Windows provides them. Publisher, version and architecture distinguish installations further. These labels do not change which components Windows allows you to uninstall. Technical package identities are searchable only in this management list. If `/all` is already used by a custom command or another Quick Tool, rename either command in settings; the conflict warning prevents either action from running accidentally.
 
 Clicking a product or pressing Enter opens its management menu. There is no app **Open**, **Run** or administrator-launch action in this list. **Uninstall** asks for confirmation and uses the exact registry registration or listed package version. Protected components have no uninstall action. Available installation folders can be opened or copied, and product names can be copied. The list uses the existing background catalog and change listeners; searching it performs no file search, network request or fresh inventory scan.
 
@@ -1033,6 +1033,11 @@ enum class Key {
     ManageInstalled,
     InstalledApp,
     InstalledApps,
+    MainPackage,
+    FrameworkPackage,
+    ResourcePackage,
+    PackageBundle,
+    OptionalPackage,
     Count
 };
 struct Locale {
@@ -1181,6 +1186,11 @@ inline constexpr Locale kLocales[] = {
         L"Manage in Installed apps", // ManageInstalled
         L"Installed app", // InstalledApp
         L"Installed apps", // InstalledApps
+        L"Main package", // MainPackage
+        L"Framework package", // FrameworkPackage
+        L"Resource package", // ResourcePackage
+        L"Package bundle", // PackageBundle
+        L"Optional package", // OptionalPackage
     }},
     {L"af", {
         L"Soek enigiets", // SearchAnything
@@ -1323,6 +1333,11 @@ inline constexpr Locale kLocales[] = {
         L"Bestuur in Geïnstalleerde programme", // ManageInstalled
         L"Geïnstalleerde toepassing", // InstalledApp
         L"Geïnstalleerde toepassings", // InstalledApps
+        L"Hoofpakket", // MainPackage
+        L"Raamwerkpakket", // FrameworkPackage
+        L"Hulpbronpakket", // ResourcePackage
+        L"Pakketbundel", // PackageBundle
+        L"Opsionele pakket", // OptionalPackage
     }},
     {L"bg", {
         L"Търсене навсякъде", // SearchAnything
@@ -1465,6 +1480,11 @@ inline constexpr Locale kLocales[] = {
         L"Управление в инсталираните приложения", // ManageInstalled
         L"Инсталирано приложение", // InstalledApp
         L"Инсталирани приложения", // InstalledApps
+        L"Основен пакет", // MainPackage
+        L"Пакет на рамкова среда", // FrameworkPackage
+        L"Пакет с ресурси", // ResourcePackage
+        L"Комплект пакети", // PackageBundle
+        L"Допълнителен пакет", // OptionalPackage
     }},
     {L"bn", {
         L"সবকিছু খুঁজুন", // SearchAnything
@@ -1607,6 +1627,11 @@ inline constexpr Locale kLocales[] = {
         L"ইনস্টল করা অ্যাপে পরিচালনা করুন", // ManageInstalled
         L"ইনস্টল করা অ্যাপ", // InstalledApp
         L"ইনস্টল করা অ্যাপ", // InstalledApps
+        L"মূল প্যাকেজ", // MainPackage
+        L"ফ্রেমওয়ার্ক প্যাকেজ", // FrameworkPackage
+        L"রিসোর্স প্যাকেজ", // ResourcePackage
+        L"প্যাকেজ বান্ডল", // PackageBundle
+        L"ঐচ্ছিক প্যাকেজ", // OptionalPackage
     }},
     {L"bs", {
         L"Pretraži sve", // SearchAnything
@@ -1749,6 +1774,11 @@ inline constexpr Locale kLocales[] = {
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
         L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket radnog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Opcionalni paket", // OptionalPackage
     }},
     {L"ca", {
         L"Cerca qualsevol cosa", // SearchAnything
@@ -1891,6 +1921,11 @@ inline constexpr Locale kLocales[] = {
         L"Gestiona a Aplicacions instal·lades", // ManageInstalled
         L"Aplicació instal·lada", // InstalledApp
         L"Aplicacions instal·lades", // InstalledApps
+        L"Paquet principal", // MainPackage
+        L"Paquet de marc de treball", // FrameworkPackage
+        L"Paquet de recursos", // ResourcePackage
+        L"Conjunt de paquets", // PackageBundle
+        L"Paquet opcional", // OptionalPackage
     }},
     {L"cs", {
         L"Hledat vše", // SearchAnything
@@ -2033,6 +2068,11 @@ inline constexpr Locale kLocales[] = {
         L"Spravovat v nainstalovaných aplikacích", // ManageInstalled
         L"Nainstalovaná aplikace", // InstalledApp
         L"Nainstalované aplikace", // InstalledApps
+        L"Hlavní balíček", // MainPackage
+        L"Balíček frameworku", // FrameworkPackage
+        L"Balíček prostředků", // ResourcePackage
+        L"Sada balíčků", // PackageBundle
+        L"Volitelný balíček", // OptionalPackage
     }},
     {L"da", {
         L"Søg efter alt", // SearchAnything
@@ -2175,6 +2215,11 @@ inline constexpr Locale kLocales[] = {
         L"Administrer i Installerede apps", // ManageInstalled
         L"Installeret app", // InstalledApp
         L"Installerede apps", // InstalledApps
+        L"Hovedpakke", // MainPackage
+        L"Frameworkpakke", // FrameworkPackage
+        L"Ressourcepakke", // ResourcePackage
+        L"Pakkesamling", // PackageBundle
+        L"Valgfri pakke", // OptionalPackage
     }},
     {L"de", {
         L"Alles durchsuchen", // SearchAnything
@@ -2317,6 +2362,11 @@ inline constexpr Locale kLocales[] = {
         L"In installierten Apps verwalten", // ManageInstalled
         L"Installierte App", // InstalledApp
         L"Installierte Apps", // InstalledApps
+        L"Hauptpaket", // MainPackage
+        L"Frameworkpaket", // FrameworkPackage
+        L"Ressourcenpaket", // ResourcePackage
+        L"Paketbündel", // PackageBundle
+        L"Optionales Paket", // OptionalPackage
     }},
     {L"el", {
         L"Αναζήτηση παντού", // SearchAnything
@@ -2459,6 +2509,11 @@ inline constexpr Locale kLocales[] = {
         L"Διαχείριση στις εγκατεστημένες εφαρμογές", // ManageInstalled
         L"Εγκατεστημένη εφαρμογή", // InstalledApp
         L"Εγκατεστημένες εφαρμογές", // InstalledApps
+        L"Κύριο πακέτο", // MainPackage
+        L"Πακέτο πλαισίου", // FrameworkPackage
+        L"Πακέτο πόρων", // ResourcePackage
+        L"Δέσμη πακέτων", // PackageBundle
+        L"Προαιρετικό πακέτο", // OptionalPackage
     }},
     {L"es", {
         L"Buscar cualquier cosa", // SearchAnything
@@ -2601,6 +2656,11 @@ inline constexpr Locale kLocales[] = {
         L"Administrar en Aplicaciones instaladas", // ManageInstalled
         L"Aplicación instalada", // InstalledApp
         L"Aplicaciones instaladas", // InstalledApps
+        L"Paquete principal", // MainPackage
+        L"Paquete de framework", // FrameworkPackage
+        L"Paquete de recursos", // ResourcePackage
+        L"Conjunto de paquetes", // PackageBundle
+        L"Paquete opcional", // OptionalPackage
     }},
     {L"et", {
         L"Otsi kõike", // SearchAnything
@@ -2743,6 +2803,11 @@ inline constexpr Locale kLocales[] = {
         L"Halda installitud rakendustes", // ManageInstalled
         L"Installitud rakendus", // InstalledApp
         L"Installitud rakendused", // InstalledApps
+        L"Põhipakett", // MainPackage
+        L"Raamistikupakett", // FrameworkPackage
+        L"Ressursipakett", // ResourcePackage
+        L"Paketikogum", // PackageBundle
+        L"Valikuline pakett", // OptionalPackage
     }},
     {L"fi", {
         L"Hae mitä tahansa", // SearchAnything
@@ -2885,6 +2950,11 @@ inline constexpr Locale kLocales[] = {
         L"Hallitse asennetuissa sovelluksissa", // ManageInstalled
         L"Asennettu sovellus", // InstalledApp
         L"Asennetut sovellukset", // InstalledApps
+        L"Pääpaketti", // MainPackage
+        L"Sovelluskehyspaketti", // FrameworkPackage
+        L"Resurssipaketti", // ResourcePackage
+        L"Pakettikokoelma", // PackageBundle
+        L"Valinnainen paketti", // OptionalPackage
     }},
     {L"fil", {
         L"Maghanap ng anuman", // SearchAnything
@@ -3027,6 +3097,11 @@ inline constexpr Locale kLocales[] = {
         L"Pamahalaan sa Mga naka-install na app", // ManageInstalled
         L"Naka-install na app", // InstalledApp
         L"Mga naka-install na app", // InstalledApps
+        L"Pangunahing pakete", // MainPackage
+        L"Pakete ng framework", // FrameworkPackage
+        L"Pakete ng resource", // ResourcePackage
+        L"Kalipunan ng mga pakete", // PackageBundle
+        L"Opsyonal na pakete", // OptionalPackage
     }},
     {L"fr", {
         L"Tout rechercher", // SearchAnything
@@ -3169,6 +3244,11 @@ inline constexpr Locale kLocales[] = {
         L"Gérer dans Applications installées", // ManageInstalled
         L"Application installée", // InstalledApp
         L"Applications installées", // InstalledApps
+        L"Paquet principal", // MainPackage
+        L"Paquet de framework", // FrameworkPackage
+        L"Paquet de ressources", // ResourcePackage
+        L"Ensemble de paquets", // PackageBundle
+        L"Paquet facultatif", // OptionalPackage
     }},
     {L"hi", {
         L"कुछ भी खोजें", // SearchAnything
@@ -3311,6 +3391,11 @@ inline constexpr Locale kLocales[] = {
         L"इंस्टॉल किए गए ऐप्स में प्रबंधित करें", // ManageInstalled
         L"इंस्टॉल किया गया ऐप", // InstalledApp
         L"इंस्टॉल किए गए ऐप", // InstalledApps
+        L"मुख्य पैकेज", // MainPackage
+        L"फ़्रेमवर्क पैकेज", // FrameworkPackage
+        L"संसाधन पैकेज", // ResourcePackage
+        L"पैकेज बंडल", // PackageBundle
+        L"वैकल्पिक पैकेज", // OptionalPackage
     }},
     {L"hr", {
         L"Pretraži sve", // SearchAnything
@@ -3453,6 +3538,11 @@ inline constexpr Locale kLocales[] = {
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
         L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket programskog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Neobavezni paket", // OptionalPackage
     }},
     {L"hu", {
         L"Keresés mindenben", // SearchAnything
@@ -3595,6 +3685,11 @@ inline constexpr Locale kLocales[] = {
         L"Kezelés a telepített alkalmazásoknál", // ManageInstalled
         L"Telepített alkalmazás", // InstalledApp
         L"Telepített alkalmazások", // InstalledApps
+        L"Fő csomag", // MainPackage
+        L"Keretrendszercsomag", // FrameworkPackage
+        L"Erőforráscsomag", // ResourcePackage
+        L"Csomagköteg", // PackageBundle
+        L"Választható csomag", // OptionalPackage
     }},
     {L"hy", {
         L"Որոնել ամեն ինչ", // SearchAnything
@@ -3737,6 +3832,11 @@ inline constexpr Locale kLocales[] = {
         L"Կառավարել տեղադրված հավելվածներում", // ManageInstalled
         L"Տեղադրված հավելված", // InstalledApp
         L"Տեղադրված հավելվածներ", // InstalledApps
+        L"Հիմնական փաթեթ", // MainPackage
+        L"Հենքի փաթեթ", // FrameworkPackage
+        L"Ռեսուրսների փաթեթ", // ResourcePackage
+        L"Փաթեթների հավաքածու", // PackageBundle
+        L"Լրացուցիչ փաթեթ", // OptionalPackage
     }},
     {L"id", {
         L"Cari apa saja", // SearchAnything
@@ -3879,6 +3979,11 @@ inline constexpr Locale kLocales[] = {
         L"Kelola di Aplikasi terinstal", // ManageInstalled
         L"Aplikasi terinstal", // InstalledApp
         L"Aplikasi terinstal", // InstalledApps
+        L"Paket utama", // MainPackage
+        L"Paket kerangka kerja", // FrameworkPackage
+        L"Paket sumber daya", // ResourcePackage
+        L"Bundel paket", // PackageBundle
+        L"Paket opsional", // OptionalPackage
     }},
     {L"is", {
         L"Leita að hverju sem er", // SearchAnything
@@ -4021,6 +4126,11 @@ inline constexpr Locale kLocales[] = {
         L"Stjórna í Uppsett forrit", // ManageInstalled
         L"Uppsett forrit", // InstalledApp
         L"Uppsett forrit", // InstalledApps
+        L"Aðalpakki", // MainPackage
+        L"Rammapakki", // FrameworkPackage
+        L"Tilfangapakki", // ResourcePackage
+        L"Pakkasafn", // PackageBundle
+        L"Valfrjáls pakki", // OptionalPackage
     }},
     {L"it", {
         L"Cerca qualsiasi cosa", // SearchAnything
@@ -4163,6 +4273,11 @@ inline constexpr Locale kLocales[] = {
         L"Gestisci in App installate", // ManageInstalled
         L"App installata", // InstalledApp
         L"App installate", // InstalledApps
+        L"Pacchetto principale", // MainPackage
+        L"Pacchetto framework", // FrameworkPackage
+        L"Pacchetto risorse", // ResourcePackage
+        L"Gruppo di pacchetti", // PackageBundle
+        L"Pacchetto facoltativo", // OptionalPackage
     }},
     {L"ja", {
         L"すべてを検索", // SearchAnything
@@ -4305,6 +4420,11 @@ inline constexpr Locale kLocales[] = {
         L"インストールされているアプリで管理", // ManageInstalled
         L"インストール済みアプリ", // InstalledApp
         L"インストールされているアプリ", // InstalledApps
+        L"メインパッケージ", // MainPackage
+        L"フレームワークパッケージ", // FrameworkPackage
+        L"リソースパッケージ", // ResourcePackage
+        L"パッケージバンドル", // PackageBundle
+        L"オプションパッケージ", // OptionalPackage
     }},
     {L"ka", {
         L"ყველაფრის ძებნა", // SearchAnything
@@ -4447,6 +4567,11 @@ inline constexpr Locale kLocales[] = {
         L"მართვა დაინსტალირებულ აპებში", // ManageInstalled
         L"დაყენებული აპი", // InstalledApp
         L"დაინსტალირებული აპები", // InstalledApps
+        L"მთავარი პაკეტი", // MainPackage
+        L"პლატფორმის პაკეტი", // FrameworkPackage
+        L"რესურსების პაკეტი", // ResourcePackage
+        L"პაკეტების ნაკრები", // PackageBundle
+        L"არასავალდებულო პაკეტი", // OptionalPackage
     }},
     {L"ko", {
         L"모든 항목 검색", // SearchAnything
@@ -4589,6 +4714,11 @@ inline constexpr Locale kLocales[] = {
         L"설치된 앱에서 관리", // ManageInstalled
         L"설치된 앱", // InstalledApp
         L"설치된 앱", // InstalledApps
+        L"기본 패키지", // MainPackage
+        L"프레임워크 패키지", // FrameworkPackage
+        L"리소스 패키지", // ResourcePackage
+        L"패키지 번들", // PackageBundle
+        L"선택적 패키지", // OptionalPackage
     }},
     {L"lt", {
         L"Ieškoti visko", // SearchAnything
@@ -4731,6 +4861,11 @@ inline constexpr Locale kLocales[] = {
         L"Tvarkyti įdiegtose programose", // ManageInstalled
         L"Įdiegta programa", // InstalledApp
         L"Įdiegtos programėlės", // InstalledApps
+        L"Pagrindinis paketas", // MainPackage
+        L"Sistemos bibliotekų paketas", // FrameworkPackage
+        L"Išteklių paketas", // ResourcePackage
+        L"Paketų rinkinys", // PackageBundle
+        L"Pasirenkamas paketas", // OptionalPackage
     }},
     {L"lv", {
         L"Meklēt visu", // SearchAnything
@@ -4873,6 +5008,11 @@ inline constexpr Locale kLocales[] = {
         L"Pārvaldīt instalētajās programmās", // ManageInstalled
         L"Instalēta programma", // InstalledApp
         L"Instalētās programmas", // InstalledApps
+        L"Galvenā pakotne", // MainPackage
+        L"Ietvara pakotne", // FrameworkPackage
+        L"Resursu pakotne", // ResourcePackage
+        L"Pakotņu kopa", // PackageBundle
+        L"Neobligāta pakotne", // OptionalPackage
     }},
     {L"mk", {
         L"Пребарај сè", // SearchAnything
@@ -5015,6 +5155,11 @@ inline constexpr Locale kLocales[] = {
         L"Управувај во инсталираните апликации", // ManageInstalled
         L"Инсталирана апликација", // InstalledApp
         L"Инсталирани апликации", // InstalledApps
+        L"Главен пакет", // MainPackage
+        L"Пакет на рамковна околина", // FrameworkPackage
+        L"Пакет со ресурси", // ResourcePackage
+        L"Збирка пакети", // PackageBundle
+        L"Изборен пакет", // OptionalPackage
     }},
     {L"ms", {
         L"Cari apa sahaja", // SearchAnything
@@ -5157,6 +5302,11 @@ inline constexpr Locale kLocales[] = {
         L"Urus dalam Aplikasi dipasang", // ManageInstalled
         L"Aplikasi dipasang", // InstalledApp
         L"Aplikasi dipasang", // InstalledApps
+        L"Pakej utama", // MainPackage
+        L"Pakej rangka kerja", // FrameworkPackage
+        L"Pakej sumber", // ResourcePackage
+        L"Himpunan pakej", // PackageBundle
+        L"Pakej pilihan", // OptionalPackage
     }},
     {L"nb", {
         L"Søk etter alt", // SearchAnything
@@ -5299,6 +5449,11 @@ inline constexpr Locale kLocales[] = {
         L"Administrer i Installerte apper", // ManageInstalled
         L"Installert app", // InstalledApp
         L"Installerte apper", // InstalledApps
+        L"Hovedpakke", // MainPackage
+        L"Rammeverkspakke", // FrameworkPackage
+        L"Ressurspakke", // ResourcePackage
+        L"Pakkesamling", // PackageBundle
+        L"Valgfri pakke", // OptionalPackage
     }},
     {L"nl", {
         L"Alles doorzoeken", // SearchAnything
@@ -5441,6 +5596,11 @@ inline constexpr Locale kLocales[] = {
         L"Beheren in Geïnstalleerde apps", // ManageInstalled
         L"Geïnstalleerde app", // InstalledApp
         L"Geïnstalleerde apps", // InstalledApps
+        L"Hoofdpakket", // MainPackage
+        L"Frameworkpakket", // FrameworkPackage
+        L"Bronnenpakket", // ResourcePackage
+        L"Pakketbundel", // PackageBundle
+        L"Optioneel pakket", // OptionalPackage
     }},
     {L"pl", {
         L"Szukaj wszystkiego", // SearchAnything
@@ -5583,6 +5743,11 @@ inline constexpr Locale kLocales[] = {
         L"Zarządzaj w Zainstalowanych aplikacjach", // ManageInstalled
         L"Zainstalowana aplikacja", // InstalledApp
         L"Zainstalowane aplikacje", // InstalledApps
+        L"Pakiet główny", // MainPackage
+        L"Pakiet platformy", // FrameworkPackage
+        L"Pakiet zasobów", // ResourcePackage
+        L"Zestaw pakietów", // PackageBundle
+        L"Pakiet opcjonalny", // OptionalPackage
     }},
     {L"pt-br", {
         L"Pesquisar qualquer coisa", // SearchAnything
@@ -5725,6 +5890,11 @@ inline constexpr Locale kLocales[] = {
         L"Gerenciar em Aplicativos instalados", // ManageInstalled
         L"Aplicativo instalado", // InstalledApp
         L"Aplicativos instalados", // InstalledApps
+        L"Pacote principal", // MainPackage
+        L"Pacote de framework", // FrameworkPackage
+        L"Pacote de recursos", // ResourcePackage
+        L"Conjunto de pacotes", // PackageBundle
+        L"Pacote opcional", // OptionalPackage
     }},
     {L"pt-pt", {
         L"Pesquisar tudo", // SearchAnything
@@ -5867,6 +6037,11 @@ inline constexpr Locale kLocales[] = {
         L"Gerir em Aplicações instaladas", // ManageInstalled
         L"Aplicação instalada", // InstalledApp
         L"Aplicações instaladas", // InstalledApps
+        L"Pacote principal", // MainPackage
+        L"Pacote de framework", // FrameworkPackage
+        L"Pacote de recursos", // ResourcePackage
+        L"Conjunto de pacotes", // PackageBundle
+        L"Pacote opcional", // OptionalPackage
     }},
     {L"ro", {
         L"Caută orice", // SearchAnything
@@ -6009,6 +6184,11 @@ inline constexpr Locale kLocales[] = {
         L"Gestionează în Aplicații instalate", // ManageInstalled
         L"Aplicație instalată", // InstalledApp
         L"Aplicații instalate", // InstalledApps
+        L"Pachet principal", // MainPackage
+        L"Pachet de framework", // FrameworkPackage
+        L"Pachet de resurse", // ResourcePackage
+        L"Colecție de pachete", // PackageBundle
+        L"Pachet opțional", // OptionalPackage
     }},
     {L"ru", {
         L"Искать всё", // SearchAnything
@@ -6151,6 +6331,11 @@ inline constexpr Locale kLocales[] = {
         L"Управление в установленных приложениях", // ManageInstalled
         L"Установленное приложение", // InstalledApp
         L"Установленные приложения", // InstalledApps
+        L"Основной пакет", // MainPackage
+        L"Пакет платформы", // FrameworkPackage
+        L"Пакет ресурсов", // ResourcePackage
+        L"Набор пакетов", // PackageBundle
+        L"Дополнительный пакет", // OptionalPackage
     }},
     {L"sk", {
         L"Hľadať všetko", // SearchAnything
@@ -6293,6 +6478,11 @@ inline constexpr Locale kLocales[] = {
         L"Spravovať v nainštalovaných aplikáciách", // ManageInstalled
         L"Nainštalovaná aplikácia", // InstalledApp
         L"Nainštalované aplikácie", // InstalledApps
+        L"Hlavný balík", // MainPackage
+        L"Balík frameworku", // FrameworkPackage
+        L"Balík prostriedkov", // ResourcePackage
+        L"Súprava balíkov", // PackageBundle
+        L"Voliteľný balík", // OptionalPackage
     }},
     {L"sl", {
         L"Išči vse", // SearchAnything
@@ -6435,6 +6625,11 @@ inline constexpr Locale kLocales[] = {
         L"Upravljaj v nameščenih aplikacijah", // ManageInstalled
         L"Nameščena aplikacija", // InstalledApp
         L"Nameščene aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket ogrodja", // FrameworkPackage
+        L"Paket virov", // ResourcePackage
+        L"Zbirka paketov", // PackageBundle
+        L"Izbirni paket", // OptionalPackage
     }},
     {L"sq", {
         L"Kërko gjithçka", // SearchAnything
@@ -6577,6 +6772,11 @@ inline constexpr Locale kLocales[] = {
         L"Menaxho te aplikacionet e instaluara", // ManageInstalled
         L"Aplikacion i instaluar", // InstalledApp
         L"Aplikacionet e instaluara", // InstalledApps
+        L"Paketa kryesore", // MainPackage
+        L"Paketë platforme", // FrameworkPackage
+        L"Paketë burimesh", // ResourcePackage
+        L"Grup paketash", // PackageBundle
+        L"Paketë opsionale", // OptionalPackage
     }},
     {L"sr-latn", {
         L"Pretraži sve", // SearchAnything
@@ -6719,6 +6919,11 @@ inline constexpr Locale kLocales[] = {
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
         L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket radnog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Opcioni paket", // OptionalPackage
     }},
     {L"sv", {
         L"Sök efter allt", // SearchAnything
@@ -6861,6 +7066,11 @@ inline constexpr Locale kLocales[] = {
         L"Hantera i Installerade appar", // ManageInstalled
         L"Installerad app", // InstalledApp
         L"Installerade appar", // InstalledApps
+        L"Huvudpaket", // MainPackage
+        L"Ramverkspaket", // FrameworkPackage
+        L"Resurspaket", // ResourcePackage
+        L"Paketpaket", // PackageBundle
+        L"Valfritt paket", // OptionalPackage
     }},
     {L"sw", {
         L"Tafuta chochote", // SearchAnything
@@ -7003,6 +7213,11 @@ inline constexpr Locale kLocales[] = {
         L"Dhibiti katika Programu zilizosakinishwa", // ManageInstalled
         L"Programu iliyosakinishwa", // InstalledApp
         L"Programu zilizosakinishwa", // InstalledApps
+        L"Kifurushi kikuu", // MainPackage
+        L"Kifurushi cha mfumo", // FrameworkPackage
+        L"Kifurushi cha rasilimali", // ResourcePackage
+        L"Kundi la vifurushi", // PackageBundle
+        L"Kifurushi cha hiari", // OptionalPackage
     }},
     {L"ta", {
         L"அனைத்தையும் தேடுங்கள்", // SearchAnything
@@ -7145,6 +7360,11 @@ inline constexpr Locale kLocales[] = {
         L"நிறுவப்பட்ட பயன்பாடுகளில் நிர்வகி", // ManageInstalled
         L"நிறுவப்பட்ட செயலி", // InstalledApp
         L"நிறுவப்பட்ட பயன்பாடுகள்", // InstalledApps
+        L"முதன்மைத் தொகுப்பு", // MainPackage
+        L"கட்டமைப்புத் தொகுப்பு", // FrameworkPackage
+        L"வளத் தொகுப்பு", // ResourcePackage
+        L"தொகுப்புகளின் தொகுதி", // PackageBundle
+        L"விருப்பத் தொகுப்பு", // OptionalPackage
     }},
     {L"te", {
         L"ఏదైనా వెతకండి", // SearchAnything
@@ -7287,6 +7507,11 @@ inline constexpr Locale kLocales[] = {
         L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలలో నిర్వహించు", // ManageInstalled
         L"ఇన్\u200cస్టాల్ చేసిన యాప్", // InstalledApp
         L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలు", // InstalledApps
+        L"ప్రధాన ప్యాకేజీ", // MainPackage
+        L"ఫ్రేమ్\u200cవర్క్ ప్యాకేజీ", // FrameworkPackage
+        L"వనరుల ప్యాకేజీ", // ResourcePackage
+        L"ప్యాకేజీల సమూహం", // PackageBundle
+        L"ఐచ్ఛిక ప్యాకేజీ", // OptionalPackage
     }},
     {L"th", {
         L"ค้นหาทุกอย่าง", // SearchAnything
@@ -7429,6 +7654,11 @@ inline constexpr Locale kLocales[] = {
         L"จัดการในแอปที่ติดตั้ง", // ManageInstalled
         L"แอปที่ติดตั้ง", // InstalledApp
         L"แอปที่ติดตั้ง", // InstalledApps
+        L"แพ็กเกจหลัก", // MainPackage
+        L"แพ็กเกจเฟรมเวิร์ก", // FrameworkPackage
+        L"แพ็กเกจทรัพยากร", // ResourcePackage
+        L"ชุดแพ็กเกจ", // PackageBundle
+        L"แพ็กเกจเสริม", // OptionalPackage
     }},
     {L"tr", {
         L"Her şeyi ara", // SearchAnything
@@ -7571,6 +7801,11 @@ inline constexpr Locale kLocales[] = {
         L"Yüklü uygulamalarda yönet", // ManageInstalled
         L"Yüklü uygulama", // InstalledApp
         L"Yüklü uygulamalar", // InstalledApps
+        L"Ana paket", // MainPackage
+        L"Çerçeve paketi", // FrameworkPackage
+        L"Kaynak paketi", // ResourcePackage
+        L"Paket grubu", // PackageBundle
+        L"İsteğe bağlı paket", // OptionalPackage
     }},
     {L"uk", {
         L"Шукати все", // SearchAnything
@@ -7713,6 +7948,11 @@ inline constexpr Locale kLocales[] = {
         L"Керувати у встановлених програмах", // ManageInstalled
         L"Установлена програма", // InstalledApp
         L"Інстальовані програми", // InstalledApps
+        L"Основний пакет", // MainPackage
+        L"Пакет платформи", // FrameworkPackage
+        L"Пакет ресурсів", // ResourcePackage
+        L"Набір пакетів", // PackageBundle
+        L"Додатковий пакет", // OptionalPackage
     }},
     {L"vi", {
         L"Tìm kiếm mọi thứ", // SearchAnything
@@ -7855,6 +8095,11 @@ inline constexpr Locale kLocales[] = {
         L"Quản lý trong Ứng dụng đã cài đặt", // ManageInstalled
         L"Ứng dụng đã cài đặt", // InstalledApp
         L"Ứng dụng đã cài đặt", // InstalledApps
+        L"Gói chính", // MainPackage
+        L"Gói nền tảng", // FrameworkPackage
+        L"Gói tài nguyên", // ResourcePackage
+        L"Bộ gói", // PackageBundle
+        L"Gói tùy chọn", // OptionalPackage
     }},
     {L"zh-hans", {
         L"搜索所有内容", // SearchAnything
@@ -7997,6 +8242,11 @@ inline constexpr Locale kLocales[] = {
         L"在已安装的应用中管理", // ManageInstalled
         L"已安装的应用", // InstalledApp
         L"已安装的应用", // InstalledApps
+        L"主程序包", // MainPackage
+        L"框架程序包", // FrameworkPackage
+        L"资源程序包", // ResourcePackage
+        L"程序包捆绑包", // PackageBundle
+        L"可选程序包", // OptionalPackage
     }},
     {L"zh-hant", {
         L"搜尋所有內容", // SearchAnything
@@ -8139,6 +8389,11 @@ inline constexpr Locale kLocales[] = {
         L"在已安裝的應用程式中管理", // ManageInstalled
         L"已安裝的應用程式", // InstalledApp
         L"已安裝的應用程式", // InstalledApps
+        L"主要套件", // MainPackage
+        L"架構套件", // FrameworkPackage
+        L"資源套件", // ResourcePackage
+        L"套件組合", // PackageBundle
+        L"選用套件", // OptionalPackage
     }},
 };
 inline std::atomic<const Locale*> g_locale{&kLocales[0]};
@@ -8267,6 +8522,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Files and folders will appear here", Key::FilesAppear},
         {L"Folder", Key::Folder},
         {L"Frame rate", Key::FrameRate},
+        {L"Framework package", Key::FrameworkPackage},
         {L"Frequency", Key::Frequency},
         {L"Gateway", Key::Gateway},
         {L"Give each Quick Tool and custom /command a different name in settings.", Key::CommandNameConflictHint},
@@ -8279,6 +8535,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Latency", Key::Latency},
         {L"Length", Key::Length},
         {L"Loading…", Key::OnlineLoading},
+        {L"Main package", Key::MainPackage},
         {L"Manage in Installed apps", Key::ManageInstalled},
         {L"Mass", Key::Mass},
         {L"Matches", Key::Matches},
@@ -8298,6 +8555,8 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Open file location", Key::OpenLocation},
         {L"Open in terminal", Key::Terminal},
         {L"Open {0}", Key::OpenService},
+        {L"Optional package", Key::OptionalPackage},
+        {L"Package bundle", Key::PackageBundle},
         {L"Pages", Key::Pages},
         {L"Paused", Key::ServicePaused},
         {L"Pending…", Key::ServicePending},
@@ -8309,6 +8568,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Pressure", Key::Pressure},
         {L"Properties", Key::Properties},
         {L"Ready", Key::TestReady},
+        {L"Resource package", Key::ResourcePackage},
         {L"Restart", Key::ServiceRestart},
         {L"Run", Key::Run},
         {L"Run as administrator", Key::RunAdmin},
@@ -10427,6 +10687,7 @@ struct Record {
     bool inventoryOnly = false; // hidden components and non-application packages
     std::vector<std::wstring> inventoryAliases;
     std::wstring architecture;
+    std::wstring packageType, resourceId;
 };
 struct Key {
     HKEY value = nullptr;
@@ -10835,8 +11096,14 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
                 if (cancel && cancel->load())
                     return {};
                 Record record;
-                record.inventoryOnly = package.IsFramework() || package.IsResourcePackage() || package.IsBundle() ||
+                const bool framework=package.IsFramework(),resource=package.IsResourcePackage(),bundle=package.IsBundle();
+                record.inventoryOnly = framework || resource || bundle ||
                     package.SignatureKind() == model::PackageSignatureKind::System;
+                bool optional=false;
+                try { optional=package.IsOptional(); } catch (...) {}
+                record.packageType=bundle?L"Package bundle":resource?L"Resource package":framework?L"Framework package":
+                    optional?L"Optional package":L"Main package";
+                if(resource)try { record.resourceId=package.Id().ResourceId().c_str(); } catch (...) {}
                 record.family = package.Id().FamilyName().c_str();
                 record.packageFullName = package.Id().FullName().c_str();
                 if (!seen.insert(record.packageFullName).second)
@@ -10932,7 +11199,7 @@ struct App {
     bool installedOnly=false,inventoryOnly=false;
     bool targetExists=false,linkExists=false;
     std::wstring installedId,installedName,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
-    std::wstring installedLocation,installedFamily,installedKey,installedArchitecture;
+    std::wstring installedLocation,installedFamily,installedKey,installedArchitecture,installedPackageType,installedResourceId;
     HKEY installedHive=nullptr;
     REGSAM installedView=0;
 };
@@ -11424,6 +11691,7 @@ inline void AttachInstalledMetadata(App& app,const installed::Record& record) {
     app.installedPackage=record.packageFullName;app.inventoryOnly=record.inventoryOnly;
     app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
     app.installedArchitecture=record.architecture;
+    app.installedPackageType=record.packageType;app.installedResourceId=record.resourceId;
     app.installedHive=record.registryHive;app.installedView=record.registryView;
 }
 inline std::vector<App> InstalledInventory(const std::vector<installed::Record>& records) {
@@ -11482,7 +11750,7 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
         }
         for(size_t i=0;i<launchCount;++i) {
             auto& app=apps[i];
-            if(app.isSetting || app.installedOnly || record.inventoryOnly ||
+            if(app.isSetting || app.installedOnly ||
                 (!app.installedId.empty() && app.installedId!=record.id))continue;
             bool same=name==app.nameLower;
             if(!productTarget.empty())same=same || targets[i]==productTarget;
@@ -11506,13 +11774,11 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
         // Never run an icon/uninstaller path as the installed product.
         app.targetPath=L"ms-settings:appsfeatures";
         AttachInstalledMetadata(app,record);
-        if(!record.inventoryOnly && !record.launcher.empty()) {
-            ITEMIDLIST* pidl=nullptr;
-            if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
-                app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
-                app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
-                app.targetExists=true;PopulateAppAliases(app);
-            }
+        ITEMIDLIST* pidl=nullptr;
+        if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
+            app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
+            app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
+            app.targetExists=true;PopulateAppAliases(app);
         }
         if(app.installedOnly)continue;
         for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
@@ -25342,6 +25608,11 @@ void SearchThreadMain() {
                     row.subtitle=m.app->installedPublisher;
                     if(!m.app->installedVersion.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedVersion;
                     if(!m.app->installedArchitecture.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedArchitecture;
+                    if(!m.app->installedPackageType.empty()) {
+                        auto kind=i18n::Label(m.app->installedPackageType);
+                        if(!m.app->installedResourceId.empty())kind+=L" \u00B7 "+m.app->installedResourceId;
+                        row.subtitle=kind+(row.subtitle.empty()?L"":L"\n"+row.subtitle);
+                    }
                     row.cardSignature=L"installed:"+m.app->installedId;
                     canAdmin=false;
                 } else if (isSettingItem) {
