@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id              compiz-desktop-cube-v5
+// @id              compiz-desktop-cube
 // @name            Compiz Desktop Cube for Windows 11
-// @description     Compiz/GNOME style glass desktop prism for virtual desktops. 1 to 6 faces depending on your desktop count, LIVE desktop on the front face and in the blurred background, mouse wheel zoom, right-click the screen edges to add / remove virtual desktops, no taskbar on the faces, refresh rate matched, power efficient.
-// @version         5.9.1
+// @description     Compiz/GNOME style 3D glass desktop prism for virtual desktops. Drag up from the taskbar to open it, turn it to switch desktops, right-click the screen edges to add or remove desktops. Live desktop, blurred background.
+// @version         5.9.0
 // @author          Soham
+// @github          https://github.com/Soham-Barate
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -lole32 -loleaut32 -lwindowsapp -ldwmapi -luuid -luser32 -lgdi32 -lcomctl32 -ld3d11 -ld2d1 -ldxgi -ldxguid -ldwrite -lwindowscodecs -lshell32
@@ -71,6 +72,7 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
 - PrintWindow cannot render every app (some games, protected content). Those windows are left out of other desktops' faces.
 - The overlay is hidden from screenshots and screen recorders on purpose (needed for the live capture).
 - Desktop switching sends Win+Ctrl+Left/Right. No undocumented COM is used.
+- The Windows desktop slide animation is hidden only while the cube switches desktops (explorer is told "animations off" for that moment). Your Windows "Animation effects" setting is never changed.
 - If you still see a slide on your build, raise "Switch Settle Delay".
 */
 // ==/WindhawkModReadme==
@@ -184,7 +186,7 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
   $description: Resolution of face textures relative to your screen (capped at 1920 wide). 25 to 100.
 - SuppressSystemAnimation: true
   $name: Suppress Windows Desktop Slide Animation
-  $description: Temporarily turns off Windows animation effects only while the switch happens, then restores your setting.
+  $description: Hides the Windows desktop slide animation only while the cube switches desktops. Your Windows "Animation effects" setting is never changed.
 - SwitchSettleDelay: 120
   $name: Switch Settle Delay (ms)
   $description: Extra time the overlay stays up after Windows reports the new desktop.
@@ -244,10 +246,6 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
 
 #include <windhawk_api.h>
 
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"compiz-desktop-cube-v5"
-#endif
-
 #include <windhawk_utils.h>
 
 #ifndef WS_EX_NOREDIRECTIONBITMAP
@@ -271,6 +269,7 @@ Built on Windows.UI.Composition + Direct2D with a GPU blurred background.
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <optional>
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
@@ -335,13 +334,22 @@ static const CLSID kClsidWICImagingFactory =
 // Logging
 // ============================================================================
 static bool g_debugLog = false;
-static std::atomic<bool> g_unloading{ false };
-static std::atomic<bool> g_switching{ false };
 
 #define LOG_DBG(fmt, ...) \
     do { if (g_debugLog) { Wh_Log(L"[Cube] " fmt, ##__VA_ARGS__); } } while (0)
 #define LOG_INF(fmt, ...) Wh_Log(L"[Cube] " fmt, ##__VA_ARGS__)
 #define LOG_ERR(fmt, ...) Wh_Log(L"[Cube ERROR] " fmt, ##__VA_ARGS__)
+
+// Set at the very start of Wh_ModUninit. Once set, no new thread may be started and no gesture may begin.
+static std::atomic<bool> g_unloading{ false };
+
+// Handle of THIS mod's module (not explorer.exe's). Used to register the overlay window class.
+static HMODULE GetThisModuleHandle() {
+    HMODULE h = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&GetThisModuleHandle, &h);
+    return h;
+}
 
 // ============================================================================
 // Settings
@@ -730,6 +738,17 @@ namespace VDManager {
         return false;
     }
 
+    // The user's "Animation effects" setting is never changed. While this flag is set, the SystemParametersInfoW hook
+    // (see the taskbar hooking section) answers FALSE to SPI_GETCLIENTAREAANIMATION, which is the check explorer.exe makes
+    // to decide whether the desktop slide animation plays.
+    static std::atomic<bool> s_animSuppressed{ false };
+    static void SuppressSystemAnimation(bool on) {
+        if (s_animSuppressed.exchange(on) != on) {
+            if (on) LOG_DBG(L"Desktop slide animation suppressed");
+            else LOG_DBG(L"Desktop slide animation restored");
+        }
+    }
+
     static bool IsWindowOnCurrentDesktop(HWND h) {
         com_ptr<IVirtualDesktopManager> vdm;
         if (FAILED(CoCreateInstance(CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
@@ -881,6 +900,73 @@ namespace DesktopCaptureManager {
     static std::unordered_map<std::wstring, Entry> s_cache;
     static uint64_t s_versionCounter = 0;
 
+    // Faces are never drawn wider than this (the texture quality cap) and the background uses a quarter scale,
+    // so stored snapshots never need more pixels than this.
+    static constexpr int kSnapMaxW = 1920;
+
+    // Box-filter downscale of a BGRA image (tw <= w, th <= h). Alpha is forced to 0xFF.
+    static void BoxDownscale(const uint32_t* src, int w, int h, std::vector<uint32_t>& dst, int tw, int th) {
+        dst.resize((size_t)tw * th);
+        std::vector<int> xs((size_t)tw + 1);
+        for (int x = 0; x <= tw; ++x) xs[x] = (int)((int64_t)x * w / tw);
+        for (int y = 0; y < th; ++y) {
+            const int y0 = (int)((int64_t)y * h / th);
+            int y1 = (int)((int64_t)(y + 1) * h / th);
+            if (y1 <= y0) y1 = y0 + 1;
+            if (y1 > h) y1 = h;
+            uint32_t* d = &dst[(size_t)y * tw];
+            for (int x = 0; x < tw; ++x) {
+                const int x0 = xs[x];
+                int x1 = xs[x + 1];
+                if (x1 <= x0) x1 = x0 + 1;
+                if (x1 > w) x1 = w;
+                uint32_t b = 0, g = 0, r = 0;
+                for (int yy = y0; yy < y1; ++yy) {
+                    const uint32_t* row = src + (size_t)yy * w;
+                    for (int xx = x0; xx < x1; ++xx) {
+                        const uint32_t px = row[xx];
+                        b += px & 0xFFu; g += (px >> 8) & 0xFFu; r += (px >> 16) & 0xFFu;
+                    }
+                }
+                const uint32_t n = (uint32_t)((y1 - y0) * (x1 - x0));
+                d[x] = 0xFF000000u | ((r / n) << 16) | ((g / n) << 8) | (b / n);
+            }
+        }
+    }
+
+    // Nearest-neighbour scale (used to expand the cached, reduced wallpaper back to the monitor size).
+    static void NearestScale(const uint32_t* src, int sw, int sh, std::vector<uint32_t>& dst, int w, int h) {
+        dst.resize((size_t)w * h);
+        std::vector<int> xmap((size_t)w);
+        for (int x = 0; x < w; ++x) xmap[x] = (int)((int64_t)x * sw / w);
+        for (int y = 0; y < h; ++y) {
+            const uint32_t* row = src + (size_t)((int64_t)y * sh / h) * sw;
+            uint32_t* d = &dst[(size_t)y * w];
+            for (int x = 0; x < w; ++x) d[x] = row[xmap[x]];
+        }
+    }
+
+    // Copies a w*h BGRA image into a snapshot that is at most kSnapMaxW wide (alpha forced to 0xFF).
+    static std::shared_ptr<SnapshotData> MakeCompactSnapshot(const uint32_t* px, int w, int h, bool composed, ULONGLONG tick) {
+        if (!px || w <= 0 || h <= 0) return nullptr;
+        auto out = std::make_shared<SnapshotData>();
+        out->composed = composed;
+        out->tick = tick;
+        if (w > kSnapMaxW) {
+            const int tw = kSnapMaxW;
+            const int th = std::max(1, (int)((int64_t)h * tw / w));
+            out->width = tw;
+            out->height = th;
+            BoxDownscale(px, w, h, out->pixels, tw, th);
+        } else {
+            out->width = w;
+            out->height = h;
+            out->pixels.assign(px, px + (size_t)w * h);
+            for (auto& v : out->pixels) v |= 0xFF000000u;
+        }
+        return out;
+    }
+
     static std::wstring GuidToString(const GUID& id) {
         wchar_t sz[48]{};
         swprintf_s(sz, L"{%08lX-%04hX-%04hX-%02X%02X-%02X%02X%02X%02X%02X%02X}",
@@ -937,6 +1023,12 @@ namespace DesktopCaptureManager {
 
     static void Store(const GUID& id, std::shared_ptr<SnapshotData> d) {
         if (!d) return;
+        // The caller may hand in a full-resolution capture (it keeps its own copy for the live feed's first frame).
+        // The cache only ever holds the compact version.
+        if (d->width > kSnapMaxW && !d->pixels.empty()) {
+            auto small = MakeCompactSnapshot(d->pixels.data(), d->width, d->height, d->composed, d->tick);
+            if (small) d = small;
+        }
         std::lock_guard<std::mutex> lock(s_mutex);
         Entry& e = s_cache[GuidToString(id)];
         // A recent exact screenshot beats a rebuilt one.
@@ -970,6 +1062,20 @@ namespace DesktopCaptureManager {
         s_cache.clear();
     }
 
+    // Drops snapshots of desktops that no longer exist and snapshots older than maxAgeMs.
+    static void Prune(const VDManager::DesktopList& list, ULONGLONG maxAgeMs) {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        const ULONGLONG now = GetTickCount64();
+        for (auto it = s_cache.begin(); it != s_cache.end();) {
+            bool keep = false;
+            for (const auto& item : list.items) {
+                if (GuidToString(item.id) == it->first) { keep = true; break; }
+            }
+            if (keep && it->second.data && (now - it->second.data->tick) > maxAgeMs) keep = false;
+            if (keep) ++it; else it = s_cache.erase(it);
+        }
+    }
+
 } // namespace DesktopCaptureManager
 
 // ============================================================================
@@ -979,7 +1085,8 @@ namespace WallpaperLoader {
 
     static std::mutex s_mtx;
     static std::wstring s_cachePath;
-    static int s_cw = 0, s_ch = 0;
+    static int s_cw = 0, s_ch = 0;       // size that was requested
+    static int s_sw = 0, s_sh = 0;       // size of the stored (reduced) copy
     static std::vector<uint32_t> s_cache;
 
     static int GetStyle(bool& tile) {
@@ -1014,7 +1121,8 @@ namespace WallpaperLoader {
         {
             std::lock_guard<std::mutex> lk(s_mtx);
             if (s_cw == w && s_ch == h && s_cachePath == path && !s_cache.empty()) {
-                out = s_cache;
+                if (s_sw == w && s_sh == h) out = s_cache;
+                else DesktopCaptureManager::NearestScale(s_cache.data(), s_sw, s_sh, out, w, h);
                 return true;
             }
         }
@@ -1085,18 +1193,30 @@ namespace WallpaperLoader {
         }
 
         {
+            // Keep only a reduced copy (at most 1920 px wide) between gestures, not a full-resolution one.
+            std::vector<uint32_t> reduced;
+            int rw = w, rh = h;
+            if (w > DesktopCaptureManager::kSnapMaxW) {
+                rw = DesktopCaptureManager::kSnapMaxW;
+                rh = std::max(1, (int)((int64_t)h * rw / w));
+                DesktopCaptureManager::BoxDownscale(out.data(), w, h, reduced, rw, rh);
+            } else {
+                reduced = out;
+            }
             std::lock_guard<std::mutex> lk(s_mtx);
             s_cachePath = path;
             s_cw = w; s_ch = h;
-            s_cache = out;
+            s_sw = rw; s_sh = rh;
+            s_cache = std::move(reduced);
         }
         return true;
     }
 
     static void ClearCache() {
         std::lock_guard<std::mutex> lk(s_mtx);
-        s_cache.clear();
+        std::vector<uint32_t>().swap(s_cache);
         s_cachePath.clear();
+        s_cw = s_ch = s_sw = s_sh = 0;
     }
 
 } // namespace WallpaperLoader
@@ -1108,8 +1228,6 @@ namespace Composer {
     struct Job {
         RECT mon{};
         VDManager::DesktopList list;
-        int targetW = 0;
-        int targetH = 0;
     };
 
     static bool LooksBlank(const uint32_t* bits, int w, int h) {
@@ -1127,8 +1245,6 @@ namespace Composer {
 
         const int w = job.mon.right - job.mon.left;
         const int h = job.mon.bottom - job.mon.top;
-        const int tw = job.targetW > 0 ? job.targetW : w;
-        const int th = job.targetH > 0 ? job.targetH : h;
 
         std::vector<VDManager::WindowCard> cards;
         VDManager::GetWindowsForDesktop(id, cards);
@@ -1138,8 +1254,8 @@ namespace Composer {
         HDC mem = CreateCompatibleDC(hdcScreen);
         BITMAPINFO bmi{};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = tw;
-        bmi.bmiHeader.biHeight = -th;
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h;
         bmi.bmiHeader.biPlanes = 1;
         bmi.bmiHeader.biBitCount = 32;
         bmi.bmiHeader.biCompression = BI_RGB;
@@ -1153,14 +1269,14 @@ namespace Composer {
         }
         HGDIOBJ old = SelectObject(mem, dib);
 
-        if (wall.size() == (size_t)tw * th) memcpy(bits, wall.data(), (size_t)tw * th * 4);
-        else memset(bits, 0x20, (size_t)tw * th * 4);
+        if (wall.size() == (size_t)w * h) memcpy(bits, wall.data(), (size_t)w * h * 4);
+        else memset(bits, 0x20, (size_t)w * h * 4);
 
         int captured = 0;
         for (auto it = cards.rbegin(); it != cards.rend(); ++it) {
             if (s_abort.load()) break;
             if (it->minimized) continue;
-            if (IsHungAppWindow(it->hwnd)) continue;
+            if (IsHungAppWindow(it->hwnd)) continue;   // PrintWindow would block on it, and unload waits for this thread
 
             RECT wr{};
             if (!GetWindowRect(it->hwnd, &wr)) continue;
@@ -1189,17 +1305,15 @@ namespace Composer {
             BOOL ok = PrintWindow(it->hwnd, hw, PW_RENDERFULLCONTENT);
             bool blank = !ok || LooksBlank((const uint32_t*)wbits, ww, wh);
 
-            int dstX = (int)((float)(fb.left - job.mon.left) * tw / w);
-            int dstY = (int)((float)(fb.top - job.mon.top) * th / h);
-            int fw = (int)((float)(fb.right - fb.left) * tw / w);
-            int fh = (int)((float)(fb.bottom - fb.top) * th / h);
+            int dstX = fb.left - job.mon.left;
+            int dstY = fb.top - job.mon.top;
+            int fw = fb.right - fb.left, fh = fb.bottom - fb.top;
 
             if (!blank) {
                 int sx = fb.left - wr.left, sy = fb.top - wr.top;
                 if (sx < 0) sx = 0;
                 if (sy < 0) sy = 0;
-                SetStretchBltMode(mem, HALFTONE);
-                StretchBlt(mem, dstX, dstY, fw, fh, hw, sx, sy, fb.right - fb.left, fb.bottom - fb.top, SRCCOPY);
+                BitBlt(mem, dstX, dstY, fw, fh, hw, sx, sy, SRCCOPY);
                 ++captured;
             }
             // else: PrintWindow could not render this app. Leave the wallpaper visible
@@ -1210,15 +1324,7 @@ namespace Composer {
             DeleteDC(hw);
         }
 
-        auto out = std::make_shared<DesktopCaptureManager::SnapshotData>();
-        out->width = tw;
-        out->height = th;
-        out->pixels.resize((size_t)tw * th);
-        memcpy(out->pixels.data(), bits, (size_t)tw * th * 4);
-
-        for (auto& px : out->pixels) px |= 0xFF000000u;
-        out->composed = true;
-        out->tick = GetTickCount64();
+        auto out = DesktopCaptureManager::MakeCompactSnapshot((const uint32_t*)bits, w, h, true, GetTickCount64());
 
         SelectObject(mem, old);
         DeleteObject(dib);
@@ -1236,10 +1342,8 @@ namespace Composer {
         try {
             const int w = job->mon.right - job->mon.left;
             const int h = job->mon.bottom - job->mon.top;
-            const int tw = job->targetW > 0 ? job->targetW : w;
-            const int th = job->targetH > 0 ? job->targetH : h;
             std::vector<uint32_t> wall;
-            WallpaperLoader::Load(tw, th, wall);
+            WallpaperLoader::Load(w, h, wall);
 
             // Desktops next to the current one first.
             int total = job->list.TotalCount();
@@ -1381,9 +1485,11 @@ struct AltWin {
 static void ActivateWindowNow(HWND h) {
     if (!h || !IsWindow(h)) return;
     if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
-    // Allows to steal focus.
+    // Allows to steal focus. An empty SendInput right before SetForegroundWindow is the supported way
+    // (no AttachThreadInput: attached threads share one input queue, so a hung app would freeze this thread).
     INPUT input{};
     SendInput(1, &input, sizeof(INPUT));
+    BringWindowToTop(h);
     SetForegroundWindow(h);
 }
 
@@ -1461,11 +1567,11 @@ static const float kBadgeH = 24.0f;
 
 class CubeRenderer {
 public:
-    // Leaked instance to avoid destructor crashes on explorer.exe shutdown (static object destruction order)
-    static CubeRenderer& Instance() {
-        static CubeRenderer* s_instance = new CubeRenderer();
-        return *s_instance;
-    }
+    // The one instance lives in g_renderer (below), created in Wh_ModInit and destroyed in Wh_ModUninit.
+    static CubeRenderer& Instance();
+
+    CubeRenderer() = default;
+    ~CubeRenderer() = default;
 
     void Prewarm();
     bool Start(POINT anchorPoint, float userZoom);
@@ -1494,9 +1600,6 @@ public:
     bool IsActive() const { return m_sceneActive.load(); }
 
 private:
-    CubeRenderer() = default;
-    ~CubeRenderer() = default;
-
     // thread plumbing
     bool EnsureThread();
     static DWORD WINAPI ThreadEntry(LPVOID p);
@@ -1592,6 +1695,7 @@ private:
     float m_zoneW = 192.0f;
     std::chrono::steady_clock::time_point m_zoneQuietUntil{};
     std::chrono::steady_clock::time_point m_vdCooldown{};
+    std::atomic<int> m_pendingVdOp{ 0 };   // 0 none, 1 add, 2 remove. Set by the mouse hook, consumed in Frame().
     Spring m_kick, m_pop;                   // spin and pop when the prism is rebuilt
     int   m_bornDesktop = -1;
     float m_bornT = 1.0f;
@@ -1612,7 +1716,6 @@ private:
     bool m_presentPending = false;          // a live Present was refused (GPU busy), retry next frame
     std::atomic<bool> m_sceneActive{ false };
     std::atomic<int> m_cmd{ 0 };            // 1 = commit, 2 = cancel
-    std::atomic<int> m_pendingVdOp{ 0 };    // 1 = add, 2 = remove, set by mouse hook, processed in Frame()
     std::atomic<float> m_inYaw{ 0.0f };
     std::atomic<float> m_inPitch{ 0.0f };
     std::atomic<float> m_inZoom{ 0.0f };
@@ -1783,14 +1886,25 @@ private:
     std::chrono::steady_clock::time_point m_confirmTime;
 };
 
+// Only touched on the render thread (registered in WarmInit, unregistered in Teardown).
 static bool g_overlayClassRegistered = false;
 static const wchar_t* kOverlayClassName = L"CompizDesktopCubeOverlayWindow";
+
+// The one renderer. [[clang::no_destroy]]: when explorer.exe itself exits Wh_ModUninit is not called, the render thread
+// is already gone, and the C++ runtime must not destroy Composition objects of a dead thread under the loader lock.
+[[clang::no_destroy]] static std::optional<CubeRenderer> g_renderer;
+
+CubeRenderer& CubeRenderer::Instance() {
+    return *g_renderer;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 bool CubeRenderer::EnsureThread() {
     std::lock_guard<std::mutex> lk(m_threadMutex);
+    // Checked under the same mutex Shutdown() uses to read m_thread: either Shutdown sees the thread created here,
+    // or this call sees the flag and refuses. A thread nobody waits for can never start during unload.
     if (g_unloading.load()) return false;
     if (m_thread) {
         if (WaitForSingleObject(m_thread, 0) == WAIT_OBJECT_0) {
@@ -1841,11 +1955,11 @@ void CubeRenderer::Shutdown() {
     }
     if (t) {
         if (m_quitEvent) SetEvent(m_quitEvent);
-        if (WaitForSingleObject(t, INFINITE) == WAIT_OBJECT_0) {
-            std::lock_guard<std::mutex> lk(m_threadMutex);
-            CloseHandle(m_thread);
-            m_thread = nullptr;
-        }
+        // No timeout: the mod image must not be unmapped while this thread (or the pacer / composer it waits for) still runs.
+        WaitForSingleObject(t, INFINITE);
+        std::lock_guard<std::mutex> lk(m_threadMutex);
+        CloseHandle(m_thread);
+        m_thread = nullptr;
     }
     m_sceneActive.store(false);
 }
@@ -1912,7 +2026,7 @@ DWORD CubeRenderer::ThreadMain() {
     }
 
     try { Teardown(); } catch (...) {}
-    g_switching.store(false);
+    VDManager::SuppressSystemAnimation(false);
     if (comInit) {
         try { winrt::uninit_apartment(); } catch (...) {}
     }
@@ -1942,7 +2056,7 @@ void CubeRenderer::RunScene() {
 
     try { EndScene(); } catch (...) {}
     timeEndPeriod(1);
-    g_switching.store(false);
+    VDManager::SuppressSystemAnimation(false);
     m_sceneActive.store(false);
     GestureController::OnSnapCompleted();
 }
@@ -1950,7 +2064,7 @@ void CubeRenderer::RunScene() {
 bool CubeRenderer::EnsureDispatcherQueue() {
     if (winrt::Windows::System::DispatcherQueue::GetForCurrentThread()) return true;
 
-    HMODULE hCore = LoadModuleW(L"CoreMessaging.dll", LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE hCore = LoadLibraryExW(L"CoreMessaging.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hCore) return false;
 
     typedef HRESULT(WINAPI* CreateDQCFn)(DispatcherQueueOptionsX, void**);
@@ -2113,11 +2227,16 @@ void CubeRenderer::FindOutput() {
 }
 
 bool CubeRenderer::WarmInit() {
+    // Registered with the mod's own module handle. ANY failure (including ERROR_CLASS_ALREADY_EXISTS) is an error:
+    // an existing class could still point at a window procedure inside an earlier, unloaded copy of the mod.
+    const HMODULE hMod = GetThisModuleHandle();
+    if (!hMod) {
+        LOG_ERR(L"Cannot get the mod module handle: %lu", GetLastError());
+        return false;
+    }
     if (!g_overlayClassRegistered) {
         WNDCLASSEXW wc{ sizeof(wc) };
         wc.lpfnWndProc = WndProc;
-        HMODULE hMod = nullptr;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&WndProc, &hMod);
         wc.hInstance = hMod;
         wc.lpszClassName = kOverlayClassName;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -2131,7 +2250,7 @@ bool CubeRenderer::WarmInit() {
     m_hwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP | WS_EX_TRANSPARENT,
         kOverlayClassName, L"Compiz Desktop Cube", WS_POPUP,
-        0, 0, 16, 16, nullptr, nullptr, GetModuleHandleW(nullptr), this);
+        0, 0, 16, 16, nullptr, nullptr, hMod, this);
     if (!m_hwnd) {
         LOG_ERR(L"CreateWindowExW failed: %lu", GetLastError());
         return false;
@@ -2216,7 +2335,11 @@ void CubeRenderer::BuildBackground() {
 
         ID2D1Bitmap1* bmp = GetDesktopBitmap(ctx, cur);
         if (!bmp) return;
-        ctx->SetTransform(D2D1::Matrix3x2F::Scale(bgScale, bgScale) *
+        // Snapshots are stored at most 1920 px wide: kx / ky map bitmap pixels back to screen pixels.
+        const D2D1_SIZE_U bps = bmp->GetPixelSize();
+        const float bw = (float)std::max<UINT32>(1, bps.width), bh = (float)std::max<UINT32>(1, bps.height);
+        const float kx = sw / bw, ky = sh / bh;
+        ctx->SetTransform(D2D1::Matrix3x2F::Scale(bgScale * kx, bgScale * ky) *
                           D2D1::Matrix3x2F::Translation((float)off.x, (float)off.y));
 
         bool drawn = false;
@@ -2224,14 +2347,14 @@ void CubeRenderer::BuildBackground() {
             ID2D1Effect* fx = nullptr;
             if (SUCCEEDED(ctx->CreateEffect(CLSID_D2D1GaussianBlur, &fx)) && fx) {
                 fx->SetInput(0, bmp);
-                fx->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
+                fx->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma / kx);
                 fx->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, (UINT32)D2D1_BORDER_MODE_SOFT);
 
                 ID2D1Image* out = nullptr;
                 fx->GetOutput(&out);
                 if (out) {
                     D2D1_POINT_2F pt = D2D1::Point2F(0.0f, 0.0f);
-                    D2D1_RECT_F src = D2D1::RectF(0.0f, 0.0f, sw, sh);
+                    D2D1_RECT_F src = D2D1::RectF(0.0f, 0.0f, bw, bh);
                     ctx->DrawImage(out, &pt, &src, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
                     out->Release();
                     drawn = true;
@@ -2239,7 +2362,7 @@ void CubeRenderer::BuildBackground() {
                 fx->Release();
             }
         }
-        if (!drawn) ctx->DrawBitmap(bmp, D2D1::RectF(0.0f, 0.0f, sw, sh));
+        if (!drawn) ctx->DrawBitmap(bmp, D2D1::RectF(0.0f, 0.0f, bw, bh));
 
         ID2D1SolidColorBrush* dimBrush = nullptr;
         ctx->CreateSolidColorBrush(D2D1::ColorF(8.0f / 255.0f, 10.0f / 255.0f, 16.0f / 255.0f, (float)m_cfg.dim / 100.0f), &dimBrush);
@@ -3149,8 +3272,6 @@ void CubeRenderer::KickComposer() {
     auto job = std::make_unique<Composer::Job>();
     job->mon = m_monitorRect;
     job->list = m_desktopList;
-    job->targetW = m_texW;
-    job->targetH = m_texH;
     m_composeThread = Composer::Start(std::move(job));
     m_composeRestart = false;
 }
@@ -3344,11 +3465,11 @@ bool CubeRenderer::OnRightDown(POINT pt) {
     if (!L && !R) return false;
     // A zone that is not showing is not clickable (no invisible buttons).
     if (!(R ? m_zoneR : m_zoneL).shown || (R ? m_zoneR : m_zoneL).op < 0.35f) return false;
-    if (m_vd.active || std::chrono::steady_clock::now() < m_vdCooldown) return true;   // swallowed, ignored
+    if (m_vd.active || m_pendingVdOp.load() != 0 || std::chrono::steady_clock::now() < m_vdCooldown) return true;   // swallowed, ignored
     (R ? m_zoneR : m_zoneL).pulse = 1.0f;
     m_zoneQuietUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(1300);
-    
-    // Processed in Frame() to avoid blocking the low-level mouse hook
+    // This runs inside the WH_MOUSE_LL callback, so it must return at once. Only record the request,
+    // Frame() does the actual work (COM, registry, drawing).
     m_pendingVdOp.store(R ? 1 : 2);
     Wake();
     return true;
@@ -3375,7 +3496,7 @@ void CubeRenderer::StartVdOp(int kind) {
     m_vd.stage = 0;
     m_vd.nextAt = t;
     m_vd.deadline = t + std::chrono::milliseconds(4500);
-    if (m_cfg.suppressSysAnim) g_switching.store(true);
+    if (m_cfg.suppressSysAnim) VDManager::SuppressSystemAnimation(true);
     LOG_DBG(L"Desktop %s: total=%d current=%d", kind == 1 ? L"add" : L"remove", T, c);
 }
 
@@ -3438,7 +3559,7 @@ void CubeRenderer::UpdateVdOp() {
 
 void CubeRenderer::FinishVdOp(bool ok) {
     m_vd.active = false;
-    if (m_cfg.suppressSysAnim) g_switching.store(false);
+    if (m_cfg.suppressSysAnim) VDManager::SuppressSystemAnimation(false);
     m_vdCooldown = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
 
     VDManager::DesktopList nl;
@@ -3543,6 +3664,7 @@ bool CubeRenderer::BeginScene() {
     // ---- desktops, then the face count follows the desktop count ----
     VDManager::QueryDesktops(m_desktopList);
     int total = m_desktopList.TotalCount();
+    DesktopCaptureManager::Prune(m_desktopList, 10ULL * 60ULL * 1000ULL);   // removed desktops / very old snapshots
     ComputeGeometry(total);
 
     float q = (float)m_cfg.texQuality / 100.0f;
@@ -3564,8 +3686,6 @@ bool CubeRenderer::BeginScene() {
             auto job = std::make_unique<Composer::Job>();
             job->mon = m_monitorRect;
             job->list = m_desktopList;
-            job->targetW = m_texW;
-            job->targetH = m_texH;
             m_composeThread = Composer::Start(std::move(job));
         }
     }
@@ -3594,6 +3714,7 @@ bool CubeRenderer::BeginScene() {
     m_vd = VdTask{};
     m_zoneQuietUntil = std::chrono::steady_clock::time_point{};
     m_vdCooldown = std::chrono::steady_clock::time_point{};
+    m_pendingVdOp.store(0);
     m_uz.x = std::clamp(m_inUserZoom.load(), kMinUserZoom, kMaxUserZoom);
     m_zoom.x = m_cfg.zoomAnim ? 0.0f : 1.0f;
     m_phase = Phase::Drag;
@@ -3666,7 +3787,7 @@ void CubeRenderer::EndScene() {
     if (m_wakeEvent) SetEvent(m_wakeEvent);
     if (m_frameEvent) SetEvent(m_frameEvent);
     if (m_pacerThread) {
-        WaitForSingleObject(m_pacerThread, INFINITE);
+        WaitForSingleObject(m_pacerThread, INFINITE);   // see Shutdown(): never leave a thread running in the mod image
         CloseHandle(m_pacerThread);
         m_pacerThread = nullptr;
     }
@@ -3706,7 +3827,7 @@ void CubeRenderer::Teardown() {
 
     Composer::s_abort.store(true);
     if (m_composeThread) {
-        WaitForSingleObject(m_composeThread, INFINITE);
+        WaitForSingleObject(m_composeThread, INFINITE);   // see Shutdown(): never leave a thread running in the mod image
         CloseHandle(m_composeThread);
         m_composeThread = nullptr;
     }
@@ -3724,11 +3845,11 @@ void CubeRenderer::Teardown() {
     HWND h = m_hwnd;
     m_hwnd = nullptr;
     if (h && IsWindow(h)) DestroyWindow(h);
-
+    // Right after the window is gone, on the thread that owns it, so this can never run while the window still exists.
     if (g_overlayClassRegistered) {
-        HMODULE hMod = nullptr;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&WndProc, &hMod);
-        UnregisterClassW(kOverlayClassName, hMod);
+        if (!UnregisterClassW(kOverlayClassName, GetThisModuleHandle())) {
+            LOG_ERR(L"UnregisterClassW failed: %lu", GetLastError());
+        }
         g_overlayClassRegistered = false;
     }
 
@@ -3816,11 +3937,11 @@ bool CubeRenderer::Frame() {
     }
     UpdateAltTab(dt);
     UpdateThumbs();
-    if (m_phase == Phase::Drag) {
-        int vdOp = m_pendingVdOp.exchange(0);
-        if (vdOp != 0 && !m_vd.active) StartVdOp(vdOp);
-        UpdateVdOp();
+    {
+        const int pendingOp = m_pendingVdOp.exchange(0);
+        if (pendingOp != 0 && m_phase == Phase::Drag && !m_vd.active) StartVdOp(pendingOp);
     }
+    if (m_phase == Phase::Drag) UpdateVdOp();
     if (m_vd.active) m_busy = true;
 
     ++m_fpsFrames;
@@ -3949,7 +4070,7 @@ bool CubeRenderer::Frame() {
     float t = m_cfg.fadeMs > 0 ? elapsed / (float)m_cfg.fadeMs : 1.0f;
     applyIfChanged();
     if (t >= 1.0f) {
-        g_switching.store(false);
+        VDManager::SuppressSystemAnimation(false);
         if (m_rootVisual) m_rootVisual.Opacity(0.0f);
         return false;
     }
@@ -4019,7 +4140,7 @@ void CubeRenderer::BeginCommit(bool cancel) {
         m_nextStep = tnow;
         m_lastStepSent = tnow;
         m_nextPoll = tnow;
-        if (m_cfg.suppressSysAnim) g_switching.store(true);
+        if (m_cfg.suppressSysAnim) VDManager::SuppressSystemAnimation(true);
     }
 
     LOG_INF(L"Commit: cancel=%d steps=%d cur=%d target=%d switch=%d", (int)cancel, n, cur, target, (int)m_needSwitch);
@@ -4297,7 +4418,8 @@ namespace GestureController {
 
     static HHOOK s_hKeyboardHook = nullptr;
     static HHOOK s_hMouseHook = nullptr;
-    static IUIAutomation* s_pUIAutomation = nullptr;
+    // No destructor at process exit (it would release COM objects during loader-lock shutdown). Reset in Shutdown().
+    [[clang::no_destroy]] static com_ptr<IUIAutomation> s_pUIAutomation;
     static constexpr UINT_PTR TIMER_ARMING_CHECK = 1002;
 
     void OnActiveMouseMove(POINT pt, DWORD tick);
@@ -4306,15 +4428,15 @@ namespace GestureController {
 
     static bool InitUIAutomation() {
         if (!s_pUIAutomation) {
-            IUIAutomation* p = nullptr;
-            if (SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&p))) {
-                s_pUIAutomation = p;
-            }
+            CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+                             IID_IUIAutomation, s_pUIAutomation.put_void());
         }
         return s_pUIAutomation != nullptr;
     }
 
     static bool IsTaskbarClass(const WCHAR* cls) {
+        // Only the real taskbar windows. The generic XAML island classes (InputSite, DesktopWindowContentBridge)
+        // are shared with Task View, Alt+Tab, Snap and others and must not count as the taskbar.
         return _wcsicmp(cls, L"Shell_TrayWnd") == 0 ||
                _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0;
     }
@@ -4458,6 +4580,7 @@ namespace GestureController {
 
     static void ActivateCube(POINT pt) {
         if (s_state.load() != GestureState::Arming) return;
+        if (g_unloading.load()) { CancelArming(); return; }
 
         if (s_anchorTaskbar && IsWindow(s_anchorTaskbar)) KillTimer(s_anchorTaskbar, TIMER_ARMING_CHECK);
 
@@ -4489,6 +4612,7 @@ namespace GestureController {
     }
 
     bool OnMouseDown(HWND hWnd, POINT pt) {
+        if (g_unloading.load() || !g_renderer) return false;
         if (s_state.load() != GestureState::Idle || CubeRenderer::Instance().IsActive()) return false;
 
         if (IsEmptyTaskbarSpace(hWnd, pt)) {
@@ -4710,7 +4834,7 @@ namespace GestureController {
     void Shutdown() {
         if (s_anchorTaskbar && IsWindow(s_anchorTaskbar)) KillTimer(s_anchorTaskbar, TIMER_ARMING_CHECK);
         s_state.store(GestureState::Idle);
-        if (s_pUIAutomation) { s_pUIAutomation->Release(); s_pUIAutomation = nullptr; }
+        s_pUIAutomation = nullptr;
     }
 
 } // namespace GestureController
@@ -4743,54 +4867,66 @@ using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int
 static CreateWindowInBand_t CreateWindowInBand_orig = nullptr;
 static CreateWindowExW_t CreateWindowExW_orig = nullptr;
 
+// All InputSite windows of explorer.exe (taskbar, Task View, Alt+Tab, Snap, ...) share ONE window procedure, so a
+// single flag says whether it is hooked. The hook then reacts only to windows whose root is a taskbar.
 static std::atomic<bool> g_inputSiteProcHooked{ false };
+static std::mutex g_taskbarMutex;                       // guards g_subclassedTaskbars (windows are created on many threads)
 static std::unordered_set<HWND> g_subclassedTaskbars;
 static WNDPROC InputSiteWindowProc_Original = nullptr;
-static bool g_isWhInitialized = false;
+static std::atomic<bool> g_isWhInitialized{ false };
+
+// Returns the root window when hWnd belongs to a taskbar (Shell_TrayWnd / Shell_SecondaryTrayWnd), otherwise nullptr.
+static HWND GetTaskbarRoot(HWND hWnd) {
+    WCHAR cls[32];
+    HWND root = GetAncestor(hWnd, GA_ROOT);
+    if (root && GetClassNameW(root, cls, ARRAYSIZE(cls)) &&
+        (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0)) {
+        return root;
+    }
+    return nullptr;
+}
 
 static bool IsTaskbarRoot(HWND hWnd) {
-    HWND root = GetAncestor(hWnd, GA_ROOT);
-    if (!root) return false;
-    WCHAR cls[32];
-    return GetClassNameW(root, cls, ARRAYSIZE(cls)) &&
-           (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+    return GetTaskbarRoot(hWnd) != nullptr;
 }
 
 static LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (!IsTaskbarRoot(hWnd)) return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
-
     switch (uMsg) {
         case WM_POINTERDOWN:
-            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam)) {
-                POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }; // screen coords
-                HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-                GestureController::OnMouseDown(hRoot ? hRoot : hWnd, pt);
+            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && !g_unloading.load()) {
+                if (HWND hRoot = GetTaskbarRoot(hWnd)) {
+                    POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }; // screen coords
+                    GestureController::OnMouseDown(hRoot, pt);
+                }
             }
             break;
 
         case WM_POINTERUPDATE:
-            if (GestureController::GetState() == GestureState::Arming) {
+            if (GestureController::GetState() == GestureState::Arming && IsTaskbarRoot(hWnd)) {
                 POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 GestureController::OnArmingMouseMove(pt);
             }
             break;
 
         case WM_POINTERUP:
-            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && GestureController::GetState() == GestureState::Arming) {
+            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && GestureController::GetState() == GestureState::Arming &&
+                IsTaskbarRoot(hWnd)) {
                 GestureController::OnArmingMouseUp();
             }
             break;
 
-        case WM_LBUTTONDOWN: {
-            POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ClientToScreen(hWnd, &pt);
-            HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-            GestureController::OnMouseDown(hRoot ? hRoot : hWnd, pt);
+        case WM_LBUTTONDOWN:
+            if (!g_unloading.load()) {
+                if (HWND hRoot = GetTaskbarRoot(hWnd)) {
+                    POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                    ClientToScreen(hWnd, &pt);
+                    GestureController::OnMouseDown(hRoot, pt);
+                }
+            }
             break;
-        }
 
         case WM_MOUSEMOVE:
-            if (GestureController::GetState() == GestureState::Arming) {
+            if (GestureController::GetState() == GestureState::Arming && IsTaskbarRoot(hWnd)) {
                 POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 ClientToScreen(hWnd, &pt);
                 GestureController::OnArmingMouseMove(pt);
@@ -4798,10 +4934,24 @@ static LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wP
             break;
 
         case WM_LBUTTONUP:
-            if (GestureController::GetState() == GestureState::Arming) GestureController::OnArmingMouseUp();
+            if (GestureController::GetState() == GestureState::Arming && IsTaskbarRoot(hWnd)) {
+                GestureController::OnArmingMouseUp();
+            }
             break;
     }
     return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+}
+
+// While a desktop switch is in progress, explorer's "client area animation" check says no. The user's real setting
+// is never touched (see VDManager::SuppressSystemAnimation).
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+static SystemParametersInfoW_t SystemParametersInfoW_orig = nullptr;
+static BOOL WINAPI SystemParametersInfoW_hook(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni) {
+    if (uiAction == SPI_GETCLIENTAREAANIMATION && pvParam && VDManager::s_animSuppressed.load()) {
+        *(BOOL*)pvParam = FALSE;
+        return TRUE;
+    }
+    return SystemParametersInfoW_orig(uiAction, uiParam, pvParam, fWinIni);
 }
 
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
@@ -4833,17 +4983,21 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 }
 
 static void HookInputSiteWindow(HWND hWnd) {
-    if (!hWnd || !IsTaskbarRoot(hWnd) || g_inputSiteProcHooked.exchange(true)) return;
+    // Only a taskbar's InputSite window may trigger the hook (the procedure itself is shared by every XAML island).
+    if (!hWnd || g_unloading.load() || !IsTaskbarRoot(hWnd) || g_inputSiteProcHooked.exchange(true)) return;
 
     void* wndProc = (void*)GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
-    if (!wndProc) return;
+    if (!wndProc) {
+        g_inputSiteProcHooked.store(false);
+        return;
+    }
 
     if (Wh_SetFunctionHook(wndProc, (void*)InputSiteWindowProc_Hook, (void**)&InputSiteWindowProc_Original)) {
-        if (g_isWhInitialized) Wh_ApplyHookOperations();
+        if (g_isWhInitialized.load()) Wh_ApplyHookOperations();
         LOG_INF(L"Hooked InputSite wndproc %p", wndProc);
     } else {
-        LOG_ERR(L"Failed to hook InputSite wndproc %p", wndProc);
         g_inputSiteProcHooked.store(false);
+        LOG_ERR(L"Failed to hook InputSite wndproc %p", wndProc);
     }
 }
 
@@ -4857,10 +5011,27 @@ static BOOL CALLBACK EnumChildFindInputSite(HWND hChild, LPARAM) {
 }
 
 static void SubclassTaskbar(HWND hWnd) {
-    if (!hWnd) return;
-    if (!g_subclassedTaskbars.contains(hWnd)) {
+    if (!hWnd || g_unloading.load()) return;
+    bool already = false;
+    {
+        std::lock_guard<std::mutex> lk(g_taskbarMutex);
+        already = g_subclassedTaskbars.contains(hWnd);
+    }
+    if (!already) {
+        // Not under the lock: this call can wait for the window's thread.
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc, 0)) {
-            g_subclassedTaskbars.insert(hWnd);
+            bool unloadingNow = false;
+            {
+                std::lock_guard<std::mutex> lk(g_taskbarMutex);
+                // Wh_ModUninit sets g_unloading before it takes this lock to collect the windows, so either it
+                // collects this one, or we see the flag here and remove the subclass ourselves.
+                unloadingNow = g_unloading.load();
+                if (!unloadingNow) g_subclassedTaskbars.insert(hWnd);
+            }
+            if (unloadingNow) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
+                return;
+            }
             LOG_INF(L"Subclassed taskbar window 0x%p", hWnd);
         }
     }
@@ -4902,17 +5073,6 @@ static BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM) {
     return TRUE;
 }
 
-using SystemParametersInfoW_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT);
-static SystemParametersInfoW_t SystemParametersInfoW_orig = nullptr;
-
-static BOOL WINAPI SystemParametersInfoW_hook(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni) {
-    if (uiAction == SPI_GETCLIENTAREAANIMATION && g_switching.load()) {
-        if (pvParam) *(BOOL*)pvParam = FALSE;
-        return TRUE;
-    }
-    return SystemParametersInfoW_orig(uiAction, uiParam, pvParam, fWinIni);
-}
-
 static bool InitMod() {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
@@ -4923,9 +5083,12 @@ static bool InitMod() {
         if (pBand) {
             Wh_SetFunctionHook(pBand, (void*)CreateWindowInBand_hook, (void**)&CreateWindowInBand_orig);
         }
-        
-        Wh_SetFunctionHook((void*)GetProcAddress(hUser32, "SystemParametersInfoW"), 
-                           (void*)SystemParametersInfoW_hook, (void**)&SystemParametersInfoW_orig);
+
+        void* pSpi = (void*)GetProcAddress(hUser32, "SystemParametersInfoW");
+        if (pSpi && !Wh_SetFunctionHook(pSpi, (void*)SystemParametersInfoW_hook, (void**)&SystemParametersInfoW_orig)) {
+            SystemParametersInfoW_orig = nullptr;
+            LOG_ERR(L"Could not hook SystemParametersInfoW, the desktop slide animation will not be suppressed");
+        }
     }
     EnumWindows(EnumWindowsInitProc, 0);
     return true;
@@ -4935,13 +5098,13 @@ static bool InitMod() {
 // Windhawk lifecycle
 // ============================================================================
 BOOL Wh_ModInit() {
-    LOG_INF(L"Compiz Desktop Cube 5.9.1 LIVE build initializing");
+    LOG_INF(L"Compiz Desktop Cube initializing");
     g_unloading.store(false);
-    g_switching.store(false);
-    g_inputSiteProcHooked.store(false);
+    g_renderer.emplace();
     LoadSettings();
     if (!InitMod()) {
         LOG_ERR(L"Failed to initialize mod");
+        g_renderer.reset();
         return FALSE;
     }
     g_isWhInitialized = true;
@@ -4950,22 +5113,36 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     LOG_INF(L"Compiz Desktop Cube uninitializing");
-    g_isWhInitialized = false;
-    g_unloading.store(true);
 
-    for (HWND hWnd : g_subclassedTaskbars) {
+    // 1. Stop new work first: no new render thread (EnsureThread refuses), no new gesture, no new subclass.
+    g_unloading.store(true);
+    g_isWhInitialized = false;
+
+    // 2. Remove the taskbar subclasses so no more mouse messages reach the mod.
+    std::vector<HWND> taskbars;
+    {
+        std::lock_guard<std::mutex> lk(g_taskbarMutex);
+        taskbars.assign(g_subclassedTaskbars.begin(), g_subclassedTaskbars.end());
+        g_subclassedTaskbars.clear();
+    }
+    for (HWND hWnd : taskbars) {
         if (IsWindow(hWnd)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
         }
     }
-    g_subclassedTaskbars.clear();
 
+    // 3. Stop the render thread and wait for it (and the pacer and composer threads it owns) without a timeout.
+    //    The render thread detaches the input hooks, destroys the overlay window and unregisters its class.
     CubeRenderer::Instance().Shutdown();
+
     RestoreTaskbarCapture();
     GestureController::Shutdown();
-    g_switching.store(false);
+    VDManager::SuppressSystemAnimation(false);
     DesktopCaptureManager::Clear();
     WallpaperLoader::ClearCache();
+
+    // 4. Every thread is gone and Teardown released all WinRT / D3D objects on the render thread: only memory is left.
+    g_renderer.reset();
 }
 
 void Wh_ModSettingsChanged() {
