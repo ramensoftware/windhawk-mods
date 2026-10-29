@@ -54,7 +54,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 * Today and the selected date are marked with your accent colour. First day of the week follows Windows.
 
 ### Stopwatch
-* Centisecond precision, unlimited laps (the newest lap is always on top) and a smooth lap list.
+* Centisecond precision, up to 200 laps (the newest lap is always on top) and a smooth lap list.
 * Keeps running while the panel is closed and shows a live preview next to the clock.
 
 ### Timer
@@ -84,12 +84,12 @@ live stopwatch and timer previews right next to the taskbar clock.
 ---
 
 ## First-run defaults
-Notification bell off, taskbar previews on, 12-hour time, acrylic blur, side-by-side layout, the *Windows Alarm*
+Notification bell off, taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the *Windows Alarm*
 tone for both timers and alarms.
 
 ## Getting started
 1. Install and enable the mod in Windhawk.
-2. Restart the Windows Explorer from task manager if changes don't appear. 
+2. Restart the Windows Explorer from task manager if changes does not appear.
 3. Have fun...
 
 
@@ -103,9 +103,9 @@ tone for both timers and alarms.
 * Do not combine with other mods that rebuild the taskbar clock area (for example *Taskbar Clock
   Customization*) until you have verified they coexist.
 * WinKlok does not change the taskbar height. Use the *Taskbar height and icon size* mod for that.
-* *Quit WinKlok* hands the clock back to Windows immediately. Re-enable it by toggling
-  **Enable WinKlok** in this mod's settings or reloading the mod.
-* If something misbehaves, turn on **Verbose logging** and check the Windhawk log.
+* *Quit WinKlok* hands the clock back to Windows immediately. Bring it back by reloading the mod
+  (disable and enable it in Windhawk).
+* If something misbehaves, enable logging for this mod in Windhawk and check the log.
 
 ## For developers
 * Single-file C++ mod, organised in blocks: engine and persistence, taskbar integration (XAML
@@ -127,16 +127,6 @@ WinKlok is free and open source software released under the **GNU General Public
 (or any later version). You are free to use, study, share and improve it under the terms of that licence.
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- enabled: true
-  $name: Enable WinKlok
-  $description: Untick to hand the taskbar clock back to Windows without unloading the mod.
-- debugLog: false
-  $name: Verbose logging
-*/
-// ==/WindhawkModSettings==
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -209,18 +199,8 @@ WinKlok is free and open source software released under the **GNU General Public
 #define WK_TAGLINE L"A calmer, smarter clock mod for Windows 11 taskbar."
 #define WK_WINDHAWK_URL L"https://windhawk.net/mods/winklok"
 
-static std::atomic<bool> g_enabledSetting{true}; // mod setting "enabled"
 static std::atomic<bool> g_quitRequested{false}; // Quit button pressed
 static std::atomic<bool> g_shuttingDown{false};  // mod is being unloaded
-static bool g_debug = false;
-
-#define WK_LOG(...) Wh_Log(__VA_ARGS__)
-#define WK_DLOG(...)             \
-    do                           \
-    {                            \
-        if (g_debug)             \
-            Wh_Log(__VA_ARGS__); \
-    } while (0)
 
 // The mod's own module handle. Window classes are registered with it (not with Explorer's handle), so they
 // belong to this image and can never outlive it.
@@ -234,7 +214,7 @@ static HINSTANCE ModInst()
 
 static inline bool WkActive()
 {
-    return g_enabledSetting.load() && !g_quitRequested.load() && !g_shuttingDown.load();
+    return !g_quitRequested.load() && !g_shuttingDown.load();
 }
 
 // ============================================================================
@@ -263,7 +243,7 @@ namespace td
         std::atomic<int> showPreviews{1};
         std::atomic<int> stacked{0}; // 0 = side by side, 1 = stopwatch above timer
         std::atomic<int> showBell{0};
-        std::atomic<int> hour24{0};                      // 0 = 12 h (default), 1 = 24 h, -1 = follow Windows
+        std::atomic<int> hour24{-1};                     // -1 = follow Windows (default), 0 = 12 h, 1 = 24 h
         std::atomic<int> acrylic{1};                     // 1 = acrylic blur when Windows transparency is on, 0 = simple transparency
         std::atomic<int> timerSound{kTimerSound};        // default sound when a timer ends
         std::atomic<int> alarmSound{kDefaultAlarmSound}; // default sound for new alarms (follows the last saved alarm)
@@ -280,7 +260,7 @@ namespace td
             showPreviews = Wh_GetIntValue(L"showPreviews", 1);
             stacked = Wh_GetIntValue(L"stacked", 0);
             showBell = Wh_GetIntValue(L"showBell", 0);
-            hour24 = Wh_GetIntValue(L"hour24", 0);
+            hour24 = Wh_GetIntValue(L"hour24", -1);
             acrylic = Wh_GetIntValue(L"acrylic", 1);
             timerSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"timerSound", kTimerSound)));
             alarmSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"alarmSound", kDefaultAlarmSound)));
@@ -1249,8 +1229,8 @@ namespace tb
     // XAML objects must never be destroyed off the UI thread / at process exit.
     [[clang::no_destroy]] static std::vector<std::shared_ptr<Entry>> g_entries;
     static std::mutex g_entMtx;
-    [[clang::no_destroy]] static std::map<DWORD, HWND> g_msgWnds;
-    [[clang::no_destroy]] static std::map<DWORD, UINT> g_msgTickMs; // current timer interval of each message window
+    static std::map<DWORD, HWND> g_msgWnds;
+    static std::map<DWORD, UINT> g_msgTickMs; // current timer interval of each message window
     static std::mutex g_msgMtx;
     static bool g_msgClassRegistered = false;
 
@@ -1499,7 +1479,7 @@ namespace tb
                 if (bell && !ContainsNoCase(cls.c_str(), L"NotificationArea")) {
                     for (auto& b : en.bells) if (b.first == fe) return false;
                     en.bells.emplace_back(fe, fe.Visibility());
-                    WK_LOG(L"WinKlok: hiding native notification candidate name='%s' id='%s' class='%s'",
+                    Wh_Log(L"hiding native notification candidate name='%s' id='%s' class='%s'",
                            fe.Name().c_str(), aid.c_str(), cls.c_str());
                 }
                 return false; }, 0, 10);
@@ -1518,7 +1498,7 @@ namespace tb
             }
             en.bellHidden = !en.bells.empty();
             if (en.bells.empty() && en.bellSearchTries == 50)
-                WK_LOG(L"WinKlok: could not identify the native notification button");
+                Wh_Log(L"could not identify the native notification button");
         }
         else if (!wantHidden && !en.bells.empty())
         {
@@ -1780,7 +1760,7 @@ namespace tb
                 if (auto g = o.try_as<wuxc::Grid>()) { gridEl = g; return true; }
                 return false; });
                 if (gridEl)
-                    WK_LOG(L"WinKlok: ContainerGrid not found, using first Grid '%s'", gridEl.Name().c_str());
+                    Wh_Log(L"ContainerGrid not found, using first Grid '%s'", gridEl.Name().c_str());
             }
             if (!gridEl)
             {
@@ -1860,16 +1840,16 @@ namespace tb
             ClearClockTooltips(en);
             en.injected = true;
             en.injectFailures = 0;
-            WK_DLOG(L"WinKlok: injected into a taskbar clock");
+            Wh_Log(L"injected into a taskbar clock");
             return true;
         }
         catch (winrt::hresult_error const &ex)
         {
-            WK_LOG(L"WinKlok: inject failed: 0x%08X %s", (unsigned)ex.code().value, ex.message().c_str());
+            Wh_Log(L"inject failed: 0x%08X %s", (unsigned)ex.code().value, ex.message().c_str());
         }
         catch (...)
         {
-            WK_LOG(L"WinKlok: inject failed (unknown exception)");
+            Wh_Log(L"inject failed (unknown exception)");
         }
         en.injectFailures++;
         return false;
@@ -1900,7 +1880,7 @@ namespace tb
         }
         catch (...)
         {
-            WK_LOG(L"WinKlok: exception while restoring clock");
+            Wh_Log(L"exception while restoring clock");
         }
         en.ClearUi();
     }
@@ -1971,9 +1951,9 @@ namespace tb
                 ApplyBrushes(en); // follows light/dark changes
             }
         }
-        catch (winrt::hresult_error const &ex)
+        catch (winrt::hresult_error const &)
         {
-            WK_DLOG(L"WinKlok: ApplyPreview error 0x%08X", (unsigned)ex.code().value);
+            // transient XAML state: the next tick tries again
         }
         catch (...)
         {
@@ -2085,7 +2065,7 @@ namespace tb
             }
             catch (...)
             {
-                WK_DLOG(L"WinKlok: tick exception");
+                // transient XAML state: the next tick tries again
             }
         }
         DropEntries(false); // drop dead entries
@@ -2166,7 +2146,7 @@ namespace tb
             wc.lpszClassName = kMsgClass;
             if (!RegisterClassW(&wc))
             {
-                WK_LOG(L"WinKlok: could not register the message window class (%u)", GetLastError());
+                Wh_Log(L"could not register the message window class (%u)", GetLastError());
                 return false;
             }
             g_msgClassRegistered = true;
@@ -2175,7 +2155,7 @@ namespace tb
                                  ModInst(), nullptr);
         if (!h)
         {
-            WK_LOG(L"WinKlok: could not create message window (%u)", GetLastError());
+            Wh_Log(L"could not create message window (%u)", GetLastError());
             return false;
         }
         SetTimer(h, 1, 100, nullptr);
@@ -2223,7 +2203,7 @@ namespace tb
             std::lock_guard<std::mutex> g(g_entMtx);
             g_entries.push_back(en);
         }
-        WK_DLOG(L"WinKlok: adopted clock element (tid %u)", en->tid);
+        Wh_Log(L"adopted clock element (tid %u)", en->tid);
         SetTickMs(100); // a new clock: start with the fast tick until it is set up
         if (WkActive())
             Inject(*en);
@@ -2249,16 +2229,16 @@ namespace tb
             if (fe)
                 AdoptClock(fe, true);
             else
-                WK_DLOG(L"WinKlok: OnApplyTemplate: no FrameworkElement from this=%p", pThis);
+                Wh_Log(L"OnApplyTemplate: no FrameworkElement from this=%p", pThis);
         }
         catch (...)
         {
-            WK_DLOG(L"WinKlok: OnApplyTemplate exception");
+            Wh_Log(L"OnApplyTemplate exception");
         }
         return hr;
     }
 
-    [[clang::no_destroy]] static std::unordered_map<void *, bool> g_seenThis;
+    static std::unordered_map<void *, bool> g_seenThis;
     static std::mutex g_seenMtx;
 
     // Hooked on the produce<> ABI thunk, so pThis is always an IUnknown* of the runtime object.
@@ -2271,7 +2251,7 @@ namespace tb
         {
             static std::atomic<bool> logged{false};
             if (!logged.exchange(true))
-                WK_LOG(L"WinKlok: BadgeIconContent::get_ViewModel hook is active");
+                Wh_Log(L"BadgeIconContent::get_ViewModel hook is active");
             {
                 std::lock_guard<std::mutex> g(g_seenMtx);
                 auto it = g_seenThis.find(pThis);
@@ -2307,7 +2287,7 @@ namespace tb
     }
 
     // Modules where the symbol lookup already failed: each candidate DLL is looked up at most once.
-    [[clang::no_destroy]] static std::vector<HMODULE> g_failedModules;
+    static std::vector<HMODULE> g_failedModules;
     static std::mutex g_failedMtx;
 
     static bool ModuleAlreadyFailed(HMODULE h)
@@ -2322,12 +2302,54 @@ namespace tb
         g_failedModules.push_back(h);
     }
 
+    // Major part of a module's file version (the first number of a version like 2604.8002.200.6000), read from its
+    // version resource. Returns 0 when it cannot be read.
+    static WORD ModuleVersionMajor(HMODULE h)
+    {
+        HRSRC res = FindResourceW(h, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+        if (!res)
+            return 0;
+        HGLOBAL mem = LoadResource(h, res);
+        const BYTE *data = mem ? (const BYTE *)LockResource(mem) : nullptr;
+        const DWORD size = SizeofResource(h, res);
+        // VS_VERSIONINFO: WORD length, WORD valueLength, WORD type, the key "VS_VERSION_INFO", padding to 4 bytes,
+        // then the VS_FIXEDFILEINFO value.
+        const size_t fixedOffset = (6 + sizeof(L"VS_VERSION_INFO") + 3) & ~(size_t)3;
+        if (!data || size < fixedOffset + sizeof(VS_FIXEDFILEINFO))
+            return 0;
+        const VS_FIXEDFILEINFO *fi = (const VS_FIXEDFILEINFO *)(data + fixedOffset);
+        if (fi->dwSignature != 0xFEEF04BD)
+            return 0;
+        return HIWORD(fi->dwFileVersionMS);
+    }
+
+    static bool IsTaskbarViewModule(HMODULE h)
+    {
+        wchar_t path[MAX_PATH] = {};
+        if (!GetModuleFileNameW(h, path, MAX_PATH))
+            return false;
+        const wchar_t *name = wcsrchr(path, L'\\');
+        return name && _wcsicmp(name + 1, L"Taskbar.View.dll") == 0;
+    }
+
     static bool TryHookModule(HMODULE h)
     {
         if (!h || g_hooksReady.load())
             return g_hooksReady.load();
         if (ModuleAlreadyFailed(h))
             return false;
+        // Starting with Taskbar.View.dll 2604.8002.200.6000 the SystemTray types live in SystemTray.dll, so there is
+        // nothing to look up in Taskbar.View.dll from that version on. (An unreadable version is still tried.)
+        if (IsTaskbarViewModule(h))
+        {
+            const WORD major = ModuleVersionMajor(h);
+            if (major >= 2604)
+            {
+                RememberFailedModule(h);
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", (int)major);
+                return false;
+            }
+        }
         // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
         WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
             {
@@ -2349,11 +2371,11 @@ namespace tb
         if (!WindhawkUtils::HookSymbols(h, systemTrayHooks, ARRAYSIZE(systemTrayHooks)))
         {
             RememberFailedModule(h);
-            WK_LOG(L"WinKlok: DateTimeIconContent::OnApplyTemplate not found in %s", path);
+            Wh_Log(L"DateTimeIconContent::OnApplyTemplate not found in %s", path);
             return false;
         }
         g_hooksReady = true;
-        WK_LOG(L"WinKlok: DateTimeIconContent::OnApplyTemplate hooked in %s", path);
+        Wh_Log(L"DateTimeIconContent::OnApplyTemplate hooked in %s", path);
         return true;
     }
 
@@ -2406,7 +2428,7 @@ namespace tb
     {
         if (TryHookAnyLoadedModule())
             return true;
-        WK_LOG(L"WinKlok: taskbar modules not loaded yet; waiting for them");
+        Wh_Log(L"taskbar modules not loaded yet; waiting for them");
         HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
         void *target = kb ? (void *)GetProcAddress(kb, "LoadLibraryExW") : nullptr;
         if (!target)
@@ -2448,7 +2470,7 @@ namespace ui
     static IDWriteFactory *g_dw = nullptr;
     static std::wstring g_uiFont = L"Segoe UI";
     static std::wstring g_iconFont = L"Segoe MDL2 Assets";
-    [[clang::no_destroy]] static std::map<std::wstring, IDWriteTextFormat *> g_fmt;
+    static std::map<std::wstring, IDWriteTextFormat *> g_fmt;
     static const wchar_t kUiClass[] = L"WinklokUiWindow";
     static bool g_uiClassRegistered = false;
     static std::atomic<HWND> g_panelWnd{nullptr};
@@ -3369,7 +3391,7 @@ namespace ui
                 if (logged < 12)
                 {
                     ++logged;
-                    WK_DLOG(L"WinKlok: wheel delta=%d via %s", delta, viaHook ? L"mouse hook" : L"window message");
+                    Wh_Log(L"wheel delta=%d via %s", delta, viaHook ? L"mouse hook" : L"window message");
                 }
                 float x, y;
                 ClientDip(POINT{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)}, x, y);
@@ -3553,7 +3575,7 @@ namespace ui
             if (!logged)
             {
                 logged = true;
-                WK_LOG(L"WinKlok: touchpad-capable registration failed (%u); two-finger scrolling uses the wheel hook", GetLastError());
+                Wh_Log(L"touchpad-capable registration failed (%u); two-finger scrolling uses the wheel hook", GetLastError());
             }
         }
     }
@@ -3592,7 +3614,7 @@ namespace ui
                     if (g_touchpadCapableWindow != hwnd && IsWindow(g_touchpadCapableWindow))
                         SetTouchpadWindowCapability(g_touchpadCapableWindow, FALSE);
                     if (!SetTouchpadWindowCapability(hwnd, FALSE))
-                        WK_DLOG(L"WinKlok: touchpad-capable unregistration failed (%u)", GetLastError());
+                        Wh_Log(L"touchpad-capable unregistration failed (%u)", GetLastError());
                 }
                 g_touchpadCapableWindow = nullptr;
                 g_touchpadPanelWindow = nullptr;
@@ -3757,7 +3779,7 @@ namespace ui
             return;
         g_wheelHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelWheelProc, GetModuleHandleW(nullptr), 0);
         if (!g_wheelHook)
-            WK_LOG(L"WinKlok: could not install the wheel hook (%u); wheel messages are used instead", GetLastError());
+            Wh_Log(L"could not install the wheel hook (%u); wheel messages are used instead", GetLastError());
     }
     static void RemoveWheelHook()
     {
@@ -3822,7 +3844,7 @@ namespace ui
         };
 
         // Index = sound id - 1.
-        [[clang::no_destroy]] static const std::vector<Def> kDefs = {
+        static const std::vector<Def> kDefs = {
             /* 1 Crystal Bells */ {4.6f, {{1046.5f, 0, .9f, 0}, {1318.5f, .24f, .85f, 0}, {1568.f, .48f, .85f, 0}, {2093.f, .72f, .8f, 0}, {1568.f, 1.f, .65f, 0}, {1318.5f, 1.24f, .65f, 0}, {1046.5f, 1.5f, .6f, 0}}},
             /* 2 Soft Chimes   */ {5.0f, {{1318.5f, 0, .8f, 0}, {1046.5f, .6f, .75f, 0}, {784.f, 1.2f, .75f, 0}, {880.f, 1.8f, .65f, 0}, {1046.5f, 2.4f, .6f, 0}}},
             /* 3 Marimba       */ {3.4f, {{523.25f, 0, .9f, 1}, {659.25f, .2f, .9f, 1}, {784.f, .4f, .9f, 1}, {659.25f, .6f, .9f, 1}, {1046.5f, .8f, .9f, 1}, {784.f, 1.f, .9f, 1}, {659.25f, 1.2f, .9f, 1}, {784.f, 1.4f, .9f, 1}, {587.33f, 1.7f, .9f, 1}, {784.f, 1.9f, .9f, 1}, {987.77f, 2.1f, .9f, 1}, {784.f, 2.3f, .9f, 1}, {1174.7f, 2.5f, .9f, 1}}},
@@ -3887,7 +3909,7 @@ namespace ui
             return w;
         }
 
-        [[clang::no_destroy]] static std::map<int, std::vector<BYTE>> g_waves; // UI thread only
+        static std::map<int, std::vector<BYTE>> g_waves; // UI thread only
         static const std::vector<BYTE> *Wave(int id)
         {
             if (id < 1 || id > (int)kDefs.size())
@@ -3986,8 +4008,8 @@ namespace ui
             float baseline = 0, height = 0;
         };
 
-        [[clang::no_destroy]] static std::map<std::wstring, FontInfo> g_fonts;
-        [[clang::no_destroy]] static std::unordered_map<std::wstring, float> g_widths;
+        static std::map<std::wstring, FontInfo> g_fonts;
+        static std::unordered_map<std::wstring, float> g_widths;
 
         static const FontInfo &Font(const Style &st)
         {
@@ -8240,9 +8262,9 @@ namespace ui
             // The registration itself is taken while the panel is open (ShowPanel) and released when it closes.
             g_touchpadPanelWindow = hwnd;
             if (ResolveRegisterTouchpadCapableWindow())
-                WK_LOG(L"WinKlok: touchpad API found; direct per-pointer HIMETRIC tracking is registered while the panel is open");
+                Wh_Log(L"touchpad API found; direct per-pointer HIMETRIC tracking is registered while the panel is open");
             else
-                WK_LOG(L"WinKlok: touchpad-capable API not available; two-finger scrolling uses the wheel hook");
+                Wh_Log(L"touchpad-capable API not available; two-finger scrolling uses the wheel hook");
             return true;
         }
 
@@ -8427,27 +8449,6 @@ namespace ui
                 }
             }
             nextNoteId = std::max(maxId + 1, Wh_GetIntValue(L"noteNext", 1));
-            if (notes.empty())
-            { // carry over the single note of the previous version
-                std::vector<wchar_t> b2(40200);
-                const size_t t1 = Wh_GetStringValue(L"noteTitle", b2.data(), b2.size());
-                const std::wstring oldTitle = (t1 > 0 && t1 < b2.size()) ? std::wstring(b2.data(), t1) : std::wstring();
-                const size_t t2 = Wh_GetStringValue(L"noteBody", b2.data(), b2.size());
-                const std::wstring oldBody = (t2 > 0 && t2 < b2.size()) ? std::wstring(b2.data(), t2) : std::wstring();
-                if (!oldTitle.empty() || !oldBody.empty())
-                {
-                    Note note;
-                    note.id = nextNoteId++;
-                    note.title = oldTitle;
-                    note.body = oldBody;
-                    note.modified = td::WallMs() / 1000;
-                    notes.push_back(note);
-                    SaveNoteData(note);
-                    SaveIndex();
-                    Wh_DeleteValue(L"noteTitle");
-                    Wh_DeleteValue(L"noteBody");
-                }
-            }
             SortNotes();
         }
 
@@ -11299,7 +11300,7 @@ namespace ui
         }
     };
 
-    [[clang::no_destroy]] static std::vector<AlertWindow *> g_alerts;
+    static std::vector<AlertWindow *> g_alerts;
 
     static void SoundUpdate()
     {
@@ -11636,29 +11637,22 @@ namespace ui
 // ============================================================================
 //  WINDHAWK ENTRY POINTS
 // ============================================================================
-static void LoadModSettings()
-{
-    g_enabledSetting = Wh_GetIntSetting(L"enabled") != 0;
-    g_debug = Wh_GetIntSetting(L"debugLog") != 0;
-}
-
 BOOL Wh_ModInit()
 {
-    LoadModSettings();
     td::g_eng.Load();
     td::g_set.Load();
     if (!ui::Start())
     {
-        WK_LOG(L"WinKlok: could not start the UI thread");
+        Wh_Log(L"could not start the UI thread");
         return FALSE;
     }
     if (!tb::InstallHooks())
     {
-        WK_LOG(L"WinKlok: could not install hooks");
+        Wh_Log(L"could not install hooks");
         ui::Stop();
         return FALSE;
     }
-    WK_LOG(L"WinKlok initialised");
+    Wh_Log(L"Initialised");
     return TRUE;
 }
 
@@ -11671,12 +11665,4 @@ void Wh_ModBeforeUninit()
 void Wh_ModUninit()
 {
     ui::Stop();
-}
-
-void Wh_ModSettingsChanged()
-{
-    LoadModSettings();
-    if (g_enabledSetting.load())
-        g_quitRequested = false;
-    tb::PostRefreshAll();
 }
