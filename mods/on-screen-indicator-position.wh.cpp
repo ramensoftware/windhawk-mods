@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
-// @version         1.5.0
+// @version         1.6.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -64,6 +64,16 @@ Volume kept at the top left while brightness sits in the middle. Only one of the
 ever on screen at a time, so this is the same desktop photographed twice:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
+
+## Hide individual indicators
+
+Choose **Hidden** for an indicator to stop it appearing. The underlying action,
+such as changing volume or brightness, still works. Other indicators keep their
+own settings. Change it back to any position to show it again.
+
+Hiding applies to the indicator type on every monitor. Display profiles only
+change placement. If Windows changes an entry point that the mod needs, that
+indicator may remain visible; check the mod log for missing entry points.
 
 ## Skip the slide out animation
 
@@ -169,6 +179,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Volume
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -183,6 +194,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Brightness
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -197,6 +209,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Keyboard brightness
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -211,6 +224,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Airplane mode
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -225,6 +239,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Camera
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -239,6 +254,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Microphone
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -253,6 +269,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Other indicators
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -267,6 +284,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     $name: Virtual desktop name
     $options:
     - same: Same as the main position
+    - hidden: Hidden
     - windowsDefault: Windows default (offsets still apply)
     - topLeft: Top left
     - topCenter: Top center
@@ -494,6 +512,7 @@ enum class Position {
     bottomCenter,
     bottomRight,
     inherit,
+    hidden,
 };
 
 // Which indicator is being shown. Windows has a separate entry point per kind,
@@ -723,6 +742,7 @@ void PlaceInArea(const WinrtRect& area,
             rect->X = right;
             rect->Y = bottom;
             break;
+        case Position::hidden:  // Only show hooks suppress; layout stays valid otherwise.
         case Position::inherit:
         case Position::windowsDefault:
             // Keep the position Windows picked and only apply the offsets.
@@ -747,32 +767,72 @@ void PlaceInArea(const WinrtRect& area,
     }
 }
 
+// Decide from the explicit kind at the show entry point, never from the last
+// recorded kind. Missing recorders for another indicator must not prevent a
+// resolved hook from hiding its own indicator.
+bool ShouldHideIndicator(Indicator kind) {
+    const auto settings = g_settings.load();
+    const auto index = static_cast<size_t>(kind);
+    return index < settings->perIndicator.size() &&
+           settings->perIndicator[index] == Position::hidden;
+}
+
 // Both the public COM thunk and the host's private coroutine record the kind.
 // The thunk survives on builds where the private name moves; the coroutine is
 // retained as the fallback for builds where a thunk has moved instead.
-#define DEFINE_RECORDER_HOOK(name, returnType, kind, parameters, arguments) \
-    using name##_t = returnType(WINAPI*) parameters;                         \
-    name##_t name##_Original;                                                 \
-    returnType WINAPI name##_Hook parameters {                                \
-        g_currentIndicator.store(kind);                                       \
-        return name##_Original arguments;                                     \
+#define DEFINE_RECORDER_HOOK(name, returnType, kind, parameters, arguments, \
+                             hiddenResult)                                  \
+    using name##_t = returnType(WINAPI*) parameters;                        \
+    name##_t name##_Original;                                               \
+    returnType WINAPI name##_Hook parameters {                              \
+        if (ShouldHideIndicator(kind))                                      \
+            return hiddenResult;                                            \
+        g_currentIndicator.store(kind);                                     \
+        return name##_Original arguments;                                   \
     }
 
-DEFINE_RECORDER_HOOK(ShowVolumeThunk, int, Indicator::volume,
-                     (void* pThis, int value), (pThis, value));
-DEFINE_RECORDER_HOOK(ShowBrightnessThunk, int, Indicator::brightness,
-                     (void* pThis, int value), (pThis, value));
-DEFINE_RECORDER_HOOK(ShowKeyboardBrightnessThunk, int,
-                     Indicator::keyboardBrightness, (void* pThis, int value),
-                     (pThis, value));
-DEFINE_RECORDER_HOOK(ShowAirplaneModeOnThunk, int, Indicator::airplaneMode,
-                     (void* pThis, bool value), (pThis, value));
-DEFINE_RECORDER_HOOK(ShowCameraOnThunk, int, Indicator::camera,
-                     (void* pThis, bool value), (pThis, value));
-DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledThunk, int, Indicator::camera,
-                     (void* pThis, bool value), (pThis, value));
-DEFINE_RECORDER_HOOK(ShowMicrophoneMutedThunk, int, Indicator::microphone,
-                     (void* pThis, int state, void* text), (pThis, state, text));
+DEFINE_RECORDER_HOOK(ShowVolumeThunk,
+                     int,
+                     Indicator::volume,
+                     (void* pThis, int value),
+                     (pThis, value),
+                     S_OK);
+DEFINE_RECORDER_HOOK(ShowBrightnessThunk,
+                     int,
+                     Indicator::brightness,
+                     (void* pThis, int value),
+                     (pThis, value),
+                     S_OK);
+DEFINE_RECORDER_HOOK(ShowKeyboardBrightnessThunk,
+                     int,
+                     Indicator::keyboardBrightness,
+                     (void* pThis, int value),
+                     (pThis, value),
+                     S_OK);
+DEFINE_RECORDER_HOOK(ShowAirplaneModeOnThunk,
+                     int,
+                     Indicator::airplaneMode,
+                     (void* pThis, bool value),
+                     (pThis, value),
+                     S_OK);
+DEFINE_RECORDER_HOOK(ShowCameraOnThunk,
+                     int,
+                     Indicator::camera,
+                     (void* pThis, bool value),
+                     (pThis, value),
+                     S_OK);
+DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledThunk,
+                     int,
+                     Indicator::camera,
+                     (void* pThis, bool value),
+                     (pThis, value),
+                     S_OK);
+DEFINE_RECORDER_HOOK(ShowMicrophoneMutedThunk,
+                     int,
+                     Indicator::microphone,
+                     (void* pThis, int state, void* text),
+                     (pThis, state, text),
+                     S_OK);
 
 // The virtual desktop name popup goes through the same ShowText entry point as
 // every other text indicator. The only thing that tells them apart at hook time
@@ -811,6 +871,9 @@ using ShowTextThunk_t = int(WINAPI*)(void* pThis, void* text, bool value);
 ShowTextThunk_t ShowTextThunk_Original;
 int WINAPI ShowTextThunk_Hook(void* pThis, void* text, bool value) {
     bool fromTwinui = ReturnAddressIsTwinui(__builtin_return_address(0));
+    const auto kind = fromTwinui ? Indicator::virtualDesktop : Indicator::text;
+    if (ShouldHideIndicator(kind))
+        return S_OK;
     g_textCallFromTwinui = fromTwinui;
     ResetOnExit reset{g_textCallFromTwinui};
     g_currentIndicator.store(fromTwinui ? Indicator::virtualDesktop
@@ -827,35 +890,55 @@ int WINAPI ShowTextThunk_Hook(void* pThis, void* text, bool value) {
 // where it expects its own arguments to be. Each name is optional;
 // if neither layer resolves for a kind, Wh_ModInit disables per-indicator
 // placement rather than reuse a previous kind's spot.
-DEFINE_RECORDER_HOOK(ShowVolumeAsync, void*, Indicator::volume,
+DEFINE_RECORDER_HOOK(ShowVolumeAsync,
+                     void*,
+                     Indicator::volume,
                      (void* pThis, void* retval, int value),
-                     (pThis, retval, value));
-DEFINE_RECORDER_HOOK(ShowBrightnessAsync, void*, Indicator::brightness,
+                     (pThis, retval, value),
+                     retval);
+DEFINE_RECORDER_HOOK(ShowBrightnessAsync,
+                     void*,
+                     Indicator::brightness,
                      (void* pThis, void* retval, int value),
-                     (pThis, retval, value));
-DEFINE_RECORDER_HOOK(ShowKeyboardBrightnessAsync, void*,
+                     (pThis, retval, value),
+                     retval);
+DEFINE_RECORDER_HOOK(ShowKeyboardBrightnessAsync,
+                     void*,
                      Indicator::keyboardBrightness,
                      (void* pThis, void* retval, int value),
-                     (pThis, retval, value));
-DEFINE_RECORDER_HOOK(ShowAirplaneModeOnAsync, void*, Indicator::airplaneMode,
+                     (pThis, retval, value),
+                     retval);
+DEFINE_RECORDER_HOOK(ShowAirplaneModeOnAsync,
+                     void*,
+                     Indicator::airplaneMode,
                      (void* pThis, void* retval, bool value),
-                     (pThis, retval, value));
-DEFINE_RECORDER_HOOK(ShowCameraOnAsync, void*, Indicator::camera,
+                     (pThis, retval, value),
+                     retval);
+DEFINE_RECORDER_HOOK(ShowCameraOnAsync,
+                     void*,
+                     Indicator::camera,
                      (void* pThis, void* retval, bool value),
-                     (pThis, retval, value));
-DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledAsync, void*, Indicator::camera,
+                     (pThis, retval, value),
+                     retval);
+DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledAsync,
+                     void*,
+                     Indicator::camera,
                      (void* pThis, void* retval, bool value),
-                     (pThis, retval, value));
+                     (pThis, retval, value),
+                     retval);
 
 // This one takes a message alongside the state on current builds and took only
-// the state on older ones. Declared with the extra parameter for both, since the
-// build that doesn't take it never reads the register it arrives in. That holds
-// because the mod is 64-bit only, x64 and arm64 both, where arguments go in
-// registers and the caller does the cleaning up. On a 32-bit stdcall build the
-// callee pops its own arguments and the same mismatch would walk the stack.
-DEFINE_RECORDER_HOOK(ShowMicrophoneMutedAsync, void*, Indicator::microphone,
+// the state on older ones. Declared with the extra parameter for both, since
+// the build that doesn't take it never reads the register it arrives in. That
+// holds because the mod is 64-bit only, x64 and arm64 both, where arguments go
+// in registers and the caller does the cleaning up. On a 32-bit stdcall build
+// the callee pops its own arguments and the same mismatch would walk the stack.
+DEFINE_RECORDER_HOOK(ShowMicrophoneMutedAsync,
+                     void*,
+                     Indicator::microphone,
                      (void* pThis, void* retval, int value, void* text),
-                     (pThis, retval, value, text));
+                     (pThis, retval, value, text),
+                     retval);
 
 #undef DEFINE_RECORDER_HOOK
 
@@ -868,20 +951,25 @@ void* WINAPI ShowTextAsync_Hook(void* pThis,
                                 void* retval,
                                 void* text,
                                 bool value) {
+    const auto kind =
+        g_textCallFromTwinui ? Indicator::virtualDesktop : Indicator::text;
+    if (ShouldHideIndicator(kind))
+        return retval;
     g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
                                                   : Indicator::text);
     return ShowTextAsync_Original(pThis, retval, text, value);
 }
 
-// The control hides itself two ways and Windows picks the animated one. Handing the
-// call to the other is the whole feature, so nothing has to be torn out of the
-// animation and nothing outside this control is touched.
+// The control hides itself two ways and Windows picks the animated one. Handing
+// the call to the other is the whole feature, so nothing has to be torn out of
+// the animation and nothing outside this control is touched.
 using ConfirmatorHostControl_Hide_t = void(WINAPI*)(void* pThis);
 ConfirmatorHostControl_Hide_t ConfirmatorHostControl_Hide_Original;
 
-// Same shape as the one above today, declared separately so a drift in one doesn't
-// quietly redefine the other.
-using ConfirmatorHostControl_HideWithoutAnimation_t = void(WINAPI*)(void* pThis);
+// Same shape as the one above today, declared separately so a drift in one
+// doesn't quietly redefine the other.
+using ConfirmatorHostControl_HideWithoutAnimation_t =
+    void(WINAPI*)(void* pThis);
 ConfirmatorHostControl_HideWithoutAnimation_t
     ConfirmatorHostControl_HideWithoutAnimation_Original;
 void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
@@ -1018,6 +1106,7 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
 }
 
 Position PositionFromString(PCWSTR value, Position fallback = Position::windowsDefault) {
+    if (wcscmp(value, L"hidden") == 0) return Position::hidden;
     if (!*value || wcscmp(value, L"same") == 0) return Position::inherit;
     if (wcscmp(value, L"topLeft") == 0) {
         return Position::topLeft;
@@ -1065,7 +1154,7 @@ void LoadSettings() {
     auto settings = std::make_shared<Settings>();
     auto value = WindhawkUtils::StringSetting::make(L"position");
     settings->position = *value.get() ? PositionFromString(value.get()) : kDefaultPosition;
-    if (settings->position == Position::inherit) settings->position = kDefaultPosition;
+    if (settings->position == Position::inherit || settings->position == Position::hidden) settings->position = kDefaultPosition;
     settings->offsetX = std::clamp(Wh_GetIntSetting(L"offsetX"), -100000, 100000);
     settings->offsetY = std::clamp(Wh_GetIntSetting(L"offsetY"), -100000, 100000);
     settings->skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation") != 0;
@@ -1100,6 +1189,7 @@ void LoadSettings() {
         if (!valid) continue;
         auto position = WindhawkUtils::StringSetting::make((prefix + L".position").c_str());
         profile.position = PositionFromString(position.get(), Position::inherit);
+        if (profile.position == Position::hidden) profile.position = Position::inherit;
         profile.offsets = LoadOffsets(prefix);
         settings->profiles.push_back(std::move(profile));
     }
