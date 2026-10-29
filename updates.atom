@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-28T23:00:39.000Z</updated>
+    <updated>2026-10-29T01:03:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.1]]></title>
+        <id>https://windhawk.net/mods/start-everything#b8729d42ac533b163188e9849b14ccf4f8c9e106</id>
+        <link href="https://windhawk.net/mods/start-everything"/>
+        <updated>2026-10-29T01:03:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Update Apps results independently of file searches. Move catalog rebuilding and icon loading off the matching worker, reuse app-card controls, preserve selection during background updates, and keep existing file results visible until replacements arrive.</li>
+<li>Warm the local app, Settings and installed-program catalogs in the background while keeping search UI creation deferred. Refresh app lists after desktop-program registry changes, Store/MSIX package events and Start-menu shortcut changes.</li>
+<li>Include installed programs and packages without registered launchers, with friendly names, package logos and a “No launcher found” label. Add installation-folder and copy-path actions, and use exact registrations for confirmed uninstall actions.</li>
+<li>Recognize missing launchers conservatively through matching executable and product metadata. Merge differently named installation records and shortcuts using their executable identity and installation folder while preserving original shortcut actions.</li>
+<li>Add weather cards with automatic or configured locations, past days, forecasts and a highlighted Today column. Support saved locations and multiple weather cards.</li>
+<li>Add online currency and cryptocurrency quotes, conversions and configurable saved lists. Keep online cards off by default for new installations; after enabling them, load weather and prices automatically after a short typing pause, with cached results shown immediately. Keep requests separate from local searches and document provider requests and approximate-location privacy.</li>
+<li>Add a LibreSpeed-based connection test with latency, download and upload readings, an animated speedometer, adaptive transfer timing, cancellation and bounded request pacing. Display Mbps alongside automatic kB/s, MB/s or GB/s readings. Require Run or Enter, limit transfer payloads, reduce limits on metered connections, and preserve the last completed result when a test is cancelled or search closes.</li>
+<li>Add live <code>/usage</code> cards for CPU, memory, GPUs, disk activity and network traffic, including per-adapter video-memory readings and one-second graphs while visible.</li>
+<li>Add <code>/services</code> search and service details, with available Start, Stop and Restart actions and administrator elevation when required.</li>
+<li>Improve clean shutdown of background catalog and service workers, run package-logo decoding on a compatible worker, and avoid network-drive existence checks during catalog rebuilding. Keep settings-triggered catalog refreshes on the helper thread to avoid a race with failed window startup and worker destruction.</li>
+<li>Add configurable Quick Tools command names, including <code>/ip</code>, and detect duplicate names across tools and custom slash commands. Update tool text across all 50 interface languages and expand the README.</li>
+</ul>]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Custom Shortcuts 1.8.0]]></title>
         <id>https://windhawk.net/mods/explorer-custom-shortcuts#5f7c8fdebcc26e7d3df215688a438ba94f06ba49</id>
@@ -435,24 +458,6 @@ files or signatures are modified. </p>
         <author>
             <name>GF-Huang</name>
             <uri>https://github.com/GF-Huang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar collapse to running apps 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-collapse-to-running#7d48d0c128c3d3491776f18c26fce3ebf8b6e9ae</id>
-        <link href="https://windhawk.net/mods/taskbar-collapse-to-running"/>
-        <updated>2026-10-27T00:01:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hotkey now toggles collapse like a click, always instant (no longer turns the mod off)</li>
-<li>Removed the "Collapse taskbar" setting</li>
-<li>New setting: "Uncollapsed at startup" (default on)</li>
-<li>Fixed: Windows' reorder animation playing when the hotkey uncollapsed</li>
-<li>Fixed: saving settings no longer collapses the taskbar</li>
-<li>Renamed "Reveal while Start is open" (resets to off)</li>
-</ul>]]></content>
-        <author>
-            <name>Lars</name>
-            <uri>https://github.com/LarsGudm</uri>
         </author>
     </entry>
 </feed>

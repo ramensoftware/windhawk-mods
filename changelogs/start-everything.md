@@ -1,3 +1,17 @@
+## 2.1 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b8729d42ac533b163188e9849b14ccf4f8c9e106/mods/start-everything.wh.cpp))
+
+* Update Apps results independently of file searches. Move catalog rebuilding and icon loading off the matching worker, reuse app-card controls, preserve selection during background updates, and keep existing file results visible until replacements arrive.
+* Warm the local app, Settings and installed-program catalogs in the background while keeping search UI creation deferred. Refresh app lists after desktop-program registry changes, Store/MSIX package events and Start-menu shortcut changes.
+* Include installed programs and packages without registered launchers, with friendly names, package logos and a “No launcher found” label. Add installation-folder and copy-path actions, and use exact registrations for confirmed uninstall actions.
+* Recognize missing launchers conservatively through matching executable and product metadata. Merge differently named installation records and shortcuts using their executable identity and installation folder while preserving original shortcut actions.
+* Add weather cards with automatic or configured locations, past days, forecasts and a highlighted Today column. Support saved locations and multiple weather cards.
+* Add online currency and cryptocurrency quotes, conversions and configurable saved lists. Keep online cards off by default for new installations; after enabling them, load weather and prices automatically after a short typing pause, with cached results shown immediately. Keep requests separate from local searches and document provider requests and approximate-location privacy.
+* Add a LibreSpeed-based connection test with latency, download and upload readings, an animated speedometer, adaptive transfer timing, cancellation and bounded request pacing. Display Mbps alongside automatic kB/s, MB/s or GB/s readings. Require Run or Enter, limit transfer payloads, reduce limits on metered connections, and preserve the last completed result when a test is cancelled or search closes.
+* Add live `/usage` cards for CPU, memory, GPUs, disk activity and network traffic, including per-adapter video-memory readings and one-second graphs while visible.
+* Add `/services` search and service details, with available Start, Stop and Restart actions and administrator elevation when required.
+* Improve clean shutdown of background catalog and service workers, run package-logo decoding on a compatible worker, and avoid network-drive existence checks during catalog rebuilding. Keep settings-triggered catalog refreshes on the helper thread to avoid a race with failed window startup and worker destruction.
+* Add configurable Quick Tools command names, including `/ip`, and detect duplicate names across tools and custom slash commands. Update tool text across all 50 interface languages and expand the README.
+
 ## 2.0 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/45217a613b9826883069ffed9129215b7851c0ce/mods/start-everything.wh.cpp))
 
 * Move search into its own Windows 11 window. Win+S, the taskbar search icon, Start’s search bar, and typing in Start open it while Start remains available normally.
