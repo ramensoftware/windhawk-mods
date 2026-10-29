@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.3
+// @version 0.9.4
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -19,6 +19,8 @@ or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.
 
 The manufacturer should have made these everyday controls part of the Windows
 battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.
+
+![Battery protection panel](https://raw.githubusercontent.com/billbauman/thinkpad-battery-controls/Main/assets/battery-protection.png)
 
 ## Setup
 Choose a backend in Windhawk Settings:
@@ -58,16 +60,6 @@ confirmation. Removing the mod during calibration loses saved recovery: check it
 state and charging limits in Vantage. Cooling and airplane controls remain omitted
 until supported behavior is verified. Calibration is not a battery-health treatment.
 
-## Experimental discharge
-Disabled by default in Windhawk Settings. Enabling it reveals an Experimental tab;
-it does not start discharge. The target is monitored by the mod, not firmware.
-A crash, sleep or communication failure may allow discharge below the target and
-interrupt work. Reboot or empty-battery reset behavior is unverified. Stay with the
-laptop and read the per-start warning. Stop remains available while recovery is
-pending, even when the opt-in is disabled. Restart attempts cancellation, not resume.
-The 30-minute limit and normal-unload stop are best effort, not crash protection.
-This uses the installed Lenovo driver; no driver or helper is downloaded.
-
 ## Compatibility
 Tested on a ThinkPad P14s Gen 6 AMD with one battery. Two-battery behavior has
 mock coverage but needs a two-battery hardware report. The executable backend
@@ -86,9 +78,6 @@ No Lenovo or Microsoft endorsement is implied.
   $options:
   - native: Integrated Lenovo service
   - executable: Lenovo ChargeThreshold.exe
-- experimentalDischarge: false
-  $name: Enable experimental discharge controls
-  $description: Off by default. A crash, sleep or failed stop can leave discharge active below the target. Empty-battery and reboot reset behavior is unverified. Read the warning and stay with the laptop. Enabling this setting never starts discharge.
 - utilityPath: ""
   $name: Full path to ChargeThreshold.exe (executable backend only)
   $description: Download the linked Lenovo utility yourself, save it in a local folder of your choice, then enter the full executable path here. The integrated backend ignores this setting.
@@ -98,7 +87,14 @@ No Lenovo or Microsoft endorsement is implied.
 #include <shellapi.h>
 #include <shlobj.h>
 #include <windhawk_api.h>
+// Windhawk 1.6.1 puts WINAPI after a lambda parameter list. With MS extensions
+// that expands to syntax Clang rejects. On our 64-bit targets WINAPI does not
+// select a different calling convention; scope this compatibility fix to the header.
+#pragma push_macro("WINAPI")
+#undef WINAPI
+#define WINAPI
 #include <windhawk_utils.h>
+#pragma pop_macro("WINAPI")
 #include <optional>
 #include <list>
 #include <string>
@@ -1204,322 +1200,6 @@ void Refresh() {
     Wh_Log(L"cacheStop=%d", int(state.stop));
   }
 }
-namespace DischargeDriver {
-struct State {
-  bool valid = false, supported = false, separate = false, acBreak = false, enabled = false,
-       breakEnabled = false;
-  DWORD error = 0;
-};
-std::atomic<bool> stalled = false;
-DWORD lastError = 0;
-// Exact vendor query/set operations only. No caller-selected IOCTL or buffers.
-bool Exchange(bool write, DWORD input, DWORD& output) {
-  lastError = ERROR_TIMEOUT;
-  if (stalled)
-    return false;
-  struct Request {
-    OVERLAPPED overlapped;
-    DWORD input, output;
-    HANDLE device;
-  };
-  auto r = static_cast<Request*>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(Request)));
-  if (!r)
-    return false;
-  r->input = input;
-  r->overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-  r->device = CreateFileW(L"\\\\.\\IBMPmDrv", GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                          FILE_FLAG_OVERLAPPED, nullptr);
-  auto release = [&] {
-    if (r->device != INVALID_HANDLE_VALUE)
-      CloseHandle(r->device);
-    if (r->overlapped.hEvent)
-      CloseHandle(r->overlapped.hEvent);
-    HeapFree(GetProcessHeap(), 0, r);
-  };
-  if (!r->overlapped.hEvent || r->device == INVALID_HANDLE_VALUE) {
-    lastError = GetLastError();
-    release();
-    return false;
-  }
-  DWORD bytes = 0;
-  BOOL ok = DeviceIoControl(r->device, write ? 0x222640 : 0x22263c, &r->input, 4, &r->output, 4,
-                            &bytes, &r->overlapped);
-  if (!ok && GetLastError() == ERROR_IO_PENDING) {
-    if (WaitForSingleObject(r->overlapped.hEvent, 1000) != WAIT_OBJECT_0) {
-      CancelIoEx(r->device, &r->overlapped);
-      if (WaitForSingleObject(r->overlapped.hEvent, 250) != WAIT_OBJECT_0) {
-        // Keep OS-owned buffers alive if a broken driver refuses cancellation.
-        // No callbacks or DLL addresses are retained. Block further I/O this run.
-        stalled = true;
-        return false;
-      }
-      release();
-      return false;
-    }
-    ok = GetOverlappedResult(r->device, &r->overlapped, &bytes, FALSE);
-  }
-  output = r->output;
-  bool valid = ok && bytes == 4 && !(output & 0x80000000);
-  lastError = valid                   ? 0
-              : !ok                   ? GetLastError()
-              : (output & 0x80000000) ? ERROR_NOT_SUPPORTED
-                                      : ERROR_INVALID_DATA;
-  release();
-  return valid;
-}
-State Query(int slot) {
-  State s;
-  DWORD raw = 0;
-  if (slot < 1 || slot > 2 || !Exchange(false, DWORD(slot), raw))
-    return s;
-  s.valid = true;
-  s.supported = (raw >> 8) & 1;
-  s.separate = (raw >> 9) & 1;
-  s.acBreak = (raw >> 10) & 1;
-  s.enabled = raw & 1;
-  s.breakEnabled = (raw >> 1) & 1;
-  return s;
-}
-bool Set(int slot, bool enabled) {
-  auto before = Query(slot);
-  if (!before.valid || !before.supported || (!before.separate && slot != 1))
-    return false;
-  // The AC-break flag is best effort and never advertised as a guaranteed reset.
-  DWORD result = 0;
-  bool written = Exchange(
-      true, (DWORD(slot) << 8) | (enabled ? 1u : 0u) | (enabled && before.acBreak ? 2u : 0u),
-      result);
-  DWORD writeError = lastError;
-  auto after = Query(slot);
-  if (!written)
-    lastError = writeError;
-  else if (after.valid && after.enabled != enabled)
-    lastError = ERROR_WRITE_FAULT;
-  return written && after.valid && after.enabled == enabled;
-}
-}  // namespace DischargeDriver
-
-namespace ExperimentalDischarge {
-struct Record {
-  DWORD magic = 0x44495331, slot = 0, target = 0, reserved = 0;
-  ULONGLONG deadline = 0;
-};
-Record record;
-std::atomic<bool> pending = false;
-bool invalid = false, running = false;
-ULONGLONG nextCheck = 0, lastCheck = 0;
-HANDLE ownership = nullptr;
-struct View {
-  DischargeDriver::State packs[2];
-  int slot = 0, target = 0, percent = -1;
-  bool pending = false;
-  std::wstring message;
-  ULONGLONG revision = 0;
-};
-enum class ButtonState { Checking, Off, Active, Uncertain, Unsupported };
-ButtonState StopButtonState(const View& state, int selected) {
-  if (!state.revision)
-    return ButtonState::Checking;
-  int slot = state.slot ? state.slot : selected;
-  if (slot < 1 || slot > 2)
-    return ButtonState::Uncertain;
-  auto pack = state.packs[slot - 1];
-  if (!pack.valid)
-    return ButtonState::Uncertain;
-  if (!pack.supported)
-    return ButtonState::Unsupported;
-  if (pack.enabled)
-    return ButtonState::Active;
-  return state.pending ? ButtonState::Uncertain : ButtonState::Off;
-}
-std::mutex mutex;
-View view;
-bool Enabled() {
-  return Wh_GetIntSetting(L"experimentalDischarge") != 0;
-}
-View Read() {
-  std::lock_guard lock(mutex);
-  return view;
-}
-void Publish(PCWSTR message = nullptr, int percent = -1) {
-  auto one = DischargeDriver::Query(1), two = DischargeDriver::Query(2);
-  std::lock_guard lock(mutex);
-  view.packs[0] = one;
-  view.packs[1] = two;
-  view.slot = record.slot;
-  view.target = record.target;
-  view.pending = pending;
-  if (message) {
-    view.message = message;
-    Wh_SetStringValue(L"DischargeLastResult", message);
-  }
-  if (percent >= 0)
-    view.percent = percent;
-  view.revision++;
-}
-bool Acquire() {
-  if (ownership)
-    return true;
-  HANDLE h = CreateMutexW(nullptr, FALSE, L"Global\\ThinkPadBatteryControls.Discharge");
-  if (!h)
-    return false;
-  DWORD result = WaitForSingleObject(h, 0);
-  if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED) {
-    CloseHandle(h);
-    return false;
-  }
-  ownership = h;
-  return true;
-}
-void Release() {
-  if (ownership) {
-    ReleaseMutex(ownership);
-    CloseHandle(ownership);
-    ownership = nullptr;
-  }
-}
-bool Save(Record next) {
-  if (!Wh_SetIntValue(L"DischargePresent", 1) ||
-      !Wh_SetBinaryValue(L"Discharge", &next, sizeof(next)))
-    return false;
-  record = next;
-  invalid = false;
-  pending = next.slot != 0;
-  return true;
-}
-bool Stop(int slot) {
-  if (!record.slot && !invalid) {
-    auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 3000);
-    if (a.resetKnown && a.resetBattery) {
-      Publish(L"Use Calibration to cancel the active calibration cycle.");
-      return false;
-    }
-  }
-  if (slot < 1 || slot > 2 || !Acquire()) {
-    Publish(L"Stop unavailable: another session may own discharge.");
-    return false;
-  }
-  // Stop is idempotent. Ambiguous writes retain recovery until readback confirms off.
-  DischargeDriver::Set(slot, false);
-  auto after = DischargeDriver::Query(slot);
-  bool ok = after.valid && after.supported && !after.enabled;
-  running = false;
-  if (ok && invalid) {
-    auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
-    bool allOff = a.connected && (a.batteries[0].present || a.batteries[1].present);
-    for (int i = 0; i < 2; ++i)
-      if (a.batteries[i].present) {
-        auto state = DischargeDriver::Query(i + 1);
-        allOff = allOff && state.valid && !state.enabled;
-      }
-    if (allOff)
-      ok = Save({});
-    else
-      ok = false;
-  } else if (ok && record.slot == DWORD(slot))
-    ok = Save({});
-  Publish(ok ? L"Forced discharge is off. Charging limits are unchanged."
-             : L"STOP NOT CONFIRMED. Discharge may continue. Recovery is retained; retry Stop or "
-               L"use the recovery tool.");
-  if (!pending)
-    Release();
-  return ok;
-}
-void Load() {
-  DWORD bytes = Wh_GetBinaryValue(L"Discharge", &record, sizeof(record));
-  invalid = (bytes != sizeof(record) && (bytes || Wh_GetIntValue(L"DischargePresent", 0))) ||
-            record.magic != 0x44495331 || record.slot > 2 || record.reserved ||
-            (record.slot && (record.target < 50 || record.target > 95 || !record.deadline));
-  if (invalid) {
-    record = {};
-    pending = true;
-    Publish(
-        L"Discharge recovery is unreadable. Check each battery and use Stop; no automatic start is "
-        L"allowed.");
-    return;
-  }
-  pending = record.slot != 0;
-  running = false;
-  if (pending)
-    Stop(record.slot);
-}
-void Start(int slot, int target) {
-  SYSTEM_POWER_STATUS power{};
-  auto a = NativeRpc::ReadAdvanced(GetTickCount64() + 5000);
-  auto status = DischargeDriver::Query(slot);
-  if (slot >= 1 && slot <= 2 && a.batteries[slot - 1].percent.available &&
-      a.batteries[slot - 1].percent.value <= target) {
-    Publish(L"Already at or below the target. Discharge was not started.");
-    return;
-  }
-  if (!Enabled() || !IntegratedBackend() || pending || Active() || slot < 1 || slot > 2 ||
-      target < 50 || target > 95 || !GetSystemPowerStatus(&power) || power.ACLineStatus != 1 ||
-      !a.connected || !a.resetKnown || a.resetBattery || a.resetStage ||
-      !a.batteries[slot - 1].present || !a.batteries[slot - 1].percent.available ||
-      a.batteries[slot - 1].percent.value <= target || !status.valid || !status.supported ||
-      status.enabled || !Acquire()) {
-    Publish(
-        L"Discharge did not start. Check power, target, driver support and other battery "
-        L"operations.");
-    return;
-  }
-  Record next;
-  next.slot = slot;
-  next.target = target;
-  next.deadline = GetTickCount64() + 30 * 60 * 1000;
-  if (!Save(next)) {
-    Publish(L"Could not save recovery. Discharge did not start.");
-    Release();
-    return;
-  }
-  if (!DischargeDriver::Set(slot, true)) {
-    DWORD error = DischargeDriver::lastError;
-    bool stopped = Stop(slot);
-    std::wstring message =
-        L"Start was not confirmed (driver error " + std::to_wstring(error) + L"). " +
-        (stopped ? L"Cleanup verified discharge is off. Do not retry until this is reviewed."
-                 : L"STOP NOT CONFIRMED. Use recovery now.");
-    Publish(message.c_str());
-    return;
-  }
-  running = true;
-  lastCheck = GetTickCount64();
-  nextCheck = lastCheck + 3000;
-  Publish(L"Experimental discharge is running. Stay with the laptop. Stop is always available.",
-          a.batteries[slot - 1].percent.value);
-}
-void Check() {
-  if (!pending || invalid || !record.slot)
-    return;
-  auto now = GetTickCount64();
-  if (now < nextCheck)
-    return;
-  SYSTEM_POWER_STATUS power{};
-  if (!running || !Enabled() || !IntegratedBackend() || now >= record.deadline ||
-      (lastCheck && now - lastCheck > 15000) || !GetSystemPowerStatus(&power) ||
-      power.ACLineStatus != 1) {
-    Stop(record.slot);
-    nextCheck = GetTickCount64() + 3000;
-    return;
-  }
-  auto a = NativeRpc::ReadAdvanced(now + 5000);
-  auto current = DischargeDriver::Query(record.slot);
-  auto b = a.batteries[record.slot - 1];
-  if (!a.connected || !a.resetKnown || a.resetBattery || !b.present || !b.percent.available ||
-      !current.valid || !current.enabled || b.percent.value <= long(record.target))
-    Stop(record.slot);
-  else
-    Publish(nullptr, b.percent.value);
-  lastCheck = GetTickCount64();
-  nextCheck = lastCheck + 3000;
-}
-void Shutdown() {
-  if (record.slot)
-    Stop(record.slot);
-  Release();
-}
-}  // namespace ExperimentalDischarge
-
 namespace AdvancedControls {
 struct Snapshot {
   NativeRpc::Advanced data;
@@ -1565,8 +1245,6 @@ void LoadCalibration() {
     Status(L"Calibration recovery is invalid. Check charging limits in Lenovo Vantage.");
 }
 bool ThresholdWritesAllowed() {
-  if (ExperimentalDischarge::pending)
-    return false;
   if (!IntegratedBackend())
     return !calibration.slot && !invalidCalibration;
   if (calibration.slot || invalidCalibration)
@@ -1651,8 +1329,8 @@ void Calibration(int slot, bool stop) {
   }
   if (!stop) {
     SYSTEM_POWER_STATUS power{};
-    if (ExperimentalDischarge::pending || Active() || calibration.slot || invalidCalibration ||
-        a.resetBattery != 0 || !GetSystemPowerStatus(&power) || power.ACLineStatus != 1) {
+    if (Active() || calibration.slot || invalidCalibration || a.resetBattery != 0 ||
+        !GetSystemPowerStatus(&power) || power.ACLineStatus != 1) {
       Publish(
           a, L"Connect power and end any charge-to-full or calibration operation before starting.");
       return;
@@ -1740,21 +1418,6 @@ bool ApplySeparate(unsigned value) {
 }  // namespace AdvancedControls
 
 void Dispatch(int action, int values) {
-  if (action == 25) {
-    ExperimentalDischarge::Stop(values);
-    return;
-  }
-  if (action == 26) {
-    if (!AdvancedControls::calibration.slot && !AdvancedControls::invalidCalibration)
-      ExperimentalDischarge::Start(LOWORD(values), HIWORD(values));
-    else
-      ExperimentalDischarge::Publish(L"End calibration before starting discharge.");
-    return;
-  }
-  if (action == 27) {
-    ExperimentalDischarge::Publish();
-    return;
-  }
   if (action >= 20 && action <= 24) {
     if (action == 20)
       AdvancedControls::RefreshAdvanced();
@@ -1807,13 +1470,6 @@ void Submit(int action, int values = 0) noexcept {
       return;
     }
     std::lock_guard lock(queueMutex);
-    if (action == 25) {
-      std::erase_if(commands,
-                    [](auto command) { return command.first == 26 || command.first == 25; });
-      commands.emplace_front(action, values);
-      SetEvent(wakeEvent);
-      return;
-    }
     // Bound work and coalesce repeated UI commands, including refresh requests.
 
     if (action == 0)
@@ -1849,7 +1505,7 @@ DWORD WINAPI Thread(void*) noexcept {
     Status(L"");
     Load();
     AdvancedControls::LoadCalibration();
-    ExperimentalDischarge::Load();
+
     if (recoveryInvalid)
       Status(L"Recovery data invalid. Apply your desired limits manually.");
     ULONGLONG checkAt = 0, calibrationCheckAt = 0;
@@ -1858,7 +1514,7 @@ DWORD WINAPI Thread(void*) noexcept {
       if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0)
         break;
       auto now = GetTickCount64();
-      ExperimentalDischarge::Check();
+
       if (AdvancedControls::calibration.slot && now >= calibrationCheckAt) {
         AdvancedControls::CheckCalibration();
         calibrationCheckAt = GetTickCount64() + 30000;
@@ -1900,8 +1556,6 @@ DWORD WINAPI Thread(void*) noexcept {
       if (Active())
         delay = (std::min)(delay, DWORD(checkAt > now ? checkAt - now : 0));
 
-      if (ExperimentalDischarge::pending)
-        delay = (std::min)(delay, DWORD(3000));
       HANDLE events[] = {stopEvent, wakeEvent};
       DWORD result = MsgWaitForMultipleObjects(2, events, FALSE, delay, QS_ALLINPUT);
       if (result == WAIT_OBJECT_0)
@@ -1916,7 +1570,7 @@ DWORD WINAPI Thread(void*) noexcept {
     }
     ULONGLONG empty = 0;
     shutdownDeadline.compare_exchange_strong(empty, GetTickCount64() + 4000);
-    ExperimentalDischarge::Shutdown();
+
     if (Active() && !Restore())
       Status(L"Restoration deferred. Saved recovery will be checked next time the mod runs.");
   } catch (...) {
@@ -1928,7 +1582,14 @@ DWORD WINAPI Thread(void*) noexcept {
 
 // Taskbar XAML access helpers adapted from Taskbar tray system icon tweaks.
 // Copyright (c) Michael Maltsev (m417z), MIT; see THIRD-PARTY-NOTICES.txt.
+// Windhawk 1.6.1 puts WINAPI after a lambda parameter list. With MS extensions
+// that expands to syntax Clang rejects. On our 64-bit targets WINAPI does not
+// select a different calling convention; scope this compatibility fix to the header.
+#pragma push_macro("WINAPI")
+#undef WINAPI
+#define WINAPI
 #include <windhawk_utils.h>
+#pragma pop_macro("WINAPI")
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
@@ -2433,7 +2094,15 @@ void SetPanelContent(C::ScrollViewer scroll,
   C::StackPanel host;
   // All settings pages share one work-area-clamped viewport. Content may
   // scroll, but switching tabs or editing presets never resizes the shell.
-  double width = 520, height = 410;
+  double width = 520, height = 360;
+  auto presets = ReadPresets();
+  auto favorites =
+      std::count_if(presets.begin(), presets.end(), [](const Preset& p) { return p.quick; });
+  if (favorites > 3)
+    height += 28 * (favorites - 3);
+  const auto batteries = BatteryControls::ReadSnapshot().state;
+  if (batteries.packs[0].present && batteries.packs[1].present)
+    height = (std::max)(height, 420.0);
   RECT bar{};
   MONITORINFO mi{sizeof(mi)};
   if (GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &bar) &&
@@ -2613,7 +2282,7 @@ void EditorCounts(const std::shared_ptr<PresetEditor>& editor) {
   editor->count.Text(std::to_wstring(editor->rows.size()) + L" of 20 presets  |  " +
                      std::to_wstring(favorites) + L" of 5 quick favorites");
   editor->add.IsEnabled(editor->rows.size() < maxPresets);
-  editor->scroll.Height((std::min)(180.0, (std::max)(38.0, double(editor->rows.size()) * 38 - 6)));
+  editor->scroll.Height((std::min)(140.0, (std::max)(38.0, double(editor->rows.size()) * 38 - 6)));
   for (size_t i = 0; i < editor->rows.size(); i++) {
     editor->rows[i]->up.IsEnabled(i > 0);
     editor->rows[i]->down.IsEnabled(i + 1 < editor->rows.size());
@@ -2937,7 +2606,7 @@ void ShowPresetEditor(FrameworkElement target) {
   content.Children().Append(heading);
   editor->list.Spacing(6);
   editor->scroll.Content(editor->list);
-  editor->scroll.Height(180);
+  editor->scroll.Height(140);
   editor->scroll.VerticalScrollBarVisibility(C::ScrollBarVisibility::Hidden);
   editor->scroll.VerticalScrollMode(C::ScrollMode::Enabled);
   editor->scroll.HorizontalScrollBarVisibility(C::ScrollBarVisibility::Disabled);
@@ -3107,165 +2776,9 @@ void ShowPresetEditor(FrameworkElement target) {
 }
 // The Advanced panel is rebuilt only on a completed worker request, never on a hardware poll.
 int advancedTab = 0, advancedBattery = 0;
-void RenderExperimental(C::StackPanel body, FrameworkElement target, bool dismissResult = false) {
-  body.Spacing(8);
-  using namespace BatteryControls;
-  auto d = ExperimentalDischarge::Read();
-  auto a = AdvancedControls::Read().data;
-  body.Children().Append(Text(L"Experimental discharge", 18));
-  if (!d.message.empty() && !dismissResult) {
-    body.Children().Append(Text(d.message, 14));
-    if (!d.pending) {
-      C::Button edit;
-      edit.Content(winrt::box_value(L"Adjust target"));
-      TrackEvent(edit.Click(winrt::auto_revoke, SafeUi([body, target](auto const&, auto const&) {
-                              body.Children().Clear();
-                              RenderExperimental(body, target, true);
-                            })));
-      body.Children().Append(edit);
-      return;
-    }
-  }
-  if (d.pending) {
-    body.Children().Append(Text(L"Battery " + std::to_wstring(d.slot) + L"  |  Target " +
-                                std::to_wstring(d.target) + L"%"));
-    if (d.percent >= 0)
-      body.Children().Append(Text(L"Last reading: " + std::to_wstring(d.percent) + L"%"));
-    body.Children().Append(
-        Text(L"Stay with the laptop. The fixed Stop button remains available on every Advanced "
-             L"page. A failed stop is not confirmation that discharge ended.",
-             12));
-    return;
-  }
-  if (!ExperimentalDischarge::Enabled()) {
-    body.Children().Append(
-        Text(L"Enable experimental discharge in Windhawk Settings to reveal Start. Stop and "
-             L"pending recovery remain available without that setting."));
-    return;
-  }
-  C::StackPanel batteries;
-  batteries.Orientation(C::Orientation::Horizontal);
-  batteries.Spacing(8);
-  for (int i = 0; i < 2; ++i)
-    if (a.batteries[i].present) {
-      P::ToggleButton button;
-      button.Content(winrt::box_value(L"Battery " + std::to_wstring(i + 1)));
-      button.IsChecked(advancedBattery == i);
-      TrackEvent(
-          button.Click(winrt::auto_revoke, SafeUi([body, target, i](auto const&, auto const&) {
-                         advancedBattery = i;
-                         body.Children().Clear();
-                         RenderExperimental(body, target);
-                       })));
-      batteries.Children().Append(button);
-    }
-  if (batteries.Children().Size() > 1)
-    body.Children().Append(batteries);
-  auto b = a.batteries[advancedBattery];
-  auto capability = d.packs[advancedBattery];
-  if (!capability.valid || !capability.supported || !b.present || !b.percent.available) {
-    body.Children().Append(
-        Text(L"Verified discharge support and a battery reading are required. Refresh to check."));
-    return;
-  }
-  body.Children().Append(Text(L"Battery " + std::to_wstring(advancedBattery + 1) + L": " +
-                              std::to_wstring(b.percent.value) + L"%"));
-  if (capability.enabled) {
-    body.Children().Append(
-        Text(L"Forced discharge is already enabled. Use Stop to turn it off before starting a new "
-             L"request."));
-    return;
-  }
-  if (!IntegratedBackend()) {
-    body.Children().Append(Text(L"Select the integrated backend before starting discharge."));
-    return;
-  }
-  C::Slider limit;
-  limit.Minimum(50);
-  limit.Maximum(95);
-  limit.StepFrequency(1);
-  limit.SmallChange(1);
-  auto current = ReadSnapshot().state;
-  limit.Value(
-      (std::max)(50L, (std::min)(95L, (std::min)(long(current.stop), b.percent.value - 1))));
-  auto label = Text(L"Stop at " + std::to_wstring(int(limit.Value())) + L"%");
-  TrackEvent(
-      limit.ValueChanged(winrt::auto_revoke, SafeUi([limit, label](auto const&, auto const&) {
-                           label.Text(L"Stop at " + std::to_wstring(int(limit.Value())) + L"%");
-                         })));
-  Automation::AutomationProperties::SetName(limit, L"Experimental discharge target percentage");
-  body.Children().Append(label);
-  body.Children().Append(limit);
-  body.Children().Append(
-      Text(L"Discharge while plugged in. Review the risks before starting.", 12));
-  C::Button review;
-  review.Content(winrt::box_value(L"Review and start..."));
-  TrackEvent(review.Click(
-      winrt::auto_revoke,
-      SafeUi([body, target, limit, slot = advancedBattery + 1](auto const&, auto const&) {
-        int targetPercent = int(limit.Value());
-        body.Children().Clear();
-        body.Spacing(8);
-        body.Children().Append(Text(L"Discharge Battery " + std::to_wstring(slot) + L" to " +
-                                        std::to_wstring(targetPercent) + L"%?",
-                                    18));
-        body.Children().Append(Text(
-            L"WARNING: The target is monitored by this mod, not enforced by firmware. If Explorer "
-            L"crashes, Windows sleeps or crashes, or a stop fails, discharge may continue below "
-            L"the "
-            L"target and drain the battery. Work may be interrupted and unsaved data lost.",
-            12));
-        body.Children().Append(
-            Text(L"Rebooting or an empty battery is not a verified reset. Unplug/replug is not "
-                 L"guaranteed. You may need this mod or the stop-only recovery tool to disable "
-                 L"discharge. Save your work and stay with the laptop. The 30-minute limit and "
-                 L"normal-unload cleanup are best effort, not crash protection.",
-                 12));
-        C::CheckBox acknowledge;
-        acknowledge.Content(
-            winrt::box_value(L"I understand the risk and have recovery available."));
-        C::Button start;
-        start.Content(winrt::box_value(L"Start discharge"));
-        start.IsEnabled(false);
-        TrackEvent(acknowledge.Checked(
-            winrt::auto_revoke,
-            SafeUi([start](auto const&, auto const&) { start.IsEnabled(true); })));
-        TrackEvent(acknowledge.Unchecked(
-            winrt::auto_revoke,
-            SafeUi([start](auto const&, auto const&) { start.IsEnabled(false); })));
-        TrackEvent(start.Click(winrt::auto_revoke, SafeUi([acknowledge, start, targetPercent, slot](
-                                                              auto const&, auto const&) {
-                                 if (acknowledge.IsChecked().Value()) {
-                                   start.IsEnabled(false);
-                                   start.Content(winrt::box_value(L"Starting..."));
-                                   acknowledge.IsEnabled(false);
-                                   Send(26, MAKELONG(slot, targetPercent));
-                                 }
-                               })));
-        body.Children().Append(acknowledge);
-        C::StackPanel confirmActions;
-        confirmActions.Orientation(C::Orientation::Horizontal);
-        confirmActions.Spacing(8);
-        confirmActions.Children().Append(start);
-        C::Button cancel;
-        cancel.Content(winrt::box_value(L"Back"));
-        TrackEvent(
-            cancel.Click(winrt::auto_revoke, SafeUi([body, target](auto const&, auto const&) {
-                           body.Children().Clear();
-                           RenderExperimental(body, target, true);
-                         })));
-        confirmActions.Children().Append(cancel);
-        body.Children().Append(confirmActions);
-      })));
-  body.Children().Append(review);
-}
 void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
   body.Children().Clear();
-  body.Spacing(10);
-  if (advancedTab == 3) {
-    RenderExperimental(body, target);
-    return;
-  }
+  body.Spacing(8);
   auto snapshot = BatteryControls::AdvancedControls::Read();
   auto a = snapshot.data;
   if (!snapshot.message.empty())
@@ -3489,10 +3002,6 @@ void ShowAdvanced(FrameworkElement target) {
   tabs.Spacing(6);
   int index = 0;
   std::vector<PCWSTR> labels = {L"Battery health", L"Power", L"Calibration"};
-  bool experimental = BatteryControls::ExperimentalDischarge::Enabled() ||
-                      BatteryControls::ExperimentalDischarge::pending;
-  if (experimental)
-    labels.push_back(L"Experimental");
   if (advancedTab >= int(labels.size()))
     advancedTab = 0;
   for (auto label : labels) {
@@ -3518,71 +3027,28 @@ void ShowAdvanced(FrameworkElement target) {
                              body.Children().Clear();
                              body.Children().Append(Text(L"Checking supported features..."));
                              Send(20);
-                             if (BatteryControls::ExperimentalDischarge::Enabled() ||
-                                 BatteryControls::ExperimentalDischarge::pending)
-                               Send(27);
                            })));
   body.Children().Append(Text(L"Checking supported features..."));
-  C::Button stop;
-  auto updateStop = [stop]() {
-    using namespace BatteryControls::ExperimentalDischarge;
-    auto snapshot = Read();
-    snapshot.pending = snapshot.pending || pending.load();
-    auto state = StopButtonState(snapshot, advancedBattery + 1);
-    PCWSTR label = state == ButtonState::Checking      ? L"Checking discharge..."
-                   : state == ButtonState::Off         ? L"Discharge is off"
-                   : state == ButtonState::Active      ? L"Stop discharge"
-                   : state == ButtonState::Unsupported ? L"Discharge unsupported"
-                                                       : L"Retry stop";
-    stop.Content(winrt::box_value(label));
-    stop.IsEnabled(state == ButtonState::Active || state == ButtonState::Uncertain);
-  };
-  updateStop();
   auto revision = std::make_shared<ULONGLONG>(BatteryControls::AdvancedControls::Read().revision);
-  auto dischargeRevision =
-      std::make_shared<ULONGLONG>(BatteryControls::ExperimentalDischarge::Read().revision);
   statusTimer = DispatcherTimer();
   statusTimer.Interval(std::chrono::milliseconds(200));
-  TrackEvent(statusTimer.Tick(
-      winrt::auto_revoke,
-      SafeUi([body, target, revision, dischargeRevision, updateStop](auto const&, auto const&) {
-        updateStop();
-        auto next = BatteryControls::AdvancedControls::Read().revision;
-        auto dischargeNext = BatteryControls::ExperimentalDischarge::Read().revision;
-        bool dischargeChanged = dischargeNext != *dischargeRevision;
-        if (next != *revision || dischargeChanged) {
-          *dischargeRevision = dischargeNext;
-          *revision = next;
-          RenderAdvanced(body, target);
-          if (dischargeChanged && advancedTab == 3 && flyout) {
-            if (auto host = flyout.Content().try_as<C::StackPanel>())
-              if (host.Children().Size())
-                if (auto scroll = host.Children().GetAt(0).try_as<C::ScrollViewer>())
-                  scroll.ChangeView(nullptr, 0.0, nullptr, true);
-          }
-        }
-      })));
+  TrackEvent(statusTimer.Tick(winrt::auto_revoke,
+                              SafeUi([body, target, revision](auto const&, auto const&) {
+                                auto next = BatteryControls::AdvancedControls::Read().revision;
+                                if (next != *revision) {
+                                  *revision = next;
+                                  RenderAdvanced(body, target);
+                                }
+                              })));
   statusTimer.Start();
-  C::StackPanel dischargeActions;
-  dischargeActions.Orientation(C::Orientation::Horizontal);
-  dischargeActions.Spacing(6);
-  dischargeActions.Children().Append(refresh);
-  if (experimental) {
-    updateStop();
-    TrackEvent(stop.Click(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
-                            auto d = BatteryControls::ExperimentalDischarge::Read();
-                            Send(25, d.slot ? d.slot : advancedBattery + 1);
-                          })));
-    dischargeActions.Children().Append(stop);
-  }
-  PresentContent(target, content, dischargeActions);
+  C::StackPanel actions;
+  actions.Children().Append(refresh);
+  PresentContent(target, content, actions);
   TrackEvent(flyout.Closed(winrt::auto_revoke, SafeUi([](auto const&, auto const&) {
                              if (statusTimer)
                                statusTimer.Stop();
                            })));
   Send(20);
-  if (experimental)
-    Send(27);
 }
 struct DualDraft {
   bool valid = false, linked = false;
@@ -3927,7 +3393,12 @@ void ShowPanel(FrameworkElement target) {
   C::Grid::SetColumn(stopRange, 1);
   ranges.Children().Append(startRange);
   ranges.Children().Append(stopRange);
-  content.Children().Append(ranges);
+  C::Border rangeGroup;
+  rangeGroup.BorderThickness(Thickness{0, 1, 0, 1});
+  rangeGroup.Padding(Thickness{0, 8, 0, 8});
+  rangeGroup.BorderBrush(Media::SolidColorBrush(winrt::Windows::UI::Colors::Gray()));
+  rangeGroup.Child(ranges);
+  content.Children().Append(rangeGroup);
   TrackEvent(p->start.ValueChanged(
       winrt::auto_revoke, SafeUi([weak](auto const&, auto const&) {
         if (auto p = weak.lock()) {
@@ -3995,10 +3466,7 @@ void ShowPanel(FrameworkElement target) {
   presetTools.Children().Append(manage);
   presetTools.Children().Append(saveCurrent);
   content.Children().Append(presetTools);
-  auto hint = Text(
-      L"Above the limit? Charging pauses and the level may fall slowly while plugged in. Unplug to "
-      L"reach your selected range sooner.",
-      12);
+  auto hint = Text(L"Above your limit? Charging pauses. Unplug to reach your range sooner.", 12);
   hint.Opacity(.75);
   if (BatteryControls::Active())
     hint.Text(L"Applying these limits ends the temporary full-charge override.");
@@ -4332,16 +3800,6 @@ void ShowMenu(FrameworkElement target) {
                           SafeUi([target](auto const&, auto const&) { QueuePanel(target, 1); })));
   menu.Items().Append(header);
   menu.Items().Append(C::MenuFlyoutSeparator());
-  if (BatteryControls::ExperimentalDischarge::pending)
-    add(L"Stop experimental discharge", L'\uE711', true, [target](auto const&, auto const&) {
-      auto d = BatteryControls::ExperimentalDischarge::Read();
-      if (d.slot)
-        Send(25, d.slot);
-      else {
-        advancedTab = 3;
-        QueuePanel(target, 4);
-      }
-    });
   C::MenuFlyoutItem full;
   full.Text(active ? L"Cancel charge to full" : fullLabel);
   full.IsEnabled(active || (valid && enabled));
