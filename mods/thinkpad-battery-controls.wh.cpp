@@ -20,8 +20,6 @@ or temporarily charge to full. Uses Windows 11 menus without an extra tray icon.
 The manufacturer should have made these everyday controls part of the Windows
 battery menu. It is a shame they did not. Feedback and compatibility reports are welcome.
 
-![Battery protection panel](https://raw.githubusercontent.com/billbauman/thinkpad-battery-controls/Main/assets/battery-protection.png)
-
 ## Setup
 Choose a backend in Windhawk Settings:
 - **Integrated Lenovo service** (default): no utility download. Requires compatible
