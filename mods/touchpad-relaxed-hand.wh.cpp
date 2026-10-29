@@ -569,6 +569,16 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
     }
 }
 
+double Median(std::vector<double>& v) {
+    size_t mid = v.size() / 2;
+    std::nth_element(v.begin(), v.begin() + mid, v.end());
+    double m = v[mid];
+    if (v.size() % 2 == 0) {
+        m = (m + *std::max_element(v.begin(), v.begin() + mid)) / 2;
+    }
+    return m;
+}
+
 void ProcessFrame() {
     DWORD now = GetTickCount();
     double t = Now();
@@ -660,11 +670,12 @@ void ProcessFrame() {
     }
 
     // A single finger moving alone is followed on its own, not divided by the resting ones; otherwise the
-    // average is, which cancels the jitter of each resting finger.
+    // median of the fingers is: it cancels their jitter like an average, and a thumb which pivots or lags in a
+    // fast flick doesn't pull the pointer toward it.
     double dx = 0;
     double dy = 0;
-    double avgX = 0;
-    double avgY = 0;
+    std::vector<double> allX;
+    std::vector<double> allY;
     double best = -1;
     double second = 0;
     int counted = 0;
@@ -677,8 +688,8 @@ void ProcessFrame() {
             continue;
         }
         counted++;
-        avgX += fx;
-        avgY += fy;
+        allX.push_back(fx);
+        allY.push_back(fy);
         double d = std::hypot(fx, fy);
         if (d > best) {
             second = std::max(second, best);
@@ -703,8 +714,8 @@ void ProcessFrame() {
         g_state.single = false;
     }
     if (!g_state.single) {
-        dx = avgX / counted;
-        dy = avgY / counted;
+        dx = Median(allX);
+        dy = Median(allY);
     }
 
     double dt = t - g_state.lastFrameTime;
