@@ -118,6 +118,7 @@ The hooks exist for specific reasons:
 #include <atomic>
 #include <cstddef>
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -318,8 +319,8 @@ enum class WindowKind : DWORD_PTR {
 };
 
 bool SubclassWith(HWND hWnd, WindowKind kind);
-void RestoreAllWindows();
 void RemoveAllSubclasses();
+void WalkEveryThread();
 void WalkThreadWindows(DWORD threadId);
 void ResetWindow(HWND hWnd);
 void ForceRepaint(HWND hWnd);
@@ -937,20 +938,6 @@ void ClearPendingThread(DWORD threadId) {
     g_pendingThreads.erase(threadId);
 }
 
-// Asked of a window when the mod is going away. The window's own thread handles
-// it: it puts the window back, repaints it, and drops the subclass. This is the
-// polite first pass, and it is optional: what it does not finish is finished below
-// by a call that waits for the window's thread.
-UINT RestoreMessage() {
-    static const UINT message =
-        RegisterWindowMessageW(L"MMC Dark Mode: put this window back");
-    return message;
-}
-
-std::atomic<int> g_restoring{0};
-
-
-
 // The pending set keeps two threads from subclassing the same window at once.
 bool SubclassWith(HWND hWnd, WindowKind kind) {
     if (!hWnd || !IsWindow(hWnd)) {
@@ -994,58 +981,6 @@ bool SubclassWith(HWND hWnd, WindowKind kind) {
     return added != FALSE;
 }
 
-// Asks every subclassed window to put itself back, on its own thread, and gives
-// the answers a short while to arrive. Anything that has not answered by then is
-// handed back the blunt way, which is still better than leaving a pointer into
-// this DLL.
-void RestoreAllWindows() {
-    std::vector<HWND> windows;
-    {
-        std::lock_guard<std::mutex> lock(g_stateLock);
-        windows.assign(g_subclassed.begin(), g_subclassed.end());
-    }
-    g_restoring = static_cast<int>(windows.size());
-
-    int posted = 0;
-    for (HWND hWnd : windows) {
-        if (!IsWindow(hWnd)) {
-            --g_restoring;
-            continue;
-        }
-        if (OnOwningThread(hWnd)) {
-            // This is the window's thread already: no message needed.
-            ResetWindow(hWnd);
-            ForceRepaint(hWnd);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
-                                                             ModSubclassProc);
-            ForgetSubclass(hWnd);
-            --g_restoring;
-            continue;
-        }
-        if (PostMessageW(hWnd, RestoreMessage(), 0, 0)) {
-            posted++;
-        } else {
-            --g_restoring;
-        }
-    }
-
-    // A bounded wait for the answers. This is the same two seconds the mod has
-    // always spent here, and it is not what makes the teardown correct: anything
-    // that has not answered by the end is handed back by RemoveAllSubclasses
-    // below, which waits for the window's thread. The bound is what keeps a
-    // thread that has stopped pumping from holding unload open forever.
-    if (posted > 0) {
-        for (int waited = 0; g_restoring.load() > 0 && waited < 2000; waited += 50) {
-            Sleep(50);
-        }
-    }
-    if (g_restoring.load() > 0) {
-        Wh_Log(L"%d windows are still busy; handing them back directly",
-               g_restoring.load());
-    }
-    // Whatever is left, including entries added while the above ran.
-    RemoveAllSubclasses();
-}
 // Hands every subclassed window back to comctl32. Called once, from unload, with
 // the set copied out first and the lock released: the removal sends to each
 // window's thread, and nothing may hold the lock across that.
@@ -1068,10 +1003,10 @@ void RemoveAllSubclasses() {
         // already created the window and was running a message loop. The startup
         // hang came from sending to a thread that had not started pumping yet.
         //
-        // It is also not an extra delay on top of anything: unload already waits
-        // for these threads through SetWindowTheme in the walk below, which sends
-        // WM_THEMECHANGED and waits for the answer. The difference is that this
-        // call leaves nothing behind when it returns.
+        // By the time this runs, unload has already had each thread reset its own
+        // windows, so this is the last step and it does not stand in for any other
+        // work. It is the call that guarantees nothing is left pointing into this
+        // DLL.
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ModSubclassProc);
     }
 }
@@ -2183,6 +2118,13 @@ BOOL CALLBACK WalkChild(HWND hWnd, LPARAM lParam) {
     if (!hWnd || !IsWindow(hWnd)) {
         return TRUE;
     }
+    // A child usually belongs to the thread that owns its parent, but not always.
+    // ResetWindow has no thread check of its own and its first call sends, so a
+    // foreign child is left for its own thread to reach.
+    if (!OnOwningThread(hWnd)) {
+        NoteWalkPendingFor(hWnd);
+        return TRUE;
+    }
     if (g_active) {
         ApplyToWindow(hWnd);
     } else {
@@ -2246,17 +2188,176 @@ void WalkThreadWindows(DWORD threadId) {
            g_active ? L"themed" : L"restored", result.topLevel, result.children);
 }
 
-void WalkProcessWindows() {
-    if (g_inWalk) {
-        return;
+// ---------------------------------------------------------------------------
+// Running a walk on somebody else's thread
+//
+// A walk only ever touches windows it owns, so a thread's windows are walked by
+// that thread. The hook below is how the job gets there: a message is sent, the
+// target thread's hook procedure runs the job in that thread's context, and the
+// send returns when it is done. The same shape as RunFromWindowThread in
+// taskbar-labels.wh.cpp.
+//
+// Why not just post a message to the window, the way the previous version did:
+// a posted message is only handled by this mod's own subclass procedure, and that
+// procedure does nothing once the mod is switched off. At unload, the walk has to
+// reset windows that were never subclassed at all. A send that runs a function in
+// the target thread does not need the window to be carrying anything of ours.
+//
+// Two more things are deliberate.
+//
+// The job is identified by a slot number, never by a pointer. A send can time out
+// and its message be processed later; a slot that is idle by then does nothing.
+//
+// The hook procedure is a named CALLBACK function, not a lambda. HOOKPROC is
+// __stdcall on 32 bit, which a plain lambda is not, and this mod is built for
+// both architectures.
+// ---------------------------------------------------------------------------
+
+using RunOnWindowThreadProc = void (*)(PVOID);
+
+// The calls themselves live in static storage, and the message carries the slot
+// number rather than a pointer. A send can time out and its message be processed
+// later, so anything the message points at could already be gone by then. A slot
+// that is idle, or already answered, is ignored, which turns a late message into
+// one unhandled message and nothing more.
+constexpr int kMaxRemoteCalls = 8;
+
+struct RemoteCall {
+    RunOnWindowThreadProc proc = nullptr;
+    PVOID param = nullptr;
+    // 0 idle, 1 waiting for the target thread, 2 answered.
+    std::atomic<int> state{0};
+};
+
+RemoteCall g_remoteCalls[kMaxRemoteCalls] = {};
+std::atomic<unsigned> g_remoteCallSlot{0};
+
+UINT RemoteCallMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"MMC Dark Mode: run this on the window's thread");
+    return message;
+}
+
+LRESULT CALLBACK RemoteCallHook(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && wParam < kMaxRemoteCalls) {
+        const CWPSTRUCT* info = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (info && info->message == RemoteCallMessage()) {
+            const unsigned slot = static_cast<unsigned>(info->wParam);
+            if (slot < kMaxRemoteCalls) {
+                RemoteCall& call = g_remoteCalls[slot];
+                // Only the first delivery of a call runs it. A message that
+                // arrives after the sender gave up finds 0 or 2 and does nothing.
+                int expected = 1;
+                if (call.state.compare_exchange_strong(expected, 2)) {
+                    call.proc(call.param);
+                }
+            }
+        }
     }
-    g_inWalk = true;
-    WalkResult result = {};
-    EnumWindows(WalkTop, reinterpret_cast<LPARAM>(&result));
-    g_inWalk = false;
-    Wh_Log(L"%s %d top level windows, %d child windows",
-           g_active ? L"themed" : L"restored", result.topLevel,
-           result.children);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+// How long one thread is given to answer before the engine thread gives up on it.
+// The send is bounded so a thread that has stopped pumping cannot hold up
+// anything that matters; whatever it misses is picked up by the deferral in the
+// window creation hook the next time that thread makes a window.
+constexpr UINT kRemoteCallTimeoutMs = 2000;
+
+bool RunOnWindowThread(HWND hWnd, RunOnWindowThreadProc proc, PVOID param) {
+    if (!hWnd || !IsWindow(hWnd)) {
+        return false;
+    }
+    const DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!threadId) {
+        return false;
+    }
+    if (threadId == GetCurrentThreadId()) {
+        proc(param);
+        return true;
+    }
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RemoteCallHook, nullptr,
+                                   threadId);
+    if (!hook) {
+        Wh_Log(L"could not hook thread %u to walk its windows", threadId);
+        return false;
+    }
+
+    const unsigned slot =
+        g_remoteCallSlot.fetch_add(1, std::memory_order_relaxed) % kMaxRemoteCalls;
+    RemoteCall& call = g_remoteCalls[slot];
+    call.proc = proc;
+    call.param = param;
+    call.state.store(1);
+
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(hWnd, RemoteCallMessage(), slot, 0,
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK, kRemoteCallTimeoutMs,
+                        &ignored);
+    const bool ran = call.state.load() == 2;
+    // Back to idle whether it ran or not: the slot is free again, and a message
+    // that is still queued on that thread will find it idle and do nothing.
+    call.state.store(0);
+    call.proc = nullptr;
+    call.param = nullptr;
+
+    UnhookWindowsHookEx(hook);
+    if (!ran) {
+        Wh_Log(L"thread %u did not answer within %u ms", threadId,
+               kRemoteCallTimeoutMs);
+    }
+    return ran;
+}
+
+void WalkThisThread(PVOID) {
+    // Runs in the thread that owns the windows, so the walk is allowed to touch
+    // them: with g_active set they are themed, with it clear they are reset.
+    WalkThreadWindows(GetCurrentThreadId());
+}
+
+BOOL CALLBACK CollectThread(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    const DWORD threadId = GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId() && threadId) {
+        // emplace, not try_emplace: this file also builds as C++14.
+        reinterpret_cast<std::unordered_map<DWORD, HWND>*>(lParam)->emplace(
+            threadId, hWnd);
+    }
+    return TRUE;
+}
+
+// Walks every thread that owns a window, one thread at a time, on that thread.
+//
+// This is what load, unload and a settings change all need, and none of them can
+// do it from the thread they run on: Windhawk's engine thread owns no console
+// window. The threads are collected from the top level windows, and then from
+// every window this mod has subclassed, so a thread whose only window is a child
+// of another thread is not missed.
+void WalkEveryThread() {
+    std::unordered_map<DWORD, HWND> threads;
+    EnumWindows(CollectThread, reinterpret_cast<LPARAM>(&threads));
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        for (HWND hWnd : g_subclassed) {
+            if (!IsWindow(hWnd)) {
+                continue;
+            }
+            DWORD pid = 0;
+            const DWORD threadId = GetWindowThreadProcessId(hWnd, &pid);
+            if (pid == GetCurrentProcessId() && threadId) {
+                threads.emplace(threadId, hWnd);
+            }
+        }
+    }
+    Wh_Log(L"%s %zu threads", g_active ? L"theming" : L"restoring",
+           threads.size());
+    int done = 0;
+    for (const auto& entry : threads) {
+        if (RunOnWindowThread(entry.second, WalkThisThread, nullptr)) {
+            done++;
+        }
+    }
+    Wh_Log(L"%s done on %d of %zu threads", g_active ? L"theme" : L"restore",
+           done, threads.size());
 }
 
 // ---------------------------------------------------------------------------
@@ -2475,22 +2576,6 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
         return result;
     }
 
-    // Unload asks every subclassed window to put itself back. Arriving here means
-    // this is the thread that owns the window, which is the only thread allowed to
-    // touch its styles, its theme and its subclass entry.
-    if (message == RestoreMessage()) {
-        ResetWindow(hWnd);
-        ForceRepaint(hWnd);
-        // Same thread, so this is a direct call into comctl32. Removing from
-        // inside the subclass procedure is the documented pattern, and after it
-        // the chain belongs to whoever was underneath: returning without calling
-        // DefSubclassProc is what keeps the message from being handled twice.
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ModSubclassProc);
-        ForgetSubclass(hWnd);
-        --g_restoring;
-        return 0;
-    }
-
     // Switched off: nothing of this mod runs, and the window behaves as it did
     // before the mod ever saw it.
     if (!g_active) {
@@ -2603,10 +2688,12 @@ void Activate() {
 
     g_active = true;
 
-    // Windows that already exist were created before the hook was in place. The
-    // ones owned by another thread are handed to that thread here, by the message
-    // the walk posts; it re-applies the settings when it pumps.
-    WalkProcessWindows();
+    // Windows that already exist were created before the hook was in place. Each
+    // thread that owns one walks its own windows, from inside that thread, which
+    // is the only place they may be touched. When the mod loads at process start
+    // there are no windows yet and this finds nothing, which is also why it
+    // cannot hold startup up.
+    WalkEveryThread();
     Wh_Log(L"init: first walk done");
 }
 
@@ -2674,16 +2761,18 @@ void Wh_ModUninit() {
     }
     Wh_Log(L"uninit: app mode restored");
 
-    // Then the windows. Subclassed ones put themselves back on their own thread,
-    // which is the only place their styles, theme and subclass entry may be
-    // touched. Everything else is put back by the walk afterwards.
+    // Then the windows. Every thread resets its own windows, from inside that
+    // thread: the theme, the colours and the border styles may only be touched
+    // there. This covers the windows that were never subclassed as well, which a
+    // message to the window could not have reached now that g_active is clear.
     if (wasActive) {
-        RestoreAllWindows();
-        WalkProcessWindows();
+        WalkEveryThread();
         BroadcastSysColorChange();
-    } else {
-        RemoveAllSubclasses();
     }
+    // Last, and unconditionally: whatever is still in the subclass set is handed
+    // back here, and this is what guarantees nothing is left pointing into a DLL
+    // that is about to be unloaded.
+    RemoveAllSubclasses();
     Wh_Log(L"uninit: windows restored");
 
     // No GDI object is deleted here, and that is deliberate.
@@ -2714,9 +2803,8 @@ void Wh_ModSettingsChanged() {
         // themed, so there is nothing to replay.
         return;
     }
-    // This runs on Windhawk's thread, which owns none of the console's windows,
-    // so the walk cannot touch them from here. What it can do is post the setup
-    // message to every window it finds, on that window's own thread, and each of
-    // those threads then walks its own windows and re-applies the new settings.
-    WalkProcessWindows();
+    // This runs on Windhawk's thread, which owns none of the console's windows, so
+    // each thread is asked to walk its own windows and apply the new settings
+    // there. The walk is the same one load and unload use.
+    WalkEveryThread();
 }
