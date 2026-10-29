@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         0.7.1
+// @version         1.0.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -57,11 +57,14 @@ The rest (the **Acrylic** and **Solid** effects and the remaining colours — Mi
 
 ### Instant, forgiving search
 
-* Filters classic programs and Microsoft Store apps as you type.
+* Filters classic programs, Microsoft Store apps and shortcuts on your Desktop as you type.
 * Case- and accent-insensitive.
 * Multi-word queries (`visual code`) and acronyms (typing the initials of each word, like `vsc`).
 * Matching letters are highlighted in the result.
 * Results show a friendly name plus the file or package they open.
+* **Frecency**: a recently and frequently used app rises among similar matches (usage decays with a 30-day half-life, so old use counts fade).
+* **Pinned apps** stay in a `Pinned` section at the top of the empty bar and get a small boost when they match.
+* Each app appears once: shortcuts from the Start menu and the Desktop that open the same program are merged, and two different programs that share a name are labelled so they can be told apart.
 
 ### Keyboard-first
 
@@ -75,23 +78,26 @@ Everything is reachable without touching the mouse.
 | **F1** | Show the shortcut and calculator cheat sheet |
 | **Enter** | Open the selected app |
 | **Esc** | Close the details panel, then the search bar |
-| **Ctrl + Enter** | Open the file location |
+| **Ctrl + Enter** | Open the file location (on a bookmark, copy its address; on a recent file, open its folder) |
 | **Ctrl + Shift + Enter** | Run as administrator |
 | **Ctrl + Shift + C** | Copy the path |
 | **Ctrl + P** | Properties |
-| **Ctrl + Shift + R** | Remove from recents |
+| **Ctrl + Shift + R** | Remove from recents (or the selected clipboard entry) |
 | **Ctrl + I** | Toggle the details panel (configurable) |
+| **Ctrl + D** | Pin / unpin the selected app or clipboard entry |
 | **Ctrl + R** | Reindex the app list |
 | Mouse wheel | Scroll the list without changing the selection |
 | Mouse hover | Highlight the row under the cursor |
 
-Press **F1** at any time (or click **Help** in the footer) for a cheat sheet with every shortcut, prefix and file filter. Its second page (**Tab**) documents the calculator syntax.
+Press **F1** at any time (or click **Help** in the footer) for a cheat sheet with every shortcut, prefix and file filter; it scrolls when a page is longer than the card. Its second page (**Tab**) documents the calculator syntax.
 
 **Alt + Space** is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it.
 
 ### Details panel
 
-Press **Ctrl + I** (or **Ctrl + K** / **Ctrl + Space** / **F4**) with an app selected to reveal a right-hand panel with actions and extra details. The actions also work with the panel closed. File actions are only offered for classic programs; Microsoft Store apps only offer *open* and *remove from recents*.
+Press **Ctrl + I** (or **Ctrl + K** / **Ctrl + Space** / **F4**) with an app selected to reveal a right-hand panel with actions and extra details. The actions also work with the panel closed. File actions are only offered for classic programs; Microsoft Store apps offer *open*, *pin* and *remove from recents*.
+
+**Pin to top** (also **Ctrl + D**) keeps the selected app in the `Pinned` section of the empty bar; the same action unpins it. Pins are stored per user and survive restarts and app reindexing.
 
 ### Built-in calculator
 
@@ -107,6 +113,68 @@ With **Web search** on, a **Search the web for …** result appears at the end o
 
 Searching for a common settings page (for example `bluetooth`, `display`, `sound`, `update` or `wifi`) also offers a **Setting** result that opens the matching page in the Settings app. No prefix is needed; these appear after your app matches, and a valid calculation hides them, like the web result.
 
+### Learning from your choices
+
+With **Learn from your choices** on (the default), picking an app after typing a few words puts that app first the next time you type those same words. One pick is enough, and it also works when the app was matching weakly: type `ex`, choose Firefox, and Firefox comes first from then on even though Excel matches the prefix. Only those words are affected; every other search keeps its normal order. The pairs live in the mod storage, capped at 200, and one you stop picking is forgotten after 90 days. Turn the setting off to get the plain ranking back.
+
+### Browser bookmarks
+
+With **Browser bookmarks** on (it is off by default; turn it on in the mod settings), the same search also covers the bookmarks of every installed **Chrome**, **Edge**, **Brave**, **Vivaldi**, **Chromium** and **Opera** profile (Beta, Dev, Canary and Nightly builds included), plus **Firefox**, **Waterfox**, **LibreWolf**, **Zen** and **Floorp** through their automatic bookmark backups. Bookmark rows carry a gold star and show the folder and browser they come from; **Enter** opens the page and **Ctrl + Enter** copies its address. The same bookmark saved in two profiles is listed once, and up to three matches appear below your apps, before the Settings and web rows.
+
+Type `bm:` to search only bookmarks (`bm: docs`, or `bm:` alone to browse them). Everything stays local: the mod reads each profile's bookmark file (or Firefox's compressed backup) and the profile names, never history, cookies, passwords or favicons, and never the network. Chromium changes are picked up the next time the bar opens; Firefox writes its backups on its own schedule, so a brand-new Firefox bookmark can take longer to appear. The whole feature can be turned off again in the settings.
+
+### Clipboard history
+
+With **Clipboard history** on (it is off by default; turn it on in the mod settings), the launcher keeps the last 30 things you copied and adds a `clip:` prefix that searches them. Text and images are both kept: an image is saved as a compressed PNG inside the mod's own folder and shows its own thumbnail in the list, and copying the same image twice does not keep two copies. Nothing leaves the PC.
+
+Type `clip:` on its own to list the history, or `clip: invoice` to filter it (`clip: image` narrows it to pictures). **Enter** pastes the selected entry into the window you came from; **Ctrl + Enter** copies it and keeps the bar open; **Ctrl + D** pins or unpins it; **Ctrl + Shift + R** removes it. Pinned entries stay at the top, show a small pin badge on the clipboard icon, and survive both the 30-entry trim and the retention below. **Clear Clipboard History** in the `>` menu erases everything after a second Enter, image files included.
+
+**Clipboard retention (days)** deletes entries older than that many days on its own, images and their files with them; the default is 3 days and 0 keeps them until the 30-entry limit drops them. Pinned entries are never deleted.
+
+If Windows does not let the launcher restore the previous window (an elevated app, for example), the entry stays on the clipboard for a manual paste.
+
+### Recent files
+
+With **Recent files** on (it is on by default), the empty bar shows a **Recent files** section with the files and folders Windows lists in its Recent folder, and `recent:` searches that list (`recent: invoice`, `recent: .pdf`). **Enter** opens the file or folder, **Ctrl + Enter** opens its folder, and **Ctrl + Shift + C** copies the path. Everything is read locally from the Recent folder; no disk scan, no network.
+
+Windows must be recording recent items. Turn on **Settings → Personalization → Start → Show recently opened items in Start, Jump Lists, and File Explorer** (Windows 11; the equivalent **Show recently used files** option on Windows 10). With that off, the Recent folder stays empty and this feature has nothing to show.
+
+### Global file search
+
+Type `find:` followed by words to search the **names** of files and folders under your Home folder (which includes Documents, Downloads, Desktop, Pictures and the rest) and any extra folders configured in **Extra search folders**. Results appear while the scan runs, with the folder each one lives in; the search stops when the bar closes. **Enter** opens the file or folder, **Ctrl + Enter** opens its folder, and **Ctrl + Shift + C** copies the path. It searches names, not file contents, and does not build an index: a very large tree may show partial results.
+
+With **File search engine** set to **Everything** (voidtools), these queries go to Everything's index instead: every drive it has indexed, answers in milliseconds, and Everything's own syntax (`*.pdf`, `"exact phrase"`, `!excluded`). The query travels over Everything's own IPC, so nothing extra is downloaded, and when Everything is not running the built-in scan takes over by itself, with the footer saying *Everything not running · built-in scan*.
+
+### Window switcher
+
+Type `win:` to list the open windows, topmost first, with their title and process. Filter with `win: chrome` or `win: document`. **Enter** activates the selected window (a minimized one is restored), and the launcher closes. The list is read when you use the prefix; no index is built.
+
+When you launch a classic desktop app that already has a visible window, the launcher focuses that window instead of starting a second instance. Launches with arguments, and packaged (Store) apps, keep their normal behaviour.
+
+### Custom entries
+
+Your own websites, files, folders and commands can live in the list next to your apps. Open the manager by searching for **Custom Entries** and pressing Enter, or via the `>` menu. Give each entry a name, a type (**Website**, **File or folder** or **Command**) and a target.
+
+A target or its arguments can ask for values with placeholders:
+
+| Placeholder | Meaning |
+| --- | --- |
+| `{folder}` | A required value |
+| `{folder?}` | An optional value |
+| `{branch=main}` | Starts as `main` (write `{branch?=main}` to make it optional too) |
+| `{query}` | The extra words you type after the entry's name (always optional) |
+
+Select an entry that has placeholders and **Enter** opens a small form to fill or review the values before it launches: **Tab** and the arrows move between fields, **Enter** runs, **Esc** goes back, and the form shows what will be opened (or run) as you type. **Shift + Enter** skips the form and launches with the current values (if a required value is still empty, the form opens anyway, so nothing launches with something missing). Optional fields carry an *Optional* tag, required ones say *Required* while empty, and a mistake (a path that does not exist, arguments typed into the target, an unknown program) is reported in place of the launch instead of failing silently.
+
+Typing **YouTube cats** with an entry named *YouTube* and the target `https://www.youtube.com/results?search_query={query}` still searches for "cats" without opening the form. A command such as `wt.exe` with `-d "{query}"` opens Windows Terminal in the folder typed (the quotes keep a path with spaces as one argument). Values are inserted as typed and only `{query}` is URL-encoded, so search words with spaces, `&` or `#` cannot break a website address; `{{` and `}}` stand for literal braces, names are case-insensitive and ignore spaces, `_` and `-`, and a value used twice is asked once. Entries can have extra search keywords, need no prefix and appear after the matching apps; they are only offered while you are typing, and an entry without a name or a target is ignored.
+
+Each entry can also carry two optional shortcuts in the manager:
+
+* **Trigger**: a typed alias. One lowercase word (letters, digits, `-` or `_`, up to 16 characters), unique among your entries. Typing `yt cats` runs the entry at once, selected at the top of the list, with `cats` passed as its `{query}` (or pre-filling its first required field when it has no `{query}`); the app matches stay below.
+* **Shortcut**: a key combination used while the launcher is open, captured by pressing it in the field (it must include Ctrl, Alt or Win; Shift can be added). Windows and other programs keep their own combinations, and the entry never fires while the bar is closed. Entries that ask for values open their form; the rest launch directly.
+
+A trigger or combination used by another entry or by the launcher's own shortcut is rejected when you save. Avoid starting an entry's name with `?`, `>` or one of the `g:`, `b:`, `bm:`, `d:`, `y:`, `w:` prefixes, because those switch the launcher into another mode.
+
 ### Files
 
 A folder button at the right of the search box switches between apps and files (the **Tab** key does the same, except while a calculation is on screen). The **File browser** setting can turn the whole mode off, hiding the button and leaving Tab for the app list. In file mode the bar shows a **Files** chip, a row of location chips (Home, Downloads, Documents, Pictures, Music, Videos) and a **path bar** with the folder you are in. When you have two or more drives, a **second row of drive chips** (`C:`, `D:`, `X:`, …) appears below the location row. When the path is long, the start is shortened (`…\MDG\logs`) so the last folders always stay visible.
@@ -116,7 +184,8 @@ The location chips live inside your user profile (and follow each folder to its 
 Going up from a drive root (**←** or **Backspace** on an empty box, or **Alt + ↑**) opens a **This PC** view that lists every drive, so you can move between drives with the arrows without Ctrl + Tab; **Enter** or **→** opens the highlighted one.
 
 * **Browse inside the launcher**: **Enter** on a folder goes into it; **Enter** on a file opens it. Very large folders stop at 5,000 folders and 5,000 files, and the path bar shows how many of the total are listed; typing searches past that cap.
-* **Deep search**: whatever you type is searched in the current folder *and all its subfolders* (results show the folder they live in). Closer matches come first and appear while the search is still running. Dot-folders such as `.config` are included; other hidden/system items and offline/cloud folders are skipped. The scan stops when the bar closes.
+* **Sort the list**: **Ctrl + S** (or **Sort…** in the actions menu) opens the sort list with the order in use marked: Name (A-Z), Name (Z-A), Type, Modified (newest and oldest first) and Size (largest and smallest first). Folders always stay on top, then the files follow the chosen order, and the order also holds while you filter; deep-search results keep their relevance order. With **Remember file sort** on, the order is kept across closes and restarts; with it off (the default) it holds while the bar is open and Files starts at Name A-Z again next time.
+* **Deep search**: whatever you type is searched in the current folder *and all its subfolders* (results show the folder they live in). Closer matches come first and appear while the search is still running. Dot-folders such as `.config` are included; other hidden/system items and offline/cloud folders are skipped. The scan stops when the bar closes. With **File search engine** set to **Everything**, this search is answered by the Everything index instead: instant, and it keeps the folder restriction, the active filters and the same "closest match first" order.
 * **History**: go back and forward through the folders you visited; going back highlights the folder you came from.
 * **Edit the path**: click the path bar (or **Ctrl + L** / **Alt + D**) and type or paste a path. It understands `~`, `%USERPROFILE%`, quotes (Copy as path), `/` slashes, `..` and paths relative to the current folder. **Tab** completes folder names (Shift + Tab goes back). **Enter** goes there (a file path opens its folder with the file highlighted), **Esc** cancels.
 * **Actions menu**: **Ctrl + I** (your configured details key) opens a menu for the highlighted item: open, show in its folder, reveal in your file manager, run as administrator, terminal here, rename, copy path / name / file, new folder, new file, properties and move to the Recycle Bin (asks for a second Enter). Copying keeps the bar open and the footer confirms it with *Copied*.
@@ -145,6 +214,8 @@ For example `report *.pdf` or `dir: projects`. The active filters are shown in t
 | **Ctrl + 1…9** / **Ctrl + ←/→** (empty box) | Jump to a location or drive chip |
 | **Ctrl + Tab** / **Ctrl + Shift + Tab** | Switch to the next / previous drive (`C:`, `D:`, `X:`, …) |
 | **Ctrl + L** / **Alt + D** | Edit the path |
+| **Ctrl + Q** | Preview the file |
+| **Ctrl + S** | Sort the list (name, type, modified date, size) |
 | **Ctrl + I** | Actions menu |
 | **Ctrl + Enter** | Show in your default file manager |
 | **Ctrl + Shift + Enter** | Run as administrator (programs) |
@@ -159,7 +230,7 @@ Images show a thumbnail preview and other files a type icon; previews decode in 
 
 ### Prefixes
 
-Start the query with a short prefix to pick a mode; a small tag then shows the mode at the left of the search box. `?` searches the web (the bar stays compact and Enter runs the search), `g:`, `b:`, `d:`, `y:` and `w:` search on Google, Bing, DuckDuckGo, YouTube and Wikipedia, and `>` lists built-in commands such as locking the PC, opening Task Manager or the Settings app. Destructive commands (hibernate, shut down, restart, sign out, empty the Recycle Bin) need a second Enter to run.
+Start the query with a short prefix to pick a mode; a small tag then shows the mode at the left of the search box. `?` searches the web (the bar stays compact and Enter runs the search), `g:`, `b:`, `d:`, `y:` and `w:` search on Google, Bing, DuckDuckGo, YouTube and Wikipedia, `bm:` searches only browser bookmarks, `clip:` searches the clipboard history, `recent:` searches Windows' recent files, `find:` searches file and folder names in Home and the extra folders, `win:` lists open windows, and `>` lists built-in commands such as locking the PC, opening Task Manager or the Settings app. A prefix only works while its feature is enabled; otherwise the text is searched as a normal query. Destructive commands (hibernate, shut down, restart, sign out, empty the Recycle Bin, clear clipboard history) need a second Enter to run. Typing the name of a mode instead of its prefix works too: **Open Windows** (also found by "windows manager" or "switcher"), **Bookmarks**, **Clipboard History**, **Recent Files**, **All Files** and **Commands** show up as their own result, and Enter switches into that mode and fills in the prefix. They only appear while their feature is enabled, and they never filter by themselves.
 
 ### Soft interface sounds
 
@@ -197,7 +268,7 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 2. In Windhawk, open **Mods** and search for **Spotlight Launcher**, then click **Install**.
 3. Press **Alt + Space** to open it. Change the shortcut, position, effect and colour from the mod's **Settings** tab.
 
-If you used an earlier version, your previous settings keep working after the update. The Settings tab now groups them into sections and shows default values until you save it once; saving it applies what the tab shows.
+If you used an earlier version, your previous settings keep working after the update. The Settings tab is grouped by what each option configures (Appearance, Behavior, Shortcuts, Apps, Search, Files, Clipboard, Calculator, Sounds) and shows default values until you save it once; saving it applies what the tab shows, so check the sections you care about the first time.
 
 ### From source
 
@@ -337,23 +408,7 @@ Copyright (c) 2026-present David Ravelo.
       - min5: 5 minutes
       - min10: 10 minutes
   $name: Apps
-- Features:
-  - FilesEnabled: true
-    $name: File browser
-    $description: Adds the Files mode, which browses drives and folders, previews images and manages files. Press Tab or the folder button in the bar to switch between apps and files. When off, the folder button is hidden and Tab moves through the app list. A chip is shown for each of your drives after the Home, Downloads, Documents, Pictures, Music and Videos locations; Ctrl + Tab (Ctrl + Shift + Tab) cycles through the drives and Ctrl + 1…9 jumps to a chip.
-  - StartDrive: ""
-    $name: Start drive
-    $description: Which drive the file browser opens on the first time you use it in a session, as a single letter (for example D or E). Leave it empty to open on Home (your user folder), which is also where it falls back if the drive is not available.
-  - CalculatorEnabled: true
-    $name: Calculator
-    $description: While you type, the text is also tried as a calculation (for example "12*8", "100+15%" or "sqrt(2)+pi") and the result is shown. It only reacts when the whole text looks like a maths expression, so ordinary searches are left alone. Press Enter to copy the result, which is also saved to a small history you can reuse.
-  - CalculatorStyle: both
-    $name: Calculator display
-    $description: How the result is shown. The card is a highlighted result at the top of the list, the inline text appears faintly right after what you typed, and "Both" shows the card and the inline text together.
-    $options:
-      - hero: Result card
-      - ghost: Inline text
-      - both: Card and inline text
+- Search:
   - WebSearch: true
     $name: Web search
     $description: Shows a result at the end of the list for what you typed. Press Enter to open it. A web address (like gmail.com) opens the site directly; prefix with ? to search instead. It is never offered while the text is being used as a calculation.
@@ -366,7 +421,56 @@ Copyright (c) 2026-present David Ravelo.
       - duckduckgo: DuckDuckGo
       - youtube: YouTube
       - wikipedia: Wikipedia
-  $name: Features
+  - FileSearchEngine: builtin
+    $name: File search engine
+    $description: How file searching works, for both the "find:" prefix and the deep search inside Files. Built-in scan walks your Home folder (and the extra folders, or the folder you are browsing) as you type, with no index and no extra software. Everything (voidtools) asks the Everything index instead, which is much faster and covers every drive and folder it has indexed, and understands Everything's own search syntax (wildcards, quotes, excluded words). Everything must be installed and running; when it is not, the built-in scan is used automatically and the footer says so.
+    $options:
+      - builtin: Built-in scan
+      - everything: Everything (voidtools)
+  - SearchRoots: ""
+    $name: Extra search folders
+    $description: Folders searched by the "find:" prefix, separated by semicolons (for example D:\Projects; C:\Tools). Environment variables such as %USERPROFILE% work. Your Home folder is always searched, so Documents, Downloads, Desktop, Pictures and the rest are included; extra folders already inside Home are skipped. Leave empty to search only Home. Not used while the file search engine is Everything.
+  - LearnFromChoices: true
+    $name: Learn from your choices
+    $description: When you pick an app after typing a few words, the launcher remembers that choice for those words and offers the app first the next time you type them. It only reorders apps that already match equally well, the pairs are stored locally per user, and one you stop picking is forgotten after 90 days.
+  - Bookmarks: false
+    $name: Browser bookmarks
+    $description: Searches your bookmarks from Chrome, Edge, Brave, Vivaldi, Chromium, Opera, Firefox (and its Waterfox, LibreWolf, Zen and Floorp forks) next to your apps, and adds a "bm:" prefix that searches only bookmarks. Only the browsers' local bookmark files and profile names are read; the mod never touches history, cookies, passwords or the network. Bookmark changes are picked up the next time the bar opens, and Firefox bookmarks follow Firefox's own automatic backups.
+  - RecentFiles: true
+    $name: Recent files
+    $description: Shows files and folders from Windows' Recent list on the empty bar and adds a "recent:" prefix. Windows must be recording recent items. Turn on Settings > Personalization > Start > "Show recently opened items in Start, Jump Lists, and File Explorer" (Windows 11; the equivalent "Show recently used files" option on Windows 10). With that off, Windows keeps the Recent folder empty and this feature has nothing to show. Read locally from the Recent folder; no network and no disk scan. Turn it off to hide the section and the prefix.
+  $name: Search
+- Files:
+  - FilesEnabled: true
+    $name: File browser
+    $description: Adds the Files mode, which browses drives and folders, previews images and manages files. Press Tab or the folder button in the bar to switch between apps and files. When off, the folder button is hidden and Tab moves through the app list. A chip is shown for each of your drives after the Home, Downloads, Documents, Pictures, Music and Videos locations; Ctrl + Tab (Ctrl + Shift + Tab) cycles through the drives and Ctrl + 1…9 jumps to a chip.
+  - StartDrive: ""
+    $name: Start drive
+    $description: Which drive the file browser opens on the first time you use it in a session, as a single letter (for example D or E). Leave it empty to open on Home (your user folder), which is also where it falls back if the drive is not available.
+  - RememberFileSort: false
+    $name: Remember file sort
+    $description: Keeps the Files order you pick (name, type, modified date or size) across closes and restarts. Off by default, so the order you pick only lasts while the bar is open and Files starts at Name (A-Z) again the next time; the sort menu is always available with Ctrl + S (or Sort in the actions menu).
+  $name: Files
+- Clipboard:
+  - ClipboardHistory: false
+    $name: Clipboard history
+    $description: Keeps a local history of what you copy and adds a "clip:" prefix that searches it. Text and images are both supported. Enter pastes an entry into the window you came from, Ctrl+Enter copies it, Ctrl+D pins or unpins it, Ctrl+Shift+R removes it, and the "Clear Clipboard History" command erases everything. Images are saved as compressed PNG files inside the mod's own folder and deleted together with their entry. Off by default, stored locally per user and never sent anywhere.
+  - ClipRetentionDays: 3
+    $name: Clipboard retention (days)
+    $description: Clipboard entries older than this many days are deleted automatically, images and their saved files included. Pinned entries are kept. Use 0 to keep entries until the 30-entry limit removes them. Only used while Clipboard history is enabled.
+  $name: Clipboard
+- Calculator:
+  - CalculatorEnabled: true
+    $name: Calculator
+    $description: While you type, the text is also tried as a calculation (for example "12*8", "100+15%" or "sqrt(2)+pi") and the result is shown. It only reacts when the whole text looks like a maths expression, so ordinary searches are left alone. Press Enter to copy the result, which is also saved to a small history you can reuse.
+  - CalculatorStyle: both
+    $name: Calculator display
+    $description: How the result is shown. The card is a highlighted result at the top of the list, the inline text appears faintly right after what you typed, and "Both" shows the card and the inline text together.
+    $options:
+      - hero: Result card
+      - ghost: Inline text
+      - both: Card and inline text
+  $name: Calculator
 - Sounds:
   - SoundEnabled: true
     $name: Interface sounds
@@ -412,11 +516,16 @@ Copyright (c) 2026-present David Ravelo.
 #include <unordered_set>
 #include <vector>
 #include <cstdio>
+#include <cstdlib>
 #include <cwchar>
 #include <cstring>
 
 #ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
 #define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
+#endif
+
+#ifndef WM_CLIPBOARDUPDATE
+#define WM_CLIPBOARDUPDATE 0x031D
 #endif
 
 // ===== Inline calculator engine =====
@@ -1431,8 +1540,13 @@ static const float kPanelActionsTop = 90.f;  // y of the first action (from the 
 static const float kActionH = 28.f;
 static const float kInfoRowH = 22.f;
 
+// Custom-entry form (replaces the results list while it is open)
+static const float kFormRowH = 42.f;
+static const int kFormRows = 6;  // fields visible at once; the rest scroll with Tab / arrows
+
 // List with an empty search bar (Expanded mode)
 static const size_t kMaxRecents = 4;
+static const size_t kMaxRecentFiles = 4;  // files shown on the empty bar; "recent:" lists more
 
 static const wchar_t kTxtPlaceholder[] = L"Search applications…";
 static const wchar_t kTxtPlaceholderFiles[] = L"Search files…  (try *.pdf or dir:)";
@@ -1450,7 +1564,9 @@ static const wchar_t kTxtEnterGlyph[] = L"↵";
 static const wchar_t kTxtNoResults[] = L"No results";
 static const wchar_t kTxtIndexing[] = L"Indexing applications…";
 static const wchar_t kTxtRecents[] = L"Recent";
+static const wchar_t kTxtRecentFiles[] = L"Recent files";
 static const wchar_t kTxtSuggestions[] = L"Suggestions";
+static const wchar_t kTxtPinned[] = L"Pinned";
 static const wchar_t kTxtActions[] = L"Actions";
 static const wchar_t kTxtInfo[] = L"Information";
 static const wchar_t kTxtDetails[] = L"Details";
@@ -1467,6 +1583,19 @@ static const wchar_t kTxtKindFile[] = L"File";
 static const wchar_t kTxtBrowse[] = L"Browse";
 static const wchar_t kTxtSearching[] = L"Searching…";
 static const wchar_t kTxtKindSetting[] = L"Setting";
+static const wchar_t kTxtKindCustom[] = L"Custom entry";
+static const wchar_t kTxtKindBookmark[] = L"Bookmark";
+static const wchar_t kTxtKindClip[] = L"Clipboard";
+static const wchar_t kTxtKindRecent[] = L"Recent file";
+static const wchar_t kTxtKindWindow[] = L"Window";
+static const wchar_t kTxtFormOptional[] = L"Optional";
+static const wchar_t kTxtFormRequired[] = L"Required";
+static const wchar_t kTxtFormNext[] = L"Next field";
+static const wchar_t kTxtFormBack[] = L"Back";
+static const wchar_t kTxtFormWillOpen[] = L"Will open";
+static const wchar_t kTxtFormWillRun[] = L"Will run";
+static const wchar_t kTxtFormFill[] = L"Fill in the required fields";
+static const wchar_t kTxtFormEdit[] = L"Edit values";
 static const wchar_t kTxtCalcCopy[] = L"Copy result";
 static const wchar_t kTxtCalcCopied[] = L"Copied";
 static const wchar_t kTxtCalcAdd[] = L"Add to operation";
@@ -1482,6 +1611,10 @@ static const UINT WM_APP_SETTINGS = WM_APP + 4;
 static const UINT WM_APP_MENU_CHANGED = WM_APP + 5;  // the watcher detected changes in the Start menu
 static const UINT WM_APP_FILES = WM_APP + 6;         // deep file search finished
 static const UINT WM_APP_THUMB = WM_APP + 7;         // a background image preview was decoded
+static const UINT WM_APP_BOOKMARKS = WM_APP + 8;     // a background bookmark load finished
+static const UINT WM_APP_RECENT = WM_APP + 9;        // a background recent-files load finished
+static const UINT WM_APP_GLOBAL = WM_APP + 10;       // a partial/final global file search arrived
+static const UINT WM_APP_EVERYTHING = WM_APP + 11;   // Everything answered a "find:" query
 
 // Start menu reindexing
 static const double kAutoSafetyRescanSec = 600.0;  // fallback in Automatic mode (MSIX apps)
@@ -1496,6 +1629,8 @@ static const UINT_PTR TIMER_CALC = 4;  // debounce for calculator evaluation
 static const UINT_PTR TIMER_CONFIRM = 5;  // cancels an armed destructive command after a while
 static const UINT_PTR TIMER_FSEARCH = 6;  // debounce for the deep file search
 static const UINT_PTR TIMER_HIDE = 7;     // fallback: completes a hide whose animation stalled
+static const UINT_PTR TIMER_GSEARCH = 8;  // debounce for the global "find:" search
+static const UINT_PTR TIMER_EVFALLBACK = 9;  // "find:" via Everything: fall back if it never answers
 static const int HOTKEY_ID = 1;
 
 // ===== Types =====
@@ -1507,6 +1642,59 @@ enum class OpenMonitor { Cursor, Foreground, Primary };
 enum class WebEngine { Google, Bing, DuckDuckGo, YouTube, Wikipedia };
 enum class BgEffect { Acrylic, Mica, Glass, Frosted, Aurora, Solid };
 enum class CalcStyle { Hero, Ghost, Both };
+
+// A placeholder found in a custom entry's Target or Arguments ({folder}, {folder?}, {branch=main}).
+struct CustomField {
+    std::wstring key;    // as written in the settings; matched case-insensitively
+    std::wstring label;  // friendly name shown in the form
+    bool optional = false;
+    std::wstring value;  // default text (may be empty)
+};
+
+// A user-defined entry (in-app manager, or the optional Commands list in the settings). Searched like
+// an app and launched with the shell: URL opens in the browser, Path opens a file/folder, Run starts a
+// program. Placeholders in Target/Arguments are filled by a small form; trigger/hotkey are optional
+// shortcuts (a typed alias such as "yt cats" and a key combination used while the bar is open).
+struct CustomEntry {
+    std::wstring name;
+    std::wstring folded;
+    std::wstring type;  // "url", "path" or "run"
+    std::wstring target;
+    std::wstring args;
+    std::wstring keywords;  // folded extra words that also match the entry
+    std::wstring trigger;   // folded typed alias, matched against the first word of the query
+    std::wstring hotkey;    // canonical global shortcut text ("ctrl+alt+t"), empty = none
+    std::vector<CustomField> fields;  // placeholders, in the order they appear (Target, then Arguments)
+    bool hasQuery = false;            // has a {query} placeholder: extra words typed after the name
+    bool fromStore = false;           // created in the in-app manager (persisted store), not settings
+    std::wstring id;                  // stable id for store entries (empty for settings entries)
+};
+
+// A bookmark from a Chromium-family browser. Only the name, the folder path and the URL are kept;
+// nothing else is read from the browser profile.
+struct BookmarkEntry {
+    std::wstring name;
+    std::wstring folded;   // folded name, for matching
+    std::wstring url;
+    std::wstring folder;   // "Bookmarks bar / Dev"
+    std::wstring browser;  // "Chrome", "Edge", "Brave", ...
+    std::wstring profile;  // profile display name, empty when unknown
+    std::wstring tail;     // folded folder + host, matched with a lower score than the name
+};
+
+// Order of the Files listing. Folders always come first; this only decides the rest.
+enum class FileSort {
+    NameAsc,    // A-Z (the default)
+    NameDesc,   // Z-A
+    Type,       // by extension, then name
+    ModNew,     // most recently modified first
+    ModOld,     // oldest first
+    SizeBig,    // largest first
+    SizeSmall,  // smallest first
+};
+static const int kFileSortCount = 7;
+
+enum class FileSearchEngine { Builtin, Everything };
 
 struct LauncherSettings {
     ListMode listMode = ListMode::Expanded;
@@ -1531,17 +1719,34 @@ struct LauncherSettings {
     int soundVolume = 70;    // 0..100
     bool webSearch = true;   // offer a "search the web" result for the query
     WebEngine webEngine = WebEngine::Google;
+    bool learnFromChoices = true;  // remember the app picked for a query and offer it first
+    FileSearchEngine fileSearchEngine = FileSearchEngine::Builtin;  // "find:" backend
     bool filesEnabled = true;  // show the file browser mode (Tab and the folder button)
+    FileSort fileSort = FileSort::NameAsc;  // Files order; restored at startup when remembered
+    bool rememberFileSort = false;         // keep the chosen Files order across restarts
+    bool bookmarks = false;    // search browser bookmarks and offer the "bm:" prefix
+    bool clipboardHistory = false;  // keep a local clipboard history (text and images), "clip:"
+    int clipRetentionDays = 3;      // drop clipboard entries older than this (0 = keep)
+    bool recentFiles = true;        // show Windows' Recent files and offer "recent:"
+    std::vector<std::wstring> searchRoots;  // extra folders for "find:" (Home is always searched)
     wchar_t startDrive = 0;    // drive letter the browser opens on first (0 = Home), see LoadSettings
+    std::vector<CustomEntry> commands;  // user-defined entries (settings + the in-app manager)
 };
 
 struct AppEntry {
     std::wstring name;
     std::wstring folded;  // same length as name (folded 1:1)
-    std::wstring id;      // parsing name relative to AppsFolder
+    std::wstring id;      // AppsFolder parsing name, or the full path of a desktop shortcut
+    // What the entry really starts. Empty for packaged apps and for shortcuts whose target the
+    // shell cannot resolve. `launch` holds the .lnk/.exe itself for entries found on the Desktop,
+    // which must be opened directly instead of through shell:AppsFolder.
+    std::wstring target;
+    std::wstring args;
+    std::wstring launch;
     std::wstring usageKey;
     int uses = 0;
     int lastUsed = 0;  // seconds since 2020-01-01 (0 = never); see NowStamp()
+    bool pinned = false;  // kept at the top of the home list and slightly boosted in search
     int iconW = 0;
     int iconH = 0;
     std::vector<uint32_t> iconPx;  // BGRA premultiplied
@@ -1549,15 +1754,24 @@ struct AppEntry {
 };
 
 // Where a result comes from. Every kind is produced today: App for the app index, Web/Url for
-// web search, Command for built-in commands, File for the file browser and Setting for Windows
-// settings pages. Each kind carries its own text and payload.
-enum class ResultKind { App, Web, Url, Command, File, Setting };
+// web search, Command for built-in commands, File for the file browser, Setting for Windows
+// settings pages, Custom for the user's own entries, Bookmark for browser bookmarks and Clip for
+// the clipboard history.
+enum class ResultKind { App, Web, Url, Command, File, Setting, Custom, Bookmark, Clip, Recent, GlobalFile, Window };
 
 struct SearchResult {
     ResultKind kind = ResultKind::App;
     int app = -1;     // ResultKind::App: index into g_apps
+    int custom = -1;  // ResultKind::Custom: index into g_cfg.commands
     int score = 0;
-    int section = 0;  // 0 = no section (search), 1 = Recent, 2 = Suggestions
+    int section = 0;  // 0 = no section (search), 1 = Recent apps, 2 = Suggestions,
+                      // 3 = Pinned apps, 4 = Recent files
+    bool pinned = false;  // Clip: the entry is pinned (draws a small pin badge)
+    bool image = false;   // Clip: the entry is an image, so the row shows its thumbnail
+    bool isDir = false;   // Recent: the target is a folder
+    std::wstring ext;     // Recent: uppercase extension for the file tile
+    HWND hwnd = nullptr;  // Window: the top-level window to activate
+    int iconApp = -1;     // Window: index into g_apps for the process icon, or -1
     // Non-App results carry their own text and payload (URL, command, path, ...).
     std::wstring title;
     std::wstring subtitle;
@@ -1583,7 +1797,16 @@ struct AppDetails {
     std::vector<InfoRow> rows;
 };
 
-enum ActionId { ACT_OPEN, ACT_ADMIN, ACT_LOCATION, ACT_COPYPATH, ACT_PROPS, ACT_FORGET };
+enum ActionId {
+    ACT_OPEN,
+    ACT_PIN,
+    ACT_UNPIN,
+    ACT_ADMIN,
+    ACT_LOCATION,
+    ACT_COPYPATH,
+    ACT_PROPS,
+    ACT_FORGET
+};
 
 struct ActionDef {
     int id;
@@ -1593,6 +1816,8 @@ struct ActionDef {
 
 static const ActionDef kActions[] = {
     {ACT_OPEN, L"Open", L"↵"},
+    {ACT_PIN, L"Pin to top", L"Ctrl+D"},
+    {ACT_UNPIN, L"Unpin from top", L"Ctrl+D"},
     {ACT_ADMIN, L"Run as administrator", L"Ctrl+Shift+↵"},
     {ACT_LOCATION, L"Open file location", L"Ctrl+↵"},
     {ACT_COPYPATH, L"Copy path", L"Ctrl+Shift+C"},
@@ -1645,6 +1870,9 @@ static const ColorDef kColors[] = {
 struct RawApp {
     std::wstring name;
     std::wstring id;
+    std::wstring target;  // program the entry really starts (empty when unknown)
+    std::wstring args;
+    std::wstring launch;  // open this file directly (desktop shortcuts); empty = AppsFolder
 };
 
 struct IndexResult {
@@ -1725,6 +1953,9 @@ static IDWriteTextFormat* g_fmtPath = nullptr;        // last segment of the pat
 static IDWriteTextFormat* g_fmtPanelTitle = nullptr;  // app name in the panel
 static IDWriteTextFormat* g_fmtPanelSub = nullptr;    // panel subtitle
 static IDWriteTextFormat* g_fmtPanelRow = nullptr;    // panel rows
+static IDWriteTextFormat* g_fmtForm = nullptr;        // value inside a custom-entry form field
+static IDWriteTextFormat* g_fmtFormLabel = nullptr;   // label of a form field
+static IDWriteTextFormat* g_fmtPreviewCode = nullptr; // monospace text of the Quick Look panel (no trimming)
 static IDWriteInlineObject* g_ellipsis = nullptr;
 static IDWriteInlineObject* g_ellipsisSm = nullptr;
 static ThemePalette g_pal;
@@ -1741,6 +1972,53 @@ static double g_lastHide = -1e9;                  // last time the window was hi
 
 static std::vector<AppEntry> g_apps;
 static std::vector<SearchResult> g_results;
+// Browser bookmarks, loaded in the background and swapped in on the UI thread.
+static std::vector<BookmarkEntry> g_bookmarks;
+static UINT g_bookmarkGen = 0;             // drops the result of an older request
+static ULONGLONG g_bookmarkStamp = 0;      // newest write time seen, to detect changes
+static double g_bookmarkCheckedAt = -1e9;  // last change check (throttled)
+
+// Opt-in clipboard history, newest first, stored per user in the mod storage. An image entry keeps
+// only its file name and size in storage ("<hash>.png|1920x1080"); the PNG lives in the mod's own
+// clips folder, so the history stays small and the file is deleted together with its entry.
+struct ClipEntry {
+    std::wstring text;    // the copied text, or "<file>|WxH" for an image
+    bool pinned = false;  // pinned entries stay at the top and survive both the cap and retention
+    bool image = false;
+    int stamp = 0;  // NowStamp() at capture time, for the retention setting
+    int w = 0;      // image width, for the row label
+    int h = 0;      // image height
+};
+static std::vector<ClipEntry> g_clips;
+
+// Windows' Recent list, resolved to real paths in a worker thread.
+struct RecentEntry {
+    std::wstring name;
+    std::wstring path;
+    std::wstring dir;
+    std::wstring ext;     // uppercase, "" when none
+    std::wstring folded;  // name + folder, for filtering
+    bool isDir = false;
+    FILETIME used = {};   // the .lnk write time (newest first)
+};
+static std::vector<RecentEntry> g_recent;
+static UINT g_recentGen = 0;
+static ULONGLONG g_recentStamp = 0;
+static double g_recentCheckedAt = -1e9;
+static bool g_recentLoaded = false;  // a load has completed (even with no entries)
+
+// Open top-level windows for "win:", cached until the bar opens again.
+struct WindowEntry {
+    HWND hwnd = nullptr;
+    std::wstring title;
+    std::wstring process;
+    std::wstring folded;  // title + process, for filtering
+    int appIcon = -1;     // index into g_apps, or -1
+};
+static std::vector<WindowEntry> g_windows;
+static bool g_windowsDirty = true;
+// The window that had the focus when the launcher opened, so "clip:" can paste back into it.
+static HWND g_prevForeground = nullptr;
 static std::vector<float> g_rowOff;  // y (DIP) of each row relative to the top of the list, n+1 entries
 static int g_headerCount = 0;        // section headers present (only with the search bar empty)
 static std::vector<std::wstring> g_tokens;
@@ -1760,20 +2038,84 @@ static double g_curH = kBarH;
 static double g_targetH = kBarH;
 static POINT g_lastMouse = {-1, -1};
 
-// Details panel
+// Details / preview panel
+enum class PanelMode { Actions, Preview };
 static bool g_detailsOpen = false;
-static double g_detailPos = 0;     // 0..1, animated
+static double g_detailPos = 0;           // 0..1, animated
 static double g_detailTarget = 0;
+static PanelMode g_panelMode = PanelMode::Actions;
+// When non-None, the panel is animating closed and will reopen in this mode once it reaches ~0.
+static PanelMode g_panelPendingMode = PanelMode::Actions;
+static bool g_panelSwitching = false;    // true while waiting for close anim before switching mode
 static int g_hoverAction = -1;     // id of the action under the mouse, or -1
 static bool g_hoverReindex = false;  // the mouse is over the footer reindex button
 static bool g_hoverHelp = false;     // the mouse is over the footer help button
 static std::wstring g_panelAppId;  // last app shown in the panel (for the fade-out)
 static std::unordered_map<std::wstring, AppDetails> g_detailsCache;
 
+// Preview panel state
+struct PreviewState {
+    std::wstring path;              // file currently loaded (empty = nothing loaded)
+    std::vector<std::wstring> lines; // text lines (text/JSON files)
+    int scroll = 0;                  // first visible line
+    int hscroll = 0;                 // first visible column (text is scrolled sideways, never trimmed)
+    int maxCols = 0;                 // length of the longest line, in columns (tabs expanded)
+    bool isImage = false;
+    bool isText  = false;
+    bool loaded  = false;
+    std::wstring errorMsg;           // non-empty if load failed
+};
+static PreviewState g_preview;
+
+// Custom-entry form (see the "Custom entry form" section). It replaces the results list while it
+// is open, so the fields of an entry can be filled without leaving the launcher.
+struct CustomFormState {
+    bool active = false;
+    int entry = -1;                  // index into g_cfg.commands
+    int focus = 0;
+    int scroll = 0;                  // first visible field (0 when they all fit)
+    std::vector<std::wstring> values;  // one per field
+    int caret = 0;
+    int anchor = 0;
+    float inputScroll = 0;           // horizontal scroll of the focused value
+    std::wstring error;              // blocking problem (red)
+    int errorField = -1;             // field to outline in red
+    std::wstring warning;            // non-blocking problem (amber)
+    bool warned = false;             // the warning was shown; the next Enter runs anyway
+};
+static CustomFormState g_form;
+
+// Custom-entries manager: an in-app screen (opened from the ">" command "Custom entries") to
+// create, edit and delete the user's own entries. It manages the persisted store only; entries
+// defined in the Windhawk settings keep working but are not shown here. Two modes: a list of the
+// stored entries (sel 0 is the "New entry" row, 1..N the entries) and an editor for one entry.
+static const int kMgrFields = 7;  // Name, Type, Target, Arguments, Keywords, Trigger, Hotkey
+struct ManagerState {
+    bool active = false;
+    bool editing = false;  // false: the list; true: the editor
+    int sel = 0;           // list selection: 0 = "New entry", 1..N = stored entries
+    int scroll = 0;        // first visible list row
+    // Editor:
+    bool creating = false;       // a new entry (vs editing an existing one)
+    std::wstring editId;         // id of the entry being edited
+    int field = 0;               // index into kMgrFieldLabels
+    int typeIdx = 0;             // 0 url, 1 path, 2 run
+    std::wstring vals[kMgrFields];  // text per field (index 1 / Type is unused: it uses typeIdx)
+    int caret = 0;
+    int anchor = 0;
+    float inputScroll = 0;
+    std::wstring error;
+    bool deleteArmed = false;  // Delete pressed once; needs a second Delete to confirm
+};
+static ManagerState g_mgr;
+
 // Help sheet (F1): replaces the list with a cheat sheet. Page 0 lists the shortcuts, page 1
 // documents the calculator syntax (operators, functions, constants and conversions).
 static bool g_helpOpen = false;
 static int g_helpPage = 0;
+static float g_helpScroll = 0;     // vertical offset of the sheet, for pages taller than the card
+static float g_helpMaxScroll = 0;  // set while drawing, used by the wheel and the keys
+static float g_helpViewH = 0;
 
 static UINT g_gen = 0;
 static bool g_indexing = false;
@@ -1836,6 +2178,16 @@ static int NowStamp() {
     u.HighPart = ft.dwHighDateTime;
     if (u.QuadPart <= kEpoch2020) return 1;
     return (int)((u.QuadPart - kEpoch2020) / 10000000ULL);
+}
+
+// Ranking bonus from usage: frequent and recent apps rise, with a 30-day half-life. It stays below
+// a word-start name match, and with the pin bonus (30) it never crosses a match tier.
+static int FrecencyScore(const AppEntry& a) {
+    if (a.uses <= 0) return 0;
+    const int last = a.lastUsed > 0 ? a.lastUsed : NowStamp() - 90 * 86400;
+    const double days = std::max(0, NowStamp() - last) / 86400.0;
+    const double decayed = (double)a.uses * std::pow(0.5, days / 30.0);
+    return std::min(60, (int)std::lround(decayed * 4.0));
 }
 
 static std::wstring FormatFileTime(const FILETIME& utc) {
@@ -1903,16 +2255,36 @@ static std::wstring FoldString(const std::wstring& s) {
     return r;
 }
 
-// ----- Settings migration (flat names -> grouped names) -----
-// Earlier releases stored every setting under a flat name (`Hotkey`, `Effect`, `Color`, ...).
-// The settings are now grouped (`Shortcuts.Hotkey`, `Appearance.Effect`, ...), so nothing is
-// stored under the new names for an existing install. While `g_legacySettings` is on, the old
-// flat names are read instead, so a user keeps their shortcut, colour, effect and the rest.
-// It switches off for good the first time the user saves the settings in the new layout
-// (see WhTool_ModSettingsChanged), because from then on the new names hold real values.
-// A fresh install has no old values, so there is nothing to carry over.
+// ----- Settings migration -----
+// Old layouts are read while g_legacySettings (flat names) or g_movedSettings (the single "Features"
+// section) are on, so an update never resets anything. Both switch off for good once the tab is
+// saved in the current layout; a fresh install has nothing to carry over.
 static const wchar_t kSettingsGroupedKey[] = L"settings.grouped_v1";
-static bool g_legacySettings = false;  // UI thread only
+static const wchar_t kSettingsSectionsKey[] = L"settings.sections_v2";
+static bool g_legacySettings = false;  // UI thread only: values still use the flat names
+static bool g_movedSettings = false;   // UI thread only: values still live under the old sections
+
+// Settings that moved into their own section in 1.0.0. Until the tab is saved once they are read
+// from where they used to be stored, so an update never resets them.
+struct MovedSetting {
+    const wchar_t* now;
+    const wchar_t* before;
+};
+static const MovedSetting kMovedSettings[] = {
+    {L"Search.WebSearch", L"Features.WebSearch"},
+    {L"Search.WebEngine", L"Features.WebEngine"},
+    {L"Files.FilesEnabled", L"Features.FilesEnabled"},
+    {L"Files.StartDrive", L"Features.StartDrive"},
+    {L"Calculator.CalculatorEnabled", L"Features.CalculatorEnabled"},
+    {L"Calculator.CalculatorStyle", L"Features.CalculatorStyle"},
+};
+
+static const wchar_t* MovedFrom(const wchar_t* name) {
+    for (const MovedSetting& m : kMovedSettings) {
+        if (wcscmp(m.now, name) == 0) return m.before;
+    }
+    return nullptr;
+}
 
 // "Shortcuts.Hotkey" -> "Hotkey" (the name the setting had before it was grouped).
 static const wchar_t* LegacyLeaf(const wchar_t* name) {
@@ -1926,13 +2298,153 @@ static const wchar_t* LegacyLeaf(const wchar_t* name) {
 // do not need this: an empty text means "not stored".
 static bool IntSettingExistedBeforeGrouping(const wchar_t* leaf) {
     static const wchar_t* const kNewer[] = {
-        L"FilesEnabled", L"WebSearch",
+        L"FilesEnabled", L"WebSearch", L"RecentFiles", L"LearnFromChoices", L"ClipRetentionDays",
     };
     for (const wchar_t* n : kNewer) {
         if (wcscmp(leaf, n) == 0) return false;
     }
     return true;
 }
+
+static std::wstring TrimBlanks(const std::wstring& s) {
+    size_t a = 0, b = s.size();
+    while (a < b && iswspace(s[a])) ++a;
+    while (b > a && iswspace(s[b - 1])) --b;
+    return s.substr(a, b - a);
+}
+
+// ----- Custom-entry placeholders -----
+// `{folder}` is required, `{folder?}` is optional, `{branch=main}` starts pre-filled and
+// `{query}` is the extra words typed after the entry's name (always optional). Names are matched
+// case-insensitively (spaces, `_` and `-` are ignored), `{{` and `}}` stand for literal braces,
+// and a field can be repeated.
+// Placeholder names are compared without case, spaces, underscores or hyphens, so {my_folder},
+// {My-Folder} and {my folder} are the same field.
+static std::wstring CustomKeyId(const std::wstring& key) {
+    std::wstring out;
+    out.reserve(key.size());
+    for (const wchar_t c : FoldString(key)) {
+        if (c == L' ' || c == L'\t' || c == L'_' || c == L'-') continue;
+        out.push_back(c);
+    }
+    return out;
+}
+
+static bool IsQueryFieldKey(const std::wstring& key) {
+    return CustomKeyId(key) == L"query";
+}
+
+// True when the entry has a field the form would ask the user to fill — any placeholder other than
+// {query}, which is filled from the words typed after the entry's name. This is what decides
+// whether Enter opens the form (fields to fill) or launches straight away (search-only/fieldless).
+static bool CustomHasFormFields(const CustomEntry& e) {
+    for (const CustomField& f : e.fields) {
+        if (!IsQueryFieldKey(f.key)) return true;
+    }
+    return false;
+}
+
+static std::wstring CustomFieldLabel(const std::wstring& key) {
+    if (IsQueryFieldKey(key)) return L"Search";
+    std::wstring out = key;
+    for (wchar_t& c : out) {
+        if (c == L'_' || c == L'-') c = L' ';
+    }
+    bool wordStart = true;
+    for (wchar_t& c : out) {
+        if (c == L' ') {
+            wordStart = true;
+        } else if (wordStart) {
+            c = (wchar_t)towupper(c);
+            wordStart = false;
+        }
+    }
+    return TrimBlanks(out);
+}
+
+static void CollectCustomFields(const std::wstring& text, std::vector<CustomField>& fields) {
+    for (size_t i = 0; i + 1 < text.size(); ++i) {
+        if (text[i] != L'{') continue;
+        if (text[i + 1] == L'{') {  // "{{" is a literal brace, not a placeholder
+            ++i;
+            continue;
+        }
+        const size_t close = text.find(L'}', i + 1);
+        if (close == std::wstring::npos) break;
+        std::wstring body = text.substr(i + 1, close - i - 1);
+        i = close;
+        if (body.empty()) continue;
+
+        std::wstring def;
+        const size_t eq = body.find(L'=');
+        if (eq != std::wstring::npos) {
+            def = TrimBlanks(body.substr(eq + 1));
+            body.resize(eq);
+        }
+        body = TrimBlanks(body);
+        bool optional = false;
+        if (!body.empty() && body.back() == L'?') {
+            optional = true;
+            body.pop_back();
+            body = TrimBlanks(body);
+        }
+        if (body.empty()) continue;
+        if (fields.size() >= 16) break;  // a sane limit for the form
+
+        const std::wstring folded = CustomKeyId(body);
+        bool dup = false;
+        for (const CustomField& f : fields) {
+            if (CustomKeyId(f.key) == folded) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup) continue;
+
+        CustomField f;
+        f.key = body;
+        f.label = CustomFieldLabel(body);
+        f.optional = optional || IsQueryFieldKey(body);  // {query} may always be empty
+        f.value = def;
+        fields.push_back(std::move(f));
+    }
+}
+
+// Builds a custom entry from its raw fields: normalizes the type, folds the name and keywords, and
+// collects the placeholders. Shared by the settings loader and the in-app store (name and target
+// should already be trimmed by the caller).
+static CustomEntry MakeCustomEntry(const std::wstring& name, const std::wstring& type,
+                                   const std::wstring& target, const std::wstring& args,
+                                   const std::wstring& keywords,
+                                   const std::wstring& trigger = L"",
+                                   const std::wstring& hotkey = L"") {
+    CustomEntry e;
+    e.name = name;
+    e.folded = FoldString(name);
+    e.type = FoldString(type);
+    if (e.type != L"path" && e.type != L"run") e.type = L"url";  // default and unknown values
+    e.target = target;
+    e.args = args;
+    e.keywords = FoldString(keywords);
+    e.trigger = FoldString(trigger);
+    e.hotkey = hotkey;
+    CollectCustomFields(e.target, e.fields);
+    CollectCustomFields(e.args, e.fields);
+    for (const CustomField& f : e.fields) {
+        if (IsQueryFieldKey(f.key)) e.hasQuery = true;
+    }
+    return e;
+}
+
+// The in-app entry store (persisted by the mod, filled by its own manager) is loaded here; defined
+// with the other persisted storage, below CurrentUserSid.
+static void LoadCustomStore(std::vector<CustomEntry>& out);
+static void LoadClipHistory();
+static void SaveClipHistory();
+static void UpdateClipboardListener();
+static ID2D1Bitmap* ClipImageThumb(const std::wstring& stored);
+static void DeleteClipImageFile(const std::wstring& stored);
+static bool PurgeExpiredClips();
 
 static std::wstring ReadTextSetting(const wchar_t* name) {
     PCWSTR s = Wh_GetStringSetting(name);  // never returns NULL
@@ -1957,10 +2469,31 @@ static void DetectLegacySettings() {
     Wh_SetIntValue(kSettingsGroupedKey, 1);  // nothing to carry over: do not look again
 }
 
+// A fresh install has nothing stored anywhere, so the old section names are only read when the
+// previous layout was actually saved: WebEngine is a string that has always had a value, which makes
+// it the probe for "this user has settings to carry over".
+static void DetectMovedSettings() {
+    g_movedSettings = false;
+    if (Wh_GetIntValue(kSettingsSectionsKey, 0) != 0) return;  // saved with the new sections
+    if (!ReadTextSetting(L"Features.WebEngine").empty()) {
+        g_movedSettings = true;
+        return;
+    }
+    Wh_SetIntValue(kSettingsSectionsKey, 1);
+}
+
 static std::wstring GetStringSetting(const wchar_t* name) {
     if (g_legacySettings) {
         std::wstring old = ReadTextSetting(LegacyLeaf(name));
         if (!old.empty()) return old;
+    }
+    // While the previous layout was in use, its value wins: the new name would otherwise return the
+    // schema default and hide what the user actually chose.
+    if (g_movedSettings) {
+        if (const wchar_t* before = MovedFrom(name)) {
+            std::wstring old = ReadTextSetting(before);
+            if (!old.empty()) return old;
+        }
     }
     return ReadTextSetting(name);
 }
@@ -1969,6 +2502,9 @@ static int GetIntSetting(const wchar_t* name) {
     if (g_legacySettings) {
         const wchar_t* leaf = LegacyLeaf(name);
         if (IntSettingExistedBeforeGrouping(leaf)) return Wh_GetIntSetting(leaf);
+    }
+    if (g_movedSettings) {
+        if (const wchar_t* before = MovedFrom(name)) return Wh_GetIntSetting(before);
     }
     return Wh_GetIntSetting(name);
 }
@@ -2050,9 +2586,9 @@ static void LoadSettings() {
         c.detailsKey = DetailsKey::CtrlI;
     }
 
-    c.calculatorEnabled = GetIntSetting(L"Features.CalculatorEnabled") != 0;
+    c.calculatorEnabled = GetIntSetting(L"Calculator.CalculatorEnabled") != 0;
     {
-        std::wstring cs = GetStringSetting(L"Features.CalculatorStyle");
+        std::wstring cs = GetStringSetting(L"Calculator.CalculatorStyle");
         c.calcStyle = (cs == L"hero")  ? CalcStyle::Hero
                       : (cs == L"ghost") ? CalcStyle::Ghost
                                          : CalcStyle::Both;
@@ -2061,9 +2597,9 @@ static void LoadSettings() {
     c.sounds = GetIntSetting(L"Sounds.SoundEnabled") != 0;
     c.soundVolume = std::clamp(GetIntSetting(L"Sounds.SoundVolume"), 0, 100);
 
-    c.webSearch = GetIntSetting(L"Features.WebSearch") != 0;
+    c.webSearch = GetIntSetting(L"Search.WebSearch") != 0;
     {
-        std::wstring we = GetStringSetting(L"Features.WebEngine");
+        std::wstring we = GetStringSetting(L"Search.WebEngine");
         c.webEngine = (we == L"bing")         ? WebEngine::Bing
                       : (we == L"duckduckgo") ? WebEngine::DuckDuckGo
                       : (we == L"youtube")    ? WebEngine::YouTube
@@ -2071,16 +2607,53 @@ static void LoadSettings() {
                                               : WebEngine::Google;
     }
 
-    c.filesEnabled = GetIntSetting(L"Features.FilesEnabled") != 0;
+    c.filesEnabled = GetIntSetting(L"Files.FilesEnabled") != 0;
+    c.fileSearchEngine = GetStringSetting(L"Search.FileSearchEngine") == L"everything"
+                             ? FileSearchEngine::Everything
+                             : FileSearchEngine::Builtin;
+    c.rememberFileSort = GetIntSetting(L"Files.RememberFileSort") != 0;
+    c.learnFromChoices = GetIntSetting(L"Search.LearnFromChoices") != 0;
+    c.bookmarks = GetIntSetting(L"Search.Bookmarks") != 0;  // off unless enabled
+    c.clipboardHistory = GetIntSetting(L"Clipboard.ClipboardHistory") != 0;  // off unless enabled
+    c.clipRetentionDays =
+        std::clamp(GetIntSetting(L"Clipboard.ClipRetentionDays"), 0, 365);
+    c.recentFiles = GetIntSetting(L"Search.RecentFiles") != 0;
+    c.searchRoots.clear();
     {
-        // A single drive letter; anything else (empty, a word, a colon) means "open on Home".
-        std::wstring sd = GetStringSetting(L"Features.StartDrive");
+        std::wstring raw = GetStringSetting(L"Search.SearchRoots");
+        std::wstring cur;
+        for (const wchar_t ch : raw) {
+            if (ch == L';' || ch == L'\n' || ch == L'\r') {
+                std::wstring p = TrimBlanks(cur);
+                if (!p.empty() && c.searchRoots.size() < 16) c.searchRoots.push_back(p);
+                cur.clear();
+            } else {
+                cur += ch;
+            }
+        }
+        std::wstring p = TrimBlanks(cur);
+        if (!p.empty() && c.searchRoots.size() < 16) c.searchRoots.push_back(p);
+    }
+    {
+        // Exactly one ASCII letter, optionally followed by a colon (for example "D" or "D:"). A word,
+        // an accent, a non-ASCII letter or extra text means "open on Home" instead of guessing.
+        std::wstring sd = GetStringSetting(L"Files.StartDrive");
         size_t a = 0;
         while (a < sd.size() && (sd[a] == L' ' || sd[a] == L'\t')) ++a;
-        c.startDrive = (a < sd.size() && iswalpha(sd[a])) ? (wchar_t)towupper(sd[a]) : 0;
+        size_t b = sd.size();
+        while (b > a && (sd[b - 1] == L' ' || sd[b - 1] == L'\t')) --b;
+        if (b > a && sd[b - 1] == L':') --b;
+        const wchar_t letter = a < b ? sd[a] : 0;
+        const bool singleLetter = (b == a + 1) && ((letter >= L'A' && letter <= L'Z') ||
+                                                   (letter >= L'a' && letter <= L'z'));
+        c.startDrive = singleLetter ? (wchar_t)towupper(letter) : 0;
     }
 
+    // Entries created in the in-app manager (persisted store).
+    LoadCustomStore(c.commands);
+
     g_cfg = c;
+    if (g_form.active) g_form = CustomFormState();  // the entry it pointed to may be gone
 }
 
 // ===== Interface sounds =====
@@ -2262,12 +2835,8 @@ static double Hash01(int slot, int salt) {
     return v - std::floor(v);
 }
 
-// Deep, creamy bottom-out: the soft "thock" of a well-lubed linear switch (Cherry MX Black style).
-// A low body that settles down on impact, a couple of quiet inharmonic case resonances for the
-// boxy colour, and a short, low-passed contact "clack" on top. Nothing bright: it is rounded on
-// purpose so it stays creamy instead of clicky.
-//   base     - resting pitch in Hz (lower = deeper)
-//   tauScale - scales how long it rings
+// Deep, creamy bottom-out (a lubed linear switch): low body, quiet case resonances and a short
+// low-passed contact. Rounded on purpose, never clicky. base = pitch in Hz, tauScale = ring time.
 static void RenderTick(std::vector<int16_t>& out, double base, double tauScale, double peak) {
     std::vector<float> b = NewBuf(0.10);
     AddTone(b, 0.0, base * 1.20, base, 0.007, 0.0007, 0.021 * tauScale, 1.00, 0.12, 9.0);
@@ -2635,7 +3204,7 @@ static std::vector<std::wstring> Tokenize(const std::wstring& text) {
 // ===== Activators (typed prefixes that switch the launcher into a mode) =====
 // A leading trigger selects a mode: "?" and "g:", "y:" ... search the web (optionally on a fixed
 // engine) and ">" lists built-in commands.
-enum class LauncherMode { Web, Commands };
+enum class LauncherMode { Web, Commands, Bookmarks, Clipboard, Recent, GlobalFiles, WindowList };
 
 struct ActivatorDef {
     const wchar_t* trigger;
@@ -2648,6 +3217,12 @@ static const ActivatorDef kActivators[] = {
     {L"?", L"Web", LauncherMode::Web, -1},
     {L">", L"Commands", LauncherMode::Commands, -1},
     {L"g:", L"Google", LauncherMode::Web, (int)WebEngine::Google},
+    // "bm:" must come before "b:": triggers are matched in this order, so "b:" would swallow it.
+    {L"bm:", L"Bookmarks", LauncherMode::Bookmarks, -1},
+    {L"clip:", L"Clipboard", LauncherMode::Clipboard, -1},
+    {L"recent:", L"Recent files", LauncherMode::Recent, -1},
+    {L"find:", L"All files", LauncherMode::GlobalFiles, -1},
+    {L"win:", L"Windows", LauncherMode::WindowList, -1},
     {L"b:", L"Bing", LauncherMode::Web, (int)WebEngine::Bing},
     {L"d:", L"DuckDuckGo", LauncherMode::Web, (int)WebEngine::DuckDuckGo},
     {L"y:", L"YouTube", LauncherMode::Web, (int)WebEngine::YouTube},
@@ -2669,7 +3244,7 @@ enum class CmdGlyph {
     Lock, Moon, Bars, Sliders, Chip, List, Key, Globe, Update, Grid, Monitor, Speaker, Bluetooth,
     Printer, Terminal, Folder, Gear, Power, Restart, SignOut, Hibernate, Recycle, Wifi, Clock, Bell,
     Camera, Mic, Doc, Home, Download, Image, Music, Video, Close, ExternalLink, ChevronRight, ChevronLeft,
-    Drive
+    Drive, Link, Star, Clipboard, Pin
 };
 
 struct CommandDef {
@@ -2679,7 +3254,8 @@ struct CommandDef {
     const wchar_t* category;
     CmdGlyph glyph;
     D2D1_COLOR_F color;
-    bool destructive;  // needs a second Enter to run (see LaunchSelected)
+    bool destructive;    // needs a second Enter to run (see LaunchSelected)
+    int activator = -1;  // mode opener: index into kActivators, or -1 for a normal command
 };
 
 static const CommandDef kCommands[] = {
@@ -2727,6 +3303,25 @@ static const CommandDef kCommands[] = {
      D2D1::ColorF(0.84f, 0.64f, 0.26f), false},
     {L"emptyrecyclebin", L"Empty Recycle Bin", L"empty recycle bin trash", L"Tools",
      CmdGlyph::Recycle, D2D1::ColorF(0.66f, 0.42f, 0.42f), true},
+    {L"customentries", L"Custom Entries", L"custom entries commands manage add new edit", L"Tools",
+     CmdGlyph::List, D2D1::ColorF(0.30f, 0.56f, 0.52f), false},
+    {L"clearclipboard", L"Clear Clipboard History", L"clear clipboard history clipoard", L"Tools",
+     CmdGlyph::Clipboard, D2D1::ColorF(0.30f, 0.62f, 0.55f), true},
+    // Mode openers: listed in ">" and blended into normal search like an app, so the prefixes are
+    // not the only way in. Enter switches into the mode exactly as typing its prefix does. The last
+    // field is the index into kActivators ("?", ">", "g:", "bm:", "clip:", "recent:", "find:", "win:").
+    {L"modecommands", L"Commands", L"commands actions all list", L"Modes", CmdGlyph::List,
+     D2D1::ColorF(0.30f, 0.56f, 0.52f), false, 1 /* > */},
+    {L"modebookmarks", L"Bookmarks", L"bookmarks favourites favorites browser bm", L"Modes",
+     CmdGlyph::Star, D2D1::ColorF(0.84f, 0.72f, 0.30f), false, 3 /* bm: */},
+    {L"modeclipboard", L"Clipboard History", L"clipboard history clip copies text", L"Modes",
+     CmdGlyph::Clipboard, D2D1::ColorF(0.30f, 0.62f, 0.55f), false, 4 /* clip: */},
+    {L"moderecent", L"Recent Files", L"recent recently files opened", L"Modes", CmdGlyph::Clock,
+     D2D1::ColorF(0.50f, 0.56f, 0.72f), false, 5 /* recent: */},
+    {L"modefiles", L"All Files", L"files find folders search disk", L"Modes", CmdGlyph::Folder,
+     D2D1::ColorF(0.84f, 0.64f, 0.26f), false, 6 /* find: */},
+    {L"modewindows", L"Open Windows", L"windows window manager switcher switch focus open list tasks",
+     L"Modes", CmdGlyph::Monitor, D2D1::ColorF(0.24f, 0.52f, 0.68f), false, 7 /* win: */},
 };
 static const int kCommandCount = (int)(sizeof(kCommands) / sizeof(kCommands[0]));
 
@@ -2862,6 +3457,7 @@ struct FileEntry {
     FILETIME writeTime = {};
     DWORD attr = 0;  // WIN32_FIND_DATA attributes (cloud/offline checks)
     bool isDir = false;
+    bool noInfo = false;  // size/date unknown (a row from the Everything index, not from disk)
 };
 
 static bool g_fileMode = false;                 // file mode active (folder button)
@@ -2899,6 +3495,16 @@ static std::wstring g_fileDeepKey;              // folder + query the deep resul
 static bool g_fileDeepTrunc = false;
 static bool g_fileDeepDone = false;             // the deep search for g_fileDeepKey has finished
 static bool g_fileSearching = false;
+
+// Global "find:" results: a separate, multi-root search that does not touch the file browser list.
+static std::vector<FileEntry> g_globalFiles;
+static std::wstring g_globalKey;                // query the current global results belong to
+static volatile LONG g_globalSearchGen = 0;     // cancels an older global search
+static volatile LONG g_globalSearchRunning = 0; // threads still alive
+static HANDLE g_globalSearchIdle = nullptr;     // manual-reset, signaled when none is alive
+static bool g_globalSearching = false;
+static bool g_globalDone = false;
+static bool g_globalTrunc = false;
 static std::vector<FileEntry>* g_fileSrc = &g_fileEntries;  // vector SearchResult::icon indexes into
 static volatile LONG g_fileSearchGen = 0;
 static volatile LONG g_fileSearchRunning = 0;  // deep-search threads still alive
@@ -3077,7 +3683,10 @@ static int g_bandCompIdx = -1;
 
 enum FileActId {
     FA_OPEN = 1, FA_GOTO, FA_REVEAL, FA_ADMIN, FA_TERMINAL, FA_RENAME,
-    FA_COPYPATH, FA_COPYNAME, FA_COPYFILE, FA_NEWFOLDER, FA_NEWFILE, FA_PROPS, FA_DELETE
+    FA_COPYPATH, FA_COPYNAME, FA_COPYFILE, FA_NEWFOLDER, FA_NEWFILE, FA_PROPS, FA_DELETE,
+    FA_SORTMENU,
+    // Sort rows (the ids map to FileSort by offset, see FileMenuRunSel).
+    FS_NAME_ASC = 100, FS_NAME_DESC, FS_TYPE, FS_MOD_NEW, FS_MOD_OLD, FS_SIZE_BIG, FS_SIZE_SMALL
 };
 struct FileMenuItem {
     int id;
@@ -3293,6 +3902,10 @@ static FileEntry MakeFileEntry(const WIN32_FIND_DATAW& fd, const std::wstring& d
 // large folder no longer pays for a date/size format per file.
 static const std::wstring& FileEntryMeta(FileEntry& e) {
     if (e.meta.empty()) {
+        if (e.noInfo) {  // Everything gave no size or date: show the type alone, never 0 B / 1601
+            e.meta = e.isDir ? kTxtFolder : kTxtKindFile;
+            return e.meta;
+        }
         e.meta = std::wstring(e.isDir ? kTxtFolder : kTxtKindFile) + L" · " +
                  (e.isDir ? std::wstring() : FormatFileSize(e.size) + L" · ") +
                  FormatFileTime(e.writeTime);
@@ -3307,6 +3920,46 @@ static const size_t kMaxListedDirs = 5000;
 static const size_t kMaxListedFiles = 5000;
 
 // Reads the children of g_fileCur into g_fileEntries (folders first).
+// Ordinal comparison of the folded names: no per-comparison locale collation.
+static int CompareFileNames(const FileEntry& a, const FileEntry& b) {
+    const int c = CompareStringOrdinal(a.folded.c_str(), -1, b.folded.c_str(), -1, TRUE);
+    if (c == CSTR_EQUAL) {
+        const int n = wcscmp(a.name.c_str(), b.name.c_str());
+        return n < 0 ? -1 : (n > 0 ? 1 : 0);
+    }
+    return c == CSTR_LESS_THAN ? -1 : 1;
+}
+
+// The Files order: folders always first, then the chosen order, ties by name so the list never
+// jumps around between refreshes.
+static bool FileEntryLess(const FileEntry& a, const FileEntry& b) {
+    if (a.isDir != b.isDir) return a.isDir;
+    switch (g_cfg.fileSort) {
+        case FileSort::NameDesc:
+            return CompareFileNames(a, b) > 0;
+        case FileSort::Type: {
+            const int c = CompareStringOrdinal(a.ext.c_str(), -1, b.ext.c_str(), -1, TRUE);
+            if (c != CSTR_EQUAL) return c == CSTR_LESS_THAN;
+            break;
+        }
+        case FileSort::ModNew:
+        case FileSort::ModOld: {
+            const int c = CompareFileTime(&a.writeTime, &b.writeTime);
+            if (c != 0) return g_cfg.fileSort == FileSort::ModNew ? c > 0 : c < 0;
+            break;
+        }
+        case FileSort::SizeBig:
+        case FileSort::SizeSmall:
+            if (a.size != b.size) {
+                return g_cfg.fileSort == FileSort::SizeBig ? a.size > b.size : a.size < b.size;
+            }
+            break;
+        case FileSort::NameAsc:
+            return CompareFileNames(a, b) < 0;
+    }
+    return CompareFileNames(a, b) < 0;
+}
+
 static void RefreshFileListing() {
     CancelThumbQueue();
     g_fileEntries.clear();
@@ -3355,13 +4008,7 @@ static void RefreshFileListing() {
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     g_fileListTotal = g_fileEntries.size() + dropped;
-    // Ordinal on the pre-folded name: no per-comparison locale collation.
-    std::sort(g_fileEntries.begin(), g_fileEntries.end(), [](const FileEntry& a, const FileEntry& b) {
-        if (a.isDir != b.isDir) return a.isDir;  // folders first
-        const int c = CompareStringOrdinal(a.folded.c_str(), -1, b.folded.c_str(), -1, TRUE);
-        if (c == CSTR_EQUAL) return wcscmp(a.name.c_str(), b.name.c_str()) < 0;
-        return c == CSTR_LESS_THAN;
-    });
+    std::sort(g_fileEntries.begin(), g_fileEntries.end(), FileEntryLess);
 }
 
 static std::wstring FileSearchKey() {
@@ -3582,9 +4229,24 @@ static bool StartsWithTrigger(const std::wstring& text, const wchar_t* trigger) 
     return true;
 }
 
+// A prefix only exists while its feature is enabled; otherwise the text stays a normal query.
+static bool ActivatorEnabled(const ActivatorDef& a) {
+    switch (a.mode) {
+        case LauncherMode::Web: return g_cfg.webSearch;
+        case LauncherMode::Bookmarks: return g_cfg.bookmarks;
+        case LauncherMode::Clipboard: return g_cfg.clipboardHistory;
+        case LauncherMode::Recent: return g_cfg.recentFiles;
+        case LauncherMode::GlobalFiles: return true;
+        case LauncherMode::WindowList: return true;
+        case LauncherMode::Commands: return true;
+    }
+    return true;
+}
+
 // Detects a leading activator, stores it in g_activator and returns the remaining query (trimmed).
 // With no activator, g_activator is -1 and the trimmed text is returned unchanged.
 static std::wstring ActivationQuery(const std::wstring& text) {
+    const int prev = g_activator;
     g_activator = -1;
     const size_t a = text.find_first_not_of(L" \t");
     if (a == std::wstring::npos) return std::wstring();
@@ -3592,8 +4254,14 @@ static std::wstring ActivationQuery(const std::wstring& text) {
     const size_t b = t.find_last_not_of(L" \t");
     t = t.substr(0, b + 1);
     for (int i = 0; i < kActivatorCount; ++i) {
+        if (!ActivatorEnabled(kActivators[i])) continue;
         if (StartsWithTrigger(t, kActivators[i].trigger)) {
             g_activator = i;
+            // Entering "win:" refreshes the window list even if the bar stayed open.
+            if (kActivators[i].mode == LauncherMode::WindowList &&
+                (prev < 0 || kActivators[prev].mode != LauncherMode::WindowList)) {
+                g_windowsDirty = true;
+            }
             std::wstring q = t.substr(wcslen(kActivators[i].trigger));
             const size_t qa = q.find_first_not_of(L" \t");
             return qa == std::wstring::npos ? std::wstring() : q.substr(qa);
@@ -3664,13 +4332,33 @@ static std::wstring LowerAscii(std::wstring s) {
     return s;
 }
 
-// Expanded mode with an empty search bar: "Recent" (last opened apps) and "Suggestions"
-// (the most used ones and, so the list is never empty, common system apps).
-// All entries are returned; the list scrolls inside the fixed panel height.
+// Expanded mode with an empty search bar: "Pinned" (apps the user kept), "Recent" (last opened
+// apps), "Recent files" (Windows' Recent list) and "Suggestions" (by frecency and, so the list is
+// never empty, common system apps). All entries are returned; the list scrolls inside the fixed
+// panel height.
+static SearchResult MakeRecentResult(const RecentEntry& r);  // defined with the search helpers
+
 static void BuildHome() {
+    std::unordered_set<int> taken;
+
+    std::vector<int> pinned;
+    for (size_t i = 0; i < g_apps.size(); ++i) {
+        if (g_apps[i].pinned) pinned.push_back((int)i);
+    }
+    std::sort(pinned.begin(), pinned.end(), [](int a, int b) {
+        return g_apps[a].folded < g_apps[b].folded;
+    });
+    for (int i : pinned) {
+        SearchResult r;
+        r.app = i;
+        r.section = 3;
+        g_results.push_back(r);
+        taken.insert(i);
+    }
+
     std::vector<SearchResult> rec;
     for (size_t i = 0; i < g_apps.size(); ++i) {
-        if (g_apps[i].lastUsed > 0) {
+        if (g_apps[i].lastUsed > 0 && !taken.count((int)i)) {
             SearchResult r;
             r.app = (int)i;
             r.score = g_apps[i].lastUsed;
@@ -3682,27 +4370,34 @@ static void BuildHome() {
         return g_apps[a.app].folded < g_apps[b.app].folded;
     });
     if (rec.size() > kMaxRecents) rec.resize(kMaxRecents);
-
-    std::unordered_set<int> taken;
     for (const auto& r : rec) taken.insert(r.app);
 
-    // Suggestions: first the most used, then the common system apps
+    // Recent files: after the apps, before the suggestions, so they are visible without scrolling.
+    if (g_cfg.recentFiles) {
+        for (size_t i = 0; i < g_recent.size() && i < kMaxRecentFiles; ++i) {
+            SearchResult r = MakeRecentResult(g_recent[i]);
+            r.section = 4;
+            g_results.push_back(std::move(r));
+        }
+    }
+
+    // Suggestions: first by frecency, then the common system apps.
     std::vector<int> pool;
     {
-        std::vector<SearchResult> byUse;
+        std::vector<SearchResult> byRank;
         for (size_t i = 0; i < g_apps.size(); ++i) {
             if (g_apps[i].uses > 0 && !taken.count((int)i)) {
                 SearchResult r;
                 r.app = (int)i;
-                r.score = g_apps[i].uses;
-                byUse.push_back(r);
+                r.score = FrecencyScore(g_apps[i]);
+                byRank.push_back(r);
             }
         }
-        std::sort(byUse.begin(), byUse.end(), [](const SearchResult& a, const SearchResult& b) {
+        std::sort(byRank.begin(), byRank.end(), [](const SearchResult& a, const SearchResult& b) {
             if (a.score != b.score) return a.score > b.score;
             return g_apps[a.app].folded < g_apps[b.app].folded;
         });
-        for (const auto& r : byUse) {
+        for (const auto& r : byRank) {
             pool.push_back(r.app);
             taken.insert(r.app);
         }
@@ -3842,6 +4537,1037 @@ static std::wstring CurrentUserSid() {
     }
     if (sid.empty()) sid = L"shared";  // fallback: degrade to machine-wide if the SID fails
     return sid;
+}
+
+// ===== Custom entries store (managed in-app, persisted by the mod) =====
+// Entries the user creates in the launcher's own manager live here, kept separate from the Windhawk
+// settings. They are serialized one entry per line, eight tab-separated fields (id, name, type,
+// target, arguments, keywords, trigger, hotkey), with \, newlines and tabs escaped so a field can
+// hold any text. Records written by older versions have six fields: the missing ones read empty.
+// Per-user name, because Windhawk storage is machine-wide (see CurrentUserSid).
+static std::wstring CustomStoreKey() { return L"custom.entries_" + CurrentUserSid(); }
+
+// A short, unique-enough id for a new store entry (time + a counter, hex). Only needs to be stable
+// and distinct among this user's entries, not cryptographic.
+static std::wstring GenerateEntryId() {
+    static unsigned counter = 0;
+    wchar_t buf[32];
+    swprintf_s(buf, L"e%llx%x", (unsigned long long)GetTickCount64(), counter++);
+    return buf;
+}
+
+static std::wstring EscapeStoreField(const std::wstring& s) {
+    std::wstring o;
+    o.reserve(s.size());
+    for (wchar_t c : s) {
+        if (c == L'\\') o += L"\\\\";
+        else if (c == L'\n') o += L"\\n";
+        else if (c == L'\r') o += L"\\r";
+        else if (c == L'\t') o += L"\\t";
+        else o += c;
+    }
+    return o;
+}
+
+static std::wstring UnescapeStoreField(const std::wstring& s) {
+    std::wstring o;
+    o.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == L'\\' && i + 1 < s.size()) {
+            const wchar_t n = s[++i];
+            o += (n == L'n') ? L'\n' : (n == L'r') ? L'\r' : (n == L't') ? L'\t' : n;
+        } else {
+            o += s[i];
+        }
+    }
+    return o;
+}
+
+// ===== Per-query learning =====
+// Picking an app for some words teaches the launcher to offer it first next time; capped at 200
+// pairs, forgotten after 90 days without a pick (the score lives in RunSearch).
+struct LearnEntry {
+    std::wstring app;    // AppEntry::id
+    std::wstring query;  // folded words as typed ("vs code")
+    int count = 1;
+    int stamp = 0;  // NowStamp() of the last pick
+};
+static std::vector<LearnEntry> g_learn;
+static const size_t kMaxLearn = 200;
+static const int kLearnDays = 90;
+
+// The folded query words joined with single spaces: the key a learned pick is stored under.
+static std::wstring LearnedQueryKey() {
+    std::wstring key;
+    for (const auto& t : g_tokens) {
+        if (!key.empty()) key += L' ';
+        key += t;
+    }
+    return key;
+}
+
+static std::wstring LearnKey() { return L"learn.v1_" + CurrentUserSid(); }
+
+// Forgets pairs nobody picked for kLearnDays and keeps the most-used ones.
+static void PruneLearn() {
+    const int cutoff = NowStamp() - kLearnDays * 86400;
+    for (size_t i = g_learn.size(); i-- > 0;) {
+        if (g_learn[i].stamp < cutoff) g_learn.erase(g_learn.begin() + (std::ptrdiff_t)i);
+    }
+    if (g_learn.size() <= kMaxLearn) return;
+    std::sort(g_learn.begin(), g_learn.end(), [](const LearnEntry& a, const LearnEntry& b) {
+        return a.count != b.count ? a.count > b.count : a.stamp > b.stamp;
+    });
+    g_learn.resize(kMaxLearn);
+}
+
+static void SaveLearn() {
+    std::wstring all;
+    for (const LearnEntry& e : g_learn) {
+        if (all.size() > 24000) break;  // one registry value, not a database
+        all += std::to_wstring(e.count) + L'\t' + std::to_wstring(e.stamp) + L'\t' +
+               EscapeStoreField(e.app) + L'\t' + EscapeStoreField(e.query) + L'\n';
+    }
+    Wh_SetStringValue(LearnKey().c_str(), all.c_str());
+}
+
+static void LoadLearn() {
+    g_learn.clear();
+    std::vector<wchar_t> buf(1 << 15, 0);
+    const size_t n = Wh_GetStringValue(LearnKey().c_str(), buf.data(), buf.size());
+    if (n == 0) return;
+    const std::wstring all(buf.data(), n);
+    size_t start = 0;
+    while (start <= all.size()) {
+        const size_t nl = all.find(L'\n', start);
+        const std::wstring line =
+            all.substr(start, nl == std::wstring::npos ? std::wstring::npos : nl - start);
+        start = (nl == std::wstring::npos) ? all.size() + 1 : nl + 1;
+        if (line.empty()) continue;
+        std::wstring f[4];  // count, stamp, app, query
+        size_t fi = 0, p = 0;
+        for (;;) {
+            const size_t t = line.find(L'\t', p);
+            const std::wstring part =
+                line.substr(p, t == std::wstring::npos ? std::wstring::npos : t - p);
+            if (fi < 4) f[fi] = UnescapeStoreField(part);
+            ++fi;
+            if (t == std::wstring::npos) break;
+            p = t + 1;
+        }
+        LearnEntry e;
+        e.count = _wtoi(f[0].c_str());
+        e.stamp = _wtoi(f[1].c_str());
+        e.app = f[2];
+        e.query = f[3];
+        if (e.app.empty() || e.query.empty() || e.count <= 0) continue;
+        g_learn.push_back(std::move(e));
+    }
+    PruneLearn();
+}
+
+// A pick only teaches something when it fixed the order: true when another app sat above it in the
+// list the user was looking at.
+static bool PickWasNotFirst(int sel) {
+    for (int i = 0; i < sel && i < (int)g_results.size(); ++i) {
+        if (g_results[(size_t)i].kind == ResultKind::App) return true;
+    }
+    return false;
+}
+
+// Remembers that the user picked `appId` for `query`.
+static void RecordLearn(const std::wstring& appId, const std::wstring& query) {
+    if (!g_cfg.learnFromChoices || appId.empty() || query.size() < 2 || query.size() > 60) return;
+    for (LearnEntry& e : g_learn) {
+        if (e.app == appId && e.query == query) {
+            e.count = std::min(e.count + 1, 99);
+            e.stamp = NowStamp();
+            SaveLearn();
+            return;
+        }
+    }
+    LearnEntry e;
+    e.app = appId;
+    e.query = query;
+    e.stamp = NowStamp();
+    g_learn.push_back(std::move(e));
+    PruneLearn();
+    SaveLearn();
+}
+
+// Appends the store entries to `out` (after any settings entries). Missing/short records are
+// tolerated; an entry needs at least a name and a target.
+static void LoadCustomStore(std::vector<CustomEntry>& out) {
+    std::vector<wchar_t> buf(1 << 16, 0);  // 64K chars: plenty for the manager's entries
+    size_t n = Wh_GetStringValue(CustomStoreKey().c_str(), buf.data(), buf.size());
+    if (n == 0) return;
+    std::wstring all(buf.data(), n);
+    size_t start = 0;
+    while (start <= all.size()) {
+        size_t nl = all.find(L'\n', start);
+        std::wstring line =
+            all.substr(start, nl == std::wstring::npos ? std::wstring::npos : nl - start);
+        start = (nl == std::wstring::npos) ? all.size() + 1 : nl + 1;
+        if (line.empty()) continue;
+        std::wstring f[8];  // id, name, type, target, args, keywords, trigger, hotkey
+        size_t fi = 0, p = 0;
+        for (;;) {
+            size_t t = line.find(L'\t', p);
+            std::wstring part =
+                line.substr(p, t == std::wstring::npos ? std::wstring::npos : t - p);
+            if (fi < 8) f[fi] = UnescapeStoreField(part);
+            ++fi;
+            if (t == std::wstring::npos) break;
+            p = t + 1;
+        }
+        if (f[1].empty() || f[3].empty()) continue;  // need a name and a target
+        CustomEntry e = MakeCustomEntry(f[1], f[2], f[3], f[4], f[5], f[6], f[7]);
+        e.fromStore = true;
+        e.id = f[0].empty() ? GenerateEntryId() : f[0];
+        out.push_back(std::move(e));
+    }
+}
+
+// Writes the given store entries back to the mod's storage. (Used by the in-app manager; the
+// settings entries are never written here.)
+[[maybe_unused]] static void SaveCustomStore(const std::vector<CustomEntry>& storeEntries) {
+    std::wstring all;
+    for (const CustomEntry& e : storeEntries) {
+        if (!all.empty()) all += L'\n';
+        all += EscapeStoreField(e.id);
+        all += L'\t';
+        all += EscapeStoreField(e.name);
+        all += L'\t';
+        all += EscapeStoreField(e.type);
+        all += L'\t';
+        all += EscapeStoreField(e.target);
+        all += L'\t';
+        all += EscapeStoreField(e.args);
+        all += L'\t';
+        all += EscapeStoreField(e.keywords);
+        all += L'\t';
+        all += EscapeStoreField(e.trigger);
+        all += L'\t';
+        all += EscapeStoreField(e.hotkey);
+    }
+    Wh_SetStringValue(CustomStoreKey().c_str(), all.c_str());
+}
+
+// ===== Browser bookmarks (Chromium family and Firefox) =====
+// Chrome, Edge, Brave, Vivaldi, Chromium and Opera keep their bookmarks in a plain JSON file
+// called "Bookmarks", one per profile; Firefox and its forks keep compressed mozLz4 backups. Only
+// those files and the profile display names are read: never history, cookies, passwords, favicons
+// or the network. Every profile is searched; a bookmark that appears in two profiles is listed
+// once.
+//
+// The load runs in a worker thread (a big file would freeze the bar) and the UI thread swaps the
+// list in when it arrives. When the bar opens, the files' write times are checked so a bookmark
+// added while the mod runs shows up without a restart.
+
+namespace Json {
+
+// A JSON value. Objects keep their members in file order (they are small and only looked up by
+// name), arrays their items.
+struct Value {
+    enum class Type { Null, Bool, Num, Str, Arr, Obj } type = Type::Null;
+    std::wstring str;
+    double num = 0;
+    std::vector<Value> items;                          // Arr
+    std::vector<std::pair<std::wstring, Value>> members;  // Obj
+
+    const Value* Get(const wchar_t* key) const {
+        if (type != Type::Obj) return nullptr;
+        for (const auto& m : members) {
+            if (m.first == key) return &m.second;
+        }
+        return nullptr;
+    }
+    std::wstring Str(const wchar_t* key) const {
+        const Value* v = Get(key);
+        return (v && v->type == Type::Str) ? v->str : std::wstring();
+    }
+};
+
+// Dependency-free reader for the subset of JSON these files use. Refuses absurd input: nesting
+// past 64 levels, strings past 64K characters, malformed UTF-8 or escapes.
+class Parser {
+   public:
+    explicit Parser(const std::string& text) : p_(text.c_str()), n_(text.size()) {}
+
+    bool Parse(Value& out) {
+        SkipWs();
+        if (!Value_(out, 0)) return false;
+        SkipWs();
+        return i_ >= n_;
+    }
+
+   private:
+    void SkipWs() {
+        while (i_ < n_ && (p_[i_] == ' ' || p_[i_] == '\t' || p_[i_] == '\r' || p_[i_] == '\n')) {
+            ++i_;
+        }
+    }
+
+    bool Value_(Value& v, int depth) {
+        if (depth > 64 || i_ >= n_) return false;
+        switch (p_[i_]) {
+            case '{': return Object_(v, depth);
+            case '[': return Array_(v, depth);
+            case '"':
+                v.type = Value::Type::Str;
+                return String_(v.str);
+            case 't': return Literal_(v, "true", Value::Type::Bool);
+            case 'f': return Literal_(v, "false", Value::Type::Bool);
+            case 'n': return Literal_(v, "null", Value::Type::Null);
+            default: return Number_(v);
+        }
+    }
+
+    bool Literal_(Value& v, const char* lit, Value::Type t) {
+        const size_t n = strlen(lit);
+        if (i_ + n > n_ || memcmp(p_ + i_, lit, n) != 0) return false;
+        i_ += n;
+        v.type = t;
+        return true;
+    }
+
+    bool Number_(Value& v) {
+        char buf[64];
+        size_t k = 0;
+        while (i_ < n_ && k + 1 < sizeof(buf)) {
+            const char c = p_[i_];
+            if (!((c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.' || c == 'e' ||
+                  c == 'E')) {
+                break;
+            }
+            buf[k++] = c;
+            ++i_;
+        }
+        if (k == 0) return false;
+        buf[k] = 0;
+        v.type = Value::Type::Num;
+        v.num = strtod(buf, nullptr);
+        return true;
+    }
+
+    bool Hex4(unsigned& out) {
+        if (i_ + 4 > n_) return false;
+        out = 0;
+        for (int k = 0; k < 4; ++k) {
+            const char c = p_[i_++];
+            out <<= 4;
+            if (c >= '0' && c <= '9') out |= (unsigned)(c - '0');
+            else if (c >= 'a' && c <= 'f') out |= (unsigned)(c - 'a' + 10);
+            else if (c >= 'A' && c <= 'F') out |= (unsigned)(c - 'A' + 10);
+            else return false;
+        }
+        return true;
+    }
+
+    static void AppendCp(std::wstring& out, unsigned cp) {
+        if (cp <= 0xFFFF) {
+            out += (wchar_t)cp;
+        } else if (cp <= 0x10FFFF) {
+            cp -= 0x10000;
+            out += (wchar_t)(0xD800 + (cp >> 10));
+            out += (wchar_t)(0xDC00 + (cp & 0x3FF));
+        }
+    }
+
+    bool String_(std::wstring& out) {
+        if (i_ >= n_ || p_[i_] != '"') return false;
+        ++i_;
+        while (i_ < n_) {
+            const unsigned char c = (unsigned char)p_[i_++];
+            if (c == '"') return true;
+            if (c == '\\') {
+                if (i_ >= n_) return false;
+                const char e = p_[i_++];
+                switch (e) {
+                    case '"': out += L'"'; break;
+                    case '\\': out += L'\\'; break;
+                    case '/': out += L'/'; break;
+                    case 'b': out += L'\b'; break;
+                    case 'f': out += L'\f'; break;
+                    case 'n': out += L'\n'; break;
+                    case 'r': out += L'\r'; break;
+                    case 't': out += L'\t'; break;
+                    case 'u': {
+                        unsigned cp = 0;
+                        if (!Hex4(cp)) return false;
+                        // A high surrogate followed by a low one is a single character.
+                        if (cp >= 0xD800 && cp <= 0xDBFF && i_ + 1 < n_ && p_[i_] == '\\' &&
+                            p_[i_ + 1] == 'u') {
+                            const size_t save = i_;
+                            i_ += 2;
+                            unsigned lo = 0;
+                            if (Hex4(lo) && lo >= 0xDC00 && lo <= 0xDFFF) {
+                                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                            } else {
+                                i_ = save;
+                            }
+                        }
+                        AppendCp(out, cp);
+                        break;
+                    }
+                    default: return false;
+                }
+            } else if (c < 0x80) {
+                out += (wchar_t)c;
+            } else {
+                // UTF-8 sequence: 2, 3 or 4 bytes.
+                const int extra = (c >= 0xF0) ? 3 : (c >= 0xE0) ? 2 : (c >= 0xC0) ? 1 : -1;
+                if (extra < 0 || i_ + (size_t)extra > n_) return false;
+                unsigned cp = c & (0x3Fu >> extra);
+                for (int k = 0; k < extra; ++k) {
+                    const unsigned char cc = (unsigned char)p_[i_++];
+                    if ((cc & 0xC0) != 0x80) return false;
+                    cp = (cp << 6) | (cc & 0x3F);
+                }
+                AppendCp(out, cp);
+            }
+            if (out.size() > 65536) return false;
+        }
+        return false;
+    }
+
+    bool Array_(Value& v, int depth) {
+        ++i_;  // '['
+        v.type = Value::Type::Arr;
+        SkipWs();
+        if (i_ < n_ && p_[i_] == ']') {
+            ++i_;
+            return true;
+        }
+        for (;;) {
+            SkipWs();
+            v.items.emplace_back();
+            if (!Value_(v.items.back(), depth + 1)) return false;
+            SkipWs();
+            if (i_ < n_ && p_[i_] == ',') {
+                ++i_;
+                continue;
+            }
+            if (i_ < n_ && p_[i_] == ']') {
+                ++i_;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    bool Object_(Value& v, int depth) {
+        ++i_;  // '{'
+        v.type = Value::Type::Obj;
+        SkipWs();
+        if (i_ < n_ && p_[i_] == '}') {
+            ++i_;
+            return true;
+        }
+        for (;;) {
+            SkipWs();
+            std::wstring key;
+            if (!String_(key)) return false;
+            SkipWs();
+            if (i_ >= n_ || p_[i_] != ':') return false;
+            ++i_;
+            SkipWs();
+            v.members.emplace_back(std::move(key), Value());
+            if (!Value_(v.members.back().second, depth + 1)) return false;
+            SkipWs();
+            if (i_ < n_ && p_[i_] == ',') {
+                ++i_;
+                continue;
+            }
+            if (i_ < n_ && p_[i_] == '}') {
+                ++i_;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    const char* p_;
+    size_t n_;
+    size_t i_ = 0;
+};
+
+}  // namespace Json
+
+static const size_t kMaxBookmarks = 20000;       // a bigger set is not searchable anyway
+static const size_t kMaxBookmarkFile = 32 << 20;  // and neither is a file this size
+
+// One file the browser keeps its bookmarks in, plus the labels for its rows.
+struct BookmarkFile {
+    std::wstring path;
+    std::wstring browser;
+    std::wstring profile;
+    bool firefox = false;  // a mozLz4 bookmark backup instead of a Chromium "Bookmarks" file
+};
+
+struct BookmarkBrowser {
+    const wchar_t* name;
+    const wchar_t* rel;   // relative to the known folder
+    bool roaming;         // %APPDATA% instead of %LOCALAPPDATA%
+};
+
+// Firefox and its forks keep one compressed backup per profile; there is no plain JSON file.
+struct FirefoxBrowser {
+    const wchar_t* name;
+    const wchar_t* rel;  // relative to %APPDATA%
+};
+
+// The Chromium family stores "<...>\User Data\<profile>\Bookmarks"; Opera keeps the file in the
+// profile folder itself. Missing folders are skipped, so only installed browsers cost anything.
+static const BookmarkBrowser kBookmarkBrowsers[] = {
+    {L"Chrome", L"Google\\Chrome\\User Data", false},
+    {L"Chrome Beta", L"Google\\Chrome Beta\\User Data", false},
+    {L"Chrome Dev", L"Google\\Chrome Dev\\User Data", false},
+    {L"Chrome Canary", L"Google\\Chrome SxS\\User Data", false},
+    {L"Edge", L"Microsoft\\Edge\\User Data", false},
+    {L"Edge Beta", L"Microsoft\\Edge Beta\\User Data", false},
+    {L"Edge Dev", L"Microsoft\\Edge Dev\\User Data", false},
+    {L"Edge Canary", L"Microsoft\\Edge SxS\\User Data", false},
+    {L"Brave", L"BraveSoftware\\Brave-Browser\\User Data", false},
+    {L"Brave Beta", L"BraveSoftware\\Brave-Browser-Beta\\User Data", false},
+    {L"Brave Nightly", L"BraveSoftware\\Brave-Browser-Nightly\\User Data", false},
+    {L"Vivaldi", L"Vivaldi\\User Data", false},
+    {L"Chromium", L"Chromium\\User Data", false},
+    {L"Opera", L"Opera Software\\Opera Stable", true},
+    {L"Opera GX", L"Opera Software\\Opera GX Stable", true},
+};
+
+// The Firefox family is separate: backups live under %APPDATA%\Mozilla\Firefox\Profiles\... and
+// the forks use their own folder next to Mozilla.
+static const FirefoxBrowser kFirefoxBrowsers[] = {
+    {L"Firefox", L"Mozilla\\Firefox"},
+    {L"Waterfox", L"Waterfox"},
+    {L"LibreWolf", L"libreWolf"},
+    {L"Zen", L"zen"},
+    {L"Floorp", L"Floorp"},
+};
+
+// Reads a whole file, refusing anything over cap. Retries once: a browser may be rewriting it.
+static bool ReadFileBytes(const std::wstring& path, std::string& out, size_t cap) {
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE) {
+            if (attempt == 0) Sleep(20);
+            continue;
+        }
+        LARGE_INTEGER size{};
+        bool ok = GetFileSizeEx(h, &size) && size.QuadPart > 0 &&
+                  (unsigned long long)size.QuadPart <= cap;
+        if (ok) {
+            out.resize((size_t)size.QuadPart);
+            DWORD got = 0;
+            ok = ReadFile(h, out.data(), (DWORD)out.size(), &got, nullptr) != FALSE;
+            out.resize(ok ? got : 0);
+        }
+        CloseHandle(h);
+        return ok && !out.empty();
+    }
+    return false;
+}
+
+static void ListSubdirs(const std::wstring& dir, std::vector<std::wstring>& out) {
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            wcscmp(fd.cFileName, L".") != 0 && wcscmp(fd.cFileName, L"..") != 0) {
+            out.push_back(dir + L"\\" + fd.cFileName);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+// Profile folder -> display name, from the browser's Local State (what its own profile menu shows).
+static void ReadProfileNames(const std::wstring& root,
+                             std::unordered_map<std::wstring, std::wstring>& names) {
+    std::string bytes;
+    if (!ReadFileBytes(root + L"\\Local State", bytes, 4 << 20)) return;
+    Json::Value doc;
+    Json::Parser parser(bytes);
+    if (!parser.Parse(doc)) return;
+    const Json::Value* profile = doc.Get(L"profile");
+    const Json::Value* cache = profile ? profile->Get(L"info_cache") : nullptr;
+    if (!cache) return;
+    for (const auto& m : cache->members) {
+        const std::wstring name = m.second.Str(L"name");
+        if (!name.empty()) names[m.first] = name;
+    }
+}
+
+// One value from a profile's profiles.ini (Firefox keeps the display names there).
+static std::wstring IniString(const std::wstring& ini, const wchar_t* section, const wchar_t* key) {
+    wchar_t buf[512] = L"";
+    GetPrivateProfileStringW(section, key, L"", buf, ARRAYSIZE(buf), ini.c_str());
+    return buf;
+}
+
+// Newest bookmark backup in "<profile>\bookmarkbackups", or empty when the profile has none.
+static std::wstring NewestFirefoxBackup(const std::wstring& profileDir) {
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(
+        (profileDir + L"\\bookmarkbackups\\bookmarks-*.jsonlz4").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return L"";
+    std::wstring best;
+    FILETIME bestTime = {};
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        if (best.empty() || CompareFileTime(&fd.ftLastWriteTime, &bestTime) > 0) {
+            best = profileDir + L"\\bookmarkbackups\\" + fd.cFileName;
+            bestTime = fd.ftLastWriteTime;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best;
+}
+
+static void AddFirefoxProfile(const std::wstring& dir, const std::wstring& browser,
+                              const std::wstring& profile, std::vector<BookmarkFile>& files) {
+    const std::wstring backup = NewestFirefoxBackup(dir);
+    if (backup.empty()) return;
+    BookmarkFile bf;
+    bf.path = backup;
+    bf.browser = browser;
+    bf.profile = profile;
+    bf.firefox = true;
+    files.push_back(std::move(bf));
+}
+
+// Reads the profile list of one Firefox-family browser. profiles.ini is the normal case; without
+// it, every folder under "Profiles" is tried and its folder name is used as the profile label.
+static void AddFirefoxBrowser(const std::wstring& base, const FirefoxBrowser& b,
+                              std::vector<BookmarkFile>& files) {
+    const std::wstring root = base + L"\\" + b.rel;
+    if (GetFileAttributesW(root.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    const std::wstring ini = root + L"\\profiles.ini";
+    wchar_t sections[8192] = L"";
+    const DWORD n = GetPrivateProfileSectionNamesW(sections, ARRAYSIZE(sections), ini.c_str());
+    bool any = false;
+    for (const wchar_t* s = sections; n > 0 && *s; s += wcslen(s) + 1) {
+        if (wcsncmp(s, L"Profile", 7) != 0) continue;  // Profile0, Profile1, ...
+        std::wstring path = IniString(ini, s, L"Path");
+        if (path.empty()) continue;
+        for (auto& c : path) {
+            if (c == L'/') c = L'\\';
+        }
+        const std::wstring dir =
+            (IniString(ini, s, L"IsRelative") == L"0") ? path : root + L"\\" + path;
+        std::wstring name = IniString(ini, s, L"Name");
+        if (name.empty()) name = dir.substr(dir.find_last_of(L'\\') + 1);
+        AddFirefoxProfile(dir, b.name, name, files);
+        any = true;
+    }
+    if (any) return;
+    std::vector<std::wstring> dirs;
+    ListSubdirs(root + L"\\Profiles", dirs);
+    for (const std::wstring& dir : dirs) {
+        AddFirefoxProfile(dir, b.name, dir.substr(dir.find_last_of(L'\\') + 1), files);
+    }
+}
+
+static std::vector<BookmarkFile> FindBookmarkFiles() {
+    std::vector<BookmarkFile> files;
+    for (const BookmarkBrowser& b : kBookmarkBrowsers) {
+        const std::wstring base =
+            KnownFolderPath(b.roaming ? FOLDERID_RoamingAppData : FOLDERID_LocalAppData);
+        if (base.empty()) continue;
+        const std::wstring root = base + L"\\" + b.rel;
+        if (GetFileAttributesW(root.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+        std::unordered_map<std::wstring, std::wstring> names;
+        ReadProfileNames(root, names);
+        std::vector<std::wstring> dirs;
+        dirs.push_back(root);  // Opera keeps Bookmarks in the root itself
+        ListSubdirs(root, dirs);
+        for (const std::wstring& dir : dirs) {
+            const std::wstring file = dir + L"\\Bookmarks";
+            if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            BookmarkFile bf;
+            bf.path = file;
+            bf.browser = b.name;
+            if (dir != root) {
+                const std::wstring dirName = dir.substr(root.size() + 1);
+                const auto it = names.find(dirName);
+                bf.profile = (it != names.end()) ? it->second : dirName;
+            }
+            files.push_back(std::move(bf));
+        }
+    }
+    const std::wstring roaming = KnownFolderPath(FOLDERID_RoamingAppData);
+    if (!roaming.empty()) {
+        for (const FirefoxBrowser& b : kFirefoxBrowsers) AddFirefoxBrowser(roaming, b, files);
+    }
+    return files;
+}
+
+static bool BookmarkUrlAllowed(const std::wstring& url) {
+    static const wchar_t* const kSchemes[] = {L"http://", L"https://", L"file://", L"mailto:"};
+    for (const wchar_t* s : kSchemes) {
+        const size_t n = wcslen(s);
+        if (url.size() >= n && _wcsnicmp(url.c_str(), s, n) == 0) return true;
+    }
+    return false;  // javascript:, chrome://, data:, ... are not useful as launcher results
+}
+
+static std::wstring BookmarkHost(const std::wstring& url) {
+    const size_t p = url.find(L"://");
+    std::wstring host = (p == std::wstring::npos) ? std::wstring() : url.substr(p + 3);
+    host = host.substr(0, host.find_first_of(L"/?#"));
+    const size_t at = host.rfind(L'@');
+    if (at != std::wstring::npos) host = host.substr(at + 1);
+    const size_t colon = host.find(L':');
+    if (colon != std::wstring::npos) host = host.substr(0, colon);
+    if (host.rfind(L"www.", 0) == 0) host = host.substr(4);
+    return host;
+}
+
+static void CollectBookmarkNode(const Json::Value& node, const std::wstring& folder,
+                                const std::wstring& browser, const std::wstring& profile,
+                                std::vector<BookmarkEntry>& out,
+                                std::unordered_set<std::wstring>& seen, int depth) {
+    if (depth > 32 || out.size() >= kMaxBookmarks) return;
+    const std::wstring name = node.Str(L"name");
+    if (node.Str(L"type") == L"url") {
+        const std::wstring url = node.Str(L"url");
+        if (url.empty() || !BookmarkUrlAllowed(url)) return;
+        if (!seen.insert(url).second) return;  // same URL in two profiles/folders: one row
+        BookmarkEntry e;
+        e.name = name.empty() ? url : name;
+        e.folded = FoldString(e.name);
+        e.url = url;
+        e.folder = folder;
+        e.browser = browser;
+        e.profile = profile;
+        e.tail = FoldString(folder + L" " + BookmarkHost(url));
+        out.push_back(std::move(e));
+        return;
+    }
+    const Json::Value* children = node.Get(L"children");
+    if (!children || children->type != Json::Value::Type::Arr) return;
+    const std::wstring sub =
+        name.empty() ? folder : (folder.empty() ? name : folder + L" / " + name);
+    for (const Json::Value& child : children->items) {
+        CollectBookmarkNode(child, sub, browser, profile, out, seen, depth + 1);
+    }
+}
+
+// Firefox bookmark backups are "mozLz4": the 8-byte magic "mozLz40\0", a 4-byte little-endian
+// uncompressed size, then an LZ4 block. This reads that block with no library and no writes.
+static bool MozLz4Decompress(const std::string& in, std::string& out) {
+    static const char kMagic[8] = {'m', 'o', 'z', 'L', 'z', '4', '0', '\0'};
+    if (in.size() < 12 || memcmp(in.data(), kMagic, 8) != 0) return false;
+    const size_t size = (size_t)(unsigned char)in[8] | ((size_t)(unsigned char)in[9] << 8) |
+                        ((size_t)(unsigned char)in[10] << 16) |
+                        ((size_t)(unsigned char)in[11] << 24);
+    if (size == 0 || size > kMaxBookmarkFile) return false;
+    out.clear();
+    out.reserve(size);
+    const unsigned char* src = (const unsigned char*)in.data() + 12;
+    const unsigned char* const end = (const unsigned char*)in.data() + in.size();
+    while (src < end) {
+        const unsigned char token = *src++;
+        size_t lit = token >> 4;
+        if (lit == 15) {
+            unsigned char b = 0;
+            do {
+                if (src >= end) return false;
+                b = *src++;
+                lit += b;
+            } while (b == 255);
+        }
+        if ((size_t)(end - src) < lit || out.size() + lit > size) return false;
+        out.append((const char*)src, lit);
+        src += lit;
+        if (src >= end) break;
+        if ((size_t)(end - src) < 2) return false;
+        const size_t offset = (size_t)src[0] | ((size_t)src[1] << 8);
+        src += 2;
+        if (offset == 0 || offset > out.size()) return false;
+        size_t len = (size_t)(token & 0x0F) + 4;
+        if ((token & 0x0F) == 15) {
+            unsigned char b = 0;
+            do {
+                if (src >= end) return false;
+                b = *src++;
+                len += b;
+            } while (b == 255);
+        }
+        if (out.size() + len > size) return false;
+        const size_t dst = out.size();
+        out.resize(dst + len);
+        for (size_t k = 0; k < len; ++k) out[dst + k] = out[dst - offset + k];
+    }
+    return out.size() == size;
+}
+
+// Label of a Firefox root folder (the backup stores internal names such as "menu").
+static std::wstring FirefoxRootLabel(const Json::Value& node) {
+    const std::wstring root = node.Str(L"root");
+    if (root == L"bookmarksMenuFolder") return L"Bookmarks Menu";
+    if (root == L"toolbarFolder") return L"Bookmarks Toolbar";
+    if (root == L"unfiledBookmarksFolder") return L"Other Bookmarks";
+    if (root == L"mobileFolder") return L"Mobile Bookmarks";
+    return node.Str(L"title");
+}
+
+// Walks one Firefox backup node: "uri" marks a bookmark, "children" a folder. At the top level,
+// the four root folders get friendly names; below it, each folder's own title is used.
+static void CollectFirefoxNode(const Json::Value& node, const std::wstring& folder,
+                               const std::wstring& browser, const std::wstring& profile,
+                               std::vector<BookmarkEntry>& out,
+                               std::unordered_set<std::wstring>& seen, int depth,
+                               bool rootLevel) {
+    if (depth > 32 || out.size() >= kMaxBookmarks) return;
+    const std::wstring url = node.Str(L"uri");
+    if (!url.empty()) {
+        if (!BookmarkUrlAllowed(url) || !seen.insert(url).second) return;
+        const std::wstring title = node.Str(L"title");
+        BookmarkEntry e;
+        e.name = title.empty() ? url : title;
+        e.folded = FoldString(e.name);
+        e.url = url;
+        e.folder = folder;
+        e.browser = browser;
+        e.profile = profile;
+        e.tail = FoldString(folder + L" " + BookmarkHost(url));
+        out.push_back(std::move(e));
+        return;
+    }
+    const Json::Value* children = node.Get(L"children");
+    if (!children || children->type != Json::Value::Type::Arr) return;
+    std::wstring sub = folder;
+    if (rootLevel) {
+        sub = FirefoxRootLabel(node);
+    } else {
+        const std::wstring title = node.Str(L"title");
+        if (!title.empty()) sub = folder.empty() ? title : folder + L" / " + title;
+    }
+    for (const Json::Value& child : children->items) {
+        CollectFirefoxNode(child, sub, browser, profile, out, seen, depth + 1, false);
+    }
+}
+
+static std::vector<BookmarkEntry> LoadBrowserBookmarks() {
+    std::vector<BookmarkEntry> all;
+    std::unordered_set<std::wstring> seen;
+    for (const BookmarkFile& file : FindBookmarkFiles()) {
+        std::string bytes;
+        if (!ReadFileBytes(file.path, bytes, kMaxBookmarkFile)) continue;
+        std::string json;
+        if (file.firefox) {
+            if (!MozLz4Decompress(bytes, json)) {
+                Wh_Log(L"bookmarks: cannot decompress %s", file.path.c_str());
+                continue;
+            }
+        } else {
+            json = std::move(bytes);
+        }
+        Json::Value doc;
+        Json::Parser parser(json);
+        if (!parser.Parse(doc)) {
+            Wh_Log(L"bookmarks: cannot parse %s", file.path.c_str());
+            continue;
+        }
+        if (file.firefox) {
+            const Json::Value* children = doc.Get(L"children");
+            if (!children || children->type != Json::Value::Type::Arr) continue;
+            for (const Json::Value& child : children->items) {
+                CollectFirefoxNode(child, L"", file.browser, file.profile, all, seen, 0, true);
+            }
+            continue;
+        }
+        const Json::Value* roots = doc.Get(L"roots");
+        if (!roots) continue;
+        // The root nodes ("bookmark_bar", "other", "synced") are containers, not folders: their
+        // children at the top level carry no folder name.
+        for (const auto& root : roots->members) {
+            const Json::Value* children = root.second.Get(L"children");
+            if (!children || children->type != Json::Value::Type::Arr) continue;
+            for (const Json::Value& child : children->items) {
+                CollectBookmarkNode(child, L"", file.browser, file.profile, all, seen, 0);
+            }
+        }
+    }
+    return all;
+}
+
+static ULONGLONG BookmarkFilesStamp(const std::vector<BookmarkFile>& files) {
+    ULONGLONG best = 0;
+    for (const BookmarkFile& f : files) {
+        WIN32_FILE_ATTRIBUTE_DATA d{};
+        if (!GetFileAttributesExW(f.path.c_str(), GetFileExInfoStandard, &d)) continue;
+        const ULONGLONG t =
+            ((ULONGLONG)d.ftLastWriteTime.dwHighDateTime << 32) | d.ftLastWriteTime.dwLowDateTime;
+        if (t > best) best = t;
+    }
+    return best;
+}
+
+struct BookmarkResult {
+    UINT gen;
+    std::vector<BookmarkEntry> entries;
+};
+
+static DWORD WINAPI BookmarkThreadProc(LPVOID param) {
+    const UINT gen = (UINT)(UINT_PTR)param;
+    auto* res = new BookmarkResult{gen, LoadBrowserBookmarks()};
+    if (!g_hwnd || !PostMessageW(g_hwnd, WM_APP_BOOKMARKS, 0, (LPARAM)res)) delete res;
+    return 0;
+}
+
+static void StartBookmarkLoad() {
+    if (!g_cfg.bookmarks || !g_hwnd) return;  // no file is read while the feature is off
+    const UINT gen = ++g_bookmarkGen;
+    HANDLE th = CreateThread(nullptr, 0, BookmarkThreadProc, (LPVOID)(UINT_PTR)gen, 0, nullptr);
+    if (th) CloseHandle(th);
+}
+
+// Called when the bar opens and when the setting is turned on: reloads only if a file changed.
+static void RefreshBookmarksIfStale() {
+    if (!g_cfg.bookmarks || !g_hwnd) return;
+    const double now = NowSec();
+    if (now - g_bookmarkCheckedAt < 2.0) return;
+    g_bookmarkCheckedAt = now;
+    const ULONGLONG stamp = BookmarkFilesStamp(FindBookmarkFiles());
+    if (stamp == g_bookmarkStamp) return;
+    g_bookmarkStamp = stamp;
+    StartBookmarkLoad();
+}
+
+// Score of a bookmark for the current query; 0 when any token is missing. The name scores like an
+// app name, the folder and host are a weaker fallback so a name match always wins.
+static int ScoreBookmark(const BookmarkEntry& b) {
+    if (g_tokens.empty()) return 1;
+    int total = 0;
+    for (const auto& t : g_tokens) {
+        int s = ScoreToken(b.name, b.folded, t, nullptr);
+        if (s <= 0) {
+            if (b.tail.find(t) == std::wstring::npos) return 0;
+            s = 180;
+        }
+        total += s;
+    }
+    return total / (int)g_tokens.size();
+}
+
+// The right-hand line of a bookmark row: folder, browser and profile, as far as they are known.
+static std::wstring BookmarkMeta(const BookmarkEntry& b) {
+    std::wstring meta = b.browser;
+    if (!b.profile.empty()) meta += L" (" + b.profile + L")";
+    return b.folder.empty() ? meta : b.folder + L" · " + meta;
+}
+
+static SearchResult MakeBookmarkResult(const BookmarkEntry& b, int score) {
+    SearchResult r;
+    r.kind = ResultKind::Bookmark;
+    r.score = score;
+    r.title = b.name;
+    r.subtitle = BookmarkMeta(b);
+    r.payload = b.url;
+    return r;
+}
+
+// One-line preview of a clipboard entry; the full text stays in the result payload.
+static std::wstring ClipPreview(const std::wstring& text) {
+    std::wstring s;
+    s.reserve(std::min<size_t>(text.size(), 140));
+    for (const wchar_t c : text) {
+        if (s.size() >= 140) {
+            s += L"…";
+            break;
+        }
+        s += (c == L'\r' || c == L'\n' || c == L'\t') ? L' ' : c;
+    }
+    return s;
+}
+
+static bool ClipMatches(const ClipEntry& c) {
+    if (g_tokens.empty()) return true;
+    // An image is searched by what it is and by its size ("image", "1920x1080").
+    const std::wstring folded =
+        c.image ? (L"image png " + std::to_wstring(c.w) + L"x" + std::to_wstring(c.h))
+                : FoldString(c.text);
+    for (const auto& t : g_tokens) {
+        if (folded.find(t) == std::wstring::npos) return false;
+    }
+    return true;
+}
+
+static SearchResult MakeClipResult(const ClipEntry& c) {
+    SearchResult r;
+    r.kind = ResultKind::Clip;
+    r.image = c.image;
+    r.title = c.image ? (L"Image " + std::to_wstring(c.w) + L"×" + std::to_wstring(c.h))
+                      : ClipPreview(c.text);
+    r.subtitle = c.pinned ? std::wstring(L"Clipboard (pinned)") : std::wstring(kTxtKindClip);
+    r.payload = c.text;
+    r.pinned = c.pinned;
+    return r;
+}
+
+static bool RecentMatches(const RecentEntry& r) {
+    if (g_tokens.empty()) return true;
+    for (const auto& t : g_tokens) {
+        if (r.folded.find(t) == std::wstring::npos) return false;
+    }
+    return true;
+}
+
+static SearchResult MakeRecentResult(const RecentEntry& r) {
+    SearchResult out;
+    out.kind = ResultKind::Recent;
+    out.title = r.name;
+    out.subtitle = r.dir;
+    out.payload = r.path;
+    out.isDir = r.isDir;
+    out.ext = r.ext;
+    return out;
+}
+
+static std::wstring GlobalQueryKey() {
+    std::wstring k;
+    for (const auto& t : g_tokens) {
+        k += t;
+        k += L'\n';
+    }
+    return k;
+}
+
+static SearchResult MakeGlobalResult(const FileEntry& e) {
+    SearchResult r;
+    r.kind = ResultKind::GlobalFile;
+    r.title = e.name;
+    r.subtitle = e.dir;
+    r.payload = e.path;
+    r.isDir = e.isDir;
+    r.ext = e.ext;
+    return r;
+}
+
+static void EnsureWindowList();  // defined with the window helpers, below
+
+static bool WindowMatches(const WindowEntry& w) {
+    if (g_tokens.empty()) return true;
+    for (const auto& t : g_tokens) {
+        if (w.folded.find(t) == std::wstring::npos) return false;
+    }
+    return true;
+}
+
+static SearchResult MakeWindowResult(const WindowEntry& w) {
+    SearchResult r;
+    r.kind = ResultKind::Window;
+    r.title = w.title;
+    r.subtitle = w.process;
+    r.hwnd = w.hwnd;
+    r.iconApp = w.appIcon;
+    return r;
 }
 
 // ===== Calculator history (persisted in the mod's local storage) =====
@@ -4109,6 +5835,13 @@ static std::wstring NormalizeUrl(const std::wstring& s) {
     return L"https://" + s;
 }
 
+// Right-hand label of a custom entry, from its type.
+static const wchar_t* CustomTypeLabel(const std::wstring& type) {
+    if (type == L"path") return L"File or folder";
+    if (type == L"run") return L"Command";
+    return L"Website";
+}
+
 static void RunSearch() {
     ReleaseResultLayouts();
     g_results.clear();
@@ -4137,6 +5870,8 @@ static void RunSearch() {
         if (kActivators[g_activator].mode == LauncherMode::Commands) {
             for (int i = 0; i < kCommandCount; ++i) {
                 const CommandDef& c = kCommands[i];
+                // A mode opener only exists while its feature is on, like its prefix.
+                if (c.activator >= 0 && !ActivatorEnabled(kActivators[c.activator])) continue;
                 std::wstring hay = FoldString(c.title);
                 hay += L' ';
                 hay += FoldString(c.keywords);
@@ -4155,6 +5890,55 @@ static void RunSearch() {
                 r.payload = c.id;
                 r.icon = i;  // index into kCommands, for the badge glyph/colour
                 g_results.push_back(std::move(r));
+            }
+        } else if (kActivators[g_activator].mode == LauncherMode::Bookmarks && g_cfg.bookmarks) {
+            // Bookmark-only search: all matches, best first. An empty query lists them from the
+            // start (the list still has to be scrolled).
+            std::vector<SearchResult> found;
+            const int kMaxBmRows = 200;
+            for (const BookmarkEntry& b : g_bookmarks) {
+                const int s = ScoreBookmark(b);
+                if (s <= 0) continue;
+                found.push_back(MakeBookmarkResult(b, s));
+                // shortcut: only the first 4000 matches are ranked (typing narrows them anyway)
+                if ((int)found.size() >= 4000) break;
+            }
+            std::sort(found.begin(), found.end(), [](const SearchResult& a, const SearchResult& b) {
+                if (a.score != b.score) return a.score > b.score;
+                return FoldString(a.title) < FoldString(b.title);
+            });
+            if ((int)found.size() > kMaxBmRows) found.resize(kMaxBmRows);
+            for (auto& r : found) g_results.push_back(std::move(r));
+        } else if (kActivators[g_activator].mode == LauncherMode::Clipboard) {
+            // Clipboard-only search: pinned entries first, newest first inside each group.
+            if (g_cfg.clipboardHistory) {
+                for (int pass = 0; pass < 2; ++pass) {
+                    for (const ClipEntry& c : g_clips) {
+                        if (c.pinned != (pass == 0)) continue;
+                        if (ClipMatches(c)) g_results.push_back(MakeClipResult(c));
+                    }
+                }
+            }
+        } else if (kActivators[g_activator].mode == LauncherMode::Recent) {
+            // Windows' Recent list, newest first.
+            if (g_cfg.recentFiles) {
+                for (const RecentEntry& r : g_recent) {
+                    if (RecentMatches(r)) g_results.push_back(MakeRecentResult(r));
+                }
+            }
+        } else if (kActivators[g_activator].mode == LauncherMode::GlobalFiles) {
+            // Global search: show the last completed/partial snapshot only when it matches this
+            // exact query; the worker thread posts updates through WM_APP_GLOBAL.
+            if (!query.empty() && g_globalKey == GlobalQueryKey()) {
+                for (const FileEntry& e : g_globalFiles) {
+                    g_results.push_back(MakeGlobalResult(e));
+                }
+            }
+        } else if (kActivators[g_activator].mode == LauncherMode::WindowList) {
+            // Open windows, topmost first; filtered by title and process name.
+            EnsureWindowList();
+            for (const WindowEntry& w : g_windows) {
+                if (WindowMatches(w)) g_results.push_back(MakeWindowResult(w));
             }
         } else if (!query.empty()) {
             // Web mode: a single result, always a search (never the direct-open behaviour),
@@ -4192,6 +5976,17 @@ static void RunSearch() {
         return;
     }
 
+    // The words as typed, folded: the key the learned picks are stored under.
+    const std::wstring queryKey = LearnedQueryKey();
+    // Learned picks for exactly these words (usually none or one), collected once instead of
+    // scanning the whole learned list for every app. The value is how many times it was picked.
+    std::vector<std::pair<std::wstring, int>> learned;
+    if (g_cfg.learnFromChoices && !g_learn.empty()) {
+        for (const LearnEntry& e : g_learn) {
+            if (e.query == queryKey) learned.emplace_back(e.app, e.count);
+        }
+    }
+
     for (size_t i = 0; i < g_apps.size(); ++i) {
         const AppEntry& a = g_apps[i];
         int total = 0;
@@ -4208,7 +6003,18 @@ static void RunSearch() {
             continue;
         }
         total /= (int)g_tokens.size();
-        total += std::min(a.uses, 30) * 4;
+        // Usage and pins only break ties inside the same match tier: together they stay below the
+        // 100-point gap between a name, a prefix, a word start and a substring.
+        int extra = FrecencyScore(a) + (a.pinned ? 30 : 0);
+        total += std::min(extra, 99);
+        // An explicit pick for these words wins outright (2000 clears any match plus its extras), so
+        // it also fixes a weak match; the count only orders learned apps among themselves.
+        for (const auto& l : learned) {
+            if (l.first == a.id) {
+                total += 2000 + std::min(400, 20 * l.second);
+                break;
+            }
+        }
         SearchResult r;
         r.app = (int)i;
         r.score = total;
@@ -4220,16 +6026,184 @@ static void RunSearch() {
                   if (a.score != b.score) return a.score > b.score;
                   return g_apps[a.app].folded < g_apps[b.app].folded;
               });
+
+    // Custom entries match like apps (name + keywords) and sit below them. Leftover words go to
+    // {query} ("YouTube cats" searches "cats"); a trigger ("yt cats") runs it at once, on top.
+    if (!g_cfg.commands.empty()) {
+        // The query as typed, split the same way as g_tokens (which holds the folded words);
+        // the original spelling is what the entry receives.
+        std::vector<std::wstring> words;
+        {
+            std::wstring cur;
+            for (const wchar_t c : query) {
+                if (c == L' ' || c == L'\t') {
+                    if (!cur.empty()) {
+                        words.push_back(cur);
+                        cur.clear();
+                    }
+                } else {
+                    cur.push_back(c);
+                }
+            }
+            if (!cur.empty()) words.push_back(cur);
+        }
+
+        bool triggerHit = false;
+        std::vector<SearchResult> custom;
+        for (size_t i = 0; i < g_cfg.commands.size(); ++i) {
+            const CustomEntry& e = g_cfg.commands[i];
+            // An entry accepts extra words if it has {query} OR any named placeholder.
+            // {query} words are passed directly; named-placeholder words pre-fill the form.
+            const bool hasAnyPlaceholder = e.hasQuery || !e.fields.empty();
+            const bool triggered =
+                !e.trigger.empty() && !words.empty() && FoldString(words[0]) == e.trigger;
+            int total = 0;
+            int matched = 0;
+            std::wstring extra;  // words left over (for {query} or to pre-fill the first field)
+            bool ok = true;
+            if (triggered) {
+                // The alias owns the whole query: everything after it is passed on.
+                matched = 1;
+                for (size_t k = 1; k < words.size(); ++k) {
+                    if (!extra.empty()) extra += L' ';
+                    extra += words[k];
+                }
+            } else {
+                for (size_t k = 0; k < g_tokens.size(); ++k) {
+                    const std::wstring& t = g_tokens[k];
+                    int s = ScoreToken(e.name, e.folded, t, nullptr);
+                    if (s <= 0) {
+                        if (!e.keywords.empty() && e.keywords.find(t) != std::wstring::npos) {
+                            s = 40;  // keyword hit: weaker than a match in the name
+                        } else if (hasAnyPlaceholder) {
+                            // This word is what the user wants to pass on. The two lists always
+                            // have the same length, but guard against an empty tail anyway.
+                            if (k < words.size()) {
+                                if (!extra.empty()) extra += L' ';
+                                extra += words[k];
+                            }
+                            continue;
+                        } else {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    total += s;
+                    ++matched;
+                }
+            }
+            if (!ok || matched == 0) continue;  // the entry itself has to be named in the query
+            SearchResult r;
+            r.kind = ResultKind::Custom;
+            r.custom = (int)i;
+            r.score = triggered ? 1000 : total / matched;  // triggers sort above every name hit
+            r.title = e.name;
+            r.subtitle = CustomTypeLabel(e.type);
+            r.payload = std::move(extra);
+            custom.push_back(std::move(r));
+            if (triggered) triggerHit = true;
+        }
+        std::sort(custom.begin(), custom.end(), [](const SearchResult& a, const SearchResult& b) {
+            if (a.score != b.score) return a.score > b.score;
+            return FoldString(a.title) < FoldString(b.title);
+        });
+        if (triggerHit && !custom.empty()) {
+            // Above the apps and selected, so Enter runs it and the rest of the list stays usable.
+            g_results.insert(g_results.begin(), std::move(custom.front()));
+            custom.erase(custom.begin());
+            g_sel = 0;
+            g_scrollTarget = 0;
+        }
+        for (auto& r : custom) g_results.push_back(std::move(r));
+    }
+
     // Cap the number of results. This only limits how many there are; the height of the
     // bar is fixed and rows that do not fit are reached by scrolling.
     if ((int)g_results.size() > g_cfg.maxRows) {
         g_results.resize((size_t)g_cfg.maxRows);
     }
+
+    // Bookmarks: up to three, added after the cap so the app list does not hide them. They go
+    // before the Windows Settings and web rows, and never mix with a calculation. Only solid
+    // matches (name, prefix or acronym) are blended in: a fuzzy subsequence hit would otherwise
+    // put a random bookmark under almost every query. "bm:" still lists everything.
+    if (g_cfg.bookmarks && !g_bookmarks.empty() && !CalcOk()) {
+        std::vector<SearchResult> bm;
+        for (const BookmarkEntry& b : g_bookmarks) {
+            const int s = ScoreBookmark(b);
+            if (s < 350) continue;
+            bm.push_back(MakeBookmarkResult(b, s));
+        }
+        std::sort(bm.begin(), bm.end(), [](const SearchResult& a, const SearchResult& b) {
+            if (a.score != b.score) return a.score > b.score;
+            return FoldString(a.title) < FoldString(b.title);
+        });
+        if (bm.size() > 3) bm.resize(3);
+        for (auto& r : bm) g_results.push_back(std::move(r));
+    }
+
     if (loneConst && !g_results.empty()) {
         g_calc = Calc::Result();  // apps matched: drop the constant's result card
         g_calcDisplay.clear();
         g_calcActive = false;
     }
+    // Custom Entries manager: surface it in normal search so the user doesn't need ">".
+    // Matches on the command's title + keywords, same fuzzy logic as the Settings block.
+    if (!query.empty() && !CalcOk()) {
+        for (int i = 0; i < kCommandCount; ++i) {
+            const CommandDef& c = kCommands[i];
+            if (wcscmp(c.id, L"customentries") != 0) continue;
+            std::wstring hay = FoldString(c.title);
+            hay += L' ';
+            hay += FoldString(c.keywords);
+            bool ok = true;
+            for (const auto& t : g_tokens) {
+                if (hay.find(t) == std::wstring::npos) { ok = false; break; }
+            }
+            if (ok) {
+                SearchResult r;
+                r.kind    = ResultKind::Command;
+                r.title   = c.title;
+                r.subtitle = c.category;
+                r.payload = c.id;
+                r.icon    = i;
+                g_results.push_back(std::move(r));
+            }
+            break;
+        }
+    }
+
+    // Mode openers ("Open Windows", "Bookmarks", "Clipboard History" ...): typing their name shows a
+    // row that enters the mode on Enter, so nobody has to remember a prefix. It lists and filters
+    // nothing by itself; the mode does that. Hidden while the feature behind it is off, and capped so
+    // it can never flood the list (a calculation suppresses it, like the other blended rows).
+    if (!query.empty() && !CalcOk()) {
+        int shown = 0;
+        for (int i = 0; i < kCommandCount && shown < 3; ++i) {
+            const CommandDef& c = kCommands[i];
+            if (c.activator < 0 || !ActivatorEnabled(kActivators[c.activator])) continue;
+            std::wstring hay = FoldString(c.title);
+            hay += L' ';
+            hay += FoldString(c.keywords);
+            bool ok = true;
+            for (const auto& t : g_tokens) {
+                if (hay.find(t) == std::wstring::npos) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok) continue;
+            SearchResult r;
+            r.kind = ResultKind::Command;
+            r.title = c.title;
+            r.subtitle = c.category;
+            r.payload = c.id;
+            r.icon = i;  // index into kCommands, for the badge glyph/colour and the mode switch
+            g_results.push_back(std::move(r));
+            ++shown;
+        }
+    }
+
     // Windows Settings pages that match the query (no prefix needed). Kept after the apps and
     // capped so they never flood the list; a valid calculation suppresses them, like the web row.
     if (!CalcOk()) {
@@ -4380,6 +6354,842 @@ static std::wstring PathFromAppId(const std::wstring& id) {
         path = id;
     }
     return path;
+}
+
+// ---- Resolving what a shortcut really runs ------------------------------------------------
+// Shell properties answer this for most shortcuts, but not for all of them (advertised MSI
+// links, links written by older installers, links whose target moved). Reading the .lnk file
+// itself is the fallback that lets an app be recognised no matter how its shortcut was made.
+
+static bool StartsWithNoCase(const std::wstring& s, const std::wstring& prefix);  // defined below
+
+static std::wstring ExpandedPath(const std::wstring& p) {
+    if (p.empty()) return p;
+    wchar_t buf[32768];
+    const DWORD n = ExpandEnvironmentStringsW(p.c_str(), buf, (DWORD)ARRAYSIZE(buf));
+    if (n > 0 && n <= ARRAYSIZE(buf)) return std::wstring(buf, n - 1);
+    return p;
+}
+
+// The target of a shortcut, as the shell stores it: possibly quoted and with variables such as
+// %ProgramFiles% left unexpanded.
+static std::wstring CleanShortcutTarget(std::wstring s) {
+    s = TrimBlanks(ExpandedPath(s));
+    while (s.size() >= 2 && s.front() == L'"' && s.back() == L'"') {
+        s = TrimBlanks(s.substr(1, s.size() - 2));
+    }
+    return s;
+}
+
+// Real, long form of a program path, so two shortcuts to the same file written differently
+// ("PROGRA~1", different case, an 8.3 name) are recognised as the same app.
+static std::wstring CanonicalAppPath(std::wstring p) {
+    p = CleanShortcutTarget(p);
+    if (p.empty()) return p;
+    wchar_t buf[32768];
+    const DWORD n = GetLongPathNameW(p.c_str(), buf, (DWORD)ARRAYSIZE(buf));
+    if (n > 0 && n < ARRAYSIZE(buf)) p.assign(buf, n);
+    return p;
+}
+
+static std::wstring FileNameOf(const std::wstring& p) {
+    const size_t i = p.find_last_of(L"\\/");
+    return i == std::wstring::npos ? p : p.substr(i + 1);
+}
+
+static std::wstring FolderNameOf(const std::wstring& p) {
+    const std::wstring dir = ParentDir(p);
+    return dir.empty() ? std::wstring() : FileNameOf(dir);
+}
+
+static bool ReadShellLink(const std::wstring& lnkPath, std::wstring& target, std::wstring& args) {
+    IShellLinkW* link = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) ||
+        !link) {
+        return false;
+    }
+    bool ok = false;
+    IPersistFile* pf = nullptr;
+    if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&pf))) && pf) {
+        if (SUCCEEDED(pf->Load(lnkPath.c_str(), STGM_READ))) {
+            wchar_t buf[32768];
+            WIN32_FIND_DATAW fd = {};
+            if (SUCCEEDED(link->GetPath(buf, (int)ARRAYSIZE(buf), &fd, SLGP_RAWPATH)) && buf[0]) {
+                target = CanonicalAppPath(buf);
+                ok = !target.empty();
+            }
+            if (SUCCEEDED(link->GetArguments(buf, (int)ARRAYSIZE(buf))) && buf[0]) {
+                args = buf;
+            }
+        }
+        pf->Release();
+    }
+    link->Release();
+    return ok;
+}
+
+// ---- Windows Recent list ---------------------------------------------------------------
+// The Recent folder holds one .lnk per document Windows was asked to open. They are resolved in a
+// worker thread (COM/shell calls) and only the shortcuts with a real file or folder target are kept.
+
+static std::wstring RecentFolder() {
+    // The shell knows the real (possibly redirected) Recent folder. Fall back to the classic path.
+    std::wstring dir = KnownFolderPath(FOLDERID_Recent);
+    if (dir.empty()) {
+        const std::wstring appData = KnownFolderPath(FOLDERID_RoamingAppData);
+        if (!appData.empty()) dir = appData + L"\\Microsoft\\Windows\\Recent";
+    }
+    return dir;
+}
+
+static ULONGLONG RecentFilesStamp(const std::wstring& dir = RecentFolder()) {
+    if (dir.empty()) return 0;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*.lnk").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    ULONGLONG best = 0;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const ULONGLONG t = ((ULONGLONG)fd.ftLastWriteTime.dwHighDateTime << 32) |
+                            fd.ftLastWriteTime.dwLowDateTime;
+        if (t > best) best = t;
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best;
+}
+
+struct RecentCandidate {
+    std::wstring path;
+    FILETIME used{};
+};
+
+static std::vector<RecentEntry> LoadRecentFiles(const std::wstring& dir = RecentFolder()) {
+    std::vector<RecentEntry> out;
+    if (dir.empty()) return out;
+    std::vector<RecentCandidate> candidates;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*.lnk").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return out;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        candidates.push_back({dir + L"\\" + fd.cFileName, fd.ftLastWriteTime});
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(candidates.begin(), candidates.end(),
+              [](const RecentCandidate& a, const RecentCandidate& b) {
+                  return CompareFileTime(&a.used, &b.used) > 0;
+              });
+    if (candidates.size() > 40) candidates.resize(40);
+    std::unordered_set<std::wstring> seen;
+    for (const RecentCandidate& c : candidates) {
+        std::wstring target, args;
+        if (!ReadShellLink(c.path, target, args)) continue;
+        if (!args.empty()) continue;  // an app launcher, not a document
+        const DWORD attr = GetFileAttributesW(target.c_str());
+        if (attr == INVALID_FILE_ATTRIBUTES) continue;
+        const std::wstring name = FileNameOf(target);
+        if (name.empty()) continue;
+        if (!seen.insert(FoldString(target)).second) continue;
+        RecentEntry e;
+        e.name = name;
+        e.path = target;
+        e.dir = ParentDir(target);
+        e.isDir = (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        e.ext = e.isDir ? std::wstring() : FileExtOf(name);
+        e.folded = FoldString(name + L" " + e.dir);
+        e.used = c.used;
+        out.push_back(std::move(e));
+        if (out.size() >= 40) break;
+    }
+    return out;
+}
+
+struct RecentLoadResult {
+    UINT gen;
+    ULONGLONG stamp;
+    std::vector<RecentEntry> entries;
+};
+
+static DWORD WINAPI RecentThreadProc(LPVOID param) {
+    const UINT gen = (UINT)(UINT_PTR)param;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    auto* res = new RecentLoadResult{gen, RecentFilesStamp(), LoadRecentFiles()};
+    CoUninitialize();
+    if (!g_hwnd || !PostMessageW(g_hwnd, WM_APP_RECENT, 0, (LPARAM)res)) delete res;
+    return 0;
+}
+
+static void StartRecentLoad() {
+    if (!g_cfg.recentFiles || !g_hwnd) return;
+    const UINT gen = ++g_recentGen;
+    HANDLE th = CreateThread(nullptr, 0, RecentThreadProc, (LPVOID)(UINT_PTR)gen, 0, nullptr);
+    if (th) CloseHandle(th);
+}
+
+static void RefreshRecentIfStale() {
+    if (!g_cfg.recentFiles || !g_hwnd) return;
+    const double now = NowSec();
+    if (now - g_recentCheckedAt < 5.0) return;
+    g_recentCheckedAt = now;
+    const ULONGLONG stamp = RecentFilesStamp();
+    if (stamp == g_recentStamp && g_recentLoaded) return;
+    g_recentStamp = stamp;
+    StartRecentLoad();
+}
+
+// ---- Global "find:" search (Home plus extra roots) --------------------------------------
+// BFS like the file browser's deep search, but with several roots and its own generation so it
+// never touches the file mode list.
+
+static bool PathUnder(const std::wstring& path, const std::wstring& root) {
+    if (path.size() <= root.size()) return false;
+    if (_wcsnicmp(path.c_str(), root.c_str(), root.size()) != 0) return false;
+    if (!root.empty() && (root.back() == L'\\' || root.back() == L'/')) return true;
+    return path[root.size()] == L'\\' || path[root.size()] == L'/';
+}
+
+static std::vector<std::wstring> GlobalRoots() {
+    std::vector<std::wstring> roots;
+    auto add = [&](std::wstring p) {
+        p = TrimBlanks(ExpandedPath(p));
+        // Keep a drive root ("C:\") intact; trim trailing separators elsewhere.
+        while (p.size() > 3 && (p.back() == L'\\' || p.back() == L'/')) p.pop_back();
+        if (p.empty()) return;
+        const DWORD attr = GetFileAttributesW(p.c_str());
+        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) return;
+        for (const auto& r : roots) {
+            if (SamePath(r, p)) return;
+        }
+        roots.push_back(std::move(p));
+    };
+    add(KnownFolderPath(FOLDERID_Profile));
+    if (roots.empty()) {
+        add(KnownFolderPath(FOLDERID_Documents));
+        add(KnownFolderPath(FOLDERID_Downloads));
+        add(KnownFolderPath(FOLDERID_Desktop));
+    }
+    for (const auto& r : g_cfg.searchRoots) add(r);
+    // Home already covers Documents/Downloads/...; drop roots nested inside another root.
+    std::vector<std::wstring> out;
+    for (size_t i = 0; i < roots.size(); ++i) {
+        bool nested = false;
+        for (size_t j = 0; j < roots.size(); ++j) {
+            if (i != j && PathUnder(roots[i], roots[j])) {
+                nested = true;
+                break;
+            }
+        }
+        if (!nested) out.push_back(roots[i]);
+    }
+    return out;
+}
+
+struct GlobalSearchJob {
+    HWND hwnd;
+    LONG gen;
+    std::wstring key;
+    std::vector<std::wstring> roots;
+    std::vector<std::wstring> tokens;
+};
+
+struct GlobalSearchResult {
+    LONG gen;
+    std::wstring key;
+    std::vector<FileEntry> entries;
+    bool truncated;
+    bool done;
+};
+
+static void GlobalSearchStarted() {
+    if (InterlockedIncrement(&g_globalSearchRunning) == 1 && g_globalSearchIdle) {
+        ResetEvent(g_globalSearchIdle);
+    }
+}
+
+static void GlobalSearchFinished() {
+    if (InterlockedDecrement(&g_globalSearchRunning) == 0 && g_globalSearchIdle) {
+        SetEvent(g_globalSearchIdle);
+    }
+}
+
+static DWORD WINAPI GlobalSearchThread(LPVOID param) {
+    std::unique_ptr<GlobalSearchJob> job((GlobalSearchJob*)param);
+    struct DoneGuard {
+        ~DoneGuard() { GlobalSearchFinished(); }
+    } doneGuard;
+    const size_t kMaxHits = 300, kMaxScanned = 400000;
+    const int kMaxDepth = 14;
+    const DWORD kBudgetMs = 8000;
+    struct Item {
+        std::wstring dir;
+        int depth;
+    };
+    struct Hit {
+        FileEntry e;
+        int score;
+    };
+    std::vector<Item> queue;
+    for (const auto& r : job->roots) queue.push_back({r, 0});
+    std::vector<Hit> hits;
+    size_t qi = 0, scanned = 0;
+    bool truncated = false;
+    const DWORD t0 = GetTickCount();
+    DWORD lastPost = t0;
+    auto cancelled = [&] { return job->gen != g_globalSearchGen; };
+    auto post = [&](bool isFinal) {
+        std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
+            if (a.score != b.score) return a.score > b.score;
+            return CompareStringOrdinal(a.e.folded.c_str(), -1, b.e.folded.c_str(), -1, TRUE) ==
+                   CSTR_LESS_THAN;
+        });
+        auto* res = new GlobalSearchResult();
+        res->gen = job->gen;
+        res->key = job->key;
+        res->truncated = truncated;
+        res->done = isFinal;
+        res->entries.reserve(hits.size());
+        for (const auto& ht : hits) res->entries.push_back(ht.e);
+        if (!PostMessageW(job->hwnd, WM_APP_GLOBAL, 0, (LPARAM)res)) delete res;
+    };
+
+    while (qi < queue.size() && !truncated) {
+        if (cancelled()) return 0;
+        if (!hits.empty() && GetTickCount() - lastPost > 250) {
+            post(false);
+            lastPost = GetTickCount();
+        }
+        const Item it = queue[qi++];
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileExW(JoinPath(it.dir, L"*").c_str(), FindExInfoBasic, &fd,
+                                    FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (SkipFindEntry(fd)) continue;
+            ++scanned;
+            if ((scanned & 255) == 0) {
+                if (cancelled()) {
+                    FindClose(h);
+                    return 0;
+                }
+                if (GetTickCount() - t0 > kBudgetMs || scanned > kMaxScanned) {
+                    truncated = true;
+                    break;
+                }
+            }
+            const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            const std::wstring folded = FoldString(fd.cFileName);
+            int score = 100;
+            bool ok = true;
+            for (size_t k = 0; k < job->tokens.size(); ++k) {
+                const size_t pos = folded.find(job->tokens[k]);
+                if (pos == std::wstring::npos) {
+                    ok = false;
+                    break;
+                }
+                if (k == 0) {
+                    if (pos == 0) score = 300;
+                    else if (!iswalnum(folded[pos - 1])) score = 200;
+                }
+            }
+            if (ok) {
+                Hit ht;
+                ht.e = MakeFileEntry(fd, it.dir);
+                FileEntryMeta(ht.e);
+                ht.score = score + (isDir ? 20 : 0) - it.depth * 15;
+                hits.push_back(std::move(ht));
+                if (hits.size() >= kMaxHits) {
+                    truncated = true;
+                    break;
+                }
+            }
+            if (isDir && it.depth < kMaxDepth) {
+                const bool link = (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
+                                  (fd.dwReserved0 == 0xA000000C || fd.dwReserved0 == 0xA0000003);
+                const bool cloud =
+                    (fd.dwFileAttributes &
+                     (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) != 0;
+                const std::wstring fn = folded;
+                if (!link && !cloud && fn != L"node_modules" && fn != L".git") {
+                    queue.push_back({JoinPath(it.dir, fd.cFileName), it.depth + 1});
+                }
+            }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    if (cancelled()) return 0;
+    post(true);
+    return 0;
+}
+
+static bool GlobalModeActive() {
+    return g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::GlobalFiles &&
+           !g_tokens.empty();
+}
+
+static void UpdateTargets(bool snap, bool followSelection);  // defined with the layout code
+static void MarkDirty();
+static void StartGlobalSearch();
+
+// ===== Everything (voidtools) as an optional index =====
+// The built-in scan stays the default. With "Everything" selected, the query is sent to the running
+// Everything over its IPC: a WM_COPYDATA packet in the format of the official SDK (everything_ipc.h)
+// and the answer comes back to this same window, so no DLL is shipped or loaded.
+static const wchar_t kEverythingWndClass[] = L"EVERYTHING_TASKBAR_NOTIFICATION";
+static const DWORD kEverythingCopyDataQueryW = 2;  // EVERYTHING_IPC_COPYDATAQUERYW
+static const DWORD kEverythingItemFolder = 0x00000001;
+static const DWORD kEverythingItemDrive = 0x00000002;
+static const DWORD kEverythingMaxHits = 1000;  // what we ask Everything for
+static const size_t kEverythingMaxShown = 300; // what the list keeps after ranking
+
+#pragma pack(push, 1)
+struct EvQueryW {
+    DWORD replyHwnd;
+    DWORD replyMessage;
+    DWORD searchFlags;
+    DWORD offset;
+    DWORD maxResults;
+    wchar_t search[1];
+};
+struct EvItemW {
+    DWORD flags;
+    DWORD nameOffset;
+    DWORD pathOffset;
+};
+struct EvListW {
+    DWORD totFolders, totFiles, totItems;
+    DWORD numFolders, numFiles, numItems;
+    DWORD offset;
+    EvItemW items[1];
+};
+#pragma pack(pop)
+
+static UINT g_evReplyMessage = 0;    // registered message Everything answers with
+static std::vector<BYTE> g_evReply;  // raw reply of the last query
+static HWND g_evWindow = nullptr;    // cached Everything notification window
+static double g_evRetryAt = 0;       // wait before probing a missing Everything again
+static bool g_evPending = false;     // a query is in flight, waiting for its answer
+static DWORD g_evSeq = 0;            // id of the query in flight, echoed back by Everything
+static DWORD g_evPendingSeq = 0;
+static std::wstring g_evPendingKey;  // the search key the answer belongs to
+static LONG g_evPendingGen = 0;      // the search generation it was sent for
+static double g_evFailedAt = -1e9;   // last time Everything could not be used (footer notice)
+
+// Where the answer in flight belongs: the "find:" list or the deep search inside Files.
+enum class EvTarget { Global, Files };
+static EvTarget g_evTarget = EvTarget::Global;
+
+// A string at `off` inside the reply, bounded by the reply size.
+static std::wstring EvText(const std::vector<BYTE>& buf, DWORD off) {
+    if (off >= buf.size()) return std::wstring();
+    const wchar_t* s = (const wchar_t*)(buf.data() + off);
+    const size_t maxChars = (buf.size() - off) / sizeof(wchar_t);
+    size_t n = 0;
+    while (n < maxChars && s[n]) ++n;
+    return std::wstring(s, n);
+}
+
+static HWND EverythingWindow() {
+    if (g_evWindow && IsWindow(g_evWindow)) return g_evWindow;
+    g_evWindow = FindWindowW(kEverythingWndClass, nullptr);
+    return g_evWindow;
+}
+
+// Everything answers asynchronously: the reply arrives later as a WM_COPYDATA to this window and is
+// finished in WM_APP_EVERYTHING (verified against a running 1.5).
+static bool EverythingSendQuery(const std::wstring& query, DWORD seq) {
+    if (!g_hwnd || query.empty()) return false;
+    if (NowSec() < g_evRetryAt) {  // still cooling down after a failure
+        g_evFailedAt = NowSec();
+        return false;
+    }
+    if (!EverythingWindow()) {
+        // Not running, or not installed at all. FindWindow is the cheap check (the handle is cached
+        // while it lives), and the long cooldown keeps a typist from probing it on every keystroke.
+        g_evRetryAt = NowSec() + 30.0;
+        g_evFailedAt = NowSec();
+        return false;
+    }
+    const size_t chars = query.size() + 1;
+    std::vector<BYTE> packet(sizeof(EvQueryW) - sizeof(wchar_t) + chars * sizeof(wchar_t), 0);
+    auto* q = (EvQueryW*)packet.data();
+    q->replyHwnd = (DWORD)(DWORD_PTR)g_hwnd;
+    q->replyMessage = seq;  // echoed back in dwData, so a stale answer is recognisable
+    q->searchFlags = 0;     // case-insensitive name match: Everything's own default
+    q->offset = 0;
+    q->maxResults = kEverythingMaxHits;
+    memcpy(q->search, query.c_str(), chars * sizeof(wchar_t));
+
+    COPYDATASTRUCT cds = {};
+    cds.dwData = kEverythingCopyDataQueryW;
+    cds.cbData = (DWORD)packet.size();
+    cds.lpData = packet.data();
+    DWORD_PTR ignored = 0;
+    const LRESULT sent = SendMessageTimeoutW(EverythingWindow(), WM_COPYDATA, (WPARAM)g_hwnd,
+                                             (LPARAM)&cds, SMTO_ABORTIFHUNG, 500, &ignored);
+    if (!sent) {
+        g_evWindow = nullptr;  // it may have restarted: look it up again next time
+        g_evRetryAt = NowSec() + 5.0;
+        g_evFailedAt = NowSec();
+    }
+    return sent != 0;
+}
+
+// Turns the last reply into entries (name + folder for each match).
+static void EverythingParseReply(std::vector<FileEntry>& out, bool& truncated) {
+    out.clear();
+    truncated = false;
+    if (g_evReply.size() < sizeof(EvListW)) return;
+    const auto* list = (const EvListW*)g_evReply.data();
+    truncated = list->totItems > list->numItems;
+    const DWORD n = std::min<DWORD>(list->numItems, kEverythingMaxHits);
+    out.reserve(n);
+    for (DWORD i = 0; i < n; ++i) {
+        const EvItemW& it = list->items[i];
+        if (it.flags & kEverythingItemDrive) continue;  // "C:" rows are noise here
+        const std::wstring name = EvText(g_evReply, it.nameOffset);
+        if (name.empty()) continue;
+        const std::wstring path = EvText(g_evReply, it.pathOffset);
+        FileEntry e;
+        e.name = name;
+        e.folded = FoldString(name);
+        e.isDir = (it.flags & kEverythingItemFolder) != 0;
+        e.dir = path;
+        e.path = path.empty() ? name : JoinPath(path, name);
+        e.noInfo = true;  // the IPC list carries no size or date
+        if (!e.isDir) e.ext = FileExtOf(name);
+        out.push_back(std::move(e));
+    }
+}
+
+// Takes the answer that just landed and asks the UI to finish the search.
+static void AcceptEverythingReply(const COPYDATASTRUCT* cds) {
+    if (!g_evPending || !cds || !cds->lpData) return;
+    if (cds->dwData != g_evPendingSeq) return;  // an answer to a query we already replaced
+    const BYTE* p = (const BYTE*)cds->lpData;
+    g_evReply.assign(p, p + cds->cbData);
+    if (g_hwnd) PostMessageW(g_hwnd, WM_APP_EVERYTHING, 0, 0);
+}
+
+// The text typed after "find:", as typed: Everything understands its own search syntax, and the
+// folded tokens would lose accents and quotes.
+static std::wstring GlobalRawQuery() {
+    if (g_activator < 0) return std::wstring();
+    const std::wstring trigger = kActivators[g_activator].trigger;
+    const size_t a = g_text.find_first_not_of(L" \t");
+    if (a == std::wstring::npos) return std::wstring();
+    const std::wstring t = g_text.substr(a);
+    if (t.size() <= trigger.size()) return std::wstring();
+    const size_t q = t.find_first_not_of(L" \t", trigger.size());
+    return q == std::wstring::npos ? std::wstring() : t.substr(q);
+}
+
+// Sends the current query to Everything; the answer arrives later (WM_APP_EVERYTHING). False means
+// "use the built-in scan instead".
+static bool StartEverythingSearch() {
+    if (!GlobalModeActive() || !g_hwnd) return false;
+    const DWORD seq = ++g_evSeq;
+    if (!EverythingSendQuery(GlobalRawQuery(), seq)) return false;
+    g_evReply.clear();
+    g_evPending = true;
+    g_evPendingSeq = seq;
+    g_evPendingKey = GlobalQueryKey();
+    g_evPendingGen = g_globalSearchGen;
+    g_evTarget = EvTarget::Global;
+    g_globalSearching = true;
+    SetTimer(g_hwnd, TIMER_EVFALLBACK, 900, nullptr);
+    MarkDirty();  // the path band shows "Searching…" while the index answers
+    return true;
+}
+
+// The Files deep search, answered by Everything restricted to the folder being browsed. Same wire
+// format, different target: the answer lands in g_fileDeep through WM_APP_EVERYTHING.
+static bool StartEverythingFileSearch() {
+    if (!g_hwnd || g_fileCur.empty()) return false;
+    std::wstring query = L"path:\"" + g_fileCur + L"\"";
+    for (const auto& t : g_tokens) {
+        query += L' ';
+        query += t;
+    }
+    const DWORD seq = ++g_evSeq;
+    if (!EverythingSendQuery(query, seq)) return false;
+    g_evReply.clear();
+    g_evPending = true;
+    g_evPendingSeq = seq;
+    g_evPendingKey = FileSearchKey();
+    g_evPendingGen = g_fileSearchGen;
+    g_evTarget = EvTarget::Files;
+    g_fileSearching = true;
+    SetTimer(g_hwnd, TIMER_EVFALLBACK, 900, nullptr);
+    MarkDirty();
+    return true;
+}
+
+// Closest match first, the rule the built-in deep search uses: the first word at the start of the
+// name, then at a word start, then anywhere; folders get a small nudge and shallower results win, so
+// a folder near the one you are browsing beats a deep temporary copy with the same name.
+static int DeepFileScore(const FileEntry& e, const std::wstring& root) {
+    int score = 100;
+    if (!g_tokens.empty()) {
+        const size_t pos = e.folded.find(g_tokens[0]);
+        if (pos == 0) {
+            score = 300;
+        } else if (pos != std::wstring::npos && !iswalnum(e.folded[pos - 1])) {
+            score = 200;
+        }
+    }
+    int depth = 0;
+    for (size_t i = root.size(); i < e.path.size(); ++i) {
+        if (e.path[i] == L'\\') ++depth;
+    }
+    score -= std::min(depth, 8) * 15;
+    return score + (e.isDir ? 20 : 0);
+}
+
+// Publishes the deep-search answer into the Files list.
+static void FinishEverythingFileSearch(LONG gen, const std::wstring& key) {
+    if (gen != g_fileSearchGen || !g_fileMode || g_fileCur.empty() || key != FileSearchKey()) {
+        return;  // the folder or the words changed while Everything was answering
+    }
+    std::vector<FileEntry> hits;
+    bool truncated = false;
+    EverythingParseReply(hits, truncated);
+    // "path:" is a text match, not a tree walk, and the local filters are not applied to deep
+    // results: both are enforced here. A drive root already ends with a separator ("C:\"), every
+    // other folder needs one, or nothing would ever match.
+    const std::wstring prefix =
+        (!g_fileCur.empty() && g_fileCur.back() == L'\\') ? g_fileCur : g_fileCur + L'\\';
+    std::vector<FileEntry> kept;
+    kept.reserve(hits.size());
+    for (FileEntry& e : hits) {
+        if (e.path.size() <= prefix.size()) continue;
+        if (CompareStringOrdinal(e.path.c_str(), (int)prefix.size(), prefix.c_str(),
+                                 (int)prefix.size(), TRUE) != CSTR_EQUAL) {
+            continue;  // e.g. C:\Temp2 when browsing C:\Temp
+        }
+        if (!FileFilterMatches(g_fileFilter, e.folded, e.isDir)) continue;
+        FileEntryMeta(e);  // formatted once, kept in the snapshot
+        kept.push_back(std::move(e));
+    }
+    std::stable_sort(kept.begin(), kept.end(), [&prefix](const FileEntry& a, const FileEntry& b) {
+        return DeepFileScore(a, prefix) > DeepFileScore(b, prefix);
+    });
+    if (kept.size() > kEverythingMaxShown) {
+        kept.resize(kEverythingMaxShown);
+        truncated = true;
+    }
+
+    const int oldSel = g_sel;
+    std::wstring keep;
+    if (oldSel > 0 && oldSel < (int)g_results.size()) keep = g_results[oldSel].payload;
+    ReleaseResultLayouts();
+    g_results.clear();
+    g_fileDeep = std::move(kept);
+    g_fileDeepKey = g_evPendingKey;
+    g_fileDeepTrunc = truncated;
+    g_fileDeepDone = true;
+    g_fileSearching = false;
+    RunSearch();
+    int restored = -1;
+    for (size_t i = 0; i < g_results.size() && !keep.empty(); ++i) {
+        if (g_results[i].payload == keep) {
+            restored = (int)i;
+            break;
+        }
+    }
+    g_sel = restored >= 0 ? restored : std::min(oldSel, (int)g_results.size() - 1);
+    if (g_sel < 0) g_sel = 0;
+    if (restored < 0 && oldSel == 0) g_scrollTarget = 0;
+    UpdateTargets(false, /*followSelection=*/restored >= 0);
+    MarkDirty();
+}
+
+// Publishes the answer that just arrived, ranked like the built-in scan.
+static void FinishEverythingSearch() {
+    if (!g_evPending) return;
+    const EvTarget target = g_evTarget;
+    const LONG gen = g_evPendingGen;
+    const std::wstring key = g_evPendingKey;
+    g_evPending = false;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_EVFALLBACK);
+    if (target == EvTarget::Files) {
+        FinishEverythingFileSearch(gen, key);
+        return;
+    }
+    const bool stale = gen != g_globalSearchGen || key != GlobalQueryKey() || g_activator < 0 ||
+                       kActivators[g_activator].mode != LauncherMode::GlobalFiles;
+    if (stale) return;
+    std::vector<FileEntry> hits;
+    bool truncated = false;
+    EverythingParseReply(hits, truncated);
+
+    // Closest matches first, the same rule as the built-in scan: everything that matched the words
+    // in the name scores, the rest keeps Everything's order at the bottom.
+    std::vector<int> score(hits.size(), 0);
+    for (size_t i = 0; i < hits.size(); ++i) {
+        for (const auto& t : g_tokens) {
+            const int s = ScoreToken(hits[i].name, hits[i].folded, t, nullptr);
+            if (s > 0) score[i] += s;
+        }
+    }
+    std::vector<size_t> order(hits.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        if (score[a] != score[b]) return score[a] > score[b];
+        return CompareStringOrdinal(hits[a].folded.c_str(), -1, hits[b].folded.c_str(), -1, TRUE) ==
+               CSTR_LESS_THAN;
+    });
+    std::vector<FileEntry> sorted;
+    sorted.reserve(hits.size());
+    for (const size_t i : order) sorted.push_back(std::move(hits[i]));
+    if (sorted.size() > kEverythingMaxShown) {
+        sorted.resize(kEverythingMaxShown);
+        truncated = true;
+    }
+
+    const int oldSel = g_sel;
+    std::wstring keep;
+    if (oldSel >= 0 && oldSel < (int)g_results.size()) keep = g_results[oldSel].payload;
+    g_globalFiles = std::move(sorted);
+    g_globalKey = GlobalQueryKey();
+    g_globalDone = true;
+    g_globalSearching = false;
+    g_globalTrunc = truncated;
+    RunSearch();
+    int restored = -1;
+    for (size_t i = 0; i < g_results.size() && !keep.empty(); ++i) {
+        if (g_results[i].payload == keep) {
+            restored = (int)i;
+            break;
+        }
+    }
+    g_sel = restored >= 0 ? restored : std::min(oldSel, (int)g_results.size() - 1);
+    if (g_sel < 0) g_sel = 0;
+    UpdateTargets(false, /*followSelection=*/restored >= 0);
+    MarkDirty();
+}
+
+// Everything never answered (it was closed or hung mid-query): drop it and scan instead.
+static void AbandonEverythingSearch() {
+    if (!g_evPending) return;
+    g_evPending = false;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_EVFALLBACK);
+    g_evRetryAt = NowSec() + 5.0;
+    g_evFailedAt = NowSec();
+    StartGlobalSearch();  // Everything is now rate-limited, so this starts the built-in scan
+}
+
+static void ResetEverythingSearch() {
+    g_evPending = false;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_EVFALLBACK);
+}
+
+static void CancelGlobalSearch() {
+    InterlockedIncrement(&g_globalSearchGen);
+    g_globalSearching = false;
+    ResetEverythingSearch();
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_GSEARCH);
+}
+
+static void ScheduleGlobalSearch() {
+    if (!GlobalModeActive()) {
+        CancelGlobalSearch();
+        return;
+    }
+    if (g_globalDone && g_globalKey == GlobalQueryKey()) {
+        CancelGlobalSearch();
+        return;
+    }
+    InterlockedIncrement(&g_globalSearchGen);
+    g_globalSearching = true;
+    g_globalDone = false;
+    if (g_hwnd) SetTimer(g_hwnd, TIMER_GSEARCH, 160, nullptr);
+}
+
+static void StartGlobalSearch() {
+    if (!GlobalModeActive() || !g_hwnd) {
+        g_globalSearching = false;
+        return;
+    }
+    if (g_cfg.fileSearchEngine == FileSearchEngine::Everything && StartEverythingSearch()) {
+        return;  // the index answered; nothing to scan
+    }
+    auto* job = new GlobalSearchJob();
+    job->hwnd = g_hwnd;
+    job->gen = InterlockedIncrement(&g_globalSearchGen);
+    job->key = GlobalQueryKey();
+    job->roots = GlobalRoots();
+    job->tokens = g_tokens;
+    GlobalSearchStarted();
+    HANDLE th = CreateThread(nullptr, 0, GlobalSearchThread, job, 0, nullptr);
+    if (!th) {
+        GlobalSearchFinished();
+        delete job;
+        g_globalSearching = false;
+    }
+}
+
+// Two entries are the same app when they start the same program with the same arguments, or are
+// the same packaged app. The display name is deliberately NOT part of this: two different apps
+// can share a name, and the same app is often listed more than once (Start menu and Desktop).
+static std::wstring AppIdentity(const RawApp& a) {
+    if (IsPackagedId(a.id)) return L"package:" + FoldString(a.id);
+    const std::wstring target = FoldString(CanonicalAppPath(a.target));
+    if (!target.empty()) {
+        return L"target:" + target + L"|" + FoldString(TrimBlanks(a.args));
+    }
+    return L"id:" + FoldString(a.id);
+}
+
+// A short suffix that tells two apps with the same name apart ("Outlook (Microsoft Office)",
+// "Outlook (Store)"). Only used when a name really repeats.
+static std::wstring AppQualifier(const RawApp& a) {
+    if (IsPackagedId(a.id)) return L"Store";
+    std::wstring path = CanonicalAppPath(a.target);
+    if (path.empty()) path = a.launch;
+    if (path.empty()) return L"App";
+
+    static const wchar_t* const kGeneric[] = {
+        L"windows",   L"system32",    L"syswow64", L"windowsapps", L"program files",
+        L"program files (x86)", L"programs", L"appdata", L"local", L"roaming",
+        L"desktop",   L"users",       L"public",   L"bin",        L"current",
+        L"versions",
+    };
+    std::wstring folder = FolderNameOf(path);
+    if (!folder.empty()) {
+        const std::wstring f = FoldString(folder);
+        bool generic = false;
+        for (const wchar_t* g : kGeneric) {
+            if (f == g) {
+                generic = true;
+                break;
+            }
+        }
+        if (!generic) return folder;
+    }
+    std::wstring file = FileNameOf(path);
+    const size_t dot = file.find_last_of(L'.');
+    if (dot != std::wstring::npos && dot > 0) file = file.substr(0, dot);
+    return file.empty() ? std::wstring(L"App") : file;
+}
+
+// True for a target that starts a program (not a document, folder or shell namespace id).
+static bool IsProgramTarget(const std::wstring& target) {
+    static const wchar_t* const kExt[] = {L".exe", L".com", L".bat", L".cmd", L".msc"};
+    const std::wstring t = FoldString(target);
+    for (const wchar_t* e : kExt) {
+        if (EndsWith(t, e)) return true;
+    }
+    return false;
+}
+
+// %LOCALAPPDATA%\Microsoft\WindowsApps holds the execution aliases of packaged apps. A Desktop
+// shortcut to one of them would duplicate the app that the Start menu already lists under its
+// AUMID.
+static bool IsStoreAliasPath(const std::wstring& path) {
+    wchar_t local[MAX_PATH];
+    const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return false;
+    return StartsWithNoCase(path, std::wstring(local) + L"\\Microsoft\\WindowsApps\\");
 }
 
 // ---- Filter: uninstallers and documentation ----------------------------------------------
@@ -4839,24 +7649,56 @@ static bool LoadImageFilePixels(IWICImagingFactory* wic,
     return ok;
 }
 
+static std::wstring KnownFolderPath(REFKNOWNFOLDERID id);  // defined with the folder watcher
+
 static DWORD WINAPI IndexThreadProc(LPVOID param) {
     std::unique_ptr<IndexJob> job((IndexJob*)param);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     struct Tmp {
         std::wstring folded;
+        int priority = 0;  // higher wins when two sources list the same app
         RawApp app;
-        IShellItem* item;
+        IShellItem* item = nullptr;
     };
     std::vector<Tmp> tmp;
+    std::unordered_map<std::wstring, size_t> byIdentity;
 
+    // Keeps the first entry for each app. A later entry from a preferred source (the Start menu)
+    // replaces an earlier one (the Desktop) without changing the position, so the order stays
+    // stable while the list is being built.
+    auto addApp = [&](RawApp&& app, IShellItem* item, int priority) {
+        std::wstring identity = AppIdentity(app);
+        auto it = byIdentity.find(identity);
+        if (it != byIdentity.end()) {
+            Tmp& cur = tmp[it->second];
+            if (priority > cur.priority) {
+                SafeRelease(cur.item);
+                cur.app = std::move(app);
+                cur.item = item;
+                cur.priority = priority;
+                cur.folded = FoldString(cur.app.name);
+            } else {
+                item->Release();
+            }
+            return;
+        }
+        Tmp t;
+        t.folded = FoldString(app.name);
+        t.priority = priority;
+        t.app = std::move(app);
+        t.item = item;
+        byIdentity[identity] = tmp.size();
+        tmp.push_back(std::move(t));
+    };
+
+    // ---- Start menu (and packaged apps) through the shell's own app list ----
     IShellItem* folder = nullptr;
     HRESULT hr = SHCreateItemFromParsingName(L"shell:AppsFolder", nullptr, IID_PPV_ARGS(&folder));
     if (SUCCEEDED(hr) && folder) {
         IEnumShellItems* en = nullptr;
         hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&en));
         if (SUCCEEDED(hr) && en) {
-            std::unordered_set<std::wstring> seenNames;
             IShellItem* it = nullptr;
             ULONG got = 0;
             while (en->Next(1, &it, &got) == S_OK && got == 1) {
@@ -4865,28 +7707,40 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
                 it->GetDisplayName(SIGDN_NORMALDISPLAY, &dn);
                 it->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &pn);
                 bool keep = dn && pn && *dn && *pn;
-                std::wstring name = dn ? dn : L"";
-                std::wstring id = pn ? pn : L"";
+                RawApp ra;
+                if (dn) ra.name = dn;
+                if (pn) ra.id = pn;
                 if (dn) CoTaskMemFree(dn);
                 if (pn) CoTaskMemFree(pn);
 
-                if (keep && job->hideUtility && ClassifyUtility(it, name, id) != UtilNone) {
+                if (keep && job->hideUtility && ClassifyUtility(it, ra.name, ra.id) != UtilNone) {
                     keep = false;
                 }
-                if (keep) {
-                    std::wstring folded = FoldString(name);
-                    if (!seenNames.insert(folded).second) {
-                        keep = false;  // duplicate name
-                    } else {
-                        Tmp t;
-                        t.folded = folded;
-                        t.app.name = name;
-                        t.app.id = id;
-                        t.item = it;
-                        tmp.push_back(std::move(t));
+
+                if (keep && !IsPackagedId(ra.id)) {
+                    IShellItem2* it2 = nullptr;
+                    if (SUCCEEDED(it->QueryInterface(IID_PPV_ARGS(&it2))) && it2) {
+                        ra.target = CanonicalAppPath(ItemString(it2, L"System.Link.TargetParsingPath"));
+                        ra.args = ItemString(it2, L"System.Link.Arguments");
+                        it2->Release();
+                    }
+                    if (ra.target.empty()) {
+                        // Advertised MSI links and a few older shortcuts do not expose their
+                        // target as a property; the .lnk file always knows it.
+                        std::wstring lnk = PathFromAppId(ra.id);
+                        if (EndsWith(FoldString(lnk), L".lnk")) {
+                            std::wstring t, a;
+                            if (ReadShellLink(lnk, t, a)) {
+                                ra.target = t;
+                                if (ra.args.empty()) ra.args = a;
+                            }
+                        }
                     }
                 }
-                if (!keep) {
+
+                if (keep) {
+                    addApp(std::move(ra), it, 2);
+                } else {
                     it->Release();
                 }
                 it = nullptr;
@@ -4894,6 +7748,115 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
             en->Release();
         }
         folder->Release();
+    }
+
+    // ---- Desktop shortcuts ----
+    // Programs are often launched from a Desktop shortcut that was never added to the Start menu
+    // (portable apps, shortcuts created by installers). Only the two Desktop folders are read,
+    // one level deep; anything that duplicates a Start menu entry is merged into it above.
+    const std::wstring desktopDirs[] = {KnownFolderPath(FOLDERID_Desktop),
+                                        KnownFolderPath(FOLDERID_PublicDesktop)};
+    for (const std::wstring& dir : desktopDirs) {
+        if (dir.empty()) continue;
+        WIN32_FIND_DATAW fd = {};
+        HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            const std::wstring leaf = fd.cFileName;
+            const std::wstring foldLeaf = FoldString(leaf);
+            const bool isLink = EndsWith(foldLeaf, L".lnk");
+            if (!isLink && !EndsWith(foldLeaf, L".exe")) continue;
+            if (leaf.empty() || leaf[0] == L'~') continue;  // stray 8.3 name
+
+            const std::wstring path = dir + L"\\" + leaf;
+            IShellItem* item = nullptr;
+            if (FAILED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item))) ||
+                !item) {
+                continue;
+            }
+
+            RawApp ra;
+            ra.id = path;
+            ra.launch = path;
+            PWSTR dn = nullptr;
+            item->GetDisplayName(SIGDN_NORMALDISPLAY, &dn);
+            ra.name = (dn && *dn) ? dn : leaf;
+            if (dn) CoTaskMemFree(dn);
+            if (FoldString(ra.name) == foldLeaf) {
+                ra.name = leaf.substr(0, leaf.find_last_of(L'.'));
+            }
+
+            if (isLink) {
+                IShellItem2* it2 = nullptr;
+                if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&it2))) && it2) {
+                    ra.target = CanonicalAppPath(ItemString(it2, L"System.Link.TargetParsingPath"));
+                    ra.args = ItemString(it2, L"System.Link.Arguments");
+                    it2->Release();
+                }
+                if (ra.target.empty()) {
+                    std::wstring t, a;
+                    if (ReadShellLink(path, t, a)) {
+                        ra.target = t;
+                        if (ra.args.empty()) ra.args = a;
+                    }
+                }
+            } else {
+                ra.target = CanonicalAppPath(path);
+            }
+
+            bool keep = !ra.name.empty();
+            if (keep && (ra.target.empty() || !IsProgramTarget(ra.target) ||
+                         IsStoreAliasPath(ra.target))) {
+                keep = false;
+            }
+            if (keep) {
+                WIN32_FILE_ATTRIBUTE_DATA fad = {};
+                if (!GetFileAttributesExW(ra.target.c_str(), GetFileExInfoStandard, &fad) ||
+                    (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    keep = false;  // the program the shortcut points to is gone
+                }
+            }
+            if (keep && job->hideUtility && ClassifyUtility(item, ra.name, path) != UtilNone) {
+                keep = false;
+            }
+
+            if (keep) {
+                addApp(std::move(ra), item, 1);
+            } else {
+                item->Release();
+            }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+
+    // ---- Readable names ----
+    // After the identity merge two different apps can still share a display name. Give each one
+    // a suffix that tells them apart, so the list never shows two identical rows.
+    {
+        std::unordered_map<std::wstring, int> nameCount;
+        for (const Tmp& t : tmp) ++nameCount[t.folded];
+        std::unordered_set<std::wstring> used;
+        for (Tmp& t : tmp) {
+            std::wstring name = t.app.name;
+            if (nameCount[t.folded] > 1) {
+                name += L" (" + AppQualifier(t.app) + L")";
+                if (used.count(FoldString(name))) {
+                    const std::wstring file = FileNameOf(CanonicalAppPath(t.app.target));
+                    if (!file.empty()) name = t.app.name + L" (" + file + L")";
+                }
+            }
+            const std::wstring base = name;
+            std::wstring folded = FoldString(name);
+            int n = 2;
+            while (used.count(folded)) {
+                name = base + L" " + std::to_wstring(n++);
+                folded = FoldString(name);
+            }
+            t.app.name = name;
+            t.folded = folded;
+            used.insert(folded);
+        }
     }
 
     std::sort(tmp.begin(), tmp.end(),
@@ -4967,13 +7930,13 @@ static DWORD WINAPI IndexThreadProc(LPVOID param) {
             if (a.ok && !suspicious) {
                 take(a);
             } else {
-                std::wstring target;
-                IShellItem2* it2 = nullptr;
-                if (SUCCEEDED(tmp[i].item->QueryInterface(IID_PPV_ARGS(&it2))) && it2) {
-                    target = ItemString(it2, L"System.Link.TargetParsingPath");
-                    it2->Release();
+                std::wstring target = tmp[i].app.target;
+                if (target.empty()) {
+                    const std::wstring p = PathFromAppId(id);
+                    // A .lnk has no icon of its own that we want; the shell item path below
+                    // resolves the shortcut's icon correctly.
+                    if (!EndsWith(FoldString(p), L".lnk")) target = p;
                 }
-                if (target.empty()) target = PathFromAppId(id);
                 Pix f;
                 if (GetClassicIconFallback(tmp[i].item, target, f)) {
                     take(f);
@@ -5056,7 +8019,7 @@ static void StartIndex(bool refreshIcons = false) {
 
 // Whether to reindex on opening, according to the "App index updates" setting:
 //  - Automatic: only if the watcher saw changes, or after 10 minutes as a fallback for
-//    Store apps that do not touch the Start menu folders.
+//    Store apps that do not touch the shortcut folders.
 //  - Every time it opens: always.
 //  - Interval: once the chosen time has passed since the last reindex.
 static bool ShouldReindexOnOpen() {
@@ -5072,10 +8035,10 @@ static bool ShouldReindexOnOpen() {
     }
 }
 
-// ===== Start menu watcher (change detection, Automatic mode) =====
-// The two Start menu folders (all users and current user) are watched. Installers fire many
-// events in a row and Windows needs a few seconds to register the shortcut, so the UI is only
-// notified once the events stop arriving.
+// ===== Shortcut folder watcher (change detection, Automatic mode) =====
+// The two Start menu folders (all users and current user) and the Desktop ones are watched.
+// Installers fire many events in a row and Windows needs a few seconds to register the shortcut,
+// so the UI is only notified once the events stop arriving.
 
 static std::wstring KnownFolderPath(REFKNOWNFOLDERID id) {
     std::wstring r;
@@ -5089,37 +8052,41 @@ static std::wstring KnownFolderPath(REFKNOWNFOLDERID id) {
 
 static DWORD WINAPI WatchThreadProc(LPVOID param) {
     HWND hwnd = (HWND)param;
-    const std::wstring dirs[2] = {KnownFolderPath(FOLDERID_CommonPrograms),
-                                  KnownFolderPath(FOLDERID_Programs)};
+    const std::wstring dirs[] = {KnownFolderPath(FOLDERID_CommonPrograms),
+                                 KnownFolderPath(FOLDERID_Programs),
+                                 KnownFolderPath(FOLDERID_Desktop),
+                                 KnownFolderPath(FOLDERID_PublicDesktop)};
     const DWORD filter =
         FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE;
 
-    HANDLE handles[3];
-    DWORD n = 0;
+    std::vector<HANDLE> handles;
+    std::unordered_set<std::wstring> seenDirs;
     for (const auto& d : dirs) {
         if (d.empty()) continue;
+        if (!seenDirs.insert(FoldString(d)).second) continue;  // a redirected Desktop can repeat
         HANDLE h = FindFirstChangeNotificationW(d.c_str(), TRUE, filter);
         if (h == INVALID_HANDLE_VALUE) {
             continue;
         }
-        handles[n++] = h;
+        handles.push_back(h);
     }
-    const DWORD stopIdx = n;
-    handles[n++] = g_watchStop;
+    const DWORD stopIdx = (DWORD)handles.size();
+    handles.push_back(g_watchStop);
+    const DWORD n = (DWORD)handles.size();
 
     if (stopIdx == 0) {
         return 0;
     }
 
     for (;;) {
-        DWORD w = WaitForMultipleObjects(n, handles, FALSE, INFINITE);
+        DWORD w = WaitForMultipleObjects(n, handles.data(), FALSE, INFINITE);
         if (w >= WAIT_OBJECT_0 + stopIdx) break;  // stop, or error
         FindNextChangeNotification(handles[w - WAIT_OBJECT_0]);
 
         // Debounce: wait until it goes quiet.
         bool stop = false;
         for (;;) {
-            DWORD w2 = WaitForMultipleObjects(n, handles, FALSE, kWatchDebounceMs);
+            DWORD w2 = WaitForMultipleObjects(n, handles.data(), FALSE, kWatchDebounceMs);
             if (w2 == WAIT_TIMEOUT) break;
             if (w2 >= WAIT_OBJECT_0 + stopIdx) {
                 stop = true;
@@ -5190,6 +8157,13 @@ static std::wstring UsageKey(const std::wstring& id) {
 
 static void UpdateTargets(bool snap, bool followSelection);
 static void MarkDirty();
+// Custom-entry form (defined in the "Custom entries" section, drawn from Render).
+static void DrawCustomForm(float cx, float cy, float cw, float s);
+static void DrawCustomFormFooter(float cx, float footerTop, float cw);
+static void DrawManager(float cx, float cy, float cw, float s);
+static void DrawManagerFooter(float cx, float footerTop, float cw);
+static void OpenManager();  // defined with the manager, below
+static bool ShiftDown();
 
 // Two-step confirmation for destructive commands: the first Enter arms the command (and shows a
 // warning), a second Enter within a few seconds runs it; anything else disarms it.
@@ -5229,10 +8203,14 @@ static void ApplyIndex(IndexResult& r) {
         AppEntry a;
         a.name = ra.name;
         a.id = ra.id;
+        a.target = ra.target;
+        a.args = ra.args;
+        a.launch = ra.launch;
         a.folded = FoldString(a.name);
         a.usageKey = UsageKey(a.id);
         a.uses = Wh_GetIntValue(a.usageKey.c_str(), 0);
         a.lastUsed = Wh_GetIntValue((a.usageKey + L"t").c_str(), 0);
+        a.pinned = Wh_GetIntValue((a.usageKey + L"p").c_str(), 0) != 0;
         auto it = old.find(a.id);
         if (it != old.end()) {
             AppEntry& o = g_apps[it->second];
@@ -5253,6 +8231,7 @@ static void ApplyIndex(IndexResult& r) {
     g_results.clear();
     g_apps.swap(next);
     g_detailsCache.clear();  // paths/versions may have changed
+    g_windowsDirty = true;   // the process -> icon mapping may have changed
 
     RunSearch();
     g_sel = 0;
@@ -5334,7 +8313,8 @@ static void ReleaseFormats() {
     IDWriteTextFormat** fmts[] = {&g_fmtInput, &g_fmtTitle,      &g_fmtHint,      &g_fmtKey,
                                   &g_fmtKeyBold, &g_fmtEmpty,    &g_fmtBadge,     &g_fmtSection,
                                   &g_fmtPanelTitle, &g_fmtPanelSub, &g_fmtPanelRow, &g_fmtMeta,
-                                  &g_fmtExt, &g_fmtPath};
+                                  &g_fmtExt, &g_fmtPath, &g_fmtForm, &g_fmtFormLabel,
+                                  &g_fmtPreviewCode};
     for (auto** f : fmts) SafeRelease(*f);
     SafeRelease(g_ellipsis);
     SafeRelease(g_ellipsisSm);
@@ -5363,6 +8343,11 @@ static void RebuildFormats() {
     g_fmtPanelTitle = MakeFormat(fam, Sc(16.f), semi);
     g_fmtPanelSub = MakeFormat(fam, Sc(12.f), normal);
     g_fmtPanelRow = MakeFormat(fam, Sc(13.f), normal);
+    g_fmtForm = MakeFormat(fam, Sc(17.f), normal);
+    g_fmtFormLabel = MakeFormat(fam, Sc(13.f), semi);
+    // Quick Look text: fixed pitch so columns map 1:1 to the horizontal scroll, and deliberately
+    // without trimming: long lines are scrolled sideways instead of ending in an ellipsis.
+    g_fmtPreviewCode = MakeFormat(L"Consolas", Sc(12.f), normal);
 
     // Long app names and paths are trimmed with an ellipsis instead of overflowing.
     const DWRITE_TRIMMING tr = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
@@ -5373,7 +8358,8 @@ static void RebuildFormats() {
     if (g_fmtPanelRow) {
         g_dw->CreateEllipsisTrimmingSign(g_fmtPanelRow, &g_ellipsisSm);
         if (g_ellipsisSm) {
-            for (IDWriteTextFormat* f : {g_fmtPanelRow, g_fmtPanelTitle, g_fmtPanelSub, g_fmtMeta}) {
+            for (IDWriteTextFormat* f :
+                 {g_fmtPanelRow, g_fmtPanelTitle, g_fmtPanelSub, g_fmtMeta, g_fmtFormLabel}) {
                 if (f) f->SetTrimming(&tr, g_ellipsisSm);
             }
         }
@@ -5837,9 +8823,10 @@ static double ExpandedH() {
     return kExpandedMinH + (g_fileMode ? kPathH : 0.f);
 }
 
-// Height (DIP) of the details panel; always matches the search bar.
+// Height (DIP) of the details panel (actions or Quick Look); always matches the search bar, which
+// is taller in file mode (path band), so the panel and the card end on the same line.
 static double DetailsPanelH() {
-    return kExpandedMinH;
+    return ExpandedH();
 }
 
 // Animated height (DIP) of the whole visible block.
@@ -5941,6 +8928,17 @@ static double MaxScrollPx() {
 // the mouse wheel and hover leave the scroll untouched.
 static void UpdateTargets(bool snap, bool followSelection = true) {
     int rows = VisibleRows();
+    // The custom-entry form replaces the list entirely, so it always uses the full height and
+    // never shows the details panel.
+    if (g_form.active) {
+        g_targetH = ExpandedH();
+        g_detailTarget = 0;
+        if (snap) {
+            g_curH = g_targetH;
+            g_detailPos = 0;
+        }
+        return;
+    }
     // There are only two heights: bar alone, or expanded (fixed). While typing it is always
     // expanded, even without results ("No results" fills the list area). Web modes are the
     // exception: they have a single, deterministic action, so the bar stays compact.
@@ -5990,12 +8988,21 @@ static void UpdateTargets(bool snap, bool followSelection = true) {
     g_scrollTarget = std::clamp(g_scrollTarget, 0.0, maxScroll);
     g_selTarget = g_sel;
 
-    // Details panel: there is only a panel if it is enabled and there is a selected app.
+    // Details / preview panel: open if the mode matches the selected result kind.
     if (n > 0 && g_sel >= 0 && g_sel < n && g_results[g_sel].kind == ResultKind::App) {
         g_panelAppId = g_apps[g_results[g_sel].app].id;
     }
-    g_detailTarget =
-        (g_detailsOpen && n > 0 && g_results[g_sel].kind == ResultKind::App) ? 1.0 : 0.0;
+    {
+        bool panelWanted = false;
+        if (g_detailsOpen && n > 0 && g_sel >= 0 && g_sel < n && !g_panelSwitching) {
+            const ResultKind rk = g_results[g_sel].kind;
+            if (g_panelMode == PanelMode::Actions && rk == ResultKind::App)
+                panelWanted = true;
+            else if (g_panelMode == PanelMode::Preview && rk == ResultKind::File)
+                panelWanted = true;
+        }
+        g_detailTarget = panelWanted ? 1.0 : 0.0;
+    }
 
     if (snap) {
         g_curH = g_targetH;
@@ -6032,6 +9039,13 @@ static void SetSelection(int idx) {
     if (n == 0) return;
     CancelConfirm();  // moving the selection disarms a pending destructive command
     g_sel = std::clamp(idx, 0, n - 1);
+    // When the preview panel is open, reset the preview if the file changed.
+    if (g_panelMode == PanelMode::Preview && g_detailsOpen) {
+        const auto& res = g_results[g_sel];
+        if (res.kind != ResultKind::File || res.payload != g_preview.path) {
+            g_preview = PreviewState{};
+        }
+    }
     UpdateTargets(false, /*followSelection=*/true);
     MarkDirty();
 }
@@ -6053,6 +9067,7 @@ static void CancelFileSearch();
 
 static void OnTextChanged() {
     CancelConfirm();  // typing disarms a pending destructive command
+    g_form = CustomFormState();  // the form belongs to the text that opened it
     // The calculator is debounced: clear its state now so typing feels instant (app searches
     // update immediately) and only re-evaluate shortly after the user stops typing. That way
     // typing "pith" never flashes the value of "pi" on the way.
@@ -6070,6 +9085,7 @@ static void OnTextChanged() {
     }
     RunSearch();
     ScheduleFileSearch();
+    ScheduleGlobalSearch();
     g_sel = 0;
     g_scrollTarget = 0;
     UpdateTargets(false, /*followSelection=*/true);  // layout/selection follow the new results
@@ -6112,8 +9128,19 @@ static const wchar_t* ResultTypeLabel(ResultKind k) {
         case ResultKind::Command: return kTxtKindCommand;
         case ResultKind::File: return kTxtKindFile;
         case ResultKind::Setting: return kTxtKindSetting;
+        case ResultKind::Custom: return kTxtKindCustom;
+        case ResultKind::Bookmark: return kTxtKindBookmark;
+        case ResultKind::Clip: return kTxtKindClip;
+        case ResultKind::Recent: return kTxtKindRecent;
+        case ResultKind::GlobalFile: return kTxtKindFile;
+        case ResultKind::Window: return kTxtKindWindow;
         default: return kTxtTypeApp;
     }
+}
+
+// Recent files and global "find:" results share the same row and actions: both carry a real path.
+static bool IsPathResult(ResultKind k) {
+    return k == ResultKind::Recent || k == ResultKind::GlobalFile;
 }
 
 // Title layout for any result text, with the matching letters set in the accent colour and
@@ -6469,14 +9496,18 @@ static void DrawCommandGlyph(CmdGlyph g, float x, float y, float size, const D2D
             ln(8.f, 8.f, 16.f, 16.f);
             ln(16.f, 8.f, 8.f, 16.f);
             break;
-        case CmdGlyph::ExternalLink:
-            ln(5.5f, 10.5f, 5.5f, 18.5f);
-            ln(5.5f, 18.5f, 13.5f, 18.5f);
-            ln(13.5f, 18.5f, 13.5f, 12.5f);
-            ln(11.f, 13.f, 18.5f, 5.5f);
-            ln(13.5f, 5.5f, 18.5f, 5.5f);
-            ln(18.5f, 5.5f, 18.5f, 10.5f);
+        case CmdGlyph::ExternalLink: {
+            // Arrow ↗ with baseline — clean "open externally" symbol used by
+            // Raycast/Spotlight. Just the arrow head + shaft, no box.
+            // Diagonal shaft bottom-left → top-right
+            ln(7.f, 17.f, 17.f, 7.f);
+            // Arrow head tip at (17, 7): right arm and top arm
+            ln(17.f, 7.f, 17.f, 12.f);
+            ln(17.f, 7.f, 12.f, 7.f);
+            // Short baseline (ground indicator below the arrow)
+            ln(6.f, 18.5f, 13.f, 18.5f);
             break;
+        }
         case CmdGlyph::ChevronRight:
             ln(9.f, 6.f, 15.f, 12.f);
             ln(15.f, 12.f, 9.f, 18.f);
@@ -6484,6 +9515,43 @@ static void DrawCommandGlyph(CmdGlyph g, float x, float y, float size, const D2D
         case CmdGlyph::ChevronLeft:
             ln(15.f, 6.f, 9.f, 12.f);
             ln(9.f, 12.f, 15.f, 18.f);
+            break;
+        case CmdGlyph::Link: {
+            // Chain-link icon: two pill-shaped ovals on a 45° axis.
+            // Drawn as two thin ellipses offset diagonally, plus a gap connector.
+            // Top-right pill centred at (14.5, 9.5), horizontal oval tilted via offset
+            el(14.5f, 9.5f,  4.2f, 2.2f);   // right oval
+            el(9.5f,  14.5f, 4.2f, 2.2f);   // left oval
+            // Diagonal connector (the shared overlapping bar between the two links)
+            ln(10.8f, 13.2f, 13.2f, 10.8f);
+            break;
+        }
+        case CmdGlyph::Star: {
+            // Five-point star: a bookmark row's badge.
+            D2D1_POINT_2F prev = pt(12.f, 3.8f);
+            for (int k = 1; k <= 10; ++k) {
+                const float a = -kPi / 2 + (float)k * kPi / 5;
+                const float r = (k % 2 == 0) ? 8.2f : 3.7f;
+                const D2D1_POINT_2F p =
+                    pt(12.f + r * (float)std::cos(a), 12.f + r * (float)std::sin(a));
+                g_rt->DrawLine(prev, p, g_brush, sw, g_roundStroke);
+                prev = p;
+            }
+            break;
+        }
+        case CmdGlyph::Clipboard:
+            // A clipboard: outer board, top clip and three text lines.
+            rr(6.5f, 5.5f, 17.5f, 19.5f, 2.f);
+            rr(9.5f, 3.5f, 14.5f, 7.5f, 1.2f);
+            ln(9.5f, 10.5f, 14.5f, 10.5f);
+            ln(9.5f, 13.5f, 14.5f, 13.5f);
+            ln(9.5f, 16.5f, 13.f, 16.5f);
+            break;
+        case CmdGlyph::Pin:
+            // Pushpin: head, collar and needle.
+            rr(9.f, 4.5f, 15.f, 10.5f, 2.f);
+            ln(8.f, 11.f, 16.f, 11.f);
+            ln(12.f, 11.f, 12.f, 19.f);
             break;
     }
 }
@@ -6508,17 +9576,33 @@ static void DrawFolderOutline(float x, float y, float size, const D2D1_COLOR_F& 
     ln(9.5f, 9.f, 4.f, 9.f);
 }
 
+static float TextWidth(const wchar_t* txt, IDWriteTextFormat* fmt);  // defined further down
+
 // Rounded tile with the extension text (falls back to a page glyph when there is no extension).
 static void DrawFileTile(float x, float y, float size, const std::wstring& ext,
-                         const D2D1_COLOR_F& col) {
+                         const D2D1_COLOR_F& col, float alpha = 1.f) {
     if (!g_rt) return;
-    FillRR(x, y, x + size, y + size, size * 0.22f, col);
+    FillRR(x, y, x + size, y + size, size * 0.22f, col, alpha);
     if (!ext.empty() && g_fmtExt) {
-        SetBrush(D2D1::ColorF(1.f, 1.f, 1.f));
+        SetBrush(D2D1::ColorF(1.f, 1.f, 1.f), alpha);
         D2D1_RECT_F tr = D2D1::RectF(x, y, x + size, y + size);
-        g_rt->DrawText(ext.c_str(), (UINT32)ext.size(), g_fmtExt, &tr, g_brush);
+        // Long extensions (e.g. "JSON", "HTML") on a small tile are shrunk around the tile
+        // centre so the letters never stick out of it.
+        const float tw = TextWidth(ext.c_str(), g_fmtExt);
+        const float avail = size * 0.86f;
+        if (tw > avail && tw > 0.f) {
+            const float f = avail / tw;
+            const float cx0 = x + size / 2, cy0 = y + size / 2;
+            g_rt->SetTransform(D2D1::Matrix3x2F::Scale(f, f, D2D1::Point2F(cx0, cy0)));
+            g_rt->DrawText(ext.c_str(), (UINT32)ext.size(), g_fmtExt, &tr, g_brush);
+            g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
+        } else {
+            g_rt->DrawText(ext.c_str(), (UINT32)ext.size(), g_fmtExt, &tr, g_brush);
+        }
     } else {
-        DrawCommandGlyph(CmdGlyph::Doc, x, y, size, col);
+        D2D1_COLOR_F gc = col;
+        gc.a *= alpha;
+        DrawCommandGlyph(CmdGlyph::Doc, x, y, size, gc);
     }
 }
 
@@ -6771,21 +9855,34 @@ static AppDetails ComputeDetails(const AppEntry& a) {
     std::wstring fullName;
     std::wstring installPath;
 
-    IShellItem2* item = nullptr;
-    std::wstring parse = L"shell:AppsFolder\\" + a.id;
-    if (SUCCEEDED(SHCreateItemFromParsingName(parse.c_str(), nullptr, IID_PPV_ARGS(&item))) && item) {
-        d.target = ItemString(item, L"System.Link.TargetParsingPath");
-        d.args = ItemString(item, L"System.Link.Arguments");
-        if (d.packaged) {
+    if (d.packaged) {
+        IShellItem2* item = nullptr;
+        std::wstring parse = L"shell:AppsFolder\\" + a.id;
+        if (SUCCEEDED(SHCreateItemFromParsingName(parse.c_str(), nullptr, IID_PPV_ARGS(&item))) &&
+            item) {
             fullName = ItemString(item, L"System.AppUserModel.PackageFullName");
             installPath = ItemString(item, L"System.AppUserModel.PackageInstallPath");
+            item->Release();
         }
-        item->Release();
-    }
-    if (d.packaged) {
         d.target.clear();  // MSIX apps are not launched or elevated by path
-    } else if (d.target.empty()) {
-        d.target = PathFromAppId(a.id);
+    } else if (!a.target.empty()) {
+        // The index resolved the program when the app was enumerated.
+        d.target = a.target;
+        d.args = a.args;
+    } else {
+        IShellItem2* item = nullptr;
+        std::wstring parse = L"shell:AppsFolder\\" + a.id;
+        if (SUCCEEDED(SHCreateItemFromParsingName(parse.c_str(), nullptr, IID_PPV_ARGS(&item))) &&
+            item) {
+            d.target = CanonicalAppPath(ItemString(item, L"System.Link.TargetParsingPath"));
+            d.args = ItemString(item, L"System.Link.Arguments");
+            item->Release();
+        }
+        if (d.target.empty()) {
+            const std::wstring p = PathFromAppId(a.id);
+            // A shortcut file is not the program: showing its own path and size would be wrong.
+            if (!EndsWith(FoldString(p), L".lnk")) d.target = p;
+        }
     }
     // Shell namespace targets (e.g. File Explorer -> "::{...}This PC") are not files: hide the
     // path and the file-based actions instead of showing the raw GUID.
@@ -6869,6 +9966,10 @@ static bool ActionAvailable(int id, const AppEntry& a, const AppDetails& d) {
     switch (id) {
         case ACT_OPEN:
             return true;
+        case ACT_PIN:
+            return !a.pinned;
+        case ACT_UNPIN:
+            return a.pinned;
         case ACT_ADMIN:
             return d.canShell && d.isExe;
         case ACT_LOCATION:
@@ -7029,7 +10130,7 @@ static void LiveSync() {
 
     if (g_livePanel) {
         const float a = (float)std::clamp(g_detailPos, 0.0, 1.0);
-        if (a > 0.02f) {
+        if (a > 0.02f && g_panelMode == PanelMode::Actions) {  // Quick Look has a flat background
             const float ox = cx + (kWidth + kPanelGap + (1.f - a) * 14.f) * s;
             LivePlaceWindow(g_livePanel, 1, baseX + (int)std::lround(ox), baseY + (int)std::lround(cy),
                             (int)std::lround(kPanelW * s * a), (int)std::lround(DetailsPanelH() * s));
@@ -7090,9 +10191,11 @@ static void DrawGlow(const D2D1_ROUNDED_RECT& card, float x, float y, float w, f
     }
 }
 
-static void DrawCard(float x, float y, float w, float h, float alpha) {
+// `plain` draws the same card (shadow, border, rim) over a flat opaque fill: no acrylic, blur or
+// captured desktop behind it. Used by the Quick Look panel.
+static void DrawCard(float x, float y, float w, float h, float alpha, bool plain = false) {
     const float s = (float)g_scale;
-    const bool live = UseLive();
+    const bool live = !plain && UseLive();
 
     if (live) {
         DrawShadowRing(x, y, w, h, alpha);
@@ -7107,7 +10210,7 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
     }
 
     const EffectParams ep = GetEffectParams();
-    const bool solid = g_cfg.effect == BgEffect::Solid;
+    const bool solid = plain || g_cfg.effect == BgEffect::Solid;
     D2D1_ROUNDED_RECT card = D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), kRadius * s, kRadius * s);
 
     if (live) {
@@ -7612,6 +10715,22 @@ static void DrawModalFooter(float cx, float cw, float yMid) {
     DrawHint(L"Cancel", esc, 1, x, yMid);
 }
 
+// Semantic feedback colours: the same three wherever a message appears, independent of the theme so
+// the meaning never gets lost in a purple or orange palette.
+static const D2D1_COLOR_F kToneOk = D2D1::ColorF(0.44f, 0.82f, 0.56f);     // done: copied, saved
+static const D2D1_COLOR_F kToneWarn = D2D1::ColorF(0.98f, 0.73f, 0.32f);   // worked around a problem
+static const D2D1_COLOR_F kToneError = D2D1::ColorF(0.94f, 0.42f, 0.42f);  // something failed
+
+// A short message in the footer with a coloured dot, the way a launcher reports one-off news
+// ("Copied", "Everything not running", "again to confirm").
+static void DrawNotice(float right, float yMid, const wchar_t* text, const D2D1_COLOR_F& tone) {
+    const float s = (float)g_scale;
+    const float w = TextWidth(text, g_fmtHint);
+    const float x = right - w;
+    FillRR(x - 11 * s, yMid - 3 * s, x - 5 * s, yMid + 3 * s, 3 * s, tone);
+    DrawLabel(text, g_fmtHint, x, yMid - 12 * s, right, yMid + 12 * s, tone, 1.f);
+}
+
 static void DrawFooter(float cx, float footerTop, float cw, int sel) {
     const float s = (float)g_scale;
     SetBrush(g_pal.separator);
@@ -7639,11 +10758,20 @@ static void DrawFooter(float cx, float footerTop, float cw, int sel) {
     }
 
     // Copying keeps the bar open, so the footer confirms it for a moment.
-    if (g_fileMode && NowSec() - g_fileCopiedAt < 1.4) {
-        const float lw = TextWidth(kTxtCalcCopied, g_fmtHint);
-        const float x = cx + cw - 20 * s;
-        DrawLabel(kTxtCalcCopied, g_fmtHint, x - lw, yMid - 12 * s, x, yMid + 12 * s,
-                  g_pal.accentInk, 1.f);
+    const bool copiedResult = sel >= 0 && sel < (int)g_results.size() &&
+                              (g_results[sel].kind == ResultKind::Bookmark ||
+                               g_results[sel].kind == ResultKind::Clip ||
+                               IsPathResult(g_results[sel].kind));
+    if ((g_fileMode || copiedResult) && NowSec() - g_fileCopiedAt < 1.4) {
+        DrawNotice(cx + cw - 20 * s, yMid, kTxtCalcCopied, kToneOk);
+        return;
+    }
+
+    // "find:" or the Files deep search with the Everything engine: say so when Everything was not
+    // available and the results came from the built-in scan instead.
+    if (g_cfg.fileSearchEngine == FileSearchEngine::Everything && NowSec() - g_evFailedAt < 6.0 &&
+        (GlobalModeActive() || (g_fileMode && FileQueryActive()))) {
+        DrawNotice(cx + cw - 20 * s, yMid, L"Everything not running · built-in scan", kToneWarn);
         return;
     }
 
@@ -7660,10 +10788,7 @@ static void DrawFooter(float cx, float footerTop, float cw, int sel) {
 
     // A destructive command is armed: show a red warning until the second Enter (or a timeout).
     if (kind == ResultKind::Command && g_confirmCmd >= 0 && g_results[sel].icon == g_confirmCmd) {
-        const D2D1_COLOR_F red = D2D1::ColorF(0.93f, 0.35f, 0.35f);
-        const float lw = TextWidth(kTxtConfirm, g_fmtHint);
-        const float x = cx + cw - 20 * s;
-        DrawLabel(kTxtConfirm, g_fmtHint, x - lw, yMid - 12 * s, x, yMid + 12 * s, red, 1.f);
+        DrawNotice(cx + cw - 20 * s, yMid, kTxtConfirm, kToneError);
         return;
     }
 
@@ -7692,8 +10817,66 @@ static void DrawFooter(float cx, float footerTop, float cw, int sel) {
         // the F1 cheat sheet, so the hints never crowd the reindex and help buttons.
         const int fi = g_results[sel].icon;
         const bool isDir = fi >= 0 && fi < (int)FileSrc().size() && FileSrc()[fi].isDir;
-        DrawHint(isDir ? kTxtBrowse : kTxtOpen, ok, 1, x, yMid);
+        x = DrawHint(isDir ? kTxtBrowse : kTxtOpen, ok, 1, x, yMid);
+        // Quick Look hint (only for previewable files, not folders)
+        if (!isDir) {
+            x -= 12 * s;
+            SetBrush(g_pal.separator);
+            D2D1_RECT_F vdiv = D2D1::RectF(x, yMid - 9 * s, x + 1.f, yMid + 9 * s);
+            g_rt->FillRectangle(&vdiv, g_brush);
+            x -= 12 * s;
+            const wchar_t* qk[2] = {L"Ctrl", L"Q"};
+            DrawHint(L"Preview", qk, 2, x, yMid);
+        }
         return;
+    }
+    if (kind == ResultKind::Bookmark) {
+        // Open is the primary action; the address copy stays discoverable next to it.
+        x = DrawHint(kTxtOpen, ok, 1, x, yMid);
+        FooterDivider(x, yMid);
+        const wchar_t* ck[2] = {L"Ctrl", kTxtEnterGlyph};
+        DrawHint(L"Copy address", ck, 2, x, yMid);
+        return;
+    }
+    if (kind == ResultKind::Clip) {
+        x = DrawHint(L"Paste", ok, 1, x, yMid);
+        FooterDivider(x, yMid);
+        const wchar_t* ck[2] = {L"Ctrl", kTxtEnterGlyph};
+        x = DrawHint(L"Copy", ck, 2, x, yMid);
+        FooterDivider(x, yMid);
+        bool pinned = false;
+        for (const ClipEntry& c : g_clips) {
+            if (c.text == g_results[sel].payload) {
+                pinned = c.pinned;
+                break;
+            }
+        }
+        const wchar_t* pk[2] = {L"Ctrl", L"D"};
+        DrawHint(pinned ? L"Unpin" : L"Pin", pk, 2, x, yMid);
+        return;
+    }
+    if (kind == ResultKind::Window) {
+        x = DrawHint(L"Switch", ok, 1, x, yMid);
+        return;
+    }
+    if (IsPathResult(kind)) {
+        x = DrawHint(kTxtOpen, ok, 1, x, yMid);
+        FooterDivider(x, yMid);
+        const wchar_t* fk[2] = {L"Ctrl", kTxtEnterGlyph};
+        DrawHint(g_results[sel].isDir ? L"Open folder" : L"Show in folder", fk, 2, x, yMid);
+        return;
+    }
+    if (kind == ResultKind::Custom) {
+        const int ci = g_results[sel].custom;
+        if (ci >= 0 && ci < (int)g_cfg.commands.size() && CustomHasFormFields(g_cfg.commands[ci])) {
+            // Enter opens the form to fill/review the fields; Shift+Enter skips it and launches now.
+            const bool run = g_cfg.commands[ci].type == L"run";
+            const wchar_t* sk[2] = {L"Shift", kTxtEnterGlyph};
+            x = DrawHint(run ? kTxtRun : kTxtOpen, sk, 2, x, yMid);
+            FooterDivider(x, yMid);
+            DrawHint(kTxtFormEdit, ok, 1, x, yMid);
+            return;
+        }
     }
     DrawHint(kind == ResultKind::Command ? kTxtRun : kTxtOpen, ok, 1, x, yMid);
 }
@@ -8156,9 +11339,17 @@ static std::wstring DetailsKeyHelpText() {
 }
 
 static const HelpRow kHelpPrefixRows[] = {
-    {L"?", L"Search the web"},
-    {L"g: b: d: y: w:", L"Search on a specific engine"},
-    {L">", L"Built-in commands (power, tools, settings)"},
+    {L"? g: b: d: y: w:", L"Web search (any engine)"},
+    {L"bm: clip:", L"Bookmarks / clipboard"},
+    {L"recent: find:", L"Recent files / every folder"},
+    {L"win: >", L"Open windows / commands"},
+    {L"Open Windows, Bookmarks…", L"Type a mode name to enter it"},
+};
+
+static const HelpRow kHelpClipRows[] = {
+    {L"Enter / Ctrl + Enter", L"Paste it / just copy it"},
+    {L"Ctrl + D", L"Pin or unpin an entry"},
+    {L"Ctrl + Shift + R", L"Remove an entry"},
 };
 
 static const HelpRow kHelpCalcRows[] = {
@@ -8173,6 +11364,10 @@ static const HelpRow kHelpFileRows[] = {
     {L"Alt + ← / →", L"Back and forward"},
     {L"Ctrl + 1…9", L"Jump to a location or drive"},
     {L"Ctrl + Tab", L"Switch drive (C:, D:, …)"},
+    {L"Ctrl + L / Alt + D", L"Edit the path"},
+    {L"Ctrl + Q", L"Preview the file"},
+    {L"Ctrl + G", L"Show it in its folder"},
+    {L"Ctrl + S", L"Sort the list"},
     {L"F2", L"Rename"},
     {L"Ctrl + Shift + N", L"New folder"},
     {L"Ctrl + T", L"Terminal in this folder"},
@@ -8242,9 +11437,26 @@ static void DrawHelpColumn(const HelpSection* secs, int n, float x, float y, flo
     }
 }
 
-// The sheet fills the expanded card: the bar stays on top, two tabs pick the page and the
-// footer says how to switch pages and close. There is no scrolling: the columns are sized to
-// fit the expanded height.
+// Height one column needs, so the sheet can scroll instead of growing.
+static float HelpColumnsHeight(const HelpSection* secs, int n, float s) {
+    const float headerH = 22 * s;
+    const float rowH = 17 * s;
+    const float gap = 6 * s;
+    float h = 0;
+    for (int i = 0; i < n; ++i) h += headerH + secs[i].count * rowH + gap;
+    return h;
+}
+
+// Keeps the sheet's scroll inside what the page actually needs (and remembers the limits for the
+// wheel and the keys).
+static void ClampHelpScroll(float contentH, float viewH) {
+    g_helpMaxScroll = std::max(0.f, contentH - viewH);
+    g_helpScroll = std::clamp(g_helpScroll, 0.f, g_helpMaxScroll);
+    g_helpViewH = viewH;
+}
+
+// The sheet fills the expanded card: the bar stays on top, two tabs pick the page and the footer
+// says how to switch pages and close. A page that does not fit scrolls with the wheel or the arrows.
 static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
     const float top = cy + (kBarH + 12) * s;
     const float contentTop = top + 28 * s;
@@ -8282,27 +11494,35 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
         };
         const HelpRow actionRows[] = {
             {details.c_str(), L"Actions and details (configurable)"},
+            {L"Ctrl + D", L"Pin or unpin the selected app"},
             {L"Ctrl + R", L"Rebuild the app index"},
         };
         const HelpSection left[] = {
             {L"GETTING AROUND", navRows, ARRAYSIZE(navRows)},
             {L"ACTIONS", actionRows, ARRAYSIZE(actionRows)},
             {L"PREFIXES", kHelpPrefixRows, ARRAYSIZE(kHelpPrefixRows)},
+            {L"CLIPBOARD", kHelpClipRows, ARRAYSIZE(kHelpClipRows)},
             {L"CALCULATOR", kHelpCalcRows, ARRAYSIZE(kHelpCalcRows)},
         };
-        DrawHelpColumn(left, ARRAYSIZE(left), cx + pad, contentTop, colW, s);
+        const HelpSection right[] = {
+            {L"FILES", kHelpFileRows, ARRAYSIZE(kHelpFileRows)},
+            {L"FILTERS", kHelpFilterRows, ARRAYSIZE(kHelpFilterRows)},
+        };
+        float contentH = HelpColumnsHeight(left, ARRAYSIZE(left), s);
+        if (g_cfg.filesEnabled) {
+            contentH = std::max(contentH, HelpColumnsHeight(right, ARRAYSIZE(right), s));
+        }
+        ClampHelpScroll(contentH, bottom - contentTop);
+        const float y = contentTop - g_helpScroll;
+        DrawHelpColumn(left, ARRAYSIZE(left), cx + pad, y, colW, s);
 
         if (g_cfg.filesEnabled) {
-            const HelpSection right[] = {
-                {L"FILES", kHelpFileRows, ARRAYSIZE(kHelpFileRows)},
-                {L"FILTERS", kHelpFilterRows, ARRAYSIZE(kHelpFilterRows)},
-            };
-            DrawHelpColumn(right, ARRAYSIZE(right), rx, contentTop, colW, s);
+            DrawHelpColumn(right, ARRAYSIZE(right), rx, y, colW, s);
         } else {
-            DrawLabel(L"FILES", g_fmtSection, rx, contentTop, rx + colW, contentTop + 22 * s,
+            DrawLabel(L"FILES", g_fmtSection, rx, y, rx + colW, y + 22 * s,
                       g_pal.accentStrong, 1.f);
-            DrawLabel(L"File browser is off in the mod's settings.", g_fmtMeta, rx,
-                      contentTop + 22 * s, rx + colW, contentTop + 39 * s, g_pal.textDim, 1.f);
+            DrawLabel(L"File browser is off in the mod's settings.", g_fmtMeta, rx, y + 22 * s,
+                      rx + colW, y + 39 * s, g_pal.textDim, 1.f);
         }
     } else {
         const HelpSection left[] = {
@@ -8314,8 +11534,12 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
             {L"NUMBERS & UNITS", kCalcUnitRows, ARRAYSIZE(kCalcUnitRows)},
             {L"EXAMPLE", kCalcExampleRows, ARRAYSIZE(kCalcExampleRows)},
         };
-        DrawHelpColumn(left, ARRAYSIZE(left), cx + pad, contentTop, colW, s);
-        DrawHelpColumn(right, ARRAYSIZE(right), rx, contentTop, colW, s);
+        const float contentH = std::max(HelpColumnsHeight(left, ARRAYSIZE(left), s),
+                                        HelpColumnsHeight(right, ARRAYSIZE(right), s));
+        ClampHelpScroll(contentH, bottom - contentTop);
+        const float y = contentTop - g_helpScroll;
+        DrawHelpColumn(left, ARRAYSIZE(left), cx + pad, y, colW, s);
+        DrawHelpColumn(right, ARRAYSIZE(right), rx, y, colW, s);
     }
     g_rt->PopAxisAlignedClip();
 
@@ -8328,7 +11552,341 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
     float hx = DrawHint(L"Close", closeKeys, 2, cx + cw - 24 * s, hintMid);
     FooterDivider(hx, hintMid);
     const wchar_t* tabKeys[1] = {L"Tab"};
-    DrawHint(g_helpPage == 0 ? L"Calculator" : L"Shortcuts", tabKeys, 1, hx, hintMid);
+    hx = DrawHint(g_helpPage == 0 ? L"Calculator" : L"Shortcuts", tabKeys, 1, hx, hintMid);
+    if (g_helpMaxScroll > 0) {
+        FooterDivider(hx, hintMid);
+        const wchar_t* scrollKeys[2] = {L"↑", L"↓"};
+        DrawHint(L"Scroll", scrollKeys, 2, hx, hintMid);
+    }
+}
+
+// ===== Preview helpers =====
+
+static void LoadPreview(const std::wstring& path) {
+    if (g_preview.path == path && g_preview.loaded) return;  // already loaded
+    g_preview = PreviewState{};
+    g_preview.path = path;
+
+    // Determine type by extension (uppercase)
+    auto dotPos = path.rfind(L'.');
+    std::wstring ext;
+    if (dotPos != std::wstring::npos) {
+        ext = path.substr(dotPos + 1);
+        for (auto& c : ext) c = (wchar_t)towupper(c);
+    }
+
+    if (IsImageExt(ext)) {
+        g_preview.isImage = true;
+        g_preview.loaded  = true;
+        return;
+    }
+
+    // Text / JSON / code: read up to 2000 lines.
+    static const std::wstring kTextExts[] = {
+        L"TXT", L"MD", L"JSON", L"XML", L"YAML", L"YML", L"CSV",
+        L"LOG", L"INI", L"CFG", L"CONF", L"TOML", L"JS", L"TS",
+        L"JSX", L"TSX", L"PY", L"RB", L"CPP", L"C", L"H", L"HPP",
+        L"CS", L"JAVA", L"KT", L"SWIFT", L"GO", L"RS", L"SH",
+        L"BAT", L"CMD", L"PS1", L"HTML", L"CSS", L"SCSS", L"LESS",
+        L"SQL", L"DART", L"LUA", L"PHP", L"R", L"M", L"VB",
+        L"DIFF", L"PATCH", L"NFO", L"README",
+    };
+    bool isText = ext.empty();  // no extension → try as text
+    for (auto& te : kTextExts) {
+        if (ext == te) { isText = true; break; }
+    }
+
+    if (!isText) {
+        g_preview.errorMsg = L"Preview not available for this file type.";
+        g_preview.loaded = true;
+        return;
+    }
+
+    HANDLE hf = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hf == INVALID_HANDLE_VALUE) {
+        g_preview.errorMsg = L"Cannot open file.";
+        g_preview.loaded = true;
+        return;
+    }
+
+    // Read up to 256 KB
+    const DWORD kMaxBytes = 256 * 1024;
+    std::string raw(kMaxBytes, '\0');
+    DWORD read = 0;
+    ReadFile(hf, raw.data(), kMaxBytes, &read, nullptr);
+    CloseHandle(hf);
+    raw.resize(read);
+
+    // Convert to wstring (try UTF-8, fall back to system codepage)
+    std::wstring text;
+    int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                   raw.c_str(), (int)raw.size(), nullptr, 0);
+    if (wlen > 0) {
+        text.resize(wlen);
+        MultiByteToWideChar(CP_UTF8, 0, raw.c_str(), (int)raw.size(), text.data(), wlen);
+    } else {
+        wlen = MultiByteToWideChar(CP_ACP, 0, raw.c_str(), (int)raw.size(), nullptr, 0);
+        if (wlen > 0) {
+            text.resize(wlen);
+            MultiByteToWideChar(CP_ACP, 0, raw.c_str(), (int)raw.size(), text.data(), wlen);
+        }
+    }
+
+    if (!text.empty() && text[0] == 0xFEFF) text.erase(0, 1);  // UTF-8 BOM
+
+    // Split into lines. Tabs are expanded to 4-column stops so that columns line up and the
+    // horizontal scroll can work in whole columns.
+    g_preview.lines.clear();
+    std::wstring line;
+    int col = 0;
+    for (wchar_t ch : text) {
+        if (ch == L'\n') {
+            g_preview.lines.push_back(line);
+            line.clear();
+            col = 0;
+            if (g_preview.lines.size() >= 2000) break;
+        } else if (ch == L'\t') {
+            const int n = 4 - (col % 4);
+            line.append((size_t)n, L' ');
+            col += n;
+        } else if (ch != L'\r') {
+            line += ch;
+            ++col;
+        }
+    }
+    if (!line.empty() && g_preview.lines.size() < 2000) g_preview.lines.push_back(line);
+    for (const auto& l : g_preview.lines) g_preview.maxCols = std::max(g_preview.maxCols, (int)l.size());
+
+    g_preview.isText  = true;
+    g_preview.loaded  = true;
+}
+
+// ===== Preview Panel (Quick Look) =====
+// Same card as the actions panel (same slot, same height as the search bar, same slide-in), but
+// over a flat background instead of the acrylic / blur effect.
+
+// Geometry (DIP) shared by the drawing code and the keyboard scrolling, so the keys clamp to
+// exactly what is on screen.
+static const float kPrevHeaderH = 44.f;  // file icon + name
+static const float kPrevTopGap = 8.f;    // between the separator and the first line
+static const float kPrevFootH = 36.f;    // hint row
+static const float kPrevLineH = 15.f;
+static const float kPrevHBarH = 8.f;     // reserved for the horizontal scroll bar
+static const int kPrevHStep = 4;         // columns moved by Left / Right
+
+struct PreviewTextGeom {
+    float charW;     // px per column (fixed-pitch font)
+    float numColW;   // px of the line-number column, including the gap to the text
+    float textW;     // px available for the text
+    int numDigits;
+    int visCols;
+    int visLines;
+    bool hbar;       // a horizontal scroll bar is needed (and its height is reserved)
+};
+
+static PreviewTextGeom PreviewGeom() {
+    const float s = (float)g_scale;
+    PreviewTextGeom g = {};
+    g.charW = TextWidth(L"0", g_fmtPreviewCode);
+    if (g.charW < 1.f) g.charW = 7.f * s;
+    g.numDigits = 2;
+    for (int n = (int)g_preview.lines.size(); n >= 100; n /= 10) ++g.numDigits;
+    g.numColW = g.numDigits * g.charW + 12.f * s;
+    g.textW = (kPanelW - 2.f * kPanelPad) * s - g.numColW;
+    g.visCols = std::max(1, (int)std::floor(g.textW / g.charW));
+    g.hbar = g_preview.maxCols > g.visCols;
+    const float contentH = ((float)DetailsPanelH() - kPrevHeaderH - kPrevTopGap - kPrevFootH) * s;
+    g.visLines = std::max(
+        1, (int)std::floor((contentH - (g.hbar ? kPrevHBarH * s : 0.f)) / (kPrevLineH * s)));
+    return g;
+}
+
+static void DrawPreviewPanel(const SearchResult& res) {
+    const float s   = (float)g_scale;
+    const float a   = (float)std::clamp(g_detailPos, 0.0, 1.0);
+    float mainX = 0, mainY = 0;
+    MainOrigin(mainX, mainY);
+
+    // Attached to the right edge of the main panel; it slides in a bit when opening.
+    const float ox  = mainX + (kWidth + kPanelGap + (1.f - a) * 14.f) * s;
+    const float oy  = mainY;
+    const float pw  = kPanelW * s;
+    const float ph  = (float)DetailsPanelH() * s;   // always the same as the search bar
+    const float pad = kPanelPad * s;
+
+    DrawCard(ox, oy, pw, ph, a, /*plain=*/true);
+
+    // Nothing the panel draws can leave its card.
+    D2D1_RECT_F panelClip = D2D1::RectF(ox, oy, ox + pw, oy + ph);
+    g_rt->PushAxisAlignedClip(&panelClip, D2D1_ANTIALIAS_MODE_ALIASED);
+
+    // Load preview data if needed
+    if (!res.payload.empty()) {
+        LoadPreview(res.payload);
+    }
+
+    // ---- Header: file name ----
+    const float headerH = kPrevHeaderH * s;
+
+    // Determine ext for colour / icon
+    std::wstring ext;
+    {
+        auto d = res.payload.rfind(L'.');
+        if (d != std::wstring::npos) {
+            ext = res.payload.substr(d + 1);
+            for (auto& c : ext) c = (wchar_t)towupper(c);
+        }
+    }
+    const D2D1_COLOR_F tileCol = ExtColor(ext);
+
+    // File name only (trimmed with an ellipsis if it does not fit)
+    DrawLabel(res.title, g_fmtPanelTitle, ox + pad,
+              oy, ox + pw - pad, oy + headerH, g_pal.text, a);
+
+    // Separator
+    SetBrush(g_pal.separator, a);
+    D2D1_RECT_F sepR = D2D1::RectF(ox + pad, oy + headerH, ox + pw - pad, oy + headerH + 1.f);
+    g_rt->FillRectangle(&sepR, g_brush);
+
+    // ---- Content area ----
+    const float contentTop = oy + headerH + kPrevTopGap * s;
+    const float contentBot = oy + ph - kPrevFootH * s;   // leave room for the footer hints
+    const float contentW   = pw - pad * 2.f;
+
+    D2D1_RECT_F clip = D2D1::RectF(ox, contentTop, ox + pw, contentBot);
+    g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+
+    PreviewTextGeom tg = {};
+    if (!g_preview.loaded || g_preview.path != res.payload) {
+        // Still loading or path mismatch — show spinner placeholder
+        SetBrush(g_pal.textDim, a);
+        D2D1_RECT_F r = D2D1::RectF(ox + pad, contentTop + 12 * s, ox + pw - pad, contentBot);
+        g_rt->DrawText(L"Loading…", 8, g_fmtPanelRow, &r, g_brush);
+
+    } else if (!g_preview.errorMsg.empty()) {
+        // A failed preview is an error, not just missing information: same red as the rest.
+        const bool unsupported = g_preview.errorMsg.find(L"not available") != std::wstring::npos;
+        SetBrush(unsupported ? g_pal.textDim : kToneError, a);
+        D2D1_RECT_F r = D2D1::RectF(ox + pad, contentTop + 12 * s, ox + pw - pad, contentBot);
+        g_rt->DrawText(g_preview.errorMsg.c_str(), (UINT32)g_preview.errorMsg.size(),
+                       g_fmtPanelRow, &r, g_brush);
+
+    } else if (g_preview.isImage) {
+        // ---- Image preview ----
+        // Use the thumbnail cache (async loaded by the thumb thread)
+        // We need the FileEntry to call EnsureFileThumb — find it via the path
+        ID2D1Bitmap* bmp = nullptr;
+        for (auto& fe : FileSrc()) {
+            if (fe.path == res.payload) {
+                bmp = EnsureFileThumb(fe);
+                break;
+            }
+        }
+        if (bmp) {
+            // Draw the image centered, aspect-fitted inside the content area
+            const D2D1_SIZE_F bsz = bmp->GetSize();
+            const float availW = contentW;
+            const float availH = contentBot - contentTop - 8 * s;
+            const float scale  = std::min(availW / bsz.width, availH / bsz.height);
+            const float dw     = bsz.width  * scale;
+            const float dh     = bsz.height * scale;
+            const float dx     = ox + pad + (availW - dw) / 2.f;
+            const float dy     = contentTop + 4 * s + (availH - dh) / 2.f;
+            D2D1_RECT_F dst    = D2D1::RectF(dx, dy, dx + dw, dy + dh);
+            g_rt->DrawBitmap(bmp, &dst, a, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        } else {
+            // Thumbnail not yet loaded — show a placeholder tile
+            DrawFileTile(ox + pad + (contentW - 48 * s) / 2.f,
+                         contentTop + 12 * s, 48 * s, ext, tileCol, a);
+            SetBrush(g_pal.textDim, a);
+            const wchar_t* lbl = L"Loading image…";
+            D2D1_RECT_F r = D2D1::RectF(ox + pad, contentTop + 70 * s, ox + pw - pad, contentBot);
+            g_rt->DrawText(lbl, (UINT32)wcslen(lbl), g_fmtPanelRow, &r, g_brush);
+            MarkDirty();  // keep redrawing until thumb arrives
+        }
+
+    } else if (g_preview.isText) {
+        // ---- Text / code preview ----
+        tg = PreviewGeom();
+        const float lineH  = kPrevLineH * s;
+        const int total    = (int)g_preview.lines.size();
+        g_preview.scroll   = std::clamp(g_preview.scroll, 0, std::max(0, total - tg.visLines));
+        const int maxH     = std::max(0, g_preview.maxCols - tg.visCols);
+        g_preview.hscroll  = std::clamp(g_preview.hscroll, 0, maxH);
+
+        const float numX  = ox + pad;
+        const float textX = numX + tg.numColW;
+
+        if (total == 0) {
+            SetBrush(g_pal.textDim, a);
+            D2D1_RECT_F r = D2D1::RectF(ox + pad, contentTop + 12 * s, ox + pw - pad, contentBot);
+            g_rt->DrawText(L"Empty file.", 11, g_fmtPanelRow, &r, g_brush);
+        }
+
+        for (int i = 0; i < tg.visLines && (g_preview.scroll + i) < total; ++i) {
+            const int lineIdx = g_preview.scroll + i;
+            const float ly    = contentTop + i * lineH;
+
+            // Line number, right-aligned in its column
+            wchar_t numBuf[12];
+            const int nLen = swprintf_s(numBuf, L"%d", lineIdx + 1);
+            SetBrush(g_pal.textDim, a * 0.8f);
+            const float nx = numX + (tg.numDigits - std::min(nLen, tg.numDigits)) * tg.charW;
+            D2D1_RECT_F nr = D2D1::RectF(nx, ly, numX + tg.numColW, ly + lineH);
+            g_rt->DrawText(numBuf, (UINT32)std::max(0, nLen), g_fmtPreviewCode, &nr, g_brush,
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+            // Line text: only the visible columns, no trimming (the clip cuts the last glyph)
+            const std::wstring& ln = g_preview.lines[lineIdx];
+            if ((int)ln.size() > g_preview.hscroll) {
+                const std::wstring seg = ln.substr((size_t)g_preview.hscroll, (size_t)tg.visCols + 2);
+                SetBrush(g_pal.text, a);
+                D2D1_RECT_F tr = D2D1::RectF(textX, ly, textX + tg.textW, ly + lineH);
+                g_rt->DrawText(seg.c_str(), (UINT32)seg.size(), g_fmtPreviewCode, &tr, g_brush,
+                               D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            }
+        }
+
+        // Vertical scroll bar (if needed)
+        if (total > tg.visLines) {
+            const float sbX = ox + pw - pad * 0.6f - 3 * s;
+            const float sbH = tg.visLines * lineH;
+            const float tH  = std::max(12 * s, sbH * tg.visLines / (float)total);
+            const float tY  = contentTop + (sbH - tH) * g_preview.scroll /
+                                               (float)std::max(1, total - tg.visLines);
+            FillRR(sbX, tY, sbX + 3 * s, tY + tH, 1.5f * s, g_pal.textDim, 0.35f * a);
+        }
+        // Horizontal scroll bar (if needed), under the last line
+        if (tg.hbar) {
+            const float hbY = contentTop + tg.visLines * lineH + 3 * s;
+            const float tW  = std::max(16 * s, tg.textW * tg.visCols / (float)g_preview.maxCols);
+            const float tX  = textX + (tg.textW - tW) * g_preview.hscroll / (float)std::max(1, maxH);
+            FillRR(tX, hbY, tX + tW, hbY + 3 * s, 1.5f * s, g_pal.textDim, 0.35f * a);
+        }
+    }
+
+    g_rt->PopAxisAlignedClip();
+
+    // ---- Footer hints, laid out from the right edge inwards so they never leave the panel ----
+    if (a > 0.98f) {
+        const float hintMid = oy + ph - 18 * s;
+        float hx = ox + pw - pad;
+        const wchar_t* escKey[] = { L"Esc" };
+        hx = DrawHint(L"Close", escKey, 1, hx, hintMid) - 14 * s;
+        if (g_preview.isText && g_preview.loaded) {
+            if (tg.hbar) {
+                const wchar_t* hKeys[] = { L"←", L"→" };
+                hx = DrawHint(L"Pan", hKeys, 2, hx, hintMid) - 14 * s;
+            }
+            if ((int)g_preview.lines.size() > tg.visLines) {
+                const wchar_t* vKeys[] = { L"↑", L"↓" };
+                DrawHint(L"Scroll", vKeys, 2, hx, hintMid);
+            }
+        }
+    }
+
+    g_rt->PopAxisAlignedClip();
 }
 
 static void Render() {
@@ -8337,24 +11895,43 @@ static void Render() {
     }
     const float s = (float)g_scale;
 
+    // Panel mode switching: when g_panelSwitching is true the panel is animating closed;
+    // once it reaches near-zero we flip the mode and reopen.
+    if (g_panelSwitching && g_detailPos < 0.05) {
+        g_panelSwitching = false;
+        g_panelMode      = g_panelPendingMode;
+        g_detailsOpen    = true;
+        Sound::OnPanel(true);
+        UpdateTargets(false, false);
+    }
+
     // Details panel data (computed before drawing starts). If there is no longer a
     // selection (e.g. the text was deleted) the panel keeps showing the last app while it
     // fades out.
     AppEntry* panelApp = nullptr;
     const AppDetails* panelDetails = nullptr;
+    const SearchResult* panelFileRes = nullptr;
     if (g_detailPos > 0.01) {
-        if (g_sel >= 0 && g_sel < (int)g_results.size() &&
-            g_results[g_sel].kind == ResultKind::App) {
-            panelApp = &g_apps[g_results[g_sel].app];
-        } else if (!g_panelAppId.empty()) {
-            for (auto& a : g_apps) {
-                if (a.id == g_panelAppId) {
-                    panelApp = &a;
-                    break;
+        if (g_panelMode == PanelMode::Actions) {
+            if (g_sel >= 0 && g_sel < (int)g_results.size() &&
+                g_results[g_sel].kind == ResultKind::App) {
+                panelApp = &g_apps[g_results[g_sel].app];
+            } else if (!g_panelAppId.empty()) {
+                for (auto& a : g_apps) {
+                    if (a.id == g_panelAppId) {
+                        panelApp = &a;
+                        break;
+                    }
                 }
             }
+            if (panelApp) panelDetails = &GetDetails(*panelApp);
+        } else {
+            // Preview mode: use currently selected file result
+            if (g_sel >= 0 && g_sel < (int)g_results.size() &&
+                g_results[g_sel].kind == ResultKind::File) {
+                panelFileRes = &g_results[g_sel];
+            }
         }
-        if (panelApp) panelDetails = &GetDetails(*panelApp);
     }
 
     RECT rc = {0, 0, g_bmpW, g_bmpH};
@@ -8430,7 +12007,8 @@ static void Render() {
                 : g_fileMode ? kTxtPlaceholderFiles
                              : kTxtPlaceholder;
             g_rt->DrawText(ph, (UINT32)wcslen(ph), g_fmtInput, &r, g_brush);
-            if (g_caretOn && !g_helpOpen && g_bandEdit == BandEdit::None && g_vis != Vis::Hiding) {
+            if (g_caretOn && !g_helpOpen && !g_form.active && g_bandEdit == BandEdit::None &&
+                g_vis != Vis::Hiding) {
                 SetBrush(g_pal.text);
                 float ch2 = 26 * s;
                 D2D1_RECT_F cr = D2D1::RectF(fieldX, barMid - ch2 / 2, fieldX + 1.5f * s, barMid + ch2 / 2);
@@ -8477,7 +12055,8 @@ static void Render() {
                     g_rt->DrawText(ghost.c_str(), (UINT32)ghost.size(), g_fmtInput, &gr, g_brush);
                 }
 
-                if (g_caretOn && !g_helpOpen && g_bandEdit == BandEdit::None && g_vis != Vis::Hiding) {
+                if (g_caretOn && !g_helpOpen && !g_form.active && g_bandEdit == BandEdit::None &&
+                    g_vis != Vis::Hiding) {
                     SetBrush(g_pal.text);
                     D2D1_RECT_F cr =
                         D2D1::RectF(ox + cxPos, barMid - chh / 2, ox + cxPos + 1.5f * s, barMid + chh / 2);
@@ -8507,6 +12086,48 @@ static void Render() {
         DrawHelp(cx, cy, cw, ch, s);
         const HRESULT hrHelp = g_rt->EndDraw();
         if (hrHelp == D2DERR_RECREATE_TARGET) {
+            ReleaseTarget();
+            g_dirty = true;
+        }
+        return;
+    }
+
+    // ---- Custom entry form: replaces the list, footer and details panel ----
+    if (g_form.active) {
+        const D2D1_RECT_F cardClip = D2D1::RectF(cx, cy, cx + cw, cy + ch);
+        g_rt->PushAxisAlignedClip(&cardClip, D2D1_ANTIALIAS_MODE_ALIASED);
+        DrawCustomForm(cx, cy, cw, s);
+        const float formFooterTop = cy + (float)(ExpandedH() - kFooterH) * s;
+        if (cy + ch > formFooterTop + 2.f) {
+            D2D1_RECT_F footClip = D2D1::RectF(cx, formFooterTop, cx + cw, cy + ch);
+            g_rt->PushAxisAlignedClip(&footClip, D2D1_ANTIALIAS_MODE_ALIASED);
+            DrawCustomFormFooter(cx, formFooterTop, cw);
+            g_rt->PopAxisAlignedClip();
+        }
+        g_rt->PopAxisAlignedClip();
+        const HRESULT hrForm = g_rt->EndDraw();
+        if (hrForm == D2DERR_RECREATE_TARGET) {
+            ReleaseTarget();
+            g_dirty = true;
+        }
+        return;
+    }
+
+    // ---- Custom-entries manager: replaces the list, footer and details panel ----
+    if (g_mgr.active) {
+        const D2D1_RECT_F cardClip = D2D1::RectF(cx, cy, cx + cw, cy + ch);
+        g_rt->PushAxisAlignedClip(&cardClip, D2D1_ANTIALIAS_MODE_ALIASED);
+        DrawManager(cx, cy, cw, s);
+        const float mgrFooterTop = cy + (float)(ExpandedH() - kFooterH) * s;
+        if (cy + ch > mgrFooterTop + 2.f) {
+            D2D1_RECT_F footClip = D2D1::RectF(cx, mgrFooterTop, cx + cw, cy + ch);
+            g_rt->PushAxisAlignedClip(&footClip, D2D1_ANTIALIAS_MODE_ALIASED);
+            DrawManagerFooter(cx, mgrFooterTop, cw);
+            g_rt->PopAxisAlignedClip();
+        }
+        g_rt->PopAxisAlignedClip();
+        const HRESULT hrMgr = g_rt->EndDraw();
+        if (hrMgr == D2DERR_RECREATE_TARGET) {
             ReleaseTarget();
             g_dirty = true;
         }
@@ -8607,9 +12228,13 @@ static void Render() {
             AppEntry* app = (res.kind == ResultKind::App) ? &g_apps[res.app] : nullptr;
             float y = rowsOrigin + (float)(RowOffset((double)i) - scrollOff) * s;
 
-            // Section header ("Recent" / "Suggestions") above the first row of each group
+            // Section header ("Pinned" / "Recent" / "Recent files" / "Suggestions") above the first
+            // row of each group
             if (res.section != 0 && (i == 0 || g_results[i - 1].section != res.section)) {
-                const wchar_t* secTxt = (res.section == 1) ? kTxtRecents : kTxtSuggestions;
+                const wchar_t* secTxt = (res.section == 3)   ? kTxtPinned
+                                        : (res.section == 1) ? kTxtRecents
+                                        : (res.section == 4) ? kTxtRecentFiles
+                                                             : kTxtSuggestions;
                 SetBrush(g_pal.textDim);
                 D2D1_RECT_F secRect = D2D1::RectF(rowX0 + 10 * s, y - kSectionH * s, rowX1, y);
                 g_rt->DrawText(secTxt, (UINT32)wcslen(secTxt), g_fmtSection, &secRect, g_brush);
@@ -8618,6 +12243,10 @@ static void Render() {
             float ix = rowX0 + 10 * s;
             float iy = y + (rowH - iconPx) / 2;
             ID2D1Bitmap* bmp = app ? EnsureIcon(*app) : nullptr;
+            if (!bmp && res.kind == ResultKind::Window && res.iconApp >= 0 &&
+                res.iconApp < (int)g_apps.size()) {
+                bmp = EnsureIcon(g_apps[res.iconApp]);
+            }
             if (bmp) {
                 D2D1_RECT_F dst = D2D1::RectF(ix, iy, ix + iconPx, iy + iconPx);
                 g_rt->DrawBitmap(bmp, &dst, 1.f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
@@ -8657,6 +12286,70 @@ static void Render() {
                     si >= 0 ? kSettings[si].color : D2D1::ColorF(0.33f, 0.34f, 0.42f);
                 FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, st);
                 DrawCommandGlyph(sg, ix, iy, iconPx, st);
+            } else if (res.kind == ResultKind::Custom) {
+                // User entry: a coloured tile with a glyph for its type.
+                const CustomEntry* ce =
+                    (res.custom >= 0 && res.custom < (int)g_cfg.commands.size())
+                        ? &g_cfg.commands[res.custom]
+                        : nullptr;
+                const bool isUrl = ce && ce->type == L"url";
+                const bool isRun = ce && ce->type == L"run";
+                const D2D1_COLOR_F ct = isUrl ? D2D1::ColorF(0.20f, 0.55f, 0.90f)
+                                        : isRun ? D2D1::ColorF(0.55f, 0.38f, 0.88f)
+                                                : D2D1::ColorF(0.92f, 0.62f, 0.22f);
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, ct);
+                DrawCommandGlyph(isUrl ? CmdGlyph::Link
+                                       : isRun ? CmdGlyph::Terminal : CmdGlyph::Folder,
+                                 ix, iy, iconPx, ct);
+            } else if (res.kind == ResultKind::Bookmark) {
+                // Bookmark badge: a star tile, so it reads as "saved link" at a glance.
+                const D2D1_COLOR_F bt = D2D1::ColorF(0.92f, 0.66f, 0.20f);
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, bt);
+                DrawCommandGlyph(CmdGlyph::Star, ix, iy, iconPx, bt);
+            } else if (res.kind == ResultKind::Clip) {
+                // An image shows its own thumbnail (decoded off the UI thread like a file preview);
+                // text gets a green tile with a clipboard glyph. A pinned entry gets a small pin
+                // badge over its top-right corner.
+                ID2D1Bitmap* thumb = res.image ? ClipImageThumb(res.payload) : nullptr;
+                if (thumb) {
+                    DrawThumbImage(thumb, ix, iy, iconPx, 9 * s);
+                } else {
+                    const D2D1_COLOR_F ct = D2D1::ColorF(0.30f, 0.62f, 0.55f);
+                    FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, ct);
+                    DrawCommandGlyph(CmdGlyph::Clipboard, ix, iy, iconPx, ct);
+                }
+                if (res.pinned) {
+                    const float bs = iconPx * 0.46f;
+                    const float bx = ix + iconPx - bs * 0.55f;
+                    const float by = iy - bs * 0.45f;
+                    const D2D1_COLOR_F gold = D2D1::ColorF(0.98f, 0.78f, 0.30f);
+                    FillRR(bx, by, bx + bs, by + bs, bs * 0.32f, gold);
+                    DrawCommandGlyph(CmdGlyph::Pin, bx, by, bs, gold,
+                                     D2D1::ColorF(0.12f, 0.12f, 0.14f));
+                }
+            } else if (IsPathResult(res.kind)) {
+                // Recent/global file: folder outline or the same type tile as the file browser.
+                if (res.isDir) {
+                    DrawFolderOutline(ix + 1 * s, iy + 1 * s, iconPx - 2 * s,
+                                      D2D1::ColorF(0.90f, 0.68f, 0.28f));
+                } else {
+                    DrawFileTile(ix, iy, iconPx, res.ext, ExtColor(res.ext));
+                }
+            } else if (res.kind == ResultKind::Window) {
+                // Window without a matching app icon: a blue tile with the process initial.
+                const D2D1_COLOR_F wt = D2D1::ColorF(0.30f, 0.40f, 0.58f);
+                FillRR(ix, iy, ix + iconPx, iy + iconPx, 9 * s, wt);
+                wchar_t ch = L'?';
+                const std::wstring& label = res.subtitle.empty() ? res.title : res.subtitle;
+                for (const wchar_t c : label) {
+                    if (iswalnum(c)) {
+                        ch = (wchar_t)towupper(c);
+                        break;
+                    }
+                }
+                SetBrush(D2D1::ColorF(1.f, 1.f, 1.f));
+                D2D1_RECT_F lr = D2D1::RectF(ix, iy, ix + iconPx, iy + iconPx);
+                g_rt->DrawText(&ch, 1, g_fmtBadge, &lr, g_brush);
             } else if (res.kind == ResultKind::File) {
                 // Folders: outline folder. Files: image preview, else a type tile.
                 const int fi = (res.icon >= 0 && res.icon < (int)FileSrc().size()) ? res.icon : -1;
@@ -8680,7 +12373,21 @@ static void Render() {
                        g_pal.textDim, 0.18f);
             }
 
-            if (res.kind == ResultKind::File) {
+            if (res.kind == ResultKind::Bookmark) {
+                // Two lines: the name on top, its folder and browser below.
+                if (!res.layout) {
+                    res.layout =
+                        BuildMatchLayout(res.title, FoldString(res.title), textW, rowH * 0.5f);
+                }
+                if (res.layout) {
+                    SetBrush(g_pal.text);
+                    g_rt->DrawTextLayout(D2D1::Point2F(textX, y + 3 * s), res.layout, g_brush);
+                }
+                if (!res.subtitle.empty()) {
+                    DrawLabel(res.subtitle, g_fmtMeta, textX, y + rowH * 0.5f, textX + textW,
+                              y + rowH - 3 * s, g_pal.textDim, 0.9f);
+                }
+            } else if (res.kind == ResultKind::File) {
                 // Two lines: the name on top, its metadata (type · size · date · folder) below.
                 if (!res.layout) {
                     const int fi2 = res.icon;
@@ -8705,6 +12412,32 @@ static void Render() {
                         const std::wstring rest = L" · " + mh + mt;
                         DrawLabel(rest, g_fmtMeta, textX + mw, my0, textX + textW, my1, g_pal.textDim, 0.9f);
                     }
+                }
+            } else if (IsPathResult(res.kind)) {
+                // Two lines: the file name and the folder it lives in.
+                if (!res.layout) {
+                    res.layout = BuildMatchLayout(res.title, FoldString(res.title), textW, rowH * 0.5f);
+                }
+                if (res.layout) {
+                    SetBrush(g_pal.text);
+                    g_rt->DrawTextLayout(D2D1::Point2F(textX, y + 3 * s), res.layout, g_brush);
+                }
+                if (!res.subtitle.empty()) {
+                    DrawLabel(res.subtitle, g_fmtMeta, textX, y + rowH * 0.5f, textX + textW,
+                              y + rowH - 3 * s, g_pal.textDim, 0.9f);
+                }
+            } else if (res.kind == ResultKind::Window) {
+                // Two lines: the window title and its process name.
+                if (!res.layout) {
+                    res.layout = BuildMatchLayout(res.title, FoldString(res.title), textW, rowH * 0.5f);
+                }
+                if (res.layout) {
+                    SetBrush(g_pal.text);
+                    g_rt->DrawTextLayout(D2D1::Point2F(textX, y + 3 * s), res.layout, g_brush);
+                }
+                if (!res.subtitle.empty()) {
+                    DrawLabel(res.subtitle, g_fmtMeta, textX, y + rowH * 0.5f, textX + textW,
+                              y + rowH - 3 * s, g_pal.textDim, 0.9f);
                 }
             } else {
                 if (!res.layout) {
@@ -8731,6 +12464,14 @@ static void Render() {
                 const wchar_t* typeTxt;
                 if (app) {
                     typeTxt = IsPackagedId(app->id) ? kTxtTypeStore : kTxtTypeApp;
+                } else if (res.kind == ResultKind::Bookmark) {
+                    typeTxt = kTxtKindBookmark;  // the subtitle already shows folder and browser
+                } else if (IsPathResult(res.kind)) {
+                    typeTxt = res.isDir ? kTxtFolder
+                                        : (res.kind == ResultKind::Recent ? kTxtKindRecent
+                                                                          : kTxtKindFile);
+                } else if (res.kind == ResultKind::Window) {
+                    typeTxt = kTxtKindWindow;
                 } else {
                     typeTxt = res.subtitle.empty() ? ResultTypeLabel(res.kind) : res.subtitle.c_str();
                 }
@@ -8743,7 +12484,17 @@ static void Render() {
         DrawCalcHistory(cx, listTop, cw);
     } else if (ch > kBarH * s + 8) {
         const wchar_t* msg = nullptr;
-        if (g_fileMode && g_fileSearching && FileQueryActive()) {
+        if (g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::WindowList) {
+            msg = g_tokens.empty() ? L"No open windows" : kTxtNoResults;
+        } else if (g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::GlobalFiles) {
+            if (g_tokens.empty()) {
+                msg = L"Type to search your folders…";
+            } else if (g_globalSearching) {
+                msg = kTxtSearching;
+            } else if (g_results.empty()) {
+                msg = kTxtNoResults;
+            }
+        } else if (g_fileMode && g_fileSearching && FileQueryActive()) {
             msg = kTxtSearching;
         } else if ((!g_tokens.empty() || (g_fileMode && g_fileFilter.Active())) && !CalcShown()) {
             msg = kTxtNoResults;
@@ -8751,7 +12502,17 @@ static void Render() {
             msg = kTxtIndexing;
         }
         if (msg) {
-            SetBrush(g_pal.textDim);
+            // Same three tones as the footer: the accent while something is still running, amber
+            // when a problem explains why the list is empty, dim for plain information.
+            D2D1_COLOR_F tone = g_pal.textDim;
+            if (msg == kTxtSearching || msg == kTxtIndexing) {
+                tone = g_pal.accentInk;
+            } else if (msg == kTxtNoResults &&
+                       g_cfg.fileSearchEngine == FileSearchEngine::Everything &&
+                       NowSec() - g_evFailedAt < 6.0) {
+                tone = kToneWarn;
+            }
+            SetBrush(tone);
             // "No results" is centered in the whole list area; "Indexing…" is a short row
             const float msgBottom = g_tokens.empty() ? listTop + kEmptyRowH * s : listBottom;
             D2D1_RECT_F r = D2D1::RectF(cx, listTop + 1.f, cx + cw, msgBottom);
@@ -8771,9 +12532,11 @@ static void Render() {
 
     if (g_fileMenuOpen && g_fileMode) DrawFileMenu(cx, cy, cw);
 
-    // ---- Details panel (on the right) ----
+    // ---- Details / preview panel (on the right) ----
     if (panelApp && panelDetails) {
         DrawDetailsPanel(*panelApp, *panelDetails);
+    } else if (panelFileRes) {
+        DrawPreviewPanel(*panelFileRes);
     }
 
     HRESULT hr = g_rt->EndDraw();
@@ -8869,9 +12632,12 @@ static void FinishHide() {
     KillTimer(g_hwnd, TIMER_CALC);
     KillTimer(g_hwnd, TIMER_HIDE);
     CancelFileSearch();   // no point scanning the disk while the bar is hidden
+    CancelGlobalSearch(); // nor while the "find:" list is not visible
     CancelThumbQueue();   // nor decoding previews nobody is looking at
     g_calcPending = false;
     g_helpOpen = false;  // next open starts on the list, not on the cheat sheet
+    g_form = CustomFormState();  // and not inside a custom entry form
+    g_mgr = ManagerState();      // nor inside the custom-entries manager
     ShowWindow(g_hwnd, SW_HIDE);
     LiveHide();
     g_vis = Vis::Hidden;
@@ -8895,6 +12661,9 @@ static void HideLauncher() {
     g_vis = Vis::Hiding;
     g_visStart = NowSec();
     StartFrameTimer();
+    // Without "Remember file sort" the chosen order only lives while the bar is open: closing it
+    // puts Files back to Name A-Z. The listing is rebuilt on the next open, so nothing to re-sort.
+    if (!g_cfg.rememberFileSort) g_cfg.fileSort = FileSort::NameAsc;
     // Safety net: if the animation is ever interrupted (e.g. the frame timer is lost while the
     // shell runs a modal loop), finish the hide so no acrylic layer is left on screen.
     if (g_hwnd) SetTimer(g_hwnd, TIMER_HIDE, 600, nullptr);
@@ -8951,6 +12720,7 @@ static void ShowLauncher() {
     g_fileMenuOpen = false;
     ClearFileDeep();
     CancelFileSearch();
+    CancelGlobalSearch();
     g_fileSrc = &g_fileEntries;
     g_chipSelPos = g_chipSelTarget = 0;
     g_calc = Calc::Result();
@@ -8967,10 +12737,21 @@ static void ShowLauncher() {
     g_scrollTarget = 0;
     g_detailsOpen = false;  // the details panel starts closed on each open
     g_detailPos = g_detailTarget = 0;
+    g_panelMode = PanelMode::Actions;
+    g_panelSwitching = false;
+    g_preview = PreviewState{};
     g_helpOpen = false;
+    g_form = CustomFormState();  // no form is left open from the last time
+    g_mgr = ManagerState();      // nor the custom-entries manager
     g_hoverAction = -1;
     g_hoverHelp = false;
     g_hoverReindex = false;
+    RefreshBookmarksIfStale();  // a bookmark added since the last open shows up now
+    RefreshRecentIfStale();     // same for Windows' Recent files
+    g_windowsDirty = true;      // a window opened/closed since the last time
+    if (g_cfg.clipboardHistory && PurgeExpiredClips()) {
+        SaveClipHistory();  // entries past the retention setting go away with their files
+    }
     RunSearch();
     UpdateTargets(true, /*followSelection=*/true);
 
@@ -9013,6 +12794,11 @@ static void ShowLauncher() {
     g_dirty = false;
     Present();
     ShowWindow(g_hwnd, SW_SHOW);
+    // Remember who had the focus so "clip:" can paste back into it.
+    {
+        HWND prev = GetForegroundWindow();
+        if (prev && prev != g_hwnd) g_prevForeground = prev;
+    }
     ForceForeground(g_hwnd);
     Sound::Resume();
     Sound::OnOpen();
@@ -9106,12 +12892,168 @@ static void RecordUse(AppEntry& a) {
 // this 32-bit process redirects the FOLDERID_ProgramFilesX64 GUID to "C:\Program Files (x86)",
 // so 64-bit apps installed in "C:\Program Files" fail to launch. System.Link.TargetParsingPath
 // holds the real, unredirected path and is used instead. Store (MSIX) apps use their AUMID.
+// ===== Open-window list and activation =====
+static std::wstring WindowProcessPath(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) return std::wstring();
+    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!p) return std::wstring();
+    wchar_t buf[32768];
+    DWORD n = (DWORD)ARRAYSIZE(buf);
+    std::wstring path;
+    if (QueryFullProcessImageNameW(p, 0, buf, &n)) path.assign(buf, n);
+    CloseHandle(p);
+    return path;
+}
+
+static bool WindowCloaked(HWND hwnd) {
+    typedef HRESULT(WINAPI * DwmGetWindowAttribute_t)(HWND, DWORD, PVOID, DWORD);
+    static DwmGetWindowAttribute_t fn = [] {
+        HMODULE m = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        return m ? (DwmGetWindowAttribute_t)GetProcAddress(m, "DwmGetWindowAttribute") : nullptr;
+    }();
+    DWORD cloaked = 0;
+    return fn && SUCCEEDED(fn(hwnd, 14 /* DWMWA_CLOAKED */, &cloaked, sizeof(cloaked))) && cloaked;
+}
+
+static bool SkipWindowClass(const wchar_t* cls) {
+    static const wchar_t* const kSkip[] = {
+        L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
+        L"Windows.UI.Core.CoreWindow", L"MultitaskingViewFrame",
+    };
+    for (const wchar_t* s : kSkip) {
+        if (wcscmp(cls, s) == 0) return true;
+    }
+    return false;
+}
+
+static int AppIconForProcess(const std::wstring& path) {
+    if (path.empty()) return -1;
+    for (size_t i = 0; i < g_apps.size(); ++i) {
+        const AppEntry& a = g_apps[i];
+        if (!a.target.empty() && SamePath(a.target, path)) return (int)i;
+        if (!a.launch.empty() && EndsWith(FoldString(a.launch), L".exe") &&
+            SamePath(a.launch, path)) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+// A hung app must not freeze the launcher while the window list is built.
+static std::wstring WindowTitle(HWND hwnd) {
+    wchar_t title[512] = L"";
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(hwnd, WM_GETTEXT, ARRAYSIZE(title), (LPARAM)title,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &result)) {
+        return std::wstring();
+    }
+    return TrimBlanks(title);
+}
+
+static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lp) {
+    auto* out = (std::vector<WindowEntry>*)lp;
+    if (hwnd == g_hwnd || !IsWindowVisible(hwnd)) return TRUE;
+    const LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return TRUE;
+    const std::wstring title = WindowTitle(hwnd);
+    if (title.empty()) return TRUE;
+    if (WindowCloaked(hwnd)) return TRUE;
+    wchar_t cls[128] = L"";
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (SkipWindowClass(cls)) return TRUE;
+    const std::wstring path = WindowProcessPath(hwnd);
+    WindowEntry w;
+    w.hwnd = hwnd;
+    w.title = title;
+    w.process = path.empty() ? std::wstring() : FileNameOf(path);
+    w.folded = FoldString(w.title + L" " + w.process);
+    w.appIcon = AppIconForProcess(path);
+    out->push_back(std::move(w));
+    return out->size() < 200 ? TRUE : FALSE;
+}
+
+static void EnsureWindowList() {
+    if (!g_windowsDirty) return;
+    g_windowsDirty = false;
+    g_windows.clear();
+    EnumWindows(EnumWindowsProc, (LPARAM)&g_windows);
+}
+
+static bool ActivateWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+    AllowSetForegroundWindow(ASFW_ANY);
+    INPUT wake{};
+    wake.type = INPUT_MOUSE;
+    SendInput(1, &wake, sizeof(INPUT));
+    SetForegroundWindow(hwnd);
+    BringWindowToTop(hwnd);
+    HideLauncher();
+    return true;
+}
+
+struct FindWindowCtx {
+    const std::wstring* path;
+    HWND found;
+};
+
+static BOOL CALLBACK FindWindowProc(HWND hwnd, LPARAM lp) {
+    auto* c = (FindWindowCtx*)lp;
+    if (!IsWindowVisible(hwnd) || hwnd == g_hwnd) return TRUE;
+    const LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return TRUE;
+    const std::wstring title = WindowTitle(hwnd);
+    if (title.empty()) return TRUE;
+    if (WindowCloaked(hwnd)) return TRUE;
+    wchar_t cls[128] = L"";
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (SkipWindowClass(cls)) return TRUE;
+    if (SamePath(WindowProcessPath(hwnd), *c->path)) {
+        c->found = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static HWND FindWindowForProcessPath(const std::wstring& path) {
+    if (path.empty()) return nullptr;
+    FindWindowCtx c{&path, nullptr};
+    EnumWindows(FindWindowProc, (LPARAM)&c);
+    return c.found;
+}
+
 static void LaunchApp(int appIdx) {
     if (appIdx < 0 || appIdx >= (int)g_apps.size()) {
         return;
     }
     AppEntry& a = g_apps[appIdx];
+    // If the app already has a visible window, focus it instead of starting a second instance.
+    std::wstring runningExe = a.target;
+    if (runningExe.empty() && !a.launch.empty() &&
+        EndsWith(FoldString(a.launch), L".exe")) {
+        runningExe = a.launch;
+    }
+    if (!runningExe.empty() && a.args.empty()) {
+        HWND existing = FindWindowForProcessPath(runningExe);
+        if (existing && ActivateWindow(existing)) {
+            RecordUse(a);
+            return;
+        }
+    }
     AllowSetForegroundWindow(ASFW_ANY);
+
+    // Entries found on the Desktop are opened through the shortcut itself, so Windows applies its
+    // arguments, working folder and elevation prompt exactly as when it is double-clicked.
+    if (!a.launch.empty()) {
+        const std::wstring dir = ParentDir(a.launch);
+        ShellExecuteW(nullptr, L"open", a.launch.c_str(), nullptr,
+                      dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+        RecordUse(a);
+        HideLauncher();
+        return;
+    }
 
     std::wstring file;
     std::wstring args;
@@ -9137,12 +13079,9 @@ static void LaunchApp(int appIdx) {
 
     if (!file.empty()) {
         if (IsUnderWindowsDir(file)) {
-            // A System32 target must not be resolved by this 32-bit process: it would be
-            // redirected to SysWOW64 and the tool (or a delay-loaded DLL) would not be found.
-            // Disabling the redirection around the call is not safe, because a failed
-            // delay-load stays failed for the rest of the process. Let the 64-bit shell resolve
-            // the AppsFolder ID instead (explorer.exe is not redirected); it also keeps the
-            // shortcut's arguments, working folder and elevation.
+            // A System32 target must not be resolved by this 32-bit process (it would be redirected
+            // to SysWOW64), and turning the redirection off is unsafe: a failed delay-load stays
+            // failed. Let the 64-bit shell resolve the AppsFolder ID instead.
             wchar_t win[MAX_PATH];
             UINT n = GetWindowsDirectoryW(win, MAX_PATH);
             if (n && n < MAX_PATH) {
@@ -9182,6 +13121,1704 @@ static void RunShellOpen(const wchar_t* target) {
     ShellExecuteW(nullptr, L"open", target, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+// ---- Custom entries -----------------------------------------------------------------------
+// A custom entry can ask for values with placeholders in its Target or Arguments:
+//   {folder}        a required field
+//   {folder?}       an optional field
+//   {branch=main}   a field that starts pre-filled (still required unless it also has `?`)
+//   {query}         the extra words typed after the entry's name (always optional)
+// Names are case-insensitive, `{{` and `}}` are literal braces, and a placeholder can repeat.
+// Pressing Enter opens a small form to fill/review these fields before launching (Shift+Enter
+// skips it); an entry with only {query}, or none, launches straight away.
+
+// True when the text already carries a URI scheme ("https:", "ms-settings:", "steam:", ...).
+// A "host:port" such as localhost:3000 is NOT a scheme: it is treated as a web address, so it
+// gets https:// in front instead of being handed to the shell as some unknown protocol.
+static bool LooksAbsoluteUri(const std::wstring& s) {
+    const size_t colon = s.find(L':');
+    if (colon == std::wstring::npos || colon == 0) return false;
+    if (!iswalpha(s[0])) return false;  // a scheme starts with a letter (C:\... also passes)
+    for (size_t i = 0; i < colon; ++i) {
+        const wchar_t c = s[i];
+        if (!(iswalnum(c) || c == L'+' || c == L'-' || c == L'.')) return false;
+    }
+    const size_t cut = s.find_first_of(L"/\\?#");
+    if (cut != std::wstring::npos && colon > cut) return false;
+    // Everything after the colon being digits means a port number, not a scheme.
+    size_t i = colon + 1;
+    size_t digits = 0;
+    while (i < s.size() && iswdigit(s[i])) {
+        ++i;
+        ++digits;
+    }
+    if (digits > 0 && (i == s.size() || s[i] == L'/' || s[i] == L'?' || s[i] == L'#')) {
+        return false;
+    }
+    return true;
+}
+
+static bool CustomPathExists(const std::wstring& p) {
+    return !p.empty() && GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static bool CustomHasPathPart(const std::wstring& p) {
+    return p.find_first_of(L"\\/") != std::wstring::npos ||
+           (p.size() >= 2 && p[1] == L':');
+}
+
+// A program is considered launchable if it is a file, or if Windows finds it on PATH (with or
+// without .exe). Installed apps registered through App Paths are left to the shell.
+static bool CustomProgramResolves(const std::wstring& p) {
+    if (p.empty()) return false;
+    if (CustomPathExists(p)) return true;
+    wchar_t found[MAX_PATH];
+    return SearchPathW(nullptr, p.c_str(), L".exe", MAX_PATH, found, nullptr) > 0;
+}
+
+static std::wstring Unquoted(std::wstring s) {
+    s = TrimBlanks(s);
+    if (s.size() >= 2 && s.front() == L'"' && s.back() == L'"') {
+        s = TrimBlanks(s.substr(1, s.size() - 2));
+    }
+    return s;
+}
+
+static int FindCustomField(const std::vector<CustomField>& fields, const std::wstring& key) {
+    const std::wstring folded = CustomKeyId(key);
+    for (size_t i = 0; i < fields.size(); ++i) {
+        if (CustomKeyId(fields[i].key) == folded) return (int)i;
+    }
+    return -1;
+}
+
+// Replaces known placeholders with their values. In a Website entry `encode` percent-encodes
+// {query} (UTF-8), so search spaces, `&` and `#` cannot break the address.
+static std::wstring ExpandCustomText(const std::wstring& text, const CustomEntry& e,
+                                     const std::vector<std::wstring>& values, bool encode) {
+    std::wstring out;
+    out.reserve(text.size() + 32);
+    for (size_t i = 0; i < text.size();) {
+        if (text[i] == L'{' && i + 1 < text.size() && text[i + 1] == L'{') {
+            out += L'{';
+            i += 2;
+            continue;
+        }
+        if (text[i] == L'}' && i + 1 < text.size() && text[i + 1] == L'}') {
+            out += L'}';
+            i += 2;
+            continue;
+        }
+        if (text[i] == L'{') {
+            const size_t close = text.find(L'}', i + 1);
+            if (close != std::wstring::npos) {
+                std::wstring body = text.substr(i + 1, close - i - 1);
+                const size_t eq = body.find(L'=');
+                if (eq != std::wstring::npos) body.resize(eq);
+                body = TrimBlanks(body);
+                if (!body.empty() && body.back() == L'?') {
+                    body.pop_back();
+                    body = TrimBlanks(body);
+                }
+                const int fi = FindCustomField(e.fields, body);
+                if (fi >= 0 && fi < (int)values.size()) {
+                    // Only {query} is percent-encoded (it holds search words). Other values are
+                    // inserted as typed, so a field can carry a path, a repo (user/repo) or a
+                    // whole base address without its slashes and colons being escaped.
+                    out += (encode && IsQueryFieldKey(e.fields[fi].key)) ? UrlEncode(values[fi])
+                                                                         : values[fi];
+                    i = close + 1;
+                    continue;
+                }
+            }
+        }
+        out += text[i++];
+    }
+    return out;
+}
+
+static bool CustomValueEmpty(const std::wstring& v) {
+    return TrimBlanks(v).empty();
+}
+
+static bool CustomRequiredMissing(const CustomEntry& e, const std::vector<std::wstring>& values) {
+    for (size_t i = 0; i < e.fields.size() && i < values.size(); ++i) {
+        if (!e.fields[i].optional && CustomValueEmpty(values[i])) return true;
+    }
+    return false;
+}
+
+// Values a freshly opened entry starts with: its defaults, plus the typed extra words in {query}.
+static std::vector<std::wstring> CustomInitialValues(const CustomEntry& e,
+                                                     const std::wstring& query) {
+    std::vector<std::wstring> v;
+    v.reserve(e.fields.size());
+    bool queryFieldExists = false;
+    for (const CustomField& f : e.fields) {
+        if (IsQueryFieldKey(f.key)) queryFieldExists = true;
+        if (IsQueryFieldKey(f.key) && !query.empty()) {
+            v.push_back(query);
+        } else {
+            v.push_back(f.value);
+        }
+    }
+    // If the entry has no {query} field but extra words were typed after the name,
+    // pre-fill the first empty required field with those words so typing
+    // "GitHub DavidRaveloU" pre-fills {user} without hiding the entry.
+    if (!queryFieldExists && !query.empty()) {
+        for (size_t i = 0; i < e.fields.size() && i < v.size(); ++i) {
+            if (!e.fields[i].optional && CustomValueEmpty(v[i])) {
+                v[i] = query;
+                break;
+            }
+        }
+    }
+    return v;
+}
+
+struct CustomCheck {
+    std::wstring error;    // blocks the launch until it is fixed
+    std::wstring warning;  // can be ignored with a second Enter
+};
+
+static CustomCheck CheckCustomTarget(const CustomEntry& e, const std::wstring& target) {
+    CustomCheck c;
+    if (target.empty()) {
+        c.error = L"The target is empty.";
+        return c;
+    }
+    if (e.type == L"url") return c;
+
+    // A path such as C:\Program Files\... is not a URI scheme, even though LooksAbsoluteUri
+    // accepts it; only real schemes (shell:, ms-settings:, steam://...) skip the file checks.
+    const bool drivePath = target.size() >= 2 && iswalpha(target[0]) && target[1] == L':';
+    if (!drivePath && LooksAbsoluteUri(target)) return c;
+
+    const std::wstring path = Unquoted(target);
+    if (e.type == L"path") {
+        if (!CustomPathExists(path)) {
+            c.error = L"Not found: " + path;
+            if (path.find(L'%') != std::wstring::npos) {
+                c.error += L" (check the environment variable)";
+            }
+        }
+        return c;
+    }
+
+    // Command entries.
+    if (CustomPathExists(path)) return c;
+
+    // "cmd.exe /k dir": the whole target is not a file, but its first word is a program. This is
+    // the most common mistake (arguments typed into Target), so give a clear message.
+    const size_t sp = path.find(L' ');
+    if (sp != std::wstring::npos) {
+        const std::wstring first = path.substr(0, sp);
+        const std::wstring rest = TrimBlanks(path.substr(sp + 1));
+        if (!first.empty() && !rest.empty() && CustomProgramResolves(first)) {
+            c.error = L"Put the arguments in the Arguments field, not in Target.";
+            return c;
+        }
+    }
+
+    if (CustomHasPathPart(path)) {
+        c.error = L"Program not found: " + path;
+        return c;
+    }
+
+    // A bare name may still be resolved by the shell through an installed app, so only names
+    // that look like a full executable are treated as a definite typo.
+    if (!CustomProgramResolves(path)) {
+        const std::wstring folded = FoldString(path);
+        if (folded.size() > 4 && folded.compare(folded.size() - 4, 4, L".exe") == 0) {
+            c.error = L"Program not found: " + path;
+        } else {
+            c.warning = L"Windows may not find “" + path + L"”. Use its full path if it fails.";
+        }
+    }
+    return c;
+}
+
+static void BuildCustomLaunch(const CustomEntry& e, const std::vector<std::wstring>& values,
+                              std::wstring& target, std::wstring& args) {
+    const bool isUrl = e.type == L"url";
+    target = ExpandedPath(TrimBlanks(ExpandCustomText(e.target, e, values, isUrl)));
+    args = ExpandedPath(TrimBlanks(ExpandCustomText(e.args, e, values, false)));
+    if (isUrl && !target.empty() && !LooksAbsoluteUri(target)) target = L"https://" + target;
+}
+
+static CustomCheck ResolveCustomEntry(const CustomEntry& e,
+                                      const std::vector<std::wstring>& values,
+                                      std::wstring& target, std::wstring& args) {
+    BuildCustomLaunch(e, values, target, args);
+    return CheckCustomTarget(e, target);
+}
+
+static void LaunchCustomEntry(const CustomEntry& e, const std::wstring& target,
+                              const std::wstring& args) {
+    if (target.empty()) return;
+    AllowSetForegroundWindow(ASFW_ANY);
+    if (e.type == L"url") {
+        HideLauncher();
+        ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
+    // A program is started in its own folder (portable apps and games read files next to it);
+    // for a file or folder, the shell decides the working directory.
+    const std::wstring dir = (e.type == L"run") ? ParentDir(target) : L"";
+    HideLauncher();
+    ShellExecuteW(nullptr, L"open", target.c_str(), args.empty() ? nullptr : args.c_str(),
+                  dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+}
+
+// ---- Custom entry form ----
+
+static void EnsureFormFocusVisible() {
+    const int count = (int)g_form.values.size();
+    if (count == 0) {
+        g_form.scroll = 0;
+        return;
+    }
+    if (g_form.focus < g_form.scroll) g_form.scroll = g_form.focus;
+    if (g_form.focus >= g_form.scroll + kFormRows) g_form.scroll = g_form.focus - kFormRows + 1;
+    g_form.scroll = std::clamp(g_form.scroll, 0, std::max(0, count - kFormRows));
+}
+
+static void OpenCustomForm(int idx, const std::wstring& query) {
+    if (idx < 0 || idx >= (int)g_cfg.commands.size()) return;
+    const CustomEntry& e = g_cfg.commands[idx];
+    CustomFormState st;
+    st.active = true;
+    st.entry = idx;
+    st.values = CustomInitialValues(e, query);
+    st.focus = -1;
+    // Focus the first empty required field; failing that, the first empty optional one.
+    for (size_t i = 0; i < st.values.size(); ++i) {
+        if (!e.fields[i].optional && CustomValueEmpty(st.values[i])) {
+            st.focus = (int)i;
+            break;
+        }
+    }
+    if (st.focus < 0) {
+        for (size_t i = 0; i < st.values.size(); ++i) {
+            if (CustomValueEmpty(st.values[i])) {
+                st.focus = (int)i;
+                break;
+            }
+        }
+    }
+    if (st.focus < 0) st.focus = 0;
+    st.caret = st.anchor = st.values.empty() ? 0 : (int)st.values[st.focus].size();
+    g_form = std::move(st);
+    EnsureFormFocusVisible();
+    g_detailsOpen = false;
+    g_detailTarget = 0;
+    UpdateTargets(true, false);
+    ResetBlink();
+    MarkDirty();
+}
+
+static void CloseCustomForm() {
+    if (!g_form.active) return;
+    g_form = CustomFormState();
+    UpdateTargets(false, false);
+    MarkDirty();
+}
+
+static void MoveFormFocus(int d, bool wrap) {
+    const int n = (int)g_form.values.size();
+    if (n == 0) return;
+    int f = g_form.focus + d;
+    if (wrap) {
+        f = (f % n + n) % n;
+    } else {
+        f = std::clamp(f, 0, n - 1);
+    }
+    if (f == g_form.focus) return;
+    g_form.focus = f;
+    g_form.caret = g_form.anchor = (int)g_form.values[f].size();
+    g_form.inputScroll = 0;
+    EnsureFormFocusVisible();
+    ResetBlink();
+    MarkDirty();
+}
+
+static std::wstring* FormValue() {
+    if (!g_form.active || g_form.focus < 0 || g_form.focus >= (int)g_form.values.size()) {
+        return nullptr;
+    }
+    return &g_form.values[g_form.focus];
+}
+
+static void FormReplaceSelection(const std::wstring& s) {
+    std::wstring* v = FormValue();
+    if (!v) return;
+    int a = std::min(g_form.anchor, g_form.caret);
+    int b = std::max(g_form.anchor, g_form.caret);
+    a = std::clamp(a, 0, (int)v->size());
+    b = std::clamp(b, 0, (int)v->size());
+    if (v->size() - (size_t)(b - a) + s.size() > 2048) return;
+    *v = v->substr(0, a) + s + v->substr(b);
+    g_form.caret = g_form.anchor = a + (int)s.size();
+    g_form.error.clear();
+    g_form.errorField = -1;
+    g_form.warning.clear();
+    g_form.warned = false;
+    ResetBlink();
+    MarkDirty();
+}
+
+static void FormMoveCaret(int pos, bool extend) {
+    std::wstring* v = FormValue();
+    if (!v) return;
+    pos = std::clamp(pos, 0, (int)v->size());
+    g_form.caret = pos;
+    if (!extend) g_form.anchor = pos;
+    ResetBlink();
+    MarkDirty();
+}
+
+static int FormPrevWord(int pos) {
+    std::wstring* v = FormValue();
+    if (!v) return 0;
+    while (pos > 0 && (*v)[pos - 1] == L' ') --pos;
+    while (pos > 0 && (*v)[pos - 1] != L' ') --pos;
+    return pos;
+}
+
+static int FormNextWord(int pos) {
+    std::wstring* v = FormValue();
+    if (!v) return 0;
+    const int n = (int)v->size();
+    while (pos < n && (*v)[pos] != L' ') ++pos;
+    while (pos < n && (*v)[pos] == L' ') ++pos;
+    return pos;
+}
+
+static void CopyTextToClipboard(const std::wstring& s);  // defined further down
+
+static std::wstring FormClipboardText() {
+    if (!OpenClipboard(g_hwnd)) return L"";
+    std::wstring s;
+    HANDLE h = GetClipboardData(CF_UNICODETEXT);
+    if (h) {
+        const wchar_t* p = (const wchar_t*)GlobalLock(h);
+        if (p) {
+            s = p;
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    for (wchar_t& c : s) {
+        if (c == L'\r' || c == L'\n' || c == L'\t') c = L' ';
+    }
+    return s;
+}
+
+static void FormCopy(bool cut) {
+    std::wstring* v = FormValue();
+    if (!v) return;
+    const int a = std::min(g_form.anchor, g_form.caret);
+    const int b = std::max(g_form.anchor, g_form.caret);
+    if (a == b) return;
+    CopyTextToClipboard(v->substr(a, b - a));
+    if (cut) FormReplaceSelection(L"");
+}
+
+static void FormPaste() {
+    const std::wstring s = FormClipboardText();
+    if (!s.empty()) FormReplaceSelection(s);
+}
+
+static void SubmitCustomForm() {
+    if (g_form.entry < 0 || g_form.entry >= (int)g_cfg.commands.size()) {
+        CloseCustomForm();
+        return;
+    }
+    const CustomEntry& e = g_cfg.commands[g_form.entry];
+
+    // Required fields must not be empty; optional ones (including {query}) may be.
+    for (size_t i = 0; i < e.fields.size() && i < g_form.values.size(); ++i) {
+        if (e.fields[i].optional) continue;
+        if (CustomValueEmpty(g_form.values[i])) {
+            g_form.focus = (int)i;
+            g_form.caret = g_form.anchor = 0;
+            g_form.inputScroll = 0;
+            g_form.error = L"Fill in “" + e.fields[i].label + L"”.";
+            g_form.errorField = (int)i;
+            EnsureFormFocusVisible();
+            ResetBlink();
+            MarkDirty();
+            return;
+        }
+    }
+
+    std::wstring target, args;
+    const CustomCheck check = ResolveCustomEntry(e, g_form.values, target, args);
+    if (!check.error.empty()) {
+        g_form.error = check.error;
+        g_form.errorField = -1;
+        g_form.warning.clear();
+        g_form.warned = false;
+        MarkDirty();
+        return;
+    }
+    if (!check.warning.empty() && !g_form.warned) {
+        g_form.warning = check.warning;
+        g_form.warned = true;
+        g_form.error.clear();
+        g_form.errorField = -1;
+        MarkDirty();
+        return;
+    }
+    g_form.error.clear();
+    g_form.warning.clear();
+    LaunchCustomEntry(e, target, args);
+}
+
+static bool HandleCustomFormKey(WPARAM vk, bool ctrl, bool shift) {
+    std::wstring* v = FormValue();
+    const int len = v ? (int)v->size() : 0;
+    const bool sel = g_form.anchor != g_form.caret;
+    switch (vk) {
+        case VK_ESCAPE:
+            CloseCustomForm();
+            return true;
+        case VK_RETURN:
+            SubmitCustomForm();
+            return true;
+        case VK_TAB:
+            MoveFormFocus(shift ? -1 : 1, true);
+            return true;
+        case VK_UP:
+            MoveFormFocus(-1, false);
+            return true;
+        case VK_DOWN:
+            MoveFormFocus(1, false);
+            return true;
+        case VK_LEFT:
+            if (!v) return true;
+            if (sel && !shift && !ctrl) {
+                FormMoveCaret(std::min(g_form.anchor, g_form.caret), false);
+            } else {
+                FormMoveCaret(ctrl ? FormPrevWord(g_form.caret) : g_form.caret - 1, shift);
+            }
+            return true;
+        case VK_RIGHT:
+            if (!v) return true;
+            if (sel && !shift && !ctrl) {
+                FormMoveCaret(std::max(g_form.anchor, g_form.caret), false);
+            } else {
+                FormMoveCaret(ctrl ? FormNextWord(g_form.caret) : g_form.caret + 1, shift);
+            }
+            return true;
+        case VK_HOME:
+            if (v) FormMoveCaret(0, shift);
+            return true;
+        case VK_END:
+            if (v) FormMoveCaret(len, shift);
+            return true;
+        case VK_BACK:
+            if (!v) return true;
+            if (sel) {
+                FormReplaceSelection(L"");
+                Sound::OnErase();
+            } else if (g_form.caret > 0) {
+                g_form.anchor = ctrl ? FormPrevWord(g_form.caret) : g_form.caret - 1;
+                FormReplaceSelection(L"");
+                Sound::OnErase();
+            }
+            return true;
+        case VK_DELETE:
+            if (!v) return true;
+            if (sel) {
+                FormReplaceSelection(L"");
+                Sound::OnErase();
+            } else if (g_form.caret < len) {
+                g_form.anchor = ctrl ? FormNextWord(g_form.caret) : g_form.caret + 1;
+                FormReplaceSelection(L"");
+                Sound::OnErase();
+            }
+            return true;
+        case 'A':
+            if (ctrl && v) {
+                g_form.anchor = 0;
+                g_form.caret = len;
+                ResetBlink();
+                MarkDirty();
+            }
+            return true;
+        case 'C':
+            if (ctrl) FormCopy(false);
+            return true;
+        case 'X':
+            if (ctrl) FormCopy(true);
+            return true;
+        case 'V':
+            if (ctrl) FormPaste();
+            return true;
+    }
+    return true;  // the form is modal: nothing reaches the search bar behind it
+}
+
+// Enter on a custom entry opens the form whenever the entry has fields to fill in — any
+// placeholder other than {query} — so the values can be reviewed or edited before it launches. A
+// pure search entry ({query} only) or a fieldless entry launches straight away. Shift+Enter skips
+// the form and launches with the current values; if a required field is still empty (or the target
+// is broken) the form opens regardless, so nothing ever launches with a missing value.
+static void ActivateCustomEntry(int idx, const std::wstring& query, bool skipForm) {
+    if (idx < 0 || idx >= (int)g_cfg.commands.size()) return;
+    const CustomEntry& e = g_cfg.commands[idx];
+    const std::vector<std::wstring> values = CustomInitialValues(e, query);
+    const bool hasFormFields = CustomHasFormFields(e);  // any placeholder other than {query}
+    if ((!skipForm && hasFormFields) || CustomRequiredMissing(e, values)) {
+        OpenCustomForm(idx, query);
+        return;
+    }
+    std::wstring target, args;
+    const CustomCheck check = ResolveCustomEntry(e, values, target, args);
+    if (!check.error.empty()) {
+        OpenCustomForm(idx, query);
+        g_form.error = check.error;
+        MarkDirty();
+        return;
+    }
+    LaunchCustomEntry(e, target, args);
+}
+
+// ---- Drawing the form ----
+
+static std::wstring FitEnd(const std::wstring& t, IDWriteTextFormat* fmt, float widthPx) {
+    if (!fmt || t.empty() || TextWidth(t.c_str(), fmt) <= widthPx) return t;
+    const std::wstring ell = L"…";
+    std::wstring s = t;
+    while (!s.empty()) {
+        s.pop_back();
+        if (TextWidth((s + ell).c_str(), fmt) <= widthPx) break;
+    }
+    return s + ell;
+}
+
+struct FormGeom {
+    float x0, x1, listTop, rowsTop, rowH, previewTop, footerTop;
+    int first, count;
+};
+
+static FormGeom GetFormGeom(float cx, float cy, float cw, float s) {
+    FormGeom g{};
+    g.x0 = cx + 20 * s;
+    g.x1 = cx + cw - 20 * s;
+    g.listTop = cy + kBarH * s;
+    g.rowsTop = g.listTop + 34 * s;  // 6 padding + 28 header
+    g.rowH = kFormRowH * s;
+    g.footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
+    g.previewTop = g.footerTop - 32 * s;
+    g.first = g_form.scroll;
+    g.count = 0;
+    if (g_form.entry >= 0 && g_form.entry < (int)g_cfg.commands.size()) {
+        g.count = (int)g_cfg.commands[g_form.entry].fields.size();
+    }
+    return g;
+}
+
+static D2D1_RECT_F FormValueRect(const FormGeom& g, int i, float s) {
+    const float y = g.rowsTop + (float)(i - g.first) * g.rowH;
+    return D2D1::RectF(g.x0 + 200 * s, y + 7 * s, g.x1 - 12 * s, y + g.rowH - 7 * s);
+}
+
+static void DrawCustomForm(float cx, float cy, float cw, float s) {
+    if (!g_form.active) return;
+    if (g_form.entry < 0 || g_form.entry >= (int)g_cfg.commands.size()) return;
+    const CustomEntry& e = g_cfg.commands[g_form.entry];
+    const FormGeom g = GetFormGeom(cx, cy, cw, s);
+
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, g.listTop, cx + cw - 12 * s, g.listTop + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+
+    // Header: entry icon, name, type and (when needed) "1-6 of 8".
+    const float hy = g.listTop + 6 * s;
+    const float hh = 28 * s;
+    const float isz = 20 * s;
+    const bool isUrl = e.type == L"url";
+    const bool isRun = e.type == L"run";
+    const D2D1_COLOR_F ct = isUrl ? D2D1::ColorF(0.20f, 0.55f, 0.90f)
+                            : isRun ? D2D1::ColorF(0.55f, 0.38f, 0.88f)
+                                    : D2D1::ColorF(0.92f, 0.62f, 0.22f);
+    FillRR(g.x0, hy + (hh - isz) / 2, g.x0 + isz, hy + (hh + isz) / 2, 6 * s, ct);
+    DrawCommandGlyph(isUrl ? CmdGlyph::Link : isRun ? CmdGlyph::Terminal
+                                                   : CmdGlyph::Folder,
+                     g.x0, hy + (hh - isz) / 2, isz, ct);
+    DrawLabel(e.name, g_fmtTitle, g.x0 + 30 * s, hy, g.x1 - 160 * s, hy + hh, g_pal.text, 1.f);
+    const wchar_t* typeTxt = CustomTypeLabel(e.type);
+    const float tw = TextWidth(typeTxt, g_fmtMeta);
+    DrawLabel(typeTxt, g_fmtMeta, g.x1 - tw, hy, g.x1, hy + hh, g_pal.textDim, 1.f);
+    if (g.count > kFormRows) {
+        wchar_t counter[64];
+        swprintf_s(counter, L"%d-%d of %d", g.first + 1,
+                   std::min(g.first + kFormRows, g.count), g.count);
+        const float cwTxt = TextWidth(counter, g_fmtMeta);
+        DrawLabel(counter, g_fmtMeta, g.x1 - tw - 12 * s - cwTxt, hy, g.x1 - tw - 12 * s,
+                  hy + hh, g_pal.textDim, 0.9f);
+    }
+
+    // Fields.
+    const D2D1_RECT_F rowsClip =
+        D2D1::RectF(cx + 10 * s, g.rowsTop, cx + cw - 10 * s, g.previewTop - 2 * s);
+    g_rt->PushAxisAlignedClip(&rowsClip, D2D1_ANTIALIAS_MODE_ALIASED);
+    const int last = std::min(g.count, g.first + kFormRows);
+    for (int i = g.first; i < last; ++i) {
+        const CustomField& f = e.fields[i];
+        const float y = g.rowsTop + (float)(i - g.first) * g.rowH;
+        const bool focused = (i == g_form.focus);
+        const bool bad = (i == g_form.errorField);
+        const D2D1_RECT_F vr = FormValueRect(g, i, s);
+        FillRR(vr.left, vr.top, vr.right, vr.bottom, 7 * s,
+               bad ? D2D1::ColorF(0.93f, 0.30f, 0.30f) : focused ? g_pal.accent : g_pal.keycap,
+               bad || focused ? 0.12f : 0.45f);
+        if (focused || bad) {
+            SetBrush(bad ? D2D1::ColorF(0.93f, 0.30f, 0.30f) : g_pal.accent, 0.5f);
+            D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(
+                D2D1::RectF(vr.left + 0.5f, vr.top + 0.5f, vr.right - 0.5f, vr.bottom - 0.5f),
+                7 * s, 7 * s);
+            g_rt->DrawRoundedRectangle(&rr, g_brush, 1.f);
+        }
+
+        const float labelW = 96 * s;
+        DrawLabel(f.label, g_fmtFormLabel, g.x0 + 14 * s, y, g.x0 + 14 * s + labelW, y + g.rowH,
+                  focused ? g_pal.text : g_pal.textDim, 1.f);
+        if (f.optional) {
+            const float tagX = g.x0 + 14 * s + labelW + 6 * s;
+            const float tagW = TextWidth(kTxtFormOptional, g_fmtMeta) + 12 * s;
+            const float tagH = 16 * s;
+            const float tagY = y + (g.rowH - tagH) / 2;
+            FillRR(tagX, tagY, tagX + tagW, tagY + tagH, tagH / 2, g_pal.textDim, 0.10f);
+            DrawLabel(kTxtFormOptional, g_fmtMeta, tagX, tagY, tagX + tagW, tagY + tagH,
+                      g_pal.textDim, 0.9f);
+        }
+
+        if (i >= (int)g_form.values.size()) continue;
+        const std::wstring& val = g_form.values[i];
+        const float vx0 = vr.left + 8 * s;
+        const float vx1 = vr.right - 8 * s;
+        if (val.empty()) {
+            const wchar_t* ph = f.optional ? kTxtFormOptional : kTxtFormRequired;
+            DrawLabel(ph, g_fmtForm, vx0, y, vx1, y + g.rowH,
+                      bad ? D2D1::ColorF(0.93f, 0.30f, 0.30f) : g_pal.textDim, bad ? 0.9f : 0.5f);
+            if (focused && g_caretOn) {
+                SetBrush(g_pal.text);
+                D2D1_RECT_F cr = D2D1::RectF(vx0, y + 10 * s, vx0 + 1.5f * s, y + g.rowH - 10 * s);
+                g_rt->FillRectangle(&cr, g_brush);
+            }
+        } else if (focused) {
+            IDWriteTextLayout* tl = nullptr;
+            g_dw->CreateTextLayout(val.c_str(), (UINT32)val.size(), g_fmtForm, 10000.f,
+                                   kFormRowH * s, &tl);
+            if (tl) {
+                float caretX = 0, tmpY = 0;
+                DWRITE_HIT_TEST_METRICS hm = {};
+                const int caret = std::clamp(g_form.caret, 0, (int)val.size());
+                tl->HitTestTextPosition((UINT32)caret, FALSE, &caretX, &tmpY, &hm);
+                const float avail = vx1 - vx0;
+                if (caretX - g_form.inputScroll > avail - 4 * s) {
+                    g_form.inputScroll = caretX - (avail - 4 * s);
+                }
+                if (caretX - g_form.inputScroll < 0) g_form.inputScroll = caretX;
+                if (g_form.inputScroll < 0) g_form.inputScroll = 0;
+                const float ox = vx0 - g_form.inputScroll;
+                if (g_form.anchor != g_form.caret) {
+                    float ax = 0, ay = 0;
+                    DWRITE_HIT_TEST_METRICS hm2 = {};
+                    const int anchor = std::clamp(g_form.anchor, 0, (int)val.size());
+                    tl->HitTestTextPosition((UINT32)anchor, FALSE, &ax, &ay, &hm2);
+                    SetBrush(g_pal.caretSel);
+                    D2D1_RECT_F sr = D2D1::RectF(ox + std::min(ax, caretX), vr.top + 5 * s,
+                                                ox + std::max(ax, caretX), vr.bottom - 5 * s);
+                    g_rt->FillRectangle(&sr, g_brush);
+                }
+                SetBrush(g_pal.text);
+                g_rt->DrawTextLayout(D2D1::Point2F(ox, y), tl, g_brush);
+                if (g_caretOn) {
+                    SetBrush(g_pal.text);
+                    D2D1_RECT_F cr = D2D1::RectF(ox + caretX, y + 10 * s, ox + caretX + 1.5f * s,
+                                                y + g.rowH - 10 * s);
+                    g_rt->FillRectangle(&cr, g_brush);
+                }
+                tl->Release();
+            }
+        } else {
+            const std::wstring shown = FitEnd(val, g_fmtForm, vx1 - vx0);
+            DrawLabel(shown, g_fmtForm, vx0, y, vx1, y + g.rowH, g_pal.text, 1.f);
+        }
+    }
+    g_rt->PopAxisAlignedClip();
+
+    // An entry with no placeholders only opens this form to report a problem, so show what it
+    // points at: that is what has to be corrected in the settings.
+    if (g.count == 0) {
+        DrawLabel(L"Target", g_fmtFormLabel, g.x0 + 14 * s, g.rowsTop, g.x0 + 110 * s,
+                  g.rowsTop + g.rowH, g_pal.textDim, 1.f);
+        std::wstring what = e.target;
+        if (!e.args.empty()) what += L" " + e.args;
+        const float tx = g.x0 + 124 * s;
+        DrawLabel(FitEnd(what, g_fmtForm, g.x1 - tx), g_fmtForm, tx, g.rowsTop, g.x1,
+                  g.rowsTop + g.rowH, g_pal.text, 0.9f);
+    }
+
+    // Preview of what will happen, or the problem that prevents it.
+    const float py = g.previewTop;
+    const float ph = 26 * s;
+    const float px0 = g.x0;
+    const float px1 = g.x1;
+    const float maxW = px1 - px0;
+    if (!g_form.error.empty()) {
+        FillRR(px0, py, px1, py + ph, 7 * s, D2D1::ColorF(0.93f, 0.30f, 0.30f), 0.10f);
+        const std::wstring msg = FitEnd(g_form.error, g_fmtMeta, maxW - 16 * s);
+        DrawLabel(msg, g_fmtMeta, px0 + 8 * s, py, px1 - 8 * s, py + ph,
+                  D2D1::ColorF(0.96f, 0.55f, 0.55f), 1.f);
+    } else if (!g_form.warning.empty()) {
+        FillRR(px0, py, px1, py + ph, 7 * s, D2D1::ColorF(0.93f, 0.62f, 0.22f), 0.10f);
+        std::wstring msg = g_form.warning;
+        if (g_form.warned) msg += L"  (press Enter again to run)";
+        msg = FitEnd(msg, g_fmtMeta, maxW - 16 * s);
+        DrawLabel(msg, g_fmtMeta, px0 + 8 * s, py, px1 - 8 * s, py + ph,
+                  D2D1::ColorF(0.95f, 0.72f, 0.40f), 1.f);
+    } else {
+        if (CustomRequiredMissing(e, g_form.values)) {
+            DrawLabel(kTxtFormFill, g_fmtMeta, px0 + 2 * s, py, px1, py + ph, g_pal.textDim, 0.85f);
+        } else {
+            std::wstring target, args;
+            BuildCustomLaunch(e, g_form.values, target, args);
+            std::wstring line = target;
+            if (isRun && !args.empty()) line += L" " + args;
+            const wchar_t* lead = isRun ? kTxtFormWillRun : kTxtFormWillOpen;
+            const float lw = TextWidth(lead, g_fmtMeta);
+            DrawLabel(lead, g_fmtMeta, px0 + 2 * s, py, px0 + 2 * s + lw, py + ph,
+                      g_pal.textDim, 0.9f);
+            const std::wstring shown = FitEnd(line, g_fmtMeta, maxW - lw - 16 * s);
+            DrawLabel(shown, g_fmtMeta, px0 + 2 * s + lw + 8 * s, py, px1, py + ph, g_pal.text,
+                      0.9f);
+        }
+    }
+}
+
+static void DrawCustomFormFooter(float cx, float footerTop, float cw) {
+    const float s = (float)g_scale;
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, footerTop, cx + cw - 12 * s, footerTop + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+
+    const float yMid = footerTop + kFooterH * s / 2 + 0.5f;
+    const bool run = g_form.entry >= 0 && g_form.entry < (int)g_cfg.commands.size() &&
+                     g_cfg.commands[g_form.entry].type == L"run";
+    const bool hasFields = g_form.entry >= 0 && g_form.entry < (int)g_cfg.commands.size() &&
+                           !g_cfg.commands[g_form.entry].fields.empty();
+    const wchar_t* ok[1] = {kTxtEnterGlyph};
+    const wchar_t* tab[1] = {L"Tab"};
+    const wchar_t* esc[1] = {L"Esc"};
+    float x = cx + cw - 20 * s;
+    if (hasFields) {
+        x = DrawHint(run ? kTxtRun : kTxtOpen, ok, 1, x, yMid);
+        x -= 16 * s;
+        x = DrawHint(kTxtFormNext, tab, 1, x, yMid);
+        x -= 16 * s;
+    }
+    DrawHint(kTxtFormBack, esc, 1, x, yMid);
+}
+
+static int HitCustomFormField(int mx, int my) {
+    if (!g_form.active) return -1;
+    float cx = 0, cy = 0;
+    MainOrigin(cx, cy);
+    const float s = (float)g_scale;
+    const FormGeom g = GetFormGeom(cx, cy, kWidth * s, s);
+    if (mx < g.x0 || mx > g.x1) return -1;
+    if (my < g.rowsTop || my >= g.previewTop) return -1;
+    const int i = g.first + (int)std::floor((my - g.rowsTop) / g.rowH);
+    if (i < g.first || i >= std::min(g.count, g.first + kFormRows)) return -1;
+    return i;
+}
+
+static bool CustomFormClick(int mx, int my) {
+    if (!g_form.active) return false;
+    const int i = HitCustomFormField(mx, my);
+    if (i < 0) return false;
+    if (i != g_form.focus) {
+        g_form.focus = i;
+        g_form.inputScroll = 0;
+        EnsureFormFocusVisible();
+    }
+    float cx = 0, cy = 0;
+    MainOrigin(cx, cy);
+    const float s = (float)g_scale;
+    const FormGeom g = GetFormGeom(cx, cy, kWidth * s, s);
+    const D2D1_RECT_F vr = FormValueRect(g, i, s);
+    int pos = 0;
+    if (i < (int)g_form.values.size()) {
+        const std::wstring& val = g_form.values[i];
+        IDWriteTextLayout* tl = nullptr;
+        g_dw->CreateTextLayout(val.c_str(), (UINT32)val.size(), g_fmtForm, 10000.f,
+                               kFormRowH * s, &tl);
+        if (tl) {
+            const float lx = (float)mx - (vr.left + 8 * s - g_form.inputScroll);
+            const float ly = (float)my - (g.rowsTop + (float)(i - g.first) * g.rowH);
+            BOOL trailing = FALSE, inside = FALSE;
+            DWRITE_HIT_TEST_METRICS hm = {};
+            tl->HitTestPoint(lx, ly, &trailing, &inside, &hm);
+            pos = hm.textPosition + (trailing ? hm.length : 0);
+            tl->Release();
+        }
+        pos = std::clamp(pos, 0, (int)val.size());
+    }
+    g_form.caret = g_form.anchor = pos;
+    ResetBlink();
+    MarkDirty();
+    return true;
+}
+
+// ===== Shortcuts for custom entries =====
+// Each entry can own a key combination (Ctrl+Alt+T ...). It is matched by the launcher window while
+// the bar is open and is never registered with the system: it cannot fire while the launcher is
+// closed, and it cannot take a combination away from Windows or another application.
+
+// Parses "ctrl+alt+t" into modifier flags and a virtual key. Needs at least one modifier and
+// exactly one key. Returns false for anything else (including an empty string).
+static bool ParseHotkey(const std::wstring& text, UINT& mods, UINT& vk) {
+    mods = 0;
+    vk = 0;
+    std::vector<std::wstring> parts;
+    std::wstring cur;
+    for (const wchar_t c : text) {
+        if (c == L'+') {
+            if (!cur.empty()) parts.push_back(cur);
+            cur.clear();
+        } else if (c != L' ' && c != L'\t') {
+            cur += c;
+        }
+    }
+    if (!cur.empty()) parts.push_back(cur);
+    if (parts.size() < 2) return false;
+    for (const std::wstring& raw : parts) {
+        const std::wstring p = FoldString(raw);
+        if (p == L"ctrl" || p == L"control") {
+            mods |= MOD_CONTROL;
+        } else if (p == L"alt") {
+            mods |= MOD_ALT;
+        } else if (p == L"shift") {
+            mods |= MOD_SHIFT;
+        } else if (p == L"win") {
+            mods |= MOD_WIN;
+        } else {
+            if (vk != 0) return false;  // more than one non-modifier key
+            if (p.size() == 1 && p[0] >= L'a' && p[0] <= L'z') {
+                vk = (UINT)towupper(p[0]);
+            } else if (p.size() == 1 && p[0] >= L'0' && p[0] <= L'9') {
+                vk = (UINT)p[0];
+            } else if (p.size() >= 2 && p[0] == L'f') {
+                const int n = _wtoi(p.c_str() + 1);
+                if (n < 1 || n > 24) return false;
+                vk = VK_F1 + (UINT)(n - 1);
+            } else if (p == L"space") {
+                vk = VK_SPACE;
+            } else if (p == L"tab") {
+                vk = VK_TAB;
+            } else if (p == L"enter") {
+                vk = VK_RETURN;
+            } else if (p == L"insert") {
+                vk = VK_INSERT;
+            } else if (p == L"delete") {
+                vk = VK_DELETE;
+            } else if (p == L"home") {
+                vk = VK_HOME;
+            } else if (p == L"end") {
+                vk = VK_END;
+            } else if (p == L"pageup") {
+                vk = VK_PRIOR;
+            } else if (p == L"pagedown") {
+                vk = VK_NEXT;
+            } else {
+                return false;
+            }
+        }
+    }
+    // Shift on its own would swallow ordinary capital letters, so Ctrl, Alt or Win is required.
+    return (mods & (MOD_CONTROL | MOD_ALT | MOD_WIN)) != 0 && vk != 0;
+}
+
+// The canonical text for a combination ("ctrl+alt+t"), or empty if the key has no name here.
+static std::wstring FormatHotkey(UINT mods, UINT vk) {
+    std::wstring s;
+    if (mods & MOD_CONTROL) s += L"ctrl+";
+    if (mods & MOD_ALT) s += L"alt+";
+    if (mods & MOD_SHIFT) s += L"shift+";
+    if (mods & MOD_WIN) s += L"win+";
+    wchar_t key[16] = L"";
+    if (vk >= 'A' && vk <= 'Z') {
+        key[0] = (wchar_t)towlower((wint_t)vk);
+    } else if (vk >= '0' && vk <= '9') {
+        key[0] = (wchar_t)vk;
+    } else if (vk >= VK_F1 && vk <= VK_F24) {
+        swprintf_s(key, L"f%u", vk - VK_F1 + 1);
+    } else if (vk == VK_SPACE) {
+        wcscpy_s(key, L"space");
+    } else if (vk == VK_TAB) {
+        wcscpy_s(key, L"tab");
+    } else if (vk == VK_RETURN) {
+        wcscpy_s(key, L"enter");
+    } else if (vk == VK_INSERT) {
+        wcscpy_s(key, L"insert");
+    } else if (vk == VK_DELETE) {
+        wcscpy_s(key, L"delete");
+    } else if (vk == VK_HOME) {
+        wcscpy_s(key, L"home");
+    } else if (vk == VK_END) {
+        wcscpy_s(key, L"end");
+    } else if (vk == VK_PRIOR) {
+        wcscpy_s(key, L"pageup");
+    } else if (vk == VK_NEXT) {
+        wcscpy_s(key, L"pagedown");
+    } else {
+        return std::wstring();
+    }
+    return s + key;
+}
+
+// Runs the entry whose Shortcut matches the key being pressed, while the launcher is open. The
+// window has the focus at that point, so no global registration (and no conflict) is involved.
+static bool TryRunEntryHotkey(WPARAM vk) {
+    if (g_vis == Vis::Hidden || vk == VK_CONTROL || vk == VK_MENU || vk == VK_SHIFT ||
+        vk == VK_LWIN || vk == VK_RWIN) {
+        return false;  // a modifier on its own never matches
+    }
+    UINT mods = 0;
+    if (GetKeyState(VK_CONTROL) & 0x8000) mods |= MOD_CONTROL;
+    if (GetKeyState(VK_MENU) & 0x8000) mods |= MOD_ALT;
+    if (GetKeyState(VK_SHIFT) & 0x8000) mods |= MOD_SHIFT;
+    if ((GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000)) mods |= MOD_WIN;
+    if (mods == 0) return false;
+    for (size_t i = 0; i < g_cfg.commands.size(); ++i) {
+        const CustomEntry& e = g_cfg.commands[i];
+        if (e.hotkey.empty()) continue;
+        UINT eMods = 0, eKey = 0;
+        if (!ParseHotkey(e.hotkey, eMods, eKey) || eMods != mods || eKey != (UINT)vk) continue;
+        if (CustomHasFormFields(e)) {
+            OpenCustomForm((int)i, L"");
+            MarkDirty();
+        } else {
+            ActivateCustomEntry((int)i, L"", /*skipForm=*/true);
+        }
+        return true;
+    }
+    return false;
+}
+
+// Manager validation: a single lowercase word, 1..16 of [a-z0-9_-], that no other entry uses.
+// The typed mode prefixes ("g:", "bm:") need a colon, so a plain word never shadows them.
+static bool ValidTrigger(const std::wstring& trigger, const std::wstring& ignoreId,
+                         std::wstring& error) {
+    if (trigger.empty()) return true;
+    if (trigger.size() > 16) {
+        error = L"Trigger: at most 16 characters.";
+        return false;
+    }
+    for (const wchar_t c : trigger) {
+        if (!((c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9') || c == L'-' || c == L'_')) {
+            error = L"Trigger: use lowercase letters, digits, - or _ only.";
+            return false;
+        }
+    }
+    for (const CustomEntry& e : g_cfg.commands) {
+        if (e.id != ignoreId && e.trigger == trigger) {
+            error = L"Trigger: another entry already uses it.";
+            return false;
+        }
+    }
+    return true;
+}
+
+// ===== Custom-entries manager (in-app create / edit / delete) =====
+
+static const wchar_t* const kMgrTypeIds[3] = {L"url", L"path", L"run"};
+static const wchar_t* const kMgrTypeLabels[3] = {L"Website", L"File or folder", L"Command"};
+static const int kMgrFieldType = 1, kMgrFieldArgs = 3,
+                 kMgrFieldKeywords = 4, kMgrFieldTrigger = 5, kMgrFieldHotkey = 6;
+static const wchar_t* const kMgrFieldLabels[kMgrFields] = {
+    L"Name", L"Type", L"Target", L"Arguments", L"Keywords", L"Trigger", L"Shortcut"};
+
+static std::vector<CustomEntry> ManagerStoreList() {
+    std::vector<CustomEntry> v;
+    for (const CustomEntry& e : g_cfg.commands) {
+        if (e.fromStore) v.push_back(e);
+    }
+    return v;
+}
+
+static int ManagerStoreCount() {
+    int n = 0;
+    for (const CustomEntry& e : g_cfg.commands) {
+        if (e.fromStore) ++n;
+    }
+    return n;
+}
+
+static void CloseManager() {
+    g_mgr = ManagerState();
+    g_activator = -1;
+    ResetBlink();
+    UpdateTargets(false, /*followSelection=*/false);
+    MarkDirty();
+}
+
+static void OpenManager() {
+    g_mgr = ManagerState();
+    g_mgr.active = true;
+    g_activator = -1;
+    g_text.clear();
+    g_caret = g_anchor = 0;
+    g_inputScroll = 0;
+    CancelConfirm();
+    ResetBlink();
+    MarkDirty();
+}
+
+static void ManagerStartNew() {
+    g_mgr.editing = true;
+    g_mgr.creating = true;
+    g_mgr.editId.clear();
+    g_mgr.typeIdx = 0;
+    for (auto& s : g_mgr.vals) s.clear();
+    g_mgr.field = 0;
+    g_mgr.caret = g_mgr.anchor = 0;
+    g_mgr.inputScroll = 0;
+    g_mgr.error.clear();
+    ResetBlink();
+    MarkDirty();
+}
+
+static void ManagerStartEdit(const CustomEntry& e) {
+    g_mgr.editing = true;
+    g_mgr.creating = false;
+    g_mgr.editId = e.id;
+    g_mgr.typeIdx = (e.type == L"run") ? 2 : (e.type == L"path") ? 1 : 0;
+    g_mgr.vals[0] = e.name;
+    g_mgr.vals[1].clear();
+    g_mgr.vals[2] = e.target;
+    g_mgr.vals[3] = e.args;
+    g_mgr.vals[4] = e.keywords;
+    g_mgr.vals[kMgrFieldTrigger] = e.trigger;
+    g_mgr.vals[kMgrFieldHotkey] = e.hotkey;
+    g_mgr.field = 0;
+    g_mgr.caret = g_mgr.anchor = (int)g_mgr.vals[0].size();
+    g_mgr.inputScroll = 0;
+    g_mgr.error.clear();
+    ResetBlink();
+    MarkDirty();
+}
+
+// The focused text field's string, or nullptr when the Type selector (field 1) is focused.
+static std::wstring* ManagerFieldText() {
+    if (!g_mgr.active || !g_mgr.editing) return nullptr;
+    if (g_mgr.field == kMgrFieldType || g_mgr.field < 0 || g_mgr.field >= kMgrFields) return nullptr;
+    return &g_mgr.vals[g_mgr.field];
+}
+
+static void ManagerReplaceSelection(const std::wstring& s) {
+    std::wstring* v = ManagerFieldText();
+    if (!v) return;
+    int a = std::min(g_mgr.anchor, g_mgr.caret);
+    int b = std::max(g_mgr.anchor, g_mgr.caret);
+    a = std::clamp(a, 0, (int)v->size());
+    b = std::clamp(b, 0, (int)v->size());
+    if (v->size() - (size_t)(b - a) + s.size() > 2048) return;
+    *v = v->substr(0, a) + s + v->substr(b);
+    g_mgr.caret = g_mgr.anchor = a + (int)s.size();
+    g_mgr.error.clear();
+    ResetBlink();
+    MarkDirty();
+}
+
+static void ManagerMoveCaret(int pos, bool extend) {
+    std::wstring* v = ManagerFieldText();
+    if (!v) return;
+    pos = std::clamp(pos, 0, (int)v->size());
+    g_mgr.caret = pos;
+    if (!extend) g_mgr.anchor = pos;
+    ResetBlink();
+    MarkDirty();
+}
+
+static void ManagerFocusField(int f) {
+    f = std::clamp(f, 0, kMgrFields - 1);
+    if (f == g_mgr.field) {
+        return;
+    }
+    g_mgr.field = f;
+    std::wstring* v = ManagerFieldText();
+    g_mgr.caret = g_mgr.anchor = v ? (int)v->size() : 0;
+    g_mgr.inputScroll = 0;
+    ResetBlink();
+    MarkDirty();
+}
+
+static void ManagerSave() {
+    const std::wstring name = TrimBlanks(g_mgr.vals[0]);
+    const std::wstring target = TrimBlanks(g_mgr.vals[2]);
+    if (name.empty()) {
+        g_mgr.error = L"Name is required.";
+        ManagerFocusField(0);
+        MarkDirty();
+        return;
+    }
+    if (target.empty()) {
+        g_mgr.error = L"Target is required.";
+        ManagerFocusField(2);
+        MarkDirty();
+        return;
+    }
+    // Optional shortcuts: a typed alias and a key combination used while the bar is open.
+    std::wstring trigger = TrimBlanks(g_mgr.vals[kMgrFieldTrigger]);
+    for (auto& c : trigger) c = (wchar_t)towlower(c);
+    std::wstring hotkeyText = TrimBlanks(g_mgr.vals[kMgrFieldHotkey]);
+    const std::wstring selfId = g_mgr.creating ? std::wstring() : g_mgr.editId;
+    if (!trigger.empty()) {
+        std::wstring error;
+        if (!ValidTrigger(trigger, selfId, error)) {
+            g_mgr.error = error;
+            ManagerFocusField(kMgrFieldTrigger);
+            MarkDirty();
+            return;
+        }
+    }
+    if (!hotkeyText.empty()) {
+        UINT hkMods = 0, hkVk = 0;
+        if (!ParseHotkey(hotkeyText, hkMods, hkVk)) {
+            g_mgr.error = L"Shortcut: press a combination like Ctrl+Alt+T.";
+            ManagerFocusField(kMgrFieldHotkey);
+            MarkDirty();
+            return;
+        }
+        // The launcher's own shortcut still belongs to the system: it would close the bar before
+        // the entry could see it.
+        if (hkMods == g_cfg.hotkeyMods && hkVk == g_cfg.hotkeyVk) {
+            g_mgr.error = L"Shortcut: the launcher's own key is already used.";
+            ManagerFocusField(kMgrFieldHotkey);
+            MarkDirty();
+            return;
+        }
+        for (const CustomEntry& e : g_cfg.commands) {
+            if (e.id == selfId || e.hotkey.empty()) continue;
+            UINT m2 = 0, v2 = 0;
+            if (ParseHotkey(e.hotkey, m2, v2) && m2 == hkMods && v2 == hkVk) {
+                g_mgr.error = L"Shortcut: another entry already uses it.";
+                ManagerFocusField(kMgrFieldHotkey);
+                MarkDirty();
+                return;
+            }
+        }
+        hotkeyText = FormatHotkey(hkMods, hkVk);  // canonical spelling
+    }
+    std::vector<CustomEntry> store = ManagerStoreList();
+    CustomEntry ne = MakeCustomEntry(name, kMgrTypeIds[g_mgr.typeIdx], target, g_mgr.vals[3],
+                                     TrimBlanks(g_mgr.vals[4]), trigger, hotkeyText);
+    ne.fromStore = true;
+    std::wstring keepId;
+    if (!g_mgr.creating && !g_mgr.editId.empty()) {
+        ne.id = g_mgr.editId;
+        keepId = ne.id;
+        bool found = false;
+        for (CustomEntry& e : store) {
+            if (e.id == g_mgr.editId) {
+                e = ne;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ne.id = GenerateEntryId();
+            keepId = ne.id;
+            store.push_back(ne);
+        }
+    } else {
+        ne.id = GenerateEntryId();
+        keepId = ne.id;
+        store.push_back(ne);
+    }
+    SaveCustomStore(store);
+    LoadSettings();  // rebuild g_cfg.commands (settings entries + the updated store)
+    g_mgr.editing = false;
+    g_mgr.error.clear();
+    // Leave the list selection on the entry that was just saved.
+    g_mgr.sel = 1;
+    int row = 1;
+    for (const CustomEntry& e : g_cfg.commands) {
+        if (!e.fromStore) continue;
+        if (e.id == keepId) {
+            g_mgr.sel = row;
+            break;
+        }
+        ++row;
+    }
+    ResetBlink();
+    MarkDirty();
+}
+
+static void ManagerDeleteSel() {
+    if (g_mgr.sel <= 0) return;  // the "New entry" row
+    std::vector<CustomEntry> store = ManagerStoreList();
+    const int idx = g_mgr.sel - 1;
+    if (idx < 0 || idx >= (int)store.size()) return;
+    store.erase(store.begin() + idx);
+    SaveCustomStore(store);
+    LoadSettings();
+    const int n = ManagerStoreCount();
+    if (g_mgr.sel > n) g_mgr.sel = n;  // clamp to 0..n
+    ResetBlink();
+    MarkDirty();
+}
+
+static int ManagerVisibleRows() {
+    const float s = (float)g_scale;
+    const float avail = (float)(ExpandedH() - kFooterH) * s - (kBarH + 34.f) * s;
+    const int rows = (int)(avail / (kRowH * s));
+    return std::max(1, rows);
+}
+
+static void EnsureManagerSelVisible() {
+    const int vis = ManagerVisibleRows();
+    const int total = ManagerStoreCount() + 1;  // + the "New entry" row
+    if (g_mgr.sel < g_mgr.scroll) g_mgr.scroll = g_mgr.sel;
+    if (g_mgr.sel >= g_mgr.scroll + vis) g_mgr.scroll = g_mgr.sel - vis + 1;
+    g_mgr.scroll = std::clamp(g_mgr.scroll, 0, std::max(0, total - vis));
+}
+
+static std::wstring ManagerClipboardText() {
+    if (!OpenClipboard(g_hwnd)) return L"";
+    std::wstring s;
+    HANDLE h = GetClipboardData(CF_UNICODETEXT);
+    if (h) {
+        const wchar_t* p = (const wchar_t*)GlobalLock(h);
+        if (p) {
+            s = p;
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    for (auto& c : s) {
+        if (c == L'\r' || c == L'\n' || c == L'\t') c = L' ';
+    }
+    return s;
+}
+
+// Captures a key combination for the Shortcut field. Returns false for the keys that keep their
+// normal editor meaning (Esc, Enter, Tab, the arrows) so those are handled by the caller.
+static bool ManagerCaptureHotkey(WPARAM vk, bool ctrl, bool shift) {
+    switch (vk) {
+        case VK_ESCAPE:
+        case VK_TAB:
+        case VK_UP:
+        case VK_DOWN:
+        case VK_RETURN:
+            return false;
+        case VK_BACK:
+        case VK_DELETE:
+            g_mgr.vals[kMgrFieldHotkey].clear();
+            g_mgr.error.clear();
+            MarkDirty();
+            return true;
+        case VK_CONTROL:
+        case VK_MENU:
+        case VK_SHIFT:
+        case VK_LWIN:
+        case VK_RWIN:
+            return true;  // a modifier on its own: wait for the real key
+        default: {
+            UINT mods = 0;
+            if (ctrl) mods |= MOD_CONTROL;
+            if ((GetKeyState(VK_MENU) & 0x8000) != 0) mods |= MOD_ALT;
+            if (shift) mods |= MOD_SHIFT;
+            if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0) {
+                mods |= MOD_WIN;
+            }
+            if (mods == 0 || (mods & (MOD_CONTROL | MOD_ALT | MOD_WIN)) == 0) {
+                g_mgr.error = L"Shortcut: hold Ctrl, Alt or Win as well.";
+                MarkDirty();
+                return true;
+            }
+            const std::wstring text = FormatHotkey(mods, (UINT)vk);
+            if (text.empty()) return true;  // a key with no name here: keep waiting
+            g_mgr.vals[kMgrFieldHotkey] = text;
+            g_mgr.error.clear();
+            MarkDirty();
+            return true;
+        }
+    }
+}
+
+static bool HandleManagerKey(WPARAM vk, bool ctrl, bool shift) {
+    if (g_mgr.editing) {
+        if (g_mgr.field == kMgrFieldHotkey && ManagerCaptureHotkey(vk, ctrl, shift)) return true;
+        std::wstring* v = ManagerFieldText();
+        const int len = v ? (int)v->size() : 0;
+        const bool sel = g_mgr.anchor != g_mgr.caret;
+        switch (vk) {
+            case VK_ESCAPE:
+                g_mgr.editing = false;  // back to the list
+                g_mgr.error.clear();
+                ResetBlink();
+                MarkDirty();
+                return true;
+            case VK_RETURN:
+                ManagerSave();
+                return true;
+            case VK_TAB:
+                ManagerFocusField((g_mgr.field + (shift ? -1 : 1) + kMgrFields) % kMgrFields);
+                return true;
+            case VK_UP:
+                ManagerFocusField(g_mgr.field - 1);
+                return true;
+            case VK_DOWN:
+                ManagerFocusField(g_mgr.field + 1);
+                return true;
+            case VK_LEFT:
+                if (g_mgr.field == kMgrFieldType) {
+                    g_mgr.typeIdx = (g_mgr.typeIdx + 2) % 3;
+                    ResetBlink();
+                    MarkDirty();
+                    return true;
+                }
+                if (sel && !shift) ManagerMoveCaret(std::min(g_mgr.anchor, g_mgr.caret), false);
+                else ManagerMoveCaret(g_mgr.caret - 1, shift);
+                return true;
+            case VK_RIGHT:
+                if (g_mgr.field == kMgrFieldType) {
+                    g_mgr.typeIdx = (g_mgr.typeIdx + 1) % 3;
+                    ResetBlink();
+                    MarkDirty();
+                    return true;
+                }
+                if (sel && !shift) ManagerMoveCaret(std::max(g_mgr.anchor, g_mgr.caret), false);
+                else ManagerMoveCaret(g_mgr.caret + 1, shift);
+                return true;
+            case VK_HOME:
+                ManagerMoveCaret(0, shift);
+                return true;
+            case VK_END:
+                ManagerMoveCaret(len, shift);
+                return true;
+            case VK_BACK:
+                if (sel) {
+                    ManagerReplaceSelection(L"");
+                } else if (g_mgr.caret > 0) {
+                    g_mgr.anchor = g_mgr.caret - 1;
+                    ManagerReplaceSelection(L"");
+                }
+                return true;
+            case VK_DELETE:
+                if (sel) {
+                    ManagerReplaceSelection(L"");
+                } else if (g_mgr.caret < len) {
+                    g_mgr.anchor = g_mgr.caret + 1;
+                    ManagerReplaceSelection(L"");
+                }
+                return true;
+            case 'A':
+                if (ctrl && v) {
+                    g_mgr.anchor = 0;
+                    g_mgr.caret = len;
+                    ResetBlink();
+                    MarkDirty();
+                }
+                return true;
+            case 'C':
+            case 'X':
+                if (ctrl && v && sel) {
+                    const int a = std::min(g_mgr.anchor, g_mgr.caret);
+                    const int b = std::max(g_mgr.anchor, g_mgr.caret);
+                    CopyTextToClipboard(v->substr(a, b - a));
+                    if (vk == 'X') ManagerReplaceSelection(L"");
+                }
+                return true;
+            case 'V':
+                if (ctrl) {
+                    std::wstring t = ManagerClipboardText();
+                    if (!t.empty()) ManagerReplaceSelection(t);
+                }
+                return true;
+        }
+        return false;  // unrecognised key: let WM_CHAR deliver the character
+    }
+
+    // List mode.
+    const int n = ManagerStoreCount();
+    switch (vk) {
+        case VK_UP:
+            g_mgr.deleteArmed = false;
+            g_mgr.sel = std::clamp(g_mgr.sel - 1, 0, n);
+            EnsureManagerSelVisible();
+            ResetBlink();
+            MarkDirty();
+            return true;
+        case VK_DOWN:
+            g_mgr.deleteArmed = false;
+            g_mgr.sel = std::clamp(g_mgr.sel + 1, 0, n);
+            EnsureManagerSelVisible();
+            ResetBlink();
+            MarkDirty();
+            return true;
+        case VK_RETURN:
+            g_mgr.deleteArmed = false;
+            if (g_mgr.sel <= 0) {
+                ManagerStartNew();
+            } else {
+                std::vector<CustomEntry> store = ManagerStoreList();
+                const int idx = g_mgr.sel - 1;
+                if (idx >= 0 && idx < (int)store.size()) ManagerStartEdit(store[idx]);
+            }
+            return true;
+        case VK_DELETE:
+            if (g_mgr.sel <= 0) return true;  // "New entry" row is not deletable
+            if (!g_mgr.deleteArmed) {
+                g_mgr.deleteArmed = true;  // first Delete: arm and show confirm hint
+                MarkDirty();
+            } else {
+                g_mgr.deleteArmed = false;  // second Delete: execute
+                ManagerDeleteSel();
+            }
+            return true;
+        case VK_ESCAPE:
+            if (g_mgr.deleteArmed) {
+                g_mgr.deleteArmed = false;
+                MarkDirty();
+                return true;
+            }
+            CloseManager();
+            return true;
+    }
+    return true;  // the manager is modal
+}
+
+// ---- Drawing the manager ----
+
+static D2D1_COLOR_F ManagerTypeColor(int typeIdx) {
+    return typeIdx == 0 ? D2D1::ColorF(0.20f, 0.55f, 0.90f)
+           : typeIdx == 2 ? D2D1::ColorF(0.55f, 0.38f, 0.88f)
+                          : D2D1::ColorF(0.92f, 0.62f, 0.22f);
+}
+
+static CmdGlyph ManagerTypeGlyph(int typeIdx) {
+    return typeIdx == 0 ? CmdGlyph::Link : typeIdx == 2 ? CmdGlyph::Terminal
+                                                                : CmdGlyph::Folder;
+}
+
+static void DrawManagerList(float cx, float cy, float cw, float s) {
+    const float x0 = cx + 20 * s;
+    const float x1 = cx + cw - 20 * s;
+    const float listTop = cy + kBarH * s;
+    const float rowsTop = listTop + 34 * s;
+    const float rowH = kRowH * s;
+    const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
+
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, listTop, cx + cw - 12 * s, listTop + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+
+    DrawLabel(L"Custom entries", g_fmtTitle, x0, listTop + 6 * s, x1 - 120 * s, listTop + 30 * s,
+              g_pal.text, 1.f);
+    const int n = ManagerStoreCount();
+    {
+        wchar_t c[48];
+        swprintf_s(c, n == 1 ? L"%d entry" : L"%d entries", n);
+        const float cwt = TextWidth(c, g_fmtMeta);
+        DrawLabel(c, g_fmtMeta, x1 - cwt, listTop + 6 * s, x1, listTop + 30 * s, g_pal.textDim, 1.f);
+    }
+
+    const int vis = ManagerVisibleRows();
+    const int total = n + 1;
+    const D2D1_RECT_F clip = D2D1::RectF(cx + 8 * s, rowsTop, cx + cw - 8 * s, footerTop - 4 * s);
+    g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+    const std::vector<CustomEntry> store = ManagerStoreList();
+    const int last = std::min(total, g_mgr.scroll + vis);
+    for (int i = g_mgr.scroll; i < last; ++i) {
+        const float y = rowsTop + (float)(i - g_mgr.scroll) * rowH;
+        const bool on = (i == g_mgr.sel);
+        const bool armedRow = on && g_mgr.deleteArmed;
+        if (on) FillRR(x0 - 8 * s, y + 2 * s, x1 + 8 * s, y + rowH - 2 * s, kRowRadius * s,
+                       armedRow ? D2D1::ColorF(0.88f, 0.22f, 0.22f) : g_pal.selection,
+                       armedRow ? 0.22f : 1.f);
+        const float iconSz = 20 * s;
+        const float iconY = y + (rowH - iconSz) / 2;
+        if (i == 0) {
+            // "New entry" row.
+            FillRR(x0, iconY, x0 + iconSz, iconY + iconSz, 6 * s, g_pal.accent, 0.16f);
+            DrawCommandGlyph(CmdGlyph::ChevronRight, x0, iconY, iconSz, g_pal.accentStrong);
+            DrawLabel(L"New entry", g_fmtTitle, x0 + 30 * s, y, x1, y + rowH, g_pal.accentStrong,
+                      1.f);
+        } else {
+            const int si = i - 1;
+            if (si < 0 || si >= (int)store.size()) continue;
+            const CustomEntry& e = store[si];
+            const int ti = (e.type == L"run") ? 2 : (e.type == L"path") ? 1 : 0;
+            const D2D1_COLOR_F ct = ManagerTypeColor(ti);
+            FillRR(x0, iconY, x0 + iconSz, iconY + iconSz, 6 * s, ct);
+            DrawCommandGlyph(ManagerTypeGlyph(ti), x0, iconY, iconSz, ct);
+            DrawLabel(e.name, g_fmtTitle, x0 + 30 * s, y + 4 * s, x1 - 8 * s, y + rowH / 2 + 4 * s,
+                      g_pal.text, 1.f);
+            std::wstring sub = kMgrTypeLabels[ti];
+            if (!e.trigger.empty()) sub += L"  ·  /" + e.trigger;
+            if (!e.hotkey.empty()) sub += L"  ·  " + e.hotkey;
+            if (!e.target.empty()) sub += L"  ·  " + e.target;
+            DrawLabel(FitEnd(sub, g_fmtMeta, x1 - (x0 + 30 * s) - 8 * s), g_fmtMeta, x0 + 30 * s,
+                      y + rowH / 2 - 2 * s, x1 - 8 * s, y + rowH - 4 * s, g_pal.textDim, 1.f);
+        }
+    }
+    g_rt->PopAxisAlignedClip();
+}
+
+static void DrawManagerEditor(float cx, float cy, float cw, float s) {
+    const float x0 = cx + 20 * s;
+    const float x1 = cx + cw - 20 * s;
+    const float listTop = cy + kBarH * s;
+    const float rowsTop = listTop + 34 * s;
+    const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
+    // Seven rows do not fit at the form's row height, so they shrink into the space above the
+    // hint line instead of scrolling: every field stays visible at once.
+    const float rowSpace = (footerTop - 30 * s) - rowsTop;
+    const float rowH = std::min(kFormRowH * s, rowSpace / (float)kMgrFields);
+
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, listTop, cx + cw - 12 * s, listTop + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+    DrawLabel(g_mgr.creating ? L"New entry" : L"Edit entry", g_fmtTitle, x0, listTop + 6 * s,
+              x1, listTop + 30 * s, g_pal.text, 1.f);
+
+    const float labelW = 96 * s;
+    const float boxL = x0 + 14 * s + labelW;
+    for (int i = 0; i < kMgrFields; ++i) {
+        const float y = rowsTop + (float)i * rowH;
+        const bool on = (i == g_mgr.field);
+        const D2D1_RECT_F vr = D2D1::RectF(boxL, y + 7 * s, x1 - 12 * s, y + rowH - 7 * s);
+        FillRR(vr.left, vr.top, vr.right, vr.bottom, 7 * s, on ? g_pal.accent : g_pal.keycap,
+               on ? 0.12f : 0.45f);
+        if (on) {
+            SetBrush(g_pal.accent, 0.5f);
+            D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(
+                D2D1::RectF(vr.left + 0.5f, vr.top + 0.5f, vr.right - 0.5f, vr.bottom - 0.5f),
+                7 * s, 7 * s);
+            g_rt->DrawRoundedRectangle(&rr, g_brush, 1.f);
+        }
+        DrawLabel(kMgrFieldLabels[i], g_fmtFormLabel, x0 + 14 * s, y, x0 + 14 * s + labelW,
+                  y + rowH, on ? g_pal.text : g_pal.textDim, 1.f);
+        const float vx0 = vr.left + 8 * s;
+        const float vx1 = vr.right - 8 * s;
+        if (i == kMgrFieldType) {
+            // Type selector: ‹ label ›
+            std::wstring t = std::wstring(L"‹  ") + kMgrTypeLabels[g_mgr.typeIdx] + L"  ›";
+            DrawLabel(t, g_fmtForm, vx0, y, vx1, y + rowH, g_pal.text, 1.f);
+            continue;
+        }
+        const std::wstring& val = g_mgr.vals[i];
+        const bool shortcutField = i == kMgrFieldTrigger || i == kMgrFieldHotkey;
+        if (val.empty() && (!on || shortcutField)) {
+            const wchar_t* hint =
+                (i == kMgrFieldArgs || i == kMgrFieldKeywords || shortcutField) ? L"Optional"
+                                                                                : L"Required";
+            if (i == kMgrFieldTrigger && on) hint = L"Type a word, e.g. yt";
+            if (i == kMgrFieldHotkey && on) hint = L"Press a combination";
+            DrawLabel(hint, g_fmtForm, vx0, y, vx1, y + rowH, g_pal.textDim, 0.5f);
+            continue;
+        }
+        // Caret and horizontal scroll via text measurement.
+        float caretX = 0, anchorX = 0;
+        if (on) {
+            const int c = std::clamp(g_mgr.caret, 0, (int)val.size());
+            const int a = std::clamp(g_mgr.anchor, 0, (int)val.size());
+            caretX = TextWidth(val.substr(0, c).c_str(), g_fmtForm);
+            anchorX = TextWidth(val.substr(0, a).c_str(), g_fmtForm);
+            const float avail = vx1 - vx0;
+            if (caretX - g_mgr.inputScroll > avail - 4 * s) g_mgr.inputScroll = caretX - (avail - 4 * s);
+            if (caretX - g_mgr.inputScroll < 0) g_mgr.inputScroll = caretX;
+            if (g_mgr.inputScroll < 0) g_mgr.inputScroll = 0;
+        }
+        const float ox = vx0 - (on ? g_mgr.inputScroll : 0.f);
+        const D2D1_RECT_F vclip = D2D1::RectF(vx0, y, vx1 + 2 * s, y + rowH);
+        g_rt->PushAxisAlignedClip(&vclip, D2D1_ANTIALIAS_MODE_ALIASED);
+        if (on && g_mgr.anchor != g_mgr.caret) {
+            SetBrush(g_pal.caretSel);
+            D2D1_RECT_F selr = D2D1::RectF(ox + std::min(anchorX, caretX), vr.top + 4 * s,
+                                           ox + std::max(anchorX, caretX), vr.bottom - 4 * s);
+            g_rt->FillRectangle(&selr, g_brush);
+        }
+        DrawLabel(val, g_fmtForm, ox, y, ox + 10000 * s, y + rowH, g_pal.text, 1.f);
+        if (on && g_caretOn) {
+            SetBrush(g_pal.text);
+            D2D1_RECT_F cr = D2D1::RectF(ox + caretX, y + 9 * s, ox + caretX + 1.5f * s,
+                                         y + rowH - 9 * s);
+            g_rt->FillRectangle(&cr, g_brush);
+        }
+        g_rt->PopAxisAlignedClip();
+    }
+
+    // Detected placeholders + error, just above the footer.
+    const float py = footerTop - 30 * s;
+    if (!g_mgr.error.empty()) {
+        FillRR(x0, py, x1, py + 26 * s, 7 * s, D2D1::ColorF(0.93f, 0.30f, 0.30f), 0.10f);
+        DrawLabel(FitEnd(g_mgr.error, g_fmtMeta, x1 - x0 - 16 * s), g_fmtMeta, x0 + 8 * s, py, x1,
+                  py + 26 * s, D2D1::ColorF(0.96f, 0.55f, 0.55f), 1.f);
+    } else {
+        std::vector<CustomField> fs;
+        CollectCustomFields(g_mgr.vals[2], fs);
+        CollectCustomFields(g_mgr.vals[3], fs);
+        std::wstring ph;
+        for (const CustomField& f : fs) {
+            if (!ph.empty()) ph += L", ";
+            ph += L"{" + f.key + L"}";
+        }
+        const std::wstring line =
+            ph.empty() ? std::wstring(L"No fields — launches directly.")
+                       : std::wstring(L"Fields: ") + ph;
+        DrawLabel(FitEnd(line, g_fmtMeta, x1 - x0), g_fmtMeta, x0 + 2 * s, py, x1, py + 26 * s,
+                  g_pal.textDim, 0.85f);
+    }
+}
+
+static void DrawManager(float cx, float cy, float cw, float s) {
+    if (!g_mgr.active) return;
+    if (g_mgr.editing) DrawManagerEditor(cx, cy, cw, s);
+    else DrawManagerList(cx, cy, cw, s);
+}
+
+static void DrawManagerFooter(float cx, float footerTop, float cw) {
+    const float s = (float)g_scale;
+    SetBrush(g_pal.separator);
+    D2D1_RECT_F sep = D2D1::RectF(cx + 12 * s, footerTop, cx + cw - 12 * s, footerTop + 1.f);
+    g_rt->FillRectangle(&sep, g_brush);
+    const float yMid = footerTop + kFooterH * s / 2 + 0.5f;
+    const wchar_t* ok[1] = {kTxtEnterGlyph};
+    const wchar_t* esc[1] = {L"Esc"};
+    const wchar_t* tab[1] = {L"Tab"};
+    const wchar_t* del[1] = {L"Del"};
+    float x = cx + cw - 20 * s;
+    if (g_mgr.editing) {
+        x = DrawHint(L"Save", ok, 1, x, yMid);
+        x -= 16 * s;
+        x = DrawHint(L"Next", tab, 1, x, yMid);
+        x -= 16 * s;
+        DrawHint(L"Back", esc, 1, x, yMid);
+    } else {
+        if (g_mgr.deleteArmed) {
+            x = DrawHint(kTxtConfirm, del, 1, x, yMid);
+            x -= 16 * s;
+            DrawHint(L"Cancel", esc, 1, x, yMid);
+        } else {
+            x = DrawHint(g_mgr.sel <= 0 ? L"New" : L"Edit", ok, 1, x, yMid);
+            x -= 16 * s;
+            if (g_mgr.sel > 0) {
+                x = DrawHint(L"Delete", del, 1, x, yMid);
+                x -= 16 * s;
+            }
+            DrawHint(L"Close", esc, 1, x, yMid);
+        }
+    }
+}
+
 // Full path of a System32 executable, so CreateProcess cannot pick up a same-named file from
 // the working directory or the search path.
 static std::wstring SystemExe(const wchar_t* name) {
@@ -9192,6 +14829,26 @@ static std::wstring SystemExe(const wchar_t* name) {
     path += L'\\';
     path += name;
     return path;
+}
+
+// %LOCALAPPDATA%\Microsoft\WindowsApps\<name>, where Windows puts the app execution aliases. Used
+// instead of a bare "wt.exe" so a same-named file in the folder being browsed cannot be picked.
+static std::wstring LocalAppAlias(const wchar_t* name) {
+    PWSTR base = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &base)) || !base) {
+        return std::wstring();
+    }
+    const std::wstring path = std::wstring(base) + L"\\Microsoft\\WindowsApps\\" + name;
+    CoTaskMemFree(base);
+    return GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES ? std::wstring() : path;
+}
+
+// Full path of a file in the Windows folder (explorer.exe and friends live there, not in System32).
+static std::wstring WindowsFile(const wchar_t* name) {
+    wchar_t dir[MAX_PATH];
+    const UINT n = GetWindowsDirectoryW(dir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return name;
+    return std::wstring(dir) + L'\\' + name;
 }
 
 // Runs an executable with arguments, without flashing a console window.
@@ -9210,6 +14867,16 @@ static void RunConsoleHidden(const wchar_t* exe, const wchar_t* args) {
 }
 
 // Runs a built-in command by its stable id (see kCommands).
+// Switches into a mode from the result list, with the same effect as typing its prefix: this is
+// what the mode openers ("Open Windows", "Bookmarks" ...) do on Enter.
+static void EnterActivator(int ai) {
+    if (ai < 0 || ai >= kActivatorCount) return;
+    g_text = kActivators[ai].trigger;
+    g_text += L' ';
+    g_caret = g_anchor = (int)g_text.size();
+    OnTextChanged();
+}
+
 static void RunCommand(const std::wstring& id) {
     if (id == L"lock") {
         HideLauncher();
@@ -9237,17 +14904,17 @@ static void RunCommand(const std::wstring& id) {
         SHEmptyRecycleBinW(nullptr, nullptr,
                            SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
     } else if (id == L"taskmgr") {
-        RunShellOpen(L"taskmgr.exe");
+        RunShellOpen(SystemExe(L"taskmgr.exe").c_str());
     } else if (id == L"control") {
-        RunShellOpen(L"control.exe");
+        RunShellOpen(SystemExe(L"control.exe").c_str());
     } else if (id == L"devmgmt") {
-        RunShellOpen(L"devmgmt.msc");
+        RunShellOpen(SystemExe(L"devmgmt.msc").c_str());
     } else if (id == L"services") {
-        RunShellOpen(L"services.msc");
+        RunShellOpen(SystemExe(L"services.msc").c_str());
     } else if (id == L"regedit") {
-        RunShellOpen(L"regedit.exe");
+        RunShellOpen(SystemExe(L"regedit.exe").c_str());
     } else if (id == L"netconnections") {
-        RunShellOpen(L"ncpa.cpl");
+        RunShellOpen(SystemExe(L"ncpa.cpl").c_str());
     } else if (id == L"settings") {
         RunShellOpen(L"ms-settings:");
     } else if (id == L"windowsupdate") {
@@ -9263,15 +14930,30 @@ static void RunCommand(const std::wstring& id) {
     } else if (id == L"printers") {
         RunShellOpen(L"ms-settings:printers");
     } else if (id == L"terminal") {
-        // Windows Terminal, falling back to PowerShell if it is not installed.
+        // Windows Terminal through its app alias, falling back to PowerShell from System32.
         HideLauncher();
         AllowSetForegroundWindow(ASFW_ANY);
-        if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"wt.exe", nullptr, nullptr, SW_SHOWNORMAL) <=
-            32) {
-            ShellExecuteW(nullptr, L"open", L"powershell.exe", nullptr, nullptr, SW_SHOWNORMAL);
+        const std::wstring wt = LocalAppAlias(L"wt.exe");
+        if (wt.empty() || (INT_PTR)ShellExecuteW(nullptr, L"open", wt.c_str(), nullptr, nullptr,
+                                                SW_SHOWNORMAL) <= 32) {
+            const std::wstring ps = SystemExe(L"powershell.exe");
+            ShellExecuteW(nullptr, L"open", ps.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         }
     } else if (id == L"explorer") {
-        RunShellOpen(L"explorer.exe");
+        RunShellOpen(WindowsFile(L"explorer.exe").c_str());
+    } else if (id == L"customentries") {
+        OpenManager();  // in-app manager; does not hide the launcher
+    } else if (id == L"clearclipboard") {
+        for (const ClipEntry& c : g_clips) {
+            if (c.image) DeleteClipImageFile(c.text);
+        }
+        const int keep = g_sel;
+        g_clips.clear();
+        SaveClipHistory();
+        RunSearch();
+        g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
+        UpdateTargets(false, /*followSelection=*/true);
+        MarkDirty();
     }
 }
 
@@ -9302,6 +14984,9 @@ static void StartFileSearch() {
     if (!g_fileMode || !FileQueryActive() || g_fileCur.empty() || InPcRoot()) {
         g_fileSearching = false;
         return;
+    }
+    if (g_cfg.fileSearchEngine == FileSearchEngine::Everything && StartEverythingFileSearch()) {
+        return;  // the index answers for the whole subtree
     }
     auto* job = new FileSearchJob();
     job->hwnd = g_hwnd;
@@ -9410,8 +15095,13 @@ static void SetFileLocation(int loc) {
 // drive is listed only when a volume is actually present, so touching it never raises a "there is
 // no disk" dialog; network and unknown drives are left out. The error mode is set per thread (not
 // SetErrorMode, which would change it for the whole host process).
+// GetDriveTypeW (and the media check below) can block on a disconnected mapped drive or a spun-down
+// device, and this runs when the file browser opens, so the answer is kept for a few seconds.
 static std::vector<std::wstring> ReadyDrives() {
-    std::vector<std::wstring> drives;
+    static std::vector<std::wstring> cached;
+    static double cachedAt = -1e9;
+    if (!cached.empty() && NowSec() - cachedAt < 5.0) return cached;
+    cached.clear();
     const DWORD mask = GetLogicalDrives();
     DWORD prevMode = 0;
     SetThreadErrorMode(SEM_FAILCRITICALERRORS, &prevMode);
@@ -9426,10 +15116,11 @@ static std::vector<std::wstring> ReadyDrives() {
                 continue;
             }
         }
-        drives.push_back(root);
+        cached.push_back(root);
     }
     SetThreadErrorMode(prevMode, nullptr);
-    return drives;
+    cachedAt = NowSec();
+    return cached;
 }
 
 // Rebuilds the chip row: the six profile locations, then one chip per ready drive. Called when
@@ -9660,6 +15351,533 @@ static std::wstring ClipboardText() {
     }
     CloseClipboard();
     return r;
+}
+
+// ===== Clipboard history (opt-in, text and images) =====
+
+static const size_t kMaxClipItems = 30;      // plenty for a launcher; older entries fall off
+static const size_t kMaxClipChars = 8192;    // larger copies stay out of the history
+static const int kMaxClipImageSide = 2560;  // longer images are scaled down before saving
+static std::wstring ClipKey(const std::wstring& suffix) {
+    return L"clip." + CurrentUserSid() + L"." + suffix;
+}
+
+// Where the image files live: the folder Windhawk gives the mod (removed together with the mod), or
+// a folder under the user's local app data when that call is not available.
+static std::wstring ClipImageDir() {
+    static std::wstring dir;
+    if (!dir.empty()) return dir;
+    wchar_t buf[MAX_PATH] = L"";
+    Wh_GetModStoragePath(buf, ARRAYSIZE(buf));
+    if (!buf[0] && SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr,
+                                              SHGFP_TYPE_CURRENT, buf))) {
+        wcscat_s(buf, L"\\SpotlightLauncher");
+    }
+    if (!buf[0]) return dir;
+    dir = std::wstring(buf) + L"\\clips";
+    // The mod folder itself may be missing (it is created on first use), so create the whole path.
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    if (GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES) dir.clear();
+    return dir;
+}
+
+// "<hash>.png|1920x1080" -> "<clips>\<hash>.png" (empty when the entry is not an image).
+static std::wstring ClipImagePath(const std::wstring& stored) {
+    const size_t bar = stored.find(L'|');
+    if (bar == std::wstring::npos || bar == 0) return std::wstring();
+    const std::wstring dir = ClipImageDir();
+    return dir.empty() ? std::wstring() : dir + L"\\" + stored.substr(0, bar);
+}
+
+static void DeleteClipImageFile(const std::wstring& stored) {
+    const std::wstring path = ClipImagePath(stored);
+    if (!path.empty()) DeleteFileW(path.c_str());
+}
+
+// Drops entries older than the retention setting and deletes their image files. Pinned entries stay
+// until they are unpinned, and 0 days means "keep until the 30-entry limit removes them".
+static bool PurgeExpiredClips() {
+    if (g_cfg.clipRetentionDays <= 0 || g_clips.empty()) return false;
+    const int cutoff = NowStamp() - g_cfg.clipRetentionDays * 86400;
+    bool removed = false;
+    for (size_t i = g_clips.size(); i-- > 0;) {
+        const ClipEntry& c = g_clips[i];
+        if (c.pinned || c.stamp <= 0 || c.stamp > cutoff) continue;
+        if (c.image) DeleteClipImageFile(c.text);
+        g_clips.erase(g_clips.begin() + (std::ptrdiff_t)i);
+        removed = true;
+    }
+    return removed;
+}
+
+// Deletes image files no entry points to, left behind by a crash or by an older run.
+static void SweepClipImages() {
+    const std::wstring dir = ClipImageDir();
+    if (dir.empty()) return;
+    std::vector<std::wstring> keep;
+    for (const ClipEntry& c : g_clips) {
+        if (!c.image) continue;
+        const size_t bar = c.text.find(L'|');
+        keep.push_back(bar == std::wstring::npos ? c.text : c.text.substr(0, bar));
+    }
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW((dir + L"\\*.png").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const std::wstring name = fd.cFileName;
+        bool used = false;
+        for (const std::wstring& k : keep) {
+            if (k == name) {
+                used = true;
+                break;
+            }
+        }
+        if (!used) DeleteFileW((dir + L"\\" + name).c_str());
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+static void SaveClipHistory() {
+    // Clear the tail as well: items that fell off must not stay in storage.
+    for (int i = 0; i < (int)kMaxClipItems; ++i) {
+        const bool has = i < (int)g_clips.size();
+        const ClipEntry* c = has ? &g_clips[(size_t)i] : nullptr;
+        const std::wstring idx = std::to_wstring(i);
+        Wh_SetStringValue(ClipKey(L"i" + idx).c_str(), c ? c->text.c_str() : L"");
+        Wh_SetIntValue(ClipKey(L"p" + idx).c_str(), c && c->pinned ? 1 : 0);
+        Wh_SetIntValue(ClipKey(L"k" + idx).c_str(), c && c->image ? 1 : 0);
+        Wh_SetIntValue(ClipKey(L"t" + idx).c_str(), c ? c->stamp : 0);
+    }
+    Wh_SetIntValue(ClipKey(L"count").c_str(), (int)g_clips.size());
+}
+
+static void LoadClipHistory() {
+    g_clips.clear();
+    const int n =
+        std::clamp(Wh_GetIntValue(ClipKey(L"count").c_str(), 0), 0, (int)kMaxClipItems);
+    std::vector<wchar_t> buf(kMaxClipChars + 1, 0);
+    for (int i = 0; i < n; ++i) {
+        const std::wstring idx = std::to_wstring(i);
+        const size_t len = Wh_GetStringValue(ClipKey(L"i" + idx).c_str(), buf.data(), buf.size());
+        if (len == 0) continue;
+        ClipEntry e;
+        e.text.assign(buf.data(), len);
+        e.pinned = Wh_GetIntValue(ClipKey(L"p" + idx).c_str(), 0) != 0;
+        e.image = Wh_GetIntValue(ClipKey(L"k" + idx).c_str(), 0) != 0;
+        e.stamp = Wh_GetIntValue(ClipKey(L"t" + idx).c_str(), 0);
+        if (e.image) {
+            const size_t bar = e.text.find(L'|');
+            if (bar != std::wstring::npos) {
+                const std::wstring dims = e.text.substr(bar + 1);
+                const size_t x = dims.find(L'x');
+                if (x != std::wstring::npos) {
+                    e.w = _wtoi(dims.c_str());
+                    e.h = _wtoi(dims.c_str() + x + 1);
+                }
+            }
+        }
+        g_clips.push_back(std::move(e));
+    }
+    SweepClipImages();  // files without an entry are gone before anything shows them
+    if (PurgeExpiredClips()) SaveClipHistory();
+}
+
+static void UpdateClipboardListener() {
+    if (!g_hwnd) return;
+    if (g_cfg.clipboardHistory) {
+        AddClipboardFormatListener(g_hwnd);
+    } else {
+        RemoveClipboardFormatListener(g_hwnd);
+    }
+}
+
+// ===== Clipboard images =====
+// PNG, not raw pixels: a 4K screenshot is ~33 MB raw and a few MB as PNG, and PNG keeps text edges
+// sharp where JPEG would ring. Anything over kMaxClipImageSide is scaled down while reading.
+// shortcut: encoded on the UI thread (~20-40 ms for a big screenshot); move it to a worker if needed.
+
+// Thumbnails reuse the file-preview pipeline (64 px, decoded off the UI thread).
+static ID2D1Bitmap* ClipImageThumb(const std::wstring& stored) {
+    const std::wstring path = ClipImagePath(stored);
+    if (path.empty()) return nullptr;
+    FileEntry e;
+    e.path = path;
+    e.ext = L"PNG";
+    return EnsureFileThumb(e);
+}
+
+static IWICImagingFactory* NewWicFactory() {
+    IWICImagingFactory* wic = nullptr;
+    CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
+    return wic;
+}
+
+static bool SaveClipPng(const std::wstring& path, const uint32_t* px, int w, int h) {
+    IWICImagingFactory* wic = NewWicFactory();
+    if (!wic) return false;
+    IWICBitmap* bmp = nullptr;
+    IWICStream* stream = nullptr;
+    IWICBitmapEncoder* enc = nullptr;
+    IWICBitmapFrameEncode* frame = nullptr;
+    IPropertyBag2* props = nullptr;
+    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
+    bool ok = false;
+    const UINT stride = (UINT)w * 4;
+    const UINT bytes = (UINT)((size_t)w * h * 4);
+    if (SUCCEEDED(wic->CreateBitmapFromMemory((UINT)w, (UINT)h, GUID_WICPixelFormat32bppBGRA,
+                                              stride, bytes, (BYTE*)px, &bmp)) &&
+        SUCCEEDED(wic->CreateStream(&stream)) &&
+        SUCCEEDED(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE)) &&
+        SUCCEEDED(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)) &&
+        SUCCEEDED(enc->Initialize(stream, WICBitmapEncoderNoCache)) &&
+        SUCCEEDED(enc->CreateNewFrame(&frame, &props)) &&
+        SUCCEEDED(frame->Initialize(props)) && SUCCEEDED(frame->SetSize((UINT)w, (UINT)h)) &&
+        SUCCEEDED(frame->SetPixelFormat(&fmt)) &&
+        SUCCEEDED(frame->WritePixels((UINT)h, stride, bytes, (BYTE*)px))) {
+        ok = SUCCEEDED(frame->Commit()) && SUCCEEDED(enc->Commit());
+    }
+    SafeRelease(props);
+    SafeRelease(frame);
+    SafeRelease(enc);
+    SafeRelease(stream);
+    SafeRelease(bmp);
+    wic->Release();
+    return ok;
+}
+
+// Reads one of our PNG entries back as top-down 32bpp BGRA pixels (for pasting and copying it).
+static bool LoadClipPng(const std::wstring& path, std::vector<uint32_t>& px, int& w, int& h) {
+    IWICImagingFactory* wic = NewWicFactory();
+    if (!wic) return false;
+    IWICBitmapDecoder* dec = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* conv = nullptr;
+    bool ok = false;
+    if (SUCCEEDED(wic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
+                                                 WICDecodeMetadataCacheOnDemand, &dec)) &&
+        dec && SUCCEEDED(dec->GetFrame(0, &frame)) && frame) {
+        UINT fw = 0, fh = 0;
+        frame->GetSize(&fw, &fh);
+        if (fw > 0 && fh > 0 && (uint64_t)fw * fh <= 64ull * 1000 * 1000 &&
+            SUCCEEDED(wic->CreateFormatConverter(&conv)) && conv &&
+            SUCCEEDED(conv->Initialize(frame, GUID_WICPixelFormat32bppBGRA,
+                                       WICBitmapDitherTypeNone, nullptr, 0.0,
+                                       WICBitmapPaletteTypeCustom))) {
+            std::vector<uint32_t> out((size_t)fw * fh, 0);
+            if (SUCCEEDED(conv->CopyPixels(nullptr, fw * 4, (UINT)(out.size() * 4),
+                                           (BYTE*)out.data()))) {
+                px = std::move(out);
+                w = (int)fw;
+                h = (int)fh;
+                ok = true;
+            }
+        }
+    }
+    SafeRelease(conv);
+    SafeRelease(frame);
+    SafeRelease(dec);
+    wic->Release();
+    return ok;
+}
+
+// Bytes between a packed DIB's header and its pixel data (colour table or channel masks).
+static size_t DibBitsOffset(const BITMAPINFOHEADER* bih) {
+    if (bih->biBitCount <= 8) {
+        return (size_t)bih->biSize + ((size_t)1 << bih->biBitCount) * sizeof(RGBQUAD);
+    }
+    // BI_BITFIELDS (3) and BI_ALPHABITFIELDS (6) keep their masks right after a 40-byte header.
+    if (bih->biSize == sizeof(BITMAPINFOHEADER) && (bih->biCompression == 3 || bih->biCompression == 6)) {
+        return (size_t)bih->biSize + 3 * sizeof(DWORD);
+    }
+    return (size_t)bih->biSize;
+}
+
+// Converts a clipboard DIB (CF_DIB or CF_DIBV5) to top-down 32bpp BGRA, scaled down to the storage
+// limit in the same blit. The alpha channel is forced opaque: Windows leaves it at 0 for screenshots
+// and browser copies, which would otherwise be saved as a fully transparent image.
+static bool DibToPixels(const BYTE* base, std::vector<uint32_t>& px, int& w, int& h) {
+    if (!base) return false;
+    const BITMAPINFOHEADER* bih = (const BITMAPINFOHEADER*)base;
+    if (bih->biSize < sizeof(BITMAPINFOHEADER)) return false;
+    const int sw = std::abs((int)bih->biWidth);
+    const int sh = std::abs((int)bih->biHeight);
+    if (sw <= 0 || sh <= 0) return false;
+    int tw = sw, th = sh;
+    if (sw > kMaxClipImageSide || sh > kMaxClipImageSide) {
+        if (sw >= sh) {
+            tw = kMaxClipImageSide;
+            th = std::max(1, (int)((int64_t)sh * kMaxClipImageSide / sw));
+        } else {
+            th = kMaxClipImageSide;
+            tw = std::max(1, (int)((int64_t)sw * kMaxClipImageSide / sh));
+        }
+    }
+    BITMAPINFO dst = {};
+    dst.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    dst.bmiHeader.biWidth = tw;
+    dst.bmiHeader.biHeight = -th;  // top-down
+    dst.bmiHeader.biPlanes = 1;
+    dst.bmiHeader.biBitCount = 32;
+    dst.bmiHeader.biCompression = BI_RGB;
+    HDC screen = GetDC(nullptr);
+    if (!screen) return false;
+    void* dstBits = nullptr;
+    HBITMAP bmp = CreateDIBSection(screen, &dst, DIB_RGB_COLORS, &dstBits, nullptr, 0);
+    HDC mem = bmp ? CreateCompatibleDC(screen) : nullptr;
+    bool ok = false;
+    if (mem && dstBits) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        SetStretchBltMode(mem, HALFTONE);
+        SetBrushOrgEx(mem, 0, 0, nullptr);
+        // StretchDIBits returns the number of scan lines copied, or GDI_ERROR (0xFFFFFFFF) on
+        // failure, which is negative once it is an int: "> 0" is the portable way to test it.
+        const int got = StretchDIBits(mem, 0, 0, tw, th, 0, 0, sw, sh,
+                                      base + DibBitsOffset(bih), (const BITMAPINFO*)bih,
+                                      DIB_RGB_COLORS, SRCCOPY);
+        SelectObject(mem, old);
+        if (got > 0) {
+            px.assign((size_t)tw * th, 0);
+            memcpy(px.data(), dstBits, px.size() * 4);
+            for (uint32_t& p : px) p |= 0xFF000000u;  // opaque, see above
+            w = tw;
+            h = th;
+            ok = true;
+        }
+    }
+    if (mem) DeleteDC(mem);
+    if (bmp) DeleteObject(bmp);
+    ReleaseDC(nullptr, screen);
+    return ok;
+}
+
+// 64-bit FNV-1a over a sample of the pixels: enough to recognise the same image again, cheap enough
+// to run on every copy. The hash names the file, so a repeated copy reuses it instead of saving.
+static uint64_t ClipImageHash(const std::vector<uint32_t>& px, int w, int h) {
+    uint64_t hash = 14695981039346656037ull;
+    const size_t step = std::max<size_t>(1, px.size() / 4096);
+    for (size_t i = 0; i < px.size(); i += step) {
+        hash = (hash ^ px[i]) * 1099511628211ull;
+    }
+    hash = (hash ^ (uint64_t)w) * 1099511628211ull;
+    return (hash ^ (uint64_t)h) * 1099511628211ull;
+}
+
+// Shows a new entry right away when "clip:" is the mode on screen.
+static void RefreshClipList() {
+    if (g_vis != Vis::Shown || g_activator < 0 ||
+        kActivators[g_activator].mode != LauncherMode::Clipboard) {
+        return;
+    }
+    const int keep = g_sel;
+    RunSearch();
+    g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
+    UpdateTargets(false, /*followSelection=*/true);
+    MarkDirty();
+}
+
+// Moves an entry to the front (or adds it), trims the list, drops expired entries and saves.
+static void AddClipEntry(std::wstring payload, bool image, int w, int h) {
+    bool wasPinned = false;
+    for (size_t i = 0; i < g_clips.size(); ++i) {
+        if (g_clips[i].text == payload && g_clips[i].image == image) {
+            wasPinned = g_clips[i].pinned;
+            g_clips.erase(g_clips.begin() + (std::ptrdiff_t)i);
+            break;
+        }
+    }
+    ClipEntry e;
+    e.text = std::move(payload);
+    e.image = image;
+    e.w = w;
+    e.h = h;
+    e.pinned = wasPinned;
+    e.stamp = NowStamp();
+    g_clips.insert(g_clips.begin(), std::move(e));
+    // Drop the oldest unpinned entry, but keep the copy that just arrived. If everything else is
+    // pinned, the oldest pin makes room instead of silently losing the new copy.
+    while (g_clips.size() > kMaxClipItems) {
+        size_t victim = g_clips.size() - 1;
+        for (size_t i = g_clips.size(); i-- > 1;) {
+            if (!g_clips[i].pinned) {
+                victim = i;
+                break;
+            }
+        }
+        if (g_clips[victim].image) DeleteClipImageFile(g_clips[victim].text);
+        g_clips.erase(g_clips.begin() + (std::ptrdiff_t)victim);
+    }
+    PurgeExpiredClips();
+    SaveClipHistory();
+    RefreshClipList();
+}
+
+// Saves the image on the clipboard, if there is one, as a PNG entry. Returns true when it was added.
+static bool CaptureClipboardImage() {
+    std::vector<uint32_t> px;
+    int w = 0, h = 0;
+    if (!OpenClipboard(g_hwnd)) return false;
+    HANDLE dib = GetClipboardData(CF_DIBV5);
+    if (!dib) dib = GetClipboardData(CF_DIB);
+    if (dib) {
+        const BYTE* base = (const BYTE*)GlobalLock(dib);
+        if (base) {
+            DibToPixels(base, px, w, h);
+            GlobalUnlock(dib);
+        }
+    }
+    CloseClipboard();
+    if (px.empty() || w <= 0 || h <= 0) return false;
+    const std::wstring dir = ClipImageDir();
+    if (dir.empty()) return false;
+    wchar_t name[64] = L"";
+    swprintf_s(name, L"%016llx.png", (unsigned long long)ClipImageHash(px, w, h));
+    const std::wstring file = dir + L"\\" + name;
+    // The name is the content hash, so the same image copied twice reuses its file instead of
+    // encoding it again.
+    if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES &&
+        !SaveClipPng(file, px.data(), w, h)) {
+        DeleteFileW(file.c_str());  // never leave a half-written PNG behind
+        return false;
+    }
+    AddClipEntry(std::wstring(name) + L"|" + std::to_wstring(w) + L"x" + std::to_wstring(h), true,
+                 w, h);
+    return true;
+}
+
+// Called from WM_CLIPBOARDUPDATE: text wins when the copy has it (a link copied from a browser
+// carries both), otherwise the image is saved.
+static void CaptureClipboard() {
+    if (!g_cfg.clipboardHistory) return;
+    std::wstring text = ClipboardText();
+    if (!text.empty() && text.size() <= kMaxClipChars && !TrimBlanks(text).empty()) {
+        AddClipEntry(std::move(text), false, 0, 0);
+        return;
+    }
+    CaptureClipboardImage();
+}
+
+// Removes the selected clipboard entry (Ctrl+Shift+R while "clip:" is active).
+static void RemoveSelectedClip() {
+    if (g_sel < 0 || g_sel >= (int)g_results.size() ||
+        g_results[g_sel].kind != ResultKind::Clip) {
+        return;
+    }
+    const std::wstring text = g_results[g_sel].payload;
+    for (auto it = g_clips.begin(); it != g_clips.end(); ++it) {
+        if (it->text == text) {
+            if (it->image) DeleteClipImageFile(it->text);
+            g_clips.erase(it);
+            break;
+        }
+    }
+    SaveClipHistory();
+    const int keep = g_sel;
+    RunSearch();
+    g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
+    UpdateTargets(false, /*followSelection=*/true);
+    MarkDirty();
+}
+
+// Toggles the pin on the selected clipboard entry (Ctrl+D while "clip:" is active).
+static void ToggleSelectedClipPin() {
+    if (g_sel < 0 || g_sel >= (int)g_results.size() ||
+        g_results[g_sel].kind != ResultKind::Clip) {
+        return;
+    }
+    const std::wstring text = g_results[g_sel].payload;
+    for (ClipEntry& c : g_clips) {
+        if (c.text == text) {
+            c.pinned = !c.pinned;
+            break;
+        }
+    }
+    SaveClipHistory();
+    RunSearch();
+    g_sel = 0;
+    for (int i = 0; i < (int)g_results.size(); ++i) {
+        if (g_results[i].kind == ResultKind::Clip && g_results[i].payload == text) {
+            g_sel = i;
+            break;
+        }
+    }
+    UpdateTargets(false, /*followSelection=*/true);
+    MarkDirty();
+}
+
+// Puts an image entry back on the clipboard as a DIB (what every app understands). The pixels are
+// stored top-down, so the header is negative-height to match.
+static bool SetClipboardImage(const std::wstring& stored) {
+    std::vector<uint32_t> px;
+    int w = 0, h = 0;
+    const std::wstring path = ClipImagePath(stored);
+    if (path.empty() || !LoadClipPng(path, px, w, h)) return false;
+    const size_t bytes = (size_t)w * h * 4;
+    HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPINFOHEADER) + bytes);
+    if (!mem) return false;
+    BITMAPINFOHEADER* bih = (BITMAPINFOHEADER*)GlobalLock(mem);
+    if (!bih) {
+        GlobalFree(mem);
+        return false;
+    }
+    ZeroMemory(bih, sizeof(BITMAPINFOHEADER));
+    bih->biSize = sizeof(BITMAPINFOHEADER);
+    bih->biWidth = w;
+    bih->biHeight = -h;
+    bih->biPlanes = 1;
+    bih->biBitCount = 32;
+    bih->biCompression = BI_RGB;
+    bih->biSizeImage = (DWORD)bytes;
+    memcpy(bih + 1, px.data(), bytes);
+    GlobalUnlock(mem);
+    if (!OpenClipboard(g_hwnd)) {
+        GlobalFree(mem);
+        return false;
+    }
+    EmptyClipboard();
+    if (!SetClipboardData(CF_DIB, mem)) GlobalFree(mem);  // the clipboard owns it on success
+    CloseClipboard();
+    return true;
+}
+
+// Hides the bar and sends Ctrl+V to the window that was focused before it opened. If the focus
+// cannot be restored (an elevated window, for example), the entry is still on the clipboard for a
+// manual paste.
+static void PasteIntoPreviousWindow() {
+    HideLauncher();
+    HWND target = g_prevForeground;
+    if (target && target != g_hwnd && IsWindow(target)) {
+        INPUT wake{};
+        wake.type = INPUT_MOUSE;
+        SendInput(1, &wake, sizeof(INPUT));
+        SetForegroundWindow(target);
+        BringWindowToTop(target);
+        Sleep(60);
+        INPUT keys[4] = {};
+        keys[0].type = INPUT_KEYBOARD;
+        keys[0].ki.wVk = VK_CONTROL;
+        keys[1].type = INPUT_KEYBOARD;
+        keys[1].ki.wVk = 'V';
+        keys[2].type = INPUT_KEYBOARD;
+        keys[2].ki.wVk = 'V';
+        keys[2].ki.dwFlags = KEYEVENTF_KEYUP;
+        keys[3].type = INPUT_KEYBOARD;
+        keys[3].ki.wVk = VK_CONTROL;
+        keys[3].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(4, keys, sizeof(INPUT));
+    }
+}
+
+// Puts the text on the clipboard and pastes it into the window that was focused before.
+static void PasteClipboardText(const std::wstring& text) {
+    if (text.empty()) return;
+    CopyTextToClipboard(text);
+    PasteIntoPreviousWindow();
+}
+
+// Same for an image entry.
+static void PasteClipboardImage(const std::wstring& stored) {
+    if (SetClipboardImage(stored)) PasteIntoPreviousWindow();
 }
 
 // Tab in the path field: completes the last segment with the matching sub-folders, cycling.
@@ -9915,9 +16133,13 @@ static void RunFileAction(int id) {
             arg = L"-d \"" + arg + L"\"";
             HideLauncher();
             AllowSetForegroundWindow(ASFW_ANY);
-            HINSTANCE r = ShellExecuteW(nullptr, L"open", L"wt.exe", arg.c_str(), folder.c_str(), SW_SHOWNORMAL);
+            const std::wstring wt = LocalAppAlias(L"wt.exe");
+            HINSTANCE r = wt.empty() ? (HINSTANCE)0
+                                     : ShellExecuteW(nullptr, L"open", wt.c_str(), arg.c_str(),
+                                                     folder.c_str(), SW_SHOWNORMAL);
             if ((INT_PTR)r <= 32) {  // no Windows Terminal: plain console in that folder
-                ShellExecuteW(nullptr, L"open", L"cmd.exe", nullptr, folder.c_str(), SW_SHOWNORMAL);
+                const std::wstring cmd = SystemExe(L"cmd.exe");
+                ShellExecuteW(nullptr, L"open", cmd.c_str(), nullptr, folder.c_str(), SW_SHOWNORMAL);
             }
             break;
         }
@@ -9982,6 +16204,71 @@ static void BuildFileMenu() {
         g_fileMenu.push_back({FA_PROPS, L"Properties", L"Ctrl+P"});
         g_fileMenu.push_back({FA_DELETE, L"Move to Recycle Bin", L""});
     }
+    g_fileMenu.push_back({FA_SORTMENU, L"Sort…", L"Ctrl+S"});
+}
+
+// Which key the chosen Files order is remembered under (per user).
+static std::wstring FileSortKey() { return L"filesort." + CurrentUserSid(); }
+
+// The order saved by the user, or Name A-Z when the setting is off or nothing was saved.
+static void RestoreFileSort() {
+    g_cfg.fileSort = FileSort::NameAsc;
+    if (!g_cfg.rememberFileSort) return;
+    const int v = std::clamp(Wh_GetIntValue(FileSortKey().c_str(), 0), 0, kFileSortCount - 1);
+    g_cfg.fileSort = (FileSort)v;
+}
+
+// Switches the Files order, keeping the highlighted row when it is still listed.
+static void ApplyFileSort(FileSort s) {
+    g_cfg.fileSort = s;
+    if (g_cfg.rememberFileSort) Wh_SetIntValue(FileSortKey().c_str(), (int)s);
+    if (g_fileMode) {
+        if (g_sel >= 0 && g_sel < (int)g_results.size()) g_pendingSelect = g_results[g_sel].payload;
+        std::sort(g_fileEntries.begin(), g_fileEntries.end(), FileEntryLess);
+        RunSearch();
+        if (!g_pendingSelect.empty()) {
+            for (size_t i = 0; i < g_results.size(); ++i) {
+                if (SamePath(g_results[i].payload, g_pendingSelect)) {
+                    g_sel = (int)i;
+                    break;
+                }
+            }
+            g_pendingSelect.clear();
+        }
+        UpdateTargets(false, /*followSelection=*/true);
+    }
+    MarkDirty();
+}
+
+// The sort menu: one row per order, with the one in use marked, so the menu itself shows the order.
+static void BuildSortMenu() {
+    static const struct {
+        int id;
+        const wchar_t* label;
+        FileSort sort;
+    } kSorts[kFileSortCount] = {
+        {FS_NAME_ASC, L"Name (A-Z)", FileSort::NameAsc},
+        {FS_NAME_DESC, L"Name (Z-A)", FileSort::NameDesc},
+        {FS_TYPE, L"Type", FileSort::Type},
+        {FS_MOD_NEW, L"Modified (newest first)", FileSort::ModNew},
+        {FS_MOD_OLD, L"Modified (oldest first)", FileSort::ModOld},
+        {FS_SIZE_BIG, L"Size (largest first)", FileSort::SizeBig},
+        {FS_SIZE_SMALL, L"Size (smallest first)", FileSort::SizeSmall},
+    };
+    g_fileMenu.clear();
+    g_fileMenuSel = 0;
+    for (int i = 0; i < kFileSortCount; ++i) {
+        const bool active = kSorts[i].sort == g_cfg.fileSort;
+        if (active) g_fileMenuSel = i;
+        g_fileMenu.push_back({kSorts[i].id, kSorts[i].label, active ? L"Active" : L""});
+    }
+}
+
+static void OpenSortMenu() {
+    BuildSortMenu();
+    g_fileMenuArmed = false;
+    g_fileMenuOpen = true;
+    MarkDirty();
 }
 
 static void OpenFileMenu() {
@@ -9997,6 +16284,18 @@ static void OpenFileMenu() {
 static void FileMenuRunSel() {
     if (g_fileMenuSel < 0 || g_fileMenuSel >= (int)g_fileMenu.size()) return;
     const int id = g_fileMenu[g_fileMenuSel].id;
+    if (id == FA_SORTMENU) {  // swap the menu for the sort list, no target needed
+        OpenSortMenu();
+        return;
+    }
+    if (id >= FS_NAME_ASC && id <= FS_SIZE_SMALL) {
+        ApplyFileSort((FileSort)(id - FS_NAME_ASC));
+        // Picking an order is a complete action: close the list (it reopens on the new order).
+        g_fileMenuOpen = false;
+        g_fileMenuArmed = false;
+        MarkDirty();
+        return;
+    }
     if (id == FA_DELETE && !g_fileMenuArmed) {  // destructive: needs a second Enter
         g_fileMenuArmed = true;
         MarkDirty();
@@ -10012,6 +16311,10 @@ static void LaunchSelected() {
     SearchResult& r = g_results[g_sel];
     if (r.kind == ResultKind::Command) {
         const int ci = (r.icon >= 0 && r.icon < kCommandCount) ? r.icon : -1;
+        if (ci >= 0 && kCommands[ci].activator >= 0) {
+            EnterActivator(kCommands[ci].activator);  // mode opener: switch into it, bar stays open
+            return;
+        }
         if (ci >= 0 && kCommands[ci].destructive && g_confirmCmd != ci) {
             ArmConfirm(ci);  // first Enter: arm and warn; a second Enter actually runs it
             return;
@@ -10021,7 +16324,30 @@ static void LaunchSelected() {
         return;
     }
     CancelConfirm();
-    if (r.kind == ResultKind::Web || r.kind == ResultKind::Url) {
+    if (r.kind == ResultKind::Custom) {
+        // Enter opens the form to fill/review the fields; Shift+Enter skips it and launches with
+        // the current values. Entries with nothing to fill (search-only or fieldless) run directly.
+        ActivateCustomEntry(r.custom, r.payload, /*skipForm=*/ShiftDown());
+        return;
+    }
+    if (r.kind == ResultKind::Window) {
+        ActivateWindow(r.hwnd);
+        return;
+    }
+    if (IsPathResult(r.kind)) {
+        RunShellOpen(r.payload.c_str());
+        return;
+    }
+    if (r.kind == ResultKind::Clip) {
+        if (r.image) {
+            PasteClipboardImage(r.payload);
+        } else {
+            PasteClipboardText(r.payload);
+        }
+        return;
+    }
+    if (r.kind == ResultKind::Web || r.kind == ResultKind::Url ||
+        r.kind == ResultKind::Bookmark) {
         OpenWebResult(r.payload);
         return;
     }
@@ -10041,6 +16367,11 @@ static void LaunchSelected() {
     if (r.kind != ResultKind::App) {
         return;  // other non-app results are activated by their own provider
     }
+    // Learn from a real search pick (not from the empty bar or from a mode list), and only when the
+    // pick fixed the order: if this app was already the best app match, there is nothing to learn.
+    if (g_activator < 0 && !g_tokens.empty() && PickWasNotFirst(g_sel)) {
+        RecordLearn(g_apps[r.app].id, LearnedQueryKey());
+    }
     LaunchApp(r.app);
 }
 
@@ -10050,7 +16381,9 @@ static void ToggleFileMode() {
     g_fileMode = !g_fileMode;
     g_bandEdit = BandEdit::None;
     g_fileMenuOpen = false;
+    g_form = CustomFormState();  // a custom entry form does not survive a mode switch
     CancelFileSearch();
+    CancelGlobalSearch();
     ClearFileDeep();
     g_fileBack.clear();
     g_fileFwd.clear();
@@ -10112,6 +16445,7 @@ static void OpenHelp() {
     // was. Only transient popups are dismissed so they do not linger behind the sheet.
     g_helpOpen = true;
     g_helpPage = 0;
+    g_helpScroll = 0;
     g_bandEdit = BandEdit::None;
     g_fileMenuOpen = false;
     g_detailsOpen = false;
@@ -10153,6 +16487,25 @@ static void RunAction(int actionId, int appIdx) {
         case ACT_OPEN:
             LaunchApp(appIdx);
             return;
+
+        case ACT_PIN:
+        case ACT_UNPIN: {
+            a.pinned = (actionId == ACT_PIN);
+            Wh_SetIntValue((a.usageKey + L"p").c_str(), a.pinned ? 1 : 0);
+            const std::wstring keepId = a.id;
+            RunSearch();
+            g_sel = 0;
+            for (int i = 0; i < (int)g_results.size(); ++i) {
+                if (g_results[i].kind == ResultKind::App &&
+                    g_apps[g_results[i].app].id == keepId) {
+                    g_sel = i;
+                    break;
+                }
+            }
+            UpdateTargets(false, /*followSelection=*/true);
+            MarkDirty();
+            return;
+        }
 
         case ACT_ADMIN: {
             AllowSetForegroundWindow(ASFW_ANY);
@@ -10220,10 +16573,64 @@ static void SetDetailsOpen(bool open) {
         return;  // no selected app, nothing to detail
     }
     g_detailsOpen = open;
+    g_panelMode = PanelMode::Actions;
+    g_panelSwitching = false;
     g_hoverAction = -1;
     Sound::OnPanel(open);
     UpdateTargets(false, /*followSelection=*/false);
     MarkDirty();
+}
+
+// Helper: is the selected result previewable?
+static bool SelIsPreviewable() {
+    if (g_results.empty() || g_sel < 0 || g_sel >= (int)g_results.size()) return false;
+    return g_results[g_sel].kind == ResultKind::File;
+}
+
+// Open or close the preview panel.  Handles the animated mode-switch when the
+// actions panel is currently open: closes it first, then reopens in Preview.
+static void SetPreviewOpen(bool open) {
+    if (!open) {
+        g_detailsOpen   = false;
+        g_panelSwitching = false;
+        Sound::OnPanel(false);
+        UpdateTargets(false, false);
+        MarkDirty();
+        return;
+    }
+    if (!SelIsPreviewable()) return;
+
+    // Path is in res.payload for File results; LoadPreview will be called from Render.
+
+    if (!g_detailsOpen) {
+        // Panel is closed — open directly in Preview mode
+        g_panelMode    = PanelMode::Preview;
+        g_panelSwitching = false;
+        g_detailsOpen  = true;
+        Sound::OnPanel(true);
+        UpdateTargets(false, false);
+        MarkDirty();
+    } else if (g_panelMode == PanelMode::Actions) {
+        // Panel is open in Actions mode — animate close, then reopen as Preview
+        g_panelSwitching   = true;
+        g_panelPendingMode = PanelMode::Preview;
+        g_detailsOpen      = false;   // starts closing animation
+        // No sound yet; will play when it reopens
+        UpdateTargets(false, false);
+        MarkDirty();
+    } else {
+        // Already in Preview mode — just keep it open (or toggle off if same file)
+        // No-op for now
+    }
+}
+
+// Toggle the preview panel (called from keyboard shortcut).
+static void TogglePreview() {
+    if (g_panelMode == PanelMode::Preview && g_detailsOpen) {
+        SetPreviewOpen(false);
+    } else {
+        SetPreviewOpen(true);
+    }
 }
 
 static bool IsDetailsKey(WPARAM vk, bool ctrl, bool shift) {
@@ -10239,7 +16646,13 @@ static bool IsDetailsKey(WPARAM vk, bool ctrl, bool shift) {
 
 // ===== Text editing =====
 
-static bool CtrlDown() { return (GetKeyState(VK_CONTROL) & 0x8000) != 0; }
+// AltGr (right Alt) generates a synthetic Ctrl+Alt combination on Windows; treat it as
+// plain Alt so that AltGr characters (e.g. backslash on many European keyboards) are not
+// blocked by the !CtrlDown() guard in WM_CHAR handlers.
+static bool CtrlDown() {
+    return (GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
+           (GetKeyState(VK_RMENU)   & 0x8000) == 0;   // AltGr is not Ctrl
+}
 static bool ShiftDown() { return (GetKeyState(VK_SHIFT) & 0x8000) != 0; }
 
 static int PrevWord(int pos) {
@@ -10430,6 +16843,9 @@ static bool HandleKeyDown(WPARAM vk) {
 
     if (g_bandEdit != BandEdit::None) return HandleBandKey(vk, ctrl, shift);
     if (g_fileMenuOpen) return HandleFileMenuKey(vk, ctrl, shift);
+    // The custom-entry form and the manager are modal: they take every key while open.
+    if (g_form.active) return HandleCustomFormKey(vk, ctrl, shift);
+    if (g_mgr.active) return HandleManagerKey(vk, ctrl, shift);
 
     // The help sheet is modal: Esc or F1 closes it, Tab and the arrows switch pages and every
     // other key is swallowed, so a stray Enter cannot launch whatever was selected behind it.
@@ -10440,6 +16856,23 @@ static bool HandleKeyDown(WPARAM vk) {
             const int page = (vk == VK_LEFT) ? 0 : (vk == VK_RIGHT) ? 1 : 1 - g_helpPage;
             if (page != g_helpPage) {
                 g_helpPage = page;
+                g_helpScroll = 0;
+                MarkDirty();
+            }
+        } else if (vk == VK_UP || vk == VK_DOWN || vk == VK_PRIOR || vk == VK_NEXT ||
+                   vk == VK_HOME || vk == VK_END) {
+            const float rowH = 17 * (float)g_scale;
+            const float pageH = std::max(rowH, g_helpViewH - rowH);
+            float to = g_helpScroll;
+            if (vk == VK_UP) to -= rowH;
+            else if (vk == VK_DOWN) to += rowH;
+            else if (vk == VK_PRIOR) to -= pageH;
+            else if (vk == VK_NEXT) to += pageH;
+            else if (vk == VK_HOME) to = 0;
+            else to = g_helpMaxScroll;
+            to = std::clamp(to, 0.f, std::max(0.f, g_helpMaxScroll));
+            if (to != g_helpScroll) {
+                g_helpScroll = to;
                 MarkDirty();
             }
         }
@@ -10449,6 +16882,10 @@ static bool HandleKeyDown(WPARAM vk) {
         OpenHelp();
         return true;
     }
+
+    // Entry shortcuts are matched by the launcher window itself: they only work while the bar is
+    // open, and they never take a combination away from Windows or another application.
+    if (TryRunEntryHotkey(vk)) return true;
 
     // Any key other than Enter disarms a pending destructive confirmation.
     if (vk != VK_RETURN) CancelConfirm();
@@ -10461,6 +16898,10 @@ static bool HandleKeyDown(WPARAM vk) {
         }
         if (ctrl && !shift && vk == 'L') {
             BeginPathEdit();
+            return true;
+        }
+        if (ctrl && !shift && vk == 'S') {
+            OpenSortMenu();  // the sort list, with the current order marked
             return true;
         }
         if (!ctrl && !shift && vk == VK_F2) {
@@ -10502,6 +16943,34 @@ static bool HandleKeyDown(WPARAM vk) {
         SetDetailsOpen(!g_detailsOpen);
         return true;
     }
+    // Preview panel: Ctrl+Q (Quick Look) toggles the file preview panel.
+    if (ctrl && vk == 'Q' && !shift) {
+        if (SelIsPreviewable()) {
+            TogglePreview();
+        }
+        return true;
+    }
+    if (ctrl && vk == VK_RETURN && !shift && g_sel >= 0 && g_sel < (int)g_results.size() &&
+        IsPathResult(g_results[g_sel].kind)) {
+        const std::wstring& path = g_results[g_sel].payload;
+        const std::wstring dir = g_results[g_sel].isDir ? path : ParentDir(path);
+        if (!dir.empty()) RunShellOpen(dir.c_str());
+        return true;
+    }
+    if (ctrl && vk == VK_RETURN && !shift && g_sel >= 0 && g_sel < (int)g_results.size() &&
+        (g_results[g_sel].kind == ResultKind::Bookmark ||
+         g_results[g_sel].kind == ResultKind::Clip)) {
+        // A bookmark has no file location; copy its address instead, leaving the bar open with
+        // the footer confirming it, like the file browser's copies. A clipboard entry is copied
+        // the same way (Enter pastes it), keeping the image when it is one.
+        if (g_results[g_sel].kind == ResultKind::Clip && g_results[g_sel].image) {
+            SetClipboardImage(g_results[g_sel].payload);
+        } else {
+            CopyTextToClipboard(g_results[g_sel].payload);
+        }
+        FileCopied();
+        return true;
+    }
     if (ctrl && vk == VK_RETURN && g_fileMode && !shift) {
         FileReveal();
         return true;
@@ -10514,8 +16983,28 @@ static bool HandleKeyDown(WPARAM vk) {
         RunActionOnSelection(ACT_PROPS);
         return true;
     }
+    if (ctrl && !shift && vk == 'D') {
+        if (g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::Clipboard &&
+            g_sel >= 0 && g_sel < (int)g_results.size() &&
+            g_results[g_sel].kind == ResultKind::Clip) {
+            ToggleSelectedClipPin();
+            return true;
+        }
+        if (g_sel >= 0 && g_sel < (int)g_results.size() &&
+            g_results[g_sel].kind == ResultKind::App) {
+            const AppEntry& a = g_apps[g_results[g_sel].app];
+            RunActionOnSelection(a.pinned ? ACT_UNPIN : ACT_PIN);
+        }
+        return true;
+    }
     if (ctrl && shift && vk == 'C' && g_fileMode && g_sel >= 0 && g_sel < (int)g_results.size() &&
         g_results[g_sel].kind == ResultKind::File) {
+        CopyTextToClipboard(g_results[g_sel].payload);
+        FileCopied();
+        return true;
+    }
+    if (ctrl && shift && vk == 'C' && g_sel >= 0 && g_sel < (int)g_results.size() &&
+        IsPathResult(g_results[g_sel].kind)) {
         CopyTextToClipboard(g_results[g_sel].payload);
         FileCopied();
         return true;
@@ -10525,6 +17014,13 @@ static bool HandleKeyDown(WPARAM vk) {
         return true;
     }
     if (ctrl && shift && vk == 'R') {
+        // "clip:" removes the selected clipboard entry with the same shortcut.
+        if (g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::Clipboard &&
+            g_sel >= 0 && g_sel < (int)g_results.size() &&
+            g_results[g_sel].kind == ResultKind::Clip) {
+            RemoveSelectedClip();
+            return true;
+        }
         // With the calculation history on screen this removes an entry (the highlighted one) or,
         // when nothing is highlighted, clears the whole history. Otherwise it forgets the app.
         if (CalcHistoryVisible()) {
@@ -10562,10 +17058,36 @@ static bool HandleKeyDown(WPARAM vk) {
         }
     }
 
+    // Preview panel (text files): Up/Down/PgUp/PgDn/Home/End scroll the lines and Left/Right scroll
+    // sideways, instead of navigating results or moving the caret / changing folder.
+    // Left/Right are only taken when the text really is wider than the panel.
+    if (g_panelMode == PanelMode::Preview && g_detailsOpen && g_preview.isText && !ctrl &&
+        (vk == VK_DOWN || vk == VK_UP || vk == VK_PRIOR || vk == VK_NEXT ||
+         vk == VK_HOME || vk == VK_END ||
+         ((vk == VK_LEFT || vk == VK_RIGHT) && !shift && PreviewGeom().hbar))) {
+        const PreviewTextGeom tg = PreviewGeom();
+        const int total    = (int)g_preview.lines.size();
+        const int maxV     = std::max(0, total - tg.visLines);
+        const int maxH     = std::max(0, g_preview.maxCols - tg.visCols);
+        const int pageSize = std::max(1, tg.visLines - 1);
+        if      (vk == VK_DOWN)  g_preview.scroll = std::min(g_preview.scroll + 1, maxV);
+        else if (vk == VK_UP)    g_preview.scroll = std::max(g_preview.scroll - 1, 0);
+        else if (vk == VK_NEXT)  g_preview.scroll = std::min(g_preview.scroll + pageSize, maxV);
+        else if (vk == VK_PRIOR) g_preview.scroll = std::max(g_preview.scroll - pageSize, 0);
+        else if (vk == VK_HOME)  g_preview.scroll = 0;
+        else if (vk == VK_END)   g_preview.scroll = maxV;
+        else if (vk == VK_RIGHT) g_preview.hscroll = std::min(g_preview.hscroll + kPrevHStep, maxH);
+        else if (vk == VK_LEFT)  g_preview.hscroll = std::max(g_preview.hscroll - kPrevHStep, 0);
+        MarkDirty();
+        return true;
+    }
+
     switch (vk) {
         case VK_ESCAPE:
-            if (g_detailsOpen) {
-                SetDetailsOpen(false);  // the panel is closed first; another Esc closes the bar
+            if (g_panelMode == PanelMode::Preview && g_detailsOpen) {
+                SetPreviewOpen(false);  // close preview first; another Esc closes the bar
+            } else if (g_detailsOpen) {
+                SetDetailsOpen(false);
             } else {
                 HideLauncher();
             }
@@ -10859,6 +17381,11 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             } else if (wp == TIMER_FSEARCH) {
                 KillTimer(g_hwnd, TIMER_FSEARCH);
                 StartFileSearch();
+            } else if (wp == TIMER_GSEARCH) {
+                KillTimer(g_hwnd, TIMER_GSEARCH);
+                StartGlobalSearch();
+            } else if (wp == TIMER_EVFALLBACK) {
+                AbandonEverythingSearch();
             } else if (wp == TIMER_HIDE) {
                 KillTimer(g_hwnd, TIMER_HIDE);
                 if (g_vis == Vis::Hiding) FinishHide();
@@ -10901,6 +17428,24 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             wchar_t c = (wchar_t)wp;
             if (g_helpOpen) return 0;
             if (g_fileMenuOpen) return 0;
+            if (g_form.active) {
+                // Typing goes into the focused form field, never into the search bar behind it.
+                if (c >= 32 && c != 127 && !CtrlDown()) {
+                    FormReplaceSelection(std::wstring(1, c));
+                    Sound::OnKey(c);
+                }
+                return 0;
+            }
+            if (g_mgr.active) {
+                // Typing goes into the focused editor field (the Type selector takes no text, and
+                // the Shortcut field is filled by capturing a key combination, never by typing).
+                if (g_mgr.editing && g_mgr.field != kMgrFieldHotkey && c >= 32 && c != 127 &&
+                    !CtrlDown()) {
+                    ManagerReplaceSelection(std::wstring(1, c));
+                    Sound::OnKey(c);
+                }
+                return 0;
+            }
             if (g_bandEdit != BandEdit::None) {
                 if (c >= 32 && c != 127) {
                     if (g_bandEdit == BandEdit::Rename && wcschr(L"\\/:*?\"<>|", c)) {
@@ -10922,6 +17467,14 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         // Alt held after the shortcut: do not open system menus or beep
         case WM_SYSKEYDOWN:
+            // Alt+key arrives here, not as WM_KEYDOWN: the manager's Shortcut field still needs it.
+            if (g_mgr.active && g_mgr.editing && g_mgr.field == kMgrFieldHotkey) {
+                if (HandleKeyDown(wp)) return 0;
+            }
+            // Entry shortcuts that use Alt are matched here, only while the bar is open.
+            if (!g_mgr.active && !g_form.active && !g_helpOpen && TryRunEntryHotkey(wp)) {
+                return 0;
+            }
             if (g_fileMode && g_activator < 0 && g_bandEdit == BandEdit::None && !g_fileMenuOpen) {
                 if (wp == 'D') BeginPathEdit();
                 else if (wp == VK_LEFT) FileBack();
@@ -10956,6 +17509,8 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 return 0;
             }
             if (g_helpOpen) return 0;  // no hover on the hidden list
+            if (g_form.active) return 0;  // the form has no hover highlight
+            if (g_mgr.active)  return 0;  // neither does the manager
             if (p.x != g_lastMouse.x || p.y != g_lastMouse.y) {
                 bool first = g_lastMouse.x == -1 && g_lastMouse.y == -1;
                 g_lastMouse = p;
@@ -10995,7 +17550,17 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             // selection stays where it is (or follows the mouse hover, which is handled in
             // WM_MOUSEMOVE).
             const int delta = GET_WHEEL_DELTA_WPARAM(wp);
-            if (g_helpOpen) return 0;  // the sheet does not scroll
+            if (g_helpOpen) {
+                const float step = (delta > 0 ? -40.f : 40.f) * (float)g_scale;
+                const float to = std::clamp(g_helpScroll + step, 0.f, std::max(0.f, g_helpMaxScroll));
+                if (to != g_helpScroll) {
+                    g_helpScroll = to;
+                    MarkDirty();
+                }
+                return 0;
+            }
+            if (g_form.active) return 0;  // neither does the form
+            if (g_mgr.active)  return 0;  // neither does the manager
             if (CalcHistoryVisible()) {
                 const double step = (delta > 0 ? -3.0 : 3.0) * (double)kHistRowH;
                 g_histScroll = std::max(0.0, g_histScroll + step);
@@ -11044,6 +17609,19 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 }
                 return 0;
             }
+            // The custom-entry form is modal: clicking a field focuses it and places the caret;
+            // clicking the search bar goes back to the list so the query can be edited.
+            if (g_form.active) {
+                const int mx = GET_X_LPARAM(lp), my = GET_Y_LPARAM(lp);
+                if (CustomFormClick(mx, my)) return 0;
+                float bx = 0, by = 0;
+                MainOrigin(bx, by);
+                const bool inBar = mx >= bx && mx < bx + kWidth * (float)g_scale && my >= by &&
+                                   my < by + kBarH * (float)g_scale;
+                if (!inBar) return 0;  // clicks outside the fields do nothing
+                CloseCustomForm();
+            }
+            if (g_mgr.active) return 0;  // manager is keyboard-only; ignore clicks on the list
             if (g_bandEdit != BandEdit::None) {
                 float bx = 0, by = 0;
                 MainOrigin(bx, by);
@@ -11221,15 +17799,108 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             return 0;
         }
 
+        case WM_APP_BOOKMARKS: {
+            auto* r = (BookmarkResult*)lp;
+            if (r->gen == g_bookmarkGen) {
+                g_bookmarks = std::move(r->entries);
+                if (g_vis != Vis::Hidden && !g_form.active && !g_mgr.active && !g_helpOpen) {
+                    const int keep = g_sel;
+                    RunSearch();
+                    g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
+                    UpdateTargets(false, /*followSelection=*/false);
+                    MarkDirty();
+                }
+            }
+            delete r;
+            return 0;
+        }
+
+        case WM_APP_RECENT: {
+            auto* r = (RecentLoadResult*)lp;
+            if (r->gen == g_recentGen) {
+                g_recent = std::move(r->entries);
+                g_recentStamp = r->stamp;
+                g_recentLoaded = true;
+                if (g_vis != Vis::Hidden && !g_form.active && !g_mgr.active && !g_helpOpen) {
+                    const int keep = g_sel;
+                    RunSearch();
+                    g_sel = std::clamp(keep, 0, std::max(0, (int)g_results.size() - 1));
+                    UpdateTargets(false, /*followSelection=*/false);
+                    MarkDirty();
+                }
+            }
+            delete r;
+            return 0;
+        }
+
+        case WM_APP_GLOBAL: {
+            auto* r = (GlobalSearchResult*)lp;
+            if (r->gen == g_globalSearchGen && g_activator >= 0 &&
+                kActivators[g_activator].mode == LauncherMode::GlobalFiles) {
+                const int oldSel = g_sel;
+                std::wstring keep;
+                if (oldSel >= 0 && oldSel < (int)g_results.size()) keep = g_results[oldSel].payload;
+                g_globalFiles = std::move(r->entries);
+                g_globalKey = r->key;
+                g_globalDone = r->done;
+                g_globalSearching = !r->done;
+                g_globalTrunc = r->truncated;
+                RunSearch();
+                int restored = -1;
+                for (size_t i = 0; i < g_results.size() && !keep.empty(); ++i) {
+                    if (g_results[i].payload == keep) {
+                        restored = (int)i;
+                        break;
+                    }
+                }
+                g_sel = restored >= 0 ? restored : std::min(oldSel, (int)g_results.size() - 1);
+                if (g_sel < 0) g_sel = 0;
+                UpdateTargets(false, /*followSelection=*/restored >= 0);
+                MarkDirty();
+            }
+            delete r;
+            return 0;
+        }
+
         case WM_APP_MENU_CHANGED:
             g_menuDirty = true;
             MaybeReindexInBackground();
             return 0;
 
+        case WM_CLIPBOARDUPDATE:
+            CaptureClipboard();
+            return 0;
+
+        case WM_COPYDATA: {
+            // Everything answers a "find:" query here (see EverythingSendQuery).
+            const COPYDATASTRUCT* cds = (const COPYDATASTRUCT*)lp;
+            if (cds && g_evPending && cds->dwData == g_evPendingSeq) {
+                AcceptEverythingReply(cds);
+                return TRUE;
+            }
+            break;
+        }
+
+        case WM_APP_EVERYTHING:
+            FinishEverythingSearch();
+            return 0;
+
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
+            const bool hadRememberSort = g_cfg.rememberFileSort;
+            const FileSort liveSort = g_cfg.fileSort;
             g_legacySettings = false;  // the user saved the new layout: its values are the real ones
+            g_movedSettings = false;   // and they now live under the new sections
+            Wh_SetIntValue(kSettingsSectionsKey, 1);
             LoadSettings();
+            if (!hadRememberSort && g_cfg.rememberFileSort) {
+                // The setting was just turned on: keep the order that is on screen and save it.
+                g_cfg.fileSort = liveSort;
+                Wh_SetIntValue(FileSortKey().c_str(), (int)liveSort);
+            } else {
+                // Turning it off (or leaving it off) falls back to Name A-Z.
+                RestoreFileSort();
+            }
             g_fileStartUsed = false;  // re-arm the start drive so a freshly set value takes effect
             Sound::Configure();
             Sound::ApplyVolume();
@@ -11237,12 +17908,37 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 g_menuDirty = true;  // the index must be rebuilt to apply this
             }
             RegisterHotkeyOrWarn();
+            UpdateClipboardListener();
+            if (g_cfg.clipboardHistory && g_clips.empty()) LoadClipHistory();
+            // The global roots or the query context may have changed: start "find:" from scratch.
+            CancelGlobalSearch();
+            g_globalFiles.clear();
+            g_globalKey.clear();
+            g_globalDone = false;
+            if (g_cfg.bookmarks) {
+                g_bookmarkCheckedAt = -1e9;  // a settings change is not throttled
+                RefreshBookmarksIfStale();
+            } else {
+                ++g_bookmarkGen;  // drop any load still in flight
+                g_bookmarks.clear();
+                g_bookmarkStamp = 0;  // re-enabling loads from scratch
+            }
+            if (g_cfg.recentFiles) {
+                g_recentCheckedAt = -1e9;  // a settings change is not throttled
+                RefreshRecentIfStale();
+            } else {
+                ++g_recentGen;  // drop any load still in flight
+                g_recent.clear();
+                g_recentStamp = 0;
+                g_recentLoaded = false;
+            }
             if (g_vis != Vis::Hidden) FinishHide();
             MaybeReindexInBackground();  // e.g. if switched to "Automatic" with pending changes
             return 0;
         }
 
         case WM_DESTROY:
+            RemoveClipboardFormatListener(hwnd);
             UnregisterHotKey(hwnd, HOTKEY_ID);
             return 0;
     }
@@ -11263,8 +17959,13 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     g_fileSearchIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    g_globalSearchIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     DetectLegacySettings();
+    DetectMovedSettings();
     LoadSettings();
+    // Everything replies to a "find:" query with this message (see EverythingQuery).
+    g_evReplyMessage = RegisterWindowMessageW(L"SpotlightLauncher.Everything.Reply");
+    RestoreFileSort();  // the remembered Files order, when "Remember file sort" is on
     LoadCalcHistory();
     LoadCalcAns();
     LoadPalette();
@@ -11300,6 +18001,11 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     RegisterHotkeyOrWarn();
+    if (g_cfg.clipboardHistory) LoadClipHistory();
+    LoadLearn();  // learned picks are tiny: always read them, used only while enabled
+    UpdateClipboardListener();
+    StartBookmarkLoad();  // async: the first open may use an empty list, the next one has it
+    RefreshRecentIfStale();  // async: Windows' Recent files, same pattern
     StartIndex();
     StartWatcher();  // always runs (it is almost free); only used in Automatic mode
 
@@ -11311,13 +18017,22 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     StopWatcher();
     CancelFileSearch();
+    CancelGlobalSearch();
     if (g_fileSearchIdle) {
         if (WaitForSingleObject(g_fileSearchIdle, 3000) == WAIT_OBJECT_0) {
             CloseHandle(g_fileSearchIdle);
             g_fileSearchIdle = nullptr;
         }
     }
+    if (g_globalSearchIdle) {
+        if (WaitForSingleObject(g_globalSearchIdle, 3000) == WAIT_OBJECT_0) {
+            CloseHandle(g_globalSearchIdle);
+            g_globalSearchIdle = nullptr;
+        }
+    }
     StopThumbThread();
+    ++g_bookmarkGen;  // a load still in flight must not touch a dying window
+    ++g_recentGen;    // same for Recent files
     UnregisterHotKey(g_hwnd, HOTKEY_ID);
     Sound::Shutdown();
     LiveDestroy();
