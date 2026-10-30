@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              touchpad-relaxed-hand
-// @name            Touchpad Relaxed Hand
+// @id              touchpad-relaxed-hand-tracking
+// @name            Touchpad Relaxed Hand Tracking
 // @description     Enables 5, 4 and 3 finger mouse pointer tracking for improved hand ergonomics (excludes admin windows, like Windhawk)
 // @version         1.0.0
 // @author          3DDinosaur
@@ -12,9 +12,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Touchpad Relaxed Hand
+# Touchpad Relaxed Hand Tracking
 
-Move the mouse pointer with all fingers resting on a precision touchpad, like a mouse that isn't there. Your hand can relax instead of holding a single finger position over the pad.
+Move the mouse pointer with all fingers resting on a precision touchpad, like a weightless mouse. Your hand can relax instead of holding a single finger position over the pad.
 
 ## How it works
 
