@@ -2,12 +2,130 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-30T13:03:21.000Z</updated>
+    <updated>2026-10-30T14:05:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Wobbly Windows 0.115.4]]></title>
+        <id>https://windhawk.net/mods/wobbly-windows#2742e6b601ca2a1d7295ddeaf115e4555351eb0f</id>
+        <link href="https://windhawk.net/mods/wobbly-windows"/>
+        <updated>2026-10-30T14:05:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixed complete-window targeting and initialization failures on affected Windows 11 builds.</p>
+<ul>
+<li>Fix content clipping, stationary borders, and related visual artifacts by targeting the complete window root instead of falling back to an inner Canvas visual.</li>
+<li>Resolve the visual-proxy accessor independently of the Canvas getter’s layout.</li>
+<li>Support both verified null-check branch layouts in native getters, fixing “Failed to initialize DWM hooks” when the direct accessor symbol is unavailable.</li>
+<li>Validate decoded offsets against independent transition getters when available, while preserving module and proxy-type checks.</li>
+<li>Improve startup diagnostics to identify the selected access path and compatibility failures.</li>
+</ul>]]></content>
+        <author>
+            <name>lalimatyus</name>
+            <uri>https://github.com/lalimatyus</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.1.1]]></title>
+        <id>https://windhawk.net/mods/start-everything#72a7dafa9d0cb1cc8629697da56aa7a2a6380892</id>
+        <link href="https://windhawk.net/mods/start-everything"/>
+        <updated>2026-10-30T14:05:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Keep ordinary search focused on launchable apps and Windows Settings, removing duplicate installed-only product entries. Keep technical package names and full identities in inventory matching only, and avoid storing a second installed-only catalog among launch entries.</li>
+<li>Add <code>/all</code> as a separate management list of desktop uninstall registrations and current-user packages, explicitly including frameworks, resources, bundles, optional packages and hidden components. Filter with <code>/all office</code> or a publisher/package identity. Show localized package types, resource identifiers and architecture so bundle, language, scale and x86/x64 records are distinguishable. The command name is customizable under Quick Tools; existing name collisions show the usual warning and can be resolved by renaming either command.</li>
+<li>Show the first 20 inventory entries and append 20 more near the bottom while preserving existing cards and scroll position. Reuse plain card controls for inventory batches, skip redundant inventory deduplication during matching, and fill a tall viewport after each layout without another wheel event. Changing the filter returns to the first batch. Reuse the background catalog without extra file searches or inventory scans while typing.</li>
+<li>Open management actions when an inventory entry is selected, with no app launch action. Offer installation-folder and copy actions where available, and confirm uninstall against the exact registry registration or package version. Keep protected components read-only.</li>
+<li>Preserve the complete working launcher catalog after a transient AppsFolder refresh failure. A first installed-inventory build can still work when AppsFolder is unavailable.</li>
+<li>Let keyboard remappers process opening keys before search captures them, preserving replacement virtual keys and Unicode text without duplicating the physical key. Tagged CJK opening-key replays reach Windows without notifying downstream remappers a second time. Automated immediate, delayed, Unicode and CJK replay tests pass; testing with EPKL itself remains pending.</li>
+<li>Update the README and all 50 interface languages for installed-app management, remove an unused launcher-status label, and correct the settings description and historical v2.1 notes. Older issue references above cover previously shipped fixes for stationary-pointer selection, localization, text size, scientific notation, unit capitalization, grouped binary digits, reciprocal custom conversions, category icon colors and wrapped conversion results.</li>
+</ul>]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 1.0.0]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#baa44b7b054e315d6b522775ecd1bb5a13594546</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-10-30T14:04:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Clipboard history.</strong> An opt-in feature (off by default) that keeps the last 30 things you copied
+and adds a <code>clip:</code> prefix to search them. <strong>Enter</strong> pastes the selected entry into the window you
+came from, <strong>Ctrl + Enter</strong> copies it, <strong>Ctrl + D</strong> pins it, <strong>Ctrl + Shift + R</strong> removes it, and
+the <strong>Clear Clipboard History</strong> command erases everything. Stored locally per user.</li>
+<li><strong>Images in the clipboard history.</strong> Copied pictures are kept too: each one is saved as a
+compressed PNG inside the mod's own folder (scaled down to 2560 px on its long side when bigger),
+shows its own thumbnail in the list, and pastes back as an image. The file name is a hash of the
+pixels, so copying the same picture twice reuses one file and one entry. <code>clip: image</code> narrows the
+list to pictures.</li>
+<li><strong>Clipboard retention.</strong> A <strong>Clipboard retention (days)</strong> setting (3 by default) deletes entries
+older than that, deleting their image files with them; pinned entries never expire, and <code>0</code> keeps
+entries until the 30-entry limit drops them. Files with no entry are cleaned up on load.</li>
+<li><strong>Pinned clipboard entries.</strong> Pinned entries stay at the top of <code>clip:</code> and survive both the
+30-entry trim and the retention.</li>
+<li><strong>Recent files.</strong> The empty bar gains a <strong>Recent files</strong> section with the files and folders from
+Windows' Recent list, and <code>recent:</code> searches them. Enter opens, Ctrl+Enter opens the folder,
+Ctrl+Shift+C copies the path. Read locally from the Recent folder; can be turned off in the
+settings. Windows must be recording recent items (Settings → Personalization → Start), or the list
+stays empty.</li>
+<li><strong>Global file search.</strong> <code>find:</code> searches file and folder names under Home (Documents, Downloads,
+Desktop, Pictures and the rest) and any extra folders configured in the settings. It runs in a
+worker thread, shows partial results while scanning, stops when the bar closes, and builds no
+index. Enter opens, Ctrl+Enter opens the folder, Ctrl+Shift+C copies the path.</li>
+<li><strong>Window switcher.</strong> <code>win:</code> lists the open windows with their title and process; <strong>Enter</strong> activates
+the selected one (restoring it if minimized). Launching a classic desktop app that already has a
+visible window now focuses it instead of starting a second instance; launches with arguments and
+packaged apps keep their normal behaviour.</li>
+<li><strong>Coloured feedback.</strong> Anything the launcher has to tell you now carries a colour and a small dot
+in the footer: green when something is done (<strong>Copied</strong>), amber when it had to work around a problem
+(<strong>Everything not running · built-in scan</strong>) and red for what needs care (a destructive command
+asking for a second Enter, a path that does not exist, a preview that could not be opened). The
+empty list uses the same language: the accent while it is still searching, amber when a problem is
+the reason it is empty.</li>
+<li><strong>Everything as an optional index.</strong> With <strong>File search engine</strong> set to <strong>Everything</strong> (voidtools),
+both <code>find:</code> and the deep search inside Files go to Everything's IPC instead of scanning: every
+drive (or just the folder you are browsing), answers in milliseconds, and Everything's own syntax
+(<code>*.pdf</code>, <code>"exact phrase"</code>, <code>!excluded</code>). No DLL is shipped or loaded, the built-in scan stays the
+default, and it takes over automatically when Everything is not running or does not answer within a
+second, with the footer saying <em>Everything not running · built-in scan</em>.</li>
+<li><strong>Sort the Files list.</strong> <strong>Ctrl + S</strong> (or <strong>Sort…</strong> in the actions menu) opens a sort list with the
+order in use marked: name (A-Z and Z-A), type, modified date (newest and oldest) and size (largest
+and smallest). Folders stay on top, the order also applies while filtering, and deep-search results
+keep their relevance order. <strong>Remember file sort</strong> (off by default) keeps the chosen order across
+closes and restarts; while it is off the order only lives while the bar is open and Files starts
+again at Name (A-Z).</li>
+<li><strong>Learning from your choices.</strong> Picking an app after typing a few words puts that app first the next
+time you type those same words — even when it was a weak match (<code>ex</code> + <strong>Firefox</strong> puts Firefox
+above Excel). One pick is enough, only those words are affected, the pairs live in the mod storage
+(capped at 200, forgotten after 90 days without a pick), and <strong>Learn from your choices</strong> in the
+settings turns it off.</li>
+<li><strong>Modes as results.</strong> Typing the name of a mode (for example <strong>Open Windows</strong> — also found by
+<em>windows manager</em> or <em>switcher</em> — <strong>Bookmarks</strong>, <strong>Clipboard History</strong>, <strong>Recent Files</strong>, <strong>All
+Files</strong> or <strong>Commands</strong>) shows it as one more result, like an app; <strong>Enter</strong> switches into that mode
+and fills in its prefix, so the prefixes are optional. A mode row only appears while its feature is
+enabled, and it never filters: <code>win: chrome</code> is still how a list is narrowed.</li>
+<li><strong>The Settings tab is grouped by what each option configures</strong>: Appearance, Behavior, Shortcuts,
+Apps, Search (web search, bookmarks, recent files, learning and the file search engine), Files
+(browser, start drive, remembered sort), Clipboard, Calculator and Sounds. Options that moved
+between sections keep their saved values; the tab shows the defaults until you save it once, so it
+is worth a look the first time.</li>
+<li><strong>The F1 sheet</strong> lists every shortcut, prefix and filter (including the newer ones: sort, preview,
+pin, the clipboard keys and the mode names) and scrolls with the wheel or the arrow keys when a
+page is taller than the bar.</li>
+<li><strong>Feedback has a colour</strong>: green when something is done, amber when a problem had to be worked
+around and red for what needs care, with a small dot in the footer and the same tones in the empty
+list and the error bands.</li>
+<li>Disabled features no longer claim their prefixes: <code>bm:</code>, <code>clip:</code> and the web prefixes (<code>?</code>, <code>g:</code>,
+<code>b:</code>, <code>d:</code>, <code>y:</code>, <code>w:</code>) are only recognized while the matching feature is enabled; otherwise the
+text is searched as a normal query.</li>
+</ul>]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinKlok 1.0.0]]></title>
         <id>https://windhawk.net/mods/winklok#d5dc716a30408034afa9f68542ea575268d8621e</id>
@@ -564,79 +682,6 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></conte
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+E Reuse File Explorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win-e-reuse-explorer#a1cc0d670623bccd12cc445fd4a292e8ed1958aa</id>
-        <link href="https://windhawk.net/mods/win-e-reuse-explorer"/>
-        <updated>2026-10-29T02:05:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winereusefileexplorer">Win+E Reuse File Explorer</h1>
-<p>Press <strong>Win+E</strong> to bring the most recently active File Explorer window forward.
-Minimized windows are restored. If Explorer is already focused, it stays focused.</p>
-<p>If no Explorer window exists on the current virtual desktop, Windows handles
-Win+E normally and opens a new window. Extra modifiers (Ctrl, Shift, or Alt)
-are left unchanged. There are no settings.</p>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.4.0]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-tooltips#590b7a1607109715a953f2f8e6d2ed85b7449319</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
-        <updated>2026-10-29T02:05:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added instant hover delay option (<code>-1</code>) and custom delay support (<code>1</code> to <code>10000</code> ms) for visible tooltips.</li>
-<li>The hover delay is now the total delay instead of an extra delay on top of native timing. If you set it before 1.4.0, adjust it.</li>
-<li>Confined hover delay overrides strictly to the taskbar thread and Windows.UI.Xaml.dll.</li>
-<li>Cleaned up README and settings documentation.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notification Center Follows Taskbar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/notification-center-follows-taskbar#1907c287c41d51fff2e08a72301dbb8b2715f174</id>
-        <link href="https://windhawk.net/mods/notification-center-follows-taskbar"/>
-        <updated>2026-10-29T02:05:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="notificationcenterfollowstaskbar">Notification Center Follows Taskbar</h1>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png" alt="Demonstration" /></p>
-<p>Keeps the Windows 11 Notification Center (Win+N, including its calendar)
-correctly positioned with top, bottom, left, and right taskbars. Detects the
-taskbar on the flyout's monitor automatically. Adds the missing correction for
-top taskbars, with an 8 logical pixel vertical gap; retains the horizontal
-position chosen by Windows or other mods. Auto-hidden taskbars use the monitor's
-working area.</p>
-<p>Install alongside your taskbar positioning mod. Close and reopen
-Notification Center after enabling, disabling, or moving the taskbar.</p>
-<p>Enable <strong>Swap notifications and calendar</strong> to put the calendar above the
-notifications. The panels exchange their visual positions while Windows keeps
-control of their native layout sizes and scrolling. The combined outer bounds
-stay fixed: the swap doesn't move the host window or change row definitions.
-No fixed notification height is used. Expanding/collapsing the calendar and
-changing display size use Windows' normal layout calculations.</p>
-<p>Remove any Notification Center Styler rules that swap these panels or force
-their heights, row definitions, or row positions before enabling this option.
-Cosmetic styling can remain. Switching the option off restores the original
-transforms, including bindings. The positioning fix works without the swap.</p>
-<h2 id="otherpositioningmods">Other positioning mods</h2>
-<p>The top-taskbar fix changes only Y by default, so horizontal alignment from
-Shell Flyout Positions is preserved. This mod and Shell Flyout Positions both
-observe the flyout being uncloaked; they should not both force its X coordinate.</p>
-<p><strong>Repair right-edge position after Explorer restarts</strong> is optional. It forces
-right alignment for top taskbars and overrides a left/center alignment selected
-in another mod. Leave it off when using Shell Flyout Positions. It is retained
-because we observed a surviving shell host occasionally reopening on the left
-after Explorer/taskbar recreation; forcing right alignment corrected that case.</p>
-<p>ShellExperienceHost loads this mod only while panel swapping is enabled. Window
-creation only schedules initialization; XAML is accessed later on its UI thread.</p>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
         </author>
     </entry>
 </feed>

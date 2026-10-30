@@ -14431,12 +14431,12 @@
         "ratingUsers": 48,
         "reviews": 1,
         "trendingSorting": 9.183778508627634,
-        "updated": 1792965729000,
+        "updated": 1793369099000,
         "users": 796
       },
       "metadata": {
         "author": "David Ravelo",
-        "compilerOptions": "-lole32 -lshell32 -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion",
+        "compilerOptions": "-lole32 -lshell32 -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion -lcrypt32",
         "description": "Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.",
         "github": "https://github.com/DavidRaveloU",
         "include": [
@@ -14444,7 +14444,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "0.7.1"
+        "version": "1.0.0"
       }
     },
     "standard-title-bar-colors": {
@@ -14509,7 +14509,7 @@
         "ratingUsers": 79,
         "reviews": 0,
         "trendingSorting": 8.024443320267029,
-        "updated": 1793235804000,
+        "updated": 1793369105000,
         "users": 838
       },
       "metadata": {
@@ -14527,7 +14527,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Everything & Power Tools in the Start Menu",
-        "version": "2.1"
+        "version": "2.1.1"
       }
     },
     "start-menu-all-apps": {
@@ -21644,7 +21644,7 @@
         "ratingUsers": 117,
         "reviews": 0,
         "trendingSorting": 9.856241154019957,
-        "updated": 1790350827000,
+        "updated": 1793369110000,
         "users": 3432
       },
       "metadata": {
@@ -21660,7 +21660,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Wobbly Windows",
-        "version": "0.115"
+        "version": "0.115.4"
       }
     },
     "word-image-resize-anti-flip": {
