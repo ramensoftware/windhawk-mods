@@ -7,7 +7,7 @@
 // @github          https://github.com/3DDinosaur
 // @include         *
 // @include         windhawk.exe
-// @compilerOptions -lgdi32
+// @compilerOptions -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -78,6 +78,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 #include <windhawk_utils.h>
 #include <atomic>
 #include <stdio.h>
+#include <string.h>
 #include <wchar.h>
 #include <wctype.h>
 
@@ -126,17 +127,47 @@ bool IsDialogClass(const wchar_t* cls) {
     return wcscmp(cls, L"#32770") == 0;
 }
 
+/// Strips the parts of a class name that change on every run: the GUID in WPF's "HwndWrapper[...]" and
+/// the per-run suffix in WinForms' "WindowsForms10.<kind>.<suffix>".
+void NormalizeClass(wchar_t* cls) {
+    if (wcsncmp(cls, L"HwndWrapper[", 12) == 0) {
+        cls[11] = L'\0';
+        return;
+    }
+    if (wcsncmp(cls, L"WindowsForms10.", 15) == 0) {
+        if (wchar_t* dot = wcschr(cls + 15, L'.'))
+            *dot = L'\0';
+    }
+}
+
 /// Identifies the kind of a standard dialog, whose class (#32770) is shared by all of them, from the
-/// classes of its direct child controls, which don't depend on language or on the file shown.
-/// Writes an 8-digit hash to sig.
+/// distinct classes of its direct child controls, which don't depend on language or on the file shown.
+/// A sorted set rather than the sequence: property sheets add a child page the first time a tab is
+/// opened, and that must not change the signature. Writes an 8-digit hash to sig.
 void DialogSignature(HWND hwnd, wchar_t* sig, size_t sigChars) {
-    UINT32 h = 2166136261u;
+    constexpr int kMaxClasses = 32;
+    wchar_t classes[kMaxClasses][64];
+    int count = 0;
     HWND child = GetWindow(hwnd, GW_CHILD);
     for (int i = 0; child && i < 256; i++, child = GetWindow(child, GW_HWNDNEXT)) {
-        wchar_t cls[128];
-        int n = GetClassNameW(child, cls, ARRAYSIZE(cls));
-        for (int j = 0; j < n; j++) {
-            h ^= (UINT32)towlower(cls[j]);
+        wchar_t cls[64];
+        if (!GetClassNameW(child, cls, ARRAYSIZE(cls)))
+            continue;
+        for (wchar_t* c = cls; *c; c++)
+            *c = towlower(*c);
+        int pos = 0;
+        while (pos < count && wcscmp(classes[pos], cls) < 0)
+            pos++;
+        if ((pos < count && wcscmp(classes[pos], cls) == 0) || count == kMaxClasses)
+            continue;
+        memmove(classes[pos + 1], classes[pos], (count - pos) * sizeof(classes[0]));
+        wcscpy_s(classes[pos], cls);
+        count++;
+    }
+    UINT32 h = 2166136261u;
+    for (int i = 0; i < count; i++) {
+        for (const wchar_t* c = classes[i]; *c; c++) {
+            h ^= (UINT32)*c;
             h *= 16777619u;
         }
         h ^= L',';
@@ -220,7 +251,10 @@ bool IsIgnored(HWND hwnd, const wchar_t* cls) {
             g_ignore.version = version;
         }
     }
-    WindowKey key = {hwnd, g_processName, cls, L"", false};
+    wchar_t kind[256];
+    wcscpy_s(kind, cls);
+    NormalizeClass(kind);
+    WindowKey key = {hwnd, g_processName, kind, L"", false};
     bool ignored = false;
     for (const wchar_t* line = g_ignore.text; line && *line && !ignored;) {
         const wchar_t* end = wcschr(line, L'\n');
@@ -652,6 +686,7 @@ void ToggleIgnoreActive() {
     wchar_t process[MAX_PATH], cls[256], title[512];
     ProcessNameOf(hwnd, process, ARRAYSIZE(process));
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    NormalizeClass(cls);
     TitleOf(hwnd, title, ARRAYSIZE(title));
     if (!process[0])
         return;
@@ -1081,86 +1116,204 @@ void WhTool_ModUninit() {
 
 // ───────────── Mod callbacks ─────────────
 //
-// The mod plays one of three roles, chosen in Wh_ModInit:
-// - hooks: every process except windhawk.exe, where windows are centered;
-// - launcher: the normal windhawk.exe, which only starts the tool process;
-// - tool: "windhawk.exe -tool-mod window-centralizer", which hosts the hotkeys and the UI.
-// The launcher/tool part follows the "Mods as tools" pattern from the Windhawk wiki.
+// Each process is routed in the Wh_Mod* callbacks below: windhawk.exe and any process started with
+// -tool-mod (Windhawk 2.0 starts this mod's tool process as windhawk-mod.exe) go to the tool-mod part,
+// which launches or runs the tool process holding the hotkeys and the UI; every other process gets the
+// centering hooks. The tool-mod part is the wiki snippet, unchanged except for its entry-point names.
 
-enum class Role { Hooks, Launcher, Tool };
-Role g_role = Role::Hooks;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
     ExitThread(0);
 }
 
-/// Copies the next command-line argument into out, honoring double quotes. Returns the position after it,
-/// or null when there are no more arguments.
-const wchar_t* NextArg(const wchar_t* p, wchar_t* out, size_t outChars) {
-    while (*p == L' ' || *p == L'\t')
-        p++;
-    if (!*p)
-        return nullptr;
-    size_t n = 0;
-    bool quoted = false;
-    for (; *p && (quoted || (*p != L' ' && *p != L'\t')); p++) {
-        if (*p == L'"') {
-            quoted = !quoted;
-            continue;
-        }
-        if (n + 1 < outChars)
-            out[n++] = *p;
-    }
-    out[n] = L'\0';
-    return p;
-}
-
-BOOL InitInWindhawkProcess() {
-    DWORD session = 0;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &session) && session == 0)
+BOOL ToolMod_Init() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
+    }
 
-    bool isService = false, isToolMod = false, isOurToolMod = false, nextIsModId = false;
-    wchar_t arg[MAX_PATH];
-    for (const wchar_t* p = GetCommandLineW(); (p = NextArg(p, arg, ARRAYSIZE(arg)));) {
-        if (nextIsModId) {
-            isOurToolMod = wcscmp(arg, WH_MOD_ID) == 0;
-            nextIsModId = false;
-        } else if (wcscmp(arg, L"-service") == 0 || wcscmp(arg, L"-service-start") == 0 ||
-                   wcscmp(arg, L"-service-stop") == 0) {
-            isService = true;
-        } else if (wcscmp(arg, L"-tool-mod") == 0) {
-            isToolMod = true;
-            nextIsModId = true;
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
         }
     }
-    if (isService)
-        return FALSE;
 
-    if (isOurToolMod) {
-        HANDLE mutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!mutex) {
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool process already running");
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
-        if (!WhTool_ModInit())
+
+        if (!WhTool_ModInit()) {
             ExitProcess(1);
-        // windhawk.exe's own main must not run in this process; the host thread keeps it alive.
-        auto* dos = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
-        auto* nt = (IMAGE_NT_HEADERS*)((BYTE*)dos + dos->e_lfanew);
-        Wh_SetFunctionHook((BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint, (void*)EntryPoint_Hook, nullptr);
-        g_role = Role::Tool;
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
-    if (isToolMod)
-        return FALSE;  // another mod's tool process
-    g_role = Role::Launcher;
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
+}
+
+void ToolMod_AfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void ToolMod_SettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void ToolMod_Uninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool g_inToolModPart;
+
+bool HasToolModArg() {
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv)
+        return false;
+    bool found = false;
+    for (int i = 1; i < argc && !found; i++)
+        found = wcscmp(argv[i], L"-tool-mod") == 0;
+    LocalFree(argv);
+    return found;
 }
 
 BOOL Wh_ModInit() {
@@ -1169,8 +1322,10 @@ BOOL Wh_ModInit() {
     const wchar_t* slash = wcsrchr(path, L'\\');
     wcscpy_s(g_processName, slash ? slash + 1 : path);
 
-    if (_wcsicmp(g_processName, L"windhawk.exe") == 0)
-        return InitInWindhawkProcess();
+    if (_wcsicmp(g_processName, L"windhawk.exe") == 0 || HasToolModArg()) {
+        g_inToolModPart = true;
+        return ToolMod_Init();
+    }
 
     LoadCenteringSettings();
     if (HMODULE win32u = GetModuleHandleW(L"win32u.dll")) {
@@ -1185,62 +1340,21 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (g_role != Role::Launcher)
-        return;
-
-    wchar_t path[MAX_PATH];
-    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!len || len >= ARRAYSIZE(path)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return;
-    }
-    wchar_t commandLine[MAX_PATH + 64];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", path, WH_MOD_ID);
-
-    HMODULE kernel = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernel)
-        kernel = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel) {
-        Wh_Log(L"No kernelbase/kernel32");
-        return;
-    }
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
-                                                   LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR,
-                                                   LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    auto createProcessInternal = (CreateProcessInternalW_t)GetProcAddress(kernel, "CreateProcessInternalW");
-    if (!createProcessInternal) {
-        Wh_Log(L"CreateProcessInternalW not found");
-        return;
-    }
-    STARTUPINFOW si = {};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi;
-    if (!createProcessInternal(nullptr, path, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                               nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed: %u", GetLastError());
-        return;
-    }
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+    if (g_inToolModPart)
+        ToolMod_AfterInit();
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_role == Role::Launcher)
-        return;
-    if (g_role == Role::Tool) {
-        WhTool_ModSettingsChanged();
-        return;
-    }
-    LoadCenteringSettings();
+    if (g_inToolModPart)
+        ToolMod_SettingsChanged();
+    else
+        LoadCenteringSettings();
 }
 
 void Wh_ModUninit() {
-    if (g_role == Role::Launcher)
+    if (g_inToolModPart) {
+        ToolMod_Uninit();
         return;
-    if (g_role == Role::Tool) {
-        WhTool_ModUninit();
-        ExitProcess(0);
     }
     if (g_ignore.text)
         HeapFree(GetProcessHeap(), 0, g_ignore.text);
