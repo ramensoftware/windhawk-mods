@@ -2,7 +2,7 @@
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Replace Windows 11 search with Everything-powered files, apps and settings in a separate search window.
-// @version         2.1
+// @version         2.1.1
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
@@ -19,11 +19,18 @@
 
 A native replacement for Windows 11 search, powered by voidtools Everything. Press Win+S, click the taskbar search icon, or start typing in Start to search files, apps, and settings in a separate window styled after your Start menu. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel.
 
-Version **2.1** includes independent Apps-panel updates, Quick Tools cards, services management, and searchable installed-only programs with friendly names and package icons.
+Version **2.1.1** separates installed-app management from ordinary search and improves opening-key handling for keyboard remappers. Version 2.1 introduced independent Apps-panel updates, Quick Tools cards and services management.
 
 ![Everything & Power Tools in the Start Menu](https://raw.githubusercontent.com/bardelyne/start-everything/main/img.png)
 
 *Version 2.0: the separate search window with a folder preview.*
+
+## Version 2.1.1 Changes
+
+- Keeps ordinary search focused on launchable apps and Windows Settings, avoiding duplicate installed-only entries.
+- Adds `/all` for managing desktop registrations and all current-user packages, including hidden components. Uninstall uses the exact product registration or package version, asks for confirmation, and respects protected components.
+- Loads the first 20 inventory entries and appends 20 more near the bottom, preserving existing cards and your scroll position. Filters and the command name are customizable.
+- Lets keyboard remappers process opening keys before search captures them, preserving their replacement keys and Unicode text. Automated remapper tests pass; testing with EPKL itself remains pending.
 
 ## Version 2.1 Changes
 
@@ -51,8 +58,8 @@ Version **2.1** includes independent Apps-panel updates, Quick Tools cards, serv
 
 - **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Windows Settings, Control Panel applets, and Windows tools. Settings names and keywords come from Windows' own local search database and navigation metadata, cached in memory and refreshed with the app index when the Windows catalog changes. Additional Windows tools stay available, and an audited built-in list is used if native data is missing or incompatible. No Windows Search indexing service or extra database software is required. Shell icons are rendered at your display's exact pixel size.
-- **Installed-only Programs**: Search also includes named installed programs and user packages, including entries without registered shortcuts, such as suites, runtimes and language packs. An **Installed app · No launcher found** label distinguishes them from Settings results. Package entries use their installed logos and friendlier application names when available; their original technical names remain searchable. Entries without an icon use Windows' default executable icon, while Settings results use a gear. Right-click for **Open file location** and **Copy path** when Windows provides an existing installation folder, plus **Copy name**. **Uninstall** uses that exact program registration or package and asks for confirmation; **Manage in Installed apps** appears only when direct removal is unavailable. Selecting an entry without a launcher opens its installation folder when known; otherwise it opens these actions. When a shortcut is missing, an executable can still be recognized by an exact product/filename match in its local installation folder. Detection requires a unique Windows GUI executable with matching version metadata; installers, uninstallers and ambiguous candidates are not used. Other entries retain the **No launcher found** label, which does not claim the program is incapable of running. Installation events invalidate cached metadata; typing uses the current in-memory catalog. Hidden system components, framework/resource packages and update-only registrations are excluded. Matching launchable entries stay merged, with their installed product name available as a search alias. Differently named shortcuts are also matched by their executable name and registered installation folder; the real shortcut keeps its icon, activation target and arguments. Distinct executables or installations are kept separate.
-- **Reusable Apps Cards**: Ordinary app, Settings and installed-only results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. The pool grows as needed up to **Max App Results** and resets when settings change. Rich Quick Tools cards keep their own layouts.
+- **Installed App Management**: Type `/all` for registered desktop programs and every current-user package, including frameworks, resources and hidden Windows components. This list comes directly from uninstall registrations and the package catalog, without AppsFolder launch entries. It never launches a program: click or press Enter to open its management menu. Right-click offers **Uninstall** when Windows permits it, with confirmation, plus **Open file location**, **Copy path** and **Copy name** where available. Protected components are read-only. Search within the list with `/all office`; browse all matches by scrolling; the list starts with 20 entries and appends 20 more near the bottom. Ordinary search excludes installed-only records, and registered metadata continues to provide aliases for real launchers. Missing launchers can still be recovered through a unique, verified GUI executable in the product folder.
+- **Reusable Apps Cards**: App and Settings results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. Ordinary search stays bounded by **Max App Results**. The installed inventory uses the same reusable cards and grows only for its loaded batches. Rich Quick Tools cards keep their own layouts.
 - **Silent App-list Updates**: Windows registry, Store/MSIX package and Start-menu shortcut notifications refresh the catalog after changes settle. Install/update/remove events bypass the installed-metadata cache. Reopening search keeps a safety refresh with a five-second minimum; otherwise unchanged installation metadata is reused for up to 30 seconds. A native background worker builds a replacement catalog and loads icons while app matching continues against the last complete snapshot. No network requests or periodic polling are needed for these listeners.
 - **Background Catalog Warmup**: After the taskbar is available, app, Settings and installed-program metadata load on a background worker. First search reuses that catalog. The search window and its XAML UI remain deferred until needed.
 - **Independent App Results**: App results update without waiting for Everything's file search. Cached icons appear immediately; missing icons fill in afterward. File results arrive separately and preserve the app selection.
@@ -78,7 +85,7 @@ Version **2.1** includes independent Apps-panel updates, Quick Tools cards, serv
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
 - **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse bounded caches of effect definitions without keeping Start's composition objects alive. The last captured effect definitions are saved in this mod's own Windhawk storage on unload, separated by Windows session and restricted to the current Start process and matching live brush identities. This preserves already captured glass across updates and off/on cycles without retaining GPU resources or reconnecting another mod's brushes. New live captures replace saved definitions. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
-- **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Focus uses standard foreground APIs without attaching thread input.
+- **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Keyboard remappers such as EPKL/AutoHotkey can process opening keys first; keys they consume are not translated a second time. Focus uses standard foreground APIs without attaching thread input.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
 ## Settings Sections
@@ -148,7 +155,7 @@ Use a full executable path if it is installed somewhere else. WSL requires an in
 
 ## Quick Tools
 
-Open **Settings → Quick Tools** to rename the weather, currency, crypto, IP, hardware-usage and speed-test commands. Enter the word after `/`, in your own language. A leading slash is optional in the setting. For example, setting Weather Command Name to `météo` makes `/météo` and `/météo London` work. The layout remains left-to-right, but command names can contain non-Latin letters.
+Open **Settings → Quick Tools** to rename the weather, currency, crypto, IP, hardware-usage, services and installed-inventory commands. Enter the word after `/`, in your own language. A leading slash is optional in the setting. For example, setting Weather Command Name to `météo` makes `/météo` and `/météo London` work. The layout remains left-to-right, but command names can contain non-Latin letters.
 
 Names are case-insensitive, cannot contain spaces, and must be distinct. Blank or invalid names use their defaults. If two commands share a name, typing that name shows a red warning card; give them separate names in settings to continue. English compatibility aliases remain only while their primary command name is unchanged. The examples below use the default names.
 
@@ -196,6 +203,16 @@ Press Enter or click a completed card to copy the converted numeric value; a wea
 Results are cached in memory: weather for 10 minutes, currency pairs for an hour, and crypto pairs for 30 seconds. Location lookups are reused for six hours. Changing only the amount reuses a cached pair and calculates locally. Old data is marked **Cached** while a refresh is needed or has failed. Failed requests back off for a minute. Providers are contacted after a 450 ms typing pause, on a separate worker, so they do not delay app results or file results. Further typing replaces pending lookups and prevents old responses from replacing the current results. There is no periodic background polling.
 
 **Privacy and connectivity:** providers see your public IP as part of the connection. For weather, the location service returns an approximate city and Open-Meteo receives the requested city or coordinates. A city name paused on while typing can be sent as a location lookup. Currency and crypto providers receive only the requested pair, without the amount. No normal search text, account credentials, cookies, or telemetry are sent. Automatic location and downloaded results are not saved to disk. **Online Cards → Offline Mode** is enabled on a fresh install; turning it off opts in to these features. Turning it on disables provider requests. Public services can be unavailable or rate limited, and the free Open-Meteo service is intended for noncommercial use. Weather data is credited to Open-Meteo and location names to GeoNames.
+
+## Installed programs and packages
+
+Use `/all` to manage all named desktop uninstall registrations and the packages registered for the current Windows user. This includes frameworks, resource packages, bundles and hidden system components. It does not enumerate other users or add launch shortcuts from `shell:AppsFolder`.
+
+Add a name, publisher or package identity to filter, for example `/all office` or `/all Microsoft.VCLibs`. Results are alphabetical when unfiltered. The list starts with 20 products and appends up to 20 more as you scroll near the bottom. Existing cards and the scroll position stay in place. A tall viewport can request another batch to fill its available space. There are no navigation pages, and this list is independent of **Max App Results**. Changing the filter returns to the first 20 entries and scrolls to the top. **Quick Tools → Installed Inventory Command Name** renames `/all`; the renamed command takes the same optional search terms.
+
+Package rows identify main, framework, resource, bundle and optional packages, with resource identifiers such as `split.scale-150` or `split.language-de` when Windows provides them. Publisher, version and architecture distinguish installations further. These labels do not change which components Windows allows you to uninstall. Technical package identities are searchable only in this management list. If `/all` is already used by a custom command or another Quick Tool, rename either command in settings; the conflict warning prevents either action from running accidentally.
+
+Clicking a product or pressing Enter opens its management menu. There is no app **Open**, **Run** or administrator-launch action in this list. **Uninstall** asks for confirmation and uses the exact registry registration or listed package version. Protected components have no uninstall action. Available installation folders can be opened or copied, and product names can be copied. The list uses the existing background catalog and change listeners; searching it performs no file search, network request or fresh inventory scan.
 
 ## Windows Services
 
@@ -652,6 +669,9 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
   - servicesName: services
     $name: Services Command Name
     $description: Search Windows services by name or description. Right-click a result to start, stop or restart it, copy its name/details, or open Windows Services. Operations request administrator approval when needed. Works offline; startup settings are not changed.
+  - installedName: all
+    $name: Installed Inventory Command Name
+    $description: Use /all to manage registered desktop programs and all current-user packages, including frameworks and hidden components. Add a name to filter, for example /all office. Entries open management actions instead of launching apps. Enter a single word here to rename /all; choose a different name if another tool or custom command already uses it. Works offline; protected components are read-only.
   - weatherPastDays: "2"
     $name: Past Weather Days
     $description: Recent days shown before Today, inside each location's weather card.
@@ -1010,9 +1030,14 @@ enum class Key {
     ServiceRestart,
     NoServices,
     CopyDetails,
-    NotLaunchable,
     ManageInstalled,
     InstalledApp,
+    InstalledApps,
+    MainPackage,
+    FrameworkPackage,
+    ResourcePackage,
+    PackageBundle,
+    OptionalPackage,
     Count
 };
 struct Locale {
@@ -1158,9 +1183,14 @@ inline constexpr Locale kLocales[] = {
         L"Restart", // ServiceRestart
         L"No matching services", // NoServices
         L"Copy details", // CopyDetails
-        L"No launcher found", // NotLaunchable
         L"Manage in Installed apps", // ManageInstalled
         L"Installed app", // InstalledApp
+        L"Installed apps", // InstalledApps
+        L"Main package", // MainPackage
+        L"Framework package", // FrameworkPackage
+        L"Resource package", // ResourcePackage
+        L"Package bundle", // PackageBundle
+        L"Optional package", // OptionalPackage
     }},
     {L"af", {
         L"Soek enigiets", // SearchAnything
@@ -1300,9 +1330,14 @@ inline constexpr Locale kLocales[] = {
         L"Herbegin", // ServiceRestart
         L"Geen ooreenstemmende dienste nie", // NoServices
         L"Kopieer besonderhede", // CopyDetails
-        L"Geen beginpunt gevind", // NotLaunchable
         L"Bestuur in Geïnstalleerde programme", // ManageInstalled
         L"Geïnstalleerde toepassing", // InstalledApp
+        L"Geïnstalleerde toepassings", // InstalledApps
+        L"Hoofpakket", // MainPackage
+        L"Raamwerkpakket", // FrameworkPackage
+        L"Hulpbronpakket", // ResourcePackage
+        L"Pakketbundel", // PackageBundle
+        L"Opsionele pakket", // OptionalPackage
     }},
     {L"bg", {
         L"Търсене навсякъде", // SearchAnything
@@ -1442,9 +1477,14 @@ inline constexpr Locale kLocales[] = {
         L"Рестартиране", // ServiceRestart
         L"Няма съответстващи услуги", // NoServices
         L"Копиране на подробности", // CopyDetails
-        L"Не е намерен начин за стартиране", // NotLaunchable
         L"Управление в инсталираните приложения", // ManageInstalled
         L"Инсталирано приложение", // InstalledApp
+        L"Инсталирани приложения", // InstalledApps
+        L"Основен пакет", // MainPackage
+        L"Пакет на рамкова среда", // FrameworkPackage
+        L"Пакет с ресурси", // ResourcePackage
+        L"Комплект пакети", // PackageBundle
+        L"Допълнителен пакет", // OptionalPackage
     }},
     {L"bn", {
         L"সবকিছু খুঁজুন", // SearchAnything
@@ -1584,9 +1624,14 @@ inline constexpr Locale kLocales[] = {
         L"পুনরায় চালু করুন", // ServiceRestart
         L"কোনো মিলযুক্ত পরিষেবা নেই", // NoServices
         L"বিস্তারিত কপি করুন", // CopyDetails
-        L"চালু করার উপায় পাওয়া যায়নি", // NotLaunchable
         L"ইনস্টল করা অ্যাপে পরিচালনা করুন", // ManageInstalled
         L"ইনস্টল করা অ্যাপ", // InstalledApp
+        L"ইনস্টল করা অ্যাপ", // InstalledApps
+        L"মূল প্যাকেজ", // MainPackage
+        L"ফ্রেমওয়ার্ক প্যাকেজ", // FrameworkPackage
+        L"রিসোর্স প্যাকেজ", // ResourcePackage
+        L"প্যাকেজ বান্ডল", // PackageBundle
+        L"ঐচ্ছিক প্যাকেজ", // OptionalPackage
     }},
     {L"bs", {
         L"Pretraži sve", // SearchAnything
@@ -1726,9 +1771,14 @@ inline constexpr Locale kLocales[] = {
         L"Ponovo pokreni", // ServiceRestart
         L"Nema odgovarajućih servisa", // NoServices
         L"Kopiraj detalje", // CopyDetails
-        L"Nije pronađen pokretač", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
+        L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket radnog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Opcionalni paket", // OptionalPackage
     }},
     {L"ca", {
         L"Cerca qualsevol cosa", // SearchAnything
@@ -1868,9 +1918,14 @@ inline constexpr Locale kLocales[] = {
         L"Reinicia", // ServiceRestart
         L"No hi ha serveis coincidents", // NoServices
         L"Copia els detalls", // CopyDetails
-        L"No s’ha trobat cap iniciador", // NotLaunchable
         L"Gestiona a Aplicacions instal·lades", // ManageInstalled
         L"Aplicació instal·lada", // InstalledApp
+        L"Aplicacions instal·lades", // InstalledApps
+        L"Paquet principal", // MainPackage
+        L"Paquet de marc de treball", // FrameworkPackage
+        L"Paquet de recursos", // ResourcePackage
+        L"Conjunt de paquets", // PackageBundle
+        L"Paquet opcional", // OptionalPackage
     }},
     {L"cs", {
         L"Hledat vše", // SearchAnything
@@ -2010,9 +2065,14 @@ inline constexpr Locale kLocales[] = {
         L"Restartovat", // ServiceRestart
         L"Žádné odpovídající služby", // NoServices
         L"Kopírovat podrobnosti", // CopyDetails
-        L"Spouštěč nenalezen", // NotLaunchable
         L"Spravovat v nainstalovaných aplikacích", // ManageInstalled
         L"Nainstalovaná aplikace", // InstalledApp
+        L"Nainstalované aplikace", // InstalledApps
+        L"Hlavní balíček", // MainPackage
+        L"Balíček frameworku", // FrameworkPackage
+        L"Balíček prostředků", // ResourcePackage
+        L"Sada balíčků", // PackageBundle
+        L"Volitelný balíček", // OptionalPackage
     }},
     {L"da", {
         L"Søg efter alt", // SearchAnything
@@ -2152,9 +2212,14 @@ inline constexpr Locale kLocales[] = {
         L"Genstart", // ServiceRestart
         L"Ingen matchende tjenester", // NoServices
         L"Kopiér detaljer", // CopyDetails
-        L"Ingen startgenvej fundet", // NotLaunchable
         L"Administrer i Installerede apps", // ManageInstalled
         L"Installeret app", // InstalledApp
+        L"Installerede apps", // InstalledApps
+        L"Hovedpakke", // MainPackage
+        L"Frameworkpakke", // FrameworkPackage
+        L"Ressourcepakke", // ResourcePackage
+        L"Pakkesamling", // PackageBundle
+        L"Valgfri pakke", // OptionalPackage
     }},
     {L"de", {
         L"Alles durchsuchen", // SearchAnything
@@ -2294,9 +2359,14 @@ inline constexpr Locale kLocales[] = {
         L"Neu starten", // ServiceRestart
         L"Keine passenden Dienste", // NoServices
         L"Details kopieren", // CopyDetails
-        L"Kein Programmstarter gefunden", // NotLaunchable
         L"In installierten Apps verwalten", // ManageInstalled
         L"Installierte App", // InstalledApp
+        L"Installierte Apps", // InstalledApps
+        L"Hauptpaket", // MainPackage
+        L"Frameworkpaket", // FrameworkPackage
+        L"Ressourcenpaket", // ResourcePackage
+        L"Paketbündel", // PackageBundle
+        L"Optionales Paket", // OptionalPackage
     }},
     {L"el", {
         L"Αναζήτηση παντού", // SearchAnything
@@ -2436,9 +2506,14 @@ inline constexpr Locale kLocales[] = {
         L"Επανεκκίνηση", // ServiceRestart
         L"Δεν βρέθηκαν αντίστοιχες υπηρεσίες", // NoServices
         L"Αντιγραφή λεπτομερειών", // CopyDetails
-        L"Δεν βρέθηκε εκκινητής", // NotLaunchable
         L"Διαχείριση στις εγκατεστημένες εφαρμογές", // ManageInstalled
         L"Εγκατεστημένη εφαρμογή", // InstalledApp
+        L"Εγκατεστημένες εφαρμογές", // InstalledApps
+        L"Κύριο πακέτο", // MainPackage
+        L"Πακέτο πλαισίου", // FrameworkPackage
+        L"Πακέτο πόρων", // ResourcePackage
+        L"Δέσμη πακέτων", // PackageBundle
+        L"Προαιρετικό πακέτο", // OptionalPackage
     }},
     {L"es", {
         L"Buscar cualquier cosa", // SearchAnything
@@ -2578,9 +2653,14 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"No hay servicios coincidentes", // NoServices
         L"Copiar detalles", // CopyDetails
-        L"No se encontró un iniciador", // NotLaunchable
         L"Administrar en Aplicaciones instaladas", // ManageInstalled
         L"Aplicación instalada", // InstalledApp
+        L"Aplicaciones instaladas", // InstalledApps
+        L"Paquete principal", // MainPackage
+        L"Paquete de framework", // FrameworkPackage
+        L"Paquete de recursos", // ResourcePackage
+        L"Conjunto de paquetes", // PackageBundle
+        L"Paquete opcional", // OptionalPackage
     }},
     {L"et", {
         L"Otsi kõike", // SearchAnything
@@ -2720,9 +2800,14 @@ inline constexpr Locale kLocales[] = {
         L"Taaskäivita", // ServiceRestart
         L"Vastavaid teenuseid pole", // NoServices
         L"Kopeeri üksikasjad", // CopyDetails
-        L"Käivitajat ei leitud", // NotLaunchable
         L"Halda installitud rakendustes", // ManageInstalled
         L"Installitud rakendus", // InstalledApp
+        L"Installitud rakendused", // InstalledApps
+        L"Põhipakett", // MainPackage
+        L"Raamistikupakett", // FrameworkPackage
+        L"Ressursipakett", // ResourcePackage
+        L"Paketikogum", // PackageBundle
+        L"Valikuline pakett", // OptionalPackage
     }},
     {L"fi", {
         L"Hae mitä tahansa", // SearchAnything
@@ -2862,9 +2947,14 @@ inline constexpr Locale kLocales[] = {
         L"Käynnistä uudelleen", // ServiceRestart
         L"Ei vastaavia palveluita", // NoServices
         L"Kopioi tiedot", // CopyDetails
-        L"Käynnistintä ei löytynyt", // NotLaunchable
         L"Hallitse asennetuissa sovelluksissa", // ManageInstalled
         L"Asennettu sovellus", // InstalledApp
+        L"Asennetut sovellukset", // InstalledApps
+        L"Pääpaketti", // MainPackage
+        L"Sovelluskehyspaketti", // FrameworkPackage
+        L"Resurssipaketti", // ResourcePackage
+        L"Pakettikokoelma", // PackageBundle
+        L"Valinnainen paketti", // OptionalPackage
     }},
     {L"fil", {
         L"Maghanap ng anuman", // SearchAnything
@@ -3004,9 +3094,14 @@ inline constexpr Locale kLocales[] = {
         L"I-restart", // ServiceRestart
         L"Walang tumutugmang serbisyo", // NoServices
         L"Kopyahin ang mga detalye", // CopyDetails
-        L"Walang nakitang panglunsad", // NotLaunchable
         L"Pamahalaan sa Mga naka-install na app", // ManageInstalled
         L"Naka-install na app", // InstalledApp
+        L"Mga naka-install na app", // InstalledApps
+        L"Pangunahing pakete", // MainPackage
+        L"Pakete ng framework", // FrameworkPackage
+        L"Pakete ng resource", // ResourcePackage
+        L"Kalipunan ng mga pakete", // PackageBundle
+        L"Opsyonal na pakete", // OptionalPackage
     }},
     {L"fr", {
         L"Tout rechercher", // SearchAnything
@@ -3146,9 +3241,14 @@ inline constexpr Locale kLocales[] = {
         L"Redémarrer", // ServiceRestart
         L"Aucun service correspondant", // NoServices
         L"Copier les détails", // CopyDetails
-        L"Aucun lanceur trouvé", // NotLaunchable
         L"Gérer dans Applications installées", // ManageInstalled
         L"Application installée", // InstalledApp
+        L"Applications installées", // InstalledApps
+        L"Paquet principal", // MainPackage
+        L"Paquet de framework", // FrameworkPackage
+        L"Paquet de ressources", // ResourcePackage
+        L"Ensemble de paquets", // PackageBundle
+        L"Paquet facultatif", // OptionalPackage
     }},
     {L"hi", {
         L"कुछ भी खोजें", // SearchAnything
@@ -3288,9 +3388,14 @@ inline constexpr Locale kLocales[] = {
         L"पुनः प्रारंभ करें", // ServiceRestart
         L"कोई मेल खाती सेवा नहीं", // NoServices
         L"विवरण कॉपी करें", // CopyDetails
-        L"लॉन्चर नहीं मिला", // NotLaunchable
         L"इंस्टॉल किए गए ऐप्स में प्रबंधित करें", // ManageInstalled
         L"इंस्टॉल किया गया ऐप", // InstalledApp
+        L"इंस्टॉल किए गए ऐप", // InstalledApps
+        L"मुख्य पैकेज", // MainPackage
+        L"फ़्रेमवर्क पैकेज", // FrameworkPackage
+        L"संसाधन पैकेज", // ResourcePackage
+        L"पैकेज बंडल", // PackageBundle
+        L"वैकल्पिक पैकेज", // OptionalPackage
     }},
     {L"hr", {
         L"Pretraži sve", // SearchAnything
@@ -3430,9 +3535,14 @@ inline constexpr Locale kLocales[] = {
         L"Ponovno pokreni", // ServiceRestart
         L"Nema odgovarajućih servisa", // NoServices
         L"Kopiraj pojedinosti", // CopyDetails
-        L"Pokretač nije pronađen", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
+        L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket programskog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Neobavezni paket", // OptionalPackage
     }},
     {L"hu", {
         L"Keresés mindenben", // SearchAnything
@@ -3572,9 +3682,14 @@ inline constexpr Locale kLocales[] = {
         L"Újraindítás", // ServiceRestart
         L"Nincs megfelelő szolgáltatás", // NoServices
         L"Részletek másolása", // CopyDetails
-        L"Nem található indító", // NotLaunchable
         L"Kezelés a telepített alkalmazásoknál", // ManageInstalled
         L"Telepített alkalmazás", // InstalledApp
+        L"Telepített alkalmazások", // InstalledApps
+        L"Fő csomag", // MainPackage
+        L"Keretrendszercsomag", // FrameworkPackage
+        L"Erőforráscsomag", // ResourcePackage
+        L"Csomagköteg", // PackageBundle
+        L"Választható csomag", // OptionalPackage
     }},
     {L"hy", {
         L"Որոնել ամեն ինչ", // SearchAnything
@@ -3714,9 +3829,14 @@ inline constexpr Locale kLocales[] = {
         L"Վերագործարկել", // ServiceRestart
         L"Համապատասխան ծառայություններ չկան", // NoServices
         L"Պատճենել մանրամասները", // CopyDetails
-        L"Գործարկիչ չի գտնվել", // NotLaunchable
         L"Կառավարել տեղադրված հավելվածներում", // ManageInstalled
         L"Տեղադրված հավելված", // InstalledApp
+        L"Տեղադրված հավելվածներ", // InstalledApps
+        L"Հիմնական փաթեթ", // MainPackage
+        L"Հենքի փաթեթ", // FrameworkPackage
+        L"Ռեսուրսների փաթեթ", // ResourcePackage
+        L"Փաթեթների հավաքածու", // PackageBundle
+        L"Լրացուցիչ փաթեթ", // OptionalPackage
     }},
     {L"id", {
         L"Cari apa saja", // SearchAnything
@@ -3856,9 +3976,14 @@ inline constexpr Locale kLocales[] = {
         L"Mulai ulang", // ServiceRestart
         L"Tidak ada layanan yang cocok", // NoServices
         L"Salin detail", // CopyDetails
-        L"Peluncur tidak ditemukan", // NotLaunchable
         L"Kelola di Aplikasi terinstal", // ManageInstalled
         L"Aplikasi terinstal", // InstalledApp
+        L"Aplikasi terinstal", // InstalledApps
+        L"Paket utama", // MainPackage
+        L"Paket kerangka kerja", // FrameworkPackage
+        L"Paket sumber daya", // ResourcePackage
+        L"Bundel paket", // PackageBundle
+        L"Paket opsional", // OptionalPackage
     }},
     {L"is", {
         L"Leita að hverju sem er", // SearchAnything
@@ -3998,9 +4123,14 @@ inline constexpr Locale kLocales[] = {
         L"Endurræsa", // ServiceRestart
         L"Engar samsvarandi þjónustur", // NoServices
         L"Afrita upplýsingar", // CopyDetails
-        L"Ræsir fannst ekki", // NotLaunchable
         L"Stjórna í Uppsett forrit", // ManageInstalled
         L"Uppsett forrit", // InstalledApp
+        L"Uppsett forrit", // InstalledApps
+        L"Aðalpakki", // MainPackage
+        L"Rammapakki", // FrameworkPackage
+        L"Tilfangapakki", // ResourcePackage
+        L"Pakkasafn", // PackageBundle
+        L"Valfrjáls pakki", // OptionalPackage
     }},
     {L"it", {
         L"Cerca qualsiasi cosa", // SearchAnything
@@ -4140,9 +4270,14 @@ inline constexpr Locale kLocales[] = {
         L"Riavvia", // ServiceRestart
         L"Nessun servizio corrispondente", // NoServices
         L"Copia dettagli", // CopyDetails
-        L"Nessun programma di avvio trovato", // NotLaunchable
         L"Gestisci in App installate", // ManageInstalled
         L"App installata", // InstalledApp
+        L"App installate", // InstalledApps
+        L"Pacchetto principale", // MainPackage
+        L"Pacchetto framework", // FrameworkPackage
+        L"Pacchetto risorse", // ResourcePackage
+        L"Gruppo di pacchetti", // PackageBundle
+        L"Pacchetto facoltativo", // OptionalPackage
     }},
     {L"ja", {
         L"すべてを検索", // SearchAnything
@@ -4282,9 +4417,14 @@ inline constexpr Locale kLocales[] = {
         L"再起動", // ServiceRestart
         L"一致するサービスがありません", // NoServices
         L"詳細をコピー", // CopyDetails
-        L"起動方法が見つかりません", // NotLaunchable
         L"インストールされているアプリで管理", // ManageInstalled
         L"インストール済みアプリ", // InstalledApp
+        L"インストールされているアプリ", // InstalledApps
+        L"メインパッケージ", // MainPackage
+        L"フレームワークパッケージ", // FrameworkPackage
+        L"リソースパッケージ", // ResourcePackage
+        L"パッケージバンドル", // PackageBundle
+        L"オプションパッケージ", // OptionalPackage
     }},
     {L"ka", {
         L"ყველაფრის ძებნა", // SearchAnything
@@ -4424,9 +4564,14 @@ inline constexpr Locale kLocales[] = {
         L"ხელახლა გაშვება", // ServiceRestart
         L"შესაბამისი სერვისები ვერ მოიძებნა", // NoServices
         L"დეტალების კოპირება", // CopyDetails
-        L"გამშვები ვერ მოიძებნა", // NotLaunchable
         L"მართვა დაინსტალირებულ აპებში", // ManageInstalled
         L"დაყენებული აპი", // InstalledApp
+        L"დაინსტალირებული აპები", // InstalledApps
+        L"მთავარი პაკეტი", // MainPackage
+        L"პლატფორმის პაკეტი", // FrameworkPackage
+        L"რესურსების პაკეტი", // ResourcePackage
+        L"პაკეტების ნაკრები", // PackageBundle
+        L"არასავალდებულო პაკეტი", // OptionalPackage
     }},
     {L"ko", {
         L"모든 항목 검색", // SearchAnything
@@ -4566,9 +4711,14 @@ inline constexpr Locale kLocales[] = {
         L"다시 시작", // ServiceRestart
         L"일치하는 서비스 없음", // NoServices
         L"세부 정보 복사", // CopyDetails
-        L"실행 경로를 찾지 못함", // NotLaunchable
         L"설치된 앱에서 관리", // ManageInstalled
         L"설치된 앱", // InstalledApp
+        L"설치된 앱", // InstalledApps
+        L"기본 패키지", // MainPackage
+        L"프레임워크 패키지", // FrameworkPackage
+        L"리소스 패키지", // ResourcePackage
+        L"패키지 번들", // PackageBundle
+        L"선택적 패키지", // OptionalPackage
     }},
     {L"lt", {
         L"Ieškoti visko", // SearchAnything
@@ -4708,9 +4858,14 @@ inline constexpr Locale kLocales[] = {
         L"Paleisti iš naujo", // ServiceRestart
         L"Atitinkančių tarnybų nėra", // NoServices
         L"Kopijuoti išsamią informaciją", // CopyDetails
-        L"Paleidimo priemonė nerasta", // NotLaunchable
         L"Tvarkyti įdiegtose programose", // ManageInstalled
         L"Įdiegta programa", // InstalledApp
+        L"Įdiegtos programėlės", // InstalledApps
+        L"Pagrindinis paketas", // MainPackage
+        L"Sistemos bibliotekų paketas", // FrameworkPackage
+        L"Išteklių paketas", // ResourcePackage
+        L"Paketų rinkinys", // PackageBundle
+        L"Pasirenkamas paketas", // OptionalPackage
     }},
     {L"lv", {
         L"Meklēt visu", // SearchAnything
@@ -4850,9 +5005,14 @@ inline constexpr Locale kLocales[] = {
         L"Restartēt", // ServiceRestart
         L"Nav atbilstošu pakalpojumu", // NoServices
         L"Kopēt informāciju", // CopyDetails
-        L"Palaidējs nav atrasts", // NotLaunchable
         L"Pārvaldīt instalētajās programmās", // ManageInstalled
         L"Instalēta programma", // InstalledApp
+        L"Instalētās programmas", // InstalledApps
+        L"Galvenā pakotne", // MainPackage
+        L"Ietvara pakotne", // FrameworkPackage
+        L"Resursu pakotne", // ResourcePackage
+        L"Pakotņu kopa", // PackageBundle
+        L"Neobligāta pakotne", // OptionalPackage
     }},
     {L"mk", {
         L"Пребарај сè", // SearchAnything
@@ -4992,9 +5152,14 @@ inline constexpr Locale kLocales[] = {
         L"Рестартирај", // ServiceRestart
         L"Нема соодветни услуги", // NoServices
         L"Копирај детали", // CopyDetails
-        L"Не е пронајден стартер", // NotLaunchable
         L"Управувај во инсталираните апликации", // ManageInstalled
         L"Инсталирана апликација", // InstalledApp
+        L"Инсталирани апликации", // InstalledApps
+        L"Главен пакет", // MainPackage
+        L"Пакет на рамковна околина", // FrameworkPackage
+        L"Пакет со ресурси", // ResourcePackage
+        L"Збирка пакети", // PackageBundle
+        L"Изборен пакет", // OptionalPackage
     }},
     {L"ms", {
         L"Cari apa sahaja", // SearchAnything
@@ -5134,9 +5299,14 @@ inline constexpr Locale kLocales[] = {
         L"Mula semula", // ServiceRestart
         L"Tiada perkhidmatan yang sepadan", // NoServices
         L"Salin butiran", // CopyDetails
-        L"Pelancar tidak ditemukan", // NotLaunchable
         L"Urus dalam Aplikasi dipasang", // ManageInstalled
         L"Aplikasi dipasang", // InstalledApp
+        L"Aplikasi dipasang", // InstalledApps
+        L"Pakej utama", // MainPackage
+        L"Pakej rangka kerja", // FrameworkPackage
+        L"Pakej sumber", // ResourcePackage
+        L"Himpunan pakej", // PackageBundle
+        L"Pakej pilihan", // OptionalPackage
     }},
     {L"nb", {
         L"Søk etter alt", // SearchAnything
@@ -5276,9 +5446,14 @@ inline constexpr Locale kLocales[] = {
         L"Start på nytt", // ServiceRestart
         L"Ingen samsvarende tjenester", // NoServices
         L"Kopier detaljer", // CopyDetails
-        L"Ingen oppstartssnarvei funnet", // NotLaunchable
         L"Administrer i Installerte apper", // ManageInstalled
         L"Installert app", // InstalledApp
+        L"Installerte apper", // InstalledApps
+        L"Hovedpakke", // MainPackage
+        L"Rammeverkspakke", // FrameworkPackage
+        L"Ressurspakke", // ResourcePackage
+        L"Pakkesamling", // PackageBundle
+        L"Valgfri pakke", // OptionalPackage
     }},
     {L"nl", {
         L"Alles doorzoeken", // SearchAnything
@@ -5418,9 +5593,14 @@ inline constexpr Locale kLocales[] = {
         L"Opnieuw starten", // ServiceRestart
         L"Geen overeenkomende services", // NoServices
         L"Details kopiëren", // CopyDetails
-        L"Geen startpunt gevonden", // NotLaunchable
         L"Beheren in Geïnstalleerde apps", // ManageInstalled
         L"Geïnstalleerde app", // InstalledApp
+        L"Geïnstalleerde apps", // InstalledApps
+        L"Hoofdpakket", // MainPackage
+        L"Frameworkpakket", // FrameworkPackage
+        L"Bronnenpakket", // ResourcePackage
+        L"Pakketbundel", // PackageBundle
+        L"Optioneel pakket", // OptionalPackage
     }},
     {L"pl", {
         L"Szukaj wszystkiego", // SearchAnything
@@ -5560,9 +5740,14 @@ inline constexpr Locale kLocales[] = {
         L"Uruchom ponownie", // ServiceRestart
         L"Brak pasujących usług", // NoServices
         L"Kopiuj szczegóły", // CopyDetails
-        L"Nie znaleziono programu uruchamiającego", // NotLaunchable
         L"Zarządzaj w Zainstalowanych aplikacjach", // ManageInstalled
         L"Zainstalowana aplikacja", // InstalledApp
+        L"Zainstalowane aplikacje", // InstalledApps
+        L"Pakiet główny", // MainPackage
+        L"Pakiet platformy", // FrameworkPackage
+        L"Pakiet zasobów", // ResourcePackage
+        L"Zestaw pakietów", // PackageBundle
+        L"Pakiet opcjonalny", // OptionalPackage
     }},
     {L"pt-br", {
         L"Pesquisar qualquer coisa", // SearchAnything
@@ -5702,9 +5887,14 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"Nenhum serviço correspondente", // NoServices
         L"Copiar detalhes", // CopyDetails
-        L"Nenhum inicializador encontrado", // NotLaunchable
         L"Gerenciar em Aplicativos instalados", // ManageInstalled
         L"Aplicativo instalado", // InstalledApp
+        L"Aplicativos instalados", // InstalledApps
+        L"Pacote principal", // MainPackage
+        L"Pacote de framework", // FrameworkPackage
+        L"Pacote de recursos", // ResourcePackage
+        L"Conjunto de pacotes", // PackageBundle
+        L"Pacote opcional", // OptionalPackage
     }},
     {L"pt-pt", {
         L"Pesquisar tudo", // SearchAnything
@@ -5844,9 +6034,14 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"Nenhum serviço correspondente", // NoServices
         L"Copiar detalhes", // CopyDetails
-        L"Nenhum iniciador encontrado", // NotLaunchable
         L"Gerir em Aplicações instaladas", // ManageInstalled
         L"Aplicação instalada", // InstalledApp
+        L"Aplicações instaladas", // InstalledApps
+        L"Pacote principal", // MainPackage
+        L"Pacote de framework", // FrameworkPackage
+        L"Pacote de recursos", // ResourcePackage
+        L"Conjunto de pacotes", // PackageBundle
+        L"Pacote opcional", // OptionalPackage
     }},
     {L"ro", {
         L"Caută orice", // SearchAnything
@@ -5986,9 +6181,14 @@ inline constexpr Locale kLocales[] = {
         L"Repornire", // ServiceRestart
         L"Nu există servicii corespunzătoare", // NoServices
         L"Copiază detaliile", // CopyDetails
-        L"Nu s-a găsit un lansator", // NotLaunchable
         L"Gestionează în Aplicații instalate", // ManageInstalled
         L"Aplicație instalată", // InstalledApp
+        L"Aplicații instalate", // InstalledApps
+        L"Pachet principal", // MainPackage
+        L"Pachet de framework", // FrameworkPackage
+        L"Pachet de resurse", // ResourcePackage
+        L"Colecție de pachete", // PackageBundle
+        L"Pachet opțional", // OptionalPackage
     }},
     {L"ru", {
         L"Искать всё", // SearchAnything
@@ -6128,9 +6328,14 @@ inline constexpr Locale kLocales[] = {
         L"Перезапустить", // ServiceRestart
         L"Нет подходящих служб", // NoServices
         L"Копировать сведения", // CopyDetails
-        L"Способ запуска не найден", // NotLaunchable
         L"Управление в установленных приложениях", // ManageInstalled
         L"Установленное приложение", // InstalledApp
+        L"Установленные приложения", // InstalledApps
+        L"Основной пакет", // MainPackage
+        L"Пакет платформы", // FrameworkPackage
+        L"Пакет ресурсов", // ResourcePackage
+        L"Набор пакетов", // PackageBundle
+        L"Дополнительный пакет", // OptionalPackage
     }},
     {L"sk", {
         L"Hľadať všetko", // SearchAnything
@@ -6270,9 +6475,14 @@ inline constexpr Locale kLocales[] = {
         L"Reštartovať", // ServiceRestart
         L"Žiadne zodpovedajúce služby", // NoServices
         L"Kopírovať podrobnosti", // CopyDetails
-        L"Spúšťač sa nenašiel", // NotLaunchable
         L"Spravovať v nainštalovaných aplikáciách", // ManageInstalled
         L"Nainštalovaná aplikácia", // InstalledApp
+        L"Nainštalované aplikácie", // InstalledApps
+        L"Hlavný balík", // MainPackage
+        L"Balík frameworku", // FrameworkPackage
+        L"Balík prostriedkov", // ResourcePackage
+        L"Súprava balíkov", // PackageBundle
+        L"Voliteľný balík", // OptionalPackage
     }},
     {L"sl", {
         L"Išči vse", // SearchAnything
@@ -6412,9 +6622,14 @@ inline constexpr Locale kLocales[] = {
         L"Znova zaženi", // ServiceRestart
         L"Ni ustreznih storitev", // NoServices
         L"Kopiraj podrobnosti", // CopyDetails
-        L"Zaganjalnik ni bil najden", // NotLaunchable
         L"Upravljaj v nameščenih aplikacijah", // ManageInstalled
         L"Nameščena aplikacija", // InstalledApp
+        L"Nameščene aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket ogrodja", // FrameworkPackage
+        L"Paket virov", // ResourcePackage
+        L"Zbirka paketov", // PackageBundle
+        L"Izbirni paket", // OptionalPackage
     }},
     {L"sq", {
         L"Kërko gjithçka", // SearchAnything
@@ -6554,9 +6769,14 @@ inline constexpr Locale kLocales[] = {
         L"Rinis", // ServiceRestart
         L"Nuk ka shërbime që përputhen", // NoServices
         L"Kopjo hollësitë", // CopyDetails
-        L"Nuk u gjet nisës", // NotLaunchable
         L"Menaxho te aplikacionet e instaluara", // ManageInstalled
         L"Aplikacion i instaluar", // InstalledApp
+        L"Aplikacionet e instaluara", // InstalledApps
+        L"Paketa kryesore", // MainPackage
+        L"Paketë platforme", // FrameworkPackage
+        L"Paketë burimesh", // ResourcePackage
+        L"Grup paketash", // PackageBundle
+        L"Paketë opsionale", // OptionalPackage
     }},
     {L"sr-latn", {
         L"Pretraži sve", // SearchAnything
@@ -6696,9 +6916,14 @@ inline constexpr Locale kLocales[] = {
         L"Ponovo pokreni", // ServiceRestart
         L"Nema odgovarajućih usluga", // NoServices
         L"Kopiraj detalje", // CopyDetails
-        L"Pokretač nije pronađen", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
+        L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket radnog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Opcioni paket", // OptionalPackage
     }},
     {L"sv", {
         L"Sök efter allt", // SearchAnything
@@ -6838,9 +7063,14 @@ inline constexpr Locale kLocales[] = {
         L"Starta om", // ServiceRestart
         L"Inga matchande tjänster", // NoServices
         L"Kopiera information", // CopyDetails
-        L"Ingen startgenväg hittades", // NotLaunchable
         L"Hantera i Installerade appar", // ManageInstalled
         L"Installerad app", // InstalledApp
+        L"Installerade appar", // InstalledApps
+        L"Huvudpaket", // MainPackage
+        L"Ramverkspaket", // FrameworkPackage
+        L"Resurspaket", // ResourcePackage
+        L"Paketpaket", // PackageBundle
+        L"Valfritt paket", // OptionalPackage
     }},
     {L"sw", {
         L"Tafuta chochote", // SearchAnything
@@ -6980,9 +7210,14 @@ inline constexpr Locale kLocales[] = {
         L"Anzisha upya", // ServiceRestart
         L"Hakuna huduma zinazolingana", // NoServices
         L"Nakili maelezo", // CopyDetails
-        L"Kizindua hakikupatikana", // NotLaunchable
         L"Dhibiti katika Programu zilizosakinishwa", // ManageInstalled
         L"Programu iliyosakinishwa", // InstalledApp
+        L"Programu zilizosakinishwa", // InstalledApps
+        L"Kifurushi kikuu", // MainPackage
+        L"Kifurushi cha mfumo", // FrameworkPackage
+        L"Kifurushi cha rasilimali", // ResourcePackage
+        L"Kundi la vifurushi", // PackageBundle
+        L"Kifurushi cha hiari", // OptionalPackage
     }},
     {L"ta", {
         L"அனைத்தையும் தேடுங்கள்", // SearchAnything
@@ -7122,9 +7357,14 @@ inline constexpr Locale kLocales[] = {
         L"மீண்டும் தொடங்கு", // ServiceRestart
         L"பொருந்தும் சேவைகள் இல்லை", // NoServices
         L"விவரங்களை நகலெடு", // CopyDetails
-        L"தொடங்கும் வழி கிடைக்கவில்லை", // NotLaunchable
         L"நிறுவப்பட்ட பயன்பாடுகளில் நிர்வகி", // ManageInstalled
         L"நிறுவப்பட்ட செயலி", // InstalledApp
+        L"நிறுவப்பட்ட பயன்பாடுகள்", // InstalledApps
+        L"முதன்மைத் தொகுப்பு", // MainPackage
+        L"கட்டமைப்புத் தொகுப்பு", // FrameworkPackage
+        L"வளத் தொகுப்பு", // ResourcePackage
+        L"தொகுப்புகளின் தொகுதி", // PackageBundle
+        L"விருப்பத் தொகுப்பு", // OptionalPackage
     }},
     {L"te", {
         L"ఏదైనా వెతకండి", // SearchAnything
@@ -7264,9 +7504,14 @@ inline constexpr Locale kLocales[] = {
         L"పునఃప్రారంభించు", // ServiceRestart
         L"సరిపోలే సేవలు లేవు", // NoServices
         L"వివరాలను కాపీ చేయి", // CopyDetails
-        L"ప్రారంభించే మార్గం కనుగొనబడలేదు", // NotLaunchable
         L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలలో నిర్వహించు", // ManageInstalled
         L"ఇన్\u200cస్టాల్ చేసిన యాప్", // InstalledApp
+        L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలు", // InstalledApps
+        L"ప్రధాన ప్యాకేజీ", // MainPackage
+        L"ఫ్రేమ్\u200cవర్క్ ప్యాకేజీ", // FrameworkPackage
+        L"వనరుల ప్యాకేజీ", // ResourcePackage
+        L"ప్యాకేజీల సమూహం", // PackageBundle
+        L"ఐచ్ఛిక ప్యాకేజీ", // OptionalPackage
     }},
     {L"th", {
         L"ค้นหาทุกอย่าง", // SearchAnything
@@ -7406,9 +7651,14 @@ inline constexpr Locale kLocales[] = {
         L"เริ่มใหม่", // ServiceRestart
         L"ไม่พบบริการที่ตรงกัน", // NoServices
         L"คัดลอกรายละเอียด", // CopyDetails
-        L"ไม่พบตัวเรียกใช้", // NotLaunchable
         L"จัดการในแอปที่ติดตั้ง", // ManageInstalled
         L"แอปที่ติดตั้ง", // InstalledApp
+        L"แอปที่ติดตั้ง", // InstalledApps
+        L"แพ็กเกจหลัก", // MainPackage
+        L"แพ็กเกจเฟรมเวิร์ก", // FrameworkPackage
+        L"แพ็กเกจทรัพยากร", // ResourcePackage
+        L"ชุดแพ็กเกจ", // PackageBundle
+        L"แพ็กเกจเสริม", // OptionalPackage
     }},
     {L"tr", {
         L"Her şeyi ara", // SearchAnything
@@ -7548,9 +7798,14 @@ inline constexpr Locale kLocales[] = {
         L"Yeniden başlat", // ServiceRestart
         L"Eşleşen hizmet yok", // NoServices
         L"Ayrıntıları kopyala", // CopyDetails
-        L"Başlatıcı bulunamadı", // NotLaunchable
         L"Yüklü uygulamalarda yönet", // ManageInstalled
         L"Yüklü uygulama", // InstalledApp
+        L"Yüklü uygulamalar", // InstalledApps
+        L"Ana paket", // MainPackage
+        L"Çerçeve paketi", // FrameworkPackage
+        L"Kaynak paketi", // ResourcePackage
+        L"Paket grubu", // PackageBundle
+        L"İsteğe bağlı paket", // OptionalPackage
     }},
     {L"uk", {
         L"Шукати все", // SearchAnything
@@ -7690,9 +7945,14 @@ inline constexpr Locale kLocales[] = {
         L"Перезапустити", // ServiceRestart
         L"Немає відповідних служб", // NoServices
         L"Копіювати відомості", // CopyDetails
-        L"Спосіб запуску не знайдено", // NotLaunchable
         L"Керувати у встановлених програмах", // ManageInstalled
         L"Установлена програма", // InstalledApp
+        L"Інстальовані програми", // InstalledApps
+        L"Основний пакет", // MainPackage
+        L"Пакет платформи", // FrameworkPackage
+        L"Пакет ресурсів", // ResourcePackage
+        L"Набір пакетів", // PackageBundle
+        L"Додатковий пакет", // OptionalPackage
     }},
     {L"vi", {
         L"Tìm kiếm mọi thứ", // SearchAnything
@@ -7832,9 +8092,14 @@ inline constexpr Locale kLocales[] = {
         L"Khởi động lại", // ServiceRestart
         L"Không có dịch vụ phù hợp", // NoServices
         L"Sao chép chi tiết", // CopyDetails
-        L"Không tìm thấy trình khởi chạy", // NotLaunchable
         L"Quản lý trong Ứng dụng đã cài đặt", // ManageInstalled
         L"Ứng dụng đã cài đặt", // InstalledApp
+        L"Ứng dụng đã cài đặt", // InstalledApps
+        L"Gói chính", // MainPackage
+        L"Gói nền tảng", // FrameworkPackage
+        L"Gói tài nguyên", // ResourcePackage
+        L"Bộ gói", // PackageBundle
+        L"Gói tùy chọn", // OptionalPackage
     }},
     {L"zh-hans", {
         L"搜索所有内容", // SearchAnything
@@ -7974,9 +8239,14 @@ inline constexpr Locale kLocales[] = {
         L"重新启动", // ServiceRestart
         L"没有匹配的服务", // NoServices
         L"复制详细信息", // CopyDetails
-        L"未找到启动入口", // NotLaunchable
         L"在已安装的应用中管理", // ManageInstalled
         L"已安装的应用", // InstalledApp
+        L"已安装的应用", // InstalledApps
+        L"主程序包", // MainPackage
+        L"框架程序包", // FrameworkPackage
+        L"资源程序包", // ResourcePackage
+        L"程序包捆绑包", // PackageBundle
+        L"可选程序包", // OptionalPackage
     }},
     {L"zh-hant", {
         L"搜尋所有內容", // SearchAnything
@@ -8116,9 +8386,14 @@ inline constexpr Locale kLocales[] = {
         L"重新啟動", // ServiceRestart
         L"沒有符合的服務", // NoServices
         L"複製詳細資料", // CopyDetails
-        L"找不到啟動方式", // NotLaunchable
         L"在已安裝的應用程式中管理", // ManageInstalled
         L"已安裝的應用程式", // InstalledApp
+        L"已安裝的應用程式", // InstalledApps
+        L"主要套件", // MainPackage
+        L"架構套件", // FrameworkPackage
+        L"資源套件", // ResourcePackage
+        L"套件組合", // PackageBundle
+        L"選用套件", // OptionalPackage
     }},
 };
 inline std::atomic<const Locale*> g_locale{&kLocales[0]};
@@ -8247,17 +8522,20 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Files and folders will appear here", Key::FilesAppear},
         {L"Folder", Key::Folder},
         {L"Frame rate", Key::FrameRate},
+        {L"Framework package", Key::FrameworkPackage},
         {L"Frequency", Key::Frequency},
         {L"Gateway", Key::Gateway},
         {L"Give each Quick Tool and custom /command a different name in settings.", Key::CommandNameConflictHint},
         {L"Hardware usage", Key::HardwareUsage},
         {L"Installed app", Key::InstalledApp},
+        {L"Installed apps", Key::InstalledApps},
         {L"Internet speed test", Key::SpeedTest},
         {L"It is not installed for this account, or it is part of Windows.", Key::ProtectedApp},
         {L"Items", Key::Items},
         {L"Latency", Key::Latency},
         {L"Length", Key::Length},
         {L"Loading…", Key::OnlineLoading},
+        {L"Main package", Key::MainPackage},
         {L"Manage in Installed apps", Key::ManageInstalled},
         {L"Mass", Key::Mass},
         {L"Matches", Key::Matches},
@@ -8268,7 +8546,6 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Network traffic", Key::NetworkTraffic},
         {L"Next", Key::Next},
         {L"No active network interfaces", Key::NoNetwork},
-        {L"No launcher found", Key::NotLaunchable},
         {L"No matching applications", Key::NoApps},
         {L"No matching files", Key::NoFiles},
         {L"No matching services", Key::NoServices},
@@ -8278,6 +8555,8 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Open file location", Key::OpenLocation},
         {L"Open in terminal", Key::Terminal},
         {L"Open {0}", Key::OpenService},
+        {L"Optional package", Key::OptionalPackage},
+        {L"Package bundle", Key::PackageBundle},
         {L"Pages", Key::Pages},
         {L"Paused", Key::ServicePaused},
         {L"Pending…", Key::ServicePending},
@@ -8289,6 +8568,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Pressure", Key::Pressure},
         {L"Properties", Key::Properties},
         {L"Ready", Key::TestReady},
+        {L"Resource package", Key::ResourcePackage},
         {L"Restart", Key::ServiceRestart},
         {L"Run", Key::Run},
         {L"Run as administrator", Key::RunAdmin},
@@ -10404,6 +10684,10 @@ struct Record {
     HKEY registryHive = nullptr;
     REGSAM registryView = 0;
     std::wstring launcher;
+    bool inventoryOnly = false; // hidden components and non-application packages
+    std::vector<std::wstring> inventoryAliases;
+    std::wstring architecture;
+    std::wstring packageType, resourceId;
 };
 struct Key {
     HKEY value = nullptr;
@@ -10695,15 +10979,14 @@ std::vector<Record> ReadPrograms(const std::atomic<bool>* cancel = nullptr) {
                     continue;
                 Record record;
                 record.name = String(entry.value, L"DisplayName");
-                if (!Visible(record.name, Number(entry.value, L"SystemComponent"),
-                             String(entry.value, L"ParentKeyName"),
-                             String(entry.value, L"ReleaseType")))
-                    continue;
+                if (record.name.empty()) continue;
+                record.inventoryOnly = !Visible(record.name, Number(entry.value, L"SystemComponent"),
+                    String(entry.value, L"ParentKeyName"), String(entry.value, L"ReleaseType"));
                 record.publisher = String(entry.value, L"Publisher");
                 record.version = String(entry.value, L"DisplayVersion");
                 record.icon = CleanIcon(String(entry.value, L"DisplayIcon"));
                 record.location = Location(String(entry.value, L"InstallLocation"));
-                record.launcher = FindLauncher(record);
+                if (!record.inventoryOnly) record.launcher = FindLauncher(record);
                 if (record.location.empty() && !record.launcher.empty())
                     record.location = ParentFolder(record.launcher);
                 record.registryKey = name;
@@ -10805,26 +11088,34 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
         namespace model = winrt::Windows::ApplicationModel;
         winrt::Windows::Management::Deployment::PackageManager manager;
         std::set<std::wstring> seen;
-        for (const auto& package : manager.FindPackagesForUser(L""))
+        using PackageTypes = winrt::Windows::Management::Deployment::PackageTypes;
+        const auto types = PackageTypes::Main | PackageTypes::Framework | PackageTypes::Resource |
+            PackageTypes::Bundle | PackageTypes::Optional;
+        for (const auto& package : manager.FindPackagesForUserWithPackageTypes(L"", types))
             try {
                 if (cancel && cancel->load())
                     return {};
-                if (package.IsFramework() || package.IsResourcePackage() || package.IsBundle() ||
-                    package.SignatureKind() == model::PackageSignatureKind::System)
-                    continue;
                 Record record;
+                const bool framework=package.IsFramework(),resource=package.IsResourcePackage(),bundle=package.IsBundle();
+                record.inventoryOnly = framework || resource || bundle ||
+                    package.SignatureKind() == model::PackageSignatureKind::System;
+                bool optional=false;
+                try { optional=package.IsOptional(); } catch (...) {}
+                record.packageType=bundle?L"Package bundle":resource?L"Resource package":framework?L"Framework package":
+                    optional?L"Optional package":L"Main package";
+                if(resource)try { record.resourceId=package.Id().ResourceId().c_str(); } catch (...) {}
                 record.family = package.Id().FamilyName().c_str();
-                if (!seen.insert(record.family).second)
+                record.packageFullName = package.Id().FullName().c_str();
+                if (!seen.insert(record.packageFullName).second)
                     continue;
-                record.id = L"package:" + record.family;
-                record.name = package.DisplayName().c_str();
+                record.id = L"package:" + record.packageFullName;
+                try { record.name = package.DisplayName().c_str(); } catch (...) {}
                 if (record.name.empty() || record.name.starts_with(L"ms-resource:"))
                     record.name = package.Id().Name().c_str();
-                record.packageFullName = package.Id().FullName().c_str();
                 const auto originalName = record.name;
                 try {
                     record.location = Location(package.InstalledLocation().Path().c_str());
-                    const auto friendly =
+                    const auto friendly = record.inventoryOnly ? std::wstring() :
                         VisualName(package.InstalledLocation().Path().c_str(),
                                    package.Id().Name().c_str(), record.packageFullName);
                     if (!friendly.empty() &&
@@ -10832,9 +11123,20 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
                         record.name = friendly;
                 } catch (...) {
                 }
-                if (originalName != record.name)
+                if (originalName != record.name && _wcsicmp(originalName.c_str(), package.Id().Name().c_str()))
                     record.aliases.push_back(originalName);
-                record.publisher = package.PublisherDisplayName().c_str();
+                record.inventoryAliases.push_back(package.Id().Name().c_str());
+                record.inventoryAliases.push_back(record.packageFullName);
+                using Architecture = winrt::Windows::System::ProcessorArchitecture;
+                switch (package.Id().Architecture()) {
+                    case Architecture::X86: record.architecture=L"x86"; break;
+                    case Architecture::X64: record.architecture=L"x64"; break;
+                    case Architecture::Arm: record.architecture=L"ARM"; break;
+                    case Architecture::Arm64: record.architecture=L"ARM64"; break;
+                    case Architecture::Neutral: record.architecture=L"neutral"; break;
+                    default: break;
+                }
+                try { record.publisher = package.PublisherDisplayName().c_str(); } catch (...) {}
                 const auto version = package.Id().Version();
                 record.version =
                     std::to_wstring(version.Major) + L"." + std::to_wstring(version.Minor) + L"." +
@@ -10894,10 +11196,10 @@ struct App {
     std::wstring area;             // Settings category or Control Panel area
     std::wstring areaLower;
     std::wstring settingArguments; // Native Settings page/target activation
-    bool installedOnly=false;
+    bool installedOnly=false,inventoryOnly=false;
     bool targetExists=false,linkExists=false;
-    std::wstring installedId,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
-    std::wstring installedLocation,installedFamily,installedKey;
+    std::wstring installedId,installedName,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
+    std::wstring installedLocation,installedFamily,installedKey,installedArchitecture,installedPackageType,installedResourceId;
     HKEY installedHive=nullptr;
     REGSAM installedView=0;
 };
@@ -11383,6 +11685,32 @@ inline std::wstring CatalogFilePath(std::wstring path) {
     if(!count || count>=std::size(absolute))return {};
     path=ToLower(absolute);while(path.size()>3 && path.back()==L'\\')path.pop_back();return path;
 }
+inline void AttachInstalledMetadata(App& app,const installed::Record& record) {
+    app.installedId=record.id;app.installedName=record.name;app.installedPublisher=record.publisher;
+    app.installedVersion=record.version;app.installedIcon=record.icon;
+    app.installedPackage=record.packageFullName;app.inventoryOnly=record.inventoryOnly;
+    app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
+    app.installedArchitecture=record.architecture;
+    app.installedPackageType=record.packageType;app.installedResourceId=record.resourceId;
+    app.installedHive=record.registryHive;app.installedView=record.registryView;
+}
+inline std::vector<App> InstalledInventory(const std::vector<installed::Record>& records) {
+    std::vector<App> inventory;inventory.reserve(records.size());
+    std::set<std::wstring> seen;
+    for(const auto& record:records) {
+        if(record.name.empty() || record.id.empty() || !seen.insert(record.id).second)continue;
+        App app;app.name=record.name;app.nameLower=ToLower(record.name);app.installedOnly=true;
+        app.targetPath=L"ms-settings:appsfeatures";
+        AttachInstalledMetadata(app,record);
+        for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
+        for(const auto& alias:record.inventoryAliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
+        if(!record.publisher.empty())app.aliases.push_back(ToLower(record.publisher));
+        std::wistringstream words(app.nameLower);std::wstring word;
+        while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
+        inventory.push_back(std::move(app));
+    }
+    return inventory;
+}
 inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::Record>& records) {
     const auto launchCount=apps.size();std::set<std::wstring> added;
     // Resolve existing shortcut paths once per catalog build. This is only an
@@ -11396,7 +11724,7 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             executableNames[i]=installed::LauncherName(filename.substr(0,filename.size()-4));
     }
     for(const auto& record:records) {
-        if(record.name.empty() || !added.insert(record.id).second)continue;
+        if(record.name.empty() || record.inventoryOnly || !added.insert(record.id).second)continue;
         const auto name=ToLower(record.name);bool represented=false;
         const auto familyOf=[](const App& app) {
             const auto& identity=app.shellIdentity.empty()?app.targetPath:app.shellIdentity;
@@ -11421,7 +11749,9 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             }
         }
         for(size_t i=0;i<launchCount;++i) {
-            auto& app=apps[i];if(app.isSetting || app.installedOnly)continue;
+            auto& app=apps[i];
+            if(app.isSetting || app.installedOnly ||
+                (!app.installedId.empty() && app.installedId!=record.id))continue;
             bool same=name==app.nameLower;
             if(!productTarget.empty())same=same || targets[i]==productTarget;
             if(!record.launcher.empty())same=same || _wcsicmp(record.launcher.c_str(),(app.linkTarget.empty()?app.targetPath:app.linkTarget).c_str())==0;
@@ -11438,24 +11768,19 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             }
             represented=true;
         }
-        if(represented)continue;
+        if(represented || record.launcher.empty())continue;
         App app;app.name=record.name;app.nameLower=name;app.installedOnly=true;
         // Until a verified application is found, use a management destination.
         // Never run an icon/uninstaller path as the installed product.
         app.targetPath=L"ms-settings:appsfeatures";
-        app.installedId=record.id;app.installedPublisher=record.publisher;
-        app.installedVersion=record.version;app.installedIcon=record.icon;
-        app.installedPackage=record.packageFullName;
-        app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
-        app.installedHive=record.registryHive;app.installedView=record.registryView;
-        if(!record.launcher.empty()) {
-            ITEMIDLIST* pidl=nullptr;
-            if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
-                app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
-                app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
-                app.targetExists=true;PopulateAppAliases(app);
-            }
+        AttachInstalledMetadata(app,record);
+        ITEMIDLIST* pidl=nullptr;
+        if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
+            app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
+            app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
+            app.targetExists=true;PopulateAppAliases(app);
         }
+        if(app.installedOnly)continue;
         for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
         std::wistringstream words(name);std::wstring word;
         while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
@@ -11468,6 +11793,41 @@ inline const std::wstring& IconIdentity(const App& app) {
 inline bool SameResult(const App& a,const App& b) {
     if(a.installedOnly || b.installedOnly)return a.installedOnly && b.installedOnly && a.installedId==b.installedId;
     return a.nameLower==b.nameLower;
+}
+enum class SearchScope { Normal, Installed };
+inline bool InSearchScope(const App& app,SearchScope scope) {
+    return scope==SearchScope::Installed ? !app.isSetting && !app.installedId.empty() : !app.installedOnly && !app.inventoryOnly;
+}
+inline std::vector<Match> MatchCatalog(const std::vector<App>& apps,const std::wstring& query,
+    size_t limit,const UsageCounts* usage,SearchScope scope) {
+    if(query.empty() && scope==SearchScope::Normal)return {};
+    const auto q=ToLower(query);
+    std::vector<Match> hits;
+    for(const auto& app:apps) {
+        if(!InSearchScope(app,scope))continue;
+        const int score=q.empty()?0:ScoreApp(app,q);
+        if(score>=0)hits.push_back({&app,score,score-(scope==SearchScope::Normal?UsageBonus(usage,app.nameLower):0)});
+    }
+    std::stable_sort(hits.begin(),hits.end(),[&](const Match& a,const Match& b) {
+        if(a.score!=b.score && MatchTier(a.score)!=MatchTier(b.score))return a.score<b.score;
+        if(a.rank!=b.rank)return a.rank<b.rank;
+        if(a.score!=b.score)return a.score<b.score;
+        return scope==SearchScope::Installed ? a.app->nameLower<b.app->nameLower : a.app->name.size()<b.app->name.size();
+    });
+    int best=hits.empty()?0:hits.front().score;
+    for(const auto& hit:hits)best=std::min(best,hit.score);
+    const int cutoff=best<80?80:best+12;
+    std::vector<Match> shown;shown.reserve(std::min(limit,hits.size()));
+    for(const auto& hit:hits) {
+        if(shown.size()>=limit)break;
+        if(hit.score>=cutoff)continue;
+        // InstalledInventory already guarantees unique registration identities.
+        const bool seen=scope==SearchScope::Normal && std::any_of(shown.begin(),shown.end(),[&](const Match& kept) {
+            return SameResult(*kept.app,*hit.app);
+        });
+        if(!seen)shown.push_back(hit);
+    }
+    return shown;
 }
 // Existence probes must not connect to UNC shares, disconnected mapped drives,
 // shell identities or URI targets while rebuilding the complete catalog.
@@ -11489,19 +11849,22 @@ class Index {
         IShellItem* folder = nullptr;
         HRESULT hr = SHCreateItemFromParsingName(L"shell:AppsFolder", nullptr,
                                                  IID_PPV_ARGS(&folder));
-        if (FAILED(hr) || !folder) {
-            return false;
-        }
-
         IEnumShellItems* e = nullptr;
-        hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&e));
-        folder->Release();
-        if (FAILED(hr) || !e) {
+        if (SUCCEEDED(hr) && folder) {
+            hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&e));
+            folder->Release();
+        }
+        const bool shellAvailable=SUCCEEDED(hr) && e;
+        // Keep a complete published catalog if a later shell refresh fails.
+        // A first inventory build can still work without AppsFolder.
+        if(!shellAvailable && hasLaunchCatalog_) {
+            if(e)e->Release();
             return false;
         }
 
         IShellItem* item = nullptr;
-        while (!cancelled() && e->Next(1, &item, nullptr) == S_OK && item) {
+        HRESULT enumeration=S_FALSE;
+        while (e && !cancelled() && (enumeration=e->Next(1, &item, nullptr)) == S_OK && item) {
             if (cancelled()) {
                 item->Release();
                 e->Release();
@@ -11588,8 +11951,8 @@ class Index {
             item->Release();
             item = nullptr;
         }
-        e->Release();
-        if (cancelled()) return false;
+        if(e)e->Release();
+        if (cancelled() || FAILED(enumeration)) return false;
 
         // Supplement launch entries on this background thread. Cache product
         // metadata across frequent shell refreshes, rather than per keystroke.
@@ -11598,6 +11961,7 @@ class Index {
             catch(...){Wh_Log(L"installed apps: retained previous metadata after refresh failure");}
         }
         AppendInstalled(fresh,installed_);
+        auto inventory=InstalledInventory(installed_);
         if (cancelled()) return false;
 
         // Refresh native data only on this background thread, never per keystroke.
@@ -11679,6 +12043,8 @@ class Index {
 
         std::lock_guard<std::mutex> lock(mutex_);
         apps_ = std::move(fresh);
+        inventory_ = std::move(inventory);
+        hasLaunchCatalog_=shellAvailable;
         return true;
     }
 
@@ -11689,6 +12055,7 @@ class Index {
         // Published snapshots never call Rebuild again. Copying their private
         // metadata caches needs no lock shared with the matching worker.
         next->nativeSettings_=nativeSettings_;next->installed_=installed_;
+        next->hasLaunchCatalog_=hasLaunchCatalog_;
         next->installedWhen_=inventoryChanged?0:installedWhen_;
         return next->Rebuild(cancel)?next:nullptr;
     }
@@ -11698,71 +12065,10 @@ class Index {
         return apps_.size();
     }
 
-    std::vector<Match> Search(const std::wstring& query, size_t limit, const UsageCounts* usage) const {
-        std::vector<Match> hits;
-        if (query.empty()) {
-            return hits;
-        }
-        const std::wstring q = ToLower(query);
-
+    std::vector<Match> Search(const std::wstring& query, size_t limit, const UsageCounts* usage,
+                              SearchScope scope=SearchScope::Normal) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        for (const App& a : apps_) {
-            int score = ScoreApp(a, q);
-            if (score >= 0) {
-                hits.push_back({&a, score, score - UsageBonus(usage, a.nameLower)});
-            }
-        }
-
-        std::stable_sort(hits.begin(), hits.end(),
-                         [](const Match& x, const Match& y) {
-                             if (MatchTier(x.score) != MatchTier(y.score)) {
-                                 return x.score < y.score;
-                             }
-                             if (x.rank != y.rank) {
-                                 return x.rank < y.rank;
-                             }
-                             if (x.score != y.score) {
-                                 return x.score < y.score;
-                             }
-                             return x.app->name.size() < y.app->name.size();
-                         });
-
-        // What is shown:
-        //  - one entry per name: many things are indexed twice, typically a
-        //    Settings page and the Control Panel applet or app behind it
-        //    (Display, Sound, Device Manager), and a second row with the same
-        //    name only takes a slot from something else;
-        //  - with a real match (below the fuzzy tiers at 80), no fuzzy ones:
-        //    "calc" is Calculator, not Local Computer Policy;
-        //  - with only fuzzy or typo matches, just those close to the best.
-        // By the score itself: use reorders what is shown, never what is.
-        const int kFuzzy = 80;
-        int best = hits.empty() ? 0 : hits.front().score;
-        for (const Match& m : hits) {
-            best = std::min(best, m.score);
-        }
-        const int cutoff = best < kFuzzy ? kFuzzy : best + 12;
-        std::vector<Match> shown;
-        shown.reserve(std::min(limit, hits.size()));
-        for (const Match& m : hits) {
-            if (shown.size() >= limit) {
-                break;
-            }
-            if (m.score >= cutoff) {
-                continue;
-            }
-            bool seen = false;
-            for (const Match& kept : shown) {
-                    if (SameResult(*kept.app,*m.app)) {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen) {
-                shown.push_back(m);
-            }
-        }
-        return shown;
+        return MatchCatalog(scope==SearchScope::Installed?inventory_:apps_,query,limit,usage,scope);
     }
 
     // Empty search shows installed apps, with learned favorites first. Turning
@@ -11802,8 +12108,10 @@ class Index {
     settings::NativeCatalog nativeSettings_;
     std::vector<installed::Record> installed_;
     ULONGLONG installedWhen_=0;
+    bool hasLaunchCatalog_=false;
     mutable std::mutex mutex_;
     std::vector<App> apps_;
+    std::vector<App> inventory_;
 };
 
 // Native catalog and icon I/O have their own owner. Matching only reads an
@@ -11972,7 +12280,7 @@ class WarmIndex {
                     job.owner = prefetch_;
                     job.app = job.owner->At(next_++);
                     job.pixels = pixels_;
-                    if (!job.app || (job.app->isSetting && !job.app->pidl))
+                    if (!job.app || job.app->installedOnly || (job.app->isSetting && !job.app->pidl))
                         continue;
                     job.key = AppKey(*job.app, job.pixels);
                 }
@@ -13141,6 +13449,7 @@ uint32_t SearchTextOverride();
 void InvalidateSearchContrastContainer(wux::FrameworkElement const& root);
 void PrepareSearchResultContrastColors();
 void SearchContrastScrolled(wuxc::ScrollViewer const& scroll);
+void CheckInstalledScroll(wuxc::ScrollViewer const& scroll);
 void SearchContainerContrastTick();
 void ApplySearchContainerContrast();
 void PauseSearchContainerContrast();
@@ -13677,7 +13986,7 @@ static void RunFileDrag(HWND host, std::wstring path) {
 // open and in front, where the user has just confirmed it, and only for a
 // package that is not part of Windows. Shows an error under the package's
 // own name when removal fails.
-static bool AcceptPackageRemoval(std::wstring family) {
+static bool AcceptPackageRemoval(std::wstring family,std::wstring fullName = {}) {
     while (!family.empty() && family.back() == L'\0') {
         family.pop_back();
     }
@@ -13689,13 +13998,14 @@ static bool AcceptPackageRemoval(std::wstring family) {
     GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
     const size_t underscore = family.rfind(L'_');
     if (!search || IsCloaked(search) || !searchPid || foregroundPid != searchPid || family.size() > 128 ||
-        underscore == std::wstring::npos || family.size() - underscore - 1 != 13 ||
+        underscore == std::wstring::npos || family.size() - underscore - 1 != 13 || fullName.size()>255 ||
+        fullName.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_")!=std::wstring::npos ||
         family.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_") !=
             std::wstring::npos) {
         Wh_Log(L"[Explorer] uninstall: refused %ls", family.c_str());
         return false;
     }
-    SpawnTrackedLaunch([family] {
+    SpawnTrackedLaunch([family,fullName] {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         std::wstring name = family;
         std::wstring error;
@@ -13704,7 +14014,9 @@ static bool AcceptPackageRemoval(std::wstring family) {
             winrt::Windows::Management::Deployment::PackageManager manager;
             bool found = false;
             for (auto const& package : manager.FindPackagesForUser(L"", family)) {
-                if (package.IsFramework() || package.SignatureKind() == appmodel::PackageSignatureKind::System) {
+                if(!fullName.empty() && fullName!=package.Id().FullName().c_str())continue;
+                if (package.IsFramework() || package.IsResourcePackage() || package.IsBundle() ||
+                    package.SignatureKind() == appmodel::PackageSignatureKind::System) {
                     continue;  // part of Windows: never removed from here
                 }
                 found = true;
@@ -13720,6 +14032,7 @@ static bool AcceptPackageRemoval(std::wstring family) {
                         error = winrt::hresult_error(code).message().c_str();
                     }
                 }
+                if(!fullName.empty())break;
             }
             if (!found) {
                 error = i18n::Text(i18n::Key::ProtectedApp);
@@ -14516,10 +14829,10 @@ struct CustomConversion {
 std::atomic<int> g_textScale{100};
 
 namespace commands {
-enum class Kind { None, Weather, Currency, Crypto, Ip, Speed, Usage, Services, Conflict };
+enum class Kind { None, Weather, Currency, Crypto, Ip, Speed, Usage, Services, Installed, Conflict };
 struct Names {
     std::wstring weather = L"weather", currency = L"money", crypto = L"crypto", ip = L"ip";
-    std::wstring speed = L"speedtest", usage = L"usage", services = L"services";
+    std::wstring speed = L"speedtest", usage = L"usage", services = L"services", installed = L"all";
 };
 std::wstring Trim(std::wstring_view text) {
     const auto first = text.find_first_not_of(L" \t\r\n");
@@ -14548,7 +14861,7 @@ std::wstring Normalize(std::wstring_view value) {
 }
 Names Resolve(Names input) {
     Names defaults;
-    auto fields = {&Names::weather, &Names::currency, &Names::crypto, &Names::ip, &Names::speed, &Names::usage, &Names::services};
+    auto fields = {&Names::weather, &Names::currency, &Names::crypto, &Names::ip, &Names::speed, &Names::usage, &Names::services, &Names::installed};
     for (auto field : fields) {
         auto name = Normalize(input.*field);
         input.*field = name.empty() ? defaults.*field : std::move(name);
@@ -14562,6 +14875,7 @@ const std::wstring& Name(const Names& names, Kind kind) {
     if (kind == Kind::Speed) return names.speed;
     if (kind == Kind::Usage) return names.usage;
     if (kind == Kind::Services) return names.services;
+    if (kind == Kind::Installed) return names.installed;
     return names.ip;
 }
 struct Match { Kind kind = Kind::None; std::wstring args; };
@@ -14571,7 +14885,7 @@ Match Parse(std::wstring_view query, const Names& names) {
     const auto end = text.find_first_of(L" \t\r\n");
     const auto token = std::wstring_view(text).substr(1, end == std::wstring::npos ? text.size() - 1 : end - 1);
     auto kind = Kind::None;
-    for (auto candidate : {Kind::Weather, Kind::Currency, Kind::Crypto, Kind::Ip, Kind::Speed, Kind::Usage, Kind::Services}) {
+    for (auto candidate : {Kind::Weather, Kind::Currency, Kind::Crypto, Kind::Ip, Kind::Speed, Kind::Usage, Kind::Services, Kind::Installed}) {
         if (Equal(token, Name(names, candidate))) {
             if (kind != Kind::None) { kind = Kind::Conflict; break; }
             kind = candidate;
@@ -14581,7 +14895,8 @@ Match Parse(std::wstring_view query, const Names& names) {
     if (kind == Kind::None && Equal(names.currency, L"money") && (Equal(token, L"currency") || Equal(token, L"fx"))) kind = Kind::Currency;
     if (kind == Kind::None && Equal(names.crypto, L"crypto") && Equal(token, L"price")) kind = Kind::Crypto;
     if (kind == Kind::None && Equal(names.speed, L"speedtest") && Equal(token, L"speed")) kind = Kind::Speed;
-    return {kind, end == std::wstring::npos ? std::wstring() : Trim(std::wstring_view(text).substr(end))};
+    auto args=end == std::wstring::npos ? std::wstring() : Trim(std::wstring_view(text).substr(end));
+    return {kind,std::move(args)};
 }
 template<class CustomCommands>
 Match Parse(std::wstring_view query, const Names& names, const CustomCommands& custom) {
@@ -14665,7 +14980,8 @@ void LoadSettings() {
     auto speedName = WindhawkUtils::StringSetting::make(L"commands.speedName");
     auto usageName = WindhawkUtils::StringSetting::make(L"commands.usageName");
     auto servicesName = WindhawkUtils::StringSetting::make(L"commands.servicesName");
-    g_settings.commandNames = commands::Resolve({weatherName.get(), moneyName.get(), cryptoName.get(), ipName.get(), speedName.get(), usageName.get(), servicesName.get()});
+    auto installedName = WindhawkUtils::StringSetting::make(L"commands.installedName");
+    g_settings.commandNames = commands::Resolve({weatherName.get(), moneyName.get(), cryptoName.get(), ipName.get(), speedName.get(), usageName.get(), servicesName.get(), installedName.get()});
     auto savedList = [](const wchar_t* setting, int limit) {
         std::vector<std::wstring> list;
         for (int i = 0; i < limit; ++i) {
@@ -15478,8 +15794,9 @@ struct Row {
     std::wstring footerText, cardSignature;
     std::optional<SpeedView> speed;
     std::optional<UsageView> usage;
-    bool installedOnly=false;
-    std::wstring installedLocation,installedFamily,installedKey;
+    bool installedOnly=false,installedProtected=false;
+    size_t installedTotal=0;
+    std::wstring installedName,installedLocation,installedFamily,installedKey,installedPackage;
     HKEY installedHive=nullptr;
     REGSAM installedView=0;
     std::wstring serviceName;
@@ -15537,6 +15854,29 @@ wuxmi::WriteableBitmap IconBitmap(const std::vector<BYTE>& pixels) {
 }
 
 std::vector<Row> g_appRows;
+inline constexpr size_t kInstalledBatchSize=20;
+std::wstring g_installedBatchQuery; // guarded by g_queryMutex
+size_t g_installedVisibleLimit=kInstalledBatchSize,g_installedTotal=0;
+bool InstalledNearEnd(double offset,double viewport,double extent) {
+    if(!std::isfinite(offset)||!std::isfinite(viewport)||!std::isfinite(extent)||
+        offset<0||viewport<=0||extent<=0)return false;
+    // Fill a tall viewport, or prefetch a little before the scrollbar ends.
+    return extent<=viewport || (offset>0 && offset+viewport>=extent-std::min(128.0,viewport*0.25));
+}
+bool RequestMoreInstalled(const std::wstring& query,size_t visible,uint64_t renderedRevision) {
+    if(!visible)return false;
+    {
+        std::lock_guard lock(g_queryMutex);
+        // The next request cannot overtake an in-flight batch or a UI that
+        // still shows the previous query. No scanning occurs on this thread.
+        if(g_searchQuit || renderedRevision!=g_queryRevision || query!=g_pendingQuery ||
+            query!=g_installedBatchQuery || visible!=std::min(g_installedVisibleLimit,g_installedTotal) ||
+            g_installedVisibleLimit>=g_installedTotal)return false;
+        g_installedVisibleLimit+=std::min(kInstalledBatchSize,g_installedTotal-g_installedVisibleLimit);
+        ++g_queryRevision;g_queryDirty=true;
+    }
+    g_queryWake.notify_all();return true;
+}
 std::vector<Row> g_fileRows;
 std::wstring g_appsQuery;
 uint64_t g_appsRevision = 0, g_filesRevision = 0;  // g_resultsMutex
@@ -16020,8 +16360,8 @@ inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
 }  // namespace uninstall
 
 // Removes a packaged app directly in Explorer (AcceptPackageRemoval).
-bool RequestPackageRemoval(const std::wstring& family) {
-    return AcceptPackageRemoval(family);
+bool RequestPackageRemoval(const std::wstring& family,const std::wstring& fullName = {}) {
+    return AcceptPackageRemoval(family,fullName);
 }
 
 // Starts a program's uninstaller from Explorer (DismissSearchForLaunch), so it
@@ -18456,9 +18796,7 @@ void LaunchSelectedApp(int index, bool asAdmin) {
     }
     const auto& row = g_currentAppRows[index];
     if(row.installedOnly) {
-        if(!installed::Location(row.installedLocation).empty())
-            DismissSearchForLaunch([path=row.installedLocation]{OpenResult(path,false);});
-        else {SetAppSelection(index,true);OpenSelectedContextMenu();}
+        SetAppSelection(index,true);OpenSelectedContextMenu();
         return;
     }
     if (row.speedStart) { StartInternetSpeedTest(); return; }
@@ -19142,7 +19480,20 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     appsScroll.Content(apps);
     g_appsScroll = appsScroll;
     KeepHandler(appsScroll,appsScroll.ViewChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
-        SearchContrastScrolled(sender.as<wuxc::ScrollViewer>());
+        auto scroll=sender.as<wuxc::ScrollViewer>();
+        SearchContrastScrolled(scroll);CheckInstalledScroll(scroll);
+    }));
+    KeepHandler(appsScroll,appsScroll.PointerWheelChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,wux::Input::PointerRoutedEventArgs const& args) {
+        if(args.GetCurrentPoint(sender.as<wux::UIElement>()).Properties().MouseWheelDelta()<0)
+            CheckInstalledScroll(sender.as<wuxc::ScrollViewer>());
+    }));
+    KeepHandler(appsScroll,appsScroll.SizeChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
+        CheckInstalledScroll(sender.as<wuxc::ScrollViewer>());
+    }));
+    // Scroll extents may still be stale during SizeChanged. Recheck only
+    // after XAML completes layout, including an appended inventory batch.
+    KeepHandler(appsScroll,appsScroll.LayoutUpdated(winrt::auto_revoke,[](wf::IInspectable const&,auto const&) {
+        if(g_appsScroll)CheckInstalledScroll(g_appsScroll);
     }));
     appsScroll.IsTabStop(false);
     appsScroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
@@ -19367,6 +19718,15 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 } catch (...) {
     Wh_Log(L"results list failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
+
+// UI-thread scroll notification; all inventory matching stays on the worker.
+void CheckInstalledScroll(wuxc::ScrollViewer const& scroll) try {
+    if(!scroll || scroll!=g_appsScroll || !g_isOverlayVisible.load() || g_currentAppRows.empty() ||
+        !g_currentAppRows.front().installedOnly ||
+        g_currentAppRows.front().installedTotal<=g_currentAppRows.size())return;
+    if(InstalledNearEnd(scroll.VerticalOffset(),scroll.ViewportHeight(),scroll.ExtentHeight()))
+        RequestMoreInstalled(g_shownQuery,g_currentAppRows.size(),g_shownAppsRevision);
+} catch (...) {}
 
 // The XAML thread keeps the displayed files until a current replacement is
 // ready. An apps-only pass reads their count, without copying their icons or
@@ -19706,7 +20066,7 @@ wuxc::Grid BuildInstalledBadge() {
     note.ColumnDefinitions().Append(iconColumn);note.ColumnDefinitions().Append(textColumn);
     note.Margin(wux::ThicknessHelper::FromLengths(0,2,0,0));
     auto mark=SearchFontIcon();mark.Glyph(L"\uE946");ScaleFont(mark,11);mark.Margin(wux::ThicknessHelper::FromLengths(0,0,4,0));note.Children().Append(mark);
-    auto label=SearchTextBlock();label.Text(std::wstring(i18n::Text(i18n::Key::InstalledApp))+L" \u00B7 "+i18n::Text(i18n::Key::NotLaunchable));
+    auto label=SearchTextBlock();label.Text(i18n::Text(i18n::Key::InstalledApp));
     ScaleFont(label,10);label.Opacity(0.75);label.TextWrapping(wux::TextWrapping::Wrap);label.MaxLines(2);
     wuxc::Grid::SetColumn(label,1);note.Children().Append(label);
     return note;
@@ -19786,26 +20146,26 @@ void ApplyAppIcon(const wuxc::Button& button, const std::vector<BYTE>& pixels) {
 
 void AddAppUninstallItem(wuxc::MenuFlyout const& flyout, winrt::weak_ref<wuxc::Button> weakBtn,
     std::wstring family, std::optional<uninstall::Command> uninstaller, std::wstring appTitle,
-    std::function<bool()> stillCurrent = {}) {
+    std::function<bool()> stillCurrent = {},std::wstring packageFullName = {}) {
     wuxc::MenuFlyoutItem uninstallItem;
     uninstallItem.Text(i18n::Text(i18n::Key::Uninstall));
     auto uninstallIcon = SearchFontIcon();
     uninstallIcon.Glyph(L"\uE74D");
     uninstallItem.Icon(uninstallIcon);
-    KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle, stillCurrent](
+    KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle, stillCurrent,packageFullName](
                                                        wf::IInspectable const&, wux::RoutedEventArgs const&) {
         if(stillCurrent && !stillCurrent())return;
         auto btn = weakBtn.get();
         if (!btn) return;
         // After the menu has closed: one flyout at a time.
-        btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle, stillCurrent] {
+        btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle, stillCurrent,packageFullName] {
             if(stillCurrent && !stillCurrent())return;
             auto anchor = weakBtn.get();
             if (!anchor) return;
-            ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle, stillCurrent] {
+            ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle, stillCurrent,packageFullName] {
                 if(stillCurrent && !stillCurrent())return;
                 if (!family.empty()) {
-                    if (RequestPackageRemoval(family)) {
+                    if (RequestPackageRemoval(family,packageFullName)) {
                         DismissSearch();
                     }
                 } else if (uninstaller) {
@@ -19867,15 +20227,15 @@ void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& b
         auto flyout = sender.as<wuxc::MenuFlyout>();
         flyout.Items().Clear();
         if(item.installedOnly) {
-            const auto family=uninstall::RemovableFamily(item.installedFamily);
-            const auto uninstaller=family.empty()?uninstall::FindRegisteredUninstaller(
-                item.installedHive,item.installedView,item.installedKey,item.title):std::nullopt;
+            const auto family=item.installedProtected?std::wstring():uninstall::RemovableFamily(item.installedFamily);
+            const auto uninstaller=family.empty()&&!item.installedProtected?uninstall::FindRegisteredUninstaller(
+                item.installedHive,item.installedView,item.installedKey,item.installedName.empty()?item.title:item.installedName):std::nullopt;
             if(!family.empty() || uninstaller) {
                 AddAppUninstallItem(flyout,weakBtn,family,uninstaller,item.title,
                     [binding,title=item.title,identity=item.cardSignature] {
                         return binding->title==title && binding->cardSignature==identity;
-                    });
-            } else {
+                    },item.installedPackage);
+            } else if(!item.installedProtected) {
                 wuxc::MenuFlyoutItem manage;manage.Text(i18n::Text(i18n::Key::ManageInstalled));
                 auto icon=SearchFontIcon();icon.Glyph(L"\uE8A7");manage.Icon(icon);
                 KeepHandler(manage,manage.Click(winrt::auto_revoke,[](wf::IInspectable const&,wux::RoutedEventArgs const&){DismissSearchForLaunch([]{OpenResult(L"ms-settings:appsfeatures",false);});}));
@@ -20057,7 +20417,7 @@ void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& b
                     std::wstring family = viaAppId ? uninstall::RemovablePackageFamily(locTarget) : std::wstring();
                     std::optional<uninstall::Command> uninstaller;
                     if(family.empty() && !item.installedKey.empty()) {
-                        uninstaller=uninstall::FindRegisteredUninstaller(item.installedHive,item.installedView,item.installedKey,item.title);
+                        uninstaller=uninstall::FindRegisteredUninstaller(item.installedHive,item.installedView,item.installedKey,item.installedName.empty()?item.title:item.installedName);
                     } else if (family.empty()) {
                         std::wstring program = filePath;
                         if (std::wstring target = apps::ResolveLnkTarget(program); !target.empty()) {
@@ -20070,7 +20430,9 @@ void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& b
                         flyout.Items().Append(sep3);
 
                         AddAppUninstallItem(flyout,weakBtn,family,uninstaller,appTitle,
-                        [binding,title=item.title,target=item.openPath] {return binding->title==title && binding->openPath==target;});
+                        [binding,title=item.title,target=item.openPath,package=item.installedPackage] {
+                            return binding->title==title && binding->openPath==target && binding->installedPackage==package;
+                        },item.installedPackage);
                     }
                 }
             }
@@ -20097,7 +20459,7 @@ bool g_plainPoolAttached=false;
 uint64_t g_plainPoolSettings=0;
 
 bool PlainAppRow(const Row& row) {
-    return row.appIndex>=0 && row.sectionTitle.empty() && row.serviceName.empty() &&
+    return row.appIndex>=0 && (row.sectionTitle.empty() || row.installedOnly) && row.serviceName.empty() &&
         row.copyText.empty() && row.commandLine.empty() && row.customGlyph.empty() &&
         row.customIconText.empty() && !row.infoOnly && !row.isError && row.weatherDays.empty() && !row.speed && !row.usage;
 }
@@ -20139,7 +20501,9 @@ void UpdatePlainAppCard(PlainAppCard& slot,const Row& row) {
     const bool changed=card.appIndex<0 || card.title!=row.title || card.openPath!=row.openPath ||
         card.iconKey!=row.iconKey || card.cardSignature!=row.cardSignature || card.isSetting!=row.isSetting ||
         slot.binding->installedLocation!=row.installedLocation || slot.binding->installedFamily!=row.installedFamily ||
-        slot.binding->installedKey!=row.installedKey || slot.binding->installedHive!=row.installedHive || slot.binding->installedView!=row.installedView;
+        slot.binding->installedKey!=row.installedKey || slot.binding->installedHive!=row.installedHive || slot.binding->installedView!=row.installedView ||
+        slot.binding->installedProtected!=row.installedProtected || slot.binding->installedName!=row.installedName ||
+        slot.binding->installedPackage!=row.installedPackage;
     if(changed && g_contextMenuOpen)DismissSearchContextMenu();
     if(changed || card.hasBitmap!=!row.icon.empty()) {
         auto bitmap=IconBitmap(row.icon);
@@ -20175,6 +20539,8 @@ bool RenderPlainApps(const std::vector<Row>& rows,bool force) {
     if(rows.empty() || !std::all_of(rows.begin(),rows.end(),PlainAppRow))return false;
     size_t limit;
     {std::lock_guard lock(g_settingsMutex);limit=static_cast<size_t>(std::clamp(g_settings.maxAppResults,1,30));}
+    if(rows.front().installedOnly && std::all_of(rows.begin(),rows.end(),[](const Row& row){return row.installedOnly;}))
+        limit=rows.size(); // Only the batches explicitly requested for inventory.
     if(rows.size()>limit)return false;
     const auto settingsRevision=g_settingsRevision.load();
     if(!g_plainAppPool || g_plainPoolSettings!=settingsRevision || g_plainAppPool->size()>limit) {
@@ -20231,6 +20597,8 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
     const bool retainFileSelection=!force && appsChanged && g_shownQuery==snapshot->query && g_filesColumnActive;
     DWORD total = snapshot->total;
     size_t fileCount = snapshot->fileCount;
+    const bool resetInstalledScroll=appsChanged && g_shownQuery!=snapshot->query &&
+        !appNames.empty() && appNames.front().installedOnly;
     g_shownQuery = snapshot->query;
     if(!filesVisible) { files.clear(); fileCount=0; total=0; }
     if (fileCount == 0 && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
@@ -20251,6 +20619,7 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
 
     if (filesChanged) g_resultsList.Children().Clear();
     if (appsChanged) g_currentAppRows = appNames;
+    if(resetInstalledScroll && g_appsScroll)g_appsScroll.ChangeView(nullptr,0.0,nullptr,true);
 
     const bool suggestions=g_searchWindowWindow.load() && g_shownQuery.empty();
     // Update bottom status bar
@@ -20260,7 +20629,9 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
         wuxc::ToolTipService::SetToolTip(g_footerStatus,nullptr);
         if (!appNames.empty() && !appNames[0].sectionTitle.empty()) {
             auto status = appNames[0].sectionTitle;
-            if (appNames[0].onlinePending || !appNames[0].infoOnly) status += L" \u2022 " +
+            if(appNames[0].installedOnly) status+=L" \u00B7 "+std::wstring(i18n::Text(i18n::Key::Shown))+L": "+
+                std::to_wstring(appNames.size())+L" / "+std::to_wstring(appNames[0].installedTotal);
+            else if (appNames[0].onlinePending || !appNames[0].infoOnly) status += L" \u2022 " +
                 std::wstring(i18n::Text(appNames[0].onlinePending ? i18n::Key::OnlineLoading : i18n::Key::CopyHint));
             g_footerStatus.Text(winrt::hstring{status});
         } else if (suggestions) {
@@ -21263,6 +21634,7 @@ void QueueQuery(std::wstring text) {
         std::lock_guard<std::mutex> lock(g_queryMutex);
         g_pendingQuery = std::move(text);
         ++g_queryRevision;
+        g_installedBatchQuery.clear();g_installedVisibleLimit=kInstalledBatchSize;g_installedTotal=0;
         g_queryDirty.store(true);
     }
     g_queryWake.notify_all();
@@ -25093,8 +25465,8 @@ void SearchThreadMain() {
         }
 
         std::wstring qTrim = tools::Trim(query);
-        bool isIpCommand = false, isConflictCommand = false, isUsageCommand = false, validUsageCommand = false, isServicesCommand=false;
-        std::wstring serviceArgs;
+        bool isIpCommand = false, isConflictCommand = false, isUsageCommand = false, validUsageCommand = false, isServicesCommand=false,isInstalledCommand=false;
+        std::wstring serviceArgs,installedArgs;
         bool isExplicitWeb = query.starts_with(L"?");
         std::wstring webQuery;
         ResolvedWebQuery explicitWeb;
@@ -25125,7 +25497,9 @@ void SearchThreadMain() {
             isConflictCommand = command.kind == commands::Kind::Conflict;
             isUsageCommand = command.kind == commands::Kind::Usage;
             isServicesCommand = command.kind == commands::Kind::Services;
+            isInstalledCommand = command.kind == commands::Kind::Installed;
             if(isServicesCommand)serviceArgs=command.args;
+            if(isInstalledCommand)installedArgs=command.args;
             validUsageCommand = command.args.empty();
             onlineRequest = online::Parse(query, g_settings.weatherLocation, g_settings.weatherUnits,
                 g_settings.quoteCurrency, g_settings.onlineCards, g_settings.commandNames,
@@ -25195,31 +25569,50 @@ void SearchThreadMain() {
         } else {
             // A sum, a conversion or another base typed: worked out above the
             // apps (calc).
-            for (Row& r : calc::Rows(qTrim)) {
+            for (Row& r : isInstalledCommand?std::vector<Row>():calc::Rows(qTrim)) {
                 r.appIndex = nextAppIndex++;
                 appRows.push_back(std::move(r));
             }
-            auto matches=query.empty() ? appIndex->Suggest(static_cast<size_t>(maxApps),usage)
-                                       : appIndex->Search(query,static_cast<size_t>(maxApps),usage);
-            for (const apps::Match& m : matches) {
+            auto matches=isInstalledCommand ? appIndex->Search(installedArgs,std::numeric_limits<size_t>::max(),nullptr,apps::SearchScope::Installed)
+                : query.empty() ? appIndex->Suggest(static_cast<size_t>(maxApps),usage)
+                                : appIndex->Search(query,static_cast<size_t>(maxApps),usage);
+            size_t matchEnd=matches.size();
+            if(isInstalledCommand){
+                std::lock_guard lock(g_queryMutex);
+                if(g_queryRevision!=revision)continue;
+                if(g_installedBatchQuery!=query){g_installedBatchQuery=query;g_installedVisibleLimit=kInstalledBatchSize;}
+                g_installedTotal=matches.size();
+                matchEnd=std::min(matches.size(),g_installedVisibleLimit);
+            }
+            for(size_t matchIndex=0;matchIndex<matchEnd;++matchIndex) {
+                const auto& m=matches[matchIndex];
                 if (!m.app) {
                     continue;
                 }
                 Row row;
-                row.title = m.app->name;
+                row.title = isInstalledCommand&&!m.app->installedName.empty()?m.app->installedName:m.app->name;
                 row.matchScore = m.score;
                 row.matchRank = m.rank;
                 bool isSettingItem = m.app->isSetting;
                 row.isSetting = isSettingItem;
-                row.installedOnly=m.app->installedOnly;
+                row.installedOnly=isInstalledCommand || m.app->installedOnly;
+                row.installedProtected=m.app->inventoryOnly;row.installedName=m.app->installedName;
+                row.installedPackage=m.app->installedPackage;
                 row.installedLocation=m.app->installedLocation;row.installedFamily=m.app->installedFamily;row.installedKey=m.app->installedKey;
                 row.installedHive=m.app->installedHive;row.installedView=m.app->installedView;
+                if(isInstalledCommand){row.sectionTitle=i18n::Text(i18n::Key::InstalledApps);row.installedTotal=matches.size();}
 
                 bool canAdmin = true;
                 bool isFileTarget = false;
-                if(m.app->installedOnly) {
+                if(row.installedOnly) {
                     row.subtitle=m.app->installedPublisher;
                     if(!m.app->installedVersion.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedVersion;
+                    if(!m.app->installedArchitecture.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedArchitecture;
+                    if(!m.app->installedPackageType.empty()) {
+                        auto kind=i18n::Label(m.app->installedPackageType);
+                        if(!m.app->installedResourceId.empty())kind+=L" \u00B7 "+m.app->installedResourceId;
+                        row.subtitle=kind+(row.subtitle.empty()?L"":L"\n"+row.subtitle);
+                    }
                     row.cardSignature=L"installed:"+m.app->installedId;
                     canAdmin=false;
                 } else if (isSettingItem) {
@@ -25244,7 +25637,7 @@ void SearchThreadMain() {
                 }
                 row.canRunAsAdmin = canAdmin;
                 row.isFile = isFileTarget;
-                row.openPath = m.app->targetPath;
+                row.openPath = row.installedOnly?L"ms-settings:appsfeatures":m.app->targetPath;
                 row.appIndex = nextAppIndex++;
 
                 row.iconKey=apps::WarmIndex::AppKey(*m.app,iconPixels);
@@ -25253,10 +25646,15 @@ void SearchThreadMain() {
                     iconJobs.push_back({appIndex,m.app,row.iconKey,L"",iconPixels,0});
                 appRows.push_back(std::move(row));
             }
+            if(isInstalledCommand && appRows.empty()) {
+                Row row;row.sectionTitle=i18n::Text(i18n::Key::InstalledApps);
+                row.title=i18n::Text(i18n::Key::NoApps);row.customGlyph=L"\uE8A7";
+                row.infoOnly=true;row.canRunAsAdmin=false;appRows.push_back(std::move(row));
+            }
 
         }
 
-        if (!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isExplicitWeb && !customCommands.empty()) {
+        if (!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isInstalledCommand && !isExplicitWeb && !customCommands.empty()) {
             AddCustomCommandRows(&appRows, customCommands, query,
                                  static_cast<size_t>(maxApps), settingsRevision,
                                  iconPixels, &commandIconCache, usage);
@@ -25282,7 +25680,7 @@ void SearchThreadMain() {
             FileSearchRequest request;
             request.revision = revision;
             request.query = isExplicitWeb ? explicitWeb.queryTerm : query;
-            request.enabled = filesVisible && !isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !request.query.empty();
+            request.enabled = filesVisible && !isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isInstalledCommand && !request.query.empty();
             request.limit = maxFiles;
             request.filterNoise = filterNoise;
             request.excludedPaths = std::move(excludedPaths);
@@ -25572,163 +25970,171 @@ bool DeliverNativeSearchKey(SearchWindowInput const& input) {
     return SendInput(1, &event, sizeof(event)) == 1;
 }
 
-LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) try {
+LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) {
     if (code != HC_ACTION || g_searchWindowInputStop.load())
         return CallNextHookEx(nullptr, code, message, param);
+    // Other hooks already saw the physical key before this IME handoff.
+    // Deliver our replay to Windows without notifying those hooks again.
     const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
-    if (key.dwExtraInfo == kSearchWindowImeReplayTag)
-        return CallNextHookEx(nullptr, code, message, param);
-    const UINT vk = key.vkCode;
-    if (vk >= 256) return CallNextHookEx(nullptr, code, message, param);
-    const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-    const bool wasDown = (g_searchWindowKeyState[vk] & 0x80) != 0;
-    BYTE toggle = g_searchWindowKeyState[vk] & 1;
-    if (vk == VK_CAPITAL && down && !wasDown) toggle ^= 1;
-    g_searchWindowKeyState[vk] = (down ? 0x80 : 0) | toggle;
-    g_searchWindowKeyState[VK_SHIFT] = (g_searchWindowKeyState[VK_LSHIFT] | g_searchWindowKeyState[VK_RSHIFT]) & 0x80;
-    g_searchWindowKeyState[VK_CONTROL] = (g_searchWindowKeyState[VK_LCONTROL] | g_searchWindowKeyState[VK_RCONTROL]) & 0x80;
-    g_searchWindowKeyState[VK_MENU] = (g_searchWindowKeyState[VK_LMENU] | g_searchWindowKeyState[VK_RMENU]) & 0x80;
-    if (!down) {
-        if (std::exchange(g_searchWindowNativeKeyDown[vk], false)) {
-            g_searchWindowSwallowed[vk] = false;
-            HWND target = g_searchWindowWindow.load();
-            const HWND foreground = GetForegroundWindow();
-            // A physical release must still reach Windows if the user has
-            // switched away after a replayed key-down. Do not swallow it and
-            // leave the key logically pressed in another application.
-            const bool inHost = target && foreground &&
-                (foreground == target || GetAncestor(foreground, GA_ROOTOWNER) == target);
-            if (!inHost && foreground != CachedStartWindow() && !IsSearchHostWindow(foreground))
-                return CallNextHookEx(nullptr, code, message, param);
-            if (!target) target = g_hExplorerHelperWnd.load();
-            auto input = NativeSearchKey(key, false, true, g_searchWindowImeCaptureLayout ?
-                g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground));
-            if (target && QueueSearchWindowInput(target, std::move(input))) return 1;
+    if (key.dwExtraInfo == kSearchWindowImeReplayTag) return 0;
+    // Give keyboard remappers (for example EPKL/AutoHotkey) first refusal.
+    // They may replace a physical key with injected input. Capture only the
+    // surviving event, and never call the remaining hook chain twice.
+    const LRESULT downstream = CallNextHookEx(nullptr, code, message, param);
+    if (downstream) return downstream;
+    try {
+        const UINT vk = key.vkCode;
+        if (vk >= 256) return downstream;
+        const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+        const bool wasDown = (g_searchWindowKeyState[vk] & 0x80) != 0;
+        BYTE toggle = g_searchWindowKeyState[vk] & 1;
+        if (vk == VK_CAPITAL && down && !wasDown) toggle ^= 1;
+        g_searchWindowKeyState[vk] = (down ? 0x80 : 0) | toggle;
+        g_searchWindowKeyState[VK_SHIFT] = (g_searchWindowKeyState[VK_LSHIFT] | g_searchWindowKeyState[VK_RSHIFT]) & 0x80;
+        g_searchWindowKeyState[VK_CONTROL] = (g_searchWindowKeyState[VK_LCONTROL] | g_searchWindowKeyState[VK_RCONTROL]) & 0x80;
+        g_searchWindowKeyState[VK_MENU] = (g_searchWindowKeyState[VK_LMENU] | g_searchWindowKeyState[VK_RMENU]) & 0x80;
+        if (!down) {
+            if (std::exchange(g_searchWindowNativeKeyDown[vk], false)) {
+                g_searchWindowSwallowed[vk] = false;
+                HWND target = g_searchWindowWindow.load();
+                const HWND foreground = GetForegroundWindow();
+                // A physical release must still reach Windows if the user has
+                // switched away after a replayed key-down. Do not swallow it and
+                // leave the key logically pressed in another application.
+                const bool inHost = target && foreground &&
+                    (foreground == target || GetAncestor(foreground, GA_ROOTOWNER) == target);
+                if (!inHost && foreground != CachedStartWindow() && !IsSearchHostWindow(foreground))
+                    return downstream;
+                if (!target) target = g_hExplorerHelperWnd.load();
+                auto input = NativeSearchKey(key, false, true, g_searchWindowImeCaptureLayout ?
+                    g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground));
+                if (target && QueueSearchWindowInput(target, std::move(input))) return 1;
+            }
+            if (std::exchange(g_searchWindowSwallowed[vk], false)) return 1;
+            return downstream;
         }
-        if (std::exchange(g_searchWindowSwallowed[vk], false)) return 1;
-        return CallNextHookEx(nullptr, code, message, param);
-    }
-    // Let Windows deliver a registered hotkey. In particular, a bare key or
-    // Shift-only binding must not be consumed by Start's typing buffer first.
-    if (AlternativeShortcutMatches(g_alternativeShortcutActive.load(),vk,g_searchWindowKeyState)) {
-        g_searchWindowSwallowed[vk]=false;
-        return CallNextHookEx(nullptr,code,message,param);
-    }
-    HWND host = g_searchWindowWindow.load();
-    HWND inputTarget = host ? host : g_hExplorerHelperWnd.load();
-    HWND foreground = GetForegroundWindow();
-    const bool inHost = host && (foreground == host || GetAncestor(foreground,GA_ROOTOWNER)==host);
-    const bool menuActive=g_contextMenuOpen.load() && host && foreground &&
-        (inHost || GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr));
-    if(menuActive) {
-        const bool modified=(g_searchWindowKeyState[VK_CONTROL] | g_searchWindowKeyState[VK_MENU] |
-                             g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
-        if(vk==VK_ESCAPE && !modified) {
-            if(g_searchWindowSwallowed[vk] || PostMessageW(host,kSearchWindowDismissMenuMessage,0,0)) {
-                g_searchWindowSwallowed[vk]=true; return 1;
+        // Let Windows deliver a registered hotkey. In particular, a bare key or
+        // Shift-only binding must not be consumed by Start's typing buffer first.
+        if (AlternativeShortcutMatches(g_alternativeShortcutActive.load(),vk,g_searchWindowKeyState)) {
+            g_searchWindowSwallowed[vk]=false;
+            return downstream;
+        }
+        HWND host = g_searchWindowWindow.load();
+        HWND inputTarget = host ? host : g_hExplorerHelperWnd.load();
+        HWND foreground = GetForegroundWindow();
+        const bool inHost = host && (foreground == host || GetAncestor(foreground,GA_ROOTOWNER)==host);
+        const bool menuActive=g_contextMenuOpen.load() && host && foreground &&
+            (inHost || GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr));
+        if(menuActive) {
+            const bool modified=(g_searchWindowKeyState[VK_CONTROL] | g_searchWindowKeyState[VK_MENU] |
+                                 g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
+            if(vk==VK_ESCAPE && !modified) {
+                if(g_searchWindowSwallowed[vk] || PostMessageW(host,kSearchWindowDismissMenuMessage,0,0)) {
+                    g_searchWindowSwallowed[vk]=true; return 1;
+                }
+            }
+            // Arrows, Enter and Tab navigate the menu. Printable text and
+            // Backspace continue below, closing the menu and editing search.
+            if(vk==VK_RETURN || vk==VK_TAB || vk==VK_UP || vk==VK_DOWN ||
+               vk==VK_LEFT || vk==VK_RIGHT || vk==VK_HOME || vk==VK_END ||
+               vk==VK_PRIOR || vk==VK_NEXT) return downstream;
+        }
+        if(inHost && vk==VK_ESCAPE && g_searchWindowSwallowed[vk]) return 1;
+        const bool inShell = foreground && (foreground == CachedStartWindow() || IsSearchHostWindow(foreground));
+        const bool missingNativeFocus = host && foreground == host && g_isOverlayVisible.load() &&
+            !g_dragging.load() && !menuActive && !SearchWindowHasNativeFocus(host);
+        const bool handoff = g_searchWindowBuffered.load() || !g_searchWindowInputReady.load() ||
+                             g_searchWindowDeadKey || missingNativeFocus;
+        const bool menuTyping=g_searchWindowMenuTyping.load() && host && foreground &&
+            GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr);
+        if (!inputTarget || (!inShell && !menuActive && !menuTyping && !(host && foreground == host && handoff))) {
+            if (!inHost) ClearSearchWindowDeadKey();
+            g_searchWindowImeCaptureLayout = nullptr;
+            g_searchWindowSwallowed[vk] = false;
+            return downstream;
+        }
+        const bool ctrl = (g_searchWindowKeyState[VK_CONTROL] & 0x80) != 0;
+        const bool alt = (g_searchWindowKeyState[VK_MENU] & 0x80) != 0;
+        const bool altGr = (g_searchWindowKeyState[VK_RMENU] & 0x80) != 0;
+        const bool win = (g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
+        // Capture the opening paste before native Start closes and loses the chord.
+        // The UI thread calls TextBox.PasteFromClipboard; the hook never reads the
+        // clipboard, and a focused search box keeps its normal editing shortcuts.
+        const bool paste = ctrl && !alt && !win && vk == 'V' && !menuActive && !menuTyping;
+        if (!paste && (((ctrl || alt) && !altGr) || win))
+            return downstream;
+
+        // An IME must see opening keys before character translation. Once focus
+        // has settled, subsequent physical keys use the normal native input path.
+        // The destination thread can still report its previous layout while the
+        // first captured IME key is waiting for focus and profile activation.
+        HKL inputLayout = !inShell && g_searchWindowImeCaptureLayout &&
+            (g_searchWindowBuffered.load() || !g_searchWindowInputReady.load()) ?
+            g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground);
+        const bool editingKey = (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+            (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping);
+        const UINT mappedCharacter = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, inputLayout) & 0xffff;
+        const bool textKey = vk == VK_PROCESSKEY || (mappedCharacter >= 0x20 && mappedCharacter != 0x7f);
+        if (!paste && SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
+            auto input = NativeSearchKey(key, true, wasDown, inputLayout);
+            const bool wasMenuTyping = g_searchWindowMenuTyping.load();
+            if (menuActive) g_searchWindowMenuTyping = true;
+            if (QueueSearchWindowInput(inputTarget, std::move(input))) {
+                g_searchWindowImeCaptureLayout = inputLayout;
+                g_searchWindowNativeKeyDown[vk] = true;
+                g_searchWindowSwallowed[vk] = true;
+                return 1;
+            }
+            g_searchWindowMenuTyping = wasMenuTyping;
+            return downstream;
+        }
+        SearchWindowInput input;
+        if (paste) {
+            ClearSearchWindowDeadKey();
+            input.kind = SearchWindowInput::Paste;
+        } else if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+            (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
+            ClearSearchWindowDeadKey();
+            input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
+                         vk == VK_RETURN ? SearchWindowInput::Enter : SearchWindowInput::Escape;
+        } else {
+            HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout : inputLayout;
+            wchar_t chars[8]{};
+            int count;
+            if (vk == VK_PACKET) {
+                chars[0] = static_cast<wchar_t>(key.scanCode);
+                count = 1;
+            } else {
+                // A stateless translation preserves Shift, Caps Lock, AltGr and
+                // the active layout without changing native text input. Only a
+                // dead-key sequence uses this dedicated thread's compose state.
+                count = ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars,
+                                    ARRAYSIZE(chars), g_searchWindowDeadKey ? 0 : 4, layout);
+            }
+            if (count < 0) {
+                if (!g_searchWindowDeadKey)
+                    ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars, ARRAYSIZE(chars), 0, layout);
+                g_searchWindowDeadKey = true;
+                g_searchWindowDeadLayout = layout;
+                input.kind = SearchWindowInput::Show;
+            } else if (count > 0 && chars[0] >= 0x20 && chars[0] != 0x7f) {
+                g_searchWindowDeadKey = false;
+                input.text.assign(chars, std::min(count, static_cast<int>(ARRAYSIZE(chars))));
+            } else {
+                return downstream;
             }
         }
-        // Arrows, Enter and Tab navigate the menu. Printable text and
-        // Backspace continue below, closing the menu and editing search.
-        if(vk==VK_RETURN || vk==VK_TAB || vk==VK_UP || vk==VK_DOWN ||
-           vk==VK_LEFT || vk==VK_RIGHT || vk==VK_HOME || vk==VK_END ||
-           vk==VK_PRIOR || vk==VK_NEXT) return CallNextHookEx(nullptr,code,message,param);
-    }
-    if(inHost && vk==VK_ESCAPE && g_searchWindowSwallowed[vk]) return 1;
-    const bool inShell = foreground && (foreground == CachedStartWindow() || IsSearchHostWindow(foreground));
-    const bool missingNativeFocus = host && foreground == host && g_isOverlayVisible.load() &&
-        !g_dragging.load() && !menuActive && !SearchWindowHasNativeFocus(host);
-    const bool handoff = g_searchWindowBuffered.load() || !g_searchWindowInputReady.load() ||
-                         g_searchWindowDeadKey || missingNativeFocus;
-    const bool menuTyping=g_searchWindowMenuTyping.load() && host && foreground &&
-        GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr);
-    if (!inputTarget || (!inShell && !menuActive && !menuTyping && !(host && foreground == host && handoff))) {
-        if (!inHost) ClearSearchWindowDeadKey();
-        g_searchWindowImeCaptureLayout = nullptr;
-        g_searchWindowSwallowed[vk] = false;
-        return CallNextHookEx(nullptr, code, message, param);
-    }
-    const bool ctrl = (g_searchWindowKeyState[VK_CONTROL] & 0x80) != 0;
-    const bool alt = (g_searchWindowKeyState[VK_MENU] & 0x80) != 0;
-    const bool altGr = (g_searchWindowKeyState[VK_RMENU] & 0x80) != 0;
-    const bool win = (g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
-    // Capture the opening paste before native Start closes and loses the chord.
-    // The UI thread calls TextBox.PasteFromClipboard; the hook never reads the
-    // clipboard, and a focused search box keeps its normal editing shortcuts.
-    const bool paste = ctrl && !alt && !win && vk == 'V' && !menuActive && !menuTyping;
-    if (!paste && (((ctrl || alt) && !altGr) || win))
-        return CallNextHookEx(nullptr, code, message, param);
-
-    // An IME must see opening keys before character translation. Once focus
-    // has settled, subsequent physical keys use the normal native input path.
-    // The destination thread can still report its previous layout while the
-    // first captured IME key is waiting for focus and profile activation.
-    HKL inputLayout = !inShell && g_searchWindowImeCaptureLayout &&
-        (g_searchWindowBuffered.load() || !g_searchWindowInputReady.load()) ?
-        g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground);
-    const bool editingKey = (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
-        (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping);
-    const UINT mappedCharacter = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, inputLayout) & 0xffff;
-    const bool textKey = vk == VK_PROCESSKEY || (mappedCharacter >= 0x20 && mappedCharacter != 0x7f);
-    if (!paste && SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
-        auto input = NativeSearchKey(key, true, wasDown, inputLayout);
-        const bool wasMenuTyping = g_searchWindowMenuTyping.load();
-        if (menuActive) g_searchWindowMenuTyping = true;
-        if (QueueSearchWindowInput(inputTarget, std::move(input))) {
-            g_searchWindowImeCaptureLayout = inputLayout;
-            g_searchWindowNativeKeyDown[vk] = true;
-            g_searchWindowSwallowed[vk] = true;
-            return 1;
+        const bool wasMenuTyping=g_searchWindowMenuTyping.load();
+        if(menuActive) g_searchWindowMenuTyping=true;
+        if (!QueueSearchWindowInput(inputTarget, std::move(input))) {
+            if(menuActive) g_searchWindowMenuTyping=wasMenuTyping;
+            return downstream;
         }
-        g_searchWindowMenuTyping = wasMenuTyping;
-        return CallNextHookEx(nullptr, code, message, param);
+        g_searchWindowSwallowed[vk] = true;
+        return 1;
+    } catch (...) {
+        return downstream;
     }
-    SearchWindowInput input;
-    if (paste) {
-        ClearSearchWindowDeadKey();
-        input.kind = SearchWindowInput::Paste;
-    } else if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
-        (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
-        ClearSearchWindowDeadKey();
-        input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
-                     vk == VK_RETURN ? SearchWindowInput::Enter : SearchWindowInput::Escape;
-    } else {
-        HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout : inputLayout;
-        wchar_t chars[8]{};
-        int count;
-        if (vk == VK_PACKET) {
-            chars[0] = static_cast<wchar_t>(key.scanCode);
-            count = 1;
-        } else {
-            // A stateless translation preserves Shift, Caps Lock, AltGr and
-            // the active layout without changing native text input. Only a
-            // dead-key sequence uses this dedicated thread's compose state.
-            count = ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars,
-                                ARRAYSIZE(chars), g_searchWindowDeadKey ? 0 : 4, layout);
-        }
-        if (count < 0) {
-            if (!g_searchWindowDeadKey)
-                ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars, ARRAYSIZE(chars), 0, layout);
-            g_searchWindowDeadKey = true;
-            g_searchWindowDeadLayout = layout;
-            input.kind = SearchWindowInput::Show;
-        } else if (count > 0 && chars[0] >= 0x20 && chars[0] != 0x7f) {
-            g_searchWindowDeadKey = false;
-            input.text.assign(chars, std::min(count, static_cast<int>(ARRAYSIZE(chars))));
-        } else {
-            return CallNextHookEx(nullptr, code, message, param);
-        }
-    }
-    const bool wasMenuTyping=g_searchWindowMenuTyping.load();
-    if(menuActive) g_searchWindowMenuTyping=true;
-    if (!QueueSearchWindowInput(inputTarget, std::move(input))) {
-        if(menuActive) g_searchWindowMenuTyping=wasMenuTyping;
-        return CallNextHookEx(nullptr, code, message, param);
-    }
-    g_searchWindowSwallowed[vk] = true;
-    return 1;
-} catch (...) {
-    return CallNextHookEx(nullptr, code, message, param);
 }
 
 DWORD WINAPI SearchWindowInputThreadProc(void*) {
