@@ -11,6 +11,8 @@
 
 // ==WindhawkModReadme==
 /*
+![Background Dimmer](https://i.imgur.com/HvfnpFn.png)
+
 # Background Dimmer
 
 Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.
@@ -21,7 +23,7 @@ The dimming layer can be a solid tint, checkerboard, horizontal, vertical or dia
 
 The look is tuned in the mod's own **configuration window**, where every change shows up immediately on screen. Open it with the **configuration hotkey** (**Win+Ctrl+Alt+D** by default, changeable in the mod settings).
 
-The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved.
+The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.
 
 Changes made in the configuration window are saved automatically. Dimming can be turned off with the **Active** checkbox in the window, or with an optional on/off hotkey.
 
@@ -131,6 +133,7 @@ bool g_configHotkeyActive;
 bool g_savePending;
 ULONG_PTR g_gdiplusToken;
 HICON g_icon;
+bool g_iconExtracted;  // false when g_icon is the shared IDI_APPLICATION icon, which must not be destroyed
 
 constexpr wchar_t kMainClass[] = L"BackgroundDimmer_Main";
 constexpr wchar_t kOverlayClass[] = L"BackgroundDimmer_Overlay";
@@ -459,9 +462,11 @@ void Reposition() {
     }
     ShowOverlay(true);
     // Below the root owner, so a dialog and the window that owns it stay lit together.
-    HWND root = GetAncestor(fg, GA_ROOTOWNER);
-    if (!root)
-        root = fg;
+    // Stops at the last visible owner: hidden owners (WinForms ShowInTaskbar=false, Java dialogs) aren't raised
+    // with the window they own, so placing the layer below one would leave everything in between undimmed.
+    HWND root = fg;
+    for (HWND owner; (owner = GetWindow(root, GW_OWNER)) && IsWindowVisible(owner);)
+        root = owner;
     if (GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOPMOST) {
         // Inserting the layer behind a topmost window would make it topmost too; go to the top of the normal band instead.
         RaiseOverlayToTop();
@@ -483,9 +488,8 @@ HICON LoadSystemIcon(int index, int size) {
     GetSystemDirectoryW(path, MAX_PATH);
     wcscat_s(path, L"\\imageres.dll");
     HICON icon = nullptr;
-    if (FAILED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) || !icon)
-        icon = LoadIconW(nullptr, IDI_APPLICATION);
-    return icon;
+    g_iconExtracted = SUCCEEDED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) && icon;
+    return g_iconExtracted ? icon : LoadIconW(nullptr, IDI_APPLICATION);
 }
 
 // ───────────── Configuration window ─────────────
@@ -965,7 +969,8 @@ DWORD WINAPI ThreadProc(void*) {
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_BAR_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&icc);
     GdiplusStartupInputFlat gdiplusInput = {1, nullptr, FALSE, FALSE};
-    GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
+    if (GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != 0)
+        Wh_Log(L"GdiplusStartup failed: the Image pattern falls back to a solid tint");
 
     g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, GetDpiForSystem()));
 
@@ -988,6 +993,8 @@ DWORD WINAPI ThreadProc(void*) {
         FitOverlay();
         g_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0,
                                  WINEVENT_OUTOFCONTEXT);
+        // Safety net for z-order changes no WinEvent reports, such as the active window being lowered or made
+        // topmost without the foreground window changing.
         SetTimer(g_hwndMain, TIMER_REPOSITION, 250, nullptr);
         ApplyModSettings(false);
         Reposition();
@@ -1013,7 +1020,7 @@ DWORD WINAPI ThreadProc(void*) {
         DeleteObject(g_brushBitmap);
     g_brush = nullptr;
     g_brushBitmap = nullptr;
-    if (g_icon)
+    if (g_icon && g_iconExtracted)
         DestroyIcon(g_icon);
     UnregisterClassW(kConfigClass, inst);
     UnregisterClassW(kOverlayClass, inst);
