@@ -40,14 +40,19 @@ Requirements:
 
 Icon underline (experimental): the "Icon underline" section adds a line under
 the button's icon with the same rule, for taskbars that hide their labels or
-as a stronger cue next to the label. Its thickness, width, distance from the
-icon, color and opacity are configurable; the color can differ between the
-light and dark theme, can be a horizontal gradient, and defaults to the system
-accent color. Icons aren't text, so this line is a composition visual attached
-to the icon element; it follows the icon's size and position without touching
-the taskbar's layout. With hidden labels it relies on the view-model symbols
-described below: on builds where they can't be resolved, the title fallback
-has no label text to work with, and those buttons stay plain.
+as a stronger cue next to the label. Thickness, width, distance from the icon,
+corner radius, color and opacity are configurable. The color can differ
+between the light and dark theme, can be a horizontal gradient, and defaults
+to the system accent color. Icons aren't text, so this line is a composition
+visual attached to the icon element; it follows the icon's size and position
+without touching the taskbar's layout. With hidden labels it relies on the
+view-model symbols described below: on builds where they can't be resolved,
+the title fallback has no label text to work with, and those buttons stay
+plain.
+
+Hide the running indicator: hides the taskbar's own indicator under running
+buttons, so that the underline is the only cue. Independent of the icon
+underline.
 
 How it works:
 
@@ -66,7 +71,10 @@ How it works:
   letter. It is removed when the mod is disabled.
 * The icon underline is a `SpriteVisual` attached to the `Image#Icon` element
   with `ElementCompositionPreview::SetElementChildVisual`, sized relative to
-  the icon so it needs no layout work. It is removed when the mod is disabled.
+  the icon so it needs no layout work; rounded corners are a geometric clip
+  whose geometry follows the icon's size. The running indicator is hidden
+  through its element's composition visual, so the taskbar's visual states
+  are left untouched. Both are undone when the mod is disabled.
 * On builds where the view-model symbols can't be resolved, the mod falls back
   to matching label text against window titles, which is exact for "Never
   combine" but blind to combined groups.
@@ -108,6 +116,11 @@ How it works:
   $description: >-
     Window-state events are coalesced for this long before the buttons are
     re-evaluated. Win+M and Win+D fire dozens of events at once.
+- hideRunningIndicator: false
+  $name: Hide the running indicator
+  $description: >-
+    Hides the taskbar's own indicator under running buttons, so the underline
+    is the only cue. Works with or without the icon underline.
 - iconUnderline:
   - enabled: false
     $name: Enabled
@@ -135,6 +148,11 @@ How it works:
       Leave empty to use the system accent color.
   - opacity: 100
     $name: Opacity (%)
+  - cornerRadius: 1
+    $name: Corner radius (px)
+    $description: >-
+      0 for square ends. Values above half the thickness are clamped, so a
+      radius of at least half the thickness gives a pill.
   $name: Icon underline (experimental)
 */
 // ==/WindhawkModSettings==
@@ -213,6 +231,7 @@ struct IconUnderlineSettings {
     std::vector<winrt::Windows::UI::Color> lightColors;
     std::vector<winrt::Windows::UI::Color> darkColors;
     float opacity;
+    float cornerRadius;
 };
 
 // Read on the taskbar thread and the event thread; written on the taskbar
@@ -225,6 +244,7 @@ struct {
     bool includeActive;
     bool cloakedIsHidden;
     int refreshDelayMs;
+    bool hideRunningIndicator;
     IconUnderlineSettings iconUnderline;
 } g_settings;
 
@@ -349,6 +369,8 @@ void LoadSettings() {
 
     g_settings.refreshDelayMs =
         ClampInt(Wh_GetIntSetting(L"refreshDelayMs"), 10, 2000);
+    g_settings.hideRunningIndicator =
+        Wh_GetIntSetting(L"hideRunningIndicator") != 0;
 
     IconUnderlineSettings& icon = g_settings.iconUnderline;
     icon.enabled = Wh_GetIntSetting(L"iconUnderline.enabled") != 0;
@@ -363,6 +385,11 @@ void LoadSettings() {
     ParseIconColorSetting(color.get(), &icon);
     icon.opacity =
         ClampInt(Wh_GetIntSetting(L"iconUnderline.opacity"), 0, 100) / 100.0f;
+    icon.cornerRadius = static_cast<float>(
+        ClampInt(Wh_GetIntSetting(L"iconUnderline.cornerRadius"), 0, 10));
+    if (icon.cornerRadius > icon.thickness / 2.0f) {
+        icon.cornerRadius = icon.thickness / 2.0f;
+    }
 }
 
 // ============================================================================
@@ -405,6 +432,10 @@ std::unordered_map<void*, LabelEntry> g_labels;
 // detached when the mod unloads. The visual itself is not kept here; it is
 // found again through the element and recognized by its Comment.
 std::unordered_map<void*, winrt::weak_ref<Xaml::Controls::Image>> g_icons;
+
+// Every RunningIndicator element we hid, so it can be shown again when the
+// option is turned off or the mod unloads.
+std::unordered_map<void*, winrt::weak_ref<Xaml::UIElement>> g_indicators;
 
 // The icon colors in use, resolved once and kept until the settings, the
 // system theme or the accent color change. The accent color is tracked with
@@ -1167,6 +1198,32 @@ Xaml::Controls::Image FindIconImage(const Xaml::DependencyObject& root) {
     return fallback;
 }
 
+// The button's running indicator (`Rectangle#RunningIndicator`, a Border on
+// some builds), found by name.
+Xaml::UIElement FindRunningIndicator(const Xaml::DependencyObject& root,
+                                     int depth = 0) {
+    if (depth > 12) {
+        return nullptr;
+    }
+
+    int count = Xaml::Media::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; i++) {
+        auto child = Xaml::Media::VisualTreeHelper::GetChild(root, i);
+
+        if (auto element = child.try_as<Xaml::FrameworkElement>()) {
+            if (element.Name() == L"RunningIndicator") {
+                return element;
+            }
+        }
+
+        if (auto found = FindRunningIndicator(child, depth + 1)) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
 // The TaskListButton that owns a LabelControl, or null.
 Xaml::FrameworkElement FindOwningTaskListButton(
     const Xaml::DependencyObject& element) {
@@ -1446,7 +1503,10 @@ void ApplyUnderline(const Xaml::Controls::TextBlock& label, bool underline) {
 // position are expressed relative to the element (RelativeSizeAdjustment /
 // RelativeOffsetAdjustment), so it follows the icon through resizes and DPI
 // changes without any layout code or SizeChanged handlers, and it never
-// enters the taskbar's own layout.
+// enters the taskbar's own layout. Rounded corners are a geometric clip whose
+// geometry is bound to the icon's size by an expression. The visual, its
+// brush and its clip are recognized by their Comment, so nothing but weak
+// element references needs to be kept.
 
 // Marks the visuals this mod created, so they can be told apart from a child
 // visual another mod may have attached to the same element.
@@ -1583,10 +1643,56 @@ Composition::SpriteVisual GetOrCreateIconVisual(
 }
 
 // Applies the current icon-underline settings and visibility to `sprite`.
-// Cheap enough to run on every evaluation (property sets only; the brush is
-// rebuilt just when its colors change), which also makes settings and theme
-// changes take effect on the next pass without bookkeeping.
+// Rounds the line's corners with a geometric clip. The sprite's Size holds
+// only the absolute part of its relative size, so the clip geometry can't
+// copy it; instead an expression computes the line's real size from the icon
+// element's visual, which the compositor re-evaluates whenever the icon is
+// resized. Like the brush, the clip is rebuilt only when its parameters
+// change, recorded in its Comment; radius 0 means no clip.
+void EnsureIconClip(const Composition::SpriteVisual& sprite,
+                    const Composition::Visual& iconVisual) {
+    const IconUnderlineSettings& s = g_settings.iconUnderline;
+
+    auto current = sprite.Clip();
+    if (s.cornerRadius <= 0.0f) {
+        if (current) {
+            sprite.Clip(nullptr);
+        }
+        return;
+    }
+
+    wchar_t signature[64];
+    swprintf_s(signature, L"%g,%g,%g", s.widthFraction, s.thickness,
+               s.cornerRadius);
+    if (current && current.Comment() == signature) {
+        return;
+    }
+
+    auto compositor = sprite.Compositor();
+    auto geometry = compositor.as<Composition::ICompositor5>()
+                        .CreateRoundedRectangleGeometry();
+    geometry.CornerRadius({s.cornerRadius, s.cornerRadius});
+
+    auto size = compositor.CreateExpressionAnimation(
+        L"Vector2(icon.Size.X * width, thickness)");
+    size.SetReferenceParameter(L"icon", iconVisual);
+    size.SetScalarParameter(L"width", s.widthFraction);
+    size.SetScalarParameter(L"thickness", s.thickness);
+    geometry.StartAnimation(L"Size", size);
+
+    auto clip =
+        compositor.as<Composition::ICompositor6>().CreateGeometricClip(geometry);
+    clip.Comment(signature);
+    sprite.Clip(clip);
+}
+
+// Applies the current icon-underline settings and visibility to `sprite`.
+// Cheap enough to run on every evaluation (property sets only; the brush and
+// the clip are rebuilt just when their parameters change), which also makes
+// settings and theme changes take effect on the next pass without
+// bookkeeping.
 void ConfigureIconVisual(const Composition::SpriteVisual& sprite,
+                         const Xaml::Controls::Image& icon,
                          bool visible) {
     const IconUnderlineSettings& s = g_settings.iconUnderline;
 
@@ -1600,6 +1706,8 @@ void ConfigureIconVisual(const Composition::SpriteVisual& sprite,
     sprite.Opacity(s.opacity);
 
     EnsureIconBrush(sprite, ResolveIconColors());
+    EnsureIconClip(
+        sprite, Xaml::Hosting::ElementCompositionPreview::GetElementVisual(icon));
 
     sprite.IsVisible(visible);
 }
@@ -1656,6 +1764,58 @@ void RemoveAllIconVisuals() {
            removed, gone);
 }
 
+// ----------------------------------------------------------------------------
+// Running indicator
+// ----------------------------------------------------------------------------
+//
+// The indicator is driven by the button's visual states (color, width,
+// visibility per state), so its XAML properties aren't a safe place to hide
+// it: the next state change would put them back, and a value left behind on
+// unload could show an indicator that shouldn't be there. Its hand-off
+// composition visual is safe: XAML never touches IsVisible on it, and setting
+// it back to true hands control to XAML completely, whatever state the button
+// is in by then.
+
+void HideRunningIndicator(const Xaml::FrameworkElement& button) {
+    auto indicator = FindRunningIndicator(button);
+    if (!indicator) {
+        LogOnce(L"Running indicator not found in a TaskListButton");
+        return;
+    }
+
+    try {
+        Xaml::Hosting::ElementCompositionPreview::GetElementVisual(indicator)
+            .IsVisible(false);
+        g_indicators[winrt::get_abi(indicator)] = winrt::make_weak(indicator);
+    } catch (const winrt::hresult_error& e) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            Wh_Log(L"Running indicator error: %08X",
+                   static_cast<unsigned int>(e.code()));
+        }
+    }
+}
+
+// Shows every hidden indicator again (option turned off, or unload).
+void RestoreAllRunningIndicators() {
+    int restored = 0;
+    for (auto& [key, weakIndicator] : g_indicators) {
+        try {
+            if (auto indicator = weakIndicator.get()) {
+                Xaml::Hosting::ElementCompositionPreview::GetElementVisual(
+                    indicator)
+                    .IsVisible(true);
+                restored++;
+            }
+        } catch (...) {
+            Wh_Log(L"Running indicator restore error");
+        }
+    }
+    g_indicators.clear();
+    Wh_Log(L"Running indicators restored: %d", restored);
+}
+
 void ApplyIconUnderline(const Xaml::FrameworkElement& button, bool underline) {
     auto icon = FindIconImage(button);
     if (!icon) {
@@ -1665,7 +1825,7 @@ void ApplyIconUnderline(const Xaml::FrameworkElement& button, bool underline) {
 
     try {
         if (auto sprite = GetOrCreateIconVisual(icon)) {
-            ConfigureIconVisual(sprite, underline);
+            ConfigureIconVisual(sprite, icon, underline);
         }
     } catch (const winrt::hresult_error& e) {
         static bool logged = false;
@@ -1687,6 +1847,12 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
         return;
     }
 
+    // Independent of the underline decision, and re-applied on every
+    // evaluation, since the hooked state updates run right before this.
+    if (g_settings.hideRunningIndicator) {
+        HideRunningIndicator(button);
+    }
+
     // The template may not be applied yet (fresh button) or the label may
     // have been collapsed/recreated (combine setting toggled); re-finding it
     // every time keeps us honest. With labels hidden there is no label at
@@ -1701,7 +1867,8 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
     ButtonWindows resolved = ResolveButtonWindows(button);
 
     // A recycled button isn't shown; leave it alone until the repeater reuses
-    // it (its text changes then, which re-evaluates it).
+    // it (its text changes then and its visual states are updated, both of
+    // which re-evaluate it).
     if (resolved.state == ButtonWindowsState::kUnrealized) {
         return;
     }
@@ -1831,19 +1998,29 @@ void RefreshTreesOnCurrentThread() {
             ++it;
         }
     }
+
+    for (auto it = g_indicators.begin(); it != g_indicators.end();) {
+        if (!it->second.get()) {
+            it = g_indicators.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void WINAPI RefreshTreesProc(void*) {
     RefreshTreesOnCurrentThread();
 }
 
-// Removes every label's subscription and decoration and every icon visual,
-// and forgets all trees. Runs synchronously on the taskbar thread while
-// unloading, so no delegate implemented by the mod stays registered
+// Undoes everything on the taskbar thread while unloading: detaches the icon
+// visuals, stops the color tracking, shows the running indicators again,
+// removes every label's subscription and decoration, and forgets all trees.
+// Runs synchronously, so no delegate implemented by the mod stays registered
 // afterwards.
 void WINAPI RestoreAndClearProc(void*) {
     RemoveAllIconVisuals();
     StopTrackingColors();
+    RestoreAllRunningIndicators();
 
     for (auto& [key, entry] : g_labels) {
         try {
@@ -2574,6 +2751,10 @@ void WINAPI ReloadSettingsProc(void*) {
     g_iconColors.reset();
     if (!g_settings.iconUnderline.enabled) {
         RemoveAllIconVisuals();
+        StopTrackingColors();
+    }
+    if (!g_settings.hideRunningIndicator) {
+        RestoreAllRunningIndicators();
     }
     RefreshTreesOnCurrentThread();
 }
