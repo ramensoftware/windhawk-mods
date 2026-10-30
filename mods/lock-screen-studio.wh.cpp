@@ -5,9 +5,9 @@
 // @version         0.0.1
 // @author          Mitsu
 // @github          https://github.com/MitsuSarkar
-// @license         MIT AND OFL-1.1
+// @license         MIT
 // @include         LockApp.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
