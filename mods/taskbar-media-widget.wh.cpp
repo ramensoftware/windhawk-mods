@@ -368,7 +368,7 @@ struct ClassicDecodedImage {
 };
 
 
-struct WidgetUiState {
+struct WidgetUiState : std::enable_shared_from_this<WidgetUiState> {
     HWND taskbarWnd = nullptr;
     Grid widgetGrid{nullptr};
     FrameworkElement injectionParent{nullptr};
@@ -440,6 +440,8 @@ struct WidgetUiState {
     double progressWidth = -1;
     bool hostSubclassed = false;
     std::atomic<bool> destroyed = false;
+    std::atomic<bool> updateRequested = true;
+    std::atomic<bool> retryAttachment = true;
     HWND nativeTaskList = nullptr;
     RECT nativeArea{};
     bool haveNativeArea = false;
@@ -457,10 +459,14 @@ WidgetUiState& Ui() {
 }
 
 class WidgetScope {
+    // A nested destruction callback may retire this instance while an outer
+    // window/event callback is still using it.
+    std::shared_ptr<WidgetUiState> keepAlive_;
     WidgetUiState* previous_;
 public:
     explicit WidgetScope(WidgetUiState& state)
-        : previous_(std::exchange(g_currentWidget, &state)) {}
+        : keepAlive_(state.weak_from_this().lock()),
+          previous_(std::exchange(g_currentWidget, &state)) {}
     ~WidgetScope() { g_currentWidget = previous_; }
     WidgetScope(WidgetScope const&) = delete;
     WidgetScope& operator=(WidgetScope const&) = delete;
@@ -468,9 +474,10 @@ public:
 
 template<class Handler>
 auto BindWidgetHandler(Handler handler) {
-    auto* state = &Ui();
-    return [state, handler = std::move(handler)](auto const& sender, auto const& args) {
-        if (g_unloading || g_workersStopping || state->destroyed) return;
+    auto weak = Ui().weak_from_this();
+    return [weak, handler = std::move(handler)](auto const& sender, auto const& args) {
+        auto state = weak.lock();
+        if (!state || g_unloading || g_workersStopping || state->destroyed) return;
         WidgetScope scope(*state);
         handler(sender, args);
     };
@@ -486,6 +493,12 @@ HANDLE g_taskbarWakeEvent = nullptr;
 std::atomic<bool> g_taskbarDiscoveryRequested = true;
 HINSTANCE g_widgetModule = nullptr;
 constexpr PCWSTR kClassicWidgetClass = L"WindhawkTaskbarMediaWidgetClassic";
+
+void RequestWidgetUpdate(WidgetUiState& ui) {
+    if (!ui.updateRequested.exchange(true) && g_taskbarWakeEvent) {
+        SetEvent(g_taskbarWakeEvent);
+    }
+}
 
 enum class CommandType {
     OpenMediaApp,
@@ -1997,6 +2010,15 @@ bool IsExecutableAppId(std::wstring const& appId) {
            appId.find_first_of(L"\\/:\"") == std::wstring::npos;
 }
 
+bool IsMediaAppWindow(HWND hwnd) {
+    if (GetWindow(hwnd, GW_OWNER) ||
+        (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return false;
+    if (IsWindowVisible(hwnd)) return true;
+    // A titled hidden helper (for example GDI+) is not a player window.
+    return (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION &&
+           GetWindowTextLengthW(hwnd) > 0;
+}
+
 bool ActivateExeMediaWindow(std::wstring const& appId) {
     // Some desktop players expose only an executable name, not an AUMID.
     // Match an existing process window; never feed an arbitrary session ID
@@ -2005,10 +2027,8 @@ bool ActivateExeMediaWindow(std::wstring const& appId) {
     struct Search { std::wstring const* name; HWND window = nullptr; } search{&appId};
     EnumWindows([](HWND hwnd, LPARAM parameter) CALLBACK -> BOOL {
         auto& search = *reinterpret_cast<Search*>(parameter);
-        if (GetWindow(hwnd, GW_OWNER) ||
-            (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
+        if (!IsMediaAppWindow(hwnd)) return TRUE;
         bool visible = IsWindowVisible(hwnd);
-        if (!visible && !GetWindowTextLengthW(hwnd)) return TRUE;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -3434,6 +3454,10 @@ bool InjectWidgetGrid() {
                                : Thickness{4, 0, 4, 0});
         Ui().widgetGrid = widget;
         Ui().injectionParent = targetElement;
+        TrackWidgetEvent(widget.Unloaded(auto_revoke, BindWidgetHandler(
+            [](IInspectable const&, RoutedEventArgs const&) {
+                RequestWidgetUpdate(Ui());
+            })));
 
         int insertCol = -1;
         int insertRow = -1;
@@ -4469,6 +4493,7 @@ LRESULT CALLBACK NativeTaskListSubclass(HWND hwnd, UINT message, WPARAM wp,
         ui.reservedExtent = 0;
         if (ui.classicWidgetWnd) ShowWindow(ui.classicWidgetWnd, SW_HIDE);
         SetClassicWidgetVisible(false);
+        RequestWidgetUpdate(ui);
         return DefSubclassProc(hwnd, message, wp, lp);
     }
     LRESULT result = DefSubclassProc(hwnd, message, wp, lp);
@@ -4502,6 +4527,9 @@ LRESULT CALLBACK NativeTaskListSubclass(HWND hwnd, UINT message, WPARAM wp,
     }
     if (message == WM_WINDOWPOSCHANGED && !ui.changingNativeArea) {
         PlaceClassicWidget();
+        if (!(reinterpret_cast<WINDOWPOS*>(lp)->flags & SWP_NOSIZE)) {
+            RequestWidgetUpdate(ui);
+        }
     }
     return result;
 }
@@ -4528,9 +4556,22 @@ void DetachClassicTaskList() {
 
 std::vector<HWND> FindTaskbarWindows();
 
+HWND FindTaskbarXamlBridge(HWND taskbar) {
+    return FindWindowExW(taskbar, nullptr,
+                        L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+}
+
+bool IsVisibleNativeTaskList(HWND host, PCWSTR childClass) {
+    HWND child = host ? FindWindowExW(host, nullptr, childClass, nullptr) : nullptr;
+    // Inspect the controls' own styles, not ancestor visibility (auto-hide).
+    return child && (GetWindowLongPtrW(host, GWL_STYLE) & WS_VISIBLE) &&
+           (GetWindowLongPtrW(child, GWL_STYLE) & WS_VISIBLE);
+}
+
 HWND FindClassicTaskListHost(HWND taskbar) {
+    if (FindTaskbarXamlBridge(taskbar)) return nullptr;
     HWND rebar = FindWindowExW(taskbar, nullptr, L"ReBarWindow32", nullptr);
-    if (rebar && FindWindowExW(rebar, nullptr, L"MSTaskSwWClass", nullptr)) {
+    if (IsVisibleNativeTaskList(rebar, L"MSTaskSwWClass")) {
         return rebar;
     }
     // A secondary WorkerW is not sufficient evidence of the classic shell.
@@ -4540,16 +4581,16 @@ HWND FindClassicTaskListHost(HWND taskbar) {
         wchar_t name[64]{};
         GetClassNameW(candidate, name, ARRAYSIZE(name));
         if (!_wcsicmp(name, L"Shell_TrayWnd")) {
+            if (FindTaskbarXamlBridge(candidate)) return nullptr;
             primaryRebar = FindWindowExW(candidate, nullptr, L"ReBarWindow32", nullptr);
             break;
         }
     }
-    if (!primaryRebar ||
-        !FindWindowExW(primaryRebar, nullptr, L"MSTaskSwWClass", nullptr)) {
+    if (!IsVisibleNativeTaskList(primaryRebar, L"MSTaskSwWClass")) {
         return nullptr;
     }
     HWND worker = FindWindowExW(taskbar, nullptr, L"WorkerW", nullptr);
-    if (worker && FindWindowExW(worker, nullptr, L"MSTaskListWClass", nullptr)) {
+    if (IsVisibleNativeTaskList(worker, L"MSTaskListWClass")) {
         return worker;
     }
     return nullptr;
@@ -4898,6 +4939,7 @@ LRESULT CALLBACK TaskbarWidgetSubclass(HWND hwnd, UINT message, WPARAM wp,
         if (g_taskbarWakeEvent) SetEvent(g_taskbarWakeEvent);
     } else if (message == WM_DISPLAYCHANGE || message == WM_DPICHANGED ||
                message == WM_SETTINGCHANGE || message == WM_THEMECHANGED) {
+        RequestWidgetUpdate(ui);
         g_taskbarDiscoveryRequested = true;
         if (g_taskbarWakeEvent) SetEvent(g_taskbarWakeEvent);
     }
@@ -4907,6 +4949,7 @@ LRESULT CALLBACK TaskbarWidgetSubclass(HWND hwnd, UINT message, WPARAM wp,
 void TickWidgetInstance(WidgetUiState& ui, bool rebuildIdle) {
     WidgetScope scope(ui);
     if (ui.destroyed) return;
+    ui.retryAttachment = true;
     if (!ui.hostSubclassed) {
         if (!SetWindowSubclass(ui.taskbarWnd, TaskbarWidgetSubclass,
                                reinterpret_cast<UINT_PTR>(&ui),
@@ -4919,7 +4962,14 @@ void TickWidgetInstance(WidgetUiState& ui, bool rebuildIdle) {
         if (ui.modernWidgetAttached || ui.nativeTaskList || ui.classicWidgetWnd) {
             CleanupWidgetInstance();
         }
+        ui.retryAttachment = false;
         return;
+    }
+    // The legacy rebar can coexist with XAML, or precede it during startup.
+    // Re-evaluate an attached classic host when the bridge/controls change.
+    if (ui.classicWidgetWnd &&
+        (!ui.nativeTaskList || ui.nativeTaskList != FindClassicTaskListHost(ui.taskbarWnd))) {
+        CleanupWidgetInstance();
     }
     TaskbarEdge edge = DetectTaskbarEdge(ui.taskbarWnd);
     int thickness = TaskbarThicknessPx(ui.taskbarWnd, edge);
@@ -4932,8 +4982,8 @@ void TickWidgetInstance(WidgetUiState& ui, bool rebuildIdle) {
         if (g_taskbarHooksInstalled && InjectWidgetGrid()) {
             if (ui.classicWidgetWnd) DestroyWindow(ui.classicWidgetWnd);
         } else {
-            // Native controls identify the classic backend, not a failed XAML
-            // lookup or a timeout during Windows 11 taskbar reconstruction.
+            // This only succeeds without a XAML bridge and with visible native
+            // task controls. Missing XAML symbols never select the fallback.
             AttachClassicWidget();
         }
     }
@@ -4948,55 +4998,118 @@ void TickWidgetInstance(WidgetUiState& ui, bool rebuildIdle) {
             if (ui.classicWidgetWnd) InvalidateRect(ui.classicWidgetWnd, nullptr, FALSE);
         }
     }
+    ui.retryAttachment = !ui.modernWidgetAttached && !ui.nativeTaskList;
+}
+
+struct TaskbarSnapshot {
+    TaskbarEdge edge = TaskbarEdge::Unknown;
+    int thickness = 0;
+    UINT dpi = 0;
+    bool selected = false;
+    HWND xamlBridge = nullptr;
+    HWND nativeHost = nullptr;
+    bool operator==(TaskbarSnapshot const&) const = default;
+};
+
+TaskbarSnapshot ReadTaskbarSnapshot(HWND taskbar) {
+    TaskbarSnapshot result;
+    result.edge = DetectTaskbarEdge(taskbar);
+    result.thickness = TaskbarThicknessPx(taskbar, result.edge);
+    result.dpi = GetDpiForWindow(taskbar);
+    result.selected = ShouldShowOnTaskbar(taskbar);
+    result.xamlBridge = FindTaskbarXamlBridge(taskbar);
+    if (!result.xamlBridge) result.nativeHost = FindClassicTaskListHost(taskbar);
+    return result;
+}
+
+struct TaskbarEntry {
+    std::shared_ptr<WidgetUiState> ui;
+    TaskbarSnapshot snapshot;
+    uint64_t revision = 0;
+    bool haveSnapshot = false;
+    bool pendingIdle = false;
+};
+
+bool NeedsTaskbarDispatch(TaskbarEntry const& entry,
+                          TaskbarSnapshot const& snapshot, uint64_t revision) {
+    return !entry.haveSnapshot || entry.snapshot != snapshot ||
+           entry.revision != revision || entry.pendingIdle ||
+           entry.ui->updateRequested || entry.ui->retryAttachment;
+}
+
+void PruneRetiredWidgets(std::vector<TaskbarEntry>& widgets) {
+    // Cleanup has released UI references before destroyed is published. Active
+    // WidgetScopes still own their instance; queued XAML handlers use weak refs.
+    std::erase_if(widgets, [](auto const& entry) { return entry.ui->destroyed.load(); });
 }
 
 void UiTickThread() {
     // The worker owns the registry, but every UI/COM access is dispatched to
     // the corresponding taskbar thread. The media and audio workers are shared.
-    std::vector<std::unique_ptr<WidgetUiState>> widgets;
+    std::vector<TaskbarEntry> widgets;
     int discoveryPasses = 5;
     HANDLE events[] = {g_stopEvent, g_taskbarWakeEvent};
     while (!g_unloading && !g_workersStopping) {
         bool light = RegistryUseLightTheme();
         if (g_systemLightTheme.exchange(light) != light) ++g_uiRevision;
         bool rebuildIdle = g_idleAppsChanged.exchange(false);
-        if (g_taskbarDiscoveryRequested.exchange(false)) discoveryPasses = 5;
-        // Keep retired instances until worker shutdown: an outer routed event
-        // can still be unwinding after a nested taskbar-destruction message.
-        bool anyLive = std::any_of(widgets.begin(), widgets.end(),
-                                  [](auto const& ui) { return !ui->destroyed; });
-        if (discoveryPasses > 0 || !anyLive) {
+        if (g_taskbarDiscoveryRequested.exchange(false)) {
+            discoveryPasses = 5;
+            for (auto& entry : widgets) entry.ui->updateRequested = true;
+        }
+        PruneRetiredWidgets(widgets);
+        if (discoveryPasses > 0 || widgets.empty()) {
             if (discoveryPasses > 0) --discoveryPasses;
             for (HWND hwnd : FindTaskbarWindows()) {
                 if (std::any_of(widgets.begin(), widgets.end(),
-                                [hwnd](auto const& ui) {
-                                    return !ui->destroyed && ui->taskbarWnd == hwnd;
+                                [hwnd](auto const& entry) {
+                                    return !entry.ui->destroyed && entry.ui->taskbarWnd == hwnd;
                                 })) continue;
-                auto ui = std::make_unique<WidgetUiState>();
+                auto ui = std::make_shared<WidgetUiState>();
                 ui->taskbarWnd = hwnd;
-                widgets.push_back(std::move(ui));
+                widgets.push_back({std::move(ui), {}});
             }
         }
-        for (auto& ui : widgets) {
+        for (auto& entry : widgets) {
             if (g_workersStopping || g_unloading) break;
+            auto& ui = entry.ui;
             if (ui->destroyed) continue;
-            struct Request { WidgetUiState* ui; bool rebuildIdle; } request{ui.get(), rebuildIdle};
-            RunFromWindowThread(ui->taskbarWnd, [](void* parameter) {
+            entry.pendingIdle |= rebuildIdle;
+            auto snapshot = ReadTaskbarSnapshot(ui->taskbarWnd);
+            uint64_t revision = g_uiRevision.load();
+            if (!NeedsTaskbarDispatch(entry, snapshot, revision)) continue;
+            ui->updateRequested = false;
+            struct Request {
+                WidgetUiState* ui;
+                bool rebuildIdle;
+                bool completed = false;
+            } request{ui.get(), entry.pendingIdle};
+            bool dispatched = RunFromWindowThread(ui->taskbarWnd, [](void* parameter) {
                 auto& request = *static_cast<Request*>(parameter);
                 if (g_workersStopping || g_unloading) return;
                 try {
                     TickWidgetInstance(*request.ui, request.rebuildIdle);
+                    request.completed = true;
                 } catch (hresult_error const& error) {
                     Wh_Log(L"Taskbar widget update failed: 0x%08X", static_cast<uint32_t>(error.code()));
                 } catch (...) {
                     Wh_Log(L"Taskbar widget update failed");
                 }
             }, &request);
+            if (dispatched && request.completed) {
+                entry.snapshot = snapshot;
+                entry.revision = revision;
+                entry.haveSnapshot = true;
+                entry.pendingIdle = false;
+            } else {
+                ui->updateRequested = true;
+            }
         }
         DWORD result = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, 1000);
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
     }
-    for (auto& ui : widgets) {
+    for (auto& entry : widgets) {
+        auto& ui = entry.ui;
         if (ui->destroyed) continue;
         RunFromWindowThread(ui->taskbarWnd, [](void* parameter) {
             auto& ui = *static_cast<WidgetUiState*>(parameter);
