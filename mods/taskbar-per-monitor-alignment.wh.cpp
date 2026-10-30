@@ -37,7 +37,7 @@ Like this mod? You can [support its development on Ko-fi](https://ko-fi.com/vmto
 
 ## Settings
 
-![Mod settings](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/settings.jpg)
+![Mod settings](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/settings-v2.jpg)
 
 * **Primary monitor / Other monitors** set the icon alignment and the Start button
   placement for every monitor of that kind. *Windows default* keeps whatever Windows
@@ -102,7 +102,7 @@ taskbar** off (or use the option below it, *Disable all taskbar features for
 compatibility with other taskbar mods*), then restart Explorer. The page should look
 like this:
 
-![Start11's Taskbar page with Let Start11 enhance the taskbar switched off](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting.png)
+![Start11's Taskbar page with Let Start11 enhance the taskbar switched off](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting-v2.png)
 
 For any other tool, switch its taskbar features off for a moment to check whether they
 are the cause.
