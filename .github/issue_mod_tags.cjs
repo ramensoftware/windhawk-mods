@@ -697,8 +697,9 @@ function modAuthorComment(mod, mention) {
   const linkText = mod.name.replace(/[\\[\]]/g, '\\$&');
   const author = mention ? `@${mod.handle}` : mod.handle;
   return (
-    `This issue is about [${linkText}](https://windhawk.net/mods/${mod.id}) by ${author}. ` +
-    'As the mod\'s author, you can manage it by commenting with these commands, ' +
+    `Mod: [${linkText}](https://windhawk.net/mods/${mod.id})\n` +
+    `Mod author: ${author}\n\n` +
+    'The mod author can manage this issue by commenting with these commands, ' +
     `each on a line of its own:\n\n${COMMANDS_TABLE}`
   );
 }
