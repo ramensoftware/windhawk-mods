@@ -4,7 +4,7 @@
 // @name:zh-CN      强制桌面图标间距（终极版）
 // @description     Safely disable desktop auto-arrange and precisely control the icon grid spacing (X/Y) and the bottom margin reserved above the taskbar. Every change applies in one absolute pass: no cumulative drift, no window shifting, no blank strip at the top.
 // @description:zh-CN  安全禁用桌面自动排列，精准控制桌面图标的水平/垂直网格间距，以及在任务栏上方预留的底部空白边距。所有调整一次性绝对到位：不叠加累积、不整体移动图标区域、顶部不产生空白。
-// @version         1.0.0
+// @version         1.0.1
 // @author          Koewen
 // @github          https://github.com/Koewen
 // @include         explorer.exe
@@ -94,6 +94,9 @@ static BOOL g_bStop = FALSE;
 #ifndef LVM_SETICONSPACING
 #define LVM_SETICONSPACING (LVM_FIRST + 53)
 #endif
+#ifndef LVM_GETITEMSPACING
+#define LVM_GETITEMSPACING (LVM_FIRST + 51)
+#endif
 #ifndef LVM_ARRANGE
 #define LVM_ARRANGE (LVM_FIRST + 22)
 #endif
@@ -167,6 +170,49 @@ static void ApplyBottomMargin(HWND hwndLV)
     SetWindowPos(hwndLV, NULL, 0, 0, rc.right, availH, SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
+// Set the icon grid spacing (absolute values) and verify by reading it back:
+//  - The window geometry (bottom margin) must be applied BEFORE this call.
+//    Resizing the window makes the list view recompute its grid from the
+//    system WindowMetrics, which would otherwise overwrite the custom
+//    spacing - the reason vertical spacing did not stick in earlier builds;
+//  - After setting, read back with LVM_GETITEMSPACING; if the value was
+//    reset, send it once more;
+//  - Returns TRUE when the spacing had been reset and the resend restored
+//    it (a rearrangement is needed so icons follow the new spacing);
+//    returns FALSE when the spacing was fine all along, or the system
+//    clamped it to its minimum (log only, no rearrange).
+static BOOL SetIconSpacing(HWND hwndLV)
+{
+    BOOL needRearrange = FALSE;
+
+    DWORD_PTR spacingParam = MAKELONG(g_spacingX, g_spacingY);
+    SendMessageTimeout(hwndLV, LVM_SETICONSPACING, 0, spacingParam, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
+
+    DWORD_PTR result = 0;
+    if (SendMessageTimeout(hwndLV, LVM_GETITEMSPACING, FALSE, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, &result) && result) {
+        int cx = LOWORD(result);
+        int cy = HIWORD(result);
+        if (abs(cx - g_spacingX) > 1 || abs(cy - g_spacingY) > 1) {
+            // Spacing got reset by the system: send it once more.
+            SendMessageTimeout(hwndLV, LVM_SETICONSPACING, 0, spacingParam, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
+            result = 0;
+            if (SendMessageTimeout(hwndLV, LVM_GETITEMSPACING, FALSE, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, &result) && result) {
+                cx = LOWORD(result);
+                cy = HIWORD(result);
+                if (abs(cx - g_spacingX) <= 1 && abs(cy - g_spacingY) <= 1) {
+                    needRearrange = TRUE;   // Restored; rearrange so icons follow.
+                } else {
+                    // Clamped by the system to the icon's minimum size
+                    // (the configured value is too small); log for diagnosis.
+                    Wh_Log(L"Icon spacing clamped by system: set (%d,%d), got (%d,%d)",
+                           g_spacingX, g_spacingY, cx, cy);
+                }
+            }
+        }
+    }
+    return needRearrange;
+}
+
 static void ApplyAllSettings(BOOL bRearrange)
 {
     // 1. Safely update the registry.
@@ -177,24 +223,22 @@ static void ApplyAllSettings(BOOL bRearrange)
 
     g_currentLV = hwndLV;
 
-    // 2. Icon spacing: LVM_SETICONSPACING with absolute values - naturally
-    //    idempotent. The list view lays icons out from the top: increasing
-    //    the vertical spacing stretches the grid downward, and the extra
-    //    space is absorbed by the bottom region. (The icon area is never
-    //    shifted as a whole.)
-    DWORD_PTR spacingParam = MAKELONG(g_spacingX, g_spacingY);
-    SendMessageTimeout(hwndLV, LVM_SETICONSPACING, 0, spacingParam, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
-
-    // 3. Bottom margin: top edge fixed, height shrunk only (absolute, one-shot).
+    // 2. Bottom margin must come before the spacing: resizing the window
+    //    makes the list view recompute its grid from the system defaults,
+    //    so the fixed order is: geometry -> spacing -> rearrange.
     ApplyBottomMargin(hwndLV);
 
-    // 4. The key step: trigger one rearrangement. Auto-arrange is disabled,
-    //    so existing icons hold absolute coordinates - changing the
-    //    spacing/margin rules alone does not move them. LVM_ARRANGE (the
-    //    same native command as the desktop "Arrange icons") recomputes all
-    //    icon positions from scratch for the current grid: idempotent, no
-    //    cumulative effect.
-    if (bRearrange) {
+    // 3. Icon grid spacing (absolute, idempotent, verified by read-back).
+    //    The vertical spacing is the grid cell height (icon + label): a
+    //    larger IconSpacingY stretches the rows downward and the extra
+    //    space is absorbed by the bottom region, with no blank strip at
+    //    the top.
+    BOOL spacingRestored = SetIconSpacing(hwndLV);
+
+    // 4. Rearrange: always on load/settings change; in watchdog ticks only
+    //    when the spacing had been reset and was restored, so hand-dragged
+    //    icons are left alone otherwise.
+    if (bRearrange || spacingRestored) {
         SendMessageTimeout(hwndLV, LVM_ARRANGE, LVA_DEFAULT, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
     }
 
