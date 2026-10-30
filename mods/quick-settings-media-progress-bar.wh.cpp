@@ -1238,6 +1238,10 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"BeforeUninit");
     g_unloading = true;
 
+    // Wait for a ControlCenter hook install running on another thread.
+    // HookControlCenterInternal re-checks g_unloading under this lock.
+    { std::lock_guard<std::mutex> lock(g_discoveryInstallMutex); }
+
     bool tornDown = false;
 
     if (g_uiDispatcherQueue) {
