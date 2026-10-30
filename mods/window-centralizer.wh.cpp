@@ -6,6 +6,7 @@
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         *
+// @include         windhawk.exe
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
@@ -19,7 +20,7 @@ The window is placed **before** it appears, so there is no jump, no flicker, and
 
 ## Modes
 
-- **Parent window**: centered on the window that owns the new one; otherwise on the active or topmost window of the same program (including another instance of it, as with File Explorer folder windows). Windows with none of these open centered on the primary monitor.
+- **Parent window**: centered on the window that owns the new one; otherwise on the active or topmost window of the same program (including another instance of it, as with File Explorer folder windows). Windows with none of these, such as the Run dialog, open centered on the primary monitor.
 - **Mouse cursor**: centered on the mouse cursor.
 
 In both modes the window is kept inside the monitor's work area.
@@ -33,11 +34,13 @@ In both modes the window is kept inside the monitor's work area.
 
 ## Ignoring windows
 
-Press **Win+Alt+C** while a window is active to stop centering it (press again to undo). The rule matches the program, the window class and the window title. A short notification confirms the change.
+Press **Win+Alt+C** while a window is active to stop centering that kind of window, and press it again on it to undo. A short notification confirms the change.
+
+A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by their layout, so Find and Save As stay separate.
 
 The **Ignored windows** list opens with **Win+Ctrl+Alt+C**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
-Both hotkeys can be changed in the mod settings.
+Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.
 
 ## Compatibility
 
@@ -72,21 +75,29 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windhawk_utils.h>
+#include <atomic>
 #include <stdio.h>
 #include <wchar.h>
 #include <wctype.h>
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
+HINSTANCE ModInstance() {
+    return (HINSTANCE)&__ImageBase;
+}
 
 // ───────────── Settings ─────────────
 
 enum Mode { MODE_PARENT, MODE_MOUSE };
 
-struct Settings {
-    Mode mode;
-    int maxAreaPercent;
-    wchar_t ignoreHotkey[64];
-    wchar_t listHotkey[64];
-};
-Settings g_settings;
+// Read by the hooks on application threads while Wh_ModSettingsChanged rewrites them.
+std::atomic<int> g_mode{MODE_PARENT};
+std::atomic<int> g_maxAreaPercent{10};
+
+// Tool process only, read and written on the host thread.
+wchar_t g_ignoreHotkey[64];
+wchar_t g_listHotkey[64];
 
 wchar_t g_processName[MAX_PATH];  // file name of the current process, for ignore rules
 
@@ -96,23 +107,54 @@ void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
     Wh_FreeStringSetting(value);
 }
 
-void LoadSettings() {
+void LoadCenteringSettings() {
     PCWSTR mode = Wh_GetStringSetting(L"mode");
-    g_settings.mode = wcscmp(mode, L"mouse") == 0 ? MODE_MOUSE : MODE_PARENT;
+    g_mode = wcscmp(mode, L"mouse") == 0 ? MODE_MOUSE : MODE_PARENT;
     Wh_FreeStringSetting(mode);
     int pct = Wh_GetIntSetting(L"maxAreaPercent");
-    g_settings.maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
-    CopySetting(L"ignoreHotkey", g_settings.ignoreHotkey, ARRAYSIZE(g_settings.ignoreHotkey));
-    CopySetting(L"listHotkey", g_settings.listHotkey, ARRAYSIZE(g_settings.listHotkey));
+    g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
+}
+
+void LoadHotkeySettings() {
+    CopySetting(L"ignoreHotkey", g_ignoreHotkey, ARRAYSIZE(g_ignoreHotkey));
+    CopySetting(L"listHotkey", g_listHotkey, ARRAYSIZE(g_listHotkey));
+}
+
+// ───────────── Window kind ─────────────
+
+bool IsDialogClass(const wchar_t* cls) {
+    return wcscmp(cls, L"#32770") == 0;
+}
+
+/// Identifies the kind of a standard dialog, whose class (#32770) is shared by all of them, from the
+/// classes of its direct child controls, which don't depend on language or on the file shown.
+/// Writes an 8-digit hash to sig.
+void DialogSignature(HWND hwnd, wchar_t* sig, size_t sigChars) {
+    UINT32 h = 2166136261u;
+    HWND child = GetWindow(hwnd, GW_CHILD);
+    for (int i = 0; child && i < 256; i++, child = GetWindow(child, GW_HWNDNEXT)) {
+        wchar_t cls[128];
+        int n = GetClassNameW(child, cls, ARRAYSIZE(cls));
+        for (int j = 0; j < n; j++) {
+            h ^= (UINT32)towlower(cls[j]);
+            h *= 16777619u;
+        }
+        h ^= L',';
+        h *= 16777619u;
+    }
+    swprintf_s(sig, sigChars, L"%08X", h);
 }
 
 // ───────────── Ignore list ─────────────
 //
-// Stored in the mod's storage as one string, one rule per line: "process.exe|class|title".
-// An empty title matches any title. "ignoredVersion" is bumped on every change so each
-// process reloads its cached copy only when the list actually changed.
+// Stored in the mod's storage as one string, one rule per line: "process.exe|class|signature|title".
+// - signature: DialogSignature for standard dialogs, empty for any other window (the class is its kind).
+// - title: the window's title when the rule was made, shown in the list only; never matched.
+// "ignoredVersion" is bumped on every change so each process reloads its cached copy only when
+// the list actually changed.
 
 constexpr size_t kIgnoredChars = 32768;
+constexpr wchar_t kRulesKey[] = L"rules";
 
 struct IgnoreCache {
     SRWLOCK lock = SRWLOCK_INIT;
@@ -120,6 +162,77 @@ struct IgnoreCache {
     wchar_t* text = nullptr;
 };
 IgnoreCache g_ignore;
+
+/// The window a rule is tested against. The dialog signature is computed on first use only.
+struct WindowKey {
+    HWND hwnd;
+    const wchar_t* process;
+    const wchar_t* cls;
+    wchar_t sig[16];
+    bool sigReady;
+};
+
+const wchar_t* SignatureOf(WindowKey& key) {
+    if (!key.sigReady) {
+        DialogSignature(key.hwnd, key.sig, ARRAYSIZE(key.sig));
+        key.sigReady = true;
+    }
+    return key.sig;
+}
+
+/// Splits a rule line into its four fields, in place. False if it is malformed.
+bool SplitRule(wchar_t* buf, wchar_t** cls, wchar_t** sig, wchar_t** title) {
+    wchar_t* bar1 = wcschr(buf, L'|');
+    wchar_t* bar2 = bar1 ? wcschr(bar1 + 1, L'|') : nullptr;
+    wchar_t* bar3 = bar2 ? wcschr(bar2 + 1, L'|') : nullptr;
+    if (!bar3)
+        return false;
+    *bar1 = *bar2 = *bar3 = L'\0';
+    *cls = bar1 + 1;
+    *sig = bar2 + 1;
+    *title = bar3 + 1;
+    return true;
+}
+
+bool RuleMatches(const wchar_t* rule, size_t ruleLen, WindowKey& key) {
+    wchar_t buf[1024];
+    if (ruleLen >= ARRAYSIZE(buf))
+        return false;
+    wmemcpy(buf, rule, ruleLen);
+    buf[ruleLen] = L'\0';
+    wchar_t *cls, *sig, *title;
+    if (!SplitRule(buf, &cls, &sig, &title))
+        return false;
+    if (_wcsicmp(buf, key.process) != 0 || _wcsicmp(cls, key.cls) != 0)
+        return false;
+    return !*sig || wcscmp(sig, SignatureOf(key)) == 0;
+}
+
+bool IsIgnored(HWND hwnd, const wchar_t* cls) {
+    int version = Wh_GetIntValue(L"ignoredVersion", 0);
+    AcquireSRWLockExclusive(&g_ignore.lock);
+    if (version != g_ignore.version) {
+        if (!g_ignore.text)
+            g_ignore.text = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
+        if (g_ignore.text) {
+            g_ignore.text[0] = L'\0';
+            Wh_GetStringValue(kRulesKey, g_ignore.text, kIgnoredChars);
+            g_ignore.version = version;
+        }
+    }
+    WindowKey key = {hwnd, g_processName, cls, L"", false};
+    bool ignored = false;
+    for (const wchar_t* line = g_ignore.text; line && *line && !ignored;) {
+        const wchar_t* end = wcschr(line, L'\n');
+        size_t len = end ? (size_t)(end - line) : wcslen(line);
+        ignored = len && RuleMatches(line, len, key);
+        line = end ? end + 1 : nullptr;
+    }
+    ReleaseSRWLockExclusive(&g_ignore.lock);
+    return ignored;
+}
+
+// ───────────── Which windows to center ─────────────
 
 bool ContainsNoCase(const wchar_t* haystack, const wchar_t* needle) {
     size_t n = wcslen(needle);
@@ -131,48 +244,6 @@ bool ContainsNoCase(const wchar_t* haystack, const wchar_t* needle) {
     return false;
 }
 
-/// True if the rule "process|class|title" matches the window. The title part is a case-insensitive substring.
-bool RuleMatches(const wchar_t* rule, size_t ruleLen, const wchar_t* process, const wchar_t* cls, const wchar_t* title) {
-    wchar_t buf[1024];
-    if (ruleLen >= ARRAYSIZE(buf))
-        return false;
-    wmemcpy(buf, rule, ruleLen);
-    buf[ruleLen] = L'\0';
-    wchar_t* bar1 = wcschr(buf, L'|');
-    if (!bar1)
-        return false;
-    wchar_t* bar2 = wcschr(bar1 + 1, L'|');
-    if (!bar2)
-        return false;
-    *bar1 = *bar2 = L'\0';
-    return _wcsicmp(buf, process) == 0 && _wcsicmp(bar1 + 1, cls) == 0 && ContainsNoCase(title, bar2 + 1);
-}
-
-bool IsIgnored(const wchar_t* cls, const wchar_t* title) {
-    int version = Wh_GetIntValue(L"ignoredVersion", 0);
-    AcquireSRWLockExclusive(&g_ignore.lock);
-    if (version != g_ignore.version) {
-        if (!g_ignore.text)
-            g_ignore.text = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
-        if (g_ignore.text) {
-            g_ignore.text[0] = L'\0';
-            Wh_GetStringValue(L"ignored", g_ignore.text, kIgnoredChars);
-            g_ignore.version = version;
-        }
-    }
-    bool ignored = false;
-    for (const wchar_t* line = g_ignore.text; line && *line && !ignored;) {
-        const wchar_t* end = wcschr(line, L'\n');
-        size_t len = end ? (size_t)(end - line) : wcslen(line);
-        ignored = len && RuleMatches(line, len, g_processName, cls, title);
-        line = end ? end + 1 : nullptr;
-    }
-    ReleaseSRWLockExclusive(&g_ignore.lock);
-    return ignored;
-}
-
-// ───────────── Which windows to center ─────────────
-
 bool HasCaption(HWND hwnd) {
     return (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
 }
@@ -181,7 +252,7 @@ bool IsIgnoredClass(const wchar_t* cls) {
     static const wchar_t* const kParts[] = {
         L"Splash", L"Loading", L"MsoSplash", L"Ghost", L"NetUI", L"#32768", L"Menu", L"Shadow", L"Tooltip",
         L"NotifyIcon", L"Popup", L"Overlay", L"Dimmer", L"Shell_TrayWnd", L"TrayNotifyWnd", L"Taskbar",
-        L"Progman", L"WorkerW", L"SearchHost", L"Windows.UI.Core.CoreWindow", L"WindowCentralizer_",
+        L"Progman", L"WorkerW", L"SearchHost", L"Windows.UI.Core.CoreWindow",
     };
     for (const wchar_t* part : kParts)
         if (ContainsNoCase(cls, part))
@@ -195,8 +266,14 @@ int TitleOf(HWND hwnd, wchar_t* buf, int chars) {
     return InternalGetWindowText(hwnd, buf, chars);
 }
 
-/// A window this mod may move: top level, title bar, not min/maximized, not tool/layered, titled, not ignored.
+/// A window this mod may move: owned by this process, top level, title bar, not min/maximized,
+/// not tool/layered, titled, not ignored.
 bool IsCandidate(HWND hwnd) {
+    // A program can show another process's window; the rules and parent search describe this process only.
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return false;
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) || (style & WS_CAPTION) != WS_CAPTION || (style & (WS_MINIMIZE | WS_MAXIMIZE)))
         return false;
@@ -207,7 +284,7 @@ bool IsCandidate(HWND hwnd) {
         return false;
     if (!TitleOf(hwnd, title, ARRAYSIZE(title)))
         return false;
-    return !IsIgnored(cls, title);
+    return !IsIgnored(hwnd, cls);
 }
 
 // A valid parent has a title bar and a title. Proxy windows such as StubWindow32 have a
@@ -277,10 +354,16 @@ HWND FindParent(HWND hwnd) {
 
     // The shell opens some dialogs (folder Properties, for one) from a hidden StubWindow32 that is
     // also the foreground window at that moment; the program's topmost real window is the one the user clicked.
-    TopWindowSearch search = {hwnd, nullptr};
-    EnumWindows(FindTopOwnWindow, (LPARAM)&search);
-    if (search.found)
-        return search.found;
+    // Only when this program is in the foreground: from another app or the desktop (Win+R), its topmost
+    // window is unrelated to what the user did.
+    wchar_t fgCls[256] = L"";
+    bool fgIsShell = fg && GetClassNameW(fg, fgCls, ARRAYSIZE(fgCls)) && IsIgnoredClass(fgCls);
+    if (fgPid == GetCurrentProcessId() && !fgIsShell) {
+        TopWindowSearch search = {hwnd, nullptr};
+        EnumWindows(FindTopOwnWindow, (LPARAM)&search);
+        if (search.found)
+            return search.found;
+    }
 
     if (fg && fgPid != GetCurrentProcessId() && IsValidParent(fg, hwnd) && SameExecutable(fg))
         return fg;
@@ -288,7 +371,7 @@ HWND FindParent(HWND hwnd) {
 }
 
 POINT ReferencePoint(HWND hwnd) {
-    if (g_settings.mode == MODE_MOUSE) {
+    if (g_mode == MODE_MOUSE) {
         POINT pt;
         GetCursorPos(&pt);
         return pt;
@@ -310,8 +393,8 @@ bool ComputeTarget(HWND hwnd, int w, int h, int* x, int* y) {
     const RECT& wa = mi.rcWork;
     long long monitorArea = (long long)(wa.right - wa.left) * (wa.bottom - wa.top);
     wchar_t cls[16];
-    bool isDialog = GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"#32770") == 0;
-    if (!isDialog && (long long)w * h * 100 > monitorArea * g_settings.maxAreaPercent)
+    bool isDialog = GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && IsDialogClass(cls);
+    if (!isDialog && (long long)w * h * 100 > monitorArea * g_maxAreaPercent)
         return false;
     int nx = c.x - w / 2, ny = c.y - h / 2;
     nx = nx + w > wa.right ? wa.right - w : nx;
@@ -370,7 +453,7 @@ BOOL WINAPI NtUserSetWindowPos_Hook(HWND hwnd, HWND after, int x, int y, int cx,
 
 // Windows created with WS_VISIBLE are shown inside the kernel, without any show call to hook;
 // they are moved right after creation, before their first paint.
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
 HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR cls, LPCWSTR name, DWORD style, int x, int y, int w, int h,
                                  HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
@@ -380,7 +463,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR cls, LPCWSTR name, DWORD
     return hwnd;
 }
 
-using CreateWindowExA_t = HWND(WINAPI*)(DWORD, LPCSTR, LPCSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+using CreateWindowExA_t = decltype(&CreateWindowExA);
 CreateWindowExA_t CreateWindowExA_Original;
 HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD style, int x, int y, int w, int h,
                                  HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
@@ -392,9 +475,8 @@ HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD s
 
 // ───────────── Host: hotkeys, notification, ignored windows list ─────────────
 //
-// Runs in one explorer.exe process at a time: the one that owns the host mutex.
+// Runs only in the mod's dedicated windhawk.exe process (see "Mod callbacks").
 
-HANDLE g_hostMutex;
 HANDLE g_hostThread;
 HANDLE g_hostStopEvent;
 HWND g_hwndHost;     // hidden window: hotkeys and timers
@@ -493,22 +575,21 @@ void HostLoadList() {
     if (!g_hostList)
         g_hostList = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
     g_hostList[0] = L'\0';
-    Wh_GetStringValue(L"ignored", g_hostList, kIgnoredChars);
+    Wh_GetStringValue(kRulesKey, g_hostList, kIgnoredChars);
 }
 
 void HostSaveList() {
-    Wh_SetStringValue(L"ignored", g_hostList);
+    Wh_SetStringValue(kRulesKey, g_hostList);
     Wh_SetIntValue(L"ignoredVersion", Wh_GetIntValue(L"ignoredVersion", 0) + 1);
 }
 
-/// Line number of rule in the list, or -1.
-int FindRule(const wchar_t* rule) {
-    size_t ruleLen = wcslen(rule);
+/// Line number of the first rule that matches the window, or -1.
+int FindMatchingRule(WindowKey& key) {
     int index = 0;
     for (const wchar_t* line = g_hostList; *line; index++) {
         const wchar_t* end = wcschr(line, L'\n');
         size_t len = end ? (size_t)(end - line) : wcslen(line);
-        if (len == ruleLen && wcsncmp(line, rule, len) == 0)
+        if (len && RuleMatches(line, len, key))
             return index;
         if (!end)
             break;
@@ -577,13 +658,16 @@ void ToggleIgnoreActive() {
     for (wchar_t* p = title; *p; p++)
         if (*p == L'\n' || *p == L'\r')
             *p = L' ';
-    wchar_t rule[1024];
-    swprintf_s(rule, L"%s|%s|%s", process, cls, title);
 
+    // Toggle by what actually matches the window, so an existing rule is removed instead of duplicated.
+    WindowKey key = {hwnd, process, cls, L"", false};
     HostLoadList();
-    int index = FindRule(rule);
+    int index = FindMatchingRule(key);
     bool nowIgnored = index < 0;
     if (nowIgnored) {
+        bool dialog = IsDialogClass(cls);
+        wchar_t rule[1024];
+        swprintf_s(rule, L"%s|%s|%s|%s", process, cls, dialog ? SignatureOf(key) : L"", dialog ? title : L"");
         if (!AddRule(rule))
             return;
     } else {
@@ -662,7 +746,7 @@ void ShowToast(const wchar_t* title, const wchar_t* detail) {
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(mon, &mi);
     g_hwndToast = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, kToastClass,
-                                  L"", WS_POPUP, pt.x, pt.y, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+                                  L"", WS_POPUP, pt.x, pt.y, 1, 1, nullptr, nullptr, ModInstance(), nullptr);
     if (!g_hwndToast)
         return;
     UINT dpi = GetDpiForWindow(g_hwndToast);
@@ -694,14 +778,11 @@ void FillListBox() {
         if (len < ARRAYSIZE(rule)) {
             wmemcpy(rule, line, len);
             rule[len] = L'\0';
-            wchar_t* bar1 = wcschr(rule, L'|');
-            wchar_t* bar2 = bar1 ? wcschr(bar1 + 1, L'|') : nullptr;
-            if (bar2) {
-                *bar1 = *bar2 = L'\0';
-                swprintf_s(label, bar2[1] ? L"%s [%s] %s" : L"%s [%s]", rule, bar1 + 1, bar2 + 1);
-            } else {
+            wchar_t *cls, *sig, *title;
+            if (SplitRule(rule, &cls, &sig, &title))
+                swprintf_s(label, *sig ? L"%s [%s] like \"%s\"" : L"%s [%s] (all windows)", rule, cls, title);
+            else
                 wcscpy_s(label, rule);
-            }
             SendMessageW(lb, LB_ADDSTRING, 0, (LPARAM)label);
             SIZE sz;
             if (GetTextExtentPoint32W(dc, label, (int)wcslen(label), &sz) && sz.cx > widest)
@@ -787,9 +868,9 @@ void ResizeList(UINT dpi, const RECT* suggested, bool center) {
 
 void UpdateHint() {
     wchar_t hint[160];
-    if (g_settings.ignoreHotkey[0])
+    if (g_ignoreHotkey[0])
         swprintf_s(hint, L"Windows that are not centered. Press %s on any window to add or remove it.",
-                   g_settings.ignoreHotkey);
+                   g_ignoreHotkey);
     else
         wcscpy_s(hint, L"Windows that are not centered. Set an ignore hotkey in the mod settings to add more.");
     SetWindowTextW(ListCtl(ID_HINT), hint);
@@ -837,10 +918,13 @@ LRESULT CALLBACK ListProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_DESTROY:
             g_hwndList = nullptr;
+            return 0;
+        case WM_NCDESTROY:
+            // The child controls are destroyed after the parent's WM_DESTROY and still hold the font until then.
             if (g_listFont)
                 DeleteObject(g_listFont);
             g_listFont = nullptr;
-            return 0;
+            break;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
@@ -851,7 +935,7 @@ void OpenList() {
         SetForegroundWindow(g_hwndList);
         return;
     }
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HINSTANCE inst = ModInstance();
     g_hwndList = CreateWindowExW(WS_EX_CONTROLPARENT | WS_EX_DLGMODALFRAME, kListClass,
                                  L"Window Centralizer - Ignored windows", WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
                                  CW_USEDEFAULT, CW_USEDEFAULT, 100, 100, nullptr, nullptr, inst, nullptr);
@@ -877,8 +961,9 @@ void OpenList() {
 // ── Host window and thread ──
 
 void ApplyHostSettings(bool fromSettingsChange) {
-    RegisterHotkeyText(HK_IGNORE, g_settings.ignoreHotkey);
-    g_listHotkeyActive = RegisterHotkeyText(HK_LIST, g_settings.listHotkey);
+    LoadHotkeySettings();
+    RegisterHotkeyText(HK_IGNORE, g_ignoreHotkey);
+    g_listHotkeyActive = RegisterHotkeyText(HK_LIST, g_listHotkey);
     if (g_hwndList)
         PostMessageW(g_hwndList, WM_APP_RELOAD, 0, 0);
     if (fromSettingsChange && !g_listHotkeyActive)
@@ -923,14 +1008,7 @@ void RunHostLoop() {
 }
 
 DWORD WINAPI HostThread(void*) {
-    // Every Explorer instance waits here. When the hosting process exits, its ownership is abandoned
-    // and the next waiter takes over, so the hotkeys survive short-lived folder-window processes.
-    HANDLE waits[] = {g_hostStopEvent, g_hostMutex};
-    DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-    if (r != WAIT_OBJECT_0 + 1 && r != WAIT_ABANDONED_0 + 1)
-        return 0;
-
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HINSTANCE inst = ModInstance();
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.hInstance = inst;
@@ -946,8 +1024,6 @@ DWORD WINAPI HostThread(void*) {
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     ATOM listAtom = RegisterClassExW(&wc);
 
-    // A failed registration can mean a class left by an earlier load, whose window procedure points
-    // into an unloaded image; creating a window from it would crash Explorer.
     if (hostAtom && toastAtom && listAtom) {
         g_hwndHost = CreateWindowExW(0, kHostClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
         if (g_hwndHost) {
@@ -978,66 +1054,193 @@ DWORD WINAPI HostThread(void*) {
     if (g_hostList)
         HeapFree(GetProcessHeap(), 0, g_hostList);
     g_hostList = nullptr;
-    ReleaseMutex(g_hostMutex);
     return 0;
 }
 
-// ───────────── Mod callbacks ─────────────
+bool WhTool_ModInit() {
+    g_hostStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hostStopEvent)
+        return false;
+    g_hostThread = CreateThread(nullptr, 0, HostThread, nullptr, 0, nullptr);
+    return g_hostThread != nullptr;
+}
 
-template <typename T>
-void HookExport(const wchar_t* module, const char* name, void* hook, T* original) {
-    HMODULE mod = GetModuleHandleW(module);
-    void* target = mod ? (void*)GetProcAddress(mod, name) : nullptr;
-    if (target)
-        Wh_SetFunctionHook(target, hook, (void**)original);
-    else
-        Wh_Log(L"Not found: %S", name);
+void WhTool_ModSettingsChanged() {
+    if (g_hwndHost)
+        PostMessageW(g_hwndHost, WM_APP_RELOAD, 0, 0);
+}
+
+void WhTool_ModUninit() {
+    SetEvent(g_hostStopEvent);
+    // A system modal loop (menu open, window being dragged) doesn't watch the event; WM_QUIT ends it.
+    PostThreadMessageW(GetThreadId(g_hostThread), WM_QUIT, 0, 0);
+    WaitForSingleObject(g_hostThread, INFINITE);
+    CloseHandle(g_hostThread);
+    CloseHandle(g_hostStopEvent);
+}
+
+// ───────────── Mod callbacks ─────────────
+//
+// The mod plays one of three roles, chosen in Wh_ModInit:
+// - hooks: every process except windhawk.exe, where windows are centered;
+// - launcher: the normal windhawk.exe, which only starts the tool process;
+// - tool: "windhawk.exe -tool-mod window-centralizer", which hosts the hotkeys and the UI.
+// The launcher/tool part follows the "Mods as tools" pattern from the Windhawk wiki.
+
+enum class Role { Hooks, Launcher, Tool };
+Role g_role = Role::Hooks;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+/// Copies the next command-line argument into out, honoring double quotes. Returns the position after it,
+/// or null when there are no more arguments.
+const wchar_t* NextArg(const wchar_t* p, wchar_t* out, size_t outChars) {
+    while (*p == L' ' || *p == L'\t')
+        p++;
+    if (!*p)
+        return nullptr;
+    size_t n = 0;
+    bool quoted = false;
+    for (; *p && (quoted || (*p != L' ' && *p != L'\t')); p++) {
+        if (*p == L'"') {
+            quoted = !quoted;
+            continue;
+        }
+        if (n + 1 < outChars)
+            out[n++] = *p;
+    }
+    out[n] = L'\0';
+    return p;
+}
+
+BOOL InitInWindhawkProcess() {
+    DWORD session = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &session) && session == 0)
+        return FALSE;
+
+    bool isService = false, isToolMod = false, isOurToolMod = false, nextIsModId = false;
+    wchar_t arg[MAX_PATH];
+    for (const wchar_t* p = GetCommandLineW(); (p = NextArg(p, arg, ARRAYSIZE(arg)));) {
+        if (nextIsModId) {
+            isOurToolMod = wcscmp(arg, WH_MOD_ID) == 0;
+            nextIsModId = false;
+        } else if (wcscmp(arg, L"-service") == 0 || wcscmp(arg, L"-service-start") == 0 ||
+                   wcscmp(arg, L"-service-stop") == 0) {
+            isService = true;
+        } else if (wcscmp(arg, L"-tool-mod") == 0) {
+            isToolMod = true;
+            nextIsModId = true;
+        }
+    }
+    if (isService)
+        return FALSE;
+
+    if (isOurToolMod) {
+        HANDLE mutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!mutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool process already running");
+            ExitProcess(1);
+        }
+        if (!WhTool_ModInit())
+            ExitProcess(1);
+        // windhawk.exe's own main must not run in this process; the host thread keeps it alive.
+        auto* dos = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        auto* nt = (IMAGE_NT_HEADERS*)((BYTE*)dos + dos->e_lfanew);
+        Wh_SetFunctionHook((BYTE*)dos + nt->OptionalHeader.AddressOfEntryPoint, (void*)EntryPoint_Hook, nullptr);
+        g_role = Role::Tool;
+        return TRUE;
+    }
+    if (isToolMod)
+        return FALSE;  // another mod's tool process
+    g_role = Role::Launcher;
+    return TRUE;
 }
 
 BOOL Wh_ModInit() {
-    LoadSettings();
-
     wchar_t path[MAX_PATH];
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     const wchar_t* slash = wcsrchr(path, L'\\');
     wcscpy_s(g_processName, slash ? slash + 1 : path);
 
-    HookExport(L"win32u.dll", "NtUserShowWindow", (void*)NtUserShowWindow_Hook, &NtUserShowWindow_Original);
-    HookExport(L"win32u.dll", "NtUserSetWindowPos", (void*)NtUserSetWindowPos_Hook, &NtUserSetWindowPos_Original);
-    HookExport(L"user32.dll", "CreateWindowExW", (void*)CreateWindowExW_Hook, &CreateWindowExW_Original);
-    HookExport(L"user32.dll", "CreateWindowExA", (void*)CreateWindowExA_Hook, &CreateWindowExA_Original);
+    if (_wcsicmp(g_processName, L"windhawk.exe") == 0)
+        return InitInWindhawkProcess();
+
+    LoadCenteringSettings();
+    if (HMODULE win32u = GetModuleHandleW(L"win32u.dll")) {
+        if (auto p = (NtUserShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"))
+            WindhawkUtils::SetFunctionHook(p, NtUserShowWindow_Hook, &NtUserShowWindow_Original);
+        if (auto p = (NtUserSetWindowPos_t)GetProcAddress(win32u, "NtUserSetWindowPos"))
+            WindhawkUtils::SetFunctionHook(p, NtUserSetWindowPos_Hook, &NtUserSetWindowPos_Original);
+    }
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExA, CreateWindowExA_Hook, &CreateWindowExA_Original);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (_wcsicmp(g_processName, L"explorer.exe") != 0)
+    if (g_role != Role::Launcher)
         return;
-    g_hostStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hostMutex = CreateMutexW(nullptr, FALSE, L"Local\\windhawk-window-centralizer-host");
-    if (g_hostStopEvent && g_hostMutex)
-        g_hostThread = CreateThread(nullptr, 0, HostThread, nullptr, 0, nullptr);
+
+    wchar_t path[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!len || len >= ARRAYSIZE(path)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return;
+    }
+    wchar_t commandLine[MAX_PATH + 64];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", path, WH_MOD_ID);
+
+    HMODULE kernel = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernel)
+        kernel = GetModuleHandleW(L"kernel32.dll");
+    if (!kernel) {
+        Wh_Log(L"No kernelbase/kernel32");
+        return;
+    }
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
+                                                   LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR,
+                                                   LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+    auto createProcessInternal = (CreateProcessInternalW_t)GetProcAddress(kernel, "CreateProcessInternalW");
+    if (!createProcessInternal) {
+        Wh_Log(L"CreateProcessInternalW not found");
+        return;
+    }
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi;
+    if (!createProcessInternal(nullptr, path, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                               nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcessInternalW failed: %u", GetLastError());
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    if (g_hwndHost)
-        PostMessageW(g_hwndHost, WM_APP_RELOAD, 0, 0);
+    if (g_role == Role::Launcher)
+        return;
+    if (g_role == Role::Tool) {
+        WhTool_ModSettingsChanged();
+        return;
+    }
+    LoadCenteringSettings();
 }
 
 void Wh_ModUninit() {
-    if (g_hostThread) {
-        SetEvent(g_hostStopEvent);
-        WaitForSingleObject(g_hostThread, INFINITE);
-        CloseHandle(g_hostThread);
-        g_hostThread = nullptr;
-    }
-    if (g_hostStopEvent) {
-        CloseHandle(g_hostStopEvent);
-        g_hostStopEvent = nullptr;
-    }
-    if (g_hostMutex) {
-        CloseHandle(g_hostMutex);
-        g_hostMutex = nullptr;
+    if (g_role == Role::Launcher)
+        return;
+    if (g_role == Role::Tool) {
+        WhTool_ModUninit();
+        ExitProcess(0);
     }
     if (g_ignore.text)
         HeapFree(GetProcessHeap(), 0, g_ignore.text);
