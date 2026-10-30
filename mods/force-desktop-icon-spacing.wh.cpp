@@ -2,9 +2,9 @@
 // @id              force-desktop-icon-spacing
 // @name            Force Desktop Icon Spacing
 // @name:zh-CN      强制桌面图标间距
-// @description     Precisely control the desktop icon grid spacing (X/Y) and the bottom margin above the taskbar. Event-driven, DPI-aware, absolute one-shot values: no drift, no window shifting, and everything is reverted on unload.
-// @description:zh-CN  精准控制桌面图标的水平/垂直网格间距，以及任务栏上方预留的底部空白边距。事件驱动、支持 DPI 缩放、一次性绝对到位：不叠加累积、不整体移动、顶部不产生空白，卸载自动还原。
-// @version         1.1.0
+// @description     Precisely control the desktop icon grid spacing (X/Y) and the bottom margin above the taskbar. Event-driven, DPI-aware, absolute one-shot values: no drift, no window shifting, and the original spacing and height are restored on unload.
+// @description:zh-CN  精准控制桌面图标的水平/垂直网格间距，以及任务栏上方预留的底部空白边距。事件驱动、支持 DPI 缩放、一次性绝对到位：不叠加累积、不整体移动、顶部不产生空白，卸载自动还原间距与高度。
+// @version         1.1.1
 // @author          Koewen
 // @github          https://github.com/Koewen
 // @include         explorer.exe
@@ -30,11 +30,11 @@ Precisely control the desktop icon spacing: set the horizontal/vertical icon gri
 - **Horizontal spacing (pixels)**: width of each icon grid cell, at 100% scaling. Larger = more horizontal gap between icons.
 - **Vertical spacing (pixels)**: height of each icon grid cell, at 100% scaling. Larger = taller rows; the grid grows downward and the extra space is absorbed by the bottom region.
 - **Bottom margin (pixels)**: blank strip reserved at the bottom of the icon area, above the taskbar, at 100% scaling. The icon grid never enters it. 0 = no reservation.
-- **Rearrange icons on startup**: arrange icons once when the mod loads (same as the desktop "Arrange icons" command) so the spacing/margin take effect immediately. Disable it to keep your hand-drawn icon layout across Explorer restarts; changes made in the settings always rearrange.
+- **Rearrange icons on startup**: arrange icons once when the mod loads (same as the desktop "Arrange icons" command) so the spacing/margin take effect immediately. Note this only applies when the mod is loaded into an already-running Explorer (enabling or updating the mod); when Explorer starts with the mod, Explorer places icons from its saved layout afterwards. Changes made in the settings always rearrange.
 
 ## Notes
 
-- This mod no longer writes any registry values. If you want free icon placement, turn off "Auto arrange icons" and "Align icons to grid" in the desktop right-click menu yourself.
+- This mod doesn't write any registry values. If you want free icon placement, turn off "Auto arrange icons" and "Align icons to grid" in the desktop right-click menu yourself.
 - Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual "Arrange icons").
 - The bottom margin applies to the whole icon area (the list view spans all monitors); on multi-monitor setups it lands above the taskbar of the bottom-most monitor.
 
@@ -55,11 +55,11 @@ Precisely control the desktop icon spacing: set the horizontal/vertical icon gri
 - **水平间距（像素）**：图标网格单元宽度（100% 缩放下），数值越大图标水平间距越大。
 - **垂直间距（像素）**：图标网格单元高度（100% 缩放下），数值越大行距越大，网格向下延伸，多余空间挤占底部区域。
 - **底部边距（像素）**：图标区域底部（任务栏上方）预留的空白高度（100% 缩放下），图标网格不会进入该区域。0 = 不预留。
-- **启动时重排图标**：模组加载时执行一次"排列图标"，使间距/边距立即生效。若希望资源管理器重启后保留手动拖放的图标布局，可关闭此项；在设置面板修改参数时始终会重排。
+- **启动时重排图标**：模组加载时执行一次"排列图标"，使间距/边距立即生效。注意：仅在模组加载到已运行的资源管理器时（启用/更新模组）起作用；资源管理器随模组启动时，系统会按保存的布局放置图标。在设置面板修改参数时始终会重排。
 
 ### 注意
 
-- 本模组不再写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭"自动排列图标"和"将图标与网格对齐"。
+- 本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭"自动排列图标"和"将图标与网格对齐"。
 - 停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动"排列图标"一致）。
 - 底部边距作用于整个图标区域（列表视图横跨所有显示器）；多显示器下预留空白位于最底部显示器的任务栏上方。
 */
@@ -82,11 +82,11 @@ Precisely control the desktop icon spacing: set the horizontal/vertical icon gri
   $name:zh-CN: 底部边距（像素，100% 缩放下）
   $description: Blank strip reserved at the bottom of the icon area, above the taskbar. The icon grid never enters it. 0 = no reservation. Scaled automatically by display DPI.
   $description:zh-CN: 在图标区域底部（任务栏上方）预留的空白高度，图标网格不会进入该区域。0 = 不预留。按显示器 DPI 自动缩放。
-- ArrangeOnStartup: 1
+- ArrangeOnStartup: true
   $name: Rearrange icons on startup
   $name:zh-CN: 启动时重排图标
-  $description: Arrange icons once when the mod loads so the spacing/margin take effect immediately. Disable to keep hand-drawn icon layouts across Explorer restarts.
-  $description:zh-CN: 模组加载时执行一次"排列图标"，使间距/边距立即生效。若希望重启资源管理器后保留手动拖放的图标布局，可关闭此项。
+  $description: Arrange icons once when the mod loads so the spacing/margin take effect immediately. Only applies when the mod is loaded into an already-running Explorer (enable/update); when Explorer starts with the mod, Explorer places icons from its saved layout afterwards. Disable to keep hand-drawn icon layouts.
+  $description:zh-CN: 模组加载时执行一次"排列图标"，使间距/边距立即生效。仅在模组加载到已运行的资源管理器时（启用/更新模组）起作用；资源管理器随模组启动时，系统会按保存的布局放置图标。若希望保留手动拖放的图标布局，可关闭此项。
 */
 // ==/WindhawkModSettings==
 
@@ -100,17 +100,13 @@ static std::atomic<int> g_spacingY{100};
 static std::atomic<int> g_bottomMargin{0};
 static std::atomic<bool> g_arrangeOnStartup{true};
 
-// The spacing Explorer currently wants (captured from its own
-// LVM_SETICONSPACING / read at subclass install). -1 = not captured yet.
-static std::atomic<LONG> g_originalSpacing{-1};
+// The spacing Explorer last requested (captured from its own
+// LVM_SETICONSPACING / read at subclass install; -1 means "reset to default").
+// 0 = not captured yet. Restored on unload.
+static std::atomic<LONG> g_originalSpacing{0};
 
-// Set while WE send LVM_SETICONSPACING to apply our values, so the subclass
-// does not mistake our own request for one coming from Explorer.
-static std::atomic<bool> g_applying{false};
-
-// The currently subclassed desktop list view. Guarded with interlocked
-// exchange because the CreateWindowExW hook may run on any thread.
-static HWND g_subclassedLV = nullptr;
+// The currently subclassed desktop list view.
+static std::atomic<HWND> g_subclassedLV{nullptr};
 
 static int Clamp(int value, int minValue, int maxValue) {
     return value < minValue ? minValue : (value > maxValue ? maxValue : value);
@@ -124,6 +120,8 @@ static void LoadSettings() {
 }
 
 // Check that the window is the desktop's SysListView32 owned by THIS process.
+// The DefView's host must be Progman or WorkerW, otherwise folder windows that
+// use a native list view would be mistaken for the desktop.
 static bool IsDesktopListView(HWND hWnd) {
     WCHAR cls[64];
     if (!GetClassName(hWnd, cls, ARRAYSIZE(cls)) || _wcsicmp(cls, L"SysListView32") != 0) {
@@ -138,6 +136,12 @@ static bool IsDesktopListView(HWND hWnd) {
     HWND defView = GetParent(hWnd);
     if (!defView || !GetClassName(defView, cls, ARRAYSIZE(cls)) ||
         _wcsicmp(cls, L"SHELLDLL_DefView") != 0) {
+        return false;
+    }
+
+    HWND host = GetParent(defView);
+    if (!host || !GetClassName(host, cls, ARRAYSIZE(cls)) ||
+        (_wcsicmp(cls, L"Progman") != 0 && _wcsicmp(cls, L"WorkerW") != 0)) {
         return false;
     }
 
@@ -175,9 +179,10 @@ static void ApplySettings(HWND hWnd, BOOL bRearrange) {
         return;
     }
 
-    g_applying = true;
+    // The subclass replaces the lParam with our values; the incoming lParam
+    // (possibly 0 when Explorer's spacing is not captured yet) never reaches
+    // the list view.
     SendMessage(hWnd, LVM_SETICONSPACING, 0, (LPARAM)g_originalSpacing.load(std::memory_order_relaxed));
-    g_applying = false;
 
     HWND parent = GetParent(hWnd);
     RECT rc;
@@ -199,18 +204,17 @@ static LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM
                                                     DWORD_PTR dwRefData) {
     switch (uMsg) {
         case LVM_SETICONSPACING: {
-            // Remember what Explorer wants, then substitute our values.
-            // Requests we generate ourselves (g_applying) are not captured.
-            LONG original = (LONG)lParam;
-            if (!g_applying.load(std::memory_order_relaxed) && original > 0 &&
-                (WORD)(original & 0xFFFF) != 0 && (WORD)((original >> 16) & 0xFFFF) != 0) {
-                g_originalSpacing.store(original, std::memory_order_relaxed);
-            }
+            // Remember what Explorer last sent (any value, including -1 for
+            // "reset to default", so unload restores exactly that), then
+            // substitute our values and LET THE MESSAGE REACH THE LIST VIEW -
+            // returning early here would swallow it and the spacing would
+            // never be applied.
+            g_originalSpacing.store((LONG)lParam, std::memory_order_relaxed);
 
             UINT dpi = GetDpiForWindow(hWnd);
-            int cx = MulDiv(g_spacingX.load(std::memory_order_relaxed), (int)dpi, 96);
-            int cy = MulDiv(g_spacingY.load(std::memory_order_relaxed), (int)dpi, 96);
-            return MAKELRESULT(cx, cy);
+            lParam = MAKELPARAM(MulDiv(g_spacingX.load(std::memory_order_relaxed), (int)dpi, 96),
+                                MulDiv(g_spacingY.load(std::memory_order_relaxed), (int)dpi, 96));
+            break;
         }
 
         case WM_WINDOWPOSCHANGING: {
@@ -229,9 +233,13 @@ static LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM
             break;
         }
 
-        case WM_DPICHANGED:
+        case WM_DPICHANGED_AFTERPARENT:
             // Re-apply on DPI changes so spacing/margin follow the new scale.
             ApplySettings(hWnd, FALSE);
+            break;
+
+        case WM_NCDESTROY:
+            g_subclassedLV.compare_exchange_strong(hWnd, nullptr, std::memory_order_relaxed);
             break;
     }
 
@@ -239,7 +247,7 @@ static LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM
 }
 
 static void SubclassDesktopListView(HWND hWnd) {
-    HWND prev = (HWND)InterlockedExchangePointer((PVOID*)&g_subclassedLV, (PVOID)hWnd);
+    HWND prev = g_subclassedLV.exchange(hWnd);
     if (prev == hWnd) {
         return;  // already subclassed
     }
@@ -262,9 +270,10 @@ static void SubclassDesktopListView(HWND hWnd) {
 static void UnsubclassDesktopListView(HWND hWnd) {
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, DesktopListViewSubclassProc, 0);
 
-    // Restore the spacing Explorer last wanted, then the full height.
+    // Restore the spacing Explorer last sent (including -1 = "reset to
+    // default"), then the full height.
     LONG original = g_originalSpacing.load(std::memory_order_relaxed);
-    if (original > 0) {
+    if (original != 0) {
         SendMessage(hWnd, LVM_SETICONSPACING, 0, (LPARAM)original);
     }
 
@@ -321,7 +330,7 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    HWND hWnd = (HWND)InterlockedExchangePointer((PVOID*)&g_subclassedLV, nullptr);
+    HWND hWnd = g_subclassedLV.exchange(nullptr);
     if (hWnd && IsWindow(hWnd)) {
         UnsubclassDesktopListView(hWnd);
     }
@@ -332,7 +341,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    HWND hWnd = (HWND)InterlockedExchangePointer((PVOID*)&g_subclassedLV, (PVOID)g_subclassedLV);
+    HWND hWnd = g_subclassedLV.load();
     if (hWnd && IsWindow(hWnd)) {
         // Settings changes always rearrange so the effect is immediate.
         ApplySettings(hWnd, TRUE);
