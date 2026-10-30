@@ -21422,6 +21422,35 @@
         "version": "0.1.0"
       }
     },
+    "winklok": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793365401000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793365401000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Shifting Whistler",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -luser32 -lgdi32 -ld2d1 -ldwrite -ldwmapi -lwinmm -lshell32 -ladvapi32",
+        "description": "A calmer, smarter clock mod for the Windows 11 taskbar. Packed with essential time utilities and a powerful notes panel that seamlessly supports rich text and LaTeX.",
+        "github": "https://github.com/shifting-whistler",
+        "homepage": "https://github.com/shifting-whistler",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "WinKlok",
+        "version": "1.0.0"
+      }
+    },
     "winstant": {
       "details": {
         "defaultSorting": 3460,

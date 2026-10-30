@@ -2,12 +2,126 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-30T00:01:24.000Z</updated>
+    <updated>2026-10-30T13:03:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinKlok 1.0.0]]></title>
+        <id>https://windhawk.net/mods/winklok#d5dc716a30408034afa9f68542ea575268d8621e</id>
+        <link href="https://windhawk.net/mods/winklok"/>
+        <updated>2026-10-30T13:03:21.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winklok">WinKlok</h1>
+<p><strong>A calmer, smarter clock mod for Windows 11 taskbar.</strong>
+WinKlok replaces the stock date/time flyout with a fast, native, Fluent-styled panel that
+combines a <strong>Calendar, Stopwatch, Timer, Alarm, Notes</strong> and <strong>Settings</strong> in one place, and puts
+live stopwatch and timer previews right next to the taskbar clock.</p>
+<hr />
+<p><img src="https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktop%20.jpg" alt="Desktop" /></p>
+<hr />
+<h2 id="highlights">Highlights</h2>
+<p>| | |
+|---|---|
+| <strong>Native look and feel</strong> | Drawn with Direct2D and DirectWrite in the Windows palette, with real acrylic blur, your accent colour, light and dark themes, and Windows-style slide-up animations. |
+| <strong>Everything in one panel</strong> | Calendar, Stopwatch, Timer, Alarm, Notes and Settings, one click away from the clock. |
+| <strong>Live taskbar previews</strong> | A running stopwatch or timer is shown beside the clock with pause/play and reset buttons. |
+| <strong>Smooth scrolling</strong> | Mouse wheel, precision touchpad (tracked from raw two-finger movement with kinetic momentum), touch and pen share smooth scrolling. |
+| <strong>Private by design</strong> | No network access, no telemetry, no accounts. Everything is stored locally by Windhawk. |</p>
+<hr />
+<p><img src="https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/panelmodetable.jpg" alt="Panel Layout modes" /></p>
+<hr />
+<p><img src="https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/alltabs.png" alt="Panel Tabs" /></p>
+<hr />
+<h2 id="features">Features</h2>
+<h3 id="calendar">Calendar</h3>
+<ul>
+<li>Month, year and decade views, with smooth vertical month scrolling like the Windows calendar.</li>
+<li>Today and the selected date are marked with your accent colour. First day of the week follows Windows.</li>
+</ul>
+<h3 id="stopwatch">Stopwatch</h3>
+<ul>
+<li>Centisecond precision, up to 200 laps (the newest lap is always on top) and a smooth lap list.</li>
+<li>Keeps running while the panel is closed and shows a live preview next to the clock.</li>
+</ul>
+<h3 id="timer">Timer</h3>
+<ul>
+<li>Hours / minutes / seconds pickers, optional timer names and one-click presets you can save and remove.</li>
+<li>Run several timers at once. The most recently touched timer is shown beside the clock.</li>
+</ul>
+<h3 id="alarm">Alarm</h3>
+<ul>
+<li>Repeat on any days, custom label, snooze length and one of nine built-in sounds with live audition.</li>
+<li>The sound and snooze length you pick become the defaults for your next alarm.</li>
+<li>If an alarm or timer came due while the PC was off or asleep, it never rings late. One popup lists
+everything you missed, with dates and times.</li>
+</ul>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>Any number of notes, saved automatically, with a rich preview of Markdown and LaTeX maths.</li>
+<li><strong>Paste from ChatGPT, Gemini, Google and the web and keep the structure</strong>: headings, lists,
+tables, block quotes, code blocks, links and equations are converted to Markdown as you paste.</li>
+<li>Links in the preview are clickable (only the link itself), plain URLs are detected automatically.</li>
+<li>One-tap <strong>Copy</strong> button for the whole note body (the title is not included), adjustable text size.</li>
+</ul>
+<h3 id="settings">Settings</h3>
+<ul>
+<li>Taskbar previews, preview layout, notification icon, 12/24-hour time (applied everywhere),
+panel material (acrylic or simple) and default timer / alarm sounds.</li>
+<li><strong>Sync time now</strong> (Windows asks for administrator permission whenever it is needed).</li>
+<li>A compact <strong>About</strong> card with the version, developer and project links.</li>
+</ul>
+<hr />
+<h2 id="firstrundefaults">First-run defaults</h2>
+<p>Notification bell off, taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the <em>Windows Alarm</em>
+tone for both timers and alarms.</p>
+<h2 id="gettingstarted">Getting started</h2>
+<ol>
+<li>Install and enable the mod in Windhawk.</li>
+<li>WinKlok takes over the taskbar clock within a second or so. If the clock does not change, restart
+Windows Explorer from Task Manager.</li>
+<li>Have fun…</li>
+</ol>
+<h2 id="tips">Tips</h2>
+<ul>
+<li>Scroll over the tab bar to reveal more tabs, or click a tab to slide it to the centre.</li>
+<li>Right-click a timer preset to reveal its remove button.</li>
+<li>The notification bell is optional. Turn it off in Settings if you prefer the stock one.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 with the XAML taskbar, 64-bit only.</li>
+<li>Do not combine with other mods that rebuild the taskbar clock area (for example <em>Taskbar Clock
+Customization</em>) until you have verified they coexist.</li>
+<li>WinKlok does not change the taskbar height. Use the <em>Taskbar height and icon size</em> mod for that.</li>
+<li>To turn WinKlok off, disable the mod in Windhawk: the taskbar clock goes back to Windows immediately.</li>
+<li>If something misbehaves, enable logging for this mod in Windhawk and check the log.</li>
+</ul>
+<h2 id="fordevelopers">For developers</h2>
+<ul>
+<li>Single-file C++ mod, organised in blocks: engine and persistence, taskbar integration (XAML
+injection and hooks), native UI primitives, sound synthesis, rich-text and LaTeX engine, panel
+pages and alert windows.</li>
+<li>Rendering is plain Win32 + Direct2D/DirectWrite. There is no browser engine and no external asset.</li>
+<li>Alarm sounds are synthesised at runtime into in-memory WAV buffers, so nothing needs to be shipped.</li>
+<li>The pasted-HTML to Markdown converter lives next to the Notes editor and understands the clipboard
+<em>HTML Format</em> produced by modern browsers and chat apps.</li>
+<li>Contributions, bug reports and ideas are welcome on GitHub.</li>
+</ul>
+<h2 id="creditsandlicence">Credits and licence</h2>
+<p>Made by <strong>Shifting Whistler</strong>.</p>
+<ul>
+<li>GitHub: https://github.com/shifting-whistler</li>
+<li>WinKlok Repo: https://github.com/shifting-whistler/WinKlok</li>
+</ul>
+<p>WinKlok is free and open source software released under the <strong>GNU General Public License v3.0</strong>
+(or any later version). You are free to use, study, share and improve it under the terms of that licence.</p>]]></content>
+        <author>
+            <name>Shifting Whistler</name>
+            <uri>https://github.com/shifting-whistler</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fast Backspace 1.0]]></title>
         <id>https://windhawk.net/mods/fast-backspace#1539f9586a19f1ac140654f04292fe20b5cff3fd</id>
@@ -1032,81 +1146,6 @@ reason: use a normal window.</li>
 <li>The look of both styles follows the measurements of the two original
 switchers.</li>
 <li>AdministratoX for testing the mod on Windows 11 25H2.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win81-start-screen-recreation#5f736702f73799aea88466b725d4aa031003066b</id>
-        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
-        <updated>2026-10-25T17:31:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows81startscreenrecreation">Windows 8.1 Start Screen Recreation</h1>
-<p>This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png" alt="Screenshot" /></p>
-<h2 id="aboutthemod">About the mod</h2>
-<p>The mod replaces the Start experience with a full-screen Start screen modeled after
-Windows 8.1: tiles arranged in groups, an All Apps view, type-to-search, and the
-corresponding menus and animations. Feedback and suggestions are accepted. The mod
-has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<p>Note: This is a best-effort modification. Layout, colors, icons and animations are
-inspired by Windows 8.1. Tiles display the real Windows 10/11 applications, so
-certain original elements (such as Live Tiles and Metro apps) cannot be restored.
-The mod does <strong>not</strong> replace system files.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Tiles</strong>: all four sizes (small, medium, wide, large). Tiles can be dragged,
-apps can be pinned and unpinned, and groups can be named via right-click on empty
-space and <strong>Name groups</strong>.</li>
-<li><strong>8.1 menus</strong>: right-clicking a tile opens the Windows 8.1 Update menu with the
-cascading <strong>Resize</strong> submenu. The bottom command bar (touch / keyboard) provides
-Advanced, Run, Resize and Unpin.</li>
-<li><strong>Search</strong>: typing starts a search. The search charm covers apps, settings and
-files, with the Everywhere / Apps / Settings / Files scopes.</li>
-<li><strong>All Apps view</strong>: accessed via the circle arrow at the bottom left; sortable by
-name, date installed or category.</li>
-<li><strong>Real tile colors</strong>: packaged apps use their own tile color and artwork; classic
-programs that declare a tile color (such as Chrome) use it as well.</li>
-<li><strong>Background options</strong>: the classic petal artwork, a solid color, the accent
-color, the desktop wallpaper, or a custom image.</li>
-<li><strong>Optional 8.1-style layout</strong>: modern versions of the old Windows 8.1 apps
-(Outlook, Calendar, Photos, Weather, and others) can be pinned automatically when
-installed. Disabled by default; it can be enabled in the settings.</li>
-</ul>
-<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
-<p>| Shortcut | Action |
-| --- | --- |
-| Windows key / Start button | Opens or closes Start |
-| Typing | Starts a search |
-| Ctrl+Tab | Opens the All Apps view |
-| Arrow keys + Enter | Navigates and opens apps |
-| Esc | Closes menus / Start |</p>
-<h2 id="additionalinformation">Additional information</h2>
-<ul>
-<li>The mod is compatible with the <strong>Windows 8/8.1 Charms Bar Recreation</strong> and the
-<strong>Windows 8/8.1 Search Charm Recreation</strong> mods for a complete Windows 8.1
-experience.</li>
-<li>The mod is available in English, Italian, Spanish, French and Portuguese. The language
-follows the Windows display language.</li>
-<li>All options are documented on the mod's settings page in Windhawk.</li>
-<li>If the Start hook cannot be installed (for example on an unsupported Windows build), the
-mod falls back to keyboard interception. A lone Windows key press is then detected by a
-keyboard hook, and the mod sends a synthetic key press of an unassigned key (VK 0xE8) so
-that Explorer does not open its own Start menu as well.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>AdmnistratoX</strong> - for the original Windows 8 (8045) Start Screen mod on which this
-mod is based.</li>
-<li><strong>WinBoeing 777</strong> - Testing on Windows 10 22H2</li>
-<li>All testers who reported bugs and provided feedback.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>This modification is not affiliated with, endorsed by, or sponsored by Microsoft. This project represents a community contribution to help users improve their Windows experience by recreating a legacy component of an old operating system. Windows is a trademark owned by Microsoft Corporation. This modification is an independent companion project intended to complement, not replace, the standard Windows experience, and is provided free of charge for personal, non-commercial use.</li>
-<li>For problems, please report an issue on GitHub.</li>
 </ul>]]></content>
         <author>
             <name>babamohammed</name>
