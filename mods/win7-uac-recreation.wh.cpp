@@ -93,7 +93,7 @@ Without this change, the mod has no effect.
 - The Windows 10 (1709 and later) skin draws the title row of its reference inside the header: that skin alone has no system caption, and its close glyph means No, exactly like the X of the Windows prompt.
 - In that skin the three states wear the header colours of its reference: blue `#7ABAEC`, yellow `#FDD266`, red `#E60026`, with black text on each of them.
 - The Windows 10 (1709 and later) skin is the only one that asks for the font of Windows 10 by name, Segoe UI (with Selawik and Arial as stand-ins); the four classic skins keep the message font of the system they always used.
-- In that skin the option that is about to be chosen carries the black frame of Windows 10, and the arrow keys, Tab and Shift+Tab move it between Yes and No; Enter presses the frame the selection is on.
+- In that skin the black frame of Windows 10 is drawn around the button that has the keyboard focus, so the framed button is always the one Narrator announces and the one Enter and Space press. The prompt opens with that focus on No; the arrow keys move it between Yes and No, Tab and Shift+Tab walk it through Yes, No and "Show details", and Enter and Space press whichever of the three has it (the link toggles the details pane, which decides nothing).
 - The prompt offers Move and Close in its title bar menu: Size, Minimize, Maximize and Restore are removed from the system menu and refused as commands, so a UAC prompt can be neither resized nor minimised.
 - That skin is drawn with GDI+, which it needs: where GDI+ cannot start, the mod leaves the native prompt in place rather than drawing half a dialog.
 - Every other skin keeps the caption, the frame and the shield behaviour it always had. Selecting a skin changes the dialog, not the flow: the secure desktop, the native prompt and every elevation decision are untouched.
@@ -3724,10 +3724,11 @@ struct UiState {
     bool modernCloseHot = false;
     bool modernClosePressed = false;
     int modernHoverButton = 0;
-    // The option of the modern skin that is about to be chosen: the one the black frame is around and
-    // the one Enter presses. Windows 10 starts on "No" - the default the prompt itself has - and the
-    // arrow keys, Tab and Shift+Tab move the frame.
-    int modernSelected = IDC_W7UAC_NO;
+    // The modern skin keeps no state of its own about which option the black frame is around. That
+    // option is the button that has the keyboard focus - the one Windows moves with the arrow keys
+    // and Tab, the one UI Automation and Narrator report, and the one Enter and Space press (see
+    // WM_DRAWITEM and the message loop). One state, so the frame and the keyboard can never
+    // disagree, and the focus starts on "No" (WM_CREATE), which is the default the prompt has.
     HICON shieldSmall = nullptr;
     HICON shieldBig = nullptr;
     HICON appIcon = nullptr;
@@ -7090,14 +7091,14 @@ static void DrawDetailsRow(HDC dc, int left, int top, int right, BOOL focused, B
 #define M10_C_BTN_HOT    M10_ARGB(255, 198, 198, 198)
 #define M10_C_BTN_DOWN   M10_ARGB(255, 166, 166, 166)
 #define M10_C_BTN_INK    M10_ARGB(255, 0, 0, 0)
-// The frame of the default button. The reference shows it around "No" - the button Enter presses,
-// which is the default button of the prompt for the reason the dialog defaults to No.
+// The frame of the button that has the keyboard focus. The reference shows it around "No" when the
+// prompt opens - which is where the focus starts, for the reason the dialog defaults to No.
 #define M10_C_BTN_FRAME  M10_ARGB(255, 0, 0, 0)
 // The frame of the option that is about to be chosen: the black rectangle Windows 10 draws around it -
-// two pixels wide, inside the button, and it moves with the arrow keys, Tab and Shift+Tab.
+// two pixels wide, inside the button, and it sits on whichever button has the keyboard focus, so the
+// arrow keys and Tab move it by moving the focus itself.
 #define M10_SELECT_FRAME      2
 #define M10_C_BTN_OFF    M10_ARGB(255, 109, 109, 109)   // a label that cannot be pressed
-#define M10_C_FOCUS      M10_ARGB(255, 77, 77, 77)
 #define M10_C_PANE       M10_ARGB(255, 245, 245, 245)
 #define M10_C_PANE_EDGE  M10_ARGB(255, 198, 198, 198)
 #define M10_C_PANE_INK   M10_ARGB(255, 60, 60, 60)
@@ -7498,10 +7499,13 @@ static void ModernDrawPane(GpGraphics* g, const ModernLayout& L, int dpi) {
 
 // The two buttons. They are the flat grey rectangles of the reference - no border, no gradient: the
 // screenshot has none, and the system button theme would put one there. Their states stay inside
-// that language: the fill lightens under the cursor, darkens while pressed, and a focused button
-// gets the dotted rectangle Windows uses for keyboard focus.
+// that language: the fill lightens under the cursor and darkens while pressed, and the button that
+// has the keyboard focus carries the black frame of the reference. That focus is the only state the
+// frame has: it is the button the system moves with the arrow keys and Tab, the one Narrator
+// announces, and the one Enter and Space press (see the message loop), so what the user sees and
+// what the keyboard will do are always the same button.
 static void DrawModernButton(HDC dc, const RECT& r, const std::wstring& label, BOOL focused,
-                             BOOL pressed, BOOL disabled, BOOL hot, BOOL selected) {
+                             BOOL pressed, BOOL disabled, BOOL hot) {
     int w = r.right - r.left, h = r.bottom - r.top;
     if (w <= 0 || h <= 0) return;
     GpGraphics* g = ModernBeginGdiPlus(dc);
@@ -7518,7 +7522,7 @@ static void DrawModernButton(HDC dc, const RECT& r, const std::wstring& label, B
         DrawTextW(dc, label.c_str(), -1, &tr,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         SelectObject(dc, old);
-        if (selected) {
+        if (focused) {
             int t = ScaleFor(M10_SELECT_FRAME, g_ui.dpi);
             if (t < 2) t = 2;
             HBRUSH fr = CreateSolidBrush(RGB(0, 0, 0));
@@ -7537,11 +7541,11 @@ static void DrawModernButton(HDC dc, const RECT& r, const std::wstring& label, B
 
     UINT fill = disabled ? M10_C_BTN : pressed ? M10_C_BTN_DOWN : hot ? M10_C_BTN_HOT : M10_C_BTN;
     ModernFillRect(g, r.left, r.top, w, h, fill);
-    // The option that is about to be chosen carries the black frame of the reference - the rectangle
+    // The button that has the keyboard focus carries the black frame of the reference - the rectangle
     // Windows 10 draws around it, two pixels wide and inside the button. It is drawn as four filled
     // strips rather than as four pen lines, so the frame is exactly as thick as it is asked for at
     // every display scale instead of a pen width rounded to whatever the device offers.
-    if (selected) {
+    if (focused) {
         int t = ScaleFor(M10_SELECT_FRAME, g_ui.dpi);
         if (t < 2) t = 2;
         if (t * 2 >= w) t = 1;
@@ -7563,19 +7567,9 @@ static void DrawModernButton(HDC dc, const RECT& r, const std::wstring& label, B
         int baseline = r.top + (h + capPx + 1) / 2;
         ModernDrawText(g, g_ui.modernButton, label, x, baseline, w, h, ink, false, false);
     }
-    // Keyboard focus is what the black frame above already says: Windows 10 draws no second, dotted
-    // rectangle on this prompt, so none is invented here. The dotted one stays the classic skins'.
-    if (focused && !selected) {
-        // A button with the keyboard focus that is not the selected one: the reference has no such
-        // state, and it lasts only until the next key or click moves the selection.
-        int inset = 3;
-        float l = (float)(r.left + inset), tp = (float)(r.top + inset);
-        float rr = (float)(r.right - inset - 1), bb = (float)(r.bottom - inset - 1);
-        ModernDrawLine(g, l, tp, rr, tp, M10_C_FOCUS, 1.0f, false);
-        ModernDrawLine(g, rr, tp, rr, bb, M10_C_FOCUS, 1.0f, false);
-        ModernDrawLine(g, rr, bb, l, bb, M10_C_FOCUS, 1.0f, false);
-        ModernDrawLine(g, l, bb, l, tp, M10_C_FOCUS, 1.0f, false);
-    }
+    // Keyboard focus is what the black frame above already says, and it is the only state this
+    // painter has: Windows 10 draws no second, dotted rectangle on this prompt, so none is invented
+    // here. The dotted one stays the classic skins' (see DrawWin7Button).
     ModernEndGdiPlus(g);
 }
 
@@ -8224,9 +8218,6 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
                 Log(L"the faces of the modern skin could not be created -> fail open");
                 return -1;
             }
-            // The selection starts where the prompt itself starts: on No. A prompt whose Yes were
-            // framed would invite the Enter key to approve, which is the one thing this mod never does.
-            g_ui.modernSelected = IDC_W7UAC_NO;
         }
         // The small caption icon is the selected theme's verified shield, never the verdict for
         // this request. The banner uses state-specific artwork on non-flat themes; Flat Icons keeps
@@ -8316,6 +8307,10 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         if (g_ui.info && !g_ui.info->yesEnabled && g_ui.hYes) EnableWindow(g_ui.hYes, FALSE);
         if (!HasDetailsRow() && g_ui.hDetails) ShowWindow(g_ui.hDetails, SW_HIDE);
         LayoutControls(hWnd);
+        // The prompt opens with the keyboard focus on No, and for the modern skin that focus is also
+        // the black frame and the button Enter presses (see WM_DRAWITEM and the message loop). A
+        // prompt that started with Yes framed would invite Enter to approve, which is the one thing
+        // this mod never does; starting on No keeps the safe answer as the default one.
         SetFocus(g_ui.hNo ? g_ui.hNo : hWnd);
         return 0;
     }
@@ -8407,12 +8402,13 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         WCHAR label[128] = L"";
         GetWindowTextW(dis->hwndItem, label, ARRAYSIZE(label));
         if (IsWin10ModernSkin()) {
-            // The frame follows the selection, not the button style: the option the user is about to
-            // choose is the one that carries it (see DrawModernButton).
-            BOOL selected = ((int)dis->CtlID == g_ui.modernSelected);
+            // The black frame is drawn on the button that has the keyboard focus, and on no other:
+            // ODS_FOCUS is the state Windows keeps for it, the one it moves with the arrow keys and
+            // Tab, the one UI Automation and Narrator report, and the one the message loop answers
+            // Enter and Space with. One owner, so the frame can never point at an option the
+            // keyboard would not press (see DrawModernButton and the message loop).
             DrawModernButton(dis->hDC, dis->rcItem, label, focused, pressed, disabled,
-                             hover || hot || (int)dis->CtlID == g_ui.modernHoverButton,
-                             selected);
+                             hover || hot || (int)dis->CtlID == g_ui.modernHoverButton);
         } else {
             DrawWin7Button(dis->hDC, dis->rcItem, label, focused, pressed, disabled, hover,
                            g_ui.fontNormal);
@@ -8505,7 +8501,9 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             }
         }
         // The click is consumed here, so the default button has to be given the focus back by
-        // hand: Enter and Esc keep working after a click on the painted area.
+        // hand: Enter and Esc keep working after a click on the painted area. In the modern skin
+        // that focus is also the black frame and the button Enter presses, so the frame returns to
+        // No with it - which is what the user hears announced and what the keyboard will do.
         if (g_ui.hNo && GetFocus() != g_ui.hNo && GetFocus() != g_ui.hYes) SetFocus(g_ui.hNo);
         // With no link there is nothing else under the cursor: the click only gives the default
         // button the focus back, which the lines above already did.
@@ -8550,14 +8548,9 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
     }
     case WM_COMMAND: {
         int id = LOWORD(wParam);
-        // A click on one of the modern skin's two buttons makes that button the selected one before it
-        // is answered: the frame never stays on the option the user did not choose.
-        if (IsWin10ModernSkin() && (id == IDC_W7UAC_YES || id == IDC_W7UAC_NO) &&
-            id != g_ui.modernSelected) {
-            g_ui.modernSelected = id;
-            if (g_ui.hYes) InvalidateRect(g_ui.hYes, nullptr, FALSE);
-            if (g_ui.hNo) InvalidateRect(g_ui.hNo, nullptr, FALSE);
-        }
+        // Nothing to synchronise for the modern skin: the black frame is drawn from the keyboard
+        // focus (see WM_DRAWITEM), and a click on a button gives that button the focus the way every
+        // push button takes it, so the frame follows the click by itself before this line runs.
         if (id == IDC_W7UAC_YES) {
             g_ui.result = IDC_W7UAC_YES;
             g_ui.done = true;
@@ -9697,59 +9690,58 @@ static DWORD WINAPI UiSessionRunInner() {
                 if (g_ui.hwnd) SetForegroundWindow(g_ui.hwnd);
             }
         }
-        // The modern skin's selection. The option that is about to be chosen is the one the black
-        // frame is around, and that frame follows the keyboard: the arrows and Tab move it (Shift+Tab
-        // the other way), Enter and Space press it. The keys are read here, before the message is
-        // dispatched, because the prompt's buttons are child controls of the system class and the
-        // frame is the dialog's own: one owner for the state, and Enter can never approve more than
-        // the option the user is looking at. The classic skins keep their own handling below.
+        // The modern skin's keyboard. The keyboard focus is the only state there is: the button that
+        // holds it is the one the black frame is drawn around (see WM_DRAWITEM), the one UI Automation
+        // and Narrator report, and the one Enter and Space press. Nothing here keeps a selection of
+        // its own, so what the user sees and what the keyboard will do can never disagree - on a UAC
+        // prompt, that has to be beyond doubt. The arrows move the focus with SetFocus; Enter and
+        // Space then act on GetFocus(); Tab is left to IsDialogMessageW below, which walks the three
+        // WS_TABSTOP controls - Yes, No and the "Show details" row - so the link is reachable from
+        // the keyboard and the link, once focused, is what Enter and Space answer. The classic skins
+        // keep their own handling below.
         if (IsWin10ModernSkin() && msg.message == WM_KEYDOWN) {
-            bool handled = true;
-            int want = g_ui.modernSelected;
-            switch (msg.wParam) {
-                case VK_LEFT:
-                case VK_UP:
-                    want = IDC_W7UAC_YES;
-                    break;
-                case VK_RIGHT:
-                case VK_DOWN:
-                    want = IDC_W7UAC_NO;
-                    break;
-                case VK_TAB: {
-                    bool back = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                    if (back)
-                        want = (g_ui.modernSelected == IDC_W7UAC_YES) ? IDC_W7UAC_NO : IDC_W7UAC_YES;
-                    else
-                        want = (g_ui.modernSelected == IDC_W7UAC_NO) ? IDC_W7UAC_YES : IDC_W7UAC_NO;
-                    break;
-                }
-                case VK_RETURN:
-                case VK_SPACE: {
-                    int chosen = g_ui.modernSelected;
+            HWND focused = GetFocus();
+            if (msg.wParam == VK_LEFT || msg.wParam == VK_UP) {
+                // A disabled Yes cannot take the focus either, so the focus - and the frame drawn on
+                // it - stays where it is, and Enter keeps meaning what the user is looking at.
+                if (g_ui.hYes && IsWindowEnabled(g_ui.hYes)) SetFocus(g_ui.hYes);
+                continue;
+            }
+            if (msg.wParam == VK_RIGHT || msg.wParam == VK_DOWN) {
+                if (g_ui.hNo) SetFocus(g_ui.hNo);
+                continue;
+            }
+            if (msg.wParam == VK_RETURN || msg.wParam == VK_SPACE) {
+                if (g_ui.hYes && focused == g_ui.hYes) {
                     bool yesUsable = g_ui.info ? g_ui.info->yesEnabled != FALSE : true;
-                    if (chosen == IDC_W7UAC_YES && !yesUsable) {
-                        Log(L"the selected option is Yes and the native prompt has it disabled: "
+                    if (!yesUsable) {
+                        Log(L"the focused option is Yes and the native prompt has it disabled: "
                             L"nothing is pressed");
-                        break;
+                    } else {
+                        Log(L"the keyboard pressed Yes (the focused option)");
+                        g_ui.result = IDC_W7UAC_YES;
+                        g_ui.done = true;
+                        PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
                     }
-                    Log(L"the keyboard pressed %s (the framed option)",
-                        chosen == IDC_W7UAC_YES ? L"Yes" : L"No");
-                    g_ui.result = chosen;
+                } else if (g_ui.hDetails && focused == g_ui.hDetails) {
+                    // The link keeps its own job: Enter and Space on a focused "Show details" toggle
+                    // the pane, exactly what the control does when the system handles the key. That
+                    // is never a decision, so it cannot approve anything by accident.
+                    PostMessageW(g_ui.hwnd, WM_COMMAND,
+                                 MAKEWPARAM(IDC_W7UAC_DETAILS, BN_CLICKED),
+                                 (LPARAM)g_ui.hDetails);
+                } else {
+                    // The No button, or a focus the dialog window itself holds: the answer is No,
+                    // the one the prompt defaults to.
+                    Log(L"the keyboard pressed No (the focused option)");
+                    g_ui.result = IDC_W7UAC_NO;
                     g_ui.done = true;
                     PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
-                    break;
                 }
-                default:
-                    handled = false;
-                    break;
+                continue;
             }
-            if (want != g_ui.modernSelected) {
-                g_ui.modernSelected = want;
-                Dbg(L"modern skin: the frame is on %s", want == IDC_W7UAC_YES ? L"Yes" : L"No");
-                if (g_ui.hYes) InvalidateRect(g_ui.hYes, nullptr, FALSE);
-                if (g_ui.hNo) InvalidateRect(g_ui.hNo, nullptr, FALSE);
-            }
-            if (handled) continue;
+            // VK_TAB, and every other key, falls through to IsDialogMessageW below: Tab moves the
+            // focus through the tab stops, and the frame follows because the frame is that focus.
         }
         if (msg.message == WM_HOTKEY && msg.wParam == IDC_W7UAC_PANIC) {
             Log(L"panic hotkey: closing the Windows 7 dialog and giving the native prompt back");
@@ -9760,8 +9752,10 @@ static DWORD WINAPI UiSessionRunInner() {
         }
         if (!IsDialogMessageW(g_ui.hwnd, &msg)) {
             // Enter means No for the classic skins, whose lower strip draws no selection of its own.
-            // The modern skin never reaches this line with Enter: it consumed the key above, where the
-            // frame says which option the user is about to choose.
+            // The modern skin never reaches this line with Enter or Space: it consumed those keys
+            // above, where the button that has the keyboard focus - the one the frame is drawn on -
+            // says which option the user is about to choose. Tab does reach this line for both, and
+            // that is the point: the dialog manager moves the focus, and the frame follows it.
             if (msg.message == WM_KEYDOWN && (msg.wParam == VK_RETURN || msg.wParam == VK_ESCAPE)) {
                 g_ui.result = IDC_W7UAC_NO;
                 g_ui.done = true;
