@@ -843,14 +843,17 @@ class ModMetadataValidator:
     def validate_tool_mod(self):
         """Validate the metadata of a tool mod: one that targets windhawk.exe
         with a WhTool_ModInit entry point or a -tool-mod launcher, or any
-        windhawk-*.exe process."""
+        windhawk-*.exe process other than windhawk-ui.exe and windhawk-cli.exe."""
         prop = self.property('include')
         if not prop:
             return
 
         includes = {x.lower() for x in prop.value.split('\n') if x != ''}
         windhawk_includes = {
-            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            x
+            for x in includes
+            if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            and x not in ('windhawk-ui.exe', 'windhawk-cli.exe')
         }
         defines_tool_mod_init = (
             re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
