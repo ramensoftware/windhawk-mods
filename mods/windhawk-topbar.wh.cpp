@@ -3,7 +3,7 @@
 // @name            TopBar for Windows
 // @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
-// @version         1.4.2
+// @version         1.4.3
 // @author          WasiXGamer
 // @github          https://github.com/wasixgamer
 // @include         explorer.exe
@@ -1279,6 +1279,7 @@ LRESULT CALLBACK ShellTrayHostIpcProc(HWND hWnd, UINT msg, WPARAM wParam,
                                       LPARAM lParam);
 void ShellTrayPushToClient();
 
+wuxm::SolidColorBrush FontColorBrush(uint8_t alpha);
 void ApplyAllControlStyles();
 void ApplyControlStylesToPopupRoot(FrameworkElement const& root);
 void UpdateTrayIconRotation();
@@ -2670,6 +2671,18 @@ void AdjustTaskButtonWidths() {
     if (s_adjusting) return;
     if (!g_taskListPanel) return;
     if (g_taskListPanel.Children().Size() == 0) return;
+
+    // Icon-only buttons have a stable compact natural width. Keep that width
+    // even when the task list competes with the center panel; text modes still
+    // use the available-width calculation below.
+    if (g_settings.taskButtonContent == L"iconOnly") {
+        for (auto&& child : g_taskListPanel.Children()) {
+            if (auto button = child.try_as<wuxc::Button>()) {
+                try { button.ClearValue(FrameworkElement::WidthProperty()); } catch (...) {}
+            }
+        }
+        return;
+    }
 
     // Width=Auto mode: never compress. The bar sizes to content and the
     // panels grow to fit. Buttons keep their natural widths so that
@@ -5327,6 +5340,33 @@ void ApplyAllControlStyles() {
 
     UpdateTrayIconRotation();
 
+    // Theme rules can assign AppTitleText's Foreground after the text block
+    // was created. Reassert the configured global font color after the style
+    // pass, unless the user's own controlStyles explicitly sets this target.
+    if (!g_settings.fontColor.empty()) {
+        bool hasUserForeground = false;
+        for (const auto& rule : g_controlStyleRules) {
+            if (rule.target.find(L"AppTitleText") == std::wstring::npos &&
+                rule.target.find(L"AppTitleButton") == std::wstring::npos) continue;
+            for (const auto& style : rule.styles) {
+                auto trimmed = TrimWs(style);
+                if (trimmed.starts_with(L"Foreground=") ||
+                    trimmed.starts_with(L"Foreground:=")) {
+                    hasUserForeground = true;
+                    break;
+                }
+            }
+            if (hasUserForeground) break;
+        }
+        if (!hasUserForeground) {
+            if (g_appTitleButton) {
+                if (auto text = g_appTitleButton.Content().try_as<wuxc::TextBlock>()) {
+                    try { text.Foreground(FontColorBrush(0xFF)); } catch (...) {}
+                }
+            }
+        }
+    }
+
     bool tintChanged = previousTintColor.A != g_iconTintColor.A ||
                        previousTintColor.R != g_iconTintColor.R ||
                        previousTintColor.G != g_iconTintColor.G ||
@@ -5998,6 +6038,57 @@ std::wstring GetEffectiveIconColorString() {
                    g_iconColorOverride->B);
         return buf;
     }
+
+    // Resolve the root icon color before the first style pass as well. The
+    // Start logo and several glyph icons are created while building the XAML
+    // tree, before ApplyAllControlStyles has populated g_iconColorOverride.
+    // Without this fallback, cold startup constructs those icons in white;
+    // a later reload happens to recolor them after the tree is fully attached.
+    auto rootIconColor = [](const std::vector<ControlStyleRule>& rules)
+        -> std::wstring {
+        std::wstring resolved;
+        for (const auto& rule : rules) {
+            bool targetsRoot = false;
+            size_t start = 0;
+            while (start <= rule.target.size()) {
+                size_t comma = rule.target.find(L',', start);
+                std::wstring target = TrimWs(rule.target.substr(
+                    start, comma == std::wstring::npos ? std::wstring::npos
+                                                       : comma - start));
+                if (target == L"TopBarRoot" || target == L"Grid#TopBarRoot" ||
+                    target == L"* > Grid#TopBarRoot") {
+                    targetsRoot = true;
+                    break;
+                }
+                if (comma == std::wstring::npos) break;
+                start = comma + 1;
+            }
+            if (!targetsRoot) continue;
+            for (const auto& style : rule.styles) {
+                std::wstring entry = TrimWs(style);
+                std::wstring value;
+                if (entry.starts_with(L"IconColor:=")) value = TrimWs(entry.substr(11));
+                else if (entry.starts_with(L"IconColor=")) value = TrimWs(entry.substr(10));
+                if (value.empty()) continue;
+                value = ApplyStyleConstants(value);
+                wui::Color parsed{};
+                if (TryParseHexColor(value, &parsed) ||
+                    TryParseNamedColor(value, &parsed)) {
+                    wchar_t buf[16];
+                    swprintf_s(buf, L"#%02X%02X%02X",
+                               parsed.R, parsed.G, parsed.B);
+                    resolved = buf;
+                }
+            }
+        }
+        return resolved;
+    };
+
+    // Match ApplyAllControlStyles precedence: user control styles override
+    // the selected theme's root icon color.
+    std::wstring configured = rootIconColor(g_controlStyleRules);
+    if (configured.empty()) configured = rootIconColor(g_themeStyleRules);
+    if (!configured.empty()) return configured;
     return g_settings.iconColor.empty() ? L"#FFFFFF" : g_settings.iconColor;
 }
 
@@ -6442,45 +6533,10 @@ wuxm::SolidColorBrush FontColorBrushDimmed() {
 // through g_iconColorOverride, so this only needs to fall back to the
 // setting, then to plain white.
 wuxm::SolidColorBrush IconColorBrush(uint8_t alpha = 0xFF) {
-    if (g_iconColorOverride) {
-        return MakeBrush(alpha,
-                         g_iconColorOverride->R,
-                         g_iconColorOverride->G,
-                         g_iconColorOverride->B);
-    }
-    // g_iconColorOverride is only populated once ApplyAllControlStyles has
-    // run at least once. Menus, tooltips, and other popups created before
-    // that first style pass (or after LoadSettings() resets the override)
-    // fall through to g_settings.iconColor (typically white), causing their
-    // icons to flash to the correct color and then revert when the reset
-    // step of ApplyAllControlStyles runs with a stale/empty override.
-    // Resolve the TopBarRoot IconColor rule straight from the user's YAML
-    // as a fallback so this function always returns what the user intended.
-    for (const auto& rule : g_controlStyleRules) {
-        std::wstring t = TrimWs(rule.target);
-        if (t != L"Grid#TopBarRoot" && t != L"TopBarRoot" &&
-            t != L"* > Grid#TopBarRoot") {
-            continue;
-        }
-        for (const auto& s : rule.styles) {
-            std::wstring ruleStr = TrimWs(s);
-            std::wstring prefix;
-            if (ruleStr.starts_with(L"IconColor:=")) prefix = L"IconColor:=";
-            else if (ruleStr.starts_with(L"IconColor=")) prefix = L"IconColor=";
-            else continue;
-            std::wstring val = TrimWs(ApplyStyleConstants(ruleStr.substr(prefix.size())));
-            wui::Color c{};
-            if (TryParseHexColor(val, &c) || TryParseNamedColor(val, &c)) {
-                return MakeBrush(alpha, c.R, c.G, c.B);
-            }
-        }
-    }
+    std::wstring effective = GetEffectiveIconColorString();
     wui::Color c{};
-    if (!g_settings.iconColor.empty()) {
-        if (TryParseHexColor(g_settings.iconColor, &c) ||
-            TryParseNamedColor(g_settings.iconColor, &c)) {
-            return MakeBrush(alpha, c.R, c.G, c.B);
-        }
+    if (TryParseHexColor(effective, &c) || TryParseNamedColor(effective, &c)) {
+        return MakeBrush(alpha, c.R, c.G, c.B);
     }
     return MakeBrush(alpha, 0xFF, 0xFF, 0xFF);
 }
@@ -7462,12 +7518,6 @@ bool IsTrueFullscreen() {
 }
 
 bool IsAnyFullscreenActive() {
-    static const ULONGLONG kBootGraceMs = 30000;
-    if (g_barStartTick != 0 &&
-        (GetTickCount64() - g_barStartTick) < kBootGraceMs) {
-        return false;
-    }
-
     QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
     if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
         if (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
@@ -20894,6 +20944,15 @@ void ShowSearchFlyout();
 void EnsureSearchFlyoutCreated();
 void LaunchFirstSearchResult();
 static void RecenterSearchPopup();
+static ULONGLONG g_searchPopupPositionSettleUntil = 0;
+static bool g_searchPopupPrimed = false;
+static bool g_searchPopupPriming = false;
+static bool g_searchPopupPrimeAttempted = false;
+static bool g_searchOpenPendingAfterPrime = false;
+[[clang::no_destroy]] DispatcherTimer g_searchPopupPrimeTimer{nullptr};
+static int g_searchPopupPrimePollTicks = 0;
+static int g_searchPopupPrimeStableTicks = 0;
+static void PrimeSearchPopupForStartup();
 static void ExecuteSearchQueryAsync(std::wstring query, int queryToken);
 
 
@@ -21386,14 +21445,13 @@ void BuildSearchFlyoutContent() {
 
 static void RecenterSearchPopup() {
     if (!g_searchFlyout || !g_searchFlyout.IsOpen()) return;
-    // Do not freeze the target from ShowAt/Opened: on the first popup after
-    // Windows startup, the taskbar work area and DPI can still be settling
-    // before XAML creates its popup HWND. Capturing then makes the first
-    // result-size change reposition the whole surface (the search field
-    // appears to move down while the no-results row grows upward). Wait until
-    // the actual popup exists, then keep the resolved top edge fixed for this
-    // open session so all later height changes extend downward.
-    if (g_wideFlyoutTargetX < 0 || g_wideFlyoutTargetY < 0) {
+    // The first search popup after startup can appear before the appbar/work
+    // area geometry has settled. Keep correcting its anchor from the live
+    // work area during the opening settle window; then freeze the target so
+    // typing and content-height animation only grow downward from that edge.
+    ULONGLONG now = GetTickCount64();
+    bool settling = now < g_searchPopupPositionSettleUntil;
+    if (g_wideFlyoutTargetX < 0 || g_wideFlyoutTargetY < 0 || settling) {
         HWND popup = FindWideFlyoutPopupHwnd();
         RECT popupRect{};
         if (!popup || !IsWindow(popup) || !GetWindowRect(popup, &popupRect) ||
@@ -22036,6 +22094,10 @@ void EnsureSearchFlyoutCreated() {
             BuildSearchFlyoutContent();
 
             g_searchFlyout.Opened([](auto&& sender, auto&&) {
+                if (g_searchPopupPriming) {
+                    Wh_Log(L"[Search] hidden startup popup prime opened");
+                    return;
+                }
                 RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
                 s_searchOpenTick = GetTickCount64();
                 ScheduleSearchPopupFit();
@@ -22076,6 +22138,10 @@ void EnsureSearchFlyoutCreated() {
             });
             InstallLightDismissGuard(g_searchFlyout);
             g_searchFlyout.Closed([](auto&& sender, auto&&) {
+                if (g_searchPopupPriming) {
+                    Wh_Log(L"[Search] hidden startup popup prime closed");
+                    return;
+                }
                 Wh_Log(L"[Search] flyout Closed fired");
                 ++g_searchPopupEpoch;
                 StopSearchHeightAnimation();
@@ -22115,6 +22181,121 @@ void EnsureSearchFlyoutCreated() {
             });
         }
     } catch (...) {}
+}
+
+static void FinishSearchPopupPrime(bool success) {
+    if (!g_searchPopupPriming) return;
+    auto anchorIt = g_namedElements.find(L"SearchAnchor");
+    if (anchorIt != g_namedElements.end()) {
+        if (auto fe = anchorIt->second.try_as<FrameworkElement>()) {
+            try { fe.RenderTransform(wuxm::TranslateTransform()); } catch (...) {}
+        }
+    }
+    if (g_searchFlyout) {
+        if (auto root = g_searchFlyout.Content().try_as<FrameworkElement>()) {
+            try { root.Opacity(1.0); root.IsHitTestVisible(true); } catch (...) {}
+        }
+    }
+    g_wideFlyoutTargetX = -1;
+    g_wideFlyoutTargetY = -1;
+    g_searchPopupPriming = false;
+    g_searchPopupPrimed = success;
+    g_searchPopupPrimeAttempted = true;
+    Wh_Log(L"[Search] first-use XAML popup prime %s", success ? L"complete" : L"failed");
+    if (g_searchOpenPendingAfterPrime) {
+        g_searchOpenPendingAfterPrime = false;
+        RunOnUiThread([] { try { ShowSearchFlyout(); } catch (...) {} });
+    }
+}
+
+// Materialize the Search Flyout's native XAML popup while the TopBar is
+// starting, rather than letting the first user-visible ShowAt create it.
+// XAML's initial Popup placement on a fresh DesktopWindowXamlSource can use
+// stale host geometry for that first frame; later opens reuse the initialized
+// HWND and are correctly positioned. The priming surface is anchored beyond
+// the virtual desktop and hidden from input, then closed before the root is
+// considered ready for interaction.
+static void PrimeSearchPopupForStartup() {
+    if (g_searchPopupPrimed || g_searchPopupPriming ||
+        g_searchPopupPrimeAttempted || !g_rootElement) return;
+    try {
+        if (!g_rootElement.IsLoaded()) return;
+        EnsureSearchFlyoutCreated();
+        if (!g_searchFlyout || g_searchFlyout.IsOpen()) return;
+
+        auto anchorIt = g_namedElements.find(L"SearchAnchor");
+        if (anchorIt == g_namedElements.end()) return;
+        auto anchor = anchorIt->second.try_as<FrameworkElement>();
+        if (!anchor) return;
+
+        RECT barMonitor = GetBarMonitorRect();
+        double dpi = GetBarDpiScale();
+        if (!std::isfinite(dpi) || dpi <= 0.0) dpi = 1.0;
+        // Place the hidden priming popup beyond every attached monitor.
+        int hiddenX = GetSystemMetrics(SM_XVIRTUALSCREEN) - 2400;
+        int hiddenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        SetTopBarAnchorScreenPosition(
+            anchor,
+            (hiddenX - barMonitor.left) / dpi,
+            (hiddenY - barMonitor.top) / dpi);
+
+        g_searchPopupPriming = true;
+        g_searchPopupPrimeAttempted = true;
+        auto content = g_searchFlyout.Content().try_as<FrameworkElement>();
+        if (content) {
+            content.Opacity(0.0);
+            content.IsHitTestVisible(false);
+        }
+
+        wuxc::Primitives::FlyoutShowOptions opts;
+        opts.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
+        g_searchFlyout.ShowAt(anchor, opts);
+        Wh_Log(L"[Search] priming first-use XAML popup off-screen");
+
+        // Poll for the actual native popup instead of assuming ShowAt has
+        // created it by the next dispatcher turn. The regular search button
+        // cannot open visibly until this first-use window is confirmed.
+        if (!g_searchPopupPrimeTimer) {
+            g_searchPopupPrimeTimer = DispatcherTimer();
+            g_searchPopupPrimeTimer.Interval(std::chrono::milliseconds(25));
+            g_searchPopupPrimeTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                if (!g_searchPopupPriming || !g_searchFlyout ||
+                    !g_searchFlyout.IsOpen()) {
+                    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
+                    FinishSearchPopupPrime(false);
+                    return;
+                }
+
+                ++g_searchPopupPrimePollTicks;
+                HWND popup = FindWideFlyoutPopupHwnd();
+                RECT rect{};
+                if (popup && IsWindow(popup) && GetWindowRect(popup, &rect) &&
+                    rect.right > rect.left && rect.bottom > rect.top) {
+                    ++g_searchPopupPrimeStableTicks;
+                } else {
+                    g_searchPopupPrimeStableTicks = 0;
+                }
+
+                if (g_searchPopupPrimeStableTicks >= 2 ||
+                    g_searchPopupPrimePollTicks >= 60) {
+                    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
+                    bool created = g_searchPopupPrimeStableTicks >= 2;
+                    try { if (g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+                    RunOnUiThread([created] { FinishSearchPopupPrime(created); });
+                }
+            });
+        }
+        g_searchPopupPrimePollTicks = 0;
+        g_searchPopupPrimeStableTicks = 0;
+        g_searchPopupPrimeTimer.Stop();
+        g_searchPopupPrimeTimer.Start();
+    } catch (...) {
+        try {
+            if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
+        } catch (...) {}
+        try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+        if (g_searchPopupPriming) FinishSearchPopupPrime(false);
+    }
 }
 
 // Start and Search use a known wide surface. Do not use the newest arbitrary
@@ -22303,6 +22484,21 @@ void ShowSearchFlyout() {
         EnsureSearchFlyoutCreated();
         if (!g_searchFlyout) return;
 
+        // A click that arrives during startup priming means "open Search",
+        // not "close the invisible warm-up popup". Resume after its hidden
+        // ShowAt/Hide cycle has completed.
+        if (g_searchPopupPriming) {
+            g_searchOpenPendingAfterPrime = true;
+            return;
+        }
+        if (!g_searchPopupPrimed && !g_searchPopupPrimeAttempted) {
+            PrimeSearchPopupForStartup();
+            if (g_searchPopupPriming) {
+                g_searchOpenPendingAfterPrime = true;
+                return;
+            }
+        }
+
         if (g_searchFlyout.IsOpen()) {
             g_searchFlyout.Hide();
             return;
@@ -22324,6 +22520,10 @@ void ShowSearchFlyout() {
         ++g_searchPopupEpoch;
         g_wideFlyoutTargetX = -1;
         g_wideFlyoutTargetY = -1;
+        // Allow the first realized popup to track the settled taskbar work
+        // area for a short period. Subsequent result resizing keeps the final
+        // target fixed and therefore expands downward without vertical drift.
+        g_searchPopupPositionSettleUntil = GetTickCount64() + 900;
         auto anchorIt = g_namedElements.find(L"SearchAnchor");
         if (anchorIt == g_namedElements.end()) {
             Wh_Log(L"[Search] SearchAnchor not registered");
@@ -24942,6 +25142,14 @@ void InvalidateStartAndSearchFlyouts() {
     // toggled. Dropping the pointers here forces the next Show to rebuild
     // the tree against the current settings.
     ++g_searchPopupEpoch;
+    g_searchPopupPrimed = false;
+    g_searchPopupPriming = false;
+    g_searchPopupPrimeAttempted = false;
+    g_searchOpenPendingAfterPrime = false;
+    g_searchPopupPositionSettleUntil = 0;
+    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
+    g_searchPopupPrimePollTicks = 0;
+    g_searchPopupPrimeStableTicks = 0;
     ++g_searchRenderGeneration;
     g_searchToken.fetch_add(1);
     if (g_searchQueryTimer) g_searchQueryTimer.Stop();
@@ -27377,7 +27585,7 @@ static std::wstring BuildSettingsJson() {
 
 void BuildAboutPage(wuxc::StackPanel& p) {
     p.Children().Append(MakeHeading(L"TopBar for Windows", 22));
-    p.Children().Append(MakeLabel(L"Version 1.4.2", 13, false, 0.65));
+    p.Children().Append(MakeLabel(L"Version 1.4.3", 13, false, 0.65));
     auto info = MakeLabel(
         L"• Mod created by WasiXGamer.\n"
         L"• Tray button functionality inspired by Mac Island & Dock by caliberda.\n"
@@ -31714,6 +31922,19 @@ FrameworkElement BuildTopBarContent() {
 
     root.Loaded([](wf::IInspectable const&, RoutedEventArgs const&) {
         try { ApplyAutoHideInitialState(); } catch (...) {}
+    });
+
+    // The initial cold-boot style pass can run before XAML has attached the
+    // Start and control buttons to their final visual tree. Reapply once the
+    // root is Loaded so theme content replacements (including Neon Blue's
+    // Display glyph) and inherited icon colors land on the actual controls.
+    root.Loaded([](wf::IInspectable const&, RoutedEventArgs const&) {
+        RunOnUiThread([] {
+            try { ApplyAllControlStyles(); } catch (...) {}
+            RunOnUiThread([] {
+                try { PrimeSearchPopupForStartup(); } catch (...) {}
+            });
+        });
     });
 
 
@@ -40472,6 +40693,19 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             g_searchQueryTimer.Stop();
             g_searchQueryTimer = nullptr;
         }
+        // DispatcherTimer is bound to the dispatcher that created it. Stop
+        // and release the startup-prime timer here, on this UI thread, before
+        // a scale/display restart creates the replacement TopBar thread.
+        if (g_searchPopupPrimeTimer) {
+            try { g_searchPopupPrimeTimer.Stop(); } catch (...) {}
+            g_searchPopupPrimeTimer = nullptr;
+        }
+        g_searchPopupPriming = false;
+        g_searchPopupPrimed = false;
+        g_searchPopupPrimeAttempted = false;
+        g_searchOpenPendingAfterPrime = false;
+        g_searchPopupPrimePollTicks = 0;
+        g_searchPopupPrimeStableTicks = 0;
         StopSearchHeightAnimation();
         g_searchHeightDebounceTimer = nullptr;
         if (g_wideFlyoutCenterTimer) {
