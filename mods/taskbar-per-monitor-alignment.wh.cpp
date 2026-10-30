@@ -2,7 +2,7 @@
 // @id              taskbar-per-monitor-alignment
 // @name            Per-monitor taskbar icon alignment
 // @description     Choose icon alignment (Left, Center, Right) and Start button placement (Left, Right) independently for each monitor (Windows 11).
-// @version         1.0.0
+// @version         1.0.1
 // @author          vmTools
 // @github          https://github.com/VitalyTz
 // @homepage        https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
@@ -20,6 +20,10 @@ Choose how the taskbar looks on **each monitor separately**: its icons **Left**,
 **Center**, **Right** or Windows' default, and the **Start button** at the left edge,
 the right edge, or with the icons. Windows only offers one alignment for every
 taskbar, and only Left or Center.
+
+[![Support on Ko-fi](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/ko-fi.png)](https://ko-fi.com/vmtools)
+
+Like this mod? You can [support its development on Ko-fi](https://ko-fi.com/vmtools).
 
 ![A monitor with centered icons and the Start button at the left edge](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/monitor2-overview.jpg)
 
