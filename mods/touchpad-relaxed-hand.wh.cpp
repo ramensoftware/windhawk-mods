@@ -130,6 +130,9 @@ struct TapProfile {
     DWORD flickerMs;  // a contact appearing this soon after another vanished is the same finger
 };
 
+// Fingers landing this close together are the hand coming down, not a one-finger tap.
+constexpr DWORD kTogetherMs = 100;
+
 constexpr TapProfile kTapProfiles[] = {
     {false, 0, 0, 0, 0, 0},          // off
     {true, 180, 1.5, 50, 500, 120},  // strict
@@ -226,6 +229,8 @@ struct {
     std::unordered_map<ULONG, Track> tracks;
     bool recentClick;
     DWORD lastLossTime;
+    DWORD lastLandTime;
+    ULONG lastLandId;
     DWORD lastClickTime;
     POINT lastClickPos;
     double lastFrameTime;  // s
@@ -587,6 +592,13 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
             Track t{now, c->x, c->y};
             const TapProfile& tap = kTapProfiles[g_tapProfile];
             t.noTap = !tap.on || now - g_state.armTime < tap.settleMs || now - g_state.lastLossTime <= tap.flickerMs;
+            auto other = g_state.tracks.find(g_state.lastLandId);
+            if (other != g_state.tracks.end() && now - g_state.lastLandTime <= kTogetherMs) {
+                t.noTap = true;
+                other->second.noTap = true;
+            }
+            g_state.lastLandTime = now;
+            g_state.lastLandId = c->id;
             g_state.tracks[c->id] = t;
         } else {
             Track& t = it->second;
@@ -665,7 +677,9 @@ void ProcessFrame() {
     std::vector<const Contact*> used;
     for (const Contact* c : movers) {
         auto it = g_state.tracks.find(c->id);
-        if (it != g_state.tracks.end() && !it->second.noTap && IsTapCandidate(it->second, now)) {
+        // A finger which already moved past a tap's reach can't be one: it joins at once.
+        if (it != g_state.tracks.end() && !it->second.noTap && IsTapCandidate(it->second, now) &&
+            it->second.maxDist <= kTapProfiles[g_tapProfile].maxMm) {
             continue;
         }
         used.push_back(c);
