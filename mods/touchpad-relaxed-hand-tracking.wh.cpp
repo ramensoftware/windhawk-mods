@@ -22,7 +22,7 @@ Move the mouse pointer with all fingers resting on a precision touchpad, like a 
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
 - **Movement:** the pointer follows the finger which moves the most, from one to five resting. With a single finger movement or left touching, the one-finger multiplier applies; with two or more moving together, the glide multiplier.
 - **Click:** with the hand resting, a new finger that taps and lifts quickly clicks. Two taps make a double click. If the hand settling or a finger shifting clicks by mistake, set **Tap to click** to Strict, or Off.
-- **Scrolling:** the Windows two-finger scroll is ignored while gliding. **Gliding and scroll will get both activated if you start with 2 and rest more fingers on the touchpad.**
+- **Scrolling:** Windows two-finger scroll is ignored while gliding. **Both with get activated if you start with 2 and rest more fingers on the touchpad.**
 
 ## Speed
 
@@ -32,14 +32,14 @@ Right after installing, before anything is learned, the glide uses a default spe
 
 ## Three and four fingers
 
-The options to start with three or four fingers need the Windows swipes for that count turned off, in **Settings → Bluetooth & devices → Touchpad → Three-finger gestures** (or four) **→ Swipes: Nothing**. Otherwise Windows responds to the same swipe. Programs can't change that setting; it has to be done in the Settings app. Taps can keep any action. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.
+The options to start with three or four fingers conflict with the respective Windows swipes. **Turn them of in Settings → Bluetooth & devices → Touchpad → Three-finger gestures (or four) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. 3/4 figher taps can keep their actions. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.
 
 ## Limitations
 
 - Requires a precision touchpad.
-- Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. Turning off the three and four finger swipes removes the conflict; the two-finger scroll can't be turned off, but it's ignored while gliding.
+- Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. Turning off the three and four finger swipes removes the conflict; **two-finger scroll can't be turned off, but it's ignored while gliding.**
 - Scrolling is only blocked in programs which receive it as mouse wheel input, not in those which scroll through the Windows precision touchpad path.
-- While a program running as administrator is in the foreground, Windows neither delivers the touchpad nor accepts pointer movement from an ordinary process, and the glide stops.
+- **While a program running as administrator is in the foreground, Windows neither delivers the touchpad nor accepts pointer movement from an ordinary process, and the glide stops.**
 - Movements at the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.
 
 ## Credits
