@@ -50,7 +50,7 @@ with `RBP:` in the Windhawk log. Keep logging off during normal use.
 
 [Source code and issue reports](https://github.com/luizbizzio/recycle-bin-file-preview)
 
-Version **1.0.0**. Author: **Luiz Bizzio**. Licensed under **MIT**.
+Author: **Luiz Bizzio**. Licensed under **MIT**.
 */
 // ==/WindhawkModReadme==
 
@@ -67,7 +67,7 @@ Version **1.0.0**. Author: **Luiz Bizzio**. Licensed under **MIT**.
 
 #include <windows.h>
 #include <shlobj.h>
-#include <shobjidl.h>
+#include <windhawk_utils.h>
 #include <shlwapi.h>
 #include <atomic>
 #include <string>
@@ -173,50 +173,22 @@ static bool GetDeletedPhysicalPath(IShellItem* item, std::wstring& physical) {
     return ok;
 }
 
-static bool ParseExtension(const wchar_t* name, std::wstring& extension) {
-    if (!name) return false;
-    const wchar_t* dot = wcsrchr(name, L'.');
-    const wchar_t* slash = wcsrchr(name, L'\\');
-    if (!dot || dot == name || !dot[1] || (slash && dot < slash))
-        return false;
-    size_t len = wcslen(dot);
-    if (len < 2 || len > 17) return false;
-    for (size_t i = 1; i < len; ++i) {
-        const wchar_t c = dot[i];
-        if (!((c >= L'A' && c <= L'Z') ||
-              (c >= L'a' && c <= L'z') ||
-              (c >= L'0' && c <= L'9') || c == L'_' || c == L'-'))
-            return false;
-    }
+// The $R file keeps the deleted file's original extension even when
+// Explorer hides extensions in its display names. Derive the extension from
+// the already-verified physical path, not from SIGDN_NORMALDISPLAY.
+// Do not assume extensions contain ASCII letters only (e.g. .c++ or Unicode).
+static bool ParseExtension(const wchar_t* path, std::wstring& extension) {
+    if (!path) return false;
+    const wchar_t* filename = wcsrchr(path, L'\\');
+    filename = filename ? filename + 1 : path;
+    const wchar_t* dot = wcsrchr(filename, L'.');
+    if (!dot || dot == filename || !dot[1]) return false;
+    const size_t len = wcslen(dot);
+    // A bounded, non-empty extension avoids processing unusual paths while
+    // permitting extensions longer than the previous arbitrary 16-character cap.
+    if (len < 2 || len > 65) return false;
     extension.assign(dot);
     for (wchar_t& c : extension) c = towlower(c);
-    return true;
-}
-
-// Prefer the original display name, not the synthetic $Rxxx filename.
-// Require the physical extension to match as a conservative sanity check.
-static bool GetOriginalExtension(IShellItem* item,
-                                 const std::wstring& physical,
-                                 std::wstring& extension) {
-    PWSTR displayName = nullptr;
-    HRESULT hr = item->GetDisplayName(SIGDN_NORMALDISPLAY, &displayName);
-    std::wstring visibleExt;
-    bool valid = SUCCEEDED(hr) && displayName &&
-                 ParseExtension(displayName, visibleExt);
-    if (displayName) CoTaskMemFree(displayName);
-    if (!valid) {
-        displayName = nullptr;
-        hr = item->GetDisplayName(SIGDN_PARENTRELATIVEEDITING, &displayName);
-        valid = SUCCEEDED(hr) && displayName &&
-                ParseExtension(displayName, visibleExt);
-        if (displayName) CoTaskMemFree(displayName);
-    }
-    if (!valid) return false;
-
-    std::wstring physicalExt;
-    if (!ParseExtension(physical.c_str(), physicalExt)) return false;
-    if (visibleExt != physicalExt) return false;
-    extension = visibleExt;
     return true;
 }
 
@@ -265,7 +237,6 @@ static HRESULT CreateExtensionAssociations(const wchar_t* extension,
 
 static HRESULT STDMETHODCALLTYPE BindToHandler_Hook(
     IShellItem* self, IBindCtx* ctx, REFGUID bhid, REFIID riid, void** out) {
-    if (!g_originalBind) return E_UNEXPECTED;
     if (g_inHook || !out ||
         !IsEqualGUID(bhid, kBhidAssociationArray) ||
         !IsEqualIID(riid, kIidQueryAssociations)) {
@@ -283,11 +254,11 @@ static HRESULT STDMETHODCALLTYPE BindToHandler_Hook(
     if (debug) g_verifiedItems.fetch_add(1, std::memory_order_relaxed);
 
     std::wstring extension;
-    if (!GetOriginalExtension(self, physical, extension)) {
+    if (!ParseExtension(physical.c_str(), extension)) {
         if (debug) {
             g_skipped.fetch_add(1, std::memory_order_relaxed);
             if (requestNumber <= 30)
-                Wh_Log(L"RBP: association #%u: original extension not verified", requestNumber);
+                Wh_Log(L"RBP: association #%u: no usable file extension", requestNumber);
         }
         return g_originalBind(self, ctx, bhid, riid, out);
     }
@@ -356,45 +327,6 @@ static HRESULT STDMETHODCALLTYPE BindToHandler_Hook(
     return S_OK;
 }
 
-// Find the exact IShellItem implementation for deleted entries, as in v0.2.1.
-// Hooks are installed once at initialization on that implementation's vtable.
-static IShellItem* FindRecycleItem(unsigned* checked, unsigned* physicalOK) {
-    *checked = *physicalOK = 0;
-    IShellFolder* desktop = nullptr;
-    IShellFolder* folder = nullptr;
-    IEnumIDList* enumerator = nullptr;
-    IShellItem* result = nullptr;
-
-    HRESULT hr = SHGetDesktopFolder(&desktop);
-    if (SUCCEEDED(hr) && desktop)
-        hr = desktop->BindToObject(g_recycleBin, nullptr,
-                                   IID_PPV_ARGS(&folder));
-    if (SUCCEEDED(hr) && folder)
-        hr = folder->EnumObjects(nullptr,
-                                 SHCONTF_FOLDERS | SHCONTF_NONFOLDERS,
-                                 &enumerator);
-    if (SUCCEEDED(hr) && enumerator) {
-        PITEMID_CHILD child = nullptr;
-        while (*checked < 10 && enumerator->Next(1, &child, nullptr) == S_OK) {
-            ++*checked;
-            PIDLIST_ABSOLUTE full = ILCombine(g_recycleBin, child);
-            std::wstring physical;
-            if (full && GetPhysicalPathFromPidl(full, physical)) {
-                ++*physicalOK;
-                if (!result)
-                    SHCreateItemFromIDList(full, IID_PPV_ARGS(&result));
-            }
-            if (full) CoTaskMemFree(full);
-            CoTaskMemFree(child);
-            child = nullptr;
-        }
-    }
-    if (enumerator) enumerator->Release();
-    if (folder) folder->Release();
-    if (desktop) desktop->Release();
-    return result;
-}
-
 BOOL Wh_ModInit() {
     LoadSettings();
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -418,19 +350,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    unsigned checked = 0, physicalOK = 0;
-    IShellItem* item = FindRecycleItem(&checked, &physicalOK);
-    if (g_debugLogging.load(std::memory_order_relaxed))
-        Wh_Log(L"RBP: v1.0.0 probe checked=%u physical=%u fallbackOnNativeFailure=1",
-               checked, physicalOK);
-
-    // The folder item is only a fallback when the bin is empty. Its vtable
-    // might differ from the child item implementation on some Windows builds.
-    if (!item) {
-        if (g_debugLogging.load(std::memory_order_relaxed))
-            Wh_Log(L"RBP: no deleted file found during initialization; using folder fallback");
-        SHCreateItemFromIDList(g_recycleBin, IID_PPV_ARGS(&item));
-    }
+    // Use the folder's generic IShellItem to obtain the BindToHandler vtable
+    // entry. Never enumerate Recycle Bin contents on Explorer's startup thread.
+    // This also installs the hook when the Recycle Bin is initially empty.
+    IShellItem* item = nullptr;
+    hr = SHCreateItemFromIDList(g_recycleBin, IID_PPV_ARGS(&item));
+    if (FAILED(hr) && g_debugLogging.load(std::memory_order_relaxed))
+        Wh_Log(L"RBP: failed to create Recycle Bin shell item hr=0x%08X",
+               static_cast<unsigned>(hr));
 
     bool installed = false;
     if (item) {
@@ -439,13 +366,9 @@ BOOL Wh_ModInit() {
         if (vtable && vtable[3] &&
             GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                 reinterpret_cast<LPCWSTR>(vtable[3]), &g_hookModulePin)) {
-            installed = Wh_SetFunctionHook(vtable[3],
-                reinterpret_cast<void*>(BindToHandler_Hook),
-                reinterpret_cast<void**>(&g_originalBind)) != FALSE;
-            if (!installed) {
-                FreeLibrary(g_hookModulePin);
-                g_hookModulePin = nullptr;
-            }
+            installed = WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<BindToHandler_t>(vtable[3]),
+                BindToHandler_Hook, &g_originalBind);
         }
         item->Release();
     }
