@@ -2,7 +2,7 @@
 // @id              quick-dock
 // @name            Quick Dock
 // @description     Taskbar island that shows a folder grid on hover, with file thumbnails and the Explorer context menu
-// @version         3.9.0
+// @version         3.9.1
 // @author          RHproject
 // @github          https://github.com/RHH-cmyk
 // @include         explorer.exe
@@ -78,6 +78,25 @@
 */
 // ==/WindhawkModSettings==
 
+// ==WindhawkModReadme==
+/*
+# Quick Dock
+
+A taskbar island that opens a grid of files and folders from a chosen folder when you hover over it. Thumbnails and the Explorer context menu are included.
+
+![Island and open panel](TODO-screenshot-url)
+
+## Tested on
+
+- TODO: Windows version and build
+
+## Notes
+
+- The island is drawn on top of the taskbar, not as part of it.
+- Only the Explorer process that owns the taskbar shows the island.
+*/
+// ==/WindhawkModReadme==
+
 #define NOMINMAX
 #include <windows.h>
 #include <windowsx.h>
@@ -87,6 +106,7 @@
 #include <shobjidl.h>
 #include <wchar.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <map>
 #include <string>
@@ -101,7 +121,9 @@ struct Entry {
     bool thumbTried;
 };
 
-static HWND g_island = nullptr;
+static std::atomic<HWND> g_island{nullptr};  // Read by the engine thread, written by the UI thread.
+static HWND g_taskbar = nullptr;             // This process's Shell_TrayWnd (UI thread only).
+static HANDLE g_stopEvent = nullptr;         // Set by Wh_ModUninit.
 static HWND g_panel = nullptr;
 static HANDLE g_thread = nullptr;
 static std::wstring g_folder;
@@ -133,8 +155,6 @@ static RECT g_tb{};
 static int g_tbH = 40;
 static int g_hover = -1;
 static int g_scroll = 0;
-static int g_tick = 0;
-static int g_leaveTicks = 0;
 
 static int g_cols = 3;
 static int g_visRows = 1;
@@ -148,7 +168,8 @@ static int g_panelRegionW = -1, g_panelRegionH = -1;
 
 static const UINT_PTR TIMER_MAIN = 1;
 static const UINT_PTR TIMER_ANIM = 2;
-static const UINT_PTR TIMER_HOVER = 3;
+static const UINT_PTR TIMER_COLLAPSE = 3;
+static const DWORD COLLAPSE_DELAY_MS = 360;
 static const UINT WM_APP_SETTINGS = WM_APP + 1;
 
 static const COLORREF COL_TILE_HOVER = RGB(60, 60, 70);
@@ -461,7 +482,7 @@ static void PlacePanel() {
 }
 
 static void PlaceAll() {
-    HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND tb = g_taskbar;
     if (!tb) return;
     RECT newTb{};
     if (!GetWindowRect(tb, &newTb)) return;
@@ -501,35 +522,30 @@ static void SetExpanded(bool on) {
     InvalidateRect(g_island, nullptr, FALSE);
 }
 
-static void UpdateHover() {
-    if (g_menuOpen) return;
+static void TrackMouse(HWND hwnd) {
+    TRACKMOUSEEVENT tme{};
+    tme.cbSize = sizeof(tme);
+    tme.dwFlags = TME_LEAVE;
+    tme.hwndTrack = hwnd;
+    TrackMouseEvent(&tme);
+}
 
+// True if the cursor is over the island or the visible panel.
+static bool CursorInsideUi() {
     POINT p;
     GetCursorPos(&p);
-
     RECT ir{};
-    GetWindowRect(g_island, &ir);
-
-    bool panelVisible = IsWindowVisible(g_panel) != FALSE;
-    RECT pr{};
-    if (panelVisible) GetWindowRect(g_panel, &pr);
-
-    bool inside = PtInRect(&ir, p) || (panelVisible && PtInRect(&pr, p));
-
-    if (g_suppress) {
-        if (!inside) g_suppress = false;
-        return;
+    if (g_island && GetWindowRect(g_island, &ir) && PtInRect(&ir, p)) return true;
+    if (IsWindowVisible(g_panel)) {
+        RECT pr{};
+        if (GetWindowRect(g_panel, &pr) && PtInRect(&pr, p)) return true;
     }
+    return false;
+}
 
-    if (inside) {
-        g_leaveTicks = 0;
-        if (!g_expanded) SetExpanded(true);
-    } else if (g_expanded) {
-        if (++g_leaveTicks >= 6) {
-            g_leaveTicks = 0;
-            SetExpanded(false);
-        }
-    }
+// One-shot check after the cursor leaves; collapses only if it is not over either window.
+static void ScheduleCollapseCheck() {
+    if (g_island) SetTimer(g_island, TIMER_COLLAPSE, COLLAPSE_DELAY_MS, nullptr);
 }
 
 // ---------- Menu konteks Explorer ----------
@@ -753,6 +769,8 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
 
     case WM_MOUSEMOVE: {
+        TrackMouse(hwnd);
+        KillTimer(g_island, TIMER_COLLAPSE);
         int idx = HitTile(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         if (idx != g_hover) {
             g_hover = idx;
@@ -761,6 +779,14 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
+    case WM_MOUSELEAVE:
+        if (g_hover != -1) {
+            g_hover = -1;
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        ScheduleCollapseCheck();
+        return 0;
+
     case WM_LBUTTONUP: {
         int idx = HitTile(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         if (idx >= 0) {
@@ -768,6 +794,7 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                           nullptr, nullptr, SW_SHOWNORMAL);
             g_suppress = true;
             SetExpanded(false);
+            ScheduleCollapseCheck();
         }
         return 0;
     }
@@ -781,6 +808,7 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             ShowShellContextMenu(hwnd, g_entries[idx].path, pt, shift);
             InvalidateRect(hwnd, nullptr, FALSE);
+            ScheduleCollapseCheck();
         }
         return 0;
     }
@@ -829,6 +857,16 @@ static LRESULT CALLBACK IslandProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         PaintIsland(hwnd);
         return 0;
 
+    case WM_MOUSEMOVE:
+        TrackMouse(hwnd);
+        KillTimer(hwnd, TIMER_COLLAPSE);
+        if (!g_expanded && !g_suppress && !g_menuOpen) SetExpanded(true);
+        return 0;
+
+    case WM_MOUSELEAVE:
+        ScheduleCollapseCheck();
+        return 0;
+
     case WM_TIMER:
         if (wp == TIMER_ANIM) {
             float diff = g_animTarget - g_anim;
@@ -842,20 +880,21 @@ static LRESULT CALLBACK IslandProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
 
-        if (wp == TIMER_HOVER) {
-            UpdateHover();
+        if (wp == TIMER_COLLAPSE) {
+            KillTimer(hwnd, TIMER_COLLAPSE);
+            if (g_menuOpen || CursorInsideUi()) return 0;
+            g_suppress = false;
+            if (g_expanded) SetExpanded(false);
             return 0;
         }
 
         if (wp == TIMER_MAIN) {
-            if (++g_tick % 6 == 0) {
-                if (g_expanded && !g_menuOpen) {
-                    RefreshEntries();
-                    ComputePanelSize();
-                    PlacePanel();
-                }
-                PlaceAll();
+            if (g_expanded && !g_menuOpen) {
+                RefreshEntries();
+                ComputePanelSize();
+                PlacePanel();
             }
+            PlaceAll();
         }
         return 0;
 
@@ -871,7 +910,7 @@ static LRESULT CALLBACK IslandProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DESTROY:
         KillTimer(hwnd, TIMER_MAIN);
         KillTimer(hwnd, TIMER_ANIM);
-        KillTimer(hwnd, TIMER_HOVER);
+        KillTimer(hwnd, TIMER_COLLAPSE);
         if (g_panel) DestroyWindow(g_panel);
         ClearEntries();
         PostQuitMessage(0);
@@ -880,9 +919,31 @@ static LRESULT CALLBACK IslandProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// Returns this process's taskbar. Secondary Explorer processes have none.
+static HWND FindCurrentProcessTaskbarWnd() {
+    HWND hWnd = nullptr;
+    while ((hWnd = FindWindowExW(nullptr, hWnd, L"Shell_TrayWnd", nullptr))) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid == GetCurrentProcessId()) return hWnd;
+    }
+    return nullptr;
+}
+
 // ---------- Thread & mod lifecycle ----------
 static DWORD WINAPI UiThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    // Wait for this process's taskbar. Secondary Explorer processes never get one,
+    // so their thread waits here until the mod unloads.
+    HWND tb = nullptr;
+    while (!(tb = FindCurrentProcessTaskbarWnd())) {
+        if (WaitForSingleObject(g_stopEvent, 500) != WAIT_TIMEOUT) {
+            CoUninitialize();
+            return 0;  // Mod is unloading.
+        }
+    }
+    g_taskbar = tb;
 
     HINSTANCE hi = GetModuleHandleW(nullptr);
     std::wstring suffix = std::to_wstring(GetTickCount64());
@@ -909,29 +970,29 @@ static DWORD WINAPI UiThread(LPVOID) {
         return 1;
     }
 
-    HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!tb) {
-        Wh_Log(L"Taskbar window not found");
-        CoUninitialize();
-        return 1;
-    }
-
-    g_island = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, g_clsIsland.c_str(),
-                               L"", WS_POPUP, 0, 0, 1, 1, tb, nullptr, hi, nullptr);
-    g_panel = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, g_clsPanel.c_str(),
-                              L"", WS_POPUP, 0, 0, 1, 1, tb, nullptr, hi, nullptr);
+    // Unowned: an owner on Explorer's taskbar thread would attach this thread's input queue to it.
+    // WS_EX_TOPMOST keeps the popups above the taskbar instead.
+    g_island = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, g_clsIsland.c_str(),
+                               L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi, nullptr);
+    g_panel = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, g_clsPanel.c_str(),
+                              L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi, nullptr);
     if (!g_island || !g_panel) {
         Wh_Log(L"CreateWindowExW failed (error %lu)", GetLastError());
         CoUninitialize();
         return 1;
     }
 
-    RefreshEntries();
-    PlaceAll();
-    ShowWindow(g_island, SW_SHOWNOACTIVATE);
-    SetTimer(g_island, TIMER_MAIN, 500, nullptr);
-    SetTimer(g_island, TIMER_HOVER, 60, nullptr);
-    Wh_Log(L"Quick Dock created, folder: %s", GetFolder().c_str());
+    // Wh_ModUninit may have run while the windows were being created. It would not have
+    // posted WM_CLOSE in that case, so close the island here instead.
+    if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+        DestroyWindow(g_island);  // WM_DESTROY posts WM_QUIT, so the loop below exits at once.
+    } else {
+        RefreshEntries();
+        PlaceAll();
+        ShowWindow(g_island, SW_SHOWNOACTIVATE);
+        SetTimer(g_island, TIMER_MAIN, 3000, nullptr);
+        Wh_Log(L"Quick Dock created, folder: %s", GetFolder().c_str());
+    }
 
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -947,9 +1008,16 @@ static DWORD WINAPI UiThread(LPVOID) {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"CreateEventW failed (error %lu)", GetLastError());
+        return FALSE;
+    }
     g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     if (!g_thread) {
         Wh_Log(L"CreateThread failed (error %lu)", GetLastError());
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
         return FALSE;
     }
     return TRUE;
@@ -960,11 +1028,18 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_island) PostMessageW(g_island, WM_CLOSE, 0, 0);
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (HWND island = g_island) PostMessageW(island, WM_CLOSE, 0, 0);
     if (g_thread) {
-        WaitForSingleObject(g_thread, 3000);
+        // No timeout: the UI thread may be inside a shell call, and unloading the mod
+        // under it would crash Explorer.
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
     }
     g_island = nullptr;
     g_panel = nullptr;
