@@ -4,7 +4,7 @@
 // @name:zh-CN      强制桌面图标间距
 // @description     Set the desktop icon grid spacing (X/Y) and reserve a blank margin above the taskbar. Event-driven and DPI-aware; the original spacing and icon area height are restored when the mod is disabled.
 // @description:zh-CN  设置桌面图标的水平/垂直网格间距，并在任务栏上方预留底部空白边距。事件驱动、支持 DPI 缩放；停用模组后自动还原原始间距与图标区域高度。
-// @version         1.1.2
+// @version         1.1.3
 // @author          Koewen
 // @github          https://github.com/Koewen
 // @include         explorer.exe
@@ -201,9 +201,10 @@ static void ApplySettings(HWND hWnd, BOOL bRearrange) {
     UpdateWindow(hWnd);
 }
 
+// WH_SUBCLASSPROC (windhawk_utils.h): LRESULT(CALLBACK*)(HWND, UINT, WPARAM,
+// LPARAM, DWORD_PTR dwRefData) - five parameters, no uIdSubclass.
 static LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
-                                                    LPARAM lParam, DWORD_PTR uIdSubclass,
-                                                    DWORD_PTR dwRefData) {
+                                                    LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case LVM_SETICONSPACING: {
             // Remember what Explorer last sent (any value, including -1 for
@@ -262,7 +263,7 @@ static void SubclassDesktopListView(HWND hWnd) {
 
     if (prev && prev != hWnd && IsWindow(prev)) {
         // The desktop list view was recreated; drop the stale subclass.
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(prev, DesktopListViewSubclassProc, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(prev, DesktopListViewSubclassProc);
     }
 
     // Capture Explorer's current spacing before the subclass is installed,
@@ -276,7 +277,7 @@ static void SubclassDesktopListView(HWND hWnd) {
 }
 
 static void UnsubclassDesktopListView(HWND hWnd) {
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, DesktopListViewSubclassProc, 0);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, DesktopListViewSubclassProc);
 
     // Restore the spacing Explorer last sent (including -1 = "reset to
     // default"), then the full height.
