@@ -47,7 +47,7 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll naturally and effort
 * **To Scroll:** Hold down **`Ctrl`**, hold down the **Right Mouse Button**, and move your mouse up, down, left, or right.
 * **To Stop:** Release the Right Mouse Button.
 * **Normal Right-Click:** Regular Right-Click is completely untouched—click anywhere like you normally do to open context menus.
-* **Need an App's Own `Ctrl + Right-Click`?** Just tap `Ctrl + Right-Click` in place without moving your mouse—it triggers the app's native shortcut as usual.
+* **Need an App's Own Ctrl + Right-Click?** Just tap `Ctrl + Right-Click` in place without moving your mouse—it triggers the app's native shortcut as usual.
 * **Hands-Free Cruising (Optional):** Turn on *Continuous Cruising* in settings. Drag to start moving, let go of the mouse button while still holding `Ctrl`, and the page will glide continuously on its own. Tap any key or click to stop.
 
 ---
@@ -120,7 +120,6 @@ Hold **`Ctrl` + Right-Click** and drag your mouse to scroll naturally and effort
 
 // clang-format on
 
-#include <tlhelp32.h>
 #include <wincrypt.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -905,59 +904,25 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
     return false;
 }
 
-// --- STANDARD MESSAGE RETRIEVAL HOOKS ---
-using GetMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
-GetMessageW_t pfnGetMessageW_Original = nullptr;
-BOOL WINAPI GetMessageW_Hook(LPMSG lpMsg,
-                             HWND hWnd,
-                             UINT wMsgFilterMin,
-                             UINT wMsgFilterMax) {
-    BOOL ret =
-        pfnGetMessageW_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
-    if (ret > 0 && ProcessScrollInput(lpMsg, true))
-        lpMsg->message = WM_NULL;
-    return ret;
+// --- SAFE DISPATCH HOOKS ---
+using DispatchMessageW_t = LRESULT(WINAPI*)(const MSG*);
+static DispatchMessageW_t pfnDispatchMessageW_Original = nullptr;
+
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
+    if (lpMsg && ProcessScrollInput(const_cast<MSG*>(lpMsg), true)) {
+        return 0;  // Handled and swallowed
+    }
+    return pfnDispatchMessageW_Original(lpMsg);
 }
 
-using PeekMessageW_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
-PeekMessageW_t pfnPeekMessageW_Original = nullptr;
-BOOL WINAPI PeekMessageW_Hook(LPMSG lpMsg,
-                              HWND hWnd,
-                              UINT wMsgFilterMin,
-                              UINT wMsgFilterMax,
-                              UINT wRemoveMsg) {
-    BOOL ret = pfnPeekMessageW_Original(lpMsg, hWnd, wMsgFilterMin,
-                                        wMsgFilterMax, wRemoveMsg);
-    if (ret && (wRemoveMsg & PM_REMOVE) && ProcessScrollInput(lpMsg, true))
-        lpMsg->message = WM_NULL;
-    return ret;
-}
+using DispatchMessageA_t = LRESULT(WINAPI*)(const MSG*);
+static DispatchMessageA_t pfnDispatchMessageA_Original = nullptr;
 
-using GetMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT);
-GetMessageA_t pfnGetMessageA_Original = nullptr;
-BOOL WINAPI GetMessageA_Hook(LPMSG lpMsg,
-                             HWND hWnd,
-                             UINT wMsgFilterMin,
-                             UINT wMsgFilterMax) {
-    BOOL ret =
-        pfnGetMessageA_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
-    if (ret > 0 && ProcessScrollInput(lpMsg, true))
-        lpMsg->message = WM_NULL;
-    return ret;
-}
-
-using PeekMessageA_t = BOOL(WINAPI*)(LPMSG, HWND, UINT, UINT, UINT);
-PeekMessageA_t pfnPeekMessageA_Original = nullptr;
-BOOL WINAPI PeekMessageA_Hook(LPMSG lpMsg,
-                              HWND hWnd,
-                              UINT wMsgFilterMin,
-                              UINT wMsgFilterMax,
-                              UINT wRemoveMsg) {
-    BOOL ret = pfnPeekMessageA_Original(lpMsg, hWnd, wMsgFilterMin,
-                                        wMsgFilterMax, wRemoveMsg);
-    if (ret && (wRemoveMsg & PM_REMOVE) && ProcessScrollInput(lpMsg, true))
-        lpMsg->message = WM_NULL;
-    return ret;
+LRESULT WINAPI DispatchMessageA_Hook(const MSG* lpMsg) {
+    if (lpMsg && ProcessScrollInput(const_cast<MSG*>(lpMsg), true)) {
+        return 0;  // Handled and swallowed
+    }
+    return pfnDispatchMessageA_Original(lpMsg);
 }
 
 using GetKeyState_t = SHORT(WINAPI*)(int);
@@ -1041,14 +1006,13 @@ BOOL Wh_ModInit() {
     g_cruiseEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_threadCreated.store(false);
 
-    WindhawkUtils::SetFunctionHook(GetMessageW, GetMessageW_Hook,
-                                   &pfnGetMessageW_Original);
-    WindhawkUtils::SetFunctionHook(PeekMessageW, PeekMessageW_Hook,
-                                   &pfnPeekMessageW_Original);
-    WindhawkUtils::SetFunctionHook(GetMessageA, GetMessageA_Hook,
-                                   &pfnGetMessageA_Original);
-    WindhawkUtils::SetFunctionHook(PeekMessageA, PeekMessageA_Hook,
-                                   &pfnPeekMessageA_Original);
+    // DispatchMessage hooks: safe from idle GetMessage blocking
+    WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
+                                   &pfnDispatchMessageW_Original);
+    WindhawkUtils::SetFunctionHook(DispatchMessageA, DispatchMessageA_Hook,
+                                   &pfnDispatchMessageA_Original);
+
+    // Synchronous modifier and cursor hooks
     WindhawkUtils::SetFunctionHook(GetKeyState, GetKeyState_Hook,
                                    &pfnGetKeyState_Original);
     WindhawkUtils::SetFunctionHook(GetAsyncKeyState, GetAsyncKeyState_Hook,
@@ -1066,19 +1030,13 @@ void Wh_ModUninit() {
 
     g_state.store(ScrollState::Idle);
 
-    if (g_captureHwnd && GetCapture() == g_captureHwnd) {
-        ReleaseCapture();
-        g_captureHwnd = nullptr;
-    }
-
-    // Wake the worker thread immediately from whatever it was waiting on
     if (g_stopEvent)
         SetEvent(g_stopEvent);
     if (g_cruiseEvent)
         SetEvent(g_cruiseEvent);
 
     if (g_hCruiseThread) {
-        WaitForSingleObject(g_hCruiseThread, INFINITE);
+        WaitForSingleObject(g_hCruiseThread, 200);
         CloseHandle(g_hCruiseThread);
         g_hCruiseThread = nullptr;
     }
@@ -1095,7 +1053,6 @@ void Wh_ModUninit() {
     DeleteCriticalSection(&g_cruiseCs);
     g_threadCreated.store(false);
 
-    // Destroy cached custom cursors
     if (g_curSizeNS) {
         DestroyCursor(g_curSizeNS);
         g_curSizeNS = nullptr;
@@ -1107,5 +1064,9 @@ void Wh_ModUninit() {
     if (g_curCruising) {
         DestroyCursor(g_curCruising);
         g_curCruising = nullptr;
+    }
+    if (g_curHand) {
+        DestroyCursor(g_curHand);
+        g_curHand = nullptr;
     }
 }
