@@ -396,6 +396,12 @@ std::unordered_map<void*, LabelEntry> g_labels;
 // found again through the element and recognized by its Comment.
 std::unordered_map<void*, winrt::weak_ref<Xaml::Controls::Image>> g_icons;
 
+// While set and the icon underline is off, every evaluated button is checked
+// for a leftover visual of ours and cleaned. Starts set, to clean up after a
+// previous session that didn't get to, and is set again when the option is
+// turned off; cleared once a full pass has run with the option off.
+bool g_iconSweepPending = true;
+
 // ============================================================================
 // Running code on the taskbar thread
 // ============================================================================
@@ -1557,27 +1563,58 @@ void ConfigureIconVisual(const Composition::SpriteVisual& sprite,
     sprite.IsVisible(visible);
 }
 
-// Detaches this mod's visual from `icon`, if it still has it.
-void RemoveIconVisual(const Xaml::Controls::Image& icon) {
+// Hides and detaches this mod's visual from `icon`, if it has one. Returns
+// true if a visual of ours was found. Hiding comes first and separately, so
+// the line is gone even if detaching were to fail; a hidden, detached
+// SpriteVisual holds no code of this mod, only compositor objects, so
+// nothing of the mod stays behind either way.
+bool RemoveIconVisual(const Xaml::Controls::Image& icon) {
     using Xaml::Hosting::ElementCompositionPreview;
+
     auto existing = ElementCompositionPreview::GetElementChildVisual(icon);
-    if (existing && existing.Comment() == kIconVisualComment) {
-        ElementCompositionPreview::SetElementChildVisual(icon, nullptr);
+    if (!existing || existing.Comment() != kIconVisualComment) {
+        return false;
     }
+
+    existing.IsVisible(false);
+    existing.Opacity(0.0f);
+
+    try {
+        ElementCompositionPreview::SetElementChildVisual(icon, nullptr);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Detaching the icon visual failed: %08X",
+               static_cast<unsigned int>(e.code()));
+    }
+    return true;
 }
 
-// Detaches every tracked icon visual (icon underline turned off, or unload).
+// Hides and detaches every tracked icon visual (icon underline turned off,
+// or unload).
 void RemoveAllIconVisuals() {
+    int tracked = static_cast<int>(g_icons.size());
+    int removed = 0;
+    int gone = 0;
+
     for (auto& [key, weakIcon] : g_icons) {
         try {
             if (auto icon = weakIcon.get()) {
-                RemoveIconVisual(icon);
+                if (RemoveIconVisual(icon)) {
+                    removed++;
+                }
+            } else {
+                gone++;
             }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Icon visual removal error: %08X",
+                   static_cast<unsigned int>(e.code()));
         } catch (...) {
             Wh_Log(L"Icon visual removal error");
         }
     }
     g_icons.clear();
+
+    Wh_Log(L"Icon visuals: %d tracked, %d removed, %d elements gone", tracked,
+           removed, gone);
 }
 
 void ApplyIconUnderline(const Xaml::FrameworkElement& button,
@@ -1618,6 +1655,20 @@ void ApplyToButton(const Xaml::FrameworkElement& button, EvalContext& context) {
     // all, and only the icon underline applies.
     auto label = FindLabelControl(button);
     bool wantIcon = g_settings.iconUnderline.enabled;
+
+    // Icon underline off: make sure no visual of ours is left on this button
+    // (from before the option was turned off, or from an earlier session).
+    if (!wantIcon && g_iconSweepPending) {
+        try {
+            if (auto icon = FindIconImage(button)) {
+                RemoveIconVisual(icon);
+            }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Icon sweep error: %08X",
+                   static_cast<unsigned int>(e.code()));
+        }
+    }
+
     if (!label && !wantIcon) {
         return;
     }
@@ -1717,6 +1768,7 @@ void RefreshTreesOnCurrentThread() {
     }
 
     EvalContext context;
+    bool anyTree = false;
 
     for (auto it = g_roots.begin(); it != g_roots.end();) {
         auto root = it->root.get();
@@ -1731,6 +1783,7 @@ void RefreshTreesOnCurrentThread() {
             for (const auto& button : buttons) {
                 ApplyToButton(button, context);
             }
+            anyTree = true;
         } catch (const winrt::hresult_error& e) {
             Wh_Log(L"Refresh error: %08X", static_cast<unsigned int>(e.code()));
         } catch (...) {
@@ -1738,6 +1791,10 @@ void RefreshTreesOnCurrentThread() {
         }
 
         ++it;
+    }
+
+    if (anyTree && !g_settings.iconUnderline.enabled) {
+        g_iconSweepPending = false;
     }
 
     for (auto it = g_labels.begin(); it != g_labels.end();) {
@@ -1767,6 +1824,26 @@ void WINAPI RefreshTreesProc(void*) {
 // afterwards.
 void WINAPI RestoreAndClearProc(void*) {
     RemoveAllIconVisuals();
+
+    // Belt and braces for the icon visuals: sweep every button in every known
+    // tree too, in case one carries a visual that wasn't tracked.
+    for (auto& entry : g_roots) {
+        try {
+            auto root = entry.root.get();
+            if (!root) {
+                continue;
+            }
+            std::vector<Xaml::FrameworkElement> buttons;
+            CollectTaskListButtons(root, buttons);
+            for (const auto& button : buttons) {
+                if (auto icon = FindIconImage(button)) {
+                    RemoveIconVisual(icon);
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Icon sweep error");
+        }
+    }
 
     for (auto& [key, entry] : g_labels) {
         try {
@@ -2492,6 +2569,7 @@ void WINAPI ReloadSettingsProc(void*) {
     LoadSettings();
     if (!g_settings.iconUnderline.enabled) {
         RemoveAllIconVisuals();
+        g_iconSweepPending = true;
     }
     RefreshTreesOnCurrentThread();
 }
