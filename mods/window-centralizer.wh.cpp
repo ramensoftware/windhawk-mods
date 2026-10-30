@@ -1092,10 +1092,10 @@ DWORD WINAPI HostThread(void*) {
     return 0;
 }
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     g_hostStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hostStopEvent)
-        return false;
+        return FALSE;
     g_hostThread = CreateThread(nullptr, 0, HostThread, nullptr, 0, nullptr);
     return g_hostThread != nullptr;
 }
