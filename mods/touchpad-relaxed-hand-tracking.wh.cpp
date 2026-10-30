@@ -14,7 +14,7 @@
 /*
 # Touchpad Relaxed Hand Tracking
 
-Move the mouse pointer with more fingers resting on the precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.
+Move the pointer with more fingers resting on the precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.
 
 ## How it works
 
