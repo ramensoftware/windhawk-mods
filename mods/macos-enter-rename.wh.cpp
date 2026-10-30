@@ -2,7 +2,7 @@
 // @id              macos-enter-rename
 // @name            Enter to Rename in File Explorer
 // @description     Rename selected files and folders with Enter, like in macOS Finder.
-// @version         0.4.0
+// @version         0.5.0
 // @author          emagiaco
 // @github          https://github.com/emagiaco
 // @include         explorer.exe
@@ -19,9 +19,12 @@ The standard **F2** shortcut is unchanged.
 
 ## Scope
 
-- Works only in File Explorer windows, not on the desktop or in file dialogs,
-    and only when the keyboard focus appears to be inside Explorer's shell file
-    list.
+- Works in File Explorer windows when keyboard focus appears to be inside the
+  shell file list. Existing Explorer behavior is unchanged.
+- Desktop support is enabled by default. Disable it in Settings
+  to restore normal Enter behavior on the desktop. Only the focused icon list
+  is eligible; the desktop background and other desktop controls are excluded.
+- File dialogs are not supported in this version.
 - Does not intercept Enter while editing text, in the address/search controls,
   or with Ctrl, Alt, or Shift pressed.
 - This mod intentionally does *not* remap Ctrl+Enter to open a file.
@@ -31,6 +34,7 @@ The standard **F2** shortcut is unchanged.
 Tested by the original user on Windows 11 for files, folders, rename confirmation,
 search, and multi-selection. Other Windows versions, Explorer extensions and
 alternative list controls have not yet been validated.
+Desktop support requires separate validation on the target Windows build.
 
 ## Notes
 
@@ -40,8 +44,20 @@ If the mod causes unintended behavior, disable it in Windhawk.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- desktopEnterRename: true
+  $name: Enable Enter to rename on the desktop
+  $description: Apply the shortcut to the focused desktop icon list.
+*/
+// ==/WindhawkModSettings==
+
 #include <windows.h>
+#include <commctrl.h>
+#include <atomic>
 #include <cwchar>
+
+static std::atomic<bool> desktopEnterRename{true};
 
 using TranslateMessage_t = BOOL (WINAPI*)(const MSG*);
 static TranslateMessage_t OriginalTranslateMessage = nullptr;
@@ -61,7 +77,21 @@ static bool ClassIs(HWND hwnd, const wchar_t* expected) {
 static bool InFileList() {
     HWND focus = GetFocus();
     if (!focus) return false;
-    if (!ClassIs(GetAncestor(focus, GA_ROOT), L"CabinetWClass")) return false;
+    HWND root = GetAncestor(focus, GA_ROOT);
+    const bool explorer = ClassIs(root, L"CabinetWClass");
+    if (!explorer) {
+        if (!desktopEnterRename.load(std::memory_order_relaxed) ||
+            !(ClassIs(root, L"Progman") || ClassIs(root, L"WorkerW"))) {
+            return false;
+        }
+        // Fail closed: only the actual focused desktop list, directly inside
+        // its shell view, is accepted. An inline rename Edit is not a list.
+        HWND view = GetParent(focus);
+        return ClassIs(focus, L"SysListView32") &&
+               ClassIs(view, L"SHELLDLL_DefView") &&
+               GetParent(view) == root && root == GetForegroundWindow() &&
+               SendMessageW(focus, LVM_GETSELECTEDCOUNT, 0, 0) > 0;
+    }
     bool shellView = false;
     bool fileList = false;
     for (HWND w = focus; w; w = GetParent(w)) {
@@ -130,6 +160,8 @@ static LRESULT WINAPI DispatchMessageW_Hook(const MSG* msg) {
 }
 
 BOOL Wh_ModInit() {
+    desktopEnterRename.store(Wh_GetIntSetting(L"desktopEnterRename") != 0,
+                             std::memory_order_relaxed);
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) return FALSE;
     auto dispatch = reinterpret_cast<void*>(
@@ -143,4 +175,9 @@ BOOL Wh_ModInit() {
     return Wh_SetFunctionHook(dispatch,
         reinterpret_cast<void*>(DispatchMessageW_Hook),
         reinterpret_cast<void**>(&OriginalDispatchMessageW));
+}
+
+void Wh_ModSettingsChanged() {
+    desktopEnterRename.store(Wh_GetIntSetting(L"desktopEnterRename") != 0,
+                             std::memory_order_relaxed);
 }

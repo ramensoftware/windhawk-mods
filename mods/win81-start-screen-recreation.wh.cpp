@@ -10,13 +10,13 @@
 // @description:es  Este mod recrea la pantalla de inicio de Windows 8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
-// @version         1.0.0
+// @version         1.1.0
 // @license         GPL-3.0-or-later
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore
+// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32
 // ==/WindhawkMod==
 //
 // ==WindhawkModReadme==
@@ -46,11 +46,18 @@ The mod does **not** replace system files.
   cascading **Resize** submenu. The bottom command bar (touch / keyboard) provides
   Advanced, Run, Resize and Unpin.
 - **Search**: typing starts a search. The search charm covers apps, settings and
-  files, with the Everywhere / Apps / Settings / Files scopes.
+  files, with the Everywhere / Apps / Settings / Files scopes. Settings are the real ones:
+  the classic Control Panel items and tasks (for example Personalization) and the pages of the
+  Settings app, found by name or by their keywords.
 - **All Apps view**: accessed via the circle arrow at the bottom left; sortable by
   name, date installed or category.
 - **Real tile colors**: packaged apps use their own tile color and artwork; classic
   programs that declare a tile color (such as Chrome) use it as well.
+- **Windows 8/8.1 tile gradients**: tiles are shaded like on Windows 8.1, lighter at the top and
+  darker at the bottom, using each tile's own color. The strength can be changed, or the gradient
+  turned off, in the settings.
+- **StartAllBack and ExplorerPatcher**: the mod works next to both (see below), and the StartAllBack
+  Start button opens this Start screen too.
 - **Background options**: the classic petal artwork, a solid color, the accent
   color, the desktop wallpaper, or a custom image.
 - **Optional 8.1-style layout**: modern versions of the old Windows 8.1 apps
@@ -66,6 +73,20 @@ The mod does **not** replace system files.
 | Ctrl+Tab | Opens the All Apps view |
 | Arrow keys + Enter | Navigates and opens apps |
 | Esc | Closes menus / Start |
+
+The search charm can be opened with the Search button in the header or by typing on the Start
+screen. With an empty query it only shows the search box, the scope selector and the Windows 8.1
+hint; clicking anywhere in the panel does nothing else, and a click outside it closes it.
+
+## Compatibility with StartAllBack and ExplorerPatcher
+
+- When StartAllBack or ExplorerPatcher is installed, the mod waits until their taskbar is ready
+  before it creates the Start screen, so the taskbar keeps its style after signing in or
+  restarting Explorer. On a slow PC, increase **Delay before creating the Start screen window**.
+- The StartAllBack Start button opens this Start screen, and clicking it again closes it. Turn off
+  **Open with the StartAllBack Start button** to get StartAllBack's own Start menu back.
+- If the old taskbar still comes back, restart Explorer from StartAllBack or ExplorerPatcher, or
+  set **Compatibility with StartAllBack and ExplorerPatcher** to *Always on* and the delay to 8000 ms.
 
 ## Additional information
 - The mod is compatible with the **Windows 8/8.1 Charms Bar Recreation** and the
@@ -142,28 +163,17 @@ The mod does **not** replace system files.
   $options:pt:
   - auto: "Ancorar o menu Iniciar dentro do Explorer (recomendado), mais o hook de teclado como reserva"
   - keyboard: "Somente hook de teclado (o botão Iniciar da barra não é capturado)"
-- openSlideMs: 360
-  $name: "Opening desktop slide (milliseconds)"
-  $name:it: "Scorrimento del desktop in apertura (millisecondi)"
-  $name:es: "Deslizamiento del escritorio al abrir (milisegundos)"
-  $name:fr: "Glissement du bureau à l'ouverture (millisecondes)"
-  $name:pt: "Deslizamento da área de trabalho ao abrir (milissegundos)"
-  $description: "This setting controls the duration of the desktop moving left when Start opens. Smaller is faster. Allowed range 80 to 3000; default 360."
-  $description:it: "Questa impostazione controlla la durata dello spostamento del desktop verso sinistra quando Start si apre. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 360."
-  $description:es: "Esta configuración controla la duración del movimiento del escritorio hacia la izquierda cuando se abre Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 360."
-  $description:fr: "Ce paramètre contrôle la durée du déplacement du bureau vers la gauche quand l'écran d'accueil s'ouvre. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 360."
-  $description:pt: "Esta configuração controla a duração do movimento da área de trabalho para a esquerda quando a Tela Inicial abre. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 360."
-- closeSlideMs: 600
-  $name: "Closing desktop slide (milliseconds)"
-  $name:it: "Scorrimento del desktop in chiusura (millisecondi)"
-  $name:es: "Deslizamiento del escritorio al cerrar (milisegundos)"
-  $name:fr: "Glissement du bureau à la fermeture (millisecondes)"
-  $name:pt: "Deslizamento da área de trabalho ao fechar (milissegundos)"
-  $description: "This setting controls the duration of the desktop returning from the left when Start closes. Smaller is faster. Allowed range 80 to 3000; default 600."
-  $description:it: "Questa impostazione controlla la durata del ritorno del desktop da sinistra quando Start si chiude. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 600."
-  $description:es: "Esta configuración controla la duración del regreso del escritorio desde la izquierda cuando se cierra Inicio. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 600."
-  $description:fr: "Ce paramètre contrôle la durée du retour du bureau depuis la gauche quand l'écran d'accueil se ferme. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 600."
-  $description:pt: "Esta configuração controla a duração do retorno da área de trabalho vindo da esquerda quando a Tela Inicial fecha. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 600."
+- closeSlideMs: 320
+  $name: "Closing animation duration (milliseconds)"
+  $name:it: "Durata dell'animazione di chiusura (millisecondi)"
+  $name:es: "Duración de la animación de cierre (milisegundos)"
+  $name:fr: "Durée de l'animation de fermeture (millisecondes)"
+  $name:pt: "Duração da animação de fechamento (milissegundos)"
+  $description: "This setting controls the duration of the closing animation: the tiles shrink and fade, then the desktop fades back in. Smaller is faster. Allowed range 80 to 3000; default 320."
+  $description:it: "Questa impostazione controlla la durata dell'animazione di chiusura: i tile si riducono e svaniscono, poi il desktop ricompare con una dissolvenza. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 320."
+  $description:es: "Esta configuración controla la duración de la animación de cierre: los iconos se reducen y se desvanecen, y después el escritorio reaparece con un fundido. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 320."
+  $description:fr: "Ce paramètre contrôle la durée de l'animation de fermeture : les vignettes rétrécissent et s'estompent, puis le bureau réapparaît en fondu. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 320."
+  $description:pt: "Esta configuração controla a duração da animação de fechamento: os blocos diminuem e desaparecem, e depois a área de trabalho reaparece com um esmaecimento. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 320."
 - groupColumns: 2
   $name: "Tiles per group (horizontal)"
   $name:it: "Tile per gruppo (orizzontali)"
@@ -271,6 +281,123 @@ The mod does **not** replace system files.
   $description:es: "Esta configuración da a cada icono con imagen un relleno plano muestreado del tono dominante del icono, como la opción del menú Inicio de Windows 10, en lugar de los colores fijos de la paleta de Windows 8.1. Los iconos sin imagen mantienen su color de paleta. Portada de la mod Windows 10 1507 Start Menu Recreation. Las aplicaciones empaquetadas siempre usan el color de su propio icono, como en Windows 8.1; esta configuración extiende el muestreo a todos los iconos."
   $description:fr: "Ce paramètre donne à chaque vignette avec icône un fond uni échantillonné depuis la teinte dominante de l'icône, comme l'option du menu Démarrer de Windows 10, au lieu des couleurs fixes de la palette Windows 8.1. Les vignettes sans icône gardent leur couleur de palette. Porté du mod Windows 10 1507 Start Menu Recreation. Les applications packagées utilisent toujours la couleur de leur propre vignette, comme Windows 8.1 ; ce paramètre étend l'échantillonnage à toutes les vignettes."
   $description:pt: "Esta configuração dá a cada bloco com ícone um preenchimento sólido amostrado do tom dominante do ícone, como a opção do menu Iniciar do Windows 10, em vez das cores fixas da paleta do Windows 8.1. Blocos sem ícone mantêm a cor da paleta. Portado da mod Windows 10 1507 Start Menu Recreation. Os aplicativos empacotados sempre usam a cor do seu próprio bloco, como no Windows 8.1; esta configuração estende a amostragem a todos os blocos."
+- tileGradients: true
+  $name: "Windows 8/8.1 tile gradients"
+  $name:it: "Sfumatura delle tile in stile Windows 8/8.1"
+  $name:es: "Degradado de los iconos estilo Windows 8/8.1"
+  $name:fr: "Dégradés des vignettes façon Windows 8/8.1"
+  $name:pt: "Gradientes dos blocos no estilo Windows 8/8.1"
+  $description: "Windows 8 and 8.1 never drew flat tiles: the tile colour is lighter towards the top and darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why the UWP apps, the 8.x Metro style apps and the tiles whose colour is sampled from the app icon look like Windows 10. Turning this on derives the Windows 8.1 gradient from the colour of every tile, including the BackgroundColor that packaged apps declare in their manifest. Turning it off restores the flat 1.0.0 look."
+  $description:it: "Windows 8 e 8.1 non disegnavano mai tile piatte: il colore della tile è più chiaro in alto e più scuro in basso. Windows 10 e 11 l'hanno sostituito con un riempimento pieno, ed è per questo che le app UWP, le app in stile Metro di Windows 8.x e le tile il cui colore è campionato dall'icona sembrano di Windows 10. Attivando questa opzione la sfumatura di Windows 8.1 viene ricavata dal colore di ogni tile, incluso il BackgroundColor che le app in pacchetto dichiarano nel loro manifesto. Disattivandola si torna all'aspetto piatto della 1.0.0."
+  $description:es: "Windows 8 y 8.1 nunca dibujaban iconos planos: el color del icono es más claro arriba y más oscuro abajo. Windows 10 y 11 lo sustituyeron por un relleno plano, y por eso las aplicaciones UWP, las aplicaciones estilo Metro de 8.x y los iconos cuyo color se muestrea del icono de la aplicación parecen de Windows 10. Al activarlo, el degradado de Windows 8.1 se obtiene del color de cada icono, incluido el BackgroundColor que las aplicaciones empaquetadas declaran en su manifiesto. Al desactivarlo se recupera el aspecto plano de la 1.0.0."
+  $description:fr: "Windows 8 et 8.1 ne dessinaient jamais de vignettes unies : la couleur de la vignette est plus claire en haut et plus sombre en bas. Windows 10 et 11 l'ont remplacée par un fond uni, et c'est pourquoi les applications UWP, les applications de style Metro 8.x et les vignettes dont la couleur est échantillonnée depuis l'icône ressemblent à Windows 10. En activant ce paramètre, le dégradé de Windows 8.1 est calculé à partir de la couleur de chaque vignette, y compris le BackgroundColor que les applications packagées déclarent dans leur manifeste. Le désactiver restaure l'aspect uni de la 1.0.0."
+  $description:pt: "O Windows 8 e 8.1 nunca desenhavam blocos lisos: a cor do bloco é mais clara em cima e mais escura em baixo. O Windows 10 e 11 substituíram isso por um preenchimento liso, e é por isso que os apps UWP, os apps no estilo Metro do 8.x e os blocos cuja cor é amostrada do ícone parecem do Windows 10. Ao ativar esta opção, o gradiente do Windows 8.1 é obtido a partir da cor de cada bloco, incluindo o BackgroundColor que os apps empacotados declaram no manifesto. Ao desativá-la, volta o aspecto liso da 1.0.0."
+- tileGradientStrength: subtle
+  $name: "Gradient strength"
+  $name:it: "Intensità della sfumatura"
+  $name:es: "Intensidad del degradado"
+  $name:fr: "Intensité du dégradé"
+  $name:pt: "Intensidade do gradiente"
+  $description: "How pronounced the Windows 8/8.1 gradient is. Subtle (the default) is closest to the Windows 8 start screen, Normal matches Windows 8.1, Strong is more visible. Changes apply immediately."
+  $description:it: "Quanto è marcata la sfumatura di Windows 8/8.1. Sobria è la più vicina alla schermata Start di Windows 8, Normale corrisponde a Windows 8.1, Forte è più visibile. Le modifiche si applicano subito."
+  $description:es: "Cómo de marcado es el degradado de Windows 8/8.1. Sutil es el más cercano a la pantalla de inicio de Windows 8, Normal corresponde a Windows 8.1 y Fuerte es más visible. Los cambios se aplican al momento."
+  $description:fr: "L'intensité du dégradé Windows 8/8.1. Subtil est le plus proche de l'écran d'accueil de Windows 8, Normal correspond à Windows 8.1 et Fort est plus visible. Les changements s'appliquent immédiatement."
+  $description:pt: "O quão marcado é o gradiente do Windows 8/8.1. Sutil é o mais próximo da Tela Inicial do Windows 8, Normal corresponde ao Windows 8.1 e Forte é mais visível. As mudanças valem na hora."
+  $options:
+  - subtle: "Subtle (closest to the Windows 8 tiles)"
+  - normal: "Normal (Windows 8.1 look)"
+  - strong: "Strong (more pronounced)"
+  $options:it:
+  - subtle: "Sobria (la più vicina alle tile di Windows 8)"
+  - normal: "Normale (aspetto di Windows 8.1)"
+  - strong: "Forte (più marcata)"
+  $options:es:
+  - subtle: "Sutil (la más cercana a los iconos de Windows 8)"
+  - normal: "Normal (aspecto de Windows 8.1)"
+  - strong: "Fuerte (más marcado)"
+  $options:fr:
+  - subtle: "Subtil (au plus près des vignettes de Windows 8)"
+  - normal: "Normal (aspect Windows 8.1)"
+  - strong: "Fort (plus marqué)"
+  $options:pt:
+  - subtle: "Sutil (o mais próximo dos blocos do Windows 8)"
+  - normal: "Normal (aspecto do Windows 8.1)"
+  - strong: "Forte (mais marcado)"
+- gradientOverArt: true
+  $name: "Keep the gradient over the app artwork"
+  $name:it: "Mantieni la sfumatura sopra la grafica delle app"
+  $name:es: "Mantener el degradado sobre la ilustración de la aplicación"
+  $name:fr: "Conserver le dégradé par-dessus l'illustration de l'application"
+  $name:pt: "Manter o gradiente sobre a arte do aplicativo"
+  $description: "Windows 10/11 packaged apps usually ship artwork that covers the whole tile, so the gradient behind it would never be visible. This draws the Windows 8.1 gradient over the artwork as well, which is what makes those tiles match the Windows 8/8.1 apps. Turn it off to keep the artwork untouched."
+  $description:it: "Le app in pacchetto di Windows 10/11 di solito hanno una grafica che copre tutta la tile, quindi la sfumatura sotto non si vedrebbe. Questa opzione disegna la sfumatura di Windows 8.1 anche sopra la grafica, ed è ciò che fa somigliare queste tile a quelle di Windows 8/8.1. Disattivala per lasciare intatta la grafica."
+  $description:es: "Las aplicaciones empaquetadas de Windows 10/11 suelen incluir una ilustración que cubre todo el icono, así que el degradado de debajo nunca se vería. Esta opción dibuja el degradado de Windows 8.1 también sobre la ilustración, que es lo que hace que esos iconos se parezcan a los de Windows 8/8.1. Desactívala para dejar la ilustración intacta."
+  $description:fr: "Les applications packagées de Windows 10/11 fournissent souvent une illustration qui couvre toute la vignette, si bien que le dégradé placé dessous ne serait jamais visible. Ce paramètre dessine aussi le dégradé Windows 8.1 par-dessus l'illustration, ce qui rapproche ces vignettes de celles de Windows 8/8.1. Désactivez-le pour laisser l'illustration intacte."
+  $description:pt: "Os apps empacotados do Windows 10/11 costumam trazer uma arte que cobre todo o bloco, então o gradiente por baixo nunca apareceria. Esta opção desenha o gradiente do Windows 8.1 também sobre a arte, e é isso que faz esses blocos se parecerem com os do Windows 8/8.1. Desative para deixar a arte intacta."
+- shellCompat: auto
+  $name: "Compatibility with StartAllBack and ExplorerPatcher"
+  $name:it: "Compatibilità con StartAllBack ed ExplorerPatcher"
+  $name:es: "Compatibilidad con StartAllBack y ExplorerPatcher"
+  $name:fr: "Compatibilité avec StartAllBack et ExplorerPatcher"
+  $name:pt: "Compatibilidade com o StartAllBack e o ExplorerPatcher"
+  $description: "StartAllBack and ExplorerPatcher patch the shell while Explorer starts, in the same phase in which Windhawk loads this mod. In this mode the mod leaves the shell completely alone until the taskbar exists, and then waits for the delay below, so that the patched taskbar can be created first. Auto detects StartAllBack and ExplorerPatcher. Always on applies the delay in every case, Always off never does (the 1.0.0 behaviour). Read at sign-in and when Explorer starts."
+  $description:it: "StartAllBack ed ExplorerPatcher modificano la shell mentre Explorer si avvia, nella stessa fase in cui Windhawk carica questa mod. In questa modalità la mod non tocca per nulla la shell finché la barra delle applicazioni non esiste, e poi attende il ritardo indicato sotto, così la barra modificata può essere creata per prima. Auto rileva StartAllBack ed ExplorerPatcher. Attiva applica sempre il ritardo, Disattiva mai (comportamento della 1.0.0). Viene letta all'accesso e all'avvio di Explorer."
+  $description:es: "StartAllBack y ExplorerPatcher modifican el shell mientras Explorer se inicia, en la misma fase en la que Windhawk carga esta mod. En este modo la mod no toca el shell hasta que existe la barra de tareas y después espera el retraso de abajo, para que la barra modificada pueda crearse primero. Auto detecta StartAllBack y ExplorerPatcher. Activada aplica siempre el retraso, Desactivada nunca (comportamiento de la 1.0.0). Se lee al iniciar sesión y al arrancar Explorer."
+  $description:fr: "StartAllBack et ExplorerPatcher modifient le shell pendant le démarrage d'Explorer, dans la même phase où Windhawk charge ce mod. Dans ce mode, le mod ne touche pas au shell tant que la barre des tâches n'existe pas, puis attend le délai ci-dessous, afin que la barre modifiée puisse être créée en premier. Auto détecte StartAllBack et ExplorerPatcher. Activé applique toujours le délai, Désactivé jamais (comportement de la 1.0.0). Ce paramètre est lu à l'ouverture de session et au démarrage d'Explorer."
+  $description:pt: "O StartAllBack e o ExplorerPatcher modificam o shell enquanto o Explorer inicia, na mesma fase em que o Windhawk carrega esta mod. Neste modo a mod não toca no shell até a barra de tarefas existir e depois espera o atraso abaixo, para que a barra modificada possa ser criada primeiro. Auto detecta o StartAllBack e o ExplorerPatcher. Ativada aplica sempre o atraso, Desativada nunca (comportamento da 1.0.0). É lida ao entrar e quando o Explorer inicia."
+  $options:
+  - auto: "Auto (on when StartAllBack or ExplorerPatcher is detected)"
+  - always: "Always on"
+  - never: "Always off (the 1.0.0 behaviour)"
+  $options:it:
+  - auto: "Auto (attiva quando viene rilevato StartAllBack o ExplorerPatcher)"
+  - always: "Sempre attiva"
+  - never: "Sempre disattivata (comportamento della 1.0.0)"
+  $options:es:
+  - auto: "Auto (activada si se detecta StartAllBack o ExplorerPatcher)"
+  - always: "Siempre activada"
+  - never: "Siempre desactivada (comportamiento de la 1.0.0)"
+  $options:fr:
+  - auto: "Auto (activé si StartAllBack ou ExplorerPatcher est détecté)"
+  - always: "Toujours activé"
+  - never: "Toujours désactivé (comportement de la 1.0.0)"
+  $options:pt:
+  - auto: "Auto (ativada se o StartAllBack ou o ExplorerPatcher for detectado)"
+  - always: "Sempre ativada"
+  - never: "Sempre desativada (comportamento da 1.0.0)"
+- startupDelayMs: 4000
+  $name: "Delay before creating the Start screen window (milliseconds)"
+  $name:it: "Ritardo prima di creare la finestra della schermata Start (millisecondi)"
+  $name:es: "Retraso antes de crear la ventana de la pantalla de inicio (milisegundos)"
+  $name:fr: "Délai avant de créer la fenêtre de l'écran d'accueil (millisecondes)"
+  $name:pt: "Atraso antes de criar a janela da Tela Inicial (milissegundos)"
+  $description: "Used only when the compatibility mode above is active. After the taskbar appears the mod waits this long before it creates its window, its buffers and its keyboard hook, so that StartAllBack and ExplorerPatcher can finish. Allowed range 0 to 60000; default 4000. Raise it to 8000 or 10000 if the taskbar still comes back in the classic style."
+  $description:it: "Usato solo quando la modalità di compatibilità qui sopra è attiva. Dopo la comparsa della barra delle applicazioni la mod attende questo tempo prima di creare la propria finestra, i propri buffer e l'hook da tastiera, così StartAllBack ed ExplorerPatcher possono finire. Intervallo consentito da 0 a 60000; predefinito 4000. Alzalo a 8000 o 10000 se la barra continua a tornare in stile classico."
+  $description:es: "Se usa solo cuando el modo de compatibilidad de arriba está activo. Tras aparecer la barra de tareas, la mod espera este tiempo antes de crear su ventana, sus búferes y su enlace de teclado, para que StartAllBack y ExplorerPatcher puedan terminar. Rango permitido de 0 a 60000; predeterminado 4000. Auméntalo a 8000 o 10000 si la barra sigue volviendo al estilo clásico."
+  $description:fr: "Utilisé uniquement lorsque le mode de compatibilité ci-dessus est actif. Une fois la barre des tâches apparue, le mod attend ce délai avant de créer sa fenêtre, ses tampons et son hook clavier, afin que StartAllBack et ExplorerPatcher puissent terminer. Plage autorisée de 0 à 60000 ; défaut 4000. Passez à 8000 ou 10000 si la barre revient encore au style classique."
+  $description:pt: "Usado apenas quando o modo de compatibilidade acima está ativo. Depois de a barra de tarefas aparecer, a mod espera este tempo antes de criar sua janela, seus buffers e seu hook de teclado, para que o StartAllBack e o ExplorerPatcher possam terminar. Faixa permitida de 0 a 60000; padrão 4000. Aumente para 8000 ou 10000 se a barra continuar voltando ao estilo clássico."
+- deferStartHook: true
+  $name: "Let Windows load the Start menu code"
+  $name:it: "Lascia che Windows carichi il codice del menu Start"
+  $name:es: "Dejar que Windows cargue el código del menú Inicio"
+  $name:fr: "Laisser Windows charger le code du menu Démarrer"
+  $name:pt: "Deixar o Windows carregar o código do menu Iniciar"
+  $description: "The mod opens this Start screen by hooking XamlLauncher::ShowStartView in twinui.pcshell.dll. Loading that DLL during Explorer start-up is what used to disturb StartAllBack and ExplorerPatcher, so the mod now waits for Windows to load it and hooks it from a background thread. The forced load is kept as a fallback, done 15 seconds after the shell has settled; turn this off to go back to loading the DLL immediately at sign-in. Read when the mod starts."
+  $description:it: "La mod apre questa schermata Start agganciando XamlLauncher::ShowStartView in twinui.pcshell.dll. Caricare quella DLL durante l'avvio di Explorer è ciò che disturbava StartAllBack ed ExplorerPatcher, quindi ora la mod aspetta che la carichi Windows e la aggancia da un thread in background. Il caricamento forzato resta come riserva, 15 secondi dopo che la shell si è stabilizzata; disattiva questa opzione per tornare a caricare la DLL subito all'accesso. Viene letta all'avvio della mod."
+  $description:es: "La mod abre esta pantalla de inicio enganchando XamlLauncher::ShowStartView en twinui.pcshell.dll. Cargar esa DLL durante el inicio de Explorer es lo que molestaba a StartAllBack y ExplorerPatcher, así que ahora la mod espera a que la cargue Windows y la engancha desde un hilo en segundo plano. La carga forzada se mantiene como reserva, 15 segundos después de que el shell se estabilice; desactiva esta opción para volver a cargar la DLL al iniciar sesión. Se lee al arrancar la mod."
+  $description:fr: "Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
+  $description:pt: "A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
+- startButtonHook: true
+  $name: "Open with the StartAllBack Start button"
+  $name:it: "Apri con il pulsante Start di StartAllBack"
+  $name:es: "Abrir con el botón Inicio de StartAllBack"
+  $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack"
+  $name:pt: "Abrir com o botão Iniciar do StartAllBack"
+  $description: "StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
+  $description:it: "StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
+  $description:es: "StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
+  $description:fr: "StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
+  $description:pt: "O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
 - seedStartLayout: false
   $name: "Populate Start with a Windows 8.1 style layout from installed apps"
   $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
@@ -307,6 +434,7 @@ The mod does **not** replace system files.
 #include <objbase.h>
 #include <shellapi.h>
 #include <commoncontrols.h>
+#include <commctrl.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <wtsapi32.h>
@@ -317,6 +445,7 @@ The mod does **not** replace system files.
 #include <new>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <algorithm>
 #include <cwctype>
 #include <stdlib.h>
@@ -457,7 +586,7 @@ static T RunGuardedValue(const wchar_t* step, T fallback, Function&& function) {
 enum StrId {
     STR_START, STR_DESKTOP,
     STR_TILE_EXPLORER, STR_TILE_COMPUTER, STR_TILE_CONTROLPANEL, STR_TILE_STORE,
-    STR_APPS, STR_RESULTS_FOR, STR_NO_RESULTS, STR_SEARCH_APPS, STR_SEARCH_FOR, STR_SEARCH_IN,
+    STR_APPS, STR_RESULTS_FOR, STR_NO_RESULTS, STR_CHARM_TYPE_TO_SEARCH, STR_SEARCH_APPS, STR_SEARCH_FOR, STR_SEARCH_IN,
     STR_ROW_APPS, STR_ROW_SETTINGS, STR_ROW_FILES, STR_ROW_STORE,
     STR_BAR_ADVANCED, STR_BAR_UNPIN, STR_BAR_PIN_START, STR_BAR_SMALLER, STR_BAR_LARGER,
     STR_ADV_MANAGE, STR_ADV_MAP, STR_ADV_DISCONNECT, STR_ADV_PROPERTIES, STR_ADV_RUNAS, STR_ADV_OPENFILE,
@@ -491,6 +620,7 @@ static const LocRow kStrings[STR_COUNT] = {
     { { L"Apps", L"App", L"Aplicaciones", L"Applications", L"Aplicativos" } },
     { { L"Results for \"%s\" (%u)", L"Risultati per \"%s\" (%u)", L"Resultados para \"%s\" (%u)", L"R\u00e9sultats pour \u00ab %s \u00bb (%u)", L"Resultados para \"%s\" (%u)" } },
     { { L"No applications matched your search.", L"Nessuna applicazione corrisponde alla ricerca.", L"Ninguna aplicaci\u00f3n coincidi\u00f3 con la b\u00fasqueda.", L"Aucune application ne correspond \u00e0 votre recherche.", L"Nenhum aplicativo correspondeu \u00e0 sua pesquisa." } },
+    { { L"Type to search apps, settings and files.", L"Digita per cercare app, impostazioni e file.", L"Escribe para buscar aplicaciones, configuraciones y archivos.", L"Tapez pour rechercher des applications, des param\u00e8tres et des fichiers.", L"Digite para pesquisar apps, configura\u00e7\u00f5es e arquivos." } },
     { { L"Search Apps", L"Cerca app", L"Buscar aplicaciones", L"Rechercher des applications", L"Pesquisar aplicativos" } },
     { { L"Search for", L"Cerca", L"Buscar", L"Rechercher", L"Pesquisar" } },
     { { L"Search in", L"Cerca in", L"Buscar en", L"Rechercher dans", L"Pesquisar em" } },
@@ -590,6 +720,7 @@ static int g_userTextW = -1;
 static bool g_swallowAccountUp = false;
 static bool g_swallowCharmUp = false;
 static bool g_swallowNamingUp = false;
+static bool g_swallowNamingRightUp = false;   // right press that only closed the name bar
 static DWORD g_charmSwallowTick = 0;
 static int ScI(int v) { return MulDiv(v, g_dpi, 96); }
 static float ScF(float v) { return v * g_dpiScale; }
@@ -597,14 +728,10 @@ static int GROUP_SEPARATION = 40;
 static volatile LONG g_requestedGroupCols = 2, g_requestedGroupRows = 3;
 static const float PRESS_SCALE   = 0.94f;      
 
-static const float OPEN_HOLD     = 0.00f;  
-static const float OPEN_SLIDE    = 0.36f;   
-static const float OPEN_SCALE_T  = 0.12f;
-static const float DESK_SCALE    = 0.948f;
-static const float TILES_DELAY   = 0.30f;   
+static const float TILES_DELAY   = 0.26f;   
 static const float TILE_FADE     = 0.065f;
-static const float TILE_T        = 0.50f;
-static const float TILE_SCALE_T  = 0.27f;
+static const float TILE_T        = 0.42f;
+static const float TILE_SCALE_T  = 0.23f;
 static const float TILE_S0       = 0.83f;
 static float TILE_PIVOT_Y = 180.0f + 2.875f * 152.0f;    
 static float TILE_SLIDE = 110.0f;
@@ -628,7 +755,19 @@ static const float LOGON_GLASS_DELAY = 0.67f;
 static const float LOGON_GLASS_FADE = 0.70f;
 static const float HEADER_DELAY  = 0.47f;
 static const float HEADER_FADE   = 0.19f;
-static const float CLOSE_SLIDE   = 0.60f;
+static const float CLOSE_SLIDE   = 0.32f;
+// Closing timeline measured frame by frame (30 fps) from a real Windows 8.1 recording. Times are
+// seconds at the reference duration CLOSE_SLIDE and scale linearly with the closeSlideMs setting.
+//  1. Tiles fade out linearly in 0.10 s while the whole tile area shrinks to 0.64 around the
+//     CENTRE OF THE SCREEN (all tiles together, no stagger). Title and user name stay in place and
+//     fade out in 0.16 s. The scroll bar and the "all apps" arrow fade out together with the tiles.
+//  2. The bare Start background is held until 0.19 s, then the desktop snapshot cross-fades in
+//     over 0.10 s.
+static const float CLOSE_TILE_T       = 0.10f;
+static const float CLOSE_TILE_SCALE   = 0.36f;
+static const float CLOSE_HEADER_T     = 0.16f;
+static const float CLOSE_DESK_DELAY   = 0.19f;
+static const float CLOSE_DESK_T       = 0.10f;
 
 static int SB_W = 346, SB_PAD = 40;
 static const float SB_IN = 0.11f;
@@ -697,8 +836,10 @@ static const UINT WM_APP_CHARM_POINTER = WM_APP + 14;
 static const UINT WM_APP_SEED_LAYOUT = WM_APP + 15;
 static const UINT WM_APP_FILES_READY = WM_APP + 16;
 static const UINT WM_APP_APPS_REFRESH = WM_APP + 17;
+static const UINT WM_APP_SETTINGS_READY = WM_APP + 18;
 static const UINT WM_HOOKCTL_MOUSE_ON  = WM_APP + 30;
 static const UINT WM_HOOKCTL_MOUSE_OFF = WM_APP + 31;
+static const UINT WM_HOOKCTL_ORB_REFRESH = WM_APP + 32;   // re-scan the StartAllBack Start button now
 static const ULONG_PTR kMagic = 0x38303435;
 static const wchar_t* kClassName = L"Win8StartScreenMod8045";
 static const wchar_t* kDesktopTarget = L"win8start:desktop";
@@ -718,15 +859,16 @@ static DWORD  g_hookTid = 0;
 static volatile bool g_useWinKey = true;
 static volatile bool g_keyboardOnly = false;
 static volatile bool g_startHooked = false;
+static HANDLE g_startHookThread = NULL, g_startHookStop = NULL;
 static DWORD g_lastToggleTick = 0;
-static volatile LONG g_openSlideMs = 360, g_closeSlideMs = 600;
+static volatile LONG g_closeSlideMs = 320;
 static volatile LONG g_openAtLogon = 1;
 static bool g_logonOpening = false;
 static bool g_firstDesktopAfterLogon = false;
 static DWORD g_logonVisualMs = 0, g_logonLastFrameTick = 0, g_logonRevealGateTick = 0;
 static bool g_userToggledStart = false;
 static HANDLE g_logonThread = NULL, g_logonStop = NULL;
-static float g_openSlideSeconds = OPEN_SLIDE, g_closeSlideSeconds = CLOSE_SLIDE;
+static float g_closeSlideSeconds = CLOSE_SLIDE;
 
 static int  g_sw = 1920, g_sh = 1080;
 static int  g_monX = 0, g_monY = 0;   // top-left of the monitor Start is shown on
@@ -836,6 +978,46 @@ static bool g_winDown = false, g_winCombo = false;
 static volatile LONG g_privacyMode = 0;
 static volatile LONG g_appTileColors = 0;
 static volatile LONG g_tileColorsDirty = 0;
+// Windows 8/8.1 tile shading: 0 = flat fill (the 1.0.0 look), 1 = gradient like Windows 8/8.1.
+static volatile LONG g_tileGradient = 1;
+static volatile LONG g_tileGradientStrength = 0;   // 0 = subtle (default), 1 = normal, 2 = strong
+static volatile LONG g_gradientOverArt = 1;        // shade the app artwork as well
+// Third-party shell compatibility (StartAllBack, ExplorerPatcher). See WaitForShellSettle.
+static volatile LONG g_shellCompat = 0;            // 0 = auto, 1 = always, 2 = never
+static volatile LONG g_startupDelayMs = 4000;      // settle delay before the shell is touched
+static volatile LONG g_deferStartHook = 1;         // don't force-load twinui.pcshell.dll
+static volatile LONG g_shellPatch = 0;             // bitmask of the detected third-party shells
+static volatile LONG g_startButtonHook = 1;        // intercept the StartAllBack Start button
+
+enum : LONG { SHELL_PATCH_STARTALLBACK = 1, SHELL_PATCH_EXPLORERPATCHER = 2 };
+
+// StartAllBack draws its own Start button, and that button does not go through
+// XamlLauncher::ShowStartView, so hooking the Windows launcher never sees it. The button is a child
+// window of this process's taskbar; it is subclassed (WindhawkUtils::SetWindowSubclassFromAnyThread)
+// and its click opens this Start screen. Only done while StartAllBack is loaded in this process.
+// g_orbWnd is only used on the hook thread. g_orbRect/g_orbCount are written there and read by the
+// Start window, under g_orbLock.
+static HWND g_orbWnd[8] = {};
+static RECT g_orbRect[8] = {};
+static int g_orbCount = 0;
+static SRWLOCK g_orbLock = SRWLOCK_INIT;
+static bool g_orbLogged = false;
+static volatile LONG g_mouseHookWant = 0;   // bit 0 = search charm
+
+// Windows subclassed by OrbSubclassProc: the Start buttons and their child windows. Only touched by
+// the hook thread, and by the UI thread after the hook thread has been joined.
+static HWND g_orbSub[16] = {};
+static int g_orbSubCount = 0;
+static DWORD g_orbPressTick = 0;      // taskbar thread only (subclass procedure)
+static HWND g_orbPressWnd = NULL;     // window that took the capture for the current press
+static bool g_orbSubFailLogged = false;
+static bool g_orbPressOnStart = false; // Start window: press on the button area, waiting for the release
+static volatile LONG g_orbClicks = 0; // clicks forwarded to the Start screen, for the log
+// The Start button and the Windows key can report the same action twice in a row; the Start window
+// ignores a second toggle that arrives inside this window.
+static const DWORD kOrbToggleDebounceMs = 250;
+static void EnsureOrbSubclass();
+static void RemoveOrbSubclasses();
 static volatile LONG g_appSort = 0;
 static int g_charmScope = 0;
 static int g_ctxRow = -1;
@@ -866,6 +1048,7 @@ static float g_dragGroupAnchorWX = 0.0f, g_dragGroupDx = 0.0f;
 static int g_namingGroup = -1;
 static bool g_customize = false;
 static std::wstring g_groupNameEdit;
+static bool g_nameSelAll = false;   // Ctrl+A: whole group name selected
 static bool g_alphaGrid = false;
 static bool g_appsSearchFocus = false;
 static DWORD g_alphaTick = 0;
@@ -895,7 +1078,11 @@ struct AppEntry { std::wstring name, lower, parse; bool exe, desktop;
                   int charmCat = CC_APP;
                   bool dir = false;
                   bool searchOnly = false;
-                  bool direct = false; };
+                  bool direct = false;
+                  std::wstring keywords;   // lower-case search keywords (settings entries)
+                  std::string pidl;        // absolute PIDL bytes (Control Panel items)
+                  int launchKind = 0;      // 0 = ShellExecute(AppTarget); see enum SettingLaunch
+                  std::wstring launch; };
 // Copy of the entry the context menu was opened on: g_results can be re-sorted
 // (e.g. when the file list finishes) while the menu is open.
 static AppEntry g_ctxApp;
@@ -910,6 +1097,7 @@ static volatile bool g_searchEnabled = true;
 static View g_view = VIEW_START;
 static wchar_t g_query[128] = L"";
 static int g_queryLen = 0;
+static bool g_querySelAll = false;   // Ctrl+A: whole query selected
 static std::vector<AppEntry> g_apps;
 static std::vector<IconSlot> g_icons;
 static std::vector<int> g_results;
@@ -922,6 +1110,11 @@ static HANDLE g_appsThread = NULL, g_appsStop = NULL;
 static SRWLOCK g_appsLock = SRWLOCK_INIT;
 static HANDLE g_filesNeed = NULL;
 static std::vector<AppEntry>* g_pendingFiles = NULL;
+static std::vector<AppEntry>* g_pendingSettings = NULL;
+// One pixel buffer shared by all modern Settings pages (they all use the SystemSettings icon).
+static BYTE* g_sharedSettingsPx = NULL;
+static int g_sharedSettingsW = 0, g_sharedSettingsH = 0;
+static SRWLOCK g_sharedSettingsLock = SRWLOCK_INIT;
 // Catalog refresh: the worker rebuilds the list, the UI thread applies it (so g_apps is
 // never replaced under a reader), then signals g_iconsGo to let the worker load icons.
 static HANDLE g_appsRefresh = NULL, g_iconsGo = NULL;
@@ -1001,9 +1194,9 @@ static float HeaderOpacity(float to);
 static void ShowMenuFor(HWND owner, RECT anchor, int kind);
 static int HitTile(int mx, int my);
 static void DrawBarGpu(DWORD now);
-static void DrawAppsChromeGpu();
-static void DrawAppsChromeGdi(HDC sdc);
-static void DrawScrollBarTo(HDC dc);
+static void DrawAppsChromeGpu(float closeA = -1.0f);
+static void DrawAppsChromeGdi(HDC sdc, float closeA = -1.0f);
+static void DrawScrollBarTo(HDC dc, float closeA = -1.0f);
 static void DrawCharmBarGpu(DWORD now);
 static void DrawCharmBarGdi(HDC sdc, DWORD now);
 static void CharmToggle();
@@ -1016,6 +1209,8 @@ static void CommitAllApps();
 static float LeaveEase(int i, DWORD now);
 static int g_charmCont = 0;
 static void CharmMoveSel(int delta);
+static bool CharmListActive();
+static bool CharmOwnsPoint(int lx, int ly);
 static COLORREF SystemAccentColor();
 static bool GetWallpaperPath(wchar_t* out, size_t capacity);
 static void AccountRect(RECT* r);
@@ -1045,6 +1240,8 @@ static void RepaintNow();
 static void BuildOneTile(int i, HDC screenDC);
 static void CloseStart(bool immediate = false);
 static HFONT g_fTitle = NULL, g_fUser = NULL, g_fLabel = NULL, g_fTopLabel = NULL;
+// Windows 8.1 uses a smaller caption on the Medium (and Small) tiles than on the Wide/Large ones.
+static HFONT g_fLabelMedium = NULL;
 static HFONT g_fHdrGlyph = NULL, g_fBarMeas = NULL;
 static HBITMAP g_avatarPicBmp = NULL;
 static ID2D1Bitmap* g_avatarPicGpu = NULL;
@@ -1075,39 +1272,6 @@ static float EaseMetroOut(float t) {
     }
     const float v = 1.0f - u;
     return 3.0f * v * v * u * y1 + 3.0f * v * u * u * y2 + u * u * u;
-}
-
-static float SlideTangent(const float* time, const float* pos, int count, int i) {
-    if (i <= 0 || i >= count - 1) return 0.0f;
-    float h0 = time[i] - time[i - 1], h1 = time[i + 1] - time[i];
-    float d0 = (pos[i] - pos[i - 1]) / h0, d1 = (pos[i + 1] - pos[i]) / h1;
-    if (d0 <= 0.0f || d1 <= 0.0f) return 0.0f;
-    float w0 = 2.0f * h1 + h0, w1 = h1 + 2.0f * h0;
-    return (w0 + w1) / (w0 / d0 + w1 / d1);
-}
-
-static float ReferenceSlide(const float* time, const float* pos, int count, float t) {
-    t = Clamp01(t);
-    int i = 0;
-    while (i + 1 < count - 1 && t > time[i + 1]) ++i;
-    float h = time[i + 1] - time[i], u = (t - time[i]) / h;
-    float u2 = u * u, u3 = u2 * u;
-    float a = (2.0f * u3 - 3.0f * u2 + 1.0f) * pos[i] + (u3 - 2.0f * u2 + u) * h * SlideTangent(time, pos, count, i);
-    float b = (-2.0f * u3 + 3.0f * u2) * pos[i + 1] + (u3 - u2) * h * SlideTangent(time, pos, count, i + 1);
-    return Clamp01(a + b);
-}
-
-static float OpenSlideProgress(float t) {
-    t = Clamp01(t);
-    float smooth = t * t * (3.0f - 2.0f * t);
-    float brisk = t * (2.0f - t);
-    return 0.65f * smooth + 0.35f * brisk;
-}
-
-static float CloseSlideProgress(float t) {
-    static const float time[] = { 0.0f, .0333f, .0667f, .1333f, .20f, .3333f, .50f, .6667f, .8333f, 1.0f };
-    static const float pos[]  = { 0.0f, .12f,   .32f,   .61f,   .77f, .89f,    .948f,.982f,  .994f,  1.0f };
-    return ReferenceSlide(time, pos, ARRAYSIZE(time), t);
 }
 
 static float SmoothStep(float t) { t = Clamp01(t); return t * t * (3.0f - 2.0f * t); }
@@ -1391,9 +1555,29 @@ static void LoadGroupNames() {
         g_groupNames[g] = p[1];
     }
 }
+static const UINT KEY_SELECT_ALL = 0x141;   // Ctrl+A (posted by the keyboard hook)
+static const UINT KEY_COPY_ALL   = 0x143;   // Ctrl+C
+static void CopyTextToClipboard(const wchar_t* text, size_t len) {
+    if (!OpenClipboard(g_wnd)) return;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (len + 1) * sizeof(wchar_t));
+    if (h) {
+        wchar_t* p = (wchar_t*)GlobalLock(h);
+        if (p) {
+            memcpy(p, text, len * sizeof(wchar_t));
+            p[len] = 0;
+            GlobalUnlock(h);
+            EmptyClipboard();
+            if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+        } else {
+            GlobalFree(h);
+        }
+    }
+    CloseClipboard();
+}
 static void StartNaming(int g) {
     if (g < 0) return;
     g_namingGroup = g;
+    g_nameSelAll = false;
     g_groupNameEdit = (g < (int)g_groupNames.size()) ? g_groupNames[g] : std::wstring();
     Wh_Log(L"[zoom] naming group %d", g);
     g_dirty = true; RepaintNow();
@@ -1405,6 +1589,7 @@ static void CommitNaming() {
     g_groupNames[g_namingGroup] = g_groupNameEdit;
     Wh_Log(L"[zoom] group %d named", g_namingGroup);
     g_namingGroup = -1;
+    g_nameSelAll = false;
     g_groupNameEdit.clear();
     SaveGroupNames();
     g_dirty = true; RepaintNow();
@@ -1412,17 +1597,31 @@ static void CommitNaming() {
 static void CancelNaming() {
     if (g_namingGroup < 0) return;
     g_namingGroup = -1;
+    g_nameSelAll = false;
     g_groupNameEdit.clear();
     g_dirty = true; RepaintNow();
 }
 static void NamingChar(wchar_t c) {
     if (g_namingGroup < 0) return;
-    if (c >= L' ' && g_groupNameEdit.size() < 48) g_groupNameEdit += c;
+    if (c >= L' ') {
+        if (g_nameSelAll) { g_groupNameEdit.clear(); g_nameSelAll = false; }
+        if (g_groupNameEdit.size() < 48) g_groupNameEdit += c;
+    }
     g_dirty = true; RepaintNow();
 }
 static void NamingKey(UINT vk) {
     if (g_namingGroup < 0) return;
-    if (vk == VK_BACK) { if (!g_groupNameEdit.empty()) g_groupNameEdit.pop_back(); g_dirty = true; RepaintNow(); }
+    if (vk == KEY_SELECT_ALL) {
+        if (!g_groupNameEdit.empty()) { g_nameSelAll = true; g_dirty = true; RepaintNow(); }
+    }
+    else if (vk == KEY_COPY_ALL) {
+        if (g_nameSelAll && !g_groupNameEdit.empty()) CopyTextToClipboard(g_groupNameEdit.c_str(), g_groupNameEdit.size());
+    }
+    else if (vk == VK_BACK) {
+        if (g_nameSelAll) { g_groupNameEdit.clear(); g_nameSelAll = false; }
+        else if (!g_groupNameEdit.empty()) g_groupNameEdit.pop_back();
+        g_dirty = true; RepaintNow();
+    }
     else if (vk == VK_RETURN) CommitNaming();
     else if (vk == VK_ESCAPE) CancelNaming();
 }
@@ -1460,6 +1659,19 @@ static bool GroupNameFieldRect(int g, RECT* out) {
     out->right = (int)(l + bw); out->bottom = (int)(t - ScF(10));
     return true;
 }
+// Width of a string laid out with the DirectWrite format that draws it, so the caret and the
+// selection line up with the text (a GDI font of the "same" size measures differently).
+static float DwTextWidth(const wchar_t* s, size_t n, IDWriteTextFormat* f) {
+    if (!s || !n || !f || !g_writeFactory) return 0.0f;
+    float w = 0.0f;
+    IDWriteTextLayout* lay = NULL;
+    if (SUCCEEDED(g_writeFactory->CreateTextLayout(s, (UINT32)n, f, 10000.0f, 200.0f, &lay)) && lay) {
+        DWRITE_TEXT_METRICS m = {};
+        if (SUCCEEDED(lay->GetMetrics(&m))) w = m.widthIncludingTrailingWhitespace;
+        lay->Release();
+    }
+    return w;
+}
 static void EnterCustomize() {
     if (g_view != VIEW_START || g_charmOpen || g_zoomOut || !g_open || g_closing) return;
     HideBar();
@@ -1485,15 +1697,16 @@ static void DrawGroupNamesGpu(DWORD now) {
             float bw = std::max(r - l, ScF(180)), bh = ScF(32);
             float bx = l, by = t - bh - ScF(10);
             FillRc(bx, by, bx + bw, by + bh, RGB(255, 255, 255), 1.0f);
-            TextAt(g_groupNameEdit.c_str(), g_queryFormat, bx + ScF(8), by, bx + bw - ScF(14), by + bh, RGB(0, 0, 0));
-            if ((NowMs() / 500) & 1) {
-                HDC dc = GetDC(NULL); SIZE tsz = {}; int tw = 0;
-                if (dc && g_fLabel) {
-                    HGDIOBJ o = SelectObject(dc, g_fLabel);
-                    if (GetTextExtentPoint32W(dc, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &tsz)) tw = tsz.cx;
-                    SelectObject(dc, o);
-                }
-                if (dc) ReleaseDC(NULL, dc);
+            const bool selAll = g_nameSelAll && !g_groupNameEdit.empty();
+            if (selAll) {
+                float sx1 = bx + ScF(8) + DwTextWidth(g_groupNameEdit.c_str(), g_groupNameEdit.size(), g_queryFormat);
+                if (sx1 > bx + bw - ScF(14)) sx1 = bx + bw - ScF(14);
+                FillRc(bx + ScF(8), by + ScF(5), sx1, by + bh - ScF(5), RGB(0, 120, 215), 1.0f);
+            }
+            TextAt(g_groupNameEdit.c_str(), g_queryFormat, bx + ScF(8), by, bx + bw - ScF(14), by + bh,
+                   selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
+            if (!selAll && ((NowMs() / 500) & 1)) {
+                float tw = DwTextWidth(g_groupNameEdit.c_str(), g_groupNameEdit.size(), g_queryFormat);
                 FillRc(bx + ScF(8) + tw, by + ScF(6), bx + ScF(10) + tw, by + bh - ScF(6), RGB(0, 0, 0), 1.0f);
             }
         } else if (g_customize) {
@@ -1506,7 +1719,7 @@ static void DrawGroupNamesGpu(DWORD now) {
         } else {
             float nx = l + ScF(2);
             float ny = (k > 0.5f) ? b + ScF(6) : t - ScF(30);
-            TextAt(nm->c_str(), g_subFormat, nx, ny, nx + (r - l), ny + ScF(26), RGB(255, 255, 255), 0.92f * ta);
+            TextAt(nm->c_str(), g_subFormat, nx, ny, nx + (r - l), ny + ScF(36), RGB(255, 255, 255), 0.92f * ta);
         }
     }
 }
@@ -1623,9 +1836,14 @@ static void ScrollSetFromX(int mx) {
     g_scrollTarget = f * ScrollMax(); ClampScroll();
     g_scrollCur = g_scrollTarget;
 }
-static void DrawScrollBarTo(HDC dc) {
-    if (!ScrollBarVisible()) return;
-    float fade = ChromeIdleFade(NowMs());
+// closeA >= 0: drawn by the closing animation (g_open is already false then), faded by closeA.
+static bool ScrollBarShown(float closeA) {
+    if (closeA < 0.0f) return ScrollBarVisible();
+    return ZoomPresence(NowMs()) <= 0.0f && ScrollMax() > 0.5f;
+}
+static void DrawScrollBarTo(HDC dc, float closeA) {
+    if (!ScrollBarShown(closeA)) return;
+    float fade = ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f);
     if (fade <= 0.01f) return;
     RECT tr = ScrollTrackRect(), th = ScrollThumbRect();
     RECT al = ScrollArrowRect(false), ar = ScrollArrowRect(true);
@@ -1648,9 +1866,9 @@ static void DrawScrollBarTo(HDC dc) {
         SelectObject(dc, ob);
     }
 }
-static void DrawScrollBarGpu() {
-    if (!ScrollBarVisible() || !g_rt) return;
-    float fade = ChromeIdleFade(NowMs());
+static void DrawScrollBarGpu(float closeA = -1.0f) {
+    if (!ScrollBarShown(closeA) || !g_rt) return;
+    float fade = ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f);
     if (fade <= 0.01f) return;
     RECT tr = ScrollTrackRect(), th = ScrollThumbRect();
     RECT al = ScrollArrowRect(false), ar = ScrollArrowRect(true);
@@ -1701,11 +1919,21 @@ static void DrawZoomOverlayGdi(DWORD now) {
             HBRUSH wb = (HBRUSH)GetStockObject(WHITE_BRUSH);
             RECT wr = { bx, by, bx + bw, by + bh };
             FillRect(g_bbDC, &wr, wb);
-            SetTextColor(g_bbDC, RGB(0, 0, 0));
+            const bool selAll = g_nameSelAll && !g_groupNameEdit.empty();
+            SetTextColor(g_bbDC, selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
             SelectObject(g_bbDC, g_fLabel);
             RECT tr = { bx + ScI(8), by, bx + bw - ScI(8), by + bh };
+            if (selAll) {
+                SIZE ssz = {};
+                GetTextExtentPoint32W(g_bbDC, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &ssz);
+                RECT sr = { tr.left, by + ScI(5), tr.left + ssz.cx, by + bh - ScI(5) };
+                if (sr.right > tr.right) sr.right = tr.right;
+                HBRUSH sb = CreateSolidBrush(RGB(0, 120, 215));
+                FillRect(g_bbDC, &sr, sb);
+                DeleteObject(sb);
+            }
             DrawTextW(g_bbDC, g_groupNameEdit.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            if ((NowMs() / 500) & 1) {
+            if (!selAll && ((NowMs() / 500) & 1)) {
                 SIZE tsz = {}; int tw = 0;
                 if (GetTextExtentPoint32W(g_bbDC, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &tsz)) tw = tsz.cx;
                 RECT cr = { bx + ScI(8) + tw, by + ScI(6), bx + ScI(10) + tw, by + bh - ScI(6) };
@@ -2275,6 +2503,87 @@ static void BuildBuffers() {
     g_dirty = true;
 }
 
+// Windows 8 and 8.1 never drew a flat tile: the tile colour is lighter towards the top and
+// darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why
+// the packaged apps, the 8.x Metro style apps and the icon-sampled tiles looked like Windows
+// 10. Everything below derives the 8.1 gradient from the colour each tile already uses.
+static COLORREF ShadeColor(COLORREF c, float k) {
+    const auto toward = [k](int value, int target) {
+        float mixed = (float)value + ((float)target - (float)value) * k;
+        if (mixed < 0.0f) mixed = 0.0f;
+        if (mixed > 255.0f) mixed = 255.0f;
+        return (int)(mixed + 0.5f);
+    };
+    if (k >= 0.0f)
+        return RGB(toward(GetRValue(c), 255), toward(GetGValue(c), 255), toward(GetBValue(c), 255));
+    return RGB(toward(GetRValue(c), 0), toward(GetGValue(c), 0), toward(GetBValue(c), 0));
+}
+
+static float TileGradientAmount() {
+    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
+    if (strength <= 0) return 0.11f;
+    if (strength >= 2) return 0.32f;
+    return 0.19f;
+}
+
+// Returns false when the gradient is off, leaving *top and *bottom equal to `base` so that the
+// flat Windows 10 style of version 1.0.0 stays available.
+static bool TileGradientPair(COLORREF base, COLORREF* top, COLORREF* bottom) {
+    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) {
+        *top = *bottom = base;
+        return false;
+    }
+    const float k = TileGradientAmount();
+    *top = ShadeColor(base, k);
+    *bottom = ShadeColor(base, -k * 0.60f);
+    return true;
+}
+
+// Fills `dc` with a vertical veil that keeps the destination visible: white towards the top and
+// black towards the bottom, both fading out in the middle. Premultiplied, so it can be blended
+// over the opaque artwork of packaged apps.
+static void GradientVeil(HDC dc, int w, int h, BYTE light, BYTE dark) {
+    if (!dc || w <= 0 || h <= 0) return;
+    void* bits = NULL;
+    HBITMAP bmp = MakeDib(dc, w, h, &bits);
+    if (!bmp || !bits) {
+        if (bmp) DeleteObject(bmp);
+        return;
+    }
+    DWORD* px = (DWORD*)bits;
+    for (int y = 0; y < h; ++y) {
+        const float t = h > 1 ? (float)y / (float)(h - 1) : 0.5f;
+        const bool lightRow = t < 0.5f;
+        const float k = lightRow ? (0.5f - t) * 2.0f : (t - 0.5f) * 2.0f;
+        const BYTE a = (BYTE)((lightRow ? light : dark) * k);
+        const DWORD premul = lightRow ? (((DWORD)a << 16) | ((DWORD)a << 8) | a) : 0;
+        const DWORD row = ((DWORD)a << 24) | premul;
+        for (int x = 0; x < w; ++x) px[(size_t)y * (size_t)w + (size_t)x] = row;
+    }
+    GdiFlush();
+    HDC mem = CreateCompatibleDC(dc);
+    if (mem) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        AlphaBlend(dc, 0, 0, w, h, mem, 0, 0, w, h, blend);
+        if (old) SelectObject(mem, old);
+        DeleteDC(mem);
+    }
+    DeleteObject(bmp);
+}
+
+// Windows 10/11 packaged apps ship artwork that covers the whole tile, so the gradient behind it
+// would never show. This lays the same shading over the artwork, which is what makes those tiles
+// look like the Windows 8/8.1 ones.
+static void ApplyTileGradientOverArt(HDC dc, int w, int h) {
+    if (InterlockedCompareExchange(&g_gradientOverArt, 0, 0) == 0) return;
+    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) return;
+    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
+    const BYTE light = strength <= 0 ? 14 : (strength >= 2 ? 44 : 28);
+    const BYTE dark = strength <= 0 ? 18 : (strength >= 2 ? 52 : 34);
+    GradientVeil(dc, w, h, light, dark);
+}
+
 static COLORREF Mix(COLORREF a, COLORREF b, float k) {
     k = Clamp01(k);
     return RGB((int)(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * k),
@@ -2382,21 +2691,39 @@ static void DrawDesktopWallpaperTile(HDC dc, HDC screen, int w, int h) {
     DrawTextW(dc, T(STR_DESKTOP), -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
 }
 
+// Picks the caption font and the caption box for a tile of this size. The Medium tiles use the
+// smaller Windows 8.1 caption, and every caption is clipped with an ellipsis instead of running
+// outside the tile ("Pannello di controllo" used to be cut mid-word on a Medium tile).
+static HFONT TileCaptionFont(int w, int h) {
+    const HFONT small = g_fLabelMedium ? g_fLabelMedium : g_fLabel;
+    const bool large = w > ScI(180) || h > ScI(180);
+    return (large || !small) ? g_fLabel : small;
+}
+static bool TileCaptionRect(int w, int h, RECT* out) {
+    if (!out) return false;
+    out->left = ScI(12);
+    out->right = w - ScI(8);
+    out->bottom = h - ScI(8);
+    out->top = h - ScI(30);
+    return out->right > out->left && out->bottom > out->top;
+}
 static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, bool dark = false) {
     if (!text || !*text || h < ScI(100)) return;
+    RECT label;
+    if (!TileCaptionRect(w, h, &label)) return;
     SetBkMode(dc, TRANSPARENT);
-    SelectObject(dc, g_fLabel);
-    RECT label = { 12, h - 30, w - 8, h - 8 };
+    SelectObject(dc, TileCaptionFont(w, h));
+    const UINT flags = DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
     if (dark) {
         SetTextColor(dc, RGB(0, 0, 0));
-        DrawTextW(dc, text, -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextW(dc, text, -1, &label, flags);
         return;
     }
-    RECT shadow = label; OffsetRect(&shadow, 1, 1);
+    RECT shadow = label; OffsetRect(&shadow, ScI(1), ScI(1));
     SetTextColor(dc, RGB(17, 12, 35));
-    DrawTextW(dc, text, -1, &shadow, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextW(dc, text, -1, &shadow, flags);
     SetTextColor(dc, RGB(255, 255, 255));
-    DrawTextW(dc, text, -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextW(dc, text, -1, &label, flags);
 }
 
 static void DrawTileHover(HDC dc, int w, int h) {
@@ -2495,18 +2822,36 @@ static void BuildOneTile(int i, HDC screenDC) {
         std::vector<BYTE> art;
         int aw = 0, ah = 0;
         COLORREF c1 = t.c1, c2 = t.c2;
-        if (t.hasAppC && (t.style == PINNED_APP || InterlockedCompareExchange(&g_appTileColors, 0, 0))) c1 = c2 = t.appC;
+        // Base colour the Windows 8/8.1 gradient is derived from: the palette colour of the
+        // tile, the colour sampled from the icon, or the BackgroundColor declared by the app
+        // (Windows 10/11 packages and 8.x VisualElements manifests alike).
+        COLORREF base = (c1 != c2) ? Mix(c1, c2, 0.5f) : c1;
+        if (t.hasAppC && (t.style == PINNED_APP || InterlockedCompareExchange(&g_appTileColors, 0, 0))) base = t.appC;
         if (t.style == PINNED_APP && t.target) {
             AcquireSRWLockShared(&g_artLock);
             for (const auto& entry : g_packageArts) if (!_wcsicmp(entry.target.c_str(), t.target)) {
                 if (t.cw == TS_WIDE) { art = entry.wide; aw = entry.wideW; ah = entry.wideH; }
                 else { art = entry.square; aw = entry.squareW; ah = entry.squareH; }
-                if (entry.hasBackground) c1 = c2 = entry.background;
+                if (entry.hasBackground) base = entry.background;
                 break;
             }
             ReleaseSRWLockShared(&g_artLock);
         }
-        if (c1 == c2) {
+        COLORREF topColor = base, bottomColor = base;
+        const bool shaded = TileGradientPair(base, &topColor, &bottomColor);
+        if (shaded && t.style == DESKTOP_REFERENCE) {
+            // The desktop tile is a live wallpaper preview: keep its own dark-to-light shading.
+            topColor = ShadeColor(c1, TileGradientAmount() * 0.5f);
+            bottomColor = c2;
+        }
+        if (shaded) {
+            TRIVERTEX v[2] = {
+                { 0, 0, (COLOR16)(GetRValue(topColor) << 8), (COLOR16)(GetGValue(topColor) << 8), (COLOR16)(GetBValue(topColor) << 8), 0 },
+                { w, h, (COLOR16)(GetRValue(bottomColor) << 8), (COLOR16)(GetGValue(bottomColor) << 8), (COLOR16)(GetBValue(bottomColor) << 8), 0 },
+            };
+            GRADIENT_RECT gr = { 0, 1 };
+            GradientFill(tdc, v, 2, &gr, 1, GRADIENT_FILL_RECT_V);
+        } else if (c1 == c2) {
             HBRUSH br = CreateSolidBrush(c1);
             RECT fr = { 0, 0, w, h };
             FillRect(tdc, &fr, br);
@@ -2532,6 +2877,7 @@ static void BuildOneTile(int i, HDC screenDC) {
                     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
                     AlphaBlend(tdc, 0, 0, w, h, src, 0, 0, aw, ah, blend);
                     SelectObject(src, previous);
+                    ApplyTileGradientOverArt(tdc, w, h);
                     DrawModernTileCaption(tdc, t.label, w, h);
                     if (hover) DrawTileHover(tdc, w, h);
                     DeleteObject(bmp);
@@ -2556,6 +2902,7 @@ static void BuildOneTile(int i, HDC screenDC) {
                 if (t.cw == TS_WIDE) AlphaBlend(tdc, (w - h) / 2, 0, h, h, src, 0, 0, iw, ih, blend);
                 else AlphaBlend(tdc, 0, 0, w, h, src, 0, 0, iw, ih, blend);
                 SelectObject(src, prev);
+                ApplyTileGradientOverArt(tdc, w, h);
                 if (!t.veHideName) DrawModernTileCaption(tdc, t.label, w, h, t.veDarkText);
                 if (hover) DrawTileHover(tdc, w, h);
                 DeleteObject(bmp);
@@ -2662,10 +3009,11 @@ static void BuildOneTile(int i, HDC screenDC) {
                 DrawModernTileCaption(tdc, t.label, w, h);
             } else {
                 SetTextColor(tdc, t.style == STORE_CAPTION ? RGB(195, 65, 21) : RGB(255, 255, 255));
-                SelectObject(tdc, g_fLabel);
-                RECT lr = { ScI(12), h - ScI(30), w - ScI(8), h - ScI(8) };
-                DrawTextW(tdc, t.label, -1, &lr,
-                          DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+                SelectObject(tdc, TileCaptionFont(w, h));
+                RECT lr;
+                if (TileCaptionRect(w, h, &lr))
+                    DrawTextW(tdc, t.label, -1, &lr,
+                              DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
             }
         }
 
@@ -2857,6 +3205,19 @@ static bool UploadSnapshotGpu() {
     return SUCCEEDED(hr) && g_snapGpu;
 }
 
+// Defensive text layout (documented DirectWrite behaviour): a format that does not wrap gets
+// character-granularity ellipsis trimming, so text wider than its layout box ends in "..."
+// instead of being cut off or running past the box.
+static void ApplyEllipsisTrimming(IDWriteTextFormat* f) {
+    if (!f || !g_writeFactory) return;
+    IDWriteInlineObject* ell = NULL;
+    if (SUCCEEDED(g_writeFactory->CreateEllipsisTrimmingSign(f, &ell)) && ell) {
+        DWRITE_TRIMMING trim = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+        f->SetTrimming(&trim, ell);
+        ell->Release();
+    }
+}
+
 static IDWriteTextFormat* NewFmt(const wchar_t* face, float size, DWRITE_FONT_WEIGHT weight,
                                 DWRITE_PARAGRAPH_ALIGNMENT para, DWRITE_TEXT_ALIGNMENT align, bool wrap) {
     IDWriteTextFormat* f = NULL;
@@ -2865,6 +3226,7 @@ static IDWriteTextFormat* NewFmt(const wchar_t* face, float size, DWRITE_FONT_WE
     f->SetParagraphAlignment(para);
     f->SetTextAlignment(align);
     f->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
+    if (!wrap) ApplyEllipsisTrimming(f);
     return f;
 }
 
@@ -2901,6 +3263,7 @@ static void CreateUiFonts() {
     g_fTitle = MakeFont(ScI(56), L"Segoe UI Light");
     g_fUser  = MakeFont(ScI(28), L"Segoe UI Light");
     g_fLabel = MakeFont(ScI(15), L"Segoe UI");
+    g_fLabelMedium = MakeFont(ScI(13), L"Segoe UI");
     g_fTopLabel = MakeFont(ScI(24), L"Segoe UI Light");
     g_fHdrGlyph = MakeFont(ScI(20), L"Segoe UI Symbol");
     g_fBarMeas = MakeFont(ScI(13), L"Segoe UI");
@@ -2910,6 +3273,7 @@ static void RecreateFonts() {
     if (g_fTitle) { DeleteObject(g_fTitle); g_fTitle = NULL; }
     if (g_fUser) { DeleteObject(g_fUser); g_fUser = NULL; }
     if (g_fLabel) { DeleteObject(g_fLabel); g_fLabel = NULL; }
+    if (g_fLabelMedium) { DeleteObject(g_fLabelMedium); g_fLabelMedium = NULL; }
     if (g_fTopLabel) { DeleteObject(g_fTopLabel); g_fTopLabel = NULL; }
     if (g_fHdrGlyph) { DeleteObject(g_fHdrGlyph); g_fHdrGlyph = NULL; }
     if (g_fBarMeas) { DeleteObject(g_fBarMeas); g_fBarMeas = NULL; }
@@ -2927,7 +3291,7 @@ static void RecreateFonts() {
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(56.0f), L"en-US", &g_titleFormat);
             g_writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_LIGHT,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(28.0f), L"en-US", &g_userFormat);
-            if (g_userFormat) g_userFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            if (g_userFormat) { g_userFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING); ApplyEllipsisTrimming(g_userFormat); }
             MakeSearchFormats();
         }
     }
@@ -3060,15 +3424,15 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
     }
     if (EnsureUiIcons()) {
         RECT pw, sc; HeaderButtonRects(&pw, &sc);
-        auto put = [&](const UiIcon& ic, const RECT& r, bool hov) {
+        auto put = [&](const UiIcon& ic, const RECT& r, bool hov, int dy = 0) {
             if (hov && g_iconHover.gpu) {
-                RECT q; IconDestRect(r, &q); InflateRect(&q, ScI(6), ScI(6));
+                RECT q; IconDestRect(r, &q); OffsetRect(&q, 0, dy); InflateRect(&q, ScI(6), ScI(6));
                 g_rt->DrawBitmap(g_iconHover.gpu, D2D1::RectF((float)q.left + accountShift, (float)q.top,
                                                               (float)q.right + accountShift, (float)q.bottom),
                                  1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             }
             if (ic.gpu) {
-                RECT d; IconDestRect(r, &d);
+                RECT d; IconDestRect(r, &d); OffsetRect(&d, 0, dy);
                 g_whiteGpu->SetOpacity(Clamp01(userA));
                 g_rt->DrawBitmap(ic.gpu, D2D1::RectF((float)d.left + accountShift, (float)d.top,
                                                      (float)d.right + accountShift, (float)d.bottom),
@@ -3126,12 +3490,13 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     }
 }
 
-static void DrawSnapshotGpu(float s, float rightEdge) {
-    if (!g_snapGpu || rightEdge <= 0.0f) return;
+static void DrawSnapshotGpu(float s, float opacity) {
+    if (!g_snapGpu || opacity <= 0.0f) return;
     float dw = s * (float)g_sw, dh = s * (float)g_sh;
+    float x = ((float)g_sw - dw) * 0.5f;
     float y = ((float)g_sh - dh) * 0.5f;
     g_rt->DrawBitmap(g_snapGpu,
-        D2D1::RectF(rightEdge - dw, y, rightEdge, y + dh), 1.0f,
+        D2D1::RectF(x, y, x + dw, y + dh), Clamp01(opacity),
         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
@@ -3202,17 +3567,36 @@ static bool RenderGpu() {
                 g_rt->DrawRectangle(fr, g_scratch, 3.0f);
             }
         }
-        if (!g_skipSnapshot && to < OPEN_HOLD + g_openSlideSeconds) {
-            float s = 1.0f - (1.0f - DESK_SCALE) * EaseOut(to / OPEN_SCALE_T);
-            float p = OpenSlideProgress((to - OPEN_HOLD) / g_openSlideSeconds);
-            DrawSnapshotGpu(s, (1.0f + s) * 0.5f * (float)g_sw * (1.0f - p));
-        }
+        // Opening: Start appears at once and the staggered tile entrance (slide + scale + fade) plays.
     } else {
-        if (g_view == VIEW_SEARCH && g_bgPlainGpu) DrawSearchGpu(now, true); else DrawHeaderGpu(1.0f);
-        float tc = (float)(now - g_closeTick) / 1000.0f;
-        float q = CloseSlideProgress(tc / g_closeSlideSeconds);
-        float s = DESK_SCALE + (1.0f - DESK_SCALE) * q;
-        DrawSnapshotGpu(s, q * (1.0f + s) * 0.5f * (float)g_sw);
+        // Closing timeline measured from a real Windows 8.1 recording (see CLOSE_* constants).
+        const float tc = (float)(now - g_closeTick) / 1000.0f * (CLOSE_SLIDE / g_closeSlideSeconds);
+        const float tileU = Clamp01(tc / CLOSE_TILE_T);
+        const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
+        const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
+        if (g_view == VIEW_SEARCH) {
+            // All Apps / search: only the list fades; the Start header and tiles are not on screen.
+            if (g_bgPlainGpu) DrawSearchGpu(now, true);
+        } else {
+            DrawHeaderGpu(hdrA, hdrA);
+            if (tileU < 1.0f) {
+                const float s = 1.0f - CLOSE_TILE_SCALE * tileU;
+                g_rt->SetTransform(D2D1::Matrix3x2F::Scale(s, s, D2D1::Point2F((float)g_sw * 0.5f, (float)g_sh * 0.5f)));
+                for (int pass = 0; pass < 2; ++pass) {
+                    for (int i = 0; i < g_tileCount; ++i) {
+                        if ((i == g_dragIdx) != (pass == 1)) continue;
+                        if (g_tiles[i].alive) DrawTileGpu(i, 1.0f - tileU, 0.0f, 1.0f);
+                    }
+                }
+                g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
+            }
+        }
+        if (tileU < 1.0f) {
+            const float chromeA = 1.0f - tileU;
+            DrawScrollBarGpu(chromeA);
+            if (g_view == VIEW_START) DrawAppsChromeGpu(chromeA);
+        }
+        DrawSnapshotGpu(1.0f, wallA);
     }
     if (!g_closing && g_open && g_view == VIEW_START) DrawGroupNamesGpu(now);
     if (!g_closing && g_open) DrawScrollBarGpu();
@@ -3230,18 +3614,16 @@ static bool RenderGpu() {
     return true;
 }
 
-static void DrawSnapshot(float s, float rightEdge) {
-    if (!g_snapDC) return;
+static void DrawSnapshot(float s, float opacity) {
+    if (!g_snapDC || opacity <= 0.0f) return;
     int dw = (int)(s * (float)g_sw + 0.5f), dh = (int)(s * (float)g_sh + 0.5f);
-    int dx = (int)(rightEdge + 0.5f) - dw, dy = (g_sh - dh) / 2;
-    if (dx >= g_sw || dx + dw <= 0) return;
-    if (dw == g_sw && dh == g_sh) {
-        BitBlt(g_bbDC, dx, dy, dw, dh, g_snapDC, 0, 0, SRCCOPY);
-    } else {
-        SetStretchBltMode(g_bbDC, HALFTONE);
-        SetBrushOrgEx(g_bbDC, 0, 0, NULL);
-        StretchBlt(g_bbDC, dx, dy, dw, dh, g_snapDC, 0, 0, g_sw, g_sh, SRCCOPY);
-    }
+    int dx = (g_sw - dw) / 2, dy = (g_sh - dh) / 2;
+    if (dx >= g_sw || dx + dw <= 0 || dy >= g_sh || dy + dh <= 0) return;
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = (BYTE)(Clamp01(opacity) * 255.0f + 0.5f);
+    blend.AlphaFormat = 0;
+    AlphaBlend(g_bbDC, dx, dy, dw, dh, g_snapDC, 0, 0, g_sw, g_sh, blend);
 }
 
 static void Render() {
@@ -3275,17 +3657,26 @@ static void Render() {
                 for (int bnd = 0; bnd < 3; ++bnd) { FrameRect(g_bbDC, &fr, wb); InflateRect(&fr, -1, -1); }
             }
         }
-        if (!g_skipSnapshot && to < OPEN_HOLD + g_openSlideSeconds) {
-            float s = 1.0f - (1.0f - DESK_SCALE) * EaseOut(to / OPEN_SCALE_T);
-            float p = OpenSlideProgress((to - OPEN_HOLD) / g_openSlideSeconds);
-            DrawSnapshot(s, (1.0f + s) * 0.5f * (float)g_sw * (1.0f - p));
-        }
+        // Same opening as the GPU path (see above).
     } else {
-        DrawHeader(1.0f, sdc);
-        float tc = (float)(now - g_closeTick) / 1000.0f;
-        float q = CloseSlideProgress(tc / g_closeSlideSeconds);
-        float s = DESK_SCALE + (1.0f - DESK_SCALE) * q;
-        DrawSnapshot(s, q * (1.0f + s) * 0.5f * (float)g_sw);
+        const float tc = (float)(now - g_closeTick) / 1000.0f * (CLOSE_SLIDE / g_closeSlideSeconds);
+        const float tileU = Clamp01(tc / CLOSE_TILE_T);
+        const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
+        const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
+        if (g_view == VIEW_START) {
+            DrawHeader(hdrA, sdc, hdrA);
+            // GDI fallback: tiles shrink around their own centres (the GPU path shrinks around the screen centre).
+            for (int pass = 0; pass < 2; ++pass) for (int i = 0; i < g_tileCount; ++i) {
+                if ((i == g_dragIdx) != (pass == 1)) continue;
+                if (g_tiles[i].alive && tileU < 1.0f) DrawTile(i, 1.0f - tileU, 0.0f, 1.0f - CLOSE_TILE_SCALE * tileU);
+            }
+        }
+        if (tileU < 1.0f) {
+            const float chromeA = 1.0f - tileU;
+            DrawScrollBarTo(g_bbDC, chromeA);
+            if (g_view == VIEW_START) DrawAppsChromeGdi(sdc, chromeA);
+        }
+        DrawSnapshot(1.0f, wallA);
     }
     DrawAlphaGridGdi(now);
     DrawZoomOverlayGdi(now);
@@ -3512,6 +3903,22 @@ static void LoadIconFor(size_t i) {
         }
         return;
     }
+    const bool modernPage = a.launchKind != 0 && path.rfind(L"ms-settings:", 0) == 0;
+    if (modernPage) {   // every Settings page uses the same SystemSettings icon: extract it once
+        BYTE* copy = NULL;
+        AcquireSRWLockExclusive(&g_sharedSettingsLock);
+        if (g_sharedSettingsPx) {
+            const size_t bytes = (size_t)g_sharedSettingsW * (size_t)g_sharedSettingsH * 4;
+            copy = new (std::nothrow) BYTE[bytes];
+            if (copy) {
+                memcpy(copy, g_sharedSettingsPx, bytes);
+                g_icons[i].px = copy; g_icons[i].w = g_sharedSettingsW; g_icons[i].h = g_sharedSettingsH;
+                InterlockedExchange(&g_icons[i].ready, 1);
+            }
+        }
+        ReleaseSRWLockExclusive(&g_sharedSettingsLock);
+        if (copy) return;
+    }
     if (path.rfind(L"ms-settings:", 0) == 0) {
         wchar_t win[MAX_PATH] = {};
         if (GetWindowsDirectoryW(win, MAX_PATH))
@@ -3525,7 +3932,9 @@ static void LoadIconFor(size_t i) {
         }
     }
     IShellItem* item = NULL;
-    if (FAILED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&item))) || !item) return;
+    if (!a.pidl.empty()) {
+        if (FAILED(SHCreateItemFromIDList((PCIDLIST_ABSOLUTE)a.pidl.data(), IID_PPV_ARGS(&item))) || !item) return;
+    } else if (FAILED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&item))) || !item) return;
     IShellItemImageFactory* factory = NULL;
     if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
         const int want = std::min(256, std::max(48, 2 * ScI(48)));
@@ -3536,6 +3945,15 @@ static void LoadIconFor(size_t i) {
             if (BitmapToPixels(hbm, &px, &w, &h)) {
                 g_icons[i].px = px; g_icons[i].w = w; g_icons[i].h = h;
                 InterlockedExchange(&g_icons[i].ready, 1);
+                if (modernPage) {
+                    AcquireSRWLockExclusive(&g_sharedSettingsLock);
+                    if (!g_sharedSettingsPx) {
+                        const size_t bytes = (size_t)w * (size_t)h * 4;
+                        BYTE* c = new (std::nothrow) BYTE[bytes];
+                        if (c) { memcpy(c, px, bytes); g_sharedSettingsPx = c; g_sharedSettingsW = w; g_sharedSettingsH = h; }
+                    }
+                    ReleaseSRWLockExclusive(&g_sharedSettingsLock);
+                }
             }
             DeleteObject(hbm);
         }
@@ -3938,6 +4356,461 @@ static void WalkStartLnks(const std::wstring& dir, int depth, size_t rootLen,
     FindClose(hf);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Settings catalog. These are the same two sources Open-Shell uses for its "Settings" category:
+//  1. Classic Control Panel: the items of the Control Panel folder, the Administrative Tools and
+//     the "All Tasks" folder (shell:::{ED7BA470-...}) with their keywords. They are opened through
+//     their PIDL, exactly as the shell does.
+//  2. Modern Settings: %windir%\ImmersiveControlPanel\Settings\AllSystemSettings_*.xml, the file
+//     SystemSettings.exe itself is indexed from. Every <SearchableContent> gives the page name,
+//     keywords, host and deep link; pages are opened the way Windows search opens them.
+// ---------------------------------------------------------------------------------------------
+enum SettingLaunch { SL_NONE = 0, SL_PIDL = 1, SL_SHELLEXEC = 2, SL_PROCESS = 3, SL_ACTIVATE = 4 };
+
+static const PROPERTYKEY kPkeyKeywords =
+    { { 0xF29F85E0, 0x4FF9, 0x1068, { 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9 } }, 5 };
+static const GUID kBhidEnumItems =
+    { 0x94F60519, 0x2850, 0x4924, { 0xAA, 0x5A, 0xD1, 0x5E, 0x84, 0x86, 0x80, 0x39 } };
+static const CLSID kClsidActivationManager =
+    { 0x45BA127D, 0x10A8, 0x46EA, { 0x8A, 0xB7, 0x56, 0xEA, 0x90, 0x78, 0x94, 0x3C } };
+static const wchar_t kSettingsAumid[] =
+    L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel";
+
+static bool AppsStopRequested() {
+    return g_appsStop && WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0;
+}
+
+static std::wstring ExpandEnvW(const std::wstring& s) {
+    wchar_t buf[2048];
+    DWORD n = ExpandEnvironmentStringsW(s.c_str(), buf, (DWORD)(sizeof(buf) / sizeof(buf[0])));
+    if (n == 0 || n > sizeof(buf) / sizeof(buf[0])) return s;
+    return buf;
+}
+
+// ---- tiny tolerant XML reader (the settings file is machine generated and well formed) ----
+static std::wstring ReadTextFileW(const std::wstring& path) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return L"";
+    LARGE_INTEGER sz = {};
+    if (!GetFileSizeEx(f, &sz) || sz.QuadPart < 4 || sz.QuadPart > 64LL * 1024 * 1024) { CloseHandle(f); return L""; }
+    std::string bytes((size_t)sz.QuadPart, '\0');
+    DWORD got = 0;
+    const BOOL ok = ReadFile(f, &bytes[0], (DWORD)bytes.size(), &got, NULL);
+    CloseHandle(f);
+    if (!ok || got < 4) return L"";
+    bytes.resize(got);
+    const BYTE* b = (const BYTE*)bytes.data();
+    if (b[0] == 0xFF && b[1] == 0xFE)
+        return std::wstring((const wchar_t*)(bytes.data() + 2), (bytes.size() - 2) / 2);
+    const size_t off = (bytes.size() >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) ? 3 : 0;
+    const int n = MultiByteToWideChar(CP_UTF8, 0, bytes.data() + off, (int)(bytes.size() - off), NULL, 0);
+    if (n <= 0) return L"";
+    std::wstring w((size_t)n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, bytes.data() + off, (int)(bytes.size() - off), &w[0], n);
+    return w;
+}
+
+static std::wstring XmlDecode(const std::wstring& s) {
+    if (s.find(L'&') == std::wstring::npos) return s;
+    static const struct { const wchar_t* ent; wchar_t ch; } named[] = {
+        { L"&amp;", L'&' }, { L"&lt;", L'<' }, { L"&gt;", L'>' }, { L"&quot;", L'"' }, { L"&apos;", L'\'' } };
+    std::wstring r;
+    r.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        if (s[i] == L'&') {
+            bool hit = false;
+            for (const auto& e : named) {
+                const size_t n = wcslen(e.ent);
+                if (s.compare(i, n, e.ent) == 0) { r += e.ch; i += n; hit = true; break; }
+            }
+            if (hit) continue;
+            if (i + 3 < s.size() && s[i + 1] == L'#') {
+                const bool hex = (s[i + 2] == L'x' || s[i + 2] == L'X');
+                const size_t semi = s.find(L';', i);
+                if (semi != std::wstring::npos && semi - i <= 10) {
+                    const wchar_t* start = s.c_str() + i + (hex ? 3 : 2);
+                    wchar_t* end = NULL;
+                    const unsigned long v = wcstoul(start, &end, hex ? 16 : 10);
+                    if (end == s.c_str() + semi && v > 0 && v < 0x10000) { r += (wchar_t)v; i = semi + 1; continue; }
+                }
+            }
+        }
+        r += s[i++];
+    }
+    return r;
+}
+
+// Finds the first <name ...>content</name> inside x[from, to) and returns the content range.
+// The search is confined to the record: a missing tag never scans on into the next records.
+static bool XmlRange(const std::wstring& x, size_t from, size_t to, const wchar_t* name,
+                     size_t* cs, size_t* ce) {
+    if (to > x.size()) to = x.size();
+    if (from >= to) return false;
+    const std::wstring_view v(x.data() + from, to - from);
+    const std::wstring open = std::wstring(L"<") + name;
+    const std::wstring close = std::wstring(L"</") + name + L">";
+    size_t p = 0;
+    while ((p = v.find(std::wstring_view(open), p)) != std::wstring_view::npos) {
+        const size_t q = p + open.size();
+        if (q < v.size() && (v[q] == L'>' || v[q] == L' ' || v[q] == L'/' || v[q] == L'\t' || v[q] == L'\r' || v[q] == L'\n')) {
+            const size_t gt = v.find(L'>', q);
+            if (gt == std::wstring_view::npos) return false;
+            if (v[gt - 1] == L'/') { *cs = *ce = from + gt; return true; }
+            const size_t e = v.find(std::wstring_view(close), gt + 1);
+            if (e == std::wstring_view::npos) return false;
+            *cs = from + gt + 1; *ce = from + e;
+            return true;
+        }
+        p = q;
+    }
+    return false;
+}
+
+static std::wstring XmlText(const std::wstring& x, size_t from, size_t to, const wchar_t* name) {
+    size_t cs = 0, ce = 0;
+    if (!XmlRange(x, from, to, name, &cs, &ce)) return L"";
+    std::wstring t = x.substr(cs, ce - cs);
+    if (t.compare(0, 9, L"<![CDATA[") == 0) {
+        const size_t end = t.rfind(L"]]>");
+        if (end != std::wstring::npos && end >= 9) return t.substr(9, end - 9);
+    }
+    return XmlDecode(t);
+}
+
+// ---- indirect strings: "@%SystemRoot%\system32\x.dll,-123", "@{PackageFamily?ms-resource://...}" ----
+static std::wstring PackageFullNameFromFamily(const std::wstring& family) {
+    typedef LONG (WINAPI *GetPackagesByPackageFamily_t)(PCWSTR, UINT32*, PWSTR*, UINT32*, PWSTR);
+    static GetPackagesByPackageFamily_t pGet = (GetPackagesByPackageFamily_t)
+        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetPackagesByPackageFamily");
+    if (!pGet) return L"";
+    UINT32 count = 0, len = 0;
+    if (pGet(family.c_str(), &count, NULL, &len, NULL) != ERROR_INSUFFICIENT_BUFFER || count == 0) return L"";
+    std::vector<PWSTR> names(count);
+    std::vector<wchar_t> buf(len);
+    if (pGet(family.c_str(), &count, names.data(), &len, buf.data()) != ERROR_SUCCESS || count == 0) return L"";
+    return names[0];
+}
+
+static std::wstring IndirectOne(const std::wstring& s) {
+    wchar_t buf[1024];
+    buf[0] = 0;
+    HRESULT hr = SHLoadIndirectString(s.c_str(), buf, 1024, NULL);
+    if (hr == E_INVALIDARG && s.size() > 3 && s[0] == L'@' && s[1] == L'{') {
+        std::wstring inner = s.substr(2);
+        if (!inner.empty() && inner.back() == L'}') inner.pop_back();
+        const size_t q = inner.find(L'?');
+        if (q != std::wstring::npos) {
+            const std::wstring full = PackageFullNameFromFamily(inner.substr(0, q));
+            if (!full.empty()) {
+                const std::wstring fixed = L"@{" + full + L"?" + inner.substr(q + 1) + L"}";
+                buf[0] = 0;
+                hr = SHLoadIndirectString(fixed.c_str(), buf, 1024, NULL);
+            }
+        }
+    }
+    return SUCCEEDED(hr) ? std::wstring(buf) : std::wstring();
+}
+
+static std::wstring TranslateSettingString(const std::wstring& s) {
+    if (s.empty() || s[0] != L'@') return s;
+    if (s.size() > 1 && s[1] == L'@') {                    // "@@res1@res2": several resources joined
+        std::wstring r;
+        size_t pos = 1;
+        while (pos < s.size()) {
+            size_t next = s.find(L'@', pos + 1);
+            if (next == std::wstring::npos) next = s.size();
+            r += IndirectOne(s.substr(pos, next - pos));
+            pos = next;
+        }
+        return r;
+    }
+    return IndirectOne(s);
+}
+
+static bool SettingsKeywordsOnly(const std::wstring& s) { return s.find_first_not_of(L"; \t\r\n") == std::wstring::npos; }
+
+static std::wstring FindAllSystemSettingsXml() {
+    wchar_t win[MAX_PATH] = {};
+    if (!GetWindowsDirectoryW(win, MAX_PATH)) return L"";
+    const std::wstring dir = std::wstring(win) + L"\\ImmersiveControlPanel\\Settings";
+    // Known names first (as Open-Shell does), then any AllSystemSettings_*.xml for newer builds.
+    const wchar_t* known[] = { L"AllSystemSettings_{FDB289F3-FCFC-4702-8015-18926E996EC1}.xml",
+                               L"AllSystemSettings_{253E530E-387D-4BC2-959D-E6F86122E5F2}.xml" };
+    for (const wchar_t* k : known) {
+        const std::wstring p = dir + L"\\" + k;
+        if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) return p;
+    }
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW((dir + L"\\AllSystemSettings_*.xml").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return L"";
+    std::wstring best;
+    FILETIME bestTime = {};
+    do {
+        if (best.empty() || CompareFileTime(&fd.ftLastWriteTime, &bestTime) > 0) {
+            best = dir + L"\\" + fd.cFileName;
+            bestTime = fd.ftLastWriteTime;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best;
+}
+
+struct ModernSettingRec { std::wstring fileName, description, keywords, parse, launch; int kind; };
+
+static void ParseModernSettings(std::vector<AppEntry>& out) {
+    const std::wstring path = FindAllSystemSettingsXml();
+    if (path.empty()) { Wh_Log(L"Settings: AllSystemSettings xml not found"); return; }
+    const std::wstring x = ReadTextFileW(path);
+    if (x.empty()) { Wh_Log(L"Settings: cannot read %s", path.c_str()); return; }
+
+    std::vector<ModernSettingRec> recs;
+    size_t p = 0;
+    while ((p = x.find(L"<SearchableContent", p)) != std::wstring::npos) {
+        if (AppsStopRequested()) return;
+        size_t e = x.find(L"</SearchableContent>", p);
+        if (e == std::wstring::npos) break;
+        const size_t from = p, to = e;
+        p = e;
+
+        size_t ics = 0, ice = 0, ccs = 0, cce = 0;
+        std::wstring deepLink;
+        if (XmlRange(x, from, to, L"ApplicationInformation", &ics, &ice))
+            deepLink = TranslateSettingString(XmlText(x, ics, ice, L"DeepLink"));
+        const std::wstring pageId    = TranslateSettingString(XmlText(x, from, to, L"PageID"));
+        const std::wstring hostId    = TranslateSettingString(XmlText(x, from, to, L"HostID"));
+        const std::wstring groupId   = TranslateSettingString(XmlText(x, from, to, L"GroupID"));
+        const std::wstring settingId = TranslateSettingString(XmlText(x, from, to, L"SettingID"));
+
+        std::wstring description, keywords;
+        if (XmlRange(x, from, to, L"SettingInformation", &ccs, &cce)) {
+            description = TranslateSettingString(XmlText(x, ccs, cce, L"Description"));
+            if (description.empty()) description = TranslateSettingString(XmlText(x, ccs, cce, L"Name"));
+            keywords += TranslateSettingString(XmlText(x, ccs, cce, L"HighKeywords"));
+            keywords += L";";
+            keywords += TranslateSettingString(XmlText(x, ccs, cce, L"LowKeywords"));
+            keywords += L";";
+            keywords += TranslateSettingString(XmlText(x, ccs, cce, L"Keywords"));
+        }
+        if (description.empty()) continue;
+
+        ModernSettingRec r;
+        r.fileName = XmlText(x, from, to, L"Filename");
+        r.description = description;
+        r.keywords = SettingsKeywordsOnly(keywords) ? std::wstring() : keywords;
+        r.parse = L"ms-settings:" + pageId;          // only used to pick the Settings icon
+        r.kind = SL_NONE;
+
+        // Same dispatch Windows uses for the three kinds of hosts (as in Open-Shell's context menu).
+        if (_wcsicmp(hostId.c_str(), L"{6E6DDBCB-9C89-434B-A994-D5F22239523B}") == 0) {          // Windows Security
+            if (deepLink.empty()) continue;
+            r.launch = L"windowsdefender://" + deepLink; r.kind = SL_SHELLEXEC;
+        } else if (_wcsicmp(hostId.c_str(), L"{7E0522FC-1AC4-41CA-AFD0-3610417A9C41}") == 0) {   // shell folder page
+            if (pageId.empty()) continue;
+            r.launch = L"shell:::" + pageId; r.kind = SL_SHELLEXEC;
+        } else if (_wcsicmp(hostId.c_str(), L"{12B1697E-D3A0-4DBC-B568-CCF64A3F934D}") == 0) {   // legacy applet command
+            if (deepLink.empty()) continue;
+            r.launch = deepLink;
+            r.kind = deepLink.compare(0, 8, L"shell:::") == 0 ? SL_SHELLEXEC : SL_PROCESS;
+        } else {                                                                                  // SystemSettings page
+            if (pageId.empty()) continue;
+            r.launch = L"page=" + pageId;
+            if (!settingId.empty()) r.launch += L"&target=" + settingId;
+            else if (!groupId.empty()) r.launch += L"&group=" + groupId;
+            r.launch += L"&ActivationType=Search";
+            r.kind = SL_ACTIVATE;
+        }
+        recs.push_back(std::move(r));
+    }
+
+    // Newer pages (e.g. "SomeSetting-2") come first, then one entry per visible name.
+    std::stable_sort(recs.begin(), recs.end(), [](const ModernSettingRec& a, const ModernSettingRec& b) {
+        return a.fileName > b.fileName; });
+    std::unordered_map<std::wstring, bool> seen;
+    for (ModernSettingRec& r : recs) {
+        const std::wstring key = LowerW(r.description);
+        if (!seen.emplace(key, true).second) continue;
+        AppEntry a{};
+        a.name = r.description; a.lower = key; a.parse = r.parse;
+        a.exe = false; a.desktop = false; a.date = 0; a.cat = 2;
+        a.charmCat = CC_SETTING; a.searchOnly = true; a.direct = true;
+        a.keywords = LowerW(r.keywords);
+        a.launchKind = r.kind; a.launch = r.launch;
+        out.push_back(std::move(a));
+    }
+    Wh_Log(L"Settings: %u modern settings from %s", (unsigned)out.size(), path.c_str());
+}
+
+// ---- classic Control Panel / Administrative Tools / All Tasks ----
+static std::wstring ShellItemKeywords(IShellItem* item) {
+    IShellItem2* i2 = NULL;
+    if (FAILED(item->QueryInterface(IID_PPV_ARGS(&i2))) || !i2) return L"";
+    PROPVARIANT v;
+    PropVariantInit(&v);
+    std::wstring r;
+    if (SUCCEEDED(i2->GetProperty(kPkeyKeywords, &v))) {
+        if ((v.vt == VT_LPWSTR || v.vt == VT_BSTR) && v.pwszVal) {
+            r = v.pwszVal;
+        } else if (v.vt == (VT_VECTOR | VT_LPWSTR) || v.vt == (VT_VECTOR | VT_BSTR)) {
+            for (ULONG k = 0; k < v.calpwstr.cElems; ++k) {
+                if (!v.calpwstr.pElems[k]) continue;
+                r += L";";
+                r += v.calpwstr.pElems[k];
+            }
+        }
+    }
+    PropVariantClear(&v);
+    i2->Release();
+    return LowerW(r);
+}
+
+static void AddShellSetting(std::vector<AppEntry>& out, IShellItem* item, bool wantKeywords) {
+    PWSTR nm = NULL;
+    if (FAILED(item->GetDisplayName(SIGDN_PARENTRELATIVEEDITING, &nm)) || !nm) return;
+    std::wstring name = nm;
+    CoTaskMemFree(nm);
+    if (name.empty()) return;
+    PIDLIST_ABSOLUTE pidl = NULL;
+    if (FAILED(SHGetIDListFromObject(item, &pidl)) || !pidl) return;
+    AppEntry a{};
+    a.name = name; a.lower = LowerW(name);
+    PWSTR pn = NULL;
+    if (SUCCEEDED(item->GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, &pn)) && pn) { a.parse = pn; CoTaskMemFree(pn); }
+    else a.parse = name;
+    a.exe = false; a.desktop = false; a.date = 0; a.cat = 2;
+    a.charmCat = CC_SETTING; a.searchOnly = true; a.direct = true;
+    a.launchKind = SL_PIDL;
+    a.pidl.assign((const char*)pidl, ILGetSize(pidl));
+    CoTaskMemFree(pidl);
+    if (wantKeywords) a.keywords = ShellItemKeywords(item);
+    out.push_back(std::move(a));
+}
+
+static void CollectShellSettings(std::vector<AppEntry>& out, IShellItem* folder, bool withFolders,
+                                 bool recursive, bool wantKeywords, int depth) {
+    if (depth > 4 || out.size() > 6000) return;
+    IEnumShellItems* en = NULL;
+    if (FAILED(folder->BindToHandler(NULL, kBhidEnumItems, IID_PPV_ARGS(&en))) || !en) return;
+    IShellItem* child = NULL;
+    while (!AppsStopRequested() && en->Next(1, &child, NULL) == S_OK && child) {
+        SFGAOF fl = 0;
+        if (SUCCEEDED(child->GetAttributes(SFGAO_FOLDER | SFGAO_STREAM | SFGAO_LINK | SFGAO_HIDDEN, &fl)) &&
+            !(fl & SFGAO_HIDDEN)) {
+            if (recursive && (fl & (SFGAO_FOLDER | SFGAO_STREAM | SFGAO_LINK)) == SFGAO_FOLDER)
+                CollectShellSettings(out, child, withFolders, recursive, wantKeywords, depth + 1);
+            if (withFolders || !(fl & SFGAO_FOLDER))
+                AddShellSetting(out, child, wantKeywords);
+        }
+        child->Release();
+        child = NULL;
+    }
+    en->Release();
+}
+
+static IShellItem* ShellItemFromKnownFolder(REFKNOWNFOLDERID id) {
+    PIDLIST_ABSOLUTE pidl = NULL;
+    if (FAILED(SHGetKnownFolderIDList(id, 0, NULL, &pidl)) || !pidl) return NULL;
+    IShellItem* item = NULL;
+    if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item)))) item = NULL;
+    CoTaskMemFree(pidl);
+    return item;
+}
+
+// The settings do not change within a session: they are built once (BuildSettingsCache, on the
+// catalog thread, after the apps are already published) and then only appended to the catalog.
+static std::vector<AppEntry> g_settingsCache;   // catalog thread only
+static bool g_settingsBuilt = false;
+
+static void BuildSettingsCache() {
+    std::vector<AppEntry> found;
+
+    if (IShellItem* cp = ShellItemFromKnownFolder(FOLDERID_ControlPanelFolder)) {
+        CollectShellSettings(found, cp, true, false, true, 0);
+        cp->Release();
+    }
+    if (IShellItem* at = ShellItemFromKnownFolder(FOLDERID_AdminTools)) {
+        CollectShellSettings(found, at, false, true, false, 0);
+        at->Release();
+    }
+    if (IShellItem* cat = ShellItemFromKnownFolder(FOLDERID_CommonAdminTools)) {
+        CollectShellSettings(found, cat, false, true, false, 0);
+        cat->Release();
+    }
+    {
+        IShellItem* tasks = NULL;   // "All Tasks" (God Mode): hundreds of tasks with good keywords
+        if (SUCCEEDED(SHCreateItemFromParsingName(L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}", NULL,
+                                                  IID_PPV_ARGS(&tasks))) && tasks) {
+            CollectShellSettings(found, tasks, false, false, true, 0);
+            tasks->Release();
+        }
+    }
+    Wh_Log(L"Settings: %u classic Control Panel items", (unsigned)found.size());
+    if (!AppsStopRequested()) ParseModernSettings(found);
+
+    // One row per visible name; the classic item wins over the modern page with the same name.
+    std::unordered_map<std::wstring, bool> seen;
+    g_settingsCache.clear();
+    for (AppEntry& a : found) {
+        if (!seen.emplace(a.lower, true).second) continue;
+        g_settingsCache.push_back(std::move(a));
+    }
+    g_settingsCache.shrink_to_fit();
+}
+
+// Appends the cached settings to a freshly built catalog (skipping names the catalog already has).
+static void AppendSettingsTo(std::vector<AppEntry>& list) {
+    std::unordered_map<std::wstring, bool> seen;
+    for (const AppEntry& a : list) if (!a.exe && a.charmCat != CC_FILE) seen.emplace(a.lower, true);
+    for (const AppEntry& a : g_settingsCache)
+        if (seen.emplace(a.lower, true).second) list.push_back(a);
+}
+
+static void LaunchSettingEntry(const AppEntry& a) {
+    switch (a.launchKind) {
+    case SL_PIDL: {
+        if (a.pidl.empty()) break;
+        SHELLEXECUTEINFOW sei = {};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
+        sei.lpIDList = (LPVOID)a.pidl.data();
+        sei.nShow = SW_SHOWNORMAL;
+        ShellExecuteExW(&sei);
+        break;
+    }
+    case SL_SHELLEXEC:
+        ShellExecuteW(NULL, L"open", a.launch.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        break;
+    case SL_PROCESS: {
+        const std::wstring cmd = ExpandEnvW(a.launch);
+        std::vector<wchar_t> buf(cmd.begin(), cmd.end());
+        buf.push_back(0);
+        STARTUPINFOW si = {};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi = {};
+        if (CreateProcessW(NULL, buf.data(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        } else {
+            ShellExecuteW(NULL, L"open", cmd.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        }
+        break;
+    }
+    case SL_ACTIVATE: {
+        bool ok = false;
+        IApplicationActivationManager* mgr = NULL;
+        if (SUCCEEDED(CoCreateInstance(kClsidActivationManager, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&mgr))) && mgr) {
+            DWORD pid = 0;
+            ok = SUCCEEDED(mgr->ActivateApplication(kSettingsAumid, a.launch.c_str(), AO_NONE, &pid));
+            mgr->Release();
+        }
+        if (!ok) ShellExecuteW(NULL, L"open", a.parse.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 static DWORD WINAPI AppsThread(LPVOID) {
   RunGuarded(L"AppsThread", [] {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -4007,6 +4880,7 @@ static DWORD WINAPI AppsThread(LPVOID) {
         }
     }
 
+    if (g_settingsBuilt) AppendSettingsTo(list);   // refreshes reuse the settings built at start-up
     AddCharmSystemEntries(list);
     Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
@@ -4033,11 +4907,27 @@ static DWORD WINAPI AppsThread(LPVOID) {
 
     for (size_t i = 0; i < g_apps.size(); ++i) {
         if (WaitForSingleObject(g_appsStop, 0) == WAIT_OBJECT_0) break;
-        if (g_apps[i].charmCat == CC_FILE || g_apps[i].exe) continue;
+        if (g_apps[i].charmCat == CC_FILE || g_apps[i].exe || g_apps[i].searchOnly) continue;
         LoadIconFor(i);
         if ((i & 7) == 7 && g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
     }
     if (g_wnd) PostMessageW(g_wnd, WM_APP_ICON_READY, 0, 0);
+
+    // Settings catalog: built once per session, after the apps are shown, and appended to g_apps
+    // (the same way scanned files are) so no app icon is reloaded.
+    if (!g_settingsBuilt && !AppsStopRequested()) {
+        try { BuildSettingsCache(); }
+        catch (...) { Wh_Log(L"Settings: scan failed"); }
+        g_settingsBuilt = true;
+        if (!g_settingsCache.empty() && !AppsStopRequested()) {
+            std::vector<AppEntry>* sets = new std::vector<AppEntry>(g_settingsCache);
+            AcquireSRWLockExclusive(&g_appsLock);
+            delete g_pendingSettings;
+            g_pendingSettings = sets;
+            ReleaseSRWLockExclusive(&g_appsLock);
+            if (g_wnd) PostMessageW(g_wnd, WM_APP_SETTINGS_READY, 0, 0);
+        }
+    }
 
     // Wait for either a file-scan request or a catalog refresh request.
     HANDLE wait3[3] = { g_appsStop, g_filesNeed, g_appsRefresh };
@@ -4069,7 +4959,9 @@ static DWORD WINAPI AppsThread(LPVOID) {
 }
 
 static int RowsPerCol() {
-    int rows = (g_sh - kItemY - ScI(24)) / kItemPitchY;
+    // Keep the last row above the bottom-left "back" arrow (AppsArrowRect: its top edge is at
+    // g_sh - ScI(62)) so the arrow never draws over an app entry.
+    int rows = (g_sh - kItemY - ScI(68)) / kItemPitchY;
     return rows < 1 ? 1 : rows;
 }
 
@@ -4226,13 +5118,17 @@ static void RunSearch() {
             if (g_charmScope == 1 && a.charmCat != CC_APP)     continue;
             if (g_charmScope == 2 && a.charmCat != CC_SETTING) continue;
             if (g_charmScope == 3 && a.charmCat != CC_FILE)    continue;
-            bool all = true;
-            for (const std::wstring& w : words)
-                if (a.lower.find(w) == std::wstring::npos) { all = false; break; }
+            bool all = true, inName = true;
+            for (const std::wstring& w : words) {
+                if (a.lower.find(w) != std::wstring::npos) continue;
+                inName = false;
+                if (a.keywords.empty() || a.keywords.find(w) == std::wstring::npos) { all = false; break; }
+            }
             if (!all) continue;
             const int rank = (a.charmCat == CC_APP ? 0 : a.charmCat == CC_SETTING ? 2 : 4)
                            + (a.lower.rfind(q, 0) == 0 ? 0 : 2)
-                           + (a.dir ? 1 : 0);
+                           + (a.dir ? 1 : 0)
+                           + (inName ? 0 : 1);
             hits.push_back({ rank, (int)i });
         }
         auto cmp = [](const Hit& a, const Hit& b) {
@@ -4266,10 +5162,12 @@ static void RunSearch() {
 }
 
 static void QueryAppend(wchar_t c) {
+    if (g_querySelAll) { g_queryLen = 0; g_query[0] = 0; g_querySelAll = false; }
     if (g_queryLen < 120) { g_query[g_queryLen++] = c; g_query[g_queryLen] = 0; }
 }
 
 static void QueryBackspace() {
+    if (g_querySelAll) { g_queryLen = 0; g_query[0] = 0; g_querySelAll = false; return; }
     if (g_queryLen > 0) g_query[--g_queryLen] = 0;
 }
 
@@ -4324,6 +5222,7 @@ static void LeaveSearch() {
 
 static void LaunchEntry(const AppEntry& a) {
     if (a.desktop) { CloseStart(g_firstDesktopAfterLogon); return; }
+    if (a.launchKind != 0) { CloseStart(); LaunchSettingEntry(a); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
     ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
@@ -4374,6 +5273,28 @@ static void MoveSelection(int delta) {
 }
 
 static void OnSearchKey(UINT vk) {
+    if (vk == KEY_SELECT_ALL || vk == KEY_COPY_ALL) {
+        if (g_queryLen <= 0) return;
+        if (vk == KEY_SELECT_ALL) { g_querySelAll = true; if (g_charmOpen) CharmRender(g_charmCont); RepaintNow(); return; }
+        if (g_querySelAll && OpenClipboard(g_wnd)) {
+            size_t bytes = ((size_t)g_queryLen + 1) * sizeof(wchar_t);
+            HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
+            if (h) {
+                wchar_t* p = (wchar_t*)GlobalLock(h);
+                if (p) {
+                    memcpy(p, g_query, (size_t)g_queryLen * sizeof(wchar_t));
+                    p[g_queryLen] = 0;
+                    GlobalUnlock(h);
+                    EmptyClipboard();
+                    if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+                } else {
+                    GlobalFree(h);
+                }
+            }
+            CloseClipboard();
+        }
+        return;
+    }
     if (g_charmOpen) {
         switch (vk) {
         case VK_ESCAPE:
@@ -4386,7 +5307,10 @@ static void OnSearchKey(UINT vk) {
             if (g_charmSel >= (int)g_results.size()) g_charmSel = 0;
             CharmRender(g_charmCont); RepaintNow(); break;
         case VK_RETURN:
-            if (!g_results.empty()) LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
+            // Only when the charm is actually showing rows: with an empty query g_results still
+            // holds the All Apps list, but nothing of it is drawn in the charm.
+            if (CharmListActive() && !g_results.empty())
+                LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
             break;
         case VK_DOWN: CharmMoveSel(1); break;
         case VK_UP:   CharmMoveSel(-1); break;
@@ -4432,6 +5356,9 @@ static void OnSearchKey(UINT vk) {
 
 // Search
 static void OnSearchClick(int x, int y) {
+    // The search charm is drawn over this view: while it is open the All Apps list must not react to
+    // clicks, or an app that the user cannot even see gets launched.
+    if (g_charmOpen) return;
     if (g_alphaGrid) { AlphaGridClick(x, y); return; }
     if (BarClick(x, y)) return;
     {
@@ -4462,6 +5389,14 @@ static void FillRc(float l, float t, float r, float b, COLORREF c, float a) {
 
 static void TextAt(const wchar_t* s, IDWriteTextFormat* f, float l, float t, float r, float b, COLORREF c, float a) {
     if (!s || !*s || !f) return;
+    // Never lay text out past the right edge of the screen (the layout box is clamped, so
+    // wrapping/trimming of the format applies at the screen edge); fully off-screen text is skipped.
+    if (l >= (float)g_sw || r <= 0.0f) return;
+    // Single-line trimmed text is laid out inside the screen so its ellipsis stays visible. A wrapping
+    // format keeps its full width: narrowing it would re-wrap the text while it scrolls in, and the
+    // render target clips whatever lies past the edge.
+    if (f->GetWordWrapping() != DWRITE_WORD_WRAPPING_WRAP && r > (float)g_sw) r = (float)g_sw;
+    if (r <= l) return;
     SetBr(c, a);
     g_rt->DrawText(s, (UINT32)wcslen(s), f, D2D1::RectF(l, t, r, b), g_scratch, D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
@@ -4479,7 +5414,7 @@ static ID2D1Bitmap* IconGpu(int appIdx) {
     }
     IconSlot& s = g_icons[appIdx];
     if (s.gpu) return s.gpu;
-    if (!InterlockedCompareExchange(&s.ready, 0, 0) && g_apps[appIdx].exe) LoadIconFor((size_t)appIdx);
+    if (!InterlockedCompareExchange(&s.ready, 0, 0) && (g_apps[appIdx].exe || g_apps[appIdx].searchOnly)) LoadIconFor((size_t)appIdx);
     if (!InterlockedCompareExchange(&s.ready, 0, 0) || !s.px) return NULL;
     D2D1_BITMAP_PROPERTIES p = {};
     p.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -5740,23 +6675,22 @@ static void DrawAppsSearchBoxGpu() {
     FillRc((float)b.left, (float)b.top, (float)b.right, (float)b.bottom,
            RGB(255, 255, 255), lit ? 1.0f : 0.25f);
     std::wstring q(g_query, (size_t)g_queryLen);
-    if (!q.empty())
+    if (!q.empty()) {
+        const bool selAll = g_querySelAll;
+        if (selAll) {
+            float sx1 = (float)b.left + ScI(10) + DwTextWidth(q.c_str(), q.size(), g_queryFormat);
+            if (sx1 > (float)b.right - ScI(40)) sx1 = (float)b.right - ScI(40);
+            FillRc((float)b.left + ScI(10), (float)b.top + ScI(5), sx1, (float)b.bottom - ScI(5),
+                   RGB(0, 120, 215), 1.0f);
+        }
         TextAt(q.c_str(), g_queryFormat, (float)b.left + ScI(10), (float)b.top,
-               (float)b.right - ScI(40), (float)b.bottom, RGB(0, 0, 0));
+               (float)b.right - ScI(40), (float)b.bottom, selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
+    }
     TextAt(q.empty() ? L"" : L"", g_glyphSmall,
            (float)b.right - ScI(36), (float)b.top, (float)b.right, (float)b.bottom,
            lit ? RGB(90, 90, 90) : RGB(220, 220, 230));
     if (g_appsSearchFocus && ((NowMs() / 500) & 1)) {
-        int tw = 0;
-        HDC dc = GetDC(NULL);
-        if (dc && g_fLabel) {
-            HGDIOBJ old = SelectObject(dc, g_fLabel);
-            SIZE sz = {};
-            if (GetTextExtentPoint32W(dc, q.c_str(), (int)q.size(), &sz)) tw = sz.cx;
-            SelectObject(dc, old);
-        }
-        if (dc) ReleaseDC(NULL, dc);
-        float cx = (float)b.left + ScI(10) + (float)tw;
+        float cx = (float)b.left + ScI(10) + DwTextWidth(q.c_str(), q.size(), g_queryFormat);
         FillRc(cx, (float)b.top + ScI(6), cx + 1.0f, (float)b.bottom - ScI(6), RGB(0, 0, 0), 1.0f);
     }
 }
@@ -5769,8 +6703,17 @@ static void DrawAppsSearchBoxGdi() {
     HGDIOBJ of = SelectObject(g_bbDC, g_fLabel);
     std::wstring q(g_query, (size_t)g_queryLen);
     if (!q.empty()) {
-        SetTextColor(g_bbDC, RGB(0, 0, 0));
+        SetTextColor(g_bbDC, g_querySelAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
         RECT tr = { b.left + ScI(10), b.top, b.right - ScI(40), b.bottom };
+        if (g_querySelAll) {
+            SIZE ssz = {};
+            GetTextExtentPoint32W(g_bbDC, q.c_str(), (int)q.size(), &ssz);
+            RECT sr = { tr.left, b.top + ScI(5), tr.left + ssz.cx, b.bottom - ScI(5) };
+            if (sr.right > tr.right) sr.right = tr.right;
+            HBRUSH sb = CreateSolidBrush(RGB(0, 120, 215));
+            FillRect(g_bbDC, &sr, sb);
+            DeleteObject(sb);
+        }
         DrawTextW(g_bbDC, q.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
     SetTextColor(g_bbDC, lit ? RGB(90, 90, 90) : RGB(220, 220, 230));
@@ -5786,10 +6729,11 @@ static void DrawAppsSearchBoxGdi() {
     }
     SelectObject(g_bbDC, of);
 }
-static void DrawAppsChromeGdi(HDC) {
-    if (!g_open || g_closing || !EnsureUiIcons()) return;
+static void DrawAppsChromeGdi(HDC, float closeA) {
+    if (closeA < 0.0f && (!g_open || g_closing)) return;
+    if (!EnsureUiIcons()) return;
     RECT ar; AppsArrowRect(&ar);
-    const BYTE aa = (BYTE)((g_hoverArrow ? 255 : 42) * ChromeIdleFade(NowMs()));
+    const BYTE aa = (BYTE)((g_hoverArrow ? 255 : 42) * ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f));
     if (g_view == VIEW_START && ZoomPresence(NowMs()) <= 0.0f) {
         BlitIconGdi(g_bbDC, g_iconArrowDown, ar, g_hoverArrow, aa);
     } else if (g_queryLen == 0) {
@@ -5806,13 +6750,13 @@ static void DrawAppsChromeGdi(HDC) {
     }
     if (g_view == VIEW_SEARCH && !g_charmOpen) DrawAppsSearchBoxGdi();
 }
-static void DrawAppsChromeGpu() {
+static void DrawAppsChromeGpu(float closeA) {
     if (!g_scratch) return;
     RECT ar; AppsArrowRect(&ar);
     auto arrow = [&](bool down) {
         const UiIcon& ic = down ? g_iconArrowDown : g_iconArrowUp;
         if (ic.gpu) {
-            float op = (g_hoverArrow ? 1.0f : 0.16f) * ChromeIdleFade(NowMs());
+            float op = (g_hoverArrow ? 1.0f : 0.16f) * ChromeIdleFade(NowMs()) * (closeA >= 0.0f ? closeA : 1.0f);
             g_whiteGpu->SetOpacity(op);
             g_rt->DrawBitmap(ic.gpu, D2D1::RectF((float)ar.left, (float)ar.top,
                                                  (float)ar.right, (float)ar.bottom),
@@ -6812,19 +7756,22 @@ static void GlyphPower(Gdiplus::Graphics& g, float sz, const Gdiplus::Color& c) 
     Gdiplus::SolidBrush br(c);
     g.FillRectangle(&br, cx - sz * 0.055f, sz * 0.07f, sz * 0.11f, sz * 0.46f);
 }
+// Search glyph measured pixel-by-pixel from the Windows 8.1 Start screen reference (22 px box):
+// ring centred at (12.95, 7.95) with a 4.6 px radius and a 2.2 px stroke, plus a round-capped
+// 2.3 px handle running down-left to (4.35, 17.65). The glyph's bounding box is centred in the box.
 static void GlyphSearch(Gdiplus::Graphics& g, float sz, const Gdiplus::Color& c) {
-    Gdiplus::Pen pen(c, sz * 0.105f);
-    pen.SetStartCap(Gdiplus::LineCapFlat);
-    pen.SetEndCap(Gdiplus::LineCapRound);
-    const float r = sz * 0.30f;
-    const float cx = sz * 0.60f, cy = sz * 0.34f;
+    // Slightly enlarged: scale the whole glyph by 1.15 about the centre of its box (it still fits).
+    g.TranslateTransform(sz * 0.5f, sz * 0.5f);
+    g.ScaleTransform(1.15f, 1.15f);
+    g.TranslateTransform(-sz * 0.5f, -sz * 0.5f);
+    Gdiplus::Pen pen(c, sz * 0.100f);
+    const float r = sz * 0.209f;
+    const float cx = sz * 0.589f, cy = sz * 0.361f;
     g.DrawEllipse(&pen, cx - r, cy - r, r * 2.0f, r * 2.0f);
-    Gdiplus::Pen hp(c, sz * 0.12f);
+    Gdiplus::Pen hp(c, sz * 0.105f);
     hp.SetStartCap(Gdiplus::LineCapFlat);
     hp.SetEndCap(Gdiplus::LineCapRound);
-    const float dx = -0.77f, dy = 0.64f;
-    const float sx = cx + r * dx, sy = cy + r * dy;
-    g.DrawLine(&hp, sx, sy, sx + sz * 0.32f * dx, sy + sz * 0.32f * dy);
+    g.DrawLine(&hp, sz * 0.447f, sz * 0.514f, sz * 0.198f, sz * 0.802f);
 }
 static void GlyphArrow(Gdiplus::Graphics& g, float sz, bool down, const Gdiplus::Color& c) {
     Gdiplus::Pen ring(c, sz * 0.067f);
@@ -6970,7 +7917,10 @@ static HBITMAP g_charmBmp = NULL;
 static BYTE* g_charmBits = NULL;
 static int g_charmW = 0, g_charmH = 0;
 static ID2D1Bitmap* g_charmGpu = NULL;
-#define CHARM_SLIDE_MS 260
+#define CHARM_SLIDE_IN_MS  475   // same timings as the Windows 8 Networks charm
+#define CHARM_SLIDE_OUT_MS 380
+#define CHARM_SLIDE_MS     CHARM_SLIDE_OUT_MS
+#define CHARM_EASE_OUT_DECEL 8.0f
 
 static int CharmW() { return ScI(346); }
 static COLORREF CharmBlend(COLORREF bg, int pct) {
@@ -7039,6 +7989,14 @@ static RECT CharmClearBtn() {
     b.left = b.right - CharmClearW();
     return b;
 }
+// The rows the charm actually draws. The empty-query state (the 8.1 "type to search" hint) is
+// not an app list, so it must not be clickable either: see CharmHit.
+static bool CharmListActive() { return g_charmOpen && g_queryLen > 0; }
+static RECT CharmListRect() {
+    CharmLay L = CharmLayout();
+    RECT r = { 0, L.listY, g_charmW, std::max(L.listY, g_charmH - ScI(20)) };
+    return r;
+}
 static RECT CharmScrollTrack() {
     CharmLay L = CharmLayout();
     RECT r = { g_charmW - ScI(8), L.listY, g_charmW - ScI(3), g_charmH - ScI(20) };
@@ -7079,10 +8037,12 @@ static void CharmRender(int contOff) {
     SetTextColor(dc, RGB(255, 255, 255));
     HFONT of = (HFONT)SelectObject(dc, fTitle.get());
     const wchar_t* ttl = T(STR_CHARM_TITLE);
-    TextOutW(dc, L.mx + ox, L.titleY, ttl, lstrlenW(ttl));
+    { RECT tr0 = { L.mx + ox, L.titleY, W - ScI(16) + ox, L.titleY + ScI(64) };
+      DrawTextW(dc, ttl, -1, &tr0, DT_SINGLELINE | DT_NOPREFIX | DT_TOP | DT_LEFT | DT_END_ELLIPSIS); }
     SelectObject(dc, fLabel.get());
     const wchar_t* scp = CharmScopeName(g_charmScope);
-    TextOutW(dc, L.mx + ox, L.lblY, scp, lstrlenW(scp));
+    { RECT lr0 = { L.mx + ox, L.lblY, W - ScI(60) + ox, L.lblY + ScI(28) };
+      DrawTextW(dc, scp, -1, &lr0, DT_SINGLELINE | DT_NOPREFIX | DT_TOP | DT_LEFT | DT_END_ELLIPSIS); }
     SIZE ls = {};
     GetTextExtentPoint32W(dc, scp, lstrlenW(scp), &ls);
     {
@@ -7135,9 +8095,17 @@ static void CharmRender(int contOff) {
         SIZE sz = {};
         GetTextExtentPoint32W(dc, g_query, g_queryLen, &sz);
         bool tail = sz.cx > (tr.right - tr.left - ScI(2));
-        SetTextColor(dc, RGB(0, 0, 0));
+        const bool selAll = g_querySelAll && g_queryLen > 0;
+        SetTextColor(dc, selAll ? GetSysColor(COLOR_HIGHLIGHTTEXT) : RGB(0, 0, 0));
         SaveDC(dc);
         IntersectClipRect(dc, tr.left, tr.top, tr.right + 1, tr.bottom);
+        if (selAll) {
+            int x0 = tail ? tr.right - sz.cx : tr.left;
+            RECT sr = { x0, box.top + ScI(5), x0 + sz.cx, box.bottom - ScI(5) };
+            HBRUSH sb = CreateSolidBrush(GetSysColor(COLOR_HIGHLIGHT));
+            FillRect(dc, &sr, sb);
+            DeleteObject(sb);
+        }
         DrawTextW(dc, g_query, g_queryLen, &tr,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | (tail ? DT_RIGHT : DT_LEFT));
         RestoreDC(dc, -1);
@@ -7154,11 +8122,21 @@ static void CharmRender(int contOff) {
     }
     {
         SrwGuard g(&g_appsLock, false);
-        if (g_queryLen > 0 && g_results.empty()) {
+        if (g_queryLen == 0) {
+            // Windows 8.1 shows a hint here instead of an empty area, which also makes it obvious
+            // that there is nothing to click.
+            HFONT tf = (HFONT)SelectObject(dc, fSub.get());
+            SetTextColor(dc, CharmBlend(pane, 45));
+            const wchar_t* hint = T(STR_CHARM_TYPE_TO_SEARCH);
+            RECT hr = { L.mx + ox, L.listY, W - ScI(24) + ox, L.listY + ScI(40) };
+            DrawTextW(dc, hint, -1, &hr, DT_SINGLELINE | DT_TOP | DT_NOPREFIX | DT_END_ELLIPSIS);
+            SelectObject(dc, tf);
+        } else if (g_results.empty()) {
             HFONT tf = (HFONT)SelectObject(dc, fText.get());
             SetTextColor(dc, RGB(255, 255, 255));
             const wchar_t* msg = T(STR_NO_RESULTS);
-            TextOutW(dc, L.mx + ox, L.listY, msg, lstrlenW(msg));
+            RECT mr = { L.mx + ox, L.listY, W - ScI(16) + ox, L.listY + ScI(80) };
+            DrawTextW(dc, msg, -1, &mr, DT_WORDBREAK | DT_NOPREFIX | DT_TOP | DT_LEFT);
             SelectObject(dc, tf);
         }
         int y = L.listY;
@@ -7172,7 +8150,7 @@ static void CharmRender(int contOff) {
             }
             if ((size_t)idx < g_icons.size()) {
             IconSlot& sl = g_icons[(size_t)idx];
-            if (!InterlockedCompareExchange(&sl.ready, 1, 1) && (g_apps[idx].charmCat == CC_FILE || g_apps[idx].exe))
+            if (!InterlockedCompareExchange(&sl.ready, 1, 1) && (g_apps[idx].charmCat == CC_FILE || g_apps[idx].exe || g_apps[idx].searchOnly))
                 LoadIconFor((size_t)idx);
             if (InterlockedCompareExchange(&sl.ready, 1, 1) && sl.px && sl.w > 0) {
                 bool drewIcon = false;
@@ -7296,10 +8274,16 @@ static void CharmRender(int contOff) {
     } catch (...) { Wh_Log(L"[charm] render failed"); CharmRelease(); }
 }
 
+// Normalized exponential ease-out, shared by the enter and the exit slide.
+static float CharmEaseOut(float t) {
+    if (t <= 0.0f) return 0.0f;
+    if (t >= 1.0f) return 1.0f;
+    return (1.0f - expf(-CHARM_EASE_OUT_DECEL * t)) / (1.0f - expf(-CHARM_EASE_OUT_DECEL));
+}
 static float CharmPresence(DWORD now) {
-    float t = (float)(now - g_charmTick) / (float)CHARM_SLIDE_MS;
-    if (g_charmOpen) return Clamp01(t);
-    return 1.0f - Clamp01(t);
+    float el = (float)(now - g_charmTick);
+    if (g_charmOpen) return CharmEaseOut(el / (float)CHARM_SLIDE_IN_MS);
+    return 1.0f - CharmEaseOut(el / (float)CHARM_SLIDE_OUT_MS);
 }
 static bool CharmVisible(DWORD now) {
     return g_charmOpen || (g_charmTick && (now - g_charmTick) < CHARM_SLIDE_MS);
@@ -7307,7 +8291,7 @@ static bool CharmVisible(DWORD now) {
 static void DrawCharmBarGpu(DWORD now) {
     if (!CharmVisible(now) || !g_charmGpu) return;
     try {
-    float e = EaseMetroOut(CharmPresence(now));
+    float e = CharmPresence(now);
     float off = (1.0f - e) * (float)g_charmW;
     g_rt->DrawBitmap(g_charmGpu, D2D1::RectF((float)g_sw - (float)g_charmW + off, 0.0f,
                                              (float)g_sw + off, (float)g_charmH), 1.0f,
@@ -7318,7 +8302,7 @@ static void DrawCharmBarGpu(DWORD now) {
 static void DrawCharmBarGdi(HDC sdc, DWORD now) {
     if (!CharmVisible(now) || !g_charmBmp) return;
     try {
-    float e = EaseMetroOut(CharmPresence(now));
+    float e = CharmPresence(now);
     float off = (1.0f - e) * (float)g_charmW;
     HDC idc = CreateCompatibleDC(sdc);
     HGDIOBJ o = SelectObject(idc, g_charmBmp);
@@ -7344,13 +8328,260 @@ static bool DismissCompanionSearchCharm(POINT screenPt, bool havePt) {
 }
 static void SuppressOtherSearchCharm() { POINT z = { 0, 0 }; DismissCompanionSearchCharm(z, false); }
 
+static LRESULT CALLBACK CharmMouseProc(int code, WPARAM wp, LPARAM lp);
+
+// The low-level mouse hook is only used by the search charm, and only while it is open.
+static void UpdateMouseHook() {
+    const LONG want = InterlockedCompareExchange(&g_mouseHookWant, 0, 0);
+    if (want != 0 && !g_mouseHook) {
+        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CharmMouseProc, GetModuleHandleW(NULL), 0);
+        if (g_mouseHook) Wh_Log(L"Mouse hook installed");
+        else Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed, error %u", (unsigned)GetLastError());
+    } else if (want == 0 && g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = NULL;
+    }
+}
+static void SetMouseHookBit(LONG bit, bool on) {
+    if (on) InterlockedOr(&g_mouseHookWant, bit);
+    else InterlockedAnd(&g_mouseHookWant, ~bit);
+    UpdateMouseHook();
+}
 static void SetCharmMouseHook(bool on) {
     if (g_hookTid) PostThreadMessageW(g_hookTid, on ? WM_HOOKCTL_MOUSE_ON : WM_HOOKCTL_MOUSE_OFF, 0, 0);
+}
+
+// Class of the Start button inside the taskbar: "Start" on current StartAllBack builds (the same
+// name Explorer uses), "SIBOrb" on older ones.
+static bool IsStartOrbClass(const wchar_t* cls) {
+    return cls && (!_wcsicmp(cls, L"Start") || !_wcsicmp(cls, L"SIBOrb"));
+}
+// True while StartAllBack is detected and its DLL is loaded in this explorer.exe. Without it the
+// Start button belongs to Explorer and is reached through the ShowStartView hook instead.
+static bool StartAllBackRunning() {
+    if (!(InterlockedCompareExchange(&g_shellPatch, 0, 0) & SHELL_PATCH_STARTALLBACK)) return false;
+    static const wchar_t* const kModules[] = {
+        L"StartAllBackX64.dll", L"StartAllBack.dll", L"StartAllBackLoaderX64.dll", L"StartAllBackLoader.dll",
+    };
+    for (const wchar_t* module : kModules)
+        if (GetModuleHandleW(module)) return true;
+    return false;
+}
+struct OrbScan { HWND wnd[8]; int count; };
+static BOOL CALLBACK OrbEnumChildProc(HWND h, LPARAM lp) {
+    OrbScan* scan = (OrbScan*)lp;
+    if (scan->count >= (int)ARRAYSIZE(scan->wnd)) return FALSE;
+    wchar_t cls[32] = {};
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && IsStartOrbClass(cls)) scan->wnd[scan->count++] = h;
+    return TRUE;
+}
+// Only the taskbars of this process are scanned, never windows of other programs.
+static void ScanTaskbarsOfThisProcess(OrbScan* scan) {
+    static const wchar_t* const kBars[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"SIBTaskbar" };
+    const DWORD self = GetCurrentProcessId();
+    for (const wchar_t* cls : kBars) {
+        HWND bar = NULL;
+        for (int guard = 0; guard < 16 && (bar = FindWindowExW(NULL, bar, cls, NULL)) != NULL; ++guard) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(bar, &pid);
+            if (pid == self) EnumChildWindows(bar, OrbEnumChildProc, (LPARAM)scan);
+        }
+    }
+}
+// Diagnosis aid: when StartAllBack is running but its Start button was not found, print the window
+// classes of the taskbar once, so that a renamed button is easy to spot in the mod log.
+static bool g_orbScanLogged = false;
+static BOOL CALLBACK OrbClassLogProc(HWND h, LPARAM lp) {
+    int* n = (int*)lp;
+    if (*n >= 14) return FALSE;
+    wchar_t cls[80] = {};
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && cls[0])
+        Wh_Log(L"  taskbar child window: class %s", cls);
+    ++(*n);
+    return TRUE;
+}
+static void LogTaskbarClassesOnce() {
+    if (g_orbScanLogged) return;
+    HWND bar = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!bar) return;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(bar, &pid);
+    if (pid != GetCurrentProcessId()) return;
+    g_orbScanLogged = true;
+    Wh_Log(L"StartAllBack Start button not found; listing the taskbar windows instead");
+    int n = 0;
+    EnumChildWindows(bar, OrbClassLogProc, (LPARAM)&n);
+}
+
+// Screen-space test used by the Start window: while the Start screen is open it covers the button,
+// so a click there has to close the screen.
+static bool OrbScreenContains(POINT pt) {
+    bool hit = false;
+    AcquireSRWLockShared(&g_orbLock);
+    for (int i = 0; i < g_orbCount && i < (int)ARRAYSIZE(g_orbRect); ++i)
+        if (PtInRect(&g_orbRect[i], pt)) { hit = true; break; }
+    ReleaseSRWLockShared(&g_orbLock);
+    return hit;
+}
+// Every Start button click ends up here. The toggle itself is decided by the Start window, where
+// g_open, g_closing and the current view are all consistent.
+static void RequestStartToggle() {
+    if (!g_wnd) return;
+    const LONG n = InterlockedIncrement(&g_orbClicks);
+    if (n <= 3 || n % 20 == 0)
+        Wh_Log(L"StartAllBack Start button click %d: open=%d closing=%d", (int)n, (int)g_open, (int)g_closing);
+    if (!PostMessageW(g_wnd, WM_APP_TOGGLE, 0, 0))
+        Wh_Log(L"Couldn't post the Start toggle, error %u", (unsigned)GetLastError());
+}
+
+// Runs on the taskbar thread, inside the Start button (or one of its child windows). dwRefData is
+// the Start button itself. The press takes the capture, so the release always comes back here; only
+// a release on the button counts, like a normal push button. Neither message reaches StartAllBack.
+// WindhawkUtils::WH_SUBCLASSPROC has no uIdSubclass parameter, and the wrapper removes the subclass
+// on WM_NCDESTROY by itself.
+static LRESULT CALLBACK OrbSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR dwRefData) {
+    const HWND button = dwRefData ? (HWND)dwRefData : hWnd;
+    if (InterlockedCompareExchange(&g_startButtonHook, 0, 0) == 0) {
+        // Turned off in the settings: give back a capture taken just before, then stay out of the way.
+        if (g_orbPressWnd == hWnd) {
+            g_orbPressWnd = NULL;
+            g_orbPressTick = 0;
+            if (GetCapture() == hWnd) ReleaseCapture();
+        }
+        return DefSubclassProc(hWnd, msg, wp, lp);
+    }
+    switch (msg) {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
+        g_orbPressTick = GetTickCount();
+        g_orbPressWnd = hWnd;
+        SetCapture(hWnd);
+        return 0;
+    case WM_LBUTTONUP:
+    case WM_NCLBUTTONUP: {
+        const bool ours = g_orbPressWnd == hWnd && g_orbPressTick && GetTickCount() - g_orbPressTick < 5000;
+        g_orbPressTick = 0;
+        g_orbPressWnd = NULL;
+        if (GetCapture() == hWnd) ReleaseCapture();
+        if (!ours) break;
+        POINT cp = {};
+        RECT br = {};
+        const bool onButton = !GetCursorPos(&cp) || !GetWindowRect(button, &br) || PtInRect(&br, cp);
+        if (onButton) RequestStartToggle();
+        return 0;   // StartAllBack never saw the press, so it must not see the release either
+    }
+    case WM_CAPTURECHANGED:
+        if ((HWND)lp != hWnd && g_orbPressWnd == hWnd) { g_orbPressWnd = NULL; g_orbPressTick = 0; }
+        break;
+    }
+    return DefSubclassProc(hWnd, msg, wp, lp);
+}
+static void RemoveOrbSubclasses() {
+    for (int i = 0; i < g_orbSubCount; ++i)
+        if (IsWindow(g_orbSub[i]))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_orbSub[i], OrbSubclassProc);
+    g_orbSubCount = 0;
+}
+struct OrbChildren { HWND wnd[4]; int count; };
+static BOOL CALLBACK OrbChildCollectProc(HWND h, LPARAM lp) {
+    OrbChildren* c = (OrbChildren*)lp;
+    if (c->count >= (int)ARRAYSIZE(c->wnd)) return FALSE;
+    c->wnd[c->count++] = h;
+    return TRUE;
+}
+static bool OrbSubclassed(HWND h) {
+    for (int k = 0; k < g_orbSubCount; ++k) if (g_orbSub[k] == h) return true;
+    return false;
+}
+static bool SubclassOrbWindow(HWND h, HWND button) {
+    if (OrbSubclassed(h)) return true;
+    if (g_orbSubCount >= (int)ARRAYSIZE(g_orbSub)) return false;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(h, OrbSubclassProc, (DWORD_PTR)button)) return false;
+    g_orbSub[g_orbSubCount++] = h;
+    return true;
+}
+// Hook thread only. Subclasses every Start button that was found, plus its child windows, so that a
+// press is caught wherever it lands on the button.
+static void EnsureOrbSubclass() {
+    int kept = 0;
+    for (int k = 0; k < g_orbSubCount; ++k)
+        if (IsWindow(g_orbSub[k])) g_orbSub[kept++] = g_orbSub[k];
+    g_orbSubCount = kept;
+    for (int i = 0; i < g_orbCount; ++i) {
+        HWND button = g_orbWnd[i];
+        const bool isNew = !OrbSubclassed(button);
+        if (!SubclassOrbWindow(button, button)) {
+            if (!g_orbSubFailLogged) {
+                g_orbSubFailLogged = true;
+                Wh_Log(L"Couldn't subclass the StartAllBack Start button, error %u", (unsigned)GetLastError());
+            }
+            continue;
+        }
+        g_orbSubFailLogged = false;
+        OrbChildren children = {};
+        EnumChildWindows(button, OrbChildCollectProc, (LPARAM)&children);
+        for (int c = 0; c < children.count; ++c) SubclassOrbWindow(children.wnd[c], button);
+        if (isNew) Wh_Log(L"StartAllBack Start button subclassed: clicking it opens this Start screen");
+    }
+}
+
+// Hook thread only. Returns the period, in milliseconds, of the next check: short while StartAllBack
+// is running and the button is still missing, longer once it has been found, and long when there is
+// nothing to look for.
+static UINT RefreshStartOrb() {
+    const bool enabled = InterlockedCompareExchange(&g_startButtonHook, 0, 0) != 0 && StartAllBackRunning();
+    if (!enabled) {
+        RemoveOrbSubclasses();
+        if (g_orbCount) {
+            AcquireSRWLockExclusive(&g_orbLock);
+            g_orbCount = 0;
+            ReleaseSRWLockExclusive(&g_orbLock);
+            memset(g_orbWnd, 0, sizeof(g_orbWnd));
+        }
+        g_orbLogged = false;
+        return 2000;
+    }
+    OrbScan scan = {};
+    ScanTaskbarsOfThisProcess(&scan);
+    HWND wnd[8] = {};
+    RECT rect[8] = {};
+    int kept = 0;
+    for (int i = 0; i < scan.count; ++i) {
+        RECT r = {};
+        if (!IsWindowVisible(scan.wnd[i]) || !GetWindowRect(scan.wnd[i], &r)) continue;
+        const int w = r.right - r.left, h = r.bottom - r.top;
+        if (w < 4 || h < 4) continue;
+        // A Start button is small and roughly square; refuse anything that spans the taskbar.
+        if (w > ScI(600) || w > 12 * h) continue;
+        wnd[kept] = scan.wnd[i];
+        rect[kept] = r;
+        ++kept;
+    }
+    const int previousCount = g_orbCount;
+    memcpy(g_orbWnd, wnd, sizeof(g_orbWnd));
+    AcquireSRWLockExclusive(&g_orbLock);
+    memcpy(g_orbRect, rect, sizeof(g_orbRect));
+    g_orbCount = kept;
+    ReleaseSRWLockExclusive(&g_orbLock);
+    if (kept > 0 && (!g_orbLogged || previousCount != kept)) {
+        wchar_t cls[32] = {};
+        GetClassNameW(wnd[0], cls, ARRAYSIZE(cls));
+        Wh_Log(L"StartAllBack Start button found (class %s, %d window(s), rect %d,%d-%d,%d)",
+               cls, kept, (int)rect[0].left, (int)rect[0].top, (int)rect[0].right, (int)rect[0].bottom);
+        g_orbLogged = true;
+    } else if (kept == 0) {
+        g_orbLogged = false;
+        LogTaskbarClassesOnce();
+    }
+    EnsureOrbSubclass();
+    return kept > 0 ? 1000 : 300;
 }
 static void OpenCharm(wchar_t firstChar) {
     if (!g_open || g_closing) return;
     try {
-    g_queryLen = 0; g_query[0] = 0;
+    g_queryLen = 0; g_query[0] = 0; g_querySelAll = false;
     if (firstChar) QueryAppend(firstChar);
     Wh_Log(L"[charm] open char=%d view=%d", (int)firstChar, (int)g_view);
     g_charmSel = 0; g_charmScroll = 0; g_charmHover = -1;
@@ -7366,7 +8597,7 @@ static void OpenCharm(wchar_t firstChar) {
 static void CloseCharm(bool now) {
     if (!g_charmOpen) return;
     Wh_Log(L"[charm] close now=%d", (int)now);
-    g_charmOpen = false;
+    g_charmOpen = false; g_querySelAll = false;
     SetCharmMouseHook(false);
     g_charmTick = now ? 0 : NowMs();
     g_charmHover = -1;
@@ -7378,6 +8609,7 @@ static void CharmToggle() {
     else OpenCharm(0);
 }
 static void CharmMoveSel(int delta) {
+    if (!CharmListActive()) return;   // no visible rows, no visible selection to move
     int n = (int)g_results.size();
     if (!n) return;
     g_charmSel += delta;
@@ -7405,8 +8637,12 @@ static int CharmHit(int lx, int ly, int* rowOut) {
         return CH_DDCLOSE;
     }
     if (PtInRect(&sco, p)) return CH_SCOPE;
-    if (g_queryLen > 0) { RECT cbHit = cb; cbHit.left -= ScI(10);
-                          if (PtInRect(&cbHit, p)) return CH_CLEAR; }
+    // With an empty query the charm only shows the "type to search" hint: nothing in the list area
+    // may react, otherwise the invisible rows of the All Apps list that RunSearch leaves in
+    // g_results could be clicked and would launch an app through the character grid.
+    if (!CharmListActive()) return CH_NONE;
+    { RECT cbHit = cb; cbHit.left -= ScI(10);
+      if (PtInRect(&cbHit, p)) return CH_CLEAR; }
     if (PtInRect(&sb, p)) return CH_SUBMIT;
     if ((int)g_results.size() > CharmLayout().vis &&
         lx >= tr.left - ScI(7) && lx <= g_charmW && ly >= tr.top - ScI(4) && ly < tr.bottom + ScI(4))
@@ -7417,6 +8653,23 @@ static int CharmHit(int lx, int ly, int* rowOut) {
         if (r >= 0 && r < (int)g_results.size()) { *rowOut = r; return CH_ROW; }
     }
     return CH_NONE;
+}
+
+// True when a point belongs to the search charm, so that the panel swallows the click instead of
+// letting it reach the Start screen underneath. Keep this in sync with CharmHit.
+static bool CharmOwnsPoint(int lx, int ly) {
+    POINT p = { lx, ly };
+    RECT sco = CharmScopeRect(), sb = CharmSubmitBtn(), cb = CharmClearBtn();
+    if (g_charmDdOpen) return true;                     // the drop-down closes on an outside click
+    if (PtInRect(&sco, p) || PtInRect(&sb, p)) return true;
+    if (CharmListActive()) {
+        RECT cbHit = cb; cbHit.left -= ScI(10);
+        if (PtInRect(&cbHit, p)) return true;
+    }
+    RECT list = CharmListRect();
+    if (CharmListActive() && PtInRect(&list, p)) return true;
+    if (g_charmScroll && PtInRect(&list, p)) return true;   // the rows the user can still see
+    return false;
 }
 
 static int UserTextWidth() {
@@ -7513,6 +8766,9 @@ static void ShowUserMenu(HWND owner) {
     ShowMenuFor(owner, anchor, 0);
 }
 static void CharmClickActions(int hit, int row, int ly) {
+    // Second line of defence: with an empty query (the "type to search" hint) the charm shows no
+    // rows at all, so a row hit can only be a stale index into the hidden All Apps list.
+    if (hit == CH_ROW && !CharmListActive()) { RepaintNow(); return; }
     if (hit == CH_SCOPE) {
         g_charmDdOpen = !g_charmDdOpen;
         g_charmDdHover = -1;
@@ -7531,7 +8787,8 @@ static void CharmClickActions(int hit, int row, int ly) {
         g_queryLen = 0; g_query[0] = 0; RunSearch(); g_charmSel = 0;
         CharmRender(g_charmCont); RepaintNow();
     } else if (hit == CH_SUBMIT) {
-        if (!g_results.empty()) LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
+        if (CharmListActive() && !g_results.empty())
+            LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
     } else if (hit == CH_SCROLL) {
         RECT tr = CharmScrollTrack();
         int total = (int)g_results.size(), vis = CharmLayout().vis;
@@ -7686,8 +8943,24 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
     case UM_SHUTDOWN:
     case UM_RESTART:
         CloseStart();
-        ExitWindowsEx(cmd == UM_RESTART ? EWX_REBOOT : (EWX_SHUTDOWN | EWX_POWEROFF),
-                      SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
+        {
+            HANDLE hTok = NULL;
+            if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hTok)) {
+                TOKEN_PRIVILEGES tp = {};
+                tp.PrivilegeCount = 1;
+                tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+                if (LookupPrivilegeValueW(NULL, SE_SHUTDOWN_NAME, &tp.Privileges[0].Luid))
+                    AdjustTokenPrivileges(hTok, FALSE, &tp, 0, NULL, NULL);
+                CloseHandle(hTok);
+            }
+            BOOL ok = ExitWindowsEx(cmd == UM_RESTART ? EWX_REBOOT : (EWX_SHUTDOWN | EWX_POWEROFF),
+                          SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
+            if (!ok) {
+                Wh_Log(L"[Power] ExitWindowsEx failed, error %u", (unsigned)GetLastError());
+                ShellExecuteW(NULL, L"open", L"shutdown.exe",
+                              cmd == UM_RESTART ? L"/r /t 0" : L"/s /t 0", NULL, SW_HIDE);
+            }
+        }
         break;
     case MC_SEP_ID: break;
     case CM_OPEN: if (g_ctxAppValid) LaunchEntry(g_ctxApp); break;
@@ -8193,15 +9466,21 @@ static void OpenStart(bool atLogon = false) {
     if (atLogon) g_snapReady = false;
     else if (!wasVisible) CaptureDesktop();
     RefreshDesktopTile();
-    g_openSlideSeconds = (float)InterlockedCompareExchange(&g_openSlideMs, 0, 0) / 1000.0f;
     ComputePivot();
     for (int i = 0; i < MAX_TILES; i++) g_tileScale[i] = 1.0f;
     g_hover = g_pressed = -1;
     g_scrollCur = g_scrollTarget = 0.0f;
     g_view = VIEW_START;
     g_zoomOut = false; g_zoomTick = 0; g_hoverZoomBtn = false; g_hoverGroup = -1;
+    g_sbArrowDir = 0; g_sbDrag = false; g_orbPressOnStart = false;
     g_dragGroup = -1; g_dragGroupMoved = false; g_dragGroupDx = 0.0f;
-    g_namingGroup = -1; g_groupNameEdit.clear(); g_focus = -1; g_alphaGrid = false;
+    g_namingGroup = -1;
+    g_nameSelAll = false;
+    g_swallowNamingUp = false;
+    g_swallowNamingRightUp = false;
+    g_groupNameEdit.clear();
+    g_focus = -1;
+    g_alphaGrid = false;
     g_charmOpen = false; g_charmTick = 0; g_leaveTick = 0; g_charmHover = -1; g_charmPressed = -1;
     SetCharmMouseHook(false);
     g_queryLen = 0; g_query[0] = 0;
@@ -8345,7 +9624,7 @@ static void Tick() {
         }
         changed = true;
     } else {
-        float end = g_logonOpening ? 0.0f : OPEN_HOLD + g_openSlideSeconds;
+        float end = 0.0f;
         float tileEnd = g_logonOpening ?
             LOGON_TILE_DELAY + (float)(g_blockCount > 0 ? g_blockCount - 1 : 0) * LOGON_BLOCK_STAGGER + LOGON_TILE_T :
             TILES_DELAY + (float)(g_blockCount > 0 ? g_blockCount - 1 : 0) * BLOCK_STAGGER + TILE_T;
@@ -8477,10 +9756,23 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_TOGGLE: {
         DWORD now = NowMs();
-        if (now - g_lastToggleTick < 250) return 0;
+        // The Start button, the Windows key and ShowStartView can report the same action twice in a
+        // row: only the first report inside the debounce window acts.
+        if (now - g_lastToggleTick < kOrbToggleDebounceMs) {
+            Wh_Log(L"Start toggle ignored: another one %u ms ago", (unsigned)(now - g_lastToggleTick));
+            return 0;
+        }
         g_lastToggleTick = now;
         g_userToggledStart = true;
-        if (g_open) { if (g_view == VIEW_SEARCH) LeaveSearch(); else CloseStart(); } else OpenStart();
+        if (g_open && !g_closing) {
+            Wh_Log(L"Start toggle: closing (view=%d)", (int)g_view);
+            if (g_view == VIEW_SEARCH) LeaveSearch(); else CloseStart();
+        } else {
+            // Also when the previous close is still animating: that click opens the screen again,
+            // instead of being dropped because g_open was already false.
+            Wh_Log(L"Start toggle: opening (closing=%d)", (int)g_closing);
+            OpenStart();
+        }
         return 0;
     }
     case WM_APP_CHARM_POINTER: {
@@ -8489,7 +9781,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             POINT cp = sp;
             ScreenToClient(h, &cp);
             RECT pr; CharmPaneRect(&pr);
-            const int visLeft = pr.left + (int)((1.0f - EaseMetroOut(CharmPresence(NowMs()))) * (float)g_charmW);
+            const int visLeft = pr.left + (int)((1.0f - CharmPresence(NowMs())) * (float)g_charmW);
             if (!(cp.x >= visLeft && PtInRect(&pr, cp))) {
                 CloseCharm(false);
                 if (WindowFromPoint(sp) == h) {
@@ -8531,7 +9823,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_KEY:
         if (g_open && !g_closing) {
-            if (g_namingGroup >= 0 && (wp == VK_BACK || wp == VK_RETURN || wp == VK_ESCAPE)) {
+            if (g_namingGroup >= 0 && (wp == VK_BACK || wp == VK_RETURN || wp == VK_ESCAPE ||
+                                       wp == KEY_SELECT_ALL || wp == KEY_COPY_ALL)) {
                 NamingKey((UINT)wp);
             } else if (g_customize) {
                 if (wp == VK_ESCAPE) ExitCustomize();
@@ -8589,6 +9882,32 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (files) {
             delete files;
             Wh_Log(L"Search: %u catalog entries including files", (unsigned)g_apps.size());
+            RunSearch();
+            if (g_charmOpen) CharmRender(g_charmCont);
+            if (g_open) RepaintNow();
+        }
+        return 0;
+    }
+    case WM_APP_SETTINGS_READY: {
+        std::vector<AppEntry>* sets = NULL;
+        size_t added = 0;
+        AcquireSRWLockExclusive(&g_appsLock);
+        sets = g_pendingSettings;
+        g_pendingSettings = NULL;
+        if (sets) {
+            std::unordered_map<std::wstring, bool> seen;
+            for (const AppEntry& a : g_apps) if (!a.exe && a.charmCat != CC_FILE) seen.emplace(a.lower, true);
+            for (AppEntry& a : *sets) {
+                if (!seen.emplace(a.lower, true).second) continue;
+                g_apps.push_back(std::move(a));
+                ++added;
+            }
+            g_icons.resize(g_apps.size());
+        }
+        ReleaseSRWLockExclusive(&g_appsLock);
+        delete sets;
+        if (added) {
+            Wh_Log(L"Search: %u catalog entries including settings", (unsigned)g_apps.size());
             RunSearch();
             if (g_charmOpen) CharmRender(g_charmCont);
             if (g_open) RepaintNow();
@@ -8748,6 +10067,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_RBUTTONDOWN:
         if (g_swallowCharmUp && NowMs() - g_charmSwallowTick < 500) return 0;
         if (g_userMenuWnd) { g_swallowMenuUp = true; DismissUserMenu(); return 0; }
+        if (g_open && !g_closing && (g_namingGroup >= 0 || g_customize) && g_view == VIEW_START) {
+            POINT np = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT nfr;
+            const bool inField = g_namingGroup >= 0 && GroupNameFieldRect(g_namingGroup, &nfr) && PtInRect(&nfr, np);
+            if (!inField) {
+                if (g_namingGroup >= 0) CommitNaming();
+                if (g_customize) ExitCustomize();
+            }
+            g_swallowNamingRightUp = true;
+            return 0;
+        }
                 if (g_open && !g_closing) {
                     POINT sp = { (short)LOWORD(lp), (short)HIWORD(lp) };
                     ClientToScreen(h, &sp);
@@ -8776,6 +10106,37 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 }
         return 0;
     case WM_LBUTTONDOWN:
+        // Group name bars (Customize) and the name field: handled before anything else, so a click
+        // outside always closes them, whatever other press handling would have taken the click.
+        if (g_open && !g_closing && g_view == VIEW_START && !g_userMenuWnd &&
+            (g_namingGroup >= 0 || g_customize)) {
+            POINT xp = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT fr;
+            if (g_namingGroup >= 0 && GroupNameFieldRect(g_namingGroup, &fr) && PtInRect(&fr, xp)) {
+                if (g_nameSelAll) { g_nameSelAll = false; g_dirty = true; RepaintNow(); }
+                g_swallowNamingUp = true;
+                return 0;
+            }
+            if (g_customize) {
+                for (int g = 0; g < g_groupCount; ++g) {
+                    if (GroupNameFieldRect(g, &fr) && PtInRect(&fr, xp)) {
+                        if (g_namingGroup >= 0 && g_namingGroup != g) CommitNaming();
+                        if (g_namingGroup != g) StartNaming(g);
+                        else if (g_nameSelAll) { g_nameSelAll = false; g_dirty = true; RepaintNow(); }
+                        g_swallowNamingUp = true;
+                        return 0;
+                    }
+                }
+                Wh_Log(L"[names] click outside the name bars at %d,%d: closing them", (int)xp.x, (int)xp.y);
+                ExitCustomize();   // also commits a name that is being typed
+            } else {
+                Wh_Log(L"[names] click outside the name field at %d,%d: closing it", (int)xp.x, (int)xp.y);
+                CommitNaming();
+            }
+            g_swallowNamingUp = true;   // the click only closes; it does not press a tile or start a drag
+            g_pressed = -1;
+            return 0;
+        }
         if (g_swallowCharmUp && NowMs() - g_charmSwallowTick < 500) { g_pressed = -1; return 0; }
         if (g_userMenuWnd) {
             RECT ar; AccountRect(&ar);
@@ -8797,7 +10158,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (g_open && !g_closing && g_charmOpen) {
             POINT cpt = { (short)LOWORD(lp), (short)HIWORD(lp) };
             RECT cpr; CharmPaneRect(&cpr);
-            const int visLeft = cpr.left + (int)((1.0f - EaseMetroOut(CharmPresence(NowMs()))) * (float)g_charmW);
+            const int visLeft = cpr.left + (int)((1.0f - CharmPresence(NowMs())) * (float)g_charmW);
             if (cpt.x >= visLeft && PtInRect(&cpr, cpt)) {
                 int lx = cpt.x - cpr.left - g_charmCont, ly = cpt.y - cpr.top, row = -1;
                 int hit = CharmHit(lx, ly, &row);
@@ -8813,29 +10174,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             g_swallowCharmUp = true;
             return 0;
         }
-        if (!g_open) return 0;
-        if (g_namingGroup >= 0 && !g_customize && !g_closing && g_view == VIEW_START) {
-            POINT xp = { (short)LOWORD(lp), (short)HIWORD(lp) };
-            RECT fr;
-            if (GroupNameFieldRect(g_namingGroup, &fr) && PtInRect(&fr, xp)) {
-                g_swallowNamingUp = true;
-                return 0;
-            }
-            CommitNaming();
-        }
-        if (g_customize && !g_closing && g_view == VIEW_START) {
-            POINT xn = { (short)LOWORD(lp), (short)HIWORD(lp) };
-            for (int g = 0; g < g_groupCount; ++g) {
-                RECT fr;
-                if (GroupNameFieldRect(g, &fr) && PtInRect(&fr, xn)) {
-                    if (g_namingGroup >= 0 && g_namingGroup != g) CommitNaming();
-                    if (g_namingGroup != g) StartNaming(g);
-                    g_swallowNamingUp = true;
-                    return 0;
-                }
-            }
-            if (g_namingGroup >= 0) CommitNaming();
-            else ExitCustomize();
+        if (!g_open) {
+            // A click on the StartAllBack Start button while the screen is still sliding away opens
+            // it again.
+            POINT op = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            ClientToScreen(h, &op);
+            if (g_closing && OrbScreenContains(op)) { g_orbPressOnStart = true; SetCapture(h); }
             return 0;
         }
         if (ScrollBarVisible()) {
@@ -8865,6 +10209,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             SetCapture(h);
             return 0;
         }
+        {
+            // The Start screen covers the StartAllBack Start button. A press there that no visible
+            // control took (scroll bar, app bar, tiles, buttons) is a click on the Start button.
+            POINT op = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            ClientToScreen(h, &op);
+            if (!g_closing && !g_charmOpen && g_hover < 0 && !g_hoverArrow && !g_hoverPwr && !g_hoverSrch &&
+                !g_hoverZoomBtn && !g_hoverAccount && OrbScreenContains(op)) {
+                g_orbPressOnStart = true;
+                SetCapture(h);
+                return 0;
+            }
+        }
         if (g_view == VIEW_START && !g_charmOpen && !g_barVisible && ZoomPresence(NowMs()) > 0.5f) {
             float wx, wy; ScreenToWorld((short)LOWORD(lp), (short)HIWORD(lp), &wx, &wy);
             int zg = GroupAtWorld(wx, wy);
@@ -8883,6 +10239,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_LBUTTONUP: {
         ReleaseCapture();
+        if (g_orbPressOnStart) {
+            // Release of a press on the StartAllBack Start button (see WM_LBUTTONDOWN).
+            g_orbPressOnStart = false;
+            POINT spt = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            ClientToScreen(h, &spt);
+            if (OrbScreenContains(spt)) {
+                if (g_open && !g_closing) CloseStart();
+                else if (g_closing) PostMessageW(h, WM_APP_TOGGLE, 0, 0);   // reopens
+            }
+            return 0;
+        }
         if (g_swallowMenuUp) { g_swallowMenuUp = false; return 0; }
         if (g_swallowCharmUp) { g_swallowCharmUp = false; g_pressed = -1; g_charmPressed = -1; return 0; }
         if (g_swallowNamingUp) { g_swallowNamingUp = false; return 0; }
@@ -8923,17 +10290,23 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                         g_charmPressed = -1;
                         return 0;
                     }
+                    // The charm is open, so its panel owns the click: close it, but don't let the
+                    // click reach the Start screen (tiles or groups) that is drawn underneath.
                     CloseCharm(false);
                     return 0;
                 }
                 if (g_open && !g_closing && g_view == VIEW_START && PtInRect(&sc, pt)) {
-                    g_pressed = -1; EnterSearchEmpty(); return 0;
+                    g_pressed = -1;
+                    // While the search charm is open the Start screen must not react below it.
+                    if (!g_charmOpen) EnterSearchEmpty();
+                    return 0;
                 }
                 if (g_open && !g_closing && g_view == VIEW_START && PtInRect(&pw, pt)) {
                     g_pressed = -1; ShowMenuFor(h, pw, 1); return 0;
                 }
                 if (g_open && !g_closing && PtInRect(&arw, pt)) {
                     g_pressed = -1;
+                    if (g_charmOpen) return 0;
                     if (g_view == VIEW_START) EnterAllApps(); else LeaveSearch();
                     return 0;
                 }
@@ -8961,6 +10334,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        if (g_open && !g_closing && g_charmOpen) {
+            // The search charm owns every click inside its panel, including the empty areas where no
+            // control lives. Without this the click fell through to the view underneath, where
+            // OnSearchClick() launched whichever app sat at those coordinates in a list that is not
+            // even drawn: the "invisible but clickable list" seen with an empty search charm.
+            POINT upt = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT upr;
+            if (CharmPaneRect(&upr) && PtInRect(&upr, upt)) {
+                int lx = upt.x - upr.left - g_charmCont, ly = upt.y - upr.top;
+                if (CharmOwnsPoint(lx, ly)) { g_pressed = -1; return 0; }
+            }
+        }
         if (g_barVisible && (g_barPressedButton >= 0 || g_advPressedRow >= 0 || g_resizePressedRow >= 0)) {
             int pressedButton = g_barPressedButton, pressedRow = g_advPressedRow, pressedSize = g_resizePressedRow;
             int mx = (short)LOWORD(lp), my = (short)HIWORD(lp);
@@ -8981,6 +10366,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_RBUTTONUP:
+        if (g_swallowNamingRightUp) { g_swallowNamingRightUp = false; return 0; }
         if (g_swallowCharmUp) { g_swallowCharmUp = false; return 0; }
         if (g_open && !g_closing && g_charmOpen) {
             POINT rpu = { (short)LOWORD(lp), (short)HIWORD(lp) };
@@ -9004,17 +10390,18 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             else if (delta > 0 && g_alphaGrid) { g_alphaGrid = false; g_searchTick = NowMs(); RepaintNow(); }
             return 0;
         }
-        g_scrollTarget -= (float)delta * 2.5f;
         if (g_charmOpen) {
             RECT pr; POINT pw2 = { (short)LOWORD(lp), (short)HIWORD(lp) };
             if (CharmPaneRect(&pr) && PtInRect(&pr, pw2)) {
+                // Scroll the charm, not the list hidden behind it.
                 int delta = GET_WHEEL_DELTA_WPARAM(wp) > 0 ? -3 : 3;
-                int total = (int)g_results.size(), vis = CharmLayout().vis;
+                int total = CharmListActive() ? (int)g_results.size() : 0, vis = CharmLayout().vis;
                 g_charmScroll = std::min(std::max(0, g_charmScroll + delta), std::max(0, total - vis));
                 CharmRender(g_charmCont); RepaintNow();
                 return 0;
             }
         }
+        g_scrollTarget -= (float)delta * 2.5f;
         float m = (g_view == VIEW_SEARCH) ? MaxScrollSearch() : MaxScroll();
         if (g_scrollTarget < 0.0f) g_scrollTarget = 0.0f;
         if (g_scrollTarget > m) g_scrollTarget = m;
@@ -9023,6 +10410,97 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return DefWindowProcW(h, msg, wp, lp);
     });
+}
+
+// ---------------------------------------------------------------------------------------
+// Third-party shell compatibility (StartAllBack, ExplorerPatcher)
+//
+// Windhawk loads a mod before explorer.exe starts executing, so anything done in Wh_ModInit
+// happens while the shell is still being built. StartAllBack and ExplorerPatcher patch the
+// shell in that very same phase and need it for themselves: when this mod loaded
+// twinui.pcshell.dll, created a full-screen window in a z-band and installed a keyboard hook
+// first, their taskbar could not be created and the stock taskbar came up instead, until
+// Explorer was restarted. Everything that touches the shell is now deferred until the taskbar
+// exists, plus a settle delay, and Wh_ModInit itself only reads the settings.
+enum : LONG { SHELL_COMPAT_AUTO = 0, SHELL_COMPAT_ALWAYS = 1, SHELL_COMPAT_NEVER = 2 };
+
+static bool ShellModuleLoaded(const wchar_t* name) {
+    return name && GetModuleHandleW(name) != NULL;
+}
+
+static bool RegistryKeyExists(HKEY root, const wchar_t* subKey) {
+    HKEY key = NULL;
+    if (!subKey || RegOpenKeyExW(root, subKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) return false;
+    RegCloseKey(key);
+    return true;
+}
+
+// Bitmask of the third-party shells present in this Windows installation.
+static LONG DetectThirdPartyShell() {
+    LONG patch = 0;
+    static const wchar_t* const kStartAllBackModules[] = {
+        L"StartAllBackX64.dll", L"StartAllBack.dll",
+        L"StartAllBackLoaderX64.dll", L"StartAllBackLoader.dll",
+    };
+    for (const wchar_t* module : kStartAllBackModules) {
+        if (ShellModuleLoaded(module)) { patch |= SHELL_PATCH_STARTALLBACK; break; }
+    }
+    if (!(patch & SHELL_PATCH_STARTALLBACK) &&
+        (RegistryKeyExists(HKEY_CURRENT_USER, L"Software\\StartIsBack") ||
+         RegistryKeyExists(HKEY_LOCAL_MACHINE, L"Software\\StartIsBack")))
+        patch |= SHELL_PATCH_STARTALLBACK;
+    static const wchar_t* const kExplorerPatcherModules[] = {
+        L"ExplorerPatcher.amd64.dll", L"ExplorerPatcher.dll", L"ep_taskbar.dll", L"ep_extra.dll",
+    };
+    for (const wchar_t* module : kExplorerPatcherModules) {
+        if (ShellModuleLoaded(module)) { patch |= SHELL_PATCH_EXPLORERPATCHER; break; }
+    }
+    if (!(patch & SHELL_PATCH_EXPLORERPATCHER) &&
+        RegistryKeyExists(HKEY_CURRENT_USER, L"Software\\ExplorerPatcher"))
+        patch |= SHELL_PATCH_EXPLORERPATCHER;
+    return patch;
+}
+
+static bool ShellCompatActive() {
+    const LONG mode = InterlockedCompareExchange(&g_shellCompat, 0, 0);
+    if (mode == SHELL_COMPAT_NEVER) return false;
+    if (mode == SHELL_COMPAT_ALWAYS) return true;
+    return InterlockedCompareExchange(&g_shellPatch, 0, 0) != 0;
+}
+
+static bool ShellIsUp() {
+    return GetShellWindow() != NULL && FindWindowW(L"Shell_TrayWnd", NULL) != NULL;
+}
+
+// True once the mod is being unloaded, or once the Start hook thread has been asked to stop.
+static bool StopRequested() {
+    if (g_uiStop && WaitForSingleObject(g_uiStop, 0) == WAIT_OBJECT_0) return true;
+    if (g_startHookStop && WaitForSingleObject(g_startHookStop, 0) == WAIT_OBJECT_0) return true;
+    return false;
+}
+
+// Sleeps in short slices, so that the mod can still be unloaded without waiting for the end.
+static void SleepShort(DWORD ms) {
+    while (ms > 0) {
+        const DWORD slice = ms > 100 ? 100 : ms;
+        Sleep(slice);
+        if (StopRequested()) return;
+        ms -= slice;
+    }
+}
+
+// Waits, only when the compatibility mode is active, for Explorer's taskbar and then for the
+// configured settle delay, so that StartAllBack/ExplorerPatcher can create their taskbar first.
+static void WaitForShellSettle() {
+    if (!ShellCompatActive()) return;
+    const ULONGLONG start = GetTickCount64();
+    while (!ShellIsUp() && GetTickCount64() - start < 60000 && !StopRequested()) Sleep(100);
+    LONG delay = InterlockedCompareExchange(&g_startupDelayMs, 0, 0);
+    if (delay < 0) delay = 0;
+    if (delay > 60000) delay = 60000;
+    Wh_Log(L"Third-party shell detected (mask 0x%X): waiting %d ms for the taskbar to settle before touching the shell",
+           (unsigned)InterlockedCompareExchange(&g_shellPatch, 0, 0), (int)delay);
+    SleepShort((DWORD)delay);
 }
 
 using XamlLauncher_ShowStartView_t = HRESULT (WINAPI*)(void* pThis, int immersiveLauncherShowMethod,
@@ -9038,7 +10516,10 @@ static HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis, int method, i
     return XamlLauncher_ShowStartView_Original(pThis, method, flags);
 }
 
-static bool InstallStartHook() {
+// Loads twinui.pcshell.dll only as a last resort. Who loads that DLL, and when, is what decides
+// whether StartAllBack and ExplorerPatcher can create their taskbar: forcing it from Wh_ModInit
+// left them with the stock taskbar until Explorer was restarted.
+static bool InstallStartHookOnce(bool allowLoad) {
     // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
@@ -9048,17 +10529,49 @@ static bool InstallStartHook() {
         },
     };
     HMODULE twinui = GetModuleHandleW(L"twinui.pcshell.dll");
-    if (!twinui) twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!twinui) {
-        Wh_Log(L"Couldn't load twinui.pcshell.dll");
-        return false;
+    if (!twinui && allowLoad) {
+        Wh_Log(L"twinui.pcshell.dll is still not loaded; loading it as a last resort");
+        twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
+    if (!twinui) return false;   // not loaded yet: keep waiting
     if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"HookSymbols failed for ShowStartView; using the keyboard hook only");
-        return false;
+        return true;             // give up: retrying would fail the same way
     }
+    // This runs after Wh_ModInit has returned, so Windhawk does not apply the hook by itself: a hook
+    // registered now stays pending until Wh_ApplyHookOperations is called.
+    if (!Wh_ApplyHookOperations()) {
+        Wh_Log(L"Wh_ApplyHookOperations failed for ShowStartView; using the keyboard hook only");
+        return true;
+    }
+    g_startHooked = true;
     Wh_Log(L"ShowStartView hooked: the Windows key and the taskbar Start button open this Start screen");
     return true;
+}
+
+// The Start menu hook is installed from a background thread: as soon as Windows itself loads
+// twinui.pcshell.dll the symbol is hooked, and the forced load only happens after the shell has
+// settled. With the "Let Windows load the Start menu code" setting off, the 1.0.0 behaviour is
+// kept and the DLL is loaded right away.
+static DWORD WINAPI StartHookThread(LPVOID) {
+  RunGuarded(L"StartHookThread", [] {
+    WaitForShellSettle();
+    const bool deferLoad = InterlockedCompareExchange(&g_deferStartHook, 0, 0) != 0;
+    const ULONGLONG start = GetTickCount64();
+    const ULONGLONG kForceLoadAfterMs = 15000;
+    for (;;) {
+        if (g_startHookStop && WaitForSingleObject(g_startHookStop, 0) == WAIT_OBJECT_0) return;
+        if (g_startHooked) return;
+        const bool lastResort = !deferLoad || GetTickCount64() - start >= kForceLoadAfterMs;
+        if (InstallStartHookOnce(lastResort)) return;
+        if (GetTickCount64() - start >= kForceLoadAfterMs && deferLoad) {
+            Wh_Log(L"ShowStartView is not hooked; the keyboard hook is the only way to open the Start screen");
+            return;
+        }
+        SleepShort(400);
+    }
+  });
+  return 0;
 }
 
 // An unassigned key pressed between the Windows key down and up stops Explorer from treating it as a lone press.
@@ -9106,6 +10619,13 @@ static bool HandleSearchKey(const KBDLLHOOKSTRUCT* k, bool down, bool up) {
     }
     const bool altGr = (GetAsyncKeyState(VK_RMENU) & 0x8000) && (GetAsyncKeyState(VK_LCONTROL) & 0x8000) &&
                        !(GetAsyncKeyState(VK_RCONTROL) & 0x8000) && !(GetAsyncKeyState(VK_LMENU) & 0x8000);
+    if (!altGr && (vk == 'A' || vk == 'C') && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+        !(GetAsyncKeyState(VK_MENU) & 0x8000) && !(GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
+        (g_namingGroup >= 0 || g_view == VIEW_SEARCH || g_charmOpen)) {
+        g_swallowed[vk] = true;
+        PostMessageW(g_wnd, WM_APP_KEY, vk == 'A' ? 0x141 : 0x143, 0);
+        return true;
+    }
     if (!altGr && ((GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000))) return false;
     bool searching = (g_view == VIEW_SEARCH) || g_charmOpen || g_namingGroup >= 0;
     if (searching && (vk == VK_BACK || vk == VK_RETURN || vk == VK_UP || vk == VK_DOWN ||
@@ -9174,12 +10694,12 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
 
 static LRESULT CALLBACK CharmMouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION) {
+        const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
         switch (wp) {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
         case WM_XBUTTONDOWN: {
-            const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
             if (m && g_wnd)
                 PostMessageW(g_wnd, WM_APP_CHARM_POINTER,
                              (WPARAM)(LONG_PTR)m->pt.x, (LPARAM)(LONG_PTR)m->pt.y);
@@ -9198,18 +10718,28 @@ static DWORD WINAPI HookThread(LPVOID) {
     g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, GetModuleHandleW(NULL), 0);
     if (g_hook) Wh_Log(L"Keyboard hook installed");
     else Wh_Log(L"SetWindowsHookEx failed, error %u", (unsigned)GetLastError());
+    // Watch for the StartAllBack Start button; the first check runs right away. For a thread timer
+    // SetTimer ignores nIDEvent and returns the ID that WM_TIMER will carry, so that one is kept.
+    UINT_PTR orbTimer = 0;
+    UINT orbPeriod = 0;
+    auto refreshOrb = [&orbTimer, &orbPeriod]() {
+        const UINT period = RefreshStartOrb();
+        if (period != orbPeriod || !orbTimer) {
+            if (orbTimer) KillTimer(NULL, orbTimer);
+            orbTimer = SetTimer(NULL, 0, period, NULL);
+            orbPeriod = period;
+        }
+    };
+    refreshOrb();
     while (GetMessageW(&m, NULL, 0, 0) > 0) {
-        if (m.message == WM_HOOKCTL_MOUSE_ON) {
-            if (!g_mouseHook) g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CharmMouseProc, GetModuleHandleW(NULL), 0);
-            continue;
-        }
-        if (m.message == WM_HOOKCTL_MOUSE_OFF) {
-            if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = NULL; }
-            continue;
-        }
+        if (m.message == WM_HOOKCTL_MOUSE_ON) { SetMouseHookBit(1, true); continue; }
+        if (m.message == WM_HOOKCTL_MOUSE_OFF) { SetMouseHookBit(1, false); continue; }
+        if (m.message == WM_TIMER && m.hwnd == NULL && orbTimer && m.wParam == orbTimer) { refreshOrb(); continue; }
+        if (m.message == WM_HOOKCTL_ORB_REFRESH) { refreshOrb(); continue; }
         TranslateMessage(&m);
         DispatchMessageW(&m);
     }
+    if (orbTimer) KillTimer(NULL, orbTimer);
     if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = NULL; }
     if (g_hook) UnhookWindowsHookEx(g_hook);
     g_hook = NULL;
@@ -9305,6 +10835,9 @@ static void InitTiles() {
 }
 
 static void UiRun() {
+    // Nothing below may run while a third-party shell is still building the taskbar. This is a
+    // no-op unless StartAllBack or ExplorerPatcher is installed (see ShellCompatActive).
+    WaitForShellSettle();
     g_uiCoInit = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
     DetectUiLanguage();
     Gdiplus::GdiplusStartupInput gdipInput;
@@ -9377,7 +10910,6 @@ static void UiRun() {
 }
 
 static void UiTeardown() {
-
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
     if (g_logonStop) { CloseHandle(g_logonStop); g_logonStop = NULL; }
@@ -9396,6 +10928,12 @@ static void UiTeardown() {
     g_pendingApps = NULL;
     delete g_pendingFiles;
     g_pendingFiles = NULL;
+    delete g_pendingSettings;
+    g_pendingSettings = NULL;
+    delete[] g_sharedSettingsPx;
+    g_sharedSettingsPx = NULL;
+    g_settingsCache.clear();
+    g_settingsBuilt = false;
     if (g_wallStop) SetEvent(g_wallStop);
     if (g_wallWake) SetEvent(g_wallWake);
     if (g_wallThread) {
@@ -9419,6 +10957,10 @@ static void UiTeardown() {
         WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread); g_hookThread = NULL;
     }
+    // The subclass procedure lives in this DLL, so it must be gone before the DLL is unmapped. The
+    // hook thread, the only other thread that adds subclasses, has been joined above, so nothing can
+    // add one after this.
+    RemoveOrbSubclasses();
     if (g_hookReady) { CloseHandle(g_hookReady); g_hookReady = NULL; }
     if (g_wnd) DestroyWindow(g_wnd);
     g_wnd = NULL;
@@ -9436,7 +10978,7 @@ static void UiTeardown() {
     if (g_writeFactory) { g_writeFactory->Release(); g_writeFactory = NULL; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = NULL; }
     for (int i = 0; i < g_tileCount; i++) FreeTile(g_tiles[i]);
-    HFONT* fonts[] = { &g_fTitle, &g_fUser, &g_fLabel, &g_fTopLabel, &g_fHdrGlyph, &g_fBarMeas };
+    HFONT* fonts[] = { &g_fTitle, &g_fUser, &g_fLabel, &g_fLabelMedium, &g_fTopLabel, &g_fHdrGlyph, &g_fBarMeas };
     for (HFONT* f : fonts) if (*f) { DeleteObject(*f); *f = NULL; }
     if (g_stockAppIcon) { DestroyIcon(g_stockAppIcon); g_stockAppIcon = NULL; }
     UnregisterUserMenuClass();
@@ -9485,13 +11027,9 @@ static void LoadSettings() {
         WindhawkUtils::StringSetting mode(WindhawkUtils::StringSetting::make(L"interceptMode"));
         g_keyboardOnly = wcscmp(mode.get(), L"keyboard") == 0;
     }
-    LONG openMs = Wh_GetIntSetting(L"openSlideMs");
     LONG closeMs = Wh_GetIntSetting(L"closeSlideMs");
-    if (openMs < 80) openMs = 80;
-    if (openMs > 3000) openMs = 3000;
     if (closeMs < 80) closeMs = 80;
     if (closeMs > 3000) closeMs = 3000;
-    InterlockedExchange(&g_openSlideMs, openMs);
     InterlockedExchange(&g_closeSlideMs, closeMs);
     WindhawkUtils::StringSetting bgModeStr(WindhawkUtils::StringSetting::make(L"backgroundMode"));
     LONG bgMode = 0;
@@ -9548,6 +11086,44 @@ static void LoadSettings() {
     bool chromeChanged = false;
     if (InterlockedExchange(&g_privacyMode, priv) != priv) { g_userTextW = -1; chromeChanged = true; }
     if (InterlockedExchange(&g_appTileColors, appc) != appc) { InterlockedExchange(&g_tileColorsDirty, 1); chromeChanged = true; }
+    {
+        // Windows 8/8.1 tile shading.
+        const LONG grad = Wh_GetIntSetting(L"tileGradients") != 0 ? 1 : 0;
+        const LONG overArt = Wh_GetIntSetting(L"gradientOverArt") != 0 ? 1 : 0;
+        LONG strength = 0;   // subtle, unless the setting says otherwise
+        {
+            WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"tileGradientStrength"));
+            if (wcscmp(value.get(), L"subtle") == 0) strength = 0;
+            else if (wcscmp(value.get(), L"normal") == 0) strength = 1;
+            else if (wcscmp(value.get(), L"strong") == 0) strength = 2;
+        }
+        if (InterlockedExchange(&g_tileGradient, grad) != grad) chromeChanged = true;
+        if (InterlockedExchange(&g_tileGradientStrength, strength) != strength) chromeChanged = true;
+        if (InterlockedExchange(&g_gradientOverArt, overArt) != overArt) chromeChanged = true;
+    }
+    {
+        // Third-party shell compatibility. These are read at sign-in and when Explorer starts.
+        InterlockedExchange(&g_shellPatch, DetectThirdPartyShell());
+        LONG mode = SHELL_COMPAT_AUTO;
+        WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"shellCompat"));
+        if (wcscmp(value.get(), L"always") == 0) mode = SHELL_COMPAT_ALWAYS;
+        else if (wcscmp(value.get(), L"never") == 0) mode = SHELL_COMPAT_NEVER;
+        const LONG oldMode = InterlockedExchange(&g_shellCompat, mode);
+        LONG delay = Wh_GetIntSetting(L"startupDelayMs");
+        if (delay < 0) delay = 0;
+        if (delay > 60000) delay = 60000;
+        const LONG oldDelay = InterlockedExchange(&g_startupDelayMs, delay);
+        const LONG defer = Wh_GetIntSetting(L"deferStartHook") != 0 ? 1 : 0;
+        const LONG oldDefer = InterlockedExchange(&g_deferStartHook, defer);
+        const LONG startButton = Wh_GetIntSetting(L"startButtonHook") != 0 ? 1 : 0;
+        if (InterlockedExchange(&g_startButtonHook, startButton) != startButton && g_hookTid)
+            PostThreadMessageW(g_hookTid, WM_HOOKCTL_ORB_REFRESH, 0, 0);   // apply it right away
+        // These three decide what happens while Explorer starts, so they only take effect the
+        // next time Explorer starts; say so instead of silently ignoring the change.
+        if (oldMode != mode || oldDelay != delay || oldDefer != defer)
+            Wh_Log(L"Shell compatibility settings changed (mode=%d delay=%d deferLoad=%d): they apply the next time Explorer starts",
+                   (int)mode, (int)delay, (int)defer);
+    }
     if ((bgChanged || chromeChanged) && g_wnd)
         PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
 }
@@ -9587,7 +11163,11 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Not the shell explorer.exe; not hosting the Start screen here");
             return FALSE;
         }
+        InterlockedExchange(&g_shellPatch, DetectThirdPartyShell());
         LoadSettings();
+        if (g_shellPatch) Wh_Log(L"Third-party shell present (mask 0x%X): compatibility mode is %ls",
+                                (unsigned)g_shellPatch,
+                                ShellCompatActive() ? L"active" : L"inactive");
         g_uiReady = CreateEventW(NULL, TRUE, FALSE, NULL);
         g_uiStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_uiReady && g_uiStop) g_thread = CreateThread(NULL, 0, UiThread, NULL, 0, &g_tid);
@@ -9596,8 +11176,33 @@ BOOL Wh_ModInit() {
             if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
             return FALSE;
         }
-        if (!g_keyboardOnly) g_startHooked = InstallStartHook();
         return TRUE;
+    });
+}
+
+// The Start menu hook is installed in the background, never from Wh_ModInit: that runs before
+// Explorer has built its shell, and StartAllBack/ExplorerPatcher need it for themselves. The thread
+// starts here because Wh_ApplyHookOperations can't be called before Wh_ModInit returns, and it is
+// stopped in Wh_ModBeforeUninit because no hook can be set or applied after that returns. See
+// StartHookThread.
+void Wh_ModAfterInit() {
+    RunGuarded(L"ModAfterInit", [] {
+        if (g_keyboardOnly || !g_thread) return;
+        g_startHookStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (g_startHookStop) g_startHookThread = CreateThread(NULL, 0, StartHookThread, NULL, 0, NULL);
+        if (!g_startHookThread)
+            Wh_Log(L"Couldn't create the Start hook thread; the keyboard hook is the only way to open the Start screen");
+    });
+}
+
+void Wh_ModBeforeUninit() {
+    RunGuarded(L"ModBeforeUninit", [] {
+        if (g_startHookStop) SetEvent(g_startHookStop);
+        if (g_startHookThread) {
+            WaitForSingleObject(g_startHookThread, INFINITE);
+            CloseHandle(g_startHookThread);
+            g_startHookThread = NULL;
+        }
     });
 }
 
@@ -9614,5 +11219,7 @@ void Wh_ModUninit() {
         }
         if (g_uiReady) { CloseHandle(g_uiReady); g_uiReady = NULL; }
         if (g_uiStop) { CloseHandle(g_uiStop); g_uiStop = NULL; }
+        // Checked by the UI thread too (StopRequested), so it is closed only now.
+        if (g_startHookStop) { CloseHandle(g_startHookStop); g_startHookStop = NULL; }
     });
 }
