@@ -2262,8 +2262,10 @@ class Panel {
     void apply_caption() {
         if (!window_) return;
         using DwmSetFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-        static const auto set_attribute = reinterpret_cast<DwmSetFn>(
-            [] { const auto module = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); return module ? GetProcAddress(module, "DwmSetWindowAttribute") : nullptr; }());
+        static const auto set_attribute = reinterpret_cast<DwmSetFn>([] {
+            const auto module = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            return module ? GetProcAddress(module, "DwmSetWindowAttribute") : nullptr;
+        }());
         if (!set_attribute) return;
         constexpr DWORD dark_attribute = 20, border_attribute = 34, caption_attribute = 35, corner_attribute = 33;
         const DWORD corner = high_contrast_ ? 0 : 2; // DWMWCP_ROUND
@@ -2276,8 +2278,10 @@ class Panel {
     }
     void apply_control_themes() {
         using SetWindowThemeFn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-        static const auto set_theme = reinterpret_cast<SetWindowThemeFn>(
-            [] { const auto module = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); return module ? GetProcAddress(module, "SetWindowTheme") : nullptr; }());
+        static const auto set_theme = reinterpret_cast<SetWindowThemeFn>([] {
+            const auto module = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            return module ? GetProcAddress(module, "SetWindowTheme") : nullptr;
+        }());
         apply_caption();
         if (!set_theme) return;
         const bool dark = dark_ && !high_contrast_;
@@ -2399,7 +2403,14 @@ class Panel {
         ShowWindow(empty_, state == 2 ? SW_SHOW : SW_HIDE);
         const int detail_top = state == 0 ? 732 : 680, detail_height = 16 * lines;
         const int end = state == 0 || state == 1 ? detail_top + detail_height : 668;
-        const auto place = [&](HWND handle, int y, int height = 0) { for (auto& item : items_) if (item.handle == handle) { item.y = y; if (height) item.height = height; } };
+        const auto place = [&](HWND handle, int y, int height = 0) {
+            for (auto& item : items_) {
+                if (item.handle == handle) {
+                    item.y = y;
+                    if (height) item.height = height;
+                }
+            }
+        };
         if (state != 2) place(detail_, detail_top, detail_height);
         else { place(status_, 648); place(detail_, 648, detail_height); }
         if (state != 0) place(countdown_, state == 1 ? 680 : 648); // hidden, kept inside the content area
@@ -2709,7 +2720,9 @@ class Panel {
                     const auto civil = record->kind == ScheduleKind::Once ? calendar_.local(record->due_utc_ms).value_or(record->civil) : record->civil;
                     SYSTEMTIME selected{};
                     selected.wYear = static_cast<WORD>(civil.year); selected.wMonth = static_cast<WORD>(civil.month);
-                    selected.wDay = static_cast<WORD>(civil.day); selected.wHour = static_cast<WORD>(civil.hour); selected.wMinute = static_cast<WORD>(civil.minute);
+                    selected.wDay = static_cast<WORD>(civil.day);
+                    selected.wHour = static_cast<WORD>(civil.hour);
+                    selected.wMinute = static_cast<WORD>(civil.minute);
                     DateTime_SetSystemtime(date_, GDT_VALID, &selected); DateTime_SetSystemtime(time_, GDT_VALID, &selected);
                     for (unsigned i = 0; i < 7; ++i) SendMessageW(days_[i], BM_SETCHECK, record->weekdays & (1u << i) ? BST_CHECKED : BST_UNCHECKED, 0);
                 }
