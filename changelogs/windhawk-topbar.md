@@ -1,3 +1,13 @@
+## 1.4.3 ([Oct 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7ed9023b39470e6aa728949f1b38aa5e5dd8dc77/mods/windhawk-topbar.wh.cpp))
+
+**Fixes:**
+* Fixed the TopBar appearing over full-screen apps during the first 30 seconds after startup.
+* Fixed Search vertically misaligned the first time it opens.
+* Fixed startup styling glitches, including the Start button’s icon color theme styling(disappearing in Neon Blue Theme).
+
+**Updates:**
+* Icon only mode in task buttons no longer shrink when soo many apps are opened.(may appear behind center panel items when too many apps are open)
+
 ## 1.4.2 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fb4b682804d2a506db5efda8d58bf5159580a812/mods/windhawk-topbar.wh.cpp))
 
 **Addition:**
