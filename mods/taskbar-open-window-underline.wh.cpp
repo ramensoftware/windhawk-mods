@@ -51,7 +51,9 @@ the title fallback has no label text to work with, and those buttons stay
 plain.
 
 Hide the running indicator: hides the taskbar's own indicator under running
-buttons, so that the underline is the only cue. Independent of the icon
+buttons, so that the underline is the only cue. The same element also marks
+the active window (the wider accent-colored line) and, on some builds,
+attention requests, so those markers go with it. Independent of the icon
 underline.
 
 How it works:
@@ -120,7 +122,9 @@ How it works:
   $name: Hide the running indicator
   $description: >-
     Hides the taskbar's own indicator under running buttons, so the underline
-    is the only cue. Works with or without the icon underline.
+    is the only cue. The same element marks the active window (the wider
+    accent-colored line) and, on some builds, attention requests, so those
+    markers disappear with it. Works with or without the icon underline.
 - iconUnderline:
   - enabled: false
     $name: Enabled
@@ -438,11 +442,12 @@ std::unordered_map<void*, winrt::weak_ref<Xaml::Controls::Image>> g_icons;
 std::unordered_map<void*, winrt::weak_ref<Xaml::UIElement>> g_indicators;
 
 // The icon colors in use, resolved once and kept until the settings, the
-// system theme or the accent color change. The accent color is tracked with
+// system theme or the accent color change. Both changes are tracked with
 // UISettings::ColorValuesChanged (raised on a worker thread, which only sets
-// the dirty flag and nudges the event thread); the theme is a registry value
-// that is re-read on every evaluation, which is cheap and also covers a theme
-// switch that doesn't raise that event.
+// the dirty flag and nudges the event thread for a pass); the theme is also
+// compared against its registry value on every evaluation, which is cheap and
+// keeps a pass that runs before the event is handled from caching stale
+// colors.
 [[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings
     g_uiSettings{nullptr};
 winrt::event_token g_colorValuesChangedToken;
@@ -1527,10 +1532,11 @@ bool IsSystemLightTheme() {
     return false;
 }
 
-// Starts tracking the accent color, the first time it is needed. The event is
-// raised on a worker thread; it only marks the cached colors dirty and asks
-// the event thread for a refresh pass, which recomputes them on the taskbar
-// thread.
+// Starts tracking the system colors, the first time the icon underline is
+// evaluated. ColorValuesChanged is raised for accent changes and for the
+// system light/dark switch, on a worker thread; it only marks the cached
+// colors dirty and asks the event thread for a refresh pass, which recomputes
+// them on the taskbar thread.
 void EnsureTrackingColors() {
     if (g_uiSettings) {
         return;
@@ -1558,6 +1564,10 @@ void StopTrackingColors() {
 // current theme, or the accent color when none is configured. Cached; see
 // g_iconColors.
 const std::vector<winrt::Windows::UI::Color>& ResolveIconColors() {
+    // Subscribed whether or not the accent color is in use, so a theme switch
+    // triggers a pass for custom light|dark colors too.
+    EnsureTrackingColors();
+
     bool lightTheme = IsSystemLightTheme();
     if (g_iconColors && !g_iconColorsDirty.exchange(false) &&
         lightTheme == g_iconColorsLightTheme) {
@@ -1570,7 +1580,6 @@ const std::vector<winrt::Windows::UI::Color>& ResolveIconColors() {
         g_iconColors = list;
     } else {
         using namespace winrt::Windows::UI::ViewManagement;
-        EnsureTrackingColors();
         g_iconColors = std::vector<winrt::Windows::UI::Color>{
             g_uiSettings.GetColorValue(UIColorType::Accent)};
     }
@@ -1669,8 +1678,7 @@ void EnsureIconClip(const Composition::SpriteVisual& sprite,
     }
 
     auto compositor = sprite.Compositor();
-    auto geometry = compositor.as<Composition::ICompositor5>()
-                        .CreateRoundedRectangleGeometry();
+    auto geometry = compositor.CreateRoundedRectangleGeometry();
     geometry.CornerRadius({s.cornerRadius, s.cornerRadius});
 
     auto size = compositor.CreateExpressionAnimation(
@@ -1680,8 +1688,7 @@ void EnsureIconClip(const Composition::SpriteVisual& sprite,
     size.SetScalarParameter(L"thickness", s.thickness);
     geometry.StartAnimation(L"Size", size);
 
-    auto clip =
-        compositor.as<Composition::ICompositor6>().CreateGeometricClip(geometry);
+    auto clip = compositor.CreateGeometricClip(geometry);
     clip.Comment(signature);
     sprite.Clip(clip);
 }
