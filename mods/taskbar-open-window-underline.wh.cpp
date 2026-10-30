@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-open-window-underline
 // @name            Taskbar Open Window Underline
-// @description     Underlines the labels of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance
-// @version         1.0
+// @description     Underlines the labels (and optionally the icons) of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance
+// @version         2.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -28,12 +28,21 @@ open in front of you.
 Requirements:
 
 * Windows 11 with the XAML taskbar (22H2 or newer).
-* Taskbar labels must be visible: Settings → Personalization → Taskbar →
-  Taskbar behaviors → "Combine taskbar buttons and hide labels" set to
-  **Never** (or **When taskbar is full**). The "Show labels, combine taskbar
-  buttons" mode of the Taskbar Labels mod is supported as well; a combined
-  group is underlined when any (or, optionally, every) one of its windows is
-  shown.
+* For the label underline, taskbar labels must be visible: Settings →
+  Personalization → Taskbar → Taskbar behaviors → "Combine taskbar buttons and
+  hide labels" set to **Never** (or **When taskbar is full**). The "Show
+  labels, combine taskbar buttons" mode of the Taskbar Labels mod is supported
+  as well; a combined group is underlined when any (or, optionally, every) one
+  of its windows is shown.
+
+Icon underline (experimental): the "Icon underline" section adds a line under
+the button's icon with the same rule, for taskbars that hide their labels or
+as a stronger cue next to the label. Its thickness, width, distance from the
+icon, color and opacity are configurable; the color can differ between the
+light and dark theme, can be a horizontal gradient, and defaults to the system
+accent color. Icons aren't text, so this line is a composition visual attached
+to the icon element; it follows the icon's size and position without touching
+the taskbar's layout.
 
 How it works:
 
@@ -50,6 +59,9 @@ How it works:
 * The underline is the native `TextBlock` underline, so it follows the text
   color, trimming and theme. It can cover the whole label or just its first
   letter. It is removed when the mod is disabled.
+* The icon underline is a `SpriteVisual` attached to the `Image#Icon` element
+  with `ElementCompositionPreview::SetElementChildVisual`, sized relative to
+  the icon so it needs no layout work. It is removed when the mod is disabled.
 * On builds where the view-model symbols can't be resolved, the mod falls back
   to matching label text against window titles, which is exact for "Never
   combine" but blind to combined groups.
@@ -91,6 +103,34 @@ How it works:
   $description: >-
     Window-state events are coalesced for this long before the buttons are
     re-evaluated. Win+M and Win+D fire dozens of events at once.
+- iconUnderline:
+  - enabled: false
+    $name: Enabled
+    $description: >-
+      Draws a line under the button's icon with the same rule as the label
+      underline. Works when labels are hidden, too.
+  - thickness: 2
+    $name: Thickness (px)
+  - widthPercent: 100
+    $name: Width (% of the icon width)
+    $description: >-
+      100 matches the icon; smaller values center a shorter line under it,
+      larger values extend past it.
+  - offset: 2
+    $name: Distance from the icon (px)
+    $description: >-
+      Gap between the bottom of the icon and the line. Negative values move
+      the line up over the icon.
+  - color: ""
+    $name: Color
+    $description: >-
+      Hex color code. Supports Light | Dark separation (e.g.
+      '#000000|#FFFFFF') and multi-color horizontal gradients (e.g.
+      '#FF0000,#00FF00'). Both can be combined ('light1,light2|dark1,dark2').
+      Leave empty to use the system accent color.
+  - opacity: 100
+    $name: Opacity (%)
+  $name: Icon underline (experimental)
 */
 // ==/WindhawkModSettings==
 
@@ -111,11 +151,15 @@ How it works:
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Documents.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.h>
 
 // The taskbar items live in a WinUI 2 ItemsRepeater built on system XAML;
 // its projection is needed to ask the repeater which item a button shows.
@@ -123,6 +167,7 @@ How it works:
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 namespace Xaml = winrt::Windows::UI::Xaml;
+namespace Composition = winrt::Windows::UI::Composition;
 using winrt::Windows::UI::Text::TextDecorations;
 
 #ifndef EVENT_OBJECT_CLOAKED
@@ -148,6 +193,18 @@ enum class Mode { kOpen, kMinimized };
 enum class UnderlineStyle { kFull, kFirstLetter };
 enum class GroupRule { kAny, kAll };
 
+struct IconUnderlineSettings {
+    bool enabled;
+    float thickness;
+    float widthFraction;
+    float offset;
+    // Colors for the light and the dark system theme. One color is a solid
+    // line, several make a horizontal gradient, none means the accent color.
+    std::vector<winrt::Windows::UI::Color> lightColors;
+    std::vector<winrt::Windows::UI::Color> darkColors;
+    float opacity;
+};
+
 // Read on the taskbar thread and the event thread; written on the taskbar
 // thread (LoadSettings runs there via RunFromWindowThread) and, before any
 // hook is applied, in Wh_ModInit.
@@ -158,7 +215,109 @@ struct {
     bool includeActive;
     bool cloakedIsHidden;
     int refreshDelayMs;
+    IconUnderlineSettings iconUnderline;
 } g_settings;
+
+std::wstring_view TrimSpaces(std::wstring_view text) {
+    while (!text.empty() && text.front() == L' ') {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && text.back() == L' ') {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
+// Parses "#RRGGBB" or "#AARRGGBB" (the '#' is optional). Returns false for
+// anything else, including an empty string.
+bool ParseColor(std::wstring_view text, winrt::Windows::UI::Color* color) {
+    text = TrimSpaces(text);
+    if (!text.empty() && text.front() == L'#') {
+        text.remove_prefix(1);
+    }
+
+    size_t length = text.size();
+    if (length != 6 && length != 8) {
+        return false;
+    }
+
+    uint32_t value = 0;
+    for (size_t i = 0; i < length; i++) {
+        wchar_t c = text[i];
+        uint32_t digit;
+        if (c >= L'0' && c <= L'9') {
+            digit = c - L'0';
+        } else if (c >= L'a' && c <= L'f') {
+            digit = c - L'a' + 10;
+        } else if (c >= L'A' && c <= L'F') {
+            digit = c - L'A' + 10;
+        } else {
+            return false;
+        }
+        value = (value << 4) | digit;
+    }
+
+    if (length == 6) {
+        value |= 0xFF000000;
+    }
+
+    color->A = static_cast<uint8_t>(value >> 24);
+    color->R = static_cast<uint8_t>(value >> 16);
+    color->G = static_cast<uint8_t>(value >> 8);
+    color->B = static_cast<uint8_t>(value);
+    return true;
+}
+
+// Parses a comma-separated list of colors. An empty list is valid (it means
+// "accent color"); a list with an unparsable entry is not.
+bool ParseColorList(std::wstring_view text,
+                    std::vector<winrt::Windows::UI::Color>* colors) {
+    colors->clear();
+    text = TrimSpaces(text);
+    if (text.empty()) {
+        return true;
+    }
+
+    while (true) {
+        size_t comma = text.find(L',');
+        std::wstring_view token =
+            comma == std::wstring_view::npos ? text : text.substr(0, comma);
+
+        winrt::Windows::UI::Color color;
+        if (!ParseColor(token, &color)) {
+            colors->clear();
+            return false;
+        }
+        colors->push_back(color);
+
+        if (comma == std::wstring_view::npos) {
+            return true;
+        }
+        text = text.substr(comma + 1);
+    }
+}
+
+// Parses the color setting: "light|dark", each side a color list. Without a
+// '|' both themes share the list.
+void ParseIconColorSetting(const wchar_t* text, IconUnderlineSettings* icon) {
+    std::wstring_view spec = text ? text : L"";
+    size_t bar = spec.find(L'|');
+    std::wstring_view lightSpec =
+        bar == std::wstring_view::npos ? spec : spec.substr(0, bar);
+    std::wstring_view darkSpec =
+        bar == std::wstring_view::npos ? spec : spec.substr(bar + 1);
+
+    if (!ParseColorList(lightSpec, &icon->lightColors) ||
+        !ParseColorList(darkSpec, &icon->darkColors)) {
+        Wh_Log(L"Icon underline color not recognized: %s", spec.data());
+        icon->lightColors.clear();
+        icon->darkColors.clear();
+    }
+}
+
+int ClampInt(int value, int min, int max) {
+    return value < min ? min : (value > max ? max : value);
+}
 
 void LoadSettings() {
     auto mode = WindhawkUtils::StringSetting::make(L"mode");
@@ -178,13 +337,22 @@ void LoadSettings() {
     g_settings.includeActive = Wh_GetIntSetting(L"includeActive") != 0;
     g_settings.cloakedIsHidden = Wh_GetIntSetting(L"cloakedIsHidden") != 0;
 
-    int delay = Wh_GetIntSetting(L"refreshDelayMs");
-    if (delay < 10) {
-        delay = 10;
-    } else if (delay > 2000) {
-        delay = 2000;
-    }
-    g_settings.refreshDelayMs = delay;
+    g_settings.refreshDelayMs =
+        ClampInt(Wh_GetIntSetting(L"refreshDelayMs"), 10, 2000);
+
+    IconUnderlineSettings& icon = g_settings.iconUnderline;
+    icon.enabled = Wh_GetIntSetting(L"iconUnderline.enabled") != 0;
+    icon.thickness = static_cast<float>(
+        ClampInt(Wh_GetIntSetting(L"iconUnderline.thickness"), 1, 20));
+    icon.widthFraction =
+        ClampInt(Wh_GetIntSetting(L"iconUnderline.widthPercent"), 1, 300) /
+        100.0f;
+    icon.offset = static_cast<float>(
+        ClampInt(Wh_GetIntSetting(L"iconUnderline.offset"), -64, 64));
+    auto color = WindhawkUtils::StringSetting::make(L"iconUnderline.color");
+    ParseIconColorSetting(color.get(), &icon);
+    icon.opacity =
+        ClampInt(Wh_GetIntSetting(L"iconUnderline.opacity"), 0, 100) / 100.0f;
 }
 
 // ============================================================================
@@ -222,6 +390,11 @@ struct LabelEntry {
     int64_t textChangedToken;
 };
 std::unordered_map<void*, LabelEntry> g_labels;
+
+// Every icon Image we attached an underline visual to, so the visual can be
+// detached when the mod unloads. The visual itself is not kept here; it is
+// found again through the element and recognized by its Comment.
+std::unordered_map<void*, winrt::weak_ref<Xaml::Controls::Image>> g_icons;
 
 // ============================================================================
 // Running code on the taskbar thread
@@ -389,18 +562,29 @@ WindowSnapshot BuildWindowSnapshot() {
     return snapshot;
 }
 
-// Builds the title snapshot on first use only; the view-model bridge doesn't
-// need it at all.
-struct LazyWindowSnapshot {
-    const WindowSnapshot& get() {
+std::vector<winrt::Windows::UI::Color> ResolveIconColors();
+
+// Per-pass state shared by every button evaluated in one refresh. Both parts
+// are built on first use only: the title snapshot isn't needed at all with
+// the view-model bridge, and the icon colors only with the icon underline.
+struct EvalContext {
+    const WindowSnapshot& windows() {
         if (!snapshot) {
             snapshot.emplace(BuildWindowSnapshot());
         }
         return *snapshot;
     }
 
+    const std::vector<winrt::Windows::UI::Color>& iconColors() {
+        if (!colors) {
+            colors.emplace(ResolveIconColors());
+        }
+        return *colors;
+    }
+
    private:
     std::optional<WindowSnapshot> snapshot;
+    std::optional<std::vector<winrt::Windows::UI::Color>> colors;
 };
 
 bool IsWindowShown(HWND hwnd) {
@@ -929,6 +1113,48 @@ Xaml::Controls::TextBlock FindLabelControl(const Xaml::DependencyObject& root,
     return nullptr;
 }
 
+// The button's icon: `Image#Icon` under `Grid#IconPanel` (hidden labels) or
+// `Taskbar.TaskListLabeledButtonPanel#IconPanel` (labels shown). Falls back
+// to the first Image that isn't the overlay icon, for templates that name it
+// differently.
+Xaml::Controls::Image FindIconImage(const Xaml::DependencyObject& root,
+                                    Xaml::Controls::Image* fallback,
+                                    int depth = 0) {
+    if (depth > 12) {
+        return nullptr;
+    }
+
+    int count = Xaml::Media::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; i++) {
+        auto child = Xaml::Media::VisualTreeHelper::GetChild(root, i);
+
+        if (auto image = child.try_as<Xaml::Controls::Image>()) {
+            auto name = image.Name();
+            if (name == L"Icon") {
+                return image;
+            }
+            if (!*fallback && name != L"OverlayIcon") {
+                *fallback = image;
+            }
+            continue;
+        }
+
+        if (auto found = FindIconImage(child, fallback, depth + 1)) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
+Xaml::Controls::Image FindIconImage(const Xaml::DependencyObject& root) {
+    Xaml::Controls::Image fallback = nullptr;
+    if (auto icon = FindIconImage(root, &fallback)) {
+        return icon;
+    }
+    return fallback;
+}
+
 // The TaskListButton that owns a LabelControl, or null.
 Xaml::FrameworkElement FindOwningTaskListButton(
     const Xaml::DependencyObject& element) {
@@ -946,8 +1172,7 @@ Xaml::FrameworkElement FindOwningTaskListButton(
 // Renderer (taskbar thread only)
 // ============================================================================
 
-void ApplyToButton(const Xaml::FrameworkElement& button,
-                   LazyWindowSnapshot& snapshot);
+void ApplyToButton(const Xaml::FrameworkElement& button, EvalContext& context);
 
 // Set while a label's text is re-set to rebuild its layout, so the Text
 // callback below ignores that write.
@@ -979,8 +1204,8 @@ bool EnsureLabelTracked(const Xaml::Controls::TextBlock& label) {
 
             try {
                 if (auto button = FindOwningTaskListButton(sender)) {
-                    LazyWindowSnapshot snapshot;
-                    ApplyToButton(button, snapshot);
+                    EvalContext context;
+                    ApplyToButton(button, context);
                 }
             } catch (const winrt::hresult_error& e) {
                 Wh_Log(L"Text change handler error: %08X",
@@ -1199,17 +1424,201 @@ void ApplyUnderline(const Xaml::Controls::TextBlock& label, bool underline) {
     SetLabelUnderline(label, underline, /*forceRebuild=*/firstSeen);
 }
 
-void ApplyToButton(const Xaml::FrameworkElement& button,
-                   LazyWindowSnapshot& snapshot) {
+// ----------------------------------------------------------------------------
+// Icon underline
+// ----------------------------------------------------------------------------
+//
+// An Image can't carry a text decoration, so the icon's line is a composition
+// SpriteVisual attached to the Image element as its child visual. Its size and
+// position are expressed relative to the element (RelativeSizeAdjustment /
+// RelativeOffsetAdjustment), so it follows the icon through resizes and DPI
+// changes without any layout code or SizeChanged handlers, and it never
+// enters the taskbar's own layout.
+
+// Marks the visuals this mod created, so they can be told apart from a child
+// visual another mod may have attached to the same element.
+constexpr wchar_t kIconVisualComment[] = L"TaskbarOpenWindowUnderline";
+
+// The taskbar follows the system theme (not the app theme), which is this
+// registry value.
+bool IsSystemLightTheme() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
+                     L"Personalize",
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) == ERROR_SUCCESS) {
+        return value != 0;
+    }
+    return false;
+}
+
+winrt::Windows::UI::Color AccentColor() {
+    using namespace winrt::Windows::UI::ViewManagement;
+    return UISettings().GetColorValue(UIColorType::Accent);
+}
+
+// The colors the line should use right now: the configured list for the
+// current theme, or the accent color when none is configured.
+std::vector<winrt::Windows::UI::Color> ResolveIconColors() {
+    const IconUnderlineSettings& s = g_settings.iconUnderline;
+    const auto& list = IsSystemLightTheme() ? s.lightColors : s.darkColors;
+    if (list.empty()) {
+        return {AccentColor()};
+    }
+    return list;
+}
+
+// Gives `sprite` a brush for `colors`: a color brush for one, a horizontal
+// linear gradient for several. The color list is recorded in the brush's
+// Comment, so an unchanged list keeps the existing brush instead of
+// building a new one on every evaluation.
+void EnsureIconBrush(const Composition::SpriteVisual& sprite,
+                     const std::vector<winrt::Windows::UI::Color>& colors) {
+    std::wstring signature;
+    for (const auto& c : colors) {
+        wchar_t hex[12];
+        swprintf_s(hex, L"%02X%02X%02X%02X,", c.A, c.R, c.G, c.B);
+        signature += hex;
+    }
+
+    auto current = sprite.Brush();
+    if (current && current.Comment() == signature) {
+        return;
+    }
+
+    auto compositor = sprite.Compositor();
+    Composition::CompositionBrush brush{nullptr};
+    if (colors.size() == 1) {
+        brush = compositor.CreateColorBrush(colors[0]);
+    } else {
+        auto gradient = compositor.CreateLinearGradientBrush();
+        gradient.StartPoint({0.0f, 0.0f});
+        gradient.EndPoint({1.0f, 0.0f});
+        auto stops = gradient.ColorStops();
+        for (size_t i = 0; i < colors.size(); i++) {
+            float offset = static_cast<float>(i) / (colors.size() - 1);
+            stops.Append(compositor.CreateColorGradientStop(offset, colors[i]));
+        }
+        brush = gradient;
+    }
+    brush.Comment(signature);
+    sprite.Brush(brush);
+}
+
+// Returns this mod's underline visual for `icon`, creating it on first use.
+// Null if the element already has a child visual that isn't ours.
+Composition::SpriteVisual GetOrCreateIconVisual(
+    const Xaml::Controls::Image& icon) {
+    using Xaml::Hosting::ElementCompositionPreview;
+
+    if (auto existing = ElementCompositionPreview::GetElementChildVisual(icon)) {
+        if (existing.Comment() == kIconVisualComment) {
+            return existing.try_as<Composition::SpriteVisual>();
+        }
+        LogOnce(L"Icon already has a child visual from elsewhere; "
+                L"icon underline skipped for it");
+        return nullptr;
+    }
+
+    auto compositor =
+        ElementCompositionPreview::GetElementVisual(icon).Compositor();
+    auto sprite = compositor.CreateSpriteVisual();
+    sprite.Comment(kIconVisualComment);
+    sprite.IsVisible(false);
+    ElementCompositionPreview::SetElementChildVisual(icon, sprite);
+
+    void* key = winrt::get_abi(icon);
+    g_icons[key] = winrt::make_weak(icon);
+    return sprite;
+}
+
+// Applies the current icon-underline settings and visibility to `sprite`.
+// Cheap enough to run on every evaluation (property sets only; the brush is
+// rebuilt just when its colors change), which also makes settings and theme
+// changes take effect on the next pass without bookkeeping.
+void ConfigureIconVisual(const Composition::SpriteVisual& sprite,
+                         bool visible,
+                         EvalContext& context) {
+    const IconUnderlineSettings& s = g_settings.iconUnderline;
+
+    // Width as a fraction of the icon, centered under it; thickness and the
+    // gap below the icon in logical pixels.
+    sprite.Size({0.0f, s.thickness});
+    sprite.RelativeSizeAdjustment({s.widthFraction, 0.0f});
+    sprite.Offset({0.0f, s.offset, 0.0f});
+    sprite.RelativeOffsetAdjustment(
+        {(1.0f - s.widthFraction) / 2.0f, 1.0f, 0.0f});
+    sprite.Opacity(s.opacity);
+
+    EnsureIconBrush(sprite, context.iconColors());
+
+    sprite.IsVisible(visible);
+}
+
+// Detaches this mod's visual from `icon`, if it still has it.
+void RemoveIconVisual(const Xaml::Controls::Image& icon) {
+    using Xaml::Hosting::ElementCompositionPreview;
+    auto existing = ElementCompositionPreview::GetElementChildVisual(icon);
+    if (existing && existing.Comment() == kIconVisualComment) {
+        ElementCompositionPreview::SetElementChildVisual(icon, nullptr);
+    }
+}
+
+// Detaches every tracked icon visual (icon underline turned off, or unload).
+void RemoveAllIconVisuals() {
+    for (auto& [key, weakIcon] : g_icons) {
+        try {
+            if (auto icon = weakIcon.get()) {
+                RemoveIconVisual(icon);
+            }
+        } catch (...) {
+            Wh_Log(L"Icon visual removal error");
+        }
+    }
+    g_icons.clear();
+}
+
+void ApplyIconUnderline(const Xaml::FrameworkElement& button,
+                        bool underline,
+                        EvalContext& context) {
+    auto icon = FindIconImage(button);
+    if (!icon) {
+        LogOnce(L"Icon image not found in a TaskListButton");
+        return;
+    }
+
+    try {
+        if (auto sprite = GetOrCreateIconVisual(icon)) {
+            ConfigureIconVisual(sprite, underline, context);
+        }
+    } catch (const winrt::hresult_error& e) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            Wh_Log(L"Icon underline error: %08X",
+                   static_cast<unsigned int>(e.code()));
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Per-button evaluation
+// ----------------------------------------------------------------------------
+
+void ApplyToButton(const Xaml::FrameworkElement& button, EvalContext& context) {
     if (g_unloading) {
         return;
     }
 
     // The template may not be applied yet (fresh button) or the label may
     // have been collapsed/recreated (combine setting toggled); re-finding it
-    // every time keeps us honest.
+    // every time keeps us honest. With labels hidden there is no label at
+    // all, and only the icon underline applies.
     auto label = FindLabelControl(button);
-    if (!label) {
+    bool wantIcon = g_settings.iconUnderline.enabled;
+    if (!label && !wantIcon) {
         return;
     }
 
@@ -1224,9 +1633,13 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
     bool underline = false;
     if (resolved.state == ButtonWindowsState::kResolved) {
         underline = ShouldUnderline(resolved.windows);
-    } else if (const auto* byTitle =
-                   ResolveWindowsForLabel(label, snapshot.get())) {
-        underline = ShouldUnderline(*byTitle);
+    } else if (label) {
+        // The title fallback needs the label text; without labels an
+        // unresolved button stays plain.
+        if (const auto* byTitle =
+                ResolveWindowsForLabel(label, context.windows())) {
+            underline = ShouldUnderline(*byTitle);
+        }
     }
 
     // Logged once per outcome, since the first button evaluated can run
@@ -1240,7 +1653,12 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
         Wh_Log(L"Resolver in use: title matching (fallback)");
     }
 
-    ApplyUnderline(label, underline);
+    if (label) {
+        ApplyUnderline(label, underline);
+    }
+    if (wantIcon) {
+        ApplyIconUnderline(button, underline, context);
+    }
 }
 
 // ============================================================================
@@ -1298,7 +1716,7 @@ void RefreshTreesOnCurrentThread() {
         return;
     }
 
-    LazyWindowSnapshot snapshot;
+    EvalContext context;
 
     for (auto it = g_roots.begin(); it != g_roots.end();) {
         auto root = it->root.get();
@@ -1311,7 +1729,7 @@ void RefreshTreesOnCurrentThread() {
             std::vector<Xaml::FrameworkElement> buttons;
             CollectTaskListButtons(root, buttons);
             for (const auto& button : buttons) {
-                ApplyToButton(button, snapshot);
+                ApplyToButton(button, context);
             }
         } catch (const winrt::hresult_error& e) {
             Wh_Log(L"Refresh error: %08X", static_cast<unsigned int>(e.code()));
@@ -1329,16 +1747,27 @@ void RefreshTreesOnCurrentThread() {
             ++it;
         }
     }
+
+    for (auto it = g_icons.begin(); it != g_icons.end();) {
+        if (!it->second.get()) {
+            it = g_icons.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void WINAPI RefreshTreesProc(void*) {
     RefreshTreesOnCurrentThread();
 }
 
-// Removes every label's subscription and decoration, and forgets all
-// trees. Runs synchronously on the taskbar thread while unloading, so no
-// delegate implemented by the mod stays registered afterwards.
+// Removes every label's subscription and decoration and every icon visual,
+// and forgets all trees. Runs synchronously on the taskbar thread while
+// unloading, so no delegate implemented by the mod stays registered
+// afterwards.
 void WINAPI RestoreAndClearProc(void*) {
+    RemoveAllIconVisuals();
+
     for (auto& [key, entry] : g_labels) {
         try {
             if (auto label = entry.label.get()) {
@@ -1789,8 +2218,8 @@ void OnTaskListButtonUpdated(void* pThis) {
             // loaded, say): decorate everything in it.
             RefreshTreesOnCurrentThread();
         } else {
-            LazyWindowSnapshot snapshot;
-            ApplyToButton(element, snapshot);
+            EvalContext context;
+            ApplyToButton(element, context);
         }
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"TaskListButton hook error: %08X",
@@ -2061,6 +2490,9 @@ void Wh_ModUninit() {
 
 void WINAPI ReloadSettingsProc(void*) {
     LoadSettings();
+    if (!g_settings.iconUnderline.enabled) {
+        RemoveAllIconVisuals();
+    }
     RefreshTreesOnCurrentThread();
 }
 
