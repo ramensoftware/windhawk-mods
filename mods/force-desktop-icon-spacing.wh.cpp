@@ -2,9 +2,9 @@
 // @id              force-desktop-icon-spacing
 // @name            Force Desktop Icon Spacing
 // @name:zh-CN      强制桌面图标间距
-// @description     Precisely control the desktop icon grid spacing (X/Y) and the bottom margin above the taskbar. Event-driven, DPI-aware, absolute one-shot values: no drift, no window shifting, and the original spacing and height are restored on unload.
-// @description:zh-CN  精准控制桌面图标的水平/垂直网格间距，以及任务栏上方预留的底部空白边距。事件驱动、支持 DPI 缩放、一次性绝对到位：不叠加累积、不整体移动、顶部不产生空白，卸载自动还原间距与高度。
-// @version         1.1.1
+// @description     Set the desktop icon grid spacing (X/Y) and reserve a blank margin above the taskbar. Event-driven and DPI-aware; the original spacing and icon area height are restored when the mod is disabled.
+// @description:zh-CN  设置桌面图标的水平/垂直网格间距，并在任务栏上方预留底部空白边距。事件驱动、支持 DPI 缩放；停用模组后自动还原原始间距与图标区域高度。
+// @version         1.1.2
 // @author          Koewen
 // @github          https://github.com/Koewen
 // @include         explorer.exe
@@ -34,6 +34,7 @@ Precisely control the desktop icon spacing: set the horizontal/vertical icon gri
 
 ## Notes
 
+- The grid cell size stays fixed when you change the icon size (Large/Medium/Small icons or Ctrl+wheel); adjust the spacing settings when you switch to Large icons, otherwise large icons may overlap their labels.
 - This mod doesn't write any registry values. If you want free icon placement, turn off "Auto arrange icons" and "Align icons to grid" in the desktop right-click menu yourself.
 - Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual "Arrange icons").
 - The bottom margin applies to the whole icon area (the list view spans all monitors); on multi-monitor setups it lands above the taskbar of the bottom-most monitor.
@@ -59,6 +60,7 @@ Precisely control the desktop icon spacing: set the horizontal/vertical icon gri
 
 ### 注意
 
+- 切换图标大小（大/中/小图标或 Ctrl+滚轮）时网格单元尺寸保持不变；切换到大图标时请相应调大间距设置，否则大图标可能与文字标签重叠。
 - 本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭"自动排列图标"和"将图标与网格对齐"。
 - 停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动"排列图标"一致）。
 - 底部边距作用于整个图标区域（列表视图横跨所有显示器）；多显示器下预留空白位于最底部显示器的任务栏上方。
@@ -238,9 +240,15 @@ static LRESULT CALLBACK DesktopListViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM
             ApplySettings(hWnd, FALSE);
             break;
 
-        case WM_NCDESTROY:
-            g_subclassedLV.compare_exchange_strong(hWnd, nullptr, std::memory_order_relaxed);
+        case WM_NCDESTROY: {
+            // Use a local copy: when the comparison fails,
+            // compare_exchange_strong writes the current value into the
+            // expected argument, which must not be the hWnd we still need
+            // for DefSubclassProc below.
+            HWND expected = hWnd;
+            g_subclassedLV.compare_exchange_strong(expected, nullptr, std::memory_order_relaxed);
             break;
+        }
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
