@@ -33,6 +33,12 @@ does not affect new tabs inside an already open window - for those, see the
 The safety timeout guarantees the window is always revealed even if no paint is
 detected, so a window can never get stuck invisible.
 
+Windows 11 can create a folder window while it is still hidden and show it
+later. If that happens and the window is not shown before the safety timeout,
+the mod reveals it while it is hidden, so it can flash once when it is shown -
+the same as without the mod. Keeping it hidden instead would tie up the mod
+indefinitely, which is the worse trade.
+
 ## Settings
 
 - **Reveal delay (ms)** - how long to wait after the content has painted before
@@ -121,6 +127,10 @@ static Entry* FindEntry(HWND hWnd) {
 }
 
 static void Uncloak(HWND hWnd) {
+    // A window that was destroyed in the meantime must not be touched: its
+    // handle may already belong to another window.
+    if (!IsWindow(hWnd))
+        return;
     BOOL off = FALSE;
     DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &off, sizeof(off));
 }
@@ -145,23 +155,24 @@ static DWORD WINAPI RevealThread(LPVOID) {
             if (!e.pending)
                 continue;
 
-            bool isDue = false;
+            bool drop = false;
+            bool reveal = false;
             if (e.revealAt != 0) {
-                isDue = (LONG)(now - e.revealAt) >= 0;
+                drop = reveal = (LONG)(now - e.revealAt) >= 0;
             } else if ((DWORD)(now - e.cloakTick) > (DWORD)g_safetyTimeout.load()) {
-                // Nothing painted. If the window is still hidden, it is a
-                // window that Explorer created ahead of time and will show
-                // later, so keep it cloaked and keep waiting; revealing it now
-                // would leave the window the user later sees uncovered.
-                if (!IsWindowVisible(e.hWnd)) {
-                    e.cloakTick = now;
-                    continue;
-                }
-                isDue = true;
+                // Nothing painted in time. Drop the entry and reveal the
+                // window, even if it is still hidden (a window Explorer
+                // pre-created ahead of time): keeping it pending would keep
+                // this thread polling and hold the slot for the rest of the
+                // session, which is worse than the flash it prevents. If the
+                // window was destroyed, there is nothing left to reveal.
+                drop = true;
+                reveal = IsWindow(e.hWnd) != FALSE;
             }
 
-            if (isDue) {
-                due[dueCount++] = e.hWnd;
+            if (drop) {
+                if (reveal)
+                    due[dueCount++] = e.hWnd;
                 e.pending = false;
                 e.hWnd = nullptr;
                 g_pendingCount.fetch_sub(1, std::memory_order_relaxed);
@@ -184,6 +195,7 @@ static void TrackWindow(HWND hWnd) {
         return;
 
     EnterCriticalSection(&g_lock);
+    bool tracked = false;
     for (int i = 0; i < MAX_TRACKED; i++) {
         if (!g_entries[i].pending) {
             g_entries[i].hWnd = hWnd;
@@ -191,10 +203,17 @@ static void TrackWindow(HWND hWnd) {
             g_entries[i].revealAt = 0;
             g_entries[i].pending = true;
             g_pendingCount.fetch_add(1, std::memory_order_relaxed);
+            tracked = true;
             break;
         }
     }
     LeaveCriticalSection(&g_lock);
+
+    if (!tracked) {
+        // No free slot, so nothing would ever reveal this window.
+        Uncloak(hWnd);
+        return;
+    }
 
     SetEvent(g_wakeEvent);
 }
