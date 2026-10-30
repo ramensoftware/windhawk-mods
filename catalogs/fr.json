@@ -1662,13 +1662,13 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792645278000,
+        "updated": 1793397886000,
         "users": 90
       },
       "metadata": {
         "author": "erenalpars",
-        "compilerOptions": "-lcomctl32 -lgdi32 -lole32 -lshell32",
-        "description": "Middle-click the empty area of the tab bar to open a new tab",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lole32 -loleaut32 -lshell32",
+        "description": "Middle-click the empty area of the tab bar to open a new tab (Chrome/Edge/Brave)",
         "github": "https://github.com/erenalpars",
         "include": [
           "chrome.exe",
@@ -1676,8 +1676,8 @@
           "brave.exe"
         ],
         "license": "GPL-3.0",
-        "name": "Middle-click empty tab bar to open a new tab (Chrome/Edge/Brave)",
-        "version": "1.0"
+        "name": "Middle-Click New Tab Chrome/Edge/Brave",
+        "version": "1.1"
       }
     },
     "chrome-native-ui-tweaks": {
@@ -11743,7 +11743,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 0.7941860314779501,
-        "updated": 1793084502000,
+        "updated": 1793397890000,
         "users": 322
       },
       "metadata": {
@@ -11758,7 +11758,7 @@
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.5.0"
+        "version": "1.6.0"
       }
     },
     "one-hair": {

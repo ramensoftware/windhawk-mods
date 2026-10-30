@@ -1,3 +1,7 @@
+## 1.6.0 ([Oct 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9ff23889dbfeda8c2faac9da6fd051b7fb3c11a5/mods/on-screen-indicator-position.wh.cpp))
+
+* Each indicator can now be set to Hidden.
+
 ## 1.5.0 ([Oct 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a9748e5fc7e051d9899daff9d1664b18ea152a83/mods/on-screen-indicator-position.wh.cpp))
 
 * Each indicator can now use its own horizontal and vertical offset, including zero, or keep the main offset.

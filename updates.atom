@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-30T20:02:18.000Z</updated>
+    <updated>2026-10-30T22:04:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[On-Screen Indicator Position 1.6.0]]></title>
+        <id>https://windhawk.net/mods/on-screen-indicator-position#9ff23889dbfeda8c2faac9da6fd051b7fb3c11a5</id>
+        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
+        <updated>2026-10-30T22:04:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Each indicator can now be set to Hidden.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Middle-Click New Tab Chrome/Edge/Brave 1.1]]></title>
+        <id>https://windhawk.net/mods/chrome-middle-click-new-tab#392163440a38ef9648ffef5ac2c88e94a31fe4fc</id>
+        <link href="https://windhawk.net/mods/chrome-middle-click-new-tab"/>
+        <updated>2026-10-30T22:04:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Added support for vertical tabs in Edge and Brave: middle-clicking the empty area below the tabs opens a new tab.</p></li>
+<li><p>In Edge, the empty area is detected with UI Automation. It can be turned off with the new Edge vertical tabs setting.</p></li>
+<li><p>Renamed the mod title and description to make it clear that it's for browsers.</p></li>
+</ul>]]></content>
+        <author>
+            <name>erenalpars</name>
+            <uri>https://github.com/erenalpars</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TopBar for Windows 1.4.3]]></title>
         <id>https://windhawk.net/mods/windhawk-topbar#7ed9023b39470e6aa728949f1b38aa5e5dd8dc77</id>
@@ -651,39 +679,6 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></conte
         <author>
             <name>MrSmith</name>
             <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Snipper 1.2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-snipper#3e2422875c4232c20bb802f54806a8c81b71f58e</id>
-        <link href="https://windhawk.net/mods/taskbar-snipper"/>
-        <updated>2026-10-29T02:05:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The screenshot and record buttons are part of the taskbar's own layout now, which makes room for them, rather than a window placed over it. The new <strong>Position</strong> setting puts them left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. They're no longer dragged.</li>
-<li>With Taskbar Audio Flipper or Taskbar RDP Launcher in the same position, the widgets sit side by side: <strong>Move left</strong> and <strong>Move right</strong> in the right-click menu change their order. They replace <strong>Link widgets</strong>.</li>
-<li>The menu is Windows' own XAML menu.</li>
-<li>The mod needs Windows 11 now. The first time it starts, Windhawk downloads the taskbar's symbols.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar RDP Launcher 1.3.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-rdp-launcher#72291cdf01bb95ba90b95e01c9a46317ddd63903</id>
-        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
-        <updated>2026-10-29T02:05:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The widget is part of the taskbar's own layout now, which makes room for it, rather than a window placed over it. The new <strong>Position</strong> setting puts it left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. It's no longer dragged.</li>
-<li>With Taskbar Snipper or Taskbar Audio Flipper in the same position, the widgets sit side by side: <strong>Move left</strong> and <strong>Move right</strong> in the right-click menu change their order. They replace <strong>Link widgets</strong>.</li>
-<li>The display map is a XAML flyout, opened by hovering a number and closed once the mouse moves off it and the number, and the menu is Windows' own XAML menu.</li>
-<li>The computer's name and address are as wide as their text, without a divider.</li>
-<li>The mod needs Windows 11 now. The first time it starts, Windhawk downloads the taskbar's symbols.</li>
-</ul>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>
