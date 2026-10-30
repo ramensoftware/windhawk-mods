@@ -31,6 +31,12 @@ Each taskbar has independent layout and UI state; media polling and audio
 capture remain shared. On Windows 11 an unavailable XAML host is retried rather
 than replaced by a floating desktop overlay.
 
+The Taskbar monitors setting selects all monitors, the primary monitor, or one
+display device. For Selected monitor, the display number identifies the Windows
+device name (for example, 2 selects `\\.\DISPLAY2`), not the enumeration order.
+If that display is disconnected or has no taskbar, the widget stays hidden.
+Windows can renumber display devices after a connection or driver change.
+
 The native Windows 11 bottom, top, left and right taskbar positions are
 supported. Left and right taskbars use a compact vertical player that keeps
 the artwork, playback time, transport controls and progress inside the bar.
@@ -67,6 +73,15 @@ state rather than a small option in either Windows 11-only layout.
 
 // ==WindhawkModSettings==
 /*
+- taskbarMonitors: all
+  $name: Taskbar monitors
+  $options:
+    - all: All monitors
+    - primary: Primary monitor only
+    - selected: Selected monitor
+- monitorNumber: 1
+  $name: Selected display number
+  $description: Only used with Selected monitor. Windows display-device number (1 = DISPLAY1, 2 = DISPLAY2). No widget is shown if that display has no taskbar.
 - widgetWidth: 330
   $name: Widget width
 - widgetHeight: 40
@@ -212,6 +227,12 @@ enum class ThemeMode {
     Dark,
 };
 
+enum class TaskbarMonitors {
+    All,
+    Primary,
+    Selected,
+};
+
 enum class TaskbarEdge {
     Unknown,
     Bottom,
@@ -239,6 +260,8 @@ public:
 };
 
 struct Settings {
+    TaskbarMonitors taskbarMonitors = TaskbarMonitors::All;
+    int monitorNumber = 1;
     int widgetWidth = 330;
     int widgetHeight = 40;
     int coverSize = 32;
@@ -554,6 +577,12 @@ ThemeMode ParseThemeMode(PCWSTR value) {
         return ThemeMode::Dark;
     }
     return ThemeMode::Auto;
+}
+
+TaskbarMonitors ParseTaskbarMonitors(PCWSTR value) {
+    if (value && !_wcsicmp(value, L"primary")) return TaskbarMonitors::Primary;
+    if (value && !_wcsicmp(value, L"selected")) return TaskbarMonitors::Selected;
+    return TaskbarMonitors::All;
 }
 
 std::wstring Trim(std::wstring value) {
@@ -1125,6 +1154,9 @@ double ParseNumberSetting(PCWSTR text, double fallback) {
 }
 
 void LoadSettings() {
+    auto taskbarMonitors = WindhawkUtils::StringSetting::make(L"taskbarMonitors");
+    g_settings.taskbarMonitors = ParseTaskbarMonitors(taskbarMonitors);
+    g_settings.monitorNumber = std::max(1, Wh_GetIntSetting(L"monitorNumber"));
     g_settings.widgetWidth = ClampInt(Wh_GetIntSetting(L"widgetWidth"), 220, 560);
     g_settings.widgetHeight = ClampInt(Wh_GetIntSetting(L"widgetHeight"), 34, 60);
     g_settings.coverSize = ClampInt(Wh_GetIntSetting(L"coverSize"), 18, 48);
@@ -4830,6 +4862,29 @@ void CleanupWidgetInstance() {
     Ui().classicIdleImages.clear();
 }
 
+bool MatchesTaskbarMonitor(const MONITORINFOEXW& monitor) {
+    switch (g_settings.taskbarMonitors) {
+        case TaskbarMonitors::All:
+            return true;
+        case TaskbarMonitors::Primary:
+            return (monitor.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        case TaskbarMonitors::Selected: {
+            std::wstring device = L"\\\\.\\DISPLAY" +
+                                  std::to_wstring(g_settings.monitorNumber);
+            return !_wcsicmp(monitor.szDevice, device.c_str());
+        }
+    }
+    return false;
+}
+
+bool ShouldShowOnTaskbar(HWND taskbar) {
+    if (g_settings.taskbarMonitors == TaskbarMonitors::All) return true;
+    MONITORINFOEXW monitor{};
+    monitor.cbSize = sizeof(monitor);
+    return GetMonitorInfoW(MonitorFromWindow(taskbar, MONITOR_DEFAULTTONULL),
+                           &monitor) && MatchesTaskbarMonitor(monitor);
+}
+
 LRESULT CALLBACK TaskbarWidgetSubclass(HWND hwnd, UINT message, WPARAM wp,
                                        LPARAM lp, UINT_PTR id, DWORD_PTR data) {
     auto& ui = *reinterpret_cast<WidgetUiState*>(data);
@@ -4857,6 +4912,14 @@ void TickWidgetInstance(WidgetUiState& ui, bool rebuildIdle) {
                                reinterpret_cast<UINT_PTR>(&ui),
                                reinterpret_cast<DWORD_PTR>(&ui))) return;
         ui.hostSubclassed = true;
+    }
+    // Keep observing excluded taskbars: a primary-display change or reconnection
+    // can make this same host eligible again without creating a new window.
+    if (!ShouldShowOnTaskbar(ui.taskbarWnd)) {
+        if (ui.modernWidgetAttached || ui.nativeTaskList || ui.classicWidgetWnd) {
+            CleanupWidgetInstance();
+        }
+        return;
     }
     TaskbarEdge edge = DetectTaskbarEdge(ui.taskbarWnd);
     int thickness = TaskbarThicknessPx(ui.taskbarWnd, edge);
