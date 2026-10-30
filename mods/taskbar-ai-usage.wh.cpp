@@ -24769,13 +24769,17 @@ static HWND FindOwnedFileDialog(HWND owner) {
 static void CancelNativeDialog(HWND dialog, bool escalate) {
     if (!dialog || !IsWindow(dialog)) return;
     constexpr UINT kTaskDialogClickButton = WM_USER + 102;  // TDM_CLICK_BUTTON
-    // The prompt is a visible, enabled window owned by the dialog on this thread.
-    // GetLastActivePopup can't find it: Windows tracks the last active popup per root owner.
+    // The prompt is a visible, enabled dialog-class window owned by the dialog on this thread.
+    // GetLastActivePopup can't find it: Windows tracks the last active popup per root owner. The
+    // class check skips other owned popups (autocomplete lists, tooltips), which would otherwise be
+    // picked instead of the prompt and receive messages they don't understand.
     struct Search { HWND dialog; HWND popup; } search{dialog, nullptr};
     EnumThreadWindows(GetCurrentThreadId(), [](HWND hWnd, LPARAM parameter) -> BOOL {
         auto* search = reinterpret_cast<Search*>(parameter);
+        wchar_t className[16] = {};
         if (hWnd != search->dialog && GetWindow(hWnd, GW_OWNER) == search->dialog &&
-            IsWindowVisible(hWnd) && IsWindowEnabled(hWnd)) {
+            IsWindowVisible(hWnd) && IsWindowEnabled(hWnd) &&
+            GetClassNameW(hWnd, className, ARRAYSIZE(className)) && wcscmp(className, L"#32770") == 0) {
             search->popup = hWnd;
             return FALSE;
         }
