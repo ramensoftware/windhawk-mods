@@ -348,6 +348,7 @@ TextScrollState g_titleScroll;
 TextScrollState g_artistScroll;
 bool g_progressHover = false;
 std::wstring g_loadedThumbnailKey;
+std::wstring g_displayedTime;
 std::vector<IdleApp> g_idleApps;
 int g_visualizerBarCount = kVisualizerMinBarCount;
 std::wstring g_playButtonGlyph;
@@ -947,6 +948,7 @@ void ResetWidgetElementReferences() {
     g_titleText = nullptr;
     g_artistText = nullptr;
     g_timeText = nullptr;
+    g_displayedTime.clear();
     g_prevButton = nullptr;
     g_playButton = nullptr;
     g_nextButton = nullptr;
@@ -3082,6 +3084,20 @@ void RefreshThumbnail(MediaState const& state) {
     }
 }
 
+void RefreshTimeText(MediaState const& state) {
+    if (!g_timeText) {
+        return;
+    }
+    std::wstring time = FormatTime(EffectivePosition(state));
+    if (!g_verticalWidgetLayout) {
+        time += L" / " + FormatTime(state.durationMs);
+    }
+    if (time != g_displayedTime) {
+        g_timeText.Text(time);
+        g_displayedTime = std::move(time);
+    }
+}
+
 void RefreshWidgetContents() {
     if (!g_widgetGrid) {
         return;
@@ -3177,11 +3193,7 @@ void RefreshWidgetContents() {
     }
 
     if (g_timeText) {
-        std::wstring time = FormatTime(EffectivePosition(state));
-        if (!g_verticalWidgetLayout) {
-            time += L" / " + FormatTime(state.durationMs);
-        }
-        g_timeText.Text(time);
+        RefreshTimeText(state);
         g_timeText.Foreground(MakeBrush(ActiveMutedTextColor()));
     }
 
@@ -3237,22 +3249,24 @@ void TickWidgetUi() {
         state = g_mediaState;
     }
 
-    if (g_timeText && state.hasSession) {
-        std::wstring time = FormatTime(EffectivePosition(state));
-        if (!g_verticalWidgetLayout) {
-            time += L" / " + FormatTime(state.durationMs);
-        }
-        g_timeText.Text(time);
+    if (!state.hasSession) {
+        return;
     }
-    RefreshProgress(state);
-    UpdateVisualizerBars(state);
+    if (state.isPlaying) {
+        RefreshTimeText(state);
+        RefreshProgress(state);
+        UpdateVisualizerBars(state);
+    }
     UpdateTextMarquee(g_titleCanvas, g_titleText, g_titleTransform, g_titleScroll);
     UpdateTextMarquee(g_artistCanvas, g_artistText, g_artistTransform,
                       g_artistScroll);
 }
 
 bool WidgetNeedsFastTicks(MediaState const& state) {
-    if (state.hasSession && state.isPlaying && g_settings.visualizerEnabled) {
+    if (!state.hasSession) {
+        return false;
+    }
+    if (state.isPlaying && g_settings.visualizerEnabled) {
         return true;
     }
     auto textOverflows = [](Canvas const& canvas, TextBlock const& text) {
@@ -3267,18 +3281,20 @@ void WidgetUiTimerTick(IInspectable const&, IInspectable const&) {
         return;
     }
 
-    if (g_uiDirty.exchange(false)) {
-        RefreshWidgetContents();
-    } else {
-        TickWidgetUi();
-    }
-
     MediaState state;
     {
         std::lock_guard lock(g_mediaMutex);
         state = g_mediaState;
     }
-    int interval = WidgetNeedsFastTicks(state) ? 33 : 100;
+    bool fastTicks = WidgetNeedsFastTicks(state);
+    if (g_uiDirty.exchange(false)) {
+        RefreshWidgetContents();
+    } else if (fastTicks || (state.hasSession && state.isPlaying)) {
+        TickWidgetUi();
+    }
+    // Keep the idle check cheap, but pick up a pause/resume without adding a
+    // second of UI latency on top of the media polling interval.
+    int interval = fastTicks ? 33 : 100;
     if (g_uiTimer && interval != g_uiTimerIntervalMs) {
         g_uiTimer.Interval(TimeSpan{std::chrono::milliseconds(interval)});
         g_uiTimerIntervalMs = interval;
@@ -3393,8 +3409,7 @@ bool InjectWidgetGrid() {
 
 bool HasMeaningfulMedia(hstring const& title,
                         hstring const& artist,
-                        TimeSpan start,
-                        TimeSpan end,
+                        int64_t durationMs,
                         IRandomAccessStreamReference const& thumbnail) {
     std::wstring titleText = Trim(std::wstring(title.c_str()));
     std::wstring artistText = Trim(std::wstring(artist.c_str()));
@@ -3402,8 +3417,7 @@ bool HasMeaningfulMedia(hstring const& title,
         return false;
     }
 
-    bool hasDuration =
-        end > start && std::chrono::duration_cast<std::chrono::seconds>(end - start).count() > 2;
+    bool hasDuration = durationMs >= 3000;
     return !artistText.empty() || hasDuration || static_cast<bool>(thumbnail);
 }
 
@@ -3426,6 +3440,12 @@ struct MediaPollContext {
     ULONGLONG managerStartedTick = 0;
     ULONGLONG managerRetryTick = 0;
     ULONGLONG metadataStartedTick = 0;
+    ULONGLONG artworkStartedTick = 0;
+    ULONGLONG nextPlaybackTick = 0;
+    ULONGLONG nextMetadataTick = 0;
+    ULONGLONG artworkRetryTick = 0;
+    unsigned int consecutiveFailures = 0;
+    MediaState playbackState;
     bool managerDelayLogged = false;
     GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
     IAsyncOperation<GlobalSystemMediaTransportControlsSessionManager> managerRequest{nullptr};
@@ -3449,13 +3469,29 @@ struct MediaPollContext {
         artworkRequested = false;
         hasAccent = false;
         artworkKey.clear();
+        artworkRetryTick = 0;
     }
 
     void ResetSession() {
         CancelPending(metadataRequest);
         properties = nullptr;
         session = nullptr;
+        playbackState = {};
+        nextMetadataTick = 0;
         ResetArtwork();
+    }
+
+    void RecordFailure() {
+        if (++consecutiveFailures < 3) {
+            return;
+        }
+        // Keep the last displayed track while replacing a broken broker proxy.
+        ResetSession();
+        CancelPending(managerRequest);
+        manager = nullptr;
+        managerRetryTick = GetTickCount64() + 3000;
+        consecutiveFailures = 0;
+        Wh_Log(L"Repeated media IPC errors; reconnecting in 3 s");
     }
 
     ~MediaPollContext() {
@@ -3470,7 +3506,10 @@ void PollArtwork(MediaPollContext& context, std::wstring const& key) {
         context.artworkKey = key;
     }
     try {
-        if (!context.artworkRequested && context.properties.Thumbnail()) {
+        if (!context.artworkRequested &&
+            GetTickCount64() >= context.artworkRetryTick &&
+            context.properties.Thumbnail()) {
+            context.artworkStartedTick = GetTickCount64();
             context.artworkOpen = context.properties.Thumbnail().OpenReadAsync();
             context.artworkRequested = true;
         }
@@ -3480,6 +3519,7 @@ void PollArtwork(MediaPollContext& context, std::wstring const& key) {
             context.artworkStream = operation.GetResults();
             uint64_t size = context.artworkStream.Size();
             if (size > 0 && size <= 10 * 1024 * 1024) {
+                context.artworkStartedTick = GetTickCount64();
                 context.artworkRead = context.artworkStream.ReadAsync(
                     Buffer(static_cast<uint32_t>(size)),
                     static_cast<uint32_t>(size), InputStreamOptions::None);
@@ -3504,10 +3544,62 @@ void PollArtwork(MediaPollContext& context, std::wstring const& key) {
         Wh_Log(L"Artwork request failed: 0x%08X", static_cast<uint32_t>(e.code()));
         context.ResetArtwork();
         context.artworkKey = key;
+        context.artworkRetryTick = GetTickCount64() + 1000;
     }
 }
 
-void PollMedia(MediaPollContext& context) {
+bool MediaPresentationChanged(MediaState const& previous,
+                              MediaState const& next) {
+    return previous.hasSession != next.hasSession ||
+           previous.isPlaying != next.isPlaying ||
+           previous.canPrevious != next.canPrevious ||
+           previous.canNext != next.canNext ||
+           previous.canPlay != next.canPlay ||
+           previous.canPlayPause != next.canPlayPause ||
+           previous.canSeek != next.canSeek ||
+           previous.sourceAppId != next.sourceAppId ||
+           previous.title != next.title || previous.artist != next.artist ||
+           previous.timelineStartMs != next.timelineStartMs ||
+           previous.durationMs != next.durationMs ||
+           previous.thumbnailBytes != next.thumbnailBytes ||
+           previous.thumbnailKey != next.thumbnailKey ||
+           previous.hasAccentColor != next.hasAccentColor ||
+           previous.accentColor != next.accentColor ||
+           (next.hasSession &&
+            std::abs(EffectivePosition(previous) - EffectivePosition(next)) >
+                (next.isPlaying ? 250 : 0));
+}
+
+DWORD PendingMediaPollDelay(ULONGLONG started, ULONGLONG now) {
+    // Only newly started operations get the fast path. A stalled broker must
+    // not keep Explorer polling twenty times a second indefinitely.
+    return now - started < 500 ? 50 : 1000;
+}
+
+DWORD MediaPollDelay(MediaPollContext const& context, ULONGLONG now) {
+    DWORD delay = 1000;
+    if (context.manager && context.nextPlaybackTick > now) {
+        delay = static_cast<DWORD>(
+            std::min<ULONGLONG>(delay, context.nextPlaybackTick - now));
+    }
+    if (context.session && !context.metadataRequest &&
+        context.nextMetadataTick > now) {
+        delay = static_cast<DWORD>(
+            std::min<ULONGLONG>(delay, context.nextMetadataTick - now));
+    }
+    if (context.managerRequest) {
+        delay = std::min(delay, PendingMediaPollDelay(context.managerStartedTick, now));
+    }
+    if (context.metadataRequest) {
+        delay = std::min(delay, PendingMediaPollDelay(context.metadataStartedTick, now));
+    }
+    if (context.artworkOpen || context.artworkRead) {
+        delay = std::min(delay, PendingMediaPollDelay(context.artworkStartedTick, now));
+    }
+    return delay;
+}
+
+void PollMedia(MediaPollContext& context, bool forcePlayback = false) {
     MediaState nextState;
     GlobalSystemMediaTransportControlsSession nextSession{nullptr};
 
@@ -3544,25 +3636,57 @@ void PollMedia(MediaPollContext& context) {
             Wh_Log(L"Media manager ready after %llu ms",
                    GetTickCount64() - context.managerStartedTick);
         }
-        nextSession = context.manager.GetCurrentSession();
-        if (!nextSession) {
-            auto sessions = context.manager.GetSessions();
-            if (sessions.Size() > 0) {
-                nextSession = sessions.GetAt(0);
+        // Short async-completion checks reuse the last playback sample instead
+        // of issuing another set of synchronous broker calls.
+        if (forcePlayback || GetTickCount64() >= context.nextPlaybackTick) {
+            context.nextPlaybackTick = GetTickCount64() + 1000;
+            nextSession = context.manager.GetCurrentSession();
+            if (!nextSession) {
+                auto sessions = context.manager.GetSessions();
+                if (sessions.Size() > 0) {
+                    nextSession = sessions.GetAt(0);
+                }
             }
-        }
 
-        if (nextSession != context.session) {
-            context.ResetSession();
-            context.session = nextSession;
+            if (nextSession != context.session) {
+                context.ResetSession();
+                context.session = nextSession;
+            }
+            MediaState playback;
+            if (nextSession) {
+                auto info = nextSession.GetPlaybackInfo();
+                auto controls = info.Controls();
+                auto timeline = nextSession.GetTimelineProperties();
+                playback.hasSession = true;
+                playback.sourceAppId = nextSession.SourceAppUserModelId();
+                playback.isPlaying = info.PlaybackStatus() ==
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+                playback.canPrevious = controls.IsPreviousEnabled();
+                playback.canNext = controls.IsNextEnabled();
+                playback.canPlay = controls.IsPlayEnabled();
+                playback.canPlayPause = controls.IsPlayPauseToggleEnabled();
+                playback.canSeek = controls.IsPlaybackPositionEnabled();
+                playback.timelineStartMs =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        timeline.StartTime()).count();
+                playback.positionMs = TimelinePositionMs(timeline, playback.isPlaying);
+                playback.durationMs = TimelineDurationMs(timeline);
+                playback.updatedTick = GetTickCount64();
+            }
+            context.playbackState = std::move(playback);
+            context.consecutiveFailures = 0;
         }
+        nextSession = context.session;
         if (nextSession) {
             try {
-                if (!context.metadataRequest) {
+                if (!context.metadataRequest &&
+                    GetTickCount64() >= context.nextMetadataTick) {
                     context.metadataStartedTick = GetTickCount64();
+                    context.nextMetadataTick = context.metadataStartedTick + 1000;
                     context.metadataRequest = nextSession.TryGetMediaPropertiesAsync();
                 }
-                if (context.metadataRequest.Status() != AsyncStatus::Started) {
+                if (context.metadataRequest &&
+                    context.metadataRequest.Status() != AsyncStatus::Started) {
                     auto request = std::exchange(context.metadataRequest, nullptr);
                     context.properties = request.GetResults();
                     ULONGLONG elapsed = GetTickCount64() - context.metadataStartedTick;
@@ -3581,35 +3705,16 @@ void PollMedia(MediaPollContext& context) {
             }
 
             auto properties = context.properties;
-            auto playbackInfo = nextSession.GetPlaybackInfo();
-            auto controls = playbackInfo.Controls();
-            auto timeline = nextSession.GetTimelineProperties();
             bool meaningful = HasMeaningfulMedia(
-                properties.Title(), properties.Artist(), timeline.StartTime(),
-                timeline.EndTime(), properties.Thumbnail());
+                properties.Title(), properties.Artist(),
+                context.playbackState.durationMs, properties.Thumbnail());
 
             if (!meaningful) {
                 nextSession = nullptr;
             } else {
-                nextState.hasSession = true;
-                nextState.sourceAppId = nextSession.SourceAppUserModelId();
+                nextState = context.playbackState;
                 nextState.title = properties.Title();
                 nextState.artist = properties.Artist();
-                nextState.isPlaying =
-                    playbackInfo.PlaybackStatus() ==
-                    GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-                nextState.canPrevious = controls.IsPreviousEnabled();
-                nextState.canNext = controls.IsNextEnabled();
-                nextState.canPlay = controls.IsPlayEnabled();
-                nextState.canPlayPause = controls.IsPlayPauseToggleEnabled();
-                nextState.canSeek = controls.IsPlaybackPositionEnabled();
-                nextState.timelineStartMs =
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        timeline.StartTime()).count();
-                nextState.positionMs =
-                    TimelinePositionMs(timeline, nextState.isPlaying);
-                nextState.durationMs = TimelineDurationMs(timeline);
-                nextState.updatedTick = GetTickCount64();
                 nextState.thumbnailKey =
                     nextState.sourceAppId + L"|" + nextState.title + L"|" +
                     nextState.artist;
@@ -3623,12 +3728,16 @@ void PollMedia(MediaPollContext& context) {
         Wh_Log(L"PollMedia failed: 0x%08X %s",
                static_cast<uint32_t>(e.code()), e.message().c_str());
         // A transient IPC failure must not turn a playing track into idle.
+        context.RecordFailure();
         return;
     } catch (...) {
         Wh_Log(L"PollMedia failed");
+        context.RecordFailure();
         return;
     }
 
+    bool presentationChanged;
+    bool audioChanged;
     {
         std::lock_guard lock(g_mediaMutex);
         ULONGLONG now = GetTickCount64();
@@ -3646,11 +3755,27 @@ void PollMedia(MediaPollContext& context) {
         } else {
             g_missingMediaSinceTick = 0;
         }
-        g_mediaState = nextState;
-        g_mediaSession = nextSession;
+        presentationChanged = MediaPresentationChanged(g_mediaState, nextState);
+        audioChanged = g_mediaState.hasSession != nextState.hasSession ||
+                       g_mediaState.isPlaying != nextState.isPlaying;
+        // Refresh the timeline anchor even when nothing needs repainting.
+        // Otherwise EffectivePosition's stale-sample cap would stop the clock.
+        if (presentationChanged) {
+            g_mediaState = std::move(nextState);
+        } else {
+            g_mediaState.positionMs = nextState.positionMs;
+            g_mediaState.updatedTick = nextState.updatedTick;
+        }
+        if (g_mediaSession != nextSession) {
+            g_mediaSession = nextSession;
+        }
     }
-    g_uiDirty = true;
-    WakeAudioThread();
+    if (presentationChanged) {
+        g_uiDirty = true;
+    }
+    if (audioChanged) {
+        WakeAudioThread();
+    }
 }
 // Windows 10's taskbar is a classic Win32 surface. Keeping this backend in the
 // same module lets the media/session code stay shared while only the rendering
@@ -4545,16 +4670,15 @@ void MediaThread() {
     ApartmentScope apartment;
     MediaPollContext context;
     HANDLE events[] = {g_stopEvent, g_mediaWakeEvent};
+    bool forcePlayback = false;
     while (!g_unloading && !g_workersStopping) {
-        PollMedia(context);
-        DWORD delay = context.managerRequest || context.metadataRequest ||
-                              context.artworkOpen || context.artworkRead
-                          ? 50
-                          : 250;
+        PollMedia(context, forcePlayback);
+        DWORD delay = MediaPollDelay(context, GetTickCount64());
         DWORD result = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, delay);
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) {
             break;
         }
+        forcePlayback = result == WAIT_OBJECT_0 + 1;
     }
     {
         std::lock_guard lock(g_mediaMutex);
