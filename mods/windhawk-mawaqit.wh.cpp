@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-| **Back up your settings before upgrading to v0.8.0** |
+| **Upgrading from v0.7.1? Back up your settings before installing v0.8.0.** |
 | :--- |
 | Copy your current configuration before upgrading. Version 0.8.0 introduces a new settings structure, so existing appearance, layout, popup, and custom-color settings will reset to the new defaults. Your **mosque identifier, selected theme, and taskbar position** are preserved. |
 
@@ -366,7 +366,7 @@ This is an unofficial community project and is not affiliated with or endorsed b
       $description: 'Leave empty to use the resolved prayer text color. (Default: Empty)'
     - Separator: ''
       $name: Pill separator
-      $description: 'Leave empty to use the theme separator color. (Default: Empty)'
+      $description: 'Shown only with the Custom theme. Leave empty to use its separator color. (Default: Empty)'
   - Popup:
     - Background: ''
       $name: Popup background
@@ -1227,6 +1227,33 @@ static std::wstring CacheDir()
 // The generation changes only when the schedule's mosque or refresh interval changes.
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static std::atomic<unsigned long long> g_scheduleConfigGeneration{0};
+static SRWLOCK g_gdiplusLock = SRWLOCK_INIT;
+static ULONG_PTR g_gdiplusToken = 0;
+
+static bool EnsureGdiplusStarted()
+{
+    AcquireSRWLockExclusive(&g_gdiplusLock);
+    if (!g_gdiplusToken)
+    {
+        Gdiplus::GdiplusStartupInput input;
+        if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &input, nullptr) != Gdiplus::Ok)
+            g_gdiplusToken = 0;
+    }
+    bool started = g_gdiplusToken != 0;
+    ReleaseSRWLockExclusive(&g_gdiplusLock);
+    return started;
+}
+
+static void ShutdownGdiplus()
+{
+    AcquireSRWLockExclusive(&g_gdiplusLock);
+    if (g_gdiplusToken)
+    {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
+    ReleaseSRWLockExclusive(&g_gdiplusLock);
+}
 
 namespace NativeUpdater
 {
@@ -1788,55 +1815,22 @@ static bool Run(const std::wstring &mosque, unsigned long long expectedGeneratio
         fail("Windhawk mod storage unavailable");
     if (!CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
         fail("Cannot create cache folder");
-    // Retain existing Hijri date metadata only if it is from the same mosque and day.
-    std::string hijri = "", hijriSource = "unavailable";
     // Mawaqit publishes the mosque's moon-sighting adjustment in confData.
     // Cache it independently from the annual prayer schedule.
     int hijriAdjustment = 0;
-    const J &adjustment = root.key("hijriAdjustment");
-    if (adjustment.kind == J::Other || adjustment.kind == J::Str)
+    auto adjustmentIt = root.o.find("hijriAdjustment");
+    if (adjustmentIt != root.o.end() &&
+        (adjustmentIt->second.kind == J::Other || adjustmentIt->second.kind == J::Str))
     {
         try
         {
             size_t consumed = 0;
-            int parsed = std::stoi(adjustment.s, &consumed);
-            if (consumed == adjustment.s.size() && parsed >= -5 && parsed <= 5)
+            int parsed = std::stoi(adjustmentIt->second.s, &consumed);
+            if (consumed == adjustmentIt->second.s.size() && parsed >= -5 && parsed <= 5)
                 hijriAdjustment = parsed;
         }
         catch (...)
         {
-        }
-    }
-    std::wstring old = dir + L"\\metadata.json";
-    {
-        HANDLE h = CreateFileW(old.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
-                               FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h != INVALID_HANDLE_VALUE)
-        {
-            DWORD sz = GetFileSize(h, nullptr);
-            if (sz < 65536)
-            {
-                std::string data(sz, 0);
-                DWORD got = 0;
-                if (ReadFile(h, data.data(), sz, &got, nullptr))
-                {
-                    try
-                    {
-                        Parser mp{data};
-                        J prev = mp.value();
-                        if (prev.key("mosqueIdentifier").s == narrow(slug) &&
-                            prev.key("localDate").s == date(now.wYear, now.wMonth, now.wDay))
-                        {
-                            hijri = prev.key("hijriDate").s;
-                            hijriSource = prev.key("hijriDateSource").s;
-                        }
-                    }
-                    catch (...)
-                    {
-                    }
-                }
-            }
-            CloseHandle(h);
         }
     }
     FILETIME ft;
@@ -1853,7 +1847,6 @@ static bool Run(const std::wstring &mosque, unsigned long long expectedGeneratio
          << ",\n  \"timezone\": " << quote(tzVal.s) << ",\n  \"scheduleYear\": " << year
          << ",\n  \"localDate\": " << quote(date(now.wYear, now.wMonth, now.wDay))
          << ",\n  \"hijriAdjustment\": " << quote(std::to_string(hijriAdjustment))
-         << ",\n  \"hijriDate\": " << quote(hijri) << ",\n  \"hijriDateSource\": " << quote(hijriSource)
          << ",\n  \"updatedAtUtc\": " << quote(stamp) << "\n}\n";
     std::wstring tmp1 = dir + L"\\schedule.native.tmp", tmp2 = dir + L"\\metadata.native.tmp";
     DeleteFileW(tmp1.c_str());
@@ -1901,12 +1894,20 @@ static std::wstring g_hijriMode = L"off";
 static std::wstring g_popupHijriMode = L"full";
 static std::wstring PopupHijriDate()
 {
-    return g_popupHijriMode == L"full" ? g_hijriDate : g_popupHijriMode == L"numeric" ? g_hijriNumeric : L"";
+    std::wstring mode;
+    AcquireSRWLockShared(&g_settingsLock);
+    mode = g_popupHijriMode;
+    ReleaseSRWLockShared(&g_settingsLock);
+    return mode == L"full" ? g_hijriDate : mode == L"numeric" ? g_hijriNumeric : L"";
 }
 static std::wstring PillHijriDate()
 {
-    const std::wstring &date = g_hijriMode == L"full" ? g_hijriDate : g_hijriNumeric;
-    return g_hijriMode != L"off" && !date.empty() ? L"• " + date : L"";
+    std::wstring mode;
+    AcquireSRWLockShared(&g_settingsLock);
+    mode = g_hijriMode;
+    ReleaseSRWLockShared(&g_settingsLock);
+    const std::wstring &date = mode == L"full" ? g_hijriDate : g_hijriNumeric;
+    return mode != L"off" && !date.empty() ? L"• " + date : L"";
 }
 struct Prayer
 {
@@ -2101,7 +2102,7 @@ static void LoadMetadata()
     const int y = today.wYear + 4800 - a;
     const int m = today.wMonth + 12 * a - 3;
     const int julianDay = today.wDay + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045 + adjustment;
-    const int hijriYear = (30 * (julianDay - 1948439) + 10646) / 10631;
+    const int hijriYear = (30 * (julianDay - 1948440) + 10646) / 10631;
     auto monthStart = [hijriYear](int month) {
         return 1 + (59 * (month - 1) + 1) / 2 + (hijriYear - 1) * 354 + (3 + 11 * hijriYear) / 30 + 1948439;
     };
@@ -3267,12 +3268,7 @@ static int PopupLogicalHeight()
 static void DrawPopupPrayerIcon(HDC dc, int prayerIndex, int left, int top, COLORREF color)
 {
     using namespace Gdiplus;
-    static const ULONG_PTR gdiplusToken = []() -> ULONG_PTR {
-        GdiplusStartupInput input;
-        ULONG_PTR token = 0;
-        return GdiplusStartup(&token, &input, nullptr) == Ok ? token : 0;
-    }();
-    if (!gdiplusToken)
+    if (!EnsureGdiplusStarted())
         return;
     // The popup uses MM_ANISOTROPIC: convert logical icon bounds to device
     // pixels explicitly so GDI+ does not apply a second viewport transform.
@@ -6665,8 +6661,12 @@ static DWORD FreshScheduleCacheRemainingMs(const std::wstring &mosque, int hours
             return 0;
         // One-time metadata upgrade when Hijri is enabled. Existing schedule
         // caches predate the mosque's hijriAdjustment field.
-        if ((g_hijriMode != L"off" || g_popupHijriMode != L"off") &&
-            root.key("hijriAdjustment").kind != NativeUpdater::J::Str)
+        bool hijriEnabled;
+        AcquireSRWLockShared(&g_settingsLock);
+        hijriEnabled = g_hijriMode != L"off" || g_popupHijriMode != L"off";
+        ReleaseSRWLockShared(&g_settingsLock);
+        auto adjustmentIt = root.o.find("hijriAdjustment");
+        if (hijriEnabled && (adjustmentIt == root.o.end() || adjustmentIt->second.kind != NativeUpdater::J::Str))
         {
             Wh_Log(L"[Mawaqit][Hijri] Cached adjustment unavailable; refreshing mosque metadata");
             return 0;
@@ -6830,85 +6830,17 @@ static std::wstring ReadSetting(PCWSTR key)
     return result;
 }
 
-// Keep public v0.7.1's General.Position key. Other reorganized v0.7.1
-// appearance settings intentionally use v0.8 defaults. These aliases only
-// preserve paths used during v0.8 development; new keys always take priority.
-static std::wstring ResolveCompatibleSettingKey(PCWSTR key)
-{
-    struct Alias
-    {
-        PCWSTR current;
-        PCWSTR previous;
-    };
-    static constexpr Alias exact[] = {
-        {L"General.AutomaticTheme", L"General.AutomaticThemeMode"},
-        {L"TaskbarPill.Layout.Style", L"TaskbarPill.Layout.PillLayout"},
-        {L"TaskbarPill.Layout.Height", L"TaskbarPill.Layout.PillHeight"},
-        {L"TaskbarPill.Appearance.ShowBorder", L"TaskbarPill.Appearance.ShowPillBorder"},
-        {L"Popup.Behavior.Enabled", L"Popup.Behavior.EnablePopup"},
-        {L"Popup.Behavior.OpenOnHover", L"Popup.Behavior.OpenPopupOnHover"},
-        {L"Popup.Behavior.AutoCloseSeconds", L"Popup.Behavior.PopupAutoCloseSeconds"},
-        {L"Popup.Layout.Placement", L"Popup.Layout.PopupLayout"},
-        {L"Popup.Layout.ScalePercent", L"Popup.Layout.PopupScale"},
-        {L"Popup.Content.HighlightNextPrayer", L"Popup.Content.ShowNextPrayerAccent"},
-        {L"Popup.Content.HighlightOpacity", L"Popup.Content.NextPrayerAccentOpacity"},
-        {L"Popup.Typography.TextShadow", L"Popup.Appearance.TextShadow"},
-        {L"General.Position", L"TaskbarPill.PositionAndMonitors.Position"},
-    };
-    static constexpr Alias prefixes[] = {
-        {L"TaskbarPill.Monitors.", L"TaskbarPill.PositionAndMonitors."},
-        {L"TaskbarPill.Layout.", L"TaskbarPill.LayoutAndDimensions."},
-        {L"TaskbarPill.Content.", L"TaskbarPill.PrayerInformation."},
-        {L"Popup.Layout.", L"Popup.LayoutAndDimensions."},
-        {L"Popup.Content.", L"Popup.ContentAndHighlighting."},
-    };
-    std::vector<std::wstring> candidates{key};
-    for (size_t i = 0; i < candidates.size() && i < 32; ++i)
-    {
-        const std::wstring current = candidates[i];
-        if (!ReadSetting(current.c_str()).empty())
-            return current;
-        auto append = [&](std::wstring previous) {
-            if (std::find(candidates.begin(), candidates.end(), previous) == candidates.end())
-                candidates.push_back(std::move(previous));
-        };
-        for (const auto &alias : exact)
-            if (current == alias.current)
-                append(alias.previous);
-        for (const auto &alias : prefixes)
-        {
-            const size_t length = wcslen(alias.current);
-            if (current.compare(0, length, alias.current) == 0)
-                append(std::wstring(alias.previous) + current.substr(length));
-        }
-    }
-    return key;
-}
-
-static std::wstring ReadCompatibleString(PCWSTR key)
-{
-    auto resolved = ResolveCompatibleSettingKey(key);
-    return ReadSetting(resolved.c_str());
-}
-
-// Older development builds stored a boolean plus a separate display mode.
-// The new string setting is authoritative once saved, including explicit None.
 static std::wstring ReadNextPrayerDisplay()
 {
-    auto value = ReadCompatibleString(L"TaskbarPill.Content.ShowNextPrayer");
+    auto value = ReadSetting(L"TaskbarPill.Content.ShowNextPrayer");
     if (value == L"none" || value == L"name" || value == L"icon" || value == L"both")
         return value;
-    if (value == L"0" || value == L"false")
-        return L"none";
-    auto previous = ReadCompatibleString(L"TaskbarPill.Content.NextPrayerDisplay");
-    if (previous == L"icon" || previous == L"both")
-        return previous;
     return L"name";
 }
 
 static int ReadFontWeight(PCWSTR key)
 {
-    auto value = ReadCompatibleString(key);
+    auto value = ReadSetting(key);
     if (value == L"medium")
         return FW_MEDIUM;
     if (value == L"semibold")
@@ -6962,25 +6894,24 @@ static int ModernDefault(PCWSTR key, int fallback)
     return fallback;
 }
 
-static int ReadCompatibleInt(PCWSTR key, int missingDefault = 0)
+static int ReadIntSetting(PCWSTR key, int missingDefault = 0)
 {
-    auto resolved = ResolveCompatibleSettingKey(key);
-    if (!ReadSetting(resolved.c_str()).empty())
-        return Wh_GetIntSetting(resolved.c_str());
+    if (!ReadSetting(key).empty())
+        return Wh_GetIntSetting(key);
     return ModernDefault(key, missingDefault);
 }
 
 static void LoadModSettings()
 {
-    g_use12HourTime = ReadCompatibleString(L"General.TimeFormat") == L"12h";
-    g_showAmPm = ReadCompatibleInt(L"General.ShowAmPm", 1) != 0;
-    std::wstring position = ReadCompatibleString(L"General.Position");
+    g_use12HourTime = ReadSetting(L"General.TimeFormat") == L"12h";
+    g_showAmPm = ReadIntSetting(L"General.ShowAmPm", 1) != 0;
+    std::wstring position = ReadSetting(L"General.Position");
     if (position != L"after-tray" && position != L"before-icons" && position != L"before-start" &&
         position != L"after-icons" && position != L"center")
         position = L"before-tray";
     g_position = position;
-    g_showPrimaryMonitor = ReadCompatibleInt(L"TaskbarPill.Monitors.ShowPrimaryMonitor") != 0;
-    g_showSecondaryMonitors = ReadCompatibleInt(L"TaskbarPill.Monitors.ShowSecondaryMonitors") != 0;
+    g_showPrimaryMonitor = ReadIntSetting(L"TaskbarPill.Monitors.ShowPrimaryMonitor") != 0;
+    g_showSecondaryMonitors = ReadIntSetting(L"TaskbarPill.Monitors.ShowSecondaryMonitors") != 0;
     Wh_Log(L"[Mawaqit][Monitor] effective monitors primary=%d secondary=%d", g_showPrimaryMonitor ? 1 : 0,
            g_showSecondaryMonitors ? 1 : 0);
     Wh_Log(L"[Mawaqit][Monitor] Visibility: primary=%d secondary=%d unified-position=%s", g_showPrimaryMonitor ? 1 : 0,
@@ -6995,106 +6926,89 @@ static void LoadModSettings()
         theme != L"one-dark" && theme != L"custom")
         theme = L"system";
     g_theme = theme;
-    g_dynamicLightDarkMode = ReadCompatibleInt(L"General.AutomaticTheme") != 0;
+    g_dynamicLightDarkMode = ReadIntSetting(L"General.AutomaticTheme") != 0;
     Wh_Log(L"[Mawaqit][Appearance] selected=%s effective=%s dynamic=%d", g_theme.c_str(), EffectiveTheme().c_str(),
            g_dynamicLightDarkMode ? 1 : 0);
-    auto backgroundStyle = ReadCompatibleString(L"TaskbarPill.Appearance.BackgroundStyle");
+    auto backgroundStyle = ReadSetting(L"TaskbarPill.Appearance.BackgroundStyle");
     if (backgroundStyle != L"transparent" && backgroundStyle != L"blur" && backgroundStyle != L"acrylic")
         backgroundStyle = L"solid";
     g_backgroundStyle = backgroundStyle;
     g_pillFontWeight = ReadFontWeight(L"TaskbarPill.Typography.FontWeight");
     g_popupFontWeight = ReadFontWeight(L"Popup.Typography.FontWeight");
-    g_popupFontSize = std::clamp(ReadCompatibleInt(L"Popup.Typography.FontSize", 15), 10, 24);
-    g_pillTextShadow = ReadCompatibleInt(L"TaskbarPill.Typography.TextShadow") != 0;
-    g_showPillBorder = ReadCompatibleInt(L"TaskbarPill.Appearance.ShowBorder") != 0;
-    g_pillBorderOpacity = std::clamp(ReadCompatibleInt(L"TaskbarPill.Appearance.BorderOpacity", 20), 0, 100);
-    g_backgroundOpacity = std::clamp(ReadCompatibleInt(L"TaskbarPill.Appearance.BackgroundOpacity"), 0, 100);
-    auto popupStyle = ReadCompatibleString(L"Popup.Appearance.BackgroundStyle");
+    g_popupFontSize = std::clamp(ReadIntSetting(L"Popup.Typography.FontSize", 15), 10, 24);
+    g_pillTextShadow = ReadIntSetting(L"TaskbarPill.Typography.TextShadow") != 0;
+    g_showPillBorder = ReadIntSetting(L"TaskbarPill.Appearance.ShowBorder") != 0;
+    g_pillBorderOpacity = std::clamp(ReadIntSetting(L"TaskbarPill.Appearance.BorderOpacity", 20), 0, 100);
+    g_backgroundOpacity = std::clamp(ReadIntSetting(L"TaskbarPill.Appearance.BackgroundOpacity"), 0, 100);
+    auto popupStyle = ReadSetting(L"Popup.Appearance.BackgroundStyle");
     if (popupStyle != L"solid" && popupStyle != L"transparent" && popupStyle != L"blur" && popupStyle != L"acrylic")
         popupStyle = L"follow-pill";
     g_popupBackgroundStyle = popupStyle;
-    g_popupBackgroundOpacity = std::clamp(ReadCompatibleInt(L"Popup.Appearance.BackgroundOpacity"), -1, 100);
-    g_popupScale = std::clamp(ReadCompatibleInt(L"Popup.Layout.ScalePercent", 100), 50, 200);
-    g_popupLayout = ReadCompatibleString(L"Popup.Layout.Placement");
+    g_popupBackgroundOpacity = std::clamp(ReadIntSetting(L"Popup.Appearance.BackgroundOpacity"), -1, 100);
+    g_popupScale = std::clamp(ReadIntSetting(L"Popup.Layout.ScalePercent", 100), 50, 200);
+    g_popupLayout = ReadSetting(L"Popup.Layout.Placement");
     if (g_popupLayout != L"attached")
         g_popupLayout = L"floating";
-    g_popupAttachedCorners = ReadCompatibleString(L"Popup.Layout.AttachedCornerStyle");
+    g_popupAttachedCorners = ReadSetting(L"Popup.Layout.AttachedCornerStyle");
     if (g_popupAttachedCorners != L"rounded" && g_popupAttachedCorners != L"square")
         g_popupAttachedCorners = L"adaptive";
-    g_popupTextShadow = ReadCompatibleInt(L"Popup.Typography.TextShadow") != 0;
-    g_popupShowBorder = ReadCompatibleInt(L"Popup.Appearance.ShowBorder") != 0;
-    g_popupShowSeparators = ReadCompatibleInt(L"Popup.Appearance.ShowSeparators") != 0;
-    g_popupShowNextPrayerAccent = ReadCompatibleInt(L"Popup.Content.HighlightNextPrayer", 1) != 0;
-    g_popupShowNextPrayerBorder = ReadCompatibleInt(L"Popup.Content.ShowNextPrayerBorder", 1) != 0;
-    g_popupBoldNextPrayer = ReadCompatibleInt(L"Popup.Content.BoldNextPrayer", 1) != 0;
-    g_popupShowPrayerIcons = ReadCompatibleInt(L"Popup.Content.ShowPrayerIcons", 1) != 0;
-    g_popupNextPrayerAccentOpacity = std::clamp(ReadCompatibleInt(L"Popup.Content.HighlightOpacity", 20), 0, 100);
+    g_popupTextShadow = ReadIntSetting(L"Popup.Typography.TextShadow") != 0;
+    g_popupShowBorder = ReadIntSetting(L"Popup.Appearance.ShowBorder") != 0;
+    g_popupShowSeparators = ReadIntSetting(L"Popup.Appearance.ShowSeparators") != 0;
+    g_popupShowNextPrayerAccent = ReadIntSetting(L"Popup.Content.HighlightNextPrayer", 1) != 0;
+    g_popupShowNextPrayerBorder = ReadIntSetting(L"Popup.Content.ShowNextPrayerBorder", 1) != 0;
+    g_popupBoldNextPrayer = ReadIntSetting(L"Popup.Content.BoldNextPrayer", 1) != 0;
+    g_popupShowPrayerIcons = ReadIntSetting(L"Popup.Content.ShowPrayerIcons", 1) != 0;
+    g_popupNextPrayerAccentOpacity = std::clamp(ReadIntSetting(L"Popup.Content.HighlightOpacity", 20), 0, 100);
 
-    g_attachedPill = ReadCompatibleString(L"TaskbarPill.Layout.Style") == L"attached";
-    int width = ReadCompatibleInt(L"TaskbarPill.Layout.Width");
-    // Preserve older manual widths by lifting the former 180–189 range.
-    g_width = width == 0 ? 0 : (width >= 180 && width <= 400) ? std::max(190, width) : 0;
-    int height = ReadCompatibleInt(L"TaskbarPill.Layout.Height");
+    g_attachedPill = ReadSetting(L"TaskbarPill.Layout.Style") == L"attached";
+    int width = ReadIntSetting(L"TaskbarPill.Layout.Width");
+    g_width = width == 0 ? 0 : (width >= 190 && width <= 400) ? width : 0;
+    int height = ReadIntSetting(L"TaskbarPill.Layout.Height");
     g_pillHeight = (height >= 0 && height <= 100) ? height : 0;
-    int radius = ReadCompatibleInt(L"TaskbarPill.Appearance.CornerRadius");
+    int radius = ReadIntSetting(L"TaskbarPill.Appearance.CornerRadius");
     g_cornerRadius = (radius >= 0 && radius <= 30) ? radius : 13;
-    int font = ReadCompatibleInt(L"TaskbarPill.Typography.FontSize");
+    int font = ReadIntSetting(L"TaskbarPill.Typography.FontSize");
     g_fontSize = (font >= 10 && font <= 24) ? font : 15;
-    int iqamahScale = ReadCompatibleInt(L"TaskbarPill.Typography.IqamahFontScale");
+    int iqamahScale = ReadIntSetting(L"TaskbarPill.Typography.IqamahFontScale");
     g_iqamahFontScale = std::clamp(iqamahScale, 50, 100);
-    auto marginSetting = ReadCompatibleString(L"TaskbarPill.Layout.Margins");
+    auto marginSetting = ReadSetting(L"TaskbarPill.Layout.Margins");
     if (!marginSetting.empty())
         g_margins = ParseInsets(marginSetting.c_str(), -100, 100);
-    auto paddingSetting = ReadCompatibleString(L"TaskbarPill.Layout.Padding");
+    auto paddingSetting = ReadSetting(L"TaskbarPill.Layout.Padding");
     if (!paddingSetting.empty())
         g_padding = ParseInsets(paddingSetting.c_str(), 0, 100);
     g_nextPrayerDisplay = ReadNextPrayerDisplay();
     g_showNext = g_nextPrayerDisplay != L"none";
-    g_nextPrayerIconStyle = ReadCompatibleString(L"TaskbarPill.Content.NextPrayerIconStyle");
+    g_nextPrayerIconStyle = ReadSetting(L"TaskbarPill.Content.NextPrayerIconStyle");
     if (g_nextPrayerIconStyle != L"mosque")
         g_nextPrayerIconStyle = L"prayer-period";
-    g_showCountdown = ReadCompatibleInt(L"TaskbarPill.Content.ShowCountdown") != 0;
-    std::wstring previousHijriMode = g_hijriMode;
-    g_hijriMode = ReadCompatibleString(L"TaskbarPill.Content.HijriDate");
-    if (g_hijriMode != L"full" && g_hijriMode != L"numeric")
-        g_hijriMode = L"off";
-    g_showIqamah = ReadCompatibleInt(L"TaskbarPill.Content.ShowIqamahTime") != 0;
-    g_showFajrWindowCountdown = ReadCompatibleInt(L"TaskbarPill.Content.ShowFajrWindowCountdown") != 0;
-    g_popupHijriMode = ReadCompatibleString(L"Popup.Content.HijriDate");
-    if (g_popupHijriMode != L"off" && g_popupHijriMode != L"numeric")
-        g_popupHijriMode = L"full";
-    g_enablePopup = ReadCompatibleInt(L"Popup.Behavior.Enabled") != 0;
-    g_openPopupOnHover = ReadCompatibleInt(L"Popup.Behavior.OpenOnHover") != 0;
-    g_hoverOpenDelayMs = std::clamp(ReadCompatibleInt(L"Popup.Behavior.HoverOpenDelayMs", 500), 0, 5000);
-    g_hoverCloseDelayMs = std::clamp(ReadCompatibleInt(L"Popup.Behavior.HoverCloseDelayMs"), 0, 5000);
-    int autoClose = std::clamp(ReadCompatibleInt(L"Popup.Behavior.AutoCloseSeconds"), 0, 300);
+    g_showCountdown = ReadIntSetting(L"TaskbarPill.Content.ShowCountdown") != 0;
+    std::wstring hijriMode = ReadSetting(L"TaskbarPill.Content.HijriDate");
+    if (hijriMode != L"full" && hijriMode != L"numeric")
+        hijriMode = L"off";
+    g_showIqamah = ReadIntSetting(L"TaskbarPill.Content.ShowIqamahTime") != 0;
+    g_showFajrWindowCountdown = ReadIntSetting(L"TaskbarPill.Content.ShowFajrWindowCountdown") != 0;
+    std::wstring popupHijriMode = ReadSetting(L"Popup.Content.HijriDate");
+    if (popupHijriMode != L"off" && popupHijriMode != L"numeric")
+        popupHijriMode = L"full";
+    g_enablePopup = ReadIntSetting(L"Popup.Behavior.Enabled") != 0;
+    g_openPopupOnHover = ReadIntSetting(L"Popup.Behavior.OpenOnHover") != 0;
+    g_hoverOpenDelayMs = std::clamp(ReadIntSetting(L"Popup.Behavior.HoverOpenDelayMs", 500), 0, 5000);
+    g_hoverCloseDelayMs = std::clamp(ReadIntSetting(L"Popup.Behavior.HoverCloseDelayMs"), 0, 5000);
+    int autoClose = std::clamp(ReadIntSetting(L"Popup.Behavior.AutoCloseSeconds"), 0, 300);
     g_popupAutoCloseSeconds.store(autoClose);
     Wh_Log(L"[Mawaqit] Popup auto-close configured: %d seconds", autoClose);
     std::wstring mosque = ReadSetting(L"General.Mosque");
     if (mosque.empty())
         mosque = L"al-haram-makkah-saudi-arabia";
-    // Accept the refresh interval as text or a stored integer while retaining
-    // the existing setting key.
-    constexpr PCWSTR refreshKey = L"Advanced.RefreshHours";
-    std::wstring refreshValue = ReadCompatibleString(refreshKey);
-    int hours = 0;
-    if (!refreshValue.empty())
-    {
-        wchar_t *end = nullptr;
-        long parsed = wcstol(refreshValue.c_str(), &end, 10);
-        if (end != refreshValue.c_str() && *end == L'\0' && parsed >= 1 && parsed <= 720)
-            hours = static_cast<int>(parsed);
-    }
-    if (hours == 0)
-    {
-        // Compatibility fallback for a previously stored numeric RefreshHours.
-        int configuredHours = ReadCompatibleInt(refreshKey, 168);
-        if (configuredHours >= 1 && configuredHours <= 720)
-            hours = configuredHours;
-    }
-    if (hours == 0)
+    int hours = ReadIntSetting(L"Advanced.RefreshHours", 168);
+    if (hours < 1 || hours > 720)
         hours = 168;
     AcquireSRWLockExclusive(&g_settingsLock);
+    bool hijriModesChanged = g_hijriMode != hijriMode || g_popupHijriMode != popupHijriMode;
+    g_hijriMode = std::move(hijriMode);
+    g_popupHijriMode = std::move(popupHijriMode);
     bool changed = g_mosque != mosque || g_refreshHours != hours;
     g_mosque = mosque;
     g_refreshHours = hours;
@@ -7105,7 +7019,7 @@ static void LoadModSettings()
            L"changed=%d",
            g_showNext ? 1 : 0, g_showCountdown ? 1 : 0, g_enablePopup ? 1 : 0, g_theme.c_str(), mosque.c_str(), hours,
            changed ? 1 : 0);
-    if ((changed || previousHijriMode != g_hijriMode) && g_refreshEvent)
+    if ((changed || hijriModesChanged) && g_refreshEvent)
     {
         Wh_Log(L"[Mawaqit] Rechecking cached schedule after settings change");
         SetEvent(g_refreshEvent);
@@ -7202,6 +7116,7 @@ void Wh_ModUninit()
                 wnd, [](void *) { RemoveOnUiThread(); }, nullptr, L"Windhawk_Mawaqit_TaskbarDispatch", INFINITE))
             Wh_Log(L"[Mawaqit] Teardown could not reach taskbar thread");
     }
+    ShutdownGdiplus();
     if (g_refreshEvent)
     {
         CloseHandle(g_refreshEvent);
