@@ -8,7 +8,7 @@
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject 
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -80,7 +80,6 @@ Adds a modern, interactive seek bar and live playback timestamps directly to the
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -94,7 +93,6 @@ Adds a modern, interactive seek bar and live playback timestamps directly to the
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Documents.h>
-#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
 namespace wux = winrt::Windows::UI::Xaml;
@@ -105,7 +103,7 @@ void SetupProgressBarUI(wux::FrameworkElement const& mtc);
 void RestoreUI();
 void InitSessionManager();
 void RefreshCurrentMediaSession();
-void UpdateProgressFromMedia(bool force = false);
+void UpdateProgressFromMedia();
 void StartTimer();
 void SeekTo(double positionSeconds);
 
@@ -122,7 +120,6 @@ struct Settings {
     bool remainingTime{false};
     bool accentColorTrack{true};
     int seekStepSeconds{5};
-    bool autoRestartShellHost{true};
 } g_settings;
 
 void LoadSettings() {
@@ -141,14 +138,6 @@ void LoadSettings() {
     g_settings.accentColorTrack = Wh_GetIntSetting(L"accentColorTrack") != 0;
     g_settings.seekStepSeconds = Wh_GetIntSetting(L"seekStepSeconds");
     if (g_settings.seekStepSeconds <= 0) g_settings.seekStepSeconds = 5;
-
-    PCWSTR autoRestartVal = Wh_GetStringSetting(L"autoRestartShellHost");
-    if (autoRestartVal) {
-        g_settings.autoRestartShellHost = (wcscmp(autoRestartVal, L"0") != 0 && _wcsicmp(autoRestartVal, L"false") != 0);
-        Wh_FreeStringSetting(autoRestartVal);
-    } else {
-        g_settings.autoRestartShellHost = true;
-    }
 }
 
 // Media Session and UI State
@@ -163,7 +152,6 @@ winrt::event_token g_sessionToken{};
 bool g_isUserScrubbing = false;
 bool g_isInternalValueUpdate = false;
 double g_currentDurationSeconds = 0.0;
-double g_currentPositionSeconds = 0.0;
 std::chrono::steady_clock::time_point g_lastSeekTime{};
 double g_targetSeekPosition = -1.0;
 
@@ -205,7 +193,6 @@ void SeekTo(double positionSeconds) {
         }
 
         int64_t ticks = static_cast<int64_t>(positionSeconds * 10'000'000.0);
-        g_currentPositionSeconds = positionSeconds;
         g_lastSeekTime = std::chrono::steady_clock::now();
         g_targetSeekPosition = positionSeconds;
 
@@ -219,7 +206,7 @@ void SeekTo(double positionSeconds) {
     }
 }
 
-void UpdateProgressFromMedia(bool force) {
+void UpdateProgressFromMedia() {
     if (g_unloading || g_isUserScrubbing) return;
 
     auto slider = g_attachedSlider.get();
@@ -251,7 +238,7 @@ void UpdateProgressFromMedia(bool force) {
                 playbackInfo.PlaybackStatus() == wmc::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) {
                 auto now = winrt::clock::now();
                 auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdated).count();
-                if (diff > 0 && diff < 30000) {
+                if (diff > 0 && lastUpdated.time_since_epoch().count() > 0) {
                     positionSec += static_cast<double>(diff) / 1000.0;
                 }
             }
@@ -281,8 +268,6 @@ void UpdateProgressFromMedia(bool force) {
                 }
             }
 
-            g_currentPositionSeconds = positionSec;
-
             if (durationSec > 0.0) {
                 slider.Maximum(durationSec);
                 g_isInternalValueUpdate = true;
@@ -309,6 +294,17 @@ void UpdateProgressFromMedia(bool force) {
     }
 }
 
+static bool IsSessionPlaying() {
+    try {
+        if (g_currentSession) {
+            auto info = g_currentSession.GetPlaybackInfo();
+            return info && info.PlaybackStatus() ==
+                wmc::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+        }
+    } catch (...) {}
+    return false;
+}
+
 void StartTimer() {
     if (g_unloading) return;
     if (!g_sessionManager) InitSessionManager();
@@ -317,9 +313,32 @@ void StartTimer() {
         try {
             g_updateTimer = wux::DispatcherTimer();
             g_updateTimer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(250)});
-            g_updateTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
-                UpdateProgressFromMedia(false);
-            });
+
+            auto onTick = [](winrt::Windows::Foundation::IInspectable const&,
+                             winrt::Windows::Foundation::IInspectable const&) {
+                UpdateProgressFromMedia();
+
+                bool hidden = false;
+                try {
+                    if (auto slider = g_attachedSlider.get()) {
+                        if (auto xamlRoot = slider.XamlRoot()) {
+                            hidden = !xamlRoot.IsHostVisible();
+                        }
+                    }
+                } catch (...) {}
+
+                // Nothing to animate while paused/stopped or while the flyout
+                // is hidden. Playback events and the next OnGotFocus restart it.
+                if ((hidden || !IsSessionPlaying()) && g_updateTimer) {
+                    if (hidden) {
+                        Wh_Log(L"Timer: flyout hidden, stopping");
+                    }
+                    try {
+                        g_updateTimer.Stop();
+                    } catch (...) {}
+                }
+            };
+            g_updateTimer.Tick(onTick);
         } catch (...) {
             Wh_Log(L"Failed to create DispatcherTimer");
         }
@@ -327,6 +346,24 @@ void StartTimer() {
 
     if (g_updateTimer && !g_updateTimer.IsEnabled()) {
         g_updateTimer.Start();
+    }
+}
+
+// Runs on the UI thread: refresh the display, and run the timer only while playing.
+void OnMediaStateChanged() {
+    if (g_unloading) return;
+    UpdateProgressFromMedia();
+    if (g_attachedSlider.get() && IsSessionPlaying()) {
+        StartTimer();
+    }
+}
+
+void PostMediaStateChanged() {
+    if (g_uiDispatcherQueue) {
+        auto task = []() {
+            OnMediaStateChanged();
+        };
+        g_uiDispatcherQueue.TryEnqueue(task);
     }
 }
 
@@ -352,41 +389,34 @@ void RefreshCurrentMediaSession() {
             g_currentSession = session;
 
             if (g_currentSession) {
-                g_timelineToken = g_currentSession.TimelinePropertiesChanged(
-                    [](wmc::GlobalSystemMediaTransportControlsSession const&, wmc::TimelinePropertiesChangedEventArgs const&) {
-                        if (g_uiDispatcherQueue) {
-                            g_uiDispatcherQueue.TryEnqueue([]() {
-                                UpdateProgressFromMedia(true);
-                            });
-                        }
-                    });
+                auto onTimeline = [](wmc::GlobalSystemMediaTransportControlsSession const&,
+                                     wmc::TimelinePropertiesChangedEventArgs const&) {
+                    PostMediaStateChanged();
+                };
+                g_timelineToken = g_currentSession.TimelinePropertiesChanged(onTimeline);
 
-                g_playbackToken = g_currentSession.PlaybackInfoChanged(
-                    [](wmc::GlobalSystemMediaTransportControlsSession const&, wmc::PlaybackInfoChangedEventArgs const&) {
-                        if (g_uiDispatcherQueue) {
-                            g_uiDispatcherQueue.TryEnqueue([]() {
-                                UpdateProgressFromMedia(true);
-                            });
-                        }
-                    });
-
-                if (g_uiDispatcherQueue) {
-                    g_uiDispatcherQueue.TryEnqueue([]() {
-                        UpdateProgressFromMedia(true);
-                    });
-                }
+                auto onPlayback = [](wmc::GlobalSystemMediaTransportControlsSession const&,
+                                     wmc::PlaybackInfoChangedEventArgs const&) {
+                    PostMediaStateChanged();
+                };
+                g_playbackToken = g_currentSession.PlaybackInfoChanged(onPlayback);
             }
+
+            // Also runs when the session became null, so the bar resets to 0:00
+            // (the always-on timer used to do this).
+            PostMediaStateChanged();
         } else if (g_currentSession) {
-            if (g_uiDispatcherQueue) {
-                g_uiDispatcherQueue.TryEnqueue([]() {
-                    UpdateProgressFromMedia(true);
-                });
-            }
+            PostMediaStateChanged();
         }
     } catch (...) {
         Wh_Log(L"RefreshCurrentMediaSession exception");
     }
 }
+
+// Signaled when no RequestAsync is in flight. Manual-reset, starts signaled.
+static HANDLE g_hSessionInitDone = nullptr;
+[[clang::no_destroy]] static winrt::Windows::Foundation::IAsyncOperation<
+    wmc::GlobalSystemMediaTransportControlsSessionManager> g_sessionManagerOp{nullptr};
 
 static std::atomic<bool> g_sessionManagerInitializing{false};
 
@@ -399,35 +429,60 @@ void InitSessionManager() {
     }
 
     try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    } catch (...) {}
+        if (g_hSessionInitDone) ResetEvent(g_hSessionInitDone);
 
-    try {
         auto asyncOp = wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync();
-        asyncOp.Completed([](auto const& asyncInfo, auto status) {
-            g_sessionManagerInitializing = false;
-            if (g_unloading) return;
+        g_sessionManagerOp = asyncOp;
 
-            if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
+        auto onCompleted = [](auto const& asyncInfo, auto status) {
+            // Runs on a thread-pool thread: touch no shared state here,
+            // only hand the result to the UI thread.
+            bool handedOff = false;
+
+            if (!g_unloading && status == winrt::Windows::Foundation::AsyncStatus::Completed) {
                 try {
-                    g_sessionManager = asyncInfo.GetResults();
-                    if (g_sessionManager) {
-                        g_sessionToken = g_sessionManager.CurrentSessionChanged(
-                            [](auto const&, auto const&) {
-                                RefreshCurrentMediaSession();
-                            });
-                        Wh_Log(L"SMTC SessionManager successfully connected");
-                        RefreshCurrentMediaSession();
+                    auto manager = asyncInfo.GetResults();
+                    if (manager && g_uiDispatcherQueue) {
+                        handedOff = g_uiDispatcherQueue.TryEnqueue([manager]() {
+                            g_sessionManagerInitializing = false;
+                            if (g_unloading || g_sessionManager) return;
+
+                            g_sessionManager = manager;
+
+                            auto onSessionChanged = [](auto const&, auto const&) {
+                                // Also a background thread: just forward to the UI thread.
+                                if (g_uiDispatcherQueue) {
+                                    g_uiDispatcherQueue.TryEnqueue([]() {
+                                        RefreshCurrentMediaSession();
+                                    });
+                                }
+                            };
+                            g_sessionToken = g_sessionManager.CurrentSessionChanged(onSessionChanged);
+
+                            Wh_Log(L"SMTC SessionManager successfully connected");
+                            RefreshCurrentMediaSession();
+                        });
                     }
                 } catch (...) {
                     Wh_Log(L"GetResults exception in SessionManager");
                 }
-            } else {
+            } else if (!g_unloading) {
                 Wh_Log(L"SMTC SessionManager RequestAsync status not completed, will retry on demand");
             }
-        });
+
+            // If nothing was queued, nothing else will clear the flag.
+            if (!handedOff) {
+                g_sessionManagerInitializing = false;
+            }
+
+            // Must stay the last statement: teardown waits on this.
+            if (g_hSessionInitDone) SetEvent(g_hSessionInitDone);
+        };
+
+        asyncOp.Completed(onCompleted);
     } catch (...) {
         g_sessionManagerInitializing = false;
+        if (g_hSessionInitDone) SetEvent(g_hSessionInitDone);
         Wh_Log(L"InitSessionManager RequestAsync exception, will retry on demand");
     }
 }
@@ -550,15 +605,10 @@ void SetupProgressBarUI(wux::FrameworkElement const& mtc) {
         }
 
         if (!rootGrid) {
-            if (g_uiDispatcherQueue) {
-                g_uiDispatcherQueue.TryEnqueue(winrt::Windows::System::DispatcherQueuePriority::Low, [weak = winrt::make_weak(mtc)]() {
-                    try {
-                        if (auto m = weak.get()) {
-                            SetupProgressBarUI(m);
-                        }
-                    } catch (...) {}
-                });
-            }
+            // No self-requeue here: it spun the UI thread and could run after
+            // teardown. OnControlCenterDiscovered already schedules one delayed
+            // attach, and every OnGotFocus calls us again.
+            Wh_Log(L"SetupProgressBarUI: root grid not found yet, will retry on next focus");
             return;
         }
 
@@ -579,15 +629,14 @@ void SetupProgressBarUI(wux::FrameworkElement const& mtc) {
         wux::Controls::Grid::SetColumnSpan(progressGrid, 99);
         wux::Controls::Canvas::SetZIndex(progressGrid, 99);
 
-        if (g_settings.progressBarPosition == ProgressBarPosition::AboveButtons) {
-            progressGrid.VerticalAlignment(wux::VerticalAlignment::Bottom);
-            // Positioned cleanly above buttons; spans full width symmetrically
-            progressGrid.Margin(wux::Thickness{0, 0, 0, static_cast<double>(g_settings.verticalOffsetAbove)});
-        } else {
-            progressGrid.VerticalAlignment(wux::VerticalAlignment::Bottom);
-            // Uses the natural empty space below the playback buttons with full symmetric width
-            progressGrid.Margin(wux::Thickness{0, 0, 0, static_cast<double>(g_settings.verticalOffsetBelow)});
-        }
+        progressGrid.VerticalAlignment(wux::VerticalAlignment::Bottom);
+        // Above-buttons and below-buttons differ only in the bottom margin.
+        progressGrid.Margin(wux::Thickness{
+            0, 0, 0,
+            static_cast<double>(
+                g_settings.progressBarPosition == ProgressBarPosition::AboveButtons
+                    ? g_settings.verticalOffsetAbove
+                    : g_settings.verticalOffsetBelow)});
 
         // Intercept clicks on the container background to protect the underlying card button
         progressGrid.PointerPressed([](auto const&, wux::Input::PointerRoutedEventArgs const& e) {
@@ -1051,7 +1100,6 @@ static int WINAPI PageFocus_Hook(void* self, void* args) {
 
 static std::atomic<int> g_discoveryState{0}; // 0 = waiting, 1 = installing, 2 = ready, 3 = failed
 static std::mutex g_discoveryInstallMutex;
-static HANDLE g_hWatchdogThread = nullptr;
 
 static bool HookControlCenterInternal(HMODULE controlCenter, bool applyNow) {
     std::lock_guard installLock(g_discoveryInstallMutex);
@@ -1085,68 +1133,64 @@ static bool HookControlCenter(HMODULE controlCenter, bool applyNow) {
     return HookControlCenterInternal(controlCenter, applyNow);
 }
 
-// Watchdog thread: polls until ControlCenter.dll is loaded, with zero early timeout
-static DWORD WINAPI WatchdogThreadProc(LPVOID) {
-    while (!g_unloading && g_discoveryState != 2) {
-        Sleep(200);
-        if (g_unloading) break;
+// Matches a path whose file name is ControlCenter.dll.
+static bool IsControlCenterPath(LPCWSTR path) {
+    if (!path) return false;
+    const wchar_t kName[] = L"ControlCenter.dll";
+    const size_t kLen = ARRAYSIZE(kName) - 1;
+    size_t len = wcslen(path);
+    if (len < kLen) return false;
+    if (_wcsicmp(path + len - kLen, kName) != 0) return false;
+    if (len == kLen) return true;
+    wchar_t sep = path[len - kLen - 1];
+    return sep == L'\\' || sep == L'/';
+}
 
-        if (auto controlCenter = GetModuleHandleW(L"ControlCenter.dll")) {
-            int expected = 0;
-            if (g_discoveryState.compare_exchange_strong(expected, 1)) {
-                Wh_Log(L"ControlCenter.dll discovered by watchdog thread");
-                HookControlCenterInternal(controlCenter, true);
-                break;
-            } else if (g_discoveryState == 2) {
-                break;
-            }
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    // Let the real load finish first. The loader lock is released by the
+    // time we are back here, so doing the hooking now cannot deadlock on it.
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+
+    if (module && !g_unloading && g_discoveryState == 0 &&
+        !(dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+                     LOAD_LIBRARY_AS_IMAGE_RESOURCE)) &&
+        IsControlCenterPath(lpLibFileName)) {
+        int expected = 0;
+        if (g_discoveryState.compare_exchange_strong(expected, 1)) {
+            Wh_Log(L"ControlCenter.dll discovered by LoadLibraryExW hook");
+            HookControlCenterInternal(module, true);
         }
     }
-    return 0;
-}
 
-// Process Helpers
-static bool IsShellProcess() {
-    WCHAR modulePath[MAX_PATH];
-    if (GetModuleFileNameW(NULL, modulePath, ARRAYSIZE(modulePath))) {
-        PCWSTR exeName = wcsrchr(modulePath, L'\\');
-        if (exeName) exeName++;
-        else exeName = modulePath;
-
-        return (_wcsicmp(exeName, L"ShellHost.exe") == 0 ||
-                _wcsicmp(exeName, L"ShellExperienceHost.exe") == 0);
-    }
-    return false;
-}
-
-static bool IsShellHost() {
-    WCHAR modulePath[MAX_PATH];
-    if (GetModuleFileNameW(NULL, modulePath, ARRAYSIZE(modulePath))) {
-        PCWSTR exeName = wcsrchr(modulePath, L'\\');
-        if (exeName) exeName++;
-        else exeName = modulePath;
-
-        return (_wcsicmp(exeName, L"ShellHost.exe") == 0);
-    }
-    return false;
+    return module;
 }
 
 // Mod Lifecycle
 BOOL Wh_ModInit() {
-    Wh_Log(L"Quick Settings Media Progress Bar: Wh_ModInit v1.2.12");
-
-    if (!IsShellProcess()) {
-        Wh_Log(L"Not ShellHost or ShellExperienceHost, skipping mod init");
-        return FALSE;
-    }
+    Wh_Log(L"Quick Settings Media Progress Bar: Wh_ModInit v" WH_MOD_VERSION);
 
     LoadSettings();
+
+    g_hSessionInitDone = CreateEventW(nullptr, TRUE, TRUE, nullptr);
 
     if (auto controlCenter = GetModuleHandleW(L"ControlCenter.dll")) {
         HookControlCenter(controlCenter, false);
     } else {
         Wh_Log(L"Waiting for ControlCenter.dll to load...");
-        g_hWatchdogThread = CreateThread(nullptr, 0, WatchdogThreadProc, nullptr, 0, nullptr);
+
+        // kernelbase, not kernel32: kernel32's export just forwards here.
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        void* pLoadLibraryExW =
+            kernelBase ? (void*)GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
+        if (pLoadLibraryExW) {
+            Wh_SetFunctionHook(pLoadLibraryExW, (void*)LoadLibraryExW_Hook,
+                               (void**)&LoadLibraryExW_Original);
+        } else {
+            Wh_Log(L"kernelbase!LoadLibraryExW not found, ControlCenter.dll will not be discovered");
+        }
     }
 
     return TRUE;
@@ -1154,11 +1198,18 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit");
-    if (!g_unloading) {
-        if (g_discoveryState == 1) {
-            bool ok = Wh_ApplyHookOperations();
-            g_discoveryState = ok ? 2 : 3;
-            Wh_Log(L"ControlCenter.dll discovery hooks applied post-init: %s", ok ? L"ready" : L"failed");
+    if (g_unloading) return;
+
+    if (g_discoveryState == 1) {
+        bool ok = Wh_ApplyHookOperations();
+        g_discoveryState = ok ? 2 : 3;
+        Wh_Log(L"ControlCenter.dll discovery hooks applied post-init: %s", ok ? L"ready" : L"failed");
+    } else if (g_discoveryState == 0) {
+        // The DLL may have loaded after the check in Wh_ModInit but before
+        // the LoadLibraryExW hook was armed.
+        if (auto controlCenter = GetModuleHandleW(L"ControlCenter.dll")) {
+            Wh_Log(L"ControlCenter.dll found in Wh_ModAfterInit");
+            HookControlCenter(controlCenter, true);
         }
     }
 }
@@ -1167,17 +1218,16 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
 
-    // Auto-restart ShellHost.exe if enabled to guarantee a 100% clean state
-    if (g_settings.autoRestartShellHost && IsShellHost()) {
-        Wh_Log(L"Auto-restarting ShellHost.exe on settings change");
-        TerminateProcess(GetCurrentProcess(), 0);
-        return;
-    }
-
     if (g_uiDispatcherQueue) {
         g_uiDispatcherQueue.TryEnqueue([]() {
             if (auto mtc = g_weakMtc.get()) {
+                auto root = g_weakRoot.get();
                 RestoreUI();
+                // RestoreUI clears these; put them back so the rebuild can
+                // find the native slider style/thumb size and so a later
+                // settings change still works.
+                g_weakMtc = winrt::make_weak(mtc);
+                if (root) g_weakRoot = winrt::make_weak(root);
                 SetupProgressBarUI(mtc);
             }
         });
@@ -1188,57 +1238,73 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"BeforeUninit");
     g_unloading = true;
 
-    if (g_hWatchdogThread) {
-        WaitForSingleObject(g_hWatchdogThread, 500);
-        CloseHandle(g_hWatchdogThread);
-        g_hWatchdogThread = nullptr;
-    }
-
-    if (g_updateTimer) {
-        try {
-            g_updateTimer.Stop();
-        } catch (...) {}
-        g_updateTimer = nullptr;
-    }
-
-    if (g_currentSession) {
-        try {
-            if (g_timelineToken.value) g_currentSession.TimelinePropertiesChanged(g_timelineToken);
-            if (g_playbackToken.value) g_currentSession.PlaybackInfoChanged(g_playbackToken);
-        } catch (...) {}
-        g_timelineToken = {};
-        g_playbackToken = {};
-        g_currentSession = nullptr;
-    }
-
-    if (g_sessionManager) {
-        try {
-            if (g_sessionToken.value) {
-                g_sessionManager.CurrentSessionChanged(g_sessionToken);
-            }
-        } catch (...) {}
-        g_sessionToken = {};
-        g_sessionManager = nullptr;
-    }
+    bool tornDown = false;
 
     if (g_uiDispatcherQueue) {
         HANDLE hDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        bool enqueued = g_uiDispatcherQueue.TryEnqueue([hDone]() {
+
+        auto teardown = [hDone]() {
+            // Timer is thread-affine: stop and release it on the UI thread.
+            try {
+                if (g_updateTimer) g_updateTimer.Stop();
+            } catch (...) {}
+            g_updateTimer = nullptr;
+
+            // Cancel an in-flight RequestAsync so its completion handler
+            // fires now instead of after the DLL is unmapped.
+            try {
+                if (g_sessionManagerOp) g_sessionManagerOp.Cancel();
+            } catch (...) {}
+            g_sessionManagerOp = nullptr;
+
+            // SMTC state is owned by the UI thread: revoke handlers and
+            // release the session and manager here.
+            try {
+                if (g_currentSession) {
+                    if (g_timelineToken.value) g_currentSession.TimelinePropertiesChanged(g_timelineToken);
+                    if (g_playbackToken.value) g_currentSession.PlaybackInfoChanged(g_playbackToken);
+                }
+            } catch (...) {}
+            g_timelineToken = {};
+            g_playbackToken = {};
+            g_currentSession = nullptr;
+
+            try {
+                if (g_sessionManager && g_sessionToken.value) {
+                    g_sessionManager.CurrentSessionChanged(g_sessionToken);
+                }
+            } catch (...) {}
+            g_sessionToken = {};
+            g_sessionManager = nullptr;
+
             try {
                 RestoreUI();
             } catch (...) {}
+
             if (hDone) SetEvent(hDone);
-        });
+        };
+
+        // Low priority: anything already queued at Low (setup retries,
+        // delayed attach) runs before this, so nothing re-attaches after it.
+        bool enqueued = g_uiDispatcherQueue.TryEnqueue(
+            winrt::Windows::System::DispatcherQueuePriority::Low, teardown);
+
         if (enqueued && hDone) {
-            WaitForSingleObject(hDone, 1000);
+            // No timeout: returning early would unmap code the lambda still runs.
+            WaitForSingleObject(hDone, INFINITE);
+            tornDown = true;
         }
         if (hDone) CloseHandle(hDone);
     }
 
-    // Auto-restart ShellHost.exe if enabled so Quick Settings is always clean and responsive without needing Task Manager
-    if (g_settings.autoRestartShellHost && IsShellHost()) {
-        Wh_Log(L"Auto-restarting ShellHost.exe on uninit");
-        TerminateProcess(GetCurrentProcess(), 0);
+    // The request was canceled above; wait for its completion handler to
+    // finish before the mod can be unmapped. Only safe if the cancel ran.
+    if (g_hSessionInitDone) {
+        if (tornDown || !g_uiDispatcherQueue) {
+            WaitForSingleObject(g_hSessionInitDone, INFINITE);
+            CloseHandle(g_hSessionInitDone);
+            g_hSessionInitDone = nullptr;
+        }
     }
 }
 
