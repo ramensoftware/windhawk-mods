@@ -14,7 +14,7 @@
 /*
 # Window Centralizer
 
-New dialogs and small windows open centered to the one they originated from, or the mouse cursor, instead of wherever the program decides.
+New dialogs and up to a size windows open centered to the one they came from, or the mouse cursor, instead of randomly around the screen.
 
 The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.
 
