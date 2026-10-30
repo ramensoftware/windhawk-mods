@@ -1,5 +1,5 @@
-// clang-format off
 // ==WindhawkMod==
+// clang-format off
 // @id              depth-wallpaper-native
 // @name            Depth Wallpaper Native
 // @description     Mouse-reactive depth wallpaper with local AI inference and independent multi-monitor rendering
@@ -9,8 +9,8 @@
 // @github          https://github.com/arturdj
 // @license         MIT
 // @include         explorer.exe
-// @architecture    amd64
-// @compilerOptions -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -lcomctl32 -lbcrypt -lole32 -loleaut32 -lruntimeobject -lwindowscodecs -lurlmon -lgdi32 -luser32 -ld3d11 -ldxgi -ld2d1 -ldcomp -luuid -ld3dcompiler -O2
+// @architecture    x86-64
+// @compilerOptions -lcomctl32 -lbcrypt -lole32 -loleaut32 -lruntimeobject -lwindowscodecs -lurlmon -lgdi32 -luser32 -ld3d11 -ldxgi -ld2d1 -ldcomp -luuid -ld3dcompiler
 // ==/WindhawkMod==
 // clang-format on
 // ==WindhawkModReadme==
@@ -163,6 +163,10 @@ claim of acceptance or complete runtime validation.
 #include <dcomp.h>
 #include <dxgi1_3.h>
 #include <shldisp.h>
+// IDesktopWallpaper is a Windows 8+ shell interface. Scope the SDK feature
+// level here instead of adding global compiler options.
+#undef NTDDI_VERSION
+#define NTDDI_VERSION 0x0A000000
 #include <shobjidl.h>
 #include <urlmon.h>
 #include <wincodec.h>
@@ -5102,6 +5106,9 @@ ORT_API_STATUS(OrtSessionOptionsAppendExecutionProvider_Tensorrt, _In_ OrtSessio
 #include <tuple>
 #include <vector>
 // clang-format on
+#ifndef WS_EX_NOREDIRECTIONBITMAP
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#endif
 using namespace winrt;
 enum class LearningModelDeviceKind
 {
@@ -6225,7 +6232,9 @@ static void Run()
     {
         init_apartment(apartment_type::multi_threaded);
         apartment = true;
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        using SetDpiContext = HANDLE(WINAPI *)(HANDLE);
+        auto setDpiContext = reinterpret_cast<SetDpiContext>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+        if (setDpiContext) setDpiContext(reinterpret_cast<HANDLE>(static_cast<INT_PTR>(-4)));
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            (LPCWSTR)&PaneProc, &instance);
         WNDCLASSW wc{};
