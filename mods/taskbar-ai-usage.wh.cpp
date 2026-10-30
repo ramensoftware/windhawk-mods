@@ -4,7 +4,7 @@
 // @description     Shows your Claude, Codex, Antigravity and GitHub Copilot usage limits as ring tiles on the Windows 11 taskbar, with a Fluent flyout for the details
 // @description:es-ES Muestra los límites de uso de Claude, Codex, Antigravity y GitHub Copilot como mosaicos con anillos en la barra de tareas de Windows 11, con un panel flotante Fluent para los detalles
 // @description:zh-CN 在 Windows 11 任务栏上以圆环磁贴显示 Claude、Codex、Antigravity 和 GitHub Copilot 的用量上限，并通过 Fluent 浮出面板查看详情
-// @version         1.0.0
+// @version         1.0.1
 // @author          Sof2245
 // @github          https://github.com/Sof2245
 // @homepage        https://github.com/Sof2245/taskbar-ai-usage
@@ -46,14 +46,16 @@ whether you are burning through it faster than the clock.
 * **Fluent flyout.** Compact rows per quota with its reset countdown, banked
   free resets, and direct access to the provider dashboard. Click to show or get
   a glance on hover.
-* **Sign in your way.** Accounts get automatically detected and added or opt to
-  sign-in each account on its own. It borrows the Claude Code, Codex, Visual
-  Studio or GitHub CLI login you are already using. Antigravity can read its
-  running local session.
-* **Notifications.** Optional notifications tell you when usage crosses the
-  threshold you choose, with the next reset time.
-* **Lenguajes/语言.** Localizada completamente al Chino (Simplificado) y Español
-  (internacional). 完全本地化为简体中文和西班牙语（国际通用）。
+* **Sign in your way.** With your permission, the mod finds the Claude Code,
+  Codex, Visual Studio and GitHub CLI sign-ins already on this PC and adds an
+  account for each, using that sign-in read-only. Or sign in each account on its
+  own. Antigravity can read its running local session. An account you remove
+  stays removed until you rescan.
+* **Notifications.** On by default: a notification tells you when usage crosses
+  the red threshold, with the next reset time. Pick another threshold or turn
+  them off in Settings > Behavior.
+* **Languages.** English, Spanish and Simplified Chinese, following your Windows
+  display language.
 
 | Codex | Antigravity | Copilot |
 |---|---|---|
@@ -63,8 +65,9 @@ whether you are burning through it faster than the clock.
 
 ### Getting started
 
-1. Enable the mod. If Claude Code, Codex, Visual Studio or GitHub CLI is already
-   signed in on this PC, its account shows up on its own.
+1. Enable the mod. Settings opens and asks whether the mod may look for AI
+   providers already signed in on this PC. Choose **Find accounts** to add them,
+   or **Not now**. You can rescan later with **Rescan** on the Accounts page.
 2. For anything else, click the **+** tile (or right-click a tile and choose
    **Settings**), add the account and click **Sign in**.
 3. Left-click a tile for its flyout. Right-click it to refresh, open the
@@ -75,14 +78,71 @@ same accounts, and they don't share accounts or sign-ins.
 
 ### Privacy and disclaimers
 
-* Credentials never leave your PC. The mod talks only to each provider's sign-in
-  and usage endpoints and sends no telemetry.
-* A borrowed sign-in is read on every poll and never written, refreshed or
-  stored. It never sends a prompt.
+* Sign-ins are stored only on this PC, encrypted with Windows DPAPI for your
+  user account. Each token is sent only to the provider that issued it, and the
+  mod sends no telemetry. Details are under **Network and credentials**.
+* A borrowed sign-in is read on every poll. The mod never writes, refreshes or
+  stores it, and never sends a prompt.
+* **Let Claude Code renew its expired sign-in** (per Claude account, in the
+  account editor) is off by default. When you turn it on and a borrowed Claude
+  Code sign-in expires, the mod starts `claude.exe` hidden so that Claude Code
+  renews and rewrites its own credentials. It starts in safe mode, without your
+  hooks, plugins or MCP servers, with its telemetry and update checks off, and
+  receives no prompt. The mod only runs `claude.exe` from
+  `%LOCALAPPDATA%\Microsoft\WinGet\Links` or `%USERPROFILE%\.local\bin`, at most
+  every 10 minutes, and stops after three failed attempts. With it off, an
+  expired sign-in shows "run claude".
 * Usage comes from undocumented endpoints that can change and stop working
   without notice. The author is not responsible for its accuracy.
 * Neither this mod nor its author is affiliated with Anthropic, OpenAI, Google,
   GitHub, Microsoft or any other usage provider.
+
+### Network and credentials
+
+* **Hosts contacted.** Each sign-in only goes to its own provider:
+  * Claude: `console.anthropic.com` (sign-in, token refresh) and
+    `api.anthropic.com` (usage, profile).
+  * ChatGPT / Codex: `auth.openai.com` (sign-in, token refresh) and
+    `chatgpt.com` (usage, credits).
+  * Antigravity: `oauth2.googleapis.com` (sign-in, token refresh, revocation)
+    and `cloudcode-pa.googleapis.com` / `daily-cloudcode-pa.googleapis.com`
+    (quota, polled at your poll interval). Without its own sign-in, it asks the
+    running Antigravity app's local server on `127.0.0.1` every minute. Signing
+    out, or removing the account together with its sign-in, also revokes that
+    sign-in at Google.
+  * GitHub Copilot: `github.com` (device sign-in) and `api.github.com` (user,
+    Copilot quota).
+* **Client identities.** Sign-in uses the public OAuth clients of Claude Code,
+  Codex, Antigravity and GitHub Copilot (copilot.vim). The Claude usage request
+  identifies itself as the Claude Code CLI, because the server only returns the
+  free-resets data to it. Antigravity requests use the Antigravity app's user
+  agent.
+* **Scopes requested.**
+  * Claude: `org:create_api_key user:profile user:inference`.
+  * OpenAI: `openid profile email offline_access api.connectors.read
+    api.connectors.invoke`.
+  * Google: `cloud-platform userinfo.email userinfo.profile`, the same set
+    Google's Gemini CLI requests for these Cloud Code endpoints, which publish
+    no narrower scope. A scope never grants more than your Google account
+    already has.
+  * GitHub: `read:user`.
+
+  A borrowed sign-in keeps whatever scopes its own app requested.
+* **On this PC.**
+  * During a sign-in only (up to 3 minutes), a listener on `127.0.0.1` receives
+    the browser redirect: ports 1455/1457 for OpenAI, 51121 for Google.
+  * To find a running Antigravity session, the mod reads the command line of
+    the Antigravity language server process in your session.
+  * Read-only files: the Claude Code and Codex credential files (for borrowed
+    sign-ins) and Claude Code's usage cache (`.claude.json`). Credential
+    Manager: the GitHub CLI and Visual Studio GitHub entries. None of these is
+    read to find accounts until you allow it.
+  * Notifications register
+    `HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAiUsage` while they
+    are on. The mod deletes it when it unloads, when you turn notifications off,
+    and at start if notifications are off. After the first notification Windows
+    keeps its own entry in Settings > System > Notifications, which may remain
+    after the mod is removed.
 
 ### Credits
 
@@ -137,7 +197,6 @@ Found a problem or have an idea?
 #include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
@@ -146,7 +205,6 @@ Found a problem or have an idea?
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
@@ -204,7 +262,6 @@ using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
 namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
-namespace wuxd = winrt::Windows::UI::Xaml::Documents;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
@@ -252,6 +309,7 @@ enum class Str : int {
     StatusCliNotSignedIn,
     StatusCouldNotReadCliSignIn,
     StatusCliSignInExpired,
+    StatusClaudeCliRunToRenew,
     StatusFetchThreadFailed,
     // Notifications
     NotificationUsageAt,
@@ -392,6 +450,11 @@ enum class Str : int {
     SettingsTheStoredSignInCouldNotBe2,
     SettingsCouldNotRemoveTheAccount,
     SettingsCouldNotReorderTheAccount,
+    SettingsRescan,
+    SettingsFindAccountsPrompt,
+    SettingsFindAccounts,
+    SettingsNotNow,
+    SettingsRescanNoneFound,
     SettingsCouldNotUpdateAccountVisibility,
     SettingsResetSettings,
     SettingsCouldNotResetSettings,
@@ -607,6 +670,9 @@ enum class Str : int {
     AppearanceValuePx,
     SettingsOpenFlyoutOnHover,
     SettingsOpenFlyoutOnHoverHelp,
+    EditorAllowClaudeCliRenewal,
+    EditorClaudeCliNotFound,
+    EditorAllowClaudeCliRenewalHelp,
     SettingsGroupTaskbarTiles,
     SettingsGroupFlyout,
     SettingsGroupPreviewBackup,
@@ -708,7 +774,7 @@ enum class Str : int {
 };
 
 // ==== BEGIN STRINGS en ====
-static const PCWSTR kStringsEn[(int)Str::Count] = {
+static const PCWSTR kStringsEn[] = {
     /* LoginAnthropicTitle */ L"Sign in: {0} (Anthropic)",
     /* LoginAnthropicInstructions */ L"A browser window opened to claude.ai. Approve access, then copy the code shown on the page and paste it below.",
     /* LoginMissingAuthorizationCode */ L"missing authorization code",
@@ -744,6 +810,7 @@ static const PCWSTR kStringsEn[(int)Str::Count] = {
     /* StatusCliNotSignedIn */ L"{0} is not signed in on this PC",
     /* StatusCouldNotReadCliSignIn */ L"could not read the {0} sign-in",
     /* StatusCliSignInExpired */ L"{0} sign-in expired - open {0} to renew it",
+    /* StatusClaudeCliRunToRenew */ L"Claude Code sign-in expired: run claude",
     /* StatusFetchThreadFailed */ L"fetch thread failed",
     /* NotificationUsageAt */ L"{0} {1} usage at {2}%",
     /* NotificationResets */ L"Next reset {0}",
@@ -880,6 +947,11 @@ static const PCWSTR kStringsEn[(int)Str::Count] = {
     /* SettingsTheStoredSignInCouldNotBe2 */ L"The stored sign-in could not be deleted, so the account was not removed.",
     /* SettingsCouldNotRemoveTheAccount */ L"Could not remove the account.",
     /* SettingsCouldNotReorderTheAccount */ L"Could not reorder the account.",
+    /* SettingsRescan */ L"Rescan",
+    /* SettingsFindAccountsPrompt */ L"Allow Taskbar AI Usage to look for AI providers already signed in on this PC and add them automatically? You can rescan or add accounts one by one later in Settings.",
+    /* SettingsFindAccounts */ L"Find accounts",
+    /* SettingsNotNow */ L"Not now",
+    /* SettingsRescanNoneFound */ L"No new signed-in AI providers were found.",
     /* SettingsCouldNotUpdateAccountVisibility */ L"Could not update account visibility.",
     /* SettingsResetSettings */ L"Reset settings",
     /* SettingsCouldNotResetSettings */ L"Could not reset settings.",
@@ -1061,7 +1133,7 @@ static const PCWSTR kStringsEn[(int)Str::Count] = {
     /* AppearanceExportDone */ L"Appearance exported to:\n{0}",
     /* AppearanceExportFailed */ L"Could not export the appearance: {0}",
     /* AppearanceImportFailed */ L"Could not import the appearance: {0}",
-    /* AppearanceErrTooManyIcons */ L"too many text icons (maximum 16)",
+    /* AppearanceErrTooManyIcons */ L"too many icons (at most 16 SVG icons and 256 in total)",
     /* AppearanceErrWrite */ L"the file could not be written",
     /* AppearanceErrRead */ L"the file could not be read",
     /* AppearanceErrTooLarge */ L"the file is larger than 4 MiB",
@@ -1090,6 +1162,9 @@ static const PCWSTR kStringsEn[(int)Str::Count] = {
     /* AppearanceValuePx */ L"{0} px",
     /* SettingsOpenFlyoutOnHover */ L"Open flyout on hover",
     /* SettingsOpenFlyoutOnHoverHelp */ L"Show the usage flyout when the pointer rests on a tile, without clicking.",
+    /* EditorAllowClaudeCliRenewal */ L"Let Claude Code renew its expired sign-in",
+    /* EditorClaudeCliNotFound */ L"Claude Code was not found",
+    /* EditorAllowClaudeCliRenewalHelp */ L"When the Claude Code sign-in expires, starts Claude Code hidden for a moment, without your hooks, plugins or MCP servers, so it renews the sign-in itself. Nothing is sent to the model.",
     /* SettingsGroupTaskbarTiles */ L"Taskbar",
     /* SettingsGroupFlyout */ L"Flyout",
     /* SettingsGroupPreviewBackup */ L"Tools",
@@ -1167,9 +1242,9 @@ static const PCWSTR kStringsEn[(int)Str::Count] = {
     /* SettingsAboutUsage */ L"Usage",
     /* SettingsAboutUsageText */ L"Usage figures come exclusively from the providers undocumented endpoints and may be incomplete, delayed or wrong and can change or stop working without notice. The author is not responsible for any of the information provided or its accuracy.",
     /* SettingsAboutData */ L"Data",
-    /* SettingsAboutDataText */ L"Sign-in uses the public OAuth clients of Claude Code, Codex, Antigravity and GitHub Copilot. Accounts that use the CLI login only read that sign-in; they never refresh, rotate or store it.",
+    /* SettingsAboutDataText */ L"Sign-in uses the public OAuth clients of Claude Code, Codex, Antigravity and GitHub Copilot. Accounts that use the CLI login only read that sign-in; the mod never refreshes, rotates or stores it. If you allow it for an account, the mod starts Claude Code hidden when its sign-in has expired, without your hooks, plugins or MCP servers, so that Claude Code renews and rewrites its own credentials.",
     /* SettingsAboutPrivacy */ L"Privacy",
-    /* SettingsAboutPrivacyText */ L"Tokens stay on this PC, encrypted with Windows DPAPI for your user account. Only the providers' sign-in and usage endpoints are contacted, and no telemetry is sent.",
+    /* SettingsAboutPrivacyText */ L"Tokens are stored only on this PC, encrypted with Windows DPAPI for your user account. Each token is sent only to the sign-in and usage endpoints of the provider that issued it. No telemetry is sent.",
     /* SettingsAboutNoWarranty */ L"No warranty",
     /* SettingsAboutNoWarrantyText */ L"Provided as is, without warranty of any kind. See the MIT License above.",
     /* SettingsTilePosition */ L"Tile position",
@@ -1190,7 +1265,7 @@ static const PCWSTR kStringsEn[(int)Str::Count] = {
 // ==== END STRINGS en ====
 
 // ==== BEGIN STRINGS es ====
-static const PCWSTR kStringsEs[(int)Str::Count] = {
+static const PCWSTR kStringsEs[] = {
     /* LoginAnthropicTitle */ L"Iniciar sesión: {0} (Anthropic)",
     /* LoginAnthropicInstructions */ L"Se abrió una ventana del explorador en claude.ai. Aprueba el acceso, copia el código que aparece en la página y pégalo a continuación.",
     /* LoginMissingAuthorizationCode */ L"falta el código de autorización",
@@ -1226,6 +1301,7 @@ static const PCWSTR kStringsEs[(int)Str::Count] = {
     /* StatusCliNotSignedIn */ L"{0} no hay sesión iniciada en este equipo",
     /* StatusCouldNotReadCliSignIn */ L"no se pudo leer la sesión iniciada de {0}",
     /* StatusCliSignInExpired */ L"la sesión iniciada de {0} expiró: abre {0} para renovarlo",
+    /* StatusClaudeCliRunToRenew */ L"La sesión de Claude Code expiró: ejecuta claude",
     /* StatusFetchThreadFailed */ L"error en el subproceso de consulta",
     /* NotificationUsageAt */ L"{0}: uso de {1} al {2}%",
     /* NotificationResets */ L"Próximo restablecimiento {0}",
@@ -1362,6 +1438,11 @@ static const PCWSTR kStringsEs[(int)Str::Count] = {
     /* SettingsTheStoredSignInCouldNotBe2 */ L"No se pudo eliminar el inicio de sesión almacenado, por lo que la cuenta no se quitó.",
     /* SettingsCouldNotRemoveTheAccount */ L"No se pudo quitar la cuenta.",
     /* SettingsCouldNotReorderTheAccount */ L"No se pudo reordenar la cuenta.",
+    /* SettingsRescan */ L"Volver a buscar",
+    /* SettingsFindAccountsPrompt */ L"¿Permitir que Taskbar AI Usage busque los proveedores de IA con sesión iniciada en este equipo y los agregue automáticamente? Puedes volver a buscar o agregar cuentas una por una más tarde en Configuración.",
+    /* SettingsFindAccounts */ L"Buscar cuentas",
+    /* SettingsNotNow */ L"Ahora no",
+    /* SettingsRescanNoneFound */ L"No se encontraron nuevos proveedores de IA con sesión iniciada.",
     /* SettingsCouldNotUpdateAccountVisibility */ L"No se pudo actualizar la visibilidad de la cuenta.",
     /* SettingsResetSettings */ L"Restablecer configuración",
     /* SettingsCouldNotResetSettings */ L"No se pudo restablecer la configuración.",
@@ -1543,7 +1624,7 @@ static const PCWSTR kStringsEs[(int)Str::Count] = {
     /* AppearanceExportDone */ L"Apariencia exportada a:\n{0}",
     /* AppearanceExportFailed */ L"No se pudo exportar la apariencia: {0}",
     /* AppearanceImportFailed */ L"No se pudo importar la apariencia: {0}",
-    /* AppearanceErrTooManyIcons */ L"demasiados iconos de texto (máximo 16)",
+    /* AppearanceErrTooManyIcons */ L"demasiados iconos (como máximo 16 iconos SVG y 256 en total)",
     /* AppearanceErrWrite */ L"no se pudo escribir el archivo",
     /* AppearanceErrRead */ L"no se pudo leer el archivo",
     /* AppearanceErrTooLarge */ L"el archivo supera los 4 MiB",
@@ -1572,6 +1653,9 @@ static const PCWSTR kStringsEs[(int)Str::Count] = {
     /* AppearanceValuePx */ L"{0} px",
     /* SettingsOpenFlyoutOnHover */ L"Abrir el flyout al pasar el puntero",
     /* SettingsOpenFlyoutOnHoverHelp */ L"Muestra el flyout de uso al detener el puntero sobre un mosaico, sin hacer clic.",
+    /* EditorAllowClaudeCliRenewal */ L"Permitir que Claude Code renueve su sesión expirada",
+    /* EditorClaudeCliNotFound */ L"No se encontró Claude Code",
+    /* EditorAllowClaudeCliRenewalHelp */ L"Cuando la sesión de Claude Code expira, inicia Claude Code oculto unos segundos, sin tus hooks, plugins ni servidores MCP, para que renueve la sesión por sí mismo. No se envía nada al modelo.",
     /* SettingsGroupTaskbarTiles */ L"Barra de tareas",
     /* SettingsGroupFlyout */ L"Flyout",
     /* SettingsGroupPreviewBackup */ L"Herramientas",
@@ -1649,9 +1733,9 @@ static const PCWSTR kStringsEs[(int)Str::Count] = {
     /* SettingsAboutUsage */ L"Uso",
     /* SettingsAboutUsageText */ L"Las cifras de uso provienen exclusivamente de los servicios no documentados de los proveedores y pueden estar incompletas, retrasadas o ser incorrectas, y pueden cambiar o dejar de funcionar sin aviso. El autor no se responsabiliza de ninguna de la información proporcionada ni de su exactitud.",
     /* SettingsAboutData */ L"Datos",
-    /* SettingsAboutDataText */ L"El inicio de sesión usa los clientes OAuth públicos de Claude Code, Codex, Antigravity y GitHub Copilot. Las cuentas que usan el inicio de sesión de la CLI solo lo leen; nunca lo renuevan, rotan ni guardan.",
+    /* SettingsAboutDataText */ L"El inicio de sesión usa los clientes OAuth públicos de Claude Code, Codex, Antigravity y GitHub Copilot. Las cuentas que usan el inicio de sesión de la CLI solo lo leen; el mod nunca lo renueva, rota ni guarda. Si lo permites en una cuenta, el mod inicia Claude Code oculto cuando su sesión expira, sin tus hooks, plugins ni servidores MCP, para que Claude Code renueve y reescriba sus propias credenciales.",
     /* SettingsAboutPrivacy */ L"Privacidad",
-    /* SettingsAboutPrivacyText */ L"Los tokens se quedan en este PC, cifrados con DPAPI de Windows para tu cuenta de usuario. Solo se contactan los servicios de inicio de sesión y de uso de los proveedores, y no se envía telemetría.",
+    /* SettingsAboutPrivacyText */ L"Los tokens se guardan solo en este PC, cifrados con DPAPI de Windows para tu cuenta de usuario. Cada token se envía solo a los servicios de inicio de sesión y de uso del proveedor que lo emitió. No se envía telemetría.",
     /* SettingsAboutNoWarranty */ L"Sin garantía",
     /* SettingsAboutNoWarrantyText */ L"Se proporciona tal cual, sin garantía de ningún tipo. Consulta la licencia MIT de arriba.",
     /* SettingsTilePosition */ L"Posición de los mosaicos",
@@ -1672,7 +1756,7 @@ static const PCWSTR kStringsEs[(int)Str::Count] = {
 // ==== END STRINGS es ====
 
 // ==== BEGIN STRINGS zh-Hans ====
-static const PCWSTR kStringsZhHans[(int)Str::Count] = {
+static const PCWSTR kStringsZhHans[] = {
     /* LoginAnthropicTitle */ L"登录：{0}（Anthropic）",
     /* LoginAnthropicInstructions */ L"已在浏览器中打开 claude.ai。请批准访问，然后复制页面上显示的代码并粘贴到下方。",
     /* LoginMissingAuthorizationCode */ L"缺少授权代码",
@@ -1708,6 +1792,7 @@ static const PCWSTR kStringsZhHans[(int)Str::Count] = {
     /* StatusCliNotSignedIn */ L"此电脑上未登录 {0}",
     /* StatusCouldNotReadCliSignIn */ L"无法读取 {0} 的登录信息",
     /* StatusCliSignInExpired */ L"{0} 登录已过期，请打开 {0} 更新登录状态",
+    /* StatusClaudeCliRunToRenew */ L"Claude Code 登录已过期：请运行 claude",
     /* StatusFetchThreadFailed */ L"数据获取线程出错",
     /* NotificationUsageAt */ L"{0} {1}用量已达 {2}%",
     /* NotificationResets */ L"下次重置：{0}",
@@ -1844,6 +1929,11 @@ static const PCWSTR kStringsZhHans[(int)Str::Count] = {
     /* SettingsTheStoredSignInCouldNotBe2 */ L"无法删除已保存的登录信息，因此未移除该账户。",
     /* SettingsCouldNotRemoveTheAccount */ L"无法移除账户。",
     /* SettingsCouldNotReorderTheAccount */ L"无法调整账户顺序。",
+    /* SettingsRescan */ L"重新扫描",
+    /* SettingsFindAccountsPrompt */ L"允许 Taskbar AI Usage 查找此电脑上已登录的 AI 提供商并自动添加吗？你可以稍后在设置中重新扫描，或逐个添加账户。",
+    /* SettingsFindAccounts */ L"查找账户",
+    /* SettingsNotNow */ L"暂不",
+    /* SettingsRescanNoneFound */ L"未找到新的已登录 AI 提供商。",
     /* SettingsCouldNotUpdateAccountVisibility */ L"无法更新账户可见性。",
     /* SettingsResetSettings */ L"重置设置",
     /* SettingsCouldNotResetSettings */ L"无法重置设置。",
@@ -2025,7 +2115,7 @@ static const PCWSTR kStringsZhHans[(int)Str::Count] = {
     /* AppearanceExportDone */ L"外观已导出到：\n{0}",
     /* AppearanceExportFailed */ L"无法导出外观：{0}",
     /* AppearanceImportFailed */ L"无法导入外观：{0}",
-    /* AppearanceErrTooManyIcons */ L"文字图标过多（最多 16 个）",
+    /* AppearanceErrTooManyIcons */ L"图标过多（最多 16 个 SVG 图标，总计不超过 256 个）",
     /* AppearanceErrWrite */ L"无法写入文件",
     /* AppearanceErrRead */ L"无法读取文件",
     /* AppearanceErrTooLarge */ L"文件大于 4 MiB",
@@ -2054,6 +2144,9 @@ static const PCWSTR kStringsZhHans[(int)Str::Count] = {
     /* AppearanceValuePx */ L"{0} px",
     /* SettingsOpenFlyoutOnHover */ L"悬停时打开浮出面板",
     /* SettingsOpenFlyoutOnHoverHelp */ L"将指针停留在磁贴上时显示用量浮出面板，无需点击。",
+    /* EditorAllowClaudeCliRenewal */ L"允许 Claude Code 更新其已过期的登录",
+    /* EditorClaudeCliNotFound */ L"未找到 Claude Code",
+    /* EditorAllowClaudeCliRenewalHelp */ L"Claude Code 登录过期时，在后台短暂启动 Claude Code（不加载你的钩子、插件或 MCP 服务器），由它自行更新登录。不会向模型发送任何内容。",
     /* SettingsGroupTaskbarTiles */ L"任务栏",
     /* SettingsGroupFlyout */ L"浮出面板",
     /* SettingsGroupPreviewBackup */ L"工具",
@@ -2131,9 +2224,9 @@ static const PCWSTR kStringsZhHans[(int)Str::Count] = {
     /* SettingsAboutUsage */ L"用量",
     /* SettingsAboutUsageText */ L"用量数据完全来自提供商未公开文档的接口，可能不完整、有延迟或不准确，并可能随时变更或停止工作，恕不另行通知。作者不对所提供的任何信息及其准确性承担责任。",
     /* SettingsAboutData */ L"数据",
-    /* SettingsAboutDataText */ L"登录使用 Claude Code、Codex、Antigravity 和 GitHub Copilot 的公共 OAuth 客户端。借用 CLI 登录的账户只读取其登录信息，不会刷新、轮换或保存这些信息。",
+    /* SettingsAboutDataText */ L"登录使用 Claude Code、Codex、Antigravity 和 GitHub Copilot 的公共 OAuth 客户端。借用 CLI 登录的账户只读取其登录信息，不会刷新、轮换或保存这些信息。如果你为某个账户允许此操作，Claude Code 登录过期时会在后台隐藏启动 Claude Code（不加载你的钩子、插件或 MCP 服务器），由它自行更新并重写自己的凭据。",
     /* SettingsAboutPrivacy */ L"隐私",
-    /* SettingsAboutPrivacyText */ L"令牌仅保存在本电脑上，使用 Windows DPAPI 加密，仅当前 Windows 用户可解密。仅连接提供商的登录和用量接口，不发送任何遥测数据。",
+    /* SettingsAboutPrivacyText */ L"令牌仅保存在本电脑上，使用 Windows DPAPI 加密，仅当前 Windows 用户可解密。每个令牌只发送到签发它的提供商的登录和用量接口。不发送任何遥测数据。",
     /* SettingsAboutNoWarranty */ L"无担保",
     /* SettingsAboutNoWarrantyText */ L"按“原样”提供，不附带任何形式的担保。请参阅上方的 MIT 许可证。",
     /* SettingsTilePosition */ L"磁贴位置",
@@ -2267,6 +2360,9 @@ struct AccountConfig {
     // Uses the Claude Code / Codex sign-in (read-only access token) instead of the mod's own
     // session. Anthropic and OpenAI only.
     bool useCliLogin = false;
+    // Claude with useCliLogin only: lets Claude Code renew its expired sign-in
+    // (RenewClaudeCliLogin). Off by default.
+    bool allowCliRenewal = false;
     // Per-account visibility of additional data; does not change alerts or identity.
     bool showOpenAiExtraLimits = false;
     bool showFableWeekly = true;
@@ -2402,8 +2498,17 @@ enum class FlyoutMaterial {
     Acrylic,
 };
 
+// Whether the mod may look for other apps' sign-ins. The user is asked once, before the first scan.
+enum class AccountDetection {
+    Ask,
+    Allowed,
+    Declined,
+};
+
 struct Settings {
     std::vector<AccountConfig> accounts;
+    std::vector<std::wstring> detectedProviders;
+    AccountDetection accountDetection = AccountDetection::Ask;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
     // Far left of the tray: the original placement.
     TilePosition tilePosition = TilePosition::TrayFarLeft;
@@ -2489,6 +2594,8 @@ struct AccountData {
     WindowUsage antigravityThirdPartyWeek;
     // Bounded additional quotas, with no arc or alerts; not persisted.
     std::vector<std::pair<std::wstring, WindowUsage>> antigravityOtherQuotas;
+    // Last fetch route, including failed attempts; not persisted.
+    bool antigravityLocalRoute = false;
     std::vector<AdditionalMeter> additionalMeters;
     std::wstring plan;
     std::wstring extraLines;
@@ -2776,6 +2883,7 @@ struct QuotaUiInstance {
     bool trackingConflict = false;
     ULONGLONG trackingConflictGeneration = 0;
     bool placementStale = false;
+    int placementErrors = 0;
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<ButtonClickHandler> tileClicks;
@@ -2858,6 +2966,8 @@ static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs = 11644473600000ULL;
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 static constexpr UINT kSettingsRefreshMessage = WM_APP + 20;
 static constexpr UINT kExitVisualTestMessage = WM_APP + 21;
+// Asks whether the mod may look for other apps' sign-ins (PromptAccountDetection).
+static constexpr UINT kSettingsDetectionPromptMessage = WM_APP + 22;
 static constexpr UINT_PTR kSettingsAutosaveTimer = 1;
 // Full repaint (root and children) after activating/deactivating the window or changing its
 // extended style: DWM can rebuild the surface with the material and leave the children transparent
@@ -4056,7 +4166,7 @@ static HICON CreateIconFromMaster(const std::vector<uint32_t>& master, int size)
 // Assets imported in an open edit that are not yet in the saved settings: cleanup must not delete
 // them (the autosave timer can fire while the editor is open).
 static std::mutex g_iconPinMutex;
-[[clang::no_destroy]] static std::vector<std::wstring> g_pinnedIconAssets;
+static std::vector<std::wstring> g_pinnedIconAssets;
 
 static void PinIconAsset(const std::wstring& asset) {
     std::lock_guard<std::mutex> lk(g_iconPinMutex);
@@ -4295,15 +4405,20 @@ static std::optional<double> EstimateTimeToLimitMs(WindowUsage const& wu,
            (double)(now - sampleMs);
 }
 
-// A single whole unit, truncated; under a minute it shows "less than 1 minute".
+// A single whole unit for a "less than {0}" phrase: the smallest count that is strictly greater
+// than the duration, so it never understates (1 h 59 m reads "2 hours", exactly 1 h reads
+// "2 hours"). Under a minute it reads "1 minute". A count that would reach the next unit's
+// size ("60 minutes", "24 hours") is expressed in that unit instead.
 static std::wstring FormatPaceDuration(double durationMs) {
-    ULONGLONG minutes = (ULONGLONG)std::max(1.0, std::floor(durationMs / 60000));
+    ULONGLONG ms = durationMs > 0 ? (ULONGLONG)durationMs : 0;
     auto unit = [](ULONGLONG count, Str one, Str other) {
         return TrFormat(count == 1 ? one : other, {std::to_wstring(count)});
     };
-    if (minutes >= 24 * 60) return unit(minutes / (24 * 60), Str::FlyoutDayOne, Str::FlyoutDayOther);
-    if (minutes >= 60) return unit(minutes / 60, Str::FlyoutHourOne, Str::FlyoutHourOther);
-    return unit(minutes, Str::FlyoutMinuteOne, Str::FlyoutMinuteOther);
+    ULONGLONG minutes = ms / 60000 + 1;
+    if (minutes < 60) return unit(minutes, Str::FlyoutMinuteOne, Str::FlyoutMinuteOther);
+    ULONGLONG hours = ms / (60ULL * 60000) + 1;
+    if (hours < 24) return unit(hours, Str::FlyoutHourOne, Str::FlyoutHourOther);
+    return unit(ms / (24ULL * 60 * 60000) + 1, Str::FlyoutDayOne, Str::FlyoutDayOther);
 }
 
 static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowThreshold,
@@ -4320,7 +4435,7 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
 }
 
 // Must match @version (shown in Settings > About).
-static constexpr PCWSTR kModVersion = L"1.0.0";
+static constexpr PCWSTR kModVersion = L"1.0.1";
 static constexpr PCWSTR kAboutQuotaBarsUrl = L"https://github.com/Cleroth/windhawk-taskbar-ai-quota";
 static constexpr PCWSTR kAboutMediaPlayerUrl = L"https://github.com/Salyts/Taskbar-Fluent-Media-Player";
 static constexpr PCWSTR kAboutT3CodeUrl = L"https://github.com/pingdotgg/t3code";
@@ -4329,9 +4444,9 @@ static constexpr PCWSTR kAboutCc0Url = L"https://creativecommons.org/publicdomai
 // LICENSE text (untranslated: it is the legal text). Must match the file in the repository.
 static constexpr PCWSTR kAboutLicenseText =
     L"Copyright (c) 2026 Sof2245\n"
-    L"Portions copyright (c) Cleroth (Taskbar AI Quota Bars)\n"
-    L"Portions copyright (c) 2026 Salyts (Taskbar Fluent Media Player)\n"
-    L"Portions copyright (c) 2026 GitHub Inc. (Primer Octicons, Copilot logo)\n\n"
+    L"Copyright (c) Cleroth (Taskbar AI Quota Bars)\n"
+    L"Copyright (c) 2026 Salyts (Taskbar Fluent Media Player)\n"
+    L"Copyright (c) 2026 GitHub Inc. (Primer Octicons, Copilot logo)\n\n"
     L"Permission is hereby granted, free of charge, to any person obtaining a copy of this "
     L"software and associated documentation files (the \"Software\"), to deal in the Software "
     L"without restriction, including without limitation the rights to use, copy, modify, merge, "
@@ -4990,8 +5105,18 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER,
                                 WINHTTP_HEADER_NAME_BY_INDEX, ra, &raSz,
                                 WINHTTP_NO_HEADER_INDEX)) {
-            res.retryAfterSec = _wtoi(ra);
-            if (res.retryAfterSec <= 0) {
+            bool numeric = ra[0] != L'\0';
+            int seconds = 0;
+            for (const wchar_t* digit = ra; *digit; ++digit) {
+                if (*digit < L'0' || *digit > L'9') {
+                    numeric = false;
+                    break;
+                }
+                // Saturate while parsing so even arbitrarily long numbers cannot overflow.
+                seconds = std::min(86400, seconds * 10 + (*digit - L'0'));
+            }
+            if (numeric) res.retryAfterSec = seconds;
+            if (!numeric) {
                 SYSTEMTIME st{};
                 FILETIME ft{};
                 if (WinHttpTimeToSystemTime(ra, &st) && SystemTimeToFileTime(&st, &ft)) {
@@ -5078,8 +5203,7 @@ static constexpr PCWSTR kAntigravityClientSecret = L"GOCSPX-K58FWR486LdLJ1mLB8sX
 static constexpr PCWSTR kAntigravityRedirect = L"http://localhost:51121/oauth-callback";
 static constexpr PCWSTR kAntigravityScope =
     L"https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email "
-    L"https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog "
-    L"https://www.googleapis.com/auth/experimentsandconfigs";
+    L"https://www.googleapis.com/auth/userinfo.profile";
 static constexpr PCWSTR kAntigravityUserAgent = L"antigravity/hub/1.0.0 (aidev_client; os_type=win32; arch=x64; cl=963137146)";
 static void WipeBuffer(std::string& buffer);
 static void WipeBuffer(std::wstring& buffer);
@@ -5292,6 +5416,60 @@ static TokenEndpointResult PostAntigravityTokenEndpoint(const std::string& formB
     bool parsed = ParseTokenResponse(result.body, false, token, error);
     WipeBuffer(result.body);
     return parsed ? TokenEndpointResult::Success : TokenEndpointResult::TransientFailure;
+}
+
+// Tokens of the mod's own Google sign-ins that were signed out or deleted, waiting for the fetch
+// thread to revoke them at Google. Borrowed sign-ins are never queued.
+static std::mutex g_googleRevocationMutex;
+static std::vector<std::string> g_pendingGoogleRevocations;
+
+// Reads the token to revoke before the caller deletes the stored sign-in (refresh token preferred:
+// revoking it also ends its access tokens).
+static std::string GoogleRevocationToken(uint64_t identity) {
+    StoredToken token;
+    if (!LoadStoredToken(identity, &token)) return {};
+    std::string value = WideToUtf8(token.refreshToken.empty() ? token.accessToken : token.refreshToken);
+    WipeBuffer(token.accessToken);
+    WipeBuffer(token.refreshToken);
+    return value;
+}
+
+static void QueueGoogleRevocation(std::string token) {
+    if (token.empty()) return;
+    std::lock_guard<std::mutex> lock(g_googleRevocationMutex);
+    if (g_unloading) {
+        WipeBuffer(token);
+        return;
+    }
+    g_pendingGoogleRevocations.push_back(std::move(token));
+}
+
+static void WipePendingGoogleRevocations() {
+    std::lock_guard<std::mutex> lock(g_googleRevocationMutex);
+    for (auto& token : g_pendingGoogleRevocations) WipeBuffer(token);
+    g_pendingGoogleRevocations.clear();
+}
+
+// Fetch thread only. The sign-in is already deleted from this PC, so a failed revocation is only
+// logged; the user can still remove the app's access in their Google account.
+static void RevokePendingGoogleTokens() {
+    std::vector<std::string> tokens;
+    {
+        std::lock_guard<std::mutex> lock(g_googleRevocationMutex);
+        tokens.swap(g_pendingGoogleRevocations);
+    }
+    for (auto& token : tokens) {
+        if (!g_unloading) {
+            std::string body = "token=" + UrlEncode(token);
+            HttpResult result = HttpRequest(L"POST", L"oauth2.googleapis.com", L"/revoke", kOAuthUserAgent,
+                L"Content-Type: application/x-www-form-urlencoded\r\n", body, true);
+            WipeBuffer(body);
+            WipeBuffer(result.body);
+            Wh_Log(L"Google sign-in revocation %s (HTTP %d)",
+                   result.ok && result.status == 200 ? L"succeeded" : L"failed", result.status);
+        }
+        WipeBuffer(token);
+    }
 }
 
 // The project is obtained for the same session; a project of another user is never made up.
@@ -5578,11 +5756,14 @@ static bool StartLoopback(SOCKET* outSock, int* outPort) {
     for (int port : {1455, 1457}) {
         SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (s == INVALID_SOCKET) continue;
+        BOOL exclusive = TRUE;
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons((u_short)port);
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        if (bind(s, (sockaddr*)&addr, sizeof(addr)) == 0 && listen(s, 1) == 0) {
+        if (setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                       reinterpret_cast<char*>(&exclusive), sizeof(exclusive)) == 0 &&
+            bind(s, (sockaddr*)&addr, sizeof(addr)) == 0 && listen(s, 1) == 0) {
             *outSock = s;
             *outPort = port;
             return true;
@@ -6015,6 +6196,8 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
         Wh_Log(L"Sign-in: exception");
     }
     if (apartmentInitialized) winrt::uninit_apartment();
+    // Thread tail: StartLoginByIdentity joins this thread while holding locks, so nothing below may
+    // take a lock or marshal synchronously to a UI thread.
     g_loginAccountIdentity.store(0);
     g_loginInProgress.store(false);
     NotifySettingsWindowChanged();
@@ -6060,8 +6243,13 @@ static void StartLoginByIdentity(uint64_t identityHash) {
         NotifySettingsWindowChanged();
         return;
     }
-    // A prior login thread has already cleared g_loginInProgress; release its handle before reuse.
+    // A prior login thread has already cleared g_loginInProgress but may still be running its
+    // tail. Wait for it to exit before releasing the handle, so Wh_ModUninit never misses a thread
+    // that can still execute mod code. The tail must stay short and non-blocking (it only posts
+    // to the settings window and frees its request: no locks, no synchronous marshaling to a UI
+    // thread), otherwise this join could deadlock against this caller.
     if (g_loginThread) {
+        WaitForSingleObject(g_loginThread, INFINITE);
         CloseHandle(g_loginThread);
         g_loginThread = nullptr;
     }
@@ -6076,6 +6264,7 @@ static void StartLoginByIdentity(uint64_t identityHash) {
 
 static bool SignOutAccountByIdentity(uint64_t identityHash) {
     if (g_unloading) return false;
+    bool google = false;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         auto it = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
@@ -6084,8 +6273,12 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
             });
         if (it == g_settings.accounts.end() ||
             (it->provider == L"copilot" && !it->copilotLogin.empty())) return false;
+        google = it->provider == L"antigravity";
     }
+    std::string revocation = google ? GoogleRevocationToken(identityHash) : std::string();
     bool cleared = ClearStoredTokenAndBumpAuthEpoch(identityHash);
+    if (cleared) QueueGoogleRevocation(std::move(revocation));
+    else WipeBuffer(revocation);
     RefreshQuotaByIdentity(identityHash);  // Re-fetch so the column flips to "not signed in".
     NotifySettingsWindowChanged();
     return cleared;
@@ -6096,10 +6289,10 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
 /**********************************************/
 
 // Borrowed Claude Code / Codex sign-in. Rules:
-// - Only the CLI's credentials file is read; its token is never written or renewed (renewing it
-//   would rotate the refresh token and sign the CLI out).
+// - The mod only reads the CLI's credentials file; it never writes, refreshes or stores its tokens.
 // - Only the access token is used; the refresh token is never copied or stored.
-// - The CLI renews the token when it is used; if it expires, the account shows an error until then.
+// - When enabled, the mod starts Claude Code hidden so Claude Code renews and rewrites its own
+//   credentials file. Otherwise the user must run the CLI to renew an expired sign-in.
 
 static std::wstring CliConfigDir(PCWSTR envVar, PCWSTR defaultSubdir) {
     wchar_t buf[MAX_PATH];
@@ -6306,31 +6499,46 @@ static bool ReadCliCredentialsFile(const std::wstring& path, std::string* out,
 static bool ReadCliLogin(const std::wstring& provider, StoredToken* out, std::wstring* error) {
     std::wstring name = CliDisplayName(provider);
     std::wstring path = CliCredentialsPath(provider);
-    std::string raw;
-    if (path.empty() || !ReadCliCredentialsFile(path, &raw)) {
+    bool found = false;
+    bool parsed = false;
+    // The CLI may truncate the file before it writes the renewed token: a read that finds it
+    // empty, locked or half-written is retried briefly before it is reported.
+    for (int attempt = 0; attempt < 3 && !path.empty(); attempt++) {
+        if (attempt > 0 &&
+            (g_unloading || (g_stopEvent && WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0))) break;
+        std::string raw;
+        SetLastError(ERROR_SUCCESS);
+        found = ReadCliCredentialsFile(path, &raw);
+        if (!found) {
+            DWORD lastError = GetLastError();
+            if (lastError == ERROR_FILE_NOT_FOUND || lastError == ERROR_PATH_NOT_FOUND) break;
+            continue;
+        }
+        try {
+            auto root = JsonObject::Parse(Utf8ToWide(raw));
+            if (provider == L"anthropic") {
+                auto oauth = GetObj(root, L"claudeAiOauth");
+                out->accessToken = GetStr(oauth, L"accessToken");
+                double expiresAt = GetNum(oauth, L"expiresAt", 0);
+                out->expiresMs = expiresAt > 0 ? (ULONGLONG)expiresAt : 0;
+            } else {
+                auto tokens = GetObj(root, L"tokens");
+                out->accessToken = GetStr(tokens, L"access_token");
+                out->accountId = GetStr(tokens, L"account_id");
+                out->expiresMs = 0;
+            }
+            parsed = true;
+        } catch (...) {
+        }
+        // The file includes the CLI's refresh token: do not keep it in memory longer than needed.
+        WipeBuffer(raw);
+        if (parsed) break;
+    }
+    out->refreshToken.clear();
+    if (!found) {
         if (error) *error = TrFormat(Str::StatusCliNotSignedIn, {name});
         return false;
     }
-    bool parsed = false;
-    try {
-        auto root = JsonObject::Parse(Utf8ToWide(raw));
-        if (provider == L"anthropic") {
-            auto oauth = GetObj(root, L"claudeAiOauth");
-            out->accessToken = GetStr(oauth, L"accessToken");
-            double expiresAt = GetNum(oauth, L"expiresAt", 0);
-            out->expiresMs = expiresAt > 0 ? (ULONGLONG)expiresAt : 0;
-        } else {
-            auto tokens = GetObj(root, L"tokens");
-            out->accessToken = GetStr(tokens, L"access_token");
-            out->accountId = GetStr(tokens, L"account_id");
-            out->expiresMs = 0;
-        }
-        parsed = true;
-    } catch (...) {
-    }
-    // The file includes the CLI's refresh token: do not keep it in memory longer than needed.
-    WipeBuffer(raw);
-    out->refreshToken.clear();
     if (!parsed) {
         // May coincide with a CLI write; the next poll tries again.
         if (error) *error = TrFormat(Str::StatusCouldNotReadCliSignIn, {name});
@@ -6355,39 +6563,123 @@ static bool HasCliLogin(const std::wstring& provider) {
 }
 
 static std::wstring FindClaudeCli() {
-    wchar_t found[MAX_PATH];
-    DWORD n = SearchPathW(nullptr, L"claude.exe", nullptr, ARRAYSIZE(found), found, nullptr);
-    if (n > 0 && n < ARRAYSIZE(found)) return found;
-    // explorer.exe's PATH may predate the installation: try the usual paths (winget and the native
-    // installer).
+    // Only known install locations are used, never the current directory or PATH. These locations
+    // are user-writable: this makes lookup deterministic, not a check of authenticity.
     const std::pair<PCWSTR, PCWSTR> candidates[] = {
         {L"LOCALAPPDATA", L"\\Microsoft\\WinGet\\Links\\claude.exe"},
         {L"USERPROFILE", L"\\.local\\bin\\claude.exe"},
     };
     for (const auto& [envVar, relative] : candidates) {
         wchar_t base[MAX_PATH];
-        n = GetEnvironmentVariableW(envVar, base, ARRAYSIZE(base));
+        DWORD n = GetEnvironmentVariableW(envVar, base, ARRAYSIZE(base));
         if (n == 0 || n >= ARRAYSIZE(base)) continue;
         std::wstring path = std::wstring(base) + relative;
-        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+        DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY)) return path;
     }
     return {};
 }
 
-// Makes Claude Code renew its own token, as T3 Code does: starts `claude` in SDK mode (stream-json)
-// and only sends the "initialize" handshake, with no prompt, so nothing reaches the model. The CLI
-// renews the session on startup and rewrites its file; the mod does not touch it. The process is
-// hidden, inherits only its pipes and lives in a job that closes it (with its children) when done.
-// It is cut short when the mod unloads. Fetch thread; at most one attempt every 10 min.
-static bool RenewClaudeCliLogin() {
-    static std::atomic<ULONGLONG> lastAttemptMs{0};
-    ULONGLONG now = NowUnixMs();
-    ULONGLONG last = lastAttemptMs.load();
-    if (g_unloading || (last && now - last < 10ULL * 60 * 1000)) return false;
-    lastAttemptMs.store(now);
+// The calling process's environment with these overrides, kept sorted by name as Windows expects.
+// Safe mode keeps Claude Code from running the user's hooks, plugins and MCP servers while it starts
+// only to renew its sign-in; the second variable turns off its telemetry, error reporting and update
+// checks. Versions that don't know a variable ignore it.
+static std::wstring ClaudeCliRenewalEnvironment() {
+    static constexpr std::wstring_view kOverrides[] = {
+        L"CLAUDE_CODE_SAFE_MODE",
+        L"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    };
+    std::vector<std::wstring> entries;
+    if (LPWCH block = GetEnvironmentStringsW()) {
+        for (LPCWSTR p = block; *p; p += wcslen(p) + 1) entries.emplace_back(p);
+        FreeEnvironmentStringsW(block);
+    }
+    // Names may start with '=' (per-drive current directories): the separator is the next '='.
+    auto name = [](const std::wstring& entry) {
+        return std::wstring_view(entry).substr(0, entry.find(L'=', 1));
+    };
+    entries.erase(std::remove_if(entries.begin(), entries.end(), [&](const std::wstring& entry) {
+        std::wstring entryName(name(entry));
+        return std::any_of(std::begin(kOverrides), std::end(kOverrides), [&](std::wstring_view variable) {
+            return _wcsicmp(entryName.c_str(), std::wstring(variable).c_str()) == 0;
+        });
+    }), entries.end());
+    for (std::wstring_view variable : kOverrides) entries.emplace_back(std::wstring(variable) + L"=1");
+    std::stable_sort(entries.begin(), entries.end(), [&](const std::wstring& a, const std::wstring& b) {
+        return _wcsicmp(std::wstring(name(a)).c_str(), std::wstring(name(b)).c_str()) < 0;
+    });
+    std::wstring environment;
+    for (const std::wstring& entry : entries) environment.append(entry).push_back(L'\0');
+    environment.push_back(L'\0');
+    return environment;
+}
+
+// Changing consent invalidates the fetch thread's failure budget, even if toggled between polls.
+static std::atomic<ULONGLONG> g_claudeCliRenewalEpoch{0};
+
+// Identities of the Claude accounts that allow Claude Code to renew its sign-in, sorted.
+static std::vector<uint64_t> ClaudeCliRenewalConsent(const Settings& s) {
+    std::vector<uint64_t> identities;
+    for (const auto& a : s.accounts) {
+        if (a.provider == L"anthropic" && a.useCliLogin && a.allowCliRenewal) {
+            identities.push_back(AccountIdentityHash(a));
+        }
+    }
+    std::sort(identities.begin(), identities.end());
+    return identities;
+}
+
+// When enabled, starts Claude Code hidden in safe mode with only an initialize handshake (no prompt)
+// so Claude Code renews and rewrites its own credentials file. The mod never writes, refreshes or
+// stores those credentials. The job contains its children; unload aborts the bounded wait. Fetch thread only.
+static bool RenewClaudeCliLogin(uint64_t identity, ULONGLONG previousExpiry) {
+    struct RenewalState {
+        ULONGLONG lastAttemptMs = 0;
+        ULONGLONG expiry = 0;
+        ULONGLONG modified = 0;
+        ULONGLONG consentEpoch = 0;
+        ULONGLONG refreshGeneration = 0;
+        unsigned failures = 0;
+    };
+    static RenewalState state;
+    ULONGLONG consentEpoch;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        if (g_unloading) return false;
+        std::vector<uint64_t> consent = ClaudeCliRenewalConsent(g_settings);
+        if (!std::binary_search(consent.begin(), consent.end(), identity)) return false;
+        consentEpoch = g_claudeCliRenewalEpoch.load();
+    }
+    auto credentialsModified = []() -> ULONGLONG {
+        WIN32_FILE_ATTRIBUTE_DATA info{};
+        std::wstring path = CliCredentialsPath(L"anthropic");
+        if (path.empty() || !GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &info)) return 0;
+        return (ULONGLONG(info.ftLastWriteTime.dwHighDateTime) << 32) |
+               info.ftLastWriteTime.dwLowDateTime;
+    };
+    ULONGLONG modified = credentialsModified();
+    bool manualRefresh = false;
+    {
+        std::lock_guard<std::mutex> lock(g_refreshMutex);
+        ULONGLONG generation = g_refreshGeneration.load();
+        uint64_t refreshedIdentity = g_refreshAccountIdentity.load();
+        manualRefresh = g_refreshing.load() && generation != state.refreshGeneration &&
+                        (!refreshedIdentity || refreshedIdentity == identity);
+        state.refreshGeneration = generation;
+    }
+    if (manualRefresh || consentEpoch != state.consentEpoch ||
+        previousExpiry != state.expiry || modified != state.modified) state.failures = 0;
+    state.consentEpoch = consentEpoch;
+    state.expiry = previousExpiry;
+    state.modified = modified;
+    ULONGLONG now = GetTickCount64();
+    if (state.failures >= 3 ||
+        (state.lastAttemptMs && now - state.lastAttemptMs < 10ULL * 60 * 1000)) return false;
 
     std::wstring exe = FindClaudeCli();
     if (exe.empty()) return false;
+    state.lastAttemptMs = now;
+    ++state.failures;
 
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE inRead = nullptr, inWrite = nullptr, outRead = nullptr, outWrite = nullptr;
@@ -6397,16 +6689,17 @@ static bool RenewClaudeCliLogin() {
         CloseHandle(inWrite);
         return false;
     }
-    SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
+    bool pipesReady = SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0) &&
+                      SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
     HANDLE errNul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
                                 OPEN_EXISTING, 0, nullptr);
 
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    bool jobReady = false;
     if (job) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+        jobReady = SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
     }
 
     // Only these pipes are inherited, not explorer.exe's other inheritable handles.
@@ -6416,7 +6709,8 @@ static bool RenewClaudeCliLogin() {
     InitializeProcThreadAttributeList(nullptr, 1, 0, &attrSize);
     std::vector<BYTE> attrBuf(attrSize);
     auto attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrBuf.data());
-    bool attrsReady = attrSize && InitializeProcThreadAttributeList(attrs, 1, 0, &attrSize) &&
+    bool attrsInitialized = attrSize && InitializeProcThreadAttributeList(attrs, 1, 0, &attrSize);
+    bool attrsReady = attrsInitialized &&
                       UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                                                 inherited, inheritedCount * sizeof(HANDLE),
                                                 nullptr, nullptr);
@@ -6431,16 +6725,21 @@ static bool RenewClaudeCliLogin() {
 
     wchar_t home[MAX_PATH];
     DWORD homeLen = GetEnvironmentVariableW(L"USERPROFILE", home, ARRAYSIZE(home));
+    // No hooks or MCP servers: safe mode in the environment, plus these flags for versions before it.
     std::wstring cmd = L"\"" + exe +
-                       L"\" -p --input-format stream-json --output-format stream-json --verbose";
+                       L"\" -p --input-format stream-json --output-format stream-json --verbose"
+                       L" --strict-mcp-config --settings \"{\\\"disableAllHooks\\\":true}\"";
+    std::wstring environment = ClaudeCliRenewalEnvironment();
     PROCESS_INFORMATION pi{};
-    bool started = attrsReady && job &&
-                   CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE,
+    bool started = !g_unloading && consentEpoch == g_claudeCliRenewalEpoch.load() &&
+                   pipesReady && attrsReady && jobReady &&
+                   CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, TRUE,
                                   CREATE_NO_WINDOW | CREATE_SUSPENDED |
-                                      EXTENDED_STARTUPINFO_PRESENT,
-                                  nullptr, homeLen && homeLen < ARRAYSIZE(home) ? home : nullptr,
+                                      EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                                  environment.data(),
+                                  homeLen && homeLen < ARRAYSIZE(home) ? home : nullptr,
                                   &si.StartupInfo, &pi);
-    if (attrsReady) DeleteProcThreadAttributeList(attrs);
+    if (attrsInitialized) DeleteProcThreadAttributeList(attrs);
     CloseHandle(inRead);
     CloseHandle(outWrite);
     if (errNul != INVALID_HANDLE_VALUE) CloseHandle(errNul);
@@ -6450,17 +6749,23 @@ static bool RenewClaudeCliLogin() {
         if (!AssignProcessToJobObject(job, pi.hProcess)) {
             TerminateProcess(pi.hProcess, 1);
         } else {
-            ResumeThread(pi.hThread);
             static const char kInitialize[] =
                 "{\"type\":\"control_request\",\"request_id\":\"taskbar-ai-usage-init\","
                 "\"request\":{\"subtype\":\"initialize\"}}\n";
-            DWORD written = 0;
-            WriteFile(inWrite, kInitialize, sizeof(kInitialize) - 1, &written, nullptr);
-
-            // Waits for the reply (at most 30 s) without blocking the mod's unload.
-            std::string output;
             ULONGLONG deadline = GetTickCount64() + 30000;
-            while (!g_unloading && GetTickCount64() < deadline) {
+            bool resumed = !g_unloading && consentEpoch == g_claudeCliRenewalEpoch.load() &&
+                           ResumeThread(pi.hThread) != (DWORD)-1;
+            DWORD written = 0;
+            bool sent = resumed && WriteFile(inWrite, kInitialize, sizeof(kInitialize) - 1,
+                                             &written, nullptr) && written == sizeof(kInitialize) - 1;
+
+            // Parse complete JSON lines; unrelated, partial and error responses cannot succeed.
+            std::string output;
+            bool discardingLine = false;
+            bool received = false;
+            while (sent && !g_unloading && consentEpoch == g_claudeCliRenewalEpoch.load() &&
+                   GetTickCount64() < deadline) {
+                if (g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
                 DWORD available = 0;
                 if (!PeekNamedPipe(outRead, nullptr, 0, nullptr, &available, nullptr)) break;
                 if (available) {
@@ -6470,31 +6775,85 @@ static bool RenewClaudeCliLogin() {
                                   &read, nullptr) || !read) {
                         break;
                     }
-                    output.append(chunk, read);
-                    if (output.find("\"control_response\"") != std::string::npos) {
-                        answered = true;
-                        break;
+                    for (DWORD i = 0; i < read && !received; ++i) {
+                        if (chunk[i] != '\n') {
+                            if (!discardingLine) output.push_back(chunk[i]);
+                            if (output.size() > 64 * 1024) {
+                                WipeBuffer(output);
+                                output.clear();
+                                discardingLine = true;
+                            }
+                            continue;
+                        }
+                        if (!discardingLine && !output.empty()) {
+                            try {
+                                JsonObject message = JsonObject::Parse(Utf8ToWide(output));
+                                JsonObject response = GetObj(message, L"response");
+                                if (GetStr(message, L"type") == L"control_response" &&
+                                    GetStr(response, L"request_id") == L"taskbar-ai-usage-init") {
+                                    received = true;
+                                    answered = GetStr(response, L"subtype") == L"success" &&
+                                               GetObj(response, L"response") != nullptr;
+                                }
+                            } catch (...) {}
+                        }
+                        WipeBuffer(output);
+                        output.clear();
+                        discardingLine = false;
                     }
-                    // Only the marker matters; do not accumulate the whole output.
-                    if (output.size() > 64 * 1024) output.erase(0, output.size() - 64);
+                    if (received) break;
                     continue;
                 }
                 if (WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0) break;
                 if (g_stopEvent && WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) break;
                 if (!g_stopEvent) Sleep(100);
             }
+            WipeBuffer(output);
+            // EOF lets the CLI finish writing its own file. Include this grace period in the
+            // overall bound, and stop waiting immediately when unload or consent changes. Keep
+            // draining its output: with a full pipe the CLI blocks and never exits by itself.
+            CloseHandle(inWrite);
+            inWrite = nullptr;
+            ULONGLONG exitDeadline = std::min(deadline, GetTickCount64() + 5000);
+            while (received && !g_unloading && consentEpoch == g_claudeCliRenewalEpoch.load()) {
+                DWORD available = 0;
+                while (!g_unloading && GetTickCount64() < exitDeadline &&
+                       PeekNamedPipe(outRead, nullptr, 0, nullptr, &available, nullptr) && available) {
+                    char chunk[4096];
+                    DWORD read = 0;
+                    if (!ReadFile(outRead, chunk, std::min<DWORD>(available, sizeof(chunk)), &read,
+                                  nullptr) || !read) {
+                        break;
+                    }
+                }
+                ULONGLONG waitStart = GetTickCount64();
+                if (waitStart >= exitDeadline) break;
+                HANDLE waitHandles[] = {pi.hProcess, g_stopEvent};
+                DWORD wait = WaitForMultipleObjects(g_stopEvent ? 2 : 1, waitHandles, FALSE,
+                    (DWORD)std::min<ULONGLONG>(100, exitDeadline - waitStart));
+                if (wait != WAIT_TIMEOUT) break;
+            }
         }
-        TerminateProcess(pi.hProcess, 0);
+        if (WaitForSingleObject(pi.hProcess, 0) != WAIT_OBJECT_0) TerminateProcess(pi.hProcess, 0);
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
     }
     // KILL_ON_JOB_CLOSE: closing the job ends any child processes the CLI started.
     // (TerminateJobObject is not in Windhawk's MinGW libraries.)
     if (job) CloseHandle(job);
-    CloseHandle(inWrite);
+    if (inWrite) CloseHandle(inWrite);
     CloseHandle(outRead);
-    Wh_Log(L"Claude Code sign-in renewal %s", answered ? L"answered" : L"did not answer");
-    return answered;
+    StoredToken renewed;
+    bool success = answered && !g_unloading && consentEpoch == g_claudeCliRenewalEpoch.load() &&
+                   ReadCliLogin(L"anthropic", &renewed, nullptr) && renewed.expiresMs > previousExpiry;
+    WipeBuffer(renewed.accessToken);
+    state.modified = credentialsModified();
+    if (success) {
+        state.failures = 0;
+        state.expiry = renewed.expiresMs;
+    }
+    Wh_Log(L"Claude Code sign-in renewal %s", success ? L"verified" : L"not verified");
+    return success;
 }
 
 /**********************************************/
@@ -7948,6 +8307,13 @@ static const ClaudeUsageSample* ReadClaudeUsageCache(ClaudeUsageCacheReader* rea
     return &reader->sample;
 }
 
+// Errors from reading the Claude Code sign-in file, which a fresh Claude Code sample disproves.
+static bool IsClaudeCliReadError(const std::wstring& error) {
+    std::wstring name = CliDisplayName(L"anthropic");
+    return !error.empty() && (error == TrFormat(Str::StatusCliNotSignedIn, {name}) ||
+                              error == TrFormat(Str::StatusCouldNotReadCliSignIn, {name}));
+}
+
 // Replaces the account's data with the Claude Code sample, which is newer. Keeps what the cache
 // does not carry (free resets, and the plan if it cannot be inferred), the current error and retry
 // deadline; lastSuccessMs becomes the sample time.
@@ -7966,8 +8332,10 @@ static void ApplyClaudeUsageSample(const ClaudeUsageSample& sample, bool fresh,
         merged.resetCreditsFetchedMs = d->resetCreditsFetchedMs;
     }
     merged.error = d->error;
-    // A new valid sample clears the usage warning, but does not allow another HTTP request.
-    if (fresh && merged.error == Tr(Str::StatusRateLimitedByAPI)) merged.error.clear();
+    // A new valid sample clears the usage warning, but does not allow another HTTP request. It
+    // also shows that Claude Code is signed in, so an earlier failure to read its sign-in is stale.
+    if (fresh && (merged.error == Tr(Str::StatusRateLimitedByAPI) ||
+                  IsClaudeCliReadError(merged.error))) merged.error.clear();
     merged.retryDeadlineMs = d->retryDeadlineMs;
     merged.needsLogin = false;
     merged.stale = fresh ? false : d->stale;
@@ -8052,21 +8420,25 @@ static std::wstring ResolveClaudePollKeyLocked(std::wstring key) {
 
 static ClaudePollState& LoadClaudePollStateLocked(const std::wstring& key) {
     auto [entry, inserted] = g_claudePollStates.try_emplace(key);
-    if (!inserted) return entry->second;
+    if (!inserted) {
+        entry->second.retryDeadlineMs = std::min(entry->second.retryDeadlineMs,
+                                                NowUnixMs() + 86400000ULL);
+        return entry->second;
+    }
     wchar_t text[512]{};
     Wh_GetStringValue(key.c_str(), text, ARRAYSIZE(text));
     if (!text[0]) return entry->second;
     try {
         auto json = JsonObject::Parse(text);
         ULONGLONG now = NowUnixMs();
-        auto timestamp = [&](PCWSTR name, ULONGLONG ceiling) -> ULONGLONG {
+        auto timestamp = [&](PCWSTR name, ULONGLONG ceiling, bool clamp = false) -> ULONGLONG {
             double value = GetNum(json, name, 0);
-            return std::isfinite(value) && value >= 0 && value <= (double)ceiling &&
-                   value == std::floor(value) ? (ULONGLONG)value : 0;
+            return std::isfinite(value) && value >= 0 && (clamp || value <= (double)ceiling) &&
+                   value == std::floor(value) ? (ULONGLONG)std::min(value, (double)ceiling) : 0;
         };
         entry->second.lastAttemptMs = std::min(now, timestamp(L"lastAttemptMs", now + 60000));
-        // A numeric WinHTTP Retry-After fits in an int; it is not shortened when loaded.
-        entry->second.retryDeadlineMs = timestamp(L"retryDeadlineMs", now + 2147483647ULL * 1000);
+        // Keep provider waits within one day, including state saved with an unbounded header.
+        entry->second.retryDeadlineMs = timestamp(L"retryDeadlineMs", now + 86400000ULL, true);
         // Older saved state: its counters no longer extend the interval. A pending deadline is
         // kept because those counters mixed Retry-After and the penalty.
         entry->second.lastRateLimited = GetNum(json, L"lastRateLimited",
@@ -8081,7 +8453,8 @@ static void SaveClaudePollStateLocked(const std::wstring& key, const ClaudePollS
     wchar_t text[256];
     swprintf(text, ARRAYSIZE(text),
              L"{\"lastAttemptMs\":%llu,\"retryDeadlineMs\":%llu,\"lastRateLimited\":%u}",
-             state.lastAttemptMs, state.retryDeadlineMs, state.lastRateLimited ? 1U : 0U);
+             state.lastAttemptMs, std::min(state.retryDeadlineMs, NowUnixMs() + 86400000ULL),
+             state.lastRateLimited ? 1U : 0U);
     if (!Wh_SetStringValue(key.c_str(), text)) Wh_Log(L"Could not save Claude polling state");
 }
 
@@ -8093,8 +8466,10 @@ static ClaudePollState ReadClaudePollState(const AccountConfig& account) {
 static void WriteClaudePollState(const AccountConfig& account, const ClaudePollState& state) {
     std::lock_guard<std::mutex> lock(g_claudePollMutex);
     std::wstring key = ResolveClaudePollKeyLocked(ClaudePollStorageKey(account));
-    g_claudePollStates[key] = state;
-    SaveClaudePollStateLocked(key, state);
+    ClaudePollState bounded = state;
+    bounded.retryDeadlineMs = std::min(bounded.retryDeadlineMs, NowUnixMs() + 86400000ULL);
+    g_claudePollStates[key] = bounded;
+    SaveClaudePollStateLocked(key, bounded);
 }
 
 static void RenameClaudePollState(const AccountConfig& before, const AccountConfig& after) {
@@ -8107,7 +8482,8 @@ static void RenameClaudePollState(const AccountConfig& before, const AccountConf
     ClaudePollState merged = LoadClaudePollStateLocked(oldKey);
     const ClaudePollState& destination = LoadClaudePollStateLocked(newKey);
     merged.lastAttemptMs = std::max(merged.lastAttemptMs, destination.lastAttemptMs);
-    merged.retryDeadlineMs = std::max(merged.retryDeadlineMs, destination.retryDeadlineMs);
+    merged.retryDeadlineMs = std::min(std::max(merged.retryDeadlineMs, destination.retryDeadlineMs),
+                                      NowUnixMs() + 86400000ULL);
     merged.lastRateLimited = merged.lastRateLimited || destination.lastRateLimited;
     g_claudePollStates[newKey] = merged;
     SaveClaudePollStateLocked(newKey, merged);
@@ -8300,9 +8676,9 @@ static void FetchCopilotAccount(const AccountConfig& account, AccountData* data,
         data->error = Tr(Str::CopilotSignInRequired);
         return;
     }
-    std::wstring headers;
-    CopilotSecretWiper headerWiper{headers};
     auto requestQuota = [&]() {
+        std::wstring headers;
+        CopilotSecretWiper headerWiper{headers};
         headers.reserve(token.size() + 160);
         headers.append(L"Authorization: token ").append(token).append(
             L"\r\nAccept: application/json\r\nX-GitHub-Api-Version: 2022-11-28\r\n");
@@ -8352,7 +8728,9 @@ static void FetchCopilotAccount(const AccountConfig& account, AccountData* data,
 // The local session is the automatic fallback only when there is no own sign-in. After an own
 // 401/403 it never silently switches to the IDE's identity.
 static void FetchAntigravityAccount(const AccountConfig& account, AccountData* data,
-                                    int* retryAfterSec, int fallbackRetrySec) {
+                                    int* retryAfterSec, int fallbackRetrySec,
+                                    int* usageHttpStatus) {
+    data->antigravityLocalRoute = false;
     const uint64_t identity = AccountIdentityHash(account);
     const ULONGLONG authEpoch = CurrentAuthEpoch(identity);
     StoredToken token;
@@ -8368,6 +8746,7 @@ static void FetchAntigravityAccount(const AccountConfig& account, AccountData* d
             return;
         }
         FetchAntigravityLocalAccount(data);
+        data->antigravityLocalRoute = true;
         if (!g_unloading && data->stale && !data->error.empty()) data->needsLogin = true;
         return;
     }
@@ -8380,7 +8759,7 @@ static void FetchAntigravityAccount(const AccountConfig& account, AccountData* d
             data->stale = true;
             data->needsLogin = result == TokenEndpointResult::Rejected;
             data->error = Tr(data->needsLogin ? Str::StatusSessionExpiredClickToSignIn : Str::StatusTokenRefreshFailed);
-            if (!data->needsLogin) *retryAfterSec = retry > 0 ? retry : 120;
+            if (retry > 0) *retryAfterSec = retry;
             return false;
         }
         uint64_t savedIdentity = 0;
@@ -8434,14 +8813,16 @@ static void FetchAntigravityAccount(const AccountConfig& account, AccountData* d
             for (PCWSTR host : {L"daily-cloudcode-pa.googleapis.com", L"cloudcode-pa.googleapis.com"}) {
                 if (g_unloading) break;
                 result = HttpRequest(L"POST", host, operation, kAntigravityUserAgent, headers, body, true);
-                if (result.ok && (result.status == 401 || result.status == 403)) {
-                    bool primary = wcscmp(host, L"cloudcode-pa.googleapis.com") == 0;
-                    if (primary) authFailed = true;
-                    if (primary && result.status == 401 && !refreshed && attempt == 0) { renew = true; break; }
-                    // The daily host may reject a session the primary one accepted.
-                    continue;
+                if (usageHttpStatus) *usageHttpStatus = result.status;
+                if (result.status == 401 || result.status == 403) {
+                    // The daily host may reject a session the primary one accepted; a rejection by
+                    // the primary host ends this attempt.
+                    if (wcscmp(host, L"cloudcode-pa.googleapis.com") != 0) continue;
+                    authFailed = true;
+                    if (result.status == 401 && !refreshed && attempt == 0) renew = true;
+                    break;
                 }
-                if (result.ok && result.status == 429) {
+                if (result.status == 429) {
                     data->stale = true;
                     data->error = Tr(Str::StatusRateLimitedByAPI);
                     *retryAfterSec = result.retryAfterSec > 0 ? result.retryAfterSec : fallbackRetrySec;
@@ -8463,12 +8844,13 @@ static void FetchAntigravityAccount(const AccountConfig& account, AccountData* d
                             return;
                         }
                         fresh.lastSuccessMs = NowUnixMs();
+                        fresh.stale = false;
                         *data = std::move(fresh);
                         return;
                     }
                 }
             }
-            if (renew || data->needsLogin || *retryAfterSec > 0 || g_unloading) break;
+            if (authFailed || renew || data->needsLogin || *retryAfterSec > 0 || g_unloading) break;
         }
         WipeBuffer(headers);
         if (data->needsLogin || *retryAfterSec > 0 || g_unloading) return;
@@ -8508,24 +8890,33 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
 
     // Antigravity prefers its own session; without it, the local server remains the fallback.
     if (acc.provider == L"antigravity") {
-        FetchAntigravityAccount(acc, d, retryAfterSec, fallbackRetrySec);
+        FetchAntigravityAccount(acc, d, retryAfterSec, fallbackRetrySec, usageHttpStatus);
         return;
     }
 
     uint64_t idHash = AccountIdentityHash(acc);
     ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
     StoredToken tok;
-    // Borrowed CLI session: reread on every poll and never renewed or stored.
+    // Borrowed CLI session: reread on every poll, never refreshed or stored by the mod.
     const bool cliLogin = acc.useCliLogin;
+    const bool allowClaudeCliRenewal = cliLogin && acc.provider == L"anthropic" && acc.allowCliRenewal;
     if (cliLogin) {
         std::wstring cliError;
         bool usable = ReadCliLogin(acc.provider, &tok, &cliError);
-        // Claude Code token expired or about to expire: have the CLI renew it and read it again.
+        // Only with consent may Claude Code renew an expired or soon-to-expire token itself.
         bool expiring = usable && tok.expiresMs && tok.expiresMs < NowUnixMs() + 5 * 60000;
-        if (acc.provider == L"anthropic" && !tok.accessToken.empty() && (!usable || expiring) &&
-            RenewClaudeCliLogin()) {
-            tok = {};
-            usable = ReadCliLogin(acc.provider, &tok, &cliError);
+        if (acc.provider == L"anthropic" && !tok.accessToken.empty() && (!usable || expiring)) {
+            if (!allowClaudeCliRenewal) {
+                // A token that is about to expire is still used until it does.
+                if (!usable) {
+                    d->stale = true;
+                    d->error = Tr(Str::StatusClaudeCliRunToRenew);
+                    return;
+                }
+            } else if (RenewClaudeCliLogin(idHash, tok.expiresMs)) {
+                tok = {};
+                usable = ReadCliLogin(acc.provider, &tok, &cliError);
+            }
         }
         if (!usable) {
             d->stale = true;
@@ -8599,9 +8990,9 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
     };
 
     HttpResult r = requestUsage(tok);
-    // Claude Code token rejected before its expiry: one renewal attempt through the CLI.
-    if (cliLogin && acc.provider == L"anthropic" && r.ok && r.status == 401 &&
-        RenewClaudeCliLogin()) {
+    // A rejected borrowed token may only start Claude Code when renewal is enabled.
+    if (cliLogin && acc.provider == L"anthropic" && allowClaudeCliRenewal && r.ok && r.status == 401 &&
+        RenewClaudeCliLogin(idHash, tok.expiresMs)) {
         StoredToken renewed;
         if (ReadCliLogin(acc.provider, &renewed, nullptr) &&
             renewed.accessToken != tok.accessToken) {
@@ -8651,7 +9042,8 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         d->stale = true;
         if (cliLogin) {
             std::wstring name = CliDisplayName(acc.provider);
-            d->error = TrFormat(Str::StatusCliSignInRejected, {name});
+            d->error = acc.provider == L"anthropic" ? Tr(Str::StatusClaudeCliRunToRenew) :
+                       TrFormat(Str::StatusCliSignInRejected, {name});
             return;
         }
         d->needsLogin = true;
@@ -8829,9 +9221,44 @@ static void FireBalloonNotification(const std::wstring& title, const std::wstrin
 }
 
 // The mod's own AUMID. It is only registered under HKCU (no Start menu shortcut) and never assigned
-// to the process: explorer.exe keeps its own.
-static PCWSTR kToastAumid = L"Windhawk.TaskbarAiUsage";
+// to the process: explorer.exe keeps its own. A local build (id "local@...") uses a different AUMID
+// so removing its registration can never remove the one written by the published mod.
+static constexpr bool ModIdIsLocal(const wchar_t* id) {
+    constexpr wchar_t prefix[] = L"local@";
+    for (size_t i = 0; prefix[i]; i++) {
+        if (id[i] != prefix[i]) return false;
+    }
+    return true;
+}
+static constexpr PCWSTR kToastAumid =
+    ModIdIsLocal(WH_MOD_ID) ? L"Windhawk.TaskbarAiUsage.Local" : L"Windhawk.TaskbarAiUsage";
 static PCWSTR ToastDisplayName() { return Tr(Str::NotificationAppName); }
+
+// True once this process has written the AUMID registration and not removed it since.
+static std::atomic<bool> g_toastAumidWritten{false};
+// Serializes the registration writes and removals.
+static std::mutex g_toastAumidMutex;
+
+static std::wstring ToastAumidKeyPath() {
+    return std::wstring(L"Software\\Classes\\AppUserModelId\\") + kToastAumid;
+}
+
+enum class ToastResult {
+    Shown,       // The toast was handed to Windows.
+    Suppressed,  // Notifications are turned off (in the mod, or for the mod in Windows).
+    Failed,      // Operational error: the caller may fall back to the legacy balloon.
+};
+
+// Deletes exactly the mod's own AppUserModelId key. The per-app notification choice that Windows
+// keeps under CurrentVersion\Notifications\Settings is never touched.
+static void RemoveToastAumidRegistration() {
+    std::lock_guard<std::mutex> lock(g_toastAumidMutex);
+    LONG rc = RegDeleteTreeW(HKEY_CURRENT_USER, ToastAumidKeyPath().c_str());
+    if (rc != ERROR_SUCCESS && rc != ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"Toast AUMID key removal failed: %ld", rc);
+    }
+    g_toastAumidWritten.store(false);
+}
 
 // Escapes text for use in toast XML nodes and attributes.
 static std::wstring XmlEscape(const std::wstring& s) {
@@ -8910,13 +9337,14 @@ static bool EnsureToastIconFile(std::wstring* path) {
     return true;
 }
 
-// Creates (if missing or different) HKCU\Software\Classes\AppUserModelId\<AUMID> with DisplayName
-// and IconUri. Used by the fetch thread (toasts) and the settings thread (taskbar button).
+// Toasts need the sender's AUMID to be registered so Windows can show its name and icon. This
+// creates (if missing or different) HKCU\Software\Classes\AppUserModelId\<AUMID> with DisplayName
+// and IconUri. It runs on the fetch thread right before a toast, and only while notifications are
+// enabled. The key is removed when the mod unloads, when notifications are turned off, and at
+// startup if a previous session ended without unloading and notifications are off.
 static bool EnsureToastAumidRegistered() {
-    static std::mutex mutex;
-    std::lock_guard<std::mutex> lock(mutex);
-    std::wstring keyPath = L"Software\\Classes\\AppUserModelId\\";
-    keyPath += kToastAumid;
+    std::lock_guard<std::mutex> lock(g_toastAumidMutex);
+    std::wstring keyPath = ToastAumidKeyPath();
     HKEY key = nullptr;
     LONG rc = RegCreateKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, 0,
                               KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &key, nullptr);
@@ -8924,6 +9352,7 @@ static bool EnsureToastAumidRegistered() {
         Wh_Log(L"Toast AUMID key failed: %ld", rc);
         return false;
     }
+    g_toastAumidWritten.store(true);
     auto setString = [&](PCWSTR name, const std::wstring& value) {
         wchar_t current[MAX_PATH + 1] = {};
         DWORD type = 0;
@@ -8946,22 +9375,35 @@ static bool EnsureToastAumidRegistered() {
 }
 
 // Fetch-thread only. Shows a toast that persists in Notification Center. Clicking it opens the URL
-// with activationType="protocol": it does not call back into this DLL. Returns false if it could
-// not be shown so the caller uses the legacy balloon.
-static bool ShowToastNotification(const std::wstring& title, const std::wstring& body,
-                                  const std::wstring& detail, const std::wstring& launchUrl, const std::wstring& tag,
-                                  uint64_t identityHash) {
+// with activationType="protocol": it does not call back into this DLL. Suppressed means the user
+// turned notifications off (nothing must be shown); only Failed makes the caller use the legacy
+// balloon.
+static ToastResult ShowToastNotification(const std::wstring& title, const std::wstring& body,
+                                         const std::wstring& detail, const std::wstring& launchUrl,
+                                         const std::wstring& tag, uint64_t identityHash) {
     try {
-        if (!EnsureToastAumidRegistered()) return false;
+        {
+            // Notifications may have been turned off since the caller checked.
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            if (g_settings.notifyThreshold == 0) return ToastResult::Suppressed;
+        }
+        if (!EnsureToastAumidRegistered()) return ToastResult::Failed;
         using namespace winrt::Windows::UI::Notifications;
         ToastNotifier notifier = ToastNotificationManager::CreateToastNotifier(kToastAumid);
         // Setting() throws 0x80070490 while Windows does not yet have the settings for this AUMID
         // (first notification from an app without a shortcut); Show is tried anyway in that case.
-        // Only an explicit disabled value falls back to the legacy balloon.
+        // An explicit disabled value is the user's (or policy's) choice and shows nothing.
         try {
-            if (notifier.Setting() != NotificationSetting::Enabled) {
-                Wh_Log(L"Toasts not enabled for the mod AUMID");
-                return false;
+            switch (notifier.Setting()) {
+                case NotificationSetting::Enabled:
+                    break;
+                case NotificationSetting::DisabledForApplication:
+                case NotificationSetting::DisabledForUser:
+                case NotificationSetting::DisabledByGroupPolicy:
+                case NotificationSetting::DisabledByManifest:
+                default:
+                    Wh_Log(L"Toasts not enabled for the mod AUMID");
+                    return ToastResult::Suppressed;
             }
         } catch (winrt::hresult_error const& e) {
             Wh_Log(L"Toast Setting() unavailable: 0x%08X", (unsigned)e.code().value);
@@ -8986,13 +9428,13 @@ static bool ShowToastNotification(const std::wstring& title, const std::wstring&
             toast.Group(group);
         }
         notifier.Show(toast);
-        return true;
+        return ToastResult::Shown;
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Toast failed: 0x%08X", (unsigned)e.code().value);
     } catch (...) {
         Wh_Log(L"Toast failed");
     }
-    return false;
+    return ToastResult::Failed;
 }
 
 // Fetch-thread only. detail/provider/quotaTag/identityHash are optional: without
@@ -9006,7 +9448,10 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
     if (provider == L"anthropic") url = L"https://claude.ai/settings/usage";
     else if (provider == L"openai") url = L"https://chatgpt.com/codex/cloud/settings/analytics#usage";
     else if (provider == L"copilot") url = L"https://github.com/settings/copilot";
-    if (ShowToastNotification(title, body, detail, url, quotaTag, identityHash)) return;
+    if (ShowToastNotification(title, body, detail, url, quotaTag, identityHash) !=
+        ToastResult::Failed) {
+        return;
+    }
     FireBalloonNotification(title, detail.empty() ? body : body + L" " + detail);
 }
 
@@ -9031,11 +9476,13 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<std::wstring> retryCopilotLogins;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
+    std::vector<unsigned> antigravityCloudFailures;
     // State per account and quota: -1 no sample, 0 armed below, 1 above.
     std::vector<std::array<int, kQuotaBarCount>> thresholdState;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     ClaudeUsageCacheReader claudeCache;
     bool hostsTaskbar = false;
+    bool detectionAsked = false;
     while (!g_unloading) {
         // Without a taskbar in this process nothing is polled; it checks again every 10 s in case
         // the taskbar has not been created yet (Explorer startup).
@@ -9044,6 +9491,17 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             if (WaitForMultipleObjects(2, handles, FALSE, 10000) == WAIT_OBJECT_0) break;
             continue;
         }
+        // First run: Settings opens and asks before any other app's sign-in is read.
+        if (!detectionAsked) {
+            detectionAsked = true;
+            bool ask;
+            {
+                std::lock_guard<std::mutex> lk(g_settingsMutex);
+                ask = !g_settingsLoadError && g_settings.accountDetection == AccountDetection::Ask;
+            }
+            if (ask && !g_unloading) OpenSettingsWindow();
+        }
+        RevokePendingGoogleTokens();
         ULONGLONG refreshGeneration;
         uint64_t refreshAccountIdentity;
         bool refreshRequested;
@@ -9068,6 +9526,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         bool settingsChanged = lastLoggedSettingsGeneration != settingsGeneration ||
                                lastLoggedErrorStates.size() != accounts.size();
+        std::vector<AccountData> results(accounts.size());
+        {
+            std::lock_guard<std::mutex> lk(g_dataMutex);
+            if (g_data.size() == results.size()) results = g_data;
+        }
         if (settingsChanged) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
@@ -9077,11 +9540,13 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             auto oldCopilotLogins = std::move(retryCopilotLogins);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
+            auto oldAntigravityCloudFailures = std::move(antigravityCloudFailures);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
             retryIdentityHashes.resize(accounts.size());
             retryCopilotLogins.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
             nextPollDeadlineMs.assign(accounts.size(), 0);
+            antigravityCloudFailures.assign(accounts.size(), 0);
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
                 retryCopilotLogins[i] = accounts[i].copilotLogin;
@@ -9092,11 +9557,20 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         (accounts[i].provider != L"copilot" ||
                          (j < oldCopilotLogins.size() && oldCopilotLogins[j] == accounts[i].copilotLogin))) {
                         retryDeadlineMs[i] = oldRetryDeadlineMs[j];
+                        if (j < oldAntigravityCloudFailures.size()) {
+                            antigravityCloudFailures[i] = oldAntigravityCloudFailures[j];
+                        }
                         if (j < oldNextPollDeadlineMs.size()) {
                             nextPollDeadlineMs[i] = oldNextPollDeadlineMs[j];
-                            ULONGLONG latestDeadline = NowUnixMs() +
-                                (accounts[i].provider == L"antigravity" ? 1ULL :
-                                 (ULONGLONG)intervalMin) * 60000;
+                            bool localAntigravity = accounts[i].provider == L"antigravity" &&
+                                                    results[i].antigravityLocalRoute;
+                            ULONGLONG pollDelayMs = localAntigravity ? 60000 :
+                                (ULONGLONG)intervalMin * 60000;
+                            if (!localAntigravity && accounts[i].provider == L"antigravity" &&
+                                antigravityCloudFailures[i] > 1) {
+                                pollDelayMs *= 1ULL << (antigravityCloudFailures[i] - 1);
+                            }
+                            ULONGLONG latestDeadline = NowUnixMs() + pollDelayMs;
                             if (nextPollDeadlineMs[i] > latestDeadline) {
                                 nextPollDeadlineMs[i] = latestDeadline;
                             }
@@ -9109,11 +9583,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             lastLoggedSettingsGeneration = settingsGeneration;
         }
 
-        std::vector<AccountData> results(accounts.size());
-        {
-            std::lock_guard<std::mutex> lk(g_dataMutex);
-            if (g_data.size() == results.size()) results = g_data;
-        }
         if (settingsChanged || thresholdState.size() != accounts.size()) {
             std::array<int, kQuotaBarCount> unknownState;
             unknownState.fill(-1);
@@ -9175,7 +9644,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             ClaudePollState claudePoll;
             if (claudeAccount) {
                 claudePoll = ReadClaudePollState(accounts[i]);
-                retryDeadlineMs[i] = std::max(retryDeadlineMs[i], claudePoll.retryDeadlineMs);
+                retryDeadlineMs[i] = std::min(std::max(retryDeadlineMs[i], claudePoll.retryDeadlineMs),
+                                              nowMs + 86400000ULL);
                 // An explicit retry wins even if it is due before the normal poll. If another
                 // attempt already started, the earlier deadline is used up and the reload keeps the
                 // interval from that in-flight attempt.
@@ -9206,7 +9676,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
             }
             if (claudeAccount) {
-                if (claudeSampleFresh && results[i].error == Tr(Str::StatusRateLimitedByAPI)) {
+                if (claudeSampleFresh && (results[i].error == Tr(Str::StatusRateLimitedByAPI) ||
+                                          (accounts[i].useCliLogin &&
+                                           IsClaudeCliReadError(results[i].error)))) {
                     results[i].error.clear();
                     results[i].stale = false;
                 } else if (!claudeSampleFresh && claudePoll.lastRateLimited &&
@@ -9280,6 +9752,15 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
             FetchAccount(accounts[i], &results[i], &retryAfter, intervalMin * 60,
                          &claudeRateLimited, &usageHttpStatus);
+            const bool antigravityAccount = accounts[i].provider == L"antigravity";
+            const bool localAntigravity = antigravityAccount && results[i].antigravityLocalRoute;
+            if (antigravityAccount) {
+                if (localAntigravity || results[i].error.empty()) {
+                    antigravityCloudFailures[i] = 0;
+                } else if (usageHttpStatus != 429) {
+                    antigravityCloudFailures[i] = std::min(antigravityCloudFailures[i] + 1, 3U);
+                }
+            }
             int providerRetryAfter = retryAfter;
             if (claudeAccount) {
                 claudePoll.lastAttemptMs = NowUnixMs();
@@ -9288,8 +9769,20 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                     retryAfter = std::max(retryAfter, intervalMin * 60);
                 }
             }
+            ULONGLONG pollDelayMs = localAntigravity ? 60000 : pollIntervalMs;
+            // Cloud failures wait 1x, 2x, then at most 4x the configured interval. This is
+            // a poll deadline so manual refresh can bypass it, unlike Retry-After.
+            if (antigravityAccount && !localAntigravity && antigravityCloudFailures[i] > 1) {
+                pollDelayMs *= 1ULL << (antigravityCloudFailures[i] - 1);
+            }
+            if (!results[i].error.empty() && !results[i].needsLogin &&
+                !antigravityAccount && !claudeAccount) {
+                pollDelayMs = std::min<ULONGLONG>(pollDelayMs, 120000);
+            }
             if (retryAfter > 0) {
-                nextPollDeadlineMs[i] = 0;
+                retryAfter = std::min(retryAfter, 86400);
+                nextPollDeadlineMs[i] = antigravityAccount && !localAntigravity &&
+                    !results[i].error.empty() && usageHttpStatus != 429 ? NowUnixMs() + pollDelayMs : 0;
                 retryDeadlineMs[i] = NowUnixMs() + (ULONGLONG)retryAfter * 1000;
                 results[i].retryDeadlineMs = retryDeadlineMs[i];
                 if (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs) {
@@ -9298,13 +9791,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             } else {
                 retryDeadlineMs[i] = 0;
                 results[i].retryDeadlineMs = 0;
-                ULONGLONG pollDelayMs = accounts[i].provider == L"antigravity"
-                                            ? 60000
-                                            : (ULONGLONG)intervalMin * 60000;
-                if (!results[i].error.empty() && !results[i].needsLogin &&
-                    accounts[i].provider != L"antigravity" && !claudeAccount) {
-                    pollDelayMs = std::min<ULONGLONG>(pollDelayMs, 120000);
-                }
                 nextPollDeadlineMs[i] = NowUnixMs() + pollDelayMs;
                 if (nextPollMs == 0 || nextPollDeadlineMs[i] < nextPollMs) {
                     nextPollMs = nextPollDeadlineMs[i];
@@ -9319,6 +9805,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                        usageHttpStatus, providerRetryAfter,
                        (deadline > loggedAtMs ? deadline - loggedAtMs : 0) / 1000,
                        claudePoll.lastRateLimited ? 1 : 0);
+            }
+            if (antigravityAccount) {
+                ULONGLONG deadline = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
+                ULONGLONG loggedAtMs = NowUnixMs();
+                Wh_Log(L"Antigravity fetch [%d]: route=%s, status=%d, failures=%u, retry=%d s, next_in=%llu s",
+                       (int)i, localAntigravity ? L"local" : L"cloud", usageHttpStatus,
+                       antigravityCloudFailures[i],
+                       retryAfter, (deadline > loggedAtMs ? deadline - loggedAtMs : 0) / 1000);
             }
 
             if (!results[i].error.empty()) {
@@ -9399,6 +9893,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
         }
         if (!notificationsEnabled && g_notifyWnd) RemoveNotifyIcon();
+        // This thread is the only toast producer, so nothing can rewrite the key meanwhile.
+        if (!notificationsEnabled && g_toastAumidWritten.load()) RemoveToastAumidRegistration();
         {
             std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
             if (refreshGeneration == g_refreshGeneration.load()) {
@@ -10697,7 +11193,8 @@ static AccountViewModel BuildAccountModel(AccountConfig const& account, AccountD
     bool antigravity = account.provider == L"antigravity";
     bool openAi = account.provider == L"openai";
     bool copilot = account.provider == L"copilot";
-    ULONGLONG staleAfterMs = (antigravity ? 1ULL : (ULONGLONG)s.intervalMin) * 2 * 60000;
+    ULONGLONG staleAfterMs = (antigravity && d.antigravityLocalRoute ? 1ULL :
+                             (ULONGLONG)s.intervalMin) * 2 * 60000;
     bool stale = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
     m.stale = stale;
     m.loading = d.lastSuccessMs == 0 && d.error.empty() && !m.needsLogin;
@@ -11485,6 +11982,8 @@ static constexpr GUID kClsidD2D1Opacity =
     {0x811d79a4, 0xde28, 0x4454, {0x80, 0x94, 0xc6, 0x46, 0x85, 0xf8, 0xbd, 0x4c}};
 static constexpr GUID kClsidD2D1Blend =
     {0x81c5b77b, 0x13f8, 0x4cdd, {0xad, 0x20, 0xc8, 0x90, 0x54, 0x7a, 0xc6, 0x5d}};
+static constexpr GUID kClsidD2D1Composite =
+    {0x48fc9f51, 0xf6ac, 0x48f1, {0x8b, 0x58, 0x3b, 0x28, 0xac, 0x46, 0xf7, 0x6d}};
 
 // One Direct2D effect node with fixed properties (indexed as in the D2D1_*_PROP enums) and its
 // inputs. Built and consumed on the taskbar UI thread; the factory copies it.
@@ -11597,23 +12096,29 @@ static winrt::Windows::UI::Composition::CompositionBrush MakeMicaBrush(
     return brush;
 }
 
-// Default: the blurred wallpaper under the palette's surface color at 80% opacity.
+// Default: the blurred wallpaper under the palette's surface color at 80% opacity. One effect
+// brush, not a tint sprite over a wallpaper sprite: the flyout's entrance fade applies its opacity
+// to each visual separately, so with two layers the bright wallpaper outweighed the half-faded tint
+// and the card flashed brighter than its final state.
 static winrt::Windows::UI::Composition::Visual MakeDefaultMicaVisual(
     winrt::Windows::UI::Composition::Compositor const& compositor, UiColor tint) {
+    using winrt::Windows::Foundation::PropertyValue;
     auto wallpaper = compositor.TryCreateBlurredWallpaperBackdropBrush();
     if (!wallpaper) return nullptr;
-    auto layers = compositor.CreateContainerVisual();
-    layers.RelativeSizeAdjustment({1.f, 1.f});
-    auto background = compositor.CreateSpriteVisual();
-    background.RelativeSizeAdjustment({1.f, 1.f});
-    background.Brush(wallpaper);
-    layers.Children().InsertAtBottom(background);
-    auto overlay = compositor.CreateSpriteVisual();
-    overlay.RelativeSizeAdjustment({1.f, 1.f});
-    tint.A = 0xCC;
-    overlay.Brush(compositor.CreateColorBrush(tint));
-    layers.Children().InsertAtTop(overlay);
-    return layers;
+    constexpr uint32_t kCompositeSourceOver = 0;
+    float color[4] = {tint.R / 255.f, tint.G / 255.f, tint.B / 255.f, 0xCC / 255.f};
+    auto overlay = MakeFlyoutEffect(kClsidD2D1Flood, {PropertyValue::CreateSingleArray(color)}, {});
+    winrt::Windows::UI::Composition::CompositionEffectSourceParameter backdrop{
+        L"BlurredWallpaperBackdrop"};
+    auto composite = MakeFlyoutEffect(kClsidD2D1Composite,
+                                      {PropertyValue::CreateUInt32(kCompositeSourceOver)},
+                                      {backdrop, overlay});
+    auto brush = compositor.CreateEffectFactory(composite).CreateBrush();
+    brush.SetSourceParameter(L"BlurredWallpaperBackdrop", wallpaper);
+    auto sprite = compositor.CreateSpriteVisual();
+    sprite.RelativeSizeAdjustment({1.f, 1.f});
+    sprite.Brush(brush);
+    return sprite;
 }
 
 // Mica, Mica Alt and Default: the brush stays in the card's visual tree, so XAML owns positioning,
@@ -13180,8 +13685,22 @@ static void UpdateTilePlacement(HWND hWnd) {
         auto origin = tracked.TransformToVisual(state->layoutHost).TransformPoint({0, 0});
         double left = state->trackLeft ? origin.X - gap : origin.X + tracked.ActualWidth();
         SetTileOffset(quota, left);
+        state->placementErrors = 0;
     } catch (...) {
+        // The grid keeps its last transform once tracking stops, so ask for a rebuild. A second
+        // failure in a row (no successful placement in between) falls back to the tray, which
+        // bounds the rebuild loop.
         ReleaseTilePlacement(*state, true);
+        if (g_unloading) return;
+        if (++state->placementErrors > 1) {
+            {
+                std::lock_guard<std::mutex> lk(g_settingsMutex);
+                state->trackingConflictGeneration = g_settingsGeneration;
+            }
+            state->trackingConflict = true;
+        }
+        state->placementStale = true;
+        StartRetryInject();
     }
 }
 
@@ -13768,6 +14287,13 @@ static constexpr PCWSTR kSettingsLengthStorageKey = L"settings_v1_len";
 static constexpr int kSettingsStorageVersion = 2;
 
 static void NormalizeSettings(Settings* s) {
+    // Detection history survives account removal and page resets.
+    auto& detected = s->detectedProviders;
+    detected.erase(std::remove_if(detected.begin(), detected.end(), [](const auto& provider) {
+        return provider != L"anthropic" && provider != L"openai" && provider != L"copilot";
+    }), detected.end());
+    std::sort(detected.begin(), detected.end());
+    detected.erase(std::unique(detected.begin(), detected.end()), detected.end());
     std::vector<AccountConfig> accounts;
     for (auto& a : s->accounts) {
         if (a.provider != L"anthropic" && a.provider != L"openai" &&
@@ -13784,6 +14310,7 @@ static void NormalizeSettings(Settings* s) {
         a.showBars[kFableWeeklyBar] = a.provider == L"anthropic";
         if (a.provider != L"openai") a.creditsMax = 0;
         if (a.provider == L"antigravity") a.useCliLogin = false;
+        if (a.provider != L"anthropic" || !a.useCliLogin) a.allowCliRenewal = false;
         if (a.provider == L"copilot") {
             a.useCliLogin = false;
             a.showBars.fill(false);
@@ -13914,6 +14441,9 @@ static std::wstring SerializeSettings(const Settings& s) {
             account.SetNamedValue(L"creditsMax", JsonValue::CreateNumberValue(a.creditsMax));
             account.SetNamedValue(L"hidden", JsonValue::CreateBooleanValue(a.hidden));
             account.SetNamedValue(L"cliLogin", JsonValue::CreateBooleanValue(a.useCliLogin));
+            if (a.provider == L"anthropic") {
+                account.SetNamedValue(L"cliRenewal", JsonValue::CreateBooleanValue(a.allowCliRenewal));
+            }
             if (a.provider == L"copilot") account.SetNamedValue(L"copilotLogin",
                 JsonValue::CreateStringValue(winrt::hstring(a.copilotLogin)));
             account.SetNamedValue(L"openAiExtraLimits", JsonValue::CreateBooleanValue(a.showOpenAiExtraLimits));
@@ -13997,6 +14527,13 @@ static std::wstring SerializeSettings(const Settings& s) {
         setNumber(L"notifyThreshold", s.notifyThreshold);
         setBool(L"staleWarning", s.showStaleWarning);
         setBool(L"openFlyoutOnHover", s.openFlyoutOnHover);
+        JsonArray detectedProviders;
+        for (const auto& provider : s.detectedProviders) {
+            detectedProviders.Append(JsonValue::CreateStringValue(winrt::hstring(provider)));
+        }
+        root.SetNamedValue(L"detectedProviders", detectedProviders.as<IJsonValue>());
+        setString(L"accountDetection", s.accountDetection == AccountDetection::Allowed ? L"allowed" :
+                  s.accountDetection == AccountDetection::Declined ? L"declined" : L"ask");
         return root.Stringify().c_str();
     } catch (...) {
         return {};
@@ -14018,6 +14555,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
         // account's own value is missing; loading does not rewrite the JSON or change identities.
         bool legacyOpenAiExtras = rootBool(L"openAiExtraLimits", rootBool(L"showCodexSpark", false));
         bool legacyFableWeekly = rootBool(L"fableWeeklyRow", true);
+        bool legacyCliRenewal = rootBool(L"claudeCliRenewal", false);
         if (root.HasKey(L"accounts") &&
             root.GetNamedValue(L"accounts").ValueType() == JsonValueType::Array) {
             for (const auto& value : root.GetNamedArray(L"accounts")) {
@@ -14041,6 +14579,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                 a.creditsMax = (int)GetNum(obj, L"creditsMax", 0);
                 a.hidden = getBoolDefault(L"hidden", false);
                 a.useCliLogin = getBoolDefault(L"cliLogin", false);
+                a.allowCliRenewal = getBoolDefault(L"cliRenewal", legacyCliRenewal);
                 a.copilotLogin = GetStr(obj, L"copilotLogin");
                 a.showOpenAiExtraLimits = getBoolDefault(L"openAiExtraLimits", legacyOpenAiExtras);
                 a.showFableWeekly = getBoolDefault(L"fableWeeklyRow", legacyFableWeekly);
@@ -14161,6 +14700,20 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                                          getBoolDefault(L"notifications", true) ? 3 : 0);
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
         s.openFlyoutOnHover = getBoolDefault(L"openFlyoutOnHover", false);
+        if (root.HasKey(L"detectedProviders") &&
+            root.GetNamedValue(L"detectedProviders").ValueType() == JsonValueType::Array) {
+            for (const auto& provider : root.GetNamedArray(L"detectedProviders")) {
+                if (provider.ValueType() == JsonValueType::String) {
+                    s.detectedProviders.emplace_back(provider.GetString().c_str());
+                }
+            }
+        }
+        // Saved before the question existed: a detection history means detection was already in use.
+        auto detection = GetStr(root, L"accountDetection");
+        s.accountDetection = detection == L"allowed" ? AccountDetection::Allowed :
+                             detection == L"declined" ? AccountDetection::Declined :
+                             detection.empty() && !s.detectedProviders.empty() ? AccountDetection::Allowed :
+                                                                                  AccountDetection::Ask;
         NormalizeSettings(&s);
         *out = std::move(s);
         return true;
@@ -14398,6 +14951,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
             }
         }
     }
+    if (ClaudeCliRenewalConsent(g_settings) != ClaudeCliRenewalConsent(s)) ++g_claudeCliRenewalEpoch;
     g_settings = std::move(s);
     g_settingsGeneration++;
     g_data = std::move(newData);
@@ -14450,57 +15004,33 @@ static std::wstring DefaultAccountLabel(const Settings& settings, const std::wst
     }
 }
 
-// Automatic detection of Claude Code / Codex / GitHub Copilot sessions on every load (with no
-// one-time suppression). A provider with any account, even hidden or with its own sign-in, counts
-// as covered and is not duplicated. Only a visible account without its own sign-in is switched to
-// the CLI; its label and icon are kept. If the provider has no account, one is added. Copilot uses
-// the automatic login mode and only reads credential names.
+// A provider is handled once. Existing accounts keep their mode and identity; a detected sign-in
+// only adds an account when that provider has none. Providers without a sign-in remain eligible.
 static bool ApplyDetectedCliLogins(Settings* s) {
     bool changed = false;
-    for (PCWSTR provider : {L"anthropic", L"openai"}) {
-        if (g_unloading || !HasCliLogin(provider)) continue;
-        bool hasProvider = false;
-        bool covered = false;
-        for (const auto& a : s->accounts) {
-            if (a.provider != provider) continue;
-            hasProvider = true;
-            covered = covered || a.useCliLogin;
-        }
-        if (covered) continue;
-        if (hasProvider) {
-            for (auto& a : s->accounts) {
-                StoredToken token;
-                if (a.provider != provider || a.hidden ||
-                    LoadStoredToken(AccountIdentityHash(a), &token)) {
-                    continue;
-                }
-                a.useCliLogin = true;
-                changed = true;
-                Wh_Log(L"Using the %s sign-in for account %s", CliDisplayName(provider),
-                       a.label.c_str());
-                break;
-            }
-        } else {
+    for (PCWSTR provider : {L"anthropic", L"openai", L"copilot"}) {
+        if (g_unloading) break;
+        if (std::find(s->detectedProviders.begin(), s->detectedProviders.end(), provider) !=
+            s->detectedProviders.end()) continue;
+        bool hasProvider = std::any_of(s->accounts.begin(), s->accounts.end(),
+            [&](const AccountConfig& a) { return a.provider == provider; });
+        if (!hasProvider) {
+            bool copilot = std::wstring_view(provider) == L"copilot";
+            if (copilot ? DetectCopilotLogins().empty() : !HasCliLogin(provider)) continue;
+            if (g_unloading) break;
             AccountConfig a;
             a.provider = provider;
             a.label = DefaultAccountLabel(*s, provider);
-            a.useCliLogin = true;
+            a.useCliLogin = !copilot;
+            if (copilot) {
+                a.showBars.fill(false);
+                a.showBars[kExtraUsageBar] = true;
+            }
             s->accounts.push_back(std::move(a));
-            changed = true;
-            Wh_Log(L"Added an account for the %s sign-in", CliDisplayName(provider));
+            Wh_Log(L"Added an account for the %s sign-in", ProviderDisplayName(provider));
         }
-    }
-    bool hasCopilot = std::any_of(s->accounts.begin(), s->accounts.end(),
-        [](const AccountConfig& a) { return a.provider == L"copilot"; });
-    if (!hasCopilot && !g_unloading && !DetectCopilotLogins().empty()) {
-        AccountConfig a;
-        a.provider = L"copilot";
-        a.label = DefaultAccountLabel(*s, a.provider);
-        a.showBars.fill(false);
-        a.showBars[kExtraUsageBar] = true;
-        s->accounts.push_back(std::move(a));
+        s->detectedProviders.emplace_back(provider);
         changed = true;
-        Wh_Log(L"Added an account for the GitHub Copilot sign-in");
     }
     return changed;
 }
@@ -14530,7 +15060,9 @@ static void LoadSettings() {
         s = Settings{};
         g_settingsLoadError = true;
     }
-    if (!g_settingsLoadError && ApplyDetectedCliLogins(&s)) {
+    // Other apps' sign-ins are only read once the user has allowed it (see PromptAccountDetection).
+    if (!g_settingsLoadError && s.accountDetection == AccountDetection::Allowed &&
+        ApplyDetectedCliLogins(&s)) {
         NormalizeSettings(&s);
         if (!SaveOwnedSettings(s)) Wh_Log(L"Could not save detected CLI sign-ins");
     }
@@ -14564,6 +15096,7 @@ enum SettingsControlId {
     kResetDisplay,
     kResetBehavior,
     kSettingsInfoBarClose,
+    kAccountRescan,
 
     kMonitorMode = 2100,
     kMonitorNumber,
@@ -14653,6 +15186,7 @@ enum SettingsControlId {
     kAccountModelLimits,
     kAccountAdditionalBuckets,
     kAccountAdditionalMetersHeading,
+    kAccountCliRenewal,
 };
 
 struct SettingsRow {
@@ -15261,6 +15795,9 @@ static constexpr UINT_PTR kSettingsExpanderTimer = 0x45585041;
 static constexpr UINT_PTR kSettingsAboutCopiedTimer = 0x41425443;
 static constexpr UINT_PTR kSettingsAccountDragTimer = 0x41444147;
 static constexpr UINT_PTR kSettingsAccountReflowTimer = 0x41524546;
+// Paced retry of a close request while a modal dialog is still on the settings thread's stack.
+static constexpr UINT_PTR kSettingsCloseRetryTimer = 0x434C5259;
+static constexpr UINT kSettingsCloseRetryMs = 100;
 
 enum class InfoBarSeverity { Info, Success, Warning, Error };
 
@@ -15280,7 +15817,7 @@ struct SettingsWindowState {
     HWND accountList = nullptr;
     HWND toolTip = nullptr;
     HWND colorDialog = nullptr;
-    bool filePickerOpen = false;  // An appearance file picker is open (see FindOwnedFileDialog).
+    int closeAttempts = 0;  // Paced WM_CLOSE retries while a modal dialog is open.
     std::array<std::vector<HWND>, kSettingsPageCount> pageControls;
     std::array<std::vector<SettingsRow>, kSettingsPageCount> rows;
     NativeTheme theme;
@@ -15424,6 +15961,7 @@ struct AccountEditorState {
     RECT labelFrame{};
     RECT iconFrame{};
     RECT creditsFrame{};
+    RECT cliRenewalFrame{};  // Tooltip area of the renewal checkbox; empty unless Claude.
     RECT arcsHeading{};
     int footerTop = 0;
     UINT dpi = 96;
@@ -15469,6 +16007,32 @@ struct SettingsMessageBoxContext {
 };
 
 static thread_local SettingsMessageBoxContext* g_settingsMessageBoxContext = nullptr;
+
+// Settings thread only. Owner of the native picker (file dialog or color chooser) whose modal call
+// is on the stack, or null. The settings window must not be destroyed while it is set.
+static thread_local HWND g_settingsPickerOwner = nullptr;
+// Innermost own modal window (account editor, appearance review) running a nested message loop.
+static thread_local HWND g_settingsModalWindow = nullptr;
+
+struct SettingsPickerScope {
+    HWND previous;
+    explicit SettingsPickerScope(HWND owner) : previous(g_settingsPickerOwner) {
+        g_settingsPickerOwner = owner;
+    }
+    ~SettingsPickerScope() { g_settingsPickerOwner = previous; }
+    SettingsPickerScope(const SettingsPickerScope&) = delete;
+    SettingsPickerScope& operator=(const SettingsPickerScope&) = delete;
+};
+
+struct SettingsModalWindowScope {
+    HWND previous;
+    explicit SettingsModalWindowScope(HWND window) : previous(g_settingsModalWindow) {
+        g_settingsModalWindow = window;
+    }
+    ~SettingsModalWindowScope() { g_settingsModalWindow = previous; }
+    SettingsModalWindowScope(const SettingsModalWindowScope&) = delete;
+    SettingsModalWindowScope& operator=(const SettingsModalWindowScope&) = delete;
+};
 
 struct SettingsDialogButtons {
     PCWSTR yes = nullptr;
@@ -15839,74 +16403,6 @@ static bool PaintNativeChild(HWND hWnd, HDC target, UINT printMessage, LPARAM fl
     return copied;
 }
 
-// Local numeric diagnostic: HDCs cannot be shared with an external checker. It does not capture the
-// screen or save images; it returns flags and the card color count.
-static UINT NativeChildPaintProbeMessage() {
-    static const UINT message = RegisterWindowMessageW(L"Windhawk_NativePaintProbe_" WH_MOD_ID);
-    return message;
-}
-
-static LRESULT ProbeNativeChildPaint(HWND hWnd, NativeChildPaintState& state) {
-    RECT client{};
-    if (!GetClientRect(hWnd, &client) || client.right <= 0 || client.bottom <= 0 ||
-        (uint64_t)client.right * client.bottom > 16ull * 1024 * 1024) return 0;
-    HDC dc = CreateCompatibleDC(nullptr);
-    BITMAPINFO info{};
-    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    info.bmiHeader.biWidth = client.right;
-    info.bmiHeader.biHeight = -client.bottom;
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    uint32_t* pixels = nullptr;
-    HBITMAP bitmap = dc ? CreateDIBSection(dc, &info, DIB_RGB_COLORS,
-        reinterpret_cast<void**>(&pixels), nullptr, 0) : nullptr;
-    HGDIOBJ previous = bitmap ? SelectObject(dc, bitmap) : nullptr;
-    if (!previous || previous == HGDI_ERROR) {
-        if (bitmap) DeleteObject(bitmap);
-        if (dc) DeleteDC(dc);
-        return 0;
-    }
-    size_t count = (size_t)client.right * client.bottom;
-    std::fill_n(pixels, count, 0x7F010203);
-    bool success = PaintNativeChild(hWnd, dc, WM_PRINTCLIENT,
-                                    PRF_CLIENT | PRF_ERASEBKGND | PRF_CHILDREN, state);
-    uint64_t result = 0;
-    if (success && !state.destroyed) {
-        GdiFlush();
-        COLORREF card = state.backdrop->childBackground;
-        uint32_t key = state.cardSurface ? NativePremultiplied(state.cardFill) :
-                                           NativeRgb(card) | 0xFF000000;
-        size_t clear = 0, opaque = 0, partial = 0, cardCount = 0;
-        unsigned materialAlpha = 0;
-        bool valid = true;
-        bool content = false;
-        uint32_t first = pixels[0] & 0xFFFFFF;
-        for (size_t i = 0; i < count; ++i) {
-            uint32_t pixel = pixels[i];
-            if (pixel == 0) ++clear;
-            if ((pixel >> 24) == 255) ++opaque;
-            if ((pixel >> 24) > 0 && (pixel >> 24) < 255) ++partial;
-            if (pixel == key) {
-                ++cardCount;
-                materialAlpha = pixel >> 24;
-            }
-            for (int shift : {0, 8, 16}) {
-                valid = valid && ((pixel >> shift) & 255) <= (pixel >> 24);
-            }
-            content = content || (pixel & 0xFFFFFF) != first;
-        }
-        result = 1 | (valid ? 2 : 0) | (content ? 4 : 0) |
-                 (clear ? 8 : 0) | (opaque ? 16 : 0) | (cardCount ? 32 : 0) |
-                 (cardCount > count / 2 ? 64 : 0) | (partial ? 128 : 0) |
-                 (uint64_t(materialAlpha) << 8) |
-                 ((uint64_t)cardCount << 32);
-    }
-    SelectObject(dc, previous);
-    DeleteObject(bitmap);
-    DeleteDC(dc);
-    return (LRESULT)result;
-}
-
 static LRESULT CALLBACK NativeChildPaintSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
                                                      LPARAM lParam, UINT_PTR subclassId,
                                                      DWORD_PTR referenceData) {
@@ -15925,10 +16421,6 @@ static LRESULT CALLBACK NativeChildPaintSubclassProc(HWND hWnd, UINT message, WP
         RemovePropW(hWnd, kSettingsSecondarySurface);
         RemovePropW(hWnd, kSettingsControlInsetProp);
         return DefSubclassProc(hWnd, message, wParam, lParam);
-    }
-    if (UINT probeMessage = NativeChildPaintProbeMessage(); probeMessage && message == probeMessage) {
-        return !g_unloading && !state->printing && state->backdrop->enabled ?
-                   ProbeNativeChildPaint(hWnd, *state) : 0;
     }
     // Also in high contrast: native controls may paint directly when they change.
     if (!state->printing && (message == WM_PAINT || message == WM_NCPAINT ||
@@ -19996,10 +20488,6 @@ static int SettingsRowLabelWidth(const SettingsWindowState& state, const Setting
     } else if (IsSettingsSwitch(row.control)) {
         // Expander header with a toggle: "On"/"Off" and the toggle; the chevron is separate.
         controlWidth = sc(kFluentSwitchWidth + 12) + stateWidth;
-    } else if (row.control && GetDlgCtrlID(row.control) == kUsagePalettePreset) {
-        controlWidth = std::min(cardWidth - padding * 2 - sc(80),
-            std::max(sc(180), MeasureTextWidth(state.theme.body,
-                Tr(Str::SettingsAccessible)) + sc(32)));
     } else if (row.spin) {
         controlWidth = sc(kSettingsNumberWidth);
     } else if (row.colorReset) {
@@ -21310,15 +21798,19 @@ static void LayoutSettingsWindow(SettingsWindowState& state, bool freeze = true,
     if (state.accountList) {
         // Actions: Add to Hide on the left, Sign in and Sign out on the right; in two rows if they
         // do not fit.
-        const int ids[] = {kAccountAdd, kAccountEdit, kAccountRemove,
-                           kAccountMoveUp, kAccountMoveDown, kAccountToggleVisible,
-                           kAccountSignIn, kAccountSignOut};
-        const PCWSTR widest[] = {Tr(Str::SettingsAdd), Tr(Str::SettingsEdit), Tr(Str::SettingsRemove), Tr(Str::SettingsUp), Tr(Str::SettingsDown), Tr(Str::CommonShow),
-                                 Tr(Str::SettingsSigningIn), Tr(Str::CommonSignOut)};
+        constexpr int kButtons = 9;
+        constexpr int kLeftButtons = 7;
+        const int ids[kButtons] = {kAccountAdd, kAccountRescan, kAccountEdit, kAccountRemove,
+                                   kAccountMoveUp, kAccountMoveDown, kAccountToggleVisible,
+                                   kAccountSignIn, kAccountSignOut};
+        const PCWSTR widest[kButtons] = {Tr(Str::SettingsAdd), Tr(Str::SettingsRescan), Tr(Str::SettingsEdit),
+                                         Tr(Str::SettingsRemove), Tr(Str::SettingsUp), Tr(Str::SettingsDown),
+                                         Tr(Str::CommonShow), Tr(Str::SettingsSigningIn),
+                                         Tr(Str::CommonSignOut)};
         int gap = sc(8);
-        int widths[8];
+        int widths[kButtons];
         int total = 0;
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < kButtons; i++) {
             widths[i] = std::max(sc(64), MeasureTextWidth(state.theme.body, widest[i]) + sc(24));
             total += widths[i] + (i ? gap : 0);
         }
@@ -21335,20 +21827,21 @@ static void LayoutSettingsWindow(SettingsWindowState& state, bool freeze = true,
         FitAccountListColumns(state);
         int leftX = cardX;
         int rightX = cardX + cardWidth;
-        for (int i = 7; i >= 6 && !compact; i--) {
+        for (int i = kButtons - 1; i >= kLeftButtons && !compact; i--) {
             rightX -= widths[i];
             place(NativeSettingsItem(state.hWnd, ids[i]), rightX, buttonY, widths[i], controlHeight);
             rightX -= gap;
         }
-        for (int i = 0; i < 8; i++) {
+        constexpr int kColumns = (kButtons + 1) / 2;
+        for (int i = 0; i < kButtons; i++) {
             HWND button = NativeSettingsItem(state.hWnd, ids[i]);
             if (compact) {
-                int column = i % 4;
-                int row = i / 4;
-                int w = std::max(1, (cardWidth - gap * 3) / 4);
+                int column = i % kColumns;
+                int row = i / kColumns;
+                int w = std::max(1, (cardWidth - gap * (kColumns - 1)) / kColumns);
                 place(button, cardX + column * (w + gap), buttonY + row * (controlHeight + gap),
                       w, controlHeight);
-            } else if (i < 6) {
+            } else if (i < kLeftButtons) {
                 place(button, leftX, buttonY, widths[i], controlHeight);
                 leftX += widths[i] + gap;
             }
@@ -21519,12 +22012,6 @@ static void LayoutSettingsWindow(SettingsWindowState& state, bool freeze = true,
                 } else if (_wcsicmp(className, L"ComboBox") == 0) {
                     int comboWidth = SettingsComboControlWidth(state, row.control, cardWidth,
                                                                padding);
-                    if (GetDlgCtrlID(row.control) == kUsagePalettePreset) {
-                        // The color preset keeps its width for "Accessible".
-                        comboWidth = std::min(cardWidth - padding * 2 - sc(80),
-                            std::max(sc(180), MeasureTextWidth(state.theme.body,
-                                Tr(Str::SettingsAccessible)) + sc(32)));
-                    }
                     controlLeft = innerRight - comboWidth;
                     place(row.control, controlLeft, controlTop, comboWidth, sc(300));
                     RECT comboRect{};
@@ -23489,7 +23976,10 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
 /**********************************************/
 
 static constexpr size_t kAppearanceMaxBytes = 4 * 1024 * 1024;
-static constexpr int kAppearanceMaxIcons = 16;
+// Every account has an icon entry, so that importing also restores provider logos. Only SVG entries
+// carry a payload worth bounding; the total only bounds the work of reading a file.
+static constexpr int kAppearanceMaxSvgIcons = 16;
+static constexpr int kAppearanceMaxIcons = 256;
 static constexpr int kAppearanceMaxDepth = 16;
 static constexpr PCWSTR kAppearanceKind = L"taskbar-ai-appearance";
 static constexpr PCWSTR kAppearanceReviewClass = L"AiUsageAppearanceReview_" WH_MOD_ID;
@@ -23569,6 +24059,7 @@ static bool SerializeAppearance(const Settings& s, std::string* out, std::wstrin
     root.SetNamedValue(L"paceMarkerColor", JsonValue::CreateNumberValue(s.paceTickColor));
 
     JsonArray icons;
+    int svgIcons = 0;
     for (const AccountConfig& account : s.accounts) {
         JsonObject icon;
         std::string svg;
@@ -23579,6 +24070,7 @@ static bool SerializeAppearance(const Settings& s, std::string* out, std::wstrin
                 *skippedSvg += account.label;
                 continue;
             }
+            ++svgIcons;
         }
         icon.SetNamedValue(L"provider", JsonValue::CreateStringValue(winrt::hstring(account.provider)));
         icon.SetNamedValue(L"label", JsonValue::CreateStringValue(winrt::hstring(account.label)));
@@ -23593,7 +24085,7 @@ static bool SerializeAppearance(const Settings& s, std::string* out, std::wstrin
         }
         icons.Append(icon);
     }
-    if (icons.Size() > (uint32_t)kAppearanceMaxIcons) {
+    if (svgIcons > kAppearanceMaxSvgIcons || icons.Size() > (uint32_t)kAppearanceMaxIcons) {
         *error = Tr(Str::AppearanceErrTooManyIcons);
         return false;
     }
@@ -23607,11 +24099,23 @@ static bool SerializeAppearance(const Settings& s, std::string* out, std::wstrin
     return true;
 }
 
-// Writes to a temporary file next to the target and replaces it atomically.
+// Writes to a uniquely named temporary file next to the target and replaces it atomically. The
+// temporary name is reserved with CREATE_NEW so an existing file is never truncated or consumed.
 static bool WriteAppearanceFile(const std::wstring& path, const std::string& data) {
-    std::wstring temp = path + L".tmp";
-    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    std::wstring temp;
+    HANDLE file = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < 16 && file == INVALID_HANDLE_VALUE; attempt++) {
+        wchar_t suffix[64];
+        swprintf(suffix, ARRAYSIZE(suffix), L".%lu-%lu-%d.tmp", GetCurrentProcessId(),
+                 GetTickCount(), attempt);
+        temp = path + suffix;
+        file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file == INVALID_HANDLE_VALUE) {
+            DWORD err = GetLastError();
+            if (err != ERROR_FILE_EXISTS && err != ERROR_ALREADY_EXISTS) return false;
+        }
+    }
     if (file == INVALID_HANDLE_VALUE) return false;
     DWORD written = 0;
     bool ok = WriteFile(file, data.data(), (DWORD)data.size(), &written, nullptr) &&
@@ -23780,6 +24284,7 @@ static bool ParseAppearanceJson(const std::string& body, const Settings& current
                 *error = Tr(Str::AppearanceErrTooManyIcons);
                 return false;
             }
+            int svgIcons = 0;
             for (uint32_t i = 0; i < icons.Size(); i++) {
                 auto item = icons.GetAt(i);
                 if (item.ValueType() != JsonValueType::Object) return invalid(L"icons");
@@ -23802,6 +24307,10 @@ static bool ParseAppearanceJson(const std::string& body, const Settings& current
                     if (!IsValidTileIconText(icon.text)) return invalid(L"text");
                 } else if (mode == L"svg") {
                     icon.mode = 2;
+                    if (++svgIcons > kAppearanceMaxSvgIcons) {
+                        *error = Tr(Str::AppearanceErrTooManyIcons);
+                        return false;
+                    }
                     // Base64 bounded before decoding; the content is validated afterwards with the
                     // same parser as the editor.
                     std::wstring encoded = GetStr(object, L"svgUtf8Base64");
@@ -24210,6 +24719,8 @@ static bool ShowAppearanceReview(HWND owner, const std::wstring& text, bool canA
 
     EnableWindow(owner, FALSE);
     ShowWindow(window, SW_SHOW);
+    // The settings window defers its close until this loop returns (see SettingsWindowProc).
+    SettingsModalWindowScope modalScope(window);
     MSG message;
     while (!g_unloading && !g_settingsWindowCancelRequested && !state.done && IsWindow(owner)) {
         int result = GetMessageW(&message, nullptr, 0, 0);
@@ -24233,13 +24744,15 @@ static bool ShowAppearanceReview(HWND owner, const std::wstring& text, bool canA
 
 // Without a hook or template GetOpenFileName shows the current Windows file picker, which follows
 // the system theme (a hook falls back to the legacy dialog). While it is open, closing Settings
-// finds it through FindOwnedFileDialog and cancels it.
+// finds it through FindOwnedFileDialog and cancels it (DismissSettingsModals).
 static HWND FindOwnedFileDialog(HWND owner) {
     struct Search { HWND owner; HWND found; } search{owner, nullptr};
     EnumThreadWindows(GetCurrentThreadId(), [](HWND hWnd, LPARAM parameter) -> BOOL {
         auto* search = reinterpret_cast<Search*>(parameter);
         wchar_t className[16] = {};
-        if (GetWindow(hWnd, GW_OWNER) == search->owner && IsWindowVisible(hWnd) &&
+        // Not filtered by visibility: the picker hides itself while it shows a nested prompt
+        // ("Confirm Save As"), and that prompt is only reachable through it.
+        if (GetWindow(hWnd, GW_OWNER) == search->owner &&
             GetClassNameW(hWnd, className, ARRAYSIZE(className)) && wcscmp(className, L"#32770") == 0) {
             search->found = hWnd;
             return FALSE;
@@ -24247,6 +24760,69 @@ static HWND FindOwnedFileDialog(HWND owner) {
         return TRUE;
     }, reinterpret_cast<LPARAM>(&search));
     return search.found;
+}
+
+// Asks a native dialog to cancel, dismissing its active nested prompt first ("Confirm Save As",
+// "file not found"): while a prompt is up, the dialog itself ignores a cancel. Posting only, so it
+// is safe from inside the dialog's own message loop. `escalate` also answers the prompt with every
+// button it could offer; it never gives up, it only gets more insistent.
+static void CancelNativeDialog(HWND dialog, bool escalate) {
+    if (!dialog || !IsWindow(dialog)) return;
+    constexpr UINT kTaskDialogClickButton = WM_USER + 102;  // TDM_CLICK_BUTTON
+    // The prompt is a visible, enabled window owned by the dialog on this thread.
+    // GetLastActivePopup can't find it: Windows tracks the last active popup per root owner.
+    struct Search { HWND dialog; HWND popup; } search{dialog, nullptr};
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND hWnd, LPARAM parameter) -> BOOL {
+        auto* search = reinterpret_cast<Search*>(parameter);
+        if (hWnd != search->dialog && GetWindow(hWnd, GW_OWNER) == search->dialog &&
+            IsWindowVisible(hWnd) && IsWindowEnabled(hWnd)) {
+            search->popup = hWnd;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&search));
+    HWND popup = search.popup;
+    if (popup) {
+        PostMessageW(popup, WM_COMMAND, IDCANCEL, 0);
+        PostMessageW(popup, kTaskDialogClickButton, IDCANCEL, 0);
+        PostMessageW(popup, WM_CLOSE, 0, 0);
+        if (escalate) {
+            for (int button : {IDNO, IDOK}) {
+                PostMessageW(popup, WM_COMMAND, button, 0);
+                PostMessageW(popup, kTaskDialogClickButton, button, 0);
+            }
+        }
+    }
+    PostMessageW(dialog, WM_COMMAND, IDCANCEL, 0);
+    if (escalate) PostMessageW(dialog, WM_CLOSE, 0, 0);
+}
+
+// Settings close/unload: asks whatever is blocking the window to go away. Returns true while a
+// modal call or nested message loop is still on the settings thread's stack: the window must not be
+// destroyed until they have returned, and the caller retries on a timer instead of spinning.
+static bool DismissSettingsModals(SettingsWindowState& state) {
+    bool escalate = state.closeAttempts++ >= 3;
+    if (g_settingsPickerOwner) {
+        HWND dialog = IsWindow(state.colorDialog) ? state.colorDialog :
+                                                    FindOwnedFileDialog(g_settingsPickerOwner);
+        CancelNativeDialog(dialog, escalate);
+        return true;
+    }
+    if (g_settingsMessageBoxContext) {
+        if (IsWindow(g_settingsMessageBoxContext->hWnd)) {
+            g_settingsMessageBoxContext->forced = true;
+            PostMessageW(g_settingsMessageBoxContext->hWnd, WM_COMMAND,
+                         g_settingsMessageBoxContext->forcedResult, 0);
+        }
+        return true;
+    }
+    if (g_settingsModalWindow && IsWindow(g_settingsModalWindow)) {
+        // On unload the nested loop ends by itself once it sees the cancel request; otherwise ask
+        // the modal window to close.
+        if (!g_settingsWindowCancelRequested) PostMessageW(g_settingsModalWindow, WM_CLOSE, 0, 0);
+        return true;
+    }
+    return false;
 }
 
 static bool ChooseAppearanceFile(SettingsWindowState& state, bool save, std::wstring* path) {
@@ -24266,10 +24842,12 @@ static bool ChooseAppearanceFile(SettingsWindowState& state, bool save, std::wst
     dialog.lpstrDefExt = L"json";
     dialog.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY |
                    (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
-    state.filePickerOpen = true;
-    bool accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
-    state.filePickerOpen = false;
-    state.colorDialog = nullptr;
+    bool accepted = false;
+    {
+        // The settings window is not destroyed while this modal call is on the stack.
+        SettingsPickerScope pickerScope(state.hWnd);
+        accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+    }
     if (accepted) *path = buffer;
     return accepted && !g_unloading && !g_settingsWindowCancelRequested && IsWindow(state.hWnd);
 }
@@ -24381,6 +24959,8 @@ static constexpr UINT kEditorIconKindClosedMessage = WM_APP + 42;
 // Tooltip tool for the icon square (a rectangle in the editor): covers the logo's disabled square,
 // which does not receive the mouse.
 static constexpr UINT_PTR kEditorIconSquareTool = 1;
+// The same for the Claude Code renewal checkbox while it is disabled (CLI sign-in off).
+static constexpr UINT_PTR kEditorCliRenewalTool = 2;
 
 // Arc checkboxes per provider (list index): Codex three, Claude four (session, weekly, Fable weekly
 // and extra usage; at most three checked), Antigravity four (Gemini and Other, session and weekly;
@@ -24393,6 +24973,13 @@ static int EditorArcCheckCount(int providerIndex) {
 static bool EditorHasProviderOptions(int providerIndex) { return providerIndex <= 2; }
 static bool EditorHasLoginCard(int providerIndex) { return providerIndex != 2; }
 
+// Claude's login card has a second row: the renewal checkbox nested under the CLI sign-in.
+static int EditorLoginCardHeight(UINT dpi, int providerIndex) {
+    if (!EditorHasLoginCard(providerIndex)) return 0;
+    if (providerIndex != 0) return ScaleForDpi(kEditorCardHeight, dpi);
+    return ScaleForDpi(12 + 2 * kEditorCheckHeight + 12, dpi);
+}
+
 static int EditorAdditionalMetersHeight(UINT dpi, int providerIndex) {
     if (!EditorHasProviderOptions(providerIndex)) return 0;
     int checks = providerIndex == 1 ? 1 : 2;
@@ -24404,10 +24991,12 @@ static int AccountEditorClientHeight(UINT dpi, int providerIndex) {
     auto sc = [&](int value) { return ScaleForDpi(value, dpi); };
     int arcsCard = sc(12) + sc(20) + sc(4) + EditorArcCheckCount(providerIndex) * sc(kEditorCheckHeight) + sc(8);
     // The icon is one more row (list and square button), as tall as the other cards.
-    int rows = 3 + (EditorHasLoginCard(providerIndex) ? 1 : 0);
-    int gaps = rows + (EditorHasProviderOptions(providerIndex) ? 1 : 0);
+    int rows = 3;
+    int gaps = rows + (EditorHasLoginCard(providerIndex) ? 1 : 0) +
+               (EditorHasProviderOptions(providerIndex) ? 1 : 0);
     return sc(kNativeCaptionHeight + kEditorMargin) + sc(kEditorCardHeight) * rows + arcsCard +
-           EditorAdditionalMetersHeight(dpi, providerIndex) + sc(4) * gaps +
+           EditorAdditionalMetersHeight(dpi, providerIndex) +
+           EditorLoginCardHeight(dpi, providerIndex) + sc(4) * gaps +
            sc(kEditorMargin) + sc(kEditorFooterHeight);
 }
 
@@ -24486,7 +25075,7 @@ static void LayoutAccountEditor(HWND hWnd, AccountEditorState& state) {
                            sc(kEditorCardHeight) + extra(EditorMessageField::Icon),
                            arcsHeight + extra(EditorMessageField::Credits) + extra(EditorMessageField::Arcs),
                            EditorAdditionalMetersHeight(state.dpi, providerIndex),
-                           EditorHasLoginCard(providerIndex) ? sc(kEditorCardHeight) : 0};
+                           EditorLoginCardHeight(state.dpi, providerIndex)};
     int y = margin + sc(kNativeCaptionHeight) - state.scrollY;
     for (int i = 0; i < 6; i++) {
         if (!heights[i]) {
@@ -24598,9 +25187,24 @@ static void LayoutAccountEditor(HWND hWnd, AccountEditorState& state) {
                      innerRight - innerLeft + sc(2), sc(kEditorCheckHeight), flags);
     }
     const RECT& cliCard = state.cards[5];
-    SetWindowPos(GetDlgItem(hWnd, kAccountCliLogin), nullptr, innerLeft - sc(2),
-                 cliCard.top + (heights[5] - sc(kEditorCheckHeight)) / 2,
+    int cliTop = providerIndex == 0 ? cliCard.top + sc(12) :
+                 cliCard.top + (heights[5] - sc(kEditorCheckHeight)) / 2;
+    SetWindowPos(GetDlgItem(hWnd, kAccountCliLogin), nullptr, innerLeft - sc(2), cliTop,
                  innerRight - innerLeft + sc(2), sc(kEditorCheckHeight), flags);
+    // Indented by the checkbox glyph and its gap, so its text lines up with the CLI sign-in's.
+    RECT renewalRect{innerLeft - sc(2) + sc(28), cliTop + sc(kEditorCheckHeight), innerRight,
+                     cliTop + 2 * sc(kEditorCheckHeight)};
+    SetWindowPos(GetDlgItem(hWnd, kAccountCliRenewal), nullptr, renewalRect.left, renewalRect.top,
+                 renewalRect.right - renewalRect.left, renewalRect.bottom - renewalRect.top, flags);
+    state.cliRenewalFrame = providerIndex == 0 ? renewalRect : RECT{};
+    if (state.toolTip) {
+        TOOLINFOW renewalTool{};
+        renewalTool.cbSize = sizeof(renewalTool);
+        renewalTool.hwnd = hWnd;
+        renewalTool.uId = kEditorCliRenewalTool;
+        renewalTool.rect = state.cliRenewalFrame;
+        SendMessageW(state.toolTip, TTM_NEWTOOLRECTW, 0, reinterpret_cast<LPARAM>(&renewalTool));
+    }
     SetWindowPos(GetDlgItem(hWnd, kAccountCopilotLoginLabel), nullptr, innerLeft,
                  cliCard.top + (heights[5] - sc(20)) / 2,
                  innerRight - fieldWidth - innerLeft - sc(12), sc(20), flags);
@@ -24847,6 +25451,18 @@ static void UpdateEditorArcLimit(HWND hWnd) {
     }
 }
 
+// Claude Code can only renew the sign-in the account borrows: the renewal checkbox keeps its
+// state but is disabled while the CLI sign-in is off.
+static void UpdateEditorCliRenewal(HWND hWnd) {
+    HWND renewal = GetDlgItem(hWnd, kAccountCliRenewal);
+    bool enable = IsDlgButtonChecked(hWnd, kAccountCliLogin) == BST_CHECKED;
+    if (!enable && GetFocus() == renewal) SetFocus(GetDlgItem(hWnd, kAccountCliLogin));
+    if ((IsWindowEnabled(renewal) != FALSE) != enable) {
+        EnableWindow(renewal, enable);
+        InvalidateRect(renewal, nullptr, TRUE);
+    }
+}
+
 static void UpdateAccountEditorProvider(HWND hWnd) {
     int providerIndex = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
     bool anthropic = providerIndex == 0;
@@ -24863,6 +25479,8 @@ static void UpdateAccountEditorProvider(HWND hWnd) {
     ShowWindow(GetDlgItem(hWnd, kAccountOtherWeekly), antigravity ? SW_SHOW : SW_HIDE);
     ShowWindow(GetDlgItem(hWnd, kAccountFableWeeklyArc), anthropic ? SW_SHOW : SW_HIDE);
     ShowWindow(GetDlgItem(hWnd, kAccountCliLogin), anthropic || openai ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hWnd, kAccountCliRenewal), anthropic ? SW_SHOW : SW_HIDE);
+    UpdateEditorCliRenewal(hWnd);
     for (int id : {kAccountCopilotLoginLabel, kAccountCopilotLogin}) {
         ShowWindow(GetDlgItem(hWnd, id), copilot ? SW_SHOW : SW_HIDE);
     }
@@ -25086,6 +25704,24 @@ static void CreateAccountEditorToolTips(HWND hWnd, AccountEditorState& state) {
         tool.lpszText = const_cast<PWSTR>(option.text);
         SendMessageW(state.toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool));
     }
+    // Claude Code renewal: on the checkbox, and on its rectangle while it is disabled (the window
+    // then gets the mouse). The tooltip keeps its own copy of the text.
+    std::wstring renewalHelp = Tr(Str::EditorAllowClaudeCliRenewalHelp);
+    if (FindClaudeCli().empty()) {
+        renewalHelp += L"\n\n";
+        renewalHelp += Tr(Str::EditorClaudeCliNotFound);
+    }
+    TOOLINFOW renewalTool{};
+    renewalTool.cbSize = sizeof(renewalTool);
+    renewalTool.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+    renewalTool.hwnd = hWnd;
+    renewalTool.uId = reinterpret_cast<UINT_PTR>(GetDlgItem(hWnd, kAccountCliRenewal));
+    renewalTool.lpszText = renewalHelp.data();
+    SendMessageW(state.toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&renewalTool));
+    renewalTool.uFlags = TTF_SUBCLASS;
+    renewalTool.uId = kEditorCliRenewalTool;
+    renewalTool.rect = state.cliRenewalFrame;
+    SendMessageW(state.toolTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&renewalTool));
 }
 
 // Picks an SVG, imports it (bounded, on this thread) and updates the preview. On any failure the
@@ -25107,7 +25743,13 @@ static void ChooseSvgForEditor(HWND hWnd, AccountEditorState& state) {
     dialog.lpstrDefExt = L"svg";
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER |
                    OFN_HIDEREADONLY;
-    if (!GetOpenFileNameW(&dialog) || g_unloading || g_settingsWindowCancelRequested) return;
+    bool picked = false;
+    {
+        // Tracked like the appearance picker: closing Settings cancels it and waits for the call.
+        SettingsPickerScope pickerScope(hWnd);
+        picked = GetOpenFileNameW(&dialog);
+    }
+    if (!picked || g_unloading || g_settingsWindowCancelRequested) return;
     HCURSOR previousCursor = SetCursor(LoadCursorW(nullptr, IDC_WAIT));
     std::vector<uint32_t> master;
     SvgImportResult result = ImportSvgIcon(file, &master);
@@ -25280,6 +25922,15 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                                              GetModuleHandleW(nullptr), nullptr);
             SendMessageW(cliLogin, BM_SETCHECK,
                          state->account.useCliLogin ? BST_CHECKED : BST_UNCHECKED, 0);
+            // Claude only; UpdateAccountEditorProvider shows it and UpdateEditorCliRenewal
+            // enables it with the CLI sign-in.
+            HWND cliRenewal = CreateWindowExW(0, L"BUTTON", Tr(Str::EditorAllowClaudeCliRenewal),
+                                              WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX,
+                                              0, 0, 1, 1, hWnd,
+                                              reinterpret_cast<HMENU>(kAccountCliRenewal),
+                                              GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(cliRenewal, BM_SETCHECK,
+                         state->account.allowCliRenewal ? BST_CHECKED : BST_UNCHECKED, 0);
             CreateWindowExW(0, L"STATIC", Tr(Str::CopilotGithubLogin), WS_CHILD,
                             0, 0, 1, 1, hWnd, reinterpret_cast<HMENU>(kAccountCopilotLoginLabel),
                             GetModuleHandleW(nullptr), nullptr);
@@ -25504,6 +26155,10 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 ChooseSvgForEditor(hWnd, *state);
                 return 0;
             }
+            if (LOWORD(wParam) == kAccountCliLogin && HIWORD(wParam) == BN_CLICKED) {
+                UpdateEditorCliRenewal(hWnd);
+                return 0;
+            }
             if (LOWORD(wParam) == kAccountLabel && HIWORD(wParam) == EN_CHANGE) {
                 if (state && !state->updatingLabel) state->labelCustomized = true;
                 SetEditorMessage(hWnd, *state, EditorMessageField::Label, L"");
@@ -25592,6 +26247,9 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                 candidate.useCliLogin =
                     (candidate.provider == L"anthropic" || openai) &&
                     IsDlgButtonChecked(hWnd, kAccountCliLogin) == BST_CHECKED;
+                candidate.allowCliRenewal =
+                    candidate.provider == L"anthropic" && candidate.useCliLogin &&
+                    IsDlgButtonChecked(hWnd, kAccountCliRenewal) == BST_CHECKED;
                 {
                     wchar_t iconBuffer[kTileIconMaxUnits + 8] = {};
                     GetDlgItemTextW(hWnd, kAccountIconText, iconBuffer, ARRAYSIZE(iconBuffer));
@@ -25798,6 +26456,8 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             if (state) return 1;
             break;
         case WM_CLOSE:
+            // Never destroy the owner of a file picker whose modal call is still on the stack.
+            if (g_settingsPickerOwner == hWnd) return 0;
             DestroyOwnedModal(hWnd);
             return 0;
         case WM_DESTROY:
@@ -25858,6 +26518,8 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
 
     EnableWindow(owner, FALSE);
     ShowNativeWindowComposed(window);
+    // The settings window defers its close until this loop returns (see SettingsWindowProc).
+    SettingsModalWindowScope modalScope(window);
     MSG message;
     while (!g_unloading && !g_settingsWindowCancelRequested && !state.done) {
         int result = GetMessageW(&message, nullptr, 0, 0);
@@ -26063,7 +26725,11 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     configLock.unlock();
     bool providerTokenCleared = true;
     if (clearOldToken) {
+        std::string revocation = oldAccount.provider == L"antigravity" ?
+                                     GoogleRevocationToken(oldIdentity) : std::string();
         providerTokenCleared = ClearStoredTokenAndBumpAuthEpoch(oldIdentity);
+        if (providerTokenCleared) QueueGoogleRevocation(std::move(revocation));
+        else WipeBuffer(revocation);
     }
     if (applyResult == SettingsApplyResult::Changed) {
         // Every bar already exists in the XAML tree; visibility and spacing update in place.
@@ -26143,11 +26809,21 @@ static void RemoveAccountFromSettingsWindow(SettingsWindowState& state) {
         RefreshSettingsControls(state);
         return;
     }
+    std::string revocation = deleteToken && account.provider == L"antigravity" ?
+                                 GoogleRevocationToken(identity) : std::string();
     if (deleteToken && !ClearStoredTokenAndBumpAuthEpoch(identity)) {
+        WipeBuffer(revocation);
         configLock.unlock();
         ShowSettingsInfoBar(state, InfoBarSeverity::Error,
                             Tr(Str::SettingsTheStoredSignInCouldNotBe2));
         return;
+    }
+    QueueGoogleRevocation(std::move(revocation));
+    if ((account.provider == L"anthropic" || account.provider == L"openai" ||
+         account.provider == L"copilot") &&
+        std::find(settings.detectedProviders.begin(), settings.detectedProviders.end(), account.provider) ==
+            settings.detectedProviders.end()) {
+        settings.detectedProviders.push_back(account.provider);
     }
     settings.accounts.erase(settings.accounts.begin() + index);
     SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
@@ -26248,6 +26924,55 @@ static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
     RefreshSettingsControls(state);
 }
 
+// Saves the user's answer and, when allowed, adds an account for each provider with a sign-in
+// on this PC. A rescan is an explicit request, so it also re-adds providers removed earlier.
+static void ApplyAccountDetection(SettingsWindowState& state, AccountDetection detection,
+                                  bool rescan) {
+    std::unique_lock<std::mutex> configLock(g_configEditMutex);
+    Settings settings;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        settings = g_settings;
+    }
+    settings.accountDetection = detection;
+    size_t accountCount = settings.accounts.size();
+    if (detection == AccountDetection::Allowed) {
+        if (rescan) settings.detectedProviders.clear();
+        ApplyDetectedCliLogins(&settings);
+    }
+    bool added = settings.accounts.size() > accountCount;
+    SettingsApplyResult applyResult = ApplyOwnedSettings(std::move(settings));
+    configLock.unlock();
+    if (applyResult == SettingsApplyResult::Failed) {
+        ShowSettingsInfoBar(state, InfoBarSeverity::Error, Tr(Str::SettingsCouldNotSaveSettings));
+    } else {
+        // Only new accounts change the tiles; the saved answer alone doesn't.
+        if (applyResult == SettingsApplyResult::Changed && added) FinishSettingsApply();
+        if (rescan && !added) {
+            ShowSettingsInfoBar(state, InfoBarSeverity::Info, Tr(Str::SettingsRescanNoneFound));
+        }
+    }
+    RefreshSettingsControls(state);
+}
+
+// Asked once, before the mod reads any other app's sign-in. Closing the question answers "Not
+// now"; unloading leaves it unanswered so it is asked again next time.
+static void PromptAccountDetection(SettingsWindowState& state) {
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        if (g_settingsLoadError || g_settings.accountDetection != AccountDetection::Ask) return;
+    }
+    // Another dialog is already up: ask when the window opens next.
+    if (g_settingsMessageBoxContext || g_settingsModalWindow || g_settingsPickerOwner) return;
+    int result = SettingsMessageBoxW(state.hWnd, Tr(Str::SettingsFindAccountsPrompt),
+                                     Tr(Str::NotificationAppName), MB_YESNO | MB_ICONQUESTION, nullptr,
+                                     {Tr(Str::SettingsFindAccounts), Tr(Str::SettingsNotNow), nullptr,
+                                      IDYES});
+    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
+    ApplyAccountDetection(state, result == IDYES ? AccountDetection::Allowed : AccountDetection::Declined,
+                          false);
+}
+
 static void ResetCurrentSettingsPage(SettingsWindowState& state) {
     int page = state.currentPage;
     if (page <= 0 || page >= 4) return;
@@ -26328,7 +27053,11 @@ static bool ChooseSettingsColor(SettingsWindowState& state, COLORREF* color) {
     chooser.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
     chooser.lCustData = reinterpret_cast<LPARAM>(&state);
     chooser.lpfnHook = SettingsColorHookProc;
-    bool accepted = ChooseColorW(&chooser);
+    bool accepted = false;
+    {
+        SettingsPickerScope pickerScope(state.hWnd);
+        accepted = ChooseColorW(&chooser);
+    }
     state.colorDialog = nullptr;
     if (accepted) *color = chooser.rgbResult;
     return accepted;
@@ -26405,17 +27134,11 @@ static void CompleteSettingsPageNavigation(SettingsWindowState& state, int page,
     if (!state.pageAnimation.active) StopSettingsPageAnimation(state, false);
 }
 
+static void SetSettingsWindowAppId(HWND window, bool set);
+
 static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                                            WPARAM wParam, LPARAM lParam) {
     auto* state = reinterpret_cast<SettingsWindowState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
-    // Side-effect-free diagnostic query: distinguishes Composition from its GDI fallback.
-    if (state && message == NativeChildPaintProbeMessage() && wParam == 0x414E494D) {
-        auto& animation = state->pageAnimation;
-        return (animation.active ? 1 : 0) | (animation.native ? 2 : 0) |
-               (animation.composition.compositor ? 4 : 0) |
-               (animation.composition.unavailable ? 8 : 0) |
-               (animation.composition.queue ? 16 : 0);
-    }
     if (state && (message == WM_COMMAND || message == WM_SETTINGCHANGE ||
         message == WM_THEMECHANGED || message == WM_SYSCOLORCHANGE || message == WM_DPICHANGED ||
         message == WM_ACTIVATE || message == WM_PAINT)) state->scrollSurface.contentValid = false;
@@ -26530,6 +27253,8 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             }
             CreateSettingsControl(*state, 0, L"BUTTON", Tr(Str::SettingsAdd),
                                   WS_VISIBLE | WS_TABSTOP, 0, kAccountAdd);
+            CreateSettingsControl(*state, 0, L"BUTTON", Tr(Str::SettingsRescan),
+                                  WS_VISIBLE | WS_TABSTOP, 0, kAccountRescan);
             CreateSettingsControl(*state, 0, L"BUTTON", Tr(Str::SettingsEdit),
                                   WS_VISIBLE | WS_TABSTOP, 0, kAccountEdit);
             CreateSettingsControl(*state, 0, L"BUTTON", Tr(Str::SettingsRemove),
@@ -27066,6 +27791,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 case kAccountAdd:
                     if (HIWORD(wParam) == BN_CLICKED) AddAccountFromSettingsWindow(*state);
                     return 0;
+                case kAccountRescan:
+                    if (HIWORD(wParam) == BN_CLICKED && !g_settingsLoadError) {
+                        ApplyAccountDetection(*state, AccountDetection::Allowed, true);
+                    }
+                    return 0;
                 case kAccountEdit:
                     if (HIWORD(wParam) == BN_CLICKED && IsWindowEnabled(hWnd) &&
                         IsWindowEnabled(NativeSettingsItem(hWnd, kAccountEdit)) &&
@@ -27290,6 +28020,11 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             }
             break;
         case WM_TIMER:
+            if (wParam == kSettingsCloseRetryTimer) {
+                KillTimer(hWnd, kSettingsCloseRetryTimer);
+                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
             if (state && wParam == kSettingsIndicatorAnimationTimer) {
                 OnSettingsIndicatorAnimationTimer(*state);
                 return 0;
@@ -27445,6 +28180,9 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
         case kExitVisualTestMessage:
             SetVisualTestMode(false);
             return 0;
+        case kSettingsDetectionPromptMessage:
+            if (state && !g_unloading) PromptAccountDetection(*state);
+            return 0;
         case kSettingsRefreshMessage:
             if (state) {
                 bool enabled = g_visualTestMode.load(std::memory_order_acquire);
@@ -27569,27 +28307,24 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
             if (state) RecreateSettingsVisuals(*state);
             return 0;
         case WM_CLOSE:
-            if (state && !state->colorDialog && state->filePickerOpen) {
-                state->colorDialog = FindOwnedFileDialog(hWnd);
-            }
-            if (state && state->colorDialog) {
-                PostMessageW(state->colorDialog, WM_COMMAND, IDCANCEL, 0);
-                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+            // A modal picker, prompt or nested loop is still on the stack: ask it to finish and
+            // retry on a timer. Destroying the window now would pull the owner out from under it.
+            if (state && DismissSettingsModals(*state)) {
+                if (!SetTimer(hWnd, kSettingsCloseRetryTimer, kSettingsCloseRetryMs, nullptr)) {
+                    // No timer available: retry through the queue (the modal call is still dismissed).
+                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                }
                 return 0;
             }
-            if (g_settingsMessageBoxContext &&
-                IsWindow(g_settingsMessageBoxContext->hWnd)) {
-                g_settingsMessageBoxContext->forced = true;
-                PostMessageW(g_settingsMessageBoxContext->hWnd, WM_COMMAND,
-                             g_settingsMessageBoxContext->forcedResult, 0);
-                PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                return 0;
-            }
+            KillTimer(hWnd, kSettingsCloseRetryTimer);
             if (state && !g_unloading) CommitScalarSettings(*state, false);
             SetVisualTestMode(false);
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
+            KillTimer(hWnd, kSettingsCloseRetryTimer);
+            // The AppUserModelID must be removed while the HWND is still valid.
+            SetSettingsWindowAppId(hWnd, false);
             if (state) {
                 EndAccountDrag(*state, false);
                 StopSettingsIndicatorAnimation(*state, false);
@@ -27614,7 +28349,7 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
 
 // Assigns (or removes) the mod's AUMID on the settings window: it gets its own taskbar button,
 // separate from Explorer, with the window's icon. Not pinnable: there is no shortcut to relaunch.
-// It must be removed before the window is destroyed.
+// It must be removed before the window is destroyed (WM_DESTROY); removing it again is harmless.
 static void SetSettingsWindowAppId(HWND window, bool set) {
     static const PROPERTYKEY kAppUserModelId =
         {{0x9f4c2855, 0x9f79, 0x4b39, {0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3}}, 5};
@@ -27735,7 +28470,6 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         smallIcon = CreateIconFromMaster(logo, ScaleForDpi(16, dpi));
         if (bigIcon) SendMessageW(window, WM_SETICON, ICON_BIG, (LPARAM)bigIcon);
         if (smallIcon) SendMessageW(window, WM_SETICON, ICON_SMALL, (LPARAM)smallIcon);
-        EnsureToastAumidRegistered();
         SetSettingsWindowAppId(window, true);
         FitSettingsWindowToContent(state);
         LayoutSettingsWindow(state);
@@ -27747,6 +28481,12 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
             StartSettingsPageAnimation(state);
             ShowNativeWindowComposed(window);
             SetForegroundWindow(window);
+            bool askDetection;
+            {
+                std::lock_guard<std::mutex> lk(g_settingsMutex);
+                askDetection = g_settings.accountDetection == AccountDetection::Ask;
+            }
+            if (askDetection) PostMessageW(window, kSettingsDetectionPromptMessage, 0, 0);
         }
         MSG message;
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
@@ -27900,6 +28640,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     LoadSettings();
+    // A registration left by an earlier session that ended without unloading is only useful
+    // while notifications are on.
+    if (g_settings.notifyThreshold == 0) RemoveToastAumidRegistration();
 
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     g_refreshEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -28019,7 +28762,15 @@ void Wh_ModUninit() {
         g_fetchThread = nullptr;
     }
     g_fetchThreadStarted.store(false, std::memory_order_release);
+    // Revocations that the fetch thread didn't get to: the sign-ins are already deleted locally.
+    WipePendingGoogleRevocations();
 
+    // The fetch thread (the only toast producer) is joined. Only the process that hosts the
+    // taskbar, or one that wrote the key, removes it: a File Explorer window process unloading
+    // must not remove the registration the taskbar process still uses.
+    if (g_toastAumidWritten.load() || CurrentProcessHostsTaskbar()) {
+        RemoveToastAumidRegistration();
+    }
 
     // All worker threads that can issue finite taskbar marshals are joined. These synchronous
     // cleanup sends are the final per-UI-thread lifetime barrier before the DLL can unload.
