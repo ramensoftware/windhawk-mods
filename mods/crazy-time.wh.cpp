@@ -19,10 +19,7 @@
 A minimalist scheduler for shutdown, sleep and hibernate, living in the
 notification area. Português abaixo.
 
-![Crazy Time panel](https://raw.githubusercontent.com/caikx11/Crazy-timer/be7f37d596ba221e65c336a6472a9bd11677c073/docs/images/crazy-time-panel.jpg)
-
-Screenshot of the standalone preview using simulated actions. The mod itself
-performs real power actions as described below.
+![Crazy Time panel](https://raw.githubusercontent.com/caikx11/Crazy-timer/c92d0c0f575f877a535377ca7ccf28734ca42306/docs/images/crazy-time-panel.png)
 
 > **This mod really shuts down, sleeps or hibernates your computer** when a
 > schedule fires. Save your work first. A warning notification appears before
