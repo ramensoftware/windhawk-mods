@@ -3,8 +3,9 @@
 // @name            Windows 7 Desktop Widgets
 // @description     Authentic Windows 7 Clock & Calendar desktop widgets with 8 skins, options dialog, expandable notebook and multi-monitor support.
 // @description:ru  Аутентичные виджеты Часов и Календаря из Windows 7 с 8 скинами, окном настроек, раскрывающимся блокнотом и поддержкой всех мониторов.
-// @version         1.1.0
-// @author          Custom Win7 Widgets
+// @version         1.0.0
+// @author          dekvas
+// @github          https://github.com/dekvas
 // @include         windhawk.exe
 // @compilerOptions -ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32 -lcomctl32
 // @license         MIT
@@ -12,35 +13,39 @@
 
 // ==WindhawkModReadme==
 /*
+![Screenshot](https://i.imgur.com/u7F6iG9.png) 
+![Screenshot](https://i.imgur.com/cQDjOws.png)
+![Screenshot](https://i.imgur.com/IdDURoO.png) 
+
 # Windows 7 Desktop Widgets
 
 I really missed the classic Windows 7 desktop widgets and couldn't find a proper, lightweight version anywhere without bloat, broken scaling, or missing multi-monitor support. I love how simple and handy they were, so I made this accurate recreation. Enjoy!
 
 ### What's included:
-- **Classic Windows 7 Clock**: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window.
-- **Classic Windows 7 Calendar**: Spiral-bound notebook with an expandable monthly grid, date picking, and smooth navigation.
-- **Clean & Fast**: Vector GDI+ rendering (no external images or assets needed), crystal clear on 125%/150%+ High-DPI screens, and draggable across any monitor.
+- **Classic Windows 7 Clock**: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -> **Options...**).
+- **Classic Windows 7 Calendar**: Spiral-bound notebook with an expandable monthly grid (click the expand icon on the hover bar or double-click the calendar), date picking, and smooth navigation.
+- **Clean & Fast**: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.
 
 ---
 
 ☕ **Support / Donations:**
 If you enjoy this mod and want to support its author:
-**Card:** `4400430427316580`
+[Support on Boosty](https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - showClock: true
-  $name: Show Clock Gadget
+  $name: Show Clock Widget
   $name:ru: Показывать виджет Часов
-  $description: Enable or disable the Windows 7 Clock gadget on the desktop.
+  $description: Enable or disable the Windows 7 Clock widget on the desktop.
   $description:ru: Включить или скрыть виджет часов на рабочем столе.
 
 - showCalendar: true
-  $name: Show Calendar Gadget
+  $name: Show Calendar Widget
   $name:ru: Показывать виджет Календаря
-  $description: Enable or disable the Windows 7 Calendar gadget on the desktop.
+  $description: Enable or disable the Windows 7 Calendar widget on the desktop.
   $description:ru: Включить или скрыть виджет календаря на рабочем столе.
 
 - clockSkin: skin1
@@ -49,14 +54,23 @@ If you enjoy this mod and want to support its author:
   $description: Choose one of the 8 classic Windows 7 clock faces (can also be changed via the wrench button on the clock).
   $description:ru: Выберите один из 8 классических циферблатов Windows 7 (также меняется через значок гаечного ключа на часах).
   $options:
-  - skin1: 1 - Traditional (Классический)
-  - skin2: 2 - Modern Dark (Современный тёмный)
-  - skin3: 3 - Silver & White (Серебристый)
-  - skin4: 4 - Sky & Pastel (Небесный)
-  - skin5: 5 - Ruby Red (Рубиновый)
-  - skin6: 6 - Roman Steel (Стальной с римскими цифрами)
-  - skin7: 7 - Emerald Gold (Изумрудный)
-  - skin8: 8 - Aero Glass (Прозрачное стекло)
+  - skin1: 1 - Traditional
+  - skin2: 2 - Modern Dark
+  - skin3: 3 - Silver & White
+  - skin4: 4 - Sky & Pastel
+  - skin5: 5 - Ruby Red
+  - skin6: 6 - Roman Steel
+  - skin7: 7 - Emerald Gold
+  - skin8: 8 - Aero Glass
+  $options:ru:
+  - skin1: 1 - Классический
+  - skin2: 2 - Современный тёмный
+  - skin3: 3 - Серебристый
+  - skin4: 4 - Небесный
+  - skin5: 5 - Рубиновый
+  - skin6: 6 - Стальной с римскими цифрами
+  - skin7: 7 - Изумрудный
+  - skin8: 8 - Прозрачное стекло
 
 - showSeconds: true
   $name: Show Second Hand
@@ -89,12 +103,16 @@ If you enjoy this mod and want to support its author:
   $description:ru: Масштаб размера в процентах (например 100, 125, 150).
 
 - language: auto
-  $name: Language / Язык
+  $name: Language
   $name:ru: Язык интерфейса
   $options:
-  - auto: Auto (System Default / По умолчанию)
-  - ru: Русский
+  - auto: Auto (System Default)
   - en: English
+  - ru: Russian
+  $options:ru:
+  - auto: Авто (По умолчанию системы)
+  - en: Английский (English)
+  - ru: Русский
 */
 // ==/WindhawkModSettings==
 
@@ -116,9 +134,9 @@ using namespace Gdiplus;
 namespace {
 
 constexpr UINT_PTR kTickTimer = 1;
-constexpr UINT_PTR kHoverCheckTimer = 2;
 constexpr UINT kSettingsChangedMessage = WM_APP + 1;
-constexpr wchar_t kCanvasClassName[] = L"WindhawkWin7GadgetsCanvas";
+constexpr wchar_t kClockClassName[] = L"WindhawkWin7ClockWidget";
+constexpr wchar_t kCalendarClassName[] = L"WindhawkWin7CalendarWidget";
 constexpr wchar_t kOptionsClassName[] = L"WindhawkWin7ClockOptionsDlg";
 
 constexpr float kPi = 3.14159265358979323846f;
@@ -172,15 +190,18 @@ const TimeZoneEntry kTimeZones[] = {
 
 // ── Global State ─────────────────────────────────────────────────────────────
 
-HWND g_hwnd = nullptr;
+HWND g_clockHwnd = nullptr;
+HWND g_calendarHwnd = nullptr;
 HWND g_optionsHwnd = nullptr;
 HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 volatile bool g_unloading = false;
 ULONG_PTR g_gdiplusToken = 0;
 
-bool g_isRussian = true;
-float g_scale = 1.0f;
+bool g_isRussian = false;
+float g_userScale = 1.0f;
+float g_clockScale = 1.0f;
+float g_calendarScale = 1.0f;
 BYTE g_masterOpacity = 255;
 
 // Clock state
@@ -189,7 +210,7 @@ int g_clockSkin = 0; // 0..7
 bool g_showSeconds = true;
 wchar_t g_clockName[64] = L"";
 int g_clockTzIndex = 0;
-PointF g_clockPos = PointF(0, 0); // In virtual screen coordinates (logical unscaled or screen px)
+PointF g_clockPos = PointF(0, 0); // In virtual screen coordinates
 
 // Calendar state
 bool g_showCalendar = true;
@@ -208,7 +229,7 @@ int g_lastRenderedMinute = -1;
 // Interaction state
 int g_hoveredWidget = -1;
 int g_hoveredBtn = HoverBtnNone;
-int g_hoveredDayNumber = 0;
+bool g_trackingMouse[WidgetCount] = {false, false};
 int g_dragWidget = -1;
 PointF g_dragOffset = PointF(0, 0);
 PointF g_dragStartScreen = PointF(0, 0);
@@ -223,8 +244,7 @@ struct RenderSurface {
     int height = 0;
 };
 
-RenderSurface g_renderSurface;
-RECT g_virtualRect = {};
+RenderSurface g_surfaces[WidgetCount];
 
 // ── Localization ─────────────────────────────────────────────────────────────
 
@@ -245,7 +265,7 @@ void DetectLanguage() {
     }
     LANGID langId = GetUserDefaultUILanguage();
     WORD primary = PRIMARYLANGID(langId);
-    g_isRussian = (primary == LANG_RUSSIAN || primary == LANG_BELARUSIAN || primary == LANG_UKRAINIAN);
+    g_isRussian = (primary == LANG_RUSSIAN);
 }
 
 const wchar_t* MonthNameFull(int month) {
@@ -296,8 +316,6 @@ const wchar_t* DayOfWeekName(int dowSundayZero) {
 
 // ── DPI Scaling & Virtual Screen Helpers ─────────────────────────────────────
 
-float g_userScale = 1.0f;
-
 void EnableProcessDpiAwareness() {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
@@ -316,15 +334,31 @@ void EnableProcessDpiAwareness() {
     }
 }
 
-float GetSystemDpiScale() {
+float GetMonitorDpiScaleForPoint(POINT pt, HWND hwnd = nullptr) {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        using GetDpiForSystem_t = UINT(WINAPI*)();
-        auto pGetDpi = reinterpret_cast<GetDpiForSystem_t>(
-            GetProcAddress(hUser32, "GetDpiForSystem"));
-        if (pGetDpi) {
-            UINT dpi = pGetDpi();
+    if (hwnd && IsWindow(hwnd) && hUser32) {
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        auto pGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
+            GetProcAddress(hUser32, "GetDpiForWindow"));
+        if (pGetDpiForWindow) {
+            UINT dpi = pGetDpiForWindow(hwnd);
             if (dpi > 0) return dpi / 96.0f;
+        }
+    }
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (hMon) {
+        HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+        if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+        if (hShcore) {
+            using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+            auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
+                GetProcAddress(hShcore, "GetDpiForMonitor"));
+            if (pGetDpiForMonitor) {
+                UINT dpiX = 96, dpiY = 96;
+                if (SUCCEEDED(pGetDpiForMonitor(hMon, 0 /*MDT_EFFECTIVE_DPI*/, &dpiX, &dpiY)) && dpiX > 0) {
+                    return dpiX / 96.0f;
+                }
+            }
         }
     }
     HDC screenDc = GetDC(nullptr);
@@ -336,8 +370,22 @@ float GetSystemDpiScale() {
     return (dpiX > 0) ? (dpiX / 96.0f) : 1.0f;
 }
 
+float GetWidgetScale(int widgetId) {
+    return (widgetId == WidgetClock) ? g_clockScale : g_calendarScale;
+}
+
 void UpdateEffectiveScale() {
-    g_scale = g_userScale * GetSystemDpiScale();
+    POINT clockPt = {
+        static_cast<LONG>(g_clockPos.X + 65.0f),
+        static_cast<LONG>(g_clockPos.Y + 65.0f)
+    };
+    g_clockScale = g_userScale * GetMonitorDpiScaleForPoint(clockPt, g_clockHwnd);
+
+    POINT calPt = {
+        static_cast<LONG>(g_calendarPos.X + 65.0f),
+        static_cast<LONG>(g_calendarPos.Y + 65.0f)
+    };
+    g_calendarScale = g_userScale * GetMonitorDpiScaleForPoint(calPt, g_calendarHwnd);
 }
 
 RECT GetFullVirtualScreenRect() {
@@ -366,36 +414,44 @@ bool PtInRectF(const RectF& rc, PointF pt) {
 // Logical dimensions of widgets (at 100% scale):
 // Clock: 130 x 130
 // Calendar Collapsed: 130 x 146
-// Calendar Expanded:  130 x 292
-// Hover bar width: 21px on the right edge of each widget
+// Calendar Expanded:  130 x 290
+// Hover bar width: 20px on the right edge of each widget
 
-RectF GetWidgetBodyRect(int widgetId) {
-    const float s = g_scale;
+SizeF GetWidgetWindowSize(int widgetId) {
+    const float s = GetWidgetScale(widgetId);
     if (widgetId == WidgetClock) {
-        return RectF(g_clockPos.X, g_clockPos.Y, 130.0f * s, 130.0f * s);
+        return SizeF(std::ceil(154.0f * s), std::ceil(132.0f * s));
     } else {
-        float h = g_calendarExpanded ? 290.0f : 146.0f;
-        return RectF(g_calendarPos.X, g_calendarPos.Y, 130.0f * s, h * s);
+        float h = g_calendarExpanded ? 292.0f : 148.0f;
+        return SizeF(std::ceil(154.0f * s), std::ceil(h * s));
     }
 }
 
-RectF GetWidgetHoverBarRect(int widgetId) {
-    const float s = g_scale;
-    RectF body = GetWidgetBodyRect(widgetId);
-    // Win7 gadget toolbar sits immediately to the right of the gadget top-right
+RectF GetWidgetLocalBodyRect(int widgetId) {
+    const float s = GetWidgetScale(widgetId);
+    if (widgetId == WidgetClock) {
+        return RectF(0.0f, 0.0f, 130.0f * s, 130.0f * s);
+    } else {
+        float h = g_calendarExpanded ? 290.0f : 146.0f;
+        return RectF(0.0f, 0.0f, 130.0f * s, h * s);
+    }
+}
+
+RectF GetWidgetLocalHoverBarRect(int widgetId) {
+    const float s = GetWidgetScale(widgetId);
+    RectF body = GetWidgetLocalBodyRect(widgetId);
     return RectF(body.X + body.Width + 1.0f * s, body.Y + 4.0f * s, 20.0f * s, 56.0f * s);
 }
 
-RectF GetWidgetTotalHitRect(int widgetId) {
-    RectF body = GetWidgetBodyRect(widgetId);
-    RectF bar = GetWidgetHoverBarRect(widgetId);
-    float right = std::max(body.X + body.Width, bar.X + bar.Width);
-    return RectF(body.X, body.Y, right - body.X, body.Height);
+RectF GetWidgetScreenBodyRect(int widgetId) {
+    RectF local = GetWidgetLocalBodyRect(widgetId);
+    PointF pos = (widgetId == WidgetClock) ? g_clockPos : g_calendarPos;
+    return RectF(pos.X, pos.Y, local.Width, local.Height);
 }
 
 void ClampWidgetToVirtualScreen(int widgetId) {
     RECT vr = GetFullVirtualScreenRect();
-    RectF body = GetWidgetBodyRect(widgetId);
+    RectF body = GetWidgetLocalBodyRect(widgetId);
     float minX = static_cast<float>(vr.left);
     float minY = static_cast<float>(vr.top);
     float maxX = std::max(minX, static_cast<float>(vr.right) - body.Width);
@@ -532,7 +588,8 @@ void SaveStateToStorage() {
 void ApplyDefaultPositions() {
     RECT workArea = {};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-    const float s = g_scale;
+    POINT initPt = {workArea.right - 100, workArea.top + 100};
+    const float s = g_userScale * GetMonitorDpiScaleForPoint(initPt);
     float rightEdge = static_cast<float>(workArea.right) - 155.0f * s;
     float topEdge = static_cast<float>(workArea.top) + 20.0f * s;
 
@@ -543,62 +600,114 @@ void ApplyDefaultPositions() {
 void LoadStateAndSettings(bool fromWindhawkSettingsChange) {
     DetectLanguage();
 
-    g_showClock = Wh_GetIntSetting(L"showClock") != 0;
-    g_showCalendar = Wh_GetIntSetting(L"showCalendar") != 0;
-
     int scalePct = Wh_GetIntSetting(L"widgetScale");
     if (scalePct < 50 || scalePct > 300) scalePct = 100;
     g_userScale = scalePct / 100.0f;
-    UpdateEffectiveScale();
 
     int opacityPct = Wh_GetIntSetting(L"widgetOpacity");
     if (opacityPct < 20 || opacityPct > 100) opacityPct = 100;
     g_masterOpacity = static_cast<BYTE>(std::round((opacityPct / 100.0f) * 255.0f));
 
+    bool cfgShowClock = Wh_GetIntSetting(L"showClock") != 0;
+    bool cfgShowCalendar = Wh_GetIntSetting(L"showCalendar") != 0;
+
+    int cfgSkin = 0;
     PCWSTR skinSetting = Wh_GetStringSetting(L"clockSkin");
     if (skinSetting) {
         if (wcsncmp(skinSetting, L"skin", 4) == 0 && skinSetting[4] >= L'1' && skinSetting[4] <= L'8') {
-            g_clockSkin = skinSetting[4] - L'1';
+            cfgSkin = skinSetting[4] - L'1';
         }
         Wh_FreeStringSetting(skinSetting);
     }
 
-    g_showSeconds = Wh_GetIntSetting(L"showSeconds") != 0;
-    g_calendarExpanded = Wh_GetIntSetting(L"calendarExpanded") != 0;
+    bool cfgShowSeconds = Wh_GetIntSetting(L"showSeconds") != 0;
+    bool cfgCalExpanded = Wh_GetIntSetting(L"calendarExpanded") != 0;
 
+    wchar_t cfgClockName[64] = L"";
     PCWSTR nameSetting = Wh_GetStringSetting(L"clockName");
     if (nameSetting) {
-        wcsncpy_s(g_clockName, nameSetting, _TRUNCATE);
+        wcsncpy_s(cfgClockName, nameSetting, _TRUNCATE);
         Wh_FreeStringSetting(nameSetting);
     }
 
-    // If loading at startup, also check saved values from desktop Options dialog
-    if (!fromWindhawkSettingsChange) {
-        int savedSkin = Wh_GetIntValue(L"savedClockSkin", -1);
-        if (savedSkin >= 0 && savedSkin <= 7) g_clockSkin = savedSkin;
+    // Compare against the last known Windhawk settings so widget-side changes
+    // survive unrelated edits in the Windhawk settings UI.
+    int prevCfgShowClock = Wh_GetIntValue(L"prevCfgShowClock", -1);
+    int prevCfgShowCal   = Wh_GetIntValue(L"prevCfgShowCalendar", -1);
+    int prevCfgSkin      = Wh_GetIntValue(L"prevCfgClockSkin", -1);
+    int prevCfgSec       = Wh_GetIntValue(L"prevCfgShowSeconds", -1);
+    int prevCfgExp       = Wh_GetIntValue(L"prevCfgCalExpanded", -1);
+    wchar_t prevCfgName[64] = L"";
+    bool hasPrevCfgName  = Wh_GetStringValue(L"prevCfgClockName", prevCfgName, ARRAYSIZE(prevCfgName)) > 0 ||
+                           Wh_GetIntValue(L"prevCfgNameInit", 0) != 0;
 
-        int savedSec = Wh_GetIntValue(L"savedShowSeconds", -1);
-        if (savedSec != -1) g_showSeconds = (savedSec != 0);
+    // Load saved runtime state first
+    int savedShowClock = Wh_GetIntValue(L"savedShowClock", -1);
+    g_showClock = (savedShowClock != -1) ? (savedShowClock != 0) : cfgShowClock;
 
-        int savedTz = Wh_GetIntValue(L"savedClockTz", -1);
-        if (savedTz >= 0 && savedTz < static_cast<int>(ARRAYSIZE(kTimeZones))) {
-            g_clockTzIndex = savedTz;
-        }
+    int savedShowCal = Wh_GetIntValue(L"savedShowCalendar", -1);
+    g_showCalendar = (savedShowCal != -1) ? (savedShowCal != 0) : cfgShowCalendar;
 
-        wchar_t savedName[64] = {};
-        if (Wh_GetStringValue(L"savedClockName", savedName, ARRAYSIZE(savedName)) > 0 && g_clockName[0] == L'\0') {
-            wcsncpy_s(g_clockName, savedName, _TRUNCATE);
-        }
+    int savedSkin = Wh_GetIntValue(L"savedClockSkin", -1);
+    g_clockSkin = (savedSkin >= 0 && savedSkin <= 7) ? savedSkin : cfgSkin;
 
-        int savedExp = Wh_GetIntValue(L"savedCalExpanded", -1);
-        if (savedExp != -1) g_calendarExpanded = (savedExp != 0);
-    } else {
-        // Sync Windhawk settings into local storage so they match
-        Wh_SetIntValue(L"savedClockSkin", g_clockSkin);
-        Wh_SetIntValue(L"savedShowSeconds", g_showSeconds ? 1 : 0);
-        Wh_SetStringValue(L"savedClockName", g_clockName);
-        Wh_SetIntValue(L"savedCalExpanded", g_calendarExpanded ? 1 : 0);
+    int savedSec = Wh_GetIntValue(L"savedShowSeconds", -1);
+    g_showSeconds = (savedSec != -1) ? (savedSec != 0) : cfgShowSeconds;
+
+    int savedTz = Wh_GetIntValue(L"savedClockTz", -1);
+    if (savedTz >= 0 && savedTz < static_cast<int>(ARRAYSIZE(kTimeZones))) {
+        g_clockTzIndex = savedTz;
     }
+
+    wchar_t savedName[64] = {};
+    if (Wh_GetStringValue(L"savedClockName", savedName, ARRAYSIZE(savedName)) > 0 ||
+        Wh_GetIntValue(L"savedClockNameInit", 0) != 0) {
+        wcsncpy_s(g_clockName, savedName, _TRUNCATE);
+    } else {
+        wcsncpy_s(g_clockName, cfgClockName, _TRUNCATE);
+    }
+
+    int savedExp = Wh_GetIntValue(L"savedCalExpanded", -1);
+    g_calendarExpanded = (savedExp != -1) ? (savedExp != 0) : cfgCalExpanded;
+
+    // Apply any Windhawk setting whose value was explicitly modified by the user
+    if (fromWindhawkSettingsChange) {
+        if (prevCfgShowClock == -1 || prevCfgShowClock != (cfgShowClock ? 1 : 0)) {
+            g_showClock = cfgShowClock;
+        }
+        if (prevCfgShowCal == -1 || prevCfgShowCal != (cfgShowCalendar ? 1 : 0)) {
+            g_showCalendar = cfgShowCalendar;
+        }
+        if (prevCfgSkin == -1 || prevCfgSkin != cfgSkin) {
+            g_clockSkin = cfgSkin;
+        }
+        if (prevCfgSec == -1 || prevCfgSec != (cfgShowSeconds ? 1 : 0)) {
+            g_showSeconds = cfgShowSeconds;
+        }
+        if (!hasPrevCfgName || wcscmp(prevCfgName, cfgClockName) != 0) {
+            wcsncpy_s(g_clockName, cfgClockName, _TRUNCATE);
+        }
+        if (prevCfgExp == -1 || prevCfgExp != (cfgCalExpanded ? 1 : 0)) {
+            g_calendarExpanded = cfgCalExpanded;
+        }
+    } else {
+        // If both widgets were closed in the previous session, restore from settings
+        // so the user isn't left with zero visible widgets on startup.
+        if (!g_showClock && !g_showCalendar && (cfgShowClock || cfgShowCalendar)) {
+            g_showClock = cfgShowClock;
+            g_showCalendar = cfgShowCalendar;
+        }
+    }
+
+    // Record current Windhawk settings snapshot & runtime state
+    Wh_SetIntValue(L"prevCfgShowClock", cfgShowClock ? 1 : 0);
+    Wh_SetIntValue(L"prevCfgShowCalendar", cfgShowCalendar ? 1 : 0);
+    Wh_SetIntValue(L"prevCfgClockSkin", cfgSkin);
+    Wh_SetIntValue(L"prevCfgShowSeconds", cfgShowSeconds ? 1 : 0);
+    Wh_SetIntValue(L"prevCfgCalExpanded", cfgCalExpanded ? 1 : 0);
+    Wh_SetStringValue(L"prevCfgClockName", cfgClockName);
+    Wh_SetIntValue(L"prevCfgNameInit", 1);
+    Wh_SetIntValue(L"savedClockNameInit", 1);
 
     if (!g_positionsInitialized) {
         ApplyDefaultPositions();
@@ -615,9 +724,11 @@ void LoadStateAndSettings(bool fromWindhawkSettingsChange) {
         g_positionsInitialized = true;
     }
 
+    UpdateEffectiveScale();
     ClampWidgetToVirtualScreen(WidgetClock);
     ClampWidgetToVirtualScreen(WidgetCalendar);
     SyncCalendarWithTodayIfUnset();
+    SaveStateToStorage();
 }
 
 // ── GDI+ Drawing Primitives ──────────────────────────────────────────────────
@@ -652,8 +763,8 @@ void DrawRoundRect(Graphics& g, const RectF& rc, float r, const Pen& pen) {
 void DrawWin7HoverToolbar(Graphics& g, int widgetId) {
     if (g_hoveredWidget != widgetId || g_dragWidget >= 0) return;
 
-    const float s = g_scale;
-    RectF bar = GetWidgetHoverBarRect(widgetId);
+    const float s = GetWidgetScale(widgetId);
+    RectF bar = GetWidgetLocalHoverBarRect(widgetId);
 
     // Outer dark translucent glass pill
     LinearGradientBrush bgBrush(
@@ -1099,7 +1210,7 @@ void RenderClockFaceAt(Graphics& g, float cx, float cy, float radius, int skinIn
 
 void DrawClockGadget(Graphics& g) {
     if (!g_showClock) return;
-    RectF rc = GetWidgetBodyRect(WidgetClock);
+    RectF rc = GetWidgetLocalBodyRect(WidgetClock);
     float cx = rc.X + rc.Width * 0.5f;
     float cy = rc.Y + rc.Height * 0.5f;
     float radius = rc.Width * 0.465f;
@@ -1392,8 +1503,8 @@ void DrawTopWhiteMonthSheet(Graphics& g, const RectF& sheetRc, float s) {
 void DrawCalendarGadget(Graphics& g) {
     if (!g_showCalendar) return;
 
-    const float s = g_scale;
-    RectF body = GetWidgetBodyRect(WidgetCalendar);
+    const float s = GetWidgetScale(WidgetCalendar);
+    RectF body = GetWidgetLocalBodyRect(WidgetCalendar);
 
     if (!g_calendarExpanded) {
         // Collapsed: Single orange page with spiral rings at the top
@@ -1413,113 +1524,108 @@ void DrawCalendarGadget(Graphics& g) {
     DrawWin7HoverToolbar(g, WidgetCalendar);
 }
 
-// ── Hit-Testing & Hover Mechanics ────────────────────────────────────────────
+// ── Hit-Testing & Hover Mechanics (Per-Widget Local Coordinates) ─────────────
 
-int HitTestGadgetAndButtons(PointF screenPt, int* outButtonId, int* outDayNum) {
+int HitTestWidgetLocal(int widgetId, PointF localPt, int* outButtonId, int* outDayNum) {
     if (outButtonId) *outButtonId = HoverBtnNone;
     if (outDayNum) *outDayNum = 0;
 
-    const float s = g_scale;
+    if (widgetId == WidgetClock && !g_showClock) return -1;
+    if (widgetId == WidgetCalendar && !g_showCalendar) return -1;
 
-    // Check widgets in reverse order (Calendar then Clock)
-    for (int id = WidgetCount - 1; id >= 0; --id) {
-        if (id == WidgetClock && !g_showClock) continue;
-        if (id == WidgetCalendar && !g_showCalendar) continue;
+    const float s = GetWidgetScale(widgetId);
 
-        RectF totalRc = GetWidgetTotalHitRect(id);
-        if (!PtInRectF(totalRc, screenPt)) continue;
-
-        // Check hover toolbar buttons first
-        RectF bar = GetWidgetHoverBarRect(id);
-        if (PtInRectF(bar, screenPt)) {
-            RectF btnCloseRc(bar.X, bar.Y, bar.Width, 19.5f * s);
-            RectF btnMidRc(bar.X, bar.Y + 19.5f * s, bar.Width, 18.0f * s);
-            if (PtInRectF(btnCloseRc, screenPt)) {
-                if (outButtonId) *outButtonId = HoverBtnClose;
-            } else if (PtInRectF(btnMidRc, screenPt)) {
-                if (outButtonId) *outButtonId = HoverBtnSizeOrOpts;
-            } else {
-                if (outButtonId) *outButtonId = HoverBtnDrag;
-            }
-            return id;
+    // Check hover toolbar buttons first
+    RectF bar = GetWidgetLocalHoverBarRect(widgetId);
+    if (PtInRectF(bar, localPt)) {
+        RectF btnCloseRc(bar.X, bar.Y, bar.Width, 19.5f * s);
+        RectF btnMidRc(bar.X, bar.Y + 19.5f * s, bar.Width, 18.0f * s);
+        if (PtInRectF(btnCloseRc, localPt)) {
+            if (outButtonId) *outButtonId = HoverBtnClose;
+        } else if (PtInRectF(btnMidRc, localPt)) {
+            if (outButtonId) *outButtonId = HoverBtnSizeOrOpts;
+        } else {
+            if (outButtonId) *outButtonId = HoverBtnDrag;
         }
+        return widgetId;
+    }
 
-        RectF body = GetWidgetBodyRect(id);
-        if (!PtInRectF(body, screenPt)) continue;
+    RectF body = GetWidgetLocalBodyRect(widgetId);
+    if (!PtInRectF(body, localPt)) return -1;
 
-        if (id == WidgetClock) {
-            // Check circular bounds of clock
-            float cx = body.X + body.Width * 0.5f;
-            float cy = body.Y + body.Height * 0.5f;
-            float dx = screenPt.X - cx;
-            float dy = screenPt.Y - cy;
-            float r = body.Width * 0.48f;
-            if (dx * dx + dy * dy <= r * r) {
-                return WidgetClock;
-            }
-            continue;
+    if (widgetId == WidgetClock) {
+        float cx = body.X + body.Width * 0.5f;
+        float cy = body.Y + body.Height * 0.5f;
+        float dx = localPt.X - cx;
+        float dy = localPt.Y - cy;
+        float r = body.Width * 0.48f;
+        if (dx * dx + dy * dy <= r * r) {
+            return WidgetClock;
         }
+        return -1;
+    }
 
-        if (id == WidgetCalendar) {
-            if (g_calendarExpanded) {
-                RectF topSheetRc(body.X + 4.0f * s, body.Y + 4.0f * s, 122.0f * s, 136.0f * s);
-                RectF prevRc(topSheetRc.X + 4.0f * s, topSheetRc.Y + 4.0f * s, 18.0f * s, 18.0f * s);
-                RectF nextRc(topSheetRc.X + topSheetRc.Width - 22.0f * s, topSheetRc.Y + 4.0f * s, 18.0f * s, 18.0f * s);
-                if (PtInRectF(prevRc, screenPt)) {
-                    if (outButtonId) *outButtonId = CalBtnPrevMonth;
-                    return WidgetCalendar;
-                }
-                if (PtInRectF(nextRc, screenPt)) {
-                    if (outButtonId) *outButtonId = CalBtnNextMonth;
-                    return WidgetCalendar;
-                }
+    if (widgetId == WidgetCalendar) {
+        if (g_calendarExpanded) {
+            RectF topSheetRc(body.X + 4.0f * s, body.Y + 4.0f * s, 122.0f * s, 136.0f * s);
+            RectF prevRc(topSheetRc.X + 4.0f * s, topSheetRc.Y + 4.0f * s, 18.0f * s, 18.0f * s);
+            RectF nextRc(topSheetRc.X + topSheetRc.Width - 22.0f * s, topSheetRc.Y + 4.0f * s, 18.0f * s, 18.0f * s);
+            if (PtInRectF(prevRc, localPt)) {
+                if (outButtonId) *outButtonId = CalBtnPrevMonth;
+                return WidgetCalendar;
+            }
+            if (PtInRectF(nextRc, localPt)) {
+                if (outButtonId) *outButtonId = CalBtnNextMonth;
+                return WidgetCalendar;
+            }
 
-                // Check day cells in the monthly grid
-                float gridLeft = topSheetRc.X + 5.0f * s;
-                float gridWidth = topSheetRc.Width - 10.0f * s;
-                float colW = gridWidth / 7.0f;
-                float startY = topSheetRc.Y + 38.5f * s;
-                float rowH = 14.5f * s;
-                RectF gridRc(gridLeft, startY, gridWidth, rowH * 6.0f);
-                if (PtInRectF(gridRc, screenPt)) {
-                    int col = std::min(6, std::max(0, static_cast<int>((screenPt.X - gridLeft) / colW)));
-                    int row = std::min(5, std::max(0, static_cast<int>((screenPt.Y - startY) / rowH)));
-                    int cell = row * 7 + col;
-                    int firstDow = DayOfWeekForDate(g_calViewYear, g_calViewMonth, 1);
-                    int leadCount = g_isRussian ? ((firstDow + 6) % 7) : firstDow;
-                    int daysInCurr = DaysInMonth(g_calViewYear, g_calViewMonth);
-                    if (cell >= leadCount && cell < leadCount + daysInCurr) {
-                        if (outButtonId) *outButtonId = CalBtnDayCell;
-                        if (outDayNum) *outDayNum = cell - leadCount + 1;
-                    }
+            // Check day cells in the monthly grid
+            float gridLeft = topSheetRc.X + 5.0f * s;
+            float gridWidth = topSheetRc.Width - 10.0f * s;
+            float colW = gridWidth / 7.0f;
+            float startY = topSheetRc.Y + 38.5f * s;
+            float rowH = 14.5f * s;
+            RectF gridRc(gridLeft, startY, gridWidth, rowH * 6.0f);
+            if (PtInRectF(gridRc, localPt)) {
+                int col = std::min(6, std::max(0, static_cast<int>((localPt.X - gridLeft) / colW)));
+                int row = std::min(5, std::max(0, static_cast<int>((localPt.Y - startY) / rowH)));
+                int cell = row * 7 + col;
+                int firstDow = DayOfWeekForDate(g_calViewYear, g_calViewMonth, 1);
+                int leadCount = g_isRussian ? ((firstDow + 6) % 7) : firstDow;
+                int daysInCurr = DaysInMonth(g_calViewYear, g_calViewMonth);
+                if (cell >= leadCount && cell < leadCount + daysInCurr) {
+                    if (outButtonId) *outButtonId = CalBtnDayCell;
+                    if (outDayNum) *outDayNum = cell - leadCount + 1;
                 }
             }
-            return WidgetCalendar;
         }
+        return WidgetCalendar;
     }
 
     return -1;
 }
 
-// ── Layered Window Surface & Render ──────────────────────────────────────────
+// ── Per-Widget Layered Window Surface & Render ───────────────────────────────
 
-void DestroyRenderSurface() {
-    if (g_renderSurface.memDc) {
-        if (g_renderSurface.oldBitmap)
-            SelectObject(g_renderSurface.memDc, g_renderSurface.oldBitmap);
-        if (g_renderSurface.bitmap)
-            DeleteObject(g_renderSurface.bitmap);
-        DeleteDC(g_renderSurface.memDc);
+void DestroyRenderSurface(int widgetId) {
+    RenderSurface& surf = g_surfaces[widgetId];
+    if (surf.memDc) {
+        if (surf.oldBitmap)
+            SelectObject(surf.memDc, surf.oldBitmap);
+        if (surf.bitmap)
+            DeleteObject(surf.bitmap);
+        DeleteDC(surf.memDc);
     }
-    g_renderSurface = {};
+    surf = {};
 }
 
-bool EnsureRenderSurface(HDC screenDc, int width, int height) {
-    if (g_renderSurface.memDc && g_renderSurface.bitmap &&
-        g_renderSurface.width == width && g_renderSurface.height == height) {
+bool EnsureRenderSurface(int widgetId, HDC screenDc, int width, int height) {
+    RenderSurface& surf = g_surfaces[widgetId];
+    if (surf.memDc && surf.bitmap &&
+        surf.width == width && surf.height == height) {
         return true;
     }
-    DestroyRenderSurface();
+    DestroyRenderSurface(widgetId);
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bi.bmiHeader.biWidth = width;
@@ -1528,64 +1634,84 @@ bool EnsureRenderSurface(HDC screenDc, int width, int height) {
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
     void* bits = nullptr;
-    g_renderSurface.memDc = CreateCompatibleDC(screenDc);
-    if (!g_renderSurface.memDc) return false;
-    g_renderSurface.bitmap = CreateDIBSection(screenDc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!g_renderSurface.bitmap) {
-        DestroyRenderSurface();
+    surf.memDc = CreateCompatibleDC(screenDc);
+    if (!surf.memDc) return false;
+    surf.bitmap = CreateDIBSection(screenDc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!surf.bitmap) {
+        DestroyRenderSurface(widgetId);
         return false;
     }
-    g_renderSurface.oldBitmap = SelectObject(g_renderSurface.memDc, g_renderSurface.bitmap);
-    g_renderSurface.width = width;
-    g_renderSurface.height = height;
+    surf.oldBitmap = SelectObject(surf.memDc, surf.bitmap);
+    surf.width = width;
+    surf.height = height;
     return true;
 }
 
-void Render() {
-    if (!g_hwnd) return;
+void RenderWidget(int widgetId) {
+    HWND hwnd = (widgetId == WidgetClock) ? g_clockHwnd : g_calendarHwnd;
+    if (!hwnd || !IsWindow(hwnd)) return;
 
-    RECT vr = GetFullVirtualScreenRect();
-    int w = vr.right - vr.left;
-    int h = vr.bottom - vr.top;
-    if (w <= 0 || h <= 0) return;
+    bool visible = (widgetId == WidgetClock) ? g_showClock : g_showCalendar;
+    if (!visible) {
+        if (IsWindowVisible(hwnd)) {
+            ShowWindow(hwnd, SW_HIDE);
+        }
+        return;
+    }
+
+    UpdateEffectiveScale();
+    SizeF winSz = GetWidgetWindowSize(widgetId);
+    int w = std::max(1, static_cast<int>(winSz.Width));
+    int h = std::max(1, static_cast<int>(winSz.Height));
 
     HDC screenDc = GetDC(nullptr);
     if (!screenDc) return;
-    if (!EnsureRenderSurface(screenDc, w, h)) {
+    if (!EnsureRenderSurface(widgetId, screenDc, w, h)) {
         ReleaseDC(nullptr, screenDc);
         return;
     }
 
+    RenderSurface& surf = g_surfaces[widgetId];
     {
-        Graphics g(g_renderSurface.memDc);
+        Graphics g(surf.memDc);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
         g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
         g.Clear(Color(0, 0, 0, 0));
 
-        // Translate from virtual screen coordinates (which can be negative on left/top monitors)
-        // to the bitmap's [0..w, 0..h] coordinate space.
-        g.TranslateTransform(static_cast<REAL>(-vr.left), static_cast<REAL>(-vr.top));
+        // Fill the hover toolbar area with alpha=1 when hidden so it still receives mouse hover events
+        if (g_hoveredWidget != widgetId) {
+            RectF bar = GetWidgetLocalHoverBarRect(widgetId);
+            SolidBrush hitBrush(Color(1, 0, 0, 0));
+            g.FillRectangle(&hitBrush, bar);
+        }
 
-        DrawClockGadget(g);
-        DrawCalendarGadget(g);
+        if (widgetId == WidgetClock) {
+            DrawClockGadget(g);
+        } else {
+            DrawCalendarGadget(g);
+        }
     }
 
+    PointF wPos = (widgetId == WidgetClock) ? g_clockPos : g_calendarPos;
     SIZE size = {w, h};
     POINT src = {0, 0};
-    POINT pos = {vr.left, vr.top};
+    POINT pos = {static_cast<LONG>(std::round(wPos.X)), static_cast<LONG>(std::round(wPos.Y))};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, g_masterOpacity, AC_SRC_ALPHA};
-    UpdateLayeredWindow(g_hwnd, screenDc, &pos, &size,
-                        g_renderSurface.memDc, &src, 0, &blend, ULW_ALPHA);
+    UpdateLayeredWindow(hwnd, screenDc, &pos, &size,
+                        surf.memDc, &src, 0, &blend, ULW_ALPHA);
 
-    if (g_virtualRect.left != vr.left || g_virtualRect.top != vr.top ||
-        g_virtualRect.right != vr.right || g_virtualRect.bottom != vr.bottom) {
-        SetWindowPos(g_hwnd, HWND_BOTTOM, vr.left, vr.top, w, h,
-                     SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-        g_virtualRect = vr;
+    if (!IsWindowVisible(hwnd)) {
+        SetWindowPos(hwnd, HWND_BOTTOM, pos.x, pos.y, w, h,
+                     SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
     }
 
     ReleaseDC(nullptr, screenDc);
+}
+
+void Render() {
+    RenderWidget(WidgetClock);
+    RenderWidget(WidgetCalendar);
 }
 
 // ── Authentic Windows 7 Clock Options Dialog (matching Screenshot #2) ────────
@@ -1599,6 +1725,7 @@ struct ClockOptionsState {
     HWND hComboTz = nullptr;
     HWND hCheckSec = nullptr;
     HFONT hFont = nullptr;
+    float dpiScale = 1.0f;
     bool hoverPrev = false;
     bool hoverNext = false;
 };
@@ -1609,23 +1736,34 @@ constexpr int kIdEditName    = 103;
 constexpr int kIdComboTz     = 104;
 constexpr int kIdCheckSec    = 105;
 
+float GetOptionsDpiScale(HWND hwnd = nullptr) {
+    if (hwnd && IsWindow(hwnd)) {
+        POINT pt = {0, 0};
+        ClientToScreen(hwnd, &pt);
+        return GetMonitorDpiScaleForPoint(pt, hwnd);
+    }
+    if (g_optState.dpiScale > 0.0f) return g_optState.dpiScale;
+    POINT clockPt = {static_cast<LONG>(g_clockPos.X + 65.0f), static_cast<LONG>(g_clockPos.Y + 65.0f)};
+    return GetMonitorDpiScaleForPoint(clockPt, g_clockHwnd);
+}
+
 RectF GetOptionsPreviewBoxRect() {
-    const float ds = GetSystemDpiScale();
+    const float ds = GetOptionsDpiScale(g_optionsHwnd);
     return RectF(18.0f * ds, 44.0f * ds, 244.0f * ds, 168.0f * ds);
 }
 
 RectF GetOptionsPrevArrowRect() {
-    const float ds = GetSystemDpiScale();
+    const float ds = GetOptionsDpiScale(g_optionsHwnd);
     return RectF(94.0f * ds, 180.0f * ds, 22.0f * ds, 22.0f * ds);
 }
 
 RectF GetOptionsNextArrowRect() {
-    const float ds = GetSystemDpiScale();
+    const float ds = GetOptionsDpiScale(g_optionsHwnd);
     return RectF(164.0f * ds, 180.0f * ds, 22.0f * ds, 22.0f * ds);
 }
 
 void PaintClockOptionsDialog(HWND hwnd, HDC hdc) {
-    const float ds = GetSystemDpiScale();
+    const float ds = GetOptionsDpiScale(hwnd);
     RECT clientRc;
     GetClientRect(hwnd, &clientRc);
     int w = clientRc.right - clientRc.left;
@@ -1743,7 +1881,7 @@ void PaintClockOptionsDialog(HWND hwnd, HDC hdc) {
 }
 
 LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    const float ds = GetSystemDpiScale();
+    const float ds = GetOptionsDpiScale(hwnd);
     auto S = [ds](int v) -> int { return static_cast<int>(std::round(v * ds)); };
 
     switch (msg) {
@@ -1920,16 +2058,18 @@ void OpenClockOptionsDialog() {
         return;
     }
 
-    const float ds = GetSystemDpiScale();
-    RectF clockRc = GetWidgetBodyRect(WidgetClock);
-    int dlgW = static_cast<int>(std::round(282.0f * ds));
-    int dlgH = static_cast<int>(std::round(400.0f * ds));
-
-    // Place dialog near the clock gadget, clamped to the monitor containing the clock
+    RectF clockRc = GetWidgetScreenBodyRect(WidgetClock);
     POINT clockCenter = {
         static_cast<LONG>(clockRc.X + clockRc.Width * 0.5f),
         static_cast<LONG>(clockRc.Y + clockRc.Height * 0.5f)
     };
+    const float ds = GetMonitorDpiScaleForPoint(clockCenter, g_clockHwnd);
+    g_optState.dpiScale = ds;
+
+    int dlgW = static_cast<int>(std::round(282.0f * ds));
+    int dlgH = static_cast<int>(std::round(400.0f * ds));
+
+    // Place dialog near the clock widget, clamped to the monitor containing the clock
     HMONITOR hMon = MonitorFromPoint(clockCenter, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
@@ -2061,21 +2201,29 @@ void ShowGadgetContextMenu(HWND hwnd, int widgetId, POINT screenPt) {
     }
 }
 
-// ── Main Canvas Window Procedure ─────────────────────────────────────────────
+// ── Per-Widget Window Procedure ──────────────────────────────────────────────
 
-PointF ScreenPointFromLParam(HWND hwnd, LPARAM lParam) {
-    POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-    ClientToScreen(hwnd, &pt);
-    return PointF(static_cast<float>(pt.x), static_cast<float>(pt.y));
+int GetWidgetIdFromHwnd(HWND hwnd) {
+    if (hwnd == g_clockHwnd) return WidgetClock;
+    if (hwnd == g_calendarHwnd) return WidgetCalendar;
+    return static_cast<int>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 }
 
-LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    int widgetId = GetWidgetIdFromHwnd(hwnd);
+
     switch (msg) {
         case WM_CREATE: {
-            g_hwnd = hwnd;
-            SetTimer(hwnd, kTickTimer, 1000, nullptr);
-            SetTimer(hwnd, kHoverCheckTimer, 50, nullptr);
-            Render();
+            CREATESTRUCTW* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            widgetId = static_cast<int>(reinterpret_cast< INT_PTR >(cs->lpCreateParams));
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, widgetId);
+            if (widgetId == WidgetClock) {
+                g_clockHwnd = hwnd;
+                SetTimer(hwnd, kTickTimer, 1000, nullptr);
+            } else {
+                g_calendarHwnd = hwnd;
+            }
+            RenderWidget(widgetId);
             return 0;
         }
 
@@ -2083,27 +2231,12 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             if (wParam == kTickTimer) {
                 bool dayRolledOver = CheckAndAdvanceMidnightRollover();
                 SYSTEMTIME st = GetClockTime();
-                if (g_showSeconds || dayRolledOver || static_cast<int>(st.wMinute) != g_lastRenderedMinute) {
+                if (g_showSeconds || static_cast<int>(st.wMinute) != g_lastRenderedMinute) {
                     g_lastRenderedMinute = st.wMinute;
-                    Render();
+                    RenderWidget(WidgetClock);
                 }
-                return 0;
-            }
-            if (wParam == kHoverCheckTimer) {
-                if (g_dragWidget >= 0) return 0;
-                POINT cursorPt = {};
-                if (GetCursorPos(&cursorPt)) {
-                    int btn = HoverBtnNone;
-                    int dayNum = 0;
-                    int hit = HitTestGadgetAndButtons(
-                        PointF(static_cast<float>(cursorPt.x), static_cast<float>(cursorPt.y)),
-                        &btn, &dayNum);
-                    if (hit != g_hoveredWidget || btn != g_hoveredBtn || dayNum != g_hoveredDayNumber) {
-                        g_hoveredWidget = hit;
-                        g_hoveredBtn = btn;
-                        g_hoveredDayNumber = dayNum;
-                        Render();
-                    }
+                if (dayRolledOver) {
+                    RenderWidget(WidgetCalendar);
                 }
                 return 0;
             }
@@ -2126,9 +2259,10 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
 
         case WM_WINDOWPOSCHANGING: {
-            // Prevent Win+D (Show Desktop) from hiding our desktop gadgets
+            // Prevent Win+D (Show Desktop) from hiding visible desktop widgets
             WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-            if (wp && (wp->flags & SWP_HIDEWINDOW)) {
+            bool shouldBeVisible = (widgetId == WidgetClock) ? g_showClock : g_showCalendar;
+            if (wp && shouldBeVisible && (wp->flags & SWP_HIDEWINDOW)) {
                 wp->flags &= ~SWP_HIDEWINDOW;
             }
             return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -2136,107 +2270,170 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
         case WM_NCHITTEST: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ScreenToClient(hwnd, &pt);
             int btn = HoverBtnNone;
-            int hit = HitTestGadgetAndButtons(
+            int hit = HitTestWidgetLocal(
+                widgetId,
                 PointF(static_cast<float>(pt.x), static_cast<float>(pt.y)),
                 &btn, nullptr);
             return (hit >= 0) ? HTCLIENT : HTTRANSPARENT;
         }
 
         case WM_SETCURSOR: {
-            if (g_hoveredBtn == HoverBtnClose || g_hoveredBtn == HoverBtnSizeOrOpts ||
-                g_hoveredBtn == CalBtnPrevMonth || g_hoveredBtn == CalBtnNextMonth ||
-                g_hoveredBtn == CalBtnDayCell) {
-                SetCursor(LoadCursor(nullptr, IDC_HAND));
-                return TRUE;
-            }
-            if (g_dragWidget >= 0 || g_hoveredBtn == HoverBtnDrag) {
-                SetCursor(LoadCursor(nullptr, IDC_SIZEALL));
-                return TRUE;
+            if (g_hoveredWidget == widgetId) {
+                if (g_hoveredBtn == HoverBtnClose || g_hoveredBtn == HoverBtnSizeOrOpts ||
+                    g_hoveredBtn == CalBtnPrevMonth || g_hoveredBtn == CalBtnNextMonth ||
+                    g_hoveredBtn == CalBtnDayCell) {
+                    SetCursor(LoadCursor(nullptr, IDC_HAND));
+                    return TRUE;
+                }
+                if (g_dragWidget == widgetId || g_hoveredBtn == HoverBtnDrag) {
+                    SetCursor(LoadCursor(nullptr, IDC_SIZEALL));
+                    return TRUE;
+                }
             }
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             return TRUE;
         }
 
         case WM_LBUTTONDOWN: {
-            PointF pt = ScreenPointFromLParam(hwnd, lParam);
+            PointF localPt(static_cast<float>(GET_X_LPARAM(lParam)),
+                           static_cast<float>(GET_Y_LPARAM(lParam)));
             int btn = HoverBtnNone;
             int dayNum = 0;
-            int hit = HitTestGadgetAndButtons(pt, &btn, &dayNum);
+            int hit = HitTestWidgetLocal(widgetId, localPt, &btn, &dayNum);
 
             if (hit < 0) return 0;
 
             // Handle immediate button clicks
             if (btn == HoverBtnClose) {
-                if (hit == WidgetClock) g_showClock = false;
-                else if (hit == WidgetCalendar) g_showCalendar = false;
+                if (widgetId == WidgetClock) g_showClock = false;
+                else if (widgetId == WidgetCalendar) g_showCalendar = false;
                 g_hoveredWidget = -1;
                 g_hoveredBtn = HoverBtnNone;
                 SaveStateToStorage();
-                Render();
+                RenderWidget(widgetId);
                 return 0;
             }
             if (btn == HoverBtnSizeOrOpts) {
-                if (hit == WidgetClock) {
+                if (widgetId == WidgetClock) {
                     OpenClockOptionsDialog();
-                } else if (hit == WidgetCalendar) {
+                } else if (widgetId == WidgetCalendar) {
                     g_calendarExpanded = !g_calendarExpanded;
                     ClampWidgetToVirtualScreen(WidgetCalendar);
                     SaveStateToStorage();
-                    Render();
+                    RenderWidget(WidgetCalendar);
                 }
                 return 0;
             }
-            if (hit == WidgetCalendar && btn == CalBtnPrevMonth) {
+            if (widgetId == WidgetCalendar && btn == CalBtnPrevMonth) {
                 if (--g_calViewMonth < 1) {
                     g_calViewMonth = 12;
                     --g_calViewYear;
                 }
-                Render();
+                RenderWidget(WidgetCalendar);
                 return 0;
             }
-            if (hit == WidgetCalendar && btn == CalBtnNextMonth) {
+            if (widgetId == WidgetCalendar && btn == CalBtnNextMonth) {
                 if (++g_calViewMonth > 12) {
                     g_calViewMonth = 1;
                     ++g_calViewYear;
                 }
-                Render();
+                RenderWidget(WidgetCalendar);
                 return 0;
             }
-            if (hit == WidgetCalendar && btn == CalBtnDayCell && dayNum > 0) {
+            if (widgetId == WidgetCalendar && btn == CalBtnDayCell && dayNum > 0) {
                 g_calSelectedYear = g_calViewYear;
                 g_calSelectedMonth = g_calViewMonth;
                 g_calSelectedDay = dayNum;
-                Render();
+                RenderWidget(WidgetCalendar);
                 return 0;
             }
 
-            // Start dragging the gadget across any monitor!
-            g_dragWidget = hit;
-            g_dragStartScreen = pt;
+            // Start dragging the widget across any monitor
+            POINT screenPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ClientToScreen(hwnd, &screenPt);
+            g_dragWidget = widgetId;
+            g_dragStartScreen = PointF(static_cast<float>(screenPt.x), static_cast<float>(screenPt.y));
             g_dragMoved = false;
-            PointF currentPos = (hit == WidgetClock) ? g_clockPos : g_calendarPos;
-            g_dragOffset = PointF(pt.X - currentPos.X, pt.Y - currentPos.Y);
+            PointF currentPos = (widgetId == WidgetClock) ? g_clockPos : g_calendarPos;
+            g_dragOffset = PointF(g_dragStartScreen.X - currentPos.X, g_dragStartScreen.Y - currentPos.Y);
             SetCapture(hwnd);
+            RenderWidget(widgetId);
             return 0;
         }
 
         case WM_MOUSEMOVE: {
-            PointF pt = ScreenPointFromLParam(hwnd, lParam);
-            if (g_dragWidget >= 0 && (wParam & MK_LBUTTON)) {
+            if (!g_trackingMouse[widgetId]) {
+                TRACKMOUSEEVENT tme = {};
+                tme.cbSize = sizeof(tme);
+                tme.dwFlags = TME_LEAVE;
+                tme.hwndTrack = hwnd;
+                TrackMouseEvent(&tme);
+                g_trackingMouse[widgetId] = true;
+            }
+
+            if (g_dragWidget == widgetId && (wParam & MK_LBUTTON)) {
+                POINT screenPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ClientToScreen(hwnd, &screenPt);
+                PointF pt(static_cast<float>(screenPt.x), static_cast<float>(screenPt.y));
                 if (std::fabs(pt.X - g_dragStartScreen.X) > 2.0f ||
                     std::fabs(pt.Y - g_dragStartScreen.Y) > 2.0f) {
                     g_dragMoved = true;
                 }
-                if (g_dragWidget == WidgetClock) {
+                float oldScale = GetWidgetScale(widgetId);
+                if (widgetId == WidgetClock) {
                     g_clockPos = PointF(pt.X - g_dragOffset.X, pt.Y - g_dragOffset.Y);
                     ClampWidgetToVirtualScreen(WidgetClock);
-                } else if (g_dragWidget == WidgetCalendar) {
+                } else {
                     g_calendarPos = PointF(pt.X - g_dragOffset.X, pt.Y - g_dragOffset.Y);
                     ClampWidgetToVirtualScreen(WidgetCalendar);
                 }
-                Render();
+                UpdateEffectiveScale();
+                float newScale = GetWidgetScale(widgetId);
+                if ( std::fabs(newScale - oldScale) > 0.001f ) {
+                    RenderWidget(widgetId);
+                } else {
+                    PointF wPos = (widgetId == WidgetClock) ? g_clockPos : g_calendarPos;
+                    SetWindowPos(hwnd, HWND_BOTTOM,
+                                 static_cast<int>(std::round(wPos.X)),
+                                 static_cast<int>(std::round(wPos.Y)),
+                                 0, 0,
+                                 SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                }
                 return 0;
+            }
+
+            PointF localPt(static_cast<float>(GET_X_LPARAM(lParam)),
+                           static_cast<float>(GET_Y_LPARAM(lParam)));
+            int btn = HoverBtnNone;
+            int hit = HitTestWidgetLocal(widgetId, localPt, &btn, nullptr);
+            int prevHoveredWidget = g_hoveredWidget;
+            int prevHoveredBtn = g_hoveredBtn;
+
+            if (hit >= 0) {
+                g_hoveredWidget = widgetId;
+                g_hoveredBtn = btn;
+            } else if (g_hoveredWidget == widgetId) {
+                g_hoveredWidget = -1;
+                g_hoveredBtn = HoverBtnNone;
+            }
+
+            if (g_hoveredWidget != prevHoveredWidget || g_hoveredBtn != prevHoveredBtn) {
+                if (prevHoveredWidget >= 0 && prevHoveredWidget != widgetId) {
+                    RenderWidget(prevHoveredWidget);
+                }
+                RenderWidget(widgetId);
+            }
+            return 0;
+        }
+
+        case WM_MOUSELEAVE: {
+            g_trackingMouse[widgetId] = false;
+            if (g_hoveredWidget == widgetId) {
+                g_hoveredWidget = -1;
+                g_hoveredBtn = HoverBtnNone;
+                RenderWidget(widgetId);
             }
             return 0;
         }
@@ -2250,17 +2447,16 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             if (wasMoved && dragged >= 0) {
                 SaveStateToStorage();
             }
-            Render();
+            RenderWidget(widgetId);
             return 0;
         }
 
         case WM_LBUTTONDBLCLK: {
-            PointF pt = ScreenPointFromLParam(hwnd, lParam);
+            PointF localPt(static_cast<float>(GET_X_LPARAM(lParam)),
+                           static_cast<float>(GET_Y_LPARAM(lParam)));
             int btn = HoverBtnNone;
-            int hit = HitTestGadgetAndButtons(pt, &btn, nullptr);
+            int hit = HitTestWidgetLocal(widgetId, localPt, &btn, nullptr);
             if (hit == WidgetCalendar && btn == HoverBtnNone) {
-                // Double-clicking the calendar unfolds/folds it (just like Windows 7!)
-                // and resets selection back to Today
                 SYSTEMTIME st;
                 GetLocalTime(&st);
                 g_calViewYear = st.wYear;
@@ -2271,7 +2467,7 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 g_calendarExpanded = !g_calendarExpanded;
                 ClampWidgetToVirtualScreen(WidgetCalendar);
                 SaveStateToStorage();
-                Render();
+                RenderWidget(WidgetCalendar);
                 return 0;
             }
             if (hit == WidgetClock && btn == HoverBtnNone) {
@@ -2282,12 +2478,14 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
 
         case WM_RBUTTONUP: {
-            PointF pt = ScreenPointFromLParam(hwnd, lParam);
+            PointF localPt(static_cast<float>(GET_X_LPARAM(lParam)),
+                           static_cast<float>(GET_Y_LPARAM(lParam)));
             int btn = HoverBtnNone;
-            int hit = HitTestGadgetAndButtons(pt, &btn, nullptr);
+            int hit = HitTestWidgetLocal(widgetId, localPt, &btn, nullptr);
             if (hit >= 0) {
-                POINT menuPt = {static_cast<LONG>(pt.X), static_cast<LONG>(pt.Y)};
-                ShowGadgetContextMenu(hwnd, hit, menuPt);
+                POINT menuPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ClientToScreen(hwnd, &menuPt);
+                ShowGadgetContextMenu(hwnd, widgetId, menuPt);
             }
             return 0;
         }
@@ -2298,6 +2496,7 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             }
             g_dragWidget = -1;
             g_dragMoved = false;
+            RenderWidget(widgetId);
             return 0;
         }
 
@@ -2311,14 +2510,18 @@ LRESULT CALLBACK CanvasWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
         case WM_DESTROY:
             SaveStateToStorage();
-            KillTimer(hwnd, kTickTimer);
-            KillTimer(hwnd, kHoverCheckTimer);
-            if (g_optionsHwnd && IsWindow(g_optionsHwnd)) {
-                DestroyWindow(g_optionsHwnd);
+            if (widgetId == WidgetClock) {
+                KillTimer(hwnd, kTickTimer);
+                if (g_optionsHwnd && IsWindow(g_optionsHwnd)) {
+                    DestroyWindow(g_optionsHwnd);
+                }
+                DestroyRenderSurface(WidgetClock);
+                g_clockHwnd = nullptr;
+                PostQuitMessage(0);
+            } else if (widgetId == WidgetCalendar) {
+                DestroyRenderSurface(WidgetCalendar);
+                g_calendarHwnd = nullptr;
             }
-            DestroyRenderSurface();
-            g_hwnd = nullptr;
-            PostQuitMessage(0);
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -2337,14 +2540,23 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 
     HINSTANCE instance = GetModuleHandleW(nullptr);
 
-    WNDCLASSEXW wc = {};
-    wc.cbSize = sizeof(wc);
-    wc.style = CS_DBLCLKS;
-    wc.hInstance = instance;
-    wc.lpfnWndProc = CanvasWndProc;
-    wc.lpszClassName = kCanvasClassName;
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    RegisterClassExW(&wc);
+    WNDCLASSEXW wcClock = {};
+    wcClock.cbSize = sizeof(wcClock);
+    wcClock.style = CS_DBLCLKS;
+    wcClock.hInstance = instance;
+    wcClock.lpfnWndProc = WidgetWndProc;
+    wcClock.lpszClassName = kClockClassName;
+    wcClock.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    RegisterClassExW(&wcClock);
+
+    WNDCLASSEXW wcCal = {};
+    wcCal.cbSize = sizeof(wcCal);
+    wcCal.style = CS_DBLCLKS;
+    wcCal.hInstance = instance;
+    wcCal.lpfnWndProc = WidgetWndProc;
+    wcCal.lpszClassName = kCalendarClassName;
+    wcCal.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    RegisterClassExW(&wcCal);
 
     WNDCLASSEXW wcOpt = {};
     wcOpt.cbSize = sizeof(wcOpt);
@@ -2356,24 +2568,33 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     wcOpt.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
     RegisterClassExW(&wcOpt);
 
-    RECT vr = GetFullVirtualScreenRect();
-    int w = vr.right - vr.left;
-    int h = vr.bottom - vr.top;
-
-    g_hwnd = CreateWindowExW(
+    SizeF clockSz = GetWidgetWindowSize(WidgetClock);
+    g_clockHwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kCanvasClassName,
-        L"Windows 7 Desktop Gadgets",
+        kClockClassName,
+        L"Windows 7 Clock Widget",
         WS_POPUP,
-        vr.left, vr.top, w, h,
-        nullptr, nullptr, instance, nullptr);
+        static_cast<int>(std::round(g_clockPos.X)),
+        static_cast<int>(std::round(g_clockPos.Y)),
+        static_cast<int>(clockSz.Width),
+        static_cast<int>(clockSz.Height),
+        nullptr, nullptr, instance,
+        reinterpret_cast<LPVOID>(static_cast<INT_PTR>(WidgetClock)));
 
-    if (g_hwnd) {
-        SetWindowPos(g_hwnd, HWND_BOTTOM, vr.left, vr.top, w, h,
-                     SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-        ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
-        Render();
-    }
+    SizeF calSz = GetWidgetWindowSize(WidgetCalendar);
+    g_calendarHwnd = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kCalendarClassName,
+        L"Windows 7 Calendar Widget",
+        WS_POPUP,
+        static_cast<int>(std::round(g_calendarPos.X)),
+        static_cast<int>(std::round(g_calendarPos.Y)),
+        static_cast<int>(calSz.Width),
+        static_cast<int>(calSz.Height),
+        nullptr, nullptr, instance,
+        reinterpret_cast<LPVOID>(static_cast<INT_PTR>(WidgetCalendar)));
+
+    Render();
 
     MSG msg;
     while (!g_unloading && GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -2385,9 +2606,11 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     }
 
     if (g_optionsHwnd && IsWindow(g_optionsHwnd)) DestroyWindow(g_optionsHwnd);
-    if (g_hwnd && IsWindow(g_hwnd)) DestroyWindow(g_hwnd);
+    if (g_calendarHwnd && IsWindow(g_calendarHwnd)) DestroyWindow(g_calendarHwnd);
+    if (g_clockHwnd && IsWindow(g_clockHwnd)) DestroyWindow(g_clockHwnd);
     UnregisterClassW(kOptionsClassName, instance);
-    UnregisterClassW(kCanvasClassName, instance);
+    UnregisterClassW(kCalendarClassName, instance);
+    UnregisterClassW(kClockClassName, instance);
     GdiplusShutdown(g_gdiplusToken);
     CoUninitialize();
     return 0;
@@ -2416,9 +2639,23 @@ void WhTool_ModUninit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    if (g_hwnd) PostMessageW(g_hwnd, kSettingsChangedMessage, 0, 0);
+    if (g_clockHwnd) PostMessageW(g_clockHwnd, kSettingsChangedMessage, 0, 0);
     else LoadStateAndSettings(true);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -2430,10 +2667,14 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0)
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
+    }
 
-    bool isExcluded = false, isToolModProcess = false, isCurrentToolModProcess = false;
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
@@ -2449,15 +2690,22 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
             break;
         }
     }
+
     LocalFree(argv);
-    if (isExcluded) return FALSE;
+
+    if (isExcluded) {
+        return FALSE;
+    }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
@@ -2466,40 +2714,55 @@ BOOL Wh_ModInit() {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
-        if (!WhTool_ModInit()) ExitProcess(1);
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess) return FALSE;
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -2511,18 +2774,25 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-        WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW si = {};
-    si.cb = sizeof(STARTUPINFOW);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
@@ -2530,17 +2800,24 @@ void Wh_ModAfterInit() {
         Wh_Log(L"CreateProcess failed");
         return;
     }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) return;
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) return;
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
