@@ -220,7 +220,6 @@ struct {
     bool armed;
     DWORD armTime;
     bool anchorValid;
-    std::vector<ULONG> anchorIds;
     std::unordered_map<ULONG, std::pair<double, double>> last;  // id -> previous position, mm
     bool single;
     double accX, accY;
@@ -676,15 +675,7 @@ void ProcessFrame() {
         return;
     }
 
-    std::vector<ULONG> ids;
-    for (const Contact* c : used) {
-        ids.push_back(c->id);
-    }
-    std::sort(ids.begin(), ids.end());
-
-    // A change of fingers: their previous positions are taken again before moving.
-    if (!g_state.anchorValid || ids != g_state.anchorIds) {
-        g_state.anchorIds = ids;
+    if (!g_state.anchorValid) {
         g_state.last.clear();
         for (const Contact* c : used) {
             g_state.last[c->id] = {c->x, c->y};
@@ -694,6 +685,15 @@ void ProcessFrame() {
         g_state.lastFrameTime = t;
         g_state.anchorValid = true;
         return;
+    }
+
+    // Fingers joining or leaving don't stop the others: a joining one only takes its position this frame. Taking
+    // every position again on each change lost a frame of movement whenever a finger landed, lifted or became
+    // part of the movement, which made five fingers with tap to click on less responsive.
+    for (auto it = g_state.last.begin(); it != g_state.last.end();) {
+        ULONG id = it->first;
+        bool present = std::any_of(used.begin(), used.end(), [id](const Contact* c) { return c->id == id; });
+        it = present ? std::next(it) : g_state.last.erase(it);
     }
 
     // A single finger moving alone is followed on its own, not divided by the resting ones; otherwise the
@@ -707,7 +707,12 @@ void ProcessFrame() {
     double second = 0;
     int counted = 0;
     for (const Contact* c : used) {
-        auto& prev = g_state.last[c->id];
+        auto found = g_state.last.find(c->id);
+        if (found == g_state.last.end()) {
+            g_state.last[c->id] = {c->x, c->y};
+            continue;
+        }
+        auto& prev = found->second;
         double fx = c->x - prev.first;
         double fy = c->y - prev.second;
         prev = {c->x, c->y};
