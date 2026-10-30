@@ -695,7 +695,7 @@ function modAuthorMarker(mod) {
 function modAuthorComment(mod, mention) {
   // Some mod names have brackets, which would end the link text.
   const linkText = mod.name.replace(/[\\[\]]/g, '\\$&');
-  const author = mention ? `@${mod.handle}` : mod.handle;
+  const author = mention ? `@${mod.handle}` : `[${mod.handle}](https://github.com/${mod.handle})`;
   return (
     `Mod: [${linkText}](https://windhawk.net/mods/${mod.id})\n` +
     `Mod author: ${author}\n\n` +
