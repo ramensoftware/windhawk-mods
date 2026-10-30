@@ -129,9 +129,11 @@ Install as a local Windhawk mod, compile and enable it. Close and reopen
 Task View after changing mode, materials or colors. Disabling the mod restores
 saved native layout properties, brushes and bindings.
 
-Task View is detected through Switcher's native Loaded callbacks and animation
-targets. No Taskbar Styler or other XAML diagnostics consumer is required.
-Windhawk downloads Windows debugging symbols when needed.
+Task View is detected through Switcher's native Loaded callbacks. Animations
+are intercepted through the public Storyboard interface; target lookup uses
+an exported XAML helper and two internal symbol-resolved functions. No Taskbar
+Styler or other XAML diagnostics consumer is required. Windhawk downloads
+Windows debugging symbols when needed.
 
 ## Compatibility
 
@@ -2290,42 +2292,6 @@ bool IsTaskViewAnimation(animation::Timeline const& timeline) {
             if (IsTaskViewAnimation(child)) return true;
     return false;
 }
-using GetPeer_t = HRESULT(WINAPI*)(void*, GUID const&, void**);
-GetPeer_t GetPeer;
-using CoreSetTarget_t = HRESULT(WINAPI*)(void*, void*);
-CoreSetTarget_t CoreSetTarget_Original;
-HRESULT WINAPI CoreSetTarget_Hook(void* self, void* target) {
-    HRESULT result = CoreSetTarget_Original(self, target);
-    if (SUCCEEDED(result) && !g_stopping && target) {
-        try {
-            animation::Timeline timeline{nullptr};
-            xaml::FrameworkElement element{nullptr};
-            HRESULT timelineResult = GetPeer(self, winrt::guid_of<animation::ITimeline>(), winrt::put_abi(timeline));
-            HRESULT targetResult = GetPeer(target, winrt::guid_of<xaml::IFrameworkElement>(), winrt::put_abi(element));
-            if (SUCCEEDED(timelineResult) && SUCCEEDED(targetResult) && timeline && element) {
-                auto ancestor = element;
-                bool fullTaskView = false;
-                for (int depth = 0; ancestor && depth < 16; depth++) {
-                    if (winrt::get_class_name(ancestor) ==
-                        L"WindowsInternal.ComposableShell.Experiences.Switcher.TaskViewTimeline") {
-                        fullTaskView = true;
-                        break;
-                    }
-                    ancestor = media::VisualTreeHelper::GetParent(ancestor).try_as<xaml::FrameworkElement>();
-                }
-                if (!fullTaskView) return result;
-                ObserveElement(element, true);
-                for (auto it = g_animationTargets.begin(); it != g_animationTargets.end();) {
-                    auto existing = it->timeline.get();
-                    if (!existing || existing == timeline) it = g_animationTargets.erase(it);
-                    else ++it;
-                }
-                g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(element)});
-            }
-        } catch (...) {}
-    }
-    return result;
-}
 void ApplyDesktopSlideDirection(animation::Timeline const& timeline) {
     if (auto storyboard = timeline.try_as<animation::Storyboard>()) {
         for (auto const& child : storyboard.Children()) ApplyDesktopSlideDirection(child);
@@ -2368,15 +2334,12 @@ void ApplyDesktopSlideDirection(animation::Timeline const& timeline) {
 // second argument and returned unchanged. Its ownership stays with the caller.
 using TimelineGetTarget_t = void*(WINAPI*)(void*, void**);
 TimelineGetTarget_t TimelineGetTarget_Original;
-// Symbol-resolved helpers, not global hooks. Their calling conventions and
-// matching ownership operations were checked against the installed DLL/PDB.
-using QueryNativePeer_t = HRESULT(WINAPI*)(void**, void*);
-using ReleaseNativePeer_t = void(WINAPI*)(void**);
-using NativePeerHandle_t = void*(WINAPI*)(void*);
+// Exported XAML helper: accepts an existing XAML IInspectable and returns its
+// borrowed core address. Keep the projected object alive while using it.
+// This replaces the private QueryInterface/GetHandle/Release helper sequence.
+using GetDependencyObjectAddress_t = void*(WINAPI*)(void*);
+GetDependencyObjectAddress_t GetDependencyObjectAddress;
 using CoreRelease_t = void(WINAPI*)(void*);
-QueryNativePeer_t QueryNativePeer;
-ReleaseNativePeer_t ReleaseNativePeer;
-NativePeerHandle_t NativePeerHandle;
 CoreRelease_t CoreRelease;
 
 void ResolveDesktopSlideTargets(animation::Timeline const& timeline) {
@@ -2385,80 +2348,36 @@ void ResolveDesktopSlideTargets(animation::Timeline const& timeline) {
         return;
     }
     if (!timeline.try_as<animation::DoubleAnimationUsingKeyFrames>()) return;
-    struct NativePeer {
-        void* value = nullptr;
-        ~NativePeer() { if (value) ReleaseNativePeer(&value); }
-    } peer;
-    if (FAILED(QueryNativePeer(&peer.value, winrt::get_abi(timeline))) || !peer.value) return;
-    auto core = NativePeerHandle(peer.value);
+    auto core = GetDependencyObjectAddress(winrt::get_abi(timeline));
     if (!core) return;
     struct CoreTarget {
         void* value = nullptr;
         ~CoreTarget() { if (value) CoreRelease(value); }
     } coreTarget;
     TimelineGetTarget_Original(core, &coreTarget.value);
-    if (coreTarget.value) {
-            xaml::DependencyObject target{nullptr};
-            if (FAILED(GetPeer(coreTarget.value, winrt::guid_of<xaml::IDependencyObject>(), winrt::put_abi(target)))) return;
-            // Discovery from a Switcher animation does not require any other
-            // diagnostics consumer. Identity checks below still gate mutation.
-            ObserveElementCore(target.try_as<xaml::FrameworkElement>(), true);
-            xaml::FrameworkElement bar{nullptr};
-            {
-                std::lock_guard lock(g_statesMutex);
-                for (auto const& state : *g_states) {
-                    if (state->threadId != GetCurrentThreadId() || state->detached) continue;
-                    auto candidate = state->desktops.get();
-                    if (candidate && (target == candidate || target == candidate.RenderTransform())) {
-                        bar = candidate;
-                        break;
-                    }
-                }
-            }
-            if (!bar) return;
-            std::erase_if(g_animationTargets, [&](auto const& entry) {
-                auto existing = entry.timeline.get();
-                return !existing || existing == timeline;
-            });
-            g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(bar)});
-            ApplyDesktopSlideDirection(timeline);
-    }
-}
-
-using CoreStoryboardBegin_t = HRESULT(WINAPI*)(void*, unsigned int);
-CoreStoryboardBegin_t CoreStoryboardBegin_Original;
-HRESULT WINAPI CoreStoryboardBegin_Hook(void* self, unsigned int flags) {
-    bool taskViewThread = false;
-    if (!g_stopping && !g_insideLayout) {
+    if (!coreTarget.value) return;
+    xaml::FrameworkElement bar{nullptr};
+    {
         std::lock_guard lock(g_statesMutex);
-        for (auto const& state : *g_states)
-            if (state->threadId == GetCurrentThreadId() && !state->detached) {
-                taskViewThread = true;
+        for (auto const& state : *g_states) {
+            if (state->threadId != GetCurrentThreadId() || state->detached) continue;
+            auto candidate = state->desktops.get();
+            if (!candidate) continue;
+            auto transform = candidate.RenderTransform();
+            if (coreTarget.value == GetDependencyObjectAddress(winrt::get_abi(candidate)) ||
+                (transform && coreTarget.value == GetDependencyObjectAddress(winrt::get_abi(transform)))) {
+                bar = candidate;
                 break;
             }
-    }
-    if (!g_stopping && !g_insideLayout && !taskViewThread) {
-        auto foreground = GetForegroundWindow();
-        DWORD process = 0;
-        auto foregroundThread = GetWindowThreadProcessId(foreground, &process);
-        if (process == GetCurrentProcessId() && foregroundThread == GetCurrentThreadId()) {
-            wchar_t name[80]{};
-            GetClassNameW(foreground, name, ARRAYSIZE(name));
-            taskViewThread = wcscmp(name, L"MultitaskingViewFrame") == 0 ||
-                             wcscmp(name, L"XamlExplorerHostIslandWindow") == 0;
         }
-        taskViewThread = taskViewThread || IsSwitcherCode(__builtin_return_address(0));
     }
-    if (taskViewThread) {
-        LayoutGuard guard;
-        try {
-            animation::Timeline timeline{nullptr};
-            if (SUCCEEDED(GetPeer(self, winrt::guid_of<animation::ITimeline>(), winrt::put_abi(timeline))) && timeline) {
-                ResolveDesktopSlideTargets(timeline);
-            }
-        } catch (...) { Wh_Log(L"Native storyboard inspection failed: %08X", winrt::to_hresult()); }
-    }
-    return CoreStoryboardBegin_Original(self, flags);
+    if (!bar) return;
+    std::erase_if(g_animationTargets, [&](auto const& entry) {
+        auto existing = entry.timeline.get();
+        return !existing || existing == timeline;
+    });
+    g_animationTargets.push_back({winrt::make_weak(timeline), winrt::make_weak(bar)});
+    ApplyDesktopSlideDirection(timeline);
 }
 
 using StoryboardBegin_t = HRESULT(WINAPI*)(void*);
@@ -2470,11 +2389,14 @@ HRESULT WINAPI StoryboardBegin_Hook(void* self) {
             animation::IStoryboard storyboardInterface{nullptr};
             winrt::copy_from_abi(storyboardInterface, self);
             auto storyboard = storyboardInterface.as<animation::Storyboard>();
+            {
+                LayoutGuard guard;
+                ResolveDesktopSlideTargets(storyboard);
+                ApplyDesktopSlideDirection(storyboard);
+            }
             skip = g_disableListAnimations && IsTaskViewAnimation(storyboard);
-            { LayoutGuard guard; ApplyDesktopSlideDirection(storyboard); }
-            // Windows reuses storyboards and can start unrelated storyboards
-            // between SetTarget and Begin. Keep weak target associations until
-            // the timeline expires instead of discarding them after any Begin.
+            // Keep weak associations for reused timelines; unrelated storyboard
+            // starts must not discard another live animation's target.
             std::erase_if(g_animationTargets, [](auto const& entry) {
                 return !entry.timeline.get() || !entry.target.get();
             });
@@ -2745,26 +2667,24 @@ BOOL Wh_ModInit() {
     HMODULE xamlModule = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr,
                                       LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!xamlModule) return FALSE;
+    GetDependencyObjectAddress = reinterpret_cast<GetDependencyObjectAddress_t>(
+        GetProcAddress(xamlModule, "GetDependencyObjectAddress"));
+    if (!GetDependencyObjectAddress) {
+        Wh_Log(L"Required GetDependencyObjectAddress export is unavailable");
+        return FALSE;
+    }
     // Windows.UI.Xaml.dll
     WindhawkUtils::SYMBOL_HOOK windowsUiXamlHooks[] = {
-        {{L"long __cdecl DirectUI::DXamlServices::GetPeer(class CDependencyObject *,struct _GUID const &,void * *)"},
-         &GetPeer},
-        {{L"long __cdecl Storyboard_SetTarget(class CTimeline *,class CDependencyObject *)"},
-         &CoreSetTarget_Original, CoreSetTarget_Hook},
         {{L"public: class xref_ptr<class CDependencyObject> __cdecl CTimeline::GetTargetObject(void)const "},
          &TimelineGetTarget_Original},
-        {{L"long __cdecl ctl::do_query_interface<class DirectUI::DependencyObject,struct IInspectable>(class ctl::ComPtr<class DirectUI::DependencyObject> &,struct IInspectable *)"}, &QueryNativePeer},
-        {{L"protected: void __cdecl ctl::ComPtr<class DirectUI::DependencyObject>::InternalRelease(void)"}, &ReleaseNativePeer},
-        {{L"public: class CDependencyObject * __cdecl DirectUI::DependencyObject::GetHandle(void)const "}, &NativePeerHandle},
         {{L"public: void __cdecl CDependencyObject::Release(void)"}, &CoreRelease},
-        {{L"public: long __cdecl CStoryboard::BeginPrivate(unsigned int)"}, &CoreStoryboardBegin_Original, CoreStoryboardBegin_Hook},
     };
     if (!WindhawkUtils::HookSymbols(xamlModule, windowsUiXamlHooks,
                                     ARRAYSIZE(windowsUiXamlHooks))) {
         Wh_Log(L"Required XAML animation symbols are unavailable");
         return FALSE;
     }
-    Wh_Log(L"Installed XAML animation symbol hooks");
+    Wh_Log(L"Resolved XAML animation target helpers; animation start uses public Storyboard ABI");
     g_threadMessage = RegisterWindowMessageW(
         L"Windhawk.TaskViewCustomizer.RunOnThread");
     return g_threadMessage && WindhawkUtils::SetFunctionHook(
