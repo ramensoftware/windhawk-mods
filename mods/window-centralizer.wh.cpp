@@ -29,14 +29,15 @@ In both modes the window is kept inside the monitor's work area.
 
 - Only windows with a title bar that are smaller than the **maximum window size** setting (a percentage of the monitor's work area). Large main windows keep their own position.
 - Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.
-- Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved.
+- Windows of UWP apps such as Calculator and Clock are centered when they open, then left where the user puts them.
+- Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.
 - A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.
 
 ## Ignoring windows
 
 Press **Win+Alt+C** while a window is active to stop centering that kind of window, and press it again on it to undo. A short notification confirms the change.
 
-A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind.
+A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. All UWP apps share one host process and window class, so ignoring one UWP app ignores them all.
 
 The **Ignored windows** list opens with **Win+Ctrl+Alt+C**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
@@ -300,8 +301,17 @@ int TitleOf(HWND hwnd, wchar_t* buf, int chars) {
     return InternalGetWindowText(hwnd, buf, chars);
 }
 
+// Animation mods (such as Windhawk's Windows Animations) make an ordinary window layered with alpha 0
+// right before it is shown, then fade it in; it must still be centered.
+bool IsHiddenForFadeIn(HWND hwnd) {
+    COLORREF key = 0;
+    BYTE alpha = 255;
+    DWORD flags = 0;
+    return GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags) && (flags & LWA_ALPHA) && alpha == 0;
+}
+
 /// A window this mod may move: owned by this process, top level, title bar, not min/maximized,
-/// not tool/layered, titled, not ignored.
+/// not tool/layered (unless being faded in), titled, not ignored.
 bool IsCandidate(HWND hwnd) {
     // A program can show another process's window; the rules and parent search describe this process only.
     DWORD pid = 0;
@@ -311,7 +321,8 @@ bool IsCandidate(HWND hwnd) {
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) || (style & WS_CAPTION) != WS_CAPTION || (style & (WS_MINIMIZE | WS_MAXIMIZE)))
         return false;
-    if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & (WS_EX_LAYERED | WS_EX_TOOLWINDOW))
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_TOOLWINDOW) || ((exStyle & WS_EX_LAYERED) && !IsHiddenForFadeIn(hwnd)))
         return false;
     wchar_t cls[256], title[512];
     if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) || IsIgnoredClass(cls))
@@ -379,6 +390,11 @@ HWND FindParent(HWND hwnd) {
     HWND owner = GetWindow(hwnd, GW_OWNER);
     if (IsValidParent(owner, hwnd))
         return owner;
+
+    // ApplicationFrameHost.exe hosts the windows of unrelated UWP apps; another one of its windows
+    // is never what the user launched this one from.
+    if (_wcsicmp(g_processName, L"ApplicationFrameHost.exe") == 0)
+        return nullptr;
 
     HWND fg = GetForegroundWindow();
     DWORD fgPid = 0;
@@ -449,6 +465,85 @@ void CenterNow(HWND hwnd) {
     SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
 }
 
+// ───────────── UWP app windows ─────────────
+//
+// Calculator, Clock and other UWP apps live in an ApplicationFrameWindow of ApplicationFrameHost.exe.
+// It is shown cloaked, untitled and at a placeholder size, so the show hooks skip it. Its real size and
+// position arrive later through a call none of the hooks see, so the frame is subclassed when shown and
+// centered in its own WM_WINDOWPOSCHANGING, which every move goes through whoever makes it.
+
+constexpr wchar_t kUwpProcProp[] = L"WindowCentralizer.UwpOrigProc";
+SRWLOCK g_uwpLock = SRWLOCK_INIT;
+HWND g_uwpFrames[16];  // frames currently subclassed, restored in Wh_ModUninit
+
+bool IsUwpFrame(HWND hwnd) {
+    wchar_t cls[32];
+    return GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"ApplicationFrameWindow") == 0;
+}
+
+LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+void UnsubclassUwpFrame(HWND hwnd) {
+    auto orig = (WNDPROC)GetPropW(hwnd, kUwpProcProp);
+    if (!orig)
+        return;
+    // Restorable only while ours is still the outermost procedure.
+    if ((WNDPROC)GetWindowLongPtrW(hwnd, GWLP_WNDPROC) != UwpFrameProc) {
+        Wh_Log(L"UWP frame subclassed by someone else; leaving it");
+        return;
+    }
+    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)orig);
+    RemovePropW(hwnd, kUwpProcProp);
+    AcquireSRWLockExclusive(&g_uwpLock);
+    for (HWND& frame : g_uwpFrames)
+        if (frame == hwnd)
+            frame = nullptr;
+    ReleaseSRWLockExclusive(&g_uwpLock);
+}
+
+void SubclassUwpFrame(HWND hwnd) {
+    if (_wcsicmp(g_processName, L"ApplicationFrameHost.exe") != 0 || !IsUwpFrame(hwnd) ||
+        GetPropW(hwnd, kUwpProcProp) || GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId())
+        return;
+    AcquireSRWLockExclusive(&g_uwpLock);
+    for (HWND& frame : g_uwpFrames) {
+        if (frame)
+            continue;
+        SetPropW(hwnd, kUwpProcProp, (HANDLE)GetWindowLongPtrW(hwnd, GWLP_WNDPROC));
+        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)UwpFrameProc);
+        frame = hwnd;
+        break;
+    }
+    ReleaseSRWLockExclusive(&g_uwpLock);
+}
+
+LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto orig = (WNDPROC)GetPropW(hwnd, kUwpProcProp);
+    if (msg == WM_NCDESTROY) {
+        UnsubclassUwpFrame(hwnd);
+        return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+    }
+    if (msg != WM_WINDOWPOSCHANGING)
+        return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+
+    auto* pos = (WINDOWPOS*)lParam;
+    RECT rc;
+    GetWindowRect(hwnd, &rc);
+    int w = (pos->flags & SWP_NOSIZE) ? rc.right - rc.left : pos->cx;
+    int h = (pos->flags & SWP_NOSIZE) ? rc.bottom - rc.top : pos->cy;
+    // The placeholder size the frame is shown with (about 178×39) isn't the app's; wait for the real one.
+    if ((pos->flags & SWP_NOMOVE) || h < 100)
+        return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+    int x, y;
+    if (!IsIgnored(hwnd, L"ApplicationFrameWindow") && ComputeTarget(hwnd, w, h, &x, &y)) {
+        pos->x = x;
+        pos->y = y;
+    }
+    LRESULT result = CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+    UnsubclassUwpFrame(hwnd);  // only the first real position is replaced; later moves are the user's
+    return result;
+}
+
 bool IsShowCommand(int cmd) {
     return cmd == SW_SHOWNORMAL || cmd == SW_SHOWNOACTIVATE || cmd == SW_SHOW || cmd == SW_SHOWNA ||
            cmd == SW_SHOWDEFAULT;
@@ -462,8 +557,10 @@ bool IsShowCommand(int cmd) {
 using NtUserShowWindow_t = BOOL(WINAPI*)(HWND, int);
 NtUserShowWindow_t NtUserShowWindow_Original;
 BOOL WINAPI NtUserShowWindow_Hook(HWND hwnd, int cmd) {
-    if (hwnd && IsShowCommand(cmd) && !IsWindowVisible(hwnd))
+    if (hwnd && IsShowCommand(cmd) && !IsWindowVisible(hwnd)) {
         CenterNow(hwnd);
+        SubclassUwpFrame(hwnd);
+    }
     return NtUserShowWindow_Original(hwnd, cmd);
 }
 
@@ -1356,6 +1453,13 @@ void Wh_ModUninit() {
         ToolMod_Uninit();
         return;
     }
+    HWND frames[ARRAYSIZE(g_uwpFrames)];
+    AcquireSRWLockExclusive(&g_uwpLock);
+    memcpy(frames, g_uwpFrames, sizeof(frames));
+    ReleaseSRWLockExclusive(&g_uwpLock);
+    for (HWND frame : frames)
+        if (frame && IsWindow(frame))
+            UnsubclassUwpFrame(frame);
     if (g_ignore.text)
         HeapFree(GetProcessHeap(), 0, g_ignore.text);
     g_ignore.text = nullptr;
