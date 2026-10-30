@@ -7,14 +7,14 @@
 // @github          https://github.com/3DDinosaur
 // @include         *
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lshell32
+// @compilerOptions -lcomctl32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Window Centralizer
 
-New dialogs and up to a size windows open centered to the one they came from, or the mouse cursor, instead of randomly around the screen.
+New dialogs and small windows open centered to the one they came from, or the mouse cursor, instead of randomly around the screen.
 
 The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.
 
@@ -76,6 +76,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <commctrl.h>
 #include <windhawk_utils.h>
 #include <atomic>
 #include <stdio.h>
@@ -472,59 +473,36 @@ void CenterNow(HWND hwnd) {
 // position arrive later through a call none of the hooks see, so the frame is subclassed when shown and
 // centered in its own WM_WINDOWPOSCHANGING, which every move goes through whoever makes it.
 
-constexpr wchar_t kUwpProcProp[] = L"WindowCentralizer.UwpOrigProc";
 SRWLOCK g_uwpLock = SRWLOCK_INIT;
-HWND g_uwpFrames[16];  // frames currently subclassed, restored in Wh_ModUninit
+HWND g_uwpFrames[16];  // frames currently subclassed, unsubclassed in Wh_ModUninit
 
 bool IsUwpFrame(HWND hwnd) {
     wchar_t cls[32];
     return GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"ApplicationFrameWindow") == 0;
 }
 
-LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-void UnsubclassUwpFrame(HWND hwnd) {
-    auto orig = (WNDPROC)GetPropW(hwnd, kUwpProcProp);
-    if (!orig)
-        return;
-    // Restorable only while ours is still the outermost procedure.
-    if ((WNDPROC)GetWindowLongPtrW(hwnd, GWLP_WNDPROC) != UwpFrameProc) {
-        Wh_Log(L"UWP frame subclassed by someone else; leaving it");
-        return;
-    }
-    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)orig);
-    RemovePropW(hwnd, kUwpProcProp);
-    AcquireSRWLockExclusive(&g_uwpLock);
-    for (HWND& frame : g_uwpFrames)
-        if (frame == hwnd)
-            frame = nullptr;
-    ReleaseSRWLockExclusive(&g_uwpLock);
-}
-
-void SubclassUwpFrame(HWND hwnd) {
-    if (_wcsicmp(g_processName, L"ApplicationFrameHost.exe") != 0 || !IsUwpFrame(hwnd) ||
-        GetPropW(hwnd, kUwpProcProp) || GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId())
-        return;
+/// Removes hwnd from g_uwpFrames. False if it wasn't there.
+bool UntrackUwpFrame(HWND hwnd) {
+    bool found = false;
     AcquireSRWLockExclusive(&g_uwpLock);
     for (HWND& frame : g_uwpFrames) {
-        if (frame)
-            continue;
-        SetPropW(hwnd, kUwpProcProp, (HANDLE)GetWindowLongPtrW(hwnd, GWLP_WNDPROC));
-        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)UwpFrameProc);
-        frame = hwnd;
-        break;
+        if (frame == hwnd) {
+            frame = nullptr;
+            found = true;
+        }
     }
     ReleaseSRWLockExclusive(&g_uwpLock);
+    return found;
 }
 
-LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    auto orig = (WNDPROC)GetPropW(hwnd, kUwpProcProp);
+LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (msg == WM_NCDESTROY) {
-        UnsubclassUwpFrame(hwnd);
-        return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+        if (UntrackUwpFrame(hwnd))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, UwpFrameProc);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
     if (msg != WM_WINDOWPOSCHANGING)
-        return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
 
     auto* pos = (WINDOWPOS*)lParam;
     RECT rc;
@@ -533,15 +511,36 @@ LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     int h = (pos->flags & SWP_NOSIZE) ? rc.bottom - rc.top : pos->cy;
     // The placeholder size the frame is shown with (about 178×39) isn't the app's; wait for the real one.
     if ((pos->flags & SWP_NOMOVE) || h < 100)
-        return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     int x, y;
     if (!IsIgnored(hwnd, L"ApplicationFrameWindow") && ComputeTarget(hwnd, w, h, &x, &y)) {
         pos->x = x;
         pos->y = y;
     }
-    LRESULT result = CallWindowProcW(orig, hwnd, msg, wParam, lParam);
-    UnsubclassUwpFrame(hwnd);  // only the first real position is replaced; later moves are the user's
+    LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
+    // Only the first real position is replaced; later moves are the user's.
+    if (UntrackUwpFrame(hwnd))
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, UwpFrameProc);
     return result;
+}
+
+void SubclassUwpFrame(HWND hwnd) {
+    if (_wcsicmp(g_processName, L"ApplicationFrameHost.exe") != 0 || !IsUwpFrame(hwnd))
+        return;
+    AcquireSRWLockExclusive(&g_uwpLock);
+    HWND* slot = nullptr;
+    bool tracked = false;
+    for (HWND& frame : g_uwpFrames) {
+        if (frame == hwnd)
+            tracked = true;
+        else if (!frame && !slot)
+            slot = &frame;
+    }
+    if (!tracked && slot)
+        *slot = hwnd;
+    ReleaseSRWLockExclusive(&g_uwpLock);
+    if (!tracked && slot && !WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, UwpFrameProc, 0))
+        UntrackUwpFrame(hwnd);
 }
 
 bool IsShowCommand(int cmd) {
@@ -1459,7 +1458,7 @@ void Wh_ModUninit() {
     ReleaseSRWLockExclusive(&g_uwpLock);
     for (HWND frame : frames)
         if (frame && IsWindow(frame))
-            UnsubclassUwpFrame(frame);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(frame, UwpFrameProc);
     if (g_ignore.text)
         HeapFree(GetProcessHeap(), 0, g_ignore.text);
     g_ignore.text = nullptr;
