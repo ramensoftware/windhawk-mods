@@ -7,7 +7,7 @@
 // @author          dekvas
 // @github          https://github.com/dekvas
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32 -lcomctl32
+// @compilerOptions -lgdiplus -lgdi32 -lshell32 -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -121,7 +121,6 @@ If you enjoy this mod and want to support its author:
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
-#include <dwmapi.h>
 #include <gdiplus.h>
 #include <shellapi.h>
 
@@ -316,24 +315,6 @@ const wchar_t* DayOfWeekName(int dowSundayZero) {
 
 // ── DPI Scaling & Virtual Screen Helpers ─────────────────────────────────────
 
-void EnableProcessDpiAwareness() {
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        using SetProcessDpiAwarenessContext_t = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
-        auto pSetCtx = reinterpret_cast<SetProcessDpiAwarenessContext_t>(
-            GetProcAddress(hUser32, "SetProcessDpiAwarenessContext"));
-        if (pSetCtx && pSetCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
-            return;
-        }
-        using SetProcessDPIAware_t = BOOL(WINAPI*)();
-        auto pSetAware = reinterpret_cast<SetProcessDPIAware_t>(
-            GetProcAddress(hUser32, "SetProcessDPIAware"));
-        if (pSetAware) {
-            pSetAware();
-        }
-    }
-}
-
 float GetMonitorDpiScaleForPoint(POINT pt, HWND hwnd = nullptr) {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hwnd && IsWindow(hwnd) && hUser32) {
@@ -348,7 +329,7 @@ float GetMonitorDpiScaleForPoint(POINT pt, HWND hwnd = nullptr) {
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     if (hMon) {
         HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
-        if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+        if (!hShcore) hShcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hShcore) {
             using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
             auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
@@ -670,27 +651,28 @@ void LoadStateAndSettings(bool fromWindhawkSettingsChange) {
     int savedExp = Wh_GetIntValue(L"savedCalExpanded", -1);
     g_calendarExpanded = (savedExp != -1) ? (savedExp != 0) : cfgCalExpanded;
 
-    // Apply any Windhawk setting whose value was explicitly modified by the user
-    if (fromWindhawkSettingsChange) {
-        if (prevCfgShowClock == -1 || prevCfgShowClock != (cfgShowClock ? 1 : 0)) {
-            g_showClock = cfgShowClock;
-        }
-        if (prevCfgShowCal == -1 || prevCfgShowCal != (cfgShowCalendar ? 1 : 0)) {
-            g_showCalendar = cfgShowCalendar;
-        }
-        if (prevCfgSkin == -1 || prevCfgSkin != cfgSkin) {
-            g_clockSkin = cfgSkin;
-        }
-        if (prevCfgSec == -1 || prevCfgSec != (cfgShowSeconds ? 1 : 0)) {
-            g_showSeconds = cfgShowSeconds;
-        }
-        if (!hasPrevCfgName || wcscmp(prevCfgName, cfgClockName) != 0) {
-            wcsncpy_s(g_clockName, cfgClockName, _TRUNCATE);
-        }
-        if (prevCfgExp == -1 || prevCfgExp != (cfgCalExpanded ? 1 : 0)) {
-            g_calendarExpanded = cfgCalExpanded;
-        }
-    } else {
+    // Apply any Windhawk setting whose value changed since the last load,
+    // including changes made while the mod wasn't running.
+    if (prevCfgShowClock == -1 || prevCfgShowClock != (cfgShowClock ? 1 : 0)) {
+        g_showClock = cfgShowClock;
+    }
+    if (prevCfgShowCal == -1 || prevCfgShowCal != (cfgShowCalendar ? 1 : 0)) {
+        g_showCalendar = cfgShowCalendar;
+    }
+    if (prevCfgSkin == -1 || prevCfgSkin != cfgSkin) {
+        g_clockSkin = cfgSkin;
+    }
+    if (prevCfgSec == -1 || prevCfgSec != (cfgShowSeconds ? 1 : 0)) {
+        g_showSeconds = cfgShowSeconds;
+    }
+    if (!hasPrevCfgName || wcscmp(prevCfgName, cfgClockName) != 0) {
+        wcsncpy_s(g_clockName, cfgClockName, _TRUNCATE);
+    }
+    if (prevCfgExp == -1 || prevCfgExp != (cfgCalExpanded ? 1 : 0)) {
+        g_calendarExpanded = cfgCalExpanded;
+    }
+
+    if (!fromWindhawkSettingsChange) {
         // If both widgets were closed in the previous session, restore from settings
         // so the user isn't left with zero visible widgets on startup.
         if (!g_showClock && !g_showCalendar && (cfgShowClock || cfgShowCalendar)) {
@@ -1952,7 +1934,7 @@ LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_CTLCOLORSTATIC: {
             HDC hdcStatic = reinterpret_cast<HDC>(wParam);
             SetBkMode(hdcStatic, TRANSPARENT);
-            return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
+            return reinterpret_cast<INT_PTR>(GetSysColorBrush(COLOR_BTNFACE));
         }
 
         case WM_MOUSEMOVE: {
@@ -2162,6 +2144,7 @@ void ShowGadgetContextMenu(HWND hwnd, int widgetId, POINT screenPt) {
     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
                              screenPt.x, screenPt.y, 0, hwnd, nullptr);
     DestroyMenu(hMenu);
+    SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (cmd == CmdOptions) {
         OpenClockOptionsDialog();
@@ -2530,8 +2513,6 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 // ── UI Thread ────────────────────────────────────────────────────────────────
 
 DWORD WINAPI UiThreadProc(LPVOID) {
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&icc);
 
@@ -2612,7 +2593,6 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     UnregisterClassW(kCalendarClassName, instance);
     UnregisterClassW(kClockClassName, instance);
     GdiplusShutdown(g_gdiplusToken);
-    CoUninitialize();
     return 0;
 }
 
@@ -2622,7 +2602,6 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 
 BOOL WhTool_ModInit() {
     g_unloading = false;
-    EnableProcessDpiAwareness();
     LoadStateAndSettings(false);
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
     return g_uiThread != nullptr;
