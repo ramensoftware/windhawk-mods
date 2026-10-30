@@ -686,6 +686,12 @@
     "githubId": 25669076,
     "homepages": []
   },
+  "https://github.com/enriquebos": {
+    "author": "Enrique Bos",
+    "github": "https://github.com/enriquebos",
+    "githubId": 54767698,
+    "homepages": []
+  },
   "https://github.com/ephemeralviolette": {
     "author": "ephemeralViolette",
     "github": "https://github.com/ephemeralViolette",
@@ -2104,6 +2110,14 @@
     "github": "https://github.com/VitalSkib",
     "githubId": 43848892,
     "homepages": []
+  },
+  "https://github.com/vitalytz": {
+    "author": "vmTools",
+    "github": "https://github.com/VitalyTz",
+    "githubId": 17824843,
+    "homepages": [
+      "https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment"
+    ]
   },
   "https://github.com/wasixgamer": {
     "author": "WasiXGamer",

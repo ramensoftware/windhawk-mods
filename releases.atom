@@ -2,12 +2,226 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-29T02:05:18.000Z</updated>
+    <updated>2026-10-30T00:01:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fast Backspace 1.0]]></title>
+        <id>https://windhawk.net/mods/fast-backspace#1539f9586a19f1ac140654f04292fe20b5cff3fd</id>
+        <link href="https://windhawk.net/mods/fast-backspace"/>
+        <updated>2026-10-30T00:01:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fastbackspace">Fast Backspace</h1>
+<p>Increase the speed of held Backspace without changing the repeat speed of other
+keys. The first press and the Windows keyboard repeat delay stay unchanged.</p>
+<h2 id="settings">Settings</h2>
+<p>Set <strong>Backspace speed multiplier</strong> to an integer from <strong>1</strong> to <strong>10</strong>. The default is
+<strong>2</strong>; <strong>1</strong> keeps normal Windows speed. Changes take effect immediately. Values
+outside this range are clamped. Start with a low value to avoid deleting too much.</p>
+<h2 id="behavior">Behavior</h2>
+<ul>
+<li>Single presses stay normal. Acceleration starts when Windows repeats a held
+physical Backspace key.</li>
+<li>Ctrl, Alt, Shift, and Windows-key combinations are not accelerated. Pressing
+another key during a hold cancels acceleration until Backspace is released.</li>
+<li>A repeat observed in a different foreground window cancels acceleration for
+that hold.</li>
+<li>Repeats arrive in small batches, which can feel bursty at high multipliers.
+Actual deletion speed depends on the application.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>A dedicated Windhawk tool process uses a global keyboard hook to observe repeats
+and queues bounded extra key-downs through <code>SendInput</code> outside the callback. Extra
+events retain the source scan code; the physical key-up releases Backspace, and
+stale input is discarded after release, cancellation, or shutdown.</p>
+<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
+<p>Designed for Windows 10 and 11 and applications that accept synthetic keyboard
+input. The mod runs independently of Explorer and does not inject into each app.</p>
+<ul>
+<li>Elevated apps, games, raw-input apps, remappers, accessibility tools, and remote
+sessions may reject or handle injected input differently. The mod does not
+bypass Windows integrity restrictions or operate on the secure desktop.</li>
+<li>Backspace is accelerated wherever it is handled, including password fields
+and non-text actions such as navigation. The global hook cannot reliably
+identify text fields. Disable the mod where this behavior is undesirable.</li>
+<li>Foreground-window checks cannot detect every change of focus inside one window
+or an application-specific mode change. Release Backspace before changing focus.</li>
+<li>Other hooks can block injected input. Windows can also silently remove a
+low-level hook if its thread times out; disable and re-enable the mod to retry.</li>
+<li>Disabling the mod cancels pending work and removes its hook. Input already
+delivered to an application cannot be undone. Physical input is passed through.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If Backspace is not faster, check that the multiplier exceeds 1, release and hold
+the key again without modifiers, and try an ordinary, non-elevated text editor.
+Disable and re-enable the mod if necessary. Windhawk logs initialization and
+input-insertion failures when logging is enabled. Failed batches are not retried.</p>]]></content>
+        <author>
+            <name>Enrique Bos</name>
+            <uri>https://github.com/enriquebos</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[RetroBar Clock Flyout Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/retrobar-clock-flyout-fix#5493bed495a3edc947fa3e51e3f129af313928cc</id>
+        <link href="https://windhawk.net/mods/retrobar-clock-flyout-fix"/>
+        <updated>2026-10-30T00:01:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="retrobarclockflyoutfix">RetroBar Clock Flyout Fix</h1>
+<p>This mod fixes the borders of the clock flyout to restore the Aero borders. It is made specifically
+for <a href="https://github.com/dremin/RetroBar">RetroBar</a>'s Aero (Windows Vista/7 style) clock/calendar flyout.
+This modification has been tested on Windows 10 21H2.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="before">Before</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/brokenclock.PNG" alt="Before" /></p>
+<h3 id="after">After</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/fixedclock.PNG" alt="After" /></p>
+<p>When <em>Clock click action</em> is set to the Aero calendar, RetroBar creates the flyout <strong>inside its own
+process</strong> (it instantiates the COM class from <code>timedate.cpl</code> and calls <code>ShowFlyout</code>), then nudges
+the window next to the taskbar. This mod therefore runs in <code>RetroBar.exe</code> and:</p>
+<ul>
+<li>It gives the flyout the thick Aero frame and keeps it non-resizable;</li>
+<li>It keeps it floating away from the work area edges, also after RetroBar repositions it.</li>
+</ul>
+<p>On Windows 10 the Win32 clock flyout must be available
+(<code>HKLM\Software\Microsoft\Windows\CurrentVersion\ImmersiveShell\UseWin32TrayClockExperience</code> = 1).</p>
+<h2 id="creditsreference">Credits &amp; Reference</h2>
+<ul>
+<li><a href="https://github.com/dremin/RetroBar">RetroBar</a> by dremin — the taskbar that hosts the Aero clock flyout.</li>
+<li><a href="https://windhawk.net/mods/aero-flyout-fix">Aero Flyout Fix</a> by aubymori — <code>timedate.cpl</code> hooks and flyout positioning logic.</li>
+<li>xoascf - Testing</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Size Presets 1.0.0]]></title>
+        <id>https://windhawk.net/mods/window-size-presets#86b178b5ffa585f442e6f67c44ed54769488cade</id>
+        <link href="https://windhawk.net/mods/window-size-presets"/>
+        <updated>2026-10-30T00:01:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsizepresets">Window Size Presets</h1>
+<p>Resize any window to a preset size, natively, in the spirit of
+<a href="https://www.brianapps.net/sizer4/">Sizer</a>.</p>
+<p><img src="https://i.imgur.com/DZwtRRD.gif" alt="Window Size Presets Demo" /></p>
+<h2 id="waystoopenthepresetmenu">Ways to open the preset menu</h2>
+<ul>
+<li><strong>Title bar button</strong> - right-click and/or hover the minimise (or maximise)
+button. Configurable in the settings; right-click is the default.</li>
+<li><strong>Hotkey</strong> - opens the menu for the foreground window at the mouse cursor.</li>
+</ul>
+<h2 id="presets">Presets</h2>
+<p>Add as many as you like in the settings. Each preset has:</p>
+<ul>
+<li><strong>Name</strong> (optional) - label shown in the menu.</li>
+<li><strong>Width / Height</strong> - in pixels or as a percentage of the monitor's work area.
+<code>0</code> keeps the current value. At least one of them must be non-zero, and the
+first preset with both set to 0 ends the list.</li>
+<li><strong>Position</strong> - keep, centre, or snap to a corner of the work area.</li>
+</ul>
+<p>A tick is shown next to the preset matching the window's current size and
+position.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>This is a tool mod: it runs in its own dedicated <code>windhawk.exe</code> process and
+doesn't inject into any other process.</li>
+<li>Windows running as administrator can't be resized unless Windhawk's tool
+process is also elevated (UIPI).</li>
+<li>On Windows 11, hovering the maximise button also opens the Snap Layouts
+flyout, so the minimise button is the better choice for hover.</li>
+<li>The <a href="https://windhawk.net/mods/winstant">Winstant</a> mod also reacts to
+hovering the minimise button. If you use both, give them different buttons
+or triggers (for example, right-click for this mod).</li>
+<li>Changing any setting is applied immediately, without restarting the mod.</li>
+</ul>]]></content>
+        <author>
+            <name>Nuzza</name>
+            <uri>https://github.com/Nuzza</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Per-monitor taskbar icon alignment 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-per-monitor-alignment#81da868a31a95dad912c7e5043ddfd7341fa2cb8</id>
+        <link href="https://windhawk.net/mods/taskbar-per-monitor-alignment"/>
+        <updated>2026-10-30T00:01:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="permonitortaskbariconalignment">Per-monitor taskbar icon alignment</h1>
+<p>Choose how the taskbar looks on <strong>each monitor separately</strong>: its icons <strong>Left</strong>,
+<strong>Center</strong>, <strong>Right</strong> or Windows' default, and the <strong>Start button</strong> at the left edge,
+the right edge, or with the icons. Windows only offers one alignment for every
+taskbar, and only Left or Center.</p>
+<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/monitor2-overview.jpg" alt="A monitor with centered icons and the Start button at the left edge" /></p>
+<p>| Icons | Start button | Result |
+| --- | --- | --- |
+| Left | with the icons | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-left.jpg" alt="" /> |
+| Center | with the icons | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-center.jpg" alt="" /> |
+| Right | with the icons | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-right.jpg" alt="" /> |
+| Center | left edge | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-center-start-left.jpg" alt="" /> |
+| Left | right edge | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-left-start-right.jpg" alt="" /> |</p>
+<h2 id="settings">Settings</h2>
+<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/settings.jpg" alt="Mod settings" /></p>
+<ul>
+<li><strong>Primary monitor / Other monitors</strong> set the icon alignment and the Start button
+placement for every monitor of that kind. <em>Windows default</em> keeps whatever Windows
+is set to. Out of the box the primary monitor keeps Windows' own alignment and the
+other monitors are Left.</li>
+<li><strong>Per-monitor overrides</strong> handle individual displays: add one row per monitor and
+pick it from the <strong>Monitor</strong> dropdown, <em>1st</em> to <em>6th from the left</em> or <em>Rightmost</em>.
+Positions follow the arrangement in Windows display settings, so they keep working
+when displays are renumbered or reconnected. Choose <em>Custom</em> to type a display
+device name (<code>DISPLAY1</code>), a monitor name (<code>DELL U2719D</code>) or part of a device path
+(<code>DISPLAY#DELA0C1</code>) instead. The first matching row wins.</li>
+<li><strong>Start button:</strong> <em>Follow the icons</em> leaves it in the icon group, as Windows does.
+<em>Left edge</em> and <em>Right edge (next to the tray)</em> place it independently, and the
+icons close the gap. Choosing the edge the icons already gather at changes nothing.</li>
+</ul>
+<p>Right is this mod's own option: Windows' alignment setting has no Right, so a Right
+taskbar is told Left and its icons are aligned right in the taskbar's layout, stopping
+at the system tray. The tray itself never moves.</p>
+<h2 id="installation">Installation</h2>
+<p>Install the mod. It takes over the running taskbars straight away, and also after an
+update or when you disable and enable it, and changing settings applies immediately.
+If a taskbar doesn't change, for instance after a Windows update has changed the
+taskbar's internals, restart Windows Explorer once (Task Manager &gt; Windows Explorer &gt;
+Restart). Enable <strong>Show my taskbar on all displays</strong> in Windows settings to get a
+taskbar on every monitor.</p>
+<p>Disabling the mod puts every taskbar back to Windows' own layout.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Windows 11, 64-bit, native taskbar only. Tested on Windows 11 26H2 (build 26300)
+with Windhawk 1.7.3, on three displays with different resolutions and scales.</p>
+<p>The mod relies on Windows' private taskbar internals. A Windows update can change
+them: if the core hooks can't be found the mod refuses to start, and the XAML-based
+features (Right icons, Start button placement) simply stay off. Windows 10 is not
+supported. Start menu and search flyouts keep using Windows' own placement. No
+registry values are changed. See below for tools that change the taskbar themselves.</p>
+<p>Known limit: the Widgets button isn't taken into account, so with Widgets shown the
+Start button's <em>Left edge</em> may overlap it, and so may <em>Right</em> icons or the <em>Right edge</em>
+on a taskbar where Windows moves it.</p>
+<h2 id="othertaskbartoolscaninterfere">Other taskbar tools can interfere</h2>
+<p>Apps and mods that add their own taskbar features, such as Start11, StartAllBack,
+ExplorerPatcher or other Windhawk taskbar mods, can take over how the taskbar buttons
+are drawn and laid out. Center, Right and the Start button placement can then look
+wrong or not apply, whatever this mod does.</p>
+<p>A known case is <strong>Start11's "Let Start11 enhance the taskbar"</strong>. It draws the taskbar
+buttons itself, in its own window laid over the taskbar, so the buttons this mod
+positions are not the ones you see. With Right, for example, only some of the buttons
+may show up, cut off on the left:</p>
+<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-symptom-right.png" alt="Right alignment with Start11's taskbar enhancement on: only some buttons are visible" /></p>
+<p>If you see this, open Start11, go to <strong>Taskbar</strong> and turn <strong>Let Start11 enhance the
+taskbar</strong> off (or use the option below it, <em>Disable all taskbar features for
+compatibility with other taskbar mods</em>), then restart Explorer. The page should look
+like this:</p>
+<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting.png" alt="Start11's Taskbar page with Let Start11 enhance the taskbar switched off" /></p>
+<p>For any other tool, switch its taskbar features off for a moment to check whether they
+are the cause.</p>
+<p>Source, build instructions and tests:
+https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></content>
+        <author>
+            <name>vmTools</name>
+            <uri>https://github.com/VitalyTz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win+E Reuse File Explorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win-e-reuse-explorer#a1cc0d670623bccd12cc445fd4a292e8ed1958aa</id>
@@ -897,239 +1111,6 @@ mod is based.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.0.0]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#734714f248424422007d996d861940948d4eb2e5</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-10-25T10:03:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="toptaskbarbleed">Top Taskbar Bleed</h1>
-<p>When a maximized window sits under a top-docked taskbar, the taskbar gets a
-full-width color panel behind its buttons that matches the window's top edge
-(optionally as a gradient, for Mica title bars), so the window's title bar
-appears to continue up into the bar.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/top-taskbar-bleed/demo.gif" alt="Demo" /></p>
-<p><strong>Requires a taskbar docked at the top of the screen</strong> (via the taskbar
-position setting on builds that have it, or a mod such as <em>Taskbar on top for
-Windows 11</em>). On other dock positions this mod stays idle.</p>
-<p>How it works:</p>
-<ul>
-<li>A tracker thread watches window events and finds, per monitor, the foremost
-maximized window (the first maximized window in z-order on that monitor -
-not necessarily the foreground window, so a small dialog on top of a
-maximized app doesn't cancel the bleed).</li>
-<li>The window's top edge row is captured from the screen and reduced to its
-dominant color (so a bit of text or an icon can't skew it); that color is
-the panel and decides the taskbar theme. Pixels covered by another window -
-a flyout, a thumbnail, a tooltip, a dialog near the top edge - are left out,
-so floating windows never tint the bleed. Hovering a taskbar thumbnail
-(Aero Peek) bleeds the peeked window if it is maximized on that monitor and
-hides the panel otherwise, since the desktop is what shows through.</li>
-<li>Experimental <strong>Gradient bleed</strong>: instead of one color, the dominant colors
-of four windows at 20/40/60/80% of the width - away from the app icon on the
-left, the caption buttons on the right and a centered title - become a
-horizontal gradient, so a Mica or gradient title bar continues into the bar
-(a flat one stays flat). A point that doesn't fit the rest (a toolbar
-reaching that far, a hovered control) is bridged from its neighbors. Off by
-default: apps that put content along their very top edge can still show it.</li>
-<li>One panel per taskbar is inserted into the taskbar's XAML tree, above the
-taskbar background and below the buttons. The panel mirrors the edge: window
-changes (switching, maximizing, minimizing) are picked up from window events
-and applied on the next composed frame, and the edge is re-sampled in
-between - every <strong>Poll interval</strong> (250 ms by default) while it is static,
-every 25 ms while it is changing - so a title bar that recolors in place
-(focus fade, tab switch, app theme change) is followed frame by frame. With
-Windows animations on, a window being zoomed into place isn't committed
-until its edge has actually landed, so the panel never flashes the background
-behind it; with animations off the first sample is applied as is.</li>
-</ul>
-<p>Supports multiple monitors (each taskbar follows its own monitor).</p>
-<p>Settings: <strong>Poll interval</strong> (how often a static edge is re-checked; window
-changes are event-driven regardless), <strong>Excluded programs</strong> (executables whose
-windows should never trigger the bleed) and the experimental <strong>Gradient bleed</strong>
-toggle described above.</p>
-<p>The panel is a regular XAML <code>Border</code> named <code>TaskbarBleedPanel</code>, so its shape can
-be styled with <em>Windows 11 Taskbar Styler</em> like any other taskbar element.
-Target <code>Border#TaskbarBleedPanel</code> and set, for example, <code>Margin=4,4,4,0</code> or
-<code>CornerRadius=8,8,0,0</code> (the panel's bottom edge meets the window, so the
-rounded corners are normally the top ones). Leave <code>Background</code> and <code>Opacity</code>
-alone - the mod drives those (the background is a gradient brush).</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The taskbar's XAML tree is reached through <code>taskbar.dll</code> and
-<code>Taskbar.View.dll</code> symbols (downloaded by Windhawk on first run), not through
-XAML diagnostics, so the mod coexists with Windows 11 Taskbar Styler and other
-XAML-diagnostics consumers. The bleed applies as soon as the mod is enabled.</li>
-<li>Cost: with a maximized window present, each poll is one small screen
-readback (a 1px-high strip) plus a window enumeration; it doesn't register in
-Task Manager at either rate, and the fast rate only runs during a transition.
-With no maximized window the poll timer is off, and window events are only
-acted on when they come from a maximized window or the window being
-followed, so tooltips, thumbnails and overlays cost nothing.</li>
-<li>Windows that exclude themselves from capture (protected media, some
-remote-desktop clients) return no usable pixels; the panel then keeps its
-last color.</li>
-<li>The 1px taskbar border line (<code>BackgroundStroke</code>) breaks the illusion; it is
-hidden while a panel is showing and restored when the panel hides.</li>
-<li>Readability: a light title bar bled into a dark-mode taskbar leaves white
-labels on a light panel (and vice versa). While a panel is showing, the mod
-switches that monitor's taskbar to the theme that matches the bled color
-(light panel -&gt; light mode, dark panel -&gt; dark mode) and restores the
-previous theme when the panel hides. This is done per taskbar through XAML's
-<code>RequestedTheme</code>, so only the affected monitor changes and the system theme
-itself is untouched.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The taskbar-thread helpers (<code>RunFromWindowThread</code>, <code>FindCurrentProcessTaskbarWnd</code>)
-and the <code>taskbar.dll</code> XAML-root lookup are ported from
-<a href="https://windhawk.net/mods/taskbar-multirow">Taskbar multi-row</a> by m417z,
-licensed under the GNU GPL v3.0. This mod is published under the same license.</p>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Scroll 1.0.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-scroll#365a77bb8705c9f36705cf265a395a7c499780a8</id>
-        <link href="https://windhawk.net/mods/drag-to-scroll"/>
-        <updated>2026-10-25T10:03:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dragtoscroll">Drag to Scroll</h1>
-<p>Hold <strong><code>Ctrl</code> + Right-Click</strong> and drag your mouse to scroll smoothly and naturally across desktop applications, including web browsers (Chrome, Edge, Firefox), text editors (VS Code, Notepad++), File Explorer, and legacy Win32 utilities.</p>
-<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/preview-global-drag-to-scroll.webp" alt="Drag to Scroll Demo" /></p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li><strong>High-Resolution Micro-Scrolling:</strong> Injects fractional wheel increments for fluid, trackpad-like scrolling in modern desktop apps and web browsers.</li>
-<li><strong>Legacy Control Detection:</strong> Automatically detects classic Win32 controls (e.g., standard list views, tree views, edit boxes) and routes discrete <code>WM_VSCROLL</code> line steps to preserve native line-by-line movement.</li>
-<li><strong>Hands-Free Cruising:</strong> Release the Right Mouse Button while continuing to hold <code>Ctrl</code> to let the page cruise automatically based on cursor offset. Cruising disengages instantly on keypress, mouse click, or <code>Ctrl</code> release.</li>
-<li><strong>Zero Zoom Interference:</strong> Dynamically masks <code>Ctrl</code> state during scroll dispatch so applications never accidentally trigger browser zoom or editor scaling.</li>
-<li><strong>Accidental Click Protection:</strong> Tapping <code>Ctrl + Right-Click</code> in place without exceeding the deadzone transparently passes through as a regular right-click.</li>
-</ul>
-<h2 id="compatibilitylimitations">Compatibility &amp; Limitations</h2>
-<ul>
-<li><strong>Packaged & Modern UI Surfaces:</strong> Certain modern Windows interfaces (such as the Windows Start Menu or some packaged store apps) do not process standard Win32 mouse-drag messages through the message queue and are not supported.</li>
-<li><strong>CAD & 3D Software:</strong> If you use software (such as Blender, AutoCAD, or video games) that natively binds actions to <code>Ctrl + Right-Click</code>, you can exclude those executables under the mod's <strong>Advanced</strong> tab in Windhawk.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Live Update for Windows 11 2.0.206]]></title>
-        <id>https://windhawk.net/mods/live-update-for-windows-widget#43716e11539b8e7bfaab4e9df11350e613c0d859</id>
-        <link href="https://windhawk.net/mods/live-update-for-windows-widget"/>
-        <updated>2026-10-25T08:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="liveupdateforwindows11">Live Update for Windows 11</h1>
-<p>A unified, single-slot "Live Activity" widget injected natively into the primary Windows 11 XAML taskbar. Instead of running multiple separate taskbar widgets or external desktop overlay windows, <strong>Live Update</strong> multiplexes contextual activities into one compact taskbar slot with a native XAML flyout popup.</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview1.png" alt="Overview: Media" /></p>
-<p>Overview: Media</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview2.png" alt="Overview: RAM Alert" /></p>
-<p>Overview: RAM Alert</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview3.png" alt="Overview: Device Battery & Bluetooth Battery" /></p>
-<p>Overview: Device Battery &amp; Bluetooth Battery</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview4.png" alt="Overview: Sensitive Permission" /></p>
-<p>Overview: Sensitive Permission</p>
-<p><img src="https://raw.githubusercontent.com/caotu2k5/live-update-for-win11/main/overview5.png" alt="Overview: Wi-Fi Hotspot" /></p>
-<p>Overview: Wi-Fi Hotspot</p>
-<h2 id="howthismoddiffersfromexistingmods">How this mod differs from existing mods</h2>
-<ul>
-<li><strong>Native single-slot multiplexer vs. external overlays:</strong> Unlike <em>Dynamic Island for Windows</em> (which runs as a separate overlay window at the top of the screen), this mod embeds directly inside the native Windows 11 taskbar layout (<code>SystemTrayFrameGrid</code> / <code>RootGrid</code>) and shares a single compact slot across all active providers.</li>
-<li><strong>Contextual activity switching vs. single-purpose widgets:</strong> Unlike standalone media mods (<em>Taskbar Music Lounge</em>, <em>Taskbar Fluent Media Player</em>, <em>Island Media Controls</em>) or calendar-only mods (<em>Lunar & Holiday Calendar</em>), this widget automatically switches to newly started activities (such as media playback, power connection, timer start, or microphone/camera access) while keeping a Vietnamese lunar calendar &amp; almanac as the idle baseline.</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Media:</strong> Shows album artwork, track title, artist, interactive seek bar, and Fluent transport controls for players integrated with Windows Global System Media Transport Controls (GSMTC), with session switching for up to 16 active sessions.</li>
-<li><strong>Battery & Bluetooth:</strong> Displays charge percentage, charging/discharging state, estimated remaining/full time, connected Bluetooth device battery levels, and a shortcut to Windows Power &amp; battery settings (<code>ms-settings:powersleep</code>).</li>
-<li><strong>Windows Clock (status reader):</strong> Displays active Stopwatch, Timer, and enabled Alarm entries observed from the Windows Clock app, continuing to advance locally from the last synced state when the app is minimized.</li>
-<li><strong>Lunar Calendar, Almanac & Vietnamese Culture Index:</strong> Computes UTC+7 Vietnamese lunar dates, Can Chi, Nạp Âm, auspicious hours (Giờ Hoàng Đạo), and 12 Trực using the Hồ Ngọc Đức algorithm. Includes a monthly calendar view, Vietnamese holiday list, and a built-in Vietnamese culture topic index that opens reference articles in your default browser.</li>
-<li><strong>Privacy Activity:</strong> Passively monitors active Microphone (Core Audio), Camera (Media Foundation sensor monitor), and Location usage and lists the reporting applications.</li>
-<li><strong>Task Progress:</strong> Passively observes taskbar progress (<code>ITaskbarList3</code>) for File Explorer, browsers, and archivers to display ongoing transfers in one place.</li>
-<li><strong>Displays & Wi-Fi Hotspot:</strong> Shows active external monitors/projection mode (<code>QueryDisplayConfig</code>) and Windows Mobile Hotspot status/connected client count (<code>NetworkOperatorTetheringManager</code>).</li>
-<li><strong>System Alerts (RAM & Storage on by default; Temperature optional, off by default):</strong></li>
-<li><strong>RAM & Storage (enabled by default):</strong> Alerts when physical RAM crosses 80%/90%/95% or when any fixed drive has less than 10% free space (listing the low-space volumes).</li>
-<li><strong>CPU/GPU Temperature (optional, off by default):</strong> Alerts when CPU/GPU temperatures from a local LibreHardwareMonitor web server (<code>http://127.0.0.1:&lt;port&gt;/data.json</code>) cross 70/80/90 °C.</li>
-<li><strong>OBS Studio Recording (optional, off by default):</strong> Connects to local OBS WebSocket v5 (<code>ws://127.0.0.1:&lt;port&gt;</code>) when OBS is running to display recording elapsed time and Pause/Resume/Stop buttons.</li>
-</ul>
-<h2 id="quicktogglespositioningnotes">Quick toggles, positioning &amp; notes</h2>
-<ul>
-<li><strong>Taskbar position (<code>root_left</code> on centered taskbar, automatic <code>tray_left</code> on left-aligned taskbar):</strong> By default (<code>root_left</code>), when the Windows 11 taskbar is centered, the widget sits on the left side of the taskbar right after the native Windows Widgets button (or at the left edge if Widgets is turned off in Windows Settings). You can optionally enable <strong>Hide Windows Widgets button in left corner</strong> (<code>appearance.hideWidgetsButton</code>, off by default) to collapse the native Widgets button while using <code>root_left</code> and restore its original state when disabled. Whenever the taskbar is left-aligned (<code>TaskbarAl = 0</code>), <code>root_left</code> automatically falls back to the system tray (<code>tray_left</code>) so the Start button and app icons are never covered.</li>
-<li><strong>Right-click quick toggles vs. Windhawk settings:</strong> Toggles in the widget's right-click context menu save quick runtime overrides (<code>ui.*</code>) that take precedence over the Windhawk settings tab. Saving settings in Windhawk (or choosing <strong>Reset to Windhawk settings</strong> in the context menu) clears all runtime overrides.</li>
-<li><strong>OBS WebSocket password:</strong> The <code>obs.password</code> field is stored as a standard Windhawk mod setting, so it is included in Windhawk settings exports.</li>
-</ul>
-<h2 id="optionallocalintegrationssetup">Optional local integrations setup</h2>
-<ul>
-<li><strong>OBS Studio:</strong> Enable <strong>Tools > WebSocket Server Settings > Enable WebSocket server</strong> in OBS Studio (v28+), then enable <strong>OBS recording</strong> in the mod settings and match the port (default <code>4455</code>) and password.</li>
-<li><strong>LibreHardwareMonitor (Temperature):</strong> In LibreHardwareMonitor, enable <strong>Options > Remote Web Server > Run</strong>, then enable <strong>Temperature alerts</strong> in the mod settings and match the local port (default <code>8085</code>).</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>Supported OS:</strong> Windows 11 (build 22000 or later) with the native primary XAML taskbar.</li>
-<li>Windows 10 and third-party replacement taskbars are not supported.</li>
-</ul>
-<hr />
-<h2 id="tingvit">Tiếng Việt</h2>
-<p><strong>Live Update for Windows 11</strong> tích hợp nhiều hoạt động trực tiếp (Live Activities) vào <strong>một vị trí duy nhất</strong> trên thanh taskbar gốc của Windows 11.</p>
-<h3 id="imkhcbitsoviccmodhinc">Điểm khác biệt so với các mod hiện có</h3>
-<ul>
-<li><strong>Tích hợp trực tiếp vào taskbar thay vì cửa sổ nổi:</strong> Khác với <em>Dynamic Island for Windows</em> (tạo cửa sổ nổi riêng phía trên màn hình), mod này gắn trực tiếp vào cây giao diện XAML của taskbar Windows 11 và dùng chung một ô hiển thị duy nhất.</li>
-<li><strong>Tự động chuyển đổi theo ngữ cảnh:</strong> Khác với các mod chỉ hiển thị nhạc hoặc chỉ hiển thị âm lịch, Live Update tự động ưu tiên hoạt động mới phát sinh (như phát nhạc, cắm sạc, bật hẹn giờ, dùng micro/camera, quay OBS) và hiển thị Âm lịch &amp; Tử vi khi ở trạng thái nghỉ.</li>
-</ul>
-<h3 id="cchotnghtr">Các hoạt động hỗ trợ</h3>
-<ul>
-<li><strong>Phương tiện (Media):</strong> Ảnh bìa, tên bài hát, nghệ sĩ, thanh tua và nút điều khiển nhạc hỗ trợ nhiều phiên phát cùng lúc.</li>
-<li><strong>Pin & Thiết bị Bluetooth:</strong> Phần trăm pin, thời gian ước tính, mức pin thiết bị Bluetooth đang kết nối và nút mở nhanh cài đặt Nguồn &amp; Pin của Windows.</li>
-<li><strong>Đồng hồ Windows:</strong> Đọc trạng thái Bấm giờ, Hẹn giờ và Báo thức từ ứng dụng Đồng hồ Windows; tiếp tục đếm từ mốc đồng bộ cuối khi thu nhỏ ứng dụng.</li>
-<li><strong>Âm lịch, Tử vi & Danh mục Văn hóa Việt:</strong> Tính ngày âm lịch, Can Chi, Nạp Âm, Giờ Hoàng Đạo, Trực, lịch tháng và danh sách ngày lễ Việt Nam. Mục <strong>Văn hóa</strong> cung cấp danh mục chủ đề văn hóa Việt Nam và mở bài viết tham khảo trong trình duyệt mặc định khi bấm vào.</li>
-<li><strong>Quyền riêng tư:</strong> Hiển thị ứng dụng đang sử dụng Micro, Camera hoặc Vị trí.</li>
-<li><strong>Tiến trình tác vụ:</strong> Theo dõi trạng thái tiến độ trên taskbar của File Explorer, trình duyệt và phần mềm giải nén.</li>
-<li><strong>Trình chiếu & Điểm phát sóng Wi-Fi:</strong> Hiển thị màn hình phụ đang kết nối và trạng thái Mobile Hotspot cùng danh sách thiết bị.</li>
-<li><strong>Cảnh báo hệ thống (RAM & Bộ nhớ bật mặc định; Nhiệt độ tùy chọn, tắt mặc định):</strong></li>
-<li><strong>RAM & Ổ đĩa (bật mặc định):</strong> Cảnh báo khi RAM vượt 80%/90%/95% hoặc khi ổ đĩa cố định còn dưới 10% dung lượng trống (hiển thị rõ tên ổ đĩa bị đầy).</li>
-<li><strong>Nhiệt độ CPU/GPU (tùy chọn, tắt mặc định):</strong> Cảnh báo khi nhiệt độ CPU/GPU đọc từ LibreHardwareMonitor Remote Web Server (<code>http://127.0.0.1:&lt;port&gt;/data.json</code>) vượt 70/80/90 °C.</li>
-<li><strong>Quay màn hình OBS (tùy chọn, tắt mặc định):</strong> Kết nối cục bộ (<code>127.0.0.1</code>) với OBS WebSocket v5 khi bật trong cài đặt để hiển thị thời lượng quay và nút Tạm dừng/Tiếp tục/Dừng.</li>
-</ul>
-<h3 id="luvvtrmenuchutphimtkhuobs">Lưu ý về vị trí, menu chuột phải &amp; mật khẩu OBS</h3>
-<ul>
-<li><strong>Vị trí mặc định (<code>root_left</code> khi taskbar căn giữa, tự động về <code>tray_left</code> khi taskbar căn trái):</strong> Mặc định khi thanh taskbar Windows 11 căn giữa, widget nằm ở góc trái (<code>root_left</code>) ngay sau nút Các tiện ích (Widgets) của Windows để không chồng lấp (hoặc sát mép trái nếu bạn đã tắt Widgets trong cài đặt Windows). Bạn có thể bật tùy chọn <strong>Ẩn nút Các tiện ích (Widgets) ở góc trái</strong> (<code>appearance.hideWidgetsButton</code>, tắt mặc định) nếu muốn ẩn nút Widgets gốc khi dùng <code>root_left</code> (tự khôi phục đúng trạng thái ban đầu khi tắt). Khi thanh taskbar được căn trái (<code>TaskbarAl = 0</code>), mod sẽ tự động chuyển vị trí về khay hệ thống (<code>tray_left</code>) để không bao giờ đè lên nút Start và các biểu tượng ứng dụng.</li>
-<li><strong>Menu chuột phải và cài đặt Windhawk:</strong> Các tùy chọn bật/tắt nhanh trong menu chuột phải lưu trạng thái ghi đè tạm thời (<code>ui.*</code>) và được ưu tiên hơn trang cài đặt Windhawk. Khi bạn bấm Lưu trong trang cài đặt Windhawk (hoặc chọn <strong>Khôi phục theo cài đặt Windhawk</strong> trong menu chuột phải), các ghi đè tạm thời này sẽ được xóa.</li>
-<li><strong>Mật khẩu OBS WebSocket:</strong> Trường <code>obs.password</code> là cài đặt thông thường của Windhawk nên sẽ được bao gồm khi xuất (export) cài đặt Windhawk.</li>
-</ul>]]></content>
-        <author>
-            <name>caotu2k5</name>
-            <uri>https://github.com/caotu2k5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Key to Search 1.0]]></title>
-        <id>https://windhawk.net/mods/windows-key-to-search#1e165a9cf47b589451bf8628cbf6395ba53c745d</id>
-        <link href="https://windhawk.net/mods/windows-key-to-search"/>
-        <updated>2026-10-24T21:01:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowskeytosearch">Windows Key to Search</h1>
-<p>Tap either Windows key to open Search instead of Start. Search opens when the
-key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
-and Win+S continue to work normally. The generated shortcut is held for 50 ms
-before release.</p>
-<p>By default, the helper runs without requesting administrator privileges. On
-Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
-On Windhawk 2.0 alpha 4 or later, the mod requests UIAccess, which also covers
-administrator windows when that host is available.</p>
-<p>The optional <strong>Support administrator windows on Windhawk 1.7.3</strong> setting launches
-an elevated helper. It is off by default. Enabling it can show a UAC prompt at
-every sign-in, and after enabling or updating the mod. The prompt runs on a
-background thread, and an already-running helper prevents another prompt.
-If elevation is cancelled, the helper runs normally instead. Disable and
-re-enable the mod after changing this setting. On Windhawk 2.0, leave this
-setting off and use its UIAccess host.</p>
-<p>The helper uses Windhawk's <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">tool-mod launcher</a>,
-with an optional background elevation path on older Windhawk versions.</p>
-<p>Windows-key mouse gestures used by tools such as AltDrag or AltSnap are not
-supported: the mod withholds the Windows key until another keyboard key is
-pressed. UAC's secure desktop is outside the scope of the mod.</p>]]></content>
-        <author>
-            <name>Tyler</name>
-            <uri>https://github.com/snowtyler</uri>
         </author>
     </entry>
 </feed>
