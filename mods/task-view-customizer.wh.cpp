@@ -38,6 +38,11 @@ the native controls.
 The mod does not change Alt+Tab or the desktop preview shown when hovering
 over the taskbar's Task View button.
 
+## Screenshots
+
+| Full Task View with Desktops list at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
+| :---: | :---: | :---: |
+| ![Full Task View with Desktops list at the top](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/1.png) | ![No Task View with Desktops list at the center + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png) | ![Windows default + Fit desktop tiles](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png) |
 ## Settings
 
 ### Task View behavior
@@ -71,7 +76,8 @@ positions. Adjust the button width, hide its background, or position the plus si
 **Stretch New desktop button to highlight height** extends the button to
 match its hover/selection frame and hides the New desktop label. The width
 and plus-sign alignment settings still apply. Turn the toggle off to restore
-the original vertical layout. Stretching also applies to Windows default mode through the shared button layout.
+the original vertical layout. Stretching also applies to Windows default mode 
+through the shared button layout.
 
 ### Background materials
 
@@ -80,20 +86,6 @@ Choose **Native**, **Solid color**, **Acrylic**, **Clear**, or experimental
 Acrylic uses a live blurred backdrop and tint. Clear removes the material.
 You can also hide the list background in list-only modes or remove its
 outer border without removing desktop selection borders.
-
-Material transparency accepts **0-100**. Zero keeps the material's default
-strength; 100 makes Native, Solid and Acrylic backgrounds clear. Values
-outside that range use default strength; **-1** is the default setting.
-Thumbnails and labels remain visible, and native hover/focus brush alpha is
-preserved rather than turning faint highlights opaque.
-
-Mica uses a panel-local blurred wallpaper brush with color and luminosity
-blends. Its transparency control reduces tint/luminosity while keeping the
-wallpaper layer opaque. This is an experimental approximation of the native
-window material: its appearance can differ from apps using Windows' DWM
-Mica backdrop. It falls back to a solid color when unavailable.
-Windows can also use Acrylic's solid fallback when transparency is disabled.
-Hiding the desktop list background takes priority over material styling.
 
 ### Desktop highlights
 
