@@ -1,5 +1,4 @@
 // ==WindhawkMod==
-// clang-format off
 // @id              depth-wallpaper-native
 // @name            Depth Wallpaper Native
 // @description     Mouse-reactive depth wallpaper with local AI inference and independent multi-monitor rendering
@@ -10,32 +9,38 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lbcrypt -lole32 -loleaut32 -lruntimeobject -lwindowscodecs -lurlmon -lgdi32 -luser32 -ld3d11 -ldxgi -ld2d1 -ldcomp -luuid -ld3dcompiler
+// @compilerOptions -lcomctl32 -lbcrypt -lole32 -loleaut32 -lruntimeobject -lwindowscodecs -lurlmon -lgdi32 -luser32 -ld3d11 -ldxgi -ldcomp -luuid -ld3dcompiler -ladvapi32
 // ==/WindhawkMod==
-// clang-format on
 // ==WindhawkModReadme==
 /*
 # Depth Wallpaper Native
 
 Adds mouse-reactive depth to static desktop photographs. Uses a Direct3D 11
 shader for animation and ONNX Runtime CPU for local depth estimation. Supports
-independent monitor images and optional SAM 2.1 Tiny foreground-depth refinement.
+independent monitor images and optional SAM 2.1 Tiny foreground-depth
+refinement.
 
 ## First use
 
-Enable the mod with its defaults. It uses each monitor's Windows picture wallpaper,
-automatically downloads the x64 runtime and MiDaS model, and uses the balanced
-profile. Internet access is needed during first setup. Images are processed
-locally and are not uploaded. Select Preview to inspect the effect in a window.
-Preview sliders affect the current session only and are not saved to settings.
+Enable the mod with its defaults. It uses each monitor's Windows picture
+wallpaper, automatically downloads the x64 runtime and MiDaS model, and uses the
+balanced profile. Internet access is needed during first setup. Images are
+processed locally and are not uploaded. Select Preview to inspect the effect in
+a window. Preview sliders affect the current session only and are not saved to
+settings.
 
 Pipeline settings choose the depth model, segmentation and animation profile.
-Advanced settings provide model/runtime overrides and processing controls. Defaults
-use explicit automatic labels; resolved paths appear in logs and download status.
-Runtime and model data are cached under `%LOCALAPPDATA%\DepthWallpaperNative`.
-Downloads for optional DA V2/DA3/SAM exports are pinned and hash-checked; the
-legacy MiDaS download is not hash-pinned. Inference is CPU-only even when the
-rendering device is a GPU. No Python or external executable is used.
+Advanced settings provide model/runtime overrides and processing controls.
+Defaults use explicit automatic labels; resolved paths appear in logs and
+download status. Runtime and model data are cached under
+`%LOCALAPPDATA%\DepthWallpaperNative`. Elevated hosts use
+`DepthWallpaperNative-Elevated` with administrator-only access. All models and
+the runtime are pinned and hash-checked. Custom paths must contain the exact
+pinned model/runtime; arbitrary models and runtime builds are rejected. Local
+fixed-drive paths without reparse points are required for those files. Verified
+files remain locked while in use, and runtime dependencies load from System32.
+Inference is CPU-only even when the rendering device is a GPU. No Python or
+external executable is used.
 
 ## Compatibility
 
@@ -48,24 +53,34 @@ fullscreen pause are not implemented. Do not combine with another animated
 wallpaper application.
 
 This version deliberately uses the 0.3.9 single-image renderer. SAM modifies the
-depth map; it does not cut the photo into layers. There is no generative filling,
-background reconstruction, FLUX integration or full spatial mesh. Images are
-currently stretched to screen aspect ratio. The DA3 FP16 adapter is experimental
-and CPU operator compatibility has not been verified. Model quality and performance
-vary by image and hardware. Disabling can wait for active inference to finish.
+depth map; it does not cut the photo into layers. There is no generative
+filling, background reconstruction, FLUX integration or full spatial mesh.
+Images are currently stretched to screen aspect ratio. The DA3 FP16 adapter is
+experimental and CPU operator compatibility has not been verified. Model quality
+and performance vary by image and hardware. Inference has a two-minute limit and
+requests cooperative cancellation on disable. Session creation and native
+operators can still delay shutdown; this in-process mod is not a security
+sandbox. Depth output is limited to 2048 pixels per side. Source images are
+limited to 100 megapixels and 32768 pixels per side before WIC scaling.
 
 ## Credits and licenses
 
 Mod: MIT, Copyright (c) 2026 arturdj. Desktop host discovery is adapted from
-[Parallax Wallpaper by HaVeN80](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/parallax-wallpaper.wh.cpp)
+[Parallax Wallpaper by
+HaVeN80](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/parallax-wallpaper.wh.cpp)
 (MIT). The embedded ONNX Runtime 1.20.1 API header and runtime are Microsoft MIT
 software. Notices are included in this source. Model weights are downloaded
 separately and retain their upstream licenses:
 
 - [MiDaS](https://github.com/isl-org/MiDaS): MIT.
-- [Depth Anything V2 Small ONNX](https://huggingface.co/onnx-community/depth-anything-v2-small): Apache 2.0.
-- [DA3 Mono ONNX export](https://huggingface.co/Jens-Duttke/Depth-Anything-3-MONO-ONNX): Apache 2.0.
-- [SAM 2.1 Tiny export](https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX): Apache 2.0.
+- [Depth Anything V2 Small
+ONNX](https://huggingface.co/onnx-community/depth-anything-v2-small):
+Apache 2.0.
+- [DA3 Mono ONNX
+export](https://huggingface.co/Jens-Duttke/Depth-Anything-3-MONO-ONNX):
+Apache 2.0.
+- [SAM 2.1 Tiny export](https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX):
+Apache 2.0.
 
 ## Validation
 
@@ -117,8 +132,10 @@ claim of acceptance or complete runtime validation.
     $description: Mistura a profundidade original com a separação do objeto selecionado automaticamente. Não reconstrói o fundo.
   - Model: "Automático — conforme modelo selecionado"
     $name: Arquivo ONNX (opcional — vazio baixa o modelo selecionado)
+    $description: Aceita apenas o modelo selecionado com o hash oficial fixado.
   - RuntimeFolder: "%LOCALAPPDATA%\\DepthWallpaperNative\\runtime-1.20.1"
     $name: Pasta do runtime (opcional — vazio instala automaticamente)
+    $description: Aceita apenas o DLL x64 do ONNX Runtime 1.20.1 com hash fixado.
   - TextureLimit: 1280
     $name: Resolução máxima da textura (lado maior, 512 a 3840)
   - Invert: false
@@ -143,11 +160,6 @@ claim of acceptance or complete runtime validation.
     $name: Suavização do movimento (ms, 1 a 2000)
   - Zoom: 106
     $name: Zoom (%) — 100 a 150
-  - Device: cpu
-    $name: Dispositivo de inferência
-    $options:
-    - cpu: CPU
-    - auto: Automático (CPU)
   - Cache: true
     $name: Reutilizar mapa em memória entre ajustes
   - Revision: 0
@@ -157,7 +169,6 @@ claim of acceptance or complete runtime validation.
 // ==/WindhawkModSettings==
 // clang-format on
 #include <commctrl.h>
-#include <d2d1_1.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dcomp.h>
@@ -167,6 +178,8 @@ claim of acceptance or complete runtime validation.
 // level here instead of adding global compiler options.
 #undef NTDDI_VERSION
 #define NTDDI_VERSION 0x0A000000
+#include <aclapi.h>
+#include <sddl.h>
 #include <shobjidl.h>
 #include <urlmon.h>
 #include <wincodec.h>
@@ -5092,11 +5105,11 @@ ORT_API_STATUS(OrtSessionOptionsAppendExecutionProvider_Tensorrt, _In_ OrtSessio
 /// @}
 
 #include <stdexcept>
-#include <fstream>
 #include <bcrypt.h>
-#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/base.h>
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <chrono>
 #include <filesystem>
@@ -5110,11 +5123,6 @@ ORT_API_STATUS(OrtSessionOptionsAppendExecutionProvider_Tensorrt, _In_ OrtSessio
 #define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
 #endif
 using namespace winrt;
-enum class LearningModelDeviceKind
-{
-    Cpu,
-    Default
-};
 static std::wstring runtimeFolder;
 static std::wstring activeDownloadPath;
 static bool depthAnything = false, depthAnything3 = false, useSam = false;
@@ -5122,6 +5130,119 @@ static float samInfluence = .6f;
 static std::thread worker;
 static std::atomic<bool> stop{false};
 static std::atomic<bool> settingsPending{false};
+static void CheckCancelled()
+{
+    if (stop)
+        throw std::runtime_error("Processing cancelled");
+}
+
+// Keep directory handles open without delete sharing so checked ancestors
+// cannot be renamed or replaced while a file is verified and consumed.
+static std::vector<handle> LockDirectories(const std::filesystem::path &directory)
+{
+    auto path = std::filesystem::absolute(directory).lexically_normal();
+    const auto text = path.wstring();
+    if (text.size() < 3 || text[1] != L':' || text[2] != L'\\' || text.find(L':', 2) != std::wstring::npos ||
+        GetDriveTypeW(path.root_path().c_str()) != DRIVE_FIXED)
+        throw std::runtime_error("Only local fixed-drive paths are allowed");
+    std::vector<handle> locks;
+    auto current = path.root_path();
+    auto lock = [&](const std::filesystem::path &part)
+    {
+        HANDLE raw = CreateFileW(part.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                                 FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (raw == INVALID_HANDLE_VALUE)
+            throw hresult_error(HRESULT_FROM_WIN32(GetLastError()));
+        handle file(raw);
+        BY_HANDLE_FILE_INFORMATION info{};
+        check_bool(GetFileInformationByHandle(file.get(), &info));
+        if (!(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+            throw std::runtime_error("Reparse-point directories are not allowed");
+        locks.push_back(std::move(file));
+    };
+    lock(current);
+    for (const auto &part : path.relative_path())
+    {
+        current /= part;
+        lock(current);
+    }
+    return locks;
+}
+
+static std::filesystem::path CacheFolder()
+{
+    // Initialization is confined to the worker thread. Preserve the directory
+    // locks until module unload, including throughout asynchronous ZIP
+    // extraction.
+    static std::filesystem::path folder;
+    static std::vector<handle> locks;
+    if (!folder.empty())
+        return folder;
+    handle token;
+    check_bool(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token.put()));
+    TOKEN_ELEVATION elevation{};
+    DWORD bytes = 0;
+    check_bool(GetTokenInformation(token.get(), TokenElevation, &elevation, sizeof(elevation), &bytes));
+    wchar_t local[32768];
+    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, ARRAYSIZE(local));
+    if (!n || n >= ARRAYSIZE(local))
+        throw std::runtime_error("LOCALAPPDATA unavailable");
+    auto candidate = std::filesystem::path(local) /
+                     (elevation.TokenIsElevated ? L"DepthWallpaperNative-Elevated" : L"DepthWallpaperNative");
+    auto parents = LockDirectories(candidate.parent_path());
+    if (elevation.TokenIsElevated)
+    {
+        PSECURITY_DESCRIPTOR raw = nullptr;
+        check_bool(ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", SDDL_REVISION_1, &raw, nullptr));
+        auto descriptor = std::unique_ptr<void, decltype(&LocalFree)>(raw, LocalFree);
+        SECURITY_ATTRIBUTES attributes{sizeof(attributes), raw, FALSE};
+        if (!CreateDirectoryW(candidate.c_str(), &attributes) && GetLastError() != ERROR_ALREADY_EXISTS)
+            throw hresult_error(HRESULT_FROM_WIN32(GetLastError()));
+        // Never take ownership of an attacker-precreated cache. Fail closed.
+        auto directoryLocks = LockDirectories(candidate);
+        PSID owner = nullptr;
+        PACL acl = nullptr;
+        PSECURITY_DESCRIPTOR actual = nullptr;
+        DWORD error = GetSecurityInfo(directoryLocks.back().get(), SE_FILE_OBJECT,
+                                      OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr,
+                                      &acl, nullptr, &actual);
+        if (error != ERROR_SUCCESS)
+            throw hresult_error(HRESULT_FROM_WIN32(error));
+        auto actualDescriptor = std::unique_ptr<void, decltype(&LocalFree)>(actual, LocalFree);
+        SECURITY_DESCRIPTOR_CONTROL control = 0;
+        DWORD descriptorRevision = 0;
+        check_bool(GetSecurityDescriptorControl(actual, &control, &descriptorRevision));
+        if (!(control & SE_DACL_PROTECTED))
+            throw std::runtime_error("Elevated cache must not inherit permissions from its parent");
+        BYTE admin[SECURITY_MAX_SID_SIZE], system[SECURITY_MAX_SID_SIZE];
+        DWORD adminSize = sizeof(admin), systemSize = sizeof(system);
+        check_bool(CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, admin, &adminSize));
+        check_bool(CreateWellKnownSid(WinLocalSystemSid, nullptr, system, &systemSize));
+        if (!owner || (!EqualSid(owner, admin) && !EqualSid(owner, system)) || !acl)
+            throw std::runtime_error("Elevated cache must be owned by Administrators or SYSTEM");
+        for (DWORD i = 0; i < acl->AceCount; ++i)
+        {
+            void *ace = nullptr;
+            check_bool(GetAce(acl, i, &ace));
+            auto allowed = static_cast<ACCESS_ALLOWED_ACE *>(ace);
+            if (allowed->Header.AceType != ACCESS_ALLOWED_ACE_TYPE ||
+                (!EqualSid(&allowed->SidStart, admin) && !EqualSid(&allowed->SidStart, system)))
+                throw std::runtime_error("Elevated cache has an unsafe access control list");
+        }
+        parents = std::move(directoryLocks);
+    }
+    else
+    {
+        std::filesystem::create_directories(candidate);
+        parents = LockDirectories(candidate);
+    }
+    locks = std::move(parents);
+    folder = candidate;
+    return folder;
+}
 static void ReadSettings();
 static std::wstring imagePath, modelPath;
 static bool preview;
@@ -5129,39 +5250,41 @@ static float strength, vertical, contrast, gammaValue, focus, zoom, smoothing;
 static bool invert, useCache;
 static int lowPercent, highPercent, blurRadius, revision;
 static int textureLimit = 1280;
-static LearningModelDeviceKind deviceKind;
-static std::vector<float> cachedRaw;
-static std::vector<unsigned char> cachedInput;
-static std::wstring cachedModel;
-static std::filesystem::file_time_type cachedModelTime;
-static int cachedRevision = -1, cachedW = 0, cachedH = 0;
-static LearningModelDeviceKind cachedDevice;
 static int width, height;
 static std::vector<float> depth;
 static std::wstring configuredImage, configuredModel;
 static auto ProcessingSettings()
 {
-    return std::make_tuple(configuredImage, configuredModel, runtimeFolder, depthAnything, depthAnything3, useSam,
-                           samInfluence, preview, contrast, gammaValue, invert, lowPercent, highPercent, blurRadius,
-                           textureLimit, revision, useCache, deviceKind);
+    return std::make_tuple(configuredImage, configuredModel, runtimeFolder, depthAnything, depthAnything3,
+                           useSam, samInfluence, preview, contrast, gammaValue, invert, lowPercent,
+                           highPercent, blurRadius, textureLimit, revision, useCache);
 }
 static std::vector<unsigned char> ReadImage(const std::wstring &path, int w, int h)
 {
+    CheckCancelled();
+    if (w < 2 || h < 2 || w > 3840 || h > 3840)
+        throw std::runtime_error("Image dimensions exceed the texture limit");
     auto factory = create_instance<IWICImagingFactory>(CLSID_WICImagingFactory);
     com_ptr<IWICBitmapDecoder> decoder;
     check_hresult(factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
                                                      WICDecodeMetadataCacheOnDemand, decoder.put()));
     com_ptr<IWICBitmapFrameDecode> frame;
     check_hresult(decoder->GetFrame(0, frame.put()));
+    UINT sourceW = 0, sourceH = 0;
+    check_hresult(frame->GetSize(&sourceW, &sourceH));
+    if (!sourceW || !sourceH || sourceW > 32768 || sourceH > 32768 ||
+        static_cast<uint64_t>(sourceW) * sourceH > 100000000)
+        throw std::runtime_error("Source image exceeds the 100-megapixel decoding limit");
     com_ptr<IWICBitmapScaler> scaler;
     check_hresult(factory->CreateBitmapScaler(scaler.put()));
     check_hresult(scaler->Initialize(frame.get(), w, h, WICBitmapInterpolationModeFant));
     com_ptr<IWICFormatConverter> cv;
     check_hresult(factory->CreateFormatConverter(cv.put()));
-    check_hresult(cv->Initialize(scaler.get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0,
-                                 WICBitmapPaletteTypeCustom));
-    std::vector<unsigned char> out(w * h * 4);
+    check_hresult(cv->Initialize(scaler.get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr,
+                                 0, WICBitmapPaletteTypeCustom));
+    std::vector<unsigned char> out(static_cast<size_t>(w) * h * 4);
     check_hresult(cv->CopyPixels(nullptr, w * 4, (UINT)out.size(), out.data()));
+    CheckCancelled();
     return out;
 }
 struct DownloadProgress : implements<DownloadProgress, IBindStatusCallback>
@@ -5172,11 +5295,12 @@ struct DownloadProgress : implements<DownloadProgress, IBindStatusCallback>
     DownloadProgress()
     {
         statusWindow = CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"Depth Wallpaper — preparando arquivos",
-                                       WS_OVERLAPPED | WS_CAPTION | WS_VISIBLE, 100, 100, 680, 230, nullptr, nullptr,
-                                       GetModuleHandleW(nullptr), nullptr);
+                                       WS_OVERLAPPED | WS_CAPTION | WS_VISIBLE, 100, 100, 680, 230, nullptr,
+                                       nullptr, GetModuleHandleW(nullptr), nullptr);
         if (statusWindow)
-            statusLabel = CreateWindowExW(0, L"STATIC", L"Conectando ao servidor...", WS_CHILD | WS_VISIBLE | SS_LEFT,
-                                          16, 16, 640, 165, statusWindow, nullptr, GetModuleHandleW(nullptr), nullptr);
+            statusLabel =
+                CreateWindowExW(0, L"STATIC", L"Conectando ao servidor...", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                                16, 16, 640, 165, statusWindow, nullptr, GetModuleHandleW(nullptr), nullptr);
     }
     ~DownloadProgress()
     {
@@ -5197,6 +5321,8 @@ struct DownloadProgress : implements<DownloadProgress, IBindStatusCallback>
     }
     HRESULT __stdcall OnProgress(ULONG current, ULONG total, ULONG, LPCWSTR text) override
     {
+        if (current > 2ULL * 1024 * 1024 * 1024 || total > 2ULL * 1024 * 1024 * 1024)
+            return E_ABORT;
         ULONGLONG now = GetTickCount64();
         if (now - updated >= 100 || current == total)
         {
@@ -5246,11 +5372,35 @@ struct ModelFile
     const wchar_t *filename;
     const char *sha256;
 };
-static void VerifyModel(const std::filesystem::path &path, const char *expected)
+struct VerifiedFile
 {
+    std::vector<handle> directories;
+    handle file;
+};
+static VerifiedFile VerifyModel(const std::filesystem::path &path, const char *expected)
+{
+    CheckCancelled();
+    auto absolute = std::filesystem::absolute(path).lexically_normal();
+    if (absolute.wstring().find(L':', 2) != std::wstring::npos)
+        throw std::runtime_error("Alternate data streams are not allowed");
+    VerifiedFile verified{LockDirectories(absolute.parent_path()), {}};
+    HANDLE raw = CreateFileW(absolute.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                             FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (raw == INVALID_HANDLE_VALUE)
+        throw hresult_error(HRESULT_FROM_WIN32(GetLastError()));
+    verified.file.attach(raw);
+    BY_HANDLE_FILE_INFORMATION info{};
+    check_bool(GetFileInformationByHandle(verified.file.get(), &info));
+    if (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+        throw std::runtime_error("Expected a regular non-reparse file");
+    LARGE_INTEGER length{};
+    check_bool(GetFileSizeEx(verified.file.get(), &length));
+    if (length.QuadPart <= 0 || length.QuadPart > 2LL * 1024 * 1024 * 1024)
+        throw std::runtime_error("Model/runtime file exceeds size limit");
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
-    auto check = [](NTSTATUS status) {
+    auto check = [](NTSTATUS status)
+    {
         if (status < 0)
             throw std::runtime_error("SHA256 failed");
     };
@@ -5258,21 +5408,17 @@ static void VerifyModel(const std::filesystem::path &path, const char *expected)
     try
     {
         check(BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0));
-        std::ifstream input(path, std::ios::binary);
-        if (!input)
-            throw std::runtime_error("Cannot read downloaded model");
         std::vector<unsigned char> buffer(1024 * 1024);
-        while (input)
+        for (;;)
         {
-            if (stop)
-                throw std::runtime_error("Download verification cancelled");
-            input.read((char *)buffer.data(), buffer.size());
-            auto n = input.gcount();
-            if (n)
-                check(BCryptHashData(hash, buffer.data(), (ULONG)n, 0));
+            CheckCancelled();
+            DWORD n = 0;
+            check_bool(
+                ReadFile(verified.file.get(), buffer.data(), static_cast<DWORD>(buffer.size()), &n, nullptr));
+            if (!n)
+                break;
+            check(BCryptHashData(hash, buffer.data(), n, 0));
         }
-        if (!input.eof())
-            throw std::runtime_error("Model read failed");
         unsigned char digest[32];
         check(BCryptFinishHash(hash, digest, 32, 0));
         const char *hex = "0123456789abcdef";
@@ -5294,15 +5440,14 @@ static void VerifyModel(const std::filesystem::path &path, const char *expected)
     }
     BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(algorithm, 0);
+    return verified;
 }
 static std::wstring DownloadModel(const ModelFile &file)
 {
-    wchar_t local[32768];
-    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, 32768);
-    if (!n || n >= 32768)
-        throw std::runtime_error("LOCALAPPDATA unavailable");
-    auto folder = std::filesystem::path(local) / L"DepthWallpaperNative" / L"models";
+    CheckCancelled();
+    auto folder = CacheFolder() / L"models";
     std::filesystem::create_directories(folder);
+    auto directoryLocks = LockDirectories(folder);
     auto path = folder / file.filename;
     if (std::filesystem::exists(path))
     {
@@ -5310,7 +5455,11 @@ static std::wstring DownloadModel(const ModelFile &file)
         return path.wstring();
     }
     auto partial = path;
-    partial += L".partial";
+    GUID id{};
+    check_hresult(CoCreateGuid(&id));
+    wchar_t suffix[40];
+    check_bool(StringFromGUID2(id, suffix, ARRAYSIZE(suffix)) != 0);
+    partial += std::wstring(suffix) + L".partial";
     activeDownloadPath = path.wstring();
     auto cb = make<DownloadProgress>();
     Wh_Log(L"Baixando %s; desative o mod para cancelar", file.filename);
@@ -5332,33 +5481,39 @@ static std::wstring DownloadModel(const ModelFile &file)
 }
 
 static const ModelFile depthModels[] = {
-    {L"https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/4472b7362082ad9968fee890ca0f1e5aca36b93d/"
+    {L"https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/"
+     L"4472b7362082ad9968fee890ca0f1e5aca36b93d/"
      L"onnx/model.onnx",
      L"dav2-small.onnx", "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c"},
-    {L"https://huggingface.co/Jens-Duttke/Depth-Anything-3-MONO-ONNX/resolve/17ee0593a09b26b69e0922f1e794fa32b025349e/"
+    {L"https://huggingface.co/Jens-Duttke/Depth-Anything-3-MONO-ONNX/resolve/"
+     L"17ee0593a09b26b69e0922f1e794fa32b025349e/"
      L"da-v3-mono-large_fp16_opset21_optimized.onnx",
      L"da3-mono-fp16.onnx", "33f7e4e609bb13ba7874edcc274a92a6ca5cbea8d1c54abeb1dbb2e7441fb764"}};
+static const ModelFile midasModel = {
+    L"https://github.com/isl-org/MiDaS/releases/download/v2_1/model-small.onnx", L"model-small.onnx",
+    "2d8c6cb8f415229daf1eb041024208e2608c9f98e17c81cc7c6ecb449c56fd58"};
+static constexpr const char *runtimeHash = "4cb41e89b8bf30578e1dd95e9c40292d61974a4bfcd666409302c4f0c5aa8ce0";
 static std::wstring EnsureRuntime()
 {
     if (!runtimeFolder.empty())
-        return runtimeFolder;
-    wchar_t local[32768];
-    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, 32768);
-    if (!n || n >= 32768)
-        throw std::runtime_error("LOCALAPPDATA unavailable");
-    auto folder = std::filesystem::path(local) / L"DepthWallpaperNative" / L"runtime-1.20.1";
+        return std::filesystem::absolute(runtimeFolder).lexically_normal().wstring();
+    auto folder = CacheFolder() / L"runtime-1.20.1";
     std::filesystem::create_directories(folder);
+    auto directoryLocks = LockDirectories(folder);
     auto dll = folder / L"onnxruntime.dll";
     if (std::filesystem::exists(dll))
     {
         VerifyModel(dll, "4cb41e89b8bf30578e1dd95e9c40292d61974a4bfcd666409302c4f0c5aa8ce0");
         return folder.wstring();
     }
-    ModelFile runtime = {
-        L"https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-win-x64-1.20.1.zip",
-        L"onnxruntime-1.20.1.zip", "78d447051e48bd2e1e778bba378bec4ece11191c9e538cf7b2c4a4565e8f5581"};
+    ModelFile runtime = {L"https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/"
+                         L"onnxruntime-win-x64-1.20.1.zip",
+                         L"onnxruntime-1.20.1.zip",
+                         "78d447051e48bd2e1e778bba378bec4ece11191c9e538cf7b2c4a4565e8f5581"};
     auto archive = DownloadModel(runtime);
-    // Windows Shell ZIP support extracts the single runtime DLL without scripts.
+    auto archiveLock = VerifyModel(archive, runtime.sha256);
+    // Windows Shell ZIP support extracts the single runtime DLL without
+    // scripts.
     auto shell = create_instance<IShellDispatch>(CLSID_Shell, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER);
     VARIANT sourcePath;
     VariantInit(&sourcePath);
@@ -5401,7 +5556,8 @@ static std::wstring EnsureRuntime()
         if (std::filesystem::exists(dll))
             try
             {
-                VerifyModel(dll, "4cb41e89b8bf30578e1dd95e9c40292d61974a4bfcd666409302c4f0c5aa8ce0");
+                VerifyModel(dll, "4cb41e89b8bf30578e1dd95e9c40292d61974a4bfcd6664093"
+                                 "02c4f0c5aa8ce0");
                 return folder.wstring();
             }
             catch (const std::exception &)
@@ -5412,8 +5568,84 @@ static std::wstring EnsureRuntime()
     throw std::runtime_error("Runtime extraction cancelled or timed out");
 }
 // ONNX Runtime is loaded into Explorer; no child process or Python is used.
+// ONNX FLOAT16 tensors store IEEE 754 binary16 bits. Use integer storage so
+// conversion doesn't depend on compiler-specific half-precision types.
+static uint16_t FloatToHalf(float value)
+{
+    uint32_t bits = std::bit_cast<uint32_t>(value);
+    uint16_t sign = static_cast<uint16_t>((bits >> 16) & 0x8000);
+    uint32_t exponent = (bits >> 23) & 0xff;
+    uint32_t fraction = bits & 0x7fffff;
+    if (exponent == 0xff)
+        return sign | (fraction ? 0x7e00 : 0x7c00);
+    if (exponent > 142)
+        return sign | 0x7c00;
+    if (exponent < 102)
+        return sign;
+
+    // Round to nearest, with ties to even, including subnormal results.
+    uint32_t mantissa = fraction;
+    unsigned shift = 13;
+    uint32_t result = 0;
+    if (exponent < 113)
+    {
+        mantissa |= 0x800000;
+        shift = 126 - exponent;
+    }
+    else
+        result = (exponent - 112) << 10;
+    uint32_t rounded = mantissa >> shift;
+    uint32_t remainder = mantissa & ((1u << shift) - 1);
+    uint32_t midpoint = 1u << (shift - 1);
+    if (remainder > midpoint || (remainder == midpoint && (rounded & 1)))
+        ++rounded;
+    return static_cast<uint16_t>(sign | (result + rounded));
+}
+
+static float HalfToFloat(uint16_t value)
+{
+    uint32_t sign = static_cast<uint32_t>(value & 0x8000) << 16;
+    uint32_t exponent = (value >> 10) & 0x1f;
+    uint32_t fraction = value & 0x3ff;
+    if (exponent == 0)
+    {
+        // ldexp is exact for all binary16 subnormal values and preserves zero.
+        float magnitude = std::ldexp(static_cast<float>(fraction), -24);
+        return sign ? -magnitude : magnitude;
+    }
+    uint32_t bits = sign | ((exponent == 31 ? 255 : exponent + 112) << 23) | (fraction << 13);
+    return std::bit_cast<float>(bits);
+}
+
+static std::pair<int, int> DepthOutputSize(const std::vector<int64_t> &dims, size_t count,
+                                           ONNXTensorElementDataType type)
+{
+    if ((type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT && type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) ||
+        dims.size() < 2 || dims.size() > 4)
+        throw std::runtime_error("Expected one float32/float16 depth map");
+    for (size_t i = 0; i + 2 < dims.size(); ++i)
+        if (dims[i] != 1)
+            throw std::runtime_error("Expected one depth output batch/channel");
+    int64_t h = dims[dims.size() - 2], w = dims.back();
+    if (w < 2 || h < 2 || w > 2048 || h > 2048 || count != static_cast<size_t>(w) * static_cast<size_t>(h))
+        throw std::runtime_error("Depth output exceeds supported dimensions (2..2048)");
+    return {static_cast<int>(w), static_cast<int>(h)};
+}
+
+static void ValidateSamOutput(const std::vector<int64_t> &dims, size_t count, ONNXTensorElementDataType type)
+{
+    size_t rank = dims.size();
+    if (type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT || (rank != 3 && rank != 4))
+        throw std::runtime_error("Expected float32 SAM masks");
+    if ((rank == 4 && dims[0] != 1) || dims[rank - 3] != 4 || dims[rank - 2] != 256 ||
+        dims[rank - 1] != 256 || count != 4 * 256 * 256)
+        throw std::runtime_error("SAM decoder output differs from pinned export");
+}
+
 struct OrtEngine
 {
+    OrtEngine(const OrtEngine &) = delete;
+    OrtEngine &operator=(const OrtEngine &) = delete;
     HMODULE library{};
     const OrtApi *api{};
     OrtEnv *env{};
@@ -5421,6 +5653,8 @@ struct OrtEngine
     OrtSession *session{};
     OrtMemoryInfo *memory{};
     OrtAllocator *allocator{};
+    VerifiedFile runtimeLock;
+    VerifiedFile modelLock;
     void Check(OrtStatus *status)
     {
         if (status)
@@ -5430,25 +5664,31 @@ struct OrtEngine
             throw std::runtime_error(message);
         }
     }
-    explicit OrtEngine(const std::wstring &model)
+    explicit OrtEngine(const std::wstring &model, const char *expectedHash)
     {
+        auto modelFile = std::filesystem::absolute(model).lexically_normal();
+        modelLock = VerifyModel(modelFile, expectedHash);
         std::wstring dll = EnsureRuntime() + L"\\onnxruntime.dll";
+        runtimeLock = VerifyModel(dll, runtimeHash);
         Wh_Log(L"Runtime ativo: %s", dll.c_str());
-        library =
-            LoadLibraryExW(dll.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        library = LoadLibraryExW(dll.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!library)
-            throw hresult_error(HRESULT_FROM_WIN32(GetLastError()),
-                                L"Configure RuntimeFolder com a pasta do pacote ONNX Runtime x64");
+            throw hresult_error(HRESULT_FROM_WIN32(GetLastError()), L"Configure RuntimeFolder com a pasta do "
+                                                                    L"pacote ONNX Runtime x64");
         try
         {
             auto get = (const OrtApiBase *(ORT_API_CALL *)())GetProcAddress(library, "OrtGetApiBase");
             if (!get || !(api = get()->GetApi(ORT_API_VERSION)))
                 throw std::runtime_error("Incompatible ONNX Runtime API");
             Check(api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "DepthWallpaper", &env));
+            Check(api->DisableTelemetryEvents(env));
             Check(api->CreateSessionOptions(&options));
             Check(api->SetSessionGraphOptimizationLevel(options, ORT_ENABLE_ALL));
             Check(api->SetIntraOpNumThreads(options, 2));
-            Check(api->CreateSession(env, model.c_str(), options, &session));
+            Check(api->SetInterOpNumThreads(options, 1));
+            CheckCancelled();
+            Check(api->CreateSession(env, modelFile.c_str(), options, &session));
+            CheckCancelled();
             Check(api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory));
             Check(api->GetAllocatorWithDefaultOptions(&allocator));
         }
@@ -5478,12 +5718,67 @@ struct OrtEngine
     {
         Release();
     }
+    void Run(const char *const *names, const OrtValue *const *inputs, size_t inputCount,
+             const char *const *outputNames, size_t outputCount, OrtValue **outputs)
+    {
+        CheckCancelled();
+        OrtRunOptions *raw = nullptr;
+        Check(api->CreateRunOptions(&raw));
+        auto releaseOptions = [this](OrtRunOptions *value)
+        {
+            api->ReleaseRunOptions(value);
+        };
+        std::unique_ptr<OrtRunOptions, decltype(releaseOptions)> runOptions(raw, releaseOptions);
+        std::atomic<bool> expired{false};
+        // ORT termination is cooperative. Keep options and the DLL alive until
+        // Run returns; never detach a thread that executes code from this mod.
+        std::jthread watchdog(
+            [&](std::stop_token token)
+            {
+                auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
+                while (!token.stop_requested())
+                {
+                    if (stop || std::chrono::steady_clock::now() >= deadline)
+                    {
+                        expired = true;
+                        if (auto status = api->RunOptionsSetTerminate(raw))
+                            api->ReleaseStatus(status);
+                        return;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+                }
+            });
+        auto status = api->Run(session, raw, names, inputs, inputCount, outputNames, outputCount, outputs);
+        watchdog.request_stop();
+        watchdog.join();
+        try
+        {
+            Check(status);
+            CheckCancelled();
+            if (expired)
+                throw std::runtime_error("Inference exceeded the two-minute limit");
+        }
+        catch (...)
+        {
+            for (size_t i = 0; i < outputCount; ++i)
+                if (outputs[i])
+                {
+                    api->ReleaseValue(outputs[i]);
+                    outputs[i] = nullptr;
+                }
+            throw;
+        }
+    }
     std::vector<float> Evaluate(const std::vector<float> &tensor, int side, int &w, int &h)
     {
+        CheckCancelled();
+        if ((side != 256 && side != 518) || tensor.size() != 3 * static_cast<size_t>(side) * side)
+            throw std::runtime_error("Unexpected depth input dimensions");
         OrtValue *input = nullptr, *output = nullptr;
         char *inputName = nullptr, *outputName = nullptr;
         OrtTensorTypeAndShapeInfo *info = nullptr;
-        auto release = [&] {
+        auto release = [&]
+        {
             if (info)
                 api->ReleaseTensorTypeAndShapeInfo(info);
             if (input)
@@ -5499,21 +5794,22 @@ struct OrtEngine
         {
             Check(api->SessionGetInputName(session, 0, allocator, &inputName));
             Check(api->SessionGetOutputName(session, 0, allocator, &outputName));
-            std::vector<_Float16> half;
+            std::vector<uint16_t> half;
             if (depthAnything3)
             {
                 half.reserve(tensor.size());
                 for (float v : tensor)
-                    half.push_back((_Float16)v);
+                    half.push_back(FloatToHalf(v));
             }
             int64_t shape[] = {1, 3, side, side};
             Check(api->CreateTensorWithDataAsOrtValue(
                 memory, depthAnything3 ? (void *)half.data() : (void *)tensor.data(),
-                tensor.size() * (depthAnything3 ? sizeof(_Float16) : sizeof(float)), shape, 4,
-                depthAnything3 ? ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16 : ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input));
+                tensor.size() * (depthAnything3 ? sizeof(uint16_t) : sizeof(float)), shape, 4,
+                depthAnything3 ? ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16 : ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+                &input));
             const char *inputs[] = {inputName};
             const char *outputs[] = {outputName};
-            Check(api->Run(session, nullptr, inputs, &input, 1, outputs, 1, &output));
+            Run(inputs, &input, 1, outputs, 1, &output);
             Check(api->GetTensorTypeAndShape(output, &info));
             size_t dimensions = 0, count = 0;
             Check(api->GetDimensionsCount(info, &dimensions));
@@ -5524,17 +5820,17 @@ struct OrtEngine
             Check(api->GetTensorShapeElementCount(info, &count));
             ONNXTensorElementDataType type;
             Check(api->GetTensorElementType(info, &type));
-            h = (int)dims[dimensions - 2];
-            w = (int)dims[dimensions - 1];
-            if ((type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT && type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16) ||
-                w < 2 || h < 2 || count != (size_t)w * h)
-                throw std::runtime_error("Expected one float32/float16 depth map");
+            std::tie(w, h) = DepthOutputSize(dims, count, type);
             void *data = nullptr;
             Check(api->GetTensorMutableData(output, &data));
             std::vector<float> result(count);
             for (size_t i = 0; i < count; i++)
-                result[i] =
-                    type == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16 ? (float)((_Float16 *)data)[i] : ((float *)data)[i];
+            {
+                if ((i & 4095) == 0)
+                    CheckCancelled();
+                result[i] = type == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16 ? HalfToFloat(((uint16_t *)data)[i])
+                                                                          : ((float *)data)[i];
+            }
             release();
             return result;
         }
@@ -5546,10 +5842,12 @@ struct OrtEngine
     }
 };
 static const ModelFile samModels[] = {
-    {L"https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/12bdf0f712731bd0b52ccbff807683ce49b726b9/"
+    {L"https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/"
+     L"12bdf0f712731bd0b52ccbff807683ce49b726b9/"
      L"encoder.onnx",
      L"sam21-tiny-encoder.onnx", "4fda6e68561e27808cedffa8689749a622bba5f11ba66f4ca4e3a8a9f6360db5"},
-    {L"https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/12bdf0f712731bd0b52ccbff807683ce49b726b9/"
+    {L"https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/"
+     L"12bdf0f712731bd0b52ccbff807683ce49b726b9/"
      L"decoder.onnx",
      L"sam21-tiny-decoder.onnx", "0ae944e08e55814c19afa4d143ef07b1a3dbad2decd77c15ec3ab220b9f57247"}};
 struct SamCacheEntry
@@ -5575,17 +5873,20 @@ static std::vector<float> SegmentSam(const std::wstring &path, int w, int h, con
         samCache.clear();
     auto encoderPath = DownloadModel(samModels[0]);
     auto decoderPath = DownloadModel(samModels[1]);
-    OrtEngine encoder(encoderPath), decoder(decoderPath);
+    OrtEngine encoder(encoderPath, samModels[0].sha256), decoder(decoderPath, samModels[1].sha256);
     auto a = encoder.api;
     std::vector<OrtValue *> owned;
-    auto cleanup = [&] {
+    owned.reserve(8);
+    auto cleanup = [&]
+    {
         for (auto value : owned)
             a->ReleaseValue(value);
     };
-    auto tensor = [&](void *ptr, size_t bytes, std::vector<int64_t> shape, ONNXTensorElementDataType type) {
+    auto tensor = [&](void *ptr, size_t bytes, std::vector<int64_t> shape, ONNXTensorElementDataType type)
+    {
         OrtValue *v = nullptr;
-        encoder.Check(
-            a->CreateTensorWithDataAsOrtValue(encoder.memory, ptr, bytes, shape.data(), shape.size(), type, &v));
+        encoder.Check(a->CreateTensorWithDataAsOrtValue(encoder.memory, ptr, bytes, shape.data(),
+                                                        shape.size(), type, &v));
         owned.push_back(v);
         return v;
     };
@@ -5597,14 +5898,16 @@ static std::vector<float> SegmentSam(const std::wstring &path, int w, int h, con
         for (int c = 0; c < 3; c++)
             for (int i = 0; i < 1024 * 1024; i++)
                 rgb[c * 1024 * 1024 + i] = (image[i * 4 + 2 - c] / 255.f - mean[c]) / sd[c];
-        OrtValue *input = tensor(rgb.data(), rgb.size() * 4, {1, 3, 1024, 1024}, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT);
+        OrtValue *input =
+            tensor(rgb.data(), rgb.size() * 4, {1, 3, 1024, 1024}, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT);
         const char *in[] = {"image"};
         const char *embeddingNames[] = {"image_embed", "high_res_0", "high_res_1"};
         OrtValue *embeds[3]{};
-        encoder.Check(a->Run(encoder.session, nullptr, in, &input, 1, embeddingNames, 3, embeds));
+        encoder.Run(in, &input, 1, embeddingNames, 3, embeds);
         for (auto value : embeds)
             owned.push_back(value);
-        // Choose a foreground point from the near-depth region, away from edges.
+        // Choose a foreground point from the near-depth region, away from
+        // edges.
         int best = (h / 2) * w + w / 2;
         float score = -INFINITY;
         for (int y = h / 8; y < 7 * h / 8; y++)
@@ -5619,7 +5922,8 @@ static std::vector<float> SegmentSam(const std::wstring &path, int w, int h, con
                 }
             }
         // Decode the linear pixel index using integer arithmetic first.
-        // Row division must truncate; only coordinate scaling is floating point.
+        // Row division must truncate; only coordinate scaling is floating
+        // point.
         const int promptColumn = best % w;
         const int promptRow = best / w;
         float points[] = {static_cast<float>(promptColumn) * 1024.0f / static_cast<float>(w),
@@ -5631,32 +5935,51 @@ static std::vector<float> SegmentSam(const std::wstring &path, int w, int h, con
         const OrtValue *inputs[] = {embeds[0], embeds[1], embeds[2], coords, lab};
         const char *outputs[] = {"mask_logits", "iou"};
         OrtValue *values[2]{};
-        decoder.Check(a->Run(decoder.session, nullptr, names, inputs, 5, outputs, 2, values));
+        decoder.Run(names, inputs, 5, outputs, 2, values);
         for (auto value : values)
             owned.push_back(value);
+        OrtTensorTypeAndShapeInfo *rawInfo = nullptr;
+        encoder.Check(a->GetTensorTypeAndShape(values[0], &rawInfo));
+        auto releaseInfo = [a](OrtTensorTypeAndShapeInfo *info)
+        {
+            a->ReleaseTensorTypeAndShapeInfo(info);
+        };
+        std::unique_ptr<OrtTensorTypeAndShapeInfo, decltype(releaseInfo)> info(rawInfo, releaseInfo);
+        size_t count = 0;
+        size_t rank = 0;
+        ONNXTensorElementDataType type;
+        encoder.Check(a->GetTensorElementType(info.get(), &type));
+        encoder.Check(a->GetDimensionsCount(info.get(), &rank));
+        if (type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT || (rank != 3 && rank != 4))
+            throw std::runtime_error("Expected float32 SAM masks");
+        std::vector<int64_t> dims(rank);
+        encoder.Check(a->GetDimensions(info.get(), dims.data(), dims.size()));
+        encoder.Check(a->GetTensorShapeElementCount(info.get(), &count));
+        ValidateSamOutput(dims, count, type);
         float *logits = nullptr;
         encoder.Check(a->GetTensorMutableData(values[0], (void **)&logits));
-        OrtTensorTypeAndShapeInfo *info = nullptr;
-        encoder.Check(a->GetTensorTypeAndShape(values[0], &info));
-        size_t count = 0;
-        auto status = a->GetTensorShapeElementCount(info, &count);
-        a->ReleaseTensorTypeAndShapeInfo(info);
-        encoder.Check(status);
-        if (count != 4 * 256 * 256)
-            throw std::runtime_error("SAM decoder output differs from pinned export");
-        std::vector<float> mask(w * h);
+        for (size_t i = 0; i < count; ++i)
+            if (!std::isfinite(logits[i]))
+                throw std::runtime_error("SAM decoder produced non-finite logits");
+        std::vector<float> mask(static_cast<size_t>(w) * h);
         for (int y = 0; y < h; y++)
+        {
+            CheckCancelled();
             for (int x = 0; x < w; x++)
             {
                 float fx = std::clamp((x + .5f) * 256 / w - .5f, 0.f, 255.f),
                       fy = std::clamp((y + .5f) * 256 / h - .5f, 0.f, 255.f);
                 int ix = (int)fx, iy = (int)fy;
                 float ax = fx - ix, ay = fy - iy;
-                auto at = [&](int xx, int yy) { return logits[std::min(yy, 255) * 256 + std::min(xx, 255)]; };
+                auto at = [&](int xx, int yy)
+                {
+                    return logits[std::min(yy, 255) * 256 + std::min(xx, 255)];
+                };
                 float v = (at(ix, iy) * (1 - ax) + at(ix + 1, iy) * ax) * (1 - ay) +
                           (at(ix, iy + 1) * (1 - ax) + at(ix + 1, iy + 1) * ax) * ay;
                 mask[y * w + x] = std::clamp(v * .25f + .5f, 0.f, 1.f);
             }
+        }
         if (useCache)
         {
             if (samCache.size() >= 2)
@@ -5683,36 +6006,10 @@ struct DepthCacheEntry
 static std::vector<DepthCacheEntry> depthCache;
 static void Infer()
 {
-    if (depthAnything && modelPath.empty())
-        modelPath = DownloadModel(depthModels[depthAnything3 ? 1 : 0]);
     if (modelPath.empty())
-    {
-        wchar_t local[32768];
-        DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, 32768);
-        if (!n || n >= 32768)
-            throw hresult_error(E_FAIL);
-        auto folder = std::filesystem::path(local) / L"DepthWallpaperNative";
-        std::filesystem::create_directories(folder);
-        modelPath = (folder / L"model-small.onnx").wstring();
-        if (!std::filesystem::exists(modelPath))
-        {
-            Wh_Log(L"Baixando modelo MiDaS small...");
-            auto tmp = modelPath + L".partial";
-            activeDownloadPath = modelPath;
-            auto cb = make<DownloadProgress>();
-            HRESULT hr =
-                URLDownloadToFileW(nullptr, L"https://github.com/isl-org/MiDaS/releases/download/v2_1/model-small.onnx",
-                                   tmp.c_str(), 0, cb.get());
-            if (FAILED(hr))
-            {
-                DeleteFileW(tmp.c_str());
-                check_hresult(hr);
-            }
-            check_hresult(MoveFileExW(tmp.c_str(), modelPath.c_str(), MOVEFILE_REPLACE_EXISTING)
-                              ? S_OK
-                              : HRESULT_FROM_WIN32(GetLastError()));
-        }
-    }
+        modelPath = DownloadModel(depthAnything ? depthModels[depthAnything3 ? 1 : 0] : midasModel);
+    auto modelLock = VerifyModel(modelPath, depthAnything ? depthModels[depthAnything3 ? 1 : 0].sha256
+                                                          : midasModel.sha256);
     if (stop)
         return;
     int side = depthAnything ? 518 : 256;
@@ -5726,29 +6023,21 @@ static void Infer()
             if (entry.path == modelPath && entry.time == modelTime && entry.revision == revision &&
                 entry.input == input)
             {
-                cachedRaw = entry.raw;
-                cachedInput = input;
-                cachedModel = modelPath;
-                cachedModelTime = modelTime;
-                cachedRevision = revision;
-                cachedW = entry.w;
-                cachedH = entry.h;
-                cachedDevice = deviceKind;
+                raw = entry.raw;
+                dw = entry.w;
+                dh = entry.h;
                 break;
             }
     if (!useCache)
         depthCache.clear();
-    if (useCache && !cachedRaw.empty() && input == cachedInput && modelPath == cachedModel &&
-        modelTime == cachedModelTime && revision == cachedRevision && deviceKind == cachedDevice)
+    if (!raw.empty())
     {
-        raw = cachedRaw;
-        dw = cachedW;
-        dh = cachedH;
         Wh_Log(L"Reutilizando mapa em memória");
     }
     else
     {
-        OrtEngine engine(modelPath);
+        OrtEngine engine(modelPath,
+                         depthAnything ? depthModels[depthAnything3 ? 1 : 0].sha256 : midasModel.sha256);
         std::vector<float> tensor(3 * side * side);
         const float mean[] = {.485f, .456f, .406f}, sd[] = {.229f, .224f, .225f};
         for (int c = 0; c < 3; c++)
@@ -5761,19 +6050,6 @@ static void Infer()
             if (depthCache.size() >= 4)
                 depthCache.erase(depthCache.begin());
             depthCache.push_back({modelPath, modelTime, revision, dw, dh, input, raw});
-            cachedRaw = raw;
-            cachedInput = input;
-            cachedModel = modelPath;
-            cachedModelTime = modelTime;
-            cachedRevision = revision;
-            cachedW = dw;
-            cachedH = dh;
-            cachedDevice = deviceKind;
-        }
-        else
-        {
-            cachedRaw.clear();
-            cachedInput.clear();
         }
     }
     std::vector<float> sorted;
@@ -5783,7 +6059,9 @@ static void Infer()
     if (sorted.empty())
         throw hresult_error(E_FAIL, L"Mapa de profundidade inválido");
     std::sort(sorted.begin(), sorted.end());
-    float lo = sorted[(sorted.size() - 1) * lowPercent / 100], hi = sorted[(sorted.size() - 1) * highPercent / 100];
+    CheckCancelled();
+    float lo = sorted[(sorted.size() - 1) * lowPercent / 100],
+          hi = sorted[(sorted.size() - 1) * highPercent / 100];
     if (hi - lo < 1e-8f)
     {
         lo = sorted.front();
@@ -5791,6 +6069,7 @@ static void Infer()
     }
     for (float &v : raw)
     {
+        CheckCancelled();
         v = std::isfinite(v) && hi - lo >= 1e-8f ? std::clamp((v - lo) / (hi - lo), 0.f, 1.f) : .5f;
         if (invert)
             v = 1 - v;
@@ -5800,6 +6079,8 @@ static void Infer()
     {
         auto original = raw;
         for (int y = 0; y < dh; y++)
+        {
+            CheckCancelled();
             for (int x = 0; x < dw; x++)
             {
                 float sum = 0;
@@ -5807,23 +6088,30 @@ static void Infer()
                 for (int yy = std::max(0, y - blurRadius); yy <= std::min(dh - 1, y + blurRadius); yy++)
                     for (int xx = std::max(0, x - blurRadius); xx <= std::min(dw - 1, x + blurRadius); xx++)
                     {
-                        sum += original[yy * dw + xx];
+                        sum += original[static_cast<size_t>(yy) * dw + xx];
                         count++;
                     }
-                raw[y * dw + x] = sum / count;
+                raw[static_cast<size_t>(y) * dw + x] = sum / count;
             }
+        }
     }
-    depth.resize(width * height);
+    depth.resize(static_cast<size_t>(width) * height);
     for (int y = 0; y < height; y++)
+    {
+        CheckCancelled();
         for (int x = 0; x < width; x++)
         {
             float fx = float(x) * (dw - 1) / (width - 1), fy = float(y) * (dh - 1) / (height - 1);
             int ix = (int)fx, iy = (int)fy;
             float ax = fx - ix, ay = fy - iy;
-            auto sample = [&](int xx, int yy) { return raw[std::min(yy, dh - 1) * dw + std::min(xx, dw - 1)]; };
+            auto sample = [&](int xx, int yy)
+            {
+                return raw[static_cast<size_t>(std::clamp(yy, 0, dh - 1)) * dw + std::clamp(xx, 0, dw - 1)];
+            };
             depth[y * width + x] = (sample(ix, iy) * (1 - ax) + sample(ix + 1, iy) * ax) * (1 - ay) +
                                    (sample(ix, iy + 1) * (1 - ax) + sample(ix + 1, iy + 1) * ax) * ay;
         }
+    }
     Wh_Log(L"Mapa pronto");
 }
 // Desktop discovery adapted from Parallax Wallpaper 0.9.0, HaVeN80, MIT.
@@ -5843,7 +6131,8 @@ static Host FindHost()
     GetWindowThreadProcessId(prog, &owner);
     HWND view = FindWindowExW(prog, nullptr, L"SHELLDLL_DefView", nullptr);
     HWND wall = FindWindowExW(prog, nullptr, L"WorkerW", nullptr);
-    if (owner == shell && view && wall && (GetWindowLongPtrW(prog, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) &&
+    if (owner == shell && view && wall &&
+        (GetWindowLongPtrW(prog, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) &&
         (GetWindowLongPtrW(view, GWL_EXSTYLE) & WS_EX_LAYERED))
         return {prog, view};
     struct Search
@@ -5853,7 +6142,8 @@ static Host FindHost()
     };
     Search search{shell, nullptr};
     EnumWindows(
-        [](HWND h, LPARAM data) -> BOOL {
+        [](HWND h, LPARAM data) -> BOOL
+        {
             auto &s = *(Search *)data;
             DWORD p = 0;
             GetWindowThreadProcessId(h, &p);
@@ -5870,7 +6160,8 @@ static Host FindHost()
     wall = FindWindowExW(nullptr, search.found, L"WorkerW", nullptr);
     owner = 0;
     GetWindowThreadProcessId(wall, &owner);
-    if (wall && owner == shell && IsWindowVisible(wall) && !FindWindowExW(wall, nullptr, L"SHELLDLL_DefView", nullptr))
+    if (wall && owner == shell && IsWindowVisible(wall) &&
+        !FindWindowExW(wall, nullptr, L"SHELLDLL_DefView", nullptr))
         return {wall, nullptr};
     return {};
 }
@@ -5879,7 +6170,8 @@ static std::vector<RECT> Displays()
     std::vector<RECT> result;
     EnumDisplayMonitors(
         nullptr, nullptr,
-        [](HMONITOR, HDC, LPRECT r, LPARAM d) -> BOOL {
+        [](HMONITOR, HDC, LPRECT r, LPARAM d) -> BOOL
+        {
             ((std::vector<RECT> *)d)->push_back(*r);
             return TRUE;
         },
@@ -5894,8 +6186,8 @@ static std::wstring WallpaperFor(RECT rect, const std::wstring &overridePath)
     // COM server. C++/WinRT defaults to INPROC_SERVER, which can produce
     // REGDB_E_CLASSNOTREG even when the shell class is correctly registered.
     com_ptr<IDesktopWallpaper> wall;
-    HRESULT activation =
-        CoCreateInstance(CLSID_DesktopWallpaper, nullptr, CLSCTX_ALL, __uuidof(IDesktopWallpaper), wall.put_void());
+    HRESULT activation = CoCreateInstance(CLSID_DesktopWallpaper, nullptr, CLSCTX_ALL,
+                                          __uuidof(IDesktopWallpaper), wall.put_void());
     if (FAILED(activation))
     {
         Wh_Log(L"IDesktopWallpaper indisponível: 0x%08X; usando wallpaper global", (unsigned)activation);
@@ -5939,17 +6231,19 @@ struct Graphics
     com_ptr<ID3D11Buffer> constants;
     void Init()
     {
-        D3D_FEATURE_LEVEL level;
-        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                                       nullptr, 0, D3D11_SDK_VERSION, device.put(), &level, context.put());
+        HRESULT hr =
+            D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                              nullptr, 0, D3D11_SDK_VERSION, device.put(), nullptr, context.put());
         if (FAILED(hr))
-            check_hresult(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                                            nullptr, 0, D3D11_SDK_VERSION, device.put(), &level, context.put()));
+            check_hresult(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
+                                            D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION,
+                                            device.put(), nullptr, context.put()));
         auto dxgi = device.as<IDXGIDevice>();
         com_ptr<IDXGIAdapter> adapter;
         check_hresult(dxgi->GetAdapter(adapter.put()));
         check_hresult(adapter->GetParent(__uuidof(IDXGIFactory2), factory.put_void()));
-        check_hresult(DCompositionCreateDevice(dxgi.get(), __uuidof(IDCompositionDevice), composition.put_void()));
+        check_hresult(
+            DCompositionCreateDevice(dxgi.get(), __uuidof(IDCompositionDevice), composition.put_void()));
         const char *shader = R"(
 Texture2D photo:register(t0); Texture2D depth:register(t1);
 SamplerState linearClamp:register(s0);
@@ -5958,7 +6252,8 @@ struct Varying{float4 position:SV_POSITION;float2 uv:TEXCOORD0;};
 Varying VS(uint id:SV_VertexID){Varying o;float2 p=float2((id<<1)&2,id&2);o.uv=float2(p.x,1-p.y);o.position=float4(p*2-1,0,1);return o;}
 float4 PS(Varying i):SV_TARGET{float2 uv=(i.uv-.5)/zoom+.5;float d=depth.SampleLevel(linearClamp,uv,0).r-focus;return float4(photo.SampleLevel(linearClamp,uv+offset*d,0).rgb,1);}
 )";
-        auto compile = [&](const char *entry, const char *profile) {
+        auto compile = [&](const char *entry, const char *profile)
+        {
             com_ptr<ID3DBlob> code, error;
             HRESULT r = D3DCompile(shader, strlen(shader), nullptr, nullptr, nullptr, entry, profile,
                                    D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, code.put(), error.put());
@@ -5971,8 +6266,10 @@ float4 PS(Varying i):SV_TARGET{float2 uv=(i.uv-.5)/zoom+.5;float d=depth.SampleL
             return code;
         };
         auto vs = compile("VS", "vs_4_0"), ps = compile("PS", "ps_4_0");
-        check_hresult(device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, vertex.put()));
-        check_hresult(device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, pixel.put()));
+        check_hresult(
+            device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, vertex.put()));
+        check_hresult(
+            device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, pixel.put()));
         D3D11_SAMPLER_DESC sd{};
         sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -5994,6 +6291,9 @@ float4 PS(Varying i):SV_TARGET{float2 uv=(i.uv-.5)/zoom+.5;float d=depth.SampleL
 static std::unique_ptr<Graphics> graphics;
 struct Pane
 {
+    Pane() = default;
+    Pane(const Pane &) = delete;
+    Pane &operator=(const Pane &) = delete;
     HWND hwnd{};
     RECT rect{};
     int w{}, h{};
@@ -6044,7 +6344,9 @@ struct Pane
         com_ptr<ID3D11Texture2D> buffer;
         check_hresult(swap->GetBuffer(0, __uuidof(ID3D11Texture2D), buffer.put_void()));
         check_hresult(g.device->CreateRenderTargetView(buffer.get(), nullptr, renderTarget.put()));
-        auto texture = [&](DXGI_FORMAT format, const void *data, UINT pitch, com_ptr<ID3D11ShaderResourceView> &view) {
+        auto texture =
+            [&](DXGI_FORMAT format, const void *data, UINT pitch, com_ptr<ID3D11ShaderResourceView> &view)
+        {
             D3D11_TEXTURE2D_DESC td{};
             td.Width = w;
             td.Height = h;
@@ -6110,7 +6412,8 @@ struct Pane
         ctx->OMSetRenderTargets(0, nullptr, nullptr);
         check_hresult(swap->Present(0, 0));
         if (!presented)
-            Wh_Log(L"Primeiro quadro GPU apresentado: %ld x %ld", rect.right - rect.left, rect.bottom - rect.top);
+            Wh_Log(L"Primeiro quadro GPU apresentado: %ld x %ld", rect.right - rect.left,
+                   rect.bottom - rect.top);
         presented = true;
         return true;
     }
@@ -6161,16 +6464,16 @@ static void CreatePreviewControls(HWND hwnd)
 {
     INITCOMMONCONTROLSEX cc{sizeof(cc), ICC_BAR_CLASSES};
     InitCommonControlsEx(&cc);
-    CreateWindowExW(0, L"STATIC", L"Ajustes ao vivo — válidos nesta sessão", WS_CHILD | WS_VISIBLE | SS_LEFT, 16, 12,
-                    330, 24, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+    CreateWindowExW(0, L"STATIC", L"Ajustes ao vivo — válidos nesta sessão", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                    16, 12, 330, 24, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
     int y = 40;
     for (auto spec : previewSliders)
     {
         CreateWindowExW(0, L"STATIC", spec.title, WS_CHILD | WS_VISIBLE | SS_LEFT, 16, y, 330, 22, hwnd,
                         (HMENU)(INT_PTR)(spec.id + 100), GetModuleHandleW(nullptr), nullptr);
-        HWND slider =
-            CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ, 16, y + 22, 300, 30,
-                            hwnd, (HMENU)(INT_PTR)spec.id, GetModuleHandleW(nullptr), nullptr);
+        HWND slider = CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ,
+                                      16, y + 22, 300, 30, hwnd, (HMENU)(INT_PTR)spec.id,
+                                      GetModuleHandleW(nullptr), nullptr);
         SendMessageW(slider, TBM_SETRANGE, TRUE, MAKELPARAM(spec.minimum, spec.maximum));
         y += 60;
     }
@@ -6233,9 +6536,12 @@ static void Run()
         init_apartment(apartment_type::multi_threaded);
         apartment = true;
         using SetDpiContext = HANDLE(WINAPI *)(HANDLE);
-        auto setDpiContext = reinterpret_cast<SetDpiContext>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
-        if (setDpiContext) setDpiContext(reinterpret_cast<HANDLE>(static_cast<INT_PTR>(-4)));
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        auto setDpiContext = reinterpret_cast<SetDpiContext>(
+            GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+        if (setDpiContext)
+            setDpiContext(reinterpret_cast<HANDLE>(static_cast<INT_PTR>(-4)));
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            (LPCWSTR)&PaneProc, &instance);
         WNDCLASSW wc{};
         wc.hInstance = instance;
@@ -6263,13 +6569,15 @@ static void Run()
                     overridePath = configuredImage;
                     rebuild = true;
                     maintenance = 0;
-                    Wh_Log(L"Settings: reconstruindo processamento; caches preservados");
+                    Wh_Log(L"Settings: reconstruindo processamento; caches "
+                           L"preservados");
                 }
                 else
                 {
                     for (auto &pane : panes)
                         pane->first = true;
-                    Wh_Log(L"Settings: atualização sem inferência ou recriação de janelas");
+                    Wh_Log(L"Settings: atualização sem inferência ou recriação de "
+                           L"janelas");
                 }
             }
             MSG msg;
@@ -6287,8 +6595,8 @@ static void Run()
                 if (!preview && !host.parent)
                 {
                     DWORD_PTR value = 0;
-                    SendMessageTimeoutW(FindWindowW(L"Progman", nullptr), 0x052C, 0xD, 1, SMTO_ABORTIFHUNG, 1000,
-                                        &value);
+                    SendMessageTimeoutW(FindWindowW(L"Progman", nullptr), 0x052C, 0xD, 1, SMTO_ABORTIFHUNG,
+                                        1000, &value);
                     host = FindHost();
                 }
                 bool changed = displays.size() != layout.size();
@@ -6329,7 +6637,8 @@ static void Run()
                                 float scale = std::min(1.f, float(textureLimit) / std::max(sw, sh));
                                 width = p->w = std::max(2, (int)(sw * scale));
                                 height = p->h = std::max(2, (int)(sh * scale));
-                                stage = L"consulta do wallpaper (IDesktopWallpaper)";
+                                stage = L"consulta do wallpaper "
+                                        L"(IDesktopWallpaper)";
                                 imagePath = WallpaperFor(rect, overridePath);
                                 if (imagePath.empty())
                                     continue;
@@ -6351,13 +6660,13 @@ static void Run()
                                     }
                                 }
                                 stage = L"criação da janela";
-                                p->hwnd = CreateWindowExW(preview ? (WS_EX_NOREDIRECTIONBITMAP | WS_EX_APPWINDOW)
-                                                                  : (WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE |
-                                                                     WS_EX_TOOLWINDOW | WS_EX_NOPARENTNOTIFY),
-                                                          wc.lpszClassName, L"Depth Wallpaper Preview",
-                                                          preview ? WS_OVERLAPPEDWINDOW : WS_CHILD | WS_CLIPSIBLINGS,
-                                                          rect.left, rect.top, sw, sh, host.parent, nullptr, instance,
-                                                          nullptr);
+                                p->hwnd = CreateWindowExW(
+                                    preview ? (WS_EX_NOREDIRECTIONBITMAP | WS_EX_APPWINDOW)
+                                            : (WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE |
+                                               WS_EX_TOOLWINDOW | WS_EX_NOPARENTNOTIFY),
+                                    wc.lpszClassName, L"Depth Wallpaper Preview",
+                                    preview ? WS_OVERLAPPEDWINDOW : WS_CHILD | WS_CLIPSIBLINGS, rect.left,
+                                    rect.top, sw, sh, host.parent, nullptr, instance, nullptr);
                                 if (!p->hwnd)
                                     check_hresult(HRESULT_FROM_WIN32(GetLastError()));
                                 if (preview)
@@ -6372,11 +6681,12 @@ static void Run()
                                                            preview      ? HWND_TOP
                                                            : host.icons ? host.icons
                                                                         : HWND_BOTTOM,
-                                                           origin.x, origin.y, sw, sh, SWP_NOACTIVATE | SWP_SHOWWINDOW)
+                                                           origin.x, origin.y, sw, sh,
+                                                           SWP_NOACTIVATE | SWP_SHOWWINDOW)
                                                   ? S_OK
                                                   : HRESULT_FROM_WIN32(GetLastError()));
-                                Wh_Log(L"Monitor (%ld,%ld)-(%ld,%ld), layout=%s", rect.left, rect.top, rect.right,
-                                       rect.bottom,
+                                Wh_Log(L"Monitor (%ld,%ld)-(%ld,%ld), layout=%s", rect.left, rect.top,
+                                       rect.right, rect.bottom,
                                        preview      ? L"preview"
                                        : host.icons ? L"Windows 11 layered"
                                                     : L"WorkerW");
@@ -6384,8 +6694,15 @@ static void Run()
                             }
                             catch (const hresult_error &e)
                             {
-                                Wh_Log(L"Falha no monitor (%ld,%ld), etapa=%s: 0x%08X %s", rect.left, rect.top, stage,
-                                       (unsigned)e.code(), e.message().c_str());
+                                Wh_Log(L"Falha no monitor (%ld,%ld), etapa=%s: "
+                                       L"0x%08X %s",
+                                       rect.left, rect.top, stage, (unsigned)e.code(), e.message().c_str());
+                                rebuild = true;
+                            }
+                            catch (const std::exception &e)
+                            {
+                                Wh_Log(L"Falha no monitor (%ld,%ld), etapa=%s: %S", rect.left, rect.top,
+                                       stage, e.what());
                                 rebuild = true;
                             }
                         }
@@ -6395,8 +6712,9 @@ static void Run()
                     {
                         POINT origin{p->rect.left, p->rect.top};
                         MapWindowPoints(nullptr, attached.parent, &origin, 1);
-                        SetWindowPos(p->hwnd, attached.icons ? attached.icons : HWND_BOTTOM, origin.x, origin.y,
-                                     p->rect.right - p->rect.left, p->rect.bottom - p->rect.top, SWP_NOACTIVATE);
+                        SetWindowPos(p->hwnd, attached.icons ? attached.icons : HWND_BOTTOM, origin.x,
+                                     origin.y, p->rect.right - p->rect.left, p->rect.bottom - p->rect.top,
+                                     SWP_NOACTIVATE);
                     }
             }
             if (lastRenderRevision != renderRevision)
@@ -6490,7 +6808,6 @@ static void ApplyProfile(const std::wstring &profile)
     zoom = 1.06f;
     textureLimit = 1280;
     useCache = true;
-    deviceKind = LearningModelDeviceKind::Cpu;
     if (profile == L"light")
     {
         textureLimit = 768;
@@ -6528,30 +6845,26 @@ static void ReadSettings()
     if (modelPath == L"Automático — conforme modelo selecionado")
         modelPath.clear();
     preview = Wh_GetIntSetting(L"Pipeline.Preview") != 0;
-    auto setting = IntSetting;
     invert = Wh_GetIntSetting(L"Advanced.Invert") != 0;
-    contrast = setting(L"Advanced.Contrast", 10, 400) / 100.f;
-    gammaValue = setting(L"Advanced.Gamma", 10, 400) / 100.f;
-    lowPercent = setting(L"Advanced.Low", 0, 49);
-    highPercent = setting(L"Advanced.High", 51, 100);
-    blurRadius = setting(L"Advanced.Blur", 0, 5);
-    focus = setting(L"Advanced.Focus", 0, 100) / 100.f;
-    strength = setting(L"Advanced.Horizontal", 0, 40) / 1000.f;
-    vertical = setting(L"Advanced.Vertical", 0, 40) / 1000.f;
-    smoothing = (float)setting(L"Advanced.Smoothing", 1, 2000);
-    zoom = setting(L"Advanced.Zoom", 100, 150) / 100.f;
+    contrast = IntSetting(L"Advanced.Contrast", 10, 400) / 100.f;
+    gammaValue = IntSetting(L"Advanced.Gamma", 10, 400) / 100.f;
+    lowPercent = IntSetting(L"Advanced.Low", 0, 49);
+    highPercent = IntSetting(L"Advanced.High", 51, 100);
+    blurRadius = IntSetting(L"Advanced.Blur", 0, 5);
+    focus = IntSetting(L"Advanced.Focus", 0, 100) / 100.f;
+    strength = IntSetting(L"Advanced.Horizontal", 0, 40) / 1000.f;
+    vertical = IntSetting(L"Advanced.Vertical", 0, 40) / 1000.f;
+    smoothing = (float)IntSetting(L"Advanced.Smoothing", 1, 2000);
+    zoom = IntSetting(L"Advanced.Zoom", 100, 150) / 100.f;
     useCache = Wh_GetIntSetting(L"Advanced.Cache") != 0;
     revision = Wh_GetIntSetting(L"Advanced.Revision");
-    textureLimit = setting(L"Advanced.TextureLimit", 512, 3840);
-    const std::wstring device = StringSetting(L"Advanced.Device");
-    deviceKind = device == L"gpu"    ? LearningModelDeviceKind::Cpu
-                 : device == L"auto" ? LearningModelDeviceKind::Default
-                                     : LearningModelDeviceKind::Cpu;
+    textureLimit = IntSetting(L"Advanced.TextureLimit", 512, 3840);
     const std::wstring profile = StringSetting(L"Pipeline.PipelineProfile");
     if (profile != L"custom" && !Wh_GetIntSetting(L"Pipeline.CustomizeProfile"))
         ApplyProfile(profile);
     Wh_Log(L"Perfil=%s, personalizado=%d, textura=%d, movimento=(%.3f,%.3f)", profile.c_str(),
-           profile == L"custom" || Wh_GetIntSetting(L"Pipeline.CustomizeProfile"), textureLimit, strength, vertical);
+           profile == L"custom" || Wh_GetIntSetting(L"Pipeline.CustomizeProfile"), textureLimit, strength,
+           vertical);
     configuredImage = imagePath;
     configuredModel = modelPath;
 }
