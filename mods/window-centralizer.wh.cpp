@@ -36,7 +36,7 @@ In both modes the window is kept inside the monitor's work area.
 
 Press **Win+Alt+C** while a window is active to stop centering that kind of window, and press it again on it to undo. A short notification confirms the change.
 
-A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by their layout, so Find and Save As stay separate.
+A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind.
 
 The **Ignored windows** list opens with **Win+Ctrl+Alt+C**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
