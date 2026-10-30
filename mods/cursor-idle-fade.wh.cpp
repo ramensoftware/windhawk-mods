@@ -65,6 +65,11 @@ the cursor back as soon as such a program gets focus. `rustdesk.exe` is
 excluded by default. If you see the same problem in another app, add its
 executable name to the list.
 
+The program is identified by the process that owns the focused window.
+Windows Store (UWP) apps are hosted by `ApplicationFrameHost.exe`, so they
+can't be excluded by their own name, and excluding `ApplicationFrameHost.exe`
+would exclude all of them.
+
 ## Limitations
 * Only the standard system cursors are faded (arrow, I-beam, hand, resize,
   cross, help, etc.). Apps that draw their own cursor (some games, some
@@ -121,9 +126,10 @@ Pointers*.
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <cwctype>
 #include <string>
 #include <vector>
+
+#include <windhawk_utils.h>
 
 // ---------------------------------------------------------------------------
 // Settings (written by the Windhawk thread, read by the worker thread)
@@ -447,25 +453,14 @@ static void ArmWatchTimer(HWND hwnd) {
              PolledMode() ? kWatchPolledIntervalMs : kWatchIntervalMs, nullptr);
 }
 
-// Raw input is not delivered to a process while a window of a more
-// privileged process (e.g. an elevated Task Manager) has focus. A normal
-// process can't open the token of an elevated one, which is used as the
-// signal. Failing to inspect the process counts as "blocked": that only
-// makes the mod check the mouse more often.
-static std::wstring ToLower(std::wstring str) {
-    for (wchar_t& c : str) c = (wchar_t)towlower(c);
-    return str;
-}
-
 // Reads the excluded-program list (worker thread only).
 static void LoadExcludedPrograms() {
     g_excluded.clear();
     for (int i = 0; i < 64; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"excludedPrograms[%d]", i);
-        bool empty = !value || !*value;
-        if (!empty) g_excluded.push_back(ToLower(value));
-        Wh_FreeStringSetting(value);
-        if (empty) break;
+        auto value =
+            WindhawkUtils::StringSetting::make(L"excludedPrograms[%d]", i);
+        if (!*value.get()) break;  // unset values are returned as ""
+        g_excluded.push_back(value.get());
     }
 }
 
@@ -494,9 +489,11 @@ static void QueryForeground(bool* blocked, bool* excluded) {
         DWORD len = ARRAYSIZE(path);
         if (QueryFullProcessImageNameW(proc, 0, path, &len)) {
             const wchar_t* base = wcsrchr(path, L'\\');
-            std::wstring name = ToLower(base ? base + 1 : path);
+            const wchar_t* name = base ? base + 1 : path;
             for (const std::wstring& e : g_excluded) {
-                if (e == name) {
+                // Compares file names the way the file system does.
+                if (CompareStringOrdinal(e.c_str(), -1, name, -1, TRUE) ==
+                    CSTR_EQUAL) {
                     *excluded = true;
                     break;
                 }
@@ -504,6 +501,11 @@ static void QueryForeground(bool* blocked, bool* excluded) {
         }
     }
 
+    // Raw input is not delivered to a process while a window of a more
+    // privileged process (e.g. an elevated Task Manager) has focus. A normal
+    // process can't open the token of an elevated one, which is used as the
+    // signal. Failing to inspect the process counts as "blocked": that only
+    // makes the mod check the mouse more often.
     HANDLE token = nullptr;
     if (OpenProcessToken(proc, TOKEN_QUERY, &token)) {
         CloseHandle(token);
@@ -515,11 +517,22 @@ static void QueryForeground(bool* blocked, bool* excluded) {
 
 static void Restore(HWND hwnd);
 
+// Mouse activity isn't tracked while an excluded program has focus (the idle
+// check returns early, and raw input doesn't reach us if that program is
+// elevated). When it loses focus, restart the idle countdown from now so the
+// cursor doesn't fade immediately.
+static void ResetActivityTracking() {
+    g_lastActivity = GetTickCount64();
+    GetCursorPos(&g_lastPt);
+    g_rawSeqAtLastPoll = g_rawSeq;
+}
+
 static void CALLBACK ForegroundChanged(HWINEVENTHOOK, DWORD, HWND, LONG, LONG,
                                        DWORD, DWORD) {
     bool blocked, excluded;
     QueryForeground(&blocked, &excluded);
     bool changed = blocked != g_fgBlocked || excluded != g_fgExcluded;
+    if (g_fgExcluded && !excluded) ResetActivityTracking();
     g_fgBlocked = blocked;
     g_fgExcluded = excluded;
 
@@ -733,8 +746,10 @@ static void OnRawInput(HWND hwnd, HRAWINPUT hri) {
 }
 
 static void OnSettingsMessage(HWND hwnd) {
+    bool wasExcluded = g_fgExcluded;
     LoadExcludedPrograms();
     QueryForeground(&g_fgBlocked, &g_fgExcluded);
+    if (wasExcluded && !g_fgExcluded) ResetActivityTracking();
     if (g_fgExcluded && g_state != State::Visible) {
         Restore(hwnd);
         return;
