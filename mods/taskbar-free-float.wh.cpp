@@ -2,7 +2,7 @@
 // @id              taskbar-free-float
 // @name            Taskbar Free Float (experimental)
 // @description     Ctrl+drag the original Windows 11 app bar and tray/clock independently
-// @version         0.1.6
+// @version         0.1.7
 // @author          Rikyz
 // @github          https://github.com/RikyZ90
 // @include         explorer.exe
@@ -387,11 +387,15 @@ HWND FindPopupWindow(const RECT& bounds) {
         GetClassNameW(hwnd, name, ARRAYSIZE(name));
         if (wcscmp(name, L"Xaml_WindowedPopupClass") != 0 ||
             !IsWindowVisible(hwnd) || !GetWindowRect(hwnd, &rect)) return TRUE;
-        const POINT middle{(s.bounds.left + s.bounds.right) / 2,
-                           (s.bounds.top + s.bounds.bottom) / 2};
         const int64_t area = static_cast<int64_t>(rect.right - rect.left) *
                              (rect.bottom - rect.top);
-        if (PtInRect(&rect, middle) && area > 0 && area < s.area) {
+        // Match the whole frame so a smaller overlapping popup cannot claim it.
+        constexpr LONG tolerance = 2;
+        if (rect.left <= s.bounds.left + tolerance &&
+            rect.top <= s.bounds.top + tolerance &&
+            rect.right >= s.bounds.right - tolerance &&
+            rect.bottom >= s.bounds.bottom - tolerance &&
+            area > 0 && area < s.area) {
             s.found = hwnd;
             s.area = area;
         }
