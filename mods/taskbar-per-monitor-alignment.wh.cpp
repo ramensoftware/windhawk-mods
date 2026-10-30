@@ -21,7 +21,7 @@ Choose how the taskbar looks on **each monitor separately**: its icons **Left**,
 the right edge, or with the icons. Windows only offers one alignment for every
 taskbar, and only Left or Center.
 
-[![Support on Ko-fi](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/ko-fi-50.png)](https://ko-fi.com/vmtools)
+[![Support on Ko-fi](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/ko-fi-small.png)](https://ko-fi.com/vmtools)
 
 Like this mod? You can [support its development on Ko-fi](https://ko-fi.com/vmtools).
 
