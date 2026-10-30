@@ -8,10 +8,8 @@
 // @license         MIT
 // @include         *
 // @exclude         unsecapp.exe
-// @exclude         rundll32.exe
 // @exclude         svchost.exe
 // @exclude         dwm.exe
-// @exclude         conhost.exe
 // @exclude         sihost.exe
 // @exclude         taskhostw.exe
 // @exclude         TextInputHost.exe
@@ -323,6 +321,21 @@ static inline bool IsCtrlPhysicallyDown() {
     return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
 }
 
+static inline bool IsInterruptKeyPressed() {
+    // Check standard navigation / cancel keys that might bypass DispatchMessage
+    static const int s_interruptKeys[] = {
+        VK_ESCAPE, VK_RETURN, VK_SPACE, VK_TAB,  VK_LEFT, VK_UP,
+        VK_RIGHT,  VK_DOWN,   VK_PRIOR, VK_NEXT, VK_HOME, VK_END};
+    for (int vk : s_interruptKeys) {
+        SHORT state = pfnGetAsyncKeyState_Original
+                          ? pfnGetAsyncKeyState_Original(vk)
+                          : GetAsyncKeyState(vk);
+        if (state & 0x8000)
+            return true;
+    }
+    return false;
+}
+
 static std::atomic<ULONGLONG> g_lastScrollEndTime{0};
 
 static inline bool IsInScrollOrGracePeriod() {
@@ -477,7 +490,7 @@ DWORD WINAPI CruiseWorkerThread(LPVOID) {
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0)
                 return 0;
 
-            if (!IsCtrlPhysicallyDown()) {
+            if (!IsCtrlPhysicallyDown() || IsInterruptKeyPressed()) {
                 g_state.store(ScrollState::Idle);
                 SetCursor(LoadCursor(nullptr, IDC_ARROW));
                 break;
@@ -643,11 +656,18 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
     }
 
     if (m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL) {
-        if (extra == MASK_EXTRA_INFO || IsInScrollOrGracePeriod()) {
+        if (extra == MASK_EXTRA_INFO) {
+            // Our injected scroll: Strip modifiers so it doesn't zoom
             if (canMutate) {
                 pMsg->wParam &= ~((WPARAM)(MK_CONTROL | MK_SHIFT | MK_RBUTTON));
             }
             return false;
+        } else {
+            // A REAL physical wheel scroll from the user:
+            // Instantly cancel the grace period so they can zoom if they want
+            // to
+            g_lastScrollEndTime.store(0);
+            return false;  // Do not mutate real wheel input
         }
     }
 
@@ -908,21 +928,25 @@ bool ProcessScrollInput(MSG* pMsg, bool canMutate) {
 using DispatchMessageW_t = LRESULT(WINAPI*)(const MSG*);
 static DispatchMessageW_t pfnDispatchMessageW_Original = nullptr;
 
-LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
-    if (lpMsg && ProcessScrollInput(const_cast<MSG*>(lpMsg), true)) {
-        return 0;  // Handled and swallowed
-    }
-    return pfnDispatchMessageW_Original(lpMsg);
-}
-
 using DispatchMessageA_t = LRESULT(WINAPI*)(const MSG*);
 static DispatchMessageA_t pfnDispatchMessageA_Original = nullptr;
 
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
+    if (!lpMsg)
+        return pfnDispatchMessageW_Original(lpMsg);
+    MSG msg = *lpMsg;
+    if (ProcessScrollInput(&msg, true))
+        return 0;
+    return pfnDispatchMessageW_Original(&msg);
+}
+
 LRESULT WINAPI DispatchMessageA_Hook(const MSG* lpMsg) {
-    if (lpMsg && ProcessScrollInput(const_cast<MSG*>(lpMsg), true)) {
-        return 0;  // Handled and swallowed
-    }
-    return pfnDispatchMessageA_Original(lpMsg);
+    if (!lpMsg)
+        return pfnDispatchMessageA_Original(lpMsg);
+    MSG msg = *lpMsg;
+    if (ProcessScrollInput(&msg, true))
+        return 0;
+    return pfnDispatchMessageA_Original(&msg);
 }
 
 using GetKeyState_t = SHORT(WINAPI*)(int);
@@ -981,6 +1005,7 @@ HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
 
 // --- WINDHAWK LIFECYCLE ---
 BOOL Wh_ModInit() {
+    // 1. Skip non-interactive window stations (services, background sessions)
     HWINSTA hWinSta = GetProcessWindowStation();
     if (hWinSta) {
         USEROBJECTFLAGS uof = {};
@@ -991,14 +1016,32 @@ BOOL Wh_ModInit() {
         }
     }
 
+    // 2. Inspect command-line parameters safely
     LPCWSTR cmdLine = GetCommandLineW();
-    if (cmdLine && (wcsstr(cmdLine, L"--type=") != nullptr ||
-                    wcsstr(cmdLine, L"-Embedding") != nullptr)) {
-        return FALSE;
+    if (cmdLine) {
+        // Exclude Chromium utility, GPU, and renderer worker subprocesses
+        if (wcsstr(cmdLine, L" --type=") != nullptr) {
+            return FALSE;
+        }
+
+        // Handle COM Embedding flag:
+        // Do not hook general COM worker daemons, BUT permit isolated Explorer
+        // folder processes
+        if (wcsstr(cmdLine, L" -Embedding") != nullptr ||
+            wcsstr(cmdLine, L" /Embedding") != nullptr) {
+            WCHAR modulePath[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, modulePath, ARRAYSIZE(modulePath));
+            PCWSTR exeName = wcsrchr(modulePath, L'\\');
+            exeName = exeName ? exeName + 1 : modulePath;
+
+            // If it's NOT explorer.exe, exit cleanly
+            if (_wcsicmp(exeName, L"explorer.exe") != 0) {
+                return FALSE;
+            }
+        }
     }
 
     Wh_Log(L"Initializing Drag to Scroll (Locked Axis)");
-
     LoadSettings();
 
     InitializeCriticalSection(&g_cruiseCs);
@@ -1006,13 +1049,13 @@ BOOL Wh_ModInit() {
     g_cruiseEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_threadCreated.store(false);
 
-    // DispatchMessage hooks: safe from idle GetMessage blocking
+    // 3. Register Safe Dispatch Hooks
     WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
                                    &pfnDispatchMessageW_Original);
     WindhawkUtils::SetFunctionHook(DispatchMessageA, DispatchMessageA_Hook,
                                    &pfnDispatchMessageA_Original);
 
-    // Synchronous modifier and cursor hooks
+    // 4. Register State and Cursor Hooks
     WindhawkUtils::SetFunctionHook(GetKeyState, GetKeyState_Hook,
                                    &pfnGetKeyState_Original);
     WindhawkUtils::SetFunctionHook(GetAsyncKeyState, GetAsyncKeyState_Hook,
@@ -1036,7 +1079,7 @@ void Wh_ModUninit() {
         SetEvent(g_cruiseEvent);
 
     if (g_hCruiseThread) {
-        WaitForSingleObject(g_hCruiseThread, 200);
+        WaitForSingleObject(g_hCruiseThread, INFINITE);
         CloseHandle(g_hCruiseThread);
         g_hCruiseThread = nullptr;
     }
