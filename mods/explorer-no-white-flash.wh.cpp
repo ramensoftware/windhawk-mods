@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              explorer-no-white-flash
 // @name            Explorer No White Flash
-// @description     Stops Explorer windows and folders flashing white before their content paints
+// @description     Hides new File Explorer windows until their content has painted, instead of showing an empty white frame
 // @version         1.0
 // @author          Chr1s
 // @github          https://github.com/chr1sx
@@ -37,11 +37,12 @@ detected, so a window can never get stuck invisible.
 
 - **Reveal delay (ms)** - how long to wait after the content has painted before
   showing the window. Default `120`. Lower feels faster, but too low may show a
-  partly drawn window.
+  partly drawn window. `0` means "use the default".
 - **Safety timeout (ms)** - reveal the window anyway after this long, even if no
   paint was detected. Default `2500`. This is the guard that stops a window from
   ever staying invisible; lower it if you prefer a faster worst case, but keep it
-  above the time your machine normally needs to draw a folder.
+  above the time your machine normally needs to draw a folder. `0` means "use the
+  default".
 */
 // ==/WindhawkModReadme==
 
@@ -49,10 +50,10 @@ detected, so a window can never get stuck invisible.
 /*
 - revealDelay: 120
   $name: Reveal delay (ms)
-  $description: How long to wait after the content has painted before showing the window. Lower feels faster, too low may show a partly drawn window.
+  $description: How long to wait after the content has painted before showing the window. Lower feels faster, too low may show a partly drawn window. 0 means "use the default".
 - safetyTimeout: 2500
   $name: Safety timeout (ms)
-  $description: Reveal the window anyway after this long, even if no paint was detected. Prevents a window from ever staying invisible.
+  $description: Reveal the window anyway after this long, even if no paint was detected. Prevents a window from ever staying invisible. 0 means "use the default".
 */
 // ==/WindhawkModSettings==
 
@@ -60,35 +61,41 @@ detected, so a window can never get stuck invisible.
 #include <dwmapi.h>
 #include <windhawk_utils.h>
 
-#ifndef DWMWA_CLOAK
-#define DWMWA_CLOAK 13
-#endif
+#include <atomic>
 
 #define MAX_TRACKED 64
 
-static volatile LONG g_revealDelay = 120;
-static volatile LONG g_safetyTimeout = 2500;
+static std::atomic<int> g_revealDelay{120};
+static std::atomic<int> g_safetyTimeout{2500};
 
 static void LoadSettings() {
-    // Unset settings read as 0, so 0 means "use the default".
-    LONG delay = Wh_GetIntSetting(L"revealDelay");
+    // A setting which has no value in the registry reads as 0 (the engine uses
+    // value_or(0)), so 0 means "use the default".
+    int delay = (int)Wh_GetIntSetting(L"revealDelay");
     if (delay <= 0)
         delay = 120;
     if (delay > 2000)
         delay = 2000;
 
-    LONG timeout = Wh_GetIntSetting(L"safetyTimeout");
+    int timeout = (int)Wh_GetIntSetting(L"safetyTimeout");
     if (timeout <= 0)
         timeout = 2500;
     if (timeout > 10000)
         timeout = 10000;
 
-    g_revealDelay = delay;
-    g_safetyTimeout = timeout;
+    g_revealDelay.store(delay, std::memory_order_relaxed);
+    g_safetyTimeout.store(timeout, std::memory_order_relaxed);
 }
 
 static bool ClassIs(PCWSTR a, PCWSTR b) {
     return a && b && !_wcsicmp(a, b);
+}
+
+static bool WindowClassIs(HWND hWnd, PCWSTR want) {
+    wchar_t cls[128];
+    if (!hWnd || !GetClassNameW(hWnd, cls, ARRAYSIZE(cls)))
+        return false;
+    return ClassIs(cls, want);
 }
 
 struct Entry {
@@ -100,7 +107,11 @@ struct Entry {
 
 static Entry g_entries[MAX_TRACKED];
 static CRITICAL_SECTION g_lock;
-static bool g_lockInit = false;
+static std::atomic<int> g_pendingCount{0};
+
+static HANDLE g_revealThread = nullptr;
+static HANDLE g_stopEvent = nullptr;
+static HANDLE g_wakeEvent = nullptr;
 
 static Entry* FindEntry(HWND hWnd) {
     for (int i = 0; i < MAX_TRACKED; i++)
@@ -109,52 +120,83 @@ static Entry* FindEntry(HWND hWnd) {
     return nullptr;
 }
 
+static void Uncloak(HWND hWnd) {
+    BOOL off = FALSE;
+    DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &off, sizeof(off));
+}
+
 static DWORD WINAPI RevealThread(LPVOID) {
+    HANDLE handles[2] = {g_stopEvent, g_wakeEvent};
+
     for (;;) {
-        Sleep(40);
+        // Only poll while a window is waiting; otherwise sleep until one is
+        // tracked, so an idle Explorer is not woken 25 times a second.
+        DWORD timeout = g_pendingCount.load(std::memory_order_relaxed) > 0 ? 40 : INFINITE;
+        if (WaitForMultipleObjects(2, handles, FALSE, timeout) == WAIT_OBJECT_0)
+            return 0;
+
+        HWND due[MAX_TRACKED];
+        int dueCount = 0;
         DWORD now = GetTickCount();
+
         EnterCriticalSection(&g_lock);
         for (int i = 0; i < MAX_TRACKED; i++) {
             Entry& e = g_entries[i];
             if (!e.pending)
                 continue;
-            bool due = false;
-            if (e.revealAt != 0)
-                due = (LONG)(now - e.revealAt) >= 0;
-            else if (now - e.cloakTick > (DWORD)g_safetyTimeout)
-                due = true;  // safety net
-            if (due) {
-                BOOL off = FALSE;
-                DwmSetWindowAttribute(e.hWnd, DWMWA_CLOAK, &off, sizeof(off));
+
+            bool isDue = false;
+            if (e.revealAt != 0) {
+                isDue = (LONG)(now - e.revealAt) >= 0;
+            } else if ((DWORD)(now - e.cloakTick) > (DWORD)g_safetyTimeout.load()) {
+                // Nothing painted. If the window is still hidden, it is a
+                // window that Explorer created ahead of time and will show
+                // later, so keep it cloaked and keep waiting; revealing it now
+                // would leave the window the user later sees uncovered.
+                if (!IsWindowVisible(e.hWnd)) {
+                    e.cloakTick = now;
+                    continue;
+                }
+                isDue = true;
+            }
+
+            if (isDue) {
+                due[dueCount++] = e.hWnd;
                 e.pending = false;
                 e.hWnd = nullptr;
+                g_pendingCount.fetch_sub(1, std::memory_order_relaxed);
             }
         }
         LeaveCriticalSection(&g_lock);
+
+        // DWM is called outside the lock: the BitBlt hook on Explorer's UI
+        // threads takes the same lock while painting.
+        for (int i = 0; i < dueCount; i++)
+            Uncloak(due[i]);
     }
-    return 0;
 }
 
 static void TrackWindow(HWND hWnd) {
-    if (!g_lockInit)
+    // Cloak before publishing the entry, so the reveal thread can never
+    // uncloak the window and then be followed by this cloak.
+    BOOL on = TRUE;
+    if (FAILED(DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &on, sizeof(on))))
         return;
+
     EnterCriticalSection(&g_lock);
-    Entry* slot = nullptr;
     for (int i = 0; i < MAX_TRACKED; i++) {
         if (!g_entries[i].pending) {
-            slot = &g_entries[i];
+            g_entries[i].hWnd = hWnd;
+            g_entries[i].cloakTick = GetTickCount();
+            g_entries[i].revealAt = 0;
+            g_entries[i].pending = true;
+            g_pendingCount.fetch_add(1, std::memory_order_relaxed);
             break;
         }
     }
-    if (slot) {
-        slot->hWnd = hWnd;
-        slot->cloakTick = GetTickCount();
-        slot->revealAt = 0;
-        slot->pending = true;
-        BOOL on = TRUE;
-        DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &on, sizeof(on));
-    }
     LeaveCriticalSection(&g_lock);
+
+    SetEvent(g_wakeEvent);
 }
 
 using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int,
@@ -169,13 +211,9 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
                                          dwStyle, X, Y, nWidth, nHeight, hWndParent,
                                          hMenu, hInstance, lpParam);
 
-    if (hWnd) {
-        wchar_t cls[128];
-        if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
-            if (ClassIs(cls, L"CabinetWClass") || ClassIs(cls, L"ExploreWClass"))
-                TrackWindow(hWnd);
-        }
-    }
+    if (hWnd && (WindowClassIs(hWnd, L"CabinetWClass") ||
+                 WindowClassIs(hWnd, L"ExploreWClass")))
+        TrackWindow(hWnd);
 
     return hWnd;
 }
@@ -183,36 +221,38 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
 using BitBlt_t = BOOL(WINAPI*)(HDC, int, int, int, int, HDC, int, int, DWORD);
 static BitBlt_t BitBlt_Original;
 
-// The content view is the big DirectUIHWND. Small siblings (ribbon, address bar,
-// search box) also blit "their whole surface", so measure against the top-level
-// window instead of the child, and require a genuinely large area.
+// The content view is the DirectUIHWND inside the shell view, i.e. one that has
+// SHELLDLL_DefView or DUIViewWndClassName among its ancestors. Other
+// DirectUIHWNDs in the window (the search box, for example) are excluded by
+// that, and by the minimum size.
 static bool IsContentViewBlit(HWND hWnd, int cx, int cy) {
-    if (cx < 300 || cy < 200)
+    if (cx < 100 || cy < 100)
         return false;
-    HWND root = GetAncestor(hWnd, GA_ROOT);
-    if (!root)
-        return false;
-    RECT rc;
-    if (!GetClientRect(root, &rc) || rc.right <= 0 || rc.bottom <= 0)
-        return false;
-    long long blit = (long long)cx * (long long)cy;
-    long long area = (long long)rc.right * (long long)rc.bottom;
-    return blit * 100 >= area * 45;
+
+    HWND parent = GetParent(hWnd);
+    for (int i = 0; i < 8 && parent; i++) {
+        if (WindowClassIs(parent, L"SHELLDLL_DefView") ||
+            WindowClassIs(parent, L"DUIViewWndClassName"))
+            return true;
+        parent = GetParent(parent);
+    }
+    return false;
 }
 
 BOOL WINAPI BitBlt_Hook(HDC hdcDest, int x, int y, int cx, int cy, HDC hdcSrc,
                         int x1, int y1, DWORD rop) {
-    if (rop == SRCCOPY && cx > 0 && cy > 0 && g_lockInit) {
+    if (rop == SRCCOPY && cx > 0 && cy > 0 &&
+        g_pendingCount.load(std::memory_order_relaxed) > 0) {
         HWND hWnd = WindowFromDC(hdcDest);
-        if (hWnd) {
-            wchar_t cls[128];
-            if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
-                ClassIs(cls, L"DirectUIHWND") && IsContentViewBlit(hWnd, cx, cy)) {
-                HWND root = GetAncestor(hWnd, GA_ROOT);
+        if (hWnd && WindowClassIs(hWnd, L"DirectUIHWND") &&
+            IsContentViewBlit(hWnd, cx, cy)) {
+            HWND root = GetAncestor(hWnd, GA_ROOT);
+            if (root) {
+                DWORD revealAt = GetTickCount() + (DWORD)g_revealDelay.load();
                 EnterCriticalSection(&g_lock);
                 Entry* e = FindEntry(root);
                 if (e && e->revealAt == 0)
-                    e->revealAt = GetTickCount() + (DWORD)g_revealDelay;
+                    e->revealAt = revealAt;
                 LeaveCriticalSection(&g_lock);
             }
         }
@@ -224,17 +264,60 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     InitializeCriticalSection(&g_lock);
-    g_lockInit = true;
+
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (g_stopEvent && g_wakeEvent)
+        g_revealThread = CreateThread(nullptr, 0, RevealThread, nullptr, 0, nullptr);
+
+    if (!g_revealThread) {
+        // Never cloak windows without a thread that can reveal them.
+        if (g_stopEvent)
+            CloseHandle(g_stopEvent);
+        if (g_wakeEvent)
+            CloseHandle(g_wakeEvent);
+        g_stopEvent = nullptr;
+        g_wakeEvent = nullptr;
+        DeleteCriticalSection(&g_lock);
+        return FALSE;
+    }
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Original);
     WindhawkUtils::SetFunctionHook(BitBlt, BitBlt_Hook, &BitBlt_Original);
 
-    HANDLE h = CreateThread(nullptr, 0, RevealThread, nullptr, 0, nullptr);
-    if (h)
-        CloseHandle(h);
-
     return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_stopEvent)
+        SetEvent(g_stopEvent);
+    if (g_revealThread) {
+        WaitForSingleObject(g_revealThread, INFINITE);
+        CloseHandle(g_revealThread);
+        g_revealThread = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+    if (g_wakeEvent) {
+        CloseHandle(g_wakeEvent);
+        g_wakeEvent = nullptr;
+    }
+
+    // Reveal whatever is still cloaked, so no window is left invisible when
+    // the mod is disabled, updated or removed.
+    for (int i = 0; i < MAX_TRACKED; i++) {
+        if (g_entries[i].pending) {
+            Uncloak(g_entries[i].hWnd);
+            g_entries[i].pending = false;
+            g_entries[i].hWnd = nullptr;
+        }
+    }
+    g_pendingCount.store(0, std::memory_order_relaxed);
+
+    DeleteCriticalSection(&g_lock);
 }
 
 void Wh_ModSettingsChanged() {
