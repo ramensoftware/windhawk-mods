@@ -40,6 +40,9 @@ Other selection-rectangle mods, such as **Desktop Marquee Fade** and **Classic
 Selection Rectangle Color**, can overlap with this mod's fade or override its
 colors. Disable overlapping features if you use them together.
 
+In 32-bit apps, if the fade implementation cannot be verified as compatible,
+the rounded rectangle remains available without the fade.
+
 This mod depends on symbols published by Microsoft. If a Windows update has no
 published symbols, or changes the symbols the mod uses, the mod will stop working
 until compatible symbols or an updated mod are available.
@@ -89,6 +92,9 @@ Compatível com o **Win32 UI Modernizer**.
 Outros mods de retângulo de seleção, como **Desktop Marquee Fade** e **Classic
 Selection Rectangle Color**, podem sobrepor o fade ou as cores deste mod.
 Desative as funções equivalentes se usar esses mods juntos.
+
+Em aplicativos de 32 bits, se não for possível confirmar a compatibilidade do
+fade, o retângulo continua arredondado, mas sem o desaparecimento suave.
 
 Este mod depende dos símbolos publicados pela Microsoft. Se uma atualização do
 Windows não tiver símbolos publicados, ou alterar os símbolos usados pelo mod,
@@ -141,6 +147,9 @@ Compatible con **Win32 UI Modernizer**.
 Otros mods del rectángulo de selección, como **Desktop Marquee Fade** y **Classic
 Selection Rectangle Color**, pueden superponer el desvanecimiento o los colores.
 Desactiva las funciones equivalentes si usas esos mods juntos.
+
+En aplicaciones de 32 bits, si no se puede confirmar la compatibilidad del
+desvanecimiento, el rectángulo sigue redondeado, pero sin desvanecimiento.
 
 Este mod depende de los símbolos publicados por Microsoft. Si una actualización
 de Windows no tiene símbolos publicados, o cambia los símbolos que usa el mod,
@@ -260,10 +269,12 @@ y `RadiusY`. Estos estilos se configuran por separado de las opciones de este mo
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cwchar>
 #include <iterator>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -1120,6 +1131,161 @@ static void InstallDirectUI() {
     }
 }
 
+// A bare x86 public symbol does not describe its calling convention. Recognize
+// the inspected argument-capture sequence, then walk every direct control-flow
+// edge to a checked epilogue. This deliberately rejects unfamiliar code shapes;
+// it is not a general-purpose ABI inference engine or a Windows-version gate.
+namespace X86PaintAbi {
+struct Instruction {
+    BYTE bytes[15]{};
+    size_t length = 0;
+    char text[96]{};
+};
+static constexpr WORD entry[] = {
+    0x8b,0xff, 0x55, 0x8b,0xec, 0x81,0xec,0x7c,0x01,0,0,
+    0xa1,256,256,256,256, 0x33,0xc5, 0x89,0x45,0xfc,
+    0x8b,0x45,0x0c, 0x53, 0x56, 0x89,0x85,0x90,0xfe,0xff,0xff,
+    0x8b,0xf1, 0x57, 0x8b,0x7d,0x08, 0x33,0xc0, 0x40,
+    0x89,0xb5,0x8c,0xfe,0xff,0xff, 0x50, 0x57,
+    0x89,0xbd,0x9c,0xfe,0xff,0xff, 0xff,0x15,256,256,256,256,
+    0x8b,0x46,0x10, 0xff,0xb0,0xd0,0,0,0, 0x57,
+    0xff,0x15,256,256,256,256, 0x33,0xdb,
+};
+// The entry saves EBX/ESI/EDI, captures ECX=this, [EBP+8]=HDC and
+// [EBP+12]=RECT*, and consumes no incoming EAX/EDX value. Only relocated
+// cookie/IAT addresses are ignored, never argument offsets or instructions.
+static constexpr WORD exit[] = {
+    0x8b,0x4d,0xfc,0x5f,0x5e,0x33,0xcd,0x5b,
+    0xe8,256,256,256,256,0xc9,0xc2,0x08,0,
+};
+static constexpr size_t returnOffset = std::size(exit) - 3;
+template<class Read, size_t N>
+static bool Match(uintptr_t address, const WORD (&pattern)[N], Read& read) {
+    for (size_t offset = 0; offset < N;) {
+        Instruction ins;
+        if (!read(address + offset, ins) || !ins.length || ins.length > 15 ||
+            ins.length > N - offset) return false;
+        for (size_t i = 0; i < ins.length; ++i)
+            if (pattern[offset + i] != 256 && pattern[offset + i] != ins.bytes[i]) return false;
+        offset += ins.length;
+    }
+    return true;
+}
+[[maybe_unused]] static bool FrameAccess(const Instruction& ins) {
+    // Wh_Disasm uses Intel syntax. Reject frame aliases, extra stack arguments
+    // and a changed frame base, including code not covered by the entry pattern.
+    char compact[96]{};
+    size_t n = 0;
+    for (char c : ins.text) {
+        if (!c) break;
+        if (c != ' ' && c != '\t') compact[n++] = c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
+    }
+    if (n == sizeof(compact)) return false;
+    std::string_view text(compact, n);
+    if (text.empty()) return false;
+    std::string_view original(ins.text);
+    auto mnemonic = original.substr(0, original.find_first_of(" \t"));
+    constexpr std::string_view ordinary[] = {
+        "add", "and", "call", "cdq", "cmovne", "cmovnz", "cmp", "cwde", "dec", "imul",
+        "inc", "lea", "leave", "mov", "movs", "movsd", "movzx", "neg", "nop",
+        "or", "pop", "push", "sar", "sbb", "shr", "stos", "stosd", "sub", "test", "xor",
+    };
+    if (std::find(std::begin(ordinary), std::end(ordinary), mnemonic) == std::end(ordinary)) return false;
+    if (mnemonic == "call" && ins.bytes[0] != 0xe8 &&
+        !(ins.bytes[0] == 0xff && ((ins.bytes[1] >> 3) & 7) == 2)) return false;
+    for (size_t p = 0; (p = text.find("ebp", p)) != text.npos; p += 3) {
+        // In the body, EBP may only address negative locals. The sole bare-EBP
+        // use is the security-cookie xor in the separately checked epilogue.
+        if (p && text[p - 1] == '[' && p + 3 < n && text[p + 3] == '-') continue;
+        if (text == "xorecx,ebp" || text == "leave") continue;
+        return false;
+    }
+    if (text.find("esp") != text.npos && !text.starts_with("addesp,0x") &&
+        !text.starts_with("subesp,0x")) return false;
+    return true;
+}
+template<class Read>
+static bool Verify(uintptr_t start, Read read) {
+    if (!start || !Match(start, entry, read)) return false;
+    struct Seen { uintptr_t address; size_t length; };
+    std::vector<Seen> seen;
+    std::vector<uintptr_t> pending{start + std::size(entry)}, targets, exits;
+    // Includes separated cold blocks, but bounds work even for malformed CFGs.
+    constexpr size_t limit = 2048;
+    while (!pending.empty()) {
+        uintptr_t pc = pending.back();
+        pending.pop_back();
+        if (pc < start + std::size(entry) || pc - start > 1024 * 1024) return false;
+        bool visited = false;
+        for (auto old : seen) {
+            if (pc == old.address) { visited = true; break; }
+            if (pc > old.address && pc - old.address < old.length) return false;
+        }
+        if (visited) continue;
+        Instruction ins;
+        if (seen.size() == limit || !read(pc, ins) || !ins.length || ins.length > 15) return false;
+        for (auto old : seen)
+            if (old.address > pc && old.address - pc < ins.length) return false;
+        seen.push_back({pc, ins.length});
+        BYTE op = ins.bytes[0];
+        if (op == 0xc9 && (pc < start + returnOffset - 1 ||
+            !Match(pc - (returnOffset - 1), exit, read))) return false;
+        if (op == 0xc2) {
+            if (ins.length != 3 || ins.bytes[1] != 8 || ins.bytes[2] ||
+                pc < start + returnOffset || !Match(pc - returnOffset, exit, read)) return false;
+            exits.push_back(pc - returnOffset);
+            continue;
+        }
+        if (op == 0xc3 || op == 0xca || op == 0xcb || op == 0xea || op == 0x9a) return false;
+        bool jump = op == 0xe9 || op == 0xeb;
+        bool conditional = (op >= 0x70 && op <= 0x7f) ||
+            (op == 0x0f && ins.bytes[1] >= 0x80 && ins.bytes[1] <= 0x8f);
+        if (op >= 0xe0 && op <= 0xe3) return false;
+        if (op == 0xff && ((ins.bytes[1] >> 3) & 7) >= 4 &&
+            ((ins.bytes[1] >> 3) & 7) <= 5) return false; // indirect/far jump
+        if (jump || conditional) {
+            int32_t delta;
+            if (ins.length == 2) delta = static_cast<signed char>(ins.bytes[1]);
+            else if (ins.length == 5 || ins.length == 6) {
+                size_t p = ins.length - 4;
+                DWORD raw = DWORD(ins.bytes[p]) | DWORD(ins.bytes[p + 1]) << 8 |
+                    DWORD(ins.bytes[p + 2]) << 16 | DWORD(ins.bytes[p + 3]) << 24;
+                delta = static_cast<int32_t>(raw);
+            } else return false;
+            uintptr_t target = pc + ins.length + delta;
+            if (pending.size() + targets.size() >= limit * 2) return false;
+            pending.push_back(target);
+            targets.push_back(target);
+        } else if (!FrameAccess(ins)) return false;
+        if (!jump) pending.push_back(pc + ins.length);
+    }
+    if (exits.empty()) return false;
+    for (auto target : targets)
+        for (auto end : exits)
+            if (target > end && target < end + std::size(exit)) return false;
+    return true;
+}
+[[maybe_unused]] static bool Compatible(HMODULE module, void* function) {
+    return Verify(reinterpret_cast<uintptr_t>(function), [module](uintptr_t pc, Instruction& ins) {
+        MEMORY_BASIC_INFORMATION memory{};
+        if (!VirtualQuery(reinterpret_cast<void*>(pc), &memory, sizeof(memory)) ||
+            memory.AllocationBase != module || memory.State != MEM_COMMIT || memory.Type != MEM_IMAGE ||
+            (memory.Protect & PAGE_GUARD) || !(memory.Protect &
+            (PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) ||
+            memory.RegionSize < sizeof(ins.bytes) ||
+            pc - reinterpret_cast<uintptr_t>(memory.BaseAddress) > memory.RegionSize - sizeof(ins.bytes)) return false;
+        SIZE_T copied = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(pc),
+            ins.bytes, sizeof(ins.bytes), &copied) || copied != sizeof(ins.bytes)) return false;
+        WH_DISASM_RESULT decoded{};
+        if (!Wh_Disasm(ins.bytes, &decoded) || !decoded.length || decoded.length > sizeof(ins.bytes)) return false;
+        ins.length = decoded.length;
+        std::copy(std::begin(decoded.text), std::end(decoded.text), std::begin(ins.text));
+        return ins.text[sizeof(ins.text) - 1] == 0;
+    });
+}
+} // namespace X86PaintAbi
+
 static void InstallListView(HMODULE module, size_t index) {
     static constexpr ListPaint hooks[] = {
         ListPaint_Hook<0>, ListPaint_Hook<1>, ListPaint_Hook<2>, ListPaint_Hook<3>};
@@ -1142,21 +1308,34 @@ static void InstallListView(HMODULE module, size_t index) {
          &g_listModules[index].dragOriginal, dragHooks[index], true},
 #ifdef _WIN64
         {{L"private: void __cdecl CLVDrawManager::_PaintItems(struct HDC__ *,struct tagRECT const *)"},
-#else
-        // Verified in x86 SxS 6.0.26100.9767: ECX=this, [EBP+8]=HDC,
-        // [EBP+0xC]=RECT*, ret 8. Recheck this ABI when the component changes.
-        {{L"CLVDrawManager::_PaintItems"},
-#endif
          &g_listModules[index].workOriginal, workHooks[index], true},
+#else
+        // Resolve without installing a detour: even a pass-through hook would
+        // be unsafe if this bare public symbol changed its calling convention.
+        {{L"CLVDrawManager::_PaintItems"},
+         &g_listModules[index].workOriginal, nullptr, true},
+#endif
     };
     bool resolved = WindhawkUtils::HookSymbols(module, comctl32_dll_hooks, std::size(comctl32_dll_hooks));
     auto& entry = g_listModules[index];
     entry.installed = resolved && entry.original;
+    PCWSTR fadeFailure = L"List view fade symbols unavailable; marquee hides immediately";
+#ifndef _WIN64
+    if (resolved && entry.workOriginal) {
+        if (!X86PaintAbi::Compatible(module, reinterpret_cast<void*>(entry.workOriginal))) {
+            fadeFailure = L"List view x86 _PaintItems ABI not recognized; fade disabled, rounded selection retained";
+            entry.workOriginal = nullptr;
+        } else if (!WindhawkUtils::SetFunctionHook(entry.workOriginal, workHooks[index], &entry.workOriginal)) {
+            fadeFailure = L"List view x86 _PaintItems hook failed; fade disabled";
+            entry.workOriginal = nullptr;
+        }
+    }
+#endif
     entry.fadeInstalled = g_settings.fadeMs > 0 && entry.installed && entry.dragOriginal && entry.workOriginal;
     if (!entry.installed)
         Wh_Log(L"List view alpha-marquee hook unavailable in module %p; remains native", module);
     else if (g_settings.fadeMs > 0 && !entry.fadeInstalled)
-        Wh_Log(L"List view fade symbols unavailable; marquee hides immediately");
+        Wh_Log(L"%s", fadeFailure);
 }
 
 // Resolution is gated by actual controls, not by DLL presence. Many programs
