@@ -5,6 +5,7 @@
 // @version         1.0
 // @author          Chr1s
 // @github          https://github.com/chr1sx
+// @license         MIT
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -luser32 -ldwmapi
 // ==/WindhawkMod==
