@@ -3,7 +3,7 @@
 // @name            Per-monitor taskbar icon alignment
 // @description     Choose icon alignment (Left, Center, Right) and Start button placement (Left, Right) independently for each monitor (Windows 11).
 // @version         1.0.1
-// @author          vTools
+// @author          vmTools
 // @github          https://github.com/VitalyTz
 // @homepage        https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
 // @license         MIT
