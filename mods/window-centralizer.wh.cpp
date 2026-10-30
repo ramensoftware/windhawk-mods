@@ -285,10 +285,18 @@ bool HasCaption(HWND hwnd) {
 }
 
 bool IsIgnoredClass(const wchar_t* cls) {
+    // Windows' own classes, matched exactly: as substrings, "Ghost" (the hung-window ghost) also caught
+    // Blender's GHOST_WindowClass.
+    static const wchar_t* const kExact[] = {
+        L"Ghost", L"#32768", L"Shell_TrayWnd", L"TrayNotifyWnd", L"Progman", L"WorkerW",
+        L"Windows.UI.Core.CoreWindow",
+    };
+    for (const wchar_t* name : kExact)
+        if (_wcsicmp(cls, name) == 0)
+            return true;
     static const wchar_t* const kParts[] = {
-        L"Splash", L"Loading", L"MsoSplash", L"Ghost", L"NetUI", L"#32768", L"Menu", L"Shadow", L"Tooltip",
-        L"NotifyIcon", L"Popup", L"Overlay", L"Dimmer", L"Shell_TrayWnd", L"TrayNotifyWnd", L"Taskbar",
-        L"Progman", L"WorkerW", L"SearchHost", L"Windows.UI.Core.CoreWindow",
+        L"Splash", L"Loading", L"NetUI", L"Menu", L"Shadow", L"Tooltip", L"NotifyIcon", L"Popup",
+        L"Overlay", L"Dimmer", L"Taskbar", L"SearchHost",
     };
     for (const wchar_t* part : kParts)
         if (ContainsNoCase(cls, part))
