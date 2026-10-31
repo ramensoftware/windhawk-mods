@@ -2,13 +2,13 @@
 // @id              outlook-refined
 // @name            Outlook Refined
 // @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.4
+// @version         0.5
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -lole32
+// @compilerOptions -lole32 -loleaut32 -lurlmon -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -116,7 +116,7 @@ the parts that depend on this most.
   $description: Days the agenda lists, today included (1 to 14)
 - monthHeatMap: false
   $name: Month grid above the agenda
-  $description: Each day shaded by its booked hours; the arrows browse other months. Reads the same calendar data as the agenda, through Outlook's session
+  $description: Each day shaded by its booked hours; the arrows browse other months. Needs the agenda above to be on, and reads the same calendar data through Outlook's session
 - otherCard: false
   $name: Other inbox under Focused
   $description: While an inbox shows its Focused tab, its newest Other conversations sit below the list. A button by the tabs switches back to Outlook's own tabs. Reads the Other list through Outlook's session and refreshes every two minutes while it is on
@@ -168,6 +168,9 @@ the parts that depend on this most.
 // ==/WindhawkModSettings==
 
 #include <unknwn.h>
+#include <bcrypt.h>
+#include <urlmon.h>
+
 #include <atomic>
 #include <map>
 #include <string>
@@ -197,8 +200,10 @@ enum {
     kWebView_AddScriptOnDocumentCreated = 27,
     kWebView_RemoveScriptOnDocumentCreated = 28,
     kWebView_ExecuteScript = 29,
+    kWebView_PostWebMessageAsString = 33,
     kWebView_AddWebMessageReceived = 34,
     kWebView_RemoveWebMessageReceived = 35,
+    kArgs_GetSource = 3,
     kArgs_TryGetWebMessageAsString = 5,
     kHandler_Invoke = 3,
 };
@@ -224,7 +229,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   // per mailbox, so the agenda, month grid and Other card can ask that same service with
   // the session Outlook is already signed in to. The headers stay inside this closure: the
   // store only says which mailboxes it holds and sends requests on their behalf. Nothing
-  // is stored or logged, and removing the mod leaves the wrappers idle.
+  // is stored or logged, and disabling the mod puts fetch and XHR back as they were.
   const SESSION_V = 5;
   const session = (window.__olktSession && window.__olktSession.v === SESSION_V) ? window.__olktSession : (window.__olktSession = (() => {
     const byAnchor = new Map(); // x-anchormailbox -> { base, headers, at }
@@ -242,7 +247,11 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     // Outlook addresses its own service with a relative URL as often as an absolute one, so
     // the address is resolved against the page before it is matched. The service's own base
     // is kept per mailbox, so each one is asked on the host Outlook itself used.
+    // Set by stop(). Outlook code that kept its own reference to the old fetch keeps
+    // calling the wrapper, so the wrapper itself has to go quiet, not just be unhooked.
+    let stopped = false;
     const note = (url, headers) => {
+      if (stopped) return;
       let u;
       try { u = new URL(url, location.href); } catch { return; }
       if (u.protocol !== 'https:' || !u.pathname.includes('/owa/') || !/\/service\.svc$/.test(u.pathname) || !u.searchParams.get('action')) return;
@@ -261,6 +270,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     // rather than by parsing the whole payload, which is large and none of our business.
     const CATEGORY = /\{"Name":"((?:[^"\\]|\\.)*)","Color":(-?\d+),"Id":"/g;
     const readPalette = (anchor, text) => {
+      if (stopped) return;
       const map = new Map();
       for (const m of text.matchAll(CATEGORY)) {
         let name = m[1];
@@ -304,6 +314,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       // drops every header the store holds. Only restores what is still ours, so a
       // wrapper another extension added after ours stays in place.
       stop() {
+        stopped = true;
         if (window.fetch === wrappedFetch) window.fetch = nativeFetch;
         if (X.open === wrappedOpen) X.open = open;
         if (X.setRequestHeader === wrappedSetHeader) X.setRequestHeader = setHeader;
@@ -349,8 +360,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       },
     };
   })());
-  // Each install replaces the previous one. Older copies (for example from an
-  // injector that was restarted) see a newer generation and shut themselves down.
+  // Each install replaces the previous one: an older copy, left by a window that was
+  // already open, sees a newer generation and shuts itself down.
   if (window.__olkt) window.__olkt.remove();
   const gen = window.__olktGen = (window.__olktGen || 0) + 1;
   const current = () => window.__olktGen === gen;
@@ -363,32 +374,55 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const ACCOUNT_ORDER_KEY = 'olkt-account-order';
   // Static choices come from the mod's settings. Edits made inside Outlook (groups,
   // renames, folds, account order, pane and card sizes) belong to the mod rather than to
-  // Outlook, so they live in Windhawk's own storage: the mod hands them in through
-  // OLKT_CONFIG.store and takes each write back over the WebView's message channel.
-  // Nothing of ours is left in Outlook's profile when the mod goes.
+  // Outlook, so they live in Windhawk's own storage: this script asks for them over the
+  // WebView's message channel and sends each change back the same way. Nothing of ours
+  // is left in Outlook's profile when the mod goes.
   const S = OLKT_CONFIG;
   const STORE_KEYS = [FOLD_KEY, WIDTH_KEY, FAVORITES_KEY, ACCOUNT_ORDER_KEY, 'olkt-agenda-height', 'olkt-other-height', 'olkt-other-split', 'olkt-other-folds'];
   const store = (() => {
-    const mem = new Map(Object.entries(S.store || {}));
-    // One line each: the marker, the key, then the value, with an empty value meaning
-    // delete. Outlook's own handler reads its messages as JSON and ignores this shape.
-    const post = (key, value) => {
-      try { window.chrome.webview.postMessage('olkt-store\n' + key + '\n' + (value == null ? '' : value)); } catch {}
-    };
-    // State an earlier version wrote into Outlook's localStorage moves across once, so
-    // favorites and sizes survive the change and Outlook's profile is left clean.
-    for (const key of STORE_KEYS) {
-      try {
-        const old = localStorage.getItem(key);
-        if (old == null) continue;
-        if (!mem.has(key)) { mem.set(key, old); post(key, old); }
-        localStorage.removeItem(key);
-      } catch {}
-    }
+    const mem = new Map();
+    const channel = (() => { try { return window.chrome.webview; } catch { return null; } })();
+    // Every message carries the key the mod put in this script. A page in another
+    // WebView, an add-in dialog for instance, shares the message channel but never sees
+    // the script, so it cannot ask for the state or change it.
+    const post = text => { try { channel.postMessage(text); } catch {} };
+    let loaded = false;
+    let onMessage = null;
+    // The state is asked for rather than baked into this script: a window that reloads
+    // then starts from what is saved now, not from what was saved when it opened.
+    const ready = new Promise(resolve => {
+      if (!channel || !S.key) { resolve(false); return; }
+      onMessage = ev => {
+        const text = typeof ev.data === 'string' ? ev.data : '';
+        if (!text.startsWith('olkt-state\n')) return;
+        try {
+          const saved = JSON.parse(text.slice('olkt-state\n'.length));
+          for (const key of STORE_KEYS) if (typeof saved[key] === 'string') mem.set(key, saved[key]);
+        } catch {}
+        loaded = true;
+        resolve(true);
+      };
+      channel.addEventListener('message', onMessage);
+      post('olkt-get\n' + S.key);
+      // No answer: draw with the defaults rather than hold the pane back. Writes stay
+      // shut until an answer arrives, so nothing saved can be overwritten unread.
+      setTimeout(() => resolve(false), 1500);
+    });
     return {
+      ready,
+      loaded: () => loaded,
       getItem: key => (mem.has(key) ? mem.get(key) : null),
-      setItem: (key, value) => { mem.set(key, String(value)); post(key, String(value)); },
-      removeItem: key => { mem.delete(key); post(key, null); },
+      setItem: (key, value) => {
+        if (!loaded) return;
+        mem.set(key, String(value));
+        post('olkt-set\n' + S.key + '\n' + key + '\n' + String(value));
+      },
+      removeItem: key => {
+        if (!loaded) return;
+        mem.delete(key);
+        post('olkt-set\n' + S.key + '\n' + key + '\n');
+      },
+      stop() { if (channel && onMessage) { channel.removeEventListener('message', onMessage); onMessage = null; } },
     };
   })();
   const stored = (key, fallback) => { try { const v = JSON.parse(store.getItem(key)); return Array.isArray(v) ? v : fallback; } catch { return fallback; } };
@@ -541,7 +575,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const matchesAnyGroup = name => groups().some(({ n: g }) => g.match && pattern(g.match).test(name));
 
   function save() {
-    // Per PC, on Outlook's origin; other open windows pick it up when they next start.
+    // Saved by the mod, per PC; other open Outlook windows read it when they next start.
     try {
       if (S.favoritesGroups) store.setItem(FAVORITES_KEY, JSON.stringify(cfg.favorites));
       store.setItem(ACCOUNT_ORDER_KEY, JSON.stringify(Object.keys(cfg.accounts)));
@@ -1428,8 +1462,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const ym = d => ymd(d).slice(0, 7);
 
   // One request in flight per month (a failed one may retry after a minute), and a
-  // cached month is fetched again once it is older than agenda.refreshMinutes; the
-  // cached copy stays on screen meanwhile.
+  // cached month is fetched again once it is older than the agenda's refresh interval;
+  // the cached copy stays on screen meanwhile.
   const monthPending = new Map(); // 'YYYY-MM' -> when it was asked for
   const refreshMs = () => AGENDA_REFRESH;
   function askMonth(key) {
@@ -1863,7 +1897,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       out.push(`[data-olkt-label]::after{content:attr(data-olkt-label);visibility:visible;position:absolute;left:0;top:0;white-space:nowrap}`);
     }
     if (S.compactTimeZones) {
-      const zw = CAL.zoneWidth || 32;
+      const zw = 32;  // the width Outlook gives a time-zone column once it is compact
       out.push(`[data-olkt-tz]{width:${zw}px!important;min-width:${zw}px!important;max-width:${zw}px!important}`);
       out.push(`time[data-olkt-short]{font-size:0!important}`);
       out.push(`time[data-olkt-short]::after{content:attr(data-olkt-short);font-size:10.5px;font-variant-numeric:tabular-nums}`);
@@ -2892,15 +2926,41 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       document.querySelectorAll('[data-olkt-favs]').forEach(n => n.removeAttribute('data-olkt-favs'));
       for (const a of ['data-olkt-label', 'data-olkt-tz', 'data-olkt-short', 'data-olkt-off', 'data-olkt-time', 'data-olkt-chip', 'data-olkt-open', 'data-olkt-othertab', 'data-olkt-ov', 'data-olkt-sig', 'data-olkt-merges', 'data-olkt-marked', 'data-olkt-quoted', 'data-olkt-collapsed'])document.querySelectorAll(`[${a}]`).forEach(n => n.removeAttribute(a));
       delete window.__olkt;
+      store.stop();
       if (full) session.stop();
       return 'removed';
     },
-    config: () => cfg,
-    agenda: setAgenda,
-    other: setOther,
-    month: setMonth,
-    refresh: () => { agendaAsked = 0; ensureAgendaData(true); if (otherAccount) askOther(); return 'refreshing'; },
   };
+
+  // Anything read from the saved state at startup is read again once the mod answers,
+  // and the panes are drawn a second time. Values an older version left in Outlook's
+  // own storage move across here, where the answer is already in hand, so a migration
+  // can never overwrite something newer.
+  function applyState() {
+    for (const key of STORE_KEYS) {
+      try {
+        const old = localStorage.getItem(key);
+        if (old == null) continue;
+        if (store.getItem(key) == null) store.setItem(key, old);
+        localStorage.removeItem(key);
+      } catch {}
+    }
+    try { folds = JSON.parse(store.getItem(FOLD_KEY) || '{}') || {}; } catch { folds = {}; }
+    if (S.resizablePane) paneWidth = (Number(store.getItem(WIDTH_KEY)) || 0) || Number(S.paneWidth) || 0;
+    if (S.favoritesGroups) cfg.favorites = stored(FAVORITES_KEY, DEFAULT_FAVORITES);
+    cfg.accounts = orderedAccounts(stored(ACCOUNT_ORDER_KEY, []));
+    agendaHeight = Number(store.getItem(HEIGHT_KEY)) || 0;
+    otherHeight = Number(store.getItem(OTHER_H_KEY)) || 0;
+    otherSplit = store.getItem(OTHER_SPLIT_KEY) !== '0';
+    try { otherFolds = JSON.parse(store.getItem(OTHER_FOLD_KEY) || '{}') || {}; } catch { otherFolds = {}; }
+    if (!current() || !document.body) return 'state applied before start';
+    render();
+    try { renderAgenda(); } catch {}
+    try { renderOther(); } catch {}
+    return 'state applied';
+  }
+  store.ready.then(got => { if (got && current()) applyState(); });
+
   if (document.body) start(); else addEventListener('DOMContentLoaded', start, { once: true });
   return 'installed';
 })())olkt";
@@ -3003,7 +3063,8 @@ void LoadStore() {
     ReleaseSRWLockExclusive(&g_storeLock);
 }
 
-void AddStore(std::wstring& json) {
+// The saved state as a JSON object, for the answer to a page that asks for it.
+std::wstring StateJson() {
     std::wstring object = L"{";
     AcquireSRWLockShared(&g_storeLock);
     for (const auto& [key, value] : g_store) {
@@ -3011,7 +3072,27 @@ void AddStore(std::wstring& json) {
         object += JsonString(key.c_str()) + L":" + JsonString(value.c_str());
     }
     ReleaseSRWLockShared(&g_storeLock);
-    AddField(json, L"store", object + L"}");
+    return object + L"}";
+}
+
+// A key made at load time and put in the page script, which no other page can read.
+// Every message must carry it, so a page in another WebView, an add-in dialog for
+// instance, cannot ask for the state or change it even though it shares the channel.
+std::wstring g_key;
+
+void MakeKey() {
+    unsigned char bytes[16] = {};
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, bytes, sizeof(bytes), BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+        // No randomness is a reason to carry no state, not a reason to accept anyone's.
+        g_key.clear();
+        return;
+    }
+    static constexpr wchar_t kHex[] = L"0123456789abcdef";
+    g_key.clear();
+    for (unsigned char b : bytes) {
+        g_key += kHex[b >> 4];
+        g_key += kHex[b & 0xF];
+    }
 }
 
 SRWLOCK g_scriptLock = SRWLOCK_INIT;
@@ -3049,7 +3130,7 @@ void BuildScript() {
     AddString(json, L"printFit");
     AddBool(json, L"printKeepChartsWhole");
     AddString(json, L"printQuotedReplies");
-    AddStore(json);
+    AddField(json, L"key", JsonString(g_key.c_str()));
     json += L"}";
     std::wstring script = L"{\nconst OLKT_CONFIG = " + json + L";\n" + kPageScript + L"\n}";
     AcquireSRWLockExclusive(&g_scriptLock);
@@ -3072,6 +3153,13 @@ HRESULT Forward(IUnknown* handler, HRESULT hr, IUnknown* result) {
     return reinterpret_cast<Invoke_t>(Slot(handler, kHandler_Invoke))(handler, hr, result);
 }
 
+// Set while the mod is being taken out: no new window is touched from here on.
+std::atomic<bool> g_unloading{false};
+// Set once the teardown has run. If anything could not be reached, the module is pinned
+// in memory rather than unmapped, and whatever WebView2 still holds reads this and
+// returns without touching the engine.
+std::atomic<bool> g_unloaded{false};
+
 // EventRegistrationToken from eventtoken.h: one INT64, so an add/remove pair can be
 // called through the vtable without pulling in the WinRT headers.
 struct EventToken {
@@ -3080,19 +3168,51 @@ struct EventToken {
 
 // ==== state the page sends back ====
 
-// "olkt-store", the key, then the value, one per line; an empty value deletes the key.
-// Outlook's own messages are JSON and never match, so they pass straight through.
-void StoreMessage(PCWSTR text) {
-    constexpr std::wstring_view kPrefix = L"olkt-store\n";
-    std::wstring_view message(text);
-    if (!message.starts_with(kPrefix)) return;
-    message.remove_prefix(kPrefix.size());
-    size_t line = message.find(L'\n');
-    if (line == std::wstring_view::npos) return;
-    std::wstring key(message.substr(0, line));
-    std::wstring value(message.substr(line + 1));
-    // Only the mod's own keys, and nothing big enough to bloat the registry: the page
-    // is trusted no further than that.
+// The hosts Outlook itself serves, the same list the page script checks. The host comes
+// from the URL parser, so it carries no user name, port or brackets, and an IDN host is
+// already punycode; only a trailing dot and case are left to deal with.
+bool OutlookHost(std::wstring_view host) {
+    static constexpr std::wstring_view kHosts[] = {
+        L"outlook.office.com",     L"outlook.office365.com",     L"outlook.live.com",
+        L"outlook-sdf.office.com", L"outlook.cloud.microsoft",   L"outlook-sdf.cloud.microsoft",
+    };
+    if (!host.empty() && host.back() == L'.') host.remove_suffix(1);
+    std::wstring lowered(host);
+    for (wchar_t& c : lowered) c = (c >= L'A' && c <= L'Z') ? (wchar_t)(c - L'A' + L'a') : c;
+    for (std::wstring_view known : kHosts) {
+        if (lowered == known) return true;
+        // A label boundary, so outlook.office.com.example.net is not a match.
+        if (lowered.size() > known.size() + 1 && lowered.ends_with(known) &&
+            lowered[lowered.size() - known.size() - 1] == L'.') {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The document that sent the message, as the browser recorded it, not as the page says.
+// Anything that is not https on one of Outlook's own hosts is refused, about:blank,
+// data: and srcdoc documents included.
+bool FromOutlook(PCWSTR url) {
+    if (!url || !*url) return false;
+    IUri* uri = nullptr;
+    if (FAILED(CreateUri(url, Uri_CREATE_CANONICALIZE, 0, &uri)) || !uri) return false;
+    BSTR scheme = nullptr;
+    BSTR host = nullptr;
+    // The scheme by name rather than by enum value: one less number to get wrong.
+    bool https = SUCCEEDED(uri->GetSchemeName(&scheme)) && scheme &&
+                 CompareStringOrdinal(scheme, -1, L"https", -1, TRUE) == CSTR_EQUAL;
+    bool ok = https && SUCCEEDED(uri->GetHost(&host)) && host && OutlookHost(host);
+    if (scheme) SysFreeString(scheme);
+    if (host) SysFreeString(host);
+    uri->Release();
+    return ok;
+}
+
+// Writes the saved state. The caller has already checked who sent the message.
+void StoreValue(std::wstring_view name, std::wstring_view text) {
+    std::wstring key(name), value(text);
+    // Only the mod's own keys, and nothing big enough to bloat the registry.
     bool known = false;
     for (PCWSTR k : kStoreKeys) known = known || key == k;
     if (!known || value.size() >= kStoreMaxChars) return;
@@ -3105,7 +3225,33 @@ void StoreMessage(PCWSTR text) {
         Wh_SetStringValue(key.c_str(), value.c_str());
     }
     ReleaseSRWLockExclusive(&g_storeLock);
-    BuildScript();  // windows opened from here on start with the new state
+}
+
+// A line the page sent, once the sender has been vouched for:
+//   olkt-get <key>                 asks for the saved state, answered on the same channel
+//   olkt-set <key> <name> <value>  writes one value; an empty value deletes it
+// Every line carries the key from the script, so a page that never saw the script is
+// turned away even on an Outlook host. Outlook's own messages are JSON and never match.
+void HandleMessage(IUnknown* sender, PCWSTR text) {
+    std::wstring_view message(text);
+    bool get = message.starts_with(L"olkt-get\n");
+    bool set = message.starts_with(L"olkt-set\n");
+    if (!get && !set) return;
+    message.remove_prefix(get ? 9 : 9);
+    size_t line = message.find(L'\n');
+    std::wstring_view key = line == std::wstring_view::npos ? message : message.substr(0, line);
+    if (g_key.empty() || key != g_key) return;
+    if (set) {
+        if (line == std::wstring_view::npos) return;
+        message.remove_prefix(line + 1);
+        size_t name = message.find(L'\n');
+        if (name == std::wstring_view::npos) return;
+        StoreValue(message.substr(0, name), message.substr(name + 1));
+        return;
+    }
+    std::wstring answer = L"olkt-state\n" + StateJson();
+    using Post_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPCWSTR);
+    reinterpret_cast<Post_t>(Slot(sender, kWebView_PostWebMessageAsString))(sender, answer.c_str());
 }
 
 class MessageReceived final : public IUnknown {
@@ -3132,13 +3278,22 @@ class MessageReceived final : public IUnknown {
         return n;
     }
     virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown* sender, IUnknown* args) {
-        LPWSTR text = nullptr;
-        using TryGet_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPWSTR*);
-        // Not a string message (Outlook posts objects): nothing of ours.
-        if (FAILED(reinterpret_cast<TryGet_t>(Slot(args, kArgs_TryGetWebMessageAsString))(args, &text)) || !text) {
+        // The mod is on its way out, or gone and only still mapped: touch nothing.
+        if (g_unloaded) return S_OK;
+        using GetString_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPWSTR*);
+        LPWSTR source = nullptr;
+        if (FAILED(reinterpret_cast<GetString_t>(Slot(args, kArgs_GetSource))(args, &source)) || !source) {
             return S_OK;
         }
-        StoreMessage(text);
+        bool trusted = FromOutlook(source);
+        CoTaskMemFree(source);
+        if (!trusted) return S_OK;
+        LPWSTR text = nullptr;
+        // Not a string message (Outlook posts objects): nothing of ours.
+        if (FAILED(reinterpret_cast<GetString_t>(Slot(args, kArgs_TryGetWebMessageAsString))(args, &text)) || !text) {
+            return S_OK;
+        }
+        HandleMessage(sender, text);
         CoTaskMemFree(text);
         return S_OK;
     }
@@ -3160,7 +3315,18 @@ struct PageView {
 SRWLOCK g_viewsLock = SRWLOCK_INIT;
 std::vector<PageView> g_views;
 
+void ReleaseView(const PageView& view, bool removeScript);
+
 void AddView(IUnknown* webview, void* controller, HWND window, PCWSTR scriptId) {
+    // The teardown has already run for the windows it knew about, and this one arrived
+    // too late to be on that list. Undo it here instead, on the thread it belongs to,
+    // rather than leave a half-modded window behind.
+    if (g_unloading) {
+        PageView late{webview, controller, window, scriptId ? scriptId : L"", EventToken{}};
+        webview->AddRef();  // ReleaseView drops it again
+        ReleaseView(late, true);
+        return;
+    }
     MessageReceived* handler = new MessageReceived();
     EventToken token{};
     using Add_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, IUnknown*, EventToken*);
@@ -3169,6 +3335,13 @@ void AddView(IUnknown* webview, void* controller, HWND window, PCWSTR scriptId) 
     if (FAILED(hr)) Wh_Log(L"add_WebMessageReceived failed: 0x%08X", hr);
     webview->AddRef();
     AcquireSRWLockExclusive(&g_viewsLock);
+    // Checked again under the lock: the teardown may have started while the handler was
+    // being registered, in which case this view would never be torn down.
+    if (g_unloading) {
+        ReleaseSRWLockExclusive(&g_viewsLock);
+        ReleaseView({webview, controller, window, scriptId ? scriptId : L"", token}, true);
+        return;
+    }
     g_views.push_back({webview, controller, window, scriptId ? scriptId : L"", token});
     ReleaseSRWLockExclusive(&g_viewsLock);
 }
@@ -3330,6 +3503,10 @@ void HookControllerClose(IUnknown* controller) {
 // the script is registered (ScriptAdded). Any failure hands it over at once.
 HRESULT OnController(HRESULT result_hr, IUnknown* result, IUnknown* outlook) {
     if (FAILED(result_hr) || !result) return Forward(outlook, result_hr, result);
+    // Being taken out: hand Outlook its window untouched. This is the only place that
+    // keeps a window from being half modded, because by the time the script completion
+    // comes back the script has already run on the window's first document.
+    if (g_unloading) return Forward(outlook, result_hr, result);
     IUnknown* controller = nullptr;
     if (FAILED(result->QueryInterface(kIID_Controller, (void**)&controller))) {
         Wh_Log(L"Controller interface missing");
@@ -3495,6 +3672,9 @@ LRESULT CALLBACK CallWndProcForRunFromWindowThread(int code, WPARAM wParam, LPAR
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+// The parcel outlives the call on purpose. A timed-out SendMessageTimeout can still be
+// delivered afterwards, and the hook procedure would then read a stack frame that has
+// returned, so on that path the parcel is leaked rather than freed.
 bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, PVOID procParam) {
     DWORD thread = GetWindowThreadProcessId(window, nullptr);
     if (!thread) return false;
@@ -3504,38 +3684,66 @@ bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, PVOID proc
     }
     HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForRunFromWindowThread, nullptr, thread);
     if (!hook) return false;
-    RunFromWindowThreadParam param{proc, procParam};
+    auto* parcel = new RunFromWindowThreadParam{proc, procParam};
     DWORD_PTR unused = 0;
-    // A hung Outlook window must not hold the unload up for ever.
-    LRESULT sent = SendMessageTimeout(window, g_runFromWindowThreadMessage, 0, (LPARAM)&param, SMTO_ABORTIFHUNG, 5000,
+    // A WebView2 UI thread can sit in a wait that pumps nothing, so the send is bounded.
+    // Correctness does not rest on it: whatever is left over is made safe below.
+    LRESULT sent = SendMessageTimeout(window, g_runFromWindowThreadMessage, 0, (LPARAM)parcel, SMTO_ABORTIFHUNG, 5000,
                                       &unused);
     UnhookWindowsHookEx(hook);
-    return sent != 0;
+    if (!sent) return false;  // parcel deliberately leaked: a late delivery must still find it
+    delete parcel;
+    return true;
 }
+
+// One window's teardown, with its own copy of the view, for the same reason.
+struct Teardown {
+    PageView view;
+    std::atomic<bool> done{false};
+};
 
 void WINAPI ReleaseViewOnThread(PVOID param) {
-    ReleaseView(*(const PageView*)param, true);
+    auto* teardown = (Teardown*)param;
+    if (!teardown->done.exchange(true)) ReleaseView(teardown->view, true);
 }
 
-// Runs while the hooks are still in place, so every open Outlook window gives the
-// script back before the DLL goes: the styling, the timers and the wrapped fetch all
-// stop at once, with no restart needed.
+// Keeps the mod's code mapped when something of ours is still reachable. Windhawk frees
+// the DLL five seconds after the teardown whether or not WebView2 has let go, and a call
+// into unmapped code takes Outlook down with it. One leaked module is the cheaper end.
+void PinModule() {
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                       (LPCWSTR)&PinModule, &self);
+}
+
+// Runs while the hooks are still in place, so every open Outlook window gives the script
+// back before the DLL goes: the styling, the timers and the wrapped fetch all stop at
+// once, with no restart needed.
 void Wh_ModBeforeUninit() {
+    g_unloading = true;
     AcquireSRWLockExclusive(&g_viewsLock);
     std::vector<PageView> views;
     views.swap(g_views);
-    ReleaseSRWLockExclusive(&g_viewsLock);
+    ReleaseSRWLockExclusive(&g_viewsLock);  // released before any send, or the UI thread deadlocks
+    bool leftBehind = false;
     for (const PageView& view : views) {
-        if (!RunFromWindowThread(view.window, ReleaseViewOnThread, (PVOID)&view)) {
-            // Its window is gone or not answering: leave the object alone rather than
-            // call into WebView2 from the wrong thread.
-            Wh_Log(L"Could not reach the WebView's thread; its script stays until Outlook restarts");
+        auto* teardown = new Teardown{view};
+        if (RunFromWindowThread(view.window, ReleaseViewOnThread, teardown)) {
+            delete teardown;
+            continue;
         }
+        // Its window is gone or not answering. Leave the objects alone rather than call
+        // into WebView2 from the wrong thread, and keep the code mapped for them.
+        leftBehind = true;
+        Wh_Log(L"Could not reach a WebView's thread; its script stays until Outlook restarts");
     }
+    if (leftBehind) PinModule();
+    g_unloaded = true;
 }
 
 BOOL Wh_ModInit() {
     g_runFromWindowThreadMessage = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_outlook-refined");
+    MakeKey();
     LoadStore();
     BuildScript();
     if (HookLoader(false)) return TRUE;
@@ -3554,5 +3762,11 @@ void Wh_ModSettingsChanged() {
 // 5 seconds for WebView2 to release the ones it still holds before the DLL unloads.
 void Wh_ModUninit() {
     for (int i = 0; i < 100 && g_liveObjects > 0; ++i) Sleep(50);
-    if (g_liveObjects > 0) Wh_Log(L"Unloading while WebView2 still holds %d handlers", g_liveObjects.load());
+    if (g_liveObjects > 0) {
+        // WebView2 can still call into these, and the wait is over. Keeping the pages
+        // mapped costs one module; unmapping them under a live caller costs Outlook.
+        Wh_Log(L"Unloading while WebView2 still holds %d handlers; pinning the module",
+               g_liveObjects.load());
+        PinModule();
+    }
 }
