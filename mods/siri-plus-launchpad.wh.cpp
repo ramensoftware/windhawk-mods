@@ -9054,10 +9054,10 @@ D2D1_RECT_F CfgHomeBar(const RECT& area, const RECT& work, float s) {
 struct CfgRow { int item; D2D1_RECT_F r, ctl; float labelH, descH; };
 struct CfgCaption { int section; D2D1_RECT_F r; };
 struct CfgSideRow { int section; D2D1_RECT_F r; };
-[[clang::no_destroy]] std::vector<CfgRow> g_cfgRows;
-[[clang::no_destroy]] std::vector<D2D1_RECT_F> g_cfgCards;
-[[clang::no_destroy]] std::vector<CfgCaption> g_cfgCaptions;
-[[clang::no_destroy]] std::vector<CfgSideRow> g_cfgSideRows;
+std::vector<CfgRow> g_cfgRows;
+std::vector<D2D1_RECT_F> g_cfgCards;
+std::vector<CfgCaption> g_cfgCaptions;
+std::vector<CfgSideRow> g_cfgSideRows;
 D2D1_RECT_F g_cfgHeader{}, g_cfgView{};
 bool g_cfgNothing;
 
