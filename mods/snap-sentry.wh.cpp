@@ -948,9 +948,10 @@ static bool ShortcutExistsAndValid(const std::wstring& path) {
     return ok;
 }
 
-// Stores the COM launch command in a private app hive inside Windhawk storage.
-// Explorer hooks redirect reads of this CLSID's LocalServer32 entry to that
-// hive, so SnapSentry never registers the CLSID in the system registry.
+// Stores the COM launch command and the toast app identity in a private app
+// hive inside Windhawk storage. Explorer hooks redirect reads of this CLSID's
+// LocalServer32 entry and of AppUserModelId\mario0318.SnapSentry to that hive,
+// so SnapSentry registers neither in the system registry.
 static HKEY g_toastRegistrationHive = nullptr;
 
 static const wchar_t kToastHiveFileName[] = L"toast-registration.hiv";
@@ -1341,9 +1342,10 @@ static void RemoveClsidRegistration() {
     RemoveLegacyAumidShortcut();
 }
 
-// These hooks expose this private LocalServer32 entry through Explorer's
-// registry calls while the notification action is enabled. Only this SnapSentry
-// CLSID is served from the private hive; other requests pass through unchanged.
+// These hooks expose the private LocalServer32 and AppUserModelId entries
+// through Explorer's registry calls while the notification action is enabled.
+// Only this SnapSentry CLSID and AUMID are served from the private hive; other
+// requests pass through unchanged.
 static HKEY g_explorerToastHive = nullptr;
 static HANDLE g_explorerHooksReady = nullptr;
 static SRWLOCK g_explorerHiveLock = SRWLOCK_INIT;
@@ -1720,10 +1722,9 @@ static void WhExplorer_ModSettingsChanged() {
             g_explorerToastHive = nullptr;
         }
         ReleaseSRWLockExclusive(&g_explorerHiveLock);
-        AcquireSRWLockExclusive(&g_registryHandleLock);
-        g_registryHandlePaths.clear();
-        g_registryHandleCount = 0;
-        ReleaseSRWLockExclusive(&g_registryHandleLock);
+        // Keep tracking open handles: the hooks stay installed, and handles
+        // opened before the toggle must still redirect once it is back on.
+        // The map is cleared only in WhExplorer_ModUninit.
         return;
     }
     if (!g_explorerHooksReady) {
