@@ -1,4 +1,3 @@
-
 // ==WindhawkMod==
 // @id              language-switcher-position
 // @name            Language Switcher Position
