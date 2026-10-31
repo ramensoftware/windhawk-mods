@@ -2,7 +2,7 @@
 // @id              taskbar-open-window-underline
 // @name            Taskbar Open Window Underline
 // @description     Underlines the labels (and optionally the icons) of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance
-// @version         2.0
+// @version         2.1
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -43,12 +43,15 @@ the button's icon with the same rule, for taskbars that hide their labels or
 as a stronger cue next to the label. Thickness, width, distance from the icon,
 corner radius, color and opacity are configurable. The color can differ
 between the light and dark theme, can be a horizontal gradient, and defaults
-to the system accent color. Icons aren't text, so this line is a composition
-visual attached to the icon element; it follows the icon's size and position
-without touching the taskbar's layout. With hidden labels it relies on the
-view-model symbols described below: on builds where they can't be resolved,
-the title fallback has no label text to work with, and those buttons stay
-plain.
+to the system accent color. The theme is the one each button is actually
+rendered with, so a taskbar switched to the other theme by a mod (Top Taskbar
+Bleed, say, when a light window is maximized) gets that theme's color, and a
+theme change recolors every line at once. Icons aren't text, so this line is
+a composition visual attached to the icon element; it follows the icon's size
+and position without touching the taskbar's layout. With hidden labels it
+relies on the view-model symbols described below: on builds where they can't
+be resolved, the title fallback has no label text to work with, and those
+buttons stay plain.
 
 Hide the running indicator: hides the taskbar's own indicator under running
 buttons, so that the underline is the only cue. The same element also marks
@@ -74,9 +77,11 @@ How it works:
 * The icon underline is a `SpriteVisual` attached to the `Image#Icon` element
   with `ElementCompositionPreview::SetElementChildVisual`, sized relative to
   the icon so it needs no layout work; rounded corners are a geometric clip
-  whose geometry follows the icon's size. The running indicator is hidden
-  through its element's composition visual, so the taskbar's visual states
-  are left untouched. Both are undone when the mod is disabled.
+  whose geometry follows the icon's size. Its color follows the icon's
+  `ActualTheme`, per button, so per-taskbar theme overrides by other mods are
+  honored. The running indicator is hidden through its element's composition
+  visual, so the taskbar's visual states are left untouched. Both are undone
+  when the mod is disabled.
 * On builds where the view-model symbols can't be resolved, the mod falls back
   to matching label text against window titles, which is exact for "Never
   combine" but blind to combined groups.
@@ -230,7 +235,7 @@ struct IconUnderlineSettings {
     float thickness;
     float widthFraction;
     float offset;
-    // Colors for the light and the dark system theme. One color is a solid
+    // Colors for the light and the dark taskbar theme. One color is a solid
     // line, several make a horizontal gradient, none means the accent color.
     std::vector<winrt::Windows::UI::Color> lightColors;
     std::vector<winrt::Windows::UI::Color> darkColors;
@@ -433,26 +438,32 @@ struct LabelEntry {
 std::unordered_map<void*, LabelEntry> g_labels;
 
 // Every icon Image we attached an underline visual to, so the visual can be
-// detached when the mod unloads. The visual itself is not kept here; it is
-// found again through the element and recognized by its Comment.
-std::unordered_map<void*, winrt::weak_ref<Xaml::Controls::Image>> g_icons;
+// detached when the mod unloads, with its ActualThemeChanged subscription.
+// The visual itself is not kept here; it is found again through the element
+// and recognized by its Comment.
+struct IconEntry {
+    winrt::weak_ref<Xaml::Controls::Image> icon;
+    int64_t themeChangedToken;
+};
+std::unordered_map<void*, IconEntry> g_icons;
 
 // Every RunningIndicator element we hid, so it can be shown again when the
 // option is turned off or the mod unloads.
 std::unordered_map<void*, winrt::weak_ref<Xaml::UIElement>> g_indicators;
 
-// The icon colors in use, resolved once and kept until the settings, the
-// system theme or the accent color change. Both changes are tracked with
-// UISettings::ColorValuesChanged (raised on a worker thread, which only sets
-// the dirty flag and nudges the event thread for a pass); the theme is also
-// compared against its registry value on every evaluation, which is cheap and
-// keeps a pass that runs before the event is handled from caching stale
-// colors.
+// The icon colors in use, one list per theme (index 1 = light), resolved once
+// and kept until the settings or the accent color change. The accent color is
+// tracked with UISettings::ColorValuesChanged (raised on a worker thread,
+// which only sets the dirty flag and nudges the event thread for a pass).
+// The theme itself isn't cached: it is read from the icon element's
+// ActualTheme at each evaluation, since a taskbar's theme can differ from
+// the Windows mode (Top Taskbar Bleed, for one, switches a taskbar to the
+// theme matching the bled color through RequestedTheme), and each icon
+// re-evaluates its button when its own ActualTheme changes.
 [[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings
     g_uiSettings{nullptr};
 winrt::event_token g_colorValuesChangedToken;
-std::optional<std::vector<winrt::Windows::UI::Color>> g_iconColors;
-bool g_iconColorsLightTheme;
+std::optional<std::vector<winrt::Windows::UI::Color>> g_iconColors[2];
 std::atomic<bool> g_iconColorsDirty;
 
 // ============================================================================
@@ -1517,26 +1528,17 @@ void ApplyUnderline(const Xaml::Controls::TextBlock& label, bool underline) {
 // visual another mod may have attached to the same element.
 constexpr wchar_t kIconVisualComment[] = L"TaskbarOpenWindowUnderline";
 
-// The taskbar follows the system theme (not the app theme), which is this
-// registry value.
-bool IsSystemLightTheme() {
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER,
-                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
-                     L"Personalize",
-                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
-                     &size) == ERROR_SUCCESS) {
-        return value != 0;
-    }
-    return false;
+// The theme the element is rendered with: the Windows mode as mirrored into
+// the taskbar's tree, or whatever a mod forced on that taskbar's root.
+bool IsLightTheme(const Xaml::FrameworkElement& element) {
+    return element.ActualTheme() == Xaml::ElementTheme::Light;
 }
 
-// Starts tracking the system colors, the first time the icon underline is
-// evaluated. ColorValuesChanged is raised for accent changes and for the
-// system light/dark switch, on a worker thread; it only marks the cached
-// colors dirty and asks the event thread for a refresh pass, which recomputes
-// them on the taskbar thread.
+// Starts tracking the accent color, the first time the icon underline is
+// evaluated. ColorValuesChanged is raised on a worker thread; it only marks
+// the cached colors dirty and asks the event thread for a refresh pass, which
+// recomputes them on the taskbar thread. (Theme switches are handled per
+// icon through ActualThemeChanged instead; see OnIconThemeChanged.)
 void EnsureTrackingColors() {
     if (g_uiSettings) {
         return;
@@ -1552,39 +1554,45 @@ void EnsureTrackingColors() {
         });
 }
 
+void ResetIconColors() {
+    g_iconColors[0].reset();
+    g_iconColors[1].reset();
+}
+
 void StopTrackingColors() {
     if (g_uiSettings) {
         g_uiSettings.ColorValuesChanged(g_colorValuesChangedToken);
         g_uiSettings = nullptr;
     }
-    g_iconColors.reset();
+    ResetIconColors();
 }
 
-// The colors the line should use right now: the configured list for the
-// current theme, or the accent color when none is configured. Cached; see
-// g_iconColors.
-const std::vector<winrt::Windows::UI::Color>& ResolveIconColors() {
-    // Subscribed whether or not the accent color is in use, so a theme switch
-    // triggers a pass for custom light|dark colors too.
+// The colors the line should use for `lightTheme`: the configured list for
+// that theme, or the accent color when none is configured. Cached per theme;
+// see g_iconColors.
+const std::vector<winrt::Windows::UI::Color>& ResolveIconColors(
+    bool lightTheme) {
     EnsureTrackingColors();
 
-    bool lightTheme = IsSystemLightTheme();
-    if (g_iconColors && !g_iconColorsDirty.exchange(false) &&
-        lightTheme == g_iconColorsLightTheme) {
-        return *g_iconColors;
+    if (g_iconColorsDirty.exchange(false)) {
+        ResetIconColors();
+    }
+
+    auto& cached = g_iconColors[lightTheme ? 1 : 0];
+    if (cached) {
+        return *cached;
     }
 
     const IconUnderlineSettings& s = g_settings.iconUnderline;
     const auto& list = lightTheme ? s.lightColors : s.darkColors;
     if (!list.empty()) {
-        g_iconColors = list;
+        cached = list;
     } else {
         using namespace winrt::Windows::UI::ViewManagement;
-        g_iconColors = std::vector<winrt::Windows::UI::Color>{
+        cached = std::vector<winrt::Windows::UI::Color>{
             g_uiSettings.GetColorValue(UIColorType::Accent)};
     }
-    g_iconColorsLightTheme = lightTheme;
-    return *g_iconColors;
+    return *cached;
 }
 
 // Gives `sprite` a brush for `colors`: a color brush for one, a horizontal
@@ -1624,6 +1632,28 @@ void EnsureIconBrush(const Composition::SpriteVisual& sprite,
     sprite.Brush(brush);
 }
 
+// A theme change on an icon (the Windows mode mirrored by the taskbar, or a
+// per-taskbar theme forced by another mod such as Top Taskbar Bleed)
+// re-evaluates its button, so the line gets the colors for the new theme.
+void OnIconThemeChanged(const Xaml::FrameworkElement& sender,
+                        const winrt::Windows::Foundation::IInspectable&) {
+    if (g_unloading || !g_settings.iconUnderline.enabled) {
+        return;
+    }
+
+    try {
+        if (auto button = FindOwningTaskListButton(sender)) {
+            LazyWindowSnapshot snapshot;
+            ApplyToButton(button, snapshot);
+        }
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Theme change handler error: %08X",
+               static_cast<unsigned int>(e.code()));
+    } catch (...) {
+        Wh_Log(L"Theme change handler error");
+    }
+}
+
 // Returns this mod's underline visual for `icon`, creating it on first use.
 // Null if the element already has a child visual that isn't ours.
 Composition::SpriteVisual GetOrCreateIconVisual(
@@ -1646,12 +1676,18 @@ Composition::SpriteVisual GetOrCreateIconVisual(
     sprite.IsVisible(false);
     ElementCompositionPreview::SetElementChildVisual(icon, sprite);
 
-    void* key = winrt::get_abi(icon);
-    g_icons[key] = winrt::make_weak(icon);
+    // Subscribed per icon rather than once per tree: when a theme change
+    // propagates through the tree, a tree-level handler can run while some
+    // icons still report the old theme, which colored buttons inconsistently.
+    // Each icon's own event fires once its ActualTheme is current.
+    int64_t themeChangedToken =
+        icon.ActualThemeChanged(OnIconThemeChanged).value;
+
+    g_icons[winrt::get_abi(icon)] =
+        IconEntry{winrt::make_weak(icon), themeChangedToken};
     return sprite;
 }
 
-// Applies the current icon-underline settings and visibility to `sprite`.
 // Rounds the line's corners with a geometric clip. The sprite's Size holds
 // only the absolute part of its relative size, so the clip geometry can't
 // copy it; instead an expression computes the line's real size from the icon
@@ -1712,7 +1748,7 @@ void ConfigureIconVisual(const Composition::SpriteVisual& sprite,
         {(1.0f - s.widthFraction) / 2.0f, 1.0f, 0.0f});
     sprite.Opacity(s.opacity);
 
-    EnsureIconBrush(sprite, ResolveIconColors());
+    EnsureIconBrush(sprite, ResolveIconColors(IsLightTheme(icon)));
     EnsureIconClip(
         sprite, Xaml::Hosting::ElementCompositionPreview::GetElementVisual(icon));
 
@@ -1742,16 +1778,18 @@ bool RemoveIconVisual(const Xaml::Controls::Image& icon) {
     return true;
 }
 
-// Hides and detaches every tracked icon visual (icon underline turned off,
-// or unload).
+// Removes every tracked icon's theme subscription and hides and detaches its
+// visual (icon underline turned off, or unload).
 void RemoveAllIconVisuals() {
     int tracked = static_cast<int>(g_icons.size());
     int removed = 0;
     int gone = 0;
 
-    for (auto& [key, weakIcon] : g_icons) {
+    for (auto& [key, entry] : g_icons) {
         try {
-            if (auto icon = weakIcon.get()) {
+            if (auto icon = entry.icon.get()) {
+                icon.ActualThemeChanged(
+                    winrt::event_token{entry.themeChangedToken});
                 if (RemoveIconVisual(icon)) {
                     removed++;
                 }
@@ -1999,7 +2037,7 @@ void RefreshTreesOnCurrentThread() {
     }
 
     for (auto it = g_icons.begin(); it != g_icons.end();) {
-        if (!it->second.get()) {
+        if (!it->second.icon.get()) {
             it = g_icons.erase(it);
         } else {
             ++it;
@@ -2755,7 +2793,7 @@ void Wh_ModUninit() {
 
 void WINAPI ReloadSettingsProc(void*) {
     LoadSettings();
-    g_iconColors.reset();
+    ResetIconColors();
     if (!g_settings.iconUnderline.enabled) {
         RemoveAllIconVisuals();
         StopTrackingColors();
