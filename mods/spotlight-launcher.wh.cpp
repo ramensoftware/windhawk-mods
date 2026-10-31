@@ -1429,6 +1429,7 @@ static const UINT_PTR TIMER_HIDE = 7;     // fallback: completes a hide whose an
 static const UINT_PTR TIMER_GSEARCH = 8;  // debounce for the global "find:" search
 static const UINT_PTR TIMER_EVFALLBACK = 9;  // "find:" via Everything: fall back if it never answers
 static const UINT_PTR TIMER_WINCLOSE = 10;   // re-read the window list while a closed window disappears
+static const UINT_PTR TIMER_WINACTION = 11;  // verify an async window action once it has landed
 static const int HOTKEY_ID = 1;
 
 // ===== Types =====
@@ -1833,9 +1834,18 @@ struct WinPanelInfo {
     std::wstring state;
 };
 static WinPanelInfo g_winPanel;
-static bool g_winCloseArmed = false;  // Ctrl+W waits for a second Ctrl+W
+static bool g_winCloseArmed = false;  // Ctrl+W waits for a second Ctrl+W on the same window
+static HWND g_winCloseHwnd = nullptr; // the window the armed close belongs to
 static HWND g_closingWin = nullptr;   // a window asked to close, still disappearing
 static int g_closingTries = 0;
+
+// What an async window action was expected to do. The call returns before it happens, so the result
+// is checked on a timer instead of right after it.
+enum class WinCheck { None, Minimized, Maximized, Restored, Topmost, NotTopmost, Monitor };
+static WinCheck g_chkKind = WinCheck::None;
+static HWND g_chkWin = nullptr;
+static HMONITOR g_chkMon = nullptr;
+static int g_chkTries = 0;
 static double g_winNoticeAt = 0.0;             // last window notice, for the footer
 static const wchar_t* g_winNoticeMsg = nullptr;
 static D2D1_COLOR_F g_winNoticeTone = {};
@@ -1885,6 +1895,8 @@ struct PreviewState {
     bool isImage = false;
     bool isText  = false;
     bool loaded  = false;
+    ID2D1Bitmap* bmp = nullptr;      // the picture decoded for the panel (not a row thumbnail)
+    bool bmpPending = false;
     std::wstring errorMsg;           // non-empty if load failed
 };
 static PreviewState g_preview;
@@ -3360,7 +3372,12 @@ static HANDLE g_thumbThread = nullptr;
 static HANDLE g_thumbEvent = nullptr;
 static HANDLE g_thumbStop = nullptr;  // manual-reset: asks the preview worker to exit
 static CRITICAL_SECTION g_thumbLock;  // guards g_thumbQueue (UI enqueues, worker dequeues)
-static std::deque<std::wstring> g_thumbQueue;
+// A row thumbnail is 64 px and square-cropped; the preview panel asks for a bigger, uncropped one.
+struct ThumbRequest {
+    std::wstring path;
+    bool big = false;
+};
+static std::deque<ThumbRequest> g_thumbQueue;
 
 static std::vector<FileEntry>& FileSrc() { return *g_fileSrc; }
 
@@ -3486,24 +3503,29 @@ static std::wstring TicksToLocalDate(unsigned long long v) {
 static bool ParseSizeValue(const std::wstring& text, unsigned long long& out) {
     size_t i = 0;
     unsigned long long v = 0;
+    int digits = 0;
     while (i < text.size() && iswdigit(text[i])) {
+        if (++digits > 12) return false;  // keeps the multiply below in range
         v = v * 10 + (unsigned long long)(text[i] - L'0');
         ++i;
     }
     if (i == 0) return false;
     std::wstring unit = text.substr(i);
     for (auto& c : unit) c = (wchar_t)towlower(c);
+    unsigned long long mul = 0;
     if (unit.empty() || unit == L"b") {
-        out = v;
+        mul = 1;
     } else if (unit == L"k" || unit == L"kb") {
-        out = v * 1024ull;
+        mul = 1024ull;
     } else if (unit == L"m" || unit == L"mb") {
-        out = v * 1024ull * 1024;
+        mul = 1024ull * 1024;
     } else if (unit == L"g" || unit == L"gb") {
-        out = v * 1024ull * 1024 * 1024;
+        mul = 1024ull * 1024 * 1024;
     } else {
         return false;
     }
+    if (v > ~0ull / mul) return false;
+    out = v * mul;
     return true;
 }
 
@@ -3548,10 +3570,12 @@ static bool ParseSizeFilter(FileFilter& f, const std::wstring& v) {
 
 static bool ParseYmd(const std::wstring& s, int& y, int& m, int& d) {
     int parts[3] = {0, 0, 0};
+    int digits[3] = {0, 0, 0};
     int sep = 0;
     for (const wchar_t c : s) {
         if (iswdigit(c)) {
             if (sep > 2) return false;
+            if (++digits[sep] > (sep == 0 ? 4 : 2)) return false;  // YYYY-MM-DD, nothing longer
             parts[sep] = parts[sep] * 10 + (c - L'0');
         } else if (c == L'-' || c == L'/') {
             if (++sep > 2) return false;
@@ -4757,9 +4781,10 @@ static std::wstring g_clipImageDir;
 static BOOL CALLBACK ClipImageDirInit(PINIT_ONCE, PVOID, PVOID*) {
     wchar_t buf[MAX_PATH] = L"";
     if (Wh_GetModStoragePath(buf, ARRAYSIZE(buf)) == 0 || !buf[0]) return TRUE;
-    const std::wstring dir = std::wstring(buf) + L"\\clips\\" + CurrentUserSid();
-    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);  // the mod folder may not exist yet
-    if (GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES) g_clipImageDir = dir;
+    // The path only. The folder is created when an image is actually saved, so a read — the thumbnail
+    // worker asking IsClipImagePath for every preview — never creates it, and a disabled feature
+    // leaves nothing on disk.
+    g_clipImageDir = std::wstring(buf) + L"\\clips\\" + CurrentUserSid();
     return TRUE;
 }
 
@@ -5526,7 +5551,7 @@ static bool MozLz4Decompress(const std::string& in, std::string& out) {
                 lit += b;
             } while (b == 255);
         }
-        if ((size_t)(end - src) < lit || out.size() + lit > size) return false;
+        if ((size_t)(end - src) < lit || out.size() > size || lit > size - out.size()) return false;
         out.append((const char*)src, lit);
         src += lit;
         if (src >= end) break;
@@ -5543,7 +5568,8 @@ static bool MozLz4Decompress(const std::string& in, std::string& out) {
                 len += b;
             } while (b == 255);
         }
-        if (out.size() + len > size) return false;
+        // 32-bit size_t: a match length built from many 0xFF bytes can overflow "out.size() + len".
+        if (out.size() > size || len > size - out.size()) return false;
         const size_t dst = out.size();
         out.resize(dst + len);
         for (size_t k = 0; k < len; ++k) out[dst + k] = out[dst - offset + k];
@@ -6110,8 +6136,8 @@ static void RunSearch() {
     const std::wstring query = ActivationQuery(g_text);
     g_tokens = Tokenize(query);
 
-    // "find:" understands the same filters as Files. Its Everything query drops them (see
-    // StripFileFilters) and they are applied to the results instead.
+    // "find:" understands the same filters as Files. Everything gets them translated to its own
+    // syntax (see EverythingFilterTerms) and they are applied again to the results.
     if (g_activator >= 0 && kActivators[g_activator].mode == LauncherMode::GlobalFiles) {
         g_tokens = ParseFileQuery(query, g_fileFilter);
     }
@@ -7088,7 +7114,7 @@ static bool EverythingSendQuery(const std::wstring& query, DWORD seq) {
     q->offset = 0;
     q->maxResults = kEverythingMaxHits;
     q->requestFlags = kEvReqName | kEvReqPath | kEvReqSize | kEvReqDateModified;
-    q->sortType = 0;  // the list re-ranks the results itself
+    q->sortType = 1;  // EVERYTHING_IPC_SORT_NAME_ASCENDING: a defined order, not an unknown 0
     memcpy(q->search, query.c_str(), chars * sizeof(wchar_t));
 
     COPYDATASTRUCT cds = {};
@@ -7120,11 +7146,15 @@ struct EvFields {
 
 static bool EvReadItem(const std::vector<BYTE>& buf, size_t pos, DWORD flags, EvFields& f) {
     auto text = [&](std::wstring* dst) {
-        if (pos + 4 > buf.size()) return false;
+        // 32-bit size_t: "pos + 4" can wrap, so compare against the remaining size instead.
+        if (pos > buf.size() || buf.size() - pos < 4) return false;
         DWORD len = 0;
         memcpy(&len, buf.data() + pos, 4);
         pos += 4;
-        if (len > 4096 || pos + ((size_t)len + 1) * sizeof(wchar_t) > buf.size()) return false;
+        if (len > 4096 || pos > buf.size() ||
+            buf.size() - pos < ((size_t)len + 1) * sizeof(wchar_t)) {
+            return false;
+        }
         if (dst) {
             dst->resize(len);
             if (len) memcpy(&(*dst)[0], buf.data() + pos, (size_t)len * sizeof(wchar_t));
@@ -7133,7 +7163,7 @@ static bool EvReadItem(const std::vector<BYTE>& buf, size_t pos, DWORD flags, Ev
         return true;
     };
     auto take = [&](size_t n, void* dst) {
-        if (pos + n > buf.size()) return false;
+        if (pos > buf.size() || buf.size() - pos < n) return false;
         if (dst) memcpy(dst, buf.data() + pos, n);
         pos += n;
         return true;
@@ -7417,8 +7447,8 @@ static void FinishEverythingSearch() {
     bool truncated = false;
     EverythingParseReply(hits, truncated);
 
-    // The filter tokens were left out of the Everything query, so they are applied here, on the
-    // size and date that the second-generation reply carries. Junk paths are dropped either way.
+    // The filters went to Everything in its own syntax and are applied again here, on the size and
+    // date that the second-generation reply carries. Junk paths are dropped either way.
     {
         std::vector<FileEntry> kept;
         kept.reserve(hits.size());
@@ -8048,7 +8078,8 @@ static bool LoadImageFilePixels(IWICImagingFactory* wic,
                                 std::vector<uint32_t>& px,
                                 int& w,
                                 int& h,
-                                bool centerSquare = false) {
+                                bool centerSquare = false,
+                                int size = 64) {
     if (!wic) return false;
     IWICBitmapDecoder* dec = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
@@ -8058,7 +8089,7 @@ static bool LoadImageFilePixels(IWICImagingFactory* wic,
         dec && SUCCEEDED(dec->GetFrame(0, &frame)) && frame) {
         UINT fw = 0, fh = 0;
         frame->GetSize(&fw, &fh);
-        ok = ScaleFrameToPixels(wic, frame, fw, fh, centerSquare, 64, px, w, h);
+        ok = ScaleFrameToPixels(wic, frame, fw, fh, centerSquare, size, px, w, h);
     }
     SafeRelease(frame);
     SafeRelease(dec);
@@ -8673,6 +8704,7 @@ static bool ShiftDown();
 static void CancelConfirm() {
     if (g_winCloseArmed) {
         g_winCloseArmed = false;
+        g_winCloseHwnd = nullptr;
         if (g_hwnd) KillTimer(g_hwnd, TIMER_CONFIRM);
         MarkDirty();
     }
@@ -9291,6 +9323,12 @@ static void ReleaseTarget() {
     ReleaseResultLayouts();
     ReleaseThumbCache();  // preview bitmaps belong to the render target
     ReleaseWindowIcons();
+    if (g_preview.bmp) {
+        SafeRelease(g_preview.bmp);  // the panel preview belongs to the target too
+        g_preview.bmp = nullptr;
+        g_preview.bmpPending = false;
+        if (g_preview.isImage) g_preview.loaded = false;  // asked for again on the next draw
+    }
     for (auto& a : g_apps) {
         SafeRelease(a.bmp);
     }
@@ -10207,6 +10245,7 @@ struct ThumbResult {
     int w = 0;
     int h = 0;
     bool ok = false;
+    bool big = false;  // a panel decode, not a row thumbnail
 };
 
 // Decodes previews off the UI thread. The bitmap itself is still created on the UI thread (it
@@ -10223,19 +10262,28 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
         for (;;) {
             if (WaitForSingleObject(g_thumbStop, 0) == WAIT_OBJECT_0) break;
             std::wstring path;
+            bool big = false;
             EnterCriticalSection(&g_thumbLock);
             if (!g_thumbQueue.empty()) {
-                path = std::move(g_thumbQueue.front());
+                path = std::move(g_thumbQueue.front().path);
+                big = g_thumbQueue.front().big;
                 g_thumbQueue.pop_front();
             }
             LeaveCriticalSection(&g_thumbLock);
             if (path.empty()) break;
             auto* tr = new ThumbResult();
             tr->path = std::move(path);
-            tr->ok = IsClipImagePath(tr->path)
-                         ? LoadClipThumbPixels(wic, tr->path, tr->px, tr->w, tr->h)
-                         : LoadImageFilePixels(wic, tr->path, tr->px, tr->w, tr->h,
-                                               /*centerSquare=*/true);
+            tr->big = big;
+            if (tr->big) {
+                // The panel wants the picture itself: bigger, and not cropped to a square.
+                tr->ok = LoadImageFilePixels(wic, tr->path, tr->px, tr->w, tr->h,
+                                             /*centerSquare=*/false, 512);
+            } else {
+                tr->ok = IsClipImagePath(tr->path)
+                             ? LoadClipThumbPixels(wic, tr->path, tr->px, tr->w, tr->h)
+                             : LoadImageFilePixels(wic, tr->path, tr->px, tr->w, tr->h,
+                                                   /*centerSquare=*/true);
+            }
             tr->ok = tr->ok && tr->w > 0 && tr->h > 0;
             if (!tr->ok) {
                 tr->px.clear();
@@ -10311,7 +10359,7 @@ static ID2D1Bitmap* EnsureFileThumb(FileEntry& e) {
         g_thumbPending.insert(e.path);
         EnterCriticalSection(&g_thumbLock);
         if (g_thumbQueue.size() < 64) {
-            g_thumbQueue.push_back(e.path);
+            g_thumbQueue.push_back({e.path, false});
         } else {
             g_thumbPending.erase(e.path);  // try again on a later frame
         }
@@ -10319,6 +10367,20 @@ static ID2D1Bitmap* EnsureFileThumb(FileEntry& e) {
         SetEvent(g_thumbEvent);
     }
     return nullptr;
+}
+
+// Asks the worker for a panel-sized decode of this image: bigger than a row thumbnail and not
+// cropped to a square.
+static void QueuePreviewImage(const std::wstring& path) {
+    if (path.empty() || g_preview.bmp || g_preview.bmpPending) return;
+    if (!EnsureThumbThread()) return;
+    EnterCriticalSection(&g_thumbLock);
+    const bool queued = g_thumbQueue.size() < 64;
+    if (queued) g_thumbQueue.push_back({path, true});
+    LeaveCriticalSection(&g_thumbLock);
+    if (!queued) return;  // the queue is busy: the next draw asks again
+    g_preview.bmpPending = true;
+    SetEvent(g_thumbEvent);
 }
 
 // ===== Details panel: technical data, available actions and drawing =====
@@ -12338,6 +12400,7 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
 
 static void LoadPreview(const std::wstring& path) {
     if (g_preview.path == path && g_preview.loaded) return;  // already loaded
+    if (g_preview.bmp) SafeRelease(g_preview.bmp);  // the bitmap belongs to the document being replaced
     g_preview = PreviewState{};
     g_preview.path = path;
 
@@ -12352,6 +12415,7 @@ static void LoadPreview(const std::wstring& path) {
     if (IsImageExt(ext)) {
         g_preview.isImage = true;
         g_preview.loaded  = true;
+        QueuePreviewImage(path);  // decoded off the UI thread, at panel size
         return;
     }
 
@@ -12548,13 +12612,15 @@ static void DrawPreviewPanel(const SearchResult& res) {
 
     } else if (g_preview.isImage) {
         // ---- Image preview ----
-        // Use the thumbnail cache (async loaded by the thumb thread)
-        // We need the FileEntry to call EnsureFileThumb — find it via the path
-        ID2D1Bitmap* bmp = nullptr;
-        for (auto& fe : FileSrc()) {
-            if (fe.path == res.payload) {
-                bmp = EnsureFileThumb(fe);
-                break;
+        // The panel decodes its own copy at panel size (aspect preserved, not a square crop), so the
+        // picture is sharp; the 64 px row thumbnail is only a placeholder while that decode arrives.
+        ID2D1Bitmap* bmp = g_preview.bmp;
+        if (!bmp) {
+            for (auto& fe : FileSrc()) {
+                if (fe.path == res.payload) {
+                    bmp = EnsureFileThumb(fe);
+                    break;
+                }
             }
         }
         if (bmp) {
@@ -12573,7 +12639,7 @@ static void DrawPreviewPanel(const SearchResult& res) {
             // "Loading" only while a decode is really queued. A remote file, a failed decode or an
             // unsupported format never arrives, and redrawing every frame to wait for it kept the
             // whole window at full frame rate; WM_APP_THUMB redraws when a decode does finish.
-            const bool pending = g_thumbPending.count(res.payload) > 0;
+            const bool pending = g_preview.bmpPending || g_thumbPending.count(res.payload) > 0;
             DrawFileTile(ox + pad + (contentW - 48 * s) / 2.f,
                          contentTop + 12 * s, 48 * s, ext, tileCol, a);
             SetBrush(g_pal.textDim, a);
@@ -13772,13 +13838,15 @@ static void EnsureWindowList() {
 
 static bool ActivateWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
-    if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+    // The window belongs to another thread, which may be hung: never wait for it.
+    if (IsIconic(hwnd)) ShowWindowAsync(hwnd, SW_RESTORE);
     AllowSetForegroundWindow(ASFW_ANY);
     INPUT wake{};
     wake.type = INPUT_MOUSE;
     SendInput(1, &wake, sizeof(INPUT));
     SetForegroundWindow(hwnd);
-    BringWindowToTop(hwnd);
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
     HideLauncher();
     return true;
 }
@@ -13795,24 +13863,29 @@ enum WinAction {
     WA_COPY_PATH
 };
 
-// Each helper verifies the window really changed instead of trusting the call: Windows refuses
-// cross-process work on elevated windows (UIPI), and that must not look like success.
-static bool WinMinimize(HWND hwnd) {
-    ShowWindow(hwnd, SW_MINIMIZE);
-    return IsIconic(hwnd) != FALSE;
+// The target window belongs to another thread, which may be busy or hung — and a switcher is exactly
+// what people reach for when a window stopped responding. Every call below is asynchronous and returns
+// at once; the effect is verified later by CheckWindowAction, on a timer.
+static void WinMinimize(HWND hwnd) {
+    ShowWindowAsync(hwnd, SW_MINIMIZE);
 }
 
-static bool WinToggleMax(HWND hwnd) {
-    const bool zoomed = IsZoomed(hwnd) != FALSE;
-    ShowWindow(hwnd, zoomed ? SW_RESTORE : SW_MAXIMIZE);
-    return (IsZoomed(hwnd) != FALSE) != zoomed;
+static bool WinIsMaximized(HWND hwnd) {
+    return IsZoomed(hwnd) != FALSE;
 }
 
-static bool WinToggleTopmost(HWND hwnd) {
-    const bool top = (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+static void WinSetMaximized(HWND hwnd, bool maximize) {
+    ShowWindowAsync(hwnd, maximize ? SW_MAXIMIZE : SW_RESTORE);
+}
+
+static bool WinIsTopmost(HWND hwnd) {
+    return (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+}
+
+static void WinSetTopmost(HWND hwnd, bool onTop) {
     // Only the z-order changes: no move, no resize, no activation.
-    return SetWindowPos(hwnd, top ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) != FALSE;
+    SetWindowPos(hwnd, onTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
 }
 
 static bool WinClose(HWND hwnd) {
@@ -13831,12 +13904,12 @@ static BOOL CALLBACK MonitorWorkProc(HMONITOR mon, HDC, LPRECT, LPARAM lp) {
     return TRUE;
 }
 
-// Walks the monitors left to right, then top to bottom, and keeps the window's size.
-// 1 = moved, 0 = Windows refused it, -1 = there is no other monitor in that direction.
-static int WinMoveMonitor(HWND hwnd, int dir) {
+// Walks the monitors left to right, then top to bottom, and keeps the window's size. Returns the
+// target monitor, or nullptr when there is no other monitor in that direction.
+static HMONITOR WinMoveMonitor(HWND hwnd, int dir) {
     std::vector<MonitorArea> mons;
     EnumDisplayMonitors(nullptr, nullptr, MonitorWorkProc, (LPARAM)&mons);
-    if (mons.size() < 2) return -1;
+    if (mons.size() < 2) return nullptr;
     std::sort(mons.begin(), mons.end(), [](const MonitorArea& a, const MonitorArea& b) {
         return a.work.left != b.work.left ? a.work.left < b.work.left : a.work.top < b.work.top;
     });
@@ -13849,11 +13922,11 @@ static int WinMoveMonitor(HWND hwnd, int dir) {
         }
     }
     const int target = std::clamp(idx + dir, 0, (int)mons.size() - 1);
-    if (target == idx) return -1;  // already on the last monitor in that direction
+    if (target == idx) return nullptr;  // already on the last monitor in that direction
     const bool zoomed = IsZoomed(hwnd) != FALSE;
-    if (zoomed) ShowWindow(hwnd, SW_RESTORE);
+    if (zoomed) ShowWindowAsync(hwnd, SW_RESTORE);
     RECT r = {};
-    if (!GetWindowRect(hwnd, &r)) return 0;
+    if (!GetWindowRect(hwnd, &r)) return nullptr;
     const RECT& w = mons[target].work;
     const int ww = r.right - r.left;
     const int wh = r.bottom - r.top;
@@ -13862,10 +13935,10 @@ static int WinMoveMonitor(HWND hwnd, int dir) {
                              std::max(w.left, w.right - ww));
     const int y = std::clamp((w.top + w.bottom) / 2 - wh / 2, w.top,
                              std::max(w.top, w.bottom - wh));
-    const bool ok = SetWindowPos(hwnd, nullptr, x, y, 0, 0,
-                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE) != FALSE;
-    if (zoomed) ShowWindow(hwnd, SW_MAXIMIZE);
-    return ok ? 1 : 0;
+    SetWindowPos(hwnd, nullptr, x, y, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    if (zoomed) ShowWindowAsync(hwnd, SW_MAXIMIZE);
+    return mons[target].mon;
 }
 
 // Snapshot for the panel. Called only when the selected window changes, because it opens the
@@ -16257,15 +16330,17 @@ static std::wstring ClipKey(const std::wstring& suffix) {
     return L"clip." + CurrentUserSid() + L"." + suffix;
 }
 
-// True when a previous run left clipboard data behind: the count value, or the per-account image
-// folder. The folder is checked without creating it, because creating it is exactly what a disabled
-// feature must not do.
+// True when a previous run left clipboard data behind: the count value, or a saved image. The folder
+// itself is not enough — an empty leftover must not make the cleanup run at every start.
 static bool ClipHistoryOnDisk() {
     if (Wh_GetIntValue(ClipKey(L"count").c_str(), 0) > 0) return true;
-    wchar_t buf[MAX_PATH] = L"";
-    if (Wh_GetModStoragePath(buf, ARRAYSIZE(buf)) == 0 || !buf[0]) return false;
-    const std::wstring dir = std::wstring(buf) + L"\\clips\\" + CurrentUserSid();
-    return GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES;
+    const std::wstring dir = ClipImageDir();
+    if (dir.empty()) return false;
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW((dir + L"\\*.dat").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    FindClose(h);
+    return true;
 }
 
 // True when the app that put the content on the clipboard asked monitors to keep it out of history.
@@ -16307,6 +16382,9 @@ static void EraseClipHistory() {
     }
     g_clips.clear();
     SaveClipHistory();
+    // The folder is per account; removing it succeeds only when nothing is left in it.
+    const std::wstring dir = ClipImageDir();
+    if (!dir.empty()) RemoveDirectoryW(dir.c_str());
 }
 
 static void DeleteClipImageFile(const std::wstring& stored) {
@@ -16377,6 +16455,7 @@ static void SaveClipHistory() {
 
 static void LoadClipHistory() {
     g_clips.clear();
+    bool migrated = false;  // a plain-text slot was re-encrypted and has to be written back
     const int n =
         std::clamp(Wh_GetIntValue(ClipKey(L"count").c_str(), 0), 0, (int)kMaxClipItems);
     // Base64 of the ciphertext is about 2.7 times the plain text, so the read buffer is bigger.
@@ -16406,12 +16485,17 @@ static void LoadClipHistory() {
         } else {
             // A slot written before encryption existed is plain text: keep the entry, but never
             // write it back unencrypted. Only the first build of 1.0.0 could produce one.
-            e.protectedText = (slot.empty() || slot[0] == L'e') ? slot : ProtectText(e.text);
+            if (slot.empty() || slot[0] == L'e') {
+                e.protectedText = slot;
+            } else {
+                e.protectedText = ProtectText(e.text);
+                migrated = true;  // the plain value is still in storage until this is saved
+            }
         }
         g_clips.push_back(std::move(e));
     }
     SweepClipImages();  // files without an entry are gone before anything shows them
-    if (PurgeExpiredClips()) SaveClipHistory();
+    if (migrated || PurgeExpiredClips()) SaveClipHistory();
 }
 
 static void UpdateClipboardListener() {
@@ -16689,6 +16773,7 @@ static bool CaptureClipboardImage() {
     if (px.empty() || w <= 0 || h <= 0) return false;
     const std::wstring dir = ClipImageDir();
     if (dir.empty()) return false;
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);  // created only when there is something to save
     wchar_t name[64] = L"";
     swprintf_s(name, L"%016llx.dat", (unsigned long long)ClipImageHash(px, w, h));
     const std::wstring file = dir + L"\\" + name;
@@ -16707,9 +16792,34 @@ static bool CaptureClipboardImage() {
 // Called from WM_CLIPBOARDUPDATE: text wins when the copy has it (a link copied from a browser
 // carries both), otherwise the image is saved. Copies that ask to stay out of clipboard history
 // (password managers and Windows itself) are ignored.
+// A file copied in Explorer publishes its name as text too, which is not useful to paste. The path
+// from CF_HDROP is: Enter pastes it into an address bar, a chat or a terminal.
+static std::wstring ClipboardFirstFile() {
+    std::wstring r;
+    if (!OpenClipboard(g_hwnd)) return r;
+    if (HDROP drop = (HDROP)GetClipboardData(CF_HDROP)) {
+        const UINT len = DragQueryFileW(drop, 0, nullptr, 0);
+        if (len > 0 && len < kMaxClipChars) {
+            std::wstring path((size_t)len + 1, L'\0');
+            if (DragQueryFileW(drop, 0, &path[0], len + 1) == len) {
+                path.resize(len);
+                r = std::move(path);
+            }
+        }
+    }
+    CloseClipboard();
+    return r;
+}
+
 static void CaptureClipboard() {
     if (!g_cfg.clipboardHistory) return;
     if (ClipboardOptedOut()) return;
+    // A file arrives as CF_HDROP plus a text fallback with just its name: keep the path.
+    std::wstring files = ClipboardFirstFile();
+    if (!files.empty()) {
+        AddClipEntry(std::move(files), false, 0, 0);
+        return;
+    }
     std::wstring text = ClipboardText();
     if (!text.empty() && text.size() <= kMaxClipChars && !TrimBlanks(text).empty()) {
         AddClipEntry(std::move(text), false, 0, 0);
@@ -16812,7 +16922,9 @@ static void PasteIntoPreviousWindow() {
         wake.type = INPUT_MOUSE;
         SendInput(1, &wake, sizeof(INPUT));
         SetForegroundWindow(target);
-        BringWindowToTop(target);
+        // Posted, not sent: a busy target must not block the launcher while it pastes.
+        SetWindowPos(target, HWND_TOP, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
         Sleep(60);
         INPUT keys[4] = {};
         keys[0].type = INPUT_KEYBOARD;
@@ -17574,13 +17686,88 @@ static void WindowRefused(const wchar_t* msg = L"Needs administrator · can't co
     WinNotice(msg, kToneWarn);
 }
 
-// Re-reads the window list (a window was closed, by us or by its app) and keeps the selection near
-// where it was instead of jumping to the top.
+// The window state the user now sees: the panel row and, for the pin, the badge and a notice.
+static void FinishWindowCheck() {
+    if (g_chkKind == WinCheck::Topmost || g_chkKind == WinCheck::NotTopmost) {
+        const bool top = WinIsTopmost(g_chkWin);
+        for (SearchResult& r : g_results) {
+            if (r.kind == ResultKind::Window && r.hwnd == g_chkWin) r.onTop = top;
+        }
+        WinNotice(top ? L"Always on top · Ctrl+Shift+T to undo" : L"No longer on top", kToneOk);
+    }
+    for (const SearchResult& r : g_results) {
+        if (r.kind == ResultKind::Window && r.hwnd == g_chkWin) {
+            if (g_winPanel.hwnd == g_chkWin) FillWinPanel(r);
+            break;
+        }
+    }
+    g_chkKind = WinCheck::None;
+    g_chkWin = nullptr;
+    MarkDirty();
+}
+
+// Runs ~400 ms after an action, twice: the request lands on the target thread asynchronously, so the
+// only honest check is a later one. A window that never changes is reported, not left silent.
+static void CheckWindowAction() {
+    if (g_chkKind == WinCheck::None || !g_chkWin) return;
+    if (!IsWindow(g_chkWin)) {  // it closed in the meantime: nothing to report
+        g_chkKind = WinCheck::None;
+        g_chkWin = nullptr;
+        return;
+    }
+    bool ok = false;
+    switch (g_chkKind) {
+        case WinCheck::Minimized:  ok = IsIconic(g_chkWin) != FALSE; break;
+        case WinCheck::Maximized:  ok = WinIsMaximized(g_chkWin); break;
+        case WinCheck::Restored:   ok = !WinIsMaximized(g_chkWin); break;
+        case WinCheck::Topmost:    ok = WinIsTopmost(g_chkWin); break;
+        case WinCheck::NotTopmost: ok = !WinIsTopmost(g_chkWin); break;
+        case WinCheck::Monitor:
+            ok = MonitorFromWindow(g_chkWin, MONITOR_DEFAULTTONEAREST) == g_chkMon;
+            break;
+        default: return;
+    }
+    if (ok) {
+        FinishWindowCheck();
+        return;
+    }
+    if (++g_chkTries < 2) {  // it may still be landing: one more look
+        if (g_hwnd) SetTimer(g_hwnd, TIMER_WINACTION, 400, nullptr);
+        return;
+    }
+    WindowRefused();
+    g_chkKind = WinCheck::None;
+    g_chkWin = nullptr;
+}
+
+// Remembers what to verify and arms the check. Never blocks on the target thread.
+static void SetWindowCheck(HWND hwnd, WinCheck kind, HMONITOR mon = nullptr) {
+    g_chkWin = hwnd;
+    g_chkKind = kind;
+    g_chkMon = mon;
+    g_chkTries = 0;
+    if (g_hwnd) SetTimer(g_hwnd, TIMER_WINACTION, 400, nullptr);
+}
+
+// Re-reads the window list (a window was closed, by us or by its app) and keeps the selection on the
+// same window, not on the same row index: the rows above it may have gone.
 static void RefreshWindowResults() {
-    const int prev = g_sel;
+    const int prevSel = g_sel;
+    HWND keep = nullptr;
+    if (prevSel >= 0 && prevSel < (int)g_results.size()) keep = g_results[prevSel].hwnd;
     g_windowsDirty = true;
     RunSearch();
-    g_sel = g_results.empty() ? 0 : std::clamp(prev, 0, (int)g_results.size() - 1);
+    int found = -1;
+    if (keep) {
+        for (int i = 0; i < (int)g_results.size(); ++i) {
+            if (g_results[i].kind == ResultKind::Window && g_results[i].hwnd == keep) {
+                found = i;
+                break;
+            }
+        }
+    }
+    g_sel = found >= 0 ? found
+                       : (g_results.empty() ? 0 : std::clamp(prevSel, 0, (int)g_results.size() - 1));
     UpdateTargets(false, /*followSelection=*/true);
     MarkDirty();
 }
@@ -17598,8 +17785,12 @@ static void DoWindowAction(int act) {
     g_focusGrace = NowSec() + 0.8;
 
     if (act == WA_CLOSE) {
-        if (!g_winCloseArmed) {  // first Ctrl+W: warn, the second one closes
+        // The confirmation belongs to a window, not to a row: the selection can move (mouse hover, or
+        // the list being re-read after another close), and closing a window the user never confirmed
+        // would be unacceptable.
+        if (!g_winCloseArmed || g_winCloseHwnd != r.hwnd) {
             g_winCloseArmed = true;
+            g_winCloseHwnd = r.hwnd;
             if (g_hwnd) {
                 KillTimer(g_hwnd, TIMER_CONFIRM);
                 SetTimer(g_hwnd, TIMER_CONFIRM, 4000, nullptr);
@@ -17608,6 +17799,7 @@ static void DoWindowAction(int act) {
             return;
         }
         g_winCloseArmed = false;
+        g_winCloseHwnd = nullptr;
         if (g_hwnd) KillTimer(g_hwnd, TIMER_CONFIRM);
         if (!WinClose(r.hwnd)) {
             WindowRefused();
@@ -17624,58 +17816,57 @@ static void DoWindowAction(int act) {
         return;
     }
 
-    bool ok = true;
-    bool noTarget = false;
     g_winCloseArmed = false;  // another action means the user moved on: no pending close
+    g_winCloseHwnd = nullptr;
     switch (act) {
-        case WA_MINIMIZE: ok = WinMinimize(r.hwnd); break;
-        case WA_MAX:      ok = WinToggleMax(r.hwnd); break;
-        case WA_TOPMOST:  ok = WinToggleTopmost(r.hwnd); break;
-        case WA_MON_NEXT: {
-            const int m = WinMoveMonitor(r.hwnd, +1);
-            ok = m > 0;
-            noTarget = m < 0;
+        case WA_MINIMIZE:
+            WinMinimize(r.hwnd);
+            SetWindowCheck(r.hwnd, WinCheck::Minimized);
+            break;
+        case WA_MAX: {
+            const bool zoomed = WinIsMaximized(r.hwnd);
+            WinSetMaximized(r.hwnd, !zoomed);
+            SetWindowCheck(r.hwnd, zoomed ? WinCheck::Restored : WinCheck::Maximized);
             break;
         }
+        case WA_TOPMOST: {
+            const bool top = WinIsTopmost(r.hwnd);
+            WinSetTopmost(r.hwnd, !top);
+            SetWindowCheck(r.hwnd, top ? WinCheck::NotTopmost : WinCheck::Topmost);
+            break;
+        }
+        case WA_MON_NEXT:
         case WA_MON_PREV: {
-            const int m = WinMoveMonitor(r.hwnd, -1);
-            ok = m > 0;
-            noTarget = m < 0;
+            const HMONITOR mon = WinMoveMonitor(r.hwnd, act == WA_MON_NEXT ? +1 : -1);
+            if (!mon) {
+                WindowRefused(L"No other monitor in that direction");
+                return;
+            }
+            SetWindowCheck(r.hwnd, WinCheck::Monitor, mon);
             break;
         }
         case WA_LOCATION: {
             const std::wstring path = WindowProcessPath(r.hwnd);
             const size_t cut = path.find_last_of(L'\\');
-            ok = cut != std::wstring::npos;
-            if (ok) RunShellOpen(path.substr(0, cut).c_str());
+            if (cut == std::wstring::npos) {
+                WindowRefused();
+                return;
+            }
+            RunShellOpen(path.substr(0, cut).c_str());
             break;
         }
         case WA_COPY_PATH: {
             const std::wstring path = WindowProcessPath(r.hwnd);
-            ok = !path.empty();
-            if (ok) {
-                CopyTextToClipboard(path);
-                FileCopied();
+            if (path.empty()) {
+                WindowRefused();
+                return;
             }
+            CopyTextToClipboard(path);
+            FileCopied();
             break;
         }
         default:
             return;  // WA_CLOSE is handled above
-    }
-    if (!ok) {
-        if (noTarget) {
-            WindowRefused(L"No other monitor in that direction");
-        } else {
-            WindowRefused();
-        }
-        return;
-    }
-    // The panel and the row badge show whether the window is minimized, maximized or on top.
-    if (g_winPanel.hwnd == r.hwnd) FillWinPanel(r);
-    if (act == WA_TOPMOST) {
-        const bool top = (GetWindowLongPtrW(r.hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-        if (g_sel >= 0 && g_sel < (int)g_results.size()) g_results[g_sel].onTop = top;
-        WinNotice(top ? L"Always on top · Ctrl+Shift+T to undo" : L"No longer on top", kToneOk);
     }
     if (g_vis != Vis::Hidden) SetForegroundWindow(g_hwnd);
     MarkDirty();
@@ -18501,6 +18692,9 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 StartGlobalSearch();
             } else if (wp == TIMER_EVFALLBACK) {
                 AbandonEverythingSearch();
+            } else if (wp == TIMER_WINACTION) {
+                KillTimer(g_hwnd, TIMER_WINACTION);
+                CheckWindowAction();
             } else if (wp == TIMER_WINCLOSE) {
                 KillTimer(g_hwnd, TIMER_WINCLOSE);
                 const bool stillThere = g_closingWin && IsWindow(g_closingWin);
@@ -18523,6 +18717,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 KillTimer(g_hwnd, TIMER_CONFIRM);
                 if (g_winCloseArmed) {
                     g_winCloseArmed = false;
+                    g_winCloseHwnd = nullptr;
                     MarkDirty();
                 }
                 if (g_confirmCmd >= 0) {
@@ -18911,6 +19106,23 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         case WM_APP_THUMB: {
             auto* tr = (ThumbResult*)lp;
+            if (tr->big) {
+                // The panel's own decode: keep it only while it still belongs to the open preview.
+                if (g_preview.isImage && g_preview.path == tr->path) {
+                    g_preview.bmpPending = false;
+                    if (g_rt && tr->ok) {
+                        if (g_preview.bmp) SafeRelease(g_preview.bmp);
+                        D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(
+                            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                              D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
+                        g_rt->CreateBitmap(D2D1::SizeU((UINT32)tr->w, (UINT32)tr->h), tr->px.data(),
+                                           (UINT32)tr->w * 4, &bp, &g_preview.bmp);
+                    }
+                    MarkDirty();
+                }
+                delete tr;
+                return 0;
+            }
             g_thumbPending.erase(tr->path);
             if (g_rt) {  // hidden or between render targets: drop it, it will be requested again
                 ThumbCacheItem item;
