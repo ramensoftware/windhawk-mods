@@ -2,7 +2,7 @@
 // @id              language-switcher-position
 // @name            Language Switcher Position
 // @description     Customize the Windows 11 26H2 language switcher position with alignment and X/Y coordinates.
-// @version         1.2
+// @version         1.3
 // @author          MaestroSky
 // @include         explorer.exe
 // @github          https://github.com/MaestroSky
