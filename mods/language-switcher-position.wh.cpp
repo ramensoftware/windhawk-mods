@@ -1,5 +1,4 @@
-
- // ==WindhawkMod==
+// ==WindhawkMod==
 // @id              language-switcher-position
 // @name            Language Switcher Position
 // @description     Customize the Windows 11 26H2 language switcher position with alignment and X/Y coordinates.
