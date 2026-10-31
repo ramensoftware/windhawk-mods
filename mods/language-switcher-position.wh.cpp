@@ -1,69 +1,24 @@
-// ==WindhawkMod==
+
+ // ==WindhawkMod==
 // @id              language-switcher-position
 // @name            Language Switcher Position
 // @description     Customize the Windows 11 26H2 language switcher position with alignment and X/Y coordinates.
 // @version         1.3
 // @author          MaestroSky
 // @include         explorer.exe
+// @architecture    x86-64
 // @github          https://github.com/MaestroSky
 // @homepage        https://github.com/MaestroSky/Language-Switcher-Position
 // @license         MIT
 // ==/WindhawkMod==
 
-
 // ==WindhawkModReadme==
 /*
 # Language Switcher Position
 
-## 🇺🇦 Українська
+## English
 
-Мод дозволяє змінювати положення сучасного перемикача мов введення Windows 11 26H2, який з'являється після натискання на індикатор мови (РУС / ENG) у системному треї.
-
-### Можливості
-
-- **Left** — розміщення перемикача біля лівого краю екрана.
-- **Center** — розміщення по центру екрана.
-- **Right** — розміщення біля правого краю екрана.
-- **Custom X/Y** — ручне налаштування координат вікна.
-- **Vertical offset** — додаткове вертикальне зміщення.
-
-### Приклади роботи
-
-![Left position](https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/left.png)
-
-![Center position](https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/center.png)
-
-![Right position](https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/right.png)
-
-![Default position](https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/default.png)
-
-### Налаштування
-
-**Horizontal position** — вибір горизонтального розташування перемикача: Left, Center, Right або Custom X/Y.
-
-**Custom X coordinate** — горизонтальна координата вікна в пікселях.
-
-**Custom Y coordinate** — вертикальна координата вікна в пікселях.
-
-**Vertical offset** — додаткове вертикальне зміщення відносно початкової позиції Windows. Використовується в режимах Left, Center та Right.
-
-### Сумісність
-
-- Windows 11 26H2
-- Windows Explorer (explorer.exe)
-- Сучасний XAML-перемикач мов введення.
-
-### Примітка
-
-Позиціонування виконується відносно повного розміру монітора, включно з областю панелі завдань. Користувацькі координати задаються в екранних пікселях.
-
-Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.
-
----
-
-## 🇬🇧 English
-
-This mod allows you to change the position of the modern Windows 11 input language switcher, which appears when clicking the language indicator (РУС / ENG) in the system tray.
+This mod allows you to customize the position of the modern Windows 11 26H2 input language switcher, which appears when clicking the language indicator (РУС / ENG) in the system tray.
 
 ### Features
 
@@ -104,9 +59,44 @@ This mod allows you to change the position of the modern Windows 11 input langua
 Positioning is calculated relative to the full monitor dimensions, including the taskbar area. Custom coordinates are specified in screen pixels.
 
 The mod only changes the position of the switcher window and does not modify Windows input language settings.
+
+---
+
+## Українська
+
+Мод дозволяє змінювати положення сучасного перемикача мов введення Windows 11 26H2, який з'являється після натискання на індикатор мови (РУС / ENG) у системному треї.
+
+### Можливості
+
+- **Left** — розміщення перемикача біля лівого краю екрана.
+- **Center** — розміщення по центру екрана.
+- **Right** — розміщення біля правого краю екрана.
+- **Custom X/Y** — ручне налаштування координат вікна.
+- **Vertical offset** — додаткове вертикальне зміщення.
+
+### Налаштування
+
+**Horizontal position** — вибір горизонтального розташування перемикача: Left, Center, Right або Custom X/Y.
+
+**Custom X coordinate** — горизонтальна координата вікна в пікселях.
+
+**Custom Y coordinate** — вертикальна координата вікна в пікселях.
+
+**Vertical offset** — додаткове вертикальне зміщення відносно початкової позиції Windows. Використовується в режимах Left, Center та Right.
+
+### Сумісність
+
+- Windows 11 26H2
+- Windows Explorer (explorer.exe)
+- Сучасний XAML-перемикач мов введення.
+
+### Примітка
+
+Позиціонування виконується відносно повного розміру монітора, включно з областю панелі завдань. Користувацькі координати задаються в екранних пікселях.
+
+Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.
 */
 // ==/WindhawkModReadme==
-
 
 // ==WindhawkModSettings==
 /*
@@ -159,46 +149,24 @@ BOOL WINAPI SetWindowPos_Hook(
     int cy,
     UINT uFlags
 ) {
-    wchar_t className[256] = {};
+    // Skip calls that don't move the window.
+    // The switcher is positioned with zero width and height.
+    if (!(uFlags & SWP_NOMOVE) && cx == 0 && cy == 0) {
+        wchar_t className[64] = {};
 
-    GetClassNameW(
-        hWnd,
-        className,
-        ARRAYSIZE(className)
-    );
-
-    if (wcscmp(
-            className,
-            L"Shell_InputSwitchTopLevelWindow"
-        ) == 0 &&
-        cx == 0 &&
-        cy == 0) {
-
-        HMODULE callerModule = nullptr;
-
-        GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            (LPCWSTR)__builtin_return_address(0),
-            &callerModule
-        );
-
-        wchar_t moduleName[MAX_PATH] = {};
-
-        if (callerModule) {
-            GetModuleFileNameW(
-                callerModule,
-                moduleName,
-                ARRAYSIZE(moduleName)
-            );
-        }
-
-        if (wcsstr(moduleName, L"InputSwitch.dll")) {
+        if (GetClassNameW(
+                hWnd,
+                className,
+                ARRAYSIZE(className)
+            ) &&
+            wcscmp(
+                className,
+                L"Shell_InputSwitchTopLevelWindow"
+            ) == 0) {
 
             RECT windowRect = {};
 
             if (GetWindowRect(hWnd, &windowRect)) {
-
                 int windowWidth =
                     windowRect.right - windowRect.left;
 
@@ -221,7 +189,6 @@ BOOL WINAPI SetWindowPos_Hook(
                         Wh_GetStringSetting(L"alignment");
 
                     if (alignment) {
-
                         if (wcscmp(alignment, L"left") == 0) {
                             X = screen.left;
                         }
@@ -270,7 +237,6 @@ BOOL WINAPI SetWindowPos_Hook(
 }
 
 BOOL Wh_ModInit() {
-
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
 
     if (!user32) {
