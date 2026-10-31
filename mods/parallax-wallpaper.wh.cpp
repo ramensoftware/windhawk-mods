@@ -2,7 +2,7 @@
 // @id              parallax-wallpaper
 // @name            Parallax Wallpaper
 // @description     Smooth mouse-reactive wallpaper with optional perspective, four motion presets, independent multi-monitor support, and HDR-aware rendering
-// @version         0.9.0
+// @version         0.9.2
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         MIT
@@ -21,7 +21,10 @@ or an optional local image.
 
 The mod runs in its own background process rather than inside Explorer, so a
 graphics driver problem cannot take the shell down with it.
+
 ![Parallax Wallpaper demo](https://i.imgur.com/jW1oE6J.gif)
+[FULLVIEW DEMO VIDEO](https://i.imgur.com/6g5LJdr.mp4)
+
 ## Motion presets
 
 | Preset | Character | Horizontal / vertical travel | Approx. settling time | Dead zone |
@@ -57,12 +60,13 @@ on.
 ## Optional perspective
 
 Enable **Enable perspective** with **Subpixel motion** on to tilt the wallpaper
-as a flat panel following the pointer. Start with 2 degrees on both axes,
+as a flat panel following the pointer. Start with 4 degrees on both axes,
 intensity 100%, and automatic edge compensation on. Perspective is off by
 default.
 
 Horizontal and vertical tilt range from 0 to 8 degrees. Intensity (0 to 200%)
-controls perspective foreshortening; zero keeps an orthographic tilt.
+controls perspective foreshortening: at 100% the virtual viewing distance
+equals the screen's larger dimension, and zero keeps an orthographic tilt.
 Automatic compensation applies a constant zoom, computed once for the largest
 tilt, so the screen stays covered without the image visibly zooming in and out
 during motion. It crops a little more of the image. Disabling it may reveal
@@ -74,7 +78,7 @@ is set to zero. Per-monitor perspective can inherit global values, be disabled,
 or use custom values independently of the monitor's motion preset.
 
 Perspective is rendered with a Direct3D 11 / Direct2D effect pipeline, using
-high-quality cubic sampling to avoid moving line patterns; on low-end GPUs,
+cubic sampling to avoid moving line patterns; on low-end GPUs,
 lowering the frame rate limit reduces its cost. If the
 pipeline is unavailable, the monitor falls back to the standard movement
 without perspective. Disabling Subpixel motion also disables perspective. This
@@ -198,15 +202,15 @@ updates; unrecognized layouts are left untouched.
 - perspective: false
   $name: Enable perspective
   $description: Tilt the wallpaper with the pointer. Requires Subpixel motion and a working Direct3D 11 pipeline.
-- perspectiveX: 2
+- perspectiveX: 4
   $name: Horizontal perspective tilt (degrees)
   $description: Range 0 to 8. Maximum tilt when moving the pointer horizontally.
-- perspectiveY: 2
+- perspectiveY: 4
   $name: Vertical perspective tilt (degrees)
   $description: Range 0 to 8. Maximum tilt when moving the pointer vertically.
 - perspectiveDepth: 100
   $name: Perspective intensity (%)
-  $description: Range 0 to 200. Controls foreshortening; 0 uses an orthographic tilt. 100 is a gentle starting point.
+  $description: Range 0 to 200. Controls foreshortening; 0 uses an orthographic tilt. 100 is a balanced starting point.
 - perspectiveAutoZoom: true
   $name: Automatically compensate perspective edges
   $description: Applies the minimum constant zoom needed to keep the screen covered at maximum tilt. Disabling this can reveal black edges.
@@ -260,10 +264,10 @@ updates; unrecognized layouts are left untouched.
       - inherit: Use global perspective settings
       - off: Disable perspective
       - custom: Use the following perspective settings
-    - perspectiveX: 2
+    - perspectiveX: 4
       $name: Horizontal perspective tilt (degrees)
       $description: Range 0 to 8. Used in custom perspective mode.
-    - perspectiveY: 2
+    - perspectiveY: 4
       $name: Vertical perspective tilt (degrees)
       $description: Range 0 to 8. Used in custom perspective mode.
     - perspectiveDepth: 100
@@ -327,7 +331,9 @@ constexpr UINT32 kTransform3DInterpolation = 0;
 constexpr UINT32 kTransform3DBorderMode = 1;
 constexpr UINT32 kTransform3DMatrix = 2;
 constexpr UINT32 kBorderModeHard = 1;
-constexpr UINT32 kInterpolationHighQualityCubic = 5;
+// D2D1_3DTRANSFORM_INTERPOLATION_MODE_CUBIC. The 3D transform accepts only
+// values 0-4; HIGH_QUALITY_CUBIC (5) exists for the 2D affine transform only.
+constexpr UINT32 kInterpolationCubic = 2;
 constexpr UINT32 kColorMatrixValue = 0;
 constexpr DISPLAYCONFIG_DEVICE_INFO_TYPE kGetSdrWhiteLevel =
     static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(11);
@@ -386,7 +392,7 @@ struct Options {
     double threshold = 0.06;  // 3% screen displacement in [-1, 1] coordinates.
     bool enabled = true, opposite = true;
     bool perspective = false, perspectiveAutoZoom = true;
-    int perspectiveX = 2, perspectiveY = 2, perspectiveDepth = 100;
+    int perspectiveX = 4, perspectiveY = 4, perspectiveDepth = 100;
     std::wstring image;
 };
 struct Rule {
@@ -1194,8 +1200,12 @@ TiltCoefficients Tilt(const Pane& pane, double tiltX, double tiltY) {
     constexpr double radians = 3.14159265358979323846 / 180.0;
     double ry = tiltX * pane.options.perspectiveX * radians;
     double rx = -tiltY * pane.options.perspectiveY * radians;
+    // At 100% intensity the virtual camera sits one screen size away, which
+    // makes the keystone of a few degrees of tilt clearly visible (about 7%
+    // of the screen height at 4 degrees) instead of reading as extra
+    // translation.
     double inverseDistance = (pane.options.perspectiveDepth / 100.0) /
-                             (2.0 * std::max(pane.width, pane.height));
+                             std::max(pane.width, pane.height);
     return {std::cos(ry),
             std::sin(rx) * std::sin(ry),
             0,
@@ -1491,11 +1501,13 @@ HRESULT CreateRenderer(Pane& pane) {
                              kBorderModeHard);
             // Bilinear sampling at a scale close to 1 produces a periodic
             // sharp/soft pattern (visible as moving vertical and horizontal
-            // lines). High-quality cubic sampling suppresses it.
-            if (SUCCEEDED(hr))
-                hr = SetProperty(pane.perspectiveEffect,
-                                 kTransform3DInterpolation,
-                                 kInterpolationHighQualityCubic);
+            // lines). Cubic sampling suppresses it; if a driver rejects it,
+            // keep the default linear sampling rather than losing perspective.
+            if (SUCCEEDED(hr) && FAILED(SetProperty(pane.perspectiveEffect,
+                                                    kTransform3DInterpolation,
+                                                    kInterpolationCubic)))
+                Wh_Log(L"Cubic sampling unavailable for %s; using linear",
+                       pane.display.name.c_str());
             last = pane.perspectiveEffect;
         }
     }
