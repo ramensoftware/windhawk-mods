@@ -470,11 +470,10 @@ const Theme g_themeStoreFrame11 = {{
         L"MinHeight=32"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter#ContentPresenter > TextBlock", {
         L"Grid.Column=0",
-        L"Visibility=Hidden"}},
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem", {
         L"MinHeight=48",
         L"MinWidth=65",
-        L"ToolTipService.Placement=5",
         L"MaxWidth=65"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid@DisplayModeStates > Grid#PaneRoot", {
         L"MaxWidth@OpenInlineLeft=65",
@@ -758,11 +757,10 @@ const Theme g_themeTranslucent_Settings11 = {{
         L"MinHeight=32"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter#ContentPresenter > TextBlock", {
         L"Grid.Column=0",
-        L"Visibility=Hidden"}},
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem", {
         L"MinHeight=48",
         L"MinWidth=65",
-        L"ToolTipService.Placement=5",
         L"MaxWidth=65"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid@DisplayModeStates > Grid#PaneRoot", {
         L"MaxWidth@OpenInlineLeft=65",
@@ -1210,15 +1208,25 @@ const Theme g_themeWindowGlass = {{
 }};
 
 const Theme g_themeOLED_variant_ModrinthGreen = {{
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > SystemSettings.View.EntityItem > Grid", {
+        L"CornerRadius=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsExpander > Grid > ContentPresenter#RevealedContent", {
+        L"CornerRadius=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.EntityItem#BluetoothRadioToggleEntityItem > Grid", {
+        L"CornerRadius=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.SpacingStackPanel > ContentPresenter > SystemSettings.View.EntityItem > Grid", {
+        L"CornerRadius=12"}},
     ThemeTargetStyles{L"ContentControl#GridViewItemContentControl > ContentPresenter > Grid", {
-        L"Background=#101013"}},
+        L"Background=#101013",
+        L"CornerRadius=12"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > Border", {
         L"CornerRadius=15",
         L"Background=transparent"}},
     ThemeTargetStyles{L"Microsoft.ReactNative.ReactRootView > Microsoft.ReactNative.ViewPanel > Microsoft.ReactNative.ViewPanel > Microsoft.ReactNative.ViewPanel > Microsoft.ReactNative.ViewPanel > Border", {
         L"Background=#101013"}},
     ThemeTargetStyles{L"SystemSettings.View.ButtonEntityItem > Button#ContainerButton > ContentPresenter#ContentPresenter", {
-        L"Background=#101013"}},
+        L"Background=#101013",
+        L"CornerRadius=12"}},
     ThemeTargetStyles{L"ContentPresenter#ContentPresenter > Grid > Grid > TextBlock", {
         L"Foreground=white"}},
     ThemeTargetStyles{L"SystemSettings.View.ReservedWidthReflowingPanel > StackPanel > ContentPresenter#SubtitleContent > TextBlock", {
@@ -1250,11 +1258,10 @@ const Theme g_themeOLED_variant_ModrinthGreen = {{
         L"MinHeight=32"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter#ContentPresenter > TextBlock", {
         L"Grid.Column=0",
-        L"Visibility=Hidden"}},
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem", {
         L"MinHeight=48",
         L"MinWidth=65",
-        L"ToolTipService.Placement=5",
         L"MaxWidth=65"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid@DisplayModeStates > Grid#PaneRoot", {
         L"MaxWidth@OpenInlineLeft=65",
@@ -1900,15 +1907,25 @@ const Theme g_themeOLED_variant_ModrinthGreen = {{
 }};
 
 const Theme g_themeOLED_variant_SystemAscent = {{
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > SystemSettings.View.EntityItem > Grid", {
+        L"CornerRadius=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsExpander > Grid > ContentPresenter#RevealedContent", {
+        L"CornerRadius=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.EntityItem#BluetoothRadioToggleEntityItem > Grid", {
+        L"CornerRadius=12"}},
+    ThemeTargetStyles{L"SystemSettings.View.SpacingStackPanel > ContentPresenter > SystemSettings.View.EntityItem > Grid", {
+        L"CornerRadius=12"}},
     ThemeTargetStyles{L"ContentControl#GridViewItemContentControl > ContentPresenter > Grid", {
-        L"Background=#101013"}},
+        L"Background=#101013",
+        L"CornerRadius=12"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > Border", {
         L"CornerRadius=15",
         L"Background=transparent"}},
     ThemeTargetStyles{L"Microsoft.ReactNative.ReactRootView > Microsoft.ReactNative.ViewPanel > Microsoft.ReactNative.ViewPanel > Microsoft.ReactNative.ViewPanel > Microsoft.ReactNative.ViewPanel > Border", {
         L"Background=#101013"}},
     ThemeTargetStyles{L"SystemSettings.View.ButtonEntityItem > Button#ContainerButton > ContentPresenter#ContentPresenter", {
-        L"Background=#101013"}},
+        L"Background=#101013",
+        L"CornerRadius=12"}},
     ThemeTargetStyles{L"ContentPresenter#ContentPresenter > Grid > Grid > TextBlock", {
         L"Foreground=white"}},
     ThemeTargetStyles{L"SystemSettings.View.ReservedWidthReflowingPanel > StackPanel > ContentPresenter#SubtitleContent > TextBlock", {
@@ -1940,11 +1957,10 @@ const Theme g_themeOLED_variant_SystemAscent = {{
         L"MinHeight=32"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter#ContentPresenter > TextBlock", {
         L"Grid.Column=0",
-        L"Visibility=Hidden"}},
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem", {
         L"MinHeight=48",
         L"MinWidth=65",
-        L"ToolTipService.Placement=5",
         L"MaxWidth=65"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid@DisplayModeStates > Grid#PaneRoot", {
         L"MaxWidth@OpenInlineLeft=65",
