@@ -2,10 +2,11 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.22.0
+// @version         0.23.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
+// @include         explorer.exe
 // @license         GPL-3.0
 // @compilerOptions -lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid -lgdi32
 // ==/WindhawkMod==
@@ -81,18 +82,19 @@ folder.
 ## The notification
 
 The popup is a real Windows notification, so it matches your light or dark theme.
-While the popup is turned on, SnapSentry leaves two things on your machine so the
-notification buttons work, a SnapSentry shortcut in your Start Menu programs
-folder and one registry entry. Turning the popup off or disabling the mod removes
-both again. If the notification can't be shown, SnapSentry falls back
-to a standard dialog. If you have turned its notifications off, it takes
-that as a cue to stay quiet: it still copies to the clipboard but shows no dialog
-and never auto deletes. Windows forgets that choice when SnapSentry is disabled,
-updated or turned off, because its notification entry is removed then, so turn
-its notifications off again in Windows settings if you want it to stay quiet.
-A multi-page or animated image is kept rather than
-deleted, because only its first frame can go on the clipboard, and afterwards a
-short notice says so, when the notification is available.
+While the popup is turned on, SnapSentry registers its notification identity in
+a private per-user hive served to Explorer by registry hooks. It doesn't add a
+Start Menu shortcut or register the CLSID in the Windows registry. Turning the
+popup off or disabling the mod removes that registration. If the notification
+can't be shown, SnapSentry falls back to a standard dialog. Explorer must be
+running for notification buttons
+to work. If Explorer is unavailable, SnapSentry uses the dialog instead. If you
+have turned its notifications off, it takes that as a cue
+to stay quiet: it still copies to the clipboard but shows no dialog and never
+auto deletes. A multi-page or animated image is kept rather than deleted, because
+only its first frame can go on the clipboard, and afterwards a short notice says
+so, when the notification is available. Windows may keep SnapSentry listed under
+Settings > System > Notifications after you turn the popup off or disable the mod.
 
 ## Capture sessions
 
@@ -176,7 +178,7 @@ page](https://github.com/mario0318/SnapSentry/issues).
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. The temporary notification registration is removed when you turn this off or disable the mod. Windows may keep SnapSentry listed under Settings > System > Notifications.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. A countdown no longer holds up the next screenshot, which is copied straight away. Popups appear one at a time. Maximum 3600.
@@ -260,10 +262,14 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <cstring>
 #include <cwchar>
 #include <deque>
+#include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
+#include <aclapi.h>
+#include <sddl.h>
 #include <algorithm>
 #include <memory>
 #include <cstddef>
@@ -413,6 +419,7 @@ static ULONGLONG g_activeToastId;
 static std::atomic<void*> g_activeToast{nullptr};
 static HANDLE g_toastActionEvent;      // Auto-reset: a toast was activated or dismissed.
 static std::atomic<bool> g_toastRegistered{false};  // AUMID+CLSID registration ok.
+static std::atomic<bool> g_loggedExplorerHooksMissing{false};
 
 // ============================================================================
 // Settings
@@ -885,49 +892,18 @@ static ImageCopy ClipboardImage(const std::wstring& path,
 // ============================================================================
 // Toast notification identity (AUMID + COM activator CLSID)
 //
-// Windows requires three things to agree before an unpackaged Win32 app gets
-// interactive toast notifications: a Start Menu shortcut carrying the AUMID
-// (PKEY_AppUserModel_ID) and the activator CLSID (PKEY_AppUserModel_ToastActivatorCLSID),
-// a registry LocalServer32 entry for that CLSID, and a live COM registration
-// (CoRegisterClassObject) for the process that wants to handle button clicks.
+// Windows needs an app identity, the activator's LocalServer32 command, and a
+// live COM registration for interactive toast notifications. The AUMID and
+// LocalServer32 keys are kept in a private hive and exposed to Explorer through
+// hooks while the popup is enabled.
 // ============================================================================
 
 static constexpr wchar_t kAppUserModelId[] = L"mario0318.SnapSentry";
-static constexpr wchar_t kShortcutName[] = L"SnapSentry.lnk";
-
-// Assigned to this mod; do not reuse or change this value --
-// Windows ties the shortcut and registry state below to this exact value.
+static constexpr wchar_t kLegacyShortcutName[] = L"SnapSentry.lnk";
+// Assigned to this mod; do not reuse or change this value.
 // {304BD1DF-F3CE-414D-A33B-3BA70D2CE081}
 DEFINE_GUID(CLSID_SnapSentryToastActivator, 0x304bd1df, 0xf3ce, 0x414d, 0xa3,
             0x3b, 0x3b, 0xa7, 0x0d, 0x2c, 0xe0, 0x81);
-
-static bool SetStringProp(IPropertyStore* store, REFPROPERTYKEY key,
-                          const wchar_t* value) {
-    PROPVARIANT pv{};
-    pv.vt = VT_LPWSTR;
-    pv.pwszVal = (PWSTR)CoTaskMemAlloc((wcslen(value) + 1) * sizeof(wchar_t));
-    if (!pv.pwszVal) {
-        return false;
-    }
-    wcscpy_s(pv.pwszVal, wcslen(value) + 1, value);
-    bool ok = SUCCEEDED(store->SetValue(key, pv));
-    PropVariantClear(&pv);  // Also frees pwszVal (CoTaskMemAlloc-compatible).
-    return ok;
-}
-
-static bool SetClsidProp(IPropertyStore* store, REFPROPERTYKEY key,
-                         REFCLSID clsid) {
-    PROPVARIANT pv{};
-    pv.vt = VT_CLSID;
-    pv.puuid = (CLSID*)CoTaskMemAlloc(sizeof(CLSID));
-    if (!pv.puuid) {
-        return false;
-    }
-    *pv.puuid = clsid;
-    bool ok = SUCCEEDED(store->SetValue(key, pv));
-    PropVariantClear(&pv);
-    return ok;
-}
 
 static bool ShortcutHasCorrectProperties(IShellLinkW* link) {
     IPropertyStore* store = nullptr;
@@ -949,12 +925,8 @@ static bool ShortcutHasCorrectProperties(IShellLinkW* link) {
     return ok;
 }
 
-// Creates (or repairs) %APPDATA%\Microsoft\Windows\Start Menu\Programs\SnapSentry.lnk
-// pointing at the current windhawk.exe, tagged with our AUMID and activator CLSID.
-// Idempotent: does nothing if a correctly-tagged shortcut already exists.
-// True only if a shortcut already exists at the path and carries our exact AUMID
-// and activator CLSID. Uses its own throwaway object so a failed load never
-// touches the object we create the shortcut with.
+// Used only to recognize and remove a shortcut created by earlier versions.
+// It leaves any same-named shortcut with different properties untouched.
 static bool ShortcutExistsAndValid(const std::wstring& path) {
     if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         return false;
@@ -976,101 +948,255 @@ static bool ShortcutExistsAndValid(const std::wstring& path) {
     return ok;
 }
 
-static bool EnsureAumidRegistered() {
-    PWSTR programs = nullptr;
-    HRESULT hr = SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs);
-    if (FAILED(hr)) {
-        Wh_Log(L"AUMID: SHGetKnownFolderPath failed 0x%08lx", hr);
-        return false;
-    }
-    std::wstring path = std::wstring(programs) + L"\\" + kShortcutName;
-    CoTaskMemFree(programs);
+// Stores the COM launch command and the toast app identity in a private app
+// hive inside Windhawk storage. Explorer hooks redirect reads of this CLSID's
+// LocalServer32 entry and of AppUserModelId\mario0318.SnapSentry to that hive,
+// so SnapSentry registers neither in the system registry.
+static HKEY g_toastRegistrationHive = nullptr;
 
-    if (ShortcutExistsAndValid(path)) {
-        return true;  // Already registered correctly.
-    }
+static const wchar_t kToastHiveFileName[] = L"toast-registration.hiv";
+static const wchar_t kExplorerHooksReadyEventPrefix[] =
+    L"Local\\Windhawk_SnapSentry_ToastRegistryHooksReady_";
 
-    WCHAR exePath[MAX_PATH];
-    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
-        // At the buffer size it truncates with no null guarantee, so reject it
-        // rather than write a shortcut that points somewhere wrong.
-        Wh_Log(L"AUMID: GetModuleFileName failed/truncated %lu", GetLastError());
-        return false;
-    }
-
-    // Create the shortcut on a fresh object (the documented pattern).
-    IShellLinkW* link = nullptr;
-    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-                          IID_PPV_ARGS(&link));
-    if (FAILED(hr)) {
-        Wh_Log(L"AUMID: CoCreateInstance(ShellLink) failed 0x%08lx", hr);
-        return false;
-    }
-
-    bool ok = false;
-    do {
-        hr = link->SetPath(exePath);
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IShellLink::SetPath failed 0x%08lx", hr);
-            break;
-        }
-        hr = link->SetArguments(L"");
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IShellLink::SetArguments failed 0x%08lx", hr);
-            break;
-        }
-        hr = link->SetDescription(L"SnapSentry (Windhawk)");
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IShellLink::SetDescription failed 0x%08lx", hr);
-            break;
-        }
-
-        IPropertyStore* store = nullptr;
-        hr = link->QueryInterface(IID_PPV_ARGS(&store));
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: QI IPropertyStore failed 0x%08lx", hr);
-            break;
-        }
-        bool aumidProp = SetStringProp(store, PKEY_AppUserModel_ID, kAppUserModelId);
-        bool clsidProp = SetClsidProp(store, PKEY_AppUserModel_ToastActivatorCLSID,
-                                      CLSID_SnapSentryToastActivator);
-        hr = store->Commit();
-        store->Release();
-        if (!aumidProp || !clsidProp || FAILED(hr)) {
-            Wh_Log(L"AUMID: set props failed (aumid=%d clsid=%d commit=0x%08lx)",
-                   aumidProp, clsidProp, hr);
-            break;
-        }
-
-        IPersistFile* file = nullptr;
-        hr = link->QueryInterface(IID_PPV_ARGS(&file));
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: QI IPersistFile failed 0x%08lx", hr);
-            break;
-        }
-        hr = file->Save(path.c_str(), TRUE);
-        file->Release();
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IPersistFile::Save failed 0x%08lx", hr);
-            break;
-        }
-        ok = true;
-    } while (false);
-
-    link->Release();
-    return ok;
+static std::wstring ExplorerHooksReadyEventName(DWORD processId) {
+    return std::wstring(kExplorerHooksReadyEventPrefix) +
+           std::to_wstring(processId);
 }
 
-// Writes HKCU\Software\Classes\CLSID\{...}\LocalServer32 so Windows treats our
-// CLSID as a valid, launchable COM server for the AUMID above. While SnapSentry
-// is already running, CoRegisterClassObject (below) intercepts activation before
-// Windows would ever need to launch a process via this key; a cold launch (the
-// mod's process not already running when a toast button is clicked) is not
-// specially handled and is a known limitation. It is rare in practice because the
-// watcher runs continuously while the mod is enabled, and the key is removed on
-// unload so nothing is left to launch once the mod is gone.
+static bool GetCurrentUserSid(std::wstring& sidString) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return false;
+    }
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> tokenInfo(size);
+    bool ok = size != 0 &&
+              GetTokenInformation(token, TokenUser, tokenInfo.data(), size,
+                                  &size);
+    CloseHandle(token);
+    if (!ok) {
+        return false;
+    }
+
+    LPWSTR text = nullptr;
+    if (!ConvertSidToStringSidW(
+            ((TOKEN_USER*)tokenInfo.data())->User.Sid, &text)) {
+        return false;
+    }
+    sidString.assign(text);
+    LocalFree(text);
+    return true;
+}
+
+static bool IsPrivateToastStorageDirectory(HANDLE directory,
+                                           const std::wstring& userSid) {
+    PSID owner = nullptr;
+    PACL dacl = nullptr;
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    DWORD status = GetSecurityInfo(
+        directory, SE_FILE_OBJECT,
+        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner,
+        nullptr, &dacl, nullptr, &descriptor);
+    if (status != ERROR_SUCCESS) {
+        return false;
+    }
+
+    PSID expectedUser = nullptr;
+    PSID systemSid = nullptr;
+    bool valid = ConvertStringSidToSidW(userSid.c_str(), &expectedUser) &&
+                 ConvertStringSidToSidW(L"S-1-5-18", &systemSid) &&
+                 owner && EqualSid(owner, expectedUser) && dacl &&
+                 dacl->AceCount == 2;
+    SECURITY_DESCRIPTOR_CONTROL control = 0;
+    DWORD revision = 0;
+    if (valid && (!GetSecurityDescriptorControl(descriptor, &control,
+                                                &revision) ||
+                  !(control & SE_DACL_PROTECTED))) {
+        valid = false;
+    }
+
+    bool userAllowed = false;
+    bool systemAllowed = false;
+    for (DWORD i = 0; valid && i < dacl->AceCount; i++) {
+        void* rawAce = nullptr;
+        if (!GetAce(dacl, i, &rawAce)) {
+            valid = false;
+            break;
+        }
+        auto* header = (ACE_HEADER*)rawAce;
+        if (header->AceType != ACCESS_ALLOWED_ACE_TYPE ||
+            header->AceFlags != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)) {
+            valid = false;
+            break;
+        }
+        auto* ace = (ACCESS_ALLOWED_ACE*)rawAce;
+        PSID aceSid = (PSID)&ace->SidStart;
+        if (ace->Mask != FILE_ALL_ACCESS) {
+            valid = false;
+        } else if (EqualSid(aceSid, expectedUser)) {
+            userAllowed = true;
+        } else if (EqualSid(aceSid, systemSid)) {
+            systemAllowed = true;
+        } else {
+            valid = false;
+        }
+    }
+    valid = valid && userAllowed && systemAllowed;
+    if (expectedUser) LocalFree(expectedUser);
+    if (systemSid) LocalFree(systemSid);
+    LocalFree(descriptor);
+    return valid;
+}
+
+static HANDLE OpenStableDirectory(const std::wstring& path) {
+    HANDLE directory = CreateFileW(
+        path.c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (directory == INVALID_HANDLE_VALUE) {
+        return INVALID_HANDLE_VALUE;
+    }
+    BY_HANDLE_FILE_INFORMATION info = {};
+    if (!GetFileInformationByHandle(directory, &info) ||
+        !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        CloseHandle(directory);
+        return INVALID_HANDLE_VALUE;
+    }
+    return directory;
+}
+
+static bool GetToastHivePath(std::wstring& path, HANDLE* storageGuard,
+                             HANDLE* directoryGuard, bool createDirectories) {
+    *storageGuard = INVALID_HANDLE_VALUE;
+    *directoryGuard = INVALID_HANDLE_VALUE;
+    WCHAR storage[MAX_PATH];
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
+        return false;
+    }
+    if (createDirectories) {
+        // SHCreateDirectoryEx returns a Win32 error directly, not via GetLastError.
+        int result = SHCreateDirectoryExW(nullptr, storage, nullptr);
+        if (result != ERROR_SUCCESS && result != ERROR_ALREADY_EXISTS) {
+            return false;
+        }
+    }
+    *storageGuard = OpenStableDirectory(storage);
+    if (*storageGuard == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    auto closeStorageGuard = [&]() {
+        CloseHandle(*storageGuard);
+        *storageGuard = INVALID_HANDLE_VALUE;
+    };
+
+    std::wstring userSid;
+    if (!GetCurrentUserSid(userSid)) {
+        closeStorageGuard();
+        return false;
+    }
+    std::wstring userStorage = storage;
+    if (!userStorage.empty() && userStorage.back() != L'\\') {
+        userStorage.push_back(L'\\');
+    }
+    userStorage += L"user-";
+    userStorage += userSid;
+
+    if (createDirectories) {
+        std::wstring sddl = L"O:" + userSid +
+            L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;" + userSid + L")";
+        PSECURITY_DESCRIPTOR descriptor = nullptr;
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.c_str(), SDDL_REVISION_1, &descriptor, nullptr)) {
+            closeStorageGuard();
+            return false;
+        }
+        SECURITY_ATTRIBUTES attributes = {sizeof(attributes), descriptor, FALSE};
+        BOOL created = CreateDirectoryW(userStorage.c_str(), &attributes);
+        DWORD createError = created ? ERROR_SUCCESS : GetLastError();
+        LocalFree(descriptor);
+        if (!created && createError != ERROR_ALREADY_EXISTS) {
+            closeStorageGuard();
+            return false;
+        }
+    }
+    HANDLE guard = OpenStableDirectory(userStorage);
+    if (guard == INVALID_HANDLE_VALUE) {
+        closeStorageGuard();
+        return false;
+    }
+    if (!IsPrivateToastStorageDirectory(guard, userSid)) {
+        CloseHandle(guard);
+        closeStorageGuard();
+        Wh_Log(L"Toast private storage directory has unexpected permissions");
+        return false;
+    }
+
+    // Keep deletion and rename of the checked directory blocked until the
+    // registry hive has been opened by path.
+    *directoryGuard = guard;
+    path = userStorage;
+    path.push_back(L'\\');
+    path += kToastHiveFileName;
+    return true;
+}
+
+static bool OpenToastRegistrationHive(HKEY* hive,
+                                      REGSAM access = KEY_ALL_ACCESS,
+                                      bool createIfMissing = true) {
+    std::wstring path;
+    HANDLE storageGuard = INVALID_HANDLE_VALUE;
+    HANDLE directoryGuard = INVALID_HANDLE_VALUE;
+    if (!GetToastHivePath(path, &storageGuard, &directoryGuard,
+                          createIfMissing)) {
+        return false;
+    }
+    if (!createIfMissing) {
+        DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            CloseHandle(directoryGuard);
+            CloseHandle(storageGuard);
+            return false;
+        }
+    }
+    LSTATUS status = RegLoadAppKeyW(path.c_str(), hive, access, 0, 0);
+    CloseHandle(directoryGuard);
+    CloseHandle(storageGuard);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Toast private registry hive could not be opened (%ld)", status);
+        return false;
+    }
+    return true;
+}
+
+static bool ExplorerToastHooksReady() {
+    HWND shellWindow = GetShellWindow();
+    DWORD shellProcessId = 0;
+    if (!shellWindow || !GetWindowThreadProcessId(shellWindow, &shellProcessId) ||
+        !shellProcessId) {
+        return false;
+    }
+    std::wstring eventName = ExplorerHooksReadyEventName(shellProcessId);
+    HANDLE ready = OpenEventW(SYNCHRONIZE, FALSE, eventName.c_str());
+    if (!ready) {
+        return false;
+    }
+    bool signaled = WaitForSingleObject(ready, 0) == WAIT_OBJECT_0;
+    CloseHandle(ready);
+    return signaled;
+}
+
 static bool EnsureClsidRegistered() {
+    if (!ExplorerToastHooksReady()) {
+        if (!g_loggedExplorerHooksMissing.exchange(true)) {
+            Wh_Log(L"Explorer registry hooks are not ready; using the dialog instead");
+        }
+        return false;
+    }
+    g_loggedExplorerHooksMissing = false;
+
     WCHAR exePath[MAX_PATH];
     DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
     if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
@@ -1081,52 +1207,106 @@ static bool EnsureClsidRegistered() {
 
     WCHAR clsidStr[64];
     StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr, ARRAYSIZE(clsidStr));
-    std::wstring keyPath = std::wstring(L"Software\\Classes\\CLSID\\") + clsidStr +
-                           L"\\LocalServer32";
-
-    // Windhawk currently hosts tool mods in an x86 process. Register both views
-    // so the 64-bit notification shell and a 32-bit caller resolve the same
-    // out-of-process activator.
-    bool ok = true;
-    const REGSAM views[] = {KEY_WOW64_64KEY, KEY_WOW64_32KEY};
-    for (REGSAM view : views) {
-        HKEY key = nullptr;
-        LSTATUS status = RegCreateKeyExW(
-            HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, 0,
-            KEY_SET_VALUE | view, nullptr, &key, nullptr);
-        if (status == ERROR_SUCCESS) {
-            status = RegSetValueExW(
-                key, nullptr, 0, REG_SZ, (const BYTE*)command,
-                (DWORD)((wcslen(command) + 1) * sizeof(wchar_t)));
-            RegCloseKey(key);
-        }
-        if (status != ERROR_SUCCESS) {
-            Wh_Log(L"Toast CLSID registration failed (view=0x%lx error=%ld)",
-                   view, status);
-            ok = false;
-        }
+    if (!g_toastRegistrationHive &&
+        !OpenToastRegistrationHive(&g_toastRegistrationHive)) {
+        return false;
     }
-    return ok;
+    std::wstring keyPath = std::wstring(L"CLSID\\") + clsidStr + L"\\LocalServer32";
+    HKEY key = nullptr;
+    // Application-hive access is controlled by the hive file's ACL, not by
+    // per-key ACLs. GetToastHivePath protects that file through its directory.
+    LSTATUS status = RegCreateKeyExW(g_toastRegistrationHive, keyPath.c_str(),
+                                     0, nullptr, 0, KEY_SET_VALUE, nullptr,
+                                     &key, nullptr);
+    if (status == ERROR_SUCCESS) {
+        status = RegSetValueExW(key, nullptr, 0, REG_SZ, (const BYTE*)command,
+                                (DWORD)((wcslen(command) + 1) * sizeof(wchar_t)));
+        RegCloseKey(key);
+    }
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Toast private CLSID registration failed (%ld)", status);
+        return false;
+    }
+    return true;
 }
 
-// Removes the Start Menu shortcut we created, but only if it's still ours (same
-// AUMID and activator CLSID). A same-named file we didn't write is left alone so
-// unload never deletes an unrelated shortcut.
-static void RemoveAumidRegistration() {
+// Registers the unpackaged app identity in the same private hive as its COM
+// server. Explorer serves this AppUserModelId key through the registry hooks,
+// so there is no Start Menu shortcut to leave behind after a crash or removal.
+static void RemoveLegacyAumidShortcut();
+
+static bool EnsureAumidRegistered() {
+    RemoveLegacyAumidShortcut();
+    if (!ExplorerToastHooksReady()) {
+        return false;
+    }
+
+    WCHAR exePath[MAX_PATH];
+    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+    if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
+        return false;
+    }
+
+    if (!g_toastRegistrationHive &&
+        !OpenToastRegistrationHive(&g_toastRegistrationHive)) {
+        return false;
+    }
+
+    const std::wstring keyPath =
+        std::wstring(L"AppUserModelId\\") + kAppUserModelId;
+    HKEY key = nullptr;
+    LSTATUS status = RegCreateKeyExW(g_toastRegistrationHive, keyPath.c_str(),
+                                     0, nullptr, 0, KEY_SET_VALUE, nullptr,
+                                     &key, nullptr);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Toast private AUMID registration failed (%ld)", status);
+        return false;
+    }
+
+    WCHAR clsidStr[64];
+    StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr,
+                    ARRAYSIZE(clsidStr));
+    const struct {
+        const wchar_t* name;
+        const wchar_t* value;
+    } values[] = {{L"DisplayName", L"SnapSentry"},
+                  {L"IconUri", exePath},
+                  {L"CustomActivator", clsidStr}};
+    for (const auto& entry : values) {
+        status = RegSetValueExW(
+            key, entry.name, 0, REG_SZ, (const BYTE*)entry.value,
+            (DWORD)((wcslen(entry.value) + 1) * sizeof(wchar_t)));
+        if (status != ERROR_SUCCESS) {
+            break;
+        }
+    }
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS) {
+        RegDeleteTreeW(g_toastRegistrationHive, keyPath.c_str());
+        Wh_Log(L"Toast private AUMID registration failed (%ld)", status);
+        return false;
+    }
+    return true;
+}
+
+// Clean up a shortcut created by versions before 0.23.0, but only if it still
+// carries SnapSentry's exact AUMID and activator CLSID.
+static void RemoveLegacyAumidShortcut() {
     PWSTR programs = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs))) {
         return;
     }
-    std::wstring path = std::wstring(programs) + L"\\" + kShortcutName;
+    std::wstring path =
+        std::wstring(programs) + L"\\" + kLegacyShortcutName;
     CoTaskMemFree(programs);
     if (ShortcutExistsAndValid(path)) {
         DeleteFileW(path.c_str());
     }
 }
 
-// Removes the CLSID key we wrote under both registry views. Deletes the whole
-// {clsid} subtree since the mod owns that GUID; a missing key is not an error.
-static void RemoveClsidRegistration() {
+// Removes the system-registry entry left by versions before 0.23.0. New
+// registrations are supplied only by the private hive and Explorer hooks.
+static void RemoveLegacyClsidRegistration() {
     WCHAR clsidStr[64];
     StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr, ARRAYSIZE(clsidStr));
     const REGSAM views[] = {KEY_WOW64_64KEY, KEY_WOW64_32KEY};
@@ -1142,25 +1322,431 @@ static void RemoveClsidRegistration() {
     }
 }
 
-// Windows creates a per-AUMID key the first time a toast is delivered, which is
-// what keeps "SnapSentry" listed under Settings > System > Notifications. It is
-// our own AUMID, so remove it too, otherwise the entry outlives the mod. A
-// missing key is not an error.
-static void RemoveNotificationSettings() {
-    HKEY parent = nullptr;
-    LSTATUS status = RegOpenKeyExW(
-        HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings", 0,
-        DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE, &parent);
-    if (status == ERROR_SUCCESS) {
-        RegDeleteTreeW(parent, kAppUserModelId);
-        RegCloseKey(parent);
+// Removes this version's private-hive entry and any leftover legacy entry.
+static void RemoveClsidRegistration() {
+    WCHAR clsidStr[64];
+    StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr, ARRAYSIZE(clsidStr));
+    if (!g_toastRegistrationHive) {
+        OpenToastRegistrationHive(&g_toastRegistrationHive, KEY_ALL_ACCESS,
+                                  false);
     }
+    if (g_toastRegistrationHive) {
+        std::wstring privateKey = std::wstring(L"CLSID\\") + clsidStr;
+        RegDeleteTreeW(g_toastRegistrationHive, privateKey.c_str());
+        privateKey = std::wstring(L"AppUserModelId\\") + kAppUserModelId;
+        RegDeleteTreeW(g_toastRegistrationHive, privateKey.c_str());
+        RegCloseKey(g_toastRegistrationHive);
+        g_toastRegistrationHive = nullptr;
+    }
+    RemoveLegacyClsidRegistration();
+    RemoveLegacyAumidShortcut();
+}
+
+// These hooks expose the private LocalServer32 and AppUserModelId entries
+// through Explorer's registry calls while the notification action is enabled.
+// Only this SnapSentry CLSID and AUMID are served from the private hive; other
+// requests pass through unchanged.
+static HKEY g_explorerToastHive = nullptr;
+static HANDLE g_explorerHooksReady = nullptr;
+static SRWLOCK g_explorerHiveLock = SRWLOCK_INIT;
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegCloseKey_t = decltype(&RegCloseKey);
+static RegOpenKeyExW_t g_regOpenKeyExWOriginal = nullptr;
+static RegGetValueW_t g_regGetValueWOriginal = nullptr;
+static RegCloseKey_t g_regCloseKeyOriginal = nullptr;
+struct TrackedRegistryKey {
+    bool classesRoot;
+    std::wstring path;
+};
+static SRWLOCK g_registryHandleLock = SRWLOCK_INIT;
+static std::map<HKEY, TrackedRegistryKey> g_registryHandlePaths;
+static std::atomic<size_t> g_registryHandleCount{0};
+
+struct RegistryPathParts {
+    std::wstring_view base;
+    std::wstring_view suffix;
+};
+
+static size_t RegistryPathLength(const RegistryPathParts& path) {
+    return path.base.size() +
+           (!path.base.empty() && !path.suffix.empty() ? 1 : 0) +
+           path.suffix.size();
+}
+
+static wchar_t RegistryPathCharAt(const RegistryPathParts& path, size_t index) {
+    if (index < path.base.size()) {
+        return path.base[index];
+    }
+    if (!path.base.empty() && !path.suffix.empty()) {
+        if (index == path.base.size()) {
+            return L'\\';
+        }
+        index--;
+    }
+    return path.suffix[index - path.base.size()];
+}
+
+static bool RegistryPathStartsWith(const RegistryPathParts& path,
+                                   std::wstring_view prefix) {
+    const size_t pathLength = RegistryPathLength(path);
+    if (pathLength < prefix.size()) {
+        return false;
+    }
+    if (path.base.empty()) {
+        return CompareStringOrdinal(path.suffix.data(), (int)prefix.size(),
+                                    prefix.data(), (int)prefix.size(), TRUE) ==
+                   CSTR_EQUAL &&
+               (pathLength == prefix.size() ||
+                path.suffix[prefix.size()] == L'\\');
+    }
+    size_t baseCompared = std::min(path.base.size(), prefix.size());
+    if (CompareStringOrdinal(path.base.data(), (int)baseCompared,
+                             prefix.data(), (int)baseCompared, TRUE) !=
+        CSTR_EQUAL) {
+        return false;
+    }
+    if (prefix.size() <= path.base.size()) {
+        if (pathLength == prefix.size()) {
+            return true;
+        }
+        return prefix.size() < path.base.size()
+                   ? path.base[prefix.size()] == L'\\'
+                   : !path.suffix.empty();
+    }
+    if (path.suffix.empty() || prefix[path.base.size()] != L'\\') {
+        return false;
+    }
+    const size_t suffixCompared = prefix.size() - path.base.size() - 1;
+    return CompareStringOrdinal(
+               path.suffix.data(), (int)suffixCompared,
+               prefix.data() + path.base.size() + 1, (int)suffixCompared,
+               TRUE) == CSTR_EQUAL &&
+           (pathLength == prefix.size() ||
+            path.suffix[suffixCompared] == L'\\');
+}
+
+static bool RegistryPathEquals(const RegistryPathParts& path,
+                               std::wstring_view expected) {
+    return RegistryPathLength(path) == expected.size() &&
+           RegistryPathStartsWith(path, expected);
+}
+
+static std::wstring CopyRegistryPath(const RegistryPathParts& path) {
+    std::wstring result;
+    result.reserve(RegistryPathLength(path));
+    for (size_t i = 0; i < RegistryPathLength(path); i++) {
+        result.push_back(RegistryPathCharAt(path, i));
+    }
+    return result;
+}
+
+static bool MapToastRegistryPath(bool classesRoot,
+                                 const RegistryPathParts& path,
+                                 std::wstring& privatePath) {
+    static constexpr std::wstring_view kClsidClassesPrefix =
+        L"CLSID\\{304BD1DF-F3CE-414D-A33B-3BA70D2CE081}";
+    static constexpr std::wstring_view kClsidUserPrefix =
+        L"Software\\Classes\\CLSID\\{304BD1DF-F3CE-414D-A33B-3BA70D2CE081}";
+    static constexpr std::wstring_view kAumidClassesPrefix =
+        L"AppUserModelId\\mario0318.SnapSentry";
+    static constexpr std::wstring_view kAumidUserPrefix =
+        L"Software\\Classes\\AppUserModelId\\mario0318.SnapSentry";
+    static constexpr std::wstring_view kClsidPrivatePath =
+        L"CLSID\\{304BD1DF-F3CE-414D-A33B-3BA70D2CE081}";
+    static constexpr std::wstring_view kAumidPrivatePath =
+        L"AppUserModelId\\mario0318.SnapSentry";
+
+    const std::wstring_view prefix = classesRoot
+        ? (RegistryPathStartsWith(path, kClsidClassesPrefix)
+               ? kClsidClassesPrefix
+               : kAumidClassesPrefix)
+        : (RegistryPathStartsWith(path, kClsidUserPrefix)
+               ? kClsidUserPrefix
+               : kAumidUserPrefix);
+    if (!RegistryPathStartsWith(path, prefix)) {
+        return false;
+    }
+
+    const std::wstring_view privatePrefix =
+        (prefix == kClsidClassesPrefix || prefix == kClsidUserPrefix)
+            ? kClsidPrivatePath
+            : kAumidPrivatePath;
+    privatePath.assign(privatePrefix);
+    for (size_t i = prefix.size(); i < RegistryPathLength(path); i++) {
+        privatePath.push_back(RegistryPathCharAt(path, i));
+    }
+    return true;
+}
+
+static bool IsRelevantKeyPrefix(bool classesRoot,
+                                const RegistryPathParts& path) {
+    if (classesRoot) {
+        return RegistryPathEquals(path, L"CLSID") ||
+               RegistryPathEquals(path, L"AppUserModelId");
+    }
+    return RegistryPathEquals(path, L"Software") ||
+           RegistryPathEquals(path, L"Software\\Classes") ||
+           RegistryPathEquals(path, L"Software\\Classes\\CLSID") ||
+           RegistryPathEquals(path,
+                              L"Software\\Classes\\AppUserModelId");
+}
+
+// Only copy registry paths when a handle must be tracked or redirected. Most
+// Explorer lookups never match these prefixes and stay allocation-free.
+static bool ResolveToastRegistryPath(HKEY root, LPCWSTR subKey,
+                                     bool& classesRoot,
+                                     std::wstring& privatePath,
+                                     std::wstring& trackedPath) {
+    std::wstring_view suffix = subKey ? subKey : L"";
+    if (root == HKEY_CLASSES_ROOT || root == HKEY_CURRENT_USER) {
+        classesRoot = root == HKEY_CLASSES_ROOT;
+        RegistryPathParts path{{}, suffix};
+        bool mapped = MapToastRegistryPath(classesRoot, path, privatePath);
+        if (IsRelevantKeyPrefix(classesRoot, path)) {
+            trackedPath = CopyRegistryPath(path);
+            return true;
+        }
+        return mapped;
+    }
+
+    if (g_registryHandleCount.load(std::memory_order_relaxed) == 0) {
+        return false;
+    }
+    AcquireSRWLockShared(&g_registryHandleLock);
+    auto it = g_registryHandlePaths.find(root);
+    if (it == g_registryHandlePaths.end()) {
+        ReleaseSRWLockShared(&g_registryHandleLock);
+        return false;
+    }
+    classesRoot = it->second.classesRoot;
+    RegistryPathParts path{it->second.path, suffix};
+    bool mapped = MapToastRegistryPath(classesRoot, path, privatePath);
+    bool relevant = IsRelevantKeyPrefix(classesRoot, path);
+    if (relevant) {
+        trackedPath = CopyRegistryPath(path);
+    }
+    ReleaseSRWLockShared(&g_registryHandleLock);
+    return mapped || relevant;
+}
+
+static bool MightBeToastRegistryPath(HKEY root, LPCWSTR subKey) {
+    if (!subKey) {
+        return false;
+    }
+    if (root == HKEY_CLASSES_ROOT) {
+        return (_wcsnicmp(subKey, L"CLSID", 5) == 0 &&
+                (subKey[5] == L'\\' || subKey[5] == L'\0')) ||
+               (_wcsnicmp(subKey, L"AppUserModelId", 14) == 0 &&
+                (subKey[14] == L'\\' || subKey[14] == L'\0'));
+    }
+    if (root == HKEY_CURRENT_USER) {
+        return _wcsicmp(subKey, L"Software") == 0 ||
+               (_wcsnicmp(subKey, L"Software\\Classes", 16) == 0 &&
+                (subKey[16] == L'\\' || subKey[16] == L'\0'));
+    }
+    return true;
+}
+
+static LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY root, LPCWSTR subKey,
+                                         DWORD options, REGSAM samDesired,
+                                         PHKEY result) {
+    if (root != HKEY_CLASSES_ROOT && root != HKEY_CURRENT_USER &&
+        g_registryHandleCount.load(std::memory_order_relaxed) == 0) {
+        return g_regOpenKeyExWOriginal(root, subKey, options, samDesired,
+                                       result);
+    }
+    if ((root == HKEY_CLASSES_ROOT || root == HKEY_CURRENT_USER) &&
+        !MightBeToastRegistryPath(root, subKey)) {
+        return g_regOpenKeyExWOriginal(root, subKey, options, samDesired,
+                                       result);
+    }
+    bool classesRoot = false;
+    std::wstring privatePath;
+    std::wstring trackedPath;
+    bool hasPath = ResolveToastRegistryPath(root, subKey, classesRoot,
+                                            privatePath, trackedPath);
+    if (hasPath && !privatePath.empty()) {
+        samDesired &= ~(KEY_WOW64_32KEY | KEY_WOW64_64KEY);
+        AcquireSRWLockShared(&g_explorerHiveLock);
+        HKEY hive = g_explorerToastHive;
+        if (hive) {
+            LSTATUS status = g_regOpenKeyExWOriginal(
+                hive, privatePath.c_str(), options, samDesired, result);
+            ReleaseSRWLockShared(&g_explorerHiveLock);
+            return status;
+        }
+        ReleaseSRWLockShared(&g_explorerHiveLock);
+    }
+    LSTATUS status = g_regOpenKeyExWOriginal(root, subKey, options, samDesired,
+                                              result);
+    if (status == ERROR_SUCCESS && result && *result && !trackedPath.empty() &&
+        *result != HKEY_CLASSES_ROOT && *result != HKEY_CURRENT_USER) {
+        AcquireSRWLockExclusive(&g_registryHandleLock);
+        auto inserted = g_registryHandlePaths.insert_or_assign(
+            *result, TrackedRegistryKey{classesRoot, std::move(trackedPath)});
+        if (inserted.second) {
+            g_registryHandleCount.fetch_add(1, std::memory_order_relaxed);
+        }
+        ReleaseSRWLockExclusive(&g_registryHandleLock);
+    }
+    return status;
+}
+
+static LSTATUS WINAPI RegGetValueW_Hook(HKEY root, LPCWSTR subKey,
+                                        LPCWSTR value, DWORD flags,
+                                        LPDWORD type, PVOID data, LPDWORD size) {
+    if (root != HKEY_CLASSES_ROOT && root != HKEY_CURRENT_USER &&
+        g_registryHandleCount.load(std::memory_order_relaxed) == 0) {
+        return g_regGetValueWOriginal(root, subKey, value, flags, type, data,
+                                      size);
+    }
+    if ((root == HKEY_CLASSES_ROOT || root == HKEY_CURRENT_USER) &&
+        !MightBeToastRegistryPath(root, subKey)) {
+        return g_regGetValueWOriginal(root, subKey, value, flags, type, data,
+                                      size);
+    }
+    bool classesRoot = false;
+    std::wstring privatePath;
+    std::wstring trackedPath;
+    if (ResolveToastRegistryPath(root, subKey, classesRoot, privatePath,
+                                 trackedPath) &&
+        !privatePath.empty()) {
+        flags &= ~(RRF_SUBKEY_WOW6464KEY | RRF_SUBKEY_WOW6432KEY);
+        AcquireSRWLockShared(&g_explorerHiveLock);
+        HKEY hive = g_explorerToastHive;
+        if (hive) {
+            LSTATUS status = g_regGetValueWOriginal(
+                hive, privatePath.c_str(), value, flags, type, data, size);
+            ReleaseSRWLockShared(&g_explorerHiveLock);
+            return status;
+        }
+        ReleaseSRWLockShared(&g_explorerHiveLock);
+    }
+    return g_regGetValueWOriginal(root, subKey, value, flags, type, data, size);
+}
+
+static LSTATUS WINAPI RegCloseKey_Hook(HKEY key) {
+    if (g_registryHandleCount.load(std::memory_order_relaxed) == 0) {
+        return g_regCloseKeyOriginal(key);
+    }
+    AcquireSRWLockShared(&g_registryHandleLock);
+    bool tracked = g_registryHandlePaths.count(key) != 0;
+    ReleaseSRWLockShared(&g_registryHandleLock);
+    if (!tracked) {
+        return g_regCloseKeyOriginal(key);
+    }
+    AcquireSRWLockExclusive(&g_registryHandleLock);
+    size_t erased = g_registryHandlePaths.erase(key);
+    if (erased) {
+        g_registryHandleCount.fetch_sub(1, std::memory_order_relaxed);
+    }
+    ReleaseSRWLockExclusive(&g_registryHandleLock);
+    return g_regCloseKeyOriginal(key);
+}
+
+static bool HookExplorerRegistryReads() {
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelBase) {
+        return false;
+    }
+    auto openTarget = reinterpret_cast<RegOpenKeyExW_t>(
+        GetProcAddress(kernelBase, "RegOpenKeyExW"));
+    auto getTarget = reinterpret_cast<RegGetValueW_t>(
+        GetProcAddress(kernelBase, "RegGetValueW"));
+    auto closeTarget = reinterpret_cast<RegCloseKey_t>(
+        GetProcAddress(kernelBase, "RegCloseKey"));
+    if (!openTarget || !getTarget || !closeTarget ||
+        !WindhawkUtils::SetFunctionHook(openTarget, RegOpenKeyExW_Hook,
+                                        &g_regOpenKeyExWOriginal) ||
+        !WindhawkUtils::SetFunctionHook(getTarget, RegGetValueW_Hook,
+                                        &g_regGetValueWOriginal) ||
+        !WindhawkUtils::SetFunctionHook(closeTarget, RegCloseKey_Hook,
+                                        &g_regCloseKeyOriginal)) {
+        Wh_Log(L"Explorer toast registry hooks could not be installed");
+        return false;
+    }
+    return true;
+}
+
+static bool WhExplorer_ModInit() {
+    if (!Wh_GetIntSetting(L"showActionPopup")) {
+        return false;
+    }
+    if (!OpenToastRegistrationHive(&g_explorerToastHive, KEY_READ)) {
+        return false;
+    }
+    if (!HookExplorerRegistryReads()) {
+        RegCloseKey(g_explorerToastHive);
+        g_explorerToastHive = nullptr;
+        return false;
+    }
+    std::wstring eventName = ExplorerHooksReadyEventName(GetCurrentProcessId());
+    g_explorerHooksReady = CreateEventW(nullptr, TRUE, FALSE,
+                                         eventName.c_str());
+    if (!g_explorerHooksReady) {
+        RegCloseKey(g_explorerToastHive);
+        g_explorerToastHive = nullptr;
+        return false;
+    }
+    return true;
+}
+
+static void WhExplorer_ModUninit() {
+    if (g_explorerHooksReady) {
+        ResetEvent(g_explorerHooksReady);
+        CloseHandle(g_explorerHooksReady);
+        g_explorerHooksReady = nullptr;
+    }
+    AcquireSRWLockExclusive(&g_explorerHiveLock);
+    if (g_explorerToastHive) {
+        RegCloseKey(g_explorerToastHive);
+        g_explorerToastHive = nullptr;
+    }
+    ReleaseSRWLockExclusive(&g_explorerHiveLock);
+    AcquireSRWLockExclusive(&g_registryHandleLock);
+    g_registryHandlePaths.clear();
+    g_registryHandleCount = 0;
+    ReleaseSRWLockExclusive(&g_registryHandleLock);
+}
+
+static void WhExplorer_ModSettingsChanged() {
+    bool popupEnabled = Wh_GetIntSetting(L"showActionPopup") != 0;
+    if (!popupEnabled) {
+        if (g_explorerHooksReady) {
+            ResetEvent(g_explorerHooksReady);
+        }
+        AcquireSRWLockExclusive(&g_explorerHiveLock);
+        if (g_explorerToastHive) {
+            RegCloseKey(g_explorerToastHive);
+            g_explorerToastHive = nullptr;
+        }
+        ReleaseSRWLockExclusive(&g_explorerHiveLock);
+        // Keep tracking open handles: the hooks stay installed, and handles
+        // opened before the toggle must still redirect once it is back on.
+        // The map is cleared only in WhExplorer_ModUninit.
+        return;
+    }
+    if (!g_explorerHooksReady) {
+        // Wh_ModInit returns FALSE when the popup is initially off. Windhawk
+        // initializes Explorer again when the setting is turned on.
+        return;
+    }
+    AcquireSRWLockExclusive(&g_explorerHiveLock);
+    if (!g_explorerToastHive &&
+        !OpenToastRegistrationHive(&g_explorerToastHive, KEY_READ)) {
+        ReleaseSRWLockExclusive(&g_explorerHiveLock);
+        ResetEvent(g_explorerHooksReady);
+        Wh_Log(L"Explorer toast registry hive could not be reopened");
+        return;
+    }
+    ReleaseSRWLockExclusive(&g_explorerHiveLock);
+    SetEvent(g_explorerHooksReady);
 }
 
 // ============================================================================
 // COM activator: invoked when a toast button is clicked (routed via the CLSID
-// registered above). Parses which button and hands the result to whichever
+// exposed to Explorer by the registry hook). Parses which button and hands the result to whichever
 // ShowToast() call is currently waiting.
 // ============================================================================
 
@@ -2475,14 +3061,11 @@ static void ReleaseInflight(const std::wstring& path) {
     LeaveCriticalSection(&g_lock);
 }
 
-// Whether the Start Menu shortcut and the CLSID key are currently in place.
-// Prompt thread only: the shortcut work reads and writes COM objects and needs
-// that thread's apartment, which also hosts the toast activator.
+// Whether the private AUMID and CLSID keys are currently in place.
 static bool g_toastRegApplied = false;
 // The first pass always runs, even when there is nothing to register. Windows can
 // be shut down or the tool process killed without the mod ever unloading cleanly,
-// which leaves the shortcut and the key behind; starting with the popup off is the
-// one moment nothing would otherwise reclaim them.
+// which leaves private-hive state or an old shortcut behind; this pass reclaims it.
 static bool g_toastRegSynced = false;
 
 // Clears anything SnapSentry left in Action Center, such as a kept-file
@@ -2513,28 +3096,24 @@ static void ClearToastHistory() {
     }
 }
 
-// The shortcut and the registry key exist for one reason, to let a toast button
-// activate us, so they follow the settings instead of being written
-// unconditionally at startup. With processing or the popup off there is no
-// notification, and a SnapSentry entry sitting in Start and in Search would be
-// there for nothing.
+// The private identity and CLSID registration exist to let a toast button
+// activate us, so they follow the setting instead of being written
+// unconditionally at startup.
 static void SyncToastRegistration(bool wantPopup, bool unloading) {
-    // Clear Action Center and reclaim the per-AUMID notification key on unload,
-    // unconditionally and before the early return below: with the popup already
-    // off at unload the requested state matches, and we would otherwise return
-    // without ever running either. The AUMID registration is still intact here,
-    // which ClearToastHistory needs; RemoveNotificationSettings only touches the
-    // separate per-app notification-settings key, not the AUMID itself.
+    // Clear Action Center on unload before the early return below: with the popup
+    // already off at unload the requested state matches, and we would otherwise
+    // return without clearing stale notifications. Keep Windows' per-app
+    // notification preference intact across disable and update.
     if (unloading) {
         ClearToastHistory();
-        RemoveNotificationSettings();
     }
     // Skip only when nothing needs to change: the state matches and, when the popup
     // is wanted, registration already fully succeeded. A prior attempt that only
     // partially succeeded is retried on a later call rather than being stuck on the
     // dialog fallback for the whole session.
     if (g_toastRegSynced && wantPopup == g_toastRegApplied &&
-        (!wantPopup || g_toastRegistered.load())) {
+        (!wantPopup ||
+         (g_toastRegistered.load() && ExplorerToastHooksReady()))) {
         return;
     }
     g_toastRegSynced = true;
@@ -2579,20 +3158,15 @@ static void SyncToastRegistration(bool wantPopup, bool unloading) {
         CoRevokeClassObject(g_toastActivatorCookie);
         g_toastActivatorCookie = 0;
     }
-    // Unload already cleared it above, while the notification key was still
-    // there; repeating it here would run after RemoveNotificationSettings and
-    // could fail for that reason alone. Skip it when nothing was ever
+    // Unload already cleared it above. Skip it when nothing was ever
     // registered (the default popup-off first pass), since there is then no
     // AUMID for ClearWithId to resolve and the failure means nothing.
     if (!unloading && g_toastRegApplied) {
         ClearToastHistory();
     }
-    RemoveAumidRegistration();
     RemoveClsidRegistration();
-    // The per-AUMID Notifications\Settings key also holds the user's own per-app
-    // choices (enabled, banner, sound), so it is reclaimed only on unload (handled
-    // at the top of this function), never on an ordinary popup-off toggle, which
-    // would silently reset a preference the user set in Windows Settings.
+    // Windows owns the per-AUMID notification settings, including the user's
+    // banner and sound choices, so SnapSentry leaves that key intact.
     g_toastRegApplied = false;
 }
 
@@ -4364,6 +4938,11 @@ static DWORD WINAPI WatchThread(LPVOID) {
 // ============================================================================
 
 BOOL WhTool_ModInit() {
+    // Remove the system-registry CLSID entry left by older versions before
+    // loading settings. Current registration is kept in a private hive and
+    // served through Explorer's hooks while the popup is enabled.
+    RemoveLegacyClsidRegistration();
+
     InitializeCriticalSection(&g_lock);
     InitializeCriticalSection(&g_toastLock);
 
@@ -4491,8 +5070,10 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
+// The screenshot watcher and notification UI use the stock dedicated tool
+// process. The Explorer include above only virtualizes this mod's notification
+// registry reads while the popup is enabled. No screenshot work runs in
+// Explorer. See:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
@@ -4505,7 +5086,19 @@ void WhTool_ModUninit() {
 // Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
+static bool g_isExplorerProcess;
 HANDLE g_toolModProcessMutex;
+
+static bool IsCurrentProcessNamed(const wchar_t* expectedName) {
+    WCHAR path[MAX_PATH];
+    DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length >= ARRAYSIZE(path)) {
+        return false;
+    }
+    const wchar_t* name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, expectedName) == 0;
+}
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -4587,11 +5180,29 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    g_isExplorerProcess = IsCurrentProcessNamed(L"explorer.exe");
+    if (g_isExplorerProcess) {
+        if (!WhExplorer_ModInit()) {
+            Wh_Log(L"Explorer toast registry virtualization could not start");
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    if (!IsCurrentProcessNamed(L"windhawk.exe")) {
+        return FALSE;
+    }
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
+    if (g_isExplorerProcess) {
+        if (g_explorerHooksReady) {
+            SetEvent(g_explorerHooksReady);
+        }
+        return;
+    }
     if (!g_isToolModProcessLauncher) {
         return;
     }
@@ -4653,6 +5264,10 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
+    if (g_isExplorerProcess) {
+        WhExplorer_ModSettingsChanged();
+        return;
+    }
     if (g_isToolModProcessLauncher) {
         return;
     }
@@ -4661,6 +5276,10 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (g_isExplorerProcess) {
+        WhExplorer_ModUninit();
+        return;
+    }
     if (g_isToolModProcessLauncher) {
         return;
     }
