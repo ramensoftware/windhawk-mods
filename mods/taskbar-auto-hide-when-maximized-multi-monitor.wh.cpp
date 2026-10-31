@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-auto-hide-when-maximized-multi-monitor
 // @name            Taskbar auto-hide when maximized - multi-monitor fix
-// @description     Auto-hide the taskbar only when a window is maximized or overlaps it. Multi-monitor friendly, with safer startup on Windows 11.
+// @description     Auto-hide the taskbar only when a window is maximized or overlaps it. Fork of m417z's mod with multi-monitor, stuck-taskbar and hide-latency fixes on Windows 11.
 // @version         1.3.0
 // @author          Saderius
 // @github          https://github.com/Saderius
@@ -28,8 +28,15 @@ overlaps the taskbar area. The rest of the time the taskbar stays visible.
 
 This is a fork of
 [m417z's Taskbar auto-hide when maximized](https://windhawk.net/mods/taskbar-auto-hide-when-maximized).
-The feature is the same; the difference is how it behaves at startup, on Windows
-11:
+Everything that makes the mod work - the per-monitor taskbar handling, the
+"hide only when a window is maximized or overlaps the taskbar" decision, the
+settings - is his work. This fork keeps that behaviour unchanged and adds the
+fixes listed below. Relative to the original file it adds roughly 400 lines and
+changes about 45, so it is a superset rather than a rewrite.
+
+## What this fork changes
+
+**Startup on Windows 11**
 
 - If the symbols for `Taskbar.View.dll` aren't available yet (first run on a new
   Windows build, slow symbol download), the mod stays out of the way and lets
@@ -42,6 +49,43 @@ On the first start, Windhawk shows *Loading symbols...* for a few minutes. That'
 expected: the taskbar keeps working normally during the download and the mod
 takes over as soon as it's done.
 
+**Taskbar no longer gets stuck visible**
+
+- Cached "keep shown" state is re-validated before a hide is blocked, so a stale
+  entry can't kill the hide timer for the rest of the session.
+- A Win+Tab window that is gone or cloaked is dropped instead of keeping the
+  taskbar shown forever.
+- All of that state is reset when the mod is reloaded.
+
+**Survives a monitor power cycle (displays off/on, sleep, dock/undock)**
+
+- After a taskbar is created or recreated, and on a display change, the state is
+  re-evaluated immediately - a rebuilt taskbar is hidden if it should be,
+  instead of waiting for a state change that never comes.
+- If Explorer loses the *Automatically hide the taskbar* setting while
+  rebuilding the taskbars, the mod restores it (once per taskbar, so the shell's
+  "a toolbar is already hidden" warning isn't spammed).
+- If the shell's hide timer can't work at all, the taskbar's own hide routine is
+  called directly.
+
+**Faster hiding**
+
+- When a taskbar should be hidden, the hide routine is called directly and the
+  pending shell timer is killed, so the slide starts immediately instead of
+  around a second later.
+- It only acts while the bar is fully on screen, so an update arriving
+  mid-animation can't restart the slide.
+
+**Not changed**: modes, excluded programs, multi-monitor settings, and the
+hide/show decision logic itself.
+
+Credits: original mod by m417z, published under the GNU General Public License
+v3.0. Fork maintained by Saderius.
+
+The fixes above were written with AI assistance - OpenCode running DeepSeek
+V4.1 Flash. This fork started as a test of that model, and it proved pretty
+successful in practice.
+
 ## Notes
 
 - Windows 10 and Windows 11, 64-bit `explorer.exe`.
@@ -50,9 +94,6 @@ takes over as soon as it's done.
 - In *intersected* mode (default), any window overlapping the taskbar area does.
 - Set *Mode* to *never* to stop the taskbar from auto-hiding at all while the mod
   is enabled.
-
-Based on the original mod by m417z, published under the GNU General Public
-License v3.0.
 */
 // ==/WindhawkModReadme==
 
@@ -141,6 +182,11 @@ std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_map<void*, HWND> g_taskbarsKeptShown;
 std::unordered_map<HWND, void*> g_taskbarToViewCoordinator;
+// Taskbars whose auto-hide setting the shell refuses to turn back on. The shell
+// can end up with a stale auto-hide toolbar registration after a monitor power
+// cycle, and every attempt to enable it pops up a warning, so try once and then
+// hide such a taskbar directly instead.
+std::unordered_map<HWND, bool> g_autoHideEnableFailed;
 UINT_PTR g_pendingEventsTimer;
 std::atomic<HWND> g_multitaskingViewHwnd;
 std::atomic<HWND> g_altTabViewHwnd;
@@ -155,6 +201,7 @@ enum {
 
 constexpr WCHAR kUpdateTaskbarStatePendingTickCount[] =
     L"Windhawk_UpdateTaskbarStatePendingTickCount_" WH_MOD_ID;
+
 
 static const UINT g_getTaskbarRectRegisteredMsg =
     RegisterWindowMessage(L"Windhawk_GetTaskbarRect_" WH_MOD_ID);
@@ -339,6 +386,120 @@ bool GetTaskbarRectForMonitor(HMONITOR monitor, RECT* rect) {
     SendMessage(hTaskbarWnd, g_getTaskbarRectRegisteredMsg, (WPARAM)monitor,
                 (LPARAM)rect);
     return true;
+}
+
+bool GetAutoHideEnabled(HWND hTaskbarWnd) {
+    return SendMessage(hTaskbarWnd, kHandleTrayPrivateSettingMessage,
+                       kTrayPrivateSettingAutoHideGet, 0) != 0;
+}
+
+// Turns auto-hide back on for this taskbar if it got turned off, returning
+// whether it is on afterwards. Tried once per taskbar: when the shell refuses,
+// it shows its "A toolbar is already hidden on this side" warning, so retrying
+// would only spam it.
+bool EnsureAutoHideEnabled(HWND hTaskbarWnd) {
+    if (GetAutoHideEnabled(hTaskbarWnd)) {
+        return true;
+    }
+
+    if (g_autoHideEnableFailed.contains(hTaskbarWnd)) {
+        return false;
+    }
+
+    SendMessage(hTaskbarWnd, kHandleTrayPrivateSettingMessage,
+                kTrayPrivateSettingAutoHideSet, TRUE);
+
+    if (GetAutoHideEnabled(hTaskbarWnd)) {
+        Wh_Log(L"Auto-hide was off, turned it back on for %08X",
+               (DWORD)(ULONG_PTR)hTaskbarWnd);
+        return true;
+    }
+
+    Wh_Log(L"Auto-hide can't be turned on for %08X, hiding it directly",
+           (DWORD)(ULONG_PTR)hTaskbarWnd);
+    g_autoHideEnableFailed[hTaskbarWnd] = true;
+    return false;
+}
+
+// True if the taskbar is currently on screen. TrayUI hides a taskbar by moving
+// it out of its monitor, so a hidden taskbar still overlaps the monitor by a
+// few pixels.
+bool IsTaskbarOnScreen(HWND hTaskbarWnd, HMONITOR monitor) {
+    RECT rect;
+    if (!GetWindowRect(hTaskbarWnd, &rect) || IsRectEmpty(&rect)) {
+        return false;
+    }
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    if (!GetMonitorInfo(monitor, &monitorInfo)) {
+        return true;
+    }
+
+    RECT visibleRect;
+    if (!IntersectRect(&visibleRect, &rect, &monitorInfo.rcMonitor)) {
+        return false;
+    }
+
+    int thickness = rect.bottom - rect.top;
+    if (rect.right - rect.left < thickness) {
+        thickness = rect.right - rect.left;
+    }
+
+    int visibleThickness = visibleRect.bottom - visibleRect.top;
+    if (visibleRect.right - visibleRect.left < visibleThickness) {
+        visibleThickness = visibleRect.right - visibleRect.left;
+    }
+
+    return visibleThickness * 2 >= thickness;
+}
+
+// Stricter than IsTaskbarOnScreen: true only while the taskbar is fully out,
+// so that acting on it mid-animation can't restart the slide.
+bool IsTaskbarFullyShown(HWND hTaskbarWnd, HMONITOR monitor) {
+    RECT rect;
+    if (!GetWindowRect(hTaskbarWnd, &rect) || IsRectEmpty(&rect)) {
+        return false;
+    }
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    if (!GetMonitorInfo(monitor, &monitorInfo)) {
+        return true;
+    }
+
+    RECT visibleRect;
+    if (!IntersectRect(&visibleRect, &rect, &monitorInfo.rcMonitor)) {
+        return false;
+    }
+
+    int thickness = rect.bottom - rect.top;
+    if (rect.right - rect.left < thickness) {
+        thickness = rect.right - rect.left;
+    }
+
+    int visibleThickness = visibleRect.bottom - visibleRect.top;
+    if (visibleRect.right - visibleRect.left < visibleThickness) {
+        visibleThickness = visibleRect.right - visibleRect.left;
+    }
+
+    return visibleThickness * 10 >= thickness * 9;
+}
+
+bool IsCursorOverTaskbar(HWND hTaskbarWnd) {
+    POINT pt;
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+
+    RECT rect;
+    if (!GetWindowRect(hTaskbarWnd, &rect)) {
+        return false;
+    }
+
+    return PtInRect(&rect, pt);
 }
 
 // https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
@@ -957,14 +1118,12 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
         g_taskbarsKeptShown.erase(
             QueryViaVtableBackwards(pThis, TrayUI_vftable_IInspectable));
         g_taskbarToViewCoordinator.erase(hWnd);
-    } else if (Msg == kHandleTrayPrivateSettingMessage) {
-        // Prevent auto-hide from being disabled while the mod is loaded.
-        if ((DWORD)wParam == 4) {
-            BOOL bSetAutoHideEnabled = (BOOL)lParam;
-            if (!bSetAutoHideEnabled) {
-                return 0;
-            }
-        }
+        g_autoHideEnableFailed.erase(hWnd);
+    } else if (Msg == WM_DISPLAYCHANGE) {
+        Wh_Log(L"WM_DISPLAYCHANGE: %08X", (DWORD)(ULONG_PTR)hWnd);
+        // Monitors came or went. Explorer rebuilds the taskbars and can lose
+        // the auto-hide setting while doing it, so re-check everything.
+        AdjustAllTaskbars();
     } else if (Msg == g_getTaskbarRectRegisteredMsg) {
         HMONITOR monitor = (HMONITOR)wParam;
         RECT* rect = (RECT*)lParam;
@@ -997,6 +1156,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
 
         bool keptShown = g_taskbarsKeptShown.contains(pTrayUI_IInspectable);
 
+
         if (keepShown != keptShown) {
             Wh_Log(L"> keepShown=%d", keepShown);
 
@@ -1014,6 +1174,25 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
 
                 UpdateViewCoordinatorIsExpanded(hWnd);
+            }
+        }
+
+        // The shell only runs its hide timer while "Automatically hide the
+        // taskbar" is on, and it can lose that setting when it rebuilds the
+        // taskbars after a display change. So whenever the taskbar should be
+        // hidden but is still on screen, make sure auto-hide is on and hide it:
+        // with the shell's timer if possible, or directly if the shell refuses
+        // to turn auto-hide back on (then no timer will ever fire). The pointer
+        // check leaves peeking at the taskbar alone.
+        if (!keepShown && !IsCursorOverTaskbar(hWnd) &&
+            IsTaskbarFullyShown(hWnd, monitor)) {
+            bool autoHideEnabled = EnsureAutoHideEnabled(hWnd);
+
+            KillTimer(hWnd, kTrayUITimerHide);
+            TrayUI__Hide_Original(pThis);
+
+            if (!autoHideEnabled) {
+                SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
             }
         }
 
@@ -1043,6 +1222,12 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         Wh_Log(L"WM_NCDESTROY: %08X", (DWORD)(ULONG_PTR)hWnd);
         g_taskbarsKeptShown.erase(pThis);
         g_taskbarToViewCoordinator.erase(hWnd);
+        g_autoHideEnableFailed.erase(hWnd);
+    } else if (Msg == WM_DISPLAYCHANGE) {
+        Wh_Log(L"WM_DISPLAYCHANGE: %08X", (DWORD)(ULONG_PTR)hWnd);
+        // Monitors came or went. Explorer rebuilds the taskbars and can lose
+        // the auto-hide setting while doing it, so re-check everything.
+        AdjustAllTaskbars();
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
         void* pCSecondaryTray_ISecondaryTray =
             QueryViaVtable(pThis, CSecondaryTray_vftable_ISecondaryTray);
@@ -1052,7 +1237,9 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
 
         bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
+
         bool keptShown = g_taskbarsKeptShown.contains(pThis);
+
 
         if (keepShown != keptShown) {
             Wh_Log(L"> keepShown=%d", keepShown);
@@ -1069,6 +1256,25 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
 
                 UpdateViewCoordinatorIsExpanded(hWnd);
+            }
+        }
+
+        // The shell only runs its hide timer while "Automatically hide the
+        // taskbar" is on, and it can lose that setting when it rebuilds the
+        // taskbars after a display change. So whenever the taskbar should be
+        // hidden but is still on screen, hide it here: with the shell's timer
+        // if auto-hide is on, or directly if it isn't, because then no timer
+        // will ever fire. The pointer check leaves peeking at the taskbar
+        // alone.
+        if (!keepShown && !IsCursorOverTaskbar(hWnd) &&
+            IsTaskbarFullyShown(hWnd, monitor)) {
+            bool autoHideEnabled = EnsureAutoHideEnabled(hWnd);
+
+            KillTimer(hWnd, kTrayUITimerHide);
+            CSecondaryTray__AutoHide_Original(pThis, true);
+
+            if (!autoHideEnabled) {
+                SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
             }
         }
 
@@ -1170,6 +1376,15 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
             }
         }(event),
         GetWindowLogInfo(hWnd).c_str());
+
+
+    // Maximizing is the case where the hide delay is noticeable, so don't wait
+    // for the event batch below: re-evaluate right away. Checking the flag is a
+    // single read and only happens for location change events.
+    if (event == EVENT_OBJECT_LOCATIONCHANGE && IsZoomed(hWnd) &&
+        !g_pendingEventsTimer && AdjustAllTaskbarsIfNotPending()) {
+        return;
+    }
 
     if (g_pendingEventsTimer) {
         return;
@@ -1660,8 +1875,11 @@ BOOL Wh_ModInit() {
     // taskbar visible. Start from a clean slate.
     g_taskbarsKeptShown.clear();
     g_taskbarToViewCoordinator.clear();
+    g_autoHideEnableFailed.clear();
     g_multitaskingViewHwnd = nullptr;
     g_altTabViewHwnd = nullptr;
+    g_wasAutoHideProcessed = false;
+    g_wasAutoHideDisabled = false;
 
     HMODULE hUser32Module =
         LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
