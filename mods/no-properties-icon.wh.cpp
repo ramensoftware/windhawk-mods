@@ -2,7 +2,7 @@
 // @id              no-properties-icon
 // @name            No Properties Icon
 // @description     Removes the window icon from property sheets like previous Windows versions
-// @version         1.0.2
+// @version         1.0.3
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -154,12 +154,29 @@ INT_PTR CALLBACK PropSheetDlgProc_hook(
     return PropSheetDlgProc_orig(hwnd, uMsg, wParam, lParam);
 }
 
-WNDPROC WndProc_orig;
-LRESULT CALLBACK WndProc_hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+WNDPROC Shell32_WndProc_orig;
+WNDPROC Sysdm_WndProc_orig;
+WNDPROC RunDLL32_WndProc_orig;
+
+LRESULT CALLBACK Shell32_WndProc_hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (uMsg == WM_ACTIVATEAPP)
         return DefWindowProcW(hwnd, uMsg, wParam, lParam);
-    return WndProc_orig(hwnd, uMsg, wParam, lParam);
+    return Shell32_WndProc_orig(hwnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK Sysdm_WndProc_hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_ACTIVATEAPP)
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return Sysdm_WndProc_orig(hwnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK RunDLL32_WndProc_hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_ACTIVATEAPP)
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return RunDLL32_WndProc_orig(hwnd, uMsg, wParam, lParam);
 }
 
 void LoadSettings(void)
@@ -202,6 +219,18 @@ BOOL Wh_ModInit(void)
             _SetPropertySheetIcon_hook,
             false
         },
+        {
+            {
+            #ifdef _WIN64
+                L"__int64 __cdecl StubWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+            #else
+                L"long __stdcall StubWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+            #endif
+            },
+            &Shell32_WndProc_orig,
+            Shell32_WndProc_hook,
+            false
+        }
     };
 
     WindhawkUtils::SYMBOL_HOOK comCtl32Dllhook = {
@@ -225,8 +254,8 @@ BOOL Wh_ModInit(void)
             L"long __stdcall StubWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
             #endif
         },
-        &WndProc_orig,
-        WndProc_hook,
+        &Sysdm_WndProc_orig,
+        Sysdm_WndProc_hook,
         false
     };
 
@@ -239,8 +268,8 @@ BOOL Wh_ModInit(void)
             L"long __stdcall WndProc(struct HWND__ *,unsigned int,unsigned int,long)"
             #endif
         },
-        &WndProc_orig,
-        WndProc_hook,
+        &RunDLL32_WndProc_orig,
+        RunDLL32_WndProc_hook,
         false
     };
 

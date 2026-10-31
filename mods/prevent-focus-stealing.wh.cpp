@@ -2,7 +2,7 @@
 // @id              prevent-focus-stealing
 // @name            Prevent Focus Stealing
 // @description     Prevents specific apps from stealing focus when a window is opened.
-// @version         1.0.1
+// @version         1.0.2
 // @author          bawNg
 // @github          https://github.com/bawNg
 // @include         *
@@ -29,13 +29,13 @@ By default, **the mod will be injected into all processes** and unload when ther
 - `Required Arguments` can be used to only include processes with specific command line arguments. All arguments must match the process.
 - `Excluded Arguments` can be used to exclude processes with specific command line arguments. Any matching argument excludes the process.
 - `Window Title` is a title prefix of the window you want to prevent focus being stolen by. Leave it blank to target all windows.
-- `Never Focus` prevents manual activation, so it should only be enabled if you never want to interact with the window.
+- `Never Focus` prevents the application from ever stealing focus, instead of only when it initially opens. You can still manually focus the window.
 
-​
+&nbsp;
 
 ---
 
-​
+&nbsp;
 
 ## Preventing focus being stolen by Chromium (Electron / Browsers)
 
@@ -117,14 +117,24 @@ const intptr_t INITIAL_FOCUS_BLOCK_MS = 100;
 
 const intptr_t NEVER_FOCUS_TS = INTPTR_MIN + 1;
 
+const intptr_t PENDING_FOCUS_TS = INTPTR_MIN + 2;
+
 struct WindowInfo {
     WindhawkUtils::StringSetting title;
     bool neverFocus;
+
+    intptr_t GetInitialFocusTimestamp(bool visible) {
+        if (this->neverFocus) {
+            return NEVER_FOCUS_TS;
+        }
+        if (!visible) {
+            return PENDING_FOCUS_TS;
+        }
+        return GetTickCount64() / TS_PRECISION_MS;
+    }
 };
 
 std::vector<WindowInfo> g_includedWindows;
-
-bool g_initialized;
 
 LPCWSTR ShowCmdToString(int cmd) {
     switch (cmd) {
@@ -165,9 +175,25 @@ WindowInfo* GetWindowInfo(LPCWSTR title) {
     return nullptr;
 }
 
+bool HasVisibleStyle(HWND hWnd) {
+    return (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_VISIBLE) != 0;
+}
+
 bool CanActivateWindow(HWND hWnd) {
     intptr_t timestamp = Wh_GetProp(intptr_t, hWnd, L"NoActivateTs");
+    if (timestamp == NEVER_FOCUS_TS || timestamp == PENDING_FOCUS_TS) {
+        return false;
+    }
     return !timestamp || GetTickCount64() / TS_PRECISION_MS - timestamp >= INITIAL_FOCUS_BLOCK_MS / TS_PRECISION_MS;
+}
+
+bool CanShowWindowWithActivation(HWND hWnd) {
+    intptr_t timestamp = Wh_GetProp(intptr_t, hWnd, L"NoActivateTs");
+    if (timestamp == PENDING_FOCUS_TS) {
+        Wh_SetProp(hWnd, L"NoActivateTs", GetTickCount64() / TS_PRECISION_MS);
+        return false;
+    }
+    return CanActivateWindow(hWnd);
 }
 
 using SetWindowTextW_t = decltype(&SetWindowTextW);
@@ -180,7 +206,7 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR title) {
         WindowInfo* window_info = GetWindowInfo(title);
         if (window_info) {
             Wh_Log(L"SetWindowTextW for new window 0x%p: '%ls'", hWnd, title);
-            intptr_t timestamp = window_info->neverFocus ? NEVER_FOCUS_TS : (GetTickCount64() / TS_PRECISION_MS);
+            intptr_t timestamp = window_info->GetInitialFocusTimestamp(HasVisibleStyle(hWnd));
             Wh_SetProp(hWnd, L"NoActivateTs", timestamp);
         }
     }
@@ -216,11 +242,10 @@ using SetWindowPos_t = decltype(&SetWindowPos);
 SetWindowPos_t SetWindowPos_Orig;
 
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
-    if (!(uFlags & SWP_NOACTIVATE)) {
-        if (!CanActivateWindow(hWnd)) {
-            Wh_Log(L"SetWindowPos for window 0x%p - Adding SWP_NOACTIVATE to flags", hWnd);
-            uFlags |= SWP_NOACTIVATE;
-        }
+    bool can_activate = (uFlags & SWP_SHOWWINDOW) ? CanShowWindowWithActivation(hWnd) : CanActivateWindow(hWnd);
+    if (!(uFlags & SWP_NOACTIVATE) && !can_activate) {
+        Wh_Log(L"SetWindowPos for window 0x%p - Adding SWP_NOACTIVATE to flags", hWnd);
+        uFlags |= SWP_NOACTIVATE;
     }
     return SetWindowPos_Orig(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
@@ -229,13 +254,35 @@ using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Orig;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    int no_activate_cmd = nCmdShow;
+    bool should_show = true;
+    bool maximize_after_show = false;
+    switch (nCmdShow) {
+        case SW_HIDE:
+        case SW_MINIMIZE:
+        case SW_FORCEMINIMIZE:
+            should_show = false;
+            break;
+        case SW_SHOWMINIMIZED:
+            no_activate_cmd = SW_SHOWMINNOACTIVE;
+            break;
+        case SW_SHOWMAXIMIZED:
+            no_activate_cmd = SW_SHOWNOACTIVATE;
+            maximize_after_show = true;
+            break;
+        case SW_SHOWNORMAL:
+        case SW_SHOW:
+        case SW_RESTORE:
+        case SW_SHOWDEFAULT:
+            no_activate_cmd = SW_SHOWNOACTIVATE;
+            break;
+    }
+    bool can_activate = should_show ? CanShowWindowWithActivation(hWnd) : CanActivateWindow(hWnd);
     bool show_maximize = false;
-    if ((nCmdShow == SW_SHOW) | (nCmdShow == SW_SHOWNORMAL) | (nCmdShow == SW_RESTORE) | (nCmdShow == SW_SHOWMAXIMIZED) | (nCmdShow == SW_SHOWDEFAULT)) {
-        if (!CanActivateWindow(hWnd)) {
-            Wh_Log(L"Showing window 0x%p with SW_SHOWNOACTIVATE instead of %ls", hWnd, ShowCmdToString(nCmdShow));
-            show_maximize = nCmdShow == SW_SHOWMAXIMIZED;
-            nCmdShow = SW_SHOWNOACTIVATE;
-        }
+    if (!can_activate && no_activate_cmd != nCmdShow) {
+        Wh_Log(L"Showing window 0x%p with %ls instead of %ls", hWnd, ShowCmdToString(no_activate_cmd), ShowCmdToString(nCmdShow));
+        show_maximize = maximize_after_show;
+        nCmdShow = no_activate_cmd;
     }
     BOOL result = ShowWindow_Orig(hWnd, nCmdShow);
     if (show_maximize) {
@@ -250,7 +297,8 @@ CreateWindowExW_t CreateWindowExW_Orig;
 
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     WindowInfo* window_info = lpWindowName ? GetWindowInfo(lpWindowName) : nullptr;
-    if ((dwStyle & WS_VISIBLE) && window_info) {
+    bool was_visible = (dwStyle & WS_VISIBLE) != 0;
+    if (was_visible && window_info) {
         Wh_Log(L"CreateWindowExW with WS_VISIBLE: '%ls'", lpWindowName);
         dwStyle &= ~WS_VISIBLE;
     }
@@ -258,8 +306,11 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     if (hWnd) {
         if (window_info) {
             Wh_Log(L"Created window 0x%p is being tracked: '%ls'", hWnd, lpWindowName);
-            Wh_SetProp(hWnd, L"NoActivateTs", window_info->neverFocus ? NEVER_FOCUS_TS : (GetTickCount64() / TS_PRECISION_MS));
-            ShowWindow_Orig(hWnd, SW_SHOWNOACTIVATE);
+            bool has_visible_style = HasVisibleStyle(hWnd);
+            Wh_SetProp(hWnd, L"NoActivateTs", window_info->GetInitialFocusTimestamp(was_visible | has_visible_style));
+            if (was_visible && !has_visible_style) {
+                ShowWindow_Orig(hWnd, SW_SHOWNOACTIVATE);
+            }
         }
     }
     return hWnd;
@@ -417,7 +468,7 @@ void Wh_ModAfterInit() {
         EnumWindowsContext existing_windows { GetCurrentProcessId() };
         EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&existing_windows));
         Wh_Log(L"Checking %lld existing windows", existing_windows.hwnds.size());
-        uint64_t now = GetTickCount64();
+
         for (HWND hWnd : existing_windows.hwnds) {
             wchar_t title[256];
             GetWindowTextW(hWnd, title, _countof(title));
@@ -432,15 +483,13 @@ void Wh_ModAfterInit() {
                     continue;
             }
             Wh_Log(L"Existing window 0x%p needs to be tracked: '%ls'%ls", hWnd, title, window_info->neverFocus ? L" (never focus)" : L"");
-            Wh_SetProp(hWnd, L"NoActivateTs", window_info->neverFocus ? NEVER_FOCUS_TS : (now / TS_PRECISION_MS));
+            Wh_SetProp(hWnd, L"NoActivateTs", window_info->GetInitialFocusTimestamp(HasVisibleStyle(hWnd)));
             if (GetForegroundWindow() == hWnd) {
                 Wh_Log(L"Window 0x%p stole focus before mod initialized - switching to previous", hWnd);
                 SwitchToPreviousWindow(hWnd);
             }
         }
     }
-
-    g_initialized = true;
 
     Wh_Log(L"Mod initialized");
 }

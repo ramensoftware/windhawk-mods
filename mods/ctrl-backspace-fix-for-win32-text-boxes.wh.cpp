@@ -2,7 +2,7 @@
 // @id              ctrl-backspace-fix-for-win32-text-boxes
 // @name            Ctrl+Backspace Fix for Win32 Text Boxes
 // @description     Makes Ctrl+Backspace delete the previous word in Win32 text boxes instead of inserting a control character
-// @version         1.0
+// @version         1.0.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -46,7 +46,8 @@ applications.
 #include <cwctype>
 #include <string>
 
-enum class CharClass {
+enum class CharClass
+{
     Whitespace,
     Punctuation,
     Alphanumeric
@@ -56,7 +57,10 @@ enum class CharClass {
 CharClass GetCharClass(WCHAR wch)
 {
     // Whitespace
-    if (iswspace(wch)) return CharClass::Whitespace;
+    if (iswspace(wch))
+    {
+        return CharClass::Whitespace;
+    }
 
     // VS Code's default word separators
     constexpr const WCHAR* szWordSeparators =
@@ -87,7 +91,10 @@ void DeletePreviousWord(HWND hWnd)
 
     // Allocate a string buffer and retrieve the text to calculate the boundary
     int cchTextLen = GetWindowTextLengthW(hWnd);
-    if (cchTextLen == 0 || dwSelectionStart == 0) return;
+    if (cchTextLen == 0 || dwSelectionStart == 0)
+    {
+        return;
+    }
 
     std::wstring windowText(cchTextLen, L'\0');
     GetWindowTextW(hWnd, windowText.data(), cchTextLen + 1);
@@ -144,22 +151,16 @@ bool IsEditControl(HWND hWnd)
         LRESULT lResult = SendMessageW(hWnd, WM_GETDLGCODE, 0, 0);
         if (lResult & DLGC_HASSETSEL)
         {
-            // Exclude RichEdit controls
+            // Exclude specific text controls from the Ctrl+Backspace fix
             _wcsupr_s(szClassName, ARRAYSIZE(szClassName));
-            if (wcsstr(szClassName, L"RICHEDIT") != nullptr)
-            {
-                return false;
-            }
-            return true;
+            return (wcsstr(szClassName, L"RICHEDIT") == nullptr &&
+                wcsstr(szClassName, L"SCINTILLA") == nullptr);
         }
 
         // Fallback for .NET WinForms wrapped Edit controls
         // Required for those within PropertyGrid controls that swallow the
         // WM_GETDLGCODE query.
-        if (_wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0)
-        {
-            return true;
-        }
+        return _wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0;
     }
     return false;
 }
@@ -171,19 +172,11 @@ bool IsCtrlBackspaceOnEditControl(HWND hWnd, UINT uMsg, WPARAM wParam)
         (GetKeyState(VK_CONTROL) & 0x8000))
     {
         LONG_PTR lStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
-        if ((lStyle & WS_CHILD) == 0)
-        {
-            return false;
-        }
 
-        if (IsEditControl(hWnd))
-        {
-            // Ignore read-only Edit controls
-            if ((lStyle & ES_READONLY) == 0)
-            {
-                return true;
-            }
-        }
+        // Ensure it is a valid, writable Edit control
+        return ((lStyle & WS_CHILD) != 0 &&
+            IsEditControl(hWnd) &&
+            (lStyle & ES_READONLY) == 0);
     }
     return false;
 }
@@ -191,16 +184,13 @@ bool IsCtrlBackspaceOnEditControl(HWND hWnd, UINT uMsg, WPARAM wParam)
 // Hook for DispatchMessageW
 using DispatchMessageW_t = decltype(&DispatchMessageW);
 DispatchMessageW_t DispatchMessageW_Original;
-LRESULT WINAPI DispatchMessageW_Hook(const MSG *lpMsg)
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg)
 {
-    if (lpMsg)
+    if (lpMsg && IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
+            lpMsg->wParam))
     {
-        if (IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
-                lpMsg->wParam))
-        {
-            DeletePreviousWord(lpMsg->hwnd);
-            return 0;
-        }
+        DeletePreviousWord(lpMsg->hwnd);
+        return 0;
     }
     return DispatchMessageW_Original(lpMsg);
 }
@@ -208,16 +198,13 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG *lpMsg)
 // Hook for DispatchMessageA
 using DispatchMessageA_t = decltype(&DispatchMessageA);
 DispatchMessageA_t DispatchMessageA_Original;
-LRESULT WINAPI DispatchMessageA_Hook(const MSG *lpMsg)
+LRESULT WINAPI DispatchMessageA_Hook(const MSG* lpMsg)
 {
-    if (lpMsg)
+    if (lpMsg && IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
+            lpMsg->wParam))
     {
-        if (IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
-                lpMsg->wParam))
-        {
-            DeletePreviousWord(lpMsg->hwnd);
-            return 0;
-        }
+        DeletePreviousWord(lpMsg->hwnd);
+        return 0;
     }
     return DispatchMessageA_Original(lpMsg);
 }
@@ -227,14 +214,11 @@ using IsDialogMessageW_t = decltype(&IsDialogMessageW);
 IsDialogMessageW_t IsDialogMessageW_Original;
 BOOL WINAPI IsDialogMessageW_Hook(HWND hDlg, LPMSG lpMsg)
 {
-    if (lpMsg)
+    if (lpMsg && IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
+            lpMsg->wParam))
     {
-        if (IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
-                lpMsg->wParam))
-        {
-            DeletePreviousWord(lpMsg->hwnd);
-            return TRUE;
-        }
+        DeletePreviousWord(lpMsg->hwnd);
+        return TRUE;
     }
     return IsDialogMessageW_Original(hDlg, lpMsg);
 }
@@ -244,14 +228,11 @@ using IsDialogMessageA_t = decltype(&IsDialogMessageA);
 IsDialogMessageA_t IsDialogMessageA_Original;
 BOOL WINAPI IsDialogMessageA_Hook(HWND hDlg, LPMSG lpMsg)
 {
-    if (lpMsg)
+    if (lpMsg && IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
+            lpMsg->wParam))
     {
-        if (IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
-                lpMsg->wParam))
-        {
-            DeletePreviousWord(lpMsg->hwnd);
-            return TRUE;
-        }
+        DeletePreviousWord(lpMsg->hwnd);
+        return TRUE;
     }
     return IsDialogMessageA_Original(hDlg, lpMsg);
 }
@@ -259,15 +240,12 @@ BOOL WINAPI IsDialogMessageA_Hook(HWND hDlg, LPMSG lpMsg)
 // Hook for TranslateMessage
 using TranslateMessage_t = decltype(&TranslateMessage);
 TranslateMessage_t TranslateMessage_Original;
-BOOL WINAPI TranslateMessage_Hook(const MSG *lpMsg)
+BOOL WINAPI TranslateMessage_Hook(const MSG* lpMsg)
 {
-    if (lpMsg)
+    if (lpMsg && IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
+            lpMsg->wParam))
     {
-        if (IsCtrlBackspaceOnEditControl(lpMsg->hwnd, lpMsg->message,
-                lpMsg->wParam))
-        {
-            return TRUE;
-        }
+        return TRUE;
     }
     return TranslateMessage_Original(lpMsg);
 }

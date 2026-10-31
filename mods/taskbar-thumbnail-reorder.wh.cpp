@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.1.4
+// @version         1.1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -49,7 +49,9 @@ check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 #include <psapi.h>
 
 #include <atomic>
+#include <cmath>
 #include <functional>
+#include <optional>
 #include <vector>
 
 #undef GetCurrentTime
@@ -59,6 +61,12 @@ check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+
+// The taskbar thumbnails use a WinUI 2 (MUX) ItemsRepeater built on top of
+// system XAML. Pull in its projection to enumerate the realized items
+// (ItemsSourceView / TryGetElement).
+#define WH_WINRT_WINUI2
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -78,6 +86,9 @@ WinVersion g_winVersion;
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
+
+bool g_noClassicThumbnails;
+bool g_hasThumbnailAnimations;
 
 int g_thumbDraggedIndex = -1;
 bool g_thumbDragDone;
@@ -295,12 +306,12 @@ bool MoveTaskInTaskList(HWND hMMTaskListWnd,
             lpMMTaskListLongPtr, CTaskListWnd_vftable_ITaskListUI);
 
         CTaskListWnd_TaskInclusionChanged(pThis_ITaskListUI, taskGroup,
-                                          taskItemFrom);
+                                          taskItemTo);
 
         g_taskItemFilterDisallowAll = false;
 
         CTaskListWnd_TaskInclusionChanged(pThis_ITaskListUI, taskGroup,
-                                          taskItemFrom);
+                                          taskItemTo);
 
         if (hThumbnailWnd) {
             SendMessage(hThumbnailWnd, WM_SETREDRAW, TRUE, 0);
@@ -480,14 +491,18 @@ LRESULT WINAPI CTaskListThumbnailWnd_v_WndProc_Hook(void* pThis,
                                                     UINT Msg,
                                                     WPARAM wParam,
                                                     LPARAM lParam) {
-    LRESULT result = 0;
-    bool processed = false;
-
     auto OriginalProc = [pThis](HWND hWnd, UINT Msg, WPARAM wParam,
                                 LPARAM lParam) {
         return CTaskListThumbnailWnd_v_WndProc_Original(pThis, hWnd, Msg,
                                                         wParam, lParam);
     };
+
+    if (g_noClassicThumbnails) {
+        return OriginalProc(hWnd, Msg, wParam, lParam);
+    }
+
+    LRESULT result = 0;
+    bool processed = false;
 
     switch (Msg) {
         case WM_LBUTTONDOWN:
@@ -565,6 +580,27 @@ LRESULT WINAPI CTaskListThumbnailWnd_v_WndProc_Hook(void* pThis,
     return result;
 }
 
+void AddTaskItemThumbnailMapping(
+    winrt::Windows::Foundation::IInspectable thumbnail,
+    void* taskGroup,
+    void* taskItem) {
+    // Delete stale mapping items.
+    std::erase_if(g_thumbnailTaskItemMapping, [&](const auto& item) {
+        auto thumbnailIter = item.thumbnail.get();
+        if (!thumbnailIter || thumbnailIter == thumbnail) {
+            return true;
+        }
+
+        if (item.taskGroup == taskGroup && item.taskItem == taskItem) {
+            return true;
+        }
+
+        return false;
+    });
+
+    g_thumbnailTaskItemMapping.push_back({thumbnail, taskGroup, taskItem});
+}
+
 using TaskItemThumbnail_TaskItemThumbnail_t = void*(WINAPI*)(void* param1,
                                                              void* param2,
                                                              void* taskGroup,
@@ -595,8 +631,7 @@ void* WINAPI TaskItemThumbnail_TaskItemThumbnail_Hook(void* param1,
             winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
             winrt::put_abi(obj));
 
-    g_thumbnailTaskItemMapping.push_back(
-        ThumbnailTaskItemMapping{obj, taskGroup, taskItem});
+    AddTaskItemThumbnailMapping(obj, taskGroup, taskItem);
 
     return result;
 }
@@ -628,8 +663,7 @@ void* WINAPI TaskItemThumbnail_TaskItemThumbnail_2_Hook(void* param1,
             winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
             winrt::put_abi(obj));
 
-    g_thumbnailTaskItemMapping.push_back(
-        ThumbnailTaskItemMapping{obj, taskGroup, taskItem});
+    AddTaskItemThumbnailMapping(obj, taskGroup, taskItem);
 
     return result;
 }
@@ -729,6 +763,24 @@ bool IsPointerInsideElement(const UIElement& element,
 }
 
 void MoveItemsFromXAMLThumbnail(int indexFrom, int indexTo) {
+    // New builds (around 10.0.26100.8544) added animations to thumbnails. One
+    // side effect is that the previous method of calling
+    // CTaskListWnd_TaskInclusionChanged(taskItemFrom) now clears the "Pressed"
+    // visual state of the source thumbnail, which breaks the dragging after a
+    // single reorder.
+    //
+    // As a workaround, we now use CTaskListWnd_TaskInclusionChanged(taskItemTo)
+    // instead, which repositions the target thumbnail instead of the source
+    // thumbnail. This only works if the target thumbnail is adjacent to the
+    // source thumbnail, because otherwise all the items between the source and
+    // target have to be repositioned, and it's probably not worth the effort.
+    int indexDistance = std::abs(indexFrom - indexTo);
+    if (indexDistance != 1) {
+        Wh_Log(L"Only adjacent thumbnail moves are supported (distance %d)",
+               indexDistance);
+        return;
+    }
+
     Wh_Log(L"Moving from %d to %d", indexFrom, indexTo);
 
     auto thumbnails = g_TaskGroup_Thumbnails.get();
@@ -856,6 +908,14 @@ int WINAPI TaskItemThumbnailList_OnPointerMoved_Hook(void* pThis, void* pArgs) {
         return original();
     }
 
+    auto repeater =
+        taskItemThumbnailListRepeater
+            .try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>();
+    if (!repeater) {
+        Wh_Log(L"Not an ItemsRepeater");
+        return original();
+    }
+
     Input::PointerRoutedEventArgs args = nullptr;
     ((IUnknown*)pArgs)
         ->QueryInterface(winrt::guid_of<Input::PointerRoutedEventArgs>(),
@@ -864,59 +924,80 @@ int WINAPI TaskItemThumbnailList_OnPointerMoved_Hook(void* pThis, void* pArgs) {
         return original();
     }
 
-    int positionPressed = 0;
-    int positionHovered = 0;
+    // Enumerate the repeater's realized items by index instead of walking the
+    // visual tree. TryGetElement only returns live items, so ghost elements
+    // (e.g. an item being animated out after a reorder) are excluded, and the
+    // index is authoritative - unlike AutomationProperties.PositionInSet, which
+    // is maintained by the automation peer and isn't refreshed on reorder.
+    int indexPressed = -1;
+    int indexHovered = -1;
 
-    EnumChildElements(
-        taskItemThumbnailListRepeater,
-        [&args, &positionPressed, &positionHovered](FrameworkElement child) {
-            auto className = winrt::get_class_name(child);
-            if (className != L"Taskbar.TaskItemThumbnailView") {
-                Wh_Log(L"Unexpected element of class %s", className.c_str());
-                return true;
-            }
+    auto itemsSourceView = repeater.ItemsSourceView();
+    int count = itemsSourceView ? itemsSourceView.Count() : 0;
 
-            auto grid =
-                FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid");
-            if (!grid) {
-                Wh_Log(L"Element has no grid child");
-                return true;
-            }
+    for (int index = 0; index < count; index++) {
+        auto element = repeater.TryGetElement(index);
+        if (!element) {
+            // Not realized (virtualized away).
+            continue;
+        }
 
-            if (positionPressed == 0) {
-                VisualState currentState = nullptr;
+        auto child = element.try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
 
-                for (const auto& v :
-                     VisualStateManager::GetVisualStateGroups(grid)) {
-                    if (v.Name() == L"CommonStates") {
-                        currentState = v.CurrentState();
-                        break;
-                    }
+        auto className = winrt::get_class_name(child);
+        if (className != L"Taskbar.TaskItemThumbnailView") {
+            Wh_Log(L"Unexpected element of class %s", className.c_str());
+            continue;
+        }
+
+        auto grid =
+            FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid");
+        if (!grid) {
+            Wh_Log(L"Element has no grid child");
+            continue;
+        }
+
+        if (indexPressed == -1) {
+            VisualState currentState = nullptr;
+
+            for (const auto& v :
+                 VisualStateManager::GetVisualStateGroups(grid)) {
+                if (v.Name() == L"CommonStates") {
+                    currentState = v.CurrentState();
+                    break;
                 }
+            }
 
-                if (currentState) {
-                    auto currentStateName = currentState.Name();
-                    if (currentStateName == L"Pressed" ||
-                        currentStateName == L"RequestingAttentionPressed") {
-                        positionPressed =
-                            Automation::AutomationProperties::GetPositionInSet(
-                                child);
-                    }
+            if (currentState) {
+                auto currentStateName = currentState.Name();
+                if (currentStateName == L"Pressed" ||
+                    currentStateName == L"RequestingAttentionPressed") {
+                    indexPressed = index;
+                    Wh_Log(L"Pressed thumbnail at index %d: %s", indexPressed,
+                           Automation::AutomationProperties::GetName(child)
+                               .c_str());
                 }
             }
+        }
 
-            if (positionHovered == 0 && IsPointerInsideElement(child, args)) {
-                positionHovered =
-                    Automation::AutomationProperties::GetPositionInSet(child);
-            }
+        if (indexHovered == -1 && IsPointerInsideElement(child, args)) {
+            indexHovered = index;
+            Wh_Log(L"Hovered thumbnail at index %d: %s", indexHovered,
+                   Automation::AutomationProperties::GetName(child).c_str());
+        }
 
-            return positionPressed != 0 && positionHovered != 0;
-        });
+        if (indexPressed != -1 && indexHovered != -1) {
+            break;
+        }
+    }
 
-    if (positionPressed != 0 && positionHovered != 0 &&
-        positionPressed != positionHovered) {
+    if (indexPressed != -1 && indexHovered != -1 &&
+        indexPressed != indexHovered) {
         g_reorderingXamlThumbnails = true;
-        MoveItemsFromXAMLThumbnail(positionPressed - 1, positionHovered - 1);
+        MoveItemsFromXAMLThumbnail(indexPressed, indexHovered);
     }
 
     return original();
@@ -925,6 +1006,13 @@ int WINAPI TaskItemThumbnailList_OnPointerMoved_Hook(void* pThis, void* pArgs) {
 using FlyoutFrame_UpdateFlyoutPosition_t = void(WINAPI*)(void* pThis);
 FlyoutFrame_UpdateFlyoutPosition_t FlyoutFrame_UpdateFlyoutPosition_Original;
 void WINAPI FlyoutFrame_UpdateFlyoutPosition_Hook(void* pThis) {
+    // Newer builds where thumbnail animations are enabled don't need this
+    // workaround.
+    if (g_hasThumbnailAnimations) {
+        FlyoutFrame_UpdateFlyoutPosition_Original(pThis);
+        return;
+    }
+
     // Skip the call entirely until the reorder completes. Otherwise, if labels
     // are shown, the thumbnail flyout moves off-screen and disappears. That
     // seems to be a Windows bug, happens with middle-click too.
@@ -972,6 +1060,8 @@ bool HookTaskbarSymbols() {
             {
                 {LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex(void)const )"},
                 &CTaskListThumbnailWnd_GetHoverIndex,
+                nullptr,
+                true,  // Classic thumbs, removed in or near 10.0.26100.8544.
             },
             {
                 {
@@ -982,14 +1072,20 @@ bool HookTaskbarSymbols() {
                     LR"(private: struct ITaskItem * __cdecl CTaskListThumbnailWnd::_GetTaskItem(int))",
                 },
                 &CTaskListThumbnailWnd__GetTaskItem,
+                nullptr,
+                true,  // Classic thumbs, removed in or near 10.0.26100.8544.
             },
             {
                 {LR"(public: virtual struct ITaskGroup * __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const )"},
                 &CTaskListThumbnailWnd_GetTaskGroup,
+                nullptr,
+                true,  // Classic thumbs, removed in or near 10.0.26100.8544.
             },
             {
                 {LR"(public: virtual void __cdecl CTaskListThumbnailWnd::TaskReordered(struct ITaskItem *))"},
                 &CTaskListThumbnailWnd_TaskReordered,
+                nullptr,
+                true,  // Classic thumbs, removed in or near 10.0.26100.8544.
             },
             {
                 {LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void))"},
@@ -1020,6 +1116,7 @@ bool HookTaskbarSymbols() {
                 {LR"(private: virtual __int64 __cdecl CTaskListThumbnailWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
                 &CTaskListThumbnailWnd_v_WndProc_Original,
                 CTaskListThumbnailWnd_v_WndProc_Hook,
+                true,  // Classic thumbs, removed in or near 10.0.26100.8544.
             },
             {
                 // An older variant, see the newer variant below.
@@ -1064,6 +1161,14 @@ bool HookTaskbarSymbols() {
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
+    }
+
+    if (!CTaskListThumbnailWnd_GetHoverIndex ||
+        !CTaskListThumbnailWnd__GetTaskItem ||
+        !CTaskListThumbnailWnd_GetTaskGroup ||
+        !CTaskListThumbnailWnd_TaskReordered ||
+        !CTaskListThumbnailWnd_v_WndProc_Original) {
+        g_noClassicThumbnails = true;
     }
 
     return true;
@@ -1326,6 +1431,65 @@ void LoadSettings() {
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
+std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
+    enum FEATURE_ENABLED_STATE {
+        FEATURE_ENABLED_STATE_DEFAULT = 0,
+        FEATURE_ENABLED_STATE_DISABLED = 1,
+        FEATURE_ENABLED_STATE_ENABLED = 2,
+    };
+
+#pragma pack(push, 1)
+    struct RTL_FEATURE_CONFIGURATION {
+        unsigned int featureId;
+        unsigned __int32 group : 4;
+        FEATURE_ENABLED_STATE enabledState : 2;
+        unsigned __int32 enabledStateOptions : 1;
+        unsigned __int32 unused1 : 1;
+        unsigned __int32 variant : 6;
+        unsigned __int32 variantPayloadKind : 2;
+        unsigned __int32 unused2 : 16;
+        unsigned int payload;
+    };
+#pragma pack(pop)
+
+    using RtlQueryFeatureConfiguration_t =
+        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
+    static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
+        HMODULE hNtDll = GetModuleHandle(L"ntdll.dll");
+        return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
+                            hNtDll, "RtlQueryFeatureConfiguration")
+                      : nullptr;
+    }();
+
+    if (!pRtlQueryFeatureConfiguration) {
+        Wh_Log(L"RtlQueryFeatureConfiguration not found");
+        return std::nullopt;
+    }
+
+    RTL_FEATURE_CONFIGURATION feature = {0};
+    INT64 changeStamp = 0;
+    HRESULT hr =
+        pRtlQueryFeatureConfiguration(featureId, 1, &changeStamp, &feature);
+    if (SUCCEEDED(hr)) {
+        Wh_Log(L"RtlQueryFeatureConfiguration result for %u: %d", featureId,
+               feature.enabledState);
+
+        switch (feature.enabledState) {
+            case FEATURE_ENABLED_STATE_DISABLED:
+                return false;
+            case FEATURE_ENABLED_STATE_ENABLED:
+                return true;
+            case FEATURE_ENABLED_STATE_DEFAULT:
+                return std::nullopt;
+        }
+    } else {
+        Wh_Log(L"RtlQueryFeatureConfiguration error for %u: %08X", featureId,
+               hr);
+    }
+
+    return std::nullopt;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -1360,6 +1524,13 @@ BOOL Wh_ModInit() {
         } else {
             Wh_Log(L"Taskbar view module not loaded yet");
         }
+
+        constexpr UINT kThumbnailAnimations = 60511437;
+        if (g_noClassicThumbnails &&
+            IsOsFeatureEnabled(kThumbnailAnimations).value_or(true)) {
+            g_hasThumbnailAnimations = true;
+            Wh_Log(L"Thumbnail animations are enabled");
+        }
     } else {
         if (!HookTaskbarSymbols()) {
             return FALSE;
@@ -1374,12 +1545,12 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
-    WindhawkUtils::Wh_SetFunctionHookT(DPA_GetPtr, DPA_GetPtr_Hook,
-                                       &DPA_GetPtr_Original);
+    WindhawkUtils::SetFunctionHook(DPA_GetPtr, DPA_GetPtr_Hook,
+                                   &DPA_GetPtr_Original);
 
     g_initialized = true;
 

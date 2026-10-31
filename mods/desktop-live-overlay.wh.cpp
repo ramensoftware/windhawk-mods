@@ -2,14 +2,14 @@
 // @id              desktop-live-overlay
 // @name            Desktop Live Overlay
 // @description     Display live, customizable content on the desktop behind icons. Perfect for showing time, date, system metrics, weather, and more.
-// @version         1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -ldwmapi -lgdi32 -lwininet -lpdh -lpowrprof -lshcore -lshlwapi
+// @compilerOptions -ldxgi -ld2d1 -ldwrite -ld3d11 -ldcomp -ldwmapi -lgdi32 -lwininet -lpdh -lpowrprof -lshcore -lshlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -49,7 +49,15 @@ showing time, date, system metrics, weather, and more.
 
 **System Metrics:**
 * `%cpu%` - CPU usage percentage
+* `%cpu_temp%` - CPU temperature in °C (average of all ACPI thermal zones)
+* `%cpu_temp_f%` - CPU temperature in °F (average of all ACPI thermal zones)
 * `%ram%` - RAM usage percentage
+* `%ram_used%` - Used RAM amount in GB
+* `%ram_total%` - Total RAM amount in GB
+* `%ram_committed%` - Committed RAM usage percentage (memory committed by apps,
+  backed by RAM or the page file)
+* `%ram_committed_used%` - Used committed RAM amount in GB
+* `%ram_committed_total%` - Total committed RAM amount in GB
 * `%battery%` - Battery percentage
 * `%battery_time%` - battery time remaining (charging time left / discharging
   time left, in h:mm format). If the value is always zero, you might need to
@@ -64,6 +72,15 @@ showing time, date, system metrics, weather, and more.
 * `%disk_write%` - Disk write speed
 * `%disk_total%` - Combined disk I/O speed
 * `%gpu%` - GPU usage percentage
+* `%gpu_temp%` - GPU temperature in °C
+* `%gpu_temp_f%` - GPU temperature in °F
+* `%vram%` - VRAM usage as a percentage of total dedicated VRAM
+* `%vram_used%` - Used dedicated VRAM amount in GB
+* `%vram_total%` - Total dedicated VRAM amount in GB
+* `%vram_shared%` - Shared VRAM usage as a percentage of total shared VRAM
+  (system RAM used as extra GPU memory)
+* `%vram_shared_used%` - Used shared VRAM amount in GB
+* `%vram_shared_total%` - Total shared VRAM pool size in GB
 * `%weather%` - Weather from [wttr.in](https://wttr.in/)
 
 **Other:**
@@ -164,6 +181,14 @@ showing time, date, system metrics, weather, and more.
 - refreshInterval: 1
   $name: Refresh interval (seconds)
   $description: How often to update dynamic content (1-60)
+- gpuAdapterName: ""
+  $name: GPU adapter name
+  $description: >-
+    The GPU adapter to use for the GPU usage, VRAM and temperature patterns.
+    Leave empty to auto-detect (uses the adapter with the most dedicated VRAM).
+    Partial match is supported. To list adapters, run:
+
+    wmic path win32_videocontroller get Name
 - background:
   - enabled: true
     $name: Enabled
@@ -223,7 +248,6 @@ showing time, date, system metrics, weather, and more.
 
 #include <windhawk_utils.h>
 
-#include <commctrl.h>
 #include <d2d1_1.h>
 #include <d2d1helper.h>
 #include <d3d11.h>
@@ -246,6 +270,8 @@ showing time, date, system metrics, weather, and more.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <vector>
 
 using namespace std::literals;
 using Microsoft::WRL::ComPtr;
@@ -292,6 +318,7 @@ struct Settings {
     WindhawkUtils::StringSetting timeFormat;
     WindhawkUtils::StringSetting dateFormat;
     int refreshInterval;
+    WindhawkUtils::StringSetting gpuAdapterName;
     bool backgroundEnabled;
     BYTE backgroundColorA;
     BYTE backgroundColorR;
@@ -315,6 +342,7 @@ struct Settings {
 
 constexpr size_t FORMATTED_BUFFER_SIZE = 256;
 constexpr size_t INTEGER_BUFFER_SIZE = sizeof("-2147483648");
+constexpr double kGBInBytes = 1024.0 * 1024.0 * 1024.0;
 
 template <size_t N>
 struct FormattedString {
@@ -333,9 +361,10 @@ std::atomic<bool> g_initSucceeded{false};
 std::atomic<bool> g_unloading{false};
 
 // Format state.
+std::mutex g_formatLineMutex;
+bool g_formattingInitialized = false;
 SYSTEMTIME g_formatTime;
 DWORD g_formatIndex = 0;
-DWORD g_metricsFormatIndex = 0;
 DWORD g_metricsLastFormatIndex = 0;
 
 FormattedString<FORMATTED_BUFFER_SIZE> g_timeFormatted;
@@ -347,6 +376,11 @@ FormattedString<INTEGER_BUFFER_SIZE> g_dayOfYearFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_timezoneFormatted;
 FormattedString<INTEGER_BUFFER_SIZE> g_cpuFormatted;
 FormattedString<INTEGER_BUFFER_SIZE> g_ramFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_ramUsedFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_ramTotalFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_ramCommittedFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_ramCommittedUsedFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_ramCommittedTotalFormatted;
 FormattedString<INTEGER_BUFFER_SIZE> g_batteryFormatted;
 FormattedString<INTEGER_BUFFER_SIZE> g_batteryTimeFormatted;
 FormattedString<INTEGER_BUFFER_SIZE> g_powerFormatted;
@@ -357,24 +391,56 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_diskReadSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_diskWriteSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_diskTotalSpeedFormatted;
 FormattedString<INTEGER_BUFFER_SIZE> g_gpuFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_vramFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_vramUsedFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_vramTotalFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_vramSharedFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_vramSharedUsedFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_vramSharedTotalFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_cpuTempFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_cpuTempFFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_gpuTempFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_gpuTempFFormatted;
 
 // Performance metrics.
 PDH_HQUERY g_metricsQuery = nullptr;
 PDH_HCOUNTER g_cpuCounter = nullptr;
-std::vector<PDH_HCOUNTER> g_uploadCounters;
-std::vector<PDH_HCOUNTER> g_downloadCounters;
 PDH_HCOUNTER g_diskReadCounter = nullptr;
 PDH_HCOUNTER g_diskWriteCounter = nullptr;
-std::vector<PDH_HCOUNTER> g_gpuCounters;
+
+struct CounterEntry {
+    std::wstring path;
+    PDH_HCOUNTER counter;
+};
+
+struct WildcardMetric {
+    std::vector<CounterEntry> counters;
+    PCWSTR wildcardPath = nullptr;  // English wildcard path for re-expansion.
+    // Substring the expanded paths must contain, empty to accept all.
+    std::wstring pathFilter;
+    // Counter values below this are ignored.
+    double minValue = 0;
+};
+
+WildcardMetric g_uploadMetric;
+WildcardMetric g_downloadMetric;
+WildcardMetric g_gpuMetric;
+WildcardMetric g_vramMetric;
+WildcardMetric g_vramSharedMetric;
+WildcardMetric g_cpuTempMetric;
 
 // Weather web content.
 HANDLE g_weatherUpdateThread = nullptr;
 HANDLE g_weatherUpdateStopEvent = nullptr;
+HANDLE g_weatherUpdateRefreshEvent = nullptr;
 std::mutex g_weatherMutex;
 std::atomic<bool> g_weatherLoaded{false};
 std::optional<std::wstring> g_weatherContent;
+// The wttr.in request URL, built from the settings so that the weather thread
+// never reads g_settings, which the settings thread is free to replace.
+std::wstring g_weatherUrl;
 
-// Cached result of whether system metrics/weather are used (set during init).
+// Whether system metrics/weather are used, derived from the line settings.
 bool g_systemMetricsUsed = false;
 bool g_weatherUsed = false;
 
@@ -382,31 +448,34 @@ bool g_weatherUsed = false;
 FILETIME g_lastWallpaperTime = {};
 
 // DirectX device objects (shared).
-ComPtr<ID3D11Device> g_d3dDevice;
-ComPtr<IDXGIDevice> g_dxgiDevice;
-ComPtr<IDXGIFactory2> g_dxgiFactory;
-ComPtr<ID2D1Factory1> g_d2dFactory;
-ComPtr<ID2D1Device> g_d2dDevice;
-ComPtr<IDWriteFactory> g_dwriteFactory;
+[[clang::no_destroy]] ComPtr<ID3D11Device> g_d3dDevice;
+[[clang::no_destroy]] ComPtr<IDXGIDevice> g_dxgiDevice;
+[[clang::no_destroy]] ComPtr<IDXGIFactory2> g_dxgiFactory;
+[[clang::no_destroy]] ComPtr<ID2D1Factory1> g_d2dFactory;
+[[clang::no_destroy]] ComPtr<ID2D1Device> g_d2dDevice;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> g_dwriteFactory;
 
 // Message-only window for receiving system notifications.
 HWND g_messageWnd;
 
+// Pending timer for the delayed overlay creation, owned by the desktop thread.
+UINT_PTR g_createOverlayTimer = 0;
+
 // Overlay window and resources.
 HWND g_overlayWnd;
-ComPtr<IDXGISwapChain1> g_swapChain;
-ComPtr<ID2D1DeviceContext> g_dc;
-ComPtr<IDCompositionDevice> g_compositionDevice;
-ComPtr<IDCompositionTarget> g_compositionTarget;
-ComPtr<IDCompositionVisual> g_compositionVisual;
-ComPtr<IDWriteTextFormat> g_topLineTextFormat;
-ComPtr<ID2D1SolidColorBrush> g_topLineTextBrush;
-ComPtr<IDWriteTextFormat> g_bottomLineTextFormat;
-ComPtr<ID2D1SolidColorBrush> g_bottomLineTextBrush;
-ComPtr<ID2D1SolidColorBrush> g_backgroundBrush;
-ComPtr<ID2D1SolidColorBrush> g_borderBrush;
-ComPtr<ID2D1Bitmap> g_wallpaperBitmap;
-ComPtr<ID2D1Effect> g_blurEffect;
+[[clang::no_destroy]] ComPtr<IDXGISwapChain1> g_swapChain;
+[[clang::no_destroy]] ComPtr<ID2D1DeviceContext> g_dc;
+[[clang::no_destroy]] ComPtr<IDCompositionDevice> g_compositionDevice;
+[[clang::no_destroy]] ComPtr<IDCompositionTarget> g_compositionTarget;
+[[clang::no_destroy]] ComPtr<IDCompositionVisual> g_compositionVisual;
+[[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_topLineTextFormat;
+[[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_topLineTextBrush;
+[[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_bottomLineTextFormat;
+[[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_bottomLineTextBrush;
+[[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_backgroundBrush;
+[[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_borderBrush;
+[[clang::no_destroy]] ComPtr<ID2D1Bitmap> g_wallpaperBitmap;
+[[clang::no_destroy]] ComPtr<ID2D1Effect> g_blurEffect;
 
 // D2D1 Gaussian Blur effect CLSID.
 // {1FEB6D69-2FE6-4AC9-8C58-1D7F93E7A6A5}
@@ -612,26 +681,67 @@ int StringCopyTruncated(PWSTR dest,
 ////////////////////////////////////////////////////////////////////////////////
 // Pattern formatting
 
-std::vector<std::wstring> ExpandPdhWildcard(PCWSTR wildcardPath) {
+// Expand an English wildcard counter path into localized paths.
+// Implemented according to the note here:
+// https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhaddenglishcounterw
+std::vector<std::wstring> ExpandEnglishWildcard(PCWSTR wildcardPath) {
+    // Step 1: Add English counter with wildcards to get localized path.
+    PDH_HCOUNTER tempCounter;
+    PDH_STATUS status =
+        PdhAddEnglishCounter(g_metricsQuery, wildcardPath, 0, &tempCounter);
+    if (FAILED(status)) {
+        Wh_Log(L"PdhAddEnglishCounter error %08X", status);
+        return {};
+    }
+
+    // Step 2: Get counter info to obtain localized full path.
+    DWORD required = 0;
+    status = PdhGetCounterInfo(tempCounter, FALSE, &required, nullptr);
+    if (FAILED(status) && status != static_cast<PDH_STATUS>(PDH_MORE_DATA)) {
+        Wh_Log(L"PdhGetCounterInfo (size) error %08X", status);
+        PdhRemoveCounter(tempCounter);
+        return {};
+    }
+
+    if (required == 0) {
+        PdhRemoveCounter(tempCounter);
+        return {};
+    }
+
+    std::vector<BYTE> counterInfoBuffer(required);
+    PDH_COUNTER_INFO* counterInfo =
+        reinterpret_cast<PDH_COUNTER_INFO*>(counterInfoBuffer.data());
+
+    status = PdhGetCounterInfo(tempCounter, FALSE, &required, counterInfo);
+    PdhRemoveCounter(tempCounter);
+    if (FAILED(status)) {
+        Wh_Log(L"PdhGetCounterInfo error %08X", status);
+        return {};
+    }
+
+    // Step 3: Expand wildcards using the localized path.
+    required = 0;
+    status = PdhExpandWildCardPathW(nullptr, counterInfo->szFullPath, nullptr,
+                                    &required, 0);
+    if (FAILED(status) && status != static_cast<PDH_STATUS>(PDH_MORE_DATA)) {
+        Wh_Log(L"PdhExpandWildCardPath (localized, size) error %08X", status);
+        return {};
+    }
+
+    if (required == 0) {
+        return {};
+    }
+
+    std::vector<WCHAR> pathList(required);
+    status = PdhExpandWildCardPathW(nullptr, counterInfo->szFullPath,
+                                    pathList.data(), &required, 0);
+    if (FAILED(status)) {
+        Wh_Log(L"PdhExpandWildCardPath (localized) error %08X", status);
+        return {};
+    }
+
     std::vector<std::wstring> result;
-
-    DWORD pathListLength = 0;
-    PDH_STATUS status = PdhExpandWildCardPathW(nullptr, wildcardPath, nullptr,
-                                               &pathListLength, 0);
-    if (status != static_cast<PDH_STATUS>(PDH_MORE_DATA) ||
-        pathListLength == 0) {
-        return result;
-    }
-
-    std::wstring pathList(pathListLength, L'\0');
-    status = PdhExpandWildCardPathW(nullptr, wildcardPath, pathList.data(),
-                                    &pathListLength, 0);
-    if (status != static_cast<PDH_STATUS>(ERROR_SUCCESS)) {
-        return result;
-    }
-
-    // Parse null-terminated list of paths.
-    PCWSTR p = pathList.c_str();
+    PCWSTR p = pathList.data();
     while (*p) {
         result.push_back(p);
         p += wcslen(p) + 1;
@@ -640,12 +750,155 @@ std::vector<std::wstring> ExpandPdhWildcard(PCWSTR wildcardPath) {
     return result;
 }
 
+std::vector<std::wstring> FilterMetricPaths(const WildcardMetric& metric,
+                                            std::vector<std::wstring> paths) {
+    if (metric.pathFilter.empty()) {
+        return paths;
+    }
+
+    std::vector<std::wstring> filtered;
+    for (const auto& path : paths) {
+        if (StrStrIW(path.c_str(), metric.pathFilter.c_str())) {
+            filtered.push_back(path);
+        }
+    }
+
+    return filtered;
+}
+
+void UpdateWildcardMetric(WildcardMetric& metric) {
+    if (!metric.wildcardPath) {
+        return;
+    }
+
+    auto currentPaths =
+        FilterMetricPaths(metric, ExpandEnglishWildcard(metric.wildcardPath));
+
+    std::unordered_set<std::wstring> currentPathSet(currentPaths.begin(),
+                                                    currentPaths.end());
+
+    // Remove counters that are no longer valid.
+    for (auto it = metric.counters.begin(); it != metric.counters.end();) {
+        if (currentPathSet.find(it->path) == currentPathSet.end()) {
+            Wh_Log(L"Removing outdated counter: %s", it->path.c_str());
+            PdhRemoveCounter(it->counter);
+            it = metric.counters.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Build a set of existing paths.
+    std::unordered_set<std::wstring> existingPaths;
+    for (const auto& entry : metric.counters) {
+        existingPaths.insert(entry.path);
+    }
+
+    // Add new counters.
+    for (const auto& path : currentPaths) {
+        if (existingPaths.find(path) == existingPaths.end()) {
+            PDH_HCOUNTER counter;
+            PDH_STATUS status =
+                PdhAddCounter(g_metricsQuery, path.c_str(), 0, &counter);
+            if (status == ERROR_SUCCESS) {
+                Wh_Log(L"Adding new counter: %s", path.c_str());
+                metric.counters.push_back({path, counter});
+            }
+        }
+    }
+}
+
+// The WinINet defaults are minutes long, which would hold up whoever waits for
+// the requesting thread to finish.
+constexpr DWORD kUrlRequestTimeoutMs = 5000;
+
+std::mutex g_urlRequestMutex;
+HINTERNET g_urlRequestOpenHandle = nullptr;
+HINTERNET g_urlRequestUrlHandle = nullptr;
+bool g_urlRequestsCanceled = false;
+
+// Requires g_urlRequestMutex to be held.
+void CloseUrlRequestHandles() {
+    if (g_urlRequestUrlHandle) {
+        InternetCloseHandle(g_urlRequestUrlHandle);
+        g_urlRequestUrlHandle = nullptr;
+    }
+
+    if (g_urlRequestOpenHandle) {
+        InternetCloseHandle(g_urlRequestOpenHandle);
+        g_urlRequestOpenHandle = nullptr;
+    }
+}
+
+// Closes the handles of the request in flight, if any, which makes the blocking
+// WinINet call using them return at once. Further requests fail until
+// ResumeUrlRequests is called.
+void CancelUrlRequests() {
+    std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+    g_urlRequestsCanceled = true;
+    CloseUrlRequestHandles();
+}
+
+void ResumeUrlRequests() {
+    std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+    g_urlRequestsCanceled = false;
+}
+
+// Scope of a single request. At most one request runs at a time, so its handles
+// live in globals where CancelUrlRequests can reach them.
+struct UrlRequestScope {
+    UrlRequestScope() = default;
+    UrlRequestScope(const UrlRequestScope&) = delete;
+    UrlRequestScope& operator=(const UrlRequestScope&) = delete;
+
+    ~UrlRequestScope() {
+        std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+        CloseUrlRequestHandles();
+    }
+
+    bool PublishOpenHandle(HINTERNET handle) {
+        return Publish(&g_urlRequestOpenHandle, handle);
+    }
+
+    bool PublishUrlHandle(HINTERNET handle) {
+        return Publish(&g_urlRequestUrlHandle, handle);
+    }
+
+   private:
+    // Hands the handle over to the globals. Returns false if requests are
+    // canceled, in which case the handle is closed and must not be used.
+    static bool Publish(HINTERNET* slot, HINTERNET handle) {
+        std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+        if (g_urlRequestsCanceled) {
+            InternetCloseHandle(handle);
+            return false;
+        }
+
+        *slot = handle;
+        return true;
+    }
+};
+
 std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
+    UrlRequestScope requestScope;
+
     HINTERNET hOpenHandle = InternetOpen(
         L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!hOpenHandle) {
         return std::nullopt;
     }
+
+    if (!requestScope.PublishOpenHandle(hOpenHandle)) {
+        return std::nullopt;
+    }
+
+    DWORD timeout = kUrlRequestTimeoutMs;
+    InternetSetOption(hOpenHandle, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout,
+                      sizeof(timeout));
+    InternetSetOption(hOpenHandle, INTERNET_OPTION_SEND_TIMEOUT, &timeout,
+                      sizeof(timeout));
+    InternetSetOption(hOpenHandle, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout,
+                      sizeof(timeout));
 
     HINTERNET hUrlHandle =
         InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
@@ -654,7 +907,10 @@ std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
                             INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
                         0);
     if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    if (!requestScope.PublishUrlHandle(hUrlHandle)) {
         return std::nullopt;
     }
 
@@ -664,40 +920,40 @@ std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
                        HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
                        &dwStatusCode, &dwStatusCodeSize, nullptr) ||
         dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
         return std::nullopt;
     }
 
     LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
     if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
         return std::nullopt;
     }
 
     DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    if (!InternetReadFile(hUrlHandle, pUrlContent, 0x400,
+                          &dwNumberOfBytesRead)) {
+        HeapFree(GetProcessHeap(), 0, pUrlContent);
+        return std::nullopt;
+    }
+
     DWORD dwLength = dwNumberOfBytesRead;
 
     while (dwNumberOfBytesRead) {
         LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
             GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
         if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
             HeapFree(GetProcessHeap(), 0, pUrlContent);
             return std::nullopt;
         }
 
         pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
+        if (!InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                              &dwNumberOfBytesRead)) {
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
         dwLength += dwNumberOfBytesRead;
     }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
 
     // Assume UTF-8.
     int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
@@ -753,7 +1009,7 @@ std::wstring EscapeUrlComponent(PCWSTR input) {
     return out;
 }
 
-bool UpdateWeatherContent() {
+std::wstring MakeWeatherUrl() {
     std::wstring format = g_settings.weatherFormat.get();
     if (format.empty()) {
         format = L"%c %t";
@@ -782,6 +1038,20 @@ bool UpdateWeatherContent() {
     }
     weatherUrl += L"format=";
     weatherUrl += EscapeUrlComponent(format.c_str());
+
+    return weatherUrl;
+}
+
+bool UpdateWeatherContent() {
+    std::wstring weatherUrl;
+    {
+        std::lock_guard<std::mutex> guard(g_weatherMutex);
+        weatherUrl = g_weatherUrl;
+    }
+
+    if (weatherUrl.empty()) {
+        return false;
+    }
 
     Wh_Log(L"Fetching weather from URL: %s", weatherUrl.c_str());
 
@@ -830,6 +1100,11 @@ DWORD WINAPI WeatherUpdateThread(LPVOID lpThreadParameter) {
     constexpr DWORD kSecondsForQuickRetry = 30;
     constexpr DWORD kSecondsForNormalUpdate = 600;  // 10 minutes
 
+    HANDLE handles[] = {
+        g_weatherUpdateStopEvent,
+        g_weatherUpdateRefreshEvent,
+    };
+
     while (true) {
         UpdateWeatherContent();
 
@@ -838,8 +1113,13 @@ DWORD WINAPI WeatherUpdateThread(LPVOID lpThreadParameter) {
             seconds = kSecondsForQuickRetry;
         }
 
-        DWORD dwWaitResult =
-            WaitForSingleObject(g_weatherUpdateStopEvent, seconds * 1000);
+        DWORD dwWaitResult = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
+                                                    FALSE, seconds * 1000);
+        if (dwWaitResult == WAIT_FAILED) {
+            Wh_Log(L"WAIT_FAILED");
+            break;
+        }
+
         if (dwWaitResult == WAIT_OBJECT_0) {
             break;  // Stop event signaled
         }
@@ -862,7 +1142,15 @@ bool IsSystemMetricsUsed() {
            IsPatternUsed(L"%download_speed%") ||
            IsPatternUsed(L"%total_speed%") || IsPatternUsed(L"%disk_read%") ||
            IsPatternUsed(L"%disk_write%") || IsPatternUsed(L"%disk_total%") ||
-           IsPatternUsed(L"%gpu%");
+           IsPatternUsed(L"%gpu%") || IsPatternUsed(L"%ram_used%") ||
+           IsPatternUsed(L"%ram_committed%") ||
+           IsPatternUsed(L"%ram_committed_used%") ||
+           IsPatternUsed(L"%ram_committed_total%") ||
+           IsPatternUsed(L"%vram%") || IsPatternUsed(L"%vram_used%") ||
+           IsPatternUsed(L"%vram_shared%") ||
+           IsPatternUsed(L"%vram_shared_used%") ||
+           IsPatternUsed(L"%cpu_temp%") || IsPatternUsed(L"%cpu_temp_f%") ||
+           IsPatternUsed(L"%gpu_temp%") || IsPatternUsed(L"%gpu_temp_f%");
 }
 
 bool IsWeatherUsed() {
@@ -870,28 +1158,239 @@ bool IsWeatherUsed() {
 }
 
 void WeatherUpdateThreadInit() {
-    if (!g_weatherUsed) {
+    if (!g_weatherUsed || g_weatherUpdateThread) {
         return;
     }
 
     g_weatherUpdateStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_weatherUpdateRefreshEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     g_weatherUpdateThread =
         CreateThread(nullptr, 0, WeatherUpdateThread, nullptr, 0, nullptr);
+}
+
+// Requires g_formatLineMutex to be held, like the other weather thread
+// functions.
+void WeatherUpdateThreadRefresh() {
+    if (!g_weatherUpdateRefreshEvent) {
+        return;
+    }
+
+    // Fall back to the quick retry interval if the request fails, which it may
+    // well do while the network is still coming up.
+    g_weatherLoaded = false;
+    SetEvent(g_weatherUpdateRefreshEvent);
 }
 
 void WeatherUpdateThreadUninit() {
     if (g_weatherUpdateThread) {
         SetEvent(g_weatherUpdateStopEvent);
+        CancelUrlRequests();
         WaitForSingleObject(g_weatherUpdateThread, INFINITE);
         CloseHandle(g_weatherUpdateThread);
         g_weatherUpdateThread = nullptr;
+        CloseHandle(g_weatherUpdateRefreshEvent);
+        g_weatherUpdateRefreshEvent = nullptr;
         CloseHandle(g_weatherUpdateStopEvent);
         g_weatherUpdateStopEvent = nullptr;
+        ResumeUrlRequests();
     }
 
     std::lock_guard<std::mutex> guard(g_weatherMutex);
     g_weatherLoaded = false;
     g_weatherContent.reset();
+}
+
+// D3DKMT is used to read the GPU temperature, which has no PDH counter. The
+// types and gdi32 exports below are declared directly to avoid depending on the
+// d3dkmthk.h header, which isn't available in all build environments.
+using D3DKMT_HANDLE = UINT32;
+
+typedef struct _D3DKMT_OPENADAPTERFROMLUID {
+    LUID AdapterLuid;
+    D3DKMT_HANDLE hAdapter;
+} D3DKMT_OPENADAPTERFROMLUID;
+
+typedef struct _D3DKMT_CLOSEADAPTER {
+    D3DKMT_HANDLE hAdapter;
+} D3DKMT_CLOSEADAPTER;
+
+typedef struct _D3DKMT_QUERYADAPTERINFO {
+    D3DKMT_HANDLE hAdapter;
+    UINT Type;  // KMTQUERYADAPTERINFOTYPE
+    VOID* pPrivateDriverData;
+    UINT PrivateDriverDataSize;
+} D3DKMT_QUERYADAPTERINFO;
+
+typedef struct _D3DKMT_ADAPTER_PERFDATA {
+    UINT PhysicalAdapterIndex;
+    ULONGLONG MemoryFrequency;
+    ULONGLONG MaxMemoryFrequency;
+    ULONGLONG MaxMemoryFrequencyOC;
+    ULONGLONG MemoryBandwidth;
+    ULONGLONG PCIEBandwidth;
+    ULONG FanRPM;
+    ULONG Power;
+    ULONG Temperature;
+    UCHAR PowerStateOverride;
+} D3DKMT_ADAPTER_PERFDATA;
+
+// KMTQAITYPE_ADAPTERPERFDATA.
+constexpr UINT kAdapterPerfDataQueryType = 62;
+
+using D3DKMTOpenAdapterFromLuid_t =
+    NTSTATUS(WINAPI*)(D3DKMT_OPENADAPTERFROMLUID*);
+D3DKMTOpenAdapterFromLuid_t pD3DKMTOpenAdapterFromLuid;
+
+using D3DKMTQueryAdapterInfo_t = NTSTATUS(WINAPI*)(D3DKMT_QUERYADAPTERINFO*);
+D3DKMTQueryAdapterInfo_t pD3DKMTQueryAdapterInfo;
+
+using D3DKMTCloseAdapter_t = NTSTATUS(WINAPI*)(const D3DKMT_CLOSEADAPTER*);
+D3DKMTCloseAdapter_t pD3DKMTCloseAdapter;
+
+// The adapter the GPU patterns report on: the configured one, or the one with
+// the most dedicated video memory. Static hardware information, queried lazily
+// and cached, keyed by the configured name so that changing it re-queries.
+struct DxgiAdapterInfo {
+    LUID luid;
+    // The LUID as it appears in GPU counter instances, e.g.
+    // "luid_0x00000000_0x0000C40C_".
+    std::wstring luidPathFilter;
+    SIZE_T dedicatedVideoMemory;
+    SIZE_T sharedSystemMemory;
+};
+
+std::optional<DxgiAdapterInfo> QueryDxgiAdapterInfo(PCWSTR gpuAdapterName) {
+    ComPtr<IDXGIFactory1> factory;
+    HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateDXGIFactory1 failed: 0x%08X", hr);
+        return std::nullopt;
+    }
+
+    DXGI_ADAPTER_DESC bestDesc{};
+    bool found = false;
+
+    for (UINT i = 0;; i++) {
+        ComPtr<IDXGIAdapter> adapter;
+        if (factory->EnumAdapters(i, &adapter) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+
+        DXGI_ADAPTER_DESC desc;
+        if (FAILED(adapter->GetDesc(&desc))) {
+            continue;
+        }
+
+        Wh_Log(L"DXGI adapter %u: %s (LUID: 0x%08X_0x%08X, VRAM: %zu)", i,
+               desc.Description, desc.AdapterLuid.HighPart,
+               desc.AdapterLuid.LowPart, desc.DedicatedVideoMemory);
+
+        if (*gpuAdapterName) {
+            if (StrStrIW(desc.Description, gpuAdapterName)) {
+                bestDesc = desc;
+                found = true;
+                break;
+            }
+        } else if (!found ||
+                   desc.DedicatedVideoMemory > bestDesc.DedicatedVideoMemory) {
+            bestDesc = desc;
+            found = true;
+        }
+    }
+
+    if (!found) {
+        Wh_Log(L"No GPU adapter found");
+        return std::nullopt;
+    }
+
+    Wh_Log(L"Using GPU adapter %s", bestDesc.Description);
+
+    WCHAR pathFilter[32];
+    swprintf_s(pathFilter, L"luid_0x%08X_0x%08X_",
+               bestDesc.AdapterLuid.HighPart, bestDesc.AdapterLuid.LowPart);
+
+    return DxgiAdapterInfo{
+        .luid = bestDesc.AdapterLuid,
+        .luidPathFilter = pathFilter,
+        .dedicatedVideoMemory = bestDesc.DedicatedVideoMemory,
+        .sharedSystemMemory = bestDesc.SharedSystemMemory,
+    };
+}
+
+const std::optional<DxgiAdapterInfo>& GetDxgiAdapterInfo() {
+    static std::optional<std::wstring> queriedName;
+    static std::optional<DxgiAdapterInfo> info;
+
+    PCWSTR gpuAdapterName = g_settings.gpuAdapterName.get();
+    if (!queriedName || *queriedName != gpuAdapterName) {
+        info = QueryDxgiAdapterInfo(gpuAdapterName);
+        queriedName = gpuAdapterName;
+    }
+
+    return info;
+}
+
+std::optional<double> GetDedicatedVramTotalGb() {
+    const auto& info = GetDxgiAdapterInfo();
+    if (!info || info->dedicatedVideoMemory == 0) {
+        return std::nullopt;
+    }
+
+    return (double)info->dedicatedVideoMemory / kGBInBytes;
+}
+
+std::optional<double> GetSharedVramTotalGb() {
+    const auto& info = GetDxgiAdapterInfo();
+    if (!info || info->sharedSystemMemory == 0) {
+        return std::nullopt;
+    }
+
+    return (double)info->sharedSystemMemory / kGBInBytes;
+}
+
+// Queries the GPU temperature via D3DKMT. Returns nullopt if the driver doesn't
+// report a temperature.
+std::optional<double> GetGpuTemperatureCelsius() {
+    if (!pD3DKMTOpenAdapterFromLuid || !pD3DKMTQueryAdapterInfo ||
+        !pD3DKMTCloseAdapter) {
+        return std::nullopt;
+    }
+
+    const auto& info = GetDxgiAdapterInfo();
+    if (!info) {
+        return std::nullopt;
+    }
+
+    D3DKMT_OPENADAPTERFROMLUID openAdapter{.AdapterLuid = info->luid};
+    if (pD3DKMTOpenAdapterFromLuid(&openAdapter) != 0) {
+        return std::nullopt;
+    }
+
+    D3DKMT_ADAPTER_PERFDATA perfData{};
+    D3DKMT_QUERYADAPTERINFO queryInfo{
+        .hAdapter = openAdapter.hAdapter,
+        .Type = kAdapterPerfDataQueryType,
+        .pPrivateDriverData = &perfData,
+        .PrivateDriverDataSize = sizeof(perfData),
+    };
+
+    NTSTATUS status = pD3DKMTQueryAdapterInfo(&queryInfo);
+
+    D3DKMT_CLOSEADAPTER closeAdapter{.hAdapter = openAdapter.hAdapter};
+    pD3DKMTCloseAdapter(&closeAdapter);
+
+    if (status != 0) {
+        return std::nullopt;
+    }
+
+    // A zero reading means the driver doesn't expose a temperature; treat it as
+    // unavailable rather than showing an implausible 0 degrees.
+    if (perfData.Temperature == 0) {
+        return std::nullopt;
+    }
+
+    // Temperature is reported in tenths of a degree Celsius.
+    return perfData.Temperature / 10.0;
 }
 
 bool InitMetrics() {
@@ -902,6 +1401,11 @@ bool InitMetrics() {
     bool needDiskRead = IsPatternUsed(L"%disk_read%");
     bool needDiskWrite = IsPatternUsed(L"%disk_write%");
     bool needGpu = IsPatternUsed(L"%gpu%");
+    bool needVram = IsPatternUsed(L"%vram%") || IsPatternUsed(L"%vram_used%");
+    bool needVramShared =
+        IsPatternUsed(L"%vram_shared%") || IsPatternUsed(L"%vram_shared_used%");
+    bool needCpuTemp =
+        IsPatternUsed(L"%cpu_temp%") || IsPatternUsed(L"%cpu_temp_f%");
 
     // %total_speed% requires both upload and download.
     if (IsPatternUsed(L"%total_speed%")) {
@@ -917,7 +1421,8 @@ bool InitMetrics() {
 
     // If no PDH metrics are needed, skip initialization.
     if (!needCpu && !needUpload && !needDownload && !needDiskRead &&
-        !needDiskWrite && !needGpu) {
+        !needDiskWrite && !needGpu && !needVram && !needVramShared &&
+        !needCpuTemp) {
         return true;
     }
 
@@ -935,28 +1440,15 @@ bool InitMetrics() {
 
     // Network upload counters (wildcard expansion).
     if (needUpload) {
-        auto uploadPaths =
-            ExpandPdhWildcard(L"\\Network Interface(*)\\Bytes Sent/sec");
-        for (const auto& path : uploadPaths) {
-            PDH_HCOUNTER counter;
-            if (PdhAddCounter(g_metricsQuery, path.c_str(), 0, &counter) ==
-                ERROR_SUCCESS) {
-                g_uploadCounters.push_back(counter);
-            }
-        }
+        g_uploadMetric.wildcardPath = L"\\Network Interface(*)\\Bytes Sent/sec";
+        UpdateWildcardMetric(g_uploadMetric);
     }
 
     // Network download counters (wildcard expansion).
     if (needDownload) {
-        auto downloadPaths =
-            ExpandPdhWildcard(L"\\Network Interface(*)\\Bytes Received/sec");
-        for (const auto& path : downloadPaths) {
-            PDH_HCOUNTER counter;
-            if (PdhAddCounter(g_metricsQuery, path.c_str(), 0, &counter) ==
-                ERROR_SUCCESS) {
-                g_downloadCounters.push_back(counter);
-            }
-        }
+        g_downloadMetric.wildcardPath =
+            L"\\Network Interface(*)\\Bytes Received/sec";
+        UpdateWildcardMetric(g_downloadMetric);
     }
 
     // Disk read/write counters.
@@ -971,17 +1463,43 @@ bool InitMetrics() {
                              &g_diskWriteCounter);
     }
 
-    // GPU engine counters (wildcard expansion).
-    if (needGpu) {
-        auto gpuPaths =
-            ExpandPdhWildcard(L"\\GPU Engine(*)\\Utilization Percentage");
-        for (const auto& path : gpuPaths) {
-            PDH_HCOUNTER counter;
-            if (PdhAddCounter(g_metricsQuery, path.c_str(), 0, &counter) ==
-                ERROR_SUCCESS) {
-                g_gpuCounters.push_back(counter);
+    // GPU counters (wildcard expansion). They have an instance for every
+    // adapter in the system (and, for GPU Engine, per engine per process), so
+    // they are filtered down to the selected adapter, and are skipped when
+    // there is no adapter to report on.
+    if (needGpu || needVram || needVramShared) {
+        if (const auto& adapterInfo = GetDxgiAdapterInfo()) {
+            if (needGpu) {
+                g_gpuMetric.pathFilter = adapterInfo->luidPathFilter;
+                g_gpuMetric.wildcardPath =
+                    L"\\GPU Engine(*)\\Utilization Percentage";
+                UpdateWildcardMetric(g_gpuMetric);
+            }
+
+            if (needVram) {
+                g_vramMetric.pathFilter = adapterInfo->luidPathFilter;
+                g_vramMetric.wildcardPath =
+                    L"\\GPU Adapter Memory(*)\\Dedicated Usage";
+                UpdateWildcardMetric(g_vramMetric);
+            }
+
+            if (needVramShared) {
+                g_vramSharedMetric.pathFilter = adapterInfo->luidPathFilter;
+                g_vramSharedMetric.wildcardPath =
+                    L"\\GPU Adapter Memory(*)\\Shared Usage";
+                UpdateWildcardMetric(g_vramSharedMetric);
             }
         }
+    }
+
+    // CPU temperature counters (wildcard expansion). Thermal zones that are
+    // present but not functional report implausibly low values that would skew
+    // the average, so require at least 200 Kelvin.
+    if (needCpuTemp) {
+        g_cpuTempMetric.minValue = 200;
+        g_cpuTempMetric.wildcardPath =
+            L"\\Thermal Zone Information(*)\\Temperature";
+        UpdateWildcardMetric(g_cpuTempMetric);
     }
 
     // First call initializes the counters.
@@ -994,11 +1512,14 @@ void UninitMetrics() {
         PdhCloseQuery(g_metricsQuery);
         g_metricsQuery = nullptr;
         g_cpuCounter = nullptr;
-        g_uploadCounters.clear();
-        g_downloadCounters.clear();
         g_diskReadCounter = nullptr;
         g_diskWriteCounter = nullptr;
-        g_gpuCounters.clear();
+        g_uploadMetric = {};
+        g_downloadMetric = {};
+        g_gpuMetric = {};
+        g_vramMetric = {};
+        g_vramSharedMetric = {};
+        g_cpuTempMetric = {};
     }
 
     g_metricsLastFormatIndex = 0;
@@ -1047,83 +1568,329 @@ PCWSTR GetWeekdayFormatted() {
     return g_weekdayFormatted.buffer;
 }
 
-DWORD GetMetricsFormatIndex() {
-    FILETIME formatTimeFt{};
-    SystemTimeToFileTime(&g_formatTime, &formatTimeFt);
-    ULARGE_INTEGER formatTimeInt{
-        .LowPart = formatTimeFt.dwLowDateTime,
-        .HighPart = formatTimeFt.dwHighDateTime,
-    };
+constexpr ULONGLONG kSecondIn100Ns = 10000000ULL;
 
-    constexpr ULONGLONG kSecondIn100Ns = 10000000ULL;
-    int interval = (std::max)(1, (std::min)(60, g_settings.refreshInterval));
-    ULONGLONG intervalIn100Ns = kSecondIn100Ns * interval;
-    return static_cast<DWORD>(formatTimeInt.QuadPart / intervalIn100Ns);
+ULARGE_INTEGER SystemTimeTo100Ns(const SYSTEMTIME* time) {
+    FILETIME ft{};
+    SystemTimeToFileTime(time, &ft);
+    return ULARGE_INTEGER{
+        .LowPart = ft.dwLowDateTime,
+        .HighPart = ft.dwHighDateTime,
+    };
+}
+
+// Metrics are sampled once per refresh interval, and the formatted values only
+// change when they are.
+DWORD GetMetricsFormatIndex() {
+    ULONGLONG intervalIn100Ns = kSecondIn100Ns * g_settings.refreshInterval;
+    return static_cast<DWORD>(SystemTimeTo100Ns(&g_formatTime).QuadPart /
+                              intervalIn100Ns);
+}
+
+void UpdateAllWildcardMetrics() {
+    UpdateWildcardMetric(g_uploadMetric);
+    UpdateWildcardMetric(g_downloadMetric);
+    UpdateWildcardMetric(g_gpuMetric);
+    UpdateWildcardMetric(g_vramMetric);
+    UpdateWildcardMetric(g_vramSharedMetric);
+    UpdateWildcardMetric(g_cpuTempMetric);
 }
 
 void CollectMetricsDataIfNeeded() {
-    g_metricsFormatIndex = GetMetricsFormatIndex();
-    if (g_metricsLastFormatIndex != g_metricsFormatIndex) {
+    DWORD metricsFormatIndex = GetMetricsFormatIndex();
+    if (g_metricsLastFormatIndex != metricsFormatIndex) {
         if (g_metricsQuery) {
+            UpdateAllWildcardMetrics();
             PdhCollectQueryData(g_metricsQuery);
         }
-        g_metricsLastFormatIndex = g_metricsFormatIndex;
+        g_metricsLastFormatIndex = metricsFormatIndex;
     }
+}
+
+// Counters can report more than 100%: the CPU utility counter exceeds 100 with
+// turbo boost, and the GPU value is a sum over all engines.
+int CapPercent(double value) {
+    return (int)(std::min)(value, 100.0);
+}
+
+std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
+    int valStrLen = _scwprintf(L"%.17f", val);
+    if (valStrLen < 0) {
+        return std::wstring();
+    }
+
+    std::wstring valStr(valStrLen + 1, L'\0');
+    if (swprintf_s(valStr.data(), valStr.size(), L"%.17f", val) < 0) {
+        return std::wstring();
+    }
+
+    WCHAR decSep[4];
+    if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, decSep,
+                         ARRAYSIZE(decSep))) {
+        // Fallback.
+        decSep[0] = L'.';
+        decSep[1] = L'\0';
+    }
+
+    NUMBERFMTW fmt{
+        .NumDigits = digitsAfterDecimal,
+        .LeadingZero = 1,
+        .lpDecimalSep = const_cast<LPWSTR>(decSep),
+        .lpThousandSep = const_cast<LPWSTR>(L""),
+    };
+
+    // Query required size.
+    int needed = GetNumberFormatEx(LOCALE_NAME_USER_DEFAULT, 0, valStr.c_str(),
+                                   &fmt, nullptr, 0);
+    if (needed == 0) {
+        return std::wstring();
+    }
+
+    // Format.
+    std::wstring out(needed - 1, L'\0');
+    if (GetNumberFormatEx(LOCALE_NAME_USER_DEFAULT, 0, valStr.c_str(), &fmt,
+                          out.data(), needed) == 0) {
+        return std::wstring();
+    }
+
+    return out;
+}
+
+void FormatGbValue(double val, PWSTR buffer, size_t bufferSize) {
+    wcscpy_s(buffer, bufferSize, FormatLocaleNum(val, 1).c_str());
+}
+
+void FormatTransferSpeed(double bytesPerSec, PWSTR buffer, size_t bufferSize) {
+    constexpr double kKBInBytes = 1024.0;
+    constexpr double kMBInBytes = 1024.0 * kKBInBytes;
+
+    // Use KB/s for values < 1 MB/s, otherwise MB/s.
+    double valUnit;
+    PCWSTR unit;
+    if (bytesPerSec < kMBInBytes) {
+        valUnit = bytesPerSec / kKBInBytes;
+        unit = L" KB/s";
+    } else {
+        valUnit = bytesPerSec / kMBInBytes;
+        unit = L" MB/s";
+    }
+
+    // Keep identical width for values below 1000.
+    unsigned int digitsAfterDecimal = 0;
+    if (valUnit < 10) {
+        digitsAfterDecimal = 2;
+    } else if (valUnit < 100) {
+        digitsAfterDecimal = 1;
+    }
+
+    swprintf_s(buffer, bufferSize, L"%s%s",
+               FormatLocaleNum(valUnit, digitsAfterDecimal).c_str(), unit);
+}
+
+// Formats a metric into its cached buffer, or "-" if it's unavailable.
+template <size_t N, typename Formatter>
+PCWSTR GetMetricFormatted(FormattedString<N>& formattedString,
+                          Formatter formatter) {
+    DWORD metricsFormatIndex = GetMetricsFormatIndex();
+    if (formattedString.formatIndex != metricsFormatIndex) {
+        if (!formatter(formattedString.buffer,
+                       ARRAYSIZE(formattedString.buffer))) {
+            wcscpy_s(formattedString.buffer, L"-");
+        }
+
+        formattedString.formatIndex = metricsFormatIndex;
+    }
+
+    return formattedString.buffer;
+}
+
+std::optional<double> QueryCounter(PDH_HCOUNTER counter) {
+    if (!counter) {
+        return std::nullopt;
+    }
+
+    PDH_FMT_COUNTERVALUE val;
+    if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &val) !=
+        ERROR_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return val.doubleValue;
+}
+
+struct WildcardMetricValue {
+    double sum;
+    size_t count;
+};
+
+std::optional<WildcardMetricValue> QueryWildcardMetric(
+    const WildcardMetric& metric) {
+    double sum = 0.0;
+    size_t count = 0;
+
+    for (const auto& entry : metric.counters) {
+        PDH_FMT_COUNTERVALUE val;
+        if (PdhGetFormattedCounterValue(entry.counter, PDH_FMT_DOUBLE, nullptr,
+                                        &val) == ERROR_SUCCESS &&
+            val.doubleValue >= metric.minValue) {
+            sum += val.doubleValue;
+            count++;
+        }
+    }
+
+    if (count == 0) {
+        return std::nullopt;
+    }
+
+    return WildcardMetricValue{sum, count};
+}
+
+std::optional<double> QueryWildcardMetricSum(const WildcardMetric& metric) {
+    auto value = QueryWildcardMetric(metric);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    return value->sum;
+}
+
+std::optional<double> QueryWildcardMetricAvg(const WildcardMetric& metric) {
+    auto value = QueryWildcardMetric(metric);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    return value->sum / value->count;
 }
 
 PCWSTR GetCpuFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_cpuFormatted.formatIndex != g_metricsFormatIndex) {
-        if (g_cpuCounter) {
-            PDH_FMT_COUNTERVALUE val;
-            if (PdhGetFormattedCounterValue(g_cpuCounter, PDH_FMT_DOUBLE,
-                                            nullptr, &val) == ERROR_SUCCESS) {
-                swprintf_s(g_cpuFormatted.buffer, L"%d%%",
-                           (int)val.doubleValue);
-            } else {
-                wcscpy_s(g_cpuFormatted.buffer, L"-");
+    return GetMetricFormatted(
+        g_cpuFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto val = QueryCounter(g_cpuCounter);
+            if (!val) {
+                return false;
             }
-        } else {
-            wcscpy_s(g_cpuFormatted.buffer, L"-");
-        }
-        g_cpuFormatted.formatIndex = g_metricsFormatIndex;
+            swprintf_s(buffer, bufferSize, L"%d%%", CapPercent(*val));
+            return true;
+        });
+}
+
+// System memory status, sampled at most once per refresh interval. Empty if
+// the query failed.
+std::optional<MEMORYSTATUSEX> GetRamStatus() {
+    static MEMORYSTATUSEX status{};
+    static bool valid = false;
+    static DWORD lastFormatIndex = 0xFFFFFFFF;
+
+    DWORD formatIndex = GetMetricsFormatIndex();
+    if (lastFormatIndex != formatIndex) {
+        status.dwLength = sizeof(status);
+        valid = GlobalMemoryStatusEx(&status);
+        lastFormatIndex = formatIndex;
     }
-    return g_cpuFormatted.buffer;
+
+    return valid ? std::optional<MEMORYSTATUSEX>(status) : std::nullopt;
 }
 
 PCWSTR GetRamFormatted() {
-    CollectMetricsDataIfNeeded();
-    if (g_ramFormatted.formatIndex != g_metricsFormatIndex) {
-        MEMORYSTATUSEX status{.dwLength = sizeof(status)};
-        if (GlobalMemoryStatusEx(&status)) {
-            swprintf_s(g_ramFormatted.buffer, L"%d%%",
-                       (int)status.dwMemoryLoad);
-        } else {
-            wcscpy_s(g_ramFormatted.buffer, L"-");
+    return GetMetricFormatted(
+        g_ramFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%d%%", (int)status->dwMemoryLoad);
+            return true;
+        });
+}
+
+PCWSTR GetRamUsedFormatted() {
+    return GetMetricFormatted(g_ramUsedFormatted, [](PWSTR buffer,
+                                                     size_t bufferSize) {
+        auto status = GetRamStatus();
+        if (!status) {
+            return false;
         }
-        g_ramFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_ramFormatted.buffer;
+        double usedGb =
+            (double)(status->ullTotalPhys - status->ullAvailPhys) / kGBInBytes;
+        FormatGbValue(usedGb, buffer, bufferSize);
+        return true;
+    });
+}
+
+PCWSTR GetRamTotalFormatted() {
+    return GetMetricFormatted(
+        g_ramTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            FormatGbValue((double)status->ullTotalPhys / kGBInBytes, buffer,
+                          bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status || status->ullTotalPageFile == 0) {
+                return false;
+            }
+            int committed =
+                (int)(((status->ullTotalPageFile - status->ullAvailPageFile) *
+                       100) /
+                      status->ullTotalPageFile);
+            swprintf_s(buffer, bufferSize, L"%d%%", committed);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedUsedFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            double usedGb =
+                (double)(status->ullTotalPageFile - status->ullAvailPageFile) /
+                kGBInBytes;
+            FormatGbValue(usedGb, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedTotalFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            FormatGbValue((double)status->ullTotalPageFile / kGBInBytes, buffer,
+                          bufferSize);
+            return true;
+        });
 }
 
 PCWSTR GetBatteryFormatted() {
-    CollectMetricsDataIfNeeded();
-    if (g_batteryFormatted.formatIndex != g_metricsFormatIndex) {
-        SYSTEM_POWER_STATUS ps;
-        if (GetSystemPowerStatus(&ps) && ps.BatteryLifePercent != 255) {
-            swprintf_s(g_batteryFormatted.buffer, L"%d%%",
-                       (int)ps.BatteryLifePercent);
-        } else {
-            wcscpy_s(g_batteryFormatted.buffer, L"-");
-        }
-        g_batteryFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_batteryFormatted.buffer;
+    return GetMetricFormatted(
+        g_batteryFormatted, [](PWSTR buffer, size_t bufferSize) {
+            SYSTEM_POWER_STATUS ps;
+            if (!GetSystemPowerStatus(&ps) || ps.BatteryLifePercent == 255) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%d%%", (int)ps.BatteryLifePercent);
+            return true;
+        });
 }
 
 PCWSTR GetBatteryTimeFormatted() {
-    CollectMetricsDataIfNeeded();
-    if (g_batteryTimeFormatted.formatIndex != g_metricsFormatIndex) {
+    return GetMetricFormatted(g_batteryTimeFormatted, [](PWSTR buffer,
+                                                         size_t bufferSize) {
         DWORD totalSeconds = 0;
         SYSTEM_POWER_STATUS ps;
 
@@ -1146,20 +1913,22 @@ PCWSTR GetBatteryTimeFormatted() {
 
         DWORD hours = totalSeconds / 3600;
         DWORD minutes = (totalSeconds % 3600) / 60;
-        swprintf_s(g_batteryTimeFormatted.buffer, L"%u:%02u", hours, minutes);
-        g_batteryTimeFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_batteryTimeFormatted.buffer;
+        swprintf_s(buffer, bufferSize, L"%u:%02u", hours, minutes);
+        return true;
+    });
 }
 
 PCWSTR GetPowerFormatted() {
-    CollectMetricsDataIfNeeded();
-    if (g_powerFormatted.formatIndex != g_metricsFormatIndex) {
-        SYSTEM_BATTERY_STATE batteryState{};
-        NTSTATUS status =
-            CallNtPowerInformation(SystemBatteryState, nullptr, 0,
-                                   &batteryState, sizeof(batteryState));
-        if (status == 0 && batteryState.MaxCapacity > 0) {
+    return GetMetricFormatted(
+        g_powerFormatted, [](PWSTR buffer, size_t bufferSize) {
+            SYSTEM_BATTERY_STATE batteryState{};
+            NTSTATUS status =
+                CallNtPowerInformation(SystemBatteryState, nullptr, 0,
+                                       &batteryState, sizeof(batteryState));
+            if (status != 0 || batteryState.MaxCapacity == 0) {
+                return false;
+            }
+
             DWORD rate = batteryState.Rate;
 
             // When some batteries charge the Rate is:
@@ -1173,184 +1942,239 @@ PCWSTR GetPowerFormatted() {
             long powerWatts =
                 (powerMilliWatts + (powerMilliWatts >= 0 ? 500 : -500)) / 1000;
 
-            swprintf_s(g_powerFormatted.buffer, L"%+ldW", powerWatts);
-        } else {
-            wcscpy_s(g_powerFormatted.buffer, L"-");
-        }
-        g_powerFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_powerFormatted.buffer;
-}
-
-void FormatTransferSpeed(double bytesPerSec, PWSTR buffer, size_t bufferSize) {
-    constexpr double KB = 1024.0;
-    constexpr double MB = 1024.0 * KB;
-
-    // Use KB/s for values < 1 MB/s, otherwise MB/s.
-    if (bytesPerSec < MB) {
-        double kbps = bytesPerSec / KB;
-        if (kbps < 10) {
-            swprintf_s(buffer, bufferSize, L"%.2f KB/s", kbps);
-        } else if (kbps < 100) {
-            swprintf_s(buffer, bufferSize, L"%.1f KB/s", kbps);
-        } else {
-            swprintf_s(buffer, bufferSize, L"%.0f KB/s", kbps);
-        }
-    } else {
-        double mbps = bytesPerSec / MB;
-        if (mbps < 10) {
-            swprintf_s(buffer, bufferSize, L"%.2f MB/s", mbps);
-        } else if (mbps < 100) {
-            swprintf_s(buffer, bufferSize, L"%.1f MB/s", mbps);
-        } else {
-            swprintf_s(buffer, bufferSize, L"%.0f MB/s", mbps);
-        }
-    }
-}
-
-double QueryNetworkSpeed(const std::vector<PDH_HCOUNTER>& counters) {
-    double total = 0.0;
-    for (PDH_HCOUNTER counter : counters) {
-        PDH_FMT_COUNTERVALUE val;
-        if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr,
-                                        &val) == ERROR_SUCCESS) {
-            total += val.doubleValue;
-        }
-    }
-    return total;
+            swprintf_s(buffer, bufferSize, L"%+ldW", powerWatts);
+            return true;
+        });
 }
 
 PCWSTR GetUploadSpeedFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_uploadSpeedFormatted.formatIndex != g_metricsFormatIndex) {
-        if (!g_uploadCounters.empty()) {
-            double speed = QueryNetworkSpeed(g_uploadCounters);
-            FormatTransferSpeed(speed, g_uploadSpeedFormatted.buffer,
-                                ARRAYSIZE(g_uploadSpeedFormatted.buffer));
-        } else {
-            wcscpy_s(g_uploadSpeedFormatted.buffer, L"-");
-        }
-        g_uploadSpeedFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_uploadSpeedFormatted.buffer;
+    return GetMetricFormatted(
+        g_uploadSpeedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto speed = QueryWildcardMetricSum(g_uploadMetric);
+            if (!speed) {
+                return false;
+            }
+            FormatTransferSpeed(*speed, buffer, bufferSize);
+            return true;
+        });
 }
 
 PCWSTR GetDownloadSpeedFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_downloadSpeedFormatted.formatIndex != g_metricsFormatIndex) {
-        if (!g_downloadCounters.empty()) {
-            double speed = QueryNetworkSpeed(g_downloadCounters);
-            FormatTransferSpeed(speed, g_downloadSpeedFormatted.buffer,
-                                ARRAYSIZE(g_downloadSpeedFormatted.buffer));
-        } else {
-            wcscpy_s(g_downloadSpeedFormatted.buffer, L"-");
-        }
-        g_downloadSpeedFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_downloadSpeedFormatted.buffer;
+    return GetMetricFormatted(
+        g_downloadSpeedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto speed = QueryWildcardMetricSum(g_downloadMetric);
+            if (!speed) {
+                return false;
+            }
+            FormatTransferSpeed(*speed, buffer, bufferSize);
+            return true;
+        });
 }
 
 PCWSTR GetTotalSpeedFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_totalSpeedFormatted.formatIndex != g_metricsFormatIndex) {
-        if (!g_uploadCounters.empty() || !g_downloadCounters.empty()) {
-            double uploadSpeed = QueryNetworkSpeed(g_uploadCounters);
-            double downloadSpeed = QueryNetworkSpeed(g_downloadCounters);
-            FormatTransferSpeed(uploadSpeed + downloadSpeed,
-                                g_totalSpeedFormatted.buffer,
-                                ARRAYSIZE(g_totalSpeedFormatted.buffer));
-        } else {
-            wcscpy_s(g_totalSpeedFormatted.buffer, L"-");
+    return GetMetricFormatted(g_totalSpeedFormatted, [](PWSTR buffer,
+                                                        size_t bufferSize) {
+        auto uploadSpeed = QueryWildcardMetricSum(g_uploadMetric);
+        auto downloadSpeed = QueryWildcardMetricSum(g_downloadMetric);
+        if (!uploadSpeed || !downloadSpeed) {
+            return false;
         }
-        g_totalSpeedFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_totalSpeedFormatted.buffer;
-}
-
-double QueryDiskSpeed(PDH_HCOUNTER counter) {
-    if (!counter) {
-        return 0.0;
-    }
-
-    PDH_FMT_COUNTERVALUE counterVal;
-    if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr,
-                                    &counterVal) == ERROR_SUCCESS) {
-        return counterVal.doubleValue;
-    }
-    return 0.0;
+        FormatTransferSpeed(*uploadSpeed + *downloadSpeed, buffer, bufferSize);
+        return true;
+    });
 }
 
 PCWSTR GetDiskReadSpeedFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_diskReadSpeedFormatted.formatIndex != g_metricsFormatIndex) {
-        if (g_diskReadCounter) {
-            double speed = QueryDiskSpeed(g_diskReadCounter);
-            FormatTransferSpeed(speed, g_diskReadSpeedFormatted.buffer,
-                                ARRAYSIZE(g_diskReadSpeedFormatted.buffer));
-        } else {
-            wcscpy_s(g_diskReadSpeedFormatted.buffer, L"-");
-        }
-        g_diskReadSpeedFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_diskReadSpeedFormatted.buffer;
+    return GetMetricFormatted(
+        g_diskReadSpeedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto speed = QueryCounter(g_diskReadCounter);
+            if (!speed) {
+                return false;
+            }
+            FormatTransferSpeed(*speed, buffer, bufferSize);
+            return true;
+        });
 }
 
 PCWSTR GetDiskWriteSpeedFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_diskWriteSpeedFormatted.formatIndex != g_metricsFormatIndex) {
-        if (g_diskWriteCounter) {
-            double speed = QueryDiskSpeed(g_diskWriteCounter);
-            FormatTransferSpeed(speed, g_diskWriteSpeedFormatted.buffer,
-                                ARRAYSIZE(g_diskWriteSpeedFormatted.buffer));
-        } else {
-            wcscpy_s(g_diskWriteSpeedFormatted.buffer, L"-");
-        }
-        g_diskWriteSpeedFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_diskWriteSpeedFormatted.buffer;
+    return GetMetricFormatted(
+        g_diskWriteSpeedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto speed = QueryCounter(g_diskWriteCounter);
+            if (!speed) {
+                return false;
+            }
+            FormatTransferSpeed(*speed, buffer, bufferSize);
+            return true;
+        });
 }
 
 PCWSTR GetDiskTotalSpeedFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_diskTotalSpeedFormatted.formatIndex != g_metricsFormatIndex) {
-        if (g_diskReadCounter || g_diskWriteCounter) {
-            double readSpeed = QueryDiskSpeed(g_diskReadCounter);
-            double writeSpeed = QueryDiskSpeed(g_diskWriteCounter);
-            FormatTransferSpeed(readSpeed + writeSpeed,
-                                g_diskTotalSpeedFormatted.buffer,
-                                ARRAYSIZE(g_diskTotalSpeedFormatted.buffer));
-        } else {
-            wcscpy_s(g_diskTotalSpeedFormatted.buffer, L"-");
-        }
-        g_diskTotalSpeedFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_diskTotalSpeedFormatted.buffer;
-}
-
-double QueryGpuUsage() {
-    double sum = 0.0;
-    for (const auto& counter : g_gpuCounters) {
-        PDH_FMT_COUNTERVALUE counterVal;
-        if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr,
-                                        &counterVal) == ERROR_SUCCESS) {
-            sum += counterVal.doubleValue;
-        }
-    }
-    return sum;
+    return GetMetricFormatted(
+        g_diskTotalSpeedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto readSpeed = QueryCounter(g_diskReadCounter);
+            auto writeSpeed = QueryCounter(g_diskWriteCounter);
+            if (!readSpeed || !writeSpeed) {
+                return false;
+            }
+            FormatTransferSpeed(*readSpeed + *writeSpeed, buffer, bufferSize);
+            return true;
+        });
 }
 
 PCWSTR GetGpuFormatted() {
     CollectMetricsDataIfNeeded();
-    if (g_gpuFormatted.formatIndex != g_metricsFormatIndex) {
-        if (!g_gpuCounters.empty()) {
-            double usage = QueryGpuUsage();
-            swprintf_s(g_gpuFormatted.buffer, L"%d", (int)usage);
-        } else {
-            wcscpy_s(g_gpuFormatted.buffer, L"-");
-        }
-        g_gpuFormatted.formatIndex = g_metricsFormatIndex;
-    }
-    return g_gpuFormatted.buffer;
+    return GetMetricFormatted(
+        g_gpuFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto usage = QueryWildcardMetricSum(g_gpuMetric);
+            if (!usage) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%d%%", CapPercent(*usage));
+            return true;
+        });
+}
+
+PCWSTR GetVramFormatted() {
+    CollectMetricsDataIfNeeded();
+    return GetMetricFormatted(
+        g_vramFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto usedBytes = QueryWildcardMetricSum(g_vramMetric);
+            auto totalGb = GetDedicatedVramTotalGb();
+            if (!usedBytes || !totalGb) {
+                return false;
+            }
+            double usedGb = *usedBytes / kGBInBytes;
+            swprintf_s(buffer, bufferSize, L"%d%%",
+                       CapPercent(usedGb / *totalGb * 100.0));
+            return true;
+        });
+}
+
+PCWSTR GetVramUsedFormatted() {
+    CollectMetricsDataIfNeeded();
+    return GetMetricFormatted(
+        g_vramUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto usedBytes = QueryWildcardMetricSum(g_vramMetric);
+            if (!usedBytes) {
+                return false;
+            }
+            FormatGbValue(*usedBytes / kGBInBytes, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetVramTotalFormatted() {
+    return GetMetricFormatted(g_vramTotalFormatted,
+                              [](PWSTR buffer, size_t bufferSize) {
+                                  auto totalGb = GetDedicatedVramTotalGb();
+                                  if (!totalGb) {
+                                      return false;
+                                  }
+                                  FormatGbValue(*totalGb, buffer, bufferSize);
+                                  return true;
+                              });
+}
+
+PCWSTR GetVramSharedFormatted() {
+    CollectMetricsDataIfNeeded();
+    return GetMetricFormatted(
+        g_vramSharedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto usedBytes = QueryWildcardMetricSum(g_vramSharedMetric);
+            auto totalGb = GetSharedVramTotalGb();
+            if (!usedBytes || !totalGb) {
+                return false;
+            }
+            double usedGb = *usedBytes / kGBInBytes;
+            swprintf_s(buffer, bufferSize, L"%d%%",
+                       CapPercent(usedGb / *totalGb * 100.0));
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedUsedFormatted() {
+    CollectMetricsDataIfNeeded();
+    return GetMetricFormatted(
+        g_vramSharedUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto usedBytes = QueryWildcardMetricSum(g_vramSharedMetric);
+            if (!usedBytes) {
+                return false;
+            }
+            FormatGbValue(*usedBytes / kGBInBytes, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedTotalFormatted() {
+    return GetMetricFormatted(g_vramSharedTotalFormatted,
+                              [](PWSTR buffer, size_t bufferSize) {
+                                  auto totalGb = GetSharedVramTotalGb();
+                                  if (!totalGb) {
+                                      return false;
+                                  }
+                                  FormatGbValue(*totalGb, buffer, bufferSize);
+                                  return true;
+                              });
+}
+
+PCWSTR GetCpuTempFormatted() {
+    CollectMetricsDataIfNeeded();
+    return GetMetricFormatted(
+        g_cpuTempFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto kelvin = QueryWildcardMetricAvg(g_cpuTempMetric);
+            if (!kelvin) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%d\u00B0C",
+                       static_cast<int>(*kelvin - 273.15));
+            return true;
+        });
+}
+
+PCWSTR GetCpuTempFFormatted() {
+    CollectMetricsDataIfNeeded();
+    return GetMetricFormatted(
+        g_cpuTempFFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto kelvin = QueryWildcardMetricAvg(g_cpuTempMetric);
+            if (!kelvin) {
+                return false;
+            }
+            double celsius = *kelvin - 273.15;
+            swprintf_s(buffer, bufferSize, L"%d\u00B0F",
+                       static_cast<int>(celsius * 9.0 / 5.0 + 32.0));
+            return true;
+        });
+}
+
+PCWSTR GetGpuTempFormatted() {
+    return GetMetricFormatted(g_gpuTempFormatted,
+                              [](PWSTR buffer, size_t bufferSize) {
+                                  auto celsius = GetGpuTemperatureCelsius();
+                                  if (!celsius) {
+                                      return false;
+                                  }
+                                  swprintf_s(buffer, bufferSize, L"%d\u00B0C",
+                                             static_cast<int>(*celsius));
+                                  return true;
+                              });
+}
+
+PCWSTR GetGpuTempFFormatted() {
+    return GetMetricFormatted(
+        g_gpuTempFFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto celsius = GetGpuTemperatureCelsius();
+            if (!celsius) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%d\u00B0F",
+                       static_cast<int>(*celsius * 9.0 / 5.0 + 32.0));
+            return true;
+        });
 }
 
 // https://stackoverflow.com/a/39344961
@@ -1464,7 +2288,7 @@ PCWSTR GetWeekdayNumFormatted() {
 PCWSTR GetWeeknumFormatted() {
     if (g_weeknumFormatted.formatIndex != g_formatIndex) {
         DWORD startDayOfWeek = GetStartDayOfWeek();
-        swprintf_s(g_weeknumFormatted.buffer, L"%d",
+        swprintf_s(g_weeknumFormatted.buffer, L"%02d",
                    CalculateWeeknum(&g_formatTime, startDayOfWeek));
         g_weeknumFormatted.formatIndex = g_formatIndex;
     }
@@ -1508,7 +2332,14 @@ size_t ResolveFormatToken(
         {L"%dayofyear%"sv, GetDayOfYearFormatted},
         {L"%timezone%"sv, GetTimezoneFormatted},
         {L"%cpu%"sv, GetCpuFormatted},
+        {L"%cpu_temp%"sv, GetCpuTempFormatted},
+        {L"%cpu_temp_f%"sv, GetCpuTempFFormatted},
         {L"%ram%"sv, GetRamFormatted},
+        {L"%ram_used%"sv, GetRamUsedFormatted},
+        {L"%ram_total%"sv, GetRamTotalFormatted},
+        {L"%ram_committed%"sv, GetRamCommittedFormatted},
+        {L"%ram_committed_used%"sv, GetRamCommittedUsedFormatted},
+        {L"%ram_committed_total%"sv, GetRamCommittedTotalFormatted},
         {L"%battery%"sv, GetBatteryFormatted},
         {L"%battery_time%"sv, GetBatteryTimeFormatted},
         {L"%power%"sv, GetPowerFormatted},
@@ -1519,16 +2350,23 @@ size_t ResolveFormatToken(
         {L"%disk_write%"sv, GetDiskWriteSpeedFormatted},
         {L"%disk_total%"sv, GetDiskTotalSpeedFormatted},
         {L"%gpu%"sv, GetGpuFormatted},
+        {L"%gpu_temp%"sv, GetGpuTempFormatted},
+        {L"%gpu_temp_f%"sv, GetGpuTempFFormatted},
+        {L"%vram%"sv, GetVramFormatted},
+        {L"%vram_used%"sv, GetVramUsedFormatted},
+        {L"%vram_total%"sv, GetVramTotalFormatted},
+        {L"%vram_shared%"sv, GetVramSharedFormatted},
+        {L"%vram_shared_used%"sv, GetVramSharedUsedFormatted},
+        {L"%vram_shared_total%"sv, GetVramSharedTotalFormatted},
+        {L"%newline%"sv, []() { return L"\n"; }},
+        {L"%n%"sv, []() { return L"\n"; }},
     };
 
-    // Check for newline patterns first.
-    if (format.starts_with(L"%newline%"sv)) {
-        resolvedCallback(L"\n");
-        return 9;  // length of "%newline%"
-    }
-    if (format.starts_with(L"%n%"sv)) {
-        resolvedCallback(L"\n");
-        return 3;  // length of "%n%"
+    for (const auto& t : tokens) {
+        if (format.starts_with(t.token)) {
+            resolvedCallback(t.getter());
+            return t.token.size();
+        }
     }
 
     // Check for weather pattern (requires mutex).
@@ -1539,21 +2377,28 @@ size_t ResolveFormatToken(
         return token.size();
     }
 
-    // Check other tokens.
-    for (const auto& t : tokens) {
-        if (format.starts_with(t.token)) {
-            resolvedCallback(t.getter());
-            return t.token.size();
-        }
+    return 0;  // Not a recognized token
+}
+
+void EnsureFormattingInitialized() {
+    if (g_formattingInitialized) {
+        return;
     }
 
-    return 0;  // Not a recognized token
+    g_formattingInitialized = true;
+
+    InitMetrics();
+    WeatherUpdateThreadInit();
 }
 
 int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
     if (bufferSize == 0) {
         return 0;
     }
+
+    std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
+    EnsureFormattingInitialized();
 
     std::wstring_view formatSuffix = format;
     PWSTR bufferStart = buffer;
@@ -1636,18 +2481,27 @@ bool IsFolderViewWnd(HWND hWnd) {
     return true;
 }
 
-// Find the WorkerW window behind desktop icons.
-// Based on weebp: https://github.com/Francesco149/weebp
-HWND GetWorkerW() {
+// The Progman window of this process, which owns the desktop thread.
+HWND GetProgmanWnd() {
     HWND hProgman = FindWindow(L"Progman", nullptr);
     if (!hProgman) {
         return nullptr;
     }
 
-    // Ensure Progman is in the current process.
     DWORD progmanProcessId = 0;
     GetWindowThreadProcessId(hProgman, &progmanProcessId);
     if (progmanProcessId != GetCurrentProcessId()) {
+        return nullptr;
+    }
+
+    return hProgman;
+}
+
+// Find the WorkerW window behind desktop icons.
+// Based on weebp: https://github.com/Francesco149/weebp
+HWND GetWorkerW() {
+    HWND hProgman = GetProgmanWnd();
+    if (!hProgman) {
         return nullptr;
     }
 
@@ -2046,6 +2900,10 @@ void ReleaseSwapChainResources() {
 }
 
 bool RecreateTextResources() {
+    if (!g_dc) {
+        return false;
+    }
+
     HRESULT hr;
 
     // Create top line text format.
@@ -2424,6 +3282,16 @@ void RenderOverlay() {
 ////////////////////////////////////////////////////////////////////////////////
 // Refresh timer
 
+// Milliseconds until the next metrics sample, matching the bucketing of
+// GetMetricsFormatIndex.
+UINT GetNextMetricsSampleTimeout(const SYSTEMTIME* time) {
+    ULONGLONG timeIn100Ns = SystemTimeTo100Ns(time).QuadPart;
+    ULONGLONG intervalIn100Ns = kSecondIn100Ns * g_settings.refreshInterval;
+    ULONGLONG nextIn100Ns =
+        (timeIn100Ns / intervalIn100Ns + 1) * intervalIn100Ns;
+    return static_cast<UINT>((nextIn100Ns - timeIn100Ns) / 10000);
+}
+
 UINT GetNextUpdateTimeout() {
     SYSTEMTIME time;
     GetLocalTime(&time);
@@ -2432,14 +3300,19 @@ UINT GetNextUpdateTimeout() {
     // change.
     constexpr UINT kExtraDelayMs = 200;
 
-    // Refresh every second when seconds, system metrics, or pending weather.
-    if (g_settings.showSeconds || g_systemMetricsUsed ||
-        (g_weatherUsed && !g_weatherLoaded)) {
+    // Refresh every second when seconds are shown or weather is pending.
+    if (g_settings.showSeconds || (g_weatherUsed && !g_weatherLoaded)) {
         return 1000 - time.wMilliseconds + kExtraDelayMs;
     }
 
-    // No seconds or system metrics - refresh every minute.
-    return (60 - time.wSecond) * 1000 - time.wMilliseconds + kExtraDelayMs;
+    // Otherwise the time display only changes on the minute.
+    UINT timeout = (60 - time.wSecond) * 1000 - time.wMilliseconds;
+
+    if (g_systemMetricsUsed) {
+        timeout = (std::min)(timeout, GetNextMetricsSampleTimeout(&time));
+    }
+
+    return timeout + kExtraDelayMs;
 }
 
 void ScheduleNextUpdate() {
@@ -2479,8 +3352,11 @@ void HandleDisplayChange() {
         Wh_Log(L"DPI changed: %.2f -> %.2f", g_dpiScale, newDpiScale);
         ReleaseSwapChainResources();
         GetClientRect(g_overlayWnd, &rc);
-        CreateSwapChainResources(rc.right - rc.left, rc.bottom - rc.top);
-        RenderOverlay();
+        if (CreateSwapChainResources(rc.right - rc.left, rc.bottom - rc.top)) {
+            RenderOverlay();
+        } else {
+            ReleaseSwapChainResources();
+        }
     }
 
     // Schedule a delayed wallpaper recapture so the system has time to
@@ -2565,6 +3441,20 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd,
             return 0;
         }
 
+        case WM_POWERBROADCAST:
+            switch (wParam) {
+                case PBT_APMRESUMECRITICAL:
+                case PBT_APMRESUMESUSPEND:
+                case PBT_APMRESUMEAUTOMATIC:
+                    if (!g_unloading) {
+                        Wh_Log(L"Resumed, refreshing weather");
+                        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+                        WeatherUpdateThreadRefresh();
+                    }
+                    break;
+            }
+            break;
+
         case WM_TIMER:
             if (g_unloading) {
                 return 0;
@@ -2633,21 +3523,12 @@ bool EnsureLazyInitialized() {
         return g_initSucceeded;
     }
 
-    g_systemMetricsUsed = IsSystemMetricsUsed();
-    g_weatherUsed = IsWeatherUsed();
-
     RunDxgiWorkaroundForExplorerPatcher();
 
     if (!InitDirectX()) {
         Wh_Log(L"InitDirectX failed");
         return false;
     }
-
-    if (g_systemMetricsUsed) {
-        InitMetrics();
-    }
-
-    WeatherUpdateThreadInit();
 
     g_initSucceeded = true;
     return true;
@@ -2692,6 +3573,8 @@ void CreateOverlayWindow() {
     if (CreateSwapChainResources(width, height)) {
         RenderOverlay();
         ScheduleNextUpdate();
+    } else {
+        ReleaseSwapChainResources();
     }
 }
 
@@ -2775,13 +3658,14 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     Wh_Log(L"FolderView window created");
 
     // Delay overlay creation to let the desktop fully initialize.
-    static UINT_PTR s_timer = 0;
-    s_timer = SetTimer(nullptr, s_timer, 1000,
-                       [](HWND, UINT, UINT_PTR idEvent, DWORD) {
-                           KillTimer(nullptr, idEvent);
-                           CreateOverlayWindow();
-                           CreateMessageWindow();
-                       });
+    g_createOverlayTimer =
+        SetTimer(nullptr, g_createOverlayTimer, 1000,
+                 [](HWND, UINT, UINT_PTR idEvent, DWORD) {
+                     KillTimer(nullptr, idEvent);
+                     g_createOverlayTimer = 0;
+                     CreateOverlayWindow();
+                     CreateMessageWindow();
+                 });
 
     return hWnd;
 }
@@ -2849,10 +3733,11 @@ void LoadSettings() {
     g_settings.timeFormat = WindhawkUtils::StringSetting::make(L"timeFormat");
     g_settings.dateFormat = WindhawkUtils::StringSetting::make(L"dateFormat");
 
-    g_settings.refreshInterval = Wh_GetIntSetting(L"refreshInterval");
-    if (g_settings.refreshInterval <= 0) {
-        g_settings.refreshInterval = 1;
-    }
+    g_settings.refreshInterval =
+        std::clamp(Wh_GetIntSetting(L"refreshInterval"), 1, 60);
+
+    g_settings.gpuAdapterName =
+        WindhawkUtils::StringSetting::make(L"gpuAdapterName");
 
     g_settings.backgroundEnabled = Wh_GetIntSetting(L"background.enabled");
 
@@ -2869,7 +3754,7 @@ void LoadSettings() {
 
     g_settings.backgroundPadding = Wh_GetIntSetting(L"background.padding");
     if (g_settings.backgroundPadding < 0) {
-        g_settings.backgroundPadding = 10;
+        g_settings.backgroundPadding = 20;
     }
 
     g_settings.backgroundCornerRadius =
@@ -2901,8 +3786,10 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(borderColor);
 
-    g_settings.verticalPosition = Wh_GetIntSetting(L"verticalPosition");
-    g_settings.horizontalPosition = Wh_GetIntSetting(L"horizontalPosition");
+    g_settings.verticalPosition =
+        std::clamp(Wh_GetIntSetting(L"verticalPosition"), 0, 100);
+    g_settings.horizontalPosition =
+        std::clamp(Wh_GetIntSetting(L"horizontalPosition"), 0, 100);
 
     g_settings.monitor = Wh_GetIntSetting(L"monitor");
     if (g_settings.monitor <= 0) {
@@ -2924,6 +3811,14 @@ void LoadSettings() {
         g_settings.weatherUnits = WeatherUnits::metricMsWind;
     }
     Wh_FreeStringSetting(weatherUnits);
+
+    g_systemMetricsUsed = IsSystemMetricsUsed();
+    g_weatherUsed = IsWeatherUsed();
+
+    {
+        std::lock_guard<std::mutex> guard(g_weatherMutex);
+        g_weatherUrl = MakeWeatherUrl();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2931,6 +3826,17 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    if (HMODULE hGdi32 = LoadLibraryEx(L"gdi32.dll", nullptr,
+                                       LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+        pD3DKMTOpenAdapterFromLuid =
+            (D3DKMTOpenAdapterFromLuid_t)GetProcAddress(
+                hGdi32, "D3DKMTOpenAdapterFromLuid");
+        pD3DKMTQueryAdapterInfo = (D3DKMTQueryAdapterInfo_t)GetProcAddress(
+            hGdi32, "D3DKMTQueryAdapterInfo");
+        pD3DKMTCloseAdapter =
+            (D3DKMTCloseAdapter_t)GetProcAddress(hGdi32, "D3DKMTCloseAdapter");
+    }
 
     LoadSettings();
 
@@ -2960,6 +3866,21 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
+    // The timer callback lives in the mod image, so it has to be gone before
+    // the image is unmapped. KillTimer only works from the thread that set the
+    // timer, which is the thread the desktop folder view belongs to.
+    if (HWND hProgman = GetProgmanWnd()) {
+        RunFromWindowThread(
+            hProgman,
+            [](void*) {
+                if (g_createOverlayTimer) {
+                    KillTimer(nullptr, g_createOverlayTimer);
+                    g_createOverlayTimer = 0;
+                }
+            },
+            nullptr);
+    }
+
     // Destroy windows from their owning thread.
     if (g_overlayWnd) {
         SendMessage(g_overlayWnd, WM_APP_CLEANUP, 0, 0);
@@ -2972,8 +3893,12 @@ void Wh_ModUninit() {
     UnregisterOverlayWindowClass();
     UnregisterMessageWindowClass();
 
-    WeatherUpdateThreadUninit();
-    UninitMetrics();
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        WeatherUpdateThreadUninit();
+        UninitMetrics();
+    }
+
     UninitDirectX();
 }
 
@@ -2995,26 +3920,31 @@ void ApplySettingsChanged() {
         return;
     }
 
-    // Reinitialize metrics to match new settings.
-    UninitMetrics();
-    g_systemMetricsUsed = IsSystemMetricsUsed();
-    if (g_systemMetricsUsed) {
-        InitMetrics();
-    }
+    // The metrics and the weather thread are recreated by the next FormatLine.
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
 
-    // Check if weather usage or settings changed.
-    bool newWeatherUsed = IsWeatherUsed();
-    bool weatherSettingsChanged =
-        oldWeatherLocation != g_settings.weatherLocation.get() ||
-        oldWeatherFormat != g_settings.weatherFormat.get() ||
-        oldWeatherUnits != g_settings.weatherUnits;
-    if (oldWeatherUsed != newWeatherUsed ||
-        (newWeatherUsed && weatherSettingsChanged)) {
-        WeatherUpdateThreadUninit();
-        g_weatherUsed = newWeatherUsed;
-        if (g_weatherUsed) {
-            WeatherUpdateThreadInit();
+        UninitMetrics();
+
+        // The thread reads the request URL from g_weatherUrl, so changed
+        // weather settings only call for a new request, not a new thread.
+        bool weatherSettingsChanged =
+            oldWeatherLocation != g_settings.weatherLocation.get() ||
+            oldWeatherFormat != g_settings.weatherFormat.get() ||
+            oldWeatherUnits != g_settings.weatherUnits;
+        if (oldWeatherUsed && !g_weatherUsed) {
+            WeatherUpdateThreadUninit();
+        } else if (g_weatherUsed && weatherSettingsChanged) {
+            {
+                // Don't keep showing weather for the old settings.
+                std::lock_guard<std::mutex> weatherGuard(g_weatherMutex);
+                g_weatherContent.reset();
+            }
+
+            WeatherUpdateThreadRefresh();
         }
+
+        g_formattingInitialized = false;
     }
 
     // If overlay not created yet, skip visual updates.
