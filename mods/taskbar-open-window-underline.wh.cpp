@@ -43,15 +43,16 @@ the button's icon with the same rule, for taskbars that hide their labels or
 as a stronger cue next to the label. Thickness, width, distance from the icon,
 corner radius, color and opacity are configurable. The color can differ
 between the light and dark theme, can be a horizontal gradient, and defaults
-to the system accent color. The theme is the one each button is actually
-rendered with, so a taskbar switched to the other theme by a mod (Top Taskbar
-Bleed, say, when a light window is maximized) gets that theme's color, and a
-theme change recolors every line at once. Icons aren't text, so this line is
-a composition visual attached to the icon element; it follows the icon's size
-and position without touching the taskbar's layout. With hidden labels it
-relies on the view-model symbols described below: on builds where they can't
-be resolved, the title fallback has no label text to work with, and those
-buttons stay plain.
+to the system accent color (in the shade Windows uses for accent fills on
+each theme). The theme is the one each button is actually rendered with, so a
+taskbar switched to the other theme by a mod (Top Taskbar Bleed, say, when a
+light window is maximized) gets that theme's color, and a theme change
+recolors every line at once. Icons aren't text, so this line is a composition
+visual attached to the icon element; it follows the icon's size and position
+without touching the taskbar's layout. With hidden labels it relies on the
+view-model symbols described below: on builds where they can't be resolved,
+the title fallback has no label text to work with, and those buttons stay
+plain.
 
 Hide the running indicator: hides the taskbar's own indicator under running
 buttons, so that the underline is the only cue. The same element also marks
@@ -154,7 +155,8 @@ How it works:
       Hex color code. Supports Light | Dark separation (e.g.
       '#000000|#FFFFFF') and multi-color horizontal gradients (e.g.
       '#FF0000,#00FF00'). Both can be combined ('light1,light2|dark1,dark2').
-      Leave empty to use the system accent color.
+      Leave empty to use the system accent color, in the shade Windows uses
+      for accent fills on that theme.
   - opacity: 100
     $name: Opacity (%)
   - cornerRadius: 1
@@ -443,7 +445,7 @@ std::unordered_map<void*, LabelEntry> g_labels;
 // and recognized by its Comment.
 struct IconEntry {
     winrt::weak_ref<Xaml::Controls::Image> icon;
-    int64_t themeChangedToken;
+    winrt::event_token themeChangedToken;
 };
 std::unordered_map<void*, IconEntry> g_icons;
 
@@ -459,7 +461,7 @@ std::unordered_map<void*, winrt::weak_ref<Xaml::UIElement>> g_indicators;
 // ActualTheme at each evaluation, since a taskbar's theme can differ from
 // the Windows mode (Top Taskbar Bleed, for one, switches a taskbar to the
 // theme matching the bled color through RequestedTheme), and each icon
-// re-evaluates its button when its own ActualTheme changes.
+// recolors its line when its own ActualTheme changes.
 [[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings
     g_uiSettings{nullptr};
 winrt::event_token g_colorValuesChangedToken;
@@ -1588,9 +1590,13 @@ const std::vector<winrt::Windows::UI::Color>& ResolveIconColors(
     if (!list.empty()) {
         cached = list;
     } else {
+        // The shade WinUI's own accent fills use on each theme
+        // (AccentFillColorDefaultBrush), so the line keeps its contrast on
+        // both: lighter on a dark taskbar, darker on a light one.
         using namespace winrt::Windows::UI::ViewManagement;
         cached = std::vector<winrt::Windows::UI::Color>{
-            g_uiSettings.GetColorValue(UIColorType::Accent)};
+            g_uiSettings.GetColorValue(lightTheme ? UIColorType::AccentDark1
+                                                  : UIColorType::AccentLight2)};
     }
     return *cached;
 }
@@ -1633,8 +1639,9 @@ void EnsureIconBrush(const Composition::SpriteVisual& sprite,
 }
 
 // A theme change on an icon (the Windows mode mirrored by the taskbar, or a
-// per-taskbar theme forced by another mod such as Top Taskbar Bleed)
-// re-evaluates its button, so the line gets the colors for the new theme.
+// per-taskbar theme forced by another mod such as Top Taskbar Bleed) recolors
+// its line. Only the brush depends on the theme; the window state is covered
+// by the hooks and the refresh passes, so the button isn't re-evaluated here.
 void OnIconThemeChanged(const Xaml::FrameworkElement& sender,
                         const winrt::Windows::Foundation::IInspectable&) {
     if (g_unloading || !g_settings.iconUnderline.enabled) {
@@ -1642,15 +1649,18 @@ void OnIconThemeChanged(const Xaml::FrameworkElement& sender,
     }
 
     try {
-        if (auto button = FindOwningTaskListButton(sender)) {
-            LazyWindowSnapshot snapshot;
-            ApplyToButton(button, snapshot);
+        auto visual =
+            Xaml::Hosting::ElementCompositionPreview::GetElementChildVisual(
+                sender);
+        if (visual && visual.Comment() == kIconVisualComment) {
+            if (auto sprite = visual.try_as<Composition::SpriteVisual>()) {
+                EnsureIconBrush(sprite,
+                                ResolveIconColors(IsLightTheme(sender)));
+            }
         }
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Theme change handler error: %08X",
                static_cast<unsigned int>(e.code()));
-    } catch (...) {
-        Wh_Log(L"Theme change handler error");
     }
 }
 
@@ -1679,12 +1689,17 @@ Composition::SpriteVisual GetOrCreateIconVisual(
     // Subscribed per icon rather than once per tree: when a theme change
     // propagates through the tree, a tree-level handler can run while some
     // icons still report the old theme, which colored buttons inconsistently.
-    // Each icon's own event fires once its ActualTheme is current.
-    int64_t themeChangedToken =
-        icon.ActualThemeChanged(OnIconThemeChanged).value;
-
-    g_icons[winrt::get_abi(icon)] =
-        IconEntry{winrt::make_weak(icon), themeChangedToken};
+    // Each icon's own event fires once its ActualTheme is current. Subscribed
+    // once per icon: if something else detached the visual while the icon
+    // stayed tracked, a second subscription would lose the first token.
+    void* key = winrt::get_abi(icon);
+    if (auto it = g_icons.find(key); it != g_icons.end()) {
+        if (auto tracked = it->second.icon.get(); tracked && tracked == icon) {
+            return sprite;
+        }
+    }
+    g_icons[key] = IconEntry{winrt::make_weak(icon),
+                             icon.ActualThemeChanged(OnIconThemeChanged)};
     return sprite;
 }
 
@@ -1788,8 +1803,7 @@ void RemoveAllIconVisuals() {
     for (auto& [key, entry] : g_icons) {
         try {
             if (auto icon = entry.icon.get()) {
-                icon.ActualThemeChanged(
-                    winrt::event_token{entry.themeChangedToken});
+                icon.ActualThemeChanged(entry.themeChangedToken);
                 if (RemoveIconVisual(icon)) {
                     removed++;
                 }
