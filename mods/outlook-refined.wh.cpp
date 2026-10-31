@@ -8,6 +8,7 @@
 // @include         olk.exe
 // @architecture    x86-64
 // @license         MIT
+// @compilerOptions -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
