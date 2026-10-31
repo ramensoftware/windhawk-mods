@@ -2,7 +2,7 @@
 // @id              outlook-refined
 // @name            Outlook Refined
 // @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.5
+// @version         0.6
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
@@ -17,8 +17,11 @@
 
 Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
 adds one script to each Outlook window when the window is created, and the
-script stops at once unless the page is one of Outlook's own. It reads nothing
-from disk, opens no ports and fetches nothing from the network.
+script stops at once unless the page is one of Outlook's own. It opens no ports
+and brings nothing of its own down from the network: every asset it draws with
+is in this file. It reads your account addresses from Outlook's own storage, to
+label the folder tree, and with the agenda, month grid or Other card on it calls
+Outlook's mail service as described below.
 
 ![Folder pane](https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/folder-pane.png)
 
@@ -247,10 +250,10 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     // Outlook addresses its own service with a relative URL as often as an absolute one, so
     // the address is resolved against the page before it is matched. The service's own base
     // is kept per mailbox, so each one is asked on the host Outlook itself used.
-    // Set by stop(). Outlook code that kept its own reference to the old fetch keeps
-    // calling the wrapper, so the wrapper itself has to go quiet, not just be unhooked.
-    let stopped = false;
+    let stopped = false;  // set by stop(); see note() below
     const note = (url, headers) => {
+      // Outlook code that kept its own reference to the old fetch goes on calling the
+      // wrapper after stop() puts the original back, so the wrapper has to go quiet too.
       if (stopped) return;
       let u;
       try { u = new URL(url, location.href); } catch { return; }
@@ -388,29 +391,32 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const post = text => { try { channel.postMessage(text); } catch {} };
     let loaded = false;
     let onMessage = null;
+    let last = '';
     // The state is asked for rather than baked into this script: a window that reloads
-    // then starts from what is saved now, not from what was saved when it opened.
-    const ready = new Promise(resolve => {
-      if (!channel || !S.key) { resolve(false); return; }
+    // then starts from what is saved now, not from what was saved when it opened. The
+    // mod sends it again whenever any window saves, which is how two open windows stay
+    // in step. The pane draws with the defaults meanwhile and redraws when it lands;
+    // writes stay shut until then, so nothing saved is ever overwritten unread, and the
+    // state is taken up here rather than behind a timeout, however late it arrives.
+    if (channel && S.key) {
       onMessage = ev => {
         const text = typeof ev.data === 'string' ? ev.data : '';
         if (!text.startsWith('olkt-state\n')) return;
+        const body = text.slice('olkt-state\n'.length);
+        if (body === last) return;  // nothing changed since the last one; no redraw
+        last = body;
         try {
-          const saved = JSON.parse(text.slice('olkt-state\n'.length));
+          const saved = JSON.parse(body);
+          mem.clear();
           for (const key of STORE_KEYS) if (typeof saved[key] === 'string') mem.set(key, saved[key]);
-        } catch {}
+        } catch { return; }
         loaded = true;
-        resolve(true);
+        try { applyState(); } catch {}
       };
       channel.addEventListener('message', onMessage);
       post('olkt-get\n' + S.key);
-      // No answer: draw with the defaults rather than hold the pane back. Writes stay
-      // shut until an answer arrives, so nothing saved can be overwritten unread.
-      setTimeout(() => resolve(false), 1500);
-    });
+    }
     return {
-      ready,
-      loaded: () => loaded,
       getItem: key => (mem.has(key) ? mem.get(key) : null),
       setItem: (key, value) => {
         if (!loaded) return;
@@ -2936,19 +2942,33 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   // and the panes are drawn a second time. Values an older version left in Outlook's
   // own storage move across here, where the answer is already in hand, so a migration
   // can never overwrite something newer.
+  // The folds the code sets up at startup: every group's own `folded`, the accounts
+  // header and the all-day row. A saved map holds only what has been toggled since,
+  // so it goes on top of these rather than in place of them.
+  function foldDefaults(target) {
+    for (const { n } of groups()) if (!(n.id in target)) target[n.id] = !!n.folded;
+    if (!(ACCOUNTS in target)) target[ACCOUNTS] = true;
+    if (!(ALLDAY in target)) target[ALLDAY] = true;
+    return target;
+  }
+
   function applyState() {
+    if (S.favoritesGroups) cfg.favorites = stored(FAVORITES_KEY, DEFAULT_FAVORITES);
+    cfg.accounts = orderedAccounts(stored(ACCOUNT_ORDER_KEY, []));
+    // A value an older version left behind is deleted only once the mod has it: a
+    // write it refuses, for being too large, must not take the last copy with it.
     for (const key of STORE_KEYS) {
       try {
         const old = localStorage.getItem(key);
         if (old == null) continue;
-        if (store.getItem(key) == null) store.setItem(key, old);
-        localStorage.removeItem(key);
+        if (store.getItem(key) === old) localStorage.removeItem(key);
+        else if (store.getItem(key) == null) store.setItem(key, old);
       } catch {}
     }
-    try { folds = JSON.parse(store.getItem(FOLD_KEY) || '{}') || {}; } catch { folds = {}; }
+    let saved = {};
+    try { saved = JSON.parse(store.getItem(FOLD_KEY) || '{}') || {}; } catch {}
+    folds = foldDefaults({ ...saved });
     if (S.resizablePane) paneWidth = (Number(store.getItem(WIDTH_KEY)) || 0) || Number(S.paneWidth) || 0;
-    if (S.favoritesGroups) cfg.favorites = stored(FAVORITES_KEY, DEFAULT_FAVORITES);
-    cfg.accounts = orderedAccounts(stored(ACCOUNT_ORDER_KEY, []));
     agendaHeight = Number(store.getItem(HEIGHT_KEY)) || 0;
     otherHeight = Number(store.getItem(OTHER_H_KEY)) || 0;
     otherSplit = store.getItem(OTHER_SPLIT_KEY) !== '0';
@@ -2959,7 +2979,6 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     try { renderOther(); } catch {}
     return 'state applied';
   }
-  store.ready.then(got => { if (got && current()) applyState(); });
 
   if (document.body) start(); else addEventListener('DOMContentLoaded', start, { once: true });
   return 'installed';
@@ -3041,8 +3060,9 @@ void AddList(std::wstring& json, PCWSTR name, std::initializer_list<PCWSTR> fiel
 
 // Edits made inside Outlook (groups, renames, folds, account order, pane and card
 // sizes) are the mod's state, not Outlook's, so they live in Windhawk's storage and
-// leave with the mod. They are handed to the page in OLKT_CONFIG.store, and the page
-// sends each change back over the WebView's message channel (see MessageReceived).
+// leave with the mod. The page asks for them over the WebView's message channel and
+// sends each change back the same way, and every window is told when one lands (see
+// MessageReceived and BroadcastState).
 constexpr PCWSTR kStoreKeys[] = {
     L"olkt-favorites", L"olkt-account-order", L"olkt-folds",        L"olkt-pane-width",
     L"olkt-agenda-height", L"olkt-other-height", L"olkt-other-split", L"olkt-other-folds",
@@ -3155,10 +3175,6 @@ HRESULT Forward(IUnknown* handler, HRESULT hr, IUnknown* result) {
 
 // Set while the mod is being taken out: no new window is touched from here on.
 std::atomic<bool> g_unloading{false};
-// Set once the teardown has run. If anything could not be reached, the module is pinned
-// in memory rather than unmapped, and whatever WebView2 still holds reads this and
-// returns without touching the engine.
-std::atomic<bool> g_unloaded{false};
 
 // EventRegistrationToken from eventtoken.h: one INT64, so an add/remove pair can be
 // called through the vtable without pulling in the WinRT headers.
@@ -3172,9 +3188,12 @@ struct EventToken {
 // from the URL parser, so it carries no user name, port or brackets, and an IDN host is
 // already punycode; only a trailing dot and case are left to deal with.
 bool OutlookHost(std::wstring_view host) {
+    // The same eight the page script's own regex accepts; the two lists have to agree,
+    // or the script runs on a host whose writes are then thrown away here.
     static constexpr std::wstring_view kHosts[] = {
-        L"outlook.office.com",     L"outlook.office365.com",     L"outlook.live.com",
-        L"outlook-sdf.office.com", L"outlook.cloud.microsoft",   L"outlook-sdf.cloud.microsoft",
+        L"outlook.office.com",        L"outlook.office365.com",     L"outlook.live.com",
+        L"outlook-sdf.office.com",    L"outlook-sdf.office365.com", L"outlook-sdf.live.com",
+        L"outlook.cloud.microsoft",   L"outlook-sdf.cloud.microsoft",
     };
     if (!host.empty() && host.back() == L'.') host.remove_suffix(1);
     std::wstring lowered(host);
@@ -3227,17 +3246,23 @@ void StoreValue(std::wstring_view name, std::wstring_view text) {
     ReleaseSRWLockExclusive(&g_storeLock);
 }
 
+// Defined with the thread helpers it needs, at the end of the file.
+void BroadcastState();
+
 // A line the page sent, once the sender has been vouched for:
 //   olkt-get <key>                 asks for the saved state, answered on the same channel
 //   olkt-set <key> <name> <value>  writes one value; an empty value deletes it
 // Every line carries the key from the script, so a page that never saw the script is
 // turned away even on an Outlook host. Outlook's own messages are JSON and never match.
 void HandleMessage(IUnknown* sender, PCWSTR text) {
+    static constexpr std::wstring_view kGet = L"olkt-get\n";
+    static constexpr std::wstring_view kSet = L"olkt-set\n";
+    static_assert(kGet.size() == kSet.size());
     std::wstring_view message(text);
-    bool get = message.starts_with(L"olkt-get\n");
-    bool set = message.starts_with(L"olkt-set\n");
+    bool get = message.starts_with(kGet);
+    bool set = message.starts_with(kSet);
     if (!get && !set) return;
-    message.remove_prefix(get ? 9 : 9);
+    message.remove_prefix(kGet.size());
     size_t line = message.find(L'\n');
     std::wstring_view key = line == std::wstring_view::npos ? message : message.substr(0, line);
     if (g_key.empty() || key != g_key) return;
@@ -3247,6 +3272,9 @@ void HandleMessage(IUnknown* sender, PCWSTR text) {
         size_t name = message.find(L'\n');
         if (name == std::wstring_view::npos) return;
         StoreValue(message.substr(0, name), message.substr(name + 1));
+        // Every window, not only the one that wrote: a second window would otherwise go
+        // on showing what it read at startup and then save that over this.
+        BroadcastState();
         return;
     }
     std::wstring answer = L"olkt-state\n" + StateJson();
@@ -3278,8 +3306,6 @@ class MessageReceived final : public IUnknown {
         return n;
     }
     virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown* sender, IUnknown* args) {
-        // The mod is on its way out, or gone and only still mapped: touch nothing.
-        if (g_unloaded) return S_OK;
         using GetString_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPWSTR*);
         LPWSTR source = nullptr;
         if (FAILED(reinterpret_cast<GetString_t>(Slot(args, kArgs_GetSource))(args, &source)) || !source) {
@@ -3308,6 +3334,7 @@ struct PageView {
     IUnknown* webview;
     void* controller;
     HWND window;
+    DWORD thread;  // the WebView's own thread: its window may be destroyed before unload
     std::wstring scriptId;
     EventToken token;
 };
@@ -3322,7 +3349,7 @@ void AddView(IUnknown* webview, void* controller, HWND window, PCWSTR scriptId) 
     // too late to be on that list. Undo it here instead, on the thread it belongs to,
     // rather than leave a half-modded window behind.
     if (g_unloading) {
-        PageView late{webview, controller, window, scriptId ? scriptId : L"", EventToken{}};
+        PageView late{webview, controller, window, GetCurrentThreadId(), scriptId ? scriptId : L"", EventToken{}};
         webview->AddRef();  // ReleaseView drops it again
         ReleaseView(late, true);
         return;
@@ -3339,10 +3366,10 @@ void AddView(IUnknown* webview, void* controller, HWND window, PCWSTR scriptId) 
     // being registered, in which case this view would never be torn down.
     if (g_unloading) {
         ReleaseSRWLockExclusive(&g_viewsLock);
-        ReleaseView({webview, controller, window, scriptId ? scriptId : L"", token}, true);
+        ReleaseView({webview, controller, window, GetCurrentThreadId(), scriptId ? scriptId : L"", token}, true);
         return;
     }
-    g_views.push_back({webview, controller, window, scriptId ? scriptId : L"", token});
+    g_views.push_back({webview, controller, window, GetCurrentThreadId(), scriptId ? scriptId : L"", token});
     ReleaseSRWLockExclusive(&g_viewsLock);
 }
 
@@ -3672,48 +3699,76 @@ LRESULT CALLBACK CallWndProcForRunFromWindowThread(int code, WPARAM wParam, LPAR
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// The parcel outlives the call on purpose. A timed-out SendMessageTimeout can still be
-// delivered afterwards, and the hook procedure would then read a stack frame that has
-// returned, so on that path the parcel is leaked rather than freed.
-bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, PVOID procParam) {
-    DWORD thread = GetWindowThreadProcessId(window, nullptr);
-    if (!thread) return false;
+// A plain send, the way Windhawk's own mods do it: it is dispatched as soon as the
+// target thread pumps in any way, so the teardown always completes rather than being
+// abandoned half way, which is what lets the module unload cleanly.
+bool RunOnThread(DWORD thread, HWND window, RunFromWindowThreadProc_t proc, PVOID procParam) {
+    if (!thread || !window) return false;
     if (thread == GetCurrentThreadId()) {
         proc(procParam);
         return true;
     }
     HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForRunFromWindowThread, nullptr, thread);
     if (!hook) return false;
-    auto* parcel = new RunFromWindowThreadParam{proc, procParam};
-    DWORD_PTR unused = 0;
-    // A WebView2 UI thread can sit in a wait that pumps nothing, so the send is bounded.
-    // Correctness does not rest on it: whatever is left over is made safe below.
-    LRESULT sent = SendMessageTimeout(window, g_runFromWindowThreadMessage, 0, (LPARAM)parcel, SMTO_ABORTIFHUNG, 5000,
-                                      &unused);
+    RunFromWindowThreadParam parcel{proc, procParam};
+    SendMessage(window, g_runFromWindowThreadMessage, 0, (LPARAM)&parcel);
     UnhookWindowsHookEx(hook);
-    if (!sent) return false;  // parcel deliberately leaked: a late delivery must still find it
-    delete parcel;
     return true;
 }
 
-// One window's teardown, with its own copy of the view, for the same reason.
-struct Teardown {
-    PageView view;
-    std::atomic<bool> done{false};
+struct FindWindowOnThread {
+    DWORD thread;
+    HWND found;
 };
 
-void WINAPI ReleaseViewOnThread(PVOID param) {
-    auto* teardown = (Teardown*)param;
-    if (!teardown->done.exchange(true)) ReleaseView(teardown->view, true);
+BOOL CALLBACK TakeFirstWindow(HWND window, LPARAM param) {
+    auto* search = (FindWindowOnThread*)param;
+    search->found = window;
+    return FALSE;
 }
 
-// Keeps the mod's code mapped when something of ours is still reachable. Windhawk frees
-// the DLL five seconds after the teardown whether or not WebView2 has let go, and a call
-// into unmapped code takes Outlook down with it. One leaked module is the cheaper end.
-void PinModule() {
-    HMODULE self = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                       (LPCWSTR)&PinModule, &self);
+// The view's own window may already be destroyed, through a close path the Close hook
+// never saw. Any live window of the same thread will carry the message just as well.
+bool RunForView(const PageView& view, RunFromWindowThreadProc_t proc, PVOID procParam) {
+    DWORD thread = view.window ? GetWindowThreadProcessId(view.window, nullptr) : 0;
+    if (thread) return RunOnThread(thread, view.window, proc, procParam);
+    FindWindowOnThread search{view.thread, nullptr};
+    EnumThreadWindows(view.thread, TakeFirstWindow, (LPARAM)&search);
+    return RunOnThread(view.thread, search.found, proc, procParam);
+}
+
+void WINAPI ReleaseViewOnThread(PVOID param) {
+    ReleaseView(*(const PageView*)param, true);
+}
+
+struct StatePost {
+    IUnknown* webview;
+    const wchar_t* text;
+};
+
+void WINAPI PostStateOnThread(PVOID param) {
+    auto* post = (StatePost*)param;
+    using Post_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPCWSTR);
+    reinterpret_cast<Post_t>(Slot(post->webview, kWebView_PostWebMessageAsString))(post->webview, post->text);
+}
+
+// Sends the state every window now shares, each on its own thread. The list is copied
+// under the lock and the WebViews held across the sends, so a window closing half way
+// through cannot pull one out from under us.
+void BroadcastState() {
+    std::wstring text = L"olkt-state\n" + StateJson();
+    std::vector<PageView> views;
+    AcquireSRWLockShared(&g_viewsLock);
+    for (const PageView& view : g_views) {
+        view.webview->AddRef();
+        views.push_back(view);
+    }
+    ReleaseSRWLockShared(&g_viewsLock);
+    for (const PageView& view : views) {
+        StatePost post{view.webview, text.c_str()};
+        RunForView(view, PostStateOnThread, &post);
+        view.webview->Release();
+    }
 }
 
 // Runs while the hooks are still in place, so every open Outlook window gives the script
@@ -3725,20 +3780,12 @@ void Wh_ModBeforeUninit() {
     std::vector<PageView> views;
     views.swap(g_views);
     ReleaseSRWLockExclusive(&g_viewsLock);  // released before any send, or the UI thread deadlocks
-    bool leftBehind = false;
     for (const PageView& view : views) {
-        auto* teardown = new Teardown{view};
-        if (RunFromWindowThread(view.window, ReleaseViewOnThread, teardown)) {
-            delete teardown;
-            continue;
-        }
-        // Its window is gone or not answering. Leave the objects alone rather than call
-        // into WebView2 from the wrong thread, and keep the code mapped for them.
-        leftBehind = true;
-        Wh_Log(L"Could not reach a WebView's thread; its script stays until Outlook restarts");
+        if (RunForView(view, ReleaseViewOnThread, (PVOID)&view)) continue;
+        // Nothing of that thread is left to carry the message, so the window it belonged
+        // to is gone and there is nothing to take the script out of.
+        Wh_Log(L"No window left on a WebView's thread; nothing to undo there");
     }
-    if (leftBehind) PinModule();
-    g_unloaded = true;
 }
 
 BOOL Wh_ModInit() {
@@ -3761,12 +3808,9 @@ void Wh_ModSettingsChanged() {
 // Runs after Windhawk has removed the hooks, so no new handlers appear. Waits up to
 // 5 seconds for WebView2 to release the ones it still holds before the DLL unloads.
 void Wh_ModUninit() {
-    for (int i = 0; i < 100 && g_liveObjects > 0; ++i) Sleep(50);
-    if (g_liveObjects > 0) {
-        // WebView2 can still call into these, and the wait is over. Keeping the pages
-        // mapped costs one module; unmapping them under a live caller costs Outlook.
-        Wh_Log(L"Unloading while WebView2 still holds %d handlers; pinning the module",
-               g_liveObjects.load());
-        PinModule();
-    }
+    // Every view was torn down on its own thread above, so what is left is completion
+    // handlers for windows that were being created during the disable. WebView2 lets
+    // those go as soon as it finishes them, and the DLL must not be unmapped first.
+    for (int i = 0; i < 2400 && g_liveObjects > 0; ++i) Sleep(50);
+    if (g_liveObjects > 0) Wh_Log(L"WebView2 still holds %d handlers after two minutes", g_liveObjects.load());
 }
