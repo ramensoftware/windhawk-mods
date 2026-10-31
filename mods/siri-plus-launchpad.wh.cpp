@@ -8,7 +8,7 @@
 // @homepage        https://github.com/brideinflame-rgb/Siri-Plus-Launchpad
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomdlg32 -lwinhttp -lgdi32 -lshell32 -lshcore -ld2d1 -ldwrite -lole32 -luuid -lwindowscodecs -lshlwapi -ldwmapi
+// @compilerOptions -lcomdlg32 -lgdi32 -lshell32 -lshcore -ld2d1 -ldwrite -lole32 -luuid -lwindowscodecs -lshlwapi -ldwmapi
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -32,8 +32,8 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 - **App tabs**: All, automatic categories and up to 6 tabs of your own
 - **Recent apps row**: recently opened or installed apps (or the most used ones) on top
 - **Power options**: type *shut down*, *restart*, *sleep*, *lock* or *sign out*, or use the floating power button
-- **Keyboard shortcuts**: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, also with the launcher closed (configurable)
-- **Custom icons**: give any app your own icon (PNG, JPG, ICO, WebP...), or pick one from a **GitHub repository** of icons, with search and a color filter
+- **Keyboard shortcuts**: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, and can also open the launcher from any program (optional)
+- **Custom icons**: give any app your own icon (PNG, JPG, ICO, WebP...), or pick one from an **icon gallery** (any folder of icons, such as a downloaded icon pack), with search and a color filter
 - **Themes**: Clear glass, Light, Dark, OLED (deep black), Siri (macOS 27 gradient) and a fully Custom theme, with an optional glass effect on Light, Dark and OLED
 - **Settings panel**: the **⋯** button at the end of the bar opens every setting in a macOS-style panel, applied live
 - **Move the bar**: hold the Siri bar and drag it anywhere, on any monitor
@@ -141,14 +141,14 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 - **Folders** (Window and Fullscreen): drag apps together, rename, undo. The Siri modes list the apps of every folder together.
 - **Multi-select** with jiggling icons, **pin to taskbar** (also by dragging an icon to the taskbar), **uninstall**.
 - **Custom icons**: right-click an app → **Change icon...** and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; **Reset icon** brings back the original. Works in every mode, including apps inside folders.
-- **Icons from GitHub**: set a repository in the settings (`owner/repository`, or a link to it or to a folder in it), then right-click an app → **Icon from GitHub...** The repository's images show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Pictures added or replaced in the repository show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.
+- **Icon gallery**: choose a folder of icon images in the settings (*Apps and icons → Icon gallery folder*, typed or picked with **Choose…**), for example a downloaded icon pack. Then right-click an app → **Icon from gallery...** The folder's images (subfolders included) show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.
 - Icon size, number of columns and the scrolling direction are configurable.
 
 ## Settings panel
 - Click the **⋯** button at the end of the bar (every mode). The bar moves to the left and becomes a list of sections, and a panel with the settings comes out of the button. Every change applies at once.
 - Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.
 - **Theme defaults** (Appearance) brings back the chosen theme's own look. **Restore all defaults** (General) puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.
-- **Back up** saves everything to a `.siribackup` file: every setting (the GitHub repository too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. **Restore a backup** brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.
+- **Back up** saves everything to a `.siribackup` file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. **Restore a backup** brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.
 - In Window and Fullscreen the window folds into its search field while the settings are open. With the bar low on the screen, the settings open upward.
 
 ## Moving the bar (Floating and Original Siri)
@@ -169,9 +169,9 @@ All options are in the **⋯** settings panel (in six languages) and in the mod'
 | ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
 | ④ Custom theme | Color, opacity, dark-to-light gradient, border width, color and opacity |
 | ⑤ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
-| ⑥ Floating and Original Siri | Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed |
+| ⑥ Floating and Original Siri | Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
 | ⑦ Opening | Open with the Windows key and/or the Start button |
-| ⑧ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, GitHub icon repository |
+| ⑧ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
 | ⑨ Files | On/off, search history, list or icons, indexer, maximum results |
 | ⑩ Clipboard | On/off, number of items kept, how long a copy stays |
 
@@ -183,7 +183,7 @@ All options are in the **⋯** settings panel (in six languages) and in the mod'
 |---|---|
 | **Win** / Start button | Open or close |
 | Type | Search (in Original Siri, typing right away searches Applications) |
-| **Ctrl+1 / 2 / 3 / 4** | Original Siri: go to Applications / Files / Actions / Clipboard (configurable). By default they also open the launcher from any program; turn that off if you need these keys elsewhere (e.g. browser tabs) |
+| **Ctrl+1 / 2 / 3 / 4** | Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With *Also with the launcher closed* on (off by default) they open the launcher from any program, and other programs no longer get those keys |
 | **Tab / Shift+Tab** | Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions |
 | Arrows + **Enter** | Move through results / open |
 | Other **Ctrl+digits** | Launch the matching result (never an action such as Shut down) |
@@ -199,13 +199,13 @@ All options are in the **⋯** settings panel (in six languages) and in the mod'
 - Live blur needs **Transparency effects** turned on in Windows (*Settings → Personalization → Colors*). Without it, a blurred still image is used.
 - Optional: [Everything](https://www.voidtools.com) for instant file search (run it normally, not as administrator)
 
-## Privacy, network and files
-- **Network**: the mod only goes online for **Icons from GitHub**, and only after you set a repository: it reads the repository's file list from `api.github.com` and downloads images from `raw.githubusercontent.com`. Nothing about you or your PC is sent.
-- **Files it writes**: downloaded GitHub images (and the colors found for them) are cached in `%LOCALAPPDATA%\SiriPlusLaunchpad\GitHubIcons`; icons restored from a backup go to `%LOCALAPPDATA%\SiriPlusLaunchpad\Icons`. These folders stay after uninstalling and can be deleted by hand. Backups are written only where you choose.
+## Privacy and files
+- The mod never goes online.
+- Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose.
 - The clipboard history lives in memory only and is never written to disk.
 
 ## Compatibility
-- **Ctrl+1 … Ctrl+4 everywhere** (on by default): while this is on, other programs no longer get these keys (for example, the browser's Ctrl+1 for the first tab). Turn it off in *Shortcuts*, or pick other combinations.
+- **Category shortcuts from any program** (off by default): when *Shortcuts → Also with the launcher closed* is on, Ctrl+1 … Ctrl+4 are registered as system hotkeys, so other programs no longer get them (for example, the browser's Ctrl+1 for the first tab). Leave it off, or pick other combinations, if you need those keys elsewhere.
 - **Fullscreen Start** (`fullscreen-start`): don't enable both. Each one replaces the Start menu through the same hook without calling the original, so only one of them would get the Windows key.
 - **Spotlight Launcher**: it adds a separate search bar on Alt+Space and leaves the Start menu alone. This mod replaces the Start menu itself (Windows key and Start button) and adds app tabs, folders, files, clipboard history and actions. Both can be used together.
 
@@ -231,6 +231,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
 - displayMode: siriOriginal
   $name: "① Mode"
   $name:pt-BR: "① Modo"
+  $description: "Tip: the ⋯ button at the end of the bar opens these settings inside the launcher. A value changed there takes priority over the one shown here until you change it here again"
+  $description:pt-BR: "Dica: o botão ⋯ no fim da barra abre estas configurações dentro do menu. Um valor mudado lá vale no lugar do que aparece aqui até você mudá-lo aqui de novo"
   $options:
   - siriOriginal: Original Siri (macOS 27 style menu, default)
   - siri: Floating (search bar)
@@ -517,7 +519,7 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - shortcutClipboard: Ctrl+4
     $name: "Original Siri: shortcut - Clipboard"
     $name:pt-BR: "Siri original: atalho — Área de transferência"
-  - shortcutsAnywhere: true
+  - shortcutsAnywhere: false
     $name: "Original Siri: the shortcuts above also work with the launcher closed"
     $name:pt-BR: "Siri original: os atalhos acima funcionam também com o menu fechado"
     $description: "They then open the launcher on that category from any program, and that program no longer gets those keys (e.g. Ctrl+1 for browser tabs)"
@@ -555,11 +557,11 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - dragToPin: true
     $name: Drag an icon to the taskbar to pin it
     $name:pt-BR: "Arrastar o ícone até a barra de tarefas fixa o app"
-  - githubIcons: ""
-    $name: Icons from GitHub (repository)
-    $name:pt-BR: "Ícones do GitHub (repositório)"
-    $description: "owner/repository, or a link to it or to a folder in it. Then right-click an app > Icon from GitHub..."
-    $description:pt-BR: "dono/repositório, ou o link dele ou de uma pasta dele. Depois, clique direito em um app > Ícone do GitHub..."
+  - iconsFolder: ""
+    $name: Icon gallery folder
+    $name:pt-BR: "Pasta da galeria de ícones"
+    $description: "A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery..."
+    $description:pt-BR: "Uma pasta com imagens de ícones, por exemplo um pacote de ícones baixado. Depois, clique direito em um app > Ícone da galeria..."
   $name: "⑧ Apps and icons"
   $name:pt-BR: "⑧ Aplicativos e ícones"
 - files:
@@ -635,7 +637,6 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <shellscalingapi.h>
-#include <winhttp.h>
 // Shell: apps folder, icons, launching
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -794,7 +795,7 @@ const UiTranslation kUiTranslations[] = {
 PCWSTR Tr(PCWSTR source);
 PCWSTR CfgT(PCWSTR en, PCWSTR pt);
 PCWSTR TabLabel(int id) {
-    if (id == 4) return CfgT(L"Icons from GitHub", L"Ícones do GitHub");
+    if (id == 4) return CfgT(L"Icon gallery", L"Galeria de ícones");
     return Tr(id == 0 ? L"Apps" : id == 1 ? L"Files" : id == 3 ? L"Actions" : L"Clipboard");
 }
 
@@ -963,9 +964,8 @@ bool g_filesList = false;
 struct Shortcut { bool valid = false, shift = false; UINT vk = 0; };
 Shortcut g_shortcuts[4];   // category shortcuts (Ctrl+...), indexed by tab id: Apps, Files, Clipboard, Actions
 std::wstring g_shortcutLabels[4];   // as shown in the categories menu
-bool g_shortcutsAnywhere = true;     // Original Siri: the category shortcuts also work with the launcher closed
-UINT g_swallowVk;                    // key whose release must also be swallowed
-HHOOK g_keyHook;
+bool g_shortcutsAnywhere = false;    // Original Siri: the category shortcuts also work with the launcher closed (hotkeys)
+void UpdateCategoryHotkeys();
 void SaveSearchHistory();
 void QueryChanged();
 
@@ -1056,6 +1056,81 @@ struct CfgSection { PCWSTR en, pt, descEn, descPt, glyph; UINT32 color; };
 // Texts written with English and Portuguese side by side; Spanish, French, German and Italian come from this table
 struct CfgTranslation { PCWSTR en, es, fr, de, it; };
 const CfgTranslation kCfgTranslations[] = {
+    {L"A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery...",
+     L"Una carpeta con imágenes de iconos, por ejemplo un paquete de iconos descargado. Luego clic derecho en una aplicación > Icono de la galería...",
+     L"Un dossier d’images d’icônes, par exemple un pack d’icônes téléchargé. Puis clic droit sur une application > Icône de la galerie...",
+     L"Ein Ordner mit Symbolbildern, zum Beispiel ein heruntergeladenes Symbolpaket. Dann Rechtsklick auf eine App > Symbol aus der Galerie...",
+     L"Una cartella con immagini di icone, per esempio un pacchetto di icone scaricato. Poi clic destro su un’app > Icona dalla galleria..."},
+    {L"Backup saved.\n\nSettings, folders, tabs and %d custom icon(s) are in the file.",
+     L"Copia de seguridad guardada.\n\nAjustes, carpetas, pestañas y %d icono(s) personalizado(s) están en el archivo.",
+     L"Sauvegarde enregistrée.\n\nRéglages, dossiers, onglets et %d icône(s) personnalisée(s) sont dans le fichier.",
+     L"Sicherung gespeichert.\n\nEinstellungen, Ordner, Tabs und %d eigene(s) Symbol(e) sind in der Datei.",
+     L"Backup salvato.\n\nImpostazioni, cartelle, schede e %d icona/e personalizzata/e sono nel file."},
+    {L"Choose the gallery folder",
+     L"Elegir la carpeta de la galería",
+     L"Choisir le dossier de la galerie",
+     L"Galerieordner wählen",
+     L"Scegli la cartella della galleria"},
+    {L"Choose the icon folder first: settings (⋯) > Apps and icons > Icon gallery folder",
+     L"Elige primero la carpeta de iconos: ajustes (⋯) > Aplicaciones e iconos > Carpeta de la galería de iconos",
+     L"Choisissez d’abord le dossier d’icônes : réglages (⋯) > Applications et icônes > Dossier de la galerie d’icônes",
+     L"Zuerst den Symbolordner wählen: Einstellungen (⋯) > Apps und Symbole > Ordner der Symbolgalerie",
+     L"Scegli prima la cartella delle icone: impostazioni (⋯) > App e icone > Cartella della galleria di icone"},
+    {L"Choose…",
+     L"Elegir…",
+     L"Choisir…",
+     L"Wählen…",
+     L"Scegli…"},
+    {L"Could not read the folder",
+     L"No se pudo leer la carpeta",
+     L"Impossible de lire le dossier",
+     L"Der Ordner konnte nicht gelesen werden",
+     L"Impossibile leggere la cartella"},
+    {L"Folder not found",
+     L"Carpeta no encontrada",
+     L"Dossier introuvable",
+     L"Ordner nicht gefunden",
+     L"Cartella non trovata"},
+    {L"Folder path",
+     L"Ruta de la carpeta",
+     L"Chemin du dossier",
+     L"Ordnerpfad",
+     L"Percorso della cartella"},
+    {L"Icon from gallery...",
+     L"Icono de la galería...",
+     L"Icône de la galerie...",
+     L"Symbol aus der Galerie...",
+     L"Icona dalla galleria..."},
+    {L"Icon gallery",
+     L"Galería de iconos",
+     L"Galerie d’icônes",
+     L"Symbolgalerie",
+     L"Galleria di icone"},
+    {L"Icon gallery folder",
+     L"Carpeta de la galería de iconos",
+     L"Dossier de la galerie d’icônes",
+     L"Ordner der Symbolgalerie",
+     L"Cartella della galleria di icone"},
+    {L"Loading the icons...",
+     L"Cargando los iconos...",
+     L"Chargement des icônes...",
+     L"Symbole werden geladen...",
+     L"Caricamento delle icone..."},
+    {L"No images (PNG, ICO, JPG...) in this folder",
+     L"No hay imágenes (PNG, ICO, JPG...) en esta carpeta",
+     L"Aucune image (PNG, ICO, JPG...) dans ce dossier",
+     L"Keine Bilder (PNG, ICO, JPG...) in diesem Ordner",
+     L"Nessuna immagine (PNG, ICO, JPG...) in questa cartella"},
+    {L"Saves every setting, folders, tabs and the custom icons (their pictures go inside the file)",
+     L"Guarda todos los ajustes, carpetas, pestañas y los iconos personalizados (sus imágenes van dentro del archivo)",
+     L"Enregistre tous les réglages, les dossiers, les onglets et les icônes personnalisées (leurs images sont incluses dans le fichier)",
+     L"Speichert alle Einstellungen, Ordner, Tabs und die eigenen Symbole (ihre Bilder kommen mit in die Datei)",
+     L"Salva tutte le impostazioni, cartelle, schede e le icone personalizzate (le immagini vanno dentro il file)"},
+    {L"This image is no longer in the folder.",
+     L"Esta imagen ya no está en la carpeta.",
+     L"Cette image n’est plus dans le dossier.",
+     L"Dieses Bild ist nicht mehr im Ordner.",
+     L"Questa immagine non è più nella cartella."},
     {L"Text color",
      L"Color del texto",
      L"Couleur du texte",
@@ -1176,11 +1251,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Rétablir tous les réglages par défaut ?\n\nTous les réglages reviennent à ceux d’origine du mod, et la barre au centre. Dossiers, onglets et icônes personnalisées restent.",
      L"Alle Standardwerte wiederherstellen?\n\nAlle Einstellungen gehen auf den Auslieferungszustand des Mods zurück, die Leiste in die Mitte. Ordner, Tabs und eigene Symbole bleiben.",
      L"Ripristinare tutti i predefiniti?\n\nTutte le impostazioni tornano come arriva la mod, e la barra al centro. Cartelle, schede e icone personalizzate restano."},
-    {L"Icons from GitHub",
-     L"Iconos de GitHub",
-     L"Icônes de GitHub",
-     L"Symbole von GitHub",
-     L"Icone da GitHub"},
     {L"Auto",
      L"Auto",
      L"Auto",
@@ -1206,11 +1276,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Ouvrir…",
      L"Öffnen…",
      L"Apri…"},
-    {L"owner/repository",
-     L"propietario/repositorio",
-     L"propriétaire/dépôt",
-     L"besitzer/repository",
-     L"proprietario/repository"},
     {L"Results",
      L"Resultados",
      L"Résultats",
@@ -1256,11 +1321,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Impossible d’enregistrer la sauvegarde à cet emplacement.",
      L"Die Sicherung konnte hier nicht gespeichert werden.",
      L"Impossibile salvare il backup in questa posizione."},
-    {L"Backup saved.\n\nSettings, GitHub repository, folders, tabs and %d custom icon(s) are in the file.",
-     L"Copia de seguridad guardada.\n\nAjustes, repositorio de GitHub, carpetas, pestañas y %d icono(s) personalizado(s) están en el archivo.",
-     L"Sauvegarde enregistrée.\n\nRéglages, dépôt GitHub, dossiers, onglets et %d icône(s) personnalisée(s) sont dans le fichier.",
-     L"Sicherung gespeichert.\n\nEinstellungen, GitHub-Repository, Ordner, Tabs und %d eigene(s) Symbol(e) sind in der Datei.",
-     L"Backup salvato.\n\nImpostazioni, repository GitHub, cartelle, schede e %d icona/e personalizzata/e sono nel file."},
     {L"\n\n%d icon(s) were left out: the picture is no longer on disk.",
      L"\n\n%d icono(s) quedaron fuera: la imagen ya no está en el disco.",
      L"\n\n%d icône(s) laissée(s) de côté : l’image n’est plus sur le disque.",
@@ -1291,36 +1351,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"\n\nLe mode restauré s’applique à la prochaine ouverture du menu.",
      L"\n\nDer wiederhergestellte Modus gilt beim nächsten Öffnen des Menüs.",
      L"\n\nLa modalità ripristinata vale alla prossima apertura del menu."},
-    {L"No connection to GitHub",
-     L"Sin conexión con GitHub",
-     L"Pas de connexion à GitHub",
-     L"Keine Verbindung zu GitHub",
-     L"Nessuna connessione a GitHub"},
-    {L"Repository or folder not found",
-     L"Repositorio o carpeta no encontrados",
-     L"Dépôt ou dossier introuvable",
-     L"Repository oder Ordner nicht gefunden",
-     L"Repository o cartella non trovati"},
-    {L"GitHub's limit for now was reached; try again in a while",
-     L"Se alcanzó el límite de GitHub por ahora; inténtalo dentro de un rato",
-     L"La limite de GitHub est atteinte pour l’instant ; réessayez plus tard",
-     L"Das GitHub-Limit ist vorerst erreicht; später erneut versuchen",
-     L"Limite di GitHub raggiunto per ora; riprova tra poco"},
-    {L"GitHub didn't answer as expected",
-     L"GitHub no respondió como se esperaba",
-     L"GitHub n’a pas répondu comme prévu",
-     L"GitHub hat nicht wie erwartet geantwortet",
-     L"GitHub non ha risposto come previsto"},
-    {L"Loading the icons from GitHub...",
-     L"Cargando los iconos de GitHub...",
-     L"Chargement des icônes de GitHub...",
-     L"Symbole von GitHub werden geladen...",
-     L"Caricamento delle icone da GitHub..."},
-    {L"No images (PNG, ICO, JPG...) in this repository",
-     L"No hay imágenes (PNG, ICO, JPG...) en este repositorio",
-     L"Aucune image (PNG, ICO, JPG...) dans ce dépôt",
-     L"Keine Bilder (PNG, ICO, JPG...) in diesem Repository",
-     L"Nessuna immagine (PNG, ICO, JPG...) in questo repository"},
     {L"Finding the colors of the icons...",
      L"Buscando los colores de los iconos...",
      L"Recherche des couleurs des icônes...",
@@ -1331,21 +1361,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Aucune icône trouvée",
      L"Kein Symbol gefunden",
      L"Nessuna icona trovata"},
-    {L"Set the repository first: settings (⋯) > Apps and icons > Icons from GitHub, for example\nowner/repository  or  https://github.com/owner/repository/tree/main/icons",
-     L"Indica primero el repositorio: ajustes (⋯) > Aplicaciones e iconos > Iconos de GitHub, por ejemplo\npropietario/repositorio  o  https://github.com/propietario/repositorio/tree/main/iconos",
-     L"Indiquez d’abord le dépôt : réglages (⋯) > Applications et icônes > Icônes de GitHub, par exemple\npropriétaire/dépôt  ou  https://github.com/propriétaire/dépôt/tree/main/icones",
-     L"Zuerst das Repository angeben: Einstellungen (⋯) > Apps und Symbole > Symbole von GitHub, zum Beispiel\nbesitzer/repository  oder  https://github.com/besitzer/repository/tree/main/symbole",
-     L"Indica prima il repository: impostazioni (⋯) > App e icone > Icone da GitHub, per esempio\nproprietario/repository  oppure  https://github.com/proprietario/repository/tree/main/icone"},
-    {L"Could not start the download",
-     L"No se pudo iniciar la descarga",
-     L"Impossible de lancer le téléchargement",
-     L"Download konnte nicht gestartet werden",
-     L"Impossibile avviare il download"},
-    {L"Could not download this image.",
-     L"No se pudo descargar esta imagen.",
-     L"Impossible de télécharger cette image.",
-     L"Dieses Bild konnte nicht heruntergeladen werden.",
-     L"Impossibile scaricare questa immagine."},
     {L"Could not load this image.",
      L"No se pudo cargar esta imagen.",
      L"Impossible de charger cette image.",
@@ -1371,11 +1386,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Remettre la barre au centre",
      L"Leiste wieder zentrieren",
      L"Rimetti la barra al centro"},
-    {L"Icon from GitHub...",
-     L"Icono de GitHub...",
-     L"Icône de GitHub...",
-     L"Symbol von GitHub...",
-     L"Icona da GitHub..."},
     {L"General",
      L"General",
      L"Général",
@@ -1711,11 +1721,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Sauvegarder",
      L"Sichern",
      L"Fai un backup"},
-    {L"Saves every setting, the GitHub repository, folders, tabs and the custom icons (their pictures go inside the file)",
-     L"Guarda todos los ajustes, el repositorio de GitHub, carpetas, pestañas y los iconos personalizados (sus imágenes van dentro del archivo)",
-     L"Enregistre tous les réglages, le dépôt GitHub, les dossiers, les onglets et les icônes personnalisées (leurs images sont incluses dans le fichier)",
-     L"Speichert alle Einstellungen, das GitHub-Repository, Ordner, Tabs und die eigenen Symbole (ihre Bilder kommen mit in die Datei)",
-     L"Salva tutte le impostazioni, il repository GitHub, cartelle, schede e le icone personalizzate (le immagini vanno dentro il file)"},
     {L"Restore a backup",
      L"Restaurar una copia de seguridad",
      L"Restaurer une sauvegarde",
@@ -2021,11 +2026,6 @@ const CfgTranslation kCfgTranslations[] = {
      L"Faire trembler les icônes sélectionnées",
      L"Ausgewählte Symbole wackeln lassen",
      L"Fai tremolare le icone selezionate"},
-    {L"owner/repository, or a link to it or to a folder in it. Then right-click an app > Icon from GitHub...",
-     L"propietario/repositorio, o un enlace a él o a una carpeta suya. Luego clic derecho en una aplicación > Icono de GitHub...",
-     L"propriétaire/dépôt, ou un lien vers celui-ci ou vers un de ses dossiers. Puis clic droit sur une application > Icône de GitHub...",
-     L"besitzer/repository oder ein Link dorthin oder zu einem Ordner darin. Dann Rechtsklick auf eine App > Symbol von GitHub...",
-     L"proprietario/repository, o un link a esso o a una sua cartella. Poi clic destro su un’app > Icona da GitHub..."},
     {L"Drag an icon to the taskbar to pin it",
      L"Arrastra un icono a la barra de tareas para anclarlo",
      L"Faites glisser une icône vers la barre des tâches pour l’épingler",
@@ -2115,8 +2115,8 @@ PCWSTR CfgT(PCWSTR en, PCWSTR pt) {
         case UiLanguage::English: return en;
         default: break;
     }
-    // Built once, thread-safely (the GitHub download thread also asks for texts)
-    [[clang::no_destroy]] static const std::unordered_map<std::wstring_view, const CfgTranslation*> byEnglish = [] {
+    // Built once, thread-safely (the icon gallery thread also asks for texts)
+    static const std::unordered_map<std::wstring_view, const CfgTranslation*> byEnglish = [] {
         std::unordered_map<std::wstring_view, const CfgTranslation*> map;
         for (const CfgTranslation& t : kCfgTranslations) map.emplace(t.en, &t);
         return map;
@@ -2193,8 +2193,8 @@ const CfgItem kCfgItems[] = {
      L"Every setting goes back to how the mod comes, and the bar to the center. Folders, tabs and custom icons stay",
      L"Todos os ajustes voltam a como o mod vem, e a barra volta ao centro. Pastas, abas e ícones personalizados ficam", 0, 0, 0, nullptr, nullptr, 0},
     {0, kCfgButton, L"#export", L"Back up", L"Fazer backup",
-     L"Saves every setting, the GitHub repository, folders, tabs and the custom icons (their pictures go inside the file)",
-     L"Salva todas as configurações, o repositório do GitHub, pastas, abas e os ícones personalizados (as imagens vão dentro do arquivo)",
+     L"Saves every setting, folders, tabs and the custom icons (their pictures go inside the file)",
+     L"Salva todas as configurações, pastas, abas e os ícones personalizados (as imagens vão dentro do arquivo)",
      0, 0, 0, nullptr, nullptr, 0},
     {0, kCfgButton, L"#import", L"Restore a backup", L"Restaurar backup",
      L"Brings everything back from a backup file, even after reinstalling the mod or on another PC",
@@ -2293,10 +2293,11 @@ const CfgItem kCfgItems[] = {
     {8, kCfgSlider, L"grid.columns", L"Columns", L"Colunas", L"0 = automatic", L"0 = automático", 0, 30, 1, nullptr, nullptr, 0},
     {8, kCfgChoice, L"grid.pageMode", L"Scrolling direction", L"Direção da rolagem", nullptr, nullptr, 0, 0, 0, nullptr, CFG_OPTS(kOptPage)},
     {8, kCfgToggle, L"grid.jiggle", L"Jiggle selected icons", L"Ícones selecionados tremem", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgText, L"grid.githubIcons", L"Icons from GitHub", L"Ícones do GitHub",
-     L"owner/repository, or a link to it or to a folder in it. Then right-click an app > Icon from GitHub...",
-     L"dono/repositório, ou o link dele ou de uma pasta dele. Depois, clique direito em um app > Ícone do GitHub...",
+    {8, kCfgText, L"grid.iconsFolder", L"Icon gallery folder", L"Pasta da galeria de ícones",
+     L"A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery...",
+     L"Uma pasta com imagens de ícones, por exemplo um pacote de ícones baixado. Depois, clique direito em um app > Ícone da galeria...",
      0, 0, 0, nullptr, nullptr, 0},
+    {8, kCfgButton, L"#iconsFolderPick", L"Choose the gallery folder", L"Escolher a pasta da galeria", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {8, kCfgToggle, L"grid.dragToPin", L"Drag an icon to the taskbar to pin it", L"Arrastar o ícone até a barra de tarefas fixa o app",
      nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     // 9 Files
@@ -2325,7 +2326,7 @@ const CfgItem* CfgFind(PCWSTR key) {
 bool CfgIsInt(const CfgItem& it) { return it.type == kCfgToggle || it.type == kCfgSlider; }
 
 struct CfgOverride { std::wstring value, base; };
-[[clang::no_destroy]] std::map<std::wstring, CfgOverride> g_cfgOverrides;
+std::map<std::wstring, CfgOverride> g_cfgOverrides;
 bool g_cfgOverridesLoaded, g_cfgOverridesDirty;
 constexpr WCHAR kCfgOverridesKey[] = L"settingsPanel";
 
@@ -2401,7 +2402,7 @@ CfgState g_cfg;
 int g_cfgLastSection = 0;
 struct GearState { bool shown = false, hover = false; float anim = 0; };
 GearState g_gear;
-[[clang::no_destroy]] std::map<std::wstring, std::wstring> g_cfgValues;   // what the panel shows
+std::map<std::wstring, std::wstring> g_cfgValues;   // what the panel shows
 
 void CfgRefreshValues() {
     g_cfgValues.clear();
@@ -2430,9 +2431,9 @@ bool HitMore(float x, float y);
 extern bool g_moreHover;
 void DrawMoreButton();
 void TrackLeave(HWND hwnd);
-// Icons from GitHub (defined further down)
+// Icon gallery (defined further down)
 struct App;
-std::wstring g_ghSetting;   // the repository from the settings
+std::wstring g_ghSetting;   // the icon gallery folder from the settings
 void GhItems(std::vector<std::shared_ptr<App>>& out);
 void GhFilterItems(std::vector<int>& out, const std::wstring& q);
 PCWSTR GhMessage();
@@ -2506,7 +2507,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"siri.shortcutFiles", L"Ctrl+2"},
     {L"siri.shortcutActions", L"Ctrl+3"},
     {L"siri.shortcutClipboard", L"Ctrl+4"},
-    {L"siri.shortcutsAnywhere", L"1"},
+    {L"siri.shortcutsAnywhere", L"0"},
     {L"window.width", L"80"},
     {L"window.height", L"75"},
     {L"window.searchStyle", L"bar"},
@@ -2522,7 +2523,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"grid.columns", L"0"},
     {L"grid.pageMode", L"vertical"},
     {L"grid.jiggle", L"1"},
-    {L"grid.githubIcons", L""},
+    {L"grid.iconsFolder", L""},
     {L"grid.dragToPin", L"1"},
     {L"files.enabled", L"1"},
     {L"files.history", L"1"},
@@ -2536,7 +2537,7 @@ const CfgDefault kCfgDefaults[] = {
 
 // Glass transparency is kept per theme: Light and OLED start solid (0), the others from the Windhawk setting
 constexpr WCHAR kThemeTransparencyKey[] = L"themeTransparency";
-[[clang::no_destroy]] std::map<std::wstring, int> g_themeTransparency;
+std::map<std::wstring, int> g_themeTransparency;
 bool g_themeTransparencyLoaded;
 PCWSTR ThemeName(Theme t) {
     switch (t) {
@@ -2696,7 +2697,8 @@ void LoadSettings() {
     g_shortcuts[2] = ParseShortcut(S(L"siri.shortcutClipboard"), g_shortcutLabels[2]);
     g_shortcuts[3] = ParseShortcut(S(L"siri.shortcutActions"), g_shortcutLabels[3]);
     g_shortcutsAnywhere = I(L"siri.shortcutsAnywhere") != 0;
-    g_ghSetting = S(L"grid.githubIcons");
+    UpdateCategoryHotkeys();   // only acts on the launcher's thread (not at the first load)
+    g_ghSetting = S(L"grid.iconsFolder");
     g_barPosX = Wh_GetIntValue(L"barX", -1);
     g_barPosY = Wh_GetIntValue(L"barY", -1);
     if (!g_historyEnabled) { g_searchHistory.clear(); SaveSearchHistory(); }
@@ -3218,7 +3220,7 @@ bool ChipEditable(int chip) {
 void BuildMainItems(std::vector<int>& out) {
     out.clear();
     std::wstring q = ToLower(g_query);
-    if (g_siriTab == 4) { GhFilterItems(out, q); return; }   // GitHub gallery: name, color and order
+    if (g_siriTab == 4) { GhFilterItems(out, q); return; }   // icon gallery: name, color and order
     if (g_siriTab != 0) {
         bool indexed = g_siriTab == 1 && !g_query.empty(); // already filtered by the indexer
         for (int i = 0; i < (int)g_tabItems.size(); i++) {
@@ -3969,7 +3971,7 @@ void LoadTabSource() {
             g_tabItems.push_back(std::move(app));
         }
     } else if (g_siriTab == 4) {
-        GhItems(g_tabItems);   // the GitHub gallery
+        GhItems(g_tabItems);   // the icon gallery
     } else if (g_siriTab == 2 && g_settings.clipEnabled) {
         PruneClipHistory();
         for (const auto& text : g_clipHistory) {
@@ -4380,7 +4382,7 @@ void EnsureFormats(float scale) {
 }
 
 // Original Siri shows the app filters instead of the category strip (categories come from the hover menu)
-bool SiriStripVisible() { return g_siriTab == 4 || (g_settings.siriOriginal ? g_siriTab == 0 : TabsVisible()); }   // 4: the GitHub icon search
+bool SiriStripVisible() { return g_siriTab == 4 || (g_settings.siriOriginal ? g_siriTab == 0 : TabsVisible()); }   // 4: the icon gallery search
 // Chips: "All", the built-in categories and the user tabs (while picking apps: Cancel and Done)
 std::vector<int> Chips() {
     if (Picking()) return {kChipCancel, kChipDone};
@@ -4619,7 +4621,7 @@ float WindowInset(float s) {
 float SiriButtonSize(float s) { return std::round(g_settings.siriPillH * s * 0.86f); }
 float SiriButtonGap(float s) { return std::round(10 * s); }
 
-// The results box of each category (the GitHub gallery uses the Applications one)
+// The results box of each category (the icon gallery uses the Applications one)
 int SiriPanelSettingW(int tab) {
     int w = tab == 1 ? g_settings.filesPanelW : tab == 2 ? g_settings.clipPanelW : tab == 3 ? g_settings.actionsPanelW : g_settings.siriPanelW;
     return w > 0 ? w : g_settings.siriPillW;   // 0 = as wide as the bar
@@ -6807,7 +6809,7 @@ void DrawFilters(const Layout& L) {
 
 void DrawGhSearchBox(const Layout& L);
 void DrawTabs(const Layout& L) {
-    if (g_siriTab == 4) { DrawGhSearchBox(L); return; }   // GitHub gallery: a search field for the icon names
+    if (g_siriTab == 4) { DrawGhSearchBox(L); return; }   // icon gallery: a search field for the icon names
     if (g_settings.siriOriginal) { DrawFilters(L); return; }
     const D2D1_RECT_F& r = L.siriTabs;
     if (!TabsVisible() || r.right <= r.left || !g_tabFormat) return;
@@ -7432,6 +7434,7 @@ void HideNow() {
     KillTimer(g_wnd, kTimerFileSearch); CancelFileSearch();
     g_tabItems.clear();
     g_cfg.active = false; g_cfg.closing = false; g_gear = GearState{};
+    if (g_cfg.capture >= 0) { g_cfg.capture = -1; UpdateCategoryHotkeys(); }   // a shortcut was being recorded
     GhClose(false);
     KillTimer(g_wnd, kTimerLiquid); FreeLiquid();
     if (g_cfg.pendingReload) { g_cfg.pendingReload = false; LoadSettings(); }   // a mode picked in the settings panel
@@ -7840,7 +7843,7 @@ void LaunchApp(int item) {
     }
     if (!ap) return;
     if (ap->kind == 2) { CopyText(ap->target); Close(); return; }
-    if (ap->kind == 5) { GhApply(ap->target); return; }   // GitHub gallery: this picture becomes the app's icon
+    if (ap->kind == 5) { GhApply(ap->target); return; }   // icon gallery: this picture becomes the app's icon
     if (ap->kind == 4) { RunAction(ap->target); return; }
     CountLaunch(*ap);
     if (ap->kind == 3) { SetQuery(ap->target); QueryChanged(); return; }
@@ -7919,7 +7922,7 @@ void QueryChanged() {
 }
 
 void SetSiriTab(int tab) {
-    if (g_siriTab == 4) {   // leaving the GitHub gallery for a category
+    if (g_siriTab == 4) {   // leaving the icon gallery for a category
         GhClose(false);
         if (tab == 0) { RefreshTabItems(true); StartFrames(); return; }
     }
@@ -7970,7 +7973,7 @@ bool ExcludedFromHistory() {
 }
 
 // When each copy entered the history (for "how long a copy stays")
-[[clang::no_destroy]] std::unordered_map<std::wstring, double> g_clipTimes;
+std::unordered_map<std::wstring, double> g_clipTimes;
 // Copies older than the chosen time leave the history; returns true if something left
 bool PruneClipHistory() {
     if (g_settings.clipKeepSec <= 0 || g_clipHistory.empty()) return false;
@@ -8145,7 +8148,7 @@ void OpenCategoryMenu();
 void OnKeyDown(WPARAM key) {
     if (g_closing) return;
     if (key == VK_ESCAPE && g_gear.shown) { g_gear.shown = false; g_gear.hover = false; StartFrames(); return; }
-    if (key == VK_ESCAPE && g_siriTab == 4 && g_query.empty()) { GhClose(true); return; }   // leaves the GitHub gallery
+    if (key == VK_ESCAPE && g_siriTab == 4 && g_query.empty()) { GhClose(true); return; }   // leaves the icon gallery
     bool categoryKey = g_menu.category && (GetKeyState(VK_CONTROL) & 0x8000) != 0;   // a category shortcut while the menu is open
     if (g_menu.open && !g_menu.closing && !categoryKey) {
         if (key == VK_ESCAPE) CloseMenu();
@@ -8928,38 +8931,18 @@ void RunPowerChoice(int id) {
 }
 
 // ---------- Original Siri: the category shortcuts (Ctrl+...) also work with the launcher closed ----------
-int MatchCategoryShortcut(UINT vk) {
-    auto down = [](int k) { return (GetAsyncKeyState(k) & 0x8000) != 0; };
-    if (!down(VK_CONTROL) || down(VK_LWIN) || down(VK_RWIN) || down(VK_MENU)) return -1;
-    bool shift = down(VK_SHIFT);
+// Category shortcuts with the launcher closed: registered hotkeys (no keyboard hook), only while the option is on.
+// Not while the settings panel is recording a new shortcut (it must get the keys itself)
+constexpr int kHotkeyBase = 100;   // + tab
+void UpdateCategoryHotkeys() {
+    if (!g_wnd || GetWindowThreadProcessId(g_wnd, nullptr) != GetCurrentThreadId()) return;   // the window's own thread only
+    for (int tab = 0; tab < 4; tab++) UnregisterHotKey(g_wnd, kHotkeyBase + tab);
+    if (!g_settings.siriOriginal || !g_shortcutsAnywhere || g_cfg.capture >= 0) return;
     for (int tab = 0; tab < 4; tab++) {
         const Shortcut& sc = g_shortcuts[tab];
-        if (sc.valid && sc.vk == vk && sc.shift == shift) return tab;
+        if (sc.valid && !RegisterHotKey(g_wnd, kHotkeyBase + tab, MOD_CONTROL | (sc.shift ? MOD_SHIFT : 0) | MOD_NOREPEAT, sc.vk))
+            Wh_Log(L"RegisterHotKey %s failed (%u)", g_shortcutLabels[tab].c_str(), GetLastError());
     }
-    return -1;
-}
-
-LRESULT CALLBACK KeyboardHook(int code, WPARAM wParam, LPARAM lParam) {
-    const KBDLLHOOKSTRUCT* k = (const KBDLLHOOKSTRUCT*)lParam;
-    // With the launcher in front, its own keyboard handling takes the shortcuts
-    if (code != HC_ACTION || !k || (k->flags & LLKHF_INJECTED) || !g_wnd || !g_settings.siriOriginal || !g_shortcutsAnywhere ||
-        GetForegroundWindow() == g_wnd)
-        return CallNextHookEx(nullptr, code, wParam, lParam);
-    bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
-    bool up = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
-    if (g_swallowVk && k->vkCode == g_swallowVk && (down || up)) {
-        if (up) g_swallowVk = 0;
-        return 1;
-    }
-    if (down) {
-        int tab = MatchCategoryShortcut(k->vkCode);
-        if (tab >= 0) {
-            g_swallowVk = k->vkCode;
-            PostMessageW(g_wnd, WM_APP_SHORTCUT, (WPARAM)tab, 0);
-            return 1;
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
 // Opens the launcher right on that category (pressed again: closes it)
@@ -9124,6 +9107,7 @@ PCWSTR CfgButtonText(const CfgItem& it) {
     if (!wcscmp(it.key, L"#export")) return CfgT(L"Save…", L"Salvar…");
     if (!wcscmp(it.key, L"#import")) return CfgT(L"Open…", L"Abrir…");
     if (!wcscmp(it.key, L"#themeReset")) return CfgT(L"Restore", L"Restaurar");
+    if (!wcscmp(it.key, L"#iconsFolderPick")) return CfgT(L"Choose…", L"Escolher…");
     return CfgT(L"Restore…", L"Restaurar…");
 }
 bool CfgThemeChanged();
@@ -9423,7 +9407,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
             }
             std::wstring text = editing ? g_cfg.editText : v;
             D2D1_RECT_F tr = D2D1::RectF(c.left + 10 * s, c.top, c.right - 8 * s, c.bottom);
-            if (text.empty() && !editing) CfgText(CfgT(L"owner/repository", L"dono/repositório"), g_cfgBody.Get(), tr, Fg(0.40f));
+            if (text.empty() && !editing) CfgText(CfgT(L"Folder path", L"Caminho da pasta"), g_cfgBody.Get(), tr, Fg(0.40f));
             else {
                 // While typing, the end of the text stays visible
                 float w = CfgTextWidth(text, g_cfgBody.Get()), room = tr.right - tr.left;
@@ -9715,6 +9699,28 @@ bool CfgThemeChanged() {
     return false;
 }
 
+// A folder dialog for the icon gallery
+void CfgPickIconsFolder() {
+    ComPtr<IFileOpenDialog> dlg;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return;
+    DWORD options = 0;
+    dlg->GetOptions(&options);
+    dlg->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+    dlg->SetTitle(CfgT(L"Choose the gallery folder", L"Escolher a pasta da galeria"));
+    g_dialogOpen = true;
+    SetWindowPos(g_wnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    HRESULT hr = dlg->Show(g_wnd);
+    SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    g_dialogOpen = false;
+    if (g_shown) ForceForeground(g_wnd);
+    ComPtr<IShellItem> res;
+    PWSTR path = nullptr;
+    if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return;
+    std::wstring folder = path;
+    CoTaskMemFree(path);
+    if (const CfgItem* it = CfgFind(L"grid.iconsFolder")) CfgSet(*it, folder);
+}
+
 void CfgResetTheme() {
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     if (!g_themeTransparencyLoaded) LoadThemeTransparency();
@@ -9752,7 +9758,7 @@ void CfgResetAll() {
 }
 
 // ---------- Backup ----------
-// One file with everything the user chose: the settings changed here (the GitHub repository too), folders, tabs,
+// One file with everything the user chose: the settings changed here (the icon gallery folder too), folders, tabs,
 // history, the bar's place and the custom icons. The icon pictures go inside the file, so they come back even after
 // the mod is uninstalled (which erases its storage) or on another PC.
 constexpr char kBackupHeader[] = "SiriPlusLaunchpadBackup 1";
@@ -9796,7 +9802,8 @@ bool B64Decode(const std::string& in, std::string& out) {
     return true;
 }
 
-std::string ToUtf8(const std::wstring& w);     // defined with the GitHub icons
+std::string ToUtf8(const std::wstring& w);     // defined with the icon gallery
+std::wstring ModFolder(PCWSTR name);
 std::wstring FromUtf8(const std::string& s);
 std::string B64W(const std::wstring& s) { return B64Encode(ToUtf8(s)); }
 bool B64ToW(const std::string& s, std::wstring& out) { std::string raw; if (!B64Decode(s, raw)) return false; out = FromUtf8(raw); return true; }
@@ -9874,7 +9881,7 @@ void BackupExport() {
     if (!PickBackupFile(true, path)) return;
     if (g_cfgOverridesDirty) SaveCfgOverrides();
     std::string text = std::string(kBackupHeader) + "\n";
-    // Every setting as it is now (the GitHub repository is one of them)
+    // Every setting as it is now (the icon gallery folder is one of them)
     for (const CfgItem& it : kCfgItems) {
         if (it.type == kCfgButton) continue;
         text += "S\t" + B64W(it.key) + "\t" + B64W(CfgIsInt(it) ? std::to_wstring(CfgInt(it.key)) : CfgStr(it.key)) + "\n";
@@ -9894,8 +9901,8 @@ void BackupExport() {
         BackupMessage(CfgT(L"Could not save the backup in this place.", L"Não foi possível salvar o backup neste local."), MB_ICONWARNING);
         return;
     }
-    std::wstring msg = CfgFormat(CfgT(L"Backup saved.\n\nSettings, GitHub repository, folders, tabs and %d custom icon(s) are in the file.",
-                                      L"Backup salvo.\n\nConfigurações, repositório do GitHub, pastas, abas e %d ícone(s) personalizado(s) estão no arquivo."), icons);
+    std::wstring msg = CfgFormat(CfgT(L"Backup saved.\n\nSettings, folders, tabs and %d custom icon(s) are in the file.",
+                                      L"Backup salvo.\n\nConfigurações, pastas, abas e %d ícone(s) personalizado(s) estão no arquivo."), icons);
     if (missing)
         msg += CfgFormat(CfgT(L"\n\n%d icon(s) were left out: the picture is no longer on disk.",
                               L"\n\n%d ícone(s) ficaram de fora: a imagem não existe mais no disco."), missing);
@@ -9904,12 +9911,8 @@ void BackupExport() {
 
 // Restored icon pictures live here (the original files may be gone)
 std::wstring RestoredIconFile(const std::wstring& target, std::wstring ext) {
-    wchar_t base[MAX_PATH] = {};
-    if (!GetEnvironmentVariableW(L"LOCALAPPDATA", base, MAX_PATH)) return {};
-    std::wstring dir = std::wstring(base) + L"\\SiriPlusLaunchpad";
-    CreateDirectoryW(dir.c_str(), nullptr);
-    dir += L"\\Icons";
-    CreateDirectoryW(dir.c_str(), nullptr);
+    std::wstring dir = ModFolder(L"Icons");   // the mod's storage (Windhawk removes it with the mod)
+    if (dir.empty()) return {};
     for (auto& ch : ext) if (!iswalnum(ch) && ch != L'.') ch = L'_';
     if (ext.size() > 8 || ext.empty() || ext[0] != L'.') ext = L".png";
     unsigned long long h = 1469598103934665603ULL;   // FNV-1a of the app's target
@@ -10108,7 +10111,9 @@ void CfgEnter() {
 void CfgExit() {
     if (!g_cfg.active || g_cfg.closing) return;
     CfgCommitEdit();
+    bool wasCapturing = g_cfg.capture >= 0;
     g_cfg.capture = g_cfg.drag = -1;
+    if (wasCapturing) UpdateCategoryHotkeys();
     if (GetCapture() == g_wnd) ReleaseCapture();
     g_menu.open = false;
     if (g_cfgOverridesDirty) SaveCfgOverrides();
@@ -10197,7 +10202,7 @@ bool CfgOnControl(int row, float x, float y) {
 void CfgSelectSection(int section) {
     if (section < 0 || section >= kCfgSectionCount) return;
     CfgCommitEdit();
-    g_cfg.capture = -1;
+    if (g_cfg.capture >= 0) { g_cfg.capture = -1; UpdateCategoryHotkeys(); }
     g_cfg.section = section; g_cfg.search.clear(); g_cfg.scroll = 0;
     ComputeLayout(); Render();
 }
@@ -10230,12 +10235,13 @@ void CfgClickRow(int row, float x, float y) {
             Render();
             break;
         }
-        case kCfgShortcut: g_cfg.capture = item; Render(); break;
+        case kCfgShortcut: g_cfg.capture = item; UpdateCategoryHotkeys(); Render(); break;   // the keys come here, not to the hotkeys
         case kCfgText: g_cfg.edit = item; g_cfg.editText = CfgValue(it); Render(); break;
         case kCfgButton:
             if (!wcscmp(it.key, L"#export")) BackupExport();
             else if (!wcscmp(it.key, L"#import")) BackupImport();
             else if (!wcscmp(it.key, L"#themeReset")) { if (CfgThemeChanged()) CfgResetTheme(); }
+            else if (!wcscmp(it.key, L"#iconsFolderPick")) CfgPickIconsFolder();
             else CfgResetAll();
             break;
     }
@@ -10244,7 +10250,7 @@ void CfgClickRow(int row, float x, float y) {
 
 void CfgShortcutKey(WPARAM key) {
     const CfgItem& it = kCfgItems[g_cfg.capture];
-    if (key == VK_ESCAPE) { g_cfg.capture = -1; Render(); return; }
+    if (key == VK_ESCAPE) { g_cfg.capture = -1; UpdateCategoryHotkeys(); Render(); return; }
     if (key == VK_BACK || key == VK_DELETE) { g_cfg.capture = -1; CfgSet(it, L""); return; }
     if (key == VK_CONTROL || key == VK_SHIFT || key == VK_MENU || key == VK_LWIN || key == VK_RWIN) return;
     if (!(GetKeyState(VK_CONTROL) & 0x8000)) return;   // must start with Ctrl
@@ -10256,7 +10262,7 @@ void CfgShortcutKey(WPARAM key) {
     std::wstring label;
     if (!ParseShortcut(text, label).valid) return;   // Ctrl+A/C/V/X stay for the text
     g_cfg.capture = -1;
-    CfgSet(it, text);
+    CfgSet(it, text);   // reloads the settings, which registers the hotkeys again
 }
 
 void CfgHover(float x, float y) {
@@ -10305,7 +10311,7 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
             bool onControl = row >= 0 && CfgOnControl(row, x, y);
             // Clicking anywhere else finishes the color being typed / the shortcut being waited for
             if (g_cfg.edit >= 0 && !(onControl && g_cfgRows[row].item == g_cfg.edit)) CfgCommitEdit();
-            if (g_cfg.capture >= 0 && !(onControl && g_cfgRows[row].item == g_cfg.capture)) { g_cfg.capture = -1; Render(); }
+            if (g_cfg.capture >= 0 && !(onControl && g_cfgRows[row].item == g_cfg.capture)) { g_cfg.capture = -1; UpdateCategoryHotkeys(); Render(); }
             if (side >= 0) { CfgSelectSection(side); return true; }
             if (onControl) CfgClickRow(row, x, y);
             return true;
@@ -10377,36 +10383,9 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Icons from a GitHub repository: right-click an app > "Icon from GitHub..." shows the repository's images in the
-// grid, with the bar searching them. Images are downloaded once into %LOCALAPPDATA%\SiriPlusLaunchpad\GitHubIcons
-// and the chosen one becomes the app's custom icon (like "Change icon...").
-
-struct GhRepo { std::wstring owner, repo, branch, folder, commit; };   // commit: the branch's latest, for fresh downloads
-
-// "owner/repo", "https://github.com/owner/repo", ".../tree/branch/some/folder"
-bool ParseGhRepo(std::wstring text, GhRepo& out) {
-    out = GhRepo{};
-    text.erase(0, text.find_first_not_of(L" \t"));
-    text.erase(text.find_last_not_of(L" \t/") + 1);
-    for (PCWSTR prefix : {L"https://", L"http://"})
-        if (ToLower(text).compare(0, wcslen(prefix), prefix) == 0) text.erase(0, wcslen(prefix));
-    if (ToLower(text).compare(0, 11, L"github.com/") == 0) text.erase(0, 11);
-    if (text.size() > 4 && ToLower(text.substr(text.size() - 4)) == L".git") text.resize(text.size() - 4);
-    std::vector<std::wstring> parts;
-    for (size_t pos = 0; pos <= text.size();) {
-        size_t end = text.find(L'/', pos);
-        if (end == std::wstring::npos) end = text.size();
-        if (end > pos) parts.push_back(text.substr(pos, end - pos));
-        pos = end + 1;
-    }
-    if (parts.size() < 2) return false;
-    out.owner = parts[0]; out.repo = parts[1];
-    if (parts.size() >= 4 && (parts[2] == L"tree" || parts[2] == L"blob")) {
-        out.branch = parts[3];
-        for (size_t i = 4; i < parts.size(); i++) out.folder += (out.folder.empty() ? L"" : L"/") + parts[i];
-    }
-    return true;
-}
+// Icon gallery: right-click an app > "Icon from gallery..." shows the images of a folder chosen in the settings (for
+// example a downloaded icon pack or a copy of an icon repository) in the grid, with the bar searching them. The chosen
+// one becomes the app's custom icon (like "Change icon..."). Nothing is downloaded; the images are only read.
 
 std::string ToUtf8(const std::wstring& w) {
     if (w.empty()) return {};
@@ -10422,76 +10401,21 @@ std::wstring FromUtf8(const std::string& s) {
     MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), w.data(), n);
     return w;
 }
-// Path for a URL: every byte that is not a plain letter, digit or -._~/ becomes %XX
-std::wstring UrlPath(const std::wstring& path) {
-    std::wstring out;
-    for (unsigned char b : ToUtf8(path)) {
-        if (isalnum(b) || b == '-' || b == '.' || b == '_' || b == '~' || b == '/') out += (wchar_t)b;
-        else { wchar_t hex[4]; swprintf(hex, 4, L"%%%02X", b); out += hex; }
-    }
-    return out;
-}
 
-// HTTPS GET with WinHTTP; body into memory. Returns the HTTP status (0 = no connection)
-DWORD HttpGet(const std::wstring& url, std::string& body) {
-    body.clear();
-    URL_COMPONENTS parts{};
-    parts.dwStructSize = sizeof(parts);
-    wchar_t host[256] = {}, path[2048] = {};
-    parts.lpszHostName = host; parts.dwHostNameLength = ARRAYSIZE(host);
-    parts.lpszUrlPath = path; parts.dwUrlPathLength = ARRAYSIZE(path);
-    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &parts)) return 0;
-    DWORD status = 0;
-    HINTERNET session = WinHttpOpen(L"SiriPlusLaunchpad", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) session = WinHttpOpen(L"SiriPlusLaunchpad", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    HINTERNET connect = session ? WinHttpConnect(session, host, parts.nPort, 0) : nullptr;
-    HINTERNET request = connect ? WinHttpOpenRequest(connect, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                                     parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) : nullptr;
-    if (request) {
-        WinHttpSetTimeouts(request, 8000, 8000, 10000, 20000);
-        PCWSTR headers = L"Accept: application/vnd.github+json\r\n";
-        if (WinHttpSendRequest(request, headers, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(request, nullptr)) {
-            DWORD size = sizeof(status);
-            WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX);
-            char buffer[16384];
-            DWORD read = 0;
-            while (WinHttpReadData(request, buffer, sizeof(buffer), &read) && read > 0 && body.size() < 64u * 1024 * 1024) body.append(buffer, read);
-        }
-        WinHttpCloseHandle(request);
-    }
-    if (connect) WinHttpCloseHandle(connect);
-    if (session) WinHttpCloseHandle(session);
-    return status;
-}
-
-// The JSON string that starts at `pos` (just after its opening quote); `pos` ends after the closing quote
-std::string JsonString(const std::string& json, size_t& pos) {
-    std::string out;
-    auto utf8 = [&](unsigned cp) {
-        // UTF-8: 1 to 4 bytes; the first says how many follow, the others carry 6 bits each
-        int extra = cp < 0x80 ? 0 : cp < 0x800 ? 1 : cp < 0x10000 ? 2 : 3;
-        static const unsigned char lead[4] = {0x00, 0xC0, 0xE0, 0xF0};
-        out += (char)(lead[extra] | (cp >> (6 * extra)));
-        for (int i = extra - 1; i >= 0; i--) out += (char)(0x80 | ((cp >> (6 * i)) & 0x3F));
+// The gallery folder as typed or picked: no quotes, spaces or trailing backslash around it
+std::wstring GhCleanFolder(std::wstring text) {
+    auto trim = [&](PCWSTR chars) {
+        text.erase(0, text.find_first_not_of(chars));
+        size_t end = text.find_last_not_of(chars);
+        text.erase(end == std::wstring::npos ? 0 : end + 1);
     };
-    while (pos < json.size() && json[pos] != '"') {
-        char ch = json[pos++];
-        if (ch != '\\' || pos >= json.size()) { out += ch; continue; }
-        char e = json[pos++];
-        if (e == 'n') out += '\n'; else if (e == 't') out += '\t'; else if (e == 'r') out += '\r';
-        else if (e == 'b') out += '\b'; else if (e == 'f') out += '\f';
-        else if (e == 'u' && pos + 4 <= json.size()) {
-            unsigned cp = (unsigned)strtoul(json.substr(pos, 4).c_str(), nullptr, 16);
-            pos += 4;
-            if (cp >= 0xD800 && cp < 0xDC00 && pos + 6 <= json.size() && json[pos] == '\\' && json[pos + 1] == 'u') {
-                unsigned low = (unsigned)strtoul(json.substr(pos + 2, 4).c_str(), nullptr, 16);
-                if (low >= 0xDC00 && low < 0xE000) { cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00); pos += 6; }
-            }
-            utf8(cp);
-        } else out += e;   // \" \\ \/
-    }
-    pos++;
-    return out;
+    trim(L" \t\"");
+    while (text.size() > 3 && (text.back() == L'\\' || text.back() == L'/')) text.pop_back();
+    return text;
+}
+bool GhFolderExists(const std::wstring& folder) {
+    DWORD attrs = folder.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(folder.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
 bool GhImagePath(const std::wstring& path) {
@@ -10505,31 +10429,30 @@ bool GhImagePath(const std::wstring& path) {
 
 constexpr UINT WM_APP_GHLIST = WM_APP + 7;
 constexpr UINT WM_APP_GHICON = WM_APP + 8;
-struct GhListResult { std::wstring key, branch, commit, error; std::vector<std::wstring> paths, shas; };
+struct GhListResult { std::wstring key, error; std::vector<std::wstring> paths; };   // paths relative to the folder
 // The main color of an icon: a class for the filter (0 red ... 6 pink, 7 white, 8 gray, 9 black, -1 unreadable)
 // and a key that puts the icons in rainbow order
 struct GhColor { int cls = -1; float key = 1000; };
-struct GhIconResult { std::wstring path; std::vector<UINT32> pixels; int size = 0; GhColor color; bool replaced = false; };
+struct GhIconResult { std::wstring path; std::vector<UINT32> pixels; int size = 0; GhColor color; };
 
 struct GhState {
     bool active = false;                  // the gallery is showing
-    std::wstring key;                     // the repository text the list belongs to
-    GhRepo repo;
-    std::vector<std::wstring> paths;      // images in the repository (inside the folder)
+    std::wstring key;                     // the folder the list belongs to
+    std::vector<std::wstring> paths;      // images in the folder (relative paths)
     bool loading = false;
     std::wstring error;
     std::wstring target;                  // the app getting the icon
     int colorFilter = -1;                 // only icons of this color (-1 = all)
     bool byColor = false;                 // the icons in rainbow order
-    bool refreshing = false;              // the list is being read again (new pictures in the repository)
-    double listTime = -1000;              // when the list was last read
+    bool refreshing = false;              // the folder is being read again (pictures added there show up)
+    double listTime = -1000;              // when the folder was last read
     // Where the launcher was when the gallery opened, to go back there
     struct Return { int tab = 0, folder = -1; std::wstring query; float scroll = 0; bool searchActive = false; } back;
 };
 GhState g_gh;
-[[clang::no_destroy]] std::unordered_map<std::wstring, GhColor> g_ghColors;   // path -> its color (known once the picture was read)
+std::unordered_map<std::wstring, GhColor> g_ghColors;   // path -> its color (known once the picture was read)
 int g_ghColorsNew;                        // found since the color list was last saved
-[[clang::no_destroy]] std::unordered_set<std::wstring> g_ghOnScreen;   // pictures the grid shows now (only these keep their pixels)
+std::unordered_set<std::wstring> g_ghOnScreen;   // pictures the grid shows now (only these keep their pixels)
 constexpr int kGhColorCount = 10;
 constexpr UINT32 kGhColorRgb[kGhColorCount] = {0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x0A84FF, 0xAF52DE, 0xFF2D92, 0xFFFFFF, 0x8E8E93, 0x000000};
 constexpr UINT_PTR kTimerGhColor = 12;
@@ -10540,93 +10463,25 @@ constexpr int kGhIconThreads = 4;
 HANDLE g_ghIconThreads[kGhIconThreads];
 std::atomic<bool> g_ghStop;
 SRWLOCK g_ghLock = SRWLOCK_INIT;
-[[clang::no_destroy]] std::deque<std::wstring> g_ghQueue;   // pictures to fetch, most wanted first
-[[clang::no_destroy]] GhRepo g_ghQueueRepo;
-// Each picture's version (git blob sha): what the repository has now, and what the copy on disk is. When they differ the
-// picture was replaced in the repository and is downloaded again. Both under g_ghLock (the download threads use them)
-[[clang::no_destroy]] std::unordered_map<std::wstring, std::wstring> g_ghWantSha, g_ghFileSha;
-bool g_ghFileShaLoaded, g_ghFileShaDirty;
-constexpr double kGhListRefresh = 15;     // seconds: opening the gallery again after this reads the list again
+std::deque<std::wstring> g_ghQueue;       // pictures to read, most wanted first
+std::wstring g_ghQueueFolder;
+constexpr double kGhListRefresh = 5;      // seconds: opening the gallery again after this reads the folder again
+constexpr int kGhMaxImages = 20000, kGhMaxDepth = 8;
 
-std::wstring GhCacheFile(const GhRepo& r, const std::wstring& path) {
-    wchar_t base[MAX_PATH] = {};
-    if (!GetEnvironmentVariableW(L"LOCALAPPDATA", base, MAX_PATH)) return {};
-    auto safe = [](std::wstring s) { for (auto& ch : s) if (wcschr(L"<>:\"|?*/\\", ch)) ch = L'_'; return s; };
-    std::wstring file = std::wstring(base) + L"\\SiriPlusLaunchpad\\GitHubIcons\\" + safe(r.owner) + L"\\" + safe(r.repo) + L"\\" + safe(r.branch) + L"\\";
-    for (wchar_t ch : path) file += ch == L'/' ? L'\\' : (wcschr(L"<>:\"|?*", ch) ? L'_' : ch);
-    return file;
+// The picture's file (it must still be there)
+bool GhEnsureFile(const std::wstring& folder, const std::wstring& path, std::wstring& file) {
+    file = folder + L"\\" + path;
+    DWORD attrs = GetFileAttributesW(file.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-// The picture on disk (downloaded the first time)
-bool GhEnsureFile(const GhRepo& r, const std::wstring& path, std::wstring& file, bool* replaced = nullptr) {
-    file = GhCacheFile(r, path);
-    if (file.empty()) return false;
-    std::wstring want, have;
-    AcquireSRWLockShared(&g_ghLock);
-    if (auto w = g_ghWantSha.find(path); w != g_ghWantSha.end()) want = w->second;
-    if (auto h = g_ghFileSha.find(path); h != g_ghFileSha.end()) have = h->second;
-    ReleaseSRWLockShared(&g_ghLock);
-    bool exists = GetFileAttributesW(file.c_str()) != INVALID_FILE_ATTRIBUTES;
-    if (exists && (want.empty() || want == have)) return true;
-    std::string body;
-    // By the commit, not the branch: the branch's address can serve an old copy for a few minutes after an upload
-    std::wstring ref = r.commit.empty() ? r.branch : r.commit;
-    std::wstring url = L"https://raw.githubusercontent.com/" + r.owner + L"/" + r.repo + L"/" + UrlPath(ref) + L"/" + UrlPath(path);
-    if (HttpGet(url, body) != 200 || body.empty()) return exists;   // the old copy still serves
-    std::wstring dir = file.substr(0, file.find_last_of(L'\\'));
+// A folder inside the mod's storage (removed by Windhawk together with the mod)
+std::wstring ModFolder(PCWSTR name) {
+    WCHAR base[MAX_PATH];
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base))) return {};
+    std::wstring dir = std::wstring(base) + L"\\" + name;
     SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
-    std::wstring part = file + L".part";
-    HANDLE h = CreateFileW(part.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return false;
-    DWORD written = 0;
-    bool ok = WriteFile(h, body.data(), (DWORD)body.size(), &written, nullptr) && written == body.size();
-    CloseHandle(h);
-    if (!ok || !MoveFileExW(part.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING)) { DeleteFileW(part.c_str()); return exists; }
-    if (!want.empty()) {
-        AcquireSRWLockExclusive(&g_ghLock);
-        g_ghFileSha[path] = want;
-        g_ghFileShaDirty = true;
-        ReleaseSRWLockExclusive(&g_ghLock);
-    }
-    if (replaced) *replaced = exists;
-    return true;
-}
-
-// The versions of the copies on disk, kept next to them
-std::wstring GhShaFile(const GhRepo& r) { return r.branch.empty() ? std::wstring() : GhCacheFile(r, L"~versions.tsv"); }
-
-void GhLoadFileShas() {
-    g_ghFileShaLoaded = true;
-    std::wstring file = GhShaFile(g_gh.repo);
-    HANDLE h = file.empty() ? INVALID_HANDLE_VALUE : CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    std::string data;
-    char buffer[65536];
-    DWORD got = 0;
-    while (ReadFile(h, buffer, sizeof(buffer), &got, nullptr) && got > 0 && data.size() < (32u << 20)) data.append(buffer, got);
-    CloseHandle(h);
-    AcquireSRWLockExclusive(&g_ghLock);
-    for (const std::wstring& line : Split(FromUtf8(data), L'\n')) {
-        auto f = Split(line, L'\t');
-        if (f.size() == 2 && !f[0].empty() && !f[1].empty()) g_ghFileSha.emplace(f[0], f[1]);
-    }
-    ReleaseSRWLockExclusive(&g_ghLock);
-}
-
-void GhSaveFileShas() {
-    std::wstring file = GhShaFile(g_gh.repo), text;
-    AcquireSRWLockExclusive(&g_ghLock);
-    if (!g_ghFileShaDirty || file.empty()) { ReleaseSRWLockExclusive(&g_ghLock); return; }
-    g_ghFileShaDirty = false;
-    for (auto& [path, sha] : g_ghFileSha) text += Clean(path) + L"\t" + sha + L"\n";
-    ReleaseSRWLockExclusive(&g_ghLock);
-    SHCreateDirectoryExW(nullptr, file.substr(0, file.find_last_of(L'\\')).c_str(), nullptr);
-    std::string data = ToUtf8(text);
-    HANDLE h = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    DWORD put = 0;
-    WriteFile(h, data.data(), (DWORD)data.size(), &put, nullptr);
-    CloseHandle(h);
+    return dir;
 }
 
 // The color most of the icon has. Colored pixels vote for their hue (stronger and brighter ones count more); an icon with
@@ -10677,11 +10532,20 @@ GhColor GhClassify(const std::vector<UINT32>& pixels) {
     return out;
 }
 
-// Colors already found for a repository, kept next to its pictures so they are not read again
-std::wstring GhColorsFile(const GhRepo& r) { return r.branch.empty() ? std::wstring() : GhCacheFile(r, L"~colors.tsv"); }
+// Colors already found for a folder, kept in the mod's storage so they are not read again
+std::wstring GhColorsFile(const std::wstring& folder) {
+    if (folder.empty()) return {};
+    std::wstring dir = ModFolder(L"IconColors");
+    if (dir.empty()) return {};
+    unsigned long long h = 1469598103934665603ULL;   // FNV-1a of the folder
+    for (wchar_t ch : ToLower(folder)) { h ^= ch; h *= 1099511628211ULL; }
+    wchar_t name[32];
+    swprintf(name, 32, L"\\%016llx.tsv", h);
+    return dir + name;
+}
 
 void GhLoadColors() {
-    std::wstring file = GhColorsFile(g_gh.repo);
+    std::wstring file = GhColorsFile(g_gh.key);
     HANDLE h = file.empty() ? INVALID_HANDLE_VALUE : CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (h == INVALID_HANDLE_VALUE) return;
     std::string data;
@@ -10699,9 +10563,8 @@ void GhLoadColors() {
 
 void GhSaveColors() {
     g_ghColorsNew = 0;
-    std::wstring file = GhColorsFile(g_gh.repo);
+    std::wstring file = GhColorsFile(g_gh.key);
     if (file.empty() || g_ghColors.empty()) return;
-    SHCreateDirectoryExW(nullptr, file.substr(0, file.find_last_of(L'\\')).c_str(), nullptr);
     std::wstring text;
     for (auto& [path, c] : g_ghColors) {
         wchar_t num[48];
@@ -10716,84 +10579,50 @@ void GhSaveColors() {
     CloseHandle(h);
 }
 
-struct GhListJob { std::wstring key; GhRepo repo; };
+// Reads the folder (and its subfolders) on its own thread: every image, by relative path
+struct GhListJob { std::wstring key; };
+void GhScanFolder(const std::wstring& dir, const std::wstring& rel, int depth, std::vector<std::wstring>& out) {
+    if (g_ghStop || depth > kGhMaxDepth || (int)out.size() >= kGhMaxImages) return;
+    WIN32_FIND_DATAW fd;
+    HANDLE find = FindFirstFileExW((dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
+    if (find == INVALID_HANDLE_VALUE) return;
+    do {
+        std::wstring name = fd.cFileName;
+        if (name == L"." || name == L".." || (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) continue;
+        std::wstring relPath = rel.empty() ? name : rel + L"\\" + name;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) GhScanFolder(dir + L"\\" + name, relPath, depth + 1, out);   // no links (loops)
+        } else if (GhImagePath(name)) out.push_back(relPath);
+    } while (!g_ghStop && (int)out.size() < kGhMaxImages && FindNextFileW(find, &fd));
+    FindClose(find);
+}
+
 DWORD WINAPI GhListThread(void* param) {
     std::unique_ptr<GhListJob> job(static_cast<GhListJob*>(param));
-    auto* result = new GhListResult{job->key, job->repo.branch, {}, {}, {}, {}};
-    const GhRepo& r = job->repo;
-    std::string body;
-    std::wstring api = L"https://api.github.com/repos/" + r.owner + L"/" + r.repo;
-    auto fail = [&](DWORD status) {
-        result->error = status == 0 ? CfgT(L"No connection to GitHub", L"Sem conexão com o GitHub")
-                      : status == 404 ? CfgT(L"Repository or folder not found", L"Repositório ou pasta não encontrado")
-                      : status == 403 || status == 429 ? CfgT(L"GitHub's limit for now was reached; try again in a while", L"Limite do GitHub atingido por agora; tente daqui a pouco")
-                      : CfgT(L"GitHub didn't answer as expected", L"O GitHub não respondeu como esperado");
-    };
-    if (result->branch.empty()) {   // the repository's main branch
-        DWORD status = HttpGet(api, body);
-        size_t at = body.find("\"default_branch\"");
-        if (status != 200 || at == std::string::npos) fail(status);
-        else {
-            size_t q = body.find('"', body.find(':', at) + 1);
-            size_t pos = q + 1;
-            if (q != std::string::npos) result->branch = FromUtf8(JsonString(body, pos));
-        }
-    }
-    if (result->error.empty() && !result->branch.empty()) {   // the branch's latest commit (falls back to the branch name)
-        DWORD status = HttpGet(api + L"/branches/" + UrlPath(result->branch), body);
-        size_t at = status == 200 ? body.find("\"commit\"") : std::string::npos;
-        size_t shaAt = at == std::string::npos ? at : body.find("\"sha\"", at);
-        if (shaAt != std::string::npos) {
-            size_t pos = body.find('"', body.find(':', shaAt) + 1) + 1;
-            result->commit = FromUtf8(JsonString(body, pos));
-        }
-    }
-    if (result->error.empty() && !result->branch.empty()) {
-        std::wstring tree = result->commit.empty() ? result->branch : result->commit;
-        DWORD status = HttpGet(api + L"/git/trees/" + UrlPath(tree) + L"?recursive=1", body);
-        if (status != 200) fail(status);
-        else {
-            std::wstring prefix = r.folder.empty() ? L"" : r.folder + L"/";
-            std::vector<std::pair<std::wstring, std::wstring>> found;   // path, version
-            for (size_t at = body.find("\"path\""); at != std::string::npos && !g_ghStop; at = body.find("\"path\"", at + 6)) {
-                size_t q = body.find('"', body.find(':', at) + 1);
-                if (q == std::string::npos) break;
-                size_t pos = q + 1;
-                std::wstring path = FromUtf8(JsonString(body, pos));
-                size_t next = body.find("\"path\"", pos), type = body.find("\"type\"", pos);
-                bool blob = type != std::string::npos && (next == std::string::npos || type < next) && body.compare(body.find('"', body.find(':', type) + 1) + 1, 4, "blob") == 0;
-                if (!blob || !GhImagePath(path) || path.compare(0, prefix.size(), prefix) != 0) continue;
-                std::wstring sha;
-                size_t shaAt = body.find("\"sha\"", pos);
-                if (shaAt != std::string::npos && (next == std::string::npos || shaAt < next)) {
-                    size_t p2 = body.find('"', body.find(':', shaAt) + 1) + 1;
-                    sha = FromUtf8(JsonString(body, p2));
-                }
-                found.push_back({path, sha});
-            }
-            std::stable_sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return NameLess(a.first, b.first); });
-            for (auto& [path, sha] : found) { result->paths.push_back(std::move(path)); result->shas.push_back(std::move(sha)); }
-        }
+    auto* result = new GhListResult{job->key, {}, {}};
+    if (!GhFolderExists(job->key)) result->error = CfgT(L"Folder not found", L"Pasta não encontrada");
+    else {
+        GhScanFolder(job->key, L"", 0, result->paths);
+        std::stable_sort(result->paths.begin(), result->paths.end(), [](const std::wstring& a, const std::wstring& b) { return NameLess(a, b); });
     }
     HWND launcher = g_wnd;
     if (g_ghStop || !launcher || !PostMessageW(launcher, WM_APP_GHLIST, 0, (LPARAM)result)) delete result;
     return 0;
 }
 
-// Fetches the pictures in the queue, one after the other, and sends them decoded to the window
+// Reads the pictures in the queue, one after the other, and sends them decoded to the window
 DWORD WINAPI GhIconThread(void*) {
     HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     while (!g_ghStop) {
-        std::wstring path;
-        GhRepo repo;
+        std::wstring path, folder;
         AcquireSRWLockExclusive(&g_ghLock);
-        if (!g_ghQueue.empty()) { path = std::move(g_ghQueue.front()); g_ghQueue.pop_front(); repo = g_ghQueueRepo; }
+        if (!g_ghQueue.empty()) { path = std::move(g_ghQueue.front()); g_ghQueue.pop_front(); folder = g_ghQueueFolder; }
         ReleaseSRWLockExclusive(&g_ghLock);
         if (path.empty()) { WaitForSingleObject(g_ghWake, 1000); continue; }
         auto* result = new GhIconResult{path, {}, 0, {}};
         std::wstring file;
         App temp;
-        if (GhEnsureFile(repo, path, file, &result->replaced) && LoadImageFile(file, CurrentIconPixels(), temp)) {
+        if (GhEnsureFile(folder, path, file) && LoadImageFile(file, CurrentIconPixels(), temp)) {
             result->color = GhClassify(temp.pixels);
             result->pixels = std::move(temp.pixels);
             result->size = temp.iconSize;
@@ -10813,7 +10642,6 @@ void GhStopThreads() {
     for (HANDLE* h : threads)
         if (*h) { WaitForSingleObject(*h, INFINITE); CloseHandle(*h); *h = nullptr; }
     if (g_ghColorsNew) GhSaveColors();
-    GhSaveFileShas();
     if (g_ghWake) { CloseHandle(g_ghWake); g_ghWake = nullptr; }
     g_ghStop = false;
     MSG msg;   // results that were already on their way
@@ -10836,7 +10664,7 @@ void GhQueueVisible() {
     std::deque<std::wstring> wanted;
     std::unordered_set<std::wstring> queued;
     g_ghOnScreen.clear();
-    // From a little before the first row on screen (the grid may be scrolled far down a big repository)
+    // From a little before the first row on screen (the grid may be scrolled far down a big folder)
     int first = std::max(0, GhFirstVisible() - 60);
     g_ghQueuedFrom = GhFirstVisible();
     for (int k = first; k < (int)g_layoutItems.size(); k++) {
@@ -10845,7 +10673,7 @@ void GhQueueVisible() {
         g_ghOnScreen.insert(a->target);
         if (a->pixels.empty() && a->iconSize >= 0) { wanted.push_back(a->target); queued.insert(a->target); }
     }
-    // Pictures far from the screen let go of their pixels (a big repository would fill the memory); they are read
+    // Pictures far from the screen let go of their pixels (a big folder would fill the memory); they are read
     // again from the disk when the grid comes back to them
     for (auto& [path, item] : g_ghItems)
         if (!item->pixels.empty() && !g_ghOnScreen.count(path)) {
@@ -10857,10 +10685,10 @@ void GhQueueVisible() {
             if (!g_ghColors.count(path) && !queued.count(path)) wanted.push_back(path);
     AcquireSRWLockExclusive(&g_ghLock);
     g_ghQueue = std::move(wanted);
-    g_ghQueueRepo = g_gh.repo;
+    g_ghQueueFolder = g_gh.key;
     ReleaseSRWLockExclusive(&g_ghLock);
     if (!g_ghWake) g_ghWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    // One thread for the pictures on screen; more while the colors of the whole repository are being found
+    // One thread for the pictures on screen; more while the colors of the whole folder are being found
     int threads = g_gh.paths.empty() ? 0 : GhColorMode() ? kGhIconThreads : 1;
     for (int i = 0; i < threads; i++)
         if (!g_ghIconThreads[i]) g_ghIconThreads[i] = CreateThread(nullptr, 0, GhIconThread, nullptr, 0, nullptr);
@@ -10881,7 +10709,7 @@ void GhItems(AppList& out) {
             item = std::make_shared<App>();
             item->kind = 5;
             item->target = path;
-            std::wstring name = path.substr(path.find_last_of(L'/') + 1);
+            std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
             item->name = name.substr(0, name.find_last_of(L'.'));
         }
         out.push_back(item);
@@ -10917,9 +10745,9 @@ int GhColorsMissing() {
 
 PCWSTR GhMessage() {
     static std::wstring text;
-    if (g_gh.loading) text = CfgT(L"Loading the icons from GitHub...", L"Carregando os ícones do GitHub...");
+    if (g_gh.loading) text = CfgT(L"Loading the icons...", L"Carregando os ícones...");
     else if (!g_gh.error.empty()) text = g_gh.error;
-    else if (g_gh.paths.empty()) text = CfgT(L"No images (PNG, ICO, JPG...) in this repository", L"Nenhuma imagem (PNG, ICO, JPG...) neste repositório");
+    else if (g_gh.paths.empty()) text = CfgT(L"No images (PNG, ICO, JPG...) in this folder", L"Nenhuma imagem (PNG, ICO, JPG...) nesta pasta");
     else if (GhColorMode() && GhColorsMissing() > 0) text = CfgT(L"Finding the colors of the icons...", L"Descobrindo as cores dos ícones...");
     else text = CfgT(L"No icon found", L"Nenhum ícone encontrado");
     return text.c_str();
@@ -10933,7 +10761,6 @@ void GhClose(bool render = true) {
     ReleaseSRWLockExclusive(&g_ghLock);
     if (g_wnd) KillTimer(g_wnd, kTimerGhColor);
     if (g_ghColorsNew) GhSaveColors();
-    GhSaveFileShas();
     if (g_siriTab != 4) return;
     g_siriTab = 0;
     ClearQuery();
@@ -10961,32 +10788,24 @@ void GhClose(bool render = true) {
     StartFrames();
 }
 
-// Right-click an app > "Icon from GitHub..."
+// Right-click an app > "Icon from gallery..."
 void GhOpen(App* app) {
     if (!app) return;
-    GhRepo repo;
-    if (!ParseGhRepo(g_ghSetting, repo)) {
-        MessageBoxW(g_wnd, CfgT(L"Set the repository first: settings (⋯) > Apps and icons > Icons from GitHub, for example\n"
-                                L"owner/repository  or  https://github.com/owner/repository/tree/main/icons",
-                                L"Informe o repositório primeiro: ajustes (⋯) > Apps e ícones > Ícones do GitHub, por exemplo\n"
-                                L"dono/repositório  ou  https://github.com/dono/repositório/tree/main/icones"),
+    std::wstring folder = GhCleanFolder(g_ghSetting);
+    if (folder.empty()) {
+        MessageBoxW(g_wnd, CfgT(L"Choose the icon folder first: settings (⋯) > Apps and icons > Icon gallery folder",
+                                L"Escolha primeiro a pasta de ícones: ajustes (⋯) > Apps e ícones > Pasta da galeria de ícones"),
                     L"Siri Plus Launchpad", MB_ICONINFORMATION);
         if (g_shown) ForceForeground(g_wnd);
         return;
     }
-    if (g_ghSetting != g_gh.key) {   // another repository: start over
+    if (folder != g_gh.key) {   // another folder: start over
         if (g_ghColorsNew) GhSaveColors();
-        GhSaveFileShas();
         g_gh.paths.clear(); g_gh.error.clear(); g_ghItems.clear(); g_ghColors.clear();
         g_gh.colorFilter = -1; g_gh.byColor = false;
-        g_gh.key = g_ghSetting;
-        g_gh.repo = repo;
+        g_gh.key = folder;
         g_gh.loading = g_gh.refreshing = false;
         g_gh.listTime = -1000;
-        AcquireSRWLockExclusive(&g_ghLock);
-        g_ghWantSha.clear(); g_ghFileSha.clear();
-        ReleaseSRWLockExclusive(&g_ghLock);
-        g_ghFileShaLoaded = g_ghFileShaDirty = false;
     }
     g_gh.target = app->target;
     g_gh.active = true;
@@ -10997,17 +10816,17 @@ void GhOpen(App* app) {
     g_gh.back.folder = g_openFolderIndex;
     g_gh.back.scroll = g_openFolderIndex >= 0 ? g_mainScroll : g_scrollTarget;
     if (g_openFolderIndex >= 0) CloseFolder(false);
-    // The list is read again when it is old: pictures added or replaced in the repository show up without restarting
+    // The folder is read again when the list is old: pictures added there show up without restarting
     if (!g_gh.refreshing && (g_gh.paths.empty() || Now() - g_gh.listTime > kGhListRefresh)) {
         if (g_ghListThread) { WaitForSingleObject(g_ghListThread, INFINITE); CloseHandle(g_ghListThread); g_ghListThread = nullptr; }
         g_gh.loading = g_gh.paths.empty(); g_gh.refreshing = true; g_gh.error.clear();
-        g_ghListThread = CreateThread(nullptr, 0, GhListThread, new GhListJob{g_gh.key, g_gh.repo}, 0, nullptr);
+        g_ghListThread = CreateThread(nullptr, 0, GhListThread, new GhListJob{g_gh.key}, 0, nullptr);
         if (!g_ghListThread) {
             g_gh.loading = g_gh.refreshing = false;
-            if (g_gh.paths.empty()) g_gh.error = CfgT(L"Could not start the download", L"Não foi possível iniciar o download");
+            if (g_gh.paths.empty()) g_gh.error = CfgT(L"Could not read the folder", L"Não foi possível ler a pasta");
         }
     }
-    // The grid now shows the repository; the bar searches it
+    // The grid now shows the folder's images; the bar searches them
     if (g_menu.open) g_menu.open = false;
     g_selection.clear();
     ClearQuery();
@@ -11027,26 +10846,7 @@ void OnGhList(GhListResult* result) {
     if (!r->error.empty() && !first) return;   // reading it again failed: the list already shown stays
     g_gh.error = r->error;
     g_gh.paths = std::move(r->paths);
-    g_gh.repo.branch = r->branch;
-    g_gh.repo.commit = r->commit;
-    if (!g_ghFileShaLoaded) GhLoadFileShas();
     if (first) { g_ghColors.clear(); GhLoadColors(); }
-    // Pictures replaced in the repository: their old picture and color are dropped, the new ones come in
-    AcquireSRWLockExclusive(&g_ghLock);
-    g_ghWantSha.clear();
-    std::vector<std::wstring> changed;
-    for (size_t i = 0; i < g_gh.paths.size() && i < r->shas.size(); i++) {
-        if (r->shas[i].empty()) continue;
-        g_ghWantSha[g_gh.paths[i]] = r->shas[i];
-        auto have = g_ghFileSha.find(g_gh.paths[i]);
-        if (have == g_ghFileSha.end() || have->second != r->shas[i]) changed.push_back(g_gh.paths[i]);
-    }
-    ReleaseSRWLockExclusive(&g_ghLock);
-    for (const std::wstring& path : changed) {
-        if (g_ghColors.erase(path)) g_ghColorsNew++;
-        auto item = g_ghItems.find(path);
-        if (item != g_ghItems.end()) { App& a = *item->second; a.pixels.clear(); a.iconSize = 0; a.bitmap.Reset(); a.generation = 0; }
-    }
     if (g_gh.active && g_siriTab == 4) { RefreshTabItems(first); GhQueueVisible(); StartFrames(); }
 }
 
@@ -11061,15 +10861,6 @@ void OnGhIcon(GhIconResult* result) {
     else if (r->size > 0) { a.pixels = std::move(r->pixels); a.iconSize = r->size; a.bitmap.Reset(); a.generation = 0; }
     else a.iconSize = -1;   // could not be read: not asked again
     if (!g_ghColors.count(r->path)) { g_ghColors[r->path] = r->color; g_ghColorsNew++; }
-    if (r->replaced) {   // a newer version of a picture: apps that use it as their icon show the new one
-        std::wstring file = GhCacheFile(g_gh.repo, r->path);
-        auto refresh = [&](App& app) {
-            auto c = g_customIcons.find(app.target);
-            if (c != g_customIcons.end() && c->second == file && LoadImageFile(file, CurrentIconPixels(), app)) { app.bitmap.Reset(); app.generation = 0; }
-        };
-        for (auto& app : g_apps) refresh(*app);
-        for (auto& f : g_folders) for (auto& app : f.apps) refresh(*app);
-    }
     if (g_gh.active && g_shown && GhColorMode()) SetTimer(g_wnd, kTimerGhColor, 250, nullptr);
     if (g_gh.active && g_shown) Render();
 }
@@ -11091,8 +10882,8 @@ void OnGhColorTimer() {
 // A picture was clicked: it becomes the app's icon
 void GhApply(const std::wstring& path) {
     std::wstring file;
-    if (!GhEnsureFile(g_gh.repo, path, file)) {
-        MessageBoxW(g_wnd, CfgT(L"Could not download this image.", L"Não foi possível baixar esta imagem."), L"Siri Plus Launchpad", MB_ICONWARNING);
+    if (!GhEnsureFile(g_gh.key, path, file)) {
+        MessageBoxW(g_wnd, CfgT(L"This image is no longer in the folder.", L"Esta imagem não está mais na pasta."), L"Siri Plus Launchpad", MB_ICONWARNING);
         if (g_shown) ForceForeground(g_wnd);
         return;
     }
@@ -11180,7 +10971,7 @@ void DrawGhDots(const Layout& L, const D2D1_RECT_F dots[kGhDotCount]) {
     }
 }
 
-// GitHub gallery: the field where the icon's name is typed (it shows the same text as the bar), with the count
+// icon gallery: the field where the icon's name is typed (it shows the same text as the bar), with the count
 void DrawGhSearchBox(const Layout& L) {
     const D2D1_RECT_F& r = L.siriTabs;
     if (r.right <= r.left) return;
@@ -11584,7 +11375,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
             if (g_openFolderIndex < 0) {
-                if (g_siriTab == 4 && GhDotClick((float)x, (float)y)) return 0;   // a color dot of the GitHub gallery
+                if (g_siriTab == 4 && GhDotClick((float)x, (float)y)) return 0;   // a color dot of the icon gallery
                 if (g_siriTab == 4 && InRect(g_layout.siriTabs, (float)x, (float)y)) {   // the icon search field: typing goes there
                     if (!g_settings.siri) g_searchActive = true;
                     return 0;
@@ -11803,7 +11594,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
                     separate();
                     items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
-                    items.push_back({CfgT(L"Icon from GitHub...", L"Ícone do GitHub..."), kMenuGhIcon});
+                    items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
                     if (g_customIcons.count(a->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                     separate();
                     items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
@@ -11845,7 +11636,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
                     items.push_back({L"", 0, true});
                     items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
-                    items.push_back({CfgT(L"Icon from GitHub...", L"Ícone do GitHub..."), kMenuGhIcon});
+                    items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
                     if (g_customIcons.count(a->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                     items.push_back({L"", 0, true});
                     items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
@@ -11865,7 +11656,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         g_menu.folderApp = idx;
                         if (App* fa = MenuApp()) {
                             items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
-                    items.push_back({CfgT(L"Icon from GitHub...", L"Ícone do GitHub..."), kMenuGhIcon});
+                    items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
                             if (g_customIcons.count(fa->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                             items.push_back({L"", 0, true});
                             items.push_back({Tr(L"Uninstall"), kMenuUninstall, false, true});
@@ -11910,7 +11701,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_KEYDOWN: OnKeyDown(wParam); return 0;
         case WM_CHAR: OnChar((WCHAR)wParam); return 0;
         case WM_CLOSE: Close(); return 0;
+        case WM_HOTKEY:
+            if (wParam >= kHotkeyBase && wParam < kHotkeyBase + 4) OnCategoryShortcut((int)wParam - kHotkeyBase);
+            return 0;
         case WM_DESTROY:
+            for (int tab = 0; tab < 4; tab++) UnregisterHotKey(hwnd, kHotkeyBase + tab);
             KillTimer(hwnd, kTimerLongPress);
             KillTimer(hwnd, kTimerFileSearch);
             RemoveClipboardFormatListener(hwnd); PostQuitMessage(0); return 0;
@@ -11947,7 +11742,7 @@ DWORD WINAPI StartThread(void*) {
     bool ok = g_d2d && g_dwrite && wnd;
     if (ok) { g_wnd = wnd; SetTimer(wnd, kTimerFirstLoad, 3000, nullptr); AddClipboardFormatListener(wnd); CreateGlassWindow(instance); }
     SetEvent(g_readyEvent);
-    if (ok) g_keyHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, instance, 0);   // category shortcuts with the launcher closed
+    if (ok) UpdateCategoryHotkeys();   // category shortcuts with the launcher closed (when the option is on)
     if (ok) g_frameWaitTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     if (ok) {
         MSG msg;
@@ -11963,10 +11758,9 @@ DWORD WINAPI StartThread(void*) {
             }
         }
     } else { if (wnd) DestroyWindow(wnd); }
-    if (g_keyHook) { UnhookWindowsHookEx(g_keyHook); g_keyHook = nullptr; }
     if (g_frameWaitTimer) { CloseHandle(g_frameWaitTimer); g_frameWaitTimer = nullptr; }
     g_frameTimer = false;
-    GhStopThreads();   // GitHub downloads run code from this module
+    GhStopThreads();   // the icon gallery threads run code from this module
     g_wnd = nullptr; g_workerStop = true;
     ++g_fileSearchGen;                                   // every file thread becomes stale
     if (g_worker) { WaitForSingleObject(g_worker, INFINITE); CloseHandle(g_worker); g_worker = nullptr; }
