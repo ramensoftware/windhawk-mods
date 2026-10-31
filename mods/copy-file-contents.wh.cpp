@@ -2,7 +2,7 @@
 // @id              copy-file-contents
 // @name            Copy File Contents
 // @description     Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.
-// @version         1.2
+// @version         1.3
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -52,8 +52,10 @@ and they do not need the menu at all.
 
 A file is copied only if it looks like text. Files that look binary are refused
 rather than pasted as garbage, and files larger than the size limit are refused
-the same way. When either happens the mod offers to open the file instead, which
-is the honest answer: this is not a text file, so read it in an editor.
+the same way. When nothing at all could be copied, the reason is shown, and for
+a file that is text but too big, which is the one case where an editor helps, the
+mod offers to open it in Notepad instead, with the path passed quoted so a path
+with a space in it still opens.
 
 The size limit is 8 MB by default, with the unit chosen next to it, megabytes or
 kilobytes. A large selection is copied file by file, so one file over the limit is
@@ -62,14 +64,18 @@ dialog in the middle of copying five files is worse than a missing one. When
 nothing at all can be copied, you are asked instead.
 
 The whole selection is also held to a 32 MB budget, so selecting a whole folder of
-logs cannot make File Explorer allocate without bound. Files are checked against
-what is left of that budget before they are opened, and once it is used up the
-rest of the selection is not read at all, which keeps a large Ctrl+A quick instead
-of slow.
+logs cannot make File Explorer allocate without bound. A file bigger than what is
+left of that budget cannot fit in any encoding, so it is skipped without being
+opened, and once the budget is used up the rest of the selection is not read at
+all, which keeps a large Ctrl+A quick instead of slow. A file smaller than that is
+read and measured: its text is the same size on disk for UTF-16, and up to twice
+that for ASCII, so only the read itself can say.
 
 The ceilings are 64 MB per file and 32 MB per selection whatever the settings
-say. A text file that big is already beyond what a clipboard is good for, and
-the mod refuses rather than trying.
+say. In practice the per selection budget is the one that binds: no single file is
+copied beyond 32 MB of text, which is the same as saying that a 20 MB UTF-16 file
+is copied and a 20 MB ASCII file is not. A text file that big is already beyond
+what a clipboard is good for, and the mod refuses rather than trying.
 
 When nothing in the selection can be copied, **Copy contents** is left out of the
 menu instead of being offered and then refusing. To decide that, the first 4 KiB
@@ -77,8 +83,10 @@ of each file are read when the menu opens, stopping at the first file that
 passes, and looking at no more than 16 files. Files that are offline or stored
 online only are not read at all, because reading one would start a download; such
 a file is assumed copyable and the copy itself decides. Files on a network share
-are treated the same way. A mixed selection still shows the entry and copies the
-files that can be copied.
+are treated the same way, whether they are reached by a `\\server\share` path or
+through a drive letter mapped to one, because reading from a share that has
+stopped answering would hang the menu. A mixed selection still shows the entry
+and copies the files that can be copied.
 
 Encoding is detected rather than assumed: a byte order mark is honored, then the
 file is checked for UTF-16 without a mark, then for strict UTF-8, and finally read
@@ -90,10 +98,11 @@ text with invisible gaps. Line endings are copied as they are.
 
 Hashing reads every byte, and the work runs on the same thread that owns the File
 Explorer window, so that window does not repaint until it is done. For a normal
-file that is instant. Above the size set in the settings, 1 GB by default, the
-mod asks first, and says how many files and how much data are involved, counting
-the whole selection rather than one file at a time. Answer no and nothing
-happens.
+file that is instant; a gigabyte on a hard disk is about ten seconds. Above the
+size set in the settings, 256 MB by default, the mod asks first, and says how many
+files and how much data are involved, counting the whole selection rather than one
+file at a time. Answer no and nothing happens. The setting can be raised to where
+hashing a whole disk in one go is on you, or set to 0 to be asked every time.
 
 ## Known limits
 
@@ -104,7 +113,10 @@ happens.
   no temporary file is created.
 * If the mod is turned off while its own prompt is open, the prompt is answered
   No for you and the copy stops, because the mod cannot be unloaded with its code
-  still waiting on that dialog.
+  still waiting on that dialog. Unloading waits about two seconds for work to
+  finish. The wait between separate clipboard items ends as soon as unloading
+  starts, but a single read from a share that has stopped answering cannot be
+  interrupted, only waited out.
 * With separate clipboard items turned on, Ctrl+V pastes only the last file. The
   earlier ones are reachable through Windows clipboard history (Win+V), and only
   there, and clipboard history has to be turned on for them to be kept.
@@ -127,7 +139,7 @@ happens.
 /*
 - maxSize: 8
   $name: Largest file to copy
-  $description: Files bigger than this are refused, with an offer to open them instead. The unit is the setting below it, and 64 MB is the most this can ever be. A megabyte here is 1,048,576 bytes, the same as Windows shows in the file listing.
+  $description: Files bigger than this are refused, with an offer to open them instead. The unit is the setting below it, and 64 MB is the most this can ever be. A megabyte here is 1,048,576 bytes, the same as Windows shows in the file listing. One copy holds at most 32 MB of text in all, so no single file is copied beyond that, whatever this is set to.
 - maxSizeUnit: mb
   $name: Size unit
   $description: Megabytes or kilobytes. Whole numbers only; for one and a half megabytes, pick kilobytes and enter 1536.
@@ -145,16 +157,16 @@ happens.
   $description: When a file is too big or not text, ask whether to open it instead of failing silently.
 - hideWhenUncopyable: true
   $name: Hide "Copy contents" when nothing can be copied
-  $description: When every selected file is binary or over the size limit, the entry is left out of the menu instead of being offered and then refusing. The first few KiB of each file are read to decide, except files that are offline or on a network share, which are not read.
+  $description: When every selected file is binary or over the size limit, the entry is left out of the menu instead of being offered and then refusing. The first few KiB of each file are read to decide, except files that are offline, stored online only, or on a network share or a mapped network drive, which are not read.
 - separateEntries: false
   $name: Put each file on the clipboard as its own item
   $description: When several files are copied, each one goes on the clipboard in turn instead of being joined into one text. Windows clipboard history (Win+V) then lists them separately and you can paste any of them. Ctrl+V pastes only the last file. Needs clipboard history turned on, otherwise only the last file is reachable, and history keeps 25 entries of about 4 MB each, so a file over that limit is written last and can only be pasted with Ctrl+V.
 - separateGapMs: 250
   $name: Wait between separate items, in milliseconds
   $description: Windows clipboard history ignores copies that arrive too close together, so the files are written with a short wait between them. Raise this if some files still go missing from the history, lower it if the copy feels slow. 0 turns the wait off.
-- askHashMB: 1024
-  $name: Ask before hashing a file bigger than this, in MB
-  $description: Hashing reads the whole file and the File Explorer window waits until it is done. Above this size the mod asks first. 0 asks for every file.
+- askHashMB: 256
+  $name: Ask before hashing files bigger than this in all, in MB
+  $description: Hashing reads every byte and the File Explorer window waits until it is done, about ten seconds for each gigabyte on a hard disk. Above this much in total the mod asks first. 0 asks for every file.
 - hotkeys: true
   $name: Keyboard shortcuts
   $description: Turn the two shortcuts on. They only act in a File Explorer window with files selected, and never while you type in a rename box, the address bar or the search box.
@@ -222,7 +234,7 @@ Settings g_settings = {
     true,                     // hideWhenUncopyable
     false,                    // separateEntries
     250,                      // separateGapMs
-    1024,                     // askHashMB
+    256,                      // askHashMB
     true,                     // hotkeys
     MOD_CONTROL | MOD_SHIFT,  // contentsModifiers
     'T',                      // contentsKey
@@ -329,6 +341,10 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 std::atomic<bool> g_unloading{false};
+// Signalled by Wh_ModBeforeUninit. The wait between separate clipboard items
+// waits on this instead of sleeping, so a 2000 ms gap does not hold up an
+// unload for two seconds.
+HANDLE g_unloadEvent = nullptr;
 // Open menus carrying the entries, and copies in progress.
 std::atomic<int> g_busy{0};
 // Only the outer popup call adds entries, and only one copy runs at a time per
@@ -529,6 +545,15 @@ enum class ReadResult {
     Unreadable,
 };
 
+// A control character that has no business in text. A NUL is the reason this
+// exists: it is valid UTF-8, so without this a binary file was accepted as
+// UTF-8 text and pasted full of invisible bytes, and the paste stopped at the
+// first one.
+bool IsTextControl(unsigned char c) {
+    return c == 0 || (c < 0x20 && c != '\t' && c != '\r' && c != '\n') ||
+           c == 0x7F;
+}
+
 bool LooksLikeUtf8(const unsigned char* data, size_t size) {
     size_t i = 0;
     while (i < size) {
@@ -536,6 +561,9 @@ bool LooksLikeUtf8(const unsigned char* data, size_t size) {
         size_t extra = 0;
         unsigned int code = 0;
         if (lead < 0x80) {
+            if (IsTextControl(lead)) {
+                return false;
+            }
             i++;
             continue;
         } else if ((lead & 0xE0) == 0xC0) {
@@ -607,11 +635,7 @@ bool LooksLikeUtf16NoBom(const unsigned char* data, size_t size, bool* bigEndian
 
 bool LooksLikeAnsiText(const unsigned char* data, size_t size) {
     for (size_t i = 0; i < size; i++) {
-        const unsigned char c = data[i];
-        if (c == 0) {
-            return false;
-        }
-        if (c < 0x20 && c != '\t' && c != '\r' && c != '\n') {
+        if (IsTextControl(data[i])) {
             return false;
         }
     }
@@ -667,6 +691,10 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
     const size_t length = bytes.size();
 
     if (length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
+        // A UTF-8 mark does not make embedded control bytes safe to paste.
+        if (!LooksLikeAnsiText(data + 3, length - 3)) {
+            return ReadResult::Binary;
+        }
         out->clear();
         if (length > 3) {
             const int wide = MultiByteToWideChar(
@@ -737,7 +765,8 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
 //
 // The menu should not offer an entry that is certain to refuse, so the files are
 // checked when the menu opens. Only the first few KiB are read, and a file that
-// is offline, stored online only, or on a network share is not read at all:
+// is offline, stored online only, or on a network share, by UNC path or mapped
+// drive, is not read at all:
 // reading one would start a download or wait for the network, and the menu would
 // wait with it. Such a file is assumed copyable and the copy decides.
 // ---------------------------------------------------------------------------
@@ -756,7 +785,16 @@ bool IsRemoteOrSparse(const std::wstring& path) {
         return true;
     }
     // A UNC path, which reading would fetch over the network.
-    return path.size() >= 2 && path[0] == L'\\' && path[1] == L'\\';
+    if (path.size() >= 2 && path[0] == L'\\' && path[1] == L'\\') {
+        return true;
+    }
+    // A drive letter that is mapped to a share is just as much on the network
+    // as a UNC path, and reading from a share that has gone away blocks.
+    if (path.size() >= 3 && path[1] == L':' && (path[2] == L'\\' || path[2] == L'/')) {
+        const wchar_t root[4] = {path[0], L':', L'\\', 0};
+        return GetDriveTypeW(root) == DRIVE_REMOTE;
+    }
+    return false;
 }
 
 // The same order the real read uses: a mark first, then UTF-16 without a mark,
@@ -766,7 +804,8 @@ bool SniffIsText(const unsigned char* data, size_t size) {
         return true;
     }
     if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
-        return true;
+        // Only check controls in the prefix: it may end mid UTF-8 character.
+        return LooksLikeAnsiText(data + 3, size - 3);
     }
     if (size >= 2 && ((data[0] == 0xFF && data[1] == 0xFE) ||
                       (data[0] == 0xFE && data[1] == 0xFF))) {
@@ -974,17 +1013,31 @@ long long FileSizeBytes(const std::wstring& path) {
 // The two commands
 // ---------------------------------------------------------------------------
 
-void OfferEditor(HWND owner, const std::wstring& path, const wchar_t* reason) {
-    if (!g_settings.offerEditor || g_unloading) {
+// Nothing was copied, so say why. Notepad is only offered for a file that is
+// text and small enough for opening it to be the better answer; for a binary
+// file or one that could not be read, the reason alone is the whole message.
+void ReportRefusal(HWND owner, const std::wstring& path, const wchar_t* reason,
+                   bool mayOfferEditor) {
+    if (!g_settings.offerEditor || g_unloading || path.empty()) {
         return;
     }
+    const long long size = mayOfferEditor ? FileSizeBytes(path) : -1;
+    const bool canOpen = size > 0 && size <= static_cast<long long>(kTotalTextBytes);
     std::wstring text = reason;
-    text += L"\n\nOpen it instead?";
-    if (MessageBoxW(owner, text.c_str(), kContentsTitle,
-                    MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-        ShellExecuteW(owner, L"open", L"notepad.exe", path.c_str(), nullptr,
-                      SW_SHOWNORMAL);
+    if (canOpen) {
+        text += L"\n\nOpen it instead?";
     }
+    const UINT flags = canOpen ? (MB_YESNO | MB_ICONINFORMATION)
+                               : (MB_OK | MB_ICONINFORMATION);
+    if (MessageBoxW(owner, text.c_str(), kContentsTitle, flags) != IDYES ||
+        !canOpen) {
+        return;
+    }
+    // Quoted, because Notepad takes its file name as a command line, and a path
+    // with a space in it would otherwise open the wrong file or none.
+    const std::wstring quoted = L"\"" + path + L"\"";
+    ShellExecuteW(owner, L"open", L"notepad.exe", quoted.c_str(), nullptr,
+                  SW_SHOWNORMAL);
 }
 
 void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
@@ -997,6 +1050,9 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
     std::vector<Part> parts;
     std::wstring lastRefused;
     const wchar_t* lastReason = nullptr;
+    // Whether opening the refused file instead is a sensible offer, which is
+    // only true for a file that is text and was refused for its size.
+    bool lastMayOpen = false;
     size_t budget = kTotalTextBytes;
 
     try {
@@ -1018,21 +1074,25 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
             if (onDisk < 0) {
                 lastRefused = path;
                 lastReason = L"This file could not be read.";
+                lastMayOpen = false;
                 continue;
             }
             if (onDisk > SizeLimitBytes()) {
                 // Checked before reading, so an oversized file costs nothing.
                 lastRefused = path;
                 lastReason = L"This file is larger than the size limit.";
+                lastMayOpen = true;
                 continue;
             }
-            // Text is held as UTF-16, so it is at most twice the bytes on disk.
-            // A file that cannot fit in what is left of the budget is skipped
-            // without being opened.
-            if (static_cast<size_t>(onDisk) * 2 > budget) {
+            // A file bigger than what is left of the budget cannot fit in any
+            // encoding, so it is skipped without being opened. A smaller file
+            // is read and measured, because its text can be anything from its
+            // size on disk, for UTF-16, to twice that, for ASCII.
+            if (static_cast<size_t>(onDisk) > budget) {
                 lastRefused = path;
                 lastReason = L"That selection contains more text than the mod "
                              L"will copy at once.";
+                lastMayOpen = true;
                 continue;
             }
             std::wstring text;
@@ -1044,6 +1104,7 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
                                  : result == ReadResult::Binary
                                        ? L"This file does not look like text."
                                        : L"This file could not be read.";
+                lastMayOpen = result == ReadResult::TooBig;
                 continue;
             }
             const size_t bytes = text.size() * sizeof(wchar_t);
@@ -1051,6 +1112,7 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
                 lastRefused = path;
                 lastReason = L"That selection contains more text than the mod "
                              L"will copy at once.";
+                lastMayOpen = true;
                 continue;
             }
             budget -= bytes;
@@ -1062,7 +1124,7 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
 
         if (parts.empty()) {
             if (!lastRefused.empty()) {
-                OfferEditor(owner, lastRefused, lastReason);
+                ReportRefusal(owner, lastRefused, lastReason, lastMayOpen);
             }
             return;
         }
@@ -1093,9 +1155,15 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
                 }
                 // Clipboard history is a separate service that reads the
                 // clipboard when it is told it changed. Write the next file
-                // immediately and it only ever sees the last one.
+                // immediately and it only ever sees the last one. The wait ends
+                // early if the mod is being unloaded.
                 if (n + 1 < order.size() && gapMs > 0) {
-                    Sleep(static_cast<DWORD>(gapMs));
+                    if (g_unloadEvent) {
+                        WaitForSingleObject(g_unloadEvent,
+                                            static_cast<DWORD>(gapMs));
+                    } else {
+                        Sleep(static_cast<DWORD>(gapMs));
+                    }
                 }
             }
             if (written != static_cast<int>(parts.size())) {
@@ -1136,9 +1204,6 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
 // added up, because three ISO images hash for as long as one file of their
 // combined size.
 bool ConfirmLargeHash(HWND owner, const std::vector<std::wstring>& paths) {
-    if (g_settings.askHashMB <= 0) {
-        return true;
-    }
     long long total = 0;
     int files = 0;
     for (const std::wstring& path : paths) {
@@ -1146,14 +1211,14 @@ bool ConfirmLargeHash(HWND owner, const std::vector<std::wstring>& paths) {
             continue;
         }
         const long long size = FileSizeBytes(path);
-        if (size > 0) {
+        if (size >= 0) {
             total += size;
             files++;
         }
     }
     const long long limit = static_cast<long long>(g_settings.askHashMB) *
                             1024LL * 1024LL;
-    if (total <= limit) {
+    if (files == 0 || (g_settings.askHashMB > 0 && total <= limit)) {
         return true;
     }
     // Megabytes when the total is under a gigabyte, because a lowered
@@ -1180,8 +1245,11 @@ void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
         if (!ConfirmLargeHash(owner, paths)) {
             return;
         }
-        std::wstring combined;
-        int copied = 0;
+        struct Hashed {
+            std::wstring hex;
+            std::wstring name;
+        };
+        std::vector<Hashed> hashed;
         for (const std::wstring& path : paths) {
             if (g_unloading) {
                 return;
@@ -1194,20 +1262,30 @@ void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
             if (!ok) {
                 continue;
             }
+            Hashed line;
+            line.hex = hex;
+            line.name = FileNameOf(path);
+            hashed.push_back(std::move(line));
+        }
+        if (hashed.empty()) {
+            return;
+        }
+        // The name goes next to a hash only when there is more than one, and
+        // that is counted from what was hashed, not from what was selected: a
+        // folder in the selection was skipped and does not count.
+        std::wstring combined;
+        for (const Hashed& line : hashed) {
             if (!combined.empty()) {
                 combined += L"\r\n";
             }
-            combined += hex;
-            if (paths.size() > 1) {
+            combined += line.hex;
+            if (hashed.size() > 1) {
                 combined += L"  ";
-                combined += FileNameOf(path);
+                combined += line.name;
             }
-            copied++;
         }
-        if (copied > 0 && !combined.empty()) {
-            if (!SetClipboardText(owner, combined)) {
-                Wh_Log(L"the clipboard was busy, nothing was copied");
-            }
+        if (!SetClipboardText(owner, combined)) {
+            Wh_Log(L"the clipboard was busy, nothing was copied");
         }
     } catch (...) {
         Wh_Log(L"ran out of memory while hashing, nothing was copied");
@@ -1339,14 +1417,18 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable,
 constexpr UINT kMenuIdBase = 0xE7C1;
 constexpr int kMenuIdTries = 8;
 
+// Three ids are taken: the two entries and the separator. All three are
+// checked, and candidates are three apart, so the separator of one candidate is
+// never the first entry of the next.
 bool IdsAreFree(HMENU menu, UINT base) {
     return GetMenuState(menu, base, MF_BYCOMMAND) == (UINT)-1 &&
-           GetMenuState(menu, base + 1, MF_BYCOMMAND) == (UINT)-1;
+           GetMenuState(menu, base + 1, MF_BYCOMMAND) == (UINT)-1 &&
+           GetMenuState(menu, base + 2, MF_BYCOMMAND) == (UINT)-1;
 }
 
 UINT PickMenuIdBase(HMENU menu) {
     for (int i = 0; i < kMenuIdTries; i++) {
-        const UINT base = kMenuIdBase + static_cast<UINT>(i) * 2;
+        const UINT base = kMenuIdBase + static_cast<UINT>(i) * 3;
         if (IdsAreFree(menu, base)) {
             return base;
         }
@@ -1363,11 +1445,37 @@ void RemoveEntries(HMENU menu, UINT base) {
     DeleteMenu(menu, base + 2, MF_BYCOMMAND);
 }
 
+bool HasCheckedItem(HMENU menu, int count) {
+    for (int i = 0; i < count; i++) {
+        const UINT state = GetMenuState(menu, static_cast<UINT>(i), MF_BYPOSITION);
+        if (state != (UINT)-1 && (state & MF_CHECKED)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsOnColumnHeader(int x, int y) {
+    POINT pt = {x, y};
+    return HasClass(WindowFromPoint(pt), L"SysHeader32");
+}
+
 // Adds the entries when this popup is a File Explorer file menu, and reports
 // the id base it used, or 0.
-UINT AddEntries(HMENU menu, UINT uFlags, HWND hWnd,
+UINT AddEntries(HMENU menu, UINT uFlags, HWND hWnd, int x, int y,
                 std::vector<std::wstring>* paths) {
     if (!(uFlags & TPM_RETURNCMD) || !menu || !hWnd) {
+        return 0;
+    }
+    // The column header sits inside the file view, so its own menu looks like a
+    // file menu and the entries were added to it. That menu has no default
+    // action, and it either has check marks on the columns being sorted by, or
+    // was opened right over the header. A file menu also loses its default
+    // action when more than fifteen files are selected, so the check marks and
+    // the pointer are what settles it there.
+    const int count = GetMenuItemCount(menu);
+    if (GetMenuDefaultItem(menu, FALSE, GMDI_USEDISABLED) == (UINT)-1 &&
+        (HasCheckedItem(menu, count) || IsOnColumnHeader(x, y))) {
         return 0;
     }
     IShellBrowser* browser = BrowserForFileView(hWnd);
@@ -1422,7 +1530,8 @@ UINT AddEntries(HMENU menu, UINT uFlags, HWND hWnd,
 }
 
 template <typename Track>
-BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, Track track) {
+BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, int x, int y,
+                      Track track) {
     // TrackPopupMenu may call TrackPopupMenuEx. Only the outer call adds.
     if (t_inMenuHook) {
         return track();
@@ -1439,7 +1548,7 @@ BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, Track track) {
     }
 
     std::vector<std::wstring> paths;
-    const UINT base = AddEntries(menu, uFlags, owner, &paths);
+    const UINT base = AddEntries(menu, uFlags, owner, x, y, &paths);
     if (!base) {
         return track();
     }
@@ -1474,7 +1583,7 @@ TrackPopupMenuEx_t TrackPopupMenuEx_Original;
 
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                   HWND hWnd, LPTPMPARAMS params) {
-    return TrackWithEntries(hMenu, uFlags, hWnd, [&] {
+    return TrackWithEntries(hMenu, uFlags, hWnd, x, y, [&] {
         return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, params);
     });
 }
@@ -1484,7 +1593,7 @@ TrackPopupMenu_t TrackPopupMenu_Original;
 
 BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                 int reserved, HWND hWnd, const RECT* rect) {
-    return TrackWithEntries(hMenu, uFlags, hWnd, [&] {
+    return TrackWithEntries(hMenu, uFlags, hWnd, x, y, [&] {
         return TrackPopupMenu_Original(hMenu, uFlags, x, y, reserved, hWnd, rect);
     });
 }
@@ -1494,7 +1603,10 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Copy File Contents 1.2");
+    Wh_Log(L"Copy File Contents 1.3");
+    // Signalled on unload, to cut the wait between separate clipboard items
+    // short. A missing event only costs that: the code falls back to sleeping.
+    g_unloadEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
     Wh_Log(L"settings: max %d %s (%lld bytes), contents=%d hash=%d",
            g_settings.maxSize, g_settings.maxSizeInMb ? L"MB" : L"KB",
@@ -1560,10 +1672,18 @@ BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
 void Wh_ModBeforeUninit() {
     // No new work from here on: the hooks pass everything straight through.
     g_unloading = true;
+    // Wakes the wait between separate clipboard items, which would otherwise
+    // spend up to two seconds of the time below doing nothing useful.
+    if (g_unloadEvent) {
+        SetEvent(g_unloadEvent);
+    }
 
     // An open menu, a prompt or a copy may still be running with this mod's
     // code on some thread's stack. Close what can be closed and wait for the
     // rest, so nothing of this mod is on any thread when it is unloaded.
+    // Around two seconds. Every step that can be cut short has been; what is
+    // left is a single CreateFileW or ReadFile on a share that has stopped
+    // answering, and that cannot be interrupted, only waited out or abandoned.
     for (int i = 0; i < 100 && g_busy > 0; i++) {
         for (int slot = 0; slot < kMaxOwners; slot++) {
             HWND owner = g_ownerSlots[slot];
@@ -1576,6 +1696,15 @@ void Wh_ModBeforeUninit() {
                 EnumThreadWindows(thread, CancelPromptProc, 0);
             }
         }
+        // The event remains signalled; sleep here to avoid a busy loop.
         Sleep(20);
+    }
+}
+
+void Wh_ModUninit() {
+    // The bounded wait above may time out if an I/O call is stuck.
+    if (g_unloadEvent) {
+        CloseHandle(g_unloadEvent);
+        g_unloadEvent = nullptr;
     }
 }
