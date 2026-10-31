@@ -13,10 +13,6 @@
 
 // ==WindhawkModReadme==
 /*
-| **Upgrading from v0.7.1? Back up your settings before installing v0.8.0.** |
-| :--- |
-| Copy your current configuration before upgrading. Version 0.8.0 introduces a new settings structure, so existing appearance, layout, popup, and custom-color settings will reset to the new defaults. Your **mosque identifier, selected theme, and taskbar position** are preserved. |
-
 # Mawaqit Prayer Clock
 
 ## Bring your daily prayer times to the Windows 11 taskbar.
@@ -63,6 +59,10 @@ Choose your preferred theme and taskbar position. You're ready!
 - **Internet access.** The mod connects to Mawaqit to retrieve your mosque's published prayer times and stores a local copy for reuse.
 - **No account required.** Simply select your mosque.
 - **Mosque-specific schedules.** Prayer times reflect the schedule and adjustments published by your selected mosque.
+
+| **Upgrading from v0.7.1? Back up your settings before installing v0.8.0.** |
+| :--- |
+| Copy your current configuration before upgrading. Version 0.8.0 introduces a new settings structure, so existing appearance, layout, popup, and custom-color settings will reset to the new defaults. Your **mosque identifier, selected theme, and taskbar position** are preserved. |
 
 ## More Information
 For additional screenshots, troubleshooting, technical details, and release information, visit the [GitHub project](https://github.com/hheitlager/windhawk-mawaqit).
@@ -5101,7 +5101,7 @@ static winrt::Windows::UI::Xaml::Controls::Viewbox MakePillPrayerIcon(winrt::Win
     // TextBlock centers its line box, whose visible glyphs sit slightly lower.
     // Correct the optical center without changing layout height or spacing.
     TranslateTransform opticalOffset;
-    opticalOffset.Y((double)g_fontSize * 0.08 - 1.0);
+    opticalOffset.Y(1.0 + ((double)g_fontSize - 15.0) * 0.08);
     view.RenderTransform(opticalOffset);
     Canvas canvas;
     canvas.Width(24);
