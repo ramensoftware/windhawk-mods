@@ -2,7 +2,7 @@
 // @id              expanded-clipboard
 // @name            Expanded Clipboard (Win+V)
 // @description     Raises the 25-item cap of Windows clipboard history (Win+V) and lifts the per-item / total buffer size limit so large images stick.
-// @version         0.7.1
+// @version         0.7.5
 // @author          takattowo
 // @github          https://github.com/takattowo
 // @include         svchost.exe
@@ -13,34 +13,54 @@
 /*
 # Expanded Clipboard (Win+V)
 
-Raises the 25-entry cap on Windows 11 clipboard history (the list shown by
-**Win+V**) and lifts the per-item size cap so large image entries are kept.
+Raises the 25-entry cap on Windows 11 clipboard history (the list
+shown by **Win+V**) and lifts the per-item size cap so large image
+entries are kept.
+
+## Targeting
+
+The clipboard history service (`cbdhsvc.dll`) is hosted in a
+per-user `svchost.exe`. Windhawk's `@include` has no service-level
+targeting, so the engine injects this mod into every svchost
+instance — but the mod only installs anything in the instance that
+hosts the clipboard service, identified from the command line
+(`svchost.exe -k <Group> [-p] [-s <Service>]`): an exact
+`-s cbdhsvc[_*]` match, or, for unsplit instances, the `-k`
+group's member list in the registry. Every other svchost instance
+bails out in `Wh_ModInit` without installing anything. This avoids
+breaking unrelated svchost-hosted services
+(https://github.com/ramensoftware/windhawk-mods/issues/5060).
+
+`cbdhsvc.dll` is loaded lazily, so it usually isn't loaded yet
+when `Wh_ModInit` runs. In that case the mod hooks
+`kernelbase!LoadLibraryExW` — only in the hosting instance — and
+applies the symbol hooks as soon as the DLL appears, before the
+service starts using it.
 
 ## Hook targets
 
-Hosted in `cbdhsvc.dll` (per-user `svchost.exe`, service group
-`UnistackSvcGroup`). All hooks are virtual COM methods on `ClipboardSettingsImpl`
-plus one static helper:
+Hosted in `cbdhsvc.dll`:
 
-- `get_ClipboardHistoryMaxItemsCount`: entry-count cap (default 25).
-- `get_ClipboardHistoryMaxItemSizeInBytes`: per-item byte cap (default 4 MiB).
-- `get_ClipboardHistoryMaxSizeInBytes`: total in-memory buffer cap. Empirically
-  this is the gate the inner add path checks first.
-- `DataPackageHelper::CanIncludeInClipboardHistory`: opt-in override of the
-  per-item allow check.
+- `ClipboardSettingsImpl::get_ClipboardHistoryMaxItemsCount`:
+  entry-count cap (default 25).
+- `ClipboardSettingsImpl::get_ClipboardHistoryMaxItemSizeInBytes`:
+  per-item byte cap (default 4 MiB).
+- `ClipboardSettingsImpl::get_ClipboardHistoryMaxSizeInBytes`:
+  total in-memory buffer cap.
+- `DataPackageHelper::CanIncludeInClipboardHistory`: opt-in
+  override of the per-item allow check.
 
 ## Configuration
 
 - `maxItems` (default 100, range 25..5000): entry cap.
-- `maxItemSizeMB` (default 256, range 4..4096): per-item and total buffer byte
-  cap, in MB. Both caps share this value.
-- `forceIncludeAll` (default off): when on, force the allow check to true so
-  items marked "do not include in history" by their source app still land in
-  Win+V.
+- `maxItemSizeMB` (default 256, range 4..4096): per-item and
+  total buffer byte cap, in MB.
+- `forceIncludeAll` (default off): when on, force the allow check
+  to true.
 
 ## Logs
 
-Open Windhawk Logs. Filter `[ExpandedClipboard]`.
+Open Windhawk Logs and filter by the mod name.
 */
 // ==/WindhawkModReadme==
 
@@ -63,6 +83,7 @@ Open Windhawk Logs. Filter `[ExpandedClipboard]`.
 #include <windows.h>
 
 #include <atomic>
+#include <vector>
 
 struct Settings {
     int maxItems = 100;
@@ -125,9 +146,9 @@ static unsigned char WINAPI Hook_CanInclude(void* dataPackageView) {
     return g_origCanInclude(dataPackageView);
 }
 
-static std::atomic<bool> g_cbdhsvcDllHooked = false;
+static std::atomic<bool> g_cbdhsvcHooked = false;
 
-static bool HookCbdhsvcDllSymbols(HMODULE hMod) {
+static bool HookCbdhsvcSymbols(HMODULE hMod) {
     WindhawkUtils::SYMBOL_HOOK cbdhsvcDllHooks[] = {
         {
             { L"public: virtual long __cdecl ClipboardSettingsImpl::get_ClipboardHistoryMaxItemsCount(unsigned int *)" },
@@ -151,94 +172,180 @@ static bool HookCbdhsvcDllSymbols(HMODULE hMod) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(hMod, cbdhsvcDllHooks, ARRAYSIZE(cbdhsvcDllHooks))) {
-        Wh_Log(L"[ExpandedClipboard] HookSymbols failed");
+    if (!WindhawkUtils::HookSymbols(hMod, cbdhsvcDllHooks,
+                                      ARRAYSIZE(cbdhsvcDllHooks))) {
+        Wh_Log(L"HookSymbols failed "
+               L"(PDB/symbol mismatch on this Windows build?)");
         return false;
     }
 
     return true;
 }
 
-static void HandleLoadedModuleIfCbdhsvc(HMODULE module, LPCWSTR lpLibFileName) {
-    if (g_cbdhsvcDllHooked) {
-        return;
+// Returns true when this svchost instance hosts the clipboard
+// history service (cbdhsvc). Windhawk injects the mod into every
+// svchost, so this check is what confines the mod to the one
+// instance that matters.
+static bool SvchostHostsClipboardService() {
+    // svchost.exe is launched as: svchost.exe -k <Group> [-p]
+    // [-s <Service>]. The command line contains no quoted
+    // arguments, so splitting a copy on whitespace is enough
+    // (and avoids pulling shell32.dll into every svchost).
+    wchar_t cmdLine[1024];
+    wcsncpy_s(cmdLine, GetCommandLineW(), _TRUNCATE);
+
+    wchar_t* args[16] = {};
+    int argc = 0;
+    wchar_t* context = nullptr;
+    for (wchar_t* token = wcstok_s(cmdLine, L" \t", &context);
+         token && argc < _countof(args);
+         token = wcstok_s(nullptr, L" \t", &context)) {
+        args[argc++] = token;
     }
 
-    if (GetModuleHandleW(L"cbdhsvc.dll") != module) {
-        return;
+    // "-s <Service>" identifies the service exactly when svchost
+    // splits the group into per-service instances. It comes
+    // after -k, so it must be checked first.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (_wcsicmp(args[i], L"-s") == 0) {
+            const wchar_t* service = args[i + 1];
+            return _wcsnicmp(service, L"cbdhsvc", 7) == 0 &&
+                   (service[7] == L'\0' || service[7] == L'_');
+        }
     }
 
-    if (g_cbdhsvcDllHooked.exchange(true)) {
-        return;
+    // Without -s, the instance hosts every service in the -k
+    // group, whose member list is a REG_MULTI_SZ value under
+    // HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Svchost.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (_wcsicmp(args[i], L"-k") == 0) {
+            HKEY hKey;
+            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                    L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Svchost",
+                    0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+                bool hosts = false;
+                DWORD type = REG_NONE, size = 0;
+                if (RegQueryValueExW(hKey, args[i + 1], nullptr,
+                        &type, nullptr, &size) == ERROR_SUCCESS
+                    && type == REG_MULTI_SZ && size != 0) {
+                    // Pad the buffer so the double-null
+                    // terminator is guaranteed even if the
+                    // registry data isn't properly terminated.
+                    std::vector<wchar_t> services(
+                        size / sizeof(wchar_t) + 2);
+                    if (RegQueryValueExW(hKey, args[i + 1], nullptr,
+                            nullptr,
+                            reinterpret_cast<LPBYTE>(services.data()),
+                            &size) == ERROR_SUCCESS) {
+                        for (const wchar_t* service = services.data();
+                             *service; service += wcslen(service) + 1) {
+                            if (_wcsicmp(service, L"cbdhsvc") == 0) {
+                                hosts = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                RegCloseKey(hKey);
+                return hosts;
+            }
+            return false;
+        }
     }
 
-    Wh_Log(L"[ExpandedClipboard] cbdhsvc.dll loaded (%s)",
-           lpLibFileName ? lpLibFileName : L"?");
-
-    if (HookCbdhsvcDllSymbols(module)) {
-        Wh_ApplyHookOperations();
-    }
+    return false;
 }
+
+// --- Late-load handling ------------------------------------------------
+//
+// cbdhsvc.dll is loaded lazily by the service control manager, so
+// it usually isn't loaded yet when Wh_ModInit runs. The
+// LoadLibraryExW hook below catches the load — but only after the
+// service-group check above confirmed this svchost is the
+// clipboard host, so no other svchost instance is ever touched.
+// The work runs after the original call returns, so the loader
+// lock is released and the hooks are applied before the service
+// starts using the DLL.
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t LoadLibraryExW_Original;
+
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                           HANDLE hFile,
                                           DWORD dwFlags) {
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module) {
-        HandleLoadedModuleIfCbdhsvc(module, lpLibFileName);
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile,
+                                               dwFlags);
+    DWORD lastError = GetLastError();
+
+    if (module && !g_cbdhsvcHooked.load() &&
+        GetModuleHandleW(L"cbdhsvc.dll") == module &&
+        !g_cbdhsvcHooked.exchange(true)) {
+        if (HookCbdhsvcSymbols(module)) {
+            Wh_ApplyHookOperations();
+            Wh_Log(L"hooks active (caught late load)");
+        }
     }
+
+    SetLastError(lastError);
     return module;
 }
+
+// ----------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    Wh_Log(L"[ExpandedClipboard] Init. maxItems=%d, maxItemSizeMB=%d, "
+    // Only the svchost instance hosting the clipboard history
+    // service is relevant. Bail out everywhere else without
+    // installing anything — hooks in unrelated svchost
+    // instances break other services (issue #5060).
+    HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll");
+    if (!hMod && !SvchostHostsClipboardService()) {
+        return FALSE;
+    }
+
+    Wh_Log(L"Init. maxItems=%d, maxItemSizeMB=%d, "
            L"forceIncludeAll=%d",
            g_settings.maxItems, g_settings.maxItemSizeMB,
            g_settings.forceIncludeAll ? 1 : 0);
 
-    if (HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll")) {
-        g_cbdhsvcDllHooked = true;
-        if (!HookCbdhsvcDllSymbols(hMod)) {
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"[ExpandedClipboard] cbdhsvc.dll not loaded yet, waiting");
+    if (hMod) {
+        // Hook operations are applied implicitly when
+        // Wh_ModInit returns TRUE.
+        g_cbdhsvcHooked = true;
+        return HookCbdhsvcSymbols(hMod);
     }
 
+    // This svchost hosts the clipboard service, but cbdhsvc.dll
+    // hasn't been loaded yet. Catch the load.
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW =
-        (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                  "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+        (decltype(&LoadLibraryExW))GetProcAddress(
+            kernelBaseModule, "LoadLibraryExW");
+    if (pKernelBaseLoadLibraryExW) {
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
-
+    }
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_cbdhsvcDllHooked) {
-        return;
-    }
-
-    if (HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll")) {
-        if (!g_cbdhsvcDllHooked.exchange(true)) {
-            Wh_Log(L"[ExpandedClipboard] cbdhsvc.dll loaded post-init");
-            if (HookCbdhsvcDllSymbols(hMod)) {
-                Wh_ApplyHookOperations();
-            }
+    // Covers a load that happened between Wh_ModInit and the
+    // LoadLibraryExW hook becoming active.
+    HMODULE hMod = GetModuleHandleW(L"cbdhsvc.dll");
+    if (hMod && !g_cbdhsvcHooked.exchange(true)) {
+        if (HookCbdhsvcSymbols(hMod)) {
+            Wh_ApplyHookOperations();
+            Wh_Log(L"hooks active (ModAfterInit)");
         }
     }
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Wh_Log(L"[ExpandedClipboard] Settings reloaded. "
-           L"maxItems=%d, maxItemSizeMB=%d, forceIncludeAll=%d",
+    Wh_Log(L"Settings reloaded. maxItems=%d, maxItemSizeMB=%d, "
+           L"forceIncludeAll=%d",
            g_settings.maxItems, g_settings.maxItemSizeMB,
            g_settings.forceIncludeAll ? 1 : 0);
 }
