@@ -4,7 +4,7 @@
 // @name:zh-CN      桌面图标 Dock
 // @description     Turns desktop icons into a centered macOS-style dock with hover magnification and an optional glass panel
 // @description:zh-CN 将桌面图标变成居中的 macOS 风格 Dock，支持悬停放大，可选液态玻璃面板
-// @version         1.0.6
+// @version         1.0.9
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -14,67 +14,114 @@
 
 // ==WindhawkModReadme==
 /*
-# Desktop Icon Dock / 桌面图标 Dock
+# Desktop Icon Dock
 
-把桌面图标变成居中的 macOS 风格 Dock。默认使用完全透明的背景，只显示图标；也可以开启可选的液态玻璃面板。
+Turns desktop icons into a centered macOS-style dock. A fully transparent
+background is used by default, showing only the icons; an optional Liquid Glass
+panel is available.
 
-![桌面图标 Dock 效果展示](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg)
+![Desktop Icon Dock preview](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg)
 
-*实际效果：桌面图标以 macOS Dock 样式居中排列，悬停的图标会放大并显示名称。*
+*Example: desktop icons arranged as a centered macOS-style dock; the hovered
+icon is magnified with its label shown.*
 
-## 功能特性
+## Features
 
-- **macOS 风格悬停放大**：鼠标接近时图标平滑放大，按余弦曲线衰减，相邻图标同时向外让位。
-- **透明背景（默认）**：只绘制图标与柔和投影，完全融入壁纸；Dock 窗口的透明区域允许鼠标穿透，不会挡住桌面右键和点击。
-- **可选液态玻璃面板**：关闭「透明背景」后启用。面板包含壁纸模糊、乳白玻璃、高光描边和悬停光晕；背景从 Dock 上方的屏幕区域采样，支持 Wallpaper Engine 等动态壁纸。
-- **名称标签**：悬停时在图标上方显示名称胶囊；透明背景下标签位置固定，不会随图标放大而跳动。
-- **原生交互**：左键单击打开项目；右键弹出与桌面一致的资源管理器原生菜单（新建快捷方式、属性、删除等）。
-- **自动同步桌面**：新增、删除、重命名、移动桌面项目会自动出现在 Dock 中，顺序与桌面网格位置一致。
-- **隐藏原始桌面图标**：默认隐藏系统桌面上的原图标，只保留 Dock；卸载或禁用模组时自动恢复。
-- **增量图标缓存**：按项目路径缓存 256px 图标，只有新项目需要重新提取，刷新快、不闪烁。
+- **macOS-style hover magnification**: icons grow smoothly as the pointer
+  approaches, with cosine falloff and neighboring icons spreading aside.
+- **Transparent background (default)**: only the icons and a soft drop shadow
+  are drawn, so the dock blends into the wallpaper; transparent areas of the
+  dock window are click-through, so desktop right-click and clicks keep
+  working.
+- **Optional Liquid Glass panel**: enabled by turning off "Transparent
+  background". Blurred wallpaper backdrop, milky glass tint, specular rim and
+  a hover glow. The backdrop is sampled from the screen above the dock and
+  works with Wallpaper Engine and other animated wallpapers.
+- **Name labels**: hovering an icon shows a name pill above it; in transparent
+  mode the pill stays at a fixed position instead of jumping while icons
+  scale.
+- **Native interaction**: left click opens an item; right click opens the same
+  Explorer context menu as the desktop (new shortcut, properties, delete, ...).
+- **Automatic desktop sync**: items added, removed, renamed or moved on the
+  desktop appear in the dock automatically through shell change notifications,
+  ordered by their desktop grid position.
+- **Original desktop icons hidden in memory**: while the dock is active, the
+  desktop's list view is hidden; no Explorer setting or registry value is
+  changed, and the icons are shown again when the mod is unloaded.
+- **Icon cache with cleanup**: icons are cached per item path, evicted when an
+  item disappears, and refreshed when the shell reports an icon update.
 
-## 工作方式
+## How it works
 
-Dock 不是重排系统桌面图标，而是读取桌面文件夹（Shell 的 IFolderView）内容后自行绘制，同时用 shell 命令隐藏原图标。
+The dock does not rearrange the system desktop icons. It reads the desktop
+folder (Shell's IFolderView), draws the items itself, and hides the original
+icons by hiding the desktop's list view window in memory.
 
-- **同步频率**：约每 3 秒检查一次桌面项目；在 Dock 右键菜单中执行命令后约 0.7 秒立即刷新。
-- **排序**：按桌面网格坐标先上下、后左右排序，因此 Dock 顺序与桌面排列一致，新快捷方式会出现在对应的位置。
-- **布局**：水平居中于主显示器底部、任务栏上方；图标增多时面板自动变宽，静止时图标垂直居中。
-- **性能**：透明背景模式下用 50ms 间隔轮询鼠标位置，以支持图标间隙的悬停放大；空闲时 CPU 占用可忽略。
+- **Sync**: the dock listens for shell change notifications for the desktop
+  folders, so most changes appear immediately. A slow 30-second check covers
+  changes that do not raise a notification, such as a new sort order.
+- **Ordering**: items are sorted by desktop grid position (top to bottom, then
+  left to right), so the dock order matches the desktop layout and a new
+  shortcut appears at its corresponding position.
+- **Layout**: centered horizontally at the bottom of the primary monitor,
+  above the taskbar; the panel widens as items are added, and icons are
+  vertically centered at rest.
+- **Performance**: in transparent mode the pointer position is polled every
+  50 ms so hover magnification also works in the gaps between icons; idle CPU
+  usage is negligible.
 
-## 设置说明
+## Settings
 
-| 设置 | 默认值 | 说明 |
+| Setting | Default | Description |
 | --- | --- | --- |
-| 图标大小 | 48 | 100% DPI 下的基础像素大小，随系统缩放自动放大（150% 时约 72px） |
-| 图标间距 | 10 | 静止时图标之间的像素间距 |
-| 最大放大比例 | 175% | 悬停图标的最大倍数 |
-| 效果半径 | 160 | 放大效果从光标向外衰减的距离（像素） |
-| 相邻扩散 | 60% | 放大时相邻图标向外让位的程度 |
-| 平滑速度 | 16 | 数值越大越跟手，越小越柔和 |
-| 底部偏移 | 10 | Dock 与任务栏之间的间距（100% DPI 像素） |
-| 透明背景 | 开 | 默认只显示图标；关闭后使用液态玻璃面板 |
-| 玻璃不透明度 | 24% | 仅玻璃模式：乳白玻璃的强度 |
-| 玻璃模糊 | 20 | 仅玻璃模式：背景模糊强度 |
-| 显示名称 | 开 | 悬停时显示名称胶囊 |
-| 隐藏原始桌面图标 | 开 | 隐藏系统桌面图标，卸载时恢复 |
-| 排除项目 | 空 | 逗号分隔的显示名，匹配的项目不会进入 Dock |
-| 背景刷新间隔 | 20 秒 | 仅玻璃模式：重新采样玻璃背景的间隔，0 表示不刷新 |
+| Icon size | 48 | Base size in pixels at 100% DPI, scaled with system DPI (about 72 px at 150%) |
+| Icon spacing | 10 | Pixel gap between icons at rest |
+| Maximum scale (%) | 175 | Largest magnification of the hovered icon |
+| Effect radius | 160 | Distance in pixels over which magnification fades out from the cursor |
+| Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
+| Smoothing speed | 16 | Higher is snappier, lower is softer |
+| Bottom offset | 10 | Gap between the dock and the taskbar, in pixels at 100% DPI |
+| Transparent background | On | Show only the icons; turn off to use the Liquid Glass panel |
+| Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
+| Glass blur | 20 | Glass mode only: backdrop blur strength |
+| Show labels | On | Show a name pill for the hovered item |
+| Hide original desktop icons | On | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
+| Excluded items | empty | Comma-separated display names that should not appear in the dock |
+| Backdrop refresh interval (s) | 20 | Glass mode only: how often the glass backdrop is re-sampled; 0 disables refresh |
 
-## 兼容性与限制
+## Compatibility and limitations
 
-- 仅支持 x86-64 的 Windows 10 / 11，通过 Windhawk 注入 explorer.exe。
-- 目前仅支持主显示器；Dock 固定在主显示器底部、任务栏上方。
-- Dock 是位于普通窗口下方的分层窗口：全屏应用或其它窗口会盖住它，这是预期行为。
-- 透明背景模式下，窗口透明像素点击穿透，图标本身仍可正常点击。
+- Windows 10 / 11 on x86-64 only, injected into explorer.exe by Windhawk.
+- Primary monitor only; the dock is anchored to the bottom of the primary
+  monitor, above the taskbar.
+- The dock is a layered window placed below normal windows; full-screen apps
+  and other windows cover it, which is expected.
+- In transparent mode, fully transparent pixels are click-through; the icons
+  themselves remain clickable.
 
-## 故障排查
+## Troubleshooting
 
-- **卸载后桌面图标没有恢复**：在桌面右键 → 查看 → 勾选「显示桌面图标」；或重新加载模组后再卸载。
-- **Explorer 崩溃后 Dock 消失或图标仍隐藏**：模组会随 explorer.exe 自动重新加载；若原图标仍隐藏，使用上面的方法恢复。
-- **新快捷方式没有立即出现**：最多等待约 3 秒；在 Dock 右键菜单中创建的项目约 0.7 秒出现。
-- **修改设置后未生效**：保存设置即自动重载并重建，无需重启 Explorer。
-- **某个项目不想显示**：在「排除项目」中填入它的显示名（逗号分隔）。
+- **Dock missing after an Explorer restart**: the mod reloads together with
+  explorer.exe; the dock comes back within a second.
+- **A new shortcut does not appear immediately**: desktop changes are picked
+  up through shell notifications, so the item should appear within a second;
+  the 30-second fallback covers unusual changes such as a new sort order.
+- **Settings changes seem to have no effect**: saving settings reloads and
+  rebuilds the dock automatically; no Explorer restart is needed.
+- **Hide a specific item**: put its display name in "Excluded items"
+  (comma-separated).
+
+## 中文说明
+
+本模组把桌面图标变成居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。
+
+- 图标支持悬停放大、相邻图标让位和名称标签。
+- Dock 通过 shell 变更通知自动同步桌面上新增、删除、重命名和移动的项目，并按桌面网格位置排序。
+- 原始桌面图标只在 Dock 运行期间通过隐藏桌面列表视图在内存中隐藏，不会修改 Explorer 的任何设置或注册表项；卸载模组后图标自动恢复。
+- 左键打开项目，右键打开与桌面一致的资源管理器上下文菜单。
+- 仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。
+
+各设置项的说明见上方英文表格。
 */
 // ==/WindhawkModReadme==
 
@@ -123,13 +170,13 @@ Dock 不是重排系统桌面图标，而是读取桌面文件夹（Shell 的 IF
 - GlassOpacity: 24
   $name: Glass opacity (%)
   $name:zh-CN: 玻璃不透明度（%）
-  $description: Strength of the milky glass tint
-  $description:zh-CN: 玻璃乳白色调的强度
+  $description: Glass mode only (Transparent background off) - strength of the milky tint
+  $description:zh-CN: 仅玻璃模式（关闭透明背景）时生效：乳白色调的强度
 - GlassBlur: 20
   $name: Glass blur
   $name:zh-CN: 玻璃模糊
-  $description: Backdrop blur strength
-  $description:zh-CN: 背景模糊强度
+  $description: Glass mode only (Transparent background off) - backdrop blur strength
+  $description:zh-CN: 仅玻璃模式（关闭透明背景）时生效：背景模糊强度
 - ShowLabels: true
   $name: Show labels
   $name:zh-CN: 显示名称
@@ -138,8 +185,8 @@ Dock 不是重排系统桌面图标，而是读取桌面文件夹（Shell 的 IF
 - HideDesktopIcons: true
   $name: Hide original desktop icons
   $name:zh-CN: 隐藏原始桌面图标
-  $description: Hide the original desktop icons while the dock is active
-  $description:zh-CN: 启用 Dock 时隐藏桌面上的原始图标
+  $description: Hide the original desktop icons while the dock is active by hiding the desktop list view in memory; restored on unload
+  $description:zh-CN: 启用 Dock 时在内存中隐藏桌面列表视图，不修改系统设置；卸载时恢复
 - ExcludeItems: ""
   $name: Excluded items
   $name:zh-CN: 排除项目
@@ -148,33 +195,31 @@ Dock 不是重排系统桌面图标，而是读取桌面文件夹（Shell 的 IF
 - BackdropRefreshSeconds: 20
   $name: Backdrop refresh interval (s)
   $name:zh-CN: 背景刷新间隔（秒）
-  $description: How often the blurred glass backdrop is re-sampled
-  $description:zh-CN: 多久重新采样一次玻璃背景
+  $description: Glass mode only - how often the blurred backdrop is re-sampled; 0 disables refresh
+  $description:zh-CN: 仅玻璃模式：多久重新采样一次玻璃背景；0 表示不自动刷新
 */
 // ==/WindhawkModSettings==
 
-#define NOMINMAX
 #include <windows.h>
-#include <windowsx.h>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <cwchar>
+#include <cwctype>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+#include <windhawk_utils.h>
 #include <oleauto.h>
 #include <shlobj.h>
 #include <shlguid.h>
 #include <exdisp.h>
 #include <shellapi.h>
 #include <gdiplus.h>
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstdarg>
-#include <cstring>
-#include <cwchar>
-#include <map>
-#include <memory>
-#include <string>
-#include <vector>
 
 #ifdef min
 #undef min
@@ -185,92 +230,21 @@ Dock 不是重排系统桌面图标，而是读取桌面文件夹（Shell 的 IF
 
 using namespace Gdiplus;
 
-#ifdef DOCK_STANDALONE_TEST
-static std::wstring TestFilePath(const wchar_t* name) {
-    wchar_t dir[MAX_PATH];
-    DWORD len = GetTempPathW(MAX_PATH, dir);
-    std::wstring path(dir, len);
-    path += L"dockdev\\";
-    CreateDirectoryW(path.c_str(), nullptr);
-    path += name;
-    return path;
-}
-
-static void Wh_Log(const wchar_t* fmt, ...) {
-    static std::wstring path = TestFilePath(L"dock-test.log");
-    wchar_t buf[2048];
-    va_list ap;
-    va_start(ap, fmt);
-    vswprintf(buf, 2048, fmt, ap);
-    va_end(ap);
-    HANDLE h = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ,
-                           nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    std::wstring line = buf;
-    line += L"\r\n";
-    int bytes = WideCharToMultiByte(CP_UTF8, 0, line.c_str(), (int)line.size(),
-                                   nullptr, 0, nullptr, nullptr);
-    std::string utf8(bytes, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, line.c_str(), (int)line.size(), utf8.data(),
-                       bytes, nullptr, nullptr);
-    DWORD written = 0;
-    WriteFile(h, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
-    CloseHandle(h);
-}
-
-static int TestSettingDefault(const wchar_t* name) {
-    if (!wcscmp(name, L"IconSize")) return 48;
-    if (!wcscmp(name, L"Spacing")) return 10;
-    if (!wcscmp(name, L"MaxScale")) return 175;
-    if (!wcscmp(name, L"EffectRadius")) return 160;
-    if (!wcscmp(name, L"SpacingFactor")) return 60;
-    if (!wcscmp(name, L"Smoothing")) return 16;
-    if (!wcscmp(name, L"BottomOffset")) return 10;
-    if (!wcscmp(name, L"TransparentBackground")) return 1;
-    if (!wcscmp(name, L"GlassOpacity")) return 24;
-    if (!wcscmp(name, L"GlassBlur")) return 20;
-    if (!wcscmp(name, L"ShowLabels")) return 1;
-    if (!wcscmp(name, L"HideDesktopIcons")) return 1;
-    if (!wcscmp(name, L"BackdropRefreshSeconds")) return 20;
-    if (!wcscmp(name, L"RunSeconds")) return 0;
-    if (!wcscmp(name, L"TestTopmost")) return 0;
-    return 0;
-}
-
-static int Wh_GetIntSetting(PCWSTR name) {
-    static std::wstring path = TestFilePath(L"dock-test.ini");
-    return (int)GetPrivateProfileIntW(L"Settings", name, TestSettingDefault(name), path.c_str());
-}
-
-static PCWSTR Wh_GetStringSetting(PCWSTR name) {
-    static std::wstring path = TestFilePath(L"dock-test.ini");
-    wchar_t buf[1024] = {};
-    GetPrivateProfileStringW(L"Settings", name, L"", buf, 1024, path.c_str());
-    size_t len = wcslen(buf);
-    PWSTR out = (PWSTR)malloc((len + 1) * sizeof(wchar_t));
-    if (out) wcscpy(out, buf);
-    return out;
-}
-
-static void Wh_FreeStringSetting(PCWSTR str) {
-    free((void*)str);
-}
-#endif
-
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"WindhawkDesktopIconDock";
 constexpr UINT kMsgReloadSettings = WM_APP + 1;
+constexpr UINT kMsgShellNotify = WM_APP + 2;
 constexpr UINT kMsgQuit = WM_APP + 3;
 constexpr UINT_PTR kTimerAnimation = 1;
 constexpr UINT_PTR kTimerMaintenance = 2;
 constexpr UINT_PTR kTimerRefresh = 3;
-constexpr UINT_PTR kTimerTestQuit = 4;
 constexpr UINT_PTR kTimerHoverPoll = 5;
+constexpr UINT_PTR kTimerShellNotify = 6;
 constexpr int kHoverPollMs = 50;
 constexpr int kIconRequestPx = 256;
-constexpr int kCheckDesktopItemsSeconds = 3;
-constexpr UINT kDesktopIconsToggleCommand = 0x7402;
+constexpr int kFullRebuildSeconds = 30;
+constexpr int kNotifyRebuildDelayMs = 300;
 constexpr double kPi = 3.14159265358979323846;
 
 struct Settings {
@@ -295,10 +269,7 @@ Settings g_settings;
 std::atomic<bool> g_stopRequested{false};
 std::atomic<HWND> g_hwnd{nullptr};
 std::atomic<HANDLE> g_thread{nullptr};
-DWORD g_threadId = 0;
 HINSTANCE g_instance = nullptr;
-int g_testRunSeconds = 0;
-bool g_testTopmost = false;
 
 HDC g_screenDc = nullptr;
 double g_dpiScale = 1.0;
@@ -309,7 +280,6 @@ struct FrameBuffer {
     HDC memDc = nullptr;
     HBITMAP dib = nullptr;
     HBITMAP oldBitmap = nullptr;
-    void* bits = nullptr;
     std::unique_ptr<Bitmap> bitmap;
 };
 
@@ -354,7 +324,6 @@ struct DockItem {
     std::shared_ptr<void> pidlOwner;
     PIDLIST_ABSOLUTE pidl = nullptr;
     std::shared_ptr<Bitmap> icon;
-    POINT desktopPosition{};
     double baseCenterX = 0.0;
     double centerX = 0.0;
     double scale = 1.0;
@@ -389,6 +358,9 @@ bool g_menuOpen = false;
 bool g_gdiplusStarted = false;
 ULONG_PTR g_gdiplusToken = 0;
 bool g_classRegistered = false;
+HWND g_desktopListView = nullptr;
+ULONG g_changeNotifyRegister = 0;
+bool g_notifyForceRebuild = false;
 
 template <typename T>
 class ComPtr {
@@ -512,16 +484,8 @@ void LoadSettings() {
     s.hideDesktopIcons = Wh_GetIntSetting(L"HideDesktopIcons") ? 1 : 0;
     s.backdropRefreshSeconds =
         ClampInt(Wh_GetIntSetting(L"BackdropRefreshSeconds"), 0, 3600);
-    PCWSTR exclude = Wh_GetStringSetting(L"ExcludeItems");
-    if (exclude) {
-        s.excludeItems = exclude;
-        Wh_FreeStringSetting(exclude);
-    }
+    s.excludeItems = WindhawkUtils::StringSetting::make(L"ExcludeItems").get();
     g_settings = std::move(s);
-#ifdef DOCK_STANDALONE_TEST
-    g_testRunSeconds = ClampInt(Wh_GetIntSetting(L"RunSeconds"), 0, 3600);
-    g_testTopmost = Wh_GetIntSetting(L"TestTopmost") != 0;
-#endif
 }
 
 std::wstring GetShellItemName(IShellItem* item, SIGDN kind) {
@@ -535,7 +499,8 @@ std::wstring GetShellItemName(IShellItem* item, SIGDN kind) {
     return out;
 }
 
-bool GetDesktopFolderView(ComPtr<IFolderView>& folderView) {
+bool GetDesktopView(ComPtr<IFolderView>& folderView, HWND* defViewOut) {
+    if (defViewOut) *defViewOut = nullptr;
     ComPtr<IShellWindows> shellWindows;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(shellWindows.put())))) {
@@ -562,6 +527,8 @@ bool GetDesktopFolderView(ComPtr<IFolderView>& folderView) {
     ComPtr<IShellView> view;
     if (FAILED(browser->QueryActiveShellView(view.put()))) return false;
 
+    if (defViewOut) view->GetWindow(defViewOut);
+
     if (FAILED(view->QueryInterface(IID_PPV_ARGS(folderView.put())))) return false;
     return true;
 }
@@ -578,7 +545,7 @@ struct EnumeratedItem {
 bool EnumerateDesktopItems(std::vector<EnumeratedItem>& out) {
     out.clear();
     ComPtr<IFolderView> folderView;
-    if (!GetDesktopFolderView(folderView)) return false;
+    if (!GetDesktopView(folderView, nullptr)) return false;
 
     ComPtr<IShellFolder> folder;
     if (FAILED(folderView->GetFolder(IID_PPV_ARGS(folder.put())))) return false;
@@ -590,12 +557,13 @@ bool EnumerateDesktopItems(std::vector<EnumeratedItem>& out) {
     }
 
     int count = 0;
-    if (FAILED(folderView->ItemCount(SVGIO_ALLVIEW, &count)) || count <= 0) {
+    if (FAILED(folderView->ItemCount(SVGIO_ALLVIEW, &count))) {
         if (root) CoTaskMemFree(root);
         return false;
     }
 
     for (int i = 0; i < count; ++i) {
+        if (g_stopRequested) break;
         PITEMID_CHILD child = nullptr;
         if (FAILED(folderView->Item(i, &child)) || !child) continue;
 
@@ -629,7 +597,7 @@ bool EnumerateDesktopItems(std::vector<EnumeratedItem>& out) {
     }
 
     if (root) CoTaskMemFree(root);
-    return !out.empty();
+    return !g_stopRequested;
 }
 
 std::shared_ptr<Bitmap> CopyToOwnedBitmap(Bitmap* source) {
@@ -692,6 +660,12 @@ std::shared_ptr<Bitmap> CopyHBitmapToBitmap(HBITMAP hbmp) {
     return std::shared_ptr<Bitmap>(owned.release());
 }
 
+int IconRequestSize() {
+    double px = (double)g_settings.iconSize * (g_settings.maxScalePercent / 100.0) *
+                g_dpiScale;
+    return ClampInt((int)std::ceil(px), 32, kIconRequestPx);
+}
+
 std::shared_ptr<Bitmap> LoadShellIcon(IShellItem* item, const std::wstring& key) {
     auto cached = g_iconCache.find(key);
     if (cached != g_iconCache.end()) return cached->second;
@@ -701,7 +675,8 @@ std::shared_ptr<Bitmap> LoadShellIcon(IShellItem* item, const std::wstring& key)
         ComPtr<IShellItemImageFactory> factory;
         if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(factory.put())))) {
             HBITMAP hbmp = nullptr;
-            SIZE size{kIconRequestPx, kIconRequestPx};
+            int px = IconRequestSize();
+            SIZE size{px, px};
             HRESULT hr = factory->GetImage(
                 size, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &hbmp);
             if (SUCCEEDED(hr) && hbmp) {
@@ -733,21 +708,15 @@ std::shared_ptr<Bitmap> LoadShellIcon(IShellItem* item, const std::wstring& key)
     return result;
 }
 
-HWND FindDesktopDefView() {
-    struct Search {
-        HWND found;
-    } search{nullptr};
-    EnumWindows(
-        [](HWND top, LPARAM param) -> BOOL {
-            HWND child = FindWindowExW(top, nullptr, L"SHELLDLL_DefView", nullptr);
-            if (child) {
-                ((Search*)param)->found = child;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        (LPARAM)&search);
-    return search.found;
+HWND DesktopListView() {
+    if (g_desktopListView && IsWindow(g_desktopListView)) return g_desktopListView;
+    g_desktopListView = nullptr;
+    ComPtr<IFolderView> folderView;
+    HWND defView = nullptr;
+    if (!GetDesktopView(folderView, &defView) || !defView) return nullptr;
+    g_desktopListView =
+        FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
+    return g_desktopListView;
 }
 
 bool AreDesktopIconsHidden() {
@@ -756,32 +725,35 @@ bool AreDesktopIconsHidden() {
     return state.fHideIcons != FALSE;
 }
 
-bool ToggleDesktopIcons() {
-    HWND defView = FindDesktopDefView();
-    if (!defView) return false;
-    DWORD_PTR result = 0;
-    LRESULT sent = SendMessageTimeoutW(defView, WM_COMMAND, kDesktopIconsToggleCommand, 0,
-                                      SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
-    return sent != 0;
-}
-
-void ApplyDesktopIconVisibility(bool hide) {
-    bool hidden = AreDesktopIconsHidden();
-    if (hide == hidden) return;
-    if (!hide && !g_iconsHiddenByUs) return;
-    if (ToggleDesktopIcons()) {
-        g_iconsHiddenByUs = hide;
-        Sleep(220);
+// The list view belongs to Explorer's UI thread. A synchronous ShowWindow
+// reenters comctl32 in the middle of the shell's own desktop refresh and can
+// crash Explorer, so visibility changes are always posted from here.
+void SetDesktopIconsHidden(bool hide) {
+    HWND listView = DesktopListView();
+    if (!listView) return;
+    if (hide) {
+        if (!AreDesktopIconsHidden() && IsWindowVisible(listView)) {
+            ShowWindowAsync(listView, SW_HIDE);
+            g_iconsHiddenByUs = true;
+        }
     } else {
-        Wh_Log(L"Failed to toggle desktop icons");
+        if (g_iconsHiddenByUs && !AreDesktopIconsHidden() &&
+            !IsWindowVisible(listView)) {
+            ShowWindowAsync(listView, SW_SHOW);
+        }
+        g_iconsHiddenByUs = false;
     }
 }
 
-void RestoreDesktopIcons() {
-    if (g_iconsHiddenByUs && AreDesktopIconsHidden()) {
-        ToggleDesktopIcons();
+void EnsureDesktopIconsHidden() {
+    if (!g_iconsHiddenByUs || !g_settings.hideDesktopIcons ||
+        AreDesktopIconsHidden()) {
+        return;
     }
-    g_iconsHiddenByUs = false;
+    HWND listView = DesktopListView();
+    if (listView && IsWindowVisible(listView)) {
+        ShowWindowAsync(listView, SW_HIDE);
+    }
 }
 
 void EnsureFrameBuffer(int width, int height) {
@@ -824,7 +796,6 @@ void EnsureFrameBuffer(int width, int height) {
     g_frame.memDc = mem;
     g_frame.dib = dib;
     g_frame.oldBitmap = old;
-    g_frame.bits = bits;
     g_frame.bitmap = std::make_unique<Bitmap>(width, height, width * 4,
                                               PixelFormat32bppPARGB, (BYTE*)bits);
 }
@@ -1092,11 +1063,7 @@ void PositionWindow() {
     if (g_windowY < monitorInfo.rcMonitor.top) g_windowY = monitorInfo.rcMonitor.top;
     g_lastWorkArea = monitorInfo.rcWork;
 
-    HWND insertAfter = HWND_BOTTOM;
-#ifdef DOCK_STANDALONE_TEST
-    if (g_testTopmost) insertAfter = HWND_TOPMOST;
-#endif
-    SetWindowPos(g_hwnd, insertAfter, g_windowX, g_windowY, g_windowWidth,
+    SetWindowPos(g_hwnd, HWND_BOTTOM, g_windowX, g_windowY, g_windowWidth,
                  g_windowHeight, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
@@ -1491,6 +1458,9 @@ void EnsureAnimationTimer() {
 bool IsPointerOverDock(POINT screenPoint) {
     HWND under = WindowFromPoint(screenPoint);
     if (!under) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(under, &pid);
+    if (pid != GetCurrentProcessId()) return false;
     bool overDock = (under == g_hwnd);
     if (!overDock && g_settings.transparentBackground) {
         // Fully transparent pixels are click-through, so accept the desktop
@@ -1747,6 +1717,32 @@ void ShowItemContextMenu(int index, POINT screenPoint) {
     DestroyMenu(popup);
 }
 
+void PruneIconCache() {
+    for (auto it = g_iconCache.begin(); it != g_iconCache.end();) {
+        bool used = false;
+        for (const auto& item : g_items) {
+            if (item.key == it->first) {
+                used = true;
+                break;
+            }
+        }
+        if (used) {
+            ++it;
+        } else {
+            it = g_iconCache.erase(it);
+        }
+    }
+}
+
+void HideDock() {
+    if (g_dockShown) {
+        ShowWindow(g_hwnd, SW_HIDE);
+        g_dockShown = false;
+    }
+    SetDesktopIconsHidden(false);
+    UpdateHoverPollTimer();
+}
+
 bool RebuildFromDesktop(bool force) {
     if (g_stopRequested) return false;
     std::vector<EnumeratedItem> found;
@@ -1777,7 +1773,10 @@ bool RebuildFromDesktop(bool force) {
 
     if (found.empty()) {
         Wh_Log(L"No desktop items to show");
-        return false;
+        g_items.clear();
+        g_lastSignature.clear();
+        HideDock();
+        return true;
     }
 
     std::wstring signature;
@@ -1797,18 +1796,19 @@ bool RebuildFromDesktop(bool force) {
     std::vector<DockItem> items;
     items.reserve(found.size());
     for (auto& entry : found) {
+        if (g_stopRequested) return false;
         DockItem item;
         item.name = entry.name;
         item.key = entry.key;
         item.pidlOwner = entry.pidlOwner;
         item.pidl = entry.pidl;
-        item.desktopPosition = entry.position;
         item.icon = LoadShellIcon(entry.shellItem.Get(), entry.key);
         items.push_back(std::move(item));
     }
 
     g_items = std::move(items);
     g_lastSignature = std::move(signature);
+    PruneIconCache();
     g_intensity = 0.0;
     g_hoverIndex = -1;
     g_mouseXValid = false;
@@ -1821,7 +1821,7 @@ bool RebuildFromDesktop(bool force) {
 
     if (!g_dockShown) {
         if (g_settings.hideDesktopIcons) {
-            ApplyDesktopIconVisibility(true);
+            SetDesktopIconsHidden(true);
         }
         CaptureBackdrop();
         RenderFrame();
@@ -1840,10 +1840,66 @@ bool RebuildFromDesktop(bool force) {
 
 void ReloadSettings() {
     LoadSettings();
-    ApplyDesktopIconVisibility(g_settings.hideDesktopIcons != 0);
     g_iconCache.clear();
     RebuildFromDesktop(true);
+    SetDesktopIconsHidden(g_settings.hideDesktopIcons != 0 && g_dockShown);
     UpdateHoverPollTimer();
+}
+
+void RegisterShellNotifications() {
+    if (!g_hwnd || g_changeNotifyRegister) return;
+
+    PIDLIST_ABSOLUTE desktop = nullptr;
+    PIDLIST_ABSOLUTE publicDesktop = nullptr;
+    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, nullptr, &desktop);
+    SHGetKnownFolderIDList(FOLDERID_PublicDesktop, 0, nullptr, &publicDesktop);
+
+    SHChangeNotifyEntry entries[2] = {};
+    int entryCount = 0;
+    if (desktop) entries[entryCount++] = {desktop, TRUE};
+    if (publicDesktop) entries[entryCount++] = {publicDesktop, TRUE};
+
+    if (entryCount > 0) {
+        LONG events = SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
+                      SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER |
+                      SHCNE_UPDATEITEM | SHCNE_UPDATEIMAGE | SHCNE_UPDATEDIR;
+        // SHCNRF_ShellLevel delivers no messages on recent Windows 11 builds;
+        // interrupt-level notifications for these two folders are reliable.
+        g_changeNotifyRegister = SHChangeNotifyRegister(
+            g_hwnd, SHCNRF_InterruptLevel | SHCNRF_NewDelivery, events,
+            kMsgShellNotify, entryCount, entries);
+        if (!g_changeNotifyRegister) {
+            Wh_Log(L"SHChangeNotifyRegister failed");
+        }
+    }
+
+    if (desktop) CoTaskMemFree(desktop);
+    if (publicDesktop) CoTaskMemFree(publicDesktop);
+}
+
+void UnregisterShellNotifications() {
+    if (g_changeNotifyRegister) {
+        SHChangeNotifyDeregister(g_changeNotifyRegister);
+        g_changeNotifyRegister = 0;
+    }
+}
+
+void HandleShellNotification(WPARAM wParam, LPARAM lParam) {
+    PIDLIST_ABSOLUTE* pidls = nullptr;
+    LONG event = 0;
+    HANDLE lock =
+        SHChangeNotification_Lock((HANDLE)wParam, (DWORD)lParam, &pidls, &event);
+    (void)pidls;
+    if (lock) {
+        if (event & (SHCNE_UPDATEIMAGE | SHCNE_UPDATEITEM)) {
+            g_iconCache.clear();
+            g_notifyForceRebuild = true;
+        }
+        SHChangeNotification_Unlock(lock);
+    }
+    if (g_hwnd) {
+        SetTimer(g_hwnd, kTimerShellNotify, kNotifyRebuildDelayMs, nullptr);
+    }
 }
 
 void RefreshWorkAreaIfNeeded() {
@@ -1881,10 +1937,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                 case kTimerMaintenance: {
                     auto now = std::chrono::steady_clock::now();
                     if (now - g_lastItemCheckTime >
-                        std::chrono::seconds(kCheckDesktopItemsSeconds)) {
+                        std::chrono::seconds(kFullRebuildSeconds)) {
                         g_lastItemCheckTime = now;
                         RebuildFromDesktop(false);
                     }
+                    EnsureDesktopIconsHidden();
                     if (g_settings.backdropRefreshSeconds > 0 && !g_menuOpen &&
                         now - g_backdropCaptureTime >
                             std::chrono::seconds(g_settings.backdropRefreshSeconds)) {
@@ -1894,13 +1951,21 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                     RefreshWorkAreaIfNeeded();
                     return 0;
                 }
+                case kTimerShellNotify:
+                    KillTimer(hwnd, kTimerShellNotify);
+                    if (g_menuOpen) {
+                        SetTimer(hwnd, kTimerShellNotify, 500, nullptr);
+                        return 0;
+                    }
+                    if (RebuildFromDesktop(g_notifyForceRebuild)) {
+                        g_notifyForceRebuild = false;
+                    }
+                    return 0;
                 case kTimerRefresh:
                     KillTimer(hwnd, kTimerRefresh);
-                    RebuildFromDesktop(true);
-                    return 0;
-                case kTimerTestQuit:
-                    KillTimer(hwnd, kTimerTestQuit);
-                    PostQuitMessage(0);
+                    if (!RebuildFromDesktop(true)) {
+                        SetTimer(hwnd, kTimerRefresh, 2000, nullptr);
+                    }
                     return 0;
             }
             break;
@@ -2018,6 +2083,10 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             }
             return 0;
 
+        case kMsgShellNotify:
+            HandleShellNotification(wParam, lParam);
+            return 0;
+
         case kMsgReloadSettings:
             ReloadSettings();
             return 0;
@@ -2044,21 +2113,28 @@ void DestroyFrameBuffer() {
 }
 
 int RunDockThread() {
+    while (!g_stopRequested) {
+        DWORD shellPid = 0;
+        HWND shellWindow = GetShellWindow();
+        if (shellWindow) GetWindowThreadProcessId(shellWindow, &shellPid);
+        if (shellPid == GetCurrentProcessId()) break;
+        Sleep(500);
+    }
     if (g_stopRequested) return 0;
-    HRESULT coInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(coInit)) {
-        Wh_Log(L"CoInitializeEx failed: 0x%08X", coInit);
+
+    HRESULT oleInit = OleInitialize(nullptr);
+    if (FAILED(oleInit)) {
+        Wh_Log(L"OleInitialize failed: 0x%08X", oleInit);
         return 1;
     }
 
     GdiplusStartupInput gdiplusInput;
     if (GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != Ok) {
         Wh_Log(L"GdiplusStartup failed");
-        CoUninitialize();
+        OleUninitialize();
         return 2;
     }
     g_gdiplusStarted = true;
-    CreateTextures();
 
     g_instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW windowClass{};
@@ -2070,7 +2146,7 @@ int RunDockThread() {
     if (!RegisterClassExW(&windowClass)) {
         Wh_Log(L"RegisterClassEx failed: %lu", GetLastError());
         GdiplusShutdown(g_gdiplusToken);
-        CoUninitialize();
+        OleUninitialize();
         return 3;
     }
     g_classRegistered = true;
@@ -2081,25 +2157,27 @@ int RunDockThread() {
     if (!hwnd) {
         Wh_Log(L"CreateWindowEx failed: %lu", GetLastError());
         UnregisterClassW(kWindowClass, g_instance);
+        g_classRegistered = false;
         GdiplusShutdown(g_gdiplusToken);
-        CoUninitialize();
+        OleUninitialize();
         return 4;
     }
     g_hwnd = hwnd;
     g_screenDc = GetDC(nullptr);
+    UINT dpi = GetDpiForWindow(hwnd);
+    g_dpiScale = dpi ? dpi / 96.0 : 1.0;
+    CreateTextures();
 
     LoadSettings();
     g_lastItemCheckTime = std::chrono::steady_clock::now();
-    RebuildFromDesktop(true);
+    RegisterShellNotifications();
+    if (!RebuildFromDesktop(true)) {
+        SetTimer(hwnd, kTimerRefresh, 1000, nullptr);
+    }
 
     if (g_stopRequested) PostQuitMessage(0);
 
     SetTimer(hwnd, kTimerMaintenance, 1000, nullptr);
-#ifdef DOCK_STANDALONE_TEST
-    if (g_testRunSeconds > 0) {
-        SetTimer(hwnd, kTimerTestQuit, (UINT)(g_testRunSeconds * 1000), nullptr);
-    }
-#endif
 
     MSG message;
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
@@ -2113,11 +2191,13 @@ int RunDockThread() {
     KillTimer(hwnd, kTimerAnimation);
     KillTimer(hwnd, kTimerMaintenance);
     KillTimer(hwnd, kTimerRefresh);
-    KillTimer(hwnd, kTimerTestQuit);
     KillTimer(hwnd, kTimerHoverPoll);
+    KillTimer(hwnd, kTimerShellNotify);
     g_hoverPollRunning = false;
 
-    RestoreDesktopIcons();
+    UnregisterShellNotifications();
+    SetDesktopIconsHidden(false);
+    g_desktopListView = nullptr;
 
     g_activeMenu2.Reset();
     g_activeMenu3.Reset();
@@ -2147,7 +2227,7 @@ int RunDockThread() {
         GdiplusShutdown(g_gdiplusToken);
         g_gdiplusStarted = false;
     }
-    CoUninitialize();
+    OleUninitialize();
     return 0;
 }
 
@@ -2157,10 +2237,9 @@ DWORD WINAPI DockThreadProc(LPVOID) {
 
 }  // namespace
 
-#ifndef DOCK_STANDALONE_TEST
 BOOL Wh_ModInit() {
-    g_instance = GetModuleHandleW(nullptr);
-    HANDLE thread = CreateThread(nullptr, 0, DockThreadProc, nullptr, 0, &g_threadId);
+    g_stopRequested = false;
+    HANDLE thread = CreateThread(nullptr, 0, DockThreadProc, nullptr, 0, nullptr);
     if (!thread) {
         Wh_Log(L"CreateThread failed: %lu", GetLastError());
         return FALSE;
@@ -2173,15 +2252,10 @@ void Wh_ModUninit() {
     g_stopRequested = true;
     HWND hwnd = g_hwnd.load();
     if (hwnd) PostMessageW(hwnd, kMsgQuit, 0, 0);
-    HANDLE thread = g_thread.load();
+    HANDLE thread = g_thread.exchange(nullptr);
     if (thread) {
-        DWORD wait = WaitForSingleObject(thread, 5000);
-        if (wait == WAIT_TIMEOUT) {
-            Wh_Log(L"Dock thread did not stop in time");
-            TerminateThread(thread, 1);
-        }
+        WaitForSingleObject(thread, INFINITE);
         CloseHandle(thread);
-        g_thread = nullptr;
     }
 }
 
@@ -2189,12 +2263,3 @@ void Wh_ModSettingsChanged() {
     HWND hwnd = g_hwnd.load();
     if (hwnd) PostMessageW(hwnd, kMsgReloadSettings, 0, 0);
 }
-#else
-int main() {
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    Wh_Log(L"Standalone dock starting");
-    int result = RunDockThread();
-    Wh_Log(L"Standalone dock exited with %d", result);
-    return result;
-}
-#endif
