@@ -1,3 +1,7 @@
+## 1.2.1 ([Oct 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dd78d9c692c1f7ece9d5f71ccd8292ff9758f37b/mods/instant-taskbar-thumbnail-previews.wh.cpp))
+
+* Fixed the hover delay, the aim boundary, and "Close on outside click" not working on recent Windows 11 taskbar updates. (#6731)
+
 ## 1.2.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bd41dcabf387671a682e2083042fdfd54188ecca/mods/instant-taskbar-thumbnail-previews.wh.cpp))
 
 * Added "aim boundary" feature.

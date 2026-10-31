@@ -8868,7 +8868,7 @@
         "ratingUsers": 74,
         "reviews": 0,
         "trendingSorting": 3.3780438857343404,
-        "updated": 1793296965000,
+        "updated": 1793477932000,
         "users": 4085
       },
       "metadata": {
@@ -8884,7 +8884,7 @@
         ],
         "license": "MIT",
         "name": "Instant Taskbar Thumbnail Previews",
-        "version": "1.2.0"
+        "version": "1.2.1"
       }
     },
     "internet-status-indicator": {

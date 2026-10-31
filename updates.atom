@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-31T20:03:29.000Z</updated>
+    <updated>2026-10-31T20:18:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.2.1]]></title>
+        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#dd78d9c692c1f7ece9d5f71ccd8292ff9758f37b</id>
+        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
+        <updated>2026-10-31T20:18:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the hover delay, the aim boundary, and "Close on outside click" not working on recent Windows 11 taskbar updates. (#6731)</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mawaqit Prayer Clock 0.8.0]]></title>
         <id>https://windhawk.net/mods/windhawk-mawaqit#aa96df48d25cc044f44e1e0aaa6d8e61f18ac8de</id>
@@ -901,50 +914,6 @@ the window next to the taskbar. This mod therefore runs in <code>RetroBar.exe</c
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Size Presets 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-size-presets#86b178b5ffa585f442e6f67c44ed54769488cade</id>
-        <link href="https://windhawk.net/mods/window-size-presets"/>
-        <updated>2026-10-30T00:01:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsizepresets">Window Size Presets</h1>
-<p>Resize any window to a preset size, natively, in the spirit of
-<a href="https://www.brianapps.net/sizer4/">Sizer</a>.</p>
-<p><img src="https://i.imgur.com/DZwtRRD.gif" alt="Window Size Presets Demo" /></p>
-<h2 id="waystoopenthepresetmenu">Ways to open the preset menu</h2>
-<ul>
-<li><strong>Title bar button</strong> - right-click and/or hover the minimise (or maximise)
-button. Configurable in the settings; right-click is the default.</li>
-<li><strong>Hotkey</strong> - opens the menu for the foreground window at the mouse cursor.</li>
-</ul>
-<h2 id="presets">Presets</h2>
-<p>Add as many as you like in the settings. Each preset has:</p>
-<ul>
-<li><strong>Name</strong> (optional) - label shown in the menu.</li>
-<li><strong>Width / Height</strong> - in pixels or as a percentage of the monitor's work area.
-<code>0</code> keeps the current value. At least one of them must be non-zero, and the
-first preset with both set to 0 ends the list.</li>
-<li><strong>Position</strong> - keep, centre, or snap to a corner of the work area.</li>
-</ul>
-<p>A tick is shown next to the preset matching the window's current size and
-position.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>This is a tool mod: it runs in its own dedicated <code>windhawk.exe</code> process and
-doesn't inject into any other process.</li>
-<li>Windows running as administrator can't be resized unless Windhawk's tool
-process is also elevated (UIPI).</li>
-<li>On Windows 11, hovering the maximise button also opens the Snap Layouts
-flyout, so the minimise button is the better choice for hover.</li>
-<li>The <a href="https://windhawk.net/mods/winstant">Winstant</a> mod also reacts to
-hovering the minimise button. If you use both, give them different buttons
-or triggers (for example, right-click for this mod).</li>
-<li>Changing any setting is applied immediately, without restarting the mod.</li>
-</ul>]]></content>
-        <author>
-            <name>Nuzza</name>
-            <uri>https://github.com/Nuzza</uri>
         </author>
     </entry>
 </feed>
