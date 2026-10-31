@@ -2,12 +2,345 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-30T13:03:21.000Z</updated>
+    <updated>2026-10-31T02:03:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar User Tile 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-user-tile#47c76d3904f84b899d7ca9f5c6199fb3e2689bea</id>
+        <link href="https://windhawk.net/mods/taskbar-user-tile"/>
+        <updated>2026-10-31T02:03:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarusertile">Taskbar User Tile</h1>
+<p>This mod recreates early windows 8 leaked builds usertile on the taskbar of windows 10 and 11</p>
+<h2 id="screenshots">Screenshots:</h2>
+<h3 id="widows11taskbar">Widows 11 taskbar</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Tbuserwin11.png" alt="win11tb" /></p>
+<h3 id="windows10taskbarexplorerpatcher">Windows 10 taskbar (Explorer patcher)</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/TbuserEP.png" alt="win10EPtb" /></p>
+<h3 id="windows10taskbar">windows 10 taskbar</h3>
+<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Tbuserwin10.png" alt="win10tb" /></p>
+<h2 id="note">Note</h2>
+<p>Native XAML taskbar integration contains portions adapted from Taskbar Fluent
+Media Player mod https://windhawk.net/mods/taskbar-fluent-media-player</p>
+<h2 id="limitation">Limitation:</h2>
+<p>Usertile button does not appers when taskbar sized verticaly!</p>]]></content>
+        <author>
+            <name>AdmXP8</name>
+            <uri>https://github.com/AdmXP8</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Recycle Bin Tray 1.0.0]]></title>
+        <id>https://windhawk.net/mods/recycle-bin-tray#42b63980416f4f6ae05edf7bbfd33701cdc9e246</id>
+        <link href="https://windhawk.net/mods/recycle-bin-tray"/>
+        <updated>2026-10-31T02:03:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="recyclebintray">Recycle Bin Tray</h1>
+<p><img src="https://raw.githubusercontent.com/wildstyle23/Recycle-Bin-Tray-Icon/refs/heads/main/Images/Recycle%20Bin%20Tray%20Icon.png" alt="Drag and drop support" /></p>
+<p>A lightweight <a href="https://windhawk.net/">Windhawk</a> Windows 11 mod that places an interactive Recycle Bin directly into your system tray.</p>
+<p>The icon follows the current Recycle Bin state, can optionally disappear when the bin is empty, reacts to Windows Shell notifications, and supports multiple rendering styles, themes, and configurable mouse actions.</p>
+<p>The mod is designed to remain lightweight and self-contained while integrating with the native Windows Shell wherever possible.</p>
+<h2 id="features">Features</h2>
+<blockquote>
+  <p>⚠️ <strong>Drag & Drop is disabled by default. Enable <code>Enable drag &amp; drop</code> in the mod settings to use this feature.</strong></p>
+</blockquote>
+<ul>
+<li><strong>Drag & Drop to Recycle Bin</strong> — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows <code>CF_HDROP</code> format. Deletion follows the Windows Recycle Bin policy for each source drive. If the icon is in the <code>^</code> notification-area overflow menu, open the menu and drop directly onto the Recycle Bin icon.</li>
+<li><strong>Live Recycle Bin state</strong> — updates when items are added to or removed from the Recycle Bin.</li>
+<li><strong>Four icon styles</strong>:</li>
+<li><code>system</code> — use the native Windows Recycle Bin icon.</li>
+<li><code>vector</code> — render a lightweight custom vector Windows 11-style icon.</li>
+<li><code>font</code> — render a glyph from an installed font family.</li>
+<li><code>custom</code> — load an <code>.ico</code>, <code>.png</code>, <code>.bmp</code>, or <code>.jpg</code> file.</li>
+<li><strong>Three vector variants</strong> — choose between a minimal geometric style with a lifted-lid full state, a Fluent-inspired trapezoidal style, and a compact symbolic style.</li>
+<li><strong>Separate icons for states and themes</strong> — custom mode uses Empty/Full Light-theme files with optional Empty/Full Dark-theme alternatives.</li>
+<li><strong>Optional auto-hide</strong> — automatically hides the tray icon while the Recycle Bin is empty.</li>
+<li><strong>Light / dark theme support</strong> — vector and font rendering adapt to the current Windows system theme; custom icons use Light-theme source files, optional Dark-theme alternatives, and can automatically adapt transparent monochrome image colors to the active theme.</li>
+<li><strong>Automatic recovery</strong> — a configurable fallback timer periodically checks the Recycle Bin state in case a Shell notification is missed.</li>
+<li><strong>Taskbar restart recovery</strong> — the tray icon is recreated after Explorer or the Windows taskbar is restarted.</li>
+<li><strong>DPI-aware rendering</strong> — the render target follows the tray's DPI, while Shell-reported tray geometry is tracked separately for layout changes. Vector icons are rendered at high internal resolution for smoother results.</li>
+<li><strong>Configurable mouse actions</strong> — independently configure left click, double-click, middle click, and right click.</li>
+<li><strong>Recycle Bin context menu</strong> — open, empty, or open Properties using Windows Shell-provided localized labels when available.</li>
+<li><strong>Optional empty confirmation</strong> — keep or disable the confirmation dialog before emptying the Recycle Bin.</li>
+</ul>
+<h2 id="installation">Installation</h2>
+<h3 id="fromwindhawk">From Windhawk</h3>
+<ol>
+<li>Open <strong>Windhawk</strong>.</li>
+<li>Go to the <strong>Explore</strong> tab and search for <strong>Recycle Bin Tray</strong>.</li>
+<li>Click <strong>Details</strong>, then click <strong>Install</strong>.</li>
+<li>Open the mod's settings to customize the icon and mouse actions.</li>
+</ol>
+<h3 id="manualinstallationfromsource">Manual Installation from Source</h3>
+<ol>
+<li>Install and open <a href="https://windhawk.net/">Windhawk</a>.</li>
+<li>Click <strong>Create Mod</strong>.</li>
+<li>Copy the mod source code and paste it over the template code.</li>
+<li>Click <strong>Compile Mod</strong> and enable the mod.</li>
+</ol>
+<p>The mod runs as a dedicated Windhawk tool mod rather than being injected into <code>explorer.exe</code>, isolating it from the Windows Shell (see <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Mods as tools</a>).</p>
+<p>No separate installation, executable, or Windows service is required. Windhawk manages the process automatically.</p>
+<h2 id="usingthetrayicon">Using the Tray Icon</h2>
+<p>The tray icon provides configurable actions for each supported mouse input.</p>
+<h3 id="mouseactions">Mouse actions</h3>
+<p>| Input        | Available actions                                 |
+| ------------ | ------------------------------------------------- |
+| Left click   | Open, context menu, empty, Properties, do nothing |
+| Double-click | Open, empty, Properties, do nothing               |
+| Middle click | Empty, open, context menu, Properties, do nothing |
+| Right click  | Context menu, open, empty, Properties, do nothing |</p>
+<p>Each action can be configured independently from the Windhawk settings.</p>
+<h3 id="clickdoubleclickbehavior">Click / double-click behavior</h3>
+<p>Windows sends a single-click notification before it can determine whether a second click will arrive.</p>
+<p>When a double-click action is enabled, the mod therefore waits for the Windows double-click interval before executing the single-click action.</p>
+<p>This small delay is intentional. Removing it while keeping independent single- and double-click actions could cause a physical double-click to execute the configured single-click action as well.</p>
+<p>Single-click execution is deferred by the Windows double-click interval so that a physical double-click executes only its configured double-click action. If <strong>Double click action = Do nothing</strong>, a physical double-click therefore performs no action.</p>
+<h2 id="dragdrop">Drag &amp; Drop</h2>
+<p>Drag &amp; Drop is disabled by default. Enable <strong>Enable drag & drop</strong> in the mod settings before using this feature. When enabled, the feature uses a global low-level mouse hook (<code>WH_MOUSE_LL</code>) to detect the start of drag gestures.</p>
+<p>The Recycle Bin tray icon can then be used as a normal drag &amp; drop destination for files and folders.</p>
+<p>Simply drag one or more items from:</p>
+<ul>
+<li>the Windows Desktop;</li>
+<li>File Explorer;</li>
+<li>other applications that expose file lists through the standard Windows <code>CF_HDROP</code> format;</li>
+</ul>
+<p>and drop them directly onto the Recycle Bin tray icon.</p>
+<p>The mod receives the dropped items through the standard Windows OLE drag &amp; drop mechanism and asks the Windows Shell to process them according to the Recycle Bin policy configured for each source drive.</p>
+<h3 id="deletionpolicyandsafety">Deletion policy and safety</h3>
+<p>Drag &amp; drop follows the per-drive Recycle Bin policy configured in Windows for each dropped item.</p>
+<p>If a drive is configured to <strong>remove files immediately instead of moving them to the Recycle Bin</strong>, items dropped from that drive can be permanently deleted. The Windows delete-confirmation preference is respected.</p>
+<p>If Windows cannot recycle a selection, for example because it exceeds the configured Recycle Bin capacity, the Shell may display its native warning or confirmation before allowing permanent deletion. Cancelling that prompt leaves the operation uncompleted.</p>
+<h3 id="visibilityandoverflowmenu">Visibility and overflow menu</h3>
+<p>For drag &amp; drop to remain available, <strong>Hide when empty</strong> must be turned off so the Recycle Bin icon continues to exist as a target.</p>
+<p>Windows may place the icon in the <code>^</code> notification-area overflow menu when it first appears.</p>
+<p>Keeping it visible is recommended for quicker access.</p>
+<p>The icon does not need to stay permanently visible in the main system tray.</p>
+<ul>
+<li>If it is visible directly in the tray, drop files and folders onto it normally.</li>
+<li>If it is in the <code>^</code> overflow menu, open the menu and drop files and folders directly onto the Recycle Bin icon.</li>
+</ul>
+<p>If you want to keep the icon permanently visible, move it out of the overflow menu:</p>
+<ul>
+<li><strong>Manual placement:</strong> Drag the icon out of the overflow menu and place it directly in the main system tray area. Windows will remember this placement.</li>
+<li><strong>Windows Settings (if available):</strong> Go to <strong>Settings → Personalization → Taskbar → Other system tray icons</strong> and toggle the icon to <strong>On</strong>.</li>
+<li><strong>Windhawk alternative:</strong> On modern Windows 11 builds where native toggles may be missing or restricted, you can use the <a href="https://windhawk.net/mods/taskbar-notification-icons-show-all"><strong>Always show all taskbar tray icons</strong></a> mod to keep all icons permanently visible.</li>
+</ul>
+<h3 id="desktopfocusbehavior">Desktop focus behavior</h3>
+<p>Windows Explorer may occasionally fail to initiate a drag from a Desktop file when another application currently has focus.</p>
+<p>For example, clicking a Desktop file and immediately moving the mouse may be interpreted primarily as a focus or selection operation instead of starting the drag.</p>
+<p>This happens before the drag operation reaches the mod and is related to normal Explorer Desktop behavior.</p>
+<h3 id="workarounds">Workarounds</h3>
+<p>Two simple workarounds are available:</p>
+<p><strong>Option 1 — focus the Desktop first</strong></p>
+<p>Click the file once without dragging, then start the drag operation again.</p>
+<p><strong>Option 2 — hold the mouse button briefly</strong></p>
+<p>Press and hold the left mouse button for approximately 500 ms before moving the file.</p>
+<p>Once Explorer has successfully initiated the drag operation, dropping the item onto the Recycle Bin works normally.</p>
+<p>The mod does not synthesize or force a Desktop drag when Explorer has not started an OLE drag operation. A low-level mouse hook is used only to arm the tray drop overlay; the actual data transfer still requires the source application to start normal OLE drag &amp; drop.</p>
+<h2 id="contextmenu">Context Menu</h2>
+<p>The optional Recycle Bin context menu contains:</p>
+<ul>
+<li><strong>Open</strong></li>
+<li><strong>Empty Recycle Bin</strong> — disabled when the bin is already empty</li>
+<li><strong>Properties</strong></li>
+</ul>
+<p>Menu labels are loaded from localized <code>shell32.dll</code> resources when available, so they follow the current Windows display language. The popup itself uses native Win32 menu rendering without custom menu icons.</p>
+<p>English fallback strings are used when a corresponding Shell resource cannot be loaded.</p>
+<h2 id="emptyingtherecyclebin">Emptying the Recycle Bin</h2>
+<p>The <strong>Confirm before emptying</strong> option controls confirmation for actions that empty the Recycle Bin through the mod, independently of the Windows <strong>Display delete confirmation dialog</strong> option in Recycle Bin Properties.</p>
+<p>When enabled, the standard Windows confirmation dialog is shown before the Recycle Bin is emptied.</p>
+<p>When disabled, the mod requests the silent empty operation directly.</p>
+<p>For emptying actions triggered through the mod, this setting takes precedence over the Windows Recycle Bin confirmation preference.</p>
+<h2 id="iconstyles">Icon Styles</h2>
+<blockquote>
+  <p><strong>Choose one icon style:</strong> <code>System</code> · <code>Vector</code> · <code>Font</code> · <code>Custom Icon</code></p>
+</blockquote>
+<h3 id="system">System</h3>
+<p>Uses the Windows Shell's own Recycle Bin icon.</p>
+<p>This is the simplest option and generally provides the closest match to the native Windows appearance.</p>
+<h3 id="vector">Vector</h3>
+<p>The icon is generated at runtime with GDI+ instead of loading an image file.</p>
+<p>It is designed for a clean Windows 11-style appearance and is rendered at a <strong>4× internal resolution</strong> before being reduced to the final tray size for smoother edges.</p>
+<p>Three variants are available:</p>
+<ul>
+<li><strong>Style 1</strong> — minimal geometric 24×24 silhouette. The empty state uses a closed lid; the full state lifts the lid and exposes two compact content shapes while keeping the body unchanged.</li>
+<li><strong>Style 2</strong> — Fluent-inspired trapezoidal body optimized for tray-size rendering. The empty state uses a clean outline, while the full state uses the same silhouette with a filled body.</li>
+<li><strong>Style 3</strong> — compact symbolic silhouette with a simple lid, handle, and body. The empty state uses an outlined body, while the full state uses the same silhouette with a filled body.</li>
+</ul>
+<h3 id="font">Font</h3>
+<p>The icon is drawn from glyphs provided by installed font families.</p>
+<p>The empty and full states have separate <strong>font family / typeface</strong>, <strong>glyph</strong>, and <strong>font weight</strong> settings. Font and glyph fields are intentionally blank by default: if Font mode is selected without a usable configuration, the mod falls back to the native Windows Recycle Bin icon.</p>
+<p>Font names are matched against GDI font/typeface names exposed by Windows. Leading/trailing whitespace and surrounding quotation marks are ignored when settings are loaded. GDI limits the requested typeface name to <strong>31 characters</strong> (<code>LF_FACESIZE - 1</code>); longer names are rejected instead of being silently truncated.</p>
+<p>The <strong>Font weight</strong> option is available independently for the Empty and Full states and supports the standard Windows range from <strong>Thin (100)</strong> to <strong>Black (900)</strong>. Use the base family/typeface name with the desired weight when Windows exposes the family through normal weight matching. If Windows exposes a variant as a separate typeface (for example <strong>Font Awesome 7 Free Solid</strong> or <strong>Arial Narrow</strong>), enter that exact Windows typeface name instead. When an exact weight is unavailable, Windows can select the nearest available weight in the requested family.</p>
+<h4 id="fallbackbehavior">Fallback behavior</h4>
+<p>Font mode validates both the requested font family and glyph before rendering:</p>
+<ul>
+<li><strong>Empty state:</strong> if the empty-state font or glyph is unavailable, the full-bin font/glyph configuration is used automatically.</li>
+<li><strong>Full state:</strong> if the full-bin font or glyph is unavailable, the native Windows Recycle Bin icon is used.</li>
+<li>If the empty state falls back to the full configuration and that configuration is also unavailable, the native Windows Recycle Bin icon is used.</li>
+</ul>
+<p>This lets a font with only one suitable trash/delete glyph remain usable without showing a missing-glyph square.</p>
+<h4 id="enteringaglyphcode">Entering a glyph code</h4>
+<p>Glyph values can be entered as hexadecimal Unicode code points with or without the <code>0x</code> prefix.</p>
+<p>Examples:</p>
+<pre><code class="text language-text">0xF014
+F014
+</code></pre>
+<p>To find a code point, you can use:</p>
+<ul>
+<li><strong>Windows Character Map</strong> (<code>charmap.exe</code>) to inspect installed fonts.</li>
+<li>The documentation/reference of the font you are using.</li>
+<li>Microsoft's references for <strong>Segoe Fluent Icons</strong> or <strong>Segoe MDL2 Assets</strong> when using those font families.</li>
+</ul>
+<h3 id="recommendedfontsglyphs">Recommended fonts &amp; glyphs</h3>
+<p>| Font Family                       | State / role | Glyph Code | Notes |
+| --------------------------------- | ------------ | ---------- | ----- |
+| <strong>Font Awesome 7 Free</strong>           | Empty        | <code>0xF014</code>   | Recommended example for the empty state. |
+| <strong>Font Awesome 7 Free Solid</strong>     | Full         | <code>0xF014</code>   | Recommended example for the full state. |
+| <strong>Segoe Fluent Icons</strong> (Built-in, default Windows 11 icon font) | Single state | <code>0xE74D</code> | <code>Delete</code>; no distinct empty/full Recycle Bin pair. Best used with <strong>Hide when empty</strong> enabled. |
+| <strong>Segoe MDL2 Assets</strong> (Built-in, legacy Windows icon font) | Single state | <code>0xE74D</code> | <code>Delete</code>; no distinct empty/full Recycle Bin pair. Best used with <strong>Hide when empty</strong> enabled. |
+| <strong>Material-Design-Iconic-Font</strong>   | Full         | <code>0xF154</code>   | Optional third-party example. |</p>
+<p>The two built-in Segoe icon fonts are useful when a single <code>Delete</code> symbol is sufficient. Because they don't provide distinct empty and full Recycle Bin states, they work best with <strong>Hide when empty</strong> enabled and the <code>Delete</code> glyph configured for the full state: the tray icon is then hidden while the Recycle Bin is empty and shown when it contains items. If you want an always-visible icon with visually distinct empty and full states, another font is preferable.</p>
+<h3 id="customicon">Custom Icon</h3>
+<p>Custom mode accepts:</p>
+<ul>
+<li><code>.ico</code></li>
+<li><code>.png</code></li>
+<li><code>.bmp</code></li>
+<li><code>.jpg</code></li>
+</ul>
+<p>Images are automatically resized to match the current system tray icon target size.</p>
+<p>For the cleanest raster result, use artwork designed to remain readable at small tray sizes. Ideally, use a source close to the active tray target size or a clean integer multiple of it (for example 16×16, 32×32, 48×48, or 64×64 when appropriate). Avoid oversized raster artwork with hairline details: a stroke that looks clean in the source can become sub-pixel when Windows renders the tray at 16 px (100% scaling), where no resampling method can fully reconstruct the original visual weight. The actual tray target depends on the Windows display scale factor; refer to the <strong>Theme and DPI Handling</strong> table below.</p>
+<p>Custom Icon color handling can either preserve the colors stored in the selected source image or <strong>Automatically adapt monochrome image colors to the active theme</strong>. Theme adaptation reads the selected image's alpha channel, downsamples it by exact pixel-area coverage, and recolors the resulting mask in memory for the active Light or Dark theme. At the smallest 16 px Dark-theme target, a small stroke-preservation and coverage adjustment helps thin monochrome artwork retain more visual weight. For best results, still use simple transparent monochrome artwork designed to remain readable at small sizes; very fine raster details can remain softer at 100% display scaling. No source file is modified. Native <code>.ico</code> files and images without an alpha channel keep their original colors.</p>
+<p>For transparent monochrome images, the <strong>Light theme</strong> Empty and Full files are normally enough. If a Dark-theme field is blank, the corresponding Light-theme file is reused automatically. The optional <strong>Dark theme</strong> section is only needed when you want different source artwork in Dark theme.</p>
+<p>| If you want… | Use |
+| --- | --- |
+| Keep the icon's original colors | <strong>Keep original image colors</strong> |
+| Automatically match a transparent monochrome icon to the Light/Dark theme | <strong>Automatically adapt monochrome image colors to theme</strong> |
+| Use different artwork in Dark theme | <strong>Configure the optional Dark theme image</strong> |</p>
+<p>Looking for ready-made icons? <a href="https://icons8.com/">Icons8</a> is a useful resource for finding icons suitable for custom <code>.ico</code> / <code>.png</code> files.</p>
+<p>For <code>.ico</code> files, a multi-size icon containing a <strong>16×16 px</strong> layer is recommended for a crisp tray result.</p>
+<p>You can paste a Windows path copied with <strong>Copy as path</strong> directly into the setting, including the quotation marks added by Windows. The mod automatically removes surrounding quotes and unnecessary whitespace.</p>
+<p>Examples:</p>
+<pre><code class="text language-text">[Light theme → Empty bin] "C:\Users\YourUsername\Pictures\recycle_empty.png"
+[Light theme → Full bin]  D:\CustomIcons\recycle_full.png
+[Dark theme → Full bin]   D:\CustomIcons\recycle_full_dark.ico
+</code></pre>
+<p>Local paths are strongly recommended for optimal performance and to avoid delays if a network share is unavailable or goes to sleep.</p>
+<p>Custom mode uses two Light-theme source files plus optional Dark-theme alternatives:</p>
+<p>| Recycle Bin state | Light-theme file          | Optional Dark-theme file |
+| ----------------- | ------------------------- | ------------------------ |
+| Empty             | <code>customIcon.light.empty</code>  | <code>customIcon.dark.empty</code>  |
+| Full              | <code>customIcon.light.full</code>   | <code>customIcon.dark.full</code>   |</p>
+<p>The Light-theme file is always selected in Light theme. In Dark theme, the matching Dark-theme file is selected when configured; otherwise the Light-theme file is reused automatically. When <strong>Automatically adapt monochrome image colors to the active theme</strong> is selected, the selected transparent monochrome image is recolored in memory for the current theme.</p>
+<p>When a custom file cannot be loaded, the mod automatically falls back to the Windows system Recycle Bin icon.</p>
+<h2 id="recyclebinstatedetection">Recycle Bin State Detection</h2>
+<p>The mod uses Windows Shell APIs to query the current Recycle Bin state and register for Shell notifications.</p>
+<p>The current state and tray icon are initialized immediately. The first Shell notification subscription is established after a short Explorer/taskbar stabilization window and uses Windows' <code>SHCNRF_NewDelivery</code> delivery mode.</p>
+<p>Shell notifications allow the icon to react quickly when items are added to or removed from the Recycle Bin. A configurable fallback timer periodically checks the actual state in case a notification is missed.</p>
+<p>The default fallback interval is <strong>300 seconds</strong> and can be changed in the Windhawk settings. DPI and tray-geometry changes are handled through Windows display/DPI events and the Shell-reported tray rectangle. Bounded startup retries handle cases where the Shell or tray is not yet ready.</p>
+<h2 id="themeanddpihandling">Theme and DPI Handling</h2>
+<p>The tray icon is regenerated when Windows reports a relevant theme or display configuration change.</p>
+<p>The mod derives its icon render target from the tray/display DPI.</p>
+<p>| Scale Factor | Icon Size |
+| ------------ | --------- |
+| 100%         | 16×16 px  |
+| 125%         | 20×20 px  |
+| 150%         | 24×24 px  |
+| 200%         | 32×32 px  |
+| 250%         | 40×40 px  |
+| 300%         | 48×48 px  |
+| 400%         | 64×64 px  |</p>
+<p>The target size is obtained from the current tray/display DPI. The rectangle returned by <code>Shell_NotifyIconGetRect</code> is tracked separately as a geometry-change signal; its slot bounds are not treated as a documented HICON target size.</p>
+<p>Vector icons are rendered internally at <strong>4× the target resolution</strong> before being downsampled with high-quality interpolation to fit the active tray size. This reduces jagged edges while keeping rendering and memory usage low.</p>
+<h2 id="taskbarexplorerrestartrecovery">Taskbar / Explorer Restart Recovery</h2>
+<p>The mod listens for the standard <code>TaskbarCreated</code> message.</p>
+<p>When Windows Explorer or the taskbar is restarted, the mod recreates the tray icon automatically.</p>
+<p>This allows the icon to recover without requiring the Windhawk mod to be manually restarted.</p>
+<h2 id="technicalnotes">Technical Notes</h2>
+<ul>
+<li>The tray icon is hosted by a hidden top-level tool window owned by the mod's dedicated tray thread.</li>
+<li>Drag &amp; drop uses the standard Windows OLE <code>IDropTarget</code> mechanism and accepts dropped file lists exposed through <code>CF_HDROP</code>.</li>
+<li>Dropped items are processed asynchronously on a dedicated STA worker through <code>IFileOperation</code>, so Shell UI or slow storage does not block the source application's <code>DoDragDrop</code> call. The worker is created lazily on the first accepted drop.</li>
+<li>A passive <code>IFileOperationProgressSink</code> tracks operation results and logs failures without changing the Shell operation.</li>
+<li>The mod does not create a separate executable or Windows service.</li>
+<li>GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native <code>.ico</code> loading can bypass GDI+. Once initialized, it stays available for the lifetime of the tool and is released during final teardown.</li>
+<li>Tray timers are explicitly cancelled during window destruction before icon and Shell resources are released.</li>
+<li>Explorer/taskbar restarts are detected through the standard <code>TaskbarCreated</code> broadcast received by the hidden tray host.</li>
+<li>The current icon handle is explicitly destroyed whenever the icon is replaced or the mod unloads.</li>
+<li>The tray thread uses Per-Monitor V2 DPI awareness, follows the rectangle reported by <code>Shell_NotifyIconGetRect</code>, and tracks slot geometry changes independently from the DPI-derived render size.</li>
+<li>A transparent top-level helper window provides the physical per-monitor DPI reference and is also used as the OLE drop overlay when drag &amp; drop is enabled.</li>
+<li>Explorer owns notification-area placement. If Windows exposes the tray on multiple taskbars, drag &amp; drop follows the single icon rectangle returned by the Shell API.</li>
+<li>A low-level mouse hook runs on a dedicated message-pump thread only while drag &amp; drop support is enabled to detect the beginning and end of a potential drag; OLE <code>IDropTarget</code> remains responsible for the actual drop.</li>
+</ul>
+<h2 id="settingsreference">Settings Reference</h2>
+<p>The Windhawk settings are grouped by function:</p>
+<ul>
+<li><strong>General</strong> — visibility and icon style.</li>
+<li><strong>Vector</strong> — vector variant selection.</li>
+<li><strong>Font</strong> — font family and glyph values for empty/full states.</li>
+<li><strong>Custom Icon</strong> — color handling, Light-theme Empty/Full source files, and optional Dark-theme files.</li>
+<li><strong>Actions</strong> — mouse-button behavior and empty confirmation.</li>
+<li><strong>System</strong> — fallback Recycle Bin state refresh interval.</li>
+</ul>
+<p>Renderer-specific settings only apply to the corresponding selected icon style.</p>
+<p>For example, the <strong>Vector</strong> section is used only when <strong>Icon style</strong> is set to <strong>Vector</strong>.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="theicondoesnotappear">The icon does not appear</h3>
+<p>Check that the Recycle Bin is not empty if auto-hide is enabled.</p>
+<p>If the icon is still missing:</p>
+<ol>
+<li>Disable and re-enable the mod in Windhawk.</li>
+<li>Try restarting Windhawk.</li>
+<li>Check whether Windows has moved the icon into the notification-area overflow menu (<code>^</code>).</li>
+</ol>
+<p>Windows may place the icon in the overflow menu when it first appears. This is normal. If you want it permanently visible, drag it from the overflow menu into the main system tray area; Windows will remember the placement.</p>
+<h3 id="dragdropdoesnotwork">Drag &amp; Drop does not work</h3>
+<ol>
+<li>Check the mod's settings to ensure that Drag &amp; Drop is enabled and <strong>Hide when empty</strong> is turned off.</li>
+<li>If the icon is in the <code>^</code> overflow menu, open the overflow panel and drop onto the Recycle Bin icon itself.</li>
+<li>Make sure the source application provides dropped files through the standard Windows <code>CF_HDROP</code> format.</li>
+</ol>
+<p>If dragging from the Desktop does not work, check whether another application currently has the input focus.</p>
+<p>In that situation, either:</p>
+<ul>
+<li>click the Desktop/file once before starting the drag; or</li>
+<li>hold the left mouse button for approximately 500 ms before moving the file.</li>
+</ul>
+<h3 id="thedarkthemedoesnotapply">The dark theme does not apply</h3>
+<p>Check your Windows personalization settings to ensure that global dark mode is active.</p>
+<p>For custom icons:</p>
+<ul>
+<li>with <strong>Original colors</strong>, add an optional Dark-theme file if you want different artwork or colors in Dark theme;</li>
+<li>with <strong>Automatically adapt monochrome image colors to the active theme</strong>, use a transparent monochrome image with an alpha channel. Native <code>.ico</code> files and images without an alpha channel keep their original colors.</li>
+</ul>
+<h3 id="customiconsdonotdisplay">Custom icons do not display</h3>
+<p>Verify that:</p>
+<ul>
+<li>the configured path is correct;</li>
+<li>the file exists and is accessible;</li>
+<li>the image format is supported;</li>
+<li>the selected Color handling mode matches the type of image you are using.</li>
+</ul>
+<p>For raster images, choose a source size appropriate for the current display scale using the <strong>Theme and DPI Handling</strong> table; thin diagonal strokes can retain some aliasing at very small tray sizes. For <code>.ico</code> files, a multi-size icon containing a <strong>16×16 px</strong> image is recommended.</p>
+<p>If a custom icon cannot be loaded, the mod automatically falls back to the Windows system Recycle Bin icon.</p>
+<h3 id="afontglyphdoesnotdisplay">A font glyph does not display</h3>
+<p>Check that:</p>
+<ul>
+<li>the configured <strong>Font name</strong> exactly matches the Windows GDI font/typeface name;</li>
+<li>the <strong>Glyph</strong> value is a valid Unicode hexadecimal code point (for example <code>0xF014</code>);</li>
+<li>the selected font actually contains a glyph at that hexadecimal code point.</li>
+</ul>
+<p>If either the font name or glyph code is incorrect or unavailable, Font mode falls back according to the rules described in the <strong>Font</strong> section above.</p>
+<h2 id="license">License</h2>
+<p>This project is licensed under the GNU General Public License Version 3.0.</p>]]></content>
+        <author>
+            <name>Wildstyle23</name>
+            <uri>https://github.com/wildstyle23</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinKlok 1.0.0]]></title>
         <id>https://windhawk.net/mods/winklok#d5dc716a30408034afa9f68542ea575268d8621e</id>
@@ -988,168 +1321,6 @@ window on purpose, put a <code>*</code> in one of the match fields.</p>]]></cont
         <author>
             <name>AdmXP8</name>
             <uri>https://github.com/AdmXP8</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Shortcut Arrow Overlays 1.0.0]]></title>
-        <id>https://windhawk.net/mods/remove-shortcut-arrows#99b2c90b8dcdc892d7bcbe4d5978e47dced3a0bb</id>
-        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
-        <updated>2026-10-25T18:01:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="removeshortcutarrowoverlays">Remove Shortcut Arrow Overlays</h1>
-<p>Removes the shortcut arrow overlay from desktop and File Explorer icons cleanly
-in memory without modifying the Windows Registry.</p>
-<h3 id="whythisisbetterthantheregistrytweak">Why this is better than the Registry tweak:</h3>
-<ul>
-<li><strong>In-Place Overlay Replacement</strong>: Modifies Explorer's system image lists
-in-place with zero image slot leaks.</li>
-<li><strong>No Black Squares</strong>: The common registry tweak (<code>Shell Icons\29</code> pointing to
-a blank <code>.ico</code>) frequently causes visual bugs such as black squares on icons
-after icon cache updates or on high-DPI displays.</li>
-<li><strong>No Registry Tampering</strong>: Does not alter system registry keys and does not
-require copying files into <code>C:\Windows\System32</code>.</li>
-<li><strong>Zero Dependencies</strong>: Generates a 100% transparent icon dynamically in
-memory. No external <code>.ico</code> files are needed.</li>
-<li><strong>Instant Reversibility</strong>: Automatically restores the original Windows
-shortcut arrows when the mod is disabled or unloaded without an Explorer restart.</li>
-<li><strong>Optional Custom Icon</strong>: Allows using a custom badge or icon instead of a
-completely transparent one.</li>
-</ul>
-<h3 id="scopeprocessbehavior">Scope &amp; Process Behavior</h3>
-<ul>
-<li>System image lists are per-process, so this mod targets <code>explorer.exe</code> (Desktop
-and File Explorer). Shell Open/Save dialogs hosted inside other application
-processes retain their separate process image lists.</li>
-</ul>
-<h3 id="credits">Credits</h3>
-<ul>
-<li>Credit to the <strong>Hide Desktop Icon Text and Shortcut Arrows</strong> mod
-(<code>hide-desktop-icon-text</code>) by kivsak for the transparent GDI icon generation and
-shell image list technique.</li>
-</ul>]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Alt+Tab Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win-7-8-alt-tab-recreation#050499fc10276da12a825ffdf909175f4d43a87e</id>
-        <link href="https://windhawk.net/mods/win-7-8-alt-tab-recreation"/>
-        <updated>2026-10-25T17:31:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781alttabrecreation">Windows 7/8.1 Alt+Tab Recreation</h1>
-<p><strong>Windows 7</strong></p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7alttab.png" alt="Windows 7 switcher" /></p>
-<p><strong>Windows 8.1</strong></p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81alttab.png" alt="Windows 8.1 switcher" /></p>
-<p>This mod recreates the Windows 7 and the Windows 8.1 Alt+Tab switchers on
-Windows 10 and Windows 11, with live previews of the windows. It runs in its own
-process and does not modify <code>explorer.exe</code>.</p>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>Draws the switcher the way Windows 7 or Windows 8.1 drew it; the style is
-chosen in the settings.</li>
-<li>Shows a live preview of every window, minimized windows included.</li>
-<li>Shows the icon of the application in the corner of every preview.</li>
-<li>Draws the Windows 7 panel as Aero glass and the Windows 8.1 one as the solid
-band it was.</li>
-<li>Does not page: the previews shrink until every window fits, as the originals
-did.</li>
-<li>Does not touch <code>explorer.exe</code> and does not ask for an Explorer restart.</li>
-<li>If the switcher cannot be shown, Alt+Tab keeps working as usual.</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 or Windows 11, 64-bit. The mod was tested on Windows 11 24H2 and
-on Windows 11 25H2.</li>
-<li>Windhawk installed, with <code>windhawk.exe</code> not excluded.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Install the mod in Windhawk and enable it.</li>
-<li>Press Alt+Tab. The switcher appears in the style chosen in the settings.</li>
-<li>To remove it, disable or uninstall the mod.</li>
-</ol>
-<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
-<p>| Shortcut | Action |
-| --- | --- |
-| <code>Alt+Tab</code>, <code>Alt+Shift+Tab</code> | Opens the switcher and moves the selection |
-| <code>Alt</code> (release) | Activates the selected window |
-| <code>Tab</code> / <code>Shift+Tab</code>, arrow keys, wheel | Moves the selection while open |
-| <code>Enter</code> / <code>Space</code> / click | Activates the selected window |
-| <code>Alt+F4</code> while open | Closes the selected window |
-| <code>Esc</code> while open | Closes the switcher without switching |
-| <code>Ctrl+Alt+F11</code> | Opens or closes the switcher manually (fallback) |
-| <code>Alt+`</code> | Optional, off by default: windows of the same app only |
-| <code>Ctrl+Alt+Tab</code>, <code>Win+Tab</code> | Left to Windows |
-| <code>Ctrl+Shift+Esc</code> | Left to Windows, opens Task Manager |</p>
-<h2 id="styles">Styles</h2>
-<ul>
-<li><strong>Windows 7</strong>: a glass panel with rounded corners and a light sheen, the name
-of the selected window above the row, the previews in a row with the
-application icon in the corner, and a thin double frame around the selected
-preview. A minimized window shows its application icon.</li>
-<li><strong>Windows 8.1</strong>: a solid colored band with square corners, a white title above
-the row, and the previews in a row with the application icon inside their
-bottom right corner. The selected preview has a white frame.</li>
-</ul>
-<h2 id="comparisonwithotheralttabmods">Comparison with other Alt+Tab mods</h2>
-<p><strong>Windows 7/8.x Alt+Tab Loader (aubymori)</strong> loads the original Alt+Tab component
-of Windows 7 or Windows 8.x. It is the most faithful option, and the hardest to
-set up: files have to be copied into the system folder, a matching theme has to
-be prepared, and Explorer has to be restarted when the mod is enabled and again
-when it is disabled.</p>
-<p><strong>Simple Window Switcher (Lone)</strong> is a configurable window switcher, built
-around Windows 10 and 11 style layouts and around other arrangements as well;
-recreating the Windows 7 or the 8.1 interface is not its purpose.</p>
-<p><strong>This mod</strong> recreates those two interfaces and nothing else. Configuration is
-reduced to the style and a few options, and no file has to be copied, no theme
-prepared and no restart done. It takes some drawing ideas from the Simple Window
-Switcher, but it works in a different way and its purpose is a narrower one.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Switcher style</strong>: Windows 7 or Windows 8.1.</li>
-<li><strong>Show the switcher on</strong>: the primary monitor, the monitor with the cursor, or
-the monitor of the active window.</li>
-<li><strong>Panel color</strong>: follow the Windows accent color, as both originals did, or
-use a custom color.</li>
-<li><strong>Custom accent color</strong>: used only when the panel color is set to custom.</li>
-<li><strong>Glass density</strong>: how much the Windows 7 panel hides the desktop behind it.</li>
-<li><strong>Desktop dimming</strong>: how much the desktop behind the switcher is darkened.</li>
-<li><strong>Only windows of the current virtual desktop</strong>: the filter of the originals.
-Minimized windows are always listed.</li>
-<li><strong>The Desktop card</strong>: the Desktop at the end of the row, as both originals
-had.</li>
-<li><strong>Auto-cycle while Alt is held</strong>, <strong>Mouse navigation</strong>, <strong>Alt+`</strong>,
-<strong>Ctrl+Alt+F11</strong>: the optional extras.</li>
-<li><strong>Blurred glass behind the panel</strong>: for the Windows 7 style.</li>
-<li><strong>Fade the switcher in and out</strong>: 250 ms, off by default.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Use one Alt+Tab replacement at a time.</li>
-<li>The previews are live, not screenshots: they show the window as it is now.</li>
-<li>The desktop behind the switcher is a still image.</li>
-<li>Windows 11 tabbed File Explorer windows appear as one item per window.</li>
-<li>True fullscreen exclusive games may not show the switcher, like other overlay
-mods.</li>
-<li>Windows of applications started as administrator can't be listed or
-activated: the mod runs at the normal permission level, so the system doesn't
-let it watch the keyboard of those windows and doesn't let it read their
-icons or close them with Ctrl+Alt+F4. Such a window keeps the system
-switcher when it has the focus.</li>
-<li>The mod can't be turned off from inside an elevated window for the same
-reason: use a normal window.</li>
-<li>The mod is released under the GPL-2.0 license.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>The look of both styles follows the measurements of the two original
-switchers.</li>
-<li>AdministratoX for testing the mod on Windows 11 25H2.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
