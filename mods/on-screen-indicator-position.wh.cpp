@@ -19,22 +19,15 @@
 /*
 # On-Screen Indicator Position
 
-Windows 11 shows an on-screen indicator when you change the volume or
-brightness, toggle airplane mode, or when the camera or microphone privacy state
-changes. Under **Settings > System > Notifications > On-screen indicators**,
-Windows lets you put it in one of three places: top left, top center, or bottom
-center.
+Move Windows 11's volume, brightness and other on-screen indicators to any
+corner, edge center or the center of the screen. Give each type its own position
+and offsets, or hide the ones you don't want to see.
 
-This mod replaces that with a full nine-point grid, any corner, any edge center,
-or dead center, plus a pixel offset for fine-tuning. Each kind of indicator can
-also be given a spot of its own, so the volume one can sit somewhere different
-from the brightness one.
-
-The brightness indicator moved to the middle of the right edge:
+The brightness indicator at the middle of the right edge:
 
 ![Indicator at middle right](https://raw.githubusercontent.com/mario0318/windhawk-mods/3685cdf56c55ba8cb3398b1cf9e35b5e95e68eb1/on-screen-indicator-position/middle-right.jpg)
 
-## Positions
+## Positions and offsets
 
 ```
  Top left        Top center        Top right
@@ -42,104 +35,98 @@ The brightness indicator moved to the middle of the right edge:
  Bottom left     Bottom center     Bottom right
 ```
 
-The indicator is kept inside the area Windows lays it out in, so an offset that
-would push it past an edge stops at the edge instead of moving off screen. You
-can also leave the position on **Windows default** and use the offsets alone to
-nudge one of the built-in positions.
+**Position** is the main position. Under **Position per indicator**, choose a
+different position for any indicator that needs one. **Same as the main position**
+follows the main setting. **Windows default** keeps the position Windows chose;
+offsets still apply.
 
-## A different spot per indicator
+Offsets move an indicator from its chosen position. Positive horizontal values
+move it right, and positive vertical values move it down. Negative values move
+it the other way. Values are pixels at 100% display scaling; an offset of 20
+becomes 30 pixels at 150%. The indicator stays inside the area Windows provides
+for it, so large offsets stop at the edge.
 
-Volume, brightness, keyboard brightness, airplane mode, camera, microphone, the
-virtual desktop name popup and the other text indicators can each be given their own
-position. Anything left on **Same as the main position** follows the setting above,
-so you only have to touch the ones you want somewhere else. Handy if you want the
-volume indicator out of the way at the bottom but still want the camera one where
-you will notice it.
+Under **Offsets per indicator**, choose **Use this offset** for either direction
+to replace the main offset. A custom value of 0 removes that direction's offset.
+The other direction can still use the main offset.
 
-If you used **Other indicators** to place the "Desktop N" popup before 1.4.0,
-set **Virtual desktop name** to that spot after updating. It now has its own setting
-and otherwise follows the main position.
-
-Volume kept at the top left while brightness sits in the middle. Only one of them is
-ever on screen at a time, so this is the same desktop photographed twice:
+Volume at the top left and brightness in the center, shown in separate photos
+because Windows displays one indicator at a time:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
 
+**Virtual desktop name** controls the name popup shown when switching desktops.
+**Other indicators** covers the remaining text popups. If you used **Other
+indicators** for the desktop name before version 1.4.0, copy that position to
+**Virtual desktop name**.
+
 ## Hide individual indicators
 
-Choose **Hidden** for an indicator to stop it appearing. The underlying action,
-such as changing volume or brightness, still works. Other indicators keep their
-own settings. Change it back to any position to show it again.
+Choose **Hidden** under **Position per indicator** to hide that type on every
+monitor. Changing volume or brightness still works. Choose any position to show
+it again. Display profiles cannot change whether an indicator is hidden.
 
-Hiding applies to the indicator type on every monitor. Display profiles only
-change placement. If Windows changes an entry point that the mod needs, that
-indicator may remain visible; check the mod log for missing entry points.
-Microphone and text indicators, including the virtual desktop name, need their
-public show entry points for hiding. If those are unavailable on your Windows
-build, these indicators remain visible even when set to **Hidden**.
+Some Windows builds may not support hiding every type. If an indicator still
+appears, check the mod log for a message about unavailable hiding.
 
-## Skip the slide out animation
+## Display profiles
 
-The indicator normally slides off screen when it's done. With **Skip the slide out
-animation** on, it just disappears. Windows already has a no-animation hide path
-and the mod asks for that one instead, so the slide in and everything outside the
-indicator are left alone. If the setting ever appears to do nothing, the mod's log
-says so on a build where the entry points have moved.
+Profiles apply different positions and offsets for different display setups.
+They change placement on the monitor Windows already chose, so they cannot move
+an indicator to another monitor.
 
-## Independent offsets and display profiles
+Enable a profile and choose which monitor, active monitor count and indicator
+it should match. All conditions must match. Leave the monitor name empty, the
+count at 0 or the indicator on **All indicators** to skip that condition.
+Monitor names match part of the name and ignore letter case. Enable mod logging
+and trigger an indicator to see its monitor name in the log.
 
-Each indicator can use the main horizontal and vertical offsets, or its own
-values, including zero. Each one can also stay at the Windows default position
-while the others move.
+The first enabled matching profile applies. Settings left on **Keep the indicator
+position** or **Keep the indicator offset** use the main or per-indicator value;
+they do not take values from later profiles. For example, a profile can move the
+volume indicator when a dock is connected without changing the other indicators.
 
-Display profiles change the placement on the screen Windows already chose. A
-profile can match part of the monitor's name, the number of monitors in use, and
-one kind of indicator. The first enabled profile that matches wins, and anything
-it leaves on "Keep" uses the indicator settings. For example, use a different
-position when a dock is connected.
+To choose which monitor shows an indicator, use [Volume control open
+location](https://windhawk.net/mods/volume-control-open-location). It works with
+this mod.
 
-**Seconds on screen** changes the indicator's one-shot timeout from 1 to 60
-seconds. Leave it at 0 to keep the Windows timeout. It does not change animations.
+## Timing and animation
 
-## Choosing a monitor
+**Seconds on screen** sets the automatic dismissal delay from 1 to 60 seconds.
+Leave it at 0 to use Windows' timing. It does not keep an indicator visible if
+Windows replaces or dismisses it for another reason, and it may have no effect
+on Windows builds that use a different timer.
 
-This mod only changes where the indicator sits on a screen, not which screen it
-appears on. For that, use [Volume control open
-location](https://windhawk.net/mods/volume-control-open-location), which selects
-a monitor by number or by interface name. The two work together.
+**Skip the slide out animation** makes the indicator disappear instead of sliding
+away. It does not change the slide-in animation. If the slide-in direction looks
+wrong for your chosen position, try changing Windows' own on-screen indicator
+position setting, if your Windows build offers it.
 
-## Notes
+## Compatibility and limitations
 
-* The slide-in animation direction is chosen by Windows from the built-in
-  setting, not by this mod. If the animation looks wrong for your new position,
-  change the built-in setting to whichever of the three has the animation you
-  like, then let this mod do the actual placement.
-* Offsets are given at 100% scaling and scaled to whichever monitor the
-  indicator appears on, so the same value moves the same distance on a display
-  running at 150%.
-* With two indicators set to different spots you can catch the previous one
-  flashing at the new spot for a frame before the new one draws. That's the
-  confirmator reusing its frame, the placement hook can't do anything about it.
-  Skipping the slide out makes it easier to catch rather than harder, since what
-  lands at the new spot is the tail end of the previous indicator instead of an
-  empty frame.
-* Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
-  Build 26300 uses the same confirmator, so it should behave the same.
-  The ARM64 hooks were checked against the disassembly of the confirmator DLL
-  but not run on hardware, so if you use it there please let me know how it
-  goes.
+This mod is for Windows 11 on x64. It was tested on build 26200 (25H2) with
+displays at 100% and 150% scaling.
+
+Windows updates can change how indicators work. If the mod cannot identify all
+indicator types, per-indicator positions and offsets are ignored. Profiles for
+**All indicators** can still apply, and hiding can still work for types the mod
+can hide. If the virtual desktop name cannot be identified separately, it uses
+**Other indicators** settings. Check the mod log when a setting has no effect.
+
+When indicators use different positions, the previous one may briefly flash at
+the new position before the next one appears. Windows reuses the same indicator
+window. Skipping the slide out animation can make this more noticeable.
 
 ## Credits
 
-The hook onto the indicator's own placement function comes from [Volume control
-open location](https://windhawk.net/mods/volume-control-open-location) and
+The placement hook is based on [Volume control open
+location](https://windhawk.net/mods/volume-control-open-location) and
 [Taskbar primary on secondary
-monitor](https://windhawk.net/mods/taskbar-primary-on-secondary-monitor), which
-both target the same function and work out the origin handling.
+monitor](https://windhawk.net/mods/taskbar-primary-on-secondary-monitor).
 
 ## Issues
 
-Bugs and feature requests go on the [issues
+Report bugs and request features on the [issues
 page](https://github.com/mario0318/on-screen-indicator-position/issues).
 */
 // ==/WindhawkModReadme==
@@ -149,8 +136,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
 - position: topRight
   $name: Position
   $description: >-
-    Where on the screen the indicator appears. Anything left on "Same as the main
-    position" below follows this one.
+    The main position for all indicators. Choose exceptions under Position per indicator.
   $options:
   - windowsDefault: Windows default (only apply the offsets)
   - topLeft: Top left
@@ -165,15 +151,13 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
 - offsetX: 0
   $name: Horizontal offset
   $description: >-
-    Nudge the indicator sideways. A positive number moves it right, a negative one
-    moves it left. It stops at the edge of the screen rather than going off it, and
-    the same number moves it the same distance on any display.
+    Positive values move it right; negative values move it left. Values are pixels
+    at 100% display scaling and scale with the display. Movement stops at the edge.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
-    Nudge the indicator up or down. A positive number moves it down, a negative one
-    moves it up. It stops at the edge of the screen rather than going off it, and
-    the same number moves it the same distance on any display.
+    Positive values move it down; negative values move it up. Values are pixels
+    at 100% display scaling and scale with the display. Movement stops at the edge.
 - skipHideAnimation: false
   $name: Skip the slide out animation
   $description: The indicator disappears instead of sliding away.
@@ -270,6 +254,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     - bottomRight: Bottom right
   - text: same
     $name: Other indicators
+    $description: Text popups other than the virtual desktop name.
     $options:
     - same: Same as the main position
     - hidden: Hidden
@@ -285,6 +270,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     - bottomRight: Bottom right
   - virtualDesktop: same
     $name: Virtual desktop name
+    $description: The name popup shown when switching virtual desktops.
     $options:
     - same: Same as the main position
     - hidden: Hidden
@@ -300,13 +286,12 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     - bottomRight: Bottom right
   $name: Position per indicator
   $description: >-
-    Give one kind of indicator a spot of its own. The virtual desktop name popup
-    is separated from other text indicators so it can be placed independently.
-    Anything left on "Same as the main position" follows the Position setting
-    above. Independent offsets can be set in Offsets per indicator below.
+    Choose a position for each type, or Hidden to hide it on every monitor.
+    Same as the main position follows Position above. Set separate offsets below.
+    Some Windows builds may not support every type; check the mod log if a setting has no effect.
 - durationSeconds: 0
   $name: Seconds on screen
-  $description: 0 keeps the Windows timeout. Values from 1 to 60 change the indicator timeout. Only one-shot timers set by the indicator itself are adjusted.
+  $description: Automatic dismissal delay in seconds, from 1 to 60. 0 uses Windows timing. Another indicator can replace it sooner. May have no effect on some Windows builds.
 - indicatorOffsets:
   - volume:
     - horizontal: inherit
@@ -315,14 +300,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Volume
   - brightness:
     - horizontal: inherit
@@ -331,14 +318,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Brightness
   - keyboardBrightness:
     - horizontal: inherit
@@ -347,14 +336,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Keyboard brightness
   - airplaneMode:
     - horizontal: inherit
@@ -363,14 +354,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Airplane mode
   - camera:
     - horizontal: inherit
@@ -379,14 +372,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Camera
   - microphone:
     - horizontal: inherit
@@ -395,14 +390,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Microphone
   - text:
     - horizontal: inherit
@@ -411,14 +408,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Other indicators
   - virtualDesktop:
     - horizontal: inherit
@@ -427,24 +426,26 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Virtual desktop name
   $name: Offsets per indicator
-  $description: Choose Use this offset to set an independent value, including zero. Leaving either axis inherited preserves its main offset.
+  $description: Choose Use this offset to replace the main offset in either direction. A value of 0 removes that offset. The other direction can still use the main offset.
 - displayProfiles:
   - - monitor: ""
-      $name: Monitor interface name contains
-      $description: Optional unique part of the monitor interface name, or its display name such as DISPLAY1. Leave empty to match any monitor. Enable mod logs to see names.
+      $name: Monitor name contains
+      $description: Match part of the monitor name, such as DISPLAY1, ignoring letter case. Empty matches any monitor. Enable this profile and mod logging, then trigger an indicator to see names.
     - monitorCount: 0
-      $name: Number of connected monitors
-      $description: 0 matches any setup. Counts the monitors Windows is using for the desktop, so a mirrored pair counts as one, and a closed laptop with one external screen also counts as one. Use the monitor name to tell such setups apart.
+      $name: Number of active monitors
+      $description: 0 matches any count. Counts displays Windows uses for the desktop. Mirrored displays count as one; a disabled laptop screen does not count.
     - indicator: all
       $name: Indicator
       $options:
@@ -477,18 +478,20 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Keep the indicator offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Keep the indicator offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     - enabled: false
       $name: Enable this profile
   $name: Display profiles
-  $description: The first enabled matching profile wins. Profiles change placement on the monitor Windows selected. They do not move the indicator to a different monitor.
+  $description: All conditions in a profile must match. The first enabled match applies; later profiles are ignored. Profiles change placement on the selected monitor, not which monitor is used.
 */
 // ==/WindhawkModSettings==
 
