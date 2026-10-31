@@ -2070,6 +2070,13 @@ static void SafeRelease(T*& p) {
     }
 }
 
+// Replacing the preview struct must release the panel bitmap it owns: it can be ~1 MB, and the struct
+// is replaced on every arrow press while Quick Look is open.
+static void ResetPreview() {
+    SafeRelease(g_preview.bmp);
+    g_preview = PreviewState{};
+}
+
 // Fold a character: lowercase and accent-free (á -> a, ñ -> n). Always 1 char -> 1 char.
 static wchar_t FoldChar(wchar_t c) {
     if (c < 0x80) {
@@ -4179,6 +4186,7 @@ static void BuildFileResults() {
         r.subtitle = FileEntryMeta(e);
         r.payload = e.path;
         r.icon = (int)i;  // index into FileSrc()
+        r.isDir = e.isDir;  // the preview panel and Ctrl+Q need to know a folder from a file
         g_results.push_back(std::move(r));
         if ((int)g_results.size() >= 300) break;
     }
@@ -7029,6 +7037,7 @@ static bool GlobalModeActive() {
 static void UpdateTargets(bool snap, bool followSelection);  // defined with the layout code
 static void MarkDirty();
 static void StartGlobalSearch();
+static void SetPreviewOpen(bool open);  // defined with the preview panel
 
 // ===== Everything (voidtools) as an optional index =====
 // The built-in scan stays the default. With "Everything" selected, the query is sent to the running
@@ -9324,10 +9333,7 @@ static void ReleaseTarget() {
     ReleaseThumbCache();  // preview bitmaps belong to the render target
     ReleaseWindowIcons();
     if (g_preview.bmp) {
-        SafeRelease(g_preview.bmp);  // the panel preview belongs to the target too
-        g_preview.bmp = nullptr;
-        g_preview.bmpPending = false;
-        if (g_preview.isImage) g_preview.loaded = false;  // asked for again on the next draw
+        ResetPreview();  // the panel preview belongs to the target too; asked for again on the next draw
     }
     for (auto& a : g_apps) {
         SafeRelease(a.bmp);
@@ -9546,7 +9552,8 @@ static void UpdateTargets(bool snap, bool followSelection = true) {
             if (g_panelMode == PanelMode::Actions &&
                 (rk == ResultKind::App || rk == ResultKind::Window))
                 panelWanted = true;
-            else if (g_panelMode == PanelMode::Preview && rk == ResultKind::File)
+            else if (g_panelMode == PanelMode::Preview && rk == ResultKind::File &&
+                     !g_results[g_sel].isDir)
                 panelWanted = true;
         }
         g_detailTarget = panelWanted ? 1.0 : 0.0;
@@ -9591,7 +9598,7 @@ static void SetSelection(int idx) {
     if (g_panelMode == PanelMode::Preview && g_detailsOpen) {
         const auto& res = g_results[g_sel];
         if (res.kind != ResultKind::File || res.payload != g_preview.path) {
-            g_preview = PreviewState{};
+            ResetPreview();
         }
     }
     UpdateTargets(false, /*followSelection=*/true);
@@ -12400,9 +12407,15 @@ static void DrawHelp(float cx, float cy, float cw, float ch, float s) {
 
 static void LoadPreview(const std::wstring& path) {
     if (g_preview.path == path && g_preview.loaded) return;  // already loaded
-    if (g_preview.bmp) SafeRelease(g_preview.bmp);  // the bitmap belongs to the document being replaced
-    g_preview = PreviewState{};
+    ResetPreview();  // releases the bitmap of the picture being replaced
     g_preview.path = path;
+
+    const DWORD attrs = GetFileAttributesW(path.c_str());
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        g_preview.errorMsg = L"A folder has nothing to preview.";
+        g_preview.loaded = true;
+        return;
+    }
 
     // Determine type by extension (uppercase)
     auto dotPos = path.rfind(L'.');
@@ -13597,7 +13610,7 @@ static void ShowLauncher() {
     g_detailPos = g_detailTarget = 0;
     g_panelMode = PanelMode::Actions;
     g_panelSwitching = false;
-    g_preview = PreviewState{};
+    ResetPreview();
     g_helpOpen = false;
     g_form = CustomFormState();  // no form is left open from the last time
     g_mgr = ManagerState();      // nor the custom-entries manager
@@ -17452,6 +17465,9 @@ static void LaunchSelected() {
 static void ToggleFileMode() {
     if (!g_fileMode && !g_cfg.filesEnabled) return;  // the file browser is turned off
     g_fileMode = !g_fileMode;
+    // The preview belongs to the file that was open: leaving the browser closes it, or it would come
+    // back later showing whatever row is selected then — a folder, which has nothing to preview.
+    if (!g_fileMode && g_panelMode == PanelMode::Preview) SetPreviewOpen(false);
     g_bandEdit = BandEdit::None;
     g_fileMenuOpen = false;
     g_form = CustomFormState();  // a custom entry form does not survive a mode switch
@@ -17875,7 +17891,8 @@ static void DoWindowAction(int act) {
 // Helper: is the selected result previewable?
 static bool SelIsPreviewable() {
     if (g_results.empty() || g_sel < 0 || g_sel >= (int)g_results.size()) return false;
-    return g_results[g_sel].kind == ResultKind::File;
+    // A folder has nothing to preview, and asking for one used to open an empty panel with an error.
+    return g_results[g_sel].kind == ResultKind::File && !g_results[g_sel].isDir;
 }
 
 // Open or close the preview panel.  Handles the animated mode-switch when the
