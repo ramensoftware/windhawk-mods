@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
-// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
-// @version         1.6.0
+// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, or hide specific indicators
+// @version         1.6.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
