@@ -88,7 +88,8 @@ volume indicator when a dock is connected without changing the other indicators.
 
 To choose which monitor shows an indicator, use [Volume control open
 location](https://windhawk.net/mods/volume-control-open-location). It works with
-this mod.
+this mod. If offsets look wrong on displays with different scaling, try disabling
+the monitor-selection mod to check for a conflict.
 
 ## Timing and animation
 
@@ -99,13 +100,14 @@ on Windows builds that use a different timer.
 
 **Skip the slide out animation** makes the indicator disappear instead of sliding
 away. It does not change the slide-in animation. If the slide-in direction looks
-wrong for your chosen position, try changing Windows' own on-screen indicator
-position setting, if your Windows build offers it.
+wrong for your chosen position, try changing **Position of on-screen indicators**
+under **Settings > System > Notifications**, if your Windows build offers it.
 
 ## Compatibility and limitations
 
-This mod is for Windows 11 on x64. It was tested on build 26200 (25H2) with
-displays at 100% and 150% scaling.
+Tested on Windows 11 build 26200 (25H2) x64 with displays at 100% and 150%
+scaling. ARM64 support was checked against disassembly, but has not been tested
+on hardware.
 
 Windows updates can change how indicators work. If the mod cannot identify all
 indicator types, per-indicator positions and offsets are ignored. Profiles for
@@ -287,7 +289,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
   $name: Position per indicator
   $description: >-
     Choose a position for each type, or Hidden to hide it on every monitor.
-    Same as the main position follows Position above. Set separate offsets below.
+    "Same as the main position" follows Position above. Set separate offsets below.
     Some Windows builds may not support every type; check the mod log if a setting has no effect.
 - durationSeconds: 0
   $name: Seconds on screen
@@ -499,12 +501,12 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
 
 #include <shellscalingapi.h>
 
-#include <atomic>
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 enum class Position {
     windowsDefault,
@@ -522,8 +524,8 @@ enum class Position {
 };
 
 // Which indicator is being shown. Windows has a separate entry point per kind,
-// so the kind is recorded as one is requested and read back when the position is
-// worked out. `same` means the kind has no position of its own.
+// so the kind is recorded as one is requested and read back when the position
+// is worked out. `same` means the kind has no position of its own.
 enum class Indicator {
     volume,
     brightness,
@@ -539,15 +541,15 @@ enum class Indicator {
     unknown,
 };
 
-// Only one indicator is on screen at a time, and the entry point runs before the
-// position is worked out, so a single value is enough.
+// Only one indicator is on screen at a time, and the entry point runs before
+// the position is worked out, so a single value is enough.
 std::atomic<Indicator> g_currentIndicator{Indicator::unknown};
 
-// Set when any of the per-kind entry points didn't resolve. The recorded kind is
-// then meaningless, since an unhooked kind would be placed using whichever kind
-// was recorded before it, so the overrides are ignored for the session and
-// everything uses the main position. Checked once at init rather than guessed at
-// per placement.
+// Set when any of the per-kind entry points didn't resolve. The recorded kind
+// is then meaningless, since an unhooked kind would be placed using whichever
+// kind was recorded before it, so the overrides are ignored for the session and
+// everything uses the main position. Checked once at init rather than guessed
+// at per placement.
 std::atomic<bool> g_kindUnreliable{false};
 
 // Must match the `position` default in the settings block above.
@@ -578,12 +580,14 @@ struct Settings {
     Settings() { perIndicator.fill(Position::inherit); }
 };
 // One immutable snapshot per call: a settings reload cannot mix an anchor from
-// one generation with offsets from another. Profiles are never copied per frame.
+// one generation with offsets from another. Profiles are never copied per
+// frame.
 class SettingsStore {
     SRWLOCK lock = SRWLOCK_INIT;
     std::shared_ptr<const Settings> value = std::make_shared<Settings>();
     std::atomic<int> fastDuration{0};
-public:
+
+   public:
     std::shared_ptr<const Settings> load() {
         AcquireSRWLockShared(&lock);
         auto result = value;
@@ -609,13 +613,13 @@ bool AnyPerIndicator(const Settings& settings) {
     return !settings.profiles.empty();
 }
 
-// Only for the log, so a line someone is asked to read back says which kind it was
-// rather than a number to count enum members against.
+// Only for the log, so a line someone is asked to read back says which kind it
+// was rather than a number to count enum members against.
 PCWSTR IndicatorName(Indicator indicator) {
     static constexpr PCWSTR kNames[] = {
-        L"volume",     L"brightness",      L"keyboardBrightness",
-        L"airplaneMode", L"camera",        L"microphone",
-        L"text",       L"virtualDesktop",
+        L"volume",       L"brightness",     L"keyboardBrightness",
+        L"airplaneMode", L"camera",         L"microphone",
+        L"text",         L"virtualDesktop",
     };
     static_assert(ARRAYSIZE(kNames) == (size_t)Indicator::count);
 
@@ -626,7 +630,8 @@ PCWSTR IndicatorName(Indicator indicator) {
 // Logged from both Wh_ModInit and Wh_ModSettingsChanged.
 constexpr PCWSTR kKindUnreliableMessage =
     L"An indicator entry point did not resolve, so per-indicator positions and "
-    L"offsets are ignored. Hidden still applies where a suppressing hook resolved";
+    L"offsets are ignored. Hidden still applies where a suppressing hook "
+    L"resolved";
 
 // Set once in Wh_ModInit when either half of the hide pair didn't resolve.
 bool g_hideAnimationUnavailable = false;
@@ -635,9 +640,9 @@ constexpr PCWSTR kHideAnimationUnavailableMessage =
     L"The hide entry points didn't resolve, so the slide out animation is left "
     L"alone";
 
-// Set once in Wh_ModInit when ShowText's thunk didn't resolve. The ramp alone still
-// recognises text indicators, but only the thunk can tell the virtual desktop popup
-// apart from them.
+// Set once in Wh_ModInit when ShowText's thunk didn't resolve. The ramp alone
+// still recognises text indicators, but only the thunk can tell the virtual
+// desktop popup apart from them.
 bool g_virtualDesktopUndetectable = false;
 
 constexpr PCWSTR kVirtualDesktopUndetectableMessage =
@@ -649,21 +654,27 @@ struct Placement {
     int x;
     int y;
 };
-Placement ResolvePlacement(const Settings& settings, Indicator kind,
-                           PCWSTR monitorName, int monitorCount) {
+Placement ResolvePlacement(const Settings& settings,
+                           Indicator kind,
+                           PCWSTR monitorName,
+                           int monitorCount) {
     Placement result{settings.position, settings.offsetX, settings.offsetY};
     const size_t i = (size_t)kind;
     if (!g_kindUnreliable.load() && i < (size_t)Indicator::count) {
         if (settings.perIndicator[i] != Position::inherit)
             result.position = settings.perIndicator[i];
         const auto& offset = settings.offsets[i];
-        if (offset.customX) result.x = offset.x;
-        if (offset.customY) result.y = offset.y;
+        if (offset.customX)
+            result.x = offset.x;
+        if (offset.customY)
+            result.y = offset.y;
     }
     for (const auto& profile : settings.profiles) {
-        if (profile.monitorCount && profile.monitorCount != monitorCount) continue;
+        if (profile.monitorCount && profile.monitorCount != monitorCount)
+            continue;
         if (profile.indicator != Indicator::unknown &&
-            (g_kindUnreliable.load() || profile.indicator != kind)) continue;
+            (g_kindUnreliable.load() || profile.indicator != kind))
+            continue;
         if (!profile.monitor.empty()) {
             const size_t length = wcslen(monitorName);
             const size_t needle = profile.monitor.size();
@@ -676,11 +687,15 @@ Placement ResolvePlacement(const Settings& settings, Indicator kind,
                     break;
                 }
             }
-            if (!matched) continue;
+            if (!matched)
+                continue;
         }
-        if (profile.position != Position::inherit) result.position = profile.position;
-        if (profile.offsets.customX) result.x = profile.offsets.x;
-        if (profile.offsets.customY) result.y = profile.offsets.y;
+        if (profile.position != Position::inherit)
+            result.position = profile.position;
+        if (profile.offsets.customX)
+            result.x = profile.offsets.x;
+        if (profile.offsets.customY)
+            result.y = profile.offsets.y;
         break;
     }
     return result;
@@ -748,7 +763,8 @@ void PlaceInArea(const WinrtRect& area,
             rect->X = right;
             rect->Y = bottom;
             break;
-        case Position::hidden:  // Only show hooks suppress; layout stays valid otherwise.
+        case Position::hidden:  // Only show hooks suppress; layout stays valid
+                                // otherwise.
         case Position::inherit:
         case Position::windowsDefault:
             // Keep the position Windows picked and only apply the offsets.
@@ -944,8 +960,10 @@ DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledAsync,
 // register here would be unsafe. The public microphone thunk handles hiding.
 using ShowMicrophoneMutedAsync_t = void*(WINAPI*)(void*, void*, int, void*);
 ShowMicrophoneMutedAsync_t ShowMicrophoneMutedAsync_Original;
-void* WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, void* retval,
-                                         int value, void* text) {
+void* WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis,
+                                           void* retval,
+                                           int value,
+                                           void* text) {
     g_currentIndicator.store(Indicator::microphone);
     return ShowMicrophoneMutedAsync_Original(pThis, retval, value, text);
 }
@@ -961,26 +979,32 @@ void* WINAPI ShowTextAsync_Hook(void* pThis,
                                 void* retval,
                                 void* text,
                                 bool value) {
-    // The original owns the by-value hstring. Always forward so it is destroyed;
-    // text hiding is handled by the public thunk with its borrowed string.
+    // The original owns the by-value hstring. Always forward so it is
+    // destroyed; text hiding is handled by the public thunk with its borrowed
+    // string.
     g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
                                                   : Indicator::text);
     return ShowTextAsync_Original(pThis, retval, text, value);
 }
 
 // Called at startup and after settings changes, including when another missing
-// entry point has disabled per-indicator placement. Hiding is independent of it.
+// entry point has disabled per-indicator placement. Hiding is independent of
+// it.
 void LogUnavailableHiding(const Settings& settings) {
     if (!ShowTextThunk_Original &&
         (settings.perIndicator[(size_t)Indicator::text] == Position::hidden ||
-         settings.perIndicator[(size_t)Indicator::virtualDesktop] == Position::hidden)) {
-        Wh_Log(L"ShowText thunk did not resolve; Hidden is unavailable for text "
-               L"and virtual desktop indicators");
+         settings.perIndicator[(size_t)Indicator::virtualDesktop] ==
+             Position::hidden)) {
+        Wh_Log(
+            L"ShowText thunk did not resolve; Hidden is unavailable for text "
+            L"and virtual desktop indicators");
     }
     if (!ShowMicrophoneMutedThunk_Original &&
-        settings.perIndicator[(size_t)Indicator::microphone] == Position::hidden) {
-        Wh_Log(L"ShowMicrophoneMuted thunk did not resolve; Hidden is unavailable "
-               L"for the microphone indicator");
+        settings.perIndicator[(size_t)Indicator::microphone] ==
+            Position::hidden) {
+        Wh_Log(
+            L"ShowMicrophoneMuted thunk did not resolve; Hidden is unavailable "
+            L"for the microphone indicator");
     }
 }
 
@@ -1007,9 +1031,10 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     Wh_Log(L"> skip=%d", (int)skip);
 
     if (skip) {
-        // Restored however this returns. Hide is an implementation method rather
-        // than an abi thunk, so an hresult_error coming out of it would otherwise
-        // leave the flag latched and the setting dead for the rest of the session.
+        // Restored however this returns. Hide is an implementation method
+        // rather than an abi thunk, so an hresult_error coming out of it would
+        // otherwise leave the flag latched and the setting dead for the rest of
+        // the session.
         ResetOnExit reset{redirecting};
 
         redirecting = true;
@@ -1020,10 +1045,11 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
 }
 
 // GetDpiForMonitor returns the real effective DPI only to a per-monitor aware
-// caller, so make sure of that for the call and restore the thread's own context.
+// caller, so make sure of that for the call and restore the thread's own
+// context.
 UINT QueryMonitorDpi(HMONITOR monitor) {
-    DPI_AWARENESS_CONTEXT previous =
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     UINT dpiX = 0;
     UINT dpiY = 0;
     HRESULT hr = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
@@ -1076,8 +1102,8 @@ std::wstring MonitorDisplayName(PCWSTR device) {
 void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
     const auto settings = g_settings.load();
     const Indicator kind = g_currentIndicator.load();
-    RECT bounds{(LONG)rect.X, (LONG)rect.Y,
-                (LONG)(rect.X + rect.Width), (LONG)(rect.Y + rect.Height)};
+    RECT bounds{(LONG)rect.X, (LONG)rect.Y, (LONG)(rect.X + rect.Width),
+                (LONG)(rect.Y + rect.Height)};
     HMONITOR monitor = MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST);
     std::wstring monitorName;
     if (!settings->profiles.empty()) {
@@ -1088,12 +1114,13 @@ void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
         }
     }
     Placement placement = ResolvePlacement(*settings, kind, monitorName.c_str(),
-                                            GetSystemMetrics(SM_CMONITORS));
+                                           GetSystemMetrics(SM_CMONITORS));
     const UINT dpi = placement.x || placement.y ? QueryMonitorDpi(monitor) : 96;
     placement.x = MulDiv(placement.x, dpi, 96);
     placement.y = MulDiv(placement.y, dpi, 96);
     WinrtRect area{0, 0, rect.Width, rect.Height};
-    if (placement.position != Position::windowsDefault || placement.x || placement.y)
+    if (placement.position != Position::windowsDefault || placement.x ||
+        placement.y)
         PlaceInArea(area, placement.position, placement.x, placement.y, result);
     result->X += rect.X;
     result->Y += rect.Y;
@@ -1129,9 +1156,12 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
     return result;
 }
 
-Position PositionFromString(PCWSTR value, Position fallback = Position::windowsDefault) {
-    if (wcscmp(value, L"hidden") == 0) return Position::hidden;
-    if (!*value || wcscmp(value, L"same") == 0) return Position::inherit;
+Position PositionFromString(PCWSTR value,
+                            Position fallback = Position::windowsDefault) {
+    if (wcscmp(value, L"hidden") == 0)
+        return Position::hidden;
+    if (!*value || wcscmp(value, L"same") == 0)
+        return Position::inherit;
     if (wcscmp(value, L"topLeft") == 0) {
         return Position::topLeft;
     } else if (wcscmp(value, L"topCenter") == 0) {
@@ -1166,41 +1196,63 @@ Position PositionFromString(PCWSTR value, Position fallback = Position::windowsD
 OffsetOverride LoadOffsets(const std::wstring& prefix) {
     OffsetOverride result;
     result.customX = wcscmp(WindhawkUtils::StringSetting::make(
-        (prefix + L".horizontal").c_str()).get(), L"custom") == 0;
-    result.customY = wcscmp(WindhawkUtils::StringSetting::make(
-        (prefix + L".vertical").c_str()).get(), L"custom") == 0;
-    result.x = std::clamp(Wh_GetIntSetting((prefix + L".x").c_str()), -100000, 100000);
-    result.y = std::clamp(Wh_GetIntSetting((prefix + L".y").c_str()), -100000, 100000);
+                                (prefix + L".horizontal").c_str())
+                                .get(),
+                            L"custom") == 0;
+    result.customY =
+        wcscmp(
+            WindhawkUtils::StringSetting::make((prefix + L".vertical").c_str())
+                .get(),
+            L"custom") == 0;
+    result.x =
+        std::clamp(Wh_GetIntSetting((prefix + L".x").c_str()), -100000, 100000);
+    result.y =
+        std::clamp(Wh_GetIntSetting((prefix + L".y").c_str()), -100000, 100000);
     return result;
 }
 
 void LoadSettings() {
     auto settings = std::make_shared<Settings>();
     auto value = WindhawkUtils::StringSetting::make(L"position");
-    settings->position = *value.get() ? PositionFromString(value.get()) : kDefaultPosition;
-    if (settings->position == Position::inherit || settings->position == Position::hidden) settings->position = kDefaultPosition;
-    settings->offsetX = std::clamp(Wh_GetIntSetting(L"offsetX"), -100000, 100000);
-    settings->offsetY = std::clamp(Wh_GetIntSetting(L"offsetY"), -100000, 100000);
+    settings->position =
+        *value.get() ? PositionFromString(value.get()) : kDefaultPosition;
+    if (settings->position == Position::inherit ||
+        settings->position == Position::hidden)
+        settings->position = kDefaultPosition;
+    settings->offsetX =
+        std::clamp(Wh_GetIntSetting(L"offsetX"), -100000, 100000);
+    settings->offsetY =
+        std::clamp(Wh_GetIntSetting(L"offsetY"), -100000, 100000);
     settings->skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation") != 0;
-    settings->durationSeconds = std::clamp(Wh_GetIntSetting(L"durationSeconds"), 0, 60);
-    static const PCWSTR names[] = {L"volume", L"brightness", L"keyboardBrightness",
-        L"airplaneMode", L"camera", L"microphone", L"text", L"virtualDesktop"};
+    settings->durationSeconds =
+        std::clamp(Wh_GetIntSetting(L"durationSeconds"), 0, 60);
+    static const PCWSTR names[] = {
+        L"volume",       L"brightness",    L"keyboardBrightness",
+        L"airplaneMode", L"camera",        L"microphone",
+        L"text",         L"virtualDesktop"};
     for (size_t i = 0; i < ARRAYSIZE(names); ++i) {
         std::wstring key = std::wstring(L"perIndicator.") + names[i];
         auto position = WindhawkUtils::StringSetting::make(key.c_str());
-        settings->perIndicator[i] = PositionFromString(position.get(), Position::inherit);
-        settings->offsets[i] = LoadOffsets(std::wstring(L"indicatorOffsets.") + names[i]);
+        settings->perIndicator[i] =
+            PositionFromString(position.get(), Position::inherit);
+        settings->offsets[i] =
+            LoadOffsets(std::wstring(L"indicatorOffsets.") + names[i]);
     }
     for (int i = 0;; ++i) {
         const auto prefix = L"displayProfiles[" + std::to_wstring(i) + L"]";
-        auto kind = WindhawkUtils::StringSetting::make((prefix + L".indicator").c_str());
+        auto kind = WindhawkUtils::StringSetting::make(
+            (prefix + L".indicator").c_str());
         // Every stored entry has an indicator value, so an empty one is the end
         // of the array.
-        if (!*kind.get()) break;
+        if (!*kind.get())
+            break;
 
-        if (!Wh_GetIntSetting((prefix + L".enabled").c_str())) continue;
+        if (!Wh_GetIntSetting((prefix + L".enabled").c_str()))
+            continue;
         DisplayProfile profile;
-        profile.monitor = WindhawkUtils::StringSetting::make((prefix + L".monitor").c_str()).get();
+        profile.monitor =
+            WindhawkUtils::StringSetting::make((prefix + L".monitor").c_str())
+                .get();
         profile.monitorCount = std::clamp(
             Wh_GetIntSetting((prefix + L".monitorCount").c_str()), 0, 64);
         bool valid = wcscmp(kind.get(), L"all") == 0;
@@ -1210,10 +1262,14 @@ void LoadSettings() {
                 valid = true;
             }
         }
-        if (!valid) continue;
-        auto position = WindhawkUtils::StringSetting::make((prefix + L".position").c_str());
-        profile.position = PositionFromString(position.get(), Position::inherit);
-        if (profile.position == Position::hidden) profile.position = Position::inherit;
+        if (!valid)
+            continue;
+        auto position =
+            WindhawkUtils::StringSetting::make((prefix + L".position").c_str());
+        profile.position =
+            PositionFromString(position.get(), Position::inherit);
+        if (profile.position == Position::hidden)
+            profile.position = Position::inherit;
         profile.offsets = LoadOffsets(prefix);
         settings->profiles.push_back(std::move(profile));
     }
@@ -1223,15 +1279,19 @@ void LoadSettings() {
 // Duration overrides are scoped to one-shot relative timers requested directly
 // by HardwareConfirmator. Absolute, periodic, cancellation and short animation
 // timers pass through. Hook both APIs because Windows builds use either one.
-FILETIME* AdjustDueTime(void* caller, const FILETIME* due, DWORD period,
+FILETIME* AdjustDueTime(void* caller,
+                        const FILETIME* due,
+                        DWORD period,
                         FILETIME& adjusted) {
     const int seconds = g_settings.duration();
-    if (!seconds || !due || period) return const_cast<FILETIME*>(due);
+    if (!seconds || !due || period)
+        return const_cast<FILETIME*>(due);
     HMODULE module = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<PCWSTR>(caller), &module) ||
-        module != g_hardwareConfirmatorModule) return const_cast<FILETIME*>(due);
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<PCWSTR>(caller), &module) ||
+        module != g_hardwareConfirmatorModule)
+        return const_cast<FILETIME*>(due);
     LARGE_INTEGER value;
     value.LowPart = due->dwLowDateTime;
     value.HighPart = due->dwHighDateTime;
@@ -1431,29 +1491,22 @@ BOOL Wh_ModInit() {
         const void* ramp;
         const void* thunk;
     } kindRecorders[] = {
-        {L"ShowVolume",
-         (void*)ShowVolumeAsync_Original,
+        {L"ShowVolume", (void*)ShowVolumeAsync_Original,
          (void*)ShowVolumeThunk_Original},
-        {L"ShowBrightness",
-         (void*)ShowBrightnessAsync_Original,
+        {L"ShowBrightness", (void*)ShowBrightnessAsync_Original,
          (void*)ShowBrightnessThunk_Original},
-        {L"ShowKeyboardBrightness",
-         (void*)ShowKeyboardBrightnessAsync_Original,
+        {L"ShowKeyboardBrightness", (void*)ShowKeyboardBrightnessAsync_Original,
          (void*)ShowKeyboardBrightnessThunk_Original},
-        {L"ShowAirplaneModeOn",
-         (void*)ShowAirplaneModeOnAsync_Original,
+        {L"ShowAirplaneModeOn", (void*)ShowAirplaneModeOnAsync_Original,
          (void*)ShowAirplaneModeOnThunk_Original},
-        {L"ShowCameraOn",
-         (void*)ShowCameraOnAsync_Original,
+        {L"ShowCameraOn", (void*)ShowCameraOnAsync_Original,
          (void*)ShowCameraOnThunk_Original},
         {L"ShowCameraAccessEnabled",
          (void*)ShowCameraAccessEnabledAsync_Original,
          (void*)ShowCameraAccessEnabledThunk_Original},
-        {L"ShowMicrophoneMuted",
-         (void*)ShowMicrophoneMutedAsync_Original,
+        {L"ShowMicrophoneMuted", (void*)ShowMicrophoneMutedAsync_Original,
          (void*)ShowMicrophoneMutedThunk_Original},
-        {L"ShowText",
-         (void*)ShowTextAsync_Original,
+        {L"ShowText", (void*)ShowTextAsync_Original,
          (void*)ShowTextThunk_Original},
     };
 
@@ -1465,10 +1518,11 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Report all of them before deciding, so a build that moved several shows all.
+    // Report all of them before deciding, so a build that moved several shows
+    // all.
     for (const auto& recorder : kindRecorders) {
-        Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d", recorder.name,
-               !!recorder.ramp, !!recorder.thunk);
+        Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d",
+               recorder.name, !!recorder.ramp, !!recorder.thunk);
 
         if (!recorder.ramp && !recorder.thunk) {
             g_kindUnreliable = true;
@@ -1483,11 +1537,11 @@ BOOL Wh_ModInit() {
 
     // The thread_local flag that tells virtual desktop popups apart from other
     // text indicators is set from ShowText's thunk, so if the thunk didn't
-    // resolve, virtual desktop popups silently follow the Other indicators position.
-    // The ramp resolving on its own is enough to keep text detection working,
-    // so it wouldn't trip the recorder check above. Only worth saying if the
-    // user has actually set a per-kind position for the virtual desktop popup, and
-    // not when every kind already falls back to the main position.
+    // resolve, virtual desktop popups silently follow the Other indicators
+    // position. The ramp resolving on its own is enough to keep text detection
+    // working, so it wouldn't trip the recorder check above. Only worth saying
+    // if the user has actually set a per-kind position for the virtual desktop
+    // popup, and not when every kind already falls back to the main position.
     g_virtualDesktopUndetectable =
         !ShowTextThunk_Original && ShowTextAsync_Original;
     if (g_virtualDesktopUndetectable && !g_kindUnreliable &&
@@ -1508,7 +1562,9 @@ BOOL Wh_ModInit() {
          !WindhawkUtils::SetFunctionHook(SetThreadpoolTimerEx,
                                          SetThreadpoolTimerEx_Hook,
                                          &SetThreadpoolTimerEx_Original))) {
-        Wh_Log(L"Duration timer hook unavailable; Windows timeout may be retained");
+        Wh_Log(
+            L"Duration timer hook unavailable; Windows timeout may be "
+            L"retained");
     }
     return TRUE;
 }
