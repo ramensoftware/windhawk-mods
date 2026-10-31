@@ -32,11 +32,11 @@
 Hold **`Ctrl` + Right-Click** and drag your mouse to scroll naturally and effortlessly across desktop apps—including web browsers (Chrome, Edge, Firefox), documents (Word, PDFs), code editors (VS Code), and File Explorer.
 
 ## Vertical & Horizontal Scrolling
-![Drag to Scroll Demo 1](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/dts_preview_1.webp)
+![Drag to Scroll Demo 1](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/assets/dts_preview_1.webp)
 
 
 ## Hands-Free Continuous Cruising
-![Drag to Scroll Demo 2](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/dts_preview_2.webp)
+![Drag to Scroll Demo 2](https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/refs/heads/master/assets/dts_preview_2.webp)
 
 ---
 
