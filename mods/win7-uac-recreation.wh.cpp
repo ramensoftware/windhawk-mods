@@ -23,7 +23,9 @@ authentication, and the secure desktop.
 - Five themes: Windows 7 Basic, custom Aero, Windows 8.1, Windows 10 (1507–1607), and the modern Windows 10 prompt (1709 and later).
 - The prompt is a dialog and behaves like one: its title bar menu offers Move and Close only, so a UAC prompt can be neither minimised, maximised nor resized.
 - It restores the native prompt if the recreation fails; never makes an elevation decision.
-- It leaves system files, settings, and credential prompts untouched.
+- It leaves system files and settings untouched, and never answers a prompt on its own. The
+  credential prompt and the prompts of apps the list excludes are never replaced; the one thing that
+  does apply to them is the background, see *The background behind the prompt*.
 - It matches the banner and shield to Windows' publisher verdict.
 - Optional Classic Theme colours for the four classic skins: `ButtonFace` as the background, `WindowText` as the text, read from the system through `GetSysColor` and refreshed on `WM_SYSCOLORCHANGE`.
 - It shows the requesting program's icon and native prompt details when available.
@@ -67,8 +69,18 @@ The picture is taken before the switch to the secure desktop: it is a still imag
 the prompt moves, and the secure desktop stays enabled either way. The mod replaces the one
 full-screen draw with which Windows composes that background into a memory bitmap, and it does so
 once per prompt; a Windows build that composes the background some other way keeps its own wallpaper
-instead of showing a stale picture. The setting does not touch the prompt, the elevation decision or
-the secure desktop, and turning it off is enough to get Windows' wallpaper back.
+instead of showing a stale picture.
+
+The picture is drawn for every prompt that process shows. A credential prompt, and a prompt for an app
+the app list excludes, keep Windows' own dialog and flow untouched - the mod does not replace those -
+but the background behind them is the screenshot as well, because Windows composes that background
+before anything here knows which kind of prompt it is. In the modes that leave the Windows prompt
+alone by design (**Replace the UAC prompt** off, **Write a diagnostics dump** on, **How the prompt is
+found** set to hook only) nothing is photographed and no drawing function of the UAC process is
+hooked, which is what those modes promise and what makes them usable to diagnose a failed elevation.
+
+The setting does not touch the prompt, the elevation decision or the secure desktop, and choosing
+**Only the wallpaper** is enough to get Windows' background back.
 
 **Extra dim over the screenshot** adds more black over the picture, from 0 to 200; leave it at 0 to
 keep the dim Windows draws.
@@ -156,7 +168,7 @@ If there are anomalies, please report them to the author. It is recommended to i
   - win10Modern: Windows 10 (versions 1709 and later, Modern Prompt)
 - backgroundStyle: screenshot
   $name: The background behind the prompt
-  $description: "This setting chooses what the secure desktop shows behind the recreated prompt. Windows 7 dimmed a screenshot of the whole screen, windows, taskbar and Start menu included; Windows 8 and later leave only the wallpaper there. The picture is taken before the switch to the secure desktop, so it is a still image, and Windows itself still draws the dim over it. The prompt, the secure desktop and every elevation decision are untouched either way."
+  $description: "This setting chooses what the secure desktop shows behind the recreated prompt. Windows 7 dimmed a screenshot of the whole screen, windows, taskbar and Start menu included; Windows 8 and later leave only the wallpaper there. The picture is taken before the switch to the secure desktop, so it is a still image, and Windows itself still draws the dim over it. It applies to every prompt the UAC process shows, including a credential prompt and a prompt for an app the app list excludes, whose own dialog and flow stay exactly as Windows drew them. In the modes that leave the Windows prompt alone - Replace the UAC prompt off, Write a diagnostics dump on, or How the prompt is found set to hook only - nothing is captured and nothing is drawn. The prompt, the secure desktop and every elevation decision are untouched either way."
   $options:
   - screenshot: Dimmed screenshot of the whole screen (Windows 7)
   - wallpaper: Only the wallpaper (Windows 8 and later)
@@ -618,6 +630,18 @@ static BitBlt_t g_bitBltOrig = nullptr;
 static StretchBlt_t g_stretchBltOrig = nullptr;
 static AlphaBlend_t g_alphaBlendOrig = nullptr;
 
+// Whether the background is this mod's to draw at all. In observe mode, in the diagnostics dump
+// mode and in the hook-only mode the promise is that Windows' own prompt is left exactly as it is,
+// and that includes the picture behind it: nothing is photographed there, no GDI function of this
+// process is hooked, and the mod stays out of the way of the very thing those modes exist to check.
+// Two cases cannot be known this early - a credential prompt, and a prompt for an app the list
+// excludes, are recognised only once the prompt is there - so the README and the setting say that
+// the background covers every prompt this process shows.
+static bool BackgroundWanted() {
+    return g_settings.backgroundStyle == BackgroundScreenshot && g_settings.relayMode == 1 &&
+           !g_settings.dumpUiTree && g_settings.detection != 2;
+}
+
 // The screenshot can only be taken on the normal desktop: the secure desktop holds nothing but the
 // wallpaper, and this process switches to it once the prompt is ready. "Default" is that desk - the
 // same name the desktop watchers open (kDesktopDefault, below).
@@ -698,7 +722,7 @@ static void FreeBackgroundCapture() {
 // settings reload that turns the option on while the process is still on the normal desktop.
 static bool CaptureBackground() {
     if (g_backgroundCaptureTried) return g_backgroundDc != nullptr;
-    if (g_settings.backgroundStyle != BackgroundScreenshot) return false;
+    if (!BackgroundWanted()) return false;
     g_backgroundCaptureTried = TRUE;
 
     const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -786,7 +810,10 @@ static bool CaptureBackground() {
 // have", which is also the answer for every other draw in the process.
 static bool TryReplaceBackground(HDC hdcDest, int x, int y, int w, int h) {
     if (!hdcDest || w <= 0 || h <= 0) return false;
-    if (g_settings.backgroundStyle != BackgroundScreenshot) return false;
+    // Asked on every draw, not once at init: a settings reload that turns the replacement off - or
+    // one of the observe and diagnostic modes on - takes effect at the next compose, even though a
+    // hook that is already in place cannot be taken out again.
+    if (!BackgroundWanted()) return false;
     // Cheap and silent first: only a draw that covers the whole screen can be the compose.
     if (!BackgroundSizeIsTheScreen(w, h)) return false;
 
@@ -912,7 +939,7 @@ static void EnsureBackgroundHooks() {
 // The one honest line about the setting, written once per prompt: either the screenshot is behind
 // the dialog, or Windows' own wallpaper is, and the log says which.
 static void NoteBackgroundOutcome() {
-    if (g_settings.backgroundStyle != BackgroundScreenshot) return;
+    if (!BackgroundWanted()) return;
     if (InterlockedCompareExchange(&g_backgroundReplaced, 0, 0) != 0) {
         Dbg(L"background: the Windows 7 screenshot is behind the prompt");
         return;
@@ -10590,7 +10617,11 @@ BOOL Wh_ModInit() {
     // moment it can be taken: once the process switches to the secure desktop there is nothing left
     // to photograph. Nothing is drawn here - the hooks below replace the one memory-bitmap compose
     // Windows makes of that picture, and only that.
-    if (g_settings.backgroundStyle == BackgroundScreenshot) {
+    //
+    // Only for a prompt this mod actually replaces. Taking a screenshot and hooking three GDI
+    // functions of consent.exe in observe mode, in the diagnostics dump mode or in the hook-only
+    // mode would break exactly what those modes promise, and what they are used for.
+    if (BackgroundWanted()) {
         if (BackgroundOnDefaultDesktop()) {
             CaptureBackground();
         } else {
@@ -10598,6 +10629,10 @@ BOOL Wh_ModInit() {
                 L"stays", deskName);
         }
         EnsureBackgroundHooks();
+    } else if (g_settings.backgroundStyle == BackgroundScreenshot) {
+        Log(L"background: not taken - replaceUAC=%d dumpDiagnostics=%d promptDetection=%d means "
+            L"the Windows prompt is left exactly as it is",
+            g_settings.relayMode, g_settings.dumpUiTree, g_settings.detection);
     }
 
     // Said out loud, because it is the one setting that makes the mod look broken: in observe or
@@ -10657,10 +10692,14 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     // Turning the Windows 7 background on while the process is still on the normal desktop is the
     // last moment the picture can be taken; on the secure desktop it is too late, and this prompt
-    // keeps the wallpaper instead of showing something that was never photographed.
-    if (g_settings.backgroundStyle == BackgroundScreenshot) {
+    // keeps the wallpaper instead of showing something that was never photographed. Turning the
+    // replacement off, or a diagnostic mode on, leaves the hooks in place but inert: the check in
+    // TryReplaceBackground is made on every draw.
+    if (BackgroundWanted()) {
         if (!g_backgroundCaptureTried && BackgroundOnDefaultDesktop()) CaptureBackground();
         EnsureBackgroundHooks();
+    } else if (g_backgroundHooksInstalled) {
+        Dbg(L"background: off in this mode, so the hooks that are in place draw nothing");
     }
     Dbg(L"settings reloaded from a new snapshot (replaceUAC=%d, background=%d)", g_settings.relayMode,
         g_settings.backgroundStyle);
