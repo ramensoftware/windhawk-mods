@@ -20,10 +20,11 @@ The window is placed **before** it appears, so there is no jump, no flicker, and
 
 ## Modes
 
-- **Parent window**: centered on the window that owns the new one; otherwise on the active or topmost window of the same program (including another instance of it, as with File Explorer folder windows). Windows with none of these, such as the Run dialog, open centered on the primary monitor.
+- **Parent window / monitor**: centered on the window it came from: the window that owns it, otherwise the active or topmost window of the same program (including another instance of it, as with File Explorer folder windows). Windows with none of these, such as the Run dialog or a program just launched, open centered on the monitor with the mouse cursor.
+- **Parent monitor only**: centered on the monitor of the window it came from, found the same way, or on the monitor with the mouse cursor when there is none. With the maximum window size at 100%, every window opens at the center of the screen.
 - **Mouse cursor**: centered on the mouse cursor.
 
-In both modes the window is kept inside the monitor's work area.
+In every mode the window is kept inside the monitor's work area.
 
 ## Which windows are moved
 
@@ -32,14 +33,15 @@ In both modes the window is kept inside the monitor's work area.
 - Windows of UWP apps such as Calculator and Clock are centered when they open, then left where the user puts them.
 - Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.
 - A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.
+- Some programs move their window again right after showing it, to restore a saved position. For a moment after a window is centered, such moves by the window's own program are sent back to the center. Moves by other tools, and the user's own dragging, are left alone.
 
 ## Ignoring windows
 
-Press **Win+Alt+C** while a window is active to stop centering that kind of window, and press it again on it to undo. A short notification confirms the change.
+Press **Win+Alt+I** while a window is active to stop centering that kind of window, and press it again on it to undo. A short notification confirms the change.
 
 A rule covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of one folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. All UWP apps share one host process and window class, so ignoring one UWP app ignores them all.
 
-The **Ignored windows** list opens with **Win+Ctrl+Alt+C**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
+The **Ignored windows** list opens with **Win+Ctrl+Alt+I**, and entries can be removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
 
 Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.
 
@@ -54,20 +56,21 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 - mode: parent
   $name: Center on
   $options:
-    - parent: Parent window
+    - parent: Parent window / monitor
+    - monitor: Parent monitor only
     - mouse: Mouse cursor
 - maxAreaPercent: 10
   $name: Maximum window size (% of the monitor)
   $description: >-
     Windows larger than this share of the monitor's work area keep their own
     position. Standard Windows dialogs are centered regardless of size.
-- ignoreHotkey: Win+Alt+C
+- ignoreHotkey: Win+Alt+I
   $name: Ignore hotkey
   $description: >-
     Add / remove the active window to the ignored list. Modifiers
     (Ctrl, Alt, Shift, Win) and one key, joined with +. Leave empty for no
     hotkey.
-- listHotkey: Win+Ctrl+Alt+C
+- listHotkey: Win+Ctrl+Alt+I
   $name: Ignored windows hotkey
   $description: >-
     Opens the list of ignored windows, same format as above. If empty, the
@@ -92,7 +95,7 @@ HINSTANCE ModInstance() {
 
 // ───────────── Settings ─────────────
 
-enum Mode { MODE_PARENT, MODE_MOUSE };
+enum Mode { MODE_PARENT, MODE_MONITOR, MODE_MOUSE };
 
 // Read by the hooks on application threads while Wh_ModSettingsChanged rewrites them.
 std::atomic<int> g_mode{MODE_PARENT};
@@ -112,7 +115,9 @@ void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
 
 void LoadCenteringSettings() {
     PCWSTR mode = Wh_GetStringSetting(L"mode");
-    g_mode = wcscmp(mode, L"mouse") == 0 ? MODE_MOUSE : MODE_PARENT;
+    g_mode = wcscmp(mode, L"mouse") == 0     ? MODE_MOUSE
+             : wcscmp(mode, L"monitor") == 0 ? MODE_MONITOR
+                                             : MODE_PARENT;
     Wh_FreeStringSetting(mode);
     int pct = Wh_GetIntSetting(L"maxAreaPercent");
     g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
@@ -350,11 +355,18 @@ bool IsValidParent(HWND parent, HWND child) {
     return TitleOf(parent, title, ARRAYSIZE(title)) > 0;
 }
 
-POINT PrimaryCenter() {
+POINT WorkAreaCenter(HMONITOR mon) {
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
+    GetMonitorInfoW(mon, &mi);
     return {(mi.rcWork.left + mi.rcWork.right) / 2, (mi.rcWork.top + mi.rcWork.bottom) / 2};
+}
+
+/// Center of the monitor with the mouse cursor, where the user last was.
+POINT CursorMonitorCenter() {
+    POINT pt;
+    GetCursorPos(&pt);
+    return WorkAreaCenter(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
 }
 
 struct TopWindowSearch {
@@ -437,15 +449,17 @@ POINT ReferencePoint(HWND hwnd) {
     }
     HWND parent = FindParent(hwnd);
     if (!parent)
-        return PrimaryCenter();
+        return CursorMonitorCenter();
+    if (g_mode == MODE_MONITOR)
+        return WorkAreaCenter(MonitorFromWindow(parent, MONITOR_DEFAULTTONEAREST));
     RECT rc;
     GetWindowRect(parent, &rc);
     return {(rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2};
 }
 
-/// Computes the centered position for a window of size w×h. False if the window should keep its position.
-bool ComputeTarget(HWND hwnd, int w, int h, int* x, int* y) {
-    POINT c = ReferencePoint(hwnd);
+/// Top-left that centers a w×h window on c, kept inside the work area of c's monitor. False if the
+/// window is over the size threshold and isn't a standard dialog.
+bool PlaceAround(HWND hwnd, POINT c, int w, int h, int* x, int* y) {
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(MonitorFromPoint(c, MONITOR_DEFAULTTONEAREST), &mi);
@@ -463,15 +477,67 @@ bool ComputeTarget(HWND hwnd, int w, int h, int* x, int* y) {
     return true;
 }
 
+/// Computes the centered position for a window about to take the proposed rect, and the point it is
+/// centered on. False if the window should keep its position.
+bool ComputeTarget(HWND hwnd, const RECT& proposed, int* x, int* y, POINT* center = nullptr) {
+    POINT c = ReferencePoint(hwnd);
+    if (!PlaceAround(hwnd, c, proposed.right - proposed.left, proposed.bottom - proposed.top, x, y))
+        return false;
+    if (center)
+        *center = c;
+    return true;
+}
+
+// ───────────── Programs that move their window back ─────────────
+//
+// Some programs (Firefox restoring its session, for one) move a window again shortly after it is shown,
+// undoing the centering. For kKeepCenteredMs after centering, moves made by the window's own process
+// are redirected to the centered point. Other programs' moves are left alone, and so is the user's
+// dragging, which happens inside the kernel and doesn't reach the SetWindowPos hook.
+
+constexpr wchar_t kCenterXProp[] = L"WindowCentralizer.CenterX";
+constexpr wchar_t kCenterYProp[] = L"WindowCentralizer.CenterY";
+constexpr wchar_t kCenterTickProp[] = L"WindowCentralizer.CenterTick";
+constexpr DWORD kKeepCenteredMs = 1500;
+
+void RememberCenter(HWND hwnd, POINT c) {
+    SetPropW(hwnd, kCenterXProp, (HANDLE)(INT_PTR)c.x);
+    SetPropW(hwnd, kCenterYProp, (HANDLE)(INT_PTR)c.y);
+    SetPropW(hwnd, kCenterTickProp, (HANDLE)(ULONG_PTR)(GetTickCount() | 1));  // never 0, which means unset
+}
+
+void ForgetCenter(HWND hwnd) {
+    RemovePropW(hwnd, kCenterXProp);
+    RemovePropW(hwnd, kCenterYProp);
+    RemovePropW(hwnd, kCenterTickProp);
+}
+
+/// The point the window was centered on, if that was less than kKeepCenteredMs ago.
+bool RecentCenter(HWND hwnd, POINT* c) {
+    DWORD tick = (DWORD)(ULONG_PTR)GetPropW(hwnd, kCenterTickProp);
+    if (!tick)
+        return false;
+    if (GetTickCount() - tick >= kKeepCenteredMs) {
+        ForgetCenter(hwnd);
+        return false;
+    }
+    c->x = (LONG)(INT_PTR)GetPropW(hwnd, kCenterXProp);
+    c->y = (LONG)(INT_PTR)GetPropW(hwnd, kCenterYProp);
+    return true;
+}
+
 void CenterNow(HWND hwnd) {
     if (!IsCandidate(hwnd))
         return;
     RECT rc;
     GetWindowRect(hwnd, &rc);
     int x, y;
-    if (!ComputeTarget(hwnd, rc.right - rc.left, rc.bottom - rc.top, &x, &y) || (x == rc.left && y == rc.top))
+    POINT c;
+    if (!ComputeTarget(hwnd, rc, &x, &y, &c))
         return;
-    SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    if (x != rc.left || y != rc.top)
+        SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    RememberCenter(hwnd, c);
 }
 
 // ───────────── UWP app windows ─────────────
@@ -520,8 +586,9 @@ LRESULT CALLBACK UwpFrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
     // The placeholder size the frame is shown with (about 178×39) isn't the app's; wait for the real one.
     if ((pos->flags & SWP_NOMOVE) || h < 100)
         return DefSubclassProc(hwnd, msg, wParam, lParam);
+    RECT proposed = {pos->x, pos->y, pos->x + w, pos->y + h};
     int x, y;
-    if (!IsIgnored(hwnd, L"ApplicationFrameWindow") && ComputeTarget(hwnd, w, h, &x, &y)) {
+    if (!IsIgnored(hwnd, L"ApplicationFrameWindow") && ComputeTarget(hwnd, proposed, &x, &y)) {
         pos->x = x;
         pos->y = y;
     }
@@ -579,11 +646,31 @@ BOOL WINAPI NtUserSetWindowPos_Hook(HWND hwnd, HWND after, int x, int y, int cx,
         GetWindowRect(hwnd, &rc);
         int w = (flags & SWP_NOSIZE) ? rc.right - rc.left : cx;
         int h = (flags & SWP_NOSIZE) ? rc.bottom - rc.top : cy;
+        int px = (flags & SWP_NOMOVE) ? rc.left : x;
+        int py = (flags & SWP_NOMOVE) ? rc.top : y;
+        RECT proposed = {px, py, px + w, py + h};
         int nx, ny;
-        if (ComputeTarget(hwnd, w, h, &nx, &ny)) {
+        POINT c;
+        if (ComputeTarget(hwnd, proposed, &nx, &ny, &c)) {
             x = nx;
             y = ny;
             flags &= ~SWP_NOMOVE;
+            RememberCenter(hwnd, c);
+        }
+    } else if (hwnd && !(flags & SWP_NOMOVE) && IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd)) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        POINT c;
+        if (pid == GetCurrentProcessId() && RecentCenter(hwnd, &c)) {
+            RECT rc;
+            GetWindowRect(hwnd, &rc);
+            int w = (flags & SWP_NOSIZE) ? rc.right - rc.left : cx;
+            int h = (flags & SWP_NOSIZE) ? rc.bottom - rc.top : cy;
+            int nx, ny;
+            if (PlaceAround(hwnd, c, w, h, &nx, &ny)) {
+                x = nx;
+                y = ny;
+            }
         }
     }
     return NtUserSetWindowPos_Original(hwnd, after, x, y, cx, cy, flags);
