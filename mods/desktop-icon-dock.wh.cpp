@@ -4,7 +4,7 @@
 // @name:zh-CN      桌面图标 Dock
 // @description     Turns desktop icons into a centered macOS-style dock with hover magnification and an optional glass panel
 // @description:zh-CN 将桌面图标变成居中的 macOS 风格 Dock，支持悬停放大，可选液态玻璃面板
-// @version         1.0.10
+// @version         1.0.11
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -40,8 +40,9 @@ icon is magnified with its label shown.*
 - **Name labels**: hovering an icon shows a name pill above it; in transparent
   mode the pill stays at a fixed position instead of jumping while icons
   scale.
-- **Native interaction**: left click opens an item; right click opens the same
-  Explorer context menu as the desktop (new shortcut, properties, delete, ...).
+- **Native interaction**: left click opens an item; right click opens that
+  item's native Explorer context menu (open, send to, create shortcut,
+  properties, delete, ...).
 - **Automatic desktop sync**: items added, removed, renamed or moved on the
   desktop appear in the dock automatically through shell change notifications,
   ordered by their desktop grid position.
@@ -108,6 +109,9 @@ icons by hiding the desktop's list view window in memory.
   the 30-second fallback covers unusual changes such as a new sort order.
 - **Settings changes seem to have no effect**: saving settings reloads and
   rebuilds the dock automatically; no Explorer restart is needed.
+- **Add an item**: put a shortcut or file on the desktop, or press Win+R and
+  enter `shell:Desktop` to open the desktop folder; the dock picks it up
+  within a second.
 - **Hide a specific item**: put its display name in "Excluded items"
   (comma-separated).
 
@@ -2108,12 +2112,12 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             return 0;
 
         case WM_DPICHANGED: {
-            // Icons are extracted at a DPI-scaled size, so they have to be
-            // re-extracted when the scale changes.
+            // Icons are extracted at a DPI-scaled size, so the scale has to
+            // be updated before the rebuild re-extracts them.
+            UINT dpi = GetDpiForWindow(hwnd);
+            g_dpiScale = (dpi ? dpi : 96) / 96.0;
             g_iconCache.clear();
             if (!RebuildFromDesktop(true)) {
-                UINT dpi = GetDpiForWindow(hwnd);
-                g_dpiScale = (dpi ? dpi : 96) / 96.0;
                 ComputeLayout();
                 g_panelWidth = g_layout.panelBaseWidth;
                 for (auto& item : g_items) {
