@@ -20758,7 +20758,7 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792555443000,
+        "updated": 1793477009000,
         "users": 65
       },
       "metadata": {
@@ -20766,14 +20766,15 @@
           "x86-64"
         ],
         "author": "HHeitlager",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lwinhttp",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lgdiplus -lwinhttp",
         "description": "Mawaqit prayer clock with live countdown, multi-monitor taskbar support, prayer schedule popup, and customizable themes.",
         "github": "https://github.com/hheitlager",
         "include": [
           "explorer.exe"
         ],
+        "license": "MIT",
         "name": "Mawaqit Prayer Clock",
-        "version": "0.7.1"
+        "version": "0.8.0"
       }
     },
     "windhawk-topbar": {

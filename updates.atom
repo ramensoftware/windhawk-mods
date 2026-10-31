@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-31T19:48:08.000Z</updated>
+    <updated>2026-10-31T20:03:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.8.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-mawaqit#aa96df48d25cc044f44e1e0aaa6d8e61f18ac8de</id>
+        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
+        <updated>2026-10-31T20:03:29.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds 12- and 24-hour clock formats, with an optional AM/PM indicator.</p>
+<p>Expands the theme selection to 26 presets, including light variants and Monochrome, and adds more pill and popup color overrides plus pill border opacity.</p>
+<p>Adds typography controls for the pill and popup, including font size and weight.</p>
+<p>Improves taskbar placement options and popup hover behavior, including delayed opening and click pinning.</p>
+<p>Reorganizes settings and changes the refresh interval default from 24 to 168 hours.</p>
+<p>On upgrade, the mosque, selected theme, and taskbar position are preserved; other settings may need to be configured again.</p>]]></content>
+        <author>
+            <name>HHeitlager</name>
+            <uri>https://github.com/hheitlager</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 8/8.1 Family Safety Applet Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#f7502792d29d0612ef13f0e3eab910b9f3cb79e7</id>
@@ -929,87 +945,6 @@ or triggers (for example, right-click for this mod).</li>
         <author>
             <name>Nuzza</name>
             <uri>https://github.com/Nuzza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-monitor taskbar icon alignment 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-per-monitor-alignment#81da868a31a95dad912c7e5043ddfd7341fa2cb8</id>
-        <link href="https://windhawk.net/mods/taskbar-per-monitor-alignment"/>
-        <updated>2026-10-30T00:01:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="permonitortaskbariconalignment">Per-monitor taskbar icon alignment</h1>
-<p>Choose how the taskbar looks on <strong>each monitor separately</strong>: its icons <strong>Left</strong>,
-<strong>Center</strong>, <strong>Right</strong> or Windows' default, and the <strong>Start button</strong> at the left edge,
-the right edge, or with the icons. Windows only offers one alignment for every
-taskbar, and only Left or Center.</p>
-<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/monitor2-overview.jpg" alt="A monitor with centered icons and the Start button at the left edge" /></p>
-<p>| Icons | Start button | Result |
-| --- | --- | --- |
-| Left | with the icons | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-left.jpg" alt="" /> |
-| Center | with the icons | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-center.jpg" alt="" /> |
-| Right | with the icons | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-right.jpg" alt="" /> |
-| Center | left edge | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-center-start-left.jpg" alt="" /> |
-| Left | right edge | <img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/icons-left-start-right.jpg" alt="" /> |</p>
-<h2 id="settings">Settings</h2>
-<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/settings.jpg" alt="Mod settings" /></p>
-<ul>
-<li><strong>Primary monitor / Other monitors</strong> set the icon alignment and the Start button
-placement for every monitor of that kind. <em>Windows default</em> keeps whatever Windows
-is set to. Out of the box the primary monitor keeps Windows' own alignment and the
-other monitors are Left.</li>
-<li><strong>Per-monitor overrides</strong> handle individual displays: add one row per monitor and
-pick it from the <strong>Monitor</strong> dropdown, <em>1st</em> to <em>6th from the left</em> or <em>Rightmost</em>.
-Positions follow the arrangement in Windows display settings, so they keep working
-when displays are renumbered or reconnected. Choose <em>Custom</em> to type a display
-device name (<code>DISPLAY1</code>), a monitor name (<code>DELL U2719D</code>) or part of a device path
-(<code>DISPLAY#DELA0C1</code>) instead. The first matching row wins.</li>
-<li><strong>Start button:</strong> <em>Follow the icons</em> leaves it in the icon group, as Windows does.
-<em>Left edge</em> and <em>Right edge (next to the tray)</em> place it independently, and the
-icons close the gap. Choosing the edge the icons already gather at changes nothing.</li>
-</ul>
-<p>Right is this mod's own option: Windows' alignment setting has no Right, so a Right
-taskbar is told Left and its icons are aligned right in the taskbar's layout, stopping
-at the system tray. The tray itself never moves.</p>
-<h2 id="installation">Installation</h2>
-<p>Install the mod. It takes over the running taskbars straight away, and also after an
-update or when you disable and enable it, and changing settings applies immediately.
-If a taskbar doesn't change, for instance after a Windows update has changed the
-taskbar's internals, restart Windows Explorer once (Task Manager &gt; Windows Explorer &gt;
-Restart). Enable <strong>Show my taskbar on all displays</strong> in Windows settings to get a
-taskbar on every monitor.</p>
-<p>Disabling the mod puts every taskbar back to Windows' own layout.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Windows 11, 64-bit, native taskbar only. Tested on Windows 11 26H2 (build 26300)
-with Windhawk 1.7.3, on three displays with different resolutions and scales.</p>
-<p>The mod relies on Windows' private taskbar internals. A Windows update can change
-them: if the core hooks can't be found the mod refuses to start, and the XAML-based
-features (Right icons, Start button placement) simply stay off. Windows 10 is not
-supported. Start menu and search flyouts keep using Windows' own placement. No
-registry values are changed. See below for tools that change the taskbar themselves.</p>
-<p>Known limit: the Widgets button isn't taken into account, so with Widgets shown the
-Start button's <em>Left edge</em> may overlap it, and so may <em>Right</em> icons or the <em>Right edge</em>
-on a taskbar where Windows moves it.</p>
-<h2 id="othertaskbartoolscaninterfere">Other taskbar tools can interfere</h2>
-<p>Apps and mods that add their own taskbar features, such as Start11, StartAllBack,
-ExplorerPatcher or other Windhawk taskbar mods, can take over how the taskbar buttons
-are drawn and laid out. Center, Right and the Start button placement can then look
-wrong or not apply, whatever this mod does.</p>
-<p>A known case is <strong>Start11's "Let Start11 enhance the taskbar"</strong>. It draws the taskbar
-buttons itself, in its own window laid over the taskbar, so the buttons this mod
-positions are not the ones you see. With Right, for example, only some of the buttons
-may show up, cut off on the left:</p>
-<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-symptom-right.png" alt="Right alignment with Start11's taskbar enhancement on: only some buttons are visible" /></p>
-<p>If you see this, open Start11, go to <strong>Taskbar</strong> and turn <strong>Let Start11 enhance the
-taskbar</strong> off (or use the option below it, <em>Disable all taskbar features for
-compatibility with other taskbar mods</em>), then restart Explorer. The page should look
-like this:</p>
-<p><img src="https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting.png" alt="Start11's Taskbar page with Let Start11 enhance the taskbar switched off" /></p>
-<p>For any other tool, switch its taskbar features off for a moment to check whether they
-are the cause.</p>
-<p>Source, build instructions and tests:
-https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></content>
-        <author>
-            <name>vmTools</name>
-            <uri>https://github.com/VitalyTz</uri>
         </author>
     </entry>
 </feed>

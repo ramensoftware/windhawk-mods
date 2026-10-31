@@ -1,3 +1,17 @@
+## 0.8.0 ([Oct 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/aa96df48d25cc044f44e1e0aaa6d8e61f18ac8de/mods/windhawk-mawaqit.wh.cpp))
+
+Adds 12- and 24-hour clock formats, with an optional AM/PM indicator.
+
+Expands the theme selection to 26 presets, including light variants and Monochrome, and adds more pill and popup color overrides plus pill border opacity.
+
+Adds typography controls for the pill and popup, including font size and weight.
+
+Improves taskbar placement options and popup hover behavior, including delayed opening and click pinning.
+
+Reorganizes settings and changes the refresh interval default from 24 to 168 hours.
+
+On upgrade, the mosque, selected theme, and taskbar position are preserved; other settings may need to be configured again.
+
 ## 0.7.1 ([Oct 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b1d6e84f9facc94d8e6be50ff78a9b13396f6b9e/mods/windhawk-mawaqit.wh.cpp))
 
 - Added optional Imsak and Shuruq schedule entries, including support for six- and seven-entry Mawaqit calendars.
