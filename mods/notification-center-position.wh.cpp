@@ -4,7 +4,7 @@
 // @description     Move the Windows 11 Notification Center to different taskbar positions.
 // @version         1.0.5
 // @author          MaestroSky
-// @github          MaestroSky
+// @github          https://github.com/MaestroSky
 // @include         ShellExperienceHost.exe
 // ==/WindhawkMod==
 
