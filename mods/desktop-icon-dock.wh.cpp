@@ -4,7 +4,7 @@
 // @name:zh-CN      桌面图标 Dock
 // @description     Turns desktop icons into a centered macOS-style dock with hover magnification and an optional glass panel
 // @description:zh-CN 将桌面图标变成居中的 macOS 风格 Dock，支持悬停放大，可选液态玻璃面板
-// @version         1.0.9
+// @version         1.0.10
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -87,7 +87,7 @@ icons by hiding the desktop's list view window in memory.
 | Show labels | On | Show a name pill for the hovered item |
 | Hide original desktop icons | On | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
 | Excluded items | empty | Comma-separated display names that should not appear in the dock |
-| Backdrop refresh interval (s) | 20 | Glass mode only: how often the glass backdrop is re-sampled; 0 disables refresh |
+| Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |
 
 ## Compatibility and limitations
 
@@ -195,8 +195,8 @@ icons by hiding the desktop's list view window in memory.
 - BackdropRefreshSeconds: 20
   $name: Backdrop refresh interval (s)
   $name:zh-CN: 背景刷新间隔（秒）
-  $description: Glass mode only - how often the blurred backdrop is re-sampled; 0 disables refresh
-  $description:zh-CN: 仅玻璃模式：多久重新采样一次玻璃背景；0 表示不自动刷新
+  $description: How often the blurred backdrop used by the glass panel and the label pill is re-sampled; 0 disables refresh
+  $description:zh-CN: 多久重新采样一次玻璃面板和名称标签所使用的模糊背景；0 表示不自动刷新
 */
 // ==/WindhawkModSettings==
 
@@ -539,6 +539,7 @@ struct EnumeratedItem {
     std::shared_ptr<void> pidlOwner;
     PIDLIST_ABSOLUTE pidl = nullptr;
     POINT position{};
+    bool isFilesystem = false;
     ComPtr<IShellItem> shellItem;
 };
 
@@ -590,6 +591,12 @@ bool EnumerateDesktopItems(std::vector<EnumeratedItem>& out) {
                 pidl, [](void* p) { if (p) ILFree((PIDLIST_ABSOLUTE)p); });
         }
         entry.position = position;
+        if (item) {
+            SFGAOF attributes = 0;
+            if (SUCCEEDED(item->GetAttributes(SFGAO_FILESYSTEM, &attributes))) {
+                entry.isFilesystem = (attributes & SFGAO_FILESYSTEM) != 0;
+            }
+        }
         entry.shellItem = std::move(item);
         out.push_back(std::move(entry));
 
@@ -1734,6 +1741,28 @@ void PruneIconCache() {
     }
 }
 
+// Virtual items (Recycle Bin, This PC, ...) have no file-system events, so
+// their state changes (e.g. an emptied Recycle Bin) are picked up by the
+// slow fallback check instead.
+void RefreshVirtualIcons(const std::vector<EnumeratedItem>& found) {
+    bool updated = false;
+    for (const auto& entry : found) {
+        if (entry.isFilesystem) continue;
+        if (g_iconCache.find(entry.key) == g_iconCache.end()) continue;
+        g_iconCache.erase(entry.key);
+        auto icon = LoadShellIcon(entry.shellItem.Get(), entry.key);
+        if (!icon) continue;
+        for (auto& item : g_items) {
+            if (item.key == entry.key) {
+                item.icon = icon;
+                updated = true;
+                break;
+            }
+        }
+    }
+    if (updated && !g_animationTimerRunning) RenderFrame();
+}
+
 void HideDock() {
     if (g_dockShown) {
         ShowWindow(g_hwnd, SW_HIDE);
@@ -1789,6 +1818,7 @@ bool RebuildFromDesktop(bool force) {
         signature += L'\n';
     }
     if (!force && !g_items.empty() && signature == g_lastSignature) {
+        RefreshVirtualIcons(found);
         g_lastItemCheckTime = std::chrono::steady_clock::now();
         return true;
     }
@@ -1854,10 +1884,12 @@ void RegisterShellNotifications() {
     SHGetKnownFolderIDList(FOLDERID_Desktop, 0, nullptr, &desktop);
     SHGetKnownFolderIDList(FOLDERID_PublicDesktop, 0, nullptr, &publicDesktop);
 
+    // Non-recursive: only the items directly on the desktop appear in the
+    // dock, so file writes inside desktop folders do not wake us up.
     SHChangeNotifyEntry entries[2] = {};
     int entryCount = 0;
-    if (desktop) entries[entryCount++] = {desktop, TRUE};
-    if (publicDesktop) entries[entryCount++] = {publicDesktop, TRUE};
+    if (desktop) entries[entryCount++] = {desktop, FALSE};
+    if (publicDesktop) entries[entryCount++] = {publicDesktop, FALSE};
 
     if (entryCount > 0) {
         LONG events = SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
@@ -1889,15 +1921,31 @@ void HandleShellNotification(WPARAM wParam, LPARAM lParam) {
     LONG event = 0;
     HANDLE lock =
         SHChangeNotification_Lock((HANDLE)wParam, (DWORD)lParam, &pidls, &event);
-    (void)pidls;
+    bool needsRebuild = true;
     if (lock) {
-        if (event & (SHCNE_UPDATEIMAGE | SHCNE_UPDATEITEM)) {
+        if (event & SHCNE_UPDATEIMAGE) {
             g_iconCache.clear();
             g_notifyForceRebuild = true;
+        } else if (event & SHCNE_UPDATEITEM) {
+            // A content update only affects the icon of that one item;
+            // everything else stays cached.
+            needsRebuild = false;
+            if (pidls && pidls[0]) {
+                ComPtr<IShellItem> item;
+                if (SUCCEEDED(SHCreateItemFromIDList(pidls[0],
+                                                     IID_PPV_ARGS(item.put())))) {
+                    std::wstring key = GetShellItemName(
+                        item.Get(), SIGDN_DESKTOPABSOLUTEPARSING);
+                    if (!key.empty() && g_iconCache.erase(key) > 0) {
+                        g_notifyForceRebuild = true;
+                        needsRebuild = true;
+                    }
+                }
+            }
         }
         SHChangeNotification_Unlock(lock);
     }
-    if (g_hwnd) {
+    if (needsRebuild && g_hwnd) {
         SetTimer(g_hwnd, kTimerShellNotify, kNotifyRebuildDelayMs, nullptr);
     }
 }
@@ -2060,19 +2108,24 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             return 0;
 
         case WM_DPICHANGED: {
-            UINT dpi = GetDpiForWindow(hwnd);
-            g_dpiScale = (dpi ? dpi : 96) / 96.0;
-            ComputeLayout();
-            g_panelWidth = g_layout.panelBaseWidth;
-            for (auto& item : g_items) {
-                item.centerX = item.baseCenterX;
-                item.scale = 1.0;
-                item.labelAlpha = 0.0;
+            // Icons are extracted at a DPI-scaled size, so they have to be
+            // re-extracted when the scale changes.
+            g_iconCache.clear();
+            if (!RebuildFromDesktop(true)) {
+                UINT dpi = GetDpiForWindow(hwnd);
+                g_dpiScale = (dpi ? dpi : 96) / 96.0;
+                ComputeLayout();
+                g_panelWidth = g_layout.panelBaseWidth;
+                for (auto& item : g_items) {
+                    item.centerX = item.baseCenterX;
+                    item.scale = 1.0;
+                    item.labelAlpha = 0.0;
+                }
+                EnsureFrameBuffer(g_layout.windowWidth, g_layout.windowHeight);
+                PositionWindow();
+                CaptureBackdrop();
+                RenderFrame();
             }
-            EnsureFrameBuffer(g_layout.windowWidth, g_layout.windowHeight);
-            PositionWindow();
-            CaptureBackdrop();
-            RenderFrame();
             return 0;
         }
 
