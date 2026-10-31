@@ -4030,20 +4030,20 @@
         "ratingUsers": 34,
         "reviews": 0,
         "trendingSorting": 1.2117341849060257,
-        "updated": 1789322343000,
+        "updated": 1793462661000,
         "users": 713
       },
       "metadata": {
         "author": "Jona like it, code it",
-        "compilerOptions": "-ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32",
-        "description": "Draggable widgets with transparent, light, and dark themes. You can add a custom folder path in the mod settings to open your desired music folder.",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -ldwmapi -lgdiplus -lgdi32 -lole32 -lshell32 -lpropsys -lwlanapi -lbthprops -ladvapi32 -liphlpapi",
+        "description": "Interactive desktop widgets with shortcuts to Wi-Fi, Hotspot and Bluetooth quick settings, music playback controls, live state indicators, and a one-click system-wide light/dark mode toggle.",
         "github": "https://github.com/Stunning-dev",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
         "name": "JonaOS Draggable Desktop Widgets",
-        "version": "7.2"
+        "version": "7.3"
       }
     },
     "desktop-icon-arrangement": {
@@ -12837,6 +12837,35 @@
         "version": "1.0.3"
       }
     },
+    "recycle-bin-file-preview": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793462657000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793462657000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Luiz Bizzio",
+        "compilerOptions": "-lole32 -lshell32 -lshlwapi -luuid",
+        "description": "Preview deleted files in the Recycle Bin using the native File Explorer Preview Pane (Alt+P), without restoring them.",
+        "github": "https://github.com/luizbizzio",
+        "homepage": "https://github.com/luizbizzio/recycle-bin-file-preview",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Recycle Bin File Preview",
+        "version": "1.0.0"
+      }
+    },
     "recycle-bin-original-names": {
       "details": {
         "defaultSorting": 560,
@@ -16731,7 +16760,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792382630000,
+        "updated": 1793462666000,
         "users": 29
       },
       "metadata": {
@@ -16740,13 +16769,13 @@
         ],
         "author": "Deen-0x",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi",
-        "description": "Underlines the labels of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance",
+        "description": "Underlines the labels (and optionally the icons) of taskbar buttons whose windows are shown on the desktop, so open and minimized windows can be told apart at a glance",
         "github": "https://github.com/Deen-0x",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Open Window Underline",
-        "version": "1.0"
+        "version": "2.0"
       }
     },
     "taskbar-per-monitor-alignment": {
@@ -20411,7 +20440,7 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": 3.7750507126683788,
-        "updated": 1792243838000,
+        "updated": 1793462670000,
         "users": 221
       },
       "metadata": {
@@ -20419,14 +20448,14 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32",
-        "description": "This mod recreates the Windows 7/8.1 UAC prompt on Windows 10/11 without changing UAC behavior or disabling the secure desktop",
+        "compilerOptions": "-luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32 -lmsimg32",
+        "description": "This mod recreates the Windows 7, 8.1 and 10 UAC prompts on Windows 10/11 without changing UAC behavior or disabling the secure desktop",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "consent.exe"
         ],
-        "name": "Windows 7/8.1 UAC Recreation",
-        "version": "1.0.0"
+        "name": "Windows 7/8.1/10 UAC Recreation",
+        "version": "1.1.0"
       }
     },
     "win7-window-animations-restorer": {

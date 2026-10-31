@@ -2,12 +2,105 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-31T14:32:13.000Z</updated>
+    <updated>2026-10-31T16:04:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1/10 UAC Recreation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-uac-recreation#cd3169cd698f0ff2976ccddf3377e31e324db328</id>
+        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
+        <updated>2026-10-31T16:04:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a skin that recreates the modern Windows 10 UAC prompt (mainly for Windows 11 setups that try to match the Windows 10 style - credits to Susie Deltarune for the feedback)</li>
+<li>Added best-effort support for the Classic theme</li>
+<li>Fixed the context menu of the recreated prompt</li>
+<li>Added an option to restore the background in the secure desktop (like in Windows 7)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Open Window Underline 2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-open-window-underline#5685777d56f943dad16b7817f4ada0d71b0a1380</id>
+        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
+        <updated>2026-10-31T16:04:26.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li><strong>Icon underline (experimental)</strong> — a settings group that draws a line under each button's icon with the same open/minimized rule as the label underline, so the mod also works with "Combine taskbar buttons and hide labels".</li>
+<li>A composition <code>SpriteVisual</code> attached to <code>Image#Icon</code> via <code>ElementCompositionPreview::SetElementChildVisual</code>, sized and positioned relative to the element (<code>RelativeSizeAdjustment</code> / <code>RelativeOffsetAdjustment</code>): it follows the icon through resizes and DPI changes with no layout code and never enters the taskbar's layout.</li>
+<li>Options: thickness, width (% of the icon), distance from the icon (negative moves it over the icon), corner radius, opacity, color.</li>
+<li>Color: <code>#RRGGBB</code> / <code>#AARRGGBB</code>; <code>light|dark</code> variants; comma-separated horizontal gradients; both combinable. Empty uses the system accent color. The theme is read from <code>SystemUsesLightTheme</code>, since the taskbar follows the system theme.</li>
+<li>Corner radius: a <code>CompositionGeometricClip</code> with a rounded-rectangle geometry whose size is bound to the icon element's visual by an expression animation, so it tracks the line's relative width; 0 disables the clip.</li>
+<li>Colors are cached and refreshed through UISettings::ColorValuesChanged, which covers accent changes and system theme switches; subscribed whenever the icon underline is on; the brush and clip are rebuilt only when their parameters change, identified by their <code>Comment</code>.</li>
+<li>Visuals are tagged with a <code>Comment</code>, tracked only as weak element references, and hidden and detached when the option is turned off and on unload. An element that already carries another mod's child visual is left alone.</li>
+<li><strong>Hide the running indicator</strong> — hides the taskbar's own indicator under running buttons so the underline is the only cue. The same element marks the active window and, on some builds, attention requests, so those markers are hidden too (intended). Independent of the icon underline. Implemented by setting <code>IsVisible(false)</code> on <code>Rectangle#RunningIndicator</code>'s hand-off composition visual rather than its XAML properties, which the button's visual states would overwrite; restored when the option is turned off and on unload, handing control back to XAML.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>A button without a label is evaluated when the icon underline or the indicator option is on; the view-model resolver works from the <code>ItemsRepeater</code> item, not the text. The title fallback still requires a label.</li>
+<li>README: icon-underline screenshot, the hidden-labels dependency on the view-model symbols, and the new options.</li>
+</ul>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7.3]]></title>
+        <id>https://windhawk.net/mods/desktop-draggable-widgets#2d32e8e405b989702c69f1e918195bba0f051fd0</id>
+        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
+        <updated>2026-10-31T16:04:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Mods are now more interactive and have more styles, WiFi, Hotspot, Bluetooth and Mode widgets indicate the functions current status with the toggle button, the default appearance theme is changed, and Winblue appearance theme is removed</li>
+</ul>]]></content>
+        <author>
+            <name>Jona like it, code it</name>
+            <uri>https://github.com/Stunning-dev</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Recycle Bin File Preview 1.0.0]]></title>
+        <id>https://windhawk.net/mods/recycle-bin-file-preview#de5d1d54404e8a578d1425dcfd654952d48ba9b8</id>
+        <link href="https://windhawk.net/mods/recycle-bin-file-preview"/>
+        <updated>2026-10-31T16:04:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="recyclebinfilepreview">Recycle Bin File Preview</h1>
+<p>Use the built-in Windows File Explorer Preview Pane (<strong>Alt + P</strong>) to view
+files in the Recycle Bin without restoring them.</p>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/recycle-bin-file-preview/main/assets/recycle-bin-file-preview-comparison.png" alt="Recycle Bin File Preview before and after" /></p>
+<p>The image compares the default Recycle Bin view with the preview enabled
+by this mod.</p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Open the Recycle Bin in File Explorer.</li>
+<li>Press <strong>Alt + P</strong> to show the Preview Pane.</li>
+<li>Select a file to see its preview.</li>
+</ol>
+<p>The mod uses your Windows file associations and installed preview handlers.
+It does not add new preview handlers or codecs.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>File types without preview support in normal Explorer folders may still
+show <strong>No preview available</strong> in the Recycle Bin.</li>
+<li>The mod does not let you browse inside deleted folders.</li>
+<li>It does not restore, copy, edit or delete your files.</li>
+<li>Windows updates can change how the Recycle Bin works.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Enable <strong>Debug logging</strong> in the mod settings and look for messages starting
+with <code>RBP:</code> in the Windhawk log. Keep logging off during normal use.</p>
+<h2 id="project">Project</h2>
+<p><a href="https://github.com/luizbizzio/recycle-bin-file-preview">Source code and issue reports</a></p>
+<p>Author: <strong>Luiz Bizzio</strong>. Licensed under <strong>MIT</strong>.</p>]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Settings Media Progress Bar 1.2.12]]></title>
         <id>https://windhawk.net/mods/quick-settings-media-progress-bar#6aaef1a7d8436612c57fb02a2d06006b7988b00d</id>
@@ -910,92 +1003,6 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></conte
         <author>
             <name>Rono</name>
             <uri>https://github.com/rono-zeroseven</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.2.0]]></title>
-        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#bd41dcabf387671a682e2083042fdfd54188ecca</id>
-        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
-        <updated>2026-10-29T18:02:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added "aim boundary" feature.</li>
-<li>Off by default. While thumbnail previews are open and the pointer moves from their taskbar button toward them, crossing other taskbar buttons no longer switches the previews, and leaving the taskbar no longer starts closing them. </li>
-<li>A movement counts as heading toward the previews when its direction lies between two boundary lines: one from the button's left edge to the previews' bottom-left corner, and one from the button's right edge to the previews' bottom-right corner.</li>
-<li>Hover changes held back during the movement are applied in order once the pointer reaches the previews, heads outside the boundary lines, or a mouse button is pressed. Buttons that were only crossed on the way are skipped.</li>
-<li>"Aim boundary height on the button (%)" setting, default 100. It sets where the boundary lines meet the button's edges, measured down from the button's top edge (0 is the top edge, 100 the bottom edge).</li>
-<li>The aim boundary feature doesn't work with vertical taskbars.</li>
-<li>Cleaned up README section</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer WinUI-Like Content Animation 1.0.2]]></title>
-        <id>https://windhawk.net/mods/file-explorer-content-animation#a0fb63a19b61b5169b38433d5b72357cd84d9f3e</id>
-        <link href="https://windhawk.net/mods/file-explorer-content-animation"/>
-        <updated>2026-10-29T18:02:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Rewrote most of the mod: DirectUI pages now animate through DirectUI's standard layer mechanism and run on the compositor, staying smooth while thumbnails and large folders load.</li>
-<li>New WinUI defaults: 450 ms timeline and 140 DIP entrance; entering a folder uses the entrance transition.</li>
-<li>Optional staggered item reveal with WinUI AddDelete curves, plus a short exit for deleted items.</li>
-<li>Pages wait for the first files to appear instead of animating an empty view.</li>
-<li>Clicking or pressing a key finishes the animation quickly; scrolling hands the content back at once, including with smooth scrolling mods.</li>
-<li>The mod no longer loads in the Control Panel process.</li>
-<li>The DirectComposition fade now also plays when opening Explorer, new tabs and the navigation pane.</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Command Bar 1.2.0]]></title>
-        <id>https://windhawk.net/mods/explorer-command-bar#8b1dc4b804cb693384afa25f56c06c120cf78492</id>
-        <link href="https://windhawk.net/mods/explorer-command-bar"/>
-        <updated>2026-10-29T18:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="new">New</h3>
-<ul>
-<li>Settings window: a cog button in the command bar opens a Windows 11 style settings window with a live preview of the command bar</li>
-<li>Toolbar items and menus are edited as a tree, with pickers for programs, icons, internal commands and placeholders</li>
-<li>Import and export settings as YAML or JSON</li>
-<li>Show Explorer Command Bar Settings Item and Settings Item Order settings</li>
-<li>Keyboard shortcuts for buttons and menu entries, e.g. <code>Ctrl+Shift+T</code>,<code>Alt+N</code> or <code>F9</code></li>
-<li>Internal commands: <code>internal:TogglePreview</code>, <code>internal:ToggleDetails</code>,<code>internal:OpenWith</code> and <code>internal:FolderOptions</code> (<code>int:</code> also works)</li>
-<li><code>%sel_each%</code> placeholder runs the command per selected item (up to 20)</li>
-<li>Show label and Custom Label Text settings show text next to a button's icon</li>
-<li>Place buttons on the right side setting docks the buttons next to the Details/Preview toggles</li>
-<li>Theme-aware icons with the <code>Light | Dark</code> syntax, e.g. <code>E706 | E708</code></li>
-<li>Icons reload automatically when the Windows theme changes</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li><code>%sel%</code> now expands to all selected items, each in quotes, instead of only the first one</li>
-<li>Every setting now has a description</li>
-<li>Readme updated with the new features</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Buttons now appear in File Explorer windows that were already open when the mod loaded, without opening a new tab or navigating first</li>
-<li>Other bug fixes.</li>
-</ul>]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#7c0eb2df5fdc4a39f3f0fc1065c8d7b2bf50fffd</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
-        <updated>2026-10-29T18:02:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>new "Single line" option (on by default)</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

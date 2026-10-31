@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-31T14:32:13.000Z</updated>
+    <updated>2026-10-31T16:04:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Recycle Bin File Preview 1.0.0]]></title>
+        <id>https://windhawk.net/mods/recycle-bin-file-preview#de5d1d54404e8a578d1425dcfd654952d48ba9b8</id>
+        <link href="https://windhawk.net/mods/recycle-bin-file-preview"/>
+        <updated>2026-10-31T16:04:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="recyclebinfilepreview">Recycle Bin File Preview</h1>
+<p>Use the built-in Windows File Explorer Preview Pane (<strong>Alt + P</strong>) to view
+files in the Recycle Bin without restoring them.</p>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/recycle-bin-file-preview/main/assets/recycle-bin-file-preview-comparison.png" alt="Recycle Bin File Preview before and after" /></p>
+<p>The image compares the default Recycle Bin view with the preview enabled
+by this mod.</p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Open the Recycle Bin in File Explorer.</li>
+<li>Press <strong>Alt + P</strong> to show the Preview Pane.</li>
+<li>Select a file to see its preview.</li>
+</ol>
+<p>The mod uses your Windows file associations and installed preview handlers.
+It does not add new preview handlers or codecs.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>File types without preview support in normal Explorer folders may still
+show <strong>No preview available</strong> in the Recycle Bin.</li>
+<li>The mod does not let you browse inside deleted folders.</li>
+<li>It does not restore, copy, edit or delete your files.</li>
+<li>Windows updates can change how the Recycle Bin works.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Enable <strong>Debug logging</strong> in the mod settings and look for messages starting
+with <code>RBP:</code> in the Windhawk log. Keep logging off during normal use.</p>
+<h2 id="project">Project</h2>
+<p><a href="https://github.com/luizbizzio/recycle-bin-file-preview">Source code and issue reports</a></p>
+<p>Author: <strong>Luiz Bizzio</strong>. Licensed under <strong>MIT</strong>.</p>]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Settings Media Progress Bar 1.2.12]]></title>
         <id>https://windhawk.net/mods/quick-settings-media-progress-bar#6aaef1a7d8436612c57fb02a2d06006b7988b00d</id>
@@ -1116,200 +1154,6 @@ the report. Logs include file names and paths; disable the option afterward.</p>
         <author>
             <name>DarkionAvey</name>
             <uri>https://github.com/DarkionAvey</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Rules 1.0]]></title>
-        <id>https://windhawk.net/mods/window-rules#166b3d81bc080be08987c19059d0e0aaaaa051bb</id>
-        <link href="https://windhawk.net/mods/window-rules"/>
-        <updated>2026-10-26T15:04:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowrules">Window Rules</h1>
-<p>Tell Windows what to do with an app's windows, once, and stop fixing them by
-hand. Each rule matches a window (by executable, window class and title) and
-asks for one or more of:</p>
-<ul>
-<li>a position and size, in pixels</li>
-<li>a monitor to open on</li>
-<li>an opacity level</li>
-<li>always on top</li>
-</ul>
-<p>Rules are tried in order. The first enabled rule that matches a window is the
-only one applied to it -- later rules are not consulted for that window, and
-actions are never merged across rules. That is the same model KWin rules and
-WindowManager use, and it is the one that stays predictable when two of your
-rules would both apply.</p>
-<h2 id="whatitdoes">What it does</h2>
-<p>Open the app and the rule happens: the window is moved, sized and made
-translucent where the rule says so. Move the window yourself and the mod lets go
--- your position wins for the rest of the session, and the rule is not re-applied
-to that window until the app is started again. Saving the settings re-applies
-every rule to the windows that are open at that moment, so editing a rule shows
-you its effect immediately instead of at the next restart.</p>
-<p>Nothing else is touched: no focus, no hiding, and no continuous watch over
-windows that are already in place.</p>
-<h2 id="alwaysontop">Always on top</h2>
-<p>A rule can keep an app's windows above other windows. The window goes up when it
-opens and stays up: activating another window does not take the top away, because
-Windows keeps a window's topmost bit until something actually removes it.</p>
-<p>What it deliberately does not do is fight for the top:</p>
-<ul>
-<li><strong>Another always-on-top window can sit above yours.</strong> The taskbar and other
-pinned apps are the user's own choices, and the mod does not climb back over
-them.</li>
-<li><strong>A fullscreen app on the same monitor makes it step aside.</strong> A window pinned by
-this mod is lowered while a fullscreen game or video covers its monitor, and
-raised again when that app is gone. A maximized window is not fullscreen and
-never triggers this.</li>
-<li><strong>If the app clears the bit itself, the mod leaves it cleared</strong>, and the journal
-says <code>app-cleared</code>, rather than pinning it again on the next activation.</li>
-<li><strong>Dragging the window stops the mod touching it</strong>, the z-order included, for the
-rest of the session.</li>
-<li><strong>Turning the rule off takes the window back down.</strong> The mod only ever lowers a
-bit it set itself, so an app that pins its own windows is never affected.</li>
-<li><strong>The same goes for opacity.</strong> The mod records the windows it made translucent,
-so changing the level takes effect on windows that are already open, and
-clearing the level, deleting the rule or turning the mod off puts them back to
-fully opaque. Only windows the mod faded itself are touched: an app that draws
-its own transparency is never made opaque by this.</li>
-</ul>
-<p>One consequence worth knowing before you pin something: a topmost window stays
-above whatever you switch to with Alt+Tab, so if the pinned window covers most of
-the screen, switching away looks like nothing happened -- the window you wanted is
-behind it. That is how the topmost bit works, not something this mod adds. Pin
-small windows, or leave the rule on "No change" while you are switching around.</p>
-<h2 id="wherewindowsgoandinwhatunits">Where windows go, and in what units</h2>
-<p><strong>Positions and sizes are in physical pixels, not points.</strong> A rule that says
-<code>800x600</code> gets a window 800 physical pixels wide whatever the display scale is,
-so on a 150% display it will look smaller than the same rule on a 100% one. That
-is not adjustable in this version, and it is the same truth the whole mod works
-in: the mod reads and writes physical pixels, and reports them in the journal so
-that what it did can be checked by hand.</p>
-<p><strong>A position is measured from the top-left of the target monitor, not from the
-desktop.</strong> <code>position: 100,200</code> means 100 pixels in and 200 down from the corner
-of the monitor the rule names -- or of the monitor the window is already on, when
-the rule names none. So a rule survives docking, undocking and adding a monitor
-above the primary, which the same numbers in desktop coordinates would not. X and
-Y may be negative to place a window partly off the edge.</p>
-<h2 id="howmatchingworks">How matching works</h2>
-<p>A rule has three optional match fields. Every field you fill in must match; a
-field you leave blank matches anything. The fields are:</p>
-<ul>
-<li><strong>Executable</strong> -- a file name (<code>notepad</code> or <code>notepad.exe</code>) or a full path.</li>
-<li><strong>Window class</strong> -- the window's class name, for example <code>Notepad</code> or
-<code>Chrome_WidgetWin_1</code>.</li>
-<li><strong>Window title</strong> -- searched <em>inside</em> the title, so a fragment is enough.</li>
-</ul>
-<p>All matching is case-insensitive. <code>*</code> and <code>?</code> are wildcards, so <code>chrome*</code> matches
-<code>chrome.exe</code> and <code>Untitled*</code> matches any title starting that way. To use a full
-regular expression, wrap it in slashes: <code>/^Document - \w+\.txt$/</code>. Nothing else
-is treated as a pattern, so a path like <code>C:\Program Files (x86)\Steam\steam.exe</code>
-or a title like <code>Inbox | Outlook</code> matches literally.</p>
-<h2 id="whatitdoesnotdoandwherethelimitsare">What it does not do, and where the limits are</h2>
-<ul>
-<li>Hide a window from the taskbar or Alt+Tab. Toggling the extended window style is
-one-shot and applications reset it themselves; a version that cannot re-assert
-would be a broken promise, so it is not here yet.</li>
-<li>Move windows between virtual desktops: that needs an undocumented Windows
-interface, and this mod does not use one.</li>
-<li><strong>Override an app that insists.</strong> A rule is applied when the window appears and
-re-applied once if the app immediately moves it somewhere else. An app that
-moves its window again after that wins -- the mod stops rather than fighting it.</li>
-<li><strong>A rule waits for a minimized window to be restored.</strong> A minimized window has
-no meaningful rectangle to move, so nothing is applied while it is minimized;
-the rule is applied the moment you restore it, including for an app that starts
-in the tray.</li>
-<li><strong>A maximized window stays maximized.</strong> The mod does not restore it to normal
-first, and what Windows does with a maximized window's restore rectangle is
-Windows' business rather than the mod's, so a rule that sets a position may not
-show until you restore the window yourself.</li>
-<li><strong>Opacity on a window that is already translucent by itself.</strong> Those windows
-draw their own transparency; a flat opacity level would replace it with
-something that renders wrong, so the mod reports <code>already-layered</code> in the journal
-and leaves them alone.</li>
-<li><strong>Change a window's size when the app is in charge of it.</strong> Some apps re-create
-their window when resized; they are left as they are after the single retry.</li>
-<li><strong>The invisible border.</strong> Since Windows 10 a window's rectangle includes about
-seven pixels of invisible resize border on the left, right and bottom, so
-<code>position: 0,0</code> leaves a small visible gap at the left, and an <code>800x600</code> window
-looks about 14 pixels narrower and 7 shorter. The mod does exactly what the
-numbers say in the coordinates Windows reports, and the journal prints them.</li>
-<li><strong>File Explorer windows are not matched.</strong> <code>explorer.exe</code> is on the built-in
-exclude list, because the same process owns the taskbar, the desktop and the
-shell's own windows. Explorer windows cannot be targeted by a rule in this
-version.</li>
-<li><strong>A window on another virtual desktop is left alone until you save the
-settings while it is in front of you.</strong> Those windows are cloaked, and the mod
-ignores cloaked windows on purpose. So if you delete a rule while one of its
-windows sits on another desktop, that window keeps its opacity and its always on
-top until the next settings save with it visible, or until you turn the mod off.
-Nothing is left behind after that.</li>
-<li><strong>Always on top and fullscreen is detected geometrically.</strong> A window counts as
-fullscreen when it covers a monitor and is not maximized. A window that nearly
-covers a monitor is not detected, so a pinned window can stay above it.</li>
-<li><strong>Stepping aside for a fullscreen app is tested, not observed, across
-monitors.</strong> It was built and tried on a single-monitor machine, so "a game on
-the other monitor leaves this window pinned" has not been watched happening.</li>
-</ul>
-<h2 id="notthesameasothermods">Not the same as other mods</h2>
-<ul>
-<li><strong>Always On Top Windows</strong> pins and unpins the active window with a hotkey, by
-hand. This mod keeps an app's windows on top automatically, every time they
-open.</li>
-<li><strong>Prevent Focus Stealing</strong> and <strong>Snap Commander</strong> already cover their own
-actions (focus, and snapping to screen regions) and this mod deliberately does
-not re-implement them.</li>
-<li><strong>Where I Left It</strong> remembers where you left a window and puts it back. This
-mod puts a window where <em>you</em> say, every time. Do not list the same app in
-both mods' settings at once: both would place the window, in an order neither
-can control. The same goes for <strong>Snap Commander</strong>'s auto-snap rules.</li>
-</ul>
-<h2 id="diagnostics">Diagnostics</h2>
-<p><strong>Write a diagnostics journal</strong> appends to <code>window-rules-journal.txt</code> in a folder
-of your own: <code>&lt;Windhawk mod storage&gt;\&lt;your SID&gt;</code>, created with an access control
-list that gives full access to you, to SYSTEM and to administrators, and to nobody
-else. Journal lines carry executable names and window titles, and the shared mod
-storage folder is readable by every account on the machine, so the file is kept
-where only you can read it. If that folder cannot be created the journal is simply
-not written; the mod itself is unaffected.</p>
-<p>Neither the file nor the folder exists until you turn the journal on. It is capped
-at 1 MB (past that it starts again from empty, with a line saying so), and it is
-<strong>off by default</strong>; turn it on when a rule does something you did not expect, or
-when reporting a bug, and the file will say what the mod decided and why. Every
-line is prefixed with what it is doing:</p>
-<ul>
-<li><code>RULES-LOADED</code> and <code>RULE-LOADED</code> -- the rules as the mod understood them, with
-any problem it found in a rule, so a typo is visible instead of silent.</li>
-<li><code>RULE-HIT</code> -- which rule matched which window, and which field decided it.</li>
-<li><code>RULE-NONE</code> -- a window that no rule matched (a few per app, not every one).</li>
-<li><code>RULE-FILTER-SKIP</code> -- a window that was never matched at all, and why.</li>
-<li><code>APPLY</code> -- what was done to a matched window, with the rectangle it was at and
-the rectangle the rule asked for, and why nothing happened when nothing did
-(<code>already-there</code>, <code>overridden</code>, <code>minimized</code>, <code>refused</code>).</li>
-<li><code>SETTLE</code> -- whether the window stayed where the rule put it, was put back once,
-or was left alone because the app kept moving it.</li>
-<li><code>OVERRIDE</code> -- you moved a window yourself; the mod has let go of it.</li>
-<li><code>OPACITY</code> -- what happened to the level, and why: <code>applied</code>, <code>already-there</code>,
-<code>already-layered</code> (the app draws its own transparency, left alone), <code>failed</code>
-(the window refused the change), <code>app-cleared</code> (the app removed the style
-itself), <code>withdrawn</code> (the rule stopped asking, or the mod was turned off).</li>
-<li><code>MONITOR-SKIP</code> -- a rule names a monitor that is not there.</li>
-<li><code>TOPMOST</code> -- what happened to the z-order, and why: <code>applied</code>, <code>already-there</code>,
-<code>overridden</code>, <code>minimized</code>, <code>refused</code>, <code>yielded</code> (a fullscreen app took the
-monitor), <code>reclaimed</code> (it gave the monitor back), <code>app-cleared</code> (the app
-removed the bit itself), <code>withdrawn</code> (the rule stopped asking), or
-<code>not-claimed</code> (the window is on top, but this mod did not put it there).</li>
-<li><code>REAPPLY-PASS</code> -- the sweep after a settings save, and how many windows it moved.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p>Rules are read from the top down, and <strong>an entry with every field blank ends the
-list</strong> -- the settings template ships one blank entry, so a fresh install has no
-rules at all until you fill it in. Leave the blank entry last.</p>
-<p>A rule with no match fields is not loaded, because it would apply to every window
-on the desktop; the journal says <code>RULE-PROBLEM</code> and names the rule. To mean every
-window on purpose, put a <code>*</code> in one of the match fields.</p>]]></content>
-        <author>
-            <name>metanoid18</name>
-            <uri>https://github.com/Metanoid18</uri>
         </author>
     </entry>
 </feed>
