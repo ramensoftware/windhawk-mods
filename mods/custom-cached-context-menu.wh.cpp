@@ -2,13 +2,83 @@
 // @id              custom-cached-context-menu
 // @name            Custom Cached Context Menu
 // @description     Instantly-opening cached Explorer context menu that is fully customizable: themes, layout, colors, animations, rules, and custom commands.
-// @version         1.1.1
+// @version         1.2.0
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshlwapi -luuid -lcomctl32 -ladvapi32 -lgdi32 -luxtheme -lversion -ld3d11 -ld2d1 -ldwrite -ldcomp
 // @license         MIT
 // @author          BOLT
 // @github          https://github.com/Bolt-Scripts
+// @name:ar قائمة السياق المخصصة المخزنة مؤقتًا
+// @description:ar فتح قائمة سياقات Explorer المخزنة مؤقتًا على الفور والقابلة للتخصيص بالكامل: السمات والتخطيط والألوان والرسوم المتحركة والقواعد والأوامر المخصصة.
+// @name:az Xüsusi Keşlənmiş Kontekst Menyu
+// @description:az Tam fərdiləşdirilə bilən keşlənmiş Explorer kontekst menyusunu dərhal açır: mövzular, tərtibat, rənglər, animasiyalar, qaydalar və fərdi əmrlər.
+// @name:bn কাস্টম ক্যাশে করা প্রসঙ্গ মেনু
+// @description:bn তাত্ক্ষণিকভাবে খোলার ক্যাশে করা Explorer প্রসঙ্গ মেনু যা সম্পূর্ণরূপে কাস্টমাইজযোগ্য: থিম, লেআউট, রঙ, অ্যানিমেশন, নিয়ম এবং কাস্টম কমান্ড।
+// @name:cs Vlastní kontextová nabídka uložená v mezipaměti
+// @description:cs Okamžité otevření kontextové nabídky Explorer uložené v mezipaměti, která je plně přizpůsobitelná: motivy, rozvržení, barvy, animace, pravidla a vlastní příkazy.
+// @name:da Brugerdefineret cache-kontekstmenu
+// @description:da Øjeblikkelig åbning af cachelagret Explorer kontekstmenu, der kan tilpasses fuldt ud: temaer, layout, farver, animationer, regler og brugerdefinerede kommandoer.
+// @name:de-DE Benutzerdefiniertes zwischengespeichertes Kontextmenü
+// @description:de-DE Sofort öffnendes, zwischengespeichertes Explorer-Kontextmenü, das vollständig anpassbar ist: Themen, Layout, Farben, Animationen, Regeln und benutzerdefinierte Befehle.
+// @name:el Προσαρμοσμένο μενού περιβάλλοντος προσωρινής αποθήκευσης
+// @description:el Άνοιγμα άμεσα αποθηκευμένου μενού περιβάλλοντος Explorer που είναι πλήρως προσαρμόσιμο: θέματα, διάταξη, χρώματα, κινούμενα σχέδια, κανόνες και προσαρμοσμένες εντολές.
+// @name:es-ES Menú contextual personalizado en caché
+// @description:es-ES Menú contextual Explorer en caché de apertura instantánea y totalmente personalizable: temas, diseño, colores, animaciones, reglas y comandos personalizados.
+// @name:fa منوی زمینه سفارشی ذخیره شده
+// @description:fa منوی زمینه ذخیره شده Explorer که به طور کامل قابل تنظیم است، بلافاصله باز می شود: تم ها، طرح بندی، رنگ ها، انیمیشن ها، قوانین و دستورات سفارشی.
+// @name:fr-FR Menu contextuel mis en cache
+// @description:fr-FR Menu contextuel de l'Explorateur mis en cache et personnalisable : thèmes, disposition, couleurs, animations, règles et commandes personnalisées.
+// @name:hi कस्टम कैश्ड संदर्भ मेनू
+// @description:hi तुरंत खुलने वाला कैश्ड Explorer संदर्भ मेनू जो पूरी तरह से अनुकूलन योग्य है: थीम, लेआउट, रंग, एनिमेशन, नियम और कस्टम कमांड।
+// @name:hr Prilagođeni kontekstni izbornik u predmemoriji
+// @description:hr Trenutačno otvarajući predmemorirani Explorer kontekstni izbornik koji je potpuno prilagodljiv: teme, izgled, boje, animacije, pravila i prilagođene naredbe.
+// @name:ht Meni kontèks Custom Cached
+// @description:ht Ouvèti meni kontèks Explorer nan kachèt ki konplètman personnalisable: tèm, layout, koulè, animasyon, règ, ak kòmandman koutim.
+// @name:hu Egyéni gyorsítótárazott helyi menü
+// @description:hu Azonnal megnyíló gyorsítótárazott Explorer helyi menü, amely teljesen testreszabható: témák, elrendezés, színek, animációk, szabályok és egyéni parancsok.
+// @name:id-ID Menu Konteks Cache Khusus
+// @description:id-ID Menu konteks Explorer cache yang terbuka secara instan dan dapat disesuaikan sepenuhnya: tema, tata letak, warna, animasi, aturan, dan perintah khusus.
+// @name:it-IT Menu contestuale memorizzato nella cache personalizzato
+// @description:it-IT Menu contestuale Explorer memorizzato nella cache ad apertura immediata, completamente personalizzabile: temi, layout, colori, animazioni, regole e comandi personalizzati.
+// @name:ja-JP カスタムのキャッシュされたコンテキスト メニュー
+// @description:ja-JP テーマ、レイアウト、色、アニメーション、ルール、カスタム コマンドなど、完全にカスタマイズ可能なキャッシュされた Explorer コンテキスト メニューをすぐに開くことができます。
+// @name:ko-KR 사용자 정의 캐시된 컨텍스트 메뉴
+// @description:ko-KR 테마, 레이아웃, 색상, 애니메이션, 규칙 및 사용자 정의 명령 등 완전히 사용자 정의할 수 있는 캐시된 Explorer 컨텍스트 메뉴를 즉시 엽니다.
+// @name:nb Tilpasset bufret kontekstmeny
+// @description:nb Umiddelbar åpning av bufret Explorer kontekstmeny som er fullt tilpassbar: temaer, layout, farger, animasjoner, regler og egendefinerte kommandoer.
+// @name:nl-NL Aangepast contextmenu in cache
+// @description:nl-NL Direct te openen in het cachegeheugen opgeslagen Explorer-contextmenu dat volledig aanpasbaar is: thema's, lay-out, kleuren, animaties, regels en aangepaste opdrachten.
+// @name:or କଷ୍ଟମ୍ କ୍ୟାଚ୍ ପ୍ରସଙ୍ଗ ତାଲିକା
+// @description:or ତତକ୍ଷଣାତ୍ ଖୋଲୁଥିବା Explorer ପ୍ରସଙ୍ଗ ତାଲିକା ଯାହା ସମ୍ପୂର୍ଣ୍ଣ କଷ୍ଟମାଇଜେବଲ୍: ଥିମ୍, ଲେଆଉଟ୍, ରଙ୍ଗ, ଆନିମେସନ୍, ନିୟମ, ଏବଂ କଷ୍ଟମ୍ କମାଣ୍ଡ୍
+// @name:pl-PL Niestandardowe menu kontekstowe buforowane
+// @description:pl-PL Natychmiast otwierające się menu kontekstowe Explorer z pamięci podręcznej, które można w pełni dostosować: motywy, układ, kolory, animacje, reguły i niestandardowe polecenia.
+// @name:pt-BR Menu de contexto em cache personalizado
+// @description:pt-BR Menu de contexto Explorer em cache de abertura instantânea e totalmente personalizável: temas, layout, cores, animações, regras e comandos personalizados.
+// @name:pt-PT Menu de contexto em cache personalizado
+// @description:pt-PT Menu de contexto Explorer em cache de abertura instantânea e totalmente personalizável: temas, layout, cores, animações, regras e comandos personalizados.
+// @name:ro Meniu contextual personalizat în cache
+// @description:ro Meniul contextual Explorer care se deschide instantaneu în cache, care este complet personalizabil: teme, aspect, culori, animații, reguli și comenzi personalizate.
+// @name:ru-RU Пользовательское кэшированное контекстное меню
+// @description:ru-RU Мгновенно открывающееся кэшированное контекстное меню Explorer, которое полностью настраивается: темы, макет, цвета, анимация, правила и пользовательские команды.
+// @name:sv Anpassad cachad kontextmeny
+// @description:sv Omedelbart öppnande cachad Explorer-kontextmeny som är helt anpassningsbar: teman, layout, färger, animationer, regler och anpassade kommandon.
+// @name:ta தனிப்பயன் தற்காலிக சேமிப்பு சூழல் மெனு
+// @description:ta முற்றிலும் தனிப்பயனாக்கக்கூடிய தற்காலிக சேமிப்பு Explorer சூழல் மெனுவை உடனடியாகத் திறக்கிறது: தீம்கள், தளவமைப்பு, வண்ணங்கள், அனிமேஷன்கள், விதிகள் மற்றும் தனிப்பயன் கட்டளைகள்.
+// @name:th เมนูบริบทแคชแบบกำหนดเอง
+// @description:th เปิดเมนูบริบท Explorer ที่แคชไว้ทันทีซึ่งสามารถปรับแต่งได้อย่างเต็มที่: ธีม เค้าโครง สี ภาพเคลื่อนไหว กฎ และคำสั่งที่กำหนดเอง
+// @name:tr-TR Özel Önbelleğe Alınmış İçerik Menüsü
+// @description:tr-TR Tamamen özelleştirilebilir, anında açılan önbelleğe alınmış Explorer içerik menüsü: temalar, düzen, renkler, animasyonlar, kurallar ve özel komutlar.
+// @name:uk-UA Спеціальне кешоване контекстне меню
+// @description:uk-UA Миттєво відкривається кешоване контекстне меню Explorer, яке можна повністю налаштувати: теми, макет, кольори, анімація, правила та власні команди.
+// @name:uz Maxsus keshlangan kontekst menyusi
+// @description:uz To'liq sozlanishi mumkin bo'lgan keshlangan Explorer kontekst menyusi darhol ochiladi: mavzular, tartib, ranglar, animatsiyalar, qoidalar va maxsus buyruqlar.
+// @name:vi-VN Menu ngữ cảnh được lưu trong bộ nhớ đệm tùy chỉnh
+// @description:vi-VN Mở ngay menu ngữ cảnh Explorer được lưu trong bộ nhớ đệm có thể tùy chỉnh hoàn toàn: chủ đề, bố cục, màu sắc, hoạt ảnh, quy tắc và lệnh tùy chỉnh.
+// @name:zh-CN 自定义缓存上下文菜单
+// @description:zh-CN 立即打开缓存的 Explorer 上下文菜单，可完全自定义：主题、布局、颜色、动画、规则和自定义命令。
+// @name:zh-TW 自訂快取上下文選單
+// @description:zh-TW 立即開啟快取的 Explorer 上下文選單，可完全自訂：主題、佈局、顏色、動畫、規則和自訂命令。
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -51,6 +121,10 @@ and discovers extension items in the background, so repeated opens are instant.
   preview) and written back to the active theme file or `menu.ini`.
 - **No code needed** — `menu.ini` supports rules (`hide`/`keep`/`move`),
   custom commands, custom submenus, per-item overrides, and an icon library.
+- **36 languages** — the menu and the in-menu settings follow the Windows
+  display language, with an override in the settings; the Windhawk settings
+  page follows Windhawk's own language. Shell-extension labels stay in their
+  own language.
 
 ## Settings
 
@@ -58,6 +132,7 @@ and discovers extension items in the background, so repeated opens are instant.
 |---|---|---|
 | Bypass keys | on | Hold Shift while right-clicking to bypass the mod and get the stock classic menu, or Ctrl for the untouched native menu. |
 | Menu mode | Custom (recommended) | Custom draws the self-rendered menu and falls back to the classic menu after repeated failures; Classic always uses the owner-drawn menu. |
+| Language | Automatic | Menu and in-menu settings language. Automatic follows the Windows display language and falls back to English; the Windhawk settings page follows Windhawk's own language. |
 | Theme | Custom (menu.ini) | Loads the appearance from `<mod storage>\themes\<name>.ini` (created from the bundled preset on first use). `menu.ini` is never modified by theme selection. |
 | Show classic menu item | on | Adds a "Show classic menu" entry at the bottom of the menu. |
 | Top action bar | off | Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only. |
@@ -97,9 +172,10 @@ or use the in-menu settings browser.
 - Tall menus do not scroll; they are capped to the work area.
 - Nav-pane menus are cached per tree node for the session and refresh after
   use, so the first open of each node pays the shell's population cost.
-- Core menu labels are English; cached extension labels come from the shell
-  and are localized. Labels that embed the selected file's name (for example
-  "Extract to \"<name>\"") are re-rendered with the current name.
+- The menu is localized; cached extension labels come from the shell and stay
+  in the language the extension supplies. Labels that embed the selected
+  file's name (for example "Extract to \"<name>\"") are re-rendered with the
+  current name.
 - Native fallback menus apply the configured submenu delay through the system
   `MenuShowDelay` value while the menu is open (restored on close); Windows
   has no per-menu delay API.
@@ -107,6 +183,19 @@ or use the in-menu settings browser.
   extension can crash it (the background pre-build loads every registered
   handler). If Explorer crashes when a menu opens, disable the offending
   extension, for example with ShellExView.
+
+## Languages
+
+Arabic, Azerbaijani, Bengali, Czech, Danish, German, Greek, English, Spanish,
+Persian, French, Hindi, Croatian, Haitian Creole, Hungarian, Indonesian,
+Italian, Japanese, Korean, Norwegian, Dutch, Odia, Polish, Portuguese
+(Brazil and Portugal), Romanian, Russian, Swedish, Tamil, Thai, Turkish,
+Ukrainian, Uzbek, Vietnamese, Chinese (Simplified and Traditional).
+
+The menu follows the Windows display language by default; the **Language**
+setting can override it. The mod's own strings are machine-translated and
+native corrections are welcome. Third-party shell-extension labels remain in
+the language their extension supplies.
 
 ## Feedback
 
@@ -123,7 +212,77 @@ MIT
 /*
 - theme: "Custom (menu.ini)"
   $name: Theme
+  $name:ar: الموضوع
+  $name:az: Mövzu
+  $name:bn: থিম
+  $name:cs: téma
+  $name:da: Tema
+  $name:de-DE: Thema
+  $name:el: Θέμα
+  $name:es-ES: Tema
+  $name:fa: موضوع
+  $name:fr-FR: Thème
+  $name:hi: थीम
+  $name:hr: Tema
+  $name:ht: Tèm
+  $name:hu: téma
+  $name:id-ID: Tema
+  $name:it-IT: Tema
+  $name:ja-JP: テーマ
+  $name:ko-KR: 테마
+  $name:nb: Tema
+  $name:nl-NL: Thema
+  $name:or: ଥିମ୍
+  $name:pl-PL: Motyw
+  $name:pt-BR: Tema
+  $name:pt-PT: Tema
+  $name:ro: Temă
+  $name:ru-RU: Тема
+  $name:sv: Tema
+  $name:ta: தீம்
+  $name:th: ธีม
+  $name:tr-TR: Tema
+  $name:uk-UA: Тема
+  $name:uz: Mavzu
+  $name:vi-VN: chủ đề
+  $name:zh-CN: 主题
+  $name:zh-TW: 主題
   $description: Loads the appearance from <storage>\themes\<name>.ini (created from the bundled preset on first use). menu.ini is never modified.
+  $description:ar: يقوم بتحميل المظهر من <storage>\themes\<name>.ini (الذي تم إنشاؤه من الإعداد المسبق المجمع عند الاستخدام الأول). لم يتم تعديل menu.ini أبدًا.
+  $description:az: Görünüşü <storage>\themes\<name>.ini-dən yükləyir (ilk istifadədə yığılmış ilkin təyinatdan yaradılmışdır). menu.ini heç vaxt dəyişdirilmir.
+  $description:bn: <storage>\themes\<name>.ini থেকে চেহারা লোড করে (প্রথম ব্যবহারে বান্ডিল করা প্রিসেট থেকে তৈরি)। menu.ini কখনই পরিবর্তন করা হয় না।
+  $description:cs: Načte vzhled ze <storage>\themes\<name>.ini (vytvořený z přibalené předvolby při prvním použití). menu.ini se nikdy nemění.
+  $description:da: Indlæser udseendet fra <storage>\themes\<name>.ini (oprettet fra den medfølgende forudindstilling ved første brug). menu.ini ændres aldrig.
+  $description:de-DE: Lädt das Erscheinungsbild von <storage>\themes\<name>.ini (erstellt aus der gebündelten Voreinstellung bei der ersten Verwendung). menu.ini wird nie verändert.
+  $description:el: Φορτώνει την εμφάνιση από το <storage>\themes\<name>.ini (δημιουργήθηκε από την προκαθορισμένη δέσμη κατά την πρώτη χρήση). Το menu.ini δεν τροποποιείται ποτέ.
+  $description:es-ES: Carga la apariencia de <storage>\themes\<name>.ini (creada a partir del ajuste preestablecido incluido en el primer uso). menu.ini nunca se modifica.
+  $description:fa: ظاهر را از <storage>\themes\<name>.ini بارگیری می کند (ایجاد شده از پیش تنظیم همراه در اولین استفاده). menu.ini هرگز اصلاح نمی شود.
+  $description:fr-FR: Charge l'apparence de <storage>\themes\<name>.ini (créée à partir du préréglage fourni lors de la première utilisation). menu.ini n’est jamais modifié.
+  $description:hi: <storage>\themes\<name>.ini से उपस्थिति लोड करता है (पहले उपयोग पर बंडल प्रीसेट से बनाया गया)। menu.ini को कभी संशोधित नहीं किया जाता है।
+  $description:hr: Učitava izgled iz <storage>\themes\<name>.ini (stvoren iz unaprijed postavljenih postavki pri prvoj upotrebi). menu.ini se nikada ne mijenja.
+  $description:ht: Chaje aparans nan <storage>\themes\<name>.ini (kreye nan prereglaj la fourni sou premye itilizasyon). menu.ini pa janm modifye.
+  $description:hu: Betölti a <storage>\themes\<name>.ini megjelenését (az első használatkor a mellékelt előbeállításból készült). A menu.ini-t soha nem módosítják.
+  $description:id-ID: Memuat tampilan dari <storage>\themes\<name>.ini (dibuat dari paket preset saat pertama kali digunakan). menu.ini tidak pernah dimodifikasi.
+  $description:it-IT: Carica l'aspetto da <storage>\themes\<name>.ini (creato dal preset in bundle al primo utilizzo). menu.ini non viene mai modificato.
+  $description:ja-JP: <storage>\themes\<name>.ini (初回使用時にバンドルされたプリセットから作成) から外観をロードします。 menu.ini は決して変更されません。
+  $description:ko-KR: <storage>\themes\<name>.ini(처음 사용 시 번들 사전 설정에서 생성됨)에서 모양을 로드합니다. menu.ini는 수정되지 않습니다.
+  $description:nb: Laster inn utseendet fra <storage>\themes\<name>.ini (opprettet fra den medfølgende forhåndsinnstillingen ved første gangs bruk). menu.ini endres aldri.
+  $description:nl-NL: Laadt het uiterlijk uit <storage>\themes\<name>.ini (gemaakt op basis van de gebundelde voorinstelling bij het eerste gebruik). menu.ini wordt nooit gewijzigd.
+  $description:or: <storage>\themes\<name>.ini ରୁ ଦୃଶ୍ୟ ଲୋଡ୍ କରେ (ପ୍ରଥମ ବ୍ୟବହାରରେ ବଣ୍ଡଲ୍ ପ୍ରିସେଟରୁ ସୃଷ୍ଟି) | menu.ini କଦାପି ପରିବର୍ତ୍ତିତ ହୁଏ ନାହିଁ
+  $description:pl-PL: Ładuje wygląd z <storage>\themes\<name>.ini (utworzony na podstawie dołączonego zestawu wstępnego przy pierwszym użyciu). menu.ini nigdy nie jest modyfikowany.
+  $description:pt-BR: Carrega a aparência de <storage>\themes\<name>.ini (criada a partir da predefinição incluída no primeiro uso). menu.ini nunca é modificado.
+  $description:pt-PT: Carrega o aspeto de <storage>\themes\<name>.ini (criado a partir da predefinição incluída na primeira utilização). menu.ini nunca é modificado.
+  $description:ro: Încarcă aspectul de la <storage>\themes\<name>.ini (creat din presetarea pachetului la prima utilizare). menu.ini nu este niciodată modificat.
+  $description:ru-RU: Загружает внешний вид из <storage>\themes\<name>.ini (созданный из встроенного пресета при первом использовании). menu.ini никогда не модифицируется.
+  $description:sv: Laddar utseendet från <storage>\themes\<name>.ini (skapat från den medföljande förinställningen vid första användningen). menu.ini modifieras aldrig.
+  $description:ta: <storage>\themes\<name>.ini இலிருந்து தோற்றத்தை ஏற்றுகிறது (முதல் பயன்பாட்டில் தொகுக்கப்பட்ட முன்னமைவிலிருந்து உருவாக்கப்பட்டது). menu.ini ஒருபோதும் மாற்றியமைக்கப்படவில்லை.
+  $description:th: โหลดลักษณะที่ปรากฏจาก <storage>\themes\<name>.ini (สร้างจากพรีเซ็ตที่รวมมาเมื่อใช้ครั้งแรก) menu.ini ไม่เคยดัดแปลง
+  $description:tr-TR: Görünümü <storage>\themes\<name>.ini'den yükler (ilk kullanımda birlikte verilen ön ayardan oluşturulur). menu.ini asla değiştirilmez.
+  $description:uk-UA: Завантажує зовнішній вигляд із <storage>\themes\<name>.ini (створеного з попереднього налаштування під час першого використання). menu.ini ніколи не змінюється.
+  $description:uz: <storage>\themes\<name>.ini dan ko'rinishni yuklaydi (birinchi foydalanishda yig'ilgan oldindan o'rnatilgandan yaratilgan). menu.ini hech qachon o'zgartirilmaydi.
+  $description:vi-VN: Tải giao diện từ <storage>\themes\<name>.ini (được tạo từ cài đặt trước đi kèm trong lần sử dụng đầu tiên). menu.ini không bao giờ được sửa đổi.
+  $description:zh-CN: 从 <storage>\themes\<name>.ini 加载外观（首次使用时从捆绑预设创建）。 menu.ini 从未被修改。
+  $description:zh-TW: 從 <storage>\themes\<name>.ini 載入外觀（首次使用時從捆綁預設建立）。 menu.ini 從未被修改。
   $options:
   - Custom (menu.ini): Custom (menu.ini)
   - Windows 11 Dark: Windows 11 Dark
@@ -142,60 +301,3426 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: High Contrast
+  $options:ar:
+  - Custom (menu.ini): مخصص (menu.ini)
+  - Windows 11 Dark: Windows 11 الظلام
+  - Windows 11 Light: ضوء Windows 11
+  - Windows 10 Dark: Windows 10 داكن
+  - Windows 10 Light: ضوء Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: التباين العالي
+  $options:az:
+  - Custom (menu.ini): Fərdi (menu.ini)
+  - Windows 11 Dark: Windows 11 Qaranlıq
+  - Windows 11 Light: Windows 11 İşıq
+  - Windows 10 Dark: Windows 10 Qaranlıq
+  - Windows 10 Light: Windows 10 İşıq
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Yüksək Kontrast
+  $options:bn:
+  - Custom (menu.ini): কাস্টম (menu.ini)
+  - Windows 11 Dark: Windows 11 অন্ধকার
+  - Windows 11 Light: Windows 11 লাইট
+  - Windows 10 Dark: Windows 10 অন্ধকার
+  - Windows 10 Light: Windows 10 লাইট
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: উচ্চ বৈসাদৃশ্য
+  $options:cs:
+  - Custom (menu.ini): Vlastní (menu.ini)
+  - Windows 11 Dark: Windows 11 Tmavý
+  - Windows 11 Light: Světlo Windows 11
+  - Windows 10 Dark: Windows 10 Tmavý
+  - Windows 10 Light: Světlo Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Vysoký kontrast
+  $options:da:
+  - Custom (menu.ini): Brugerdefineret (menu.ini)
+  - Windows 11 Dark: Windows 11 Mørk
+  - Windows 11 Light: Windows 11 lys
+  - Windows 10 Dark: Windows 10 Mørk
+  - Windows 10 Light: Windows 10 lys
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Høj kontrast
+  $options:de-DE:
+  - Custom (menu.ini): Benutzerdefiniert (menu.ini)
+  - Windows 11 Dark: Windows 11 Dunkel
+  - Windows 11 Light: Windows 11 Licht
+  - Windows 10 Dark: Windows 10 Dunkel
+  - Windows 10 Light: Windows 10 Licht
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Hoher Kontrast
+  $options:el:
+  - Custom (menu.ini): Προσαρμοσμένο (menu.ini)
+  - Windows 11 Dark: Windows 11 Σκούρο
+  - Windows 11 Light: Windows 11 Φως
+  - Windows 10 Dark: Windows 10 Σκούρο
+  - Windows 10 Light: Windows 10 Φως
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Υψηλή Αντίθεση
+  $options:es-ES:
+  - Custom (menu.ini): Personalizado (menu.ini)
+  - Windows 11 Dark: Windows 11 Oscuro
+  - Windows 11 Light: Luz Windows 11
+  - Windows 10 Dark: Windows 10 Oscuro
+  - Windows 10 Light: Luz Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Alto contraste
+  $options:fa:
+  - Custom (menu.ini): سفارشی (menu.ini)
+  - Windows 11 Dark: Windows 11 تیره
+  - Windows 11 Light: Windows 11 روشن
+  - Windows 10 Dark: Windows 10 تیره
+  - Windows 10 Light: Windows 10 روشن
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: کنتراست بالا
+  $options:fr-FR:
+  - Custom (menu.ini): Personnalisé (menu.ini)
+  - Windows 11 Dark: Windows 11 sombre
+  - Windows 11 Light: Windows 11 clair
+  - Windows 10 Dark: Windows 10 sombre
+  - Windows 10 Light: Windows 10 clair
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Contraste élevé
+  $options:hi:
+  - Custom (menu.ini): कस्टम (menu.ini)
+  - Windows 11 Dark: Windows 11 डार्क
+  - Windows 11 Light: Windows 11 लाइट
+  - Windows 10 Dark: Windows 10 डार्क
+  - Windows 10 Light: Windows 10 लाइट
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: उच्च कंट्रास्ट
+  $options:hr:
+  - Custom (menu.ini): Prilagođeno (menu.ini)
+  - Windows 11 Dark: Windows 11 Tamno
+  - Windows 11 Light: Windows 11 Svjetlo
+  - Windows 10 Dark: Windows 10 Tamno
+  - Windows 10 Light: Windows 10 Svjetlo
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Visoki kontrast
+  $options:ht:
+  - Custom (menu.ini): Custom (menu.ini)
+  - Windows 11 Dark: Windows 11 nwa
+  - Windows 11 Light: Windows 11 Limyè
+  - Windows 10 Dark: Windows 10 nwa
+  - Windows 10 Light: Windows 10 Limyè
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Segondè kontras
+  $options:hu:
+  - Custom (menu.ini): Egyéni (menu.ini)
+  - Windows 11 Dark: Windows 11 Sötét
+  - Windows 11 Light: Windows 11 Világos
+  - Windows 10 Dark: Windows 10 Sötét
+  - Windows 10 Light: Windows 10 Világos
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Magas kontraszt
+  $options:id-ID:
+  - Custom (menu.ini): Kustom (menu.ini)
+  - Windows 11 Dark: Windows 11 Gelap
+  - Windows 11 Light: Windows 11 Terang
+  - Windows 10 Dark: Windows 10 Gelap
+  - Windows 10 Light: Windows 10 Terang
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Kontras Tinggi
+  $options:it-IT:
+  - Custom (menu.ini): Personalizzato (menu.ini)
+  - Windows 11 Dark: Windows 11 Scuro
+  - Windows 11 Light: Windows 11 Luce
+  - Windows 10 Dark: Windows 10 Scuro
+  - Windows 10 Light: Windows 10 Luce
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Contrasto elevato
+  $options:ja-JP:
+  - Custom (menu.ini): カスタム (menu.ini)
+  - Windows 11 Dark: Windows 11 ダーク
+  - Windows 11 Light: Windows 11 ライト
+  - Windows 10 Dark: Windows 10 ダーク
+  - Windows 10 Light: Windows 10ライト
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: ハイコントラスト
+  $options:ko-KR:
+  - Custom (menu.ini): 커스텀(menu.ini)
+  - Windows 11 Dark: Windows 11 다크
+  - Windows 11 Light: Windows 11 라이트
+  - Windows 10 Dark: Windows 10 다크
+  - Windows 10 Light: Windows 10 라이트
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: 고대비
+  $options:nb:
+  - Custom (menu.ini): Egendefinert (menu.ini)
+  - Windows 11 Dark: Windows 11 Mørk
+  - Windows 11 Light: Windows 11 lys
+  - Windows 10 Dark: Windows 10 Mørk
+  - Windows 10 Light: Windows 10 lys
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Høy kontrast
+  $options:nl-NL:
+  - Custom (menu.ini): Aangepast (menu.ini)
+  - Windows 11 Dark: Windows 11 Donker
+  - Windows 11 Light: Windows 11 Licht
+  - Windows 10 Dark: Windows 10 Donker
+  - Windows 10 Light: Windows 10 Licht
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Hoog contrast
+  $options:or:
+  - Custom (menu.ini): କଷ୍ଟମ୍ (menu.ini)
+  - Windows 11 Dark: Windows 11 ଅନ୍ଧାର
+  - Windows 11 Light: Windows 11 ଉଜ୍ଜ୍ୱଳ
+  - Windows 10 Dark: Windows 10 ଅନ୍ଧାର
+  - Windows 10 Light: Windows 10 ଉଜ୍ଜ୍ୱଳ
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: ଉଚ୍ଚ କଣ୍ଟ୍ରାସ୍
+  $options:pl-PL:
+  - Custom (menu.ini): Niestandardowe (menu.ini)
+  - Windows 11 Dark: Windows 11 Ciemny
+  - Windows 11 Light: Światło Windows 11
+  - Windows 10 Dark: Windows 10 Ciemny
+  - Windows 10 Light: Światło Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Wysoki kontrast
+  $options:pt-BR:
+  - Custom (menu.ini): Personalizado (menu.ini)
+  - Windows 11 Dark: Windows 11 Escuro
+  - Windows 11 Light: Luz Windows 11
+  - Windows 10 Dark: Windows 10 Escuro
+  - Windows 10 Light: Luz Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Alto contraste
+  $options:pt-PT:
+  - Custom (menu.ini): Personalizado (menu.ini)
+  - Windows 11 Dark: Windows 11 Escuro
+  - Windows 11 Light: Luz Windows 11
+  - Windows 10 Dark: Windows 10 Escuro
+  - Windows 10 Light: Luz Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Alto contraste
+  $options:ro:
+  - Custom (menu.ini): Personalizat (menu.ini)
+  - Windows 11 Dark: Windows 11 Întunecat
+  - Windows 11 Light: Windows 11 Lumină
+  - Windows 10 Dark: Windows 10 Întunecat
+  - Windows 10 Light: Windows 10 Lumină
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Contrast ridicat
+  $options:ru-RU:
+  - Custom (menu.ini): Пользовательский (menu.ini)
+  - Windows 11 Dark: Windows 11 Темный
+  - Windows 11 Light: Windows 11 Светлая
+  - Windows 10 Dark: Windows 10 Темный
+  - Windows 10 Light: Windows 10 Светлая
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Высокая контрастность
+  $options:sv:
+  - Custom (menu.ini): Anpassad (menu.ini)
+  - Windows 11 Dark: Windows 11 Mörk
+  - Windows 11 Light: Windows 11 ljus
+  - Windows 10 Dark: Windows 10 mörk
+  - Windows 10 Light: Windows 10 ljus
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Hög kontrast
+  $options:ta:
+  - Custom (menu.ini): தனிப்பயன் (menu.ini)
+  - Windows 11 Dark: Windows 11 டார்க்
+  - Windows 11 Light: Windows 11 ஒளி
+  - Windows 10 Dark: Windows 10 டார்க்
+  - Windows 10 Light: Windows 10 ஒளி
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: உயர் மாறுபாடு
+  $options:th:
+  - Custom (menu.ini): กำหนดเอง (menu.ini)
+  - Windows 11 Dark: Windows 11 เข้ม
+  - Windows 11 Light: ไฟ Windows 11
+  - Windows 10 Dark: Windows 10 เข้ม
+  - Windows 10 Light: ไฟ Windows 10
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: คอนทราสต์สูง
+  $options:tr-TR:
+  - Custom (menu.ini): Özel (menu.ini)
+  - Windows 11 Dark: Windows 11 Koyu
+  - Windows 11 Light: Windows 11 Işık
+  - Windows 10 Dark: Windows 10 Koyu
+  - Windows 10 Light: Windows 10 Işık
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Yüksek Kontrast
+  $options:uk-UA:
+  - Custom (menu.ini): Спеціальний (menu.ini)
+  - Windows 11 Dark: Windows 11 Темний
+  - Windows 11 Light: Windows 11 Світло
+  - Windows 10 Dark: Windows 10 Темний
+  - Windows 10 Light: Windows 10 Світло
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Високий контраст
+  $options:uz:
+  - Custom (menu.ini): Maxsus (menu.ini)
+  - Windows 11 Dark: Windows 11 To'q
+  - Windows 11 Light: Windows 11 yorug'lik
+  - Windows 10 Dark: Windows 10 To'q
+  - Windows 10 Light: Windows 10 yorug'lik
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Yuqori kontrast
+  $options:vi-VN:
+  - Custom (menu.ini): Tùy chỉnh (menu.ini)
+  - Windows 11 Dark: Windows 11 Tối
+  - Windows 11 Light: Windows 11 Sáng
+  - Windows 10 Dark: Windows 10 Tối
+  - Windows 10 Light: Windows 10 Sáng
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: Độ tương phản cao
+  $options:zh-CN:
+  - Custom (menu.ini): 定制（menu.ini）
+  - Windows 11 Dark: Windows 11 深色
+  - Windows 11 Light: Windows 11 光
+  - Windows 10 Dark: Windows 10 深色
+  - Windows 10 Light: Windows 10 光
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: 高对比度
+  $options:zh-TW:
+  - Custom (menu.ini): 客製化（menu.ini）
+  - Windows 11 Dark: Windows 11 深色
+  - Windows 11 Light: Windows 11 光
+  - Windows 10 Dark: Windows 10 深色
+  - Windows 10 Light: Windows 10 光
+  - Nord: Nord
+  - Dracula: Dracula
+  - Solarized Dark: Solarized Dark
+  - Gruvbox Dark: Gruvbox Dark
+  - One Dark: One Dark
+  - Cyberpunk: Cyberpunk
+  - Synthwave: Synthwave
+  - Terminal Green: Terminal Green
+  - Amber CRT: Amber CRT
+  - Tokyo Night: Tokyo Night
+  - AMOLED Black: AMOLED Black
+  - High Contrast: 高對比度
 - menuMode: "custom"
   $name: Menu mode
+  $name:ar: وضع القائمة
+  $name:az: Menyu rejimi
+  $name:bn: মেনু মোড
+  $name:cs: Režim nabídky
+  $name:da: Menutilstand
+  $name:de-DE: Menümodus
+  $name:el: Λειτουργία μενού
+  $name:es-ES: Modo menú
+  $name:fa: حالت منو
+  $name:fr-FR: Mode du menu
+  $name:hi: मेनू मोड
+  $name:hr: Način izbornika
+  $name:ht: Mòd meni
+  $name:hu: Menü mód
+  $name:id-ID: Modus menu
+  $name:it-IT: Modalità menù
+  $name:ja-JP: メニューモード
+  $name:ko-KR: 메뉴 모드
+  $name:nb: Menymodus
+  $name:nl-NL: Menumodus
+  $name:or: ମେନୁ ମୋଡ୍
+  $name:pl-PL: Tryb menu
+  $name:pt-BR: Modo de menu
+  $name:pt-PT: Modo de menu
+  $name:ro: Modul meniu
+  $name:ru-RU: Режим меню
+  $name:sv: Menyläge
+  $name:ta: மெனு பயன்முறை
+  $name:th: โหมดเมนู
+  $name:tr-TR: Menü modu
+  $name:uk-UA: Режим меню
+  $name:uz: Menyu rejimi
+  $name:vi-VN: Chế độ thực đơn
+  $name:zh-CN: 菜单模式
+  $name:zh-TW: 選單模式
   $description: Custom draws the self-rendered menu and falls back to the classic menu after repeated failures. Classic always uses the owner-drawn menu.
+  $description:ar: يقوم Custom برسم القائمة المعروضة ذاتيًا ويعود إلى القائمة الكلاسيكية بعد حالات الفشل المتكررة. يستخدم Classic دائمًا القائمة التي رسمها المالك.
+  $description:az: Xüsusi öz-özünə göstərilən menyunu çəkir və təkrarlanan uğursuzluqlardan sonra klassik menyuya qayıdır. Klassik həmişə sahibi tərəfindən tərtib edilmiş menyudan istifadə edir.
+  $description:bn: কাস্টম স্ব-রেন্ডার করা মেনুটি আঁকে এবং বারবার ব্যর্থতার পরে ক্লাসিক মেনুতে ফিরে আসে। ক্লাসিক সর্বদা মালিক দ্বারা আঁকা মেনু ব্যবহার করে।
+  $description:cs: Vlastní vykreslí samovykreslované menu a po opakovaných selháních se vrátí ke klasickému menu. Classic vždy používá menu nakreslené majitelem.
+  $description:da: Custom tegner den selvgengivne menu og falder tilbage til den klassiske menu efter gentagne fejl. Classic bruger altid den ejertegnede menu.
+  $description:de-DE: Custom zeichnet das selbst gerenderte Menü und greift nach wiederholten Fehlern auf das klassische Menü zurück. Classic verwendet immer das vom Eigentümer erstellte Menü.
+  $description:el: Η προσαρμογή σχεδιάζει το μενού που αποδίδεται μόνος του και επιστρέφει στο κλασικό μενού μετά από επανειλημμένες αποτυχίες. Το Classic χρησιμοποιεί πάντα το μενού που σχεδιάζεται από τον ιδιοκτήτη.
+  $description:es-ES: Custom dibuja el menú auto-renderizado y vuelve al menú clásico después de repetidos fallos. Classic siempre usa el menú elaborado por el propietario.
+  $description:fa: سفارشی منوی خود رندر شده را ترسیم می کند و پس از شکست های مکرر به منوی کلاسیک بازمی گردد. کلاسیک همیشه از منوی طراحی شده توسط مالک استفاده می کند.
+  $description:fr-FR: Custom dessine le menu auto-rendu et revient au menu classique après des échecs répétés. Classic utilise toujours le menu dessiné par le propriétaire.
+  $description:hi: कस्टम स्व-रेंडर किए गए मेनू को खींचता है और बार-बार विफलताओं के बाद क्लासिक मेनू पर वापस आ जाता है। क्लासिक हमेशा मालिक द्वारा तैयार किए गए मेनू का उपयोग करता है।
+  $description:hr: Prilagođeno crta jelovnik koji je sam prikazao i vraća se na klasični jelovnik nakon ponovljenih neuspjeha. Classic uvijek koristi jelovnik koji je izradio vlasnik.
+  $description:ht: Custom trase meni an pwòp tèt ou-rann ak tonbe tounen nan meni an klasik apre echèk repete. Classic toujou sèvi ak meni an pwopriyetè-trase.
+  $description:hu: Az Egyéni megrajzolja a saját készítésű menüt, és ismételt meghibásodások után visszatér a klasszikus menühöz. A Classic mindig a tulajdonos által készített menüt használja.
+  $description:id-ID: Custom menggambar menu yang dirender sendiri dan kembali ke menu klasik setelah kegagalan berulang kali. Klasik selalu menggunakan menu yang dibuat oleh pemilik.
+  $description:it-IT: Custom disegna il menu self-renderizzato e torna al menu classico dopo ripetuti fallimenti. Classic utilizza sempre il menu disegnato dal proprietario.
+  $description:ja-JP: カスタムは自己レンダリングされたメニューを描画し、失敗を繰り返すとクラシック メニューに戻ります。 Classic は常にオーナー作成のメニューを使用します。
+  $description:ko-KR: 사용자 정의는 자체 렌더링 메뉴를 그리고 반복된 실패 후에 클래식 메뉴로 돌아갑니다. 클래식은 항상 소유자가 그린 메뉴를 사용합니다.
+  $description:nb: Custom tegner den selvgjengitte menyen og faller tilbake til den klassiske menyen etter gjentatte feil. Classic bruker alltid den eiertegnede menyen.
+  $description:nl-NL: Custom tekent het zelf weergegeven menu en valt na herhaalde mislukkingen terug naar het klassieke menu. Classic gebruikt altijd het door de eigenaar getekende menu.
+  $description:or: କଷ୍ଟମ୍ ସ୍ୱ-ରେଣ୍ଡେଡ୍ ମେନୁ ଆଙ୍କିଥାଏ ଏବଂ ବାରମ୍ବାର ବିଫଳତା ପରେ କ୍ଲାସିକ୍ ମେନୁକୁ ଫେରିଯାଏ | କ୍ଲାସିକ୍ ସର୍ବଦା ମାଲିକ-ଅଙ୍କିତ ମେନୁ ବ୍ୟବହାର କରେ
+  $description:pl-PL: Niestandardowe rysuje samodzielnie renderowane menu i powraca do klasycznego menu po powtarzających się niepowodzeniach. Klasyczny zawsze korzysta z menu rysowanego przez właściciela.
+  $description:pt-BR: Custom desenha o menu auto-renderizado e volta ao menu clássico após falhas repetidas. Classic sempre usa o menu desenhado pelo proprietário.
+  $description:pt-PT: Custom desenha o menu auto-renderizado e volta ao menu clássico após falhas repetidas. O Classic utiliza sempre o menu desenhado pelo proprietário.
+  $description:ro: Personalizat desenează meniul auto-redat și revine la meniul clasic după eșecuri repetate. Classic folosește întotdeauna meniul desenat de proprietar.
+  $description:ru-RU: Custom рисует самостоятельно отображаемое меню и возвращается к классическому меню после повторяющихся сбоев. Classic всегда использует меню, нарисованное владельцем.
+  $description:sv: Custom ritar den självrenderade menyn och faller tillbaka till den klassiska menyn efter upprepade misslyckanden. Classic använder alltid den ägarritade menyn.
+  $description:ta: தனிப்பயன் சுய-ரெண்டர் செய்யப்பட்ட மெனுவை வரைந்து, மீண்டும் மீண்டும் தோல்விகளுக்குப் பிறகு கிளாசிக் மெனுவுக்குத் திரும்பும். கிளாசிக் எப்போதும் உரிமையாளர் வரைந்த மெனுவைப் பயன்படுத்துகிறது.
+  $description:th: กำหนดเองจะดึงเมนูที่แสดงผลด้วยตนเองและกลับไปใช้เมนูคลาสสิกหลังจากเกิดข้อผิดพลาดซ้ำแล้วซ้ำอีก คลาสสิกจะใช้เมนูที่เจ้าของวาดเสมอ
+  $description:tr-TR: Özel, kendi kendine oluşturulan menüyü çizer ve tekrarlanan hatalardan sonra klasik menüye geri döner. Classic her zaman sahibinin çizdiği menüyü kullanır.
+  $description:uk-UA: Custom малює самовідтворене меню та повертається до класичного меню після повторних помилок. Classic завжди використовує меню, складене власником.
+  $description:uz: Maxsus o'z-o'zidan ko'rsatilgan menyuni chizadi va takroriy nosozliklardan so'ng klassik menyuga qaytadi. Klassik har doim egasi tomonidan tuzilgan menyudan foydalanadi.
+  $description:vi-VN: Custom rút menu tự hiển thị và quay lại menu cổ điển sau nhiều lần thất bại. Classic luôn sử dụng menu do chủ quán tự vẽ.
+  $description:zh-CN: 自定义绘制自渲染菜单，多次失败后回退到经典菜单。 Classic始终使用所有者绘制的菜单。
+  $description:zh-TW: 自訂繪製自渲染選單，多次失敗後回退到經典選單。 Classic始終使用所有者繪製的選單。
   $options:
   - custom: Custom (recommended)
   - classic: Classic owner-drawn
+  $options:ar:
+  - custom: مخصص (مستحسن)
+  - classic: الكلاسيكية التي رسمها المالك
+  $options:az:
+  - custom: Fərdi (tövsiyə olunur)
+  - classic: Klassik sahibi tərəfindən çəkilmişdir
+  $options:bn:
+  - custom: কাস্টম (প্রস্তাবিত)
+  - classic: ক্লাসিক মালিক-আঁকা
+  $options:cs:
+  - custom: Vlastní (doporučeno)
+  - classic: Klasický vlastníkem kreslený
+  $options:da:
+  - custom: Brugerdefineret (anbefales)
+  - classic: Klassisk ejertegnet
+  $options:de-DE:
+  - custom: Benutzerdefiniert (empfohlen)
+  - classic: Klassisch vom Besitzer gezeichnet
+  $options:el:
+  - custom: Προσαρμοσμένο (συνιστάται)
+  - classic: Κλασικό ιδιοκτήτη
+  $options:es-ES:
+  - custom: Personalizado (recomendado)
+  - classic: Clásico dibujado por el propietario
+  $options:fa:
+  - custom: سفارشی (توصیه می شود)
+  - classic: کلاسیک توسط مالک طراحی شده است
+  $options:fr-FR:
+  - custom: Personnalisé (recommandé)
+  - classic: Classique (dessiné par le système)
+  $options:hi:
+  - custom: कस्टम (अनुशंसित)
+  - classic: क्लासिक मालिक-तैयार
+  $options:hr:
+  - custom: Prilagođeno (preporučeno)
+  - classic: Klasična vlasnička izrada
+  $options:ht:
+  - custom: Custom (rekòmande)
+  - classic: Klasik pwopriyetè-trase
+  $options:hu:
+  - custom: Egyéni (ajánlott)
+  - classic: Klasszikus, tulajdonos által rajzolt
+  $options:id-ID:
+  - custom: Kustom (disarankan)
+  - classic: Klasik yang dibuat oleh pemilik
+  $options:it-IT:
+  - custom: Personalizzato (consigliato)
+  - classic: Classico disegnato dal proprietario
+  $options:ja-JP:
+  - custom: カスタム (推奨)
+  - classic: オーナーが描いたクラシックなデザイン
+  $options:ko-KR:
+  - custom: 맞춤(권장)
+  - classic: 소유자가 그린 클래식
+  $options:nb:
+  - custom: Egendefinert (anbefalt)
+  - classic: Klassisk eiertegnet
+  $options:nl-NL:
+  - custom: Aangepast (aanbevolen)
+  - classic: Klassiek door de eigenaar getekend
+  $options:or:
+  - custom: କଷ୍ଟମ୍ (ସୁପାରିଶ)
+  - classic: କ୍ଲାସିକ୍ ମାଲିକ-ଅଙ୍କିତ
+  $options:pl-PL:
+  - custom: Niestandardowe (zalecane)
+  - classic: Klasyczny, narysowany przez właściciela
+  $options:pt-BR:
+  - custom: Personalizado (recomendado)
+  - classic: Clássico desenhado pelo proprietário
+  $options:pt-PT:
+  - custom: Personalizado (recomendado)
+  - classic: Clássico desenhado pelo proprietário
+  $options:ro:
+  - custom: Personalizat (recomandat)
+  - classic: Clasic desenat de proprietar
+  $options:ru-RU:
+  - custom: Пользовательский (рекомендуется)
+  - classic: Классический, нарисованный владельцем
+  $options:sv:
+  - custom: Anpassad (rekommenderas)
+  - classic: Klassisk ägartecknad
+  $options:ta:
+  - custom: தனிப்பயன் (பரிந்துரைக்கப்பட்டது)
+  - classic: கிளாசிக் உரிமையாளர் வரையப்பட்டது
+  $options:th:
+  - custom: กำหนดเอง (แนะนำ)
+  - classic: เจ้าของวาดแบบคลาสสิก
+  $options:tr-TR:
+  - custom: Özel (önerilen)
+  - classic: Klasik sahibi tarafından çizilmiş
+  $options:uk-UA:
+  - custom: Спеціальний (рекомендовано)
+  - classic: Класичний власний малюнок
+  $options:uz:
+  - custom: Maxsus (tavsiya etiladi)
+  - classic: Klassik egasi tomonidan chizilgan
+  $options:vi-VN:
+  - custom: Tùy chỉnh (được đề xuất)
+  - classic: Cổ điển do chủ sở hữu vẽ
+  $options:zh-CN:
+  - custom: 定制（推荐）
+  - classic: 经典业主手绘
+  $options:zh-TW:
+  - custom: 客製化（建議）
+  - classic: 經典業主手繪
+- language: auto
+  $name: Language
+  $name:ar: اللغة
+  $name:az: Dil
+  $name:bn: ভাষা
+  $name:cs: Jazyk
+  $name:da: Sprog
+  $name:de-DE: Sprache
+  $name:el: Γλώσσα
+  $name:es-ES: Idioma
+  $name:fa: زبان
+  $name:fr-FR: Langue
+  $name:hi: भाषा
+  $name:hr: Jezik
+  $name:ht: Lang
+  $name:hu: Nyelv
+  $name:id-ID: Bahasa
+  $name:it-IT: Lingua
+  $name:ja-JP: 言語
+  $name:ko-KR: 언어
+  $name:nb: Språk
+  $name:nl-NL: Taal
+  $name:or: ଭାଷା
+  $name:pl-PL: Język
+  $name:pt-BR: Idioma
+  $name:pt-PT: Idioma
+  $name:ro: Limba
+  $name:ru-RU: Язык
+  $name:sv: Språk
+  $name:ta: மொழி
+  $name:th: ภาษา
+  $name:tr-TR: Dil
+  $name:uk-UA: Мова
+  $name:uz: Til
+  $name:vi-VN: Ngôn ngữ
+  $name:zh-CN: 语言
+  $name:zh-TW: 語言
+  $description: Language for the menu and the in-menu settings. Automatic follows the Windows display language and falls back to English when it is not one of the supported languages; this page itself follows Windhawk's language setting.
+  $description:ar: لغة القائمة وإعدادات القائمة. تتبع اللغة التلقائية لغة عرض Windows وتعود إلى اللغة الإنجليزية عندما لا تكون إحدى اللغات المدعومة؛ تتبع هذه الصفحة نفسها إعدادات لغة Windhawk.
+  $description:az: Menyu və menyudaxili parametrlər üçün dil. Avtomatik Windows ekran dilini izləyir və dəstəklənən dillərdən biri olmadıqda ingilis dilinə qayıdır; bu səhifənin özü Windhawk-nin dil parametrlərinə uyğundur.
+  $description:bn: মেনু এবং ইন-মেনু সেটিংসের জন্য ভাষা। স্বয়ংক্রিয় উইন্ডোজ ডিসপ্লে ভাষা অনুসরণ করে এবং ইংরেজিতে ফিরে আসে যখন এটি সমর্থিত ভাষাগুলির মধ্যে একটি নয়; এই পৃষ্ঠাটি নিজেই Windhawk-এর ভাষা সেটিং অনুসরণ করে৷
+  $description:cs: Jazyk pro nabídku a nastavení v nabídce. Automaticky se řídí jazykem zobrazení Windows a vrátí se zpět na angličtinu, pokud není jedním z podporovaných jazyků; tato stránka sama o sobě sleduje nastavení jazyka Windhawk.
+  $description:da: Sprog for menuen og indstillingerne i menuen. Automatisk følger Windows-skærmsproget og falder tilbage til engelsk, når det ikke er et af de understøttede sprog; selve denne side følger Windhawk's sprogindstilling.
+  $description:de-DE: Sprache für das Menü und die Einstellungen im Menü. Automatisch folgt der Windows-Anzeigesprache und greift auf Englisch zurück, wenn es keine der unterstützten Sprachen ist; Diese Seite selbst folgt der Spracheinstellung von Windhawk.
+  $description:el: Γλώσσα για το μενού και τις ρυθμίσεις στο μενού. Το Automatic ακολουθεί τη γλώσσα εμφάνισης των Windows και επανέρχεται στα Αγγλικά όταν δεν είναι μία από τις υποστηριζόμενες γλώσσες. Αυτή η ίδια η σελίδα ακολουθεί τη ρύθμιση γλώσσας του Windhawk.
+  $description:es-ES: Idioma del menú y la configuración en el menú. Automático sigue el idioma de visualización de Windows y vuelve al inglés cuando no es uno de los idiomas admitidos; esta página en sí sigue la configuración de idioma de Windhawk.
+  $description:fa: زبان منو و تنظیمات درون منو. خودکار از زبان نمایش ویندوز پیروی می کند و زمانی که یکی از زبان های پشتیبانی شده نیست، به انگلیسی بازمی گردد. این صفحه خود از تنظیمات زبان Windhawk پیروی می کند.
+  $description:fr-FR: Langue du menu et des paramètres du menu. Automatique suit la langue d'affichage de Windows et revient à l'anglais lorsqu'il ne s'agit pas d'une des langues prises en charge ; cette page elle-même suit les paramètres de langue du Windhawk.
+  $description:hi: मेनू और इन-मेनू सेटिंग्स के लिए भाषा। स्वचालित रूप से विंडोज़ डिस्प्ले भाषा का अनुसरण करता है और जब यह समर्थित भाषाओं में से एक नहीं है तो अंग्रेजी पर वापस आ जाता है; यह पृष्ठ स्वयं Windhawk की भाषा सेटिंग का अनुसरण करता है।
+  $description:hr: Jezik za izbornik i postavke unutar izbornika. Automatski prati jezik prikaza sustava Windows i vraća se na engleski kada to nije jedan od podržanih jezika; sama ova stranica slijedi jezične postavke Windhawk-a.
+  $description:ht: Lang pou meni an ak paramèt ki nan meni a. Otomatik swiv lang nan ekspozisyon Windows ak tonbe tounen nan angle lè li pa youn nan lang yo sipòte; paj sa a li menm swiv anviwònman lang Windhawk.
+  $description:hu: A menü nyelve és a menün belüli beállítások. Az Automatic a Windows megjelenítési nyelvét követi, és visszavált angolra, ha az nem tartozik a támogatott nyelvek közé; ez az oldal maga a Windhawk nyelvi beállítását követi.
+  $description:id-ID: Bahasa untuk menu dan pengaturan dalam menu. Otomatis mengikuti bahasa tampilan Windows dan kembali ke bahasa Inggris jika bahasa tersebut bukan salah satu bahasa yang didukung; halaman ini sendiri mengikuti pengaturan bahasa Windhawk.
+  $description:it-IT: Lingua del menu e impostazioni del menu. Automatico segue la lingua di visualizzazione di Windows e torna all'inglese quando non è una delle lingue supportate; questa pagina stessa segue l'impostazione della lingua di Windhawk.
+  $description:ja-JP: メニューおよびメニュー内設定の言語。自動は Windows の表示言語に従い、サポートされている言語ではない場合は英語に戻ります。このページ自体は Windhawk の言語設定に従います。
+  $description:ko-KR: 메뉴 및 메뉴 내 설정에 대한 언어입니다. 자동은 Windows 표시 언어를 따르며 지원되는 언어가 아닌 경우 영어로 대체됩니다. 이 페이지 자체는 Windhawk의 언어 설정을 따릅니다.
+  $description:nb: Språk for menyen og innstillingene i menyen. Automatisk følger visningsspråket i Windows og faller tilbake til engelsk når det ikke er et av de støttede språkene; selve denne siden følger Windhawks språkinnstilling.
+  $description:nl-NL: Taal voor het menu en de instellingen in het menu. Automatisch volgt de Windows-weergavetaal en valt terug op Engels als dit niet een van de ondersteunde talen is; deze pagina zelf volgt de taalinstelling van Windhawk.
+  $description:or: ମେନୁ ଏବଂ ଇନ-ମେନୁ ସେଟିଙ୍ଗ୍ ପାଇଁ ଭାଷା | ସ୍ୱୟଂଚାଳିତ ୱିଣ୍ଡୋଜ୍ ପ୍ରଦର୍ଶନ ଭାଷା ଅନୁସରଣ କରେ ଏବଂ ଯେତେବେଳେ ଏହା ସମର୍ଥିତ ଭାଷାଗୁଡ଼ିକ ମଧ୍ୟରୁ ଗୋଟିଏ ନୁହେଁ ସେତେବେଳେ ଇଂରାଜୀକୁ ଫେରିଯାଏ | ଏହି ପୃଷ୍ଠା ନିଜେ Windhawk ର ଭାଷା ସେଟିଂ ଅନୁସରଣ କରେ
+  $description:pl-PL: Język menu i ustawień w menu. Tryb automatyczny podąża za językiem wyświetlania systemu Windows i powraca do języka angielskiego, jeśli nie jest on jednym z obsługiwanych języków; ta strona sama w sobie jest zgodna z ustawieniami językowymi Windhawk.
+  $description:pt-BR: Idioma do menu e configurações do menu. Automático segue o idioma de exibição do Windows e volta para o inglês quando não é um dos idiomas suportados; esta página segue a configuração de idioma do Windhawk.
+  $description:pt-PT: Idioma do menu e definições do menu. Automático segue o idioma de visualização do Windows e volta ao inglês quando não é um dos idiomas suportados; esta página segue a configuração de idioma do Windhawk.
+  $description:ro: Limba pentru meniu și setările din meniu. Automatic urmează limba de afișare Windows și revine la engleză atunci când aceasta nu este una dintre limbile acceptate; această pagină în sine urmează setarea de limbă a lui Windhawk.
+  $description:ru-RU: Язык меню и внутрименю настроек. Автоматически следует языку отображения Windows и возвращается к английскому, если он не входит в число поддерживаемых языков; сама эта страница соответствует языковым настройкам Windhawk.
+  $description:sv: Språk för menyn och inställningarna i menyn. Automatisk följer Windows visningsspråk och faller tillbaka till engelska när det inte är ett av de språk som stöds; denna sida själv följer Windhawks språkinställning.
+  $description:ta: மெனு மற்றும் மெனு அமைப்புகளுக்கான மொழி. விண்டோஸ் டிஸ்பிளே மொழியை தானியங்கு பின்பற்றுகிறது மற்றும் ஆதரிக்கப்படும் மொழிகளில் ஒன்றாக இல்லாத போது மீண்டும் ஆங்கிலத்திற்கு வரும்; இந்தப் பக்கமே Windhawk இன் மொழி அமைப்பைப் பின்பற்றுகிறது.
+  $description:th: ภาษาสำหรับเมนูและการตั้งค่าในเมนู อัตโนมัติจะเป็นไปตามภาษาที่แสดงของ Windows และกลับไปเป็นภาษาอังกฤษเมื่อไม่ใช่ภาษาใดภาษาหนึ่งที่รองรับ หน้านี้เป็นไปตามการตั้งค่าภาษาของ Windhawk
+  $description:tr-TR: Menü dili ve menü içi ayarlar. Otomatik, Windows görüntüleme dilini izler ve desteklenen dillerden biri olmadığında İngilizce'ye geri döner; bu sayfanın kendisi Windhawk'nin dil ayarını takip eder.
+  $description:uk-UA: Мова для меню та налаштувань у меню. Автоматично дотримується мови відображення Windows і повертається до англійської, якщо вона не є однією з підтримуваних мов; сама ця сторінка відповідає мовним налаштуванням Windhawk.
+  $description:uz: Menyu va menyu ichidagi sozlamalar uchun til. Avtomatik Windows displey tiliga amal qiladi va qo'llab-quvvatlanadigan tillardan biri bo'lmaganda ingliz tiliga qaytadi; bu sahifaning o'zi Windhawk til sozlamalariga amal qiladi.
+  $description:vi-VN: Ngôn ngữ cho menu và cài đặt trong menu. Tự động tuân theo ngôn ngữ hiển thị của Windows và quay lại tiếng Anh khi nó không phải là một trong những ngôn ngữ được hỗ trợ; trang này tuân theo cài đặt ngôn ngữ của Windhawk.
+  $description:zh-CN: 菜单和菜单内设置的语言。自动模式跟随 Windows 显示语言；如果该语言不在支持列表中，则回退到英语。此页面本身跟随 Windhawk 的语言设置。
+  $description:zh-TW: 選單與選單內設定的語言。自動模式跟隨 Windows 顯示語言；若該語言不在支援清單中，則回退到英文。此頁面本身跟隨 Windhawk 的語言設定。
+  $options:
+  - auto: Automatic (match Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ar:
+  - auto: تلقائي (تطابق Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:az:
+  - auto: Avtomatik (Windows uyğun)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:bn:
+  - auto: স্বয়ংক্রিয় (মেল উইন্ডোজ)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:cs:
+  - auto: Automaticky (shoda se systémem Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:da:
+  - auto: Automatisk (match Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:de-DE:
+  - auto: Automatisch (entsprechend Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:el:
+  - auto: Αυτόματο (ταιριάζουν με Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:es-ES:
+  - auto: Automático (coincide con Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:fa:
+  - auto: خودکار (مطابقت با ویندوز)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:fr-FR:
+  - auto: Automatique (selon Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:hi:
+  - auto: स्वचालित (विंडोज़ से मेल करें)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:hr:
+  - auto: Automatski (odgovara Windowsima)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ht:
+  - auto: Otomatik (koresponn ak Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:hu:
+  - auto: Automatikus (egyezik a Windows rendszerrel)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:id-ID:
+  - auto: Otomatis (cocok dengan Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:it-IT:
+  - auto: Automatico (corrisponde a Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ja-JP:
+  - auto: 自動 (Windows に一致)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ko-KR:
+  - auto: 자동(Windows와 일치)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:nb:
+  - auto: Automatisk (matcher Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:nl-NL:
+  - auto: Automatisch (match Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:or:
+  - auto: ସ୍ୱୟଂଚାଳିତ (ୱିଣ୍ଡୋଜ୍ ସହିତ ମେଳ)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:pl-PL:
+  - auto: Automatyczny (dopasowany do systemu Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:pt-BR:
+  - auto: Automático (corresponde ao Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:pt-PT:
+  - auto: Automático (corresponde ao Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ro:
+  - auto: Automat (se potrivește cu Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ru-RU:
+  - auto: Автоматически (соответствует Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:sv:
+  - auto: Automatisk (matcha Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:ta:
+  - auto: தானியங்கி (விண்டோஸுடன் பொருந்த)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:th:
+  - auto: อัตโนมัติ (ตรงกับ Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:tr-TR:
+  - auto: Otomatik (Windows'la eşleş)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:uk-UA:
+  - auto: Автоматично (відповідає Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:uz:
+  - auto: Avtomatik (Windows mos)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:vi-VN:
+  - auto: Tự động (khớp với Windows)
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:zh-CN:
+  - auto: 自动（匹配Windows）
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  $options:zh-TW:
+  - auto: 自动（匹配Windows）
+  - ar: العربية
+  - az: Azərbaycanca
+  - bn: বাংলা
+  - cs: Čeština
+  - da: Dansk
+  - de: Deutsch
+  - el: Ελληνικά
+  - en: English
+  - es: Español
+  - fa: فارسی
+  - fr: Français
+  - hi: हिन्दी
+  - hr: Hrvatski
+  - ht: Kreyòl ayisyen
+  - hu: Magyar
+  - id: Bahasa Indonesia
+  - it: Italiano
+  - ja: 日本語
+  - ko: 한국어
+  - nb: Norsk bokmål
+  - nl: Nederlands
+  - or: ଓଡ଼ିଆ
+  - pl: Polski
+  - pt-BR: Português (Brasil)
+  - pt-PT: Português (Portugal)
+  - ro: Română
+  - ru: Русский
+  - sv: Svenska
+  - ta: தமிழ்
+  - th: ไทย
+  - tr: Türkçe
+  - uk: Українська
+  - uz: Oʻzbekcha
+  - vi: Tiếng Việt
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
 - enableShiftBypass: true
   $name: Bypass keys
+  $name:ar: مفاتيح التجاوز
+  $name:az: Bypass açarları
+  $name:bn: বাইপাস কী
+  $name:cs: Obejít klíče
+  $name:da: Bypass nøgler
+  $name:de-DE: Schlüssel umgehen
+  $name:el: Κλειδιά παράκαμψης
+  $name:es-ES: Claves de derivación
+  $name:fa: کلیدهای دور زدن
+  $name:fr-FR: Touches de contournement
+  $name:hi: बायपास कुंजियाँ
+  $name:hr: Premosni ključevi
+  $name:ht: Bypass kle
+  $name:hu: Kulcsok megkerülése
+  $name:id-ID: Tombol pintas
+  $name:it-IT: Chiavi di bypass
+  $name:ja-JP: バイパスキー
+  $name:ko-KR: 바이패스 키
+  $name:nb: Omgå nøkler
+  $name:nl-NL: Sleutels omzeilen
+  $name:or: ଚାବିଗୁଡିକ ବାଇପାସ୍ କରନ୍ତୁ
+  $name:pl-PL: Omiń klucze
+  $name:pt-BR: Ignorar chaves
+  $name:pt-PT: Ignorar chaves
+  $name:ro: Tastele de ocolire
+  $name:ru-RU: Клавиши обхода
+  $name:sv: Bypass nycklar
+  $name:ta: பைபாஸ் விசைகள்
+  $name:th: บายพาสคีย์
+  $name:tr-TR: Anahtarları atla
+  $name:uk-UA: Обхідні ключі
+  $name:uz: Bypass kalitlari
+  $name:vi-VN: Bỏ qua phím
+  $name:zh-CN: 旁路键
+  $name:zh-TW: 旁路鍵
   $description: Hold Shift while right-clicking to bypass the mod and get the stock classic menu, or Ctrl for the untouched native menu.
+  $description:ar: اضغط باستمرار على Shift أثناء النقر بزر الماوس الأيمن لتجاوز الوضع والحصول على القائمة الكلاسيكية للأسهم، أو Ctrl للقائمة الأصلية التي لم تمسها.
+  $description:az: Modu yan keçmək və stok klassik menyusunu və ya toxunulmamış yerli menyu üçün Ctrl əldə etmək üçün sağ klikləyərkən Shift düyməsini basıb saxlayın.
+  $description:bn: মোড বাইপাস করার জন্য ডান-ক্লিক করার সময় Shift ধরে রাখুন এবং স্টক ক্লাসিক মেনু পান, অথবা অস্পর্শিত নেটিভ মেনুর জন্য Ctrl।
+  $description:cs: Podržením Shift a kliknutím pravým tlačítkem myši obcházíte mod a získáte klasické menu, nebo Ctrl pro nedotčené nativní menu.
+  $description:da: Hold Shift nede, mens du højreklikker for at omgå mod'et og få den klassiske menu, eller Ctrl for den uberørte native menu.
+  $description:de-DE: Halten Sie Shift gedrückt, während Sie mit der rechten Maustaste klicken, um den Mod zu umgehen und das klassische Standardmenü zu erhalten, oder Ctrl für das unberührte native Menü.
+  $description:el: Κρατήστε πατημένο το Shift ενώ κάνετε δεξί κλικ για να παρακάμψετε το mod και να λάβετε το απόθεμα κλασικό μενού ή Ctrl για το ανέγγιχτο εγγενές μενού.
+  $description:es-ES: Mantenga presionado Shift mientras hace clic derecho para omitir el mod y obtener el menú clásico estándar, o Ctrl para el menú nativo intacto.
+  $description:fa: Shift را نگه دارید در حالی که راست کلیک می کنید تا حالت را دور بزنید و منوی استوک کلاسیک یا Ctrl را برای منوی اصلی دست نخورده دریافت کنید.
+  $description:fr-FR: Maintenez Shift tout en cliquant avec le bouton droit pour contourner le mod et obtenir le menu classique d'origine, ou Ctrl pour le menu natif intact.
+  $description:hi: मॉड को बायपास करने और स्टॉक क्लासिक मेनू प्राप्त करने के लिए राइट-क्लिक करते समय Shift दबाए रखें, या अछूते देशी मेनू के लिए Ctrl दबाए रखें।
+  $description:hr: Držite Shift dok desnom tipkom miša kliknete kako biste zaobišli mod i dobili standardni klasični izbornik ili Ctrl za netaknuti izvorni izbornik.
+  $description:ht: Kenbe Shift pandan y ap klike sou dwa pou kontoune mod la epi jwenn meni klasik stock la, oswa Ctrl pou meni natif natal ki pa manyen.
+  $description:hu: Tartsa lenyomva a Shift billentyűt, miközben a jobb gombbal kattint a mod megkerüléséhez, és elérheti a normál klasszikus menüt, vagy a Ctrl gombot az érintetlen natív menühöz.
+  $description:id-ID: Tahan Shift sambil mengklik kanan untuk melewati mod dan mendapatkan menu stok klasik, atau Ctrl untuk menu asli yang belum tersentuh.
+  $description:it-IT: Tieni premuto Shift mentre fai clic con il pulsante destro del mouse per bypassare la mod e ottenere il menu classico di serie o Ctrl per il menu nativo intatto.
+  $description:ja-JP: Shift を押したまま右クリックすると MOD がバイパスされ、標準のクラシック メニューが表示されます。または、Ctrl を押したままのネイティブ メニューが表示されます。
+  $description:ko-KR: 모드를 우회하고 기본 클래식 메뉴를 얻으려면 마우스 오른쪽 버튼을 클릭하는 동안 Shift를 누르고, 손대지 않은 기본 메뉴를 보려면 Ctrl를 누르세요.
+  $description:nb: Hold Shift mens du høyreklikker for å omgå moden og få den klassiske menyen, eller Ctrl for den uberørte native-menyen.
+  $description:nl-NL: Houd Shift vast terwijl je met de rechtermuisknop klikt om de mod te omzeilen en het standaard klassieke menu te krijgen, of Ctrl voor het onaangeroerde oorspronkelijke menu.
+  $description:or: ମୋଡ୍ ବାଇପାସ୍ କରିବାକୁ ଏବଂ ଷ୍ଟକ୍ କ୍ଲାସିକ୍ ମେନୁ ପାଇବାକୁ, କିମ୍ବା ଅସ୍ପୃଶ୍ୟ ଦେଶୀ ମେନୁ ପାଇଁ Ctrl ପାଇବାକୁ ଡାହାଣ କ୍ଲିକ୍ କରିବା ସମୟରେ Shift ଧରି ରଖନ୍ତୁ
+  $description:pl-PL: Przytrzymaj Shift podczas klikania prawym przyciskiem myszy, aby ominąć mod i uzyskać standardowe menu klasyczne, lub Ctrl, aby uzyskać niezmienione menu natywne.
+  $description:pt-BR: Segure Shift enquanto clica com o botão direito para ignorar o mod e obter o menu clássico de estoque, ou Ctrl para o menu nativo intocado.
+  $description:pt-PT: Segure Shift enquanto clica com o botão direito do rato para ignorar o mod e obter o menu clássico de stock, ou Ctrl para o menu nativo intocado.
+  $description:ro: Țineți apăsat Shift în timp ce faceți clic dreapta pentru a ocoli modul și a obține meniul clasic stoc sau Ctrl pentru meniul nativ neatins.
+  $description:ru-RU: Удерживайте Shift, щелкнув правой кнопкой мыши, чтобы обойти мод и получить стандартное классическое меню, или Ctrl для нетронутого родного меню.
+  $description:sv: Håll Shift medan du högerklickar för att kringgå modden och få den klassiska menyn, eller Ctrl för den orörda inbyggda menyn.
+  $description:ta: மோட்டைத் தவிர்த்துவிட்டு, ஸ்டாக் கிளாசிக் மெனுவைப் பெற வலது கிளிக் செய்யும் போது Shift ஐப் பிடிக்கவும் அல்லது தொடாத நேட்டிவ் மெனுவிற்கு Ctrl ஐப் பிடிக்கவும்.
+  $description:th: กด Shift ค้างไว้ขณะคลิกขวาเพื่อข้าม mod และรับเมนูคลาสสิกในสต็อก หรือ Ctrl สำหรับเมนูเนทิฟที่ยังไม่มีใครแตะต้อง
+  $description:tr-TR: Modu atlayıp standart klasik menüyü almak için sağ tıklarken Shift'yi basılı tutun veya el değmemiş yerel menü için Ctrl'yi basılı tutun.
+  $description:uk-UA: Утримуйте Shift, клацаючи правою кнопкою миші, щоб обійти мод і отримати стандартне класичне меню, або Ctrl для недоторканого рідного меню.
+  $description:uz: Modni chetlab o'tish va birja klassik menyusini olish uchun sichqonchaning o'ng tugmachasini bosgan holda Shift-ni yoki tegilmagan mahalliy menyu uchun Ctrl-ni ushlab turing.
+  $description:vi-VN: Giữ Shift trong khi nhấp chuột phải để bỏ qua bản mod và nhận menu cổ điển gốc hoặc Ctrl cho menu gốc nguyên bản.
+  $description:zh-CN: 按住 Shift 的同时右键单击可绕过 mod 并获取库存经典菜单，或按住 Ctrl 以获得未修改的本机菜单。
+  $description:zh-TW: 按住 Shift 的同時右鍵點擊可繞過 mod 並取得庫存經典選單，或按住 Ctrl 以獲得未修改的本機選單。
 - instantMenuFade: true
   $name: Instant menu open
+  $name:ar: القائمة الفورية مفتوحة
+  $name:az: Ani menyu açıqdır
+  $name:bn: তাত্ক্ষণিক মেনু খুলুন
+  $name:cs: Otevřená okamžitá nabídka
+  $name:da: Øjeblikkelig menu åben
+  $name:de-DE: Sofortiges Menü geöffnet
+  $name:el: Άνοιγμα του άμεσου μενού
+  $name:es-ES: Menú instantáneo abierto
+  $name:fa: منوی فوری باز می شود
+  $name:fr-FR: Ouverture instantanée du menu
+  $name:hi: तत्काल मेनू खोलें
+  $name:hr: Otvoren instant izbornik
+  $name:ht: Meni enstantane louvri
+  $name:hu: Azonnali menü megnyitása
+  $name:id-ID: Menu instan terbuka
+  $name:it-IT: Menu istantaneo aperto
+  $name:ja-JP: インスタントメニューが開きます
+  $name:ko-KR: 인스턴트 메뉴 오픈
+  $name:nb: Øyeblikkelig meny åpen
+  $name:nl-NL: Instantmenu geopend
+  $name:or: ତତକ୍ଷଣାତ୍ ମେନୁ ଖୋଲା
+  $name:pl-PL: Menu natychmiastowe otwarte
+  $name:pt-BR: Menu instantâneo aberto
+  $name:pt-PT: Menu instantâneo aberto
+  $name:ro: Meniu instantaneu deschis
+  $name:ru-RU: Мгновенное меню открыто
+  $name:sv: Instant-menyn öppen
+  $name:ta: உடனடி மெனு திறக்கப்பட்டது
+  $name:th: เปิดเมนูทันที
+  $name:tr-TR: Anlık menü açık
+  $name:uk-UA: Миттєве меню відкрито
+  $name:uz: Tezkor menyu ochiladi
+  $name:vi-VN: Mở menu tức thì
+  $name:zh-CN: 即时菜单打开
+  $name:zh-TW: 即時選單打開
   $description: Shows native fallback menus (classic mode, fallbacks) without the system open animation, via TPM_NOANIMATION.
+  $description:ar: يعرض القوائم الاحتياطية الأصلية (الوضع الكلاسيكي، والقوائم الاحتياطية) بدون الرسوم المتحركة المفتوحة للنظام، عبر TPM_NOANIMATION.
+  $description:az: TPM_NOANIMATION vasitəsilə sistem açıq animasiyası olmadan yerli ehtiyat menyularını (klassik rejim, ehtiyatlar) göstərir.
+  $description:bn: TPM_NOANIMATION এর মাধ্যমে সিস্টেম ওপেন অ্যানিমেশন ছাড়াই নেটিভ ফলব্যাক মেনু (ক্লাসিক মোড, ফলব্যাক) দেখায়।
+  $description:cs: Zobrazuje nativní záložní nabídky (klasický režim, záložní) bez animace otevřeného systému prostřednictvím TPM_NOANIMATION.
+  $description:da: Viser native reservemenuer (klassisk tilstand, fallbacks) uden systemets åbne animation via TPM_NOANIMATION.
+  $description:de-DE: Zeigt native Fallback-Menüs (klassischer Modus, Fallbacks) ohne die Systemöffnungsanimation über TPM_NOANIMATION an.
+  $description:el: Εμφανίζει εγγενή εναλλακτικά μενού (κλασική λειτουργία, εναλλακτικά) χωρίς την ανοιχτή κίνηση του συστήματος, μέσω TPM_NOANIMATION.
+  $description:es-ES: Muestra menús de respaldo nativos (modo clásico, respaldos) sin la animación de apertura del sistema, a través de TPM_NOANIMATION.
+  $description:fa: منوهای بازگشتی بومی (حالت کلاسیک، بک گراند) را بدون انیمیشن باز سیستم، از طریق TPM_NOANIMATION نشان می دهد.
+  $description:fr-FR: Affiche les menus de secours natifs (mode classique, secours) sans l'animation d'ouverture du système, via TPM_NOANIMATION.
+  $description:hi: TPM_NOANIMATION के माध्यम से सिस्टम ओपन एनीमेशन के बिना मूल फ़ॉलबैक मेनू (क्लासिक मोड, फ़ॉलबैक) दिखाता है।
+  $description:hr: Prikazuje izvorne rezervne izbornike (klasični način rada, rezervne opcije) bez animacije otvaranja sustava, putem TPM_NOANIMATION.
+  $description:ht: Montre meni natif natal (mòd klasik, sekou) san animasyon sistèm lan louvri, atravè TPM_NOANIMATION.
+  $description:hu: Megjeleníti a natív tartalék menüket (klasszikus mód, tartalék menük) a rendszer megnyitása nélkül, a TPM_NOANIMATION-n keresztül.
+  $description:id-ID: Menampilkan menu fallback asli (mode klasik, fallback) tanpa animasi sistem terbuka, melalui TPM_NOANIMATION.
+  $description:it-IT: Mostra i menu di fallback nativi (modalità classica, fallback) senza l'animazione di apertura del sistema, tramite TPM_NOANIMATION.
+  $description:ja-JP: TPM_NOANIMATION 経由で、システムを開くアニメーションなしでネイティブ フォールバック メニュー (クラシック モード、フォールバック) を表示します。
+  $description:ko-KR: TPM_NOANIMATION를 통해 시스템 열기 애니메이션 없이 기본 대체 메뉴(클래식 모드, 대체)를 표시합니다.
+  $description:nb: Viser native reservemenyer (klassisk modus, fallbacks) uten systemets åpen animasjon, via TPM_NOANIMATION.
+  $description:nl-NL: Toont native fallback-menu's (klassieke modus, fallbacks) zonder de open animatie van het systeem, via TPM_NOANIMATION.
+  $description:or: TPM_NOANIMATION ମାଧ୍ୟମରେ ସିଷ୍ଟମ୍ ଖୋଲା ଆନିମେସନ୍ ବିନା ଦେଶୀ ଫଲବ୍ୟାକ୍ ମେନୁଗୁଡିକ (କ୍ଲାସିକ୍ ମୋଡ୍, ଫଲବ୍ୟାକ୍) ଦେଖାଏ
+  $description:pl-PL: Pokazuje natywne menu awaryjne (tryb klasyczny, awaryjne) bez animacji otwierania systemu, poprzez TPM_NOANIMATION.
+  $description:pt-BR: Mostra menus alternativos nativos (modo clássico, substitutos) sem a animação de abertura do sistema, via TPM_NOANIMATION.
+  $description:pt-PT: Mostra menus alternativos nativos (modo clássico, substitutos) sem a animação de abertura do sistema, através de TPM_NOANIMATION.
+  $description:ro: Afișează meniuri de rezervă native (modul clasic, alternative) fără animația deschisă a sistemului, prin TPM_NOANIMATION.
+  $description:ru-RU: Показывает собственные резервные меню (классический режим, резервные варианты) без анимации открытия системы через TPM_NOANIMATION.
+  $description:sv: Visar inbyggda reservmenyer (klassiskt läge, fallbacks) utan systemets öppna animering, via TPM_NOANIMATION.
+  $description:ta: TPM_NOANIMATION வழியாக சிஸ்டம் ஓபன் அனிமேஷன் இல்லாமல் நேட்டிவ் ஃபால்பேக் மெனுக்களை (கிளாசிக் பயன்முறை, ஃபால்பேக்குகள்) காட்டுகிறது.
+  $description:th: แสดงเมนูทางเลือกดั้งเดิม (โหมดคลาสสิก, ทางเลือก) โดยไม่มีภาพเคลื่อนไหวเปิดระบบผ่าน TPM_NOANIMATION
+  $description:tr-TR: TPM_NOANIMATION aracılığıyla sistem açma animasyonu olmadan yerel geri dönüş menülerini (klasik mod, geri dönüşler) gösterir.
+  $description:uk-UA: Показує власні резервні меню (класичний режим, резервні варіанти) без анімації відкриття системи через TPM_NOANIMATION.
+  $description:uz: TPM_NOANIMATION orqali tizimning ochiq animatsiyasisiz mahalliy zaxira menyularni (klassik rejim, zaxiralar) ko'rsatadi.
+  $description:vi-VN: Hiển thị các menu dự phòng gốc (chế độ cổ điển, dự phòng) mà không có hoạt ảnh mở hệ thống, thông qua TPM_NOANIMATION.
+  $description:zh-CN: 通过 TPM_NOANIMATION 显示本机后备菜单（经典模式、后备），无需系统打开动画。
+  $description:zh-TW: 透過 TPM_NOANIMATION 顯示本機後備選單（經典模式、後備），無需系統開啟動畫。
 - showMoreOptionsItem: true
   $name: Show classic menu item
+  $name:ar: إظهار عنصر القائمة الكلاسيكية
+  $name:az: Klassik menyu elementini göstərin
+  $name:bn: ক্লাসিক মেনু আইটেম দেখান
+  $name:cs: Zobrazit klasickou položku nabídky
+  $name:da: Vis klassisk menupunkt
+  $name:de-DE: Klassischen Menüpunkt anzeigen
+  $name:el: Εμφάνιση κλασικού στοιχείου μενού
+  $name:es-ES: Mostrar elemento de menú clásico
+  $name:fa: نمایش آیتم منوی کلاسیک
+  $name:fr-FR: Afficher l'élément du menu classique
+  $name:hi: क्लासिक मेनू आइटम दिखाएँ
+  $name:hr: Prikaži klasičnu stavku izbornika
+  $name:ht: Montre atik meni klasik
+  $name:hu: Klasszikus menüelem megjelenítése
+  $name:id-ID: Tampilkan item menu klasik
+  $name:it-IT: Mostra la voce di menu classica
+  $name:ja-JP: クラシックメニュー項目を表示
+  $name:ko-KR: 클래식 메뉴 항목 표시
+  $name:nb: Vis klassisk menyelement
+  $name:nl-NL: Klassiek menu-item weergeven
+  $name:or: କ୍ଲାସିକ୍ ମେନୁ ଆଇଟମ୍ ଦେଖାନ୍ତୁ
+  $name:pl-PL: Pokaż klasyczny element menu
+  $name:pt-BR: Mostrar item de menu clássico
+  $name:pt-PT: Mostrar item de menu clássico
+  $name:ro: Afișează elementul de meniu clasic
+  $name:ru-RU: Показать пункт классического меню
+  $name:sv: Visa klassiska menyalternativ
+  $name:ta: கிளாசிக் மெனு உருப்படியைக் காட்டு
+  $name:th: แสดงรายการเมนูแบบคลาสสิก
+  $name:tr-TR: Klasik menü öğesini göster
+  $name:uk-UA: Показати класичний пункт меню
+  $name:uz: Klassik menyu elementini ko'rsatish
+  $name:vi-VN: Hiển thị mục menu cổ điển
+  $name:zh-CN: 显示经典菜单项
+  $name:zh-TW: 顯示經典選單項
   $description: Add a "Show classic menu" entry at the bottom of the replacement menu.
+  $description:ar: أضف إدخال "إظهار القائمة الكلاسيكية" أسفل القائمة البديلة.
+  $description:az: Əvəzedici menyunun altındakı "Klassik menyunu göstər" girişini əlavə edin.
+  $description:bn: প্রতিস্থাপন মেনুর নীচে একটি "ক্লাসিক মেনু দেখান" এন্ট্রি যোগ করুন।
+  $description:cs: Do spodní části náhradní nabídky přidejte položku „Zobrazit klasickou nabídku“.
+  $description:da: Tilføj en "Vis klassisk menu"-post nederst i erstatningsmenuen.
+  $description:de-DE: Fügen Sie unten im Ersatzmenü den Eintrag „Klassisches Menü anzeigen“ hinzu.
+  $description:el: Προσθέστε μια καταχώρηση "Εμφάνιση κλασικού μενού" στο κάτω μέρος του μενού αντικατάστασης.
+  $description:es-ES: Agregue una entrada "Mostrar menú clásico" en la parte inferior del menú de reemplazo.
+  $description:fa: یک ورودی «نمایش منوی کلاسیک» را در پایین منوی جایگزین اضافه کنید.
+  $description:fr-FR: Ajoutez une entrée "Afficher le menu classique" en bas du menu de remplacement.
+  $description:hi: प्रतिस्थापन मेनू के नीचे "क्लासिक मेनू दिखाएँ" प्रविष्टि जोड़ें।
+  $description:hr: Dodajte unos "Prikaži klasični izbornik" na dnu zamjenskog izbornika.
+  $description:ht: Ajoute yon antre "Montre meni klasik" nan pati anba meni ranplasman an.
+  $description:hu: Adjon hozzá egy „Klasszikus menü megjelenítése” bejegyzést a helyettesítő menü aljához.
+  $description:id-ID: Tambahkan entri "Tampilkan menu klasik" di bagian bawah menu pengganti.
+  $description:it-IT: Aggiungi una voce "Mostra menu classico" nella parte inferiore del menu sostitutivo.
+  $description:ja-JP: 置換メニューの下部に「クラシック メニューを表示」エントリを追加します。
+  $description:ko-KR: 대체 메뉴 하단에 "클래식 메뉴 표시" 항목을 추가합니다.
+  $description:nb: Legg til en «Vis klassisk meny»-oppføring nederst på erstatningsmenyen.
+  $description:nl-NL: Voeg een item 'Klassiek menu weergeven' toe onder aan het vervangingsmenu.
+  $description:or: ପ୍ରତିସ୍ଥାପନ ମେନୁର ତଳେ ଏକ “କ୍ଲାସିକ୍ ମେନୁ ଦେଖାନ୍ତୁ” ଏଣ୍ଟ୍ରି ଯୋଡନ୍ତୁ
+  $description:pl-PL: Dodaj wpis „Pokaż menu klasyczne” na dole menu zastępczego.
+  $description:pt-BR: Adicione uma entrada “Mostrar menu clássico” na parte inferior do menu de substituição.
+  $description:pt-PT: Adicione uma entrada “Mostrar menu clássico” na parte inferior do menu de substituição.
+  $description:ro: Adăugați o intrare „Afișați meniul clasic” în partea de jos a meniului de înlocuire.
+  $description:ru-RU: Добавьте пункт «Показать классическое меню» внизу заменяющего меню.
+  $description:sv: Lägg till en "Visa klassisk meny"-post längst ned på ersättningsmenyn.
+  $description:ta: மாற்று மெனுவின் கீழே "கிளாசிக் மெனுவைக் காட்டு" உள்ளீட்டைச் சேர்க்கவும்.
+  $description:th: เพิ่มรายการ "แสดงเมนูคลาสสิก" ที่ด้านล่างของเมนูทดแทน
+  $description:tr-TR: Değiştirme menüsünün altına "Klasik menüyü göster" girişini ekleyin.
+  $description:uk-UA: Додайте запис «Показати класичне меню» внизу меню заміни.
+  $description:uz: O'zgartirish menyusining pastki qismida "Klassik menyuni ko'rsatish" yozuvini qo'shing.
+  $description:vi-VN: Thêm mục "Hiển thị menu cổ điển" ở cuối menu thay thế.
+  $description:zh-CN: 在替换菜单的底部添加“显示经典菜单”条目。
+  $description:zh-TW: 在替換選單的底部新增「顯示經典選單」條目。
 - topBar: false
   $name: Top action bar
+  $name:ar: شريط الإجراءات العلوي
+  $name:az: Üst fəaliyyət çubuğu
+  $name:bn: শীর্ষ কর্ম বার
+  $name:cs: Horní akční lišta
+  $name:da: Øverste handlingsbjælke
+  $name:de-DE: Obere Aktionsleiste
+  $name:el: Κορυφαία γραμμή δράσης
+  $name:es-ES: Barra de acción superior
+  $name:fa: نوار اقدام بالا
+  $name:fr-FR: Barre d'actions supérieure
+  $name:hi: शीर्ष एक्शन बार
+  $name:hr: Gornja akcijska traka
+  $name:ht: Top aksyon bar
+  $name:hu: Legfelső akciósáv
+  $name:id-ID: Bilah tindakan teratas
+  $name:it-IT: Barra delle azioni superiore
+  $name:ja-JP: 上部のアクションバー
+  $name:ko-KR: 상단 작업 표시줄
+  $name:nb: Øverste handlingslinje
+  $name:nl-NL: Actiebalk bovenaan
+  $name:or: ଶୀର୍ଷ ଆକ୍ସନ୍ ବାର୍
+  $name:pl-PL: Górny pasek akcji
+  $name:pt-BR: Barra de ação superior
+  $name:pt-PT: Barra de ação superior
+  $name:ro: Bara de acțiuni de sus
+  $name:ru-RU: Верхняя панель действий
+  $name:sv: Översta åtgärdsfältet
+  $name:ta: மேல் செயல் பட்டை
+  $name:th: แถบการกระทำยอดนิยม
+  $name:tr-TR: Üst işlem çubuğu
+  $name:uk-UA: Верхня панель дій
+  $name:uz: Yuqori harakatlar paneli
+  $name:vi-VN: Thanh hành động hàng đầu
+  $name:zh-CN: 顶部操作栏
+  $name:zh-TW: 頂部操作欄
   $description: Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only.
+  $description:ar: ينقل القص والنسخ واللصق وإعادة التسمية والحذف إلى شريط الرموز الموجود على جانب القائمة الأقرب للمؤشر، مثل قائمة Windows 11. وضع القائمة المخصصة فقط.
+  $description:az: Windows 11 menyusu kimi, kursora ən yaxın menyunun yan tərəfindəki nişanlar çubuğuna Kəs, Kopyalayın, Yapışdırın, Adını dəyişdirin və Silin. Yalnız fərdi menyu rejimi.
+  $description:bn: Windows 11 মেনুর মতো কার্সারের কাছাকাছি মেনুর পাশের একটি আইকন বারে কাট, কপি, পেস্ট, পুনঃনামকরণ এবং মুছুন। শুধুমাত্র কাস্টম মেনু মোড।
+  $description:cs: Přesune Vyjmout, Kopírovat, Vložit, Přejmenovat a Odstranit do lišty ikon na straně nabídky nejblíže kurzoru, jako je nabídka Windows 11. Pouze režim vlastní nabídky.
+  $description:da: Flytter Klip, Kopier, Indsæt, Omdøb og Slet til en ikonlinje på siden af menuen nærmest markøren, som Windows 11-menuen. Kun brugerdefineret menutilstand.
+  $description:de-DE: Verschiebt Ausschneiden, Kopieren, Einfügen, Umbenennen und Löschen in eine Symbolleiste auf der Seite des Menüs, die dem Cursor am nächsten liegt, wie das Windows 11-Menü. Nur benutzerdefinierter Menümodus.
+  $description:el: Μετακινεί Αποκοπή, Αντιγραφή, Επικόλληση, Μετονομασία και Διαγραφή σε μια γραμμή εικονιδίων στο πλάι του μενού που βρίσκεται πιο κοντά στον κέρσορα, όπως το μενού Windows 11. Μόνο λειτουργία προσαρμοσμένου μενού.
+  $description:es-ES: Mueve Cortar, Copiar, Pegar, Cambiar nombre y Eliminar a una barra de iconos en el lado del menú más cercano al cursor, como el menú Windows 11. Solo modo de menú personalizado.
+  $description:fa: برش، کپی، چسباندن، تغییر نام و حذف را به یک نوار نماد در کنار منو نزدیک ترین مکان نما، مانند منوی Windows 11، منتقل می کند. فقط حالت منوی سفارشی
+  $description:fr-FR: Déplace Couper, Copier, Coller, Renommer et Supprimer dans une barre d'icônes sur le côté du menu le plus proche du curseur, comme le menu Windows 11. Mode menu personnalisé uniquement.
+  $description:hi: कट, कॉपी, पेस्ट, नाम बदलें और हटाएं को Windows 11 मेनू की तरह, कर्सर के निकटतम मेनू के किनारे एक आइकन बार में ले जाता है। केवल कस्टम मेनू मोड.
+  $description:hr: Premješta Izreži, Kopiraj, Zalijepi, Preimenuj i Izbriši u traku s ikonama na strani izbornika najbližoj pokazivaču, poput Windows 11 izbornika. Samo način prilagođenog izbornika.
+  $description:ht: Deplase Koupe, Kopi, Kole, Chanje non ak Efase nan yon ba icon sou bò meni ki pi pre kurseur la, tankou meni Windows 11 la. Mòd meni Custom sèlman.
+  $description:hu: A kivágást, másolást, beillesztést, átnevezést és törlést a menü kurzorhoz legközelebbi oldalán lévő ikonsávba helyezi, például a Windows 11 menüt. Csak egyéni menü mód.
+  $description:id-ID: Memindahkan Potong, Salin, Tempel, Ganti Nama, dan Hapus ke dalam bilah ikon di sisi menu yang paling dekat dengan kursor, seperti menu Windows 11. Hanya mode menu khusus.
+  $description:it-IT: Sposta Taglia, Copia, Incolla, Rinomina ed Elimina in una barra delle icone sul lato del menu più vicino al cursore, come il menu Windows 11. Solo modalità menu personalizzato.
+  $description:ja-JP: カット、コピー、ペースト、名前変更、および削除を、Windows 11 メニューのように、カーソルに最も近いメニューの横にあるアイコン バーに移動します。カスタムメニューモードのみ。
+  $description:ko-KR: Windows 11 메뉴와 같이 커서에 가장 가까운 메뉴 측면의 아이콘 표시줄로 잘라내기, 복사하기, 붙여넣기, 이름 바꾸기 및 삭제를 이동합니다. 사용자 정의 메뉴 모드에만 해당됩니다.
+  $description:nb: Flytter Klipp ut, Kopier, Lim inn, Gi nytt navn og Slett til en ikonlinje på siden av menyen nærmest markøren, som Windows 11-menyen. Kun tilpasset menymodus.
+  $description:nl-NL: Verplaatst Knippen, Kopiëren, Plakken, Hernoemen en Verwijderen naar een pictogrammenbalk aan de kant van het menu die zich het dichtst bij de cursor bevindt, zoals het Windows 11-menu. Alleen aangepaste menumodus.
+  $description:or: Windows 11 ମେନୁ ପରି କର୍ସର୍ ନିକଟ ମେନୁ ପାର୍ଶ୍ୱରେ ଥିବା ଏକ ଆଇକନ୍ ବାର୍ ରେ କଟ୍, କପି, ଲେପନ, ପୁନଃନାମ ଏବଂ ଡିଲିଟ୍ କୁ ଘୁଞ୍ଚାଏ | କେବଳ କଷ୍ଟମ୍ ମେନୁ ମୋଡ୍
+  $description:pl-PL: Przenosi polecenie Wytnij, Kopiuj, Wklej, Zmień nazwę i Usuń na pasek ikon z boku menu najbliżej kursora, np. menu Windows 11. Tylko tryb menu niestandardowego.
+  $description:pt-BR: Move Recortar, Copiar, Colar, Renomear e Excluir em uma barra de ícones na lateral do menu mais próxima do cursor, como o menu Windows 11. Somente modo de menu personalizado.
+  $description:pt-PT: Move Recortar, Copiar, Colar, Renomear e Apagar numa barra de ícones na lateral do menu mais próxima do cursor, como o menu Windows 11. Apenas modo de menu personalizado.
+  $description:ro: Mută Cut, Copy, Paste, Redenumire și Delete într-o bară de pictograme pe partea laterală a meniului cea mai apropiată de cursor, cum ar fi meniul Windows 11. Numai modul meniu personalizat.
+  $description:ru-RU: Перемещает команды «Вырезать», «Копировать», «Вставить», «Переименовать» и «Удалить» на панель значков на стороне меню, ближайшей к курсору, например меню Windows 11. Только режим пользовательского меню.
+  $description:sv: Flyttar Klipp ut, Kopiera, Klistra in, Byt namn och Ta bort till en ikonrad på sidan av menyn närmast markören, som Windows 11-menyn. Endast anpassat menyläge.
+  $description:ta: Windows 11 மெனு போன்ற கர்சருக்கு அருகில் உள்ள மெனுவின் பக்கத்தில் உள்ள ஐகான் பட்டியில் வெட்டு, நகலெடுக்க, ஒட்டுதல், மறுபெயரிடுதல் மற்றும் நீக்குதல் ஆகியவற்றை நகர்த்துகிறது. தனிப்பயன் மெனு பயன்முறை மட்டும்.
+  $description:th: ย้ายการตัด คัดลอก วาง เปลี่ยนชื่อ และลบลงในแถบไอคอนที่ด้านข้างของเมนูที่อยู่ใกล้เคอร์เซอร์มากที่สุด เช่น เมนู Windows 11 โหมดเมนูแบบกำหนดเองเท่านั้น
+  $description:tr-TR: Kes, Kopyala, Yapıştır, Yeniden Adlandır ve Sil'i, Windows 11 menüsü gibi menünün imlece en yakın tarafındaki simge çubuğuna taşır. Yalnızca özel menü modu.
+  $description:uk-UA: Переміщує «Вирізати», «Копіювати», «Вставити», «Перейменувати» та «Видалити» на панель значків збоку від меню, найближчого до курсору, як-от меню Windows 11. Лише режим спеціального меню.
+  $description:uz: Kesish, Nusxalash, joylashtirish, nomini o'zgartirish va o'chirishni Windows 11 menyusi kabi kursorga eng yaqin menyuning yon tomonidagi piktogramma satriga o'tkazadi. Faqat shaxsiy menyu rejimi.
+  $description:vi-VN: Di chuyển Cắt, Sao chép, Dán, Đổi tên và Xóa vào thanh biểu tượng ở bên cạnh menu gần con trỏ nhất, chẳng hạn như menu Windows 11. Chỉ có chế độ menu tùy chỉnh.
+  $description:zh-CN: 将剪切、复制、粘贴、重命名和删除移动到最靠近光标的菜单一侧的图标栏中，如 Windows 11 菜单。仅自定义菜单模式。
+  $description:zh-TW: 將剪下、複製、貼上、重新命名和刪除移至最靠近遊標的選單一側的圖示列中，如 Windows 11 選單。僅自訂選單模式。
 - submenuDelayMs: 150
   $name: Submenu open delay
+  $name:ar: تأخير فتح القائمة الفرعية
+  $name:az: Alt menyunun açılması gecikməsi
+  $name:bn: সাবমেনু খুলতে বিলম্ব
+  $name:cs: Zpoždění otevření podnabídky
+  $name:da: Undermenu åbningsforsinkelse
+  $name:de-DE: Verzögerung beim Öffnen des Untermenüs
+  $name:el: Καθυστέρηση ανοίγματος υπομενού
+  $name:es-ES: Retardo de apertura del submenú
+  $name:fa: تاخیر باز شدن منوی فرعی
+  $name:fr-FR: Délai des sous-menus
+  $name:hi: सबमेनू खुलने में देरी
+  $name:hr: Odgoda otvaranja podizbornika
+  $name:ht: Sou-menu louvri reta
+  $name:hu: Az almenü megnyitásának késleltetése
+  $name:id-ID: Penundaan pembukaan submenu
+  $name:it-IT: Ritardo apertura sottomenu
+  $name:ja-JP: サブメニューを開く遅延
+  $name:ko-KR: 하위 메뉴 열기 지연
+  $name:nb: Undermeny åpningsforsinkelse
+  $name:nl-NL: Submenu openingsvertraging
+  $name:or: ସବମେନୁ ଖୋଲା ବିଳମ୍ବ
+  $name:pl-PL: Opóźnienie otwarcia podmenu
+  $name:pt-BR: Atraso na abertura do submenu
+  $name:pt-PT: Atraso na abertura do submenu
+  $name:ro: Întârziere deschidere submeniu
+  $name:ru-RU: Задержка открытия подменю
+  $name:sv: Undermeny öppen fördröjning
+  $name:ta: துணைமெனு திறக்க தாமதம்
+  $name:th: เมนูย่อยเปิดล่าช้า
+  $name:tr-TR: Alt menü açılma gecikmesi
+  $name:uk-UA: Затримка відкриття підменю
+  $name:uz: Pastki menyuni ochish kechikishi
+  $name:vi-VN: Độ trễ mở menu con
+  $name:zh-CN: 子菜单打开延迟
+  $name:zh-TW: 子選單開啟延遲
   $description: Milliseconds before a hovered submenu opens while the replacement menu is shown. 0 opens instantly; -1 keeps the Windows setting.
+  $description:ar: مللي ثانية قبل فتح القائمة الفرعية التي تم تمرير مؤشر الماوس عليها أثناء عرض قائمة الاستبدال. 0 يفتح على الفور؛ -1 يحافظ على إعدادات Windows.
+  $description:az: Dəyişdirmə menyusu göstərildiyi halda üzərinə qoyulmuş alt menyunun açılmasından əvvəl millisaniyələr. 0 dərhal açılır; -1 Windows parametrlərini saxlayır.
+  $description:bn: প্রতিস্থাপন মেনু দেখানোর সময় একটি হোভারড সাবমেনু খোলার আগে মিলিসেকেন্ড। 0 অবিলম্বে খোলে; -1 উইন্ডোজ সেটিং রাখে।
+  $description:cs: Milisekundy předtím, než se otevře umístěná podnabídka, zatímco je zobrazena nabídka náhrady. 0 se otevře okamžitě; -1 zachová nastavení Windows.
+  $description:da: Millisekunder før en undermenu, der svæver over, åbnes, mens erstatningsmenuen vises. 0 åbner øjeblikkeligt; -1 beholder Windows-indstillingen.
+  $description:de-DE: Millisekunden, bevor ein schwebendes Untermenü geöffnet wird, während das Ersatzmenü angezeigt wird. 0 öffnet sich sofort; -1 behält die Windows-Einstellung bei.
+  $description:el: Χιλιοστά του δευτερολέπτου πριν ανοίξει ένα υπομενού που τοποθετείται στον δείκτη ενώ εμφανίζεται το μενού αντικατάστασης. Το 0 ανοίγει αμέσως. -1 διατηρεί τη ρύθμιση των Windows.
+  $description:es-ES: Milisegundos antes de que se abra un submenú suspendido mientras se muestra el menú de reemplazo. 0 se abre instantáneamente; -1 mantiene la configuración de Windows.
+  $description:fa: چند میلی ثانیه قبل از باز شدن منوی فرعی شناور در حالی که منوی جایگزین نشان داده می شود. 0 فورا باز می شود. -1 تنظیمات ویندوز را حفظ می کند.
+  $description:fr-FR: Millisecondes avant l'ouverture d'un sous-menu survolé pendant que le menu de remplacement est affiché. 0 s'ouvre instantanément ; -1 conserve le paramètre Windows.
+  $description:hi: जब प्रतिस्थापन मेनू दिखाया जाता है तो होवर किए गए सबमेनू के खुलने से कुछ सेकंड पहले। 0 तुरंत खुलता है; -1 विंडोज़ सेटिंग रखता है।
+  $description:hr: Milisekunde prije otvaranja podizbornika nad kojim lebdite dok je prikazan zamjenski izbornik. 0 se otvara trenutno; -1 zadržava postavke sustava Windows.
+  $description:ht: Milisgond anvan yon sous-menu plane ouvri pandan y ap montre meni ranplasman an. 0 louvri imedyatman; -1 kenbe anviwònman Windows la.
+  $description:hu: Ezredmásodperccel azelőtt, hogy megnyílik egy lebegtetett almenü, miközben a helyettesítő menü látható. 0 azonnal megnyílik; -1 megtartja a Windows beállítást.
+  $description:id-ID: Milidetik sebelum submenu yang diarahkan terbuka saat menu pengganti ditampilkan. 0 terbuka secara instan; -1 menyimpan pengaturan Windows.
+  $description:it-IT: Millisecondi prima che si apra un sottomenu al passaggio del mouse mentre viene visualizzato il menu di sostituzione. 0 si apre istantaneamente; -1 mantiene l'impostazione di Windows.
+  $description:ja-JP: 置換メニューが表示されている間にホバーされたサブメニューが開くまでのミリ秒数。 0 は即座に開きます。 -1 は Windows の設定を維持します。
+  $description:ko-KR: 대체 메뉴가 표시되는 동안 마우스를 올려 놓은 하위 메뉴가 열릴 때까지의 시간은 밀리초입니다. 0은 즉시 열립니다. -1은 Windows 설정을 유지합니다.
+  $description:nb: Millisekunder før en undermeny med sveve åpnes mens erstatningsmenyen vises. 0 åpnes umiddelbart; -1 beholder Windows-innstillingen.
+  $description:nl-NL: Milliseconden voordat een zwevend submenu wordt geopend terwijl het vervangingsmenu wordt weergegeven. 0 wordt onmiddellijk geopend; -1 behoudt de Windows-instelling.
+  $description:or: ପ୍ରତିସ୍ଥାପନ ମେନୁ ଦେଖାଯାଉଥିବାବେଳେ ଏକ ହୋଭର୍ ସବମେନୁ ଖୋଲିବା ପୂର୍ବରୁ ମିଲିସେକେଣ୍ଡ | 0 ତତକ୍ଷଣାତ୍ ଖୋଲିବ; -1 ୱିଣ୍ଡୋଜ୍ ସେଟିଂ ରଖେ
+  $description:pl-PL: Milisekundy przed otwarciem podmenu po najechaniu kursorem i wyświetleniu menu zastępczego. 0 otwiera się natychmiast; -1 zachowuje ustawienie systemu Windows.
+  $description:pt-BR: Milissegundos antes que um submenu suspenso seja aberto enquanto o menu de substituição é mostrado. 0 abre instantaneamente; -1 mantém a configuração do Windows.
+  $description:pt-PT: Milissegundos antes de um submenu suspenso ser aberto enquanto o menu de substituição é apresentado. 0 abre instantaneamente; -1 mantém a configuração do Windows.
+  $description:ro: Milisecunde înainte ca un submeniu plasat cu mouse-ul să se deschidă în timp ce este afișat meniul de înlocuire. 0 se deschide instantaneu; -1 păstrează setarea Windows.
+  $description:ru-RU: За миллисекунды до открытия наведенного подменю, пока отображается меню замены. 0 открывается мгновенно; -1 сохраняет настройки Windows.
+  $description:sv: Millisekunder innan en undermeny med hovring öppnas medan ersättningsmenyn visas. 0 öppnas omedelbart; -1 behåller Windows-inställningen.
+  $description:ta: மாற்று மெனு காண்பிக்கப்படும்போது, மிதவை செய்யப்பட்ட துணைமெனு திறக்கும் முன் மில்லி விநாடிகள். 0 உடனடியாக திறக்கிறது; -1 விண்டோஸ் அமைப்பை வைத்திருக்கிறது.
+  $description:th: มิลลิวินาทีก่อนที่เมนูย่อยที่โฮเวอร์จะเปิดขึ้นในขณะที่เมนูทดแทนแสดงขึ้น 0 เปิดทันที -1 คงการตั้งค่า Windows ไว้
+  $description:tr-TR: Değiştirme menüsü gösterilirken fareyle üzerine gelinen bir alt menünün açılmasından milisaniyeler önce. 0 anında açılır; -1 Windows ayarını korur.
+  $description:uk-UA: Мілісекунди до того, як підменю, на яке наведено курсор, відкривається, коли відображається меню заміни. 0 відкривається миттєво; -1 зберігає налаштування Windows.
+  $description:uz: O'zgartirish menyusi ko'rsatilganda kursorga o'rnatilgan pastki menyu ochilishidan oldin millisekundlar. 0 darhol ochiladi; -1 Windows sozlamalarini saqlaydi.
+  $description:vi-VN: Một phần nghìn giây trước khi menu con được di chuột mở ra trong khi menu thay thế được hiển thị. 0 mở ngay lập tức; -1 giữ cài đặt Windows.
+  $description:zh-CN: 在显示替换菜单时，悬停子菜单打开之前的毫秒数。 0 立即打开； -1 保留 Windows 设置。
+  $description:zh-TW: 在顯示替換選單時，懸停子選單開啟之前的毫秒數。 0 立即開啟； -1 保留 Windows 設定。
 - advancedSubmenuWindows: true
   $name: Move Windows extras
+  $name:ar: نقل إضافات ويندوز
+  $name:az: Windows əlavələrini köçürün
+  $name:bn: উইন্ডোজ অতিরিক্ত সরান
+  $name:cs: Přesunout doplňky systému Windows
+  $name:da: Flyt Windows ekstramateriale
+  $name:de-DE: Verschieben Sie Windows-Extras
+  $name:el: Μετακινήστε τα πρόσθετα Windows
+  $name:es-ES: Mover extras de Windows
+  $name:fa: وسایل اضافی ویندوز را جابجا کنید
+  $name:fr-FR: Déplacer les extras Windows
+  $name:hi: विंडोज़ एक्स्ट्रा को स्थानांतरित करें
+  $name:hr: Premjesti Windows dodatke
+  $name:ht: Deplase Windows siplemantè
+  $name:hu: Windows extrák áthelyezése
+  $name:id-ID: Pindahkan ekstra Windows
+  $name:it-IT: Sposta gli extra di Windows
+  $name:ja-JP: Windows の追加機能を移動する
+  $name:ko-KR: Windows 추가 항목 이동
+  $name:nb: Flytt Windows-ekstrautstyr
+  $name:nl-NL: Verplaats Windows-extra's
+  $name:or: ୱିଣ୍ଡୋଜ୍ ଅତିରିକ୍ତଗୁଡିକ ଘୁଞ୍ଚାନ୍ତୁ
+  $name:pl-PL: Przenieś dodatki systemu Windows
+  $name:pt-BR: Mover extras do Windows
+  $name:pt-PT: Mover extras do Windows
+  $name:ro: Mutați extraurile Windows
+  $name:ru-RU: Переместить дополнительные функции Windows
+  $name:sv: Flytta Windows extrafunktioner
+  $name:ta: விண்டோஸ் எக்ஸ்ட்ராக்களை நகர்த்தவும்
+  $name:th: ย้ายคุณสมบัติพิเศษของ Windows
+  $name:tr-TR: Windows ekstralarını taşıma
+  $name:uk-UA: Перемістіть додаткові елементи Windows
+  $name:uz: Windows qo'shimchalarini ko'chiring
+  $name:vi-VN: Di chuyển các tính năng bổ sung của Windows
+  $name:zh-CN: 移动 Windows 附加功能
+  $name:zh-TW: 行動 Windows 附加功能
   $description: Move the configured Windows extras into the More options submenu.
+  $description:ar: انقل إضافات Windows التي تم تكوينها إلى القائمة الفرعية "المزيد من الخيارات".
+  $description:az: Konfiqurasiya edilmiş Windows əlavələrini Daha çox seçimlər alt menyusuna köçürün.
+  $description:bn: আরও বিকল্প সাবমেনুতে কনফিগার করা উইন্ডোজ অতিরিক্তগুলি সরান।
+  $description:cs: Přesuňte nakonfigurované doplňky systému Windows do podnabídky Další možnosti.
+  $description:da: Flyt de konfigurerede Windows-tilbehør til undermenuen Flere indstillinger.
+  $description:de-DE: Verschieben Sie die konfigurierten Windows-Extras in das Untermenü Weitere Optionen.
+  $description:el: Μετακινήστε τα διαμορφωμένα πρόσθετα των Windows στο υπομενού Περισσότερες επιλογές.
+  $description:es-ES: Mueva los extras configurados de Windows al submenú Más opciones.
+  $description:fa: موارد اضافی پیکربندی شده ویندوز را به زیر منوی گزینه های بیشتر منتقل کنید.
+  $description:fr-FR: Déplacez les extras Windows configurés dans le sous-menu Plus d'options.
+  $description:hi: कॉन्फ़िगर किए गए विंडोज़ एक्स्ट्रा को अधिक विकल्प सबमेनू में ले जाएं।
+  $description:hr: Premjestite konfigurirane Windows dodatke u podizbornik Više opcija.
+  $description:ht: Deplase siplemantè Windows konfigirasyon yo nan soumenu Plis opsyon.
+  $description:hu: Helyezze át a konfigurált Windows extrákat a További beállítások almenübe.
+  $description:id-ID: Pindahkan ekstra Windows yang dikonfigurasi ke submenu Opsi lainnya.
+  $description:it-IT: Sposta gli extra di Windows configurati nel sottomenu Altre opzioni.
+  $description:ja-JP: 構成された Windows の追加機能を [その他のオプション] サブメニューに移動します。
+  $description:ko-KR: 구성된 Windows 추가 항목을 추가 옵션 하위 메뉴로 이동합니다.
+  $description:nb: Flytt det konfigurerte Windows-ekstrautstyret til undermenyen Flere alternativer.
+  $description:nl-NL: Verplaats de geconfigureerde Windows-extra's naar het submenu Meer opties.
+  $description:or: ବିନ୍ୟାସିତ ୱିଣ୍ଡୋଜ୍ ଅତିରିକ୍ତଗୁଡ଼ିକୁ ଅଧିକ ବିକଳ୍ପ ସବମେନୁକୁ ଘୁଞ୍ଚାନ୍ତୁ
+  $description:pl-PL: Przenieś skonfigurowane dodatki systemu Windows do podmenu Więcej opcji.
+  $description:pt-BR: Mova os extras configurados do Windows para o submenu Mais opções.
+  $description:pt-PT: Mova os extras configurados do Windows para o submenu Mais opções.
+  $description:ro: Mutați extrasele Windows configurate în submeniul Mai multe opțiuni.
+  $description:ru-RU: Переместите настроенные дополнительные возможности Windows в подменю «Дополнительные параметры».
+  $description:sv: Flytta de konfigurerade Windows-tilläggen till undermenyn Fler alternativ.
+  $description:ta: உள்ளமைக்கப்பட்ட விண்டோஸ் கூடுதல்களை மேலும் விருப்பங்கள் துணைமெனுவில் நகர்த்தவும்.
+  $description:th: ย้ายส่วนเสริม Windows ที่กำหนดค่าไว้ไปไว้ในเมนูย่อยตัวเลือกเพิ่มเติม
+  $description:tr-TR: Yapılandırılmış Windows ekstralarını Diğer seçenekler alt menüsüne taşıyın.
+  $description:uk-UA: Перемістіть налаштовані додаткові функції Windows у підменю Додаткові параметри.
+  $description:uz: Sozlangan Windows qo'shimchalarini Qo'shimcha parametrlar pastki menyusiga o'tkazing.
+  $description:vi-VN: Di chuyển các tính năng bổ sung của Windows đã được định cấu hình vào menu con Tùy chọn khác.
+  $description:zh-CN: 将配置的 Windows 附加功能移至更多选项子菜单中。
+  $description:zh-TW: 將配置的 Windows 附加功能移至更多選項子選單中。
 - advancedSubmenuThirdParty: true
   $name: Move third-party handlers
+  $name:ar: نقل معالجات الطرف الثالث
+  $name:az: Üçüncü tərəf idarəçilərini köçürün
+  $name:bn: তৃতীয় পক্ষের হ্যান্ডলারদের সরান
+  $name:cs: Přesunout obslužné nástroje třetích stran
+  $name:da: Flyt tredjepartshandlere
+  $name:de-DE: Verschieben Sie Drittanbieter-Handler
+  $name:el: Μετακινήστε διαχειριστές τρίτων
+  $name:es-ES: Mover controladores de terceros
+  $name:fa: انتقال دهنده های شخص ثالث
+  $name:fr-FR: Déplacer les extensions tierces
+  $name:hi: तृतीय-पक्ष हैंडलर को स्थानांतरित करें
+  $name:hr: Premjestite rukovatelje treće strane
+  $name:ht: Deplase moun kap okipe yon twazyèm pati
+  $name:hu: Harmadik fél kezelőinek áthelyezése
+  $name:id-ID: Pindahkan penangan pihak ketiga
+  $name:it-IT: Spostare gestori di terze parti
+  $name:ja-JP: サードパーティのハンドラーを移動する
+  $name:ko-KR: 타사 핸들러 이동
+  $name:nb: Flytt tredjepartsbehandlere
+  $name:nl-NL: Verplaats handlers van derden
+  $name:or: ତୃତୀୟ-ପକ୍ଷ ନିୟନ୍ତ୍ରକମାନଙ୍କୁ ଘୁଞ୍ଚାନ୍ତୁ
+  $name:pl-PL: Przenieś programy obsługi stron trzecich
+  $name:pt-BR: Mover gerenciadores de terceiros
+  $name:pt-PT: Mover gestores de terceiros
+  $name:ro: Mutați handlere terți
+  $name:ru-RU: Перемещение сторонних обработчиков
+  $name:sv: Flytta tredjepartshanterare
+  $name:ta: மூன்றாம் தரப்பு ஹேண்ட்லர்களை நகர்த்தவும்
+  $name:th: ย้ายตัวจัดการบุคคลที่สาม
+  $name:tr-TR: Üçüncü taraf işleyicileri taşıma
+  $name:uk-UA: Перемістити сторонні обробники
+  $name:uz: Uchinchi tomon ishlov beruvchilarini ko'chiring
+  $name:vi-VN: Di chuyển trình xử lý của bên thứ ba
+  $name:zh-CN: 移动第三方处理程序
+  $name:zh-TW: 移动第三方处理程序
   $description: Move third-party shell extension entries into the More options submenu.
+  $description:ar: انقل إدخالات ملحق Shell لجهة خارجية إلى القائمة الفرعية "المزيد من الخيارات".
+  $description:az: Üçüncü tərəf qabıq genişləndirmə girişlərini Daha çox seçimlər alt menyusuna köçürün.
+  $description:bn: আরও বিকল্প সাবমেনুতে তৃতীয় পক্ষের শেল এক্সটেনশন এন্ট্রিগুলি সরান।
+  $description:cs: Přesuňte položky rozšíření shellu třetích stran do podnabídky Další možnosti.
+  $description:da: Flyt tredjeparts shell-udvidelsesposter til undermenuen Flere muligheder.
+  $description:de-DE: Verschieben Sie Shell-Erweiterungseinträge von Drittanbietern in das Untermenü „Weitere Optionen“.
+  $description:el: Μετακινήστε εγγραφές επέκτασης κελύφους τρίτων στο υπομενού Περισσότερες επιλογές.
+  $description:es-ES: Mueva las entradas de extensión de shell de terceros al submenú Más opciones.
+  $description:fa: ورودی های برنامه افزودنی پوسته شخص ثالث را به زیر منوی گزینه های بیشتر منتقل کنید.
+  $description:fr-FR: Déplacez les entrées d’extension de shell tierce dans le sous-menu Plus d’options.
+  $description:hi: तृतीय-पक्ष शेल एक्सटेंशन प्रविष्टियों को अधिक विकल्प सबमेनू में ले जाएँ।
+  $description:hr: Premjestite unose proširenja ljuske treće strane u podizbornik Više opcija.
+  $description:ht: Deplase antre ekstansyon kokiy twazyèm pati yo nan soumenu Plis opsyon.
+  $description:hu: Helyezze át a harmadik féltől származó shell-bővítmények bejegyzéseit a További beállítások almenübe.
+  $description:id-ID: Pindahkan entri ekstensi shell pihak ketiga ke submenu Opsi lainnya.
+  $description:it-IT: Sposta le voci dell'estensione della shell di terze parti nel sottomenu Altre opzioni.
+  $description:ja-JP: サードパーティのシェル拡張エントリを [その他のオプション] サブメニューに移動します。
+  $description:ko-KR: 타사 셸 확장 항목을 추가 옵션 하위 메뉴로 이동합니다.
+  $description:nb: Flytt oppføringer fra tredjeparts shell-utvidelser til undermenyen Flere alternativer.
+  $description:nl-NL: Verplaats shell-extensie-items van derden naar het submenu Meer opties.
+  $description:or: ଅଧିକ ବିକଳ୍ପ ସବମେନୁରେ ତୃତୀୟ-ପକ୍ଷ ସେଲ ଏକ୍ସଟେନ୍ସନ୍ ଏଣ୍ଟ୍ରିଗୁଡ଼ିକୁ ଘୁଞ୍ଚାନ୍ତୁ
+  $description:pl-PL: Przenieś wpisy rozszerzeń powłoki innych firm do podmenu Więcej opcji.
+  $description:pt-BR: Mova entradas de extensão de shell de terceiros para o submenu Mais opções.
+  $description:pt-PT: Mova as entradas de extensão de shell de terceiros para o submenu Mais opções.
+  $description:ro: Mutați intrările de extensii shell de la terți în submeniul Mai multe opțiuni.
+  $description:ru-RU: Переместите записи сторонних расширений оболочки в подменю «Дополнительные параметры».
+  $description:sv: Flytta tredje parts skaltilläggsposter till undermenyn Fler alternativ.
+  $description:ta: மூன்றாம் தரப்பு ஷெல் நீட்டிப்பு உள்ளீடுகளை மேலும் விருப்பங்கள் துணைமெனுவில் நகர்த்தவும்.
+  $description:th: ย้ายรายการส่วนขยายเชลล์ของบริษัทอื่นไปไว้ในเมนูย่อยตัวเลือกเพิ่มเติม
+  $description:tr-TR: Üçüncü taraf kabuk uzantısı girişlerini Diğer seçenekler alt menüsüne taşıyın.
+  $description:uk-UA: Перемістіть записи сторонніх розширень оболонки в підменю «Додаткові параметри».
+  $description:uz: Uchinchi tomon qobiq kengaytmasi yozuvlarini Qo'shimcha parametrlar pastki menyusiga o'tkazing.
+  $description:vi-VN: Di chuyển các mục mở rộng shell của bên thứ ba vào menu con Tùy chọn khác.
+  $description:zh-CN: 将第三方 shell 扩展条目移至“更多选项”子菜单中。
+  $description:zh-TW: 将第三方 shell 扩展条目移至“更多选项”子菜单中。
 - advancedSubmenuItems: "Windows.ModernShare, pintohomefile, casttodevice, Give access to, PreviousVersions, pintostartscreen, pintohome, openterminal, setdesktopwallpaper"
   $name: Windows items to move
+  $name:ar: عناصر ويندوز للتحرك
+  $name:az: Hərəkət etmək üçün Windows elementləri
+  $name:bn: উইন্ডোজ আইটেম সরানো
+  $name:cs: Položky systému Windows k přesunutí
+  $name:da: Windows-emner at flytte
+  $name:de-DE: Zu verschiebende Windows-Elemente
+  $name:el: Στοιχεία Windows για μετακίνηση
+  $name:es-ES: Elementos de Windows para mover
+  $name:fa: آیتم های ویندوز برای جابجایی
+  $name:fr-FR: Éléments Windows à déplacer
+  $name:hi: स्थानांतरित करने के लिए विंडोज़ आइटम
+  $name:hr: Windows stavke za premještanje
+  $name:ht: Windows atik pou deplase
+  $name:hu: Az áthelyezendő Windows-elemek
+  $name:id-ID: Item Windows untuk dipindahkan
+  $name:it-IT: Elementi di Windows da spostare
+  $name:ja-JP: 移動する Windows アイテム
+  $name:ko-KR: 이동할 Windows 항목
+  $name:nb: Windows-elementer å flytte
+  $name:nl-NL: Windows-items om te verplaatsen
+  $name:or: ଘୁଞ୍ଚିବା ପାଇଁ ୱିଣ୍ଡୋଜ୍ ଆଇଟମ୍
+  $name:pl-PL: Elementy systemu Windows do przeniesienia
+  $name:pt-BR: Itens do Windows para mover
+  $name:pt-PT: Itens do Windows para mover
+  $name:ro: Elemente Windows de mutat
+  $name:ru-RU: Элементы Windows для перемещения
+  $name:sv: Windows-objekt att flytta
+  $name:ta: நகர்த்த விண்டோஸ் உருப்படிகள்
+  $name:th: รายการ Windows ที่จะย้าย
+  $name:tr-TR: Taşınacak Windows öğeleri
+  $name:uk-UA: Елементи Windows для переміщення
+  $name:uz: Ko'chirish uchun Windows elementlari
+  $name:vi-VN: Các mục Windows cần di chuyển
+  $name:zh-CN: 要移动的 Windows 项目
+  $name:zh-TW: 要移动的 Windows 项目
   $description: Comma-separated labels or verbs of Windows items to move into the submenu. Verbs (for example setdesktopwallpaper) match on every language; labels match the menu's display language. GUID-verb commands also accept the aliases openterminal, editwithphotos, editwithpaint and editwithnotepad.
+  $description:ar: "تسميات أو أفعال مفصولة بفواصل لعناصر Windows للانتقال إلى القائمة الفرعية. تتطابق الأفعال (على سبيل المثال setdesktopwallpaper) في كل لغة؛ تتوافق التسميات مع لغة عرض القائمة. تقبل أوامر الفعل GUID أيضًا الأسماء المستعارة: openterminal، وeditwithphotos، وeditwithpaint، وeditwithnotepad."
+  $description:az: Alt menyuya keçmək üçün Windows elementlərinin vergüllə ayrılmış etiketləri və ya felləri. Verbs (məsələn, setdesktopwallpaper) hər dildə uyğun gəlir; etiketlər menyunun ekran dilinə uyğun gəlir. GUID-verb əmrləri həmçinin openterminal, editwithphotos, editwithpaint və editwithnotepad ləqəblərini qəbul edir.
+  $description:bn: সাবমেনুতে যাওয়ার জন্য উইন্ডোজ আইটেমগুলির কমা-বিচ্ছিন্ন লেবেল বা ক্রিয়া। ক্রিয়াপদ (উদাহরণস্বরূপ setdesktopwallpaper) প্রতিটি ভাষায় মেলে; লেবেল মেনুর প্রদর্শন ভাষার সাথে মেলে। GUID-ক্রিয়া কমান্ডগুলি ওপেনটার্মিনাল, ফটোর সাথে সম্পাদনা, এডিট উইথপেইন্ট এবং নোটপ্যাডের সাথে এডিট করে।
+  $description:cs: Čárkami oddělené popisky nebo slovesa položek Windows pro přesun do podnabídky. Slovesa (například setdesktopwallpaper) se shodují v každém jazyce; štítky odpovídají jazyku zobrazení nabídky. Příkazy GUID-verb také přijímají aliasy openterminal, editwithphotos, editwithpaint a editwithnotepad.
+  $description:da: Kommaseparerede etiketter eller verber af Windows-elementer for at flytte ind i undermenuen. Verber (for eksempel setdesktopwallpaper) matcher på alle sprog; etiketter matcher menuens visningssprog. GUID-verb kommandoer accepterer også aliasserne openterminal, editwithphotos, editwithpaint og editwithnotepad.
+  $description:de-DE: Durch Kommas getrennte Bezeichnungen oder Verben von Windows-Elementen, die in das Untermenü verschoben werden sollen. Verben (zum Beispiel setdesktopwallpaper) stimmen in jeder Sprache überein; Beschriftungen entsprechen der Anzeigesprache des Menüs. GUID-Verb-Befehle akzeptieren auch die Aliase openterminal, editwithphotos, editwithpaint und editwithnotepad.
+  $description:el: Ετικέτες ή ρήματα των στοιχείων των Windows διαχωρισμένων με κόμματα για να μετακινηθείτε στο υπομενού. Τα ρήματα (για παράδειγμα setdesktop wallpaper) ταιριάζουν σε κάθε γλώσσα. οι ετικέτες ταιριάζουν με τη γλώσσα εμφάνισης του μενού. Οι εντολές του ρήματος GUID δέχονται επίσης τα ψευδώνυμα openterminal, editwithphotos, editwithpaint και editwithnotepad.
+  $description:es-ES: Etiquetas o verbos separados por comas de elementos de Windows para pasar al submenú. Los verbos (por ejemplo setdesktopwallpaper) coinciden en todos los idiomas; Las etiquetas coinciden con el idioma de visualización del menú. Los comandos GUID-verb también aceptan los alias openterminal, editwithphotos, editwithpaint y editwithnotepad.
+  $description:fa: برچسب ها یا افعال آیتم های ویندوز با کاما جدا شده برای انتقال به منوی فرعی. افعال (به عنوان مثال setdesktop wallpaper) در هر زبانی مطابقت دارند. برچسب ها با زبان نمایش منو مطابقت دارند. دستورات GUID-verb نیز نام مستعار openterminal، editwithphotos، editwithpaint و editwithnotepad را می پذیرند.
+  $description:fr-FR: Étiquettes ou verbes d'éléments Windows séparés par des virgules à déplacer dans le sous-menu. Les verbes (par exemple setdesktopwallpaper) correspondent dans toutes les langues ; les étiquettes correspondent à la langue d’affichage du menu. Les commandes GUID-verb acceptent également les alias openterminal, editwithphotos, editwithpaint et editwithnotepad.
+  $description:hi: सबमेनू में जाने के लिए विंडोज़ आइटम के अल्पविराम से अलग किए गए लेबल या क्रियाएं। क्रियाएँ (उदाहरण के लिए सेटडेस्कटॉपवॉलपेपर) हर भाषा में मेल खाती हैं; लेबल मेनू की प्रदर्शन भाषा से मेल खाते हैं। GUID-वर्ब कमांड उपनाम ओपनटर्मिनल, एडिटविथफोटो, एडिटविथपेंट और एडिटविथनोटपैड भी स्वीकार करते हैं।
+  $description:hr: Zarezima odvojene oznake ili glagoli Windows stavki za premještanje u podizbornik. Glagoli (na primjer setdesktopwallpaper) odgovaraju na svakom jeziku; oznake odgovaraju jeziku prikaza izbornika. GUID-verb naredbe također prihvaćaju aliase openterminal, editwithphotos, editwithpaint i editwithnotepad.
+  $description:ht: Etikèt ki separe ak vigil oswa vèb nan atik Windows pou avanse pou pi nan submenu a. Vèb (pa egzanp setdesktopwallpaper) matche ak nan chak lang; etikèt yo matche ak lang ekspozisyon meni an. Kòmandman GUID-vèb yo aksepte alyas yo tou openterminal, editwithphotos, editwithpaint ak editwithnotepad.
+  $description:hu: A Windows-elemek vesszővel elválasztott címkéi vagy igék az almenübe való áthelyezéshez. Az igék (például setdesktopwallpaper) minden nyelven megegyeznek; a címkék megegyeznek a menü megjelenítési nyelvével. A GUID-ige parancsai elfogadják az openterminal, editwithphotos, editwithpaint és editwithnotepad álneveket is.
+  $description:id-ID: Label atau kata kerja item Windows yang dipisahkan koma untuk dipindahkan ke submenu. Kata kerja (misalnya setdesktopwallpaper) cocok di setiap bahasa; label cocok dengan bahasa tampilan menu. Perintah kata kerja GUID juga menerima alias openterminal, editwithphotos, editwithpaint dan editwithnotepad.
+  $description:it-IT: Etichette o verbi separati da virgole degli elementi di Windows per spostarsi nel sottomenu. I verbi (ad esempio setdesktopwallpaper) corrispondono in ogni lingua; le etichette corrispondono alla lingua di visualizzazione del menu. I comandi GUID-verb accettano anche gli alias openterminal, editwithphotos, editwithpaint e editwithnotepad.
+  $description:ja-JP: サブメニューに移動する Windows 項目のカンマ区切りのラベルまたは動詞。動詞 (setdesktopwallpaper など) はすべての言語に一致します。ラベルはメニューの表示言語と一致します。 GUID 動詞コマンドは、openterminal、editwithphotos、editwithpaint、および editwithnotepad のエイリアスも受け入れます。
+  $description:ko-KR: "하위 메뉴로 이동할 Windows 항목의 쉼표로 구분된 레이블 또는 동사입니다. 동사(예: setdesktopwallpaper)는 모든 언어에서 일치합니다. 라벨은 메뉴의 표시 언어와 일치합니다. GUID 동사 명령은 별칭 openterminal, editwithphotos, editwithpaint 및 editwithnotepad도 허용합니다."
+  $description:nb: Kommaseparerte etiketter eller verb for Windows-elementer for å flytte inn i undermenyen. Verb (for eksempel setdesktopwallpaper) samsvarer på hvert språk; etiketter samsvarer med menyens visningsspråk. GUID-verbkommandoer godtar også aliasene openterminal, editwithphotos, editwithpaint og editwithnotepad.
+  $description:nl-NL: Door komma's gescheiden labels of werkwoorden van Windows-items om naar het submenu te gaan. Werkwoorden (bijvoorbeeld setdesktopwallpaper) komen in elke taal overeen; labels komen overeen met de weergavetaal van het menu. GUID-werkwoordopdrachten accepteren ook de aliassen openterminal, editwithphotos, editwithpaint en editwithnotepad.
+  $description:or: ଉପମେନୁକୁ ଯିବା ପାଇଁ କମା ଦ୍ୱାରା ପୃଥକ ଲେବଲ୍ କିମ୍ବା ୱିଣ୍ଡୋଜ୍ ଆଇଟମଗୁଡ଼ିକର କ୍ରିୟା | କ୍ରିୟାଗୁଡ଼ିକ (ଉଦାହରଣ ସ୍ୱରୂପ ସେଟ୍ ଡେସ୍କଟପୱାଲ୍ ପେପର) ପ୍ରତ୍ୟେକ ଭାଷାରେ ମେଳ ହୁଏ; ଲେବଲ୍ ଗୁଡିକ ମେନୁର ପ୍ରଦର୍ଶନ ଭାଷା ସହିତ ମେଳ ଖାଏ | GUID- କ୍ରିୟା ନିର୍ଦ୍ଦେଶଗୁଡ଼ିକ ଛଦ୍ମନାମ ଅପ୍ଟର୍ମିନାଲ୍, ଏଡିଟ୍ ୱିଥଫୋଟସ୍, ଏଡିଟ୍ ୱିଥ୍ ପେଣ୍ଟ୍ ଏବଂ ଏଡିଟ୍ ୱିଥ୍ ନୋଟ୍ପ୍ୟାଡ୍ ମଧ୍ୟ ଗ୍ରହଣ କରେ
+  $description:pl-PL: Oddzielone przecinkami etykiety lub czasowniki elementów systemu Windows, które mają zostać przeniesione do podmenu. Czasowniki (na przykład setdesktopwallpaper) pasują do każdego języka; etykiety odpowiadają językowi wyświetlania menu. Polecenia czasownika GUID akceptują także aliasy openterminal, editwithphotos, editwithpaint i editwithnotepad.
+  $description:pt-BR: Rótulos ou verbos separados por vírgula de itens do Windows para mover para o submenu. Verbos (por exemplo setdesktopwallpaper) correspondem em todos os idiomas; os rótulos correspondem ao idioma de exibição do menu. Os comandos de verbo GUID também aceitam os aliases openterminal, editwithphotos, editwithpaint e editwithnotepad.
+  $description:pt-PT: Rótulos ou verbos separados por vírgula dos itens do Windows para passar para o submenu. Os verbos (por exemplo setdesktopwallpaper) correspondem em todas as línguas; os rótulos correspondem ao idioma de apresentação do menu. Os comandos de verbo GUID também aceitam os alias openterminal, editwithphotos, editwithpaint e editwithnotepad.
+  $description:ro: Etichete sau verbe separate prin virgulă ale elementelor Windows pentru a muta în submeniu. Verbele (de exemplu setdesktopwallpaper) se potrivesc în fiecare limbă; etichetele se potrivesc cu limba de afișare a meniului. Comenzile GUID-verb acceptă și aliasurile openterminal, editwithphotos, editwithpaint și editwithnotepad.
+  $description:ru-RU: Разделенные запятыми метки или глаголы элементов Windows для перемещения в подменю. Глаголы (например, setdesktopwallpaper) совпадают на каждом языке; метки соответствуют языку отображения меню. Команды GUID-глагола также принимают псевдонимы openterminal, editwithphotos, editwithpaint и editwithnotepad.
+  $description:sv: Kommaseparerade etiketter eller verb för Windows-objekt för att flytta till undermenyn. Verb (till exempel setdesktopwallpaper) matchar på alla språk; etiketter matchar menyns visningsspråk. GUID-verbkommandon accepterar också aliasen openterminal, editwithphotos, editwithpaint och editwithnotepad.
+  $description:ta: துணைமெனுவிற்குச் செல்ல, கமாவால் பிரிக்கப்பட்ட லேபிள்கள் அல்லது விண்டோஸ் உருப்படிகளின் வினைச்சொற்கள். வினைச்சொற்கள் (உதாரணமாக setdesktopwallpaper) ஒவ்வொரு மொழியிலும் பொருந்தும்; லேபிள்கள் மெனுவின் காட்சி மொழியுடன் பொருந்துகின்றன. GUID-வினை கட்டளைகள் openterminal, editwithphotos, editwithpaint மற்றும் editwithnotepad ஆகிய மாற்றுப்பெயர்களையும் ஏற்கின்றன.
+  $description:th: ป้ายกำกับหรือคำกริยาที่คั่นด้วยเครื่องหมายจุลภาคของรายการ Windows เพื่อย้ายไปยังเมนูย่อย กริยา (เช่น setdesktopwallpaper) ตรงกันในทุกภาษา ป้ายกำกับตรงกับภาษาที่แสดงของเมนู คำสั่งกริยา GUID ยังยอมรับนามแฝง openterminal, editwithphotos, editwithpaint และ editwithnotepad
+  $description:tr-TR: Alt menüye taşınacak Windows öğelerinin virgülle ayrılmış etiketleri veya fiilleri. Fiiller (örneğin setdesktopwallpaper) her dilde eşleşir; etiketler menünün görüntüleme diliyle eşleşir. GUID fiil komutları aynı zamanda openterminal, editwithphotos, editwithpaint ve editwithnotepad takma adlarını da kabul eder.
+  $description:uk-UA: Відокремлені комами мітки або дієслова елементів Windows для переміщення до підменю. Дієслова (наприклад, setdesktopwallpaper) відповідають кожній мові; мітки відповідають мові відображення меню. Команди дієслова GUID також приймають псевдоніми openterminal, editwithphotos, editwithpaint і editwithnotepad.
+  $description:uz: Pastki menyuga o'tish uchun Windows elementlarining vergul bilan ajratilgan yorliqlari yoki fe'llari. Fe'llar (masalan, setdesktopwallpaper) har bir tilda mos keladi; teglar menyuning ekran tiliga mos keladi. GUID-fe'l buyruqlari shuningdek openterminal, editwithphotos, editwithpaint va editwithnotepad taxalluslarini qabul qiladi.
+  $description:vi-VN: "Các nhãn hoặc động từ được phân tách bằng dấu phẩy của các mục Windows để chuyển vào menu con. Động từ (ví dụ: setdesktopwallpaper) phù hợp với mọi ngôn ngữ; nhãn khớp với ngôn ngữ hiển thị của menu. Các lệnh động từ GUID cũng chấp nhận các bí danh openterminal, editwithphotos, editwithpaint và editwithnotepad."
+  $description:zh-CN: 要移动到子菜单中的 Windows 项目的逗号分隔标签或动词。动词（例如 setdesktopwallpaper）在每种语言上都匹配；标签与菜单的显示语言相匹配。 GUID-verb 命令还接受别名 openterminal、editwithphotos、editwithpaint 和 editwithnotepad。
+  $description:zh-TW: 要移动到子菜单中的 Windows 项目的逗号分隔标签或动词。动词（例如 setdesktopwallpaper）在每种语言上都匹配；标签与菜单的显示语言相匹配。 GUID-verb 命令还接受别名 openterminal、editwithphotos、editwithpaint 和 editwithnotepad。
 - advancedSubmenuExclude: ""
   $name: Keep in the main menu
+  $name:ar: احتفظ بها في القائمة الرئيسية
+  $name:az: Əsas menyuda saxlayın
+  $name:bn: প্রধান মেনুতে রাখুন
+  $name:cs: Udržujte v hlavní nabídce
+  $name:da: Hold i hovedmenuen
+  $name:de-DE: Bleiben Sie im Hauptmenü
+  $name:el: Διατήρηση στο κύριο μενού
+  $name:es-ES: Mantener en el menú principal
+  $name:fa: در منوی اصلی نگه دارید
+  $name:fr-FR: Conserver dans le menu principal
+  $name:hi: मुख्य मेनू में रखें
+  $name:hr: Držite u glavnom izborniku
+  $name:ht: Kenbe nan meni prensipal la
+  $name:hu: Tartsa a főmenüben
+  $name:id-ID: Simpan di menu utama
+  $name:it-IT: Resta nel menu principale
+  $name:ja-JP: メインメニューに残しておきます
+  $name:ko-KR: 메인 메뉴에 유지
+  $name:nb: Hold deg i hovedmenyen
+  $name:nl-NL: Blijf in het hoofdmenu
+  $name:or: ମୁଖ୍ୟ ମେନୁରେ ରଖ
+  $name:pl-PL: Zachowaj w menu głównym
+  $name:pt-BR: Manter no menu principal
+  $name:pt-PT: Manter no menu principal
+  $name:ro: Păstrați în meniul principal
+  $name:ru-RU: Держите в главном меню
+  $name:sv: Håll kvar i huvudmenyn
+  $name:ta: பிரதான மெனுவில் வைக்கவும்
+  $name:th: เก็บไว้ในเมนูหลัก
+  $name:tr-TR: Ana menüde tut
+  $name:uk-UA: Зберегти в головному меню
+  $name:uz: Asosiy menyuda saqlang
+  $name:vi-VN: Giữ trong menu chính
+  $name:zh-CN: 保留在主菜单中
+  $name:zh-TW: 保留在主選單中
   $description: Comma-separated third-party labels or verbs that stay in the main menu instead of moving into the submenu.
+  $description:ar: تسميات أو أفعال الجهات الخارجية مفصولة بفواصل والتي تبقى في القائمة الرئيسية بدلاً من الانتقال إلى القائمة الفرعية.
+  $description:az: Vergüllə ayrılmış üçüncü tərəf etiketləri və ya alt menyuya keçmək əvəzinə əsas menyuda qalan fellər.
+  $description:bn: কমা দ্বারা পৃথক করা তৃতীয় পক্ষের লেবেল বা ক্রিয়াপদ যা সাবমেনুতে যাওয়ার পরিবর্তে প্রধান মেনুতে থাকে।
+  $description:cs: Čárkami oddělené štítky nebo slovesa třetích stran, které zůstávají v hlavní nabídce namísto přesunu do podnabídky.
+  $description:da: Kommaseparerede tredjepartsetiketter eller verber, der bliver i hovedmenuen i stedet for at flytte ind i undermenuen.
+  $description:de-DE: Durch Kommas getrennte Bezeichnungen oder Verben von Drittanbietern, die im Hauptmenü bleiben, anstatt in das Untermenü zu wechseln.
+  $description:el: Ετικέτες τρίτου μέρους διαχωρισμένες με κόμματα ή ρήματα που παραμένουν στο κύριο μενού αντί να μετακινούνται στο υπομενού.
+  $description:es-ES: Etiquetas de terceros o verbos separados por comas que permanecen en el menú principal en lugar de pasar al submenú.
+  $description:fa: برچسب ها یا افعال شخص ثالث جدا شده با کاما که به جای رفتن به منوی فرعی در منوی اصلی باقی می مانند.
+  $description:fr-FR: Étiquettes ou verbes tiers séparés par des virgules qui restent dans le menu principal au lieu de passer dans le sous-menu.
+  $description:hi: अल्पविराम से अलग किए गए तृतीय-पक्ष लेबल या क्रियाएं जो सबमेनू में जाने के बजाय मुख्य मेनू में रहती हैं।
+  $description:hr: Oznake ili glagoli trećih strana odvojeni zarezima koji ostaju u glavnom izborniku umjesto da se pomaknu u podizbornik.
+  $description:ht: Etikèt twazyèm pati ki separe ak vigil oswa vèb ki rete nan meni prensipal la olye pou yo deplase nan submenu a.
+  $description:hu: Vesszővel elválasztott harmadik féltől származó címkék vagy igék, amelyek a főmenüben maradnak, nem pedig az almenübe.
+  $description:id-ID: Label atau kata kerja pihak ketiga yang dipisahkan koma dan tetap berada di menu utama, bukan berpindah ke submenu.
+  $description:it-IT: Etichette o verbi di terze parti separati da virgole che rimangono nel menu principale invece di spostarsi nel sottomenu.
+  $description:ja-JP: サブメニューに移動せずにメインメニューに残るカンマ区切りのサードパーティのラベルまたは動詞。
+  $description:ko-KR: 하위 메뉴로 이동하지 않고 기본 메뉴에 머무르는 쉼표로 구분된 타사 레이블 또는 동사입니다.
+  $description:nb: Kommaseparerte tredjepartsetiketter eller verb som blir værende i hovedmenyen i stedet for å flytte inn i undermenyen.
+  $description:nl-NL: Door komma's gescheiden labels of werkwoorden van derden die in het hoofdmenu blijven staan in plaats van naar het submenu te gaan.
+  $description:or: କମା ଦ୍ୱାରା ପୃଥକ ତୃତୀୟ-ପକ୍ଷ ଲେବଲ୍ କିମ୍ବା କ୍ରିୟା ଯାହା ସବମେନୁକୁ ଯିବା ପରିବର୍ତ୍ତେ ମୁଖ୍ୟ ମେନୁରେ ରହିଥାଏ
+  $description:pl-PL: Oddzielone przecinkami etykiety lub czasowniki innych firm, które pozostają w menu głównym zamiast przechodzić do podmenu.
+  $description:pt-BR: Rótulos ou verbos de terceiros separados por vírgula que permanecem no menu principal em vez de passarem para o submenu.
+  $description:pt-PT: Rótulos ou verbos de terceiros separados por vírgula que permanecem no menu principal em vez de passarem para o submenu.
+  $description:ro: Etichete sau verbe de la terți, separate prin virgulă, care rămân în meniul principal în loc să fie mutate în submeniu.
+  $description:ru-RU: Сторонние ярлыки или команды, разделенные запятыми, которые остаются в главном меню, а не перемещаются в подменю.
+  $description:sv: Kommaseparerade etiketter eller verb från tredje part som stannar i huvudmenyn istället för att flytta till undermenyn.
+  $description:ta: காற்புள்ளியால் பிரிக்கப்பட்ட மூன்றாம் தரப்பு லேபிள்கள் அல்லது துணைமெனுவிற்குச் செல்வதற்குப் பதிலாக பிரதான மெனுவில் இருக்கும் வினைச்சொற்கள்.
+  $description:th: ป้ายกำกับหรือกริยาของบุคคลที่สามที่คั่นด้วยเครื่องหมายจุลภาคซึ่งจะอยู่ในเมนูหลักแทนที่จะย้ายไปที่เมนูย่อย
+  $description:tr-TR: Alt menüye gitmek yerine ana menüde kalan virgülle ayrılmış üçüncü taraf etiketleri veya fiiller.
+  $description:uk-UA: Розділені комами сторонні мітки або дієслова, які залишаються в головному меню, а не переходять у підменю.
+  $description:uz: Vergul bilan ajratilgan uchinchi tomon yorliqlari yoki pastki menyuga o'tish o'rniga asosiy menyuda qoladigan fe'llar.
+  $description:vi-VN: Các nhãn hoặc động từ của bên thứ ba được phân tách bằng dấu phẩy vẫn nằm trong menu chính thay vì chuyển sang menu phụ.
+  $description:zh-CN: 以逗号分隔的第三方标签或动词保留在主菜单中，而不是移入子菜单。
+  $description:zh-TW: 以逗号分隔的第三方标签或动词保留在主菜单中，而不是移入子菜单。
 - advancedSubmenuLabel: More options
   $name: More options submenu label
+  $name:ar: المزيد من الخيارات تسمية القائمة الفرعية
+  $name:az: Daha çox seçim alt menyu etiketi
+  $name:bn: আরও বিকল্প সাবমেনু লেবেল
+  $name:cs: Štítek podnabídky Další možnosti
+  $name:da: Flere muligheder undermenuetiket
+  $name:de-DE: Beschriftung des Untermenüs „Weitere Optionen“.
+  $name:el: Ετικέτα υπομενού περισσότερων επιλογών
+  $name:es-ES: Etiqueta del submenú Más opciones
+  $name:fa: برچسب منوی گزینه های بیشتر
+  $name:fr-FR: Libellé du sous-menu Plus d'options
+  $name:hi: अधिक विकल्प सबमेनू लेबल
+  $name:hr: Oznaka podizbornika Više opcija
+  $name:ht: Plis opsyon sou-menu etikèt
+  $name:hu: További lehetőségek almenü címke
+  $name:id-ID: Label submenu opsi lainnya
+  $name:it-IT: Etichetta del sottomenu Altre opzioni
+  $name:ja-JP: その他のオプションのサブメニューのラベル
+  $name:ko-KR: 추가 옵션 하위 메뉴 라벨
+  $name:nb: Flere alternativer undermenyetikett
+  $name:nl-NL: Submenulabel Meer opties
+  $name:or: ଅଧିକ ବିକଳ୍ପ ସବମେନୁ ଲେବଲ୍
+  $name:pl-PL: Etykieta podmenu więcej opcji
+  $name:pt-BR: Etiqueta do submenu Mais opções
+  $name:pt-PT: Etiqueta do submenu Mais opções
+  $name:ro: Eticheta submeniului mai multe opțiuni
+  $name:ru-RU: Метка подменю «Дополнительные параметры»
+  $name:sv: Fler alternativ undermenyetikett
+  $name:ta: கூடுதல் விருப்பங்கள் துணைமெனு லேபிள்
+  $name:th: ป้ายกำกับเมนูย่อยตัวเลือกเพิ่มเติม
+  $name:tr-TR: Daha fazla seçenek alt menü etiketi
+  $name:uk-UA: Мітка підменю «Додаткові параметри».
+  $name:uz: Ko'proq parametrlar pastki menyusi yorlig'i
+  $name:vi-VN: Nhãn menu con tùy chọn khác
+  $name:zh-CN: 更多选项子菜单标签
+  $name:zh-TW: 更多选项子菜单标签
   $description: Label of the submenu that collects extra items.
+  $description:ar: تسمية القائمة الفرعية التي تجمع العناصر الإضافية.
+  $description:az: Əlavə elementləri toplayan alt menyunun etiketi.
+  $description:bn: সাবমেনুর লেবেল যা অতিরিক্ত আইটেম সংগ্রহ করে।
+  $description:cs: Štítek podnabídky, která shromažďuje další položky.
+  $description:da: Etiket på undermenuen, der samler ekstra elementer.
+  $description:de-DE: Bezeichnung des Untermenüs, das zusätzliche Elemente sammelt.
+  $description:el: Ετικέτα του υπομενού που συλλέγει επιπλέον στοιχεία.
+  $description:es-ES: Etiqueta del submenú que recoge elementos extra.
+  $description:fa: برچسب زیر منویی که موارد اضافی را جمع آوری می کند.
+  $description:fr-FR: Étiquette du sous-menu qui collecte les éléments supplémentaires.
+  $description:hi: सबमेनू का लेबल जो अतिरिक्त आइटम एकत्र करता है।
+  $description:hr: Oznaka podizbornika koji prikuplja dodatne stavke.
+  $description:ht: Etikèt sou meni a ki kolekte atik siplemantè.
+  $description:hu: Az extra elemeket gyűjtő almenü címkéje.
+  $description:id-ID: Label submenu yang mengumpulkan item tambahan.
+  $description:it-IT: Etichetta del sottomenu che raccoglie voci extra.
+  $description:ja-JP: 追加のアイテムを収集するサブメニューのラベル。
+  $description:ko-KR: 추가 항목을 수집하는 하위 메뉴의 레이블입니다.
+  $description:nb: Etikett på undermenyen som samler ekstra elementer.
+  $description:nl-NL: Label van het submenu dat extra items verzamelt.
+  $description:or: ସବମେନୁର ଲେବଲ୍ ଯାହା ଅତିରିକ୍ତ ଆଇଟମ୍ ସଂଗ୍ରହ କରେ
+  $description:pl-PL: Etykieta podmenu zbierającego dodatkowe pozycje.
+  $description:pt-BR: Etiqueta do submenu que coleta itens extras.
+  $description:pt-PT: Etiqueta do submenu que recolhe itens extra.
+  $description:ro: Eticheta submeniului care colectează articole suplimentare.
+  $description:ru-RU: Ярлык подменю, в котором собраны дополнительные элементы.
+  $description:sv: Etikett för undermenyn som samlar extra objekt.
+  $description:ta: கூடுதல் பொருட்களை சேகரிக்கும் துணைமெனுவின் லேபிள்.
+  $description:th: ป้ายกำกับเมนูย่อยที่รวบรวมรายการพิเศษ
+  $description:tr-TR: Ekstra öğeleri toplayan alt menünün etiketi.
+  $description:uk-UA: Позначка підменю, яке збирає додаткові елементи.
+  $description:uz: Qo'shimcha elementlarni to'playdigan pastki menyuning yorlig'i.
+  $description:vi-VN: Nhãn của menu con thu thập các mục bổ sung.
+  $description:zh-CN: 收集额外项目的子菜单的标签。
+  $description:zh-TW: 收集额外项目的子菜单的标签。
 - settingsHotkey: ""
   $name: Settings hotkey
+  $name:ar: مفتاح الاختصار للإعدادات
+  $name:az: Parametrlər isti düyməsi
+  $name:bn: সেটিংস হটকি
+  $name:cs: Klávesová zkratka Nastavení
+  $name:da: Indstillinger genvejstast
+  $name:de-DE: Hotkey für Einstellungen
+  $name:el: Πλήκτρο συντόμευσης ρυθμίσεων
+  $name:es-ES: Tecla de acceso rápido de configuración
+  $name:fa: کلید میانبر تنظیمات
+  $name:fr-FR: Raccourci des paramètres
+  $name:hi: सेटिंग्स हॉटकी
+  $name:hr: Prečac za postavke
+  $name:ht: Anviwònman raccourcis
+  $name:hu: Beállítások gyorsbillentyű
+  $name:id-ID: Tombol pintas pengaturan
+  $name:it-IT: Tasto di scelta rapida Impostazioni
+  $name:ja-JP: 設定ホットキー
+  $name:ko-KR: 설정 단축키
+  $name:nb: Innstillinger hurtigtast
+  $name:nl-NL: Sneltoets voor instellingen
+  $name:or: ସେଟିଂସମୂହ ହଟ୍କି
+  $name:pl-PL: Skrót do ustawień
+  $name:pt-BR: Tecla de atalho de configurações
+  $name:pt-PT: Tecla de atalho de definições
+  $name:ro: Tasta rapidă Setări
+  $name:ru-RU: Горячая клавиша настроек
+  $name:sv: Snabbknapp för inställningar
+  $name:ta: அமைப்புகள் ஹாட்ஸ்கி
+  $name:th: ปุ่มลัดการตั้งค่า
+  $name:tr-TR: Ayarlar kısayol tuşu
+  $name:uk-UA: Гаряча клавіша налаштувань
+  $name:uz: Sozlamalar tezkor tugmasi
+  $name:vi-VN: Phím nóng cài đặt
+  $name:zh-CN: 设置热键
+  $name:zh-TW: 設定熱鍵
   $description: Optional global hotkey that opens the appearance settings menu (for example Ctrl+Alt+M). Empty disables it.
+  $description:ar: مفتاح التشغيل السريع العام الاختياري الذي يفتح قائمة إعدادات المظهر (على سبيل المثال Ctrl+Alt+M). فارغة تعطيله.
+  $description:az: Görünüş parametrləri menyusunu açan əlavə qlobal isti düymə (məsələn, Ctrl+Alt+M). Boş onu deaktiv edir.
+  $description:bn: ঐচ্ছিক গ্লোবাল হটকি যা চেহারা সেটিংস মেনু খোলে (উদাহরণস্বরূপ Ctrl+Alt+M)। খালি এটা নিষ্ক্রিয়.
+  $description:cs: Volitelná globální klávesová zkratka, která otevře nabídku nastavení vzhledu (například Ctrl+Alt+M). Prázdné to deaktivuje.
+  $description:da: Valgfri global genvejstast, der åbner menuen for udseendeindstillinger (for eksempel Ctrl+Alt+M). Tom deaktiverer den.
+  $description:de-DE: Optionaler globaler Hotkey, der das Menü mit den Darstellungseinstellungen öffnet (z. B. Ctrl+Alt+M). Leer deaktiviert es.
+  $description:el: Προαιρετικό καθολικό πλήκτρο πρόσβασης που ανοίγει το μενού ρυθμίσεων εμφάνισης (για παράδειγμα Ctrl+Alt+M). Το Empty το απενεργοποιεί.
+  $description:es-ES: Tecla de acceso rápido global opcional que abre el menú de configuración de apariencia (por ejemplo, Ctrl+Alt+M). Vacío lo desactiva.
+  $description:fa: کلید میانبر سراسری اختیاری که منوی تنظیمات ظاهری را باز می کند (به عنوان مثال Ctrl+Alt+M). Empty آن را غیرفعال می کند.
+  $description:fr-FR: Touche de raccourci globale facultative qui ouvre le menu des paramètres d'apparence (par exemple Ctrl+Alt+M). Vide le désactive.
+  $description:hi: वैकल्पिक वैश्विक हॉटकी जो उपस्थिति सेटिंग्स मेनू खोलती है (उदाहरण के लिए Ctrl+Alt+M)। खाली इसे अक्षम कर देता है.
+  $description:hr: Neobavezna globalna tipka prečaca koja otvara izbornik postavki izgleda (na primjer Ctrl+Alt+M). Prazno ga onemogućuje.
+  $description:ht: Si ou vle, raccourci global ki ouvri meni paramèt aparans (pa egzanp Ctrl+Alt+M). Vide enfim li.
+  $description:hu: Opcionális globális gyorsbillentyű, amely megnyitja a megjelenési beállítások menüt (például Ctrl+Alt+M). Az üres letiltja.
+  $description:id-ID: Tombol pintas global opsional yang membuka menu pengaturan tampilan (misalnya Ctrl+Alt+M). Kosong menonaktifkannya.
+  $description:it-IT: Tasto di scelta rapida globale opzionale che apre il menu delle impostazioni dell'aspetto (ad esempio Ctrl+Alt+M). Vuoto lo disabilita.
+  $description:ja-JP: "外観設定メニューを開くオプションのグローバル ホットキー (例: Ctrl+Alt+M)。空にすると無効になります。"
+  $description:ko-KR: "모양 설정 메뉴를 여는 선택적 전역 단축키(예: Ctrl+Alt+M). 비어 있으면 비활성화됩니다."
+  $description:nb: Valgfri global hurtigtast som åpner menyen for utseendeinnstillinger (for eksempel Ctrl+Alt+M). Tom deaktiverer den.
+  $description:nl-NL: Optionele algemene sneltoets die het menu met weergave-instellingen opent (bijvoorbeeld Ctrl+Alt+M). Leeg schakelt het uit.
+  $description:or: ବୈକଳ୍ପିକ ଗ୍ଲୋବାଲ୍ ହଟ୍କି ଯାହା ଦୃଶ୍ୟ ସେଟିଙ୍ଗ୍ ମେନୁ ଖୋଲିଥାଏ (ଉଦାହରଣ ସ୍ୱରୂପ Ctrl + Alt + M) | ଖାଲି ଏହାକୁ ଅକ୍ଷମ କରିଥାଏ
+  $description:pl-PL: Opcjonalny globalny klawisz skrótu otwierający menu ustawień wyglądu (na przykład Ctrl+Alt+M). Pusty wyłącza to.
+  $description:pt-BR: Tecla de atalho global opcional que abre o menu de configurações de aparência (por exemplo Ctrl+Alt+M). Vazio o desativa.
+  $description:pt-PT: Tecla de atalho global opcional que abre o menu de definições de aparência (por exemplo Ctrl+Alt+M). Vazio desativa-o.
+  $description:ro: Tasta rapidă globală opțională care deschide meniul de setări de aspect (de exemplu Ctrl+Alt+M). Golire îl dezactivează.
+  $description:ru-RU: Дополнительная глобальная горячая клавиша, открывающая меню настроек внешнего вида (например, Ctrl+Alt+M). Пусто отключает его.
+  $description:sv: Valfri global snabbtangent som öppnar menyn för utseendeinställningar (till exempel Ctrl+Alt+M). Empty inaktiverar den.
+  $description:ta: தோற்ற அமைப்புகள் மெனுவைத் திறக்கும் விருப்பமான உலகளாவிய ஹாட்ஸ்கி (உதாரணமாக Ctrl+Alt+M). வெற்று அதை முடக்குகிறது.
+  $description:th: ปุ่มลัดส่วนกลางเสริมที่เปิดเมนูการตั้งค่าลักษณะที่ปรากฏ (เช่น Ctrl+Alt+M) ว่างเปล่าปิดการใช้งานมัน
+  $description:tr-TR: Görünüm ayarları menüsünü açan isteğe bağlı genel kısayol tuşu (örneğin Ctrl+Alt+M). Boş bunu devre dışı bırakır.
+  $description:uk-UA: Додаткова глобальна гаряча клавіша, яка відкриває меню налаштувань зовнішнього вигляду (наприклад, Ctrl+Alt+M). Пусто вимикає його.
+  $description:uz: Tashqi ko'rinish sozlamalari menyusini ochadigan ixtiyoriy global tezkor tugma (masalan, Ctrl+Alt+M). Bo'sh uni o'chiradi.
+  $description:vi-VN: Phím nóng chung tùy chọn mở menu cài đặt giao diện (ví dụ Ctrl+Alt+M). Trống vô hiệu hóa nó.
+  $description:zh-CN: 打开外观设置菜单的可选全局热键（例如 Ctrl+Alt+M）。空则禁用它。
+  $description:zh-TW: 打开外观设置菜单的可选全局热键（例如 Ctrl+Alt+M）。空則禁用它。
 - debugLogging: false
   $name: Debug logging
+  $name:ar: تسجيل التصحيح
+  $name:az: Sazlama girişi
+  $name:bn: ডিবাগ লগিং
+  $name:cs: Ladění protokolování
+  $name:da: Debug logning
+  $name:de-DE: Debug-Protokollierung
+  $name:el: Καταγραφή εντοπισμού σφαλμάτων
+  $name:es-ES: Registro de depuración
+  $name:fa: ثبت اشکال زدایی
+  $name:fr-FR: Journalisation de débogage
+  $name:hi: डिबग लॉगिंग
+  $name:hr: Zapisivanje otklanjanja pogrešaka
+  $name:ht: Debug antre
+  $name:hu: Hibakeresési naplózás
+  $name:id-ID: Pencatatan debug
+  $name:it-IT: Registrazione del debug
+  $name:ja-JP: デバッグログ
+  $name:ko-KR: 디버그 로깅
+  $name:nb: Feilsøk logging
+  $name:nl-NL: Foutopsporingslogboekregistratie
+  $name:or: ତ୍ରୁଟି ନିବାରଣ
+  $name:pl-PL: Rejestrowanie debugowania
+  $name:pt-BR: Registro de depuração
+  $name:pt-PT: Registo de depuração
+  $name:ro: Jurnal de depanare
+  $name:ru-RU: Ведение журнала отладки
+  $name:sv: Felsökning av loggning
+  $name:ta: பிழைத்திருத்த பதிவு
+  $name:th: การบันทึกการแก้ไขข้อบกพร่อง
+  $name:tr-TR: Hata ayıklama günlüğü
+  $name:uk-UA: Журналування налагодження
+  $name:uz: Nosozliklarni tuzatish jurnali
+  $name:vi-VN: Ghi nhật ký gỡ lỗi
+  $name:zh-CN: 调试日志记录
+  $name:zh-TW: 調試日誌記錄
   $description: Log timing and diagnostics for troubleshooting.
+  $description:ar: تسجيل التوقيت والتشخيص لاستكشاف الأخطاء وإصلاحها.
+  $description:az: Problemlərin aradan qaldırılması üçün vaxt və diaqnostika qeydi.
+  $description:bn: সমস্যা সমাধানের জন্য লগ টাইমিং এবং ডায়াগনস্টিকস।
+  $description:cs: Zaznamenejte časování a diagnostiku pro odstraňování problémů.
+  $description:da: Log timing og diagnostik til fejlfinding.
+  $description:de-DE: Protokollieren Sie Timing und Diagnose zur Fehlerbehebung.
+  $description:el: Χρονισμός καταγραφής και διαγνωστικά για την αντιμετώπιση προβλημάτων.
+  $description:es-ES: Registre la sincronización y el diagnóstico para la resolución de problemas.
+  $description:fa: ثبت زمان بندی و تشخیص برای عیب یابی.
+  $description:fr-FR: Journalisez la synchronisation et les diagnostics pour le dépannage.
+  $description:hi: समस्या निवारण के लिए लॉग टाइमिंग और डायग्नोस्टिक्स।
+  $description:hr: Vrijeme zapisivanja i dijagnostika za rješavanje problema.
+  $description:ht: Log distribisyon ak dyagnostik pou depanaj.
+  $description:hu: Napló időzítés és diagnosztika a hibaelhárításhoz.
+  $description:id-ID: Catat waktu dan diagnostik untuk pemecahan masalah.
+  $description:it-IT: Registra tempi e diagnostica per la risoluzione dei problemi.
+  $description:ja-JP: トラブルシューティングのためにタイミングと診断をログに記録します。
+  $description:ko-KR: 문제 해결을 위한 로그 타이밍 및 진단입니다.
+  $description:nb: Loggtiming og diagnostikk for feilsøking.
+  $description:nl-NL: Registreer timing en diagnostiek voor probleemoplossing.
+  $description:or: ତ୍ରୁଟି ନିବାରଣ ପାଇଁ ଟାଇମିଂ ଏବଂ ଡାଇଗ୍ନୋଷ୍ଟିକ୍ ଲଗ୍ କରନ୍ତୁ
+  $description:pl-PL: Rejestrowanie czasu i diagnostyka w celu rozwiązywania problemów.
+  $description:pt-BR: Registro de tempo e diagnóstico para solução de problemas.
+  $description:pt-PT: Registo de tempo e diagnóstico para resolução de problemas.
+  $description:ro: Înregistrare sincronizare și diagnosticare pentru depanare.
+  $description:ru-RU: Регистрация времени и диагностика для устранения неполадок.
+  $description:sv: Logga timing och diagnostik för felsökning.
+  $description:ta: சரிசெய்தலுக்கான பதிவு நேரம் மற்றும் கண்டறிதல்.
+  $description:th: บันทึกเวลาและการวินิจฉัยเพื่อการแก้ไขปัญหา
+  $description:tr-TR: Sorun giderme için zamanlamayı ve tanılamayı günlüğe kaydedin.
+  $description:uk-UA: Час журналу та діагностика для усунення несправностей.
+  $description:uz: Muammolarni bartaraf etish uchun vaqt va diagnostika jurnali.
+  $description:vi-VN: Ghi lại thời gian và chẩn đoán để khắc phục sự cố.
+  $description:zh-CN: 记录计时和诊断以进行故障排除。
+  $description:zh-TW: 记录计时和诊断以进行故障排除。
 - clearCache: false
   $name: Clear cache
+  $name:ar: مسح ذاكرة التخزين المؤقت
+  $name:az: Keşi təmizləyin
+  $name:bn: ক্যাশে সাফ করুন
+  $name:cs: Vymazat mezipaměť
+  $name:da: Ryd cache
+  $name:de-DE: Cache leeren
+  $name:el: Εκκαθάριση προσωρινής μνήμης
+  $name:es-ES: Borrar caché
+  $name:fa: حافظه پنهان را پاک کنید
+  $name:fr-FR: Vider le cache
+  $name:hi: कैश साफ़ करें
+  $name:hr: Očisti predmemoriju
+  $name:ht: Klè kachèt
+  $name:hu: Gyorsítótár törlése
+  $name:id-ID: Hapus cache
+  $name:it-IT: Svuota cache
+  $name:ja-JP: キャッシュをクリアする
+  $name:ko-KR: 캐시 지우기
+  $name:nb: Tøm hurtigbufferen
+  $name:nl-NL: Cache wissen
+  $name:or: କ୍ୟାଚ୍ ସଫା କରନ୍ତୁ
+  $name:pl-PL: Wyczyść pamięć podręczną
+  $name:pt-BR: Limpar cache
+  $name:pt-PT: Limpar cache
+  $name:ro: Goliți memoria cache
+  $name:ru-RU: Очистить кеш
+  $name:sv: Rensa cache
+  $name:ta: தேக்ககத்தை அழிக்கவும்
+  $name:th: ล้างแคช
+  $name:tr-TR: Önbelleği temizle
+  $name:uk-UA: Очистити кеш
+  $name:uz: Keshni tozalash
+  $name:vi-VN: Xóa bộ nhớ đệm
+  $name:zh-CN: 清除缓存
+  $name:zh-TW: 清除快取
   $description: Turn on to delete the cached menu models; they rebuild on next use.
+  $description:ar: قم بالتشغيل لحذف نماذج القائمة المخزنة مؤقتًا؛ يتم إعادة بنائها عند الاستخدام التالي.
+  $description:az: Keşlənmiş menyu modellərini silmək üçün yandırın; növbəti istifadədə yenidən qururlar.
+  $description:bn: ক্যাশে করা মেনু মডেলগুলি মুছতে চালু করুন; তারা পরবর্তী ব্যবহারে পুনর্নির্মাণ করে।
+  $description:cs: Zapnutím odstraníte modely nabídek uložené v mezipaměti; při dalším použití obnoví.
+  $description:da: Tænd for at slette de cachelagrede menumodeller; de genopbygges ved næste brug.
+  $description:de-DE: Aktivieren Sie diese Option, um die zwischengespeicherten Menümodelle zu löschen. Sie bauen sich bei der nächsten Verwendung wieder auf.
+  $description:el: Ενεργοποιήστε για να διαγράψετε τα μοντέλα μενού που έχουν αποθηκευτεί στην κρυφή μνήμη. ξαναχτίζονται στην επόμενη χρήση.
+  $description:es-ES: Actívelo para eliminar los modelos de menú almacenados en caché; se reconstruyen en el próximo uso.
+  $description:fa: برای حذف مدل های منوی ذخیره شده، روشن کنید. آنها در استفاده بعدی بازسازی می کنند.
+  $description:fr-FR: Activez pour supprimer les modèles de menu mis en cache ; ils se reconstruisent lors de la prochaine utilisation.
+  $description:hi: कैश्ड मेनू मॉडल को हटाने के लिए चालू करें; वे अगले उपयोग पर पुनर्निर्माण करते हैं।
+  $description:hr: Uključite za brisanje predmemoriranih modela izbornika; obnavljaju se prilikom sljedeće upotrebe.
+  $description:ht: Vire sou yo efase modèl yo meni kach; yo rebati sou pwochen itilizasyon.
+  $description:hu: Kapcsolja be a gyorsítótárazott menümodellek törléséhez; a következő használatkor újjáépítik.
+  $description:id-ID: Aktifkan untuk menghapus model menu cache; mereka membangun kembali pada penggunaan berikutnya.
+  $description:it-IT: Attiva per eliminare i modelli di menu memorizzati nella cache; si ricostruiscono al prossimo utilizzo.
+  $description:ja-JP: オンにすると、キャッシュされたメニュー モデルが削除されます。次回の使用時に再構築されます。
+  $description:ko-KR: 캐시된 메뉴 모델을 삭제하려면 켜십시오. 다음 사용 시 다시 빌드됩니다.
+  $description:nb: Slå på for å slette de bufrede menymodellene; de bygger om ved neste bruk.
+  $description:nl-NL: Schakel dit in om de in de cache opgeslagen menumodellen te verwijderen; ze herbouwen bij het volgende gebruik.
+  $description:or: କ୍ୟାଚ୍ ହୋଇଥିବା ମେନୁ ମଡେଲଗୁଡିକ ବିଲୋପ କରିବାକୁ ଟର୍ନ୍ ଅନ୍ କରନ୍ତୁ; ସେମାନେ ପରବର୍ତ୍ତୀ ବ୍ୟବହାରରେ ପୁନଃ ନିର୍ମାଣ କରନ୍ତି
+  $description:pl-PL: Włącz, aby usunąć buforowane modele menu; odbudowują się przy następnym użyciu.
+  $description:pt-BR: Ative para excluir os modelos de menu em cache; eles reconstroem no próximo uso.
+  $description:pt-PT: Ative para eliminar os modelos de menu em cache; reconstroem no próximo uso.
+  $description:ro: Activați pentru a șterge modelele de meniu stocate în cache; se reconstruiesc la următoarea utilizare.
+  $description:ru-RU: Включите, чтобы удалить кэшированные модели меню; они восстанавливаются при следующем использовании.
+  $description:sv: Slå på för att radera de cachade menymodellerna; de bygger om vid nästa användning.
+  $description:ta: தற்காலிக சேமிப்பு மெனு மாதிரிகளை நீக்க இயக்கவும்; அவை அடுத்த பயன்பாட்டில் மீண்டும் உருவாக்கப்படுகின்றன.
+  $description:th: เปิดเพื่อลบโมเดลเมนูที่แคชไว้ พวกเขาสร้างขึ้นใหม่ในการใช้งานครั้งต่อไป
+  $description:tr-TR: Önbelleğe alınan menü modellerini silmek için açın; bir sonraki kullanımda yeniden inşa edilirler.
+  $description:uk-UA: Увімкніть, щоб видалити кешовані моделі меню; вони відновлюються під час наступного використання.
+  $description:uz: Keshlangan menyu modellarini o'chirish uchun yoqing; ular keyingi foydalanishda qayta quradilar.
+  $description:vi-VN: Bật để xóa các mô hình menu đã lưu trong bộ nhớ đệm; họ xây dựng lại vào lần sử dụng tiếp theo.
+  $description:zh-CN: 开启删除缓存菜单模型；他们会在下次使用时重建。
+  $description:zh-TW: 開啟刪除快取選單模型；他們會在下次使用時重建。
 - warmup: true
   $name: Background pre-build
+  $name:ar: الخلفية قبل البناء
+  $name:az: Arxa planın əvvəlcədən qurulması
+  $name:bn: ব্যাকগ্রাউন্ড প্রি-বিল্ড
+  $name:cs: Předběžné sestavení pozadí
+  $name:da: Forudbygget baggrund
+  $name:de-DE: Hintergrund vorgefertigt
+  $name:el: Προκατασκευή φόντου
+  $name:es-ES: Preconstrucción de fondo
+  $name:fa: پیش زمینه پس زمینه
+  $name:fr-FR: Préconstruction en arrière-plan
+  $name:hi: पृष्ठभूमि पूर्व-निर्माण
+  $name:hr: Predizgradnja pozadine
+  $name:ht: Jan nou koumanse pre-konstriksyon
+  $name:hu: Háttér előépítés
+  $name:id-ID: Latar belakang pra-pembangunan
+  $name:it-IT: Pre-costruzione dello sfondo
+  $name:ja-JP: バックグラウンドのプリビルド
+  $name:ko-KR: 배경 사전 빌드
+  $name:nb: Bakgrunn forhåndsbygging
+  $name:nl-NL: Achtergrond vooraf gebouwd
+  $name:or: ପୃଷ୍ଠଭୂମି ପୂର୍ବ-ନିର୍ମାଣ
+  $name:pl-PL: Wstępna kompilacja tła
+  $name:pt-BR: Pré-construção em segundo plano
+  $name:pt-PT: Pré-construção em segundo plano
+  $name:ro: Preconstrucție de fundal
+  $name:ru-RU: Предварительная сборка фона
+  $name:sv: Förbyggd bakgrund
+  $name:ta: பின்னணி முன் உருவாக்கம்
+  $name:th: พื้นหลังก่อนสร้าง
+  $name:tr-TR: Arka planda ön derleme
+  $name:uk-UA: Попереднє створення фону
+  $name:uz: Oldindan yaratilgan fon
+  $name:vi-VN: Xây dựng trước nền
+  $name:zh-CN: 后台预构建
+  $name:zh-TW: 後台預建
   $description: Warms common menus shortly after Explorer starts so their first open is instant. Turning it off skips loading every registered context-menu handler at startup (the stock menu's exposure), which avoids startup crashes from faulty third-party extensions; the first open of each context then builds on demand, like the stock menu. A handler that would crash the stock menu still crashes.
+  $description:ar: يقوم بتدفئة القوائم الشائعة بعد وقت قصير من بدء تشغيل Explorer بحيث يكون أول فتح لها فوريًا. يؤدي إيقاف تشغيله إلى تخطي تحميل كل معالج قائمة السياق المسجل عند بدء التشغيل (عرض قائمة الأسهم)، مما يتجنب تعطل بدء التشغيل من ملحقات الطرف الثالث الخاطئة؛ يتم بناء أول فتح لكل سياق على الطلب، مثل قائمة الأسهم. لا يزال المعالج الذي قد يؤدي إلى تعطل قائمة الأسهم يتعطل.
+  $description:az: Explorer başladıqdan qısa müddət sonra ümumi menyuları qızdırır, beləliklə onların ilk açılması ani olur. Onu söndürmək başlanğıcda hər bir qeydiyyatdan keçmiş kontekst-menyu işləyicisini yükləməyi atlayır (birja menyusunun ifşası), bu da səhv üçüncü tərəf uzantılarından başlanğıc qəzalarının qarşısını alır; hər bir kontekstin ilk açılışı sonra fond menyusu kimi tələb əsasında qurulur. Fond menyusunu pozacaq bir işləyici hələ də çökür.
+  $description:bn: Explorer শুরু হওয়ার কিছুক্ষণ পরেই সাধারণ মেনুগুলিকে উষ্ণ করে যাতে তাদের প্রথম খোলা তাত্ক্ষণিক হয়। এটি বন্ধ করলে স্টার্টআপে প্রতিটি নিবন্ধিত প্রসঙ্গ-মেনু হ্যান্ডলার লোড করা যায় না (স্টক মেনুর এক্সপোজার), যা ত্রুটিপূর্ণ তৃতীয় পক্ষের এক্সটেনশন থেকে স্টার্টআপ ক্র্যাশ এড়ায়; প্রতিটি প্রসঙ্গের প্রথম ওপেন তারপর চাহিদা অনুযায়ী তৈরি করে, যেমন স্টক মেনু। একটি হ্যান্ডলার যা স্টক মেনু ক্র্যাশ করবে এখনও ক্র্যাশ করে।
+  $description:cs: Ohřeje běžné nabídky krátce po spuštění Explorer, takže jejich první otevření je okamžité. Vypnutím přeskočíte načítání všech registrovaných obslužných rutin kontextové nabídky při spuštění (zobrazení nabídky akcií), což zabrání zhroucení spouštění z chybných rozšíření třetích stran; první otevření každého kontextu pak staví na požádání, jako je nabídka akcií. Obslužná rutina, která by zhroutila nabídku akcií, stále padá.
+  $description:da: Opvarmer almindelige menuer kort efter, at Explorer starter, så deres første åbning er øjeblikkelig. Deaktivering springer over at indlæse alle registrerede kontekstmenuhandlere ved opstart (aktiemenuens eksponering), hvilket undgår startnedbrud fra defekte tredjepartsudvidelser; den første åbning af hver kontekst bygger derefter på efterspørgsel, som aktiemenuen. En handler, der ville gå ned i aktiemenuen, går stadig ned.
+  $description:de-DE: Erwärmt allgemeine Menüs kurz nach dem Start von Explorer, sodass sie sofort zum ersten Mal geöffnet werden können. Wenn Sie es deaktivieren, wird das Laden aller registrierten Kontextmenü-Handler beim Start (die Anzeige des Standardmenüs) übersprungen, wodurch Startabstürze durch fehlerhafte Erweiterungen von Drittanbietern vermieden werden. Das erste Öffnen jedes Kontexts baut sich dann bei Bedarf auf, wie das Aktienmenü. Ein Handler, der das Aktienmenü zum Absturz bringen würde, stürzt immer noch ab.
+  $description:el: Ζεσταίνει τα κοινά μενού λίγο μετά την έναρξη του Explorer, ώστε το πρώτο τους άνοιγμα να είναι άμεσο. Η απενεργοποίησή του παρακάμπτει τη φόρτωση κάθε εγγεγραμμένου προγράμματος χειρισμού του μενού περιβάλλοντος κατά την εκκίνηση (έκθεση του μενού στοκ), γεγονός που αποφεύγει τα σφάλματα εκκίνησης από ελαττωματικές επεκτάσεις τρίτων. το πρώτο άνοιγμα κάθε περιβάλλοντος στη συνέχεια βασίζεται σε ζήτηση, όπως το μενού μετοχών. Ένας χειριστής που θα έσκαγε το μενού μετοχών εξακολουθεί να κολλάει.
+  $description:es-ES: Calienta los menús comunes poco después de que se inicia Explorer para que su primera apertura sea instantánea. Al desactivarlo se omite la carga de todos los controladores de menú contextual registrados al inicio (la exposición del menú de valores), lo que evita fallas de inicio debido a extensiones defectuosas de terceros; la primera apertura de cada contexto se basa en la demanda, como el menú de acciones. Un controlador que bloquearía el menú de valores todavía falla.
+  $description:fa: منوهای رایج را اندکی پس از شروع Explorer گرم می کند تا اولین باز شدن آنها فورا باشد. با خاموش کردن آن از بارگیری هر کنترل کننده منوی زمینه ثبت شده در هنگام راه اندازی پرش می شود (نمایش منوی سهام)، که از خرابی راه اندازی توسط برنامه های افزودنی شخص ثالث معیوب جلوگیری می کند. اولین باز از هر زمینه و سپس بر اساس تقاضا ایجاد می شود، مانند منوی سهام. کنترل کننده ای که منوی سهام را خراب می کند همچنان خراب می شود.
+  $description:fr-FR: Réchauffe les menus communs peu de temps après le démarrage d'Explorer afin que leur première ouverture soit instantanée. Le désactiver ignore le chargement de chaque gestionnaire de menu contextuel enregistré au démarrage (l'exposition du menu d'origine), ce qui évite les plantages de démarrage dus à des extensions tierces défectueuses ; la première ouverture de chaque contexte se construit ensuite à la demande, comme le menu d'origine. Un gestionnaire qui ferait planter le menu d'origine plante toujours.
+  $description:hi: Explorer शुरू होने के तुरंत बाद आम मेनू को गर्म करता है ताकि उनका पहला ओपन तुरंत हो। इसे बंद करने से स्टार्टअप (स्टॉक मेनू का एक्सपोज़र) पर प्रत्येक पंजीकृत संदर्भ-मेनू हैंडलर को लोड करना बंद हो जाता है, जो दोषपूर्ण तृतीय-पक्ष एक्सटेंशन से स्टार्टअप क्रैश से बचाता है; प्रत्येक संदर्भ का पहला ओपन स्टॉक मेनू की तरह, मांग पर आधारित होता है। एक हैंडलर जो स्टॉक मेनू को क्रैश कर देगा वह अभी भी क्रैश हो जाता है।
+  $description:hr: Zagrijava uobičajene izbornike ubrzo nakon pokretanja Explorer tako da je njihovo prvo otvaranje trenutno. Isključivanjem se preskače učitavanje svakog registriranog rukovatelja kontekstnim izbornikom pri pokretanju (izloženost izbornika dionica), čime se izbjegavaju rušenja pri pokretanju zbog neispravnih proširenja trećih strana; prvo otvaranje svakog konteksta zatim se nadograđuje na zahtjev, poput izbornika dionica. Rukovatelj koji bi srušio dionički izbornik i dalje se ruši.
+  $description:ht: Chofe meni komen yon ti tan apre Explorer kòmanse pou premye louvri yo se enstantane. Fè li sote chaje chak moun ki okipe meni kontèks anrejistre nan demaraj (ekspozisyon meni stock la), ki evite aksidan demaraj soti nan ekstansyon defo twazyèm pati; premye louvri nan chak kontèks Lè sa a, bati sou demann, tankou meni an stock. Yon moun k ap okipe meni aksyon an ap fè aksidan toujou.
+  $description:hu: Röviddel a Explorer indulása után felmelegíti a gyakori menüket, így azok első megnyitása azonnal megtörténik. A kikapcsolása kihagyja az összes regisztrált helyi menükezelő betöltését indításkor (a készletmenü megjelenítése), ami elkerüli a hibás, külső féltől származó bővítmények indítási összeomlását; az egyes kontextusok első megnyitása azután igény szerint épül fel, mint például a készletmenü. Az a kezelő, amely összeomolná a készletmenüt, továbbra is összeomlik.
+  $description:id-ID: Menghangatkan menu umum segera setelah Explorer dimulai sehingga pembukaan pertamanya terjadi secara instan. Mematikannya akan melompati pemuatan setiap pengendali menu konteks yang terdaftar saat startup (paparan menu stok), yang menghindari crash startup karena ekstensi pihak ketiga yang salah; pembukaan pertama setiap konteks kemudian dibangun berdasarkan permintaan, seperti menu stok. Penangan yang akan membuat crash menu stok masih crash.
+  $description:it-IT: Riscalda i menu comuni subito dopo l'avvio di Explorer, quindi la loro prima apertura è immediata. Disattivandolo si salta il caricamento di ogni gestore di menu contestuale registrato all'avvio (l'esposizione del menu Stock), evitando arresti anomali all'avvio dovuti a estensioni di terze parti difettose; la prima apertura di ciascun contesto si basa quindi su richiesta, come il menu delle scorte. Un gestore che causerebbe l'arresto anomalo del menu Stock continua a bloccarsi.
+  $description:ja-JP: Explorer の開始直後に共通メニューをウォームアップするため、最初に開くのは即座に完了します。これをオフにすると、起動時に登録されているすべてのコンテキスト メニュー ハンドラーの読み込み (ストック メニューの露出) がスキップされ、欠陥のあるサードパーティ拡張機能による起動クラッシュが回避されます。各コンテキストの最初のオープンは、ストック メニューのようにオンデマンドで構築されます。ストック メニューをクラッシュさせるハンドラーは依然としてクラッシュします。
+  $description:ko-KR: Explorer가 시작된 직후에 공통 메뉴를 따뜻하게 하여 첫 번째 메뉴가 즉각적으로 열리도록 합니다. 이 기능을 끄면 시작 시 등록된 모든 컨텍스트 메뉴 핸들러 로드(스톡 메뉴 노출)를 건너뛰어 잘못된 타사 확장으로 인한 시작 충돌을 방지합니다. 각 컨텍스트를 처음 열면 재고 메뉴처럼 수요에 따라 구축됩니다. 스톡 메뉴를 충돌시키는 핸들러는 여전히 충돌합니다.
+  $description:nb: Varmer opp vanlige menyer kort tid etter at Explorer starter, slik at de åpnes umiddelbart. Hvis du slår den av, hopper du over lasting av alle registrerte kontekstmenybehandlere ved oppstart (aksjemenyens eksponering), noe som unngår oppstartskrasj fra defekte tredjepartsutvidelser; den første åpningen i hver kontekst bygger deretter på etterspørsel, som aksjemenyen. En behandler som ville krasje aksjemenyen krasjer fortsatt.
+  $description:nl-NL: Verwarmt algemene menu's kort nadat de Explorer is gestart, zodat ze direct voor het eerst worden geopend. Als u dit uitschakelt, wordt het laden van elke geregistreerde contextmenu-handler bij het opstarten overgeslagen (de weergave van het aandelenmenu), waardoor opstartcrashes door defecte extensies van derden worden vermeden; de eerste opening van elke context bouwt vervolgens voort op aanvraag, zoals het aandelenmenu. Een handler die het aandelenmenu zou laten crashen, crasht nog steeds.
+  $description:or: Explorer ଆରମ୍ଭ ହେବାର କିଛି ସମୟ ପରେ ସାଧାରଣ ମେନୁ ଗରମ କରେ ତେଣୁ ସେମାନଙ୍କର ପ୍ରଥମ ଖୋଲା ତତକ୍ଷଣାତ୍ | ଏହାକୁ ଷ୍ଟାର୍ଟଅପ୍ ରେ ପ୍ରତ୍ୟେକ ପଞ୍ଜୀକୃତ ପ୍ରସଙ୍ଗ-ମେନୁ ହ୍ୟାଣ୍ଡେଲର୍ ଲୋଡ୍ କରିବା ବନ୍ଦ କରିଦିଏ (ଷ୍ଟକ୍ ମେନୁର ଏକ୍ସପୋଜର୍), ଯାହା ତ୍ରୁଟିପୂର୍ଣ୍ଣ ତୃତୀୟ-ପକ୍ଷ ବିସ୍ତାରରୁ ଷ୍ଟାର୍ଟଅପ୍ କ୍ରାସ୍କୁ ଏଡାଇଥାଏ | ପ୍ରତ୍ୟେକ ପ୍ରସଙ୍ଗର ପ୍ରଥମ ଖୋଲା ତା’ପରେ ଷ୍ଟକ୍ ମେନୁ ପରି ଚାହିଦା ଉପରେ ନିର୍ଭର କରେ | ଏକ ହ୍ୟାଣ୍ଡଲର୍ ଯାହା ଷ୍ଟକ୍ ମେନୁକୁ କ୍ରାସ୍ କରିବ ତଥାପି କ୍ରାସ୍
+  $description:pl-PL: Ogrzewa popularne menu wkrótce po uruchomieniu Explorer, dzięki czemu ich pierwsze otwarcie jest natychmiastowe. Wyłączenie tej opcji powoduje pominięcie ładowania każdego zarejestrowanego modułu obsługi menu kontekstowego podczas uruchamiania (ekspozycja menu podstawowego), co pozwala uniknąć awarii uruchamiania spowodowanych wadliwymi rozszerzeniami innych firm; pierwsze otwarcie każdego kontekstu jest następnie tworzone na żądanie, podobnie jak menu akcji. Program obsługi, który spowodowałby awarię menu podstawowego, nadal ulega awarii.
+  $description:pt-BR: Aquece menus comuns logo após o início do Explorer, para que sua primeira abertura seja instantânea. Desligá-lo ignora o carregamento de todos os manipuladores de menu de contexto registrados na inicialização (a exposição do menu de ações), o que evita travamentos de inicialização causados por extensões de terceiros defeituosas; a primeira abertura de cada contexto é construída conforme a demanda, como o menu de estoque. Um manipulador que travaria o menu de ações ainda trava.
+  $description:pt-PT: Aquece os menus comuns logo após o início do Explorer, para que a sua primeira abertura seja instantânea. Desligá-lo ignora o carregamento de todos os manipuladores de menus de contexto registados no arranque (a exposição do menu de ações), o que evita falhas de arranque causados por extensões de terceiros defeituosas; a primeira abertura de cada contexto é construída consoante a procura, como o menu de stock. Um manipulador que iria bloquear o menu de ações ainda bloqueia.
+  $description:ro: Încălzește meniurile comune la scurt timp după pornirea Explorer, astfel încât prima lor deschidere să fie instantanee. Dezactivarea acesteia omite încărcarea fiecărui handler de meniu contextual înregistrat la pornire (expunerea meniului stoc), ceea ce evită blocările la pornire de la extensiile terțe defecte; prima deschidere a fiecărui context se construiește apoi la cerere, cum ar fi meniul stoc. Un handler care ar bloca meniul stoc încă se blochează.
+  $description:ru-RU: Разогревает общие меню вскоре после запуска Explorer, поэтому их первое открытие происходит мгновенно. Его отключение позволяет пропустить загрузку каждого зарегистрированного обработчика контекстного меню при запуске (доступ к стандартному меню), что позволяет избежать сбоев при запуске из-за неисправных сторонних расширений; первое открытие каждого контекста затем создается по требованию, как стандартное меню. Обработчик, который приводил к сбою стандартного меню, все равно дает сбой.
+  $description:sv: Värmer upp vanliga menyer strax efter att Explorer startar så att de öppnas omedelbart. Om du stänger av den hoppar du över alla registrerade kontextmenyhanterare vid start (aktiemenyns exponering), vilket undviker startkrascher från felaktiga tredjepartstillägg; den första öppningen i varje sammanhang bygger sedan på efterfrågan, som aktiemenyn. En hanterare som skulle krascha aktiemenyn kraschar fortfarande.
+  $description:ta: Explorer தொடங்கிய சிறிது நேரத்திலேயே பொதுவான மெனுக்களை வெப்பமாக்குகிறது, எனவே அவற்றின் முதல் திறந்திருக்கும். அதை முடக்குவது, தொடக்கத்தில் பதிவுசெய்யப்பட்ட ஒவ்வொரு சூழல்-மெனு ஹேண்ட்லரையும் ஏற்றுவதைத் தவிர்க்கிறது (பங்கு மெனுவின் வெளிப்பாடு), இது தவறான மூன்றாம் தரப்பு நீட்டிப்புகளிலிருந்து தொடக்க செயலிழப்புகளைத் தவிர்க்கிறது; ஒவ்வொரு சூழலின் முதல் திறந்த பின்னர் பங்கு மெனு போன்ற தேவையை உருவாக்குகிறது. பங்கு மெனுவை செயலிழக்கச் செய்யும் ஹேண்ட்லர் இன்னும் செயலிழக்கிறது.
+  $description:th: อุ่นเมนูทั่วไปทันทีหลังจากที่ Explorer เริ่มทำงาน เพื่อให้เปิดเมนูแรกได้ทันที การปิดจะข้ามการโหลดตัวจัดการเมนูบริบทที่ลงทะเบียนไว้ทุกตัวเมื่อเริ่มต้น (การเปิดเผยของเมนูสต็อก) ซึ่งจะช่วยหลีกเลี่ยงปัญหาการเริ่มต้นระบบจากส่วนขยายของบุคคลที่สามที่ผิดพลาด การเปิดแต่ละบริบทครั้งแรก จากนั้นจะสร้างตามความต้องการ เช่น เมนูสต็อก ตัวจัดการที่จะขัดข้องเมนูสต็อกยังคงขัดข้อง
+  $description:tr-TR: Explorer başladıktan kısa bir süre sonra ortak menüleri ısıtır, böylece ilk açılmaları anında gerçekleşir. Bunu kapatmak, başlangıçta kayıtlı her içerik menüsü işleyicisinin yüklenmesini atlar (stok menüsünün ortaya çıkması), bu da hatalı üçüncü taraf uzantılardan kaynaklanan başlangıç çökmelerini önler; Her bağlamın ilk açılışı, stok menüsü gibi isteğe bağlı olarak oluşturulur. Stok menüsünü çökerten bir işleyici yine de çöküyor.
+  $description:uk-UA: Розігріває загальні меню незабаром після запуску Explorer, тому їх перше відкриття відбувається миттєво. Якщо вимкнути його, пропускається завантаження кожного зареєстрованого обробника контекстного меню під час запуску (розкриття основного меню), що дозволяє уникнути збоїв під час запуску через несправні розширення сторонніх розробників; перше відкриття кожного контексту потім будується на вимогу, як і фондове меню. Обробник, який призведе до збою меню запасів, все одно виходить з ладу.
+  $description:uz: Explorer ishga tushirilgandan so'ng qisqa vaqt ichida umumiy menyularni isitadi, shuning uchun ular bir zumda ochiladi. Uni o'chirib qo'yish ishga tushirilganda ro'yxatdan o'tgan har bir kontekst menyusi ishlovchisini yuklashni o'tkazib yuboradi (birja menyusi ko'rinishi), bu noto'g'ri uchinchi tomon kengaytmalari tufayli ishga tushishning ishdan chiqishini oldini oladi; Har bir kontekstning birinchi ochilishi, so'ngra stok menyusi kabi talab asosida tuziladi. Birja menyusini buzadigan ishlov beruvchi hali ham ishdan chiqadi.
+  $description:vi-VN: Làm ấm các menu phổ biến ngay sau khi Explorer khởi động để lần mở đầu tiên của chúng diễn ra ngay lập tức. Việc tắt tính năng này sẽ bỏ qua việc tải mọi trình xử lý menu ngữ cảnh đã đăng ký khi khởi động (hiển thị của menu gốc), điều này tránh được sự cố khởi động do các tiện ích mở rộng bị lỗi của bên thứ ba; lần mở đầu tiên của mỗi bối cảnh sau đó được xây dựng theo yêu cầu, giống như menu chứng khoán. Trình xử lý có thể làm hỏng menu chứng khoán vẫn gặp sự cố.
+  $description:zh-CN: Explorer 启动后不久就会加热常用菜单，因此它们的第一次打开是即时的。关闭它会在启动时跳过加载每个已注册的上下文菜单处理程序（库存菜单的曝光），从而避免因错误的第三方扩展而导致启动崩溃；然后，每个上下文的第一次打开都会根据需要进行构建，例如库存菜单。会使库存菜单崩溃的处理程序仍然会崩溃。
+  $description:zh-TW: Explorer 啟動後不久就會加熱常用選單，因此它們的第一次開啟是即時的。關閉它會在啟動時跳過加載每個已註冊的上下文選單處理程序（庫存選單的曝光），從而避免因錯誤的第三方擴展而導致啟動崩潰；然後，每個上下文的第一次打開都會根據需要進行構建，例如庫存選單。會使庫存選單崩潰的處理程序仍然會崩潰。
 - warmupExtensions: ".txt, .pdf, .zip, .rar, .7z, .jpg, .png, .mp4, .mp3, .docx, .xlsx, .exe, .lnk"
   $name: Warm-up extensions
+  $name:ar: تمديدات الاحماء
+  $name:az: İstiləşmə uzantıları
+  $name:bn: ওয়ার্ম আপ এক্সটেনশন
+  $name:cs: Zahřívací nástavce
+  $name:da: Opvarmningsudvidelser
+  $name:de-DE: Aufwärmverlängerungen
+  $name:el: Προεκτάσεις προθέρμανσης
+  $name:es-ES: Extensiones de calentamiento
+  $name:fa: پسوندهای گرم کننده
+  $name:fr-FR: Extensions à préchauffer
+  $name:hi: वार्म-अप एक्सटेंशन
+  $name:hr: Nastavci za zagrijavanje
+  $name:ht: Ekstansyon chofe
+  $name:hu: Bemelegítő hosszabbítások
+  $name:id-ID: Ekstensi pemanasan
+  $name:it-IT: Estensioni di riscaldamento
+  $name:ja-JP: ウォームアップ延長
+  $name:ko-KR: 워밍업 연장
+  $name:nb: Oppvarmingsforlengelser
+  $name:nl-NL: Opwarmextensies
+  $name:or: ୱାର୍ମ ଅପ୍ ଏକ୍ସଟେନ୍ସନ୍
+  $name:pl-PL: Przedłużenia rozgrzewkowe
+  $name:pt-BR: Extensões de aquecimento
+  $name:pt-PT: Extensões de aquecimento
+  $name:ro: Extensii de încălzire
+  $name:ru-RU: Расширения для разминки
+  $name:sv: Uppvärmningsförlängningar
+  $name:ta: சூடான நீட்டிப்புகள்
+  $name:th: ส่วนขยายการวอร์มอัพ
+  $name:tr-TR: Isınma uzatmaları
+  $name:uk-UA: Розминка розтяжок
+  $name:uz: Isitish kengaytmalari
+  $name:vi-VN: Phần mở rộng khởi động
+  $name:zh-CN: 热身延伸
+  $name:zh-TW: 熱身延伸
   $description: Comma-separated file types whose menus are pre-built at Explorer startup.
+  $description:ar: أنواع الملفات المفصولة بفواصل والتي تم إنشاء قوائمها مسبقًا عند بدء تشغيل Explorer.
+  $description:az: Menyuları Explorer başlanğıcında əvvəlcədən qurulmuş vergüllə ayrılmış fayl növləri.
+  $description:bn: কমা-বিভক্ত ফাইল প্রকার যার মেনুগুলি Explorer স্টার্টআপে প্রাক-বিল্ট।
+  $description:cs: Typy souborů oddělených čárkami, jejichž nabídky jsou předem vytvořeny při spuštění Explorer.
+  $description:da: Kommaseparerede filtyper, hvis menuer er forudbygget ved opstart af Explorer.
+  $description:de-DE: Durch Kommas getrennte Dateitypen, deren Menüs beim Start von Explorer vorgefertigt sind.
+  $description:el: Τύποι αρχείων διαχωρισμένων με κόμματα των οποίων τα μενού είναι προκατασκευασμένα κατά την εκκίνηση του Explorer.
+  $description:es-ES: Tipos de archivos separados por comas cuyos menús están prediseñados al iniciar Explorer.
+  $description:fa: انواع فایل جدا شده با کاما که منوهای آنها در راه اندازی Explorer از قبل ساخته شده است.
+  $description:fr-FR: Types de fichiers séparés par des virgules dont les menus sont prédéfinis au démarrage d'Explorer.
+  $description:hi: अल्पविराम से अलग किए गए फ़ाइल प्रकार जिनके मेनू Explorer स्टार्टअप पर पूर्व-निर्मित होते हैं।
+  $description:hr: Vrste datoteka odvojenih zarezima čiji su izbornici unaprijed ugrađeni pri pokretanju Explorer.
+  $description:ht: Kalite fichye ki separe ak vigil ki gen meni yo prekonstwi nan demaraj Explorer.
+  $description:hu: Vesszővel elválasztott fájltípusok, amelyek menüi előre be vannak építve a Explorer indításakor.
+  $description:id-ID: Jenis file yang dipisahkan koma yang menunya sudah dibuat sebelumnya saat startup Explorer.
+  $description:it-IT: Tipi di file separati da virgole i cui menu sono precostruiti all'avvio di Explorer.
+  $description:ja-JP: Explorer の起動時にメニューが事前に構築されているカンマ区切りのファイル タイプ。
+  $description:ko-KR: Explorer 시작 시 메뉴가 사전 구축된 쉼표로 구분된 파일 형식입니다.
+  $description:nb: Kommaseparerte filtyper hvis menyer er forhåndsbygd ved oppstart av Explorer.
+  $description:nl-NL: Door komma's gescheiden bestandstypen waarvan de menu's vooraf zijn gebouwd bij het opstarten van de Explorer.
+  $description:or: କମା ଦ୍ୱାରା ପୃଥକ ଫାଇଲ୍ ପ୍ରକାର ଯାହାର ମେନୁଗୁଡ଼ିକ Explorer ପ୍ରାରମ୍ଭରେ ପୂର୍ବରୁ ନିର୍ମିତ
+  $description:pl-PL: Typy plików oddzielonych przecinkami, których menu są wstępnie tworzone podczas uruchamiania Explorer.
+  $description:pt-BR: Tipos de arquivos separados por vírgula cujos menus são pré-construídos na inicialização do Explorer.
+  $description:pt-PT: Tipos de ficheiros separados por vírgula cujos menus são pré-construídos no arranque do Explorer.
+  $description:ro: Tipuri de fișiere separate prin virgulă ale căror meniuri sunt pre-construite la pornirea Explorer.
+  $description:ru-RU: Типы файлов, разделенные запятыми, меню которых предварительно создаются при запуске Explorer.
+  $description:sv: Kommaseparerade filtyper vars menyer är förbyggda vid Explorer-start.
+  $description:ta: Explorer தொடக்கத்தில் மெனுக்கள் முன்பே கட்டமைக்கப்பட்ட காற்புள்ளியால் பிரிக்கப்பட்ட கோப்பு வகைகள்.
+  $description:th: ประเภทไฟล์ที่คั่นด้วยเครื่องหมายจุลภาคซึ่งมีเมนูที่สร้างไว้ล่วงหน้าเมื่อเริ่มต้น Explorer
+  $description:tr-TR: Menüleri Explorer başlangıcında önceden oluşturulmuş olan virgülle ayrılmış dosya türleri.
+  $description:uk-UA: Розділені комами типи файлів, меню яких попередньо створено під час запуску Explorer.
+  $description:uz: Menyulari Explorer ishga tushirilganda oldindan tuzilgan vergul bilan ajratilgan fayl turlari.
+  $description:vi-VN: Các loại tệp được phân tách bằng dấu phẩy có menu được tạo sẵn khi khởi động Explorer.
+  $description:zh-CN: 逗号分隔的文件类型，其菜单是在 Explorer 启动时预先构建的。
+  $description:zh-TW: 逗號分隔的檔案類型，其選單是在 Explorer 啟動時預先建立的。
 - warmupDelaySeconds: 5
   $name: Warm-up delay
+  $name:ar: تأخير الاحماء
+  $name:az: İstiləşmə gecikməsi
+  $name:bn: ওয়ার্ম-আপ বিলম্ব
+  $name:cs: Zpoždění zahřívání
+  $name:da: Opvarmningsforsinkelse
+  $name:de-DE: Aufwärmverzögerung
+  $name:el: Καθυστέρηση προθέρμανσης
+  $name:es-ES: Retraso de calentamiento
+  $name:fa: تاخیر گرم کردن
+  $name:fr-FR: Délai de préchauffage
+  $name:hi: वार्म-अप में देरी
+  $name:hr: Odgoda zagrijavanja
+  $name:ht: Reta chofe
+  $name:hu: Bemelegítés késleltetése
+  $name:id-ID: Penundaan pemanasan
+  $name:it-IT: Ritardo del riscaldamento
+  $name:ja-JP: ウォームアップ遅延
+  $name:ko-KR: 워밍업 지연
+  $name:nb: Oppvarmingsforsinkelse
+  $name:nl-NL: Opwarmvertraging
+  $name:or: ୱାର୍ମ ଅପ୍ ବିଳମ୍ବ
+  $name:pl-PL: Opóźnienie nagrzewania
+  $name:pt-BR: Atraso no aquecimento
+  $name:pt-PT: Atraso no aquecimento
+  $name:ro: Întârziere la încălzire
+  $name:ru-RU: Задержка прогрева
+  $name:sv: Uppvärmningsfördröjning
+  $name:ta: வார்ம்-அப் தாமதம்
+  $name:th: ความล่าช้าในการอุ่นเครื่อง
+  $name:tr-TR: Isınma gecikmesi
+  $name:uk-UA: Затримка прогріву
+  $name:uz: Isitish kechikishi
+  $name:vi-VN: Độ trễ khởi động
+  $name:zh-CN: 预热延迟
+  $name:zh-TW: 預熱延遲
   $description: Seconds to wait after Explorer starts before warming the cache.
+  $description:ar: ثواني من الانتظار بعد بدء تشغيل Explorer قبل تسخين ذاكرة التخزين المؤقت.
+  $description:az: Keşi istiləşdirmədən əvvəl Explorer işə salındıqdan sonra gözləmək üçün saniyələr.
+  $description:bn: ক্যাশে গরম করার আগে Explorer শুরু হওয়ার পর সেকেন্ড অপেক্ষা করতে হবে।
+  $description:cs: Sekundy čekání po spuštění Explorer před zahřátím mezipaměti.
+  $description:da: Sekunder at vente efter Explorer starter, før cachen opvarmes.
+  $description:de-DE: Sekunden, die nach dem Start von Explorer gewartet werden müssen, bevor der Cache aufgewärmt wird.
+  $description:el: Δευτερόλεπτα αναμονής μετά την εκκίνηση του Explorer προτού θερμανθεί η κρυφή μνήμη.
+  $description:es-ES: Segundos de espera después de que se inicie Explorer antes de calentar el caché.
+  $description:fa: چند ثانیه منتظر ماندن پس از شروع Explorer قبل از گرم کردن حافظه پنهان.
+  $description:fr-FR: Quelques secondes à attendre après le démarrage d'Explorer avant de réchauffer le cache.
+  $description:hi: कैश को गर्म करने से पहले Explorer शुरू होने के बाद कुछ सेकंड इंतजार करना होगा।
+  $description:hr: Nekoliko sekundi čekanja nakon pokretanja Explorer prije zagrijavanja predmemorije.
+  $description:ht: Segonn pou tann apre Explorer kòmanse anvan chofe kachèt la.
+  $description:hu: Másodperceket kell várni a Explorer elindulása után, mielőtt felmelegítené a gyorsítótárat.
+  $description:id-ID: Beberapa detik untuk menunggu setelah Explorer dimulai sebelum menghangatkan cache.
+  $description:it-IT: Secondi di attesa dopo l'avvio di Explorer prima di riscaldare la cache.
+  $description:ja-JP: Explorer の開始後、キャッシュをウォームアップするまで待機する秒数。
+  $description:ko-KR: 캐시를 워밍하기 전에 Explorer가 시작된 후 기다리는 시간(초)입니다.
+  $description:nb: Sekunder å vente etter at Explorer starter før cachen varmes opp.
+  $description:nl-NL: Seconden om te wachten nadat Explorer is gestart voordat de cache wordt opgewarmd.
+  $description:or: କ୍ୟାଚ୍ ଗରମ କରିବା ପୂର୍ବରୁ Explorer ଆରମ୍ଭ ହେବା ପରେ ସେକେଣ୍ଡ୍
+  $description:pl-PL: Sekundy oczekiwania po uruchomieniu Explorer przed rozgrzaniem pamięci podręcznej.
+  $description:pt-BR: Segundos para esperar após o início do Explorer antes de aquecer o cache.
+  $description:pt-PT: Segundos para esperar após o início do Explorer antes de aquecer a cache.
+  $description:ro: Secunde de așteptat după pornirea Explorer înainte de a încălzi memoria cache.
+  $description:ru-RU: Несколько секунд ожидания после запуска Explorer, прежде чем нагревать кэш.
+  $description:sv: Sekunder att vänta efter att Explorer startar innan cachen värms upp.
+  $description:ta: தற்காலிக சேமிப்பை வெப்பமாக்கும் முன் Explorer தொடங்கிய பிறகு காத்திருக்க வேண்டிய வினாடிகள்.
+  $description:th: วินาทีที่จะรอหลังจาก Explorer เริ่มทำงานก่อนที่จะอุ่นแคช
+  $description:tr-TR: Önbelleği ısıtmadan önce Explorer başladıktan sonra beklenecek saniyeler.
+  $description:uk-UA: Кілька секунд очікування після запуску Explorer перед нагріванням кешу.
+  $description:uz: Keshni isitishdan oldin Explorer ishga tushirilgandan keyin kutish uchun soniyalar.
+  $description:vi-VN: Chờ vài giây sau khi Explorer khởi động trước khi khởi động bộ nhớ đệm.
+  $description:zh-CN: Explorer 启动后预热缓存之前等待的秒数。
+  $description:zh-TW: Explorer 啟動後預熱快取之前等待的秒數。
 */
 // ==/WindhawkModSettings==
 
@@ -276,6 +3801,7 @@ struct Settings {
     std::wstring theme = L"Custom (menu.ini)";
     int themeIndex = 0;
     std::wstring settingsHotkey;
+    std::wstring language = L"auto";
     int menuMode = 0;
     bool showMoreOptionsItem = true;
     bool topBar = false;
@@ -291,6 +3817,10 @@ struct Settings {
     std::vector<std::wstring> advancedSubmenuItems;
     std::vector<std::wstring> advancedSubmenuExclude;
 };
+
+void SelectLanguage(const std::wstring& setting);
+void ResetNewTemplates();
+void EnsureNewTemplates();
 
 // Settings are published as immutable snapshots: LoadSettings runs on the
 // engine thread while UI and warm-up threads read, and swapping a snapshot
@@ -403,6 +3933,10 @@ void LoadSettings() {
     WindhawkUtils::StringSetting hotkey =
         WindhawkUtils::StringSetting::make(L"settingsHotkey");
     next.settingsHotkey = hotkey.get();
+
+    WindhawkUtils::StringSetting language =
+        WindhawkUtils::StringSetting::make(L"language");
+    next.language = language.get()[0] ? language.get() : L"auto";
     next.themeIndex = ThemeIndexFromName(next.theme);
 
     WindhawkUtils::StringSetting menuMode =
@@ -436,7 +3970,665 @@ void LoadSettings() {
     next.advancedSubmenuExclude = ParseAdvancedItems(advancedExclude.get());
 
     g_settings.Publish(std::move(next));
+    SelectLanguage(g_settings->language);
 }
+
+// ===========================================================================
+// [CMO:Localization] Runtime language selection and display strings.
+// ===========================================================================
+
+struct LocalizationKey {
+    const wchar_t* key;
+    const wchar_t* english;
+};
+
+struct LocalizationLanguage {
+    const wchar_t* tag;
+    bool rtl;
+    const char* data;  // UTF-8 entries separated by '\x1F'
+};
+
+// [CMO:LocalizationData]
+const LocalizationKey kLocalizationKeys[] = {
+    {L"Open", L"Open"},
+    {L"Reset %s…", L"Reset %s…"},
+    {L"Compressed (zipped) Folder", L"Compressed (zipped) Folder"},
+    {L"Folder", L"Folder"},
+    {L"Shortcut", L"Shortcut"},
+    {L"About", L"About"},
+    {L"Align icons to grid", L"Align icons to grid"},
+    {L"Auto arrange icons", L"Auto arrange icons"},
+    {L"Content", L"Content"},
+    {L"Copy", L"Copy"},
+    {L"Copy as path", L"Copy as path"},
+    {L"Create shortcut", L"Create shortcut"},
+    {L"Cut", L"Cut"},
+    {L"Default (unset)", L"Default (unset)"},
+    {L"Delete", L"Delete"},
+    {L"Details", L"Details"},
+    {L"Display settings", L"Display settings"},
+    {L"Extra large icons", L"Extra large icons"},
+    {L"Face", L"Face"},
+    {L"Group by", L"Group by"},
+    {L"Hex", L"Hex"},
+    {L"Large icons", L"Large icons"},
+    {L"List", L"List"},
+    {L"Medium icons", L"Medium icons"},
+    {L"Menu settings", L"Menu settings"},
+    {L"Menu settings…", L"Menu settings…"},
+    {L"New", L"New"},
+    {L"Open Windhawk", L"Open Windhawk"},
+    {L"Open in new process", L"Open in new process"},
+    {L"Open in new window", L"Open in new window"},
+    {L"Open menu.ini", L"Open menu.ini"},
+    {L"Open theme file", L"Open theme file"},
+    {L"Open with", L"Open with"},
+    {L"Paste", L"Paste"},
+    {L"Paste shortcut", L"Paste shortcut"},
+    {L"Personalize", L"Personalize"},
+    {L"Pin to Quick access", L"Pin to Quick access"},
+    {L"Properties", L"Properties"},
+    {L"Refresh", L"Refresh"},
+    {L"Rename", L"Rename"},
+    {L"Replay open animation", L"Replay open animation"},
+    {L"Reset all appearance", L"Reset all appearance"},
+    {L"Reset all appearance…", L"Reset all appearance…"},
+    {L"Scale options…", L"Scale options…"},
+    {L"Send to", L"Send to"},
+    {L"Size", L"Size"},
+    {L"Slide options…", L"Slide options…"},
+    {L"Small icons", L"Small icons"},
+    {L"Sort by", L"Sort by"},
+    {L"Status", L"Status"},
+    {L"Target", L"Target"},
+    {L"Theme", L"Theme"},
+    {L"Tiles", L"Tiles"},
+    {L"Use cornerRadius (unset)", L"Use cornerRadius (unset)"},
+    {L"View", L"View"},
+    {L"Windhawk settings…", L"Windhawk settings…"},
+    {L"Show classic menu", L"Show classic menu"},
+    {L"More options", L"More options"},
+    {L"Ascending", L"Ascending"},
+    {L"Descending", L"Descending"},
+    {L"(None)", L"(None)"},
+    {L"Name", L"Name"},
+    {L"Date modified", L"Date modified"},
+    {L"Type", L"Type"},
+    {L"Text Document", L"Text Document"},
+    {L"Bitmap image", L"Bitmap image"},
+    {L"Rich Text Document", L"Rich Text Document"},
+    {L"on", L"on"},
+    {L"off", L"off"},
+    {L"custom", L"custom"},
+    {L"default", L"default"},
+    {L"Saved", L"Saved"},
+    {L"Save failed", L"Save failed"},
+    {L"Font not found", L"Font not found"},
+    {L"Base appearance", L"Base appearance"},
+    {L"Light appearance", L"Light appearance"},
+    {L"Dark appearance", L"Dark appearance"},
+    {L"deprecated — use animationOpen/Close", L"deprecated — use animationOpen/Close"},
+    {L"Theme: %s — editing theme file", L"Theme: %s — editing theme file"},
+    {L"schema %d", L"schema %d"},
+    {L"Menu mode", L"Menu mode"},
+    {L"Custom", L"Custom"},
+    {L"Classic", L"Classic"},
+    {L"Color", L"Color"},
+    {L"Colors", L"Colors"},
+    {L"Layout", L"Layout"},
+    {L"Text", L"Text"},
+    {L"Shadow", L"Shadow"},
+    {L"Effects", L"Effects"},
+    {L"Animation", L"Animation"},
+    {L"Background", L"Background"},
+    {L"Border", L"Border"},
+    {L"Separator", L"Separator"},
+    {L"Hover background", L"Hover background"},
+    {L"Pressed background", L"Pressed background"},
+    {L"Text color", L"Text color"},
+    {L"Disabled text color", L"Disabled text color"},
+    {L"Submenu arrow", L"Submenu arrow"},
+    {L"Header color", L"Header color"},
+    {L"Corner radius", L"Corner radius"},
+    {L"Corner radii", L"Corner radii"},
+    {L"Border width", L"Border width"},
+    {L"Padding", L"Padding"},
+    {L"Item padding", L"Item padding"},
+    {L"Vertical padding", L"Vertical padding"},
+    {L"Item height", L"Item height"},
+    {L"Icon size", L"Icon size"},
+    {L"Minimum width", L"Minimum width"},
+    {L"Maximum width", L"Maximum width"},
+    {L"Separator spacing", L"Separator spacing"},
+    {L"Marker", L"Marker"},
+    {L"Marker width", L"Marker width"},
+    {L"Marker color", L"Marker color"},
+    {L"Font", L"Font"},
+    {L"Font weight", L"Font weight"},
+    {L"Font style", L"Font style"},
+    {L"Accelerator display", L"Accelerator display"},
+    {L"Shadow size", L"Shadow size"},
+    {L"Shadow offset X", L"Shadow offset X"},
+    {L"Shadow offset Y", L"Shadow offset Y"},
+    {L"Shadow opacity", L"Shadow opacity"},
+    {L"Adapt shadow to backdrop", L"Adapt shadow to backdrop"},
+    {L"Shadow color", L"Shadow color"},
+    {L"Shadow blur", L"Shadow blur"},
+    {L"Blur", L"Blur"},
+    {L"Blur strength", L"Blur strength"},
+    {L"Overlay effects", L"Overlay effects"},
+    {L"Overlay intensity", L"Overlay intensity"},
+    {L"Overlay speed", L"Overlay speed"},
+    {L"Overlay size", L"Overlay size"},
+    {L"Overlay frame interval", L"Overlay frame interval"},
+    {L"Animate overlays while open", L"Animate overlays while open"},
+    {L"Open animation", L"Open animation"},
+    {L"Close animation", L"Close animation"},
+    {L"Open duration", L"Open duration"},
+    {L"Close duration", L"Close duration"},
+    {L"Animation frame interval", L"Animation frame interval"},
+    {L"Animation easing", L"Animation easing"},
+    {L"Animation anchor", L"Animation anchor"},
+    {L"Animate submenus", L"Animate submenus"},
+    {L"Slide offset X", L"Slide offset X"},
+    {L"Slide offset Y", L"Slide offset Y"},
+    {L"Scale from", L"Scale from"},
+    {L"Saturation / value", L"Saturation / value"},
+    {L"Hue", L"Hue"},
+    {L"Alpha", L"Alpha"},
+    {L"Red", L"Red"},
+    {L"Green", L"Green"},
+    {L"Blue", L"Blue"},
+    {L"Alpha value", L"Alpha value"},
+    {L"Top left", L"Top left"},
+    {L"Top right", L"Top right"},
+    {L"Bottom right", L"Bottom right"},
+    {L"Bottom left", L"Bottom left"},
+    {L"@option:fontWeight:normal", L"Normal"},
+    {L"@option:fontWeight:semibold", L"Semibold"},
+    {L"@option:fontWeight:bold", L"Bold"},
+    {L"@option:fontStyle:normal", L"Normal"},
+    {L"@option:fontStyle:italic", L"Italic"},
+    {L"@option:marker:dot", L"Dot"},
+    {L"@option:marker:check", L"Check"},
+    {L"@option:marker:bar", L"Bar"},
+    {L"@option:marker:none", L"None"},
+    {L"@option:showAccelerators:underline", L"Underline"},
+    {L"@option:showAccelerators:strip", L"Strip"},
+    {L"@option:showAccelerators:raw", L"Raw"},
+    {L"@option:animationEasing:linear", L"Linear"},
+    {L"@option:animationEasing:easeOut", L"Ease out"},
+    {L"@option:animationEasing:easeInOut", L"Ease in-out"},
+    {L"@option:animationEasing:back", L"Back"},
+    {L"@option:animationEasing:bounce", L"Bounce"},
+    {L"@option:animationEasing:elastic", L"Elastic"},
+    {L"@option:animationAnchor:cursor", L"Cursor"},
+    {L"@option:animationAnchor:center", L"Center"},
+    {L"@effect:none", L"None"},
+    {L"@effect:fade", L"Fade"},
+    {L"@effect:slide", L"Slide"},
+    {L"@effect:scale", L"Scale"},
+    {L"@effect:dissolve", L"Dissolve"},
+    {L"@effect:crt", L"CRT"},
+    {L"@effect:unfold", L"Unfold"},
+    {L"@overlay:none", L"None"},
+    {L"@overlay:noise", L"Noise"},
+    {L"@overlay:plasma", L"Plasma"},
+    {L"@overlay:hue", L"Hue"},
+    {L"@overlay:glow", L"Glow"},
+    {L"@overlay:scanlines", L"Scanlines"},
+    {L"@overlay:vignette", L"Vignette"},
+    {L"Language", L"Language"},
+    {L"Show classic menu item", L"Show classic menu item"},
+    {L"Top action bar", L"Top action bar"},
+    {L"Submenu delay", L"Submenu delay"},
+    {L"Bypass keys", L"Bypass keys"},
+    {L"Debug logging", L"Debug logging"},
+    {L"Warmup delay", L"Warmup delay"},
+    {L"@theme:Custom (menu.ini)", L"Custom (menu.ini)"},
+    {L"@theme:Windows 11 Dark", L"Windows 11 Dark"},
+    {L"@theme:Windows 11 Light", L"Windows 11 Light"},
+    {L"@theme:Windows 10 Dark", L"Windows 10 Dark"},
+    {L"@theme:Windows 10 Light", L"Windows 10 Light"},
+    {L"@theme:High Contrast", L"High Contrast"},
+    {L"Selection marker", L"Selection marker"},
+    {L"New %s", L"New %s"},
+    {L"New folder", L"New folder"},
+    {L"New shortcut", L"New shortcut"},
+};
+
+const LocalizationLanguage kLocalizationLanguages[] = {
+    {L"ar", true, "فتح\037إعادة تعيين %s...\037مجلد مضغوط (مضغوط).\037مجلد\037الاختصار\037حول\037محاذاة الرموز إلى الشبكة\037الترتيب التلقائي للأيقونات\037المحتوى\037نسخ\037نسخ كمسار\037إنشاء اختصار\037قص\037افتراضي (غير محدد)\037حذف\037التفاصيل\037إعدادات العرض\037أيقونات كبيرة جدًا\037الوجه\037تجميع حسب\037عرافة\037أيقونات كبيرة\037قائمة\037أيقونات متوسطة\037إعدادات القائمة\037إعدادات القائمة…\037جديد\037افتح Windhawk\037فتح في عملية جديدة\037فتح في نافذة جديدة\037افتح menu.ini\037فتح ملف الموضوع\037فتح مع\037لصق\037لصق الاختصار\037إضفاء الطابع الشخصي\037دبوس للوصول السريع\037الخصائص\037تحديث\037إعادة تسمية\037إعادة تشغيل الرسوم المتحركة المفتوحة\037إعادة ضبط كل المظهر\037إعادة ضبط المظهر بالكامل...\037خيارات القياس…\037أرسل إلى\037الحجم\037خيارات الشرائح...\037أيقونات صغيرة\037الترتيب حسب\037الحالة\037الهدف\037الموضوع\037البلاط\037استخدم CornerRadius (غير محدد)\037عرض\037إعدادات Windhawk...\037عرض القائمة الكلاسيكية\037المزيد من الخيارات\037تصاعدي\037تنازلي\037(لا شيء)\037الاسم\037تم تعديل التاريخ\037اكتب\037وثيقة نصية\037صورة نقطية\037وثيقة نصية غنية\037على\037خارج\037مخصص\037default\037تم الحفظ\037فشل الحفظ\037لم يتم العثور على الخط\037المظهر الأساسي\037مظهر خفيف\037مظهر داكن\037مهمل - استخدم animationOpen/Close\037الموضوع: %s - تحرير ملف الموضوع\037المخطط %d\037وضع القائمة\037مخصص\037كلاسيكي\037اللون\037الألوان\037التخطيط\037نص\037الظل\037التأثيرات\037الرسوم المتحركة\037الخلفية\037الحدود\037فاصل\037تحوم الخلفية\037الخلفية المضغوطة\037لون النص\037لون النص معطل\037سهم القائمة الفرعية\037لون الرأس\037شعاع الزاوية\037نصف قطر الزاوية\037عرض الحدود\037الحشو\037حشوة السلعة\037الحشو العمودي\037ارتفاع السلعة\037حجم الأيقونة\037الحد الأدنى للعرض\037أقصى عرض\037تباعد الفاصل\037علامة\037عرض العلامة\037لون العلامة\037الخط\037وزن الخط\037نمط الخط\037عرض المسرع\037حجم الظل\037إزاحة الظل X\037إزاحة الظل Y\037عتامة الظل\037تكييف الظل مع الخلفية\037لون الظل\037طمس الظل\037طمس\037قوة طمس\037تأثيرات التراكب\037كثافة التراكب\037سرعة التراكب\037حجم التراكب\037تراكب الفاصل الزمني للإطار\037تحريك التراكبات أثناء الفتح\037فتح الرسوم المتحركة\037إغلاق الرسوم المتحركة\037مدة مفتوحة\037مدة الإغلاق\037الفاصل الزمني لإطار الرسوم المتحركة\037تخفيف الرسوم المتحركة\037مرساة الرسوم المتحركة\037تحريك القوائم الفرعية\037إزاحة الشريحة X\037إزاحة الشريحة Y\037مقياس من\037التشبع / القيمة\037هوى\037ألفا\037أحمر\037أخضر\037أزرق\037قيمة ألفا\037أعلى اليسار\037أعلى اليمين\037أسفل اليمين\037أسفل اليسار\037عادي\037نصف غامق\037جريئة\037عادي\037مائل\037نقطة\037تحقق\037بار\037لا شيء\037تسطير\037قطاع\037الخام\037خطي\037سهولة الخروج\037سهولة الدخول والخروج\037العودة\037ترتد\037مرن\037المؤشر\037مركز\037لا شيء\037تتلاشى\037شريحة\037مقياس\037حل\037إنبوب أشعة القطب السالب\037تتكشف\037لا شيء\037الضوضاء\037بلازما\037هوى\037توهج\037خطوط المسح\037المقالة القصيرة\037اللغة\037إظهار عنصر القائمة الكلاسيكية\037شريط الإجراءات العلوي\037تأخير القائمة الفرعية\037مفاتيح التجاوز\037تسجيل التصحيح\037تأخير الاحماء\037مخصص (menu.ini)\037Windows 11 الظلام\037ضوء Windows 11\037Windows 10 داكن\037ضوء Windows 10\037التباين العالي\037علامة الاختيار\037جديد %s\037مجلد جديد\037اختصار جديد"},
+    {L"az", false, "Aç\037%s-ni sıfırlayın…\037Sıxılmış (sıxılmış) qovluq\037Qovluq\037Qısayol\037Haqqında\037Nişanları şəbəkəyə uyğunlaşdırın\037Nişanları avtomatik təşkil edin\037Məzmun\037Kopyalayın\037Yol kimi kopyalayın\037Qısayol yaradın\037Kəs\037Defolt (ayarlanmamış)\037Sil\037Təfərrüatlar\037Ekran parametrləri\037Əlavə böyük nişanlar\037Üz\037Qrupla\037Hex\037Böyük nişanlar\037Siyahı\037Orta ölçülü nişanlar\037Menyu parametrləri\037Menyu parametrləri...\037Yeni\037Windhawk-i açın\037Yeni prosesdə açın\037Yeni pəncərədə açın\037menu.ini-i açın\037Mövzu faylını açın\037ilə açın\037Yapıştır\037Qısayolu yapışdırın\037Fərdiləşdirin\037Sürətli girişə bərkidin\037Xüsusiyyətlər\037Yenilə\037Adını dəyişmək\037Açıq animasiyanı təkrarlayın\037Bütün görünüşü sıfırlayın\037Bütün görünüşü sıfırlayın...\037Ölçek seçimləri...\037göndərin\037Ölçü\037Slayd seçimləri...\037Kiçik nişanlar\037Sırala\037Status\037Hədəf\037Mövzu\037Kafel\037küncRadiusundan istifadə edin (ayarlanmamış)\037Baxış\037Windhawk parametrləri...\037Klassik menyunu göstərin\037Daha çox seçim\037Artan\037Azalan\037(Heç biri)\037ad\037Dəyişdirilmə tarixi\037Növ\037Mətn sənədi\037Bitmap şəkli\037Zəngin mətn sənədi\037haqqında\037off\037adət\037default\037Saxlandı\037Yadda saxlamaq alınmadı\037Şrift tapılmadı\037Baza görünüşü\037Yüngül görünüş\037Qaranlıq görünüş\037köhnəlmişdir — animationOpen/Close istifadə edin\037Mövzu: %s — tema faylının redaktə edilməsi\037sxemi %d\037Menyu rejimi\037Fərdi\037Klassik\037Rəng\037Rənglər\037Layout\037Mətn\037Kölgə\037Effektlər\037Animasiya\037Fon\037Sərhəd\037Ayırıcı\037Hover fon\037Basılmış fon\037Mətnin rəngi\037Mətn rəngini deaktiv etdi\037Alt menyu oxu\037Başlıq rəngi\037Künc radiusu\037Künc radiusları\037Sərhəd eni\037Doldurma\037Elementin doldurulması\037Şaquli doldurma\037Element hündürlüyü\037Nişan ölçüsü\037Minimum genişlik\037Maksimum genişlik\037Ayırıcı məsafə\037Marker\037Marker eni\037Marker rəngi\037Şrift\037Şriftin çəkisi\037Şrift üslubu\037Sürətləndirici ekran\037Kölgə ölçüsü\037Kölgə ofseti X\037Kölgə ofseti Y\037Kölgə qeyri-şəffaflığı\037Kölgəni fona uyğunlaşdırın\037Kölgə rəngi\037Kölgə bulanması\037Bulanıq\037Bulanıqlıq gücü\037Overlay effektləri\037Üst-üstə düşmə intensivliyi\037Overlay sürəti\037Overlay ölçüsü\037Overlay çərçivə intervalı\037Açıq halda üst-üstə düşmələri canlandırın\037Açıq animasiya\037Animasiyanı bağlayın\037Açıq müddət\037Müddəti bağlayın\037Animasiya çərçivə intervalı\037Animasiya asanlaşdırılması\037Animasiya anker\037Alt menyuları canlandırın\037Slayd ofseti X\037Slayd ofseti Y\037miqyası\037Doyma / dəyər\037Hue\037Alfa\037Qırmızı\037Yaşıl\037Mavi\037Alfa dəyəri\037Yuxarı sol\037Yuxarı sağ\037Aşağı sağ\037Aşağı sol\037Normal\037Yarım qalın\037Cəsarətli\037Normal\037kursiv\037Nöqtə\037Yoxlayın\037Bar\037Heç biri\037Altını çiz\037zolaq\037Xam\037Xətti\037Rahatlayın\037Giriş-çıxışı asanlaşdırın\037Geri\037Sıçrayış\037Elastik\037Kursor\037mərkəz\037Heç biri\037Solmaq\037Slayd\037Ölçək\037Həll et\037CRT\037Açın\037Heç biri\037Səs-küy\037Plazma\037Hue\037Parıltı\037Skan xətləri\037Vinyet\037Dil\037Klassik menyu elementini göstərin\037Üst fəaliyyət çubuğu\037Alt menyu gecikməsi\037Bypass açarları\037Sazlama girişi\037İstiləşmə gecikməsi\037Fərdi (menu.ini)\037Windows 11 Qaranlıq\037Windows 11 İşıq\037Windows 10 Qaranlıq\037Windows 10 İşıq\037Yüksək Kontrast\037Seçim markeri\037Yeni %s\037Yeni qovluq\037Yeni qısayol"},
+    {L"bn", false, "খুলুন\037%s রিসেট করুন...\037সংকুচিত (জিপ) ফোল্ডার\037ফোল্ডার\037শর্টকাট\037সম্পর্কে\037আইকনগুলিকে গ্রিডে সারিবদ্ধ করুন\037স্বয়ংক্রিয়ভাবে আইকন সাজান\037বিষয়বস্তু\037অনুলিপি\037পথ হিসাবে অনুলিপি\037শর্টকাট তৈরি করুন\037কাট\037ডিফল্ট (আনসেট)\037মুছুন\037বিস্তারিত\037প্রদর্শন সেটিংস\037অতিরিক্ত বড় আইকন\037মুখ\037দ্বারা গ্রুপ\037হেক্স\037বড় আইকন\037তালিকা\037মাঝারি আইকন\037মেনু সেটিংস\037মেনু সেটিংস...\037নতুন\037Windhawk খুলুন\037নতুন প্রক্রিয়ায় খুলুন\037নতুন উইন্ডোতে খুলুন\037menu.ini খুলুন\037থিম ফাইল খুলুন\037দিয়ে খুলুন\037পেস্ট করুন\037শর্টকাট পেস্ট করুন\037ব্যক্তিগতকৃত\037দ্রুত অ্যাক্সেসে পিন করুন\037বৈশিষ্ট্য\037রিফ্রেশ\037নাম পরিবর্তন করুন\037খোলা অ্যানিমেশন রিপ্লে\037সমস্ত চেহারা রিসেট করুন\037সমস্ত চেহারা রিসেট করুন...\037স্কেল বিকল্প…\037পাঠান\037আকার\037স্লাইড বিকল্প...\037ছোট আইকন\037অনুসারে সাজান\037স্থিতি\037টার্গেট\037থিম\037টাইলস\037কর্নাররেডিয়াস ব্যবহার করুন (আনসেট)\037দেখুন\037Windhawk সেটিংস…\037ক্লাসিক মেনু দেখান\037আরও বিকল্প\037আরোহী\037অবরোহী\037(কোনটিই নয়)\037নাম\037তারিখ পরিবর্তন করা হয়েছে\037টাইপ\037টেক্সট ডকুমেন্ট\037বিটম্যাপ ছবি\037রিচ টেক্সট ডকুমেন্ট\037অন\037বন্ধ\037কাস্টম\037ডিফল্ট\037সংরক্ষিত\037সংরক্ষণ ব্যর্থ হয়েছে\037ফন্ট পাওয়া যায়নি\037বেস চেহারা\037হালকা চেহারা\037অন্ধকার চেহারা\037অপ্রচলিত — animationOpen/Close ব্যবহার করুন\037থিম: %s — থিম ফাইল সম্পাদনা করা\037স্কিমা %d\037মেনু মোড\037কাস্টম\037ক্লাসিক\037রঙ\037রং\037লেআউট\037পাঠ্য\037ছায়া\037প্রভাব\037অ্যানিমেশন\037পটভূমি\037বর্ডার\037বিভাজক\037পটভূমি হোভার করুন\037চাপা পটভূমি\037পাঠ্যের রঙ\037অক্ষম টেক্সট রঙ\037সাবমেনু তীর\037হেডারের রঙ\037কোণার ব্যাসার্ধ\037কোণার ব্যাসার্ধ\037সীমানা প্রস্থ\037প্যাডিং\037আইটেম প্যাডিং\037উল্লম্ব প্যাডিং\037আইটেমের উচ্চতা\037আইকনের আকার\037ন্যূনতম প্রস্থ\037সর্বোচ্চ প্রস্থ\037বিভাজক ব্যবধান\037মার্কার\037মার্কার প্রস্থ\037মার্কার রঙ\037হরফ\037হরফের ওজন\037ফন্ট শৈলী\037এক্সিলারেটর ডিসপ্লে\037ছায়ার আকার\037ছায়া অফসেট এক্স\037ছায়া অফসেট Y\037ছায়ার অস্বচ্ছতা\037পটভূমিতে ছায়া মানিয়ে নিন\037ছায়া রঙ\037ছায়া ঝাপসা\037ঝাপসা\037ঝাপসা শক্তি\037ওভারলে প্রভাব\037ওভারলে তীব্রতা\037ওভারলে গতি\037ওভারলে আকার\037ওভারলে ফ্রেম ব্যবধান\037খোলা থাকার সময় ওভারলে অ্যানিমেট করুন\037অ্যানিমেশন খুলুন\037অ্যানিমেশন বন্ধ করুন\037খোলার সময়কাল\037বন্ধ সময়কাল\037অ্যানিমেশন ফ্রেম ব্যবধান\037অ্যানিমেশন সহজীকরণ\037অ্যানিমেশন অ্যাঙ্কর\037অ্যানিমেট সাবমেনুস\037স্লাইড অফসেট এক্স\037স্লাইড অফসেট Y\037থেকে স্কেল\037স্যাচুরেশন / মান\037হিউ\037আলফা\037লাল\037সবুজ\037নীল\037আলফা মান\037উপরে বাম\037উপরে ডানদিকে\037নীচে ডান\037নীচে বাম\037স্বাভাবিক\037সেমিবোল্ড\037সাহসী\037স্বাভাবিক\037তির্যক\037ডট\037চেক করুন\037বার\037কোনোটিই নয়\037আন্ডারলাইন করুন\037স্ট্রিপ\037কাঁচা\037রৈখিক\037সহজ আউট\037সহজ ইন-আউট\037ব্যাক\037বাউন্স\037ইলাস্টিক\037কার্সার\037কেন্দ্র\037কোনোটিই নয়\037বিবর্ণ\037স্লাইড\037স্কেল\037দ্রবীভূত করা\037সিআরটি\037উন্মোচন\037কোনোটিই নয়\037গোলমাল\037প্লাজমা\037হিউ\037দীপ্তি\037স্ক্যানলাইন\037ভিগনেট\037ভাষা\037ক্লাসিক মেনু আইটেম দেখান\037শীর্ষ কর্ম বার\037সাবমেনু বিলম্ব\037বাইপাস কী\037ডিবাগ লগিং\037ওয়ার্মআপ বিলম্ব\037কাস্টম (menu.ini)\037Windows 11 অন্ধকার\037Windows 11 লাইট\037Windows 10 অন্ধকার\037Windows 10 লাইট\037উচ্চ বৈসাদৃশ্য\037নির্বাচন মার্কার\037নতুন %s\037নতুন ফোল্ডার\037নতুন শর্টকাট"},
+    {L"cs", false, "Otevřít\037Resetovat %s…\037Komprimovaná (zazipovaná) složka\037Složka\037Zkratka\037O\037Zarovnejte ikony do mřížky\037Automatické uspořádání ikon\037Obsah\037Kopírovat\037Kopírovat jako cestu\037Vytvořit zástupce\037Vyjmout\037Výchozí (nenastaveno)\037Smazat\037Podrobnosti\037Nastavení displeje\037Extra velké ikony\037Tvář\037Seskupit podle\037Hex\037Velké ikony\037Seznam\037Střední ikony\037Nastavení menu\037Nastavení menu…\037Nový\037Otevřete Windhawk\037Otevřít v novém procesu\037Otevřít v novém okně\037Otevřete menu.ini\037Otevřete soubor motivu\037Otevřít pomocí\037Vložit\037Vložit zkratku\037Přizpůsobit\037Připnout na Rychlý přístup\037Vlastnosti\037Obnovit\037Přejmenovat\037Přehrajte znovu otevřenou animaci\037Obnovit veškerý vzhled\037Obnovit celý vzhled…\037Možnosti měřítka…\037Odeslat na\037Velikost\037Možnosti snímku…\037Malé ikony\037Seřadit podle\037Stav\037Cíl\037téma\037Dlaždice\037Použít rohový poloměr (nenastaveno)\037Zobrazit\037Nastavení Windhawk…\037Zobrazit klasické menu\037Více možností\037Vzestupně\037Sestupně\037(žádné)\037Jméno\037Datum změny\037Typ\037Textový dokument\037Bitmapový obrázek\037RTF dokument\037na\037vypnuto\037vlastní\037výchozí\037Uloženo\037Uložení se nezdařilo\037Písmo nenalezeno\037Základní vzhled\037Světlý vzhled\037Tmavý vzhled\037zastaralé – použijte animationOpen/Close\037Téma: %s — úprava souboru motivu\037schéma %d\037Režim nabídky\037Vlastní\037Classic\037Barva\037Barvy\037Rozložení\037Text\037Stín\037Efekty\037Animace\037Pozadí\037Hranice\037Separátor\037Vznášející se pozadí\037Lisované pozadí\037Barva textu\037Barva textu zakázána\037Šipka podnabídky\037Barva záhlaví\037Poloměr rohu\037Rohové poloměry\037Šířka okraje\037Vycpávka\037Polstrování položky\037Vertikální polstrování\037Výška položky\037Velikost ikony\037Minimální šířka\037Maximální šířka\037Rozteč oddělovačů\037Marker\037Šířka značky\037Barva fixu\037Písmo\037Tloušťka písma\037Styl písma\037Displej akcelerátoru\037Velikost stínu\037Posun stínu X\037Posun stínu Y\037Neprůhlednost stínů\037Přizpůsobte stín pozadí\037Barva stínu\037Rozostření stínů\037Rozostření\037Síla rozmazání\037Překryvné efekty\037Intenzita překrytí\037Rychlost překrytí\037Velikost překryvu\037Interval překryvného snímku\037Animujte překryvné obrázky při otevření\037Otevřete animaci\037Zavřít animaci\037Otevřená doba trvání\037Zavřít trvání\037Interval snímků animace\037Uvolnění animace\037Animační kotva\037Animovat podnabídky\037Odsazení snímku X\037Odsazení posuvu Y\037Měřítko od\037Sytost / hodnota\037Odstín\037Alfa\037Červená\037Zelená\037Modrá\037Hodnota alfa\037Vlevo nahoře\037Vpravo nahoře\037Vpravo dole\037Vlevo dole\037Normální\037Polotučný\037Tučné\037Normální\037kurzíva\037Tečka\037Zkontrolujte\037Bar\037žádný\037Podtrhněte\037Proužek\037Syrové\037Lineární\037Uvolněte se\037Snadný vstup a výstup\037Zpět\037Odrazit\037Elastické\037Kurzor\037Střed\037žádný\037Vyblednout\037Snímek\037Měřítko\037Rozpustit\037CRT\037Rozvinout\037žádný\037Hluk\037Plazma\037Odstín\037Záře\037Scanlines\037Viněta\037Jazyk\037Zobrazit klasickou položku nabídky\037Horní akční lišta\037Zpoždění podnabídky\037Obejít klíče\037Ladění protokolování\037Zpoždění zahřívání\037Vlastní (menu.ini)\037Windows 11 Tmavý\037Světlo Windows 11\037Windows 10 Tmavý\037Světlo Windows 10\037Vysoký kontrast\037Značka výběru\037Nový %s\037Nová složka\037Nová zkratka"},
+    {L"da", false, "Åbn\037Nulstil %s...\037Komprimeret (zippet) mappe\037Mappe\037Genvej\037Om\037Juster ikoner til gitter\037Automatisk arrangere ikoner\037Indhold\037Kopier\037Kopiér som sti\037Opret genvej\037Klip\037Standard (frakoblet)\037Slet\037Detaljer\037Skærmindstillinger\037Ekstra store ikoner\037Ansigt\037Grupper efter\037Hex\037Store ikoner\037Liste\037Mellemstore ikoner\037Menuindstillinger\037Menuindstillinger...\037Ny\037Åbn Windhawk\037Åbn i ny proces\037Åbn i nyt vindue\037Åbn menu.ini\037Åbn temafil\037Åbn med\037Indsæt\037Indsæt genvej\037Tilpas\037Fastgør til hurtig adgang\037Egenskaber\037Opdater\037Omdøb\037Gentag åben animation\037Nulstil alt udseende\037Nulstil alt udseende...\037Skaleringsmuligheder...\037Send til\037Størrelse\037Indstillinger for dias...\037Små ikoner\037Sorter efter\037Status\037Mål\037Tema\037Fliser\037Brug cornerRadius (frakoblet)\037Vis\037Windhawk indstillinger...\037Vis klassisk menu\037Flere muligheder\037Stigende\037Faldende\037(Ingen)\037Navn\037Ændret dato\037Type\037Tekstdokument\037Bitmap billede\037Rich Text-dokument\037på\037slukket\037skik\037standard\037Gemt\037Gem mislykkedes\037Skrifttype ikke fundet\037Base udseende\037Let udseende\037Mørkt udseende\037forældet — brug animationOpen/Close\037Tema: %s — redigering af temafil\037skema %d\037Menutilstand\037Brugerdefineret\037Klassisk\037Farve\037Farver\037Layout\037Tekst\037Skygge\037Effekter\037Animation\037Baggrund\037Grænse\037Separator\037Hover baggrund\037Trykt baggrund\037Tekstfarve\037Deaktiveret tekstfarve\037Undermenupil\037Overskriftsfarve\037Hjørneradius\037Hjørneradier\037Kantbredde\037Polstring\037Emne polstring\037Lodret polstring\037Varehøjde\037Ikon størrelse\037Minimum bredde\037Maksimal bredde\037Separator afstand\037Markør\037Markør bredde\037Markør farve\037Skrifttype\037Skrifttypevægt\037Skrifttypestil\037Accelerator display\037Skygge størrelse\037Skygge offset X\037Skygge offset Y\037Skyggeopacitet\037Tilpas skygge til baggrunden\037Skygge farve\037Skyggesløring\037Slør\037Sløringsstyrke\037Overlejringseffekter\037Overlejringsintensitet\037Overlejringshastighed\037Overlay størrelse\037Overlay frame interval\037Animer overlejringer, mens de er åbne\037Åbn animation\037Luk animation\037Åben varighed\037Luk varighed\037Animation frame interval\037Lempelse af animation\037Animation anker\037Animer undermenuer\037Slide offset X\037Slide offset Y\037Skala fra\037Mætning / værdi\037Hue\037Alfa\037Rød\037Grøn\037Blå\037Alfa værdi\037Øverst til venstre\037Øverst til højre\037Nederst til højre\037Nederst til venstre\037Normal\037Halvfed\037Fed\037Normal\037Kursiv\037Prik\037Tjek\037Bar\037Ingen\037Understreg\037Strip\037Rå\037Lineær\037Slap af\037Nem ind-ud\037Tilbage\037Bounce\037Elastik\037Markør\037Center\037Ingen\037Fade\037Slide\037Skala\037Opløses\037CRT\037Fold ud\037Ingen\037Støj\037Plasma\037Hue\037Glød\037Scanlines\037Vignette\037Sprog\037Vis klassisk menupunkt\037Øverste handlingsbjælke\037Undermenu forsinkelse\037Bypass nøgler\037Debug logning\037Opvarmningsforsinkelse\037Brugerdefineret (menu.ini)\037Windows 11 Mørk\037Windows 11 lys\037Windows 10 Mørk\037Windows 10 lys\037Høj kontrast\037Markeringsmarkør\037Ny %s\037Ny mappe\037Ny genvej"},
+    {L"de", false, "Öffnen\037%s zurücksetzen…\037Komprimierter (gezippter) Ordner\037Ordner\037Verknüpfung\037Über\037Symbole am Raster ausrichten\037Symbole automatisch anordnen\037Inhalt\037Kopieren\037Als Pfad kopieren\037Verknüpfung erstellen\037Ausschneiden\037Standard (nicht festgelegt)\037Löschen\037Einzelheiten\037Anzeigeeinstellungen\037Extra große Symbole\037Gesicht\037Gruppieren nach\037Hex\037Große Symbole\037Liste\037Mittlere Symbole\037Menüeinstellungen\037Menüeinstellungen…\037Neu\037Öffnen Sie Windhawk\037In neuem Prozess öffnen\037In neuem Fenster öffnen\037Öffnen Sie menu.ini\037Theme-Datei öffnen\037Öffnen mit\037Einfügen\037Verknüpfung einfügen\037Personalisieren\037An den Schnellzugriff anpinnen\037Eigenschaften\037Aktualisieren\037Umbenennen\037Öffnen Sie die Animation noch einmal\037Alle Erscheinungsbilder zurücksetzen\037Alle Erscheinungsbilder zurücksetzen…\037Skalierungsoptionen…\037Senden an\037Größe\037Folienoptionen…\037Kleine Symbole\037Sortieren nach\037Status\037Ziel\037Thema\037Kacheln\037CornerRadius verwenden (nicht gesetzt)\037Ansicht\037Windhawk-Einstellungen…\037Klassisches Menü anzeigen\037Weitere Optionen\037Aufsteigend\037Absteigend\037(Keine)\037Name\037Änderungsdatum\037Typ\037Textdokument\037Bitmap-Bild\037Rich-Text-Dokument\037auf\037aus\037Brauch\037Standard\037Gespeichert\037Speichern fehlgeschlagen\037Schriftart nicht gefunden\037Grundaussehen\037Leichtes Erscheinungsbild\037Dunkles Aussehen\037veraltet – verwenden Sie animationOpen/Close\037Thema: %s – Themendatei bearbeiten\037Schema %d\037Menümodus\037Benutzerdefiniert\037Klassisch\037Farbe\037Farben\037Layout\037Text\037Schatten\037Effekte\037Animation\037Hintergrund\037Grenze\037Trennzeichen\037Hover-Hintergrund\037Gepresster Hintergrund\037Textfarbe\037Textfarbe deaktiviert\037Untermenüpfeil\037Kopfzeilenfarbe\037Eckenradius\037Eckradien\037Randbreite\037Polsterung\037Artikelpolsterung\037Vertikale Polsterung\037Artikelhöhe\037Symbolgröße\037Mindestbreite\037Maximale Breite\037Trennabstand\037Markierung\037Markierungsbreite\037Markierungsfarbe\037Schriftart\037Schriftstärke\037Schriftstil\037Beschleunigeranzeige\037Schattengröße\037Schattenversatz X\037Schattenversatz Y\037Schattenopazität\037Schatten an Hintergrund anpassen\037Schattenfarbe\037Schattenunschärfe\037Unschärfe\037Unschärfestärke\037Overlay-Effekte\037Overlay-Intensität\037Overlay-Geschwindigkeit\037Overlay-Größe\037Overlay-Frame-Intervall\037Animieren Sie Overlays, während sie geöffnet sind\037Animation öffnen\037Animation schließen\037Offene Dauer\037Schließdauer\037Animationsbildintervall\037Lockerung der Animation\037Animationsanker\037Untermenüs animieren\037Folienversatz X\037Folienversatz Y\037Maßstab von\037Sättigung / Wert\037Farbton\037Alpha\037Rot\037Grün\037Blau\037Alpha-Wert\037Oben links\037Oben rechts\037Unten rechts\037Unten links\037Normal\037Halbfett\037Fett\037Normal\037Kursiv\037Punkt\037Überprüfen\037Bar\037Keine\037Unterstreichen\037Streifen\037Roh\037Linear\037Entspannen Sie sich\037Einfaches Ein- und Aussteigen\037Zurück\037Hüpfen\037Elastisch\037Cursor\037Mitte\037Keine\037Verblassen\037Rutsche\037Maßstab\037Auflösen\037CRT\037Entfalten\037Keine\037Lärm\037Plasma\037Farbton\037Glühen\037Scanlinien\037Vignette\037Sprache\037Klassischen Menüpunkt anzeigen\037Obere Aktionsleiste\037Untermenüverzögerung\037Schlüssel umgehen\037Debug-Protokollierung\037Aufwärmverzögerung\037Benutzerdefiniert (menu.ini)\037Windows 11 Dunkel\037Windows 11 Licht\037Windows 10 Dunkel\037Windows 10 Licht\037Hoher Kontrast\037Auswahlmarkierung\037Neuer %s\037Neuer Ordner\037Neue Verknüpfung"},
+    {L"el", false, "Άνοιγμα\037Επαναφορά %s…\037Συμπιεσμένος (φερμουάρ) φάκελος\037Φάκελος\037Συντόμευση\037Πληροφορίες\037Ευθυγραμμίστε τα εικονίδια στο πλέγμα\037Αυτόματη τακτοποίηση εικονιδίων\037περιεχόμενο\037Αντιγραφή\037Αντιγραφή ως διαδρομή\037Δημιουργία συντόμευσης\037Αποκοπή\037Προεπιλογή (μη καθορισμένο)\037Διαγραφή\037Λεπτομέρειες\037Ρυθμίσεις οθόνης\037Πολύ μεγάλα εικονίδια\037Πρόσωπο\037Ομάδα κατά\037Hex\037Μεγάλα εικονίδια\037Λίστα\037Μεσαία εικονίδια\037Ρυθμίσεις μενού\037Ρυθμίσεις μενού…\037Νέο\037Ανοίξτε το Windhawk\037Άνοιγμα σε νέα διαδικασία\037Άνοιγμα σε νέο παράθυρο\037Ανοίξτε το menu.ini\037Ανοίξτε το αρχείο θέματος\037Άνοιγμα με\037Επικόλληση\037Επικόλληση συντόμευσης\037Εξατομίκευση\037Καρφίτσωμα στη Γρήγορη πρόσβαση\037Ιδιότητες\037Ανανέωση\037Μετονομασία\037Επαναλάβετε το ανοιχτό κινούμενο σχέδιο\037Επαναφορά όλης της εμφάνισης\037Επαναφορά όλης της εμφάνισης…\037Επιλογές κλίμακας…\037Αποστολή σε\037Μέγεθος\037Επιλογές διαφανειών…\037Μικρά εικονίδια\037Ταξινόμηση κατά\037Κατάσταση\037Στόχος\037Θέμα\037Πλακάκια\037Χρήση cornerRadius (μη καθορισμένη)\037Προβολή\037Ρυθμίσεις Windhawk…\037Εμφάνιση κλασικού μενού\037Περισσότερες επιλογές\037Αύξουσα\037Φθίνουσα\037(Καμία)\037Όνομα\037Ημερομηνία τροποποίησης\037Τύπος\037Έγγραφο κειμένου\037Εικόνα bitmap\037Έγγραφο εμπλουτισμένου κειμένου\037επάνω\037εκτός λειτουργίας\037έθιμο\037προεπιλογή\037Αποθηκευμένο\037Η αποθήκευση απέτυχε\037Η γραμματοσειρά δεν βρέθηκε\037Εμφάνιση βάσης\037Ελαφριά εμφάνιση\037Σκοτεινή εμφάνιση\037καταργήθηκε — χρησιμοποιήστε το animationOpen/Close\037Θέμα: %s — επεξεργασία αρχείου θέματος\037σχήμα %d\037Λειτουργία μενού\037Προσαρμοσμένο\037Κλασικό\037Χρώμα\037Χρώματα\037Διάταξη\037Κείμενο\037Σκιά\037Εφέ\037Κινούμενα σχέδια\037φόντο\037σύνορα\037Διαχωριστής\037Τοποθετήστε το φόντο\037Πατημένο φόντο\037Χρώμα κειμένου\037Απενεργοποιημένο χρώμα κειμένου\037Βέλος υπομενού\037Χρώμα κεφαλίδας\037Γωνιακή ακτίνα\037Γωνιακές ακτίνες\037Πλάτος περιγράμματος\037Γέμισμα\037Γέμισμα αντικειμένου\037Κάθετη επένδυση\037Ύψος αντικειμένου\037Μέγεθος εικονιδίου\037Ελάχιστο πλάτος\037Μέγιστο πλάτος\037Διάσταση διαχωριστικών\037Μαρκαδόρος\037Πλάτος δείκτη\037Χρώμα μαρκαδόρου\037Γραμματοσειρά\037Βάρος γραμματοσειράς\037Στυλ γραμματοσειράς\037Ένδειξη επιταχυντή\037Μέγεθος σκιάς\037Μετατόπιση σκιάς X\037Μετατόπιση σκιάς Υ\037Αδιαφάνεια σκιάς\037Προσαρμόστε τη σκιά στο σκηνικό\037Χρώμα σκιάς\037Θάμπωμα σκιάς\037Θάμπωμα\037Δύναμη θολώματος\037Εφέ επικάλυψης\037Ένταση επικάλυψης\037Ταχύτητα επικάλυψης\037Μέγεθος επικάλυψης\037Διάστημα πλαισίου επικάλυψης\037Κινούμενες επικαλύψεις ενώ είναι ανοιχτές\037Ανοίξτε το κινούμενο σχέδιο\037Κλείσιμο κινουμένων σχεδίων\037Ανοιχτή διάρκεια\037Κλείσιμο διάρκειας\037Διάστημα καρέ κινούμενων σχεδίων\037Χαλάρωση κινουμένων σχεδίων\037Άγκυρα κινουμένων σχεδίων\037Κίνηση υπομενού\037Μετατόπιση ολίσθησης X\037Μετατόπιση ολίσθησης Y\037Κλίμακα από\037Κορεσμός / τιμή\037Απόχρωση\037Άλφα\037Κόκκινο\037Πράσινο\037Μπλε\037Τιμή άλφα\037Επάνω αριστερά\037Πάνω δεξιά\037Κάτω δεξιά\037Κάτω αριστερά\037Κανονικό\037Ημίτολμη\037Τολμηρή\037Κανονικό\037Πλάγια γραφή\037Τελεία\037Έλεγχος\037Μπαρ\037Κανένα\037Υπογράμμιση\037Λωρίδα\037Ακατέργαστο\037Γραμμική\037Χαλαρώστε\037Ευκολία μέσα-έξω\037Πίσω\037Αναπήδηση\037Ελαστικό\037Δρομέας\037Κέντρο\037Κανένα\037Ξεθωριάζει\037Διαφάνεια\037Κλίμακα\037Διαλύστε\037CRT\037ξεδιπλώστε\037Κανένα\037Θόρυβος\037Πλάσμα\037Απόχρωση\037Λάμψη\037Scanlines\037Βινιέτα\037Γλώσσα\037Εμφάνιση κλασικού στοιχείου μενού\037Κορυφαία γραμμή δράσης\037Καθυστέρηση υπομενού\037Κλειδιά παράκαμψης\037Καταγραφή εντοπισμού σφαλμάτων\037Καθυστέρηση προθέρμανσης\037Προσαρμοσμένο (menu.ini)\037Windows 11 Σκούρο\037Windows 11 Φως\037Windows 10 Σκούρο\037Windows 10 Φως\037Υψηλή Αντίθεση\037Δείκτης επιλογής\037Νέο %s\037Νέος φάκελος\037Νέα συντόμευση"},
+    {L"en", false, "Open\037Reset %s…\037Compressed (zipped) Folder\037Folder\037Shortcut\037About\037Align icons to grid\037Auto arrange icons\037Content\037Copy\037Copy as path\037Create shortcut\037Cut\037Default (unset)\037Delete\037Details\037Display settings\037Extra large icons\037Face\037Group by\037Hex\037Large icons\037List\037Medium icons\037Menu settings\037Menu settings…\037New\037Open Windhawk\037Open in new process\037Open in new window\037Open menu.ini\037Open theme file\037Open with\037Paste\037Paste shortcut\037Personalize\037Pin to Quick access\037Properties\037Refresh\037Rename\037Replay open animation\037Reset all appearance\037Reset all appearance…\037Scale options…\037Send to\037Size\037Slide options…\037Small icons\037Sort by\037Status\037Target\037Theme\037Tiles\037Use cornerRadius (unset)\037View\037Windhawk settings…\037Show classic menu\037More options\037Ascending\037Descending\037(None)\037Name\037Date modified\037Type\037Text Document\037Bitmap image\037Rich Text Document\037on\037off\037custom\037default\037Saved\037Save failed\037Font not found\037Base appearance\037Light appearance\037Dark appearance\037deprecated — use animationOpen/Close\037Theme: %s — editing theme file\037schema %d\037Menu mode\037Custom\037Classic\037Color\037Colors\037Layout\037Text\037Shadow\037Effects\037Animation\037Background\037Border\037Separator\037Hover background\037Pressed background\037Text color\037Disabled text color\037Submenu arrow\037Header color\037Corner radius\037Corner radii\037Border width\037Padding\037Item padding\037Vertical padding\037Item height\037Icon size\037Minimum width\037Maximum width\037Separator spacing\037Marker\037Marker width\037Marker color\037Font\037Font weight\037Font style\037Accelerator display\037Shadow size\037Shadow offset X\037Shadow offset Y\037Shadow opacity\037Adapt shadow to backdrop\037Shadow color\037Shadow blur\037Blur\037Blur strength\037Overlay effects\037Overlay intensity\037Overlay speed\037Overlay size\037Overlay frame interval\037Animate overlays while open\037Open animation\037Close animation\037Open duration\037Close duration\037Animation frame interval\037Animation easing\037Animation anchor\037Animate submenus\037Slide offset X\037Slide offset Y\037Scale from\037Saturation / value\037Hue\037Alpha\037Red\037Green\037Blue\037Alpha value\037Top left\037Top right\037Bottom right\037Bottom left\037Normal\037Semibold\037Bold\037Normal\037Italic\037Dot\037Check\037Bar\037None\037Underline\037Strip\037Raw\037Linear\037Ease out\037Ease in-out\037Back\037Bounce\037Elastic\037Cursor\037Center\037None\037Fade\037Slide\037Scale\037Dissolve\037CRT\037Unfold\037None\037Noise\037Plasma\037Hue\037Glow\037Scanlines\037Vignette\037Language\037Show classic menu item\037Top action bar\037Submenu delay\037Bypass keys\037Debug logging\037Warmup delay\037Custom (menu.ini)\037Windows 11 Dark\037Windows 11 Light\037Windows 10 Dark\037Windows 10 Light\037High Contrast\037Selection marker\037New %s\037New folder\037New shortcut"},
+    {L"es", false, "Abrir\037Restablecer %s…\037Carpeta comprimida (en zip)\037Carpeta\037Acceso directo\037Acerca de\037Alinear iconos a la cuadrícula\037Organizar iconos automáticamente\037Contenido\037Copiar\037Copiar como ruta\037Crear acceso directo\037Cortar\037Predeterminado (desarmado)\037Eliminar\037Detalles\037Configuración de pantalla\037Iconos extra grandes\037cara\037Agrupar por\037maleficio\037Iconos grandes\037Lista\037Iconos medianos\037Configuración del menú\037Configuración del menú...\037Nuevo\037Abrir Windhawk\037Abrir en nuevo proceso\037Abrir en nueva ventana\037Abrir menu.ini\037Abrir archivo de tema\037abrir con\037Pegar\037Pegar acceso directo\037Personalizar\037Anclar a Acceso rápido\037Propiedades\037Actualizar\037Cambiar nombre\037Reproducir animación abierta\037Restablecer toda la apariencia\037Restablecer toda la apariencia...\037Opciones de escala...\037Enviar a\037Tamaño\037Opciones de diapositiva…\037Iconos pequeños\037Ordenar por\037Estado\037Objetivo\037Tema\037Azulejos\037Usar cornerRadius (desarmado)\037Ver\037Configuración de Windhawk…\037Mostrar menú clásico\037Más opciones\037Ascendente\037Descendente\037(Ninguno)\037Nombre\037Fecha de modificación\037Tipo\037Documento de texto\037Imagen de mapa de bits\037Documento de texto enriquecido\037en\037apagado\037personalizado\037predeterminado\037Guardado\037Error al guardar\037Fuente no encontrada\037Apariencia básica\037Aspecto ligero\037apariencia oscura\037obsoleto: use animationOpen/Close\037Tema: %s — edición de archivo de tema\037esquema %d\037Modo menú\037Personalizado\037Clásico\037Color\037Colores\037Diseño\037Texto\037sombra\037Efectos\037Animación\037Antecedentes\037frontera\037Separador\037fondo flotante\037Fondo presionado\037Color del texto\037Color de texto deshabilitado\037Flecha de submenú\037Color del encabezado\037Radio de esquina\037Radios de esquina\037Ancho del borde\037Relleno\037Relleno de artículos\037Acolchado vertical\037Altura del artículo\037Tamaño del icono\037Ancho mínimo\037Ancho máximo\037Espaciado de separadores\037marcador\037Ancho del marcador\037Color del marcador\037fuente\037Peso de fuente\037Estilo de fuente\037Pantalla del acelerador\037Tamaño de la sombra\037Desplazamiento de sombra X\037Desplazamiento de sombra Y\037Opacidad de las sombras\037Adaptar la sombra al fondo\037color de sombra\037Desenfoque de sombra\037Desenfoque\037Fuerza de desenfoque\037Efectos de superposición\037Intensidad de superposición\037Velocidad de superposición\037Tamaño de superposición\037Intervalo de cuadro de superposición\037Animar superposiciones mientras está abierto\037animacion abierta\037Cerrar animación\037Duración abierta\037Duración del cierre\037Intervalo de fotograma de animación\037Facilitación de la animación\037Ancla de animación\037Animar submenús\037Desplazamiento de diapositiva X\037Desplazamiento de diapositiva Y\037Escalar desde\037Saturación / valor\037tono\037Alfa\037rojo\037Verde\037azul\037valor alfa\037Arriba a la izquierda\037Arriba a la derecha\037Abajo a la derecha\037Abajo a la izquierda\037normales\037Seminegrita\037Negrita\037normales\037cursiva\037Punto\037comprobar\037barra\037Ninguno\037subrayado\037tira\037crudo\037lineal\037Relájese\037Facilidad de entrada y salida\037Atrás\037Rebote\037Elástico\037Cursor\037Centro\037Ninguno\037desvanecerse\037diapositiva\037Escala\037disolver\037CRT\037desplegar\037Ninguno\037Ruido\037plasma\037tono\037Resplandor\037Líneas de exploración\037viñeta\037Idioma\037Mostrar elemento de menú clásico\037Barra de acción superior\037Retraso del submenú\037Claves de derivación\037Registro de depuración\037Retraso de calentamiento\037Personalizado (menu.ini)\037Windows 11 Oscuro\037Luz Windows 11\037Windows 10 Oscuro\037Luz Windows 10\037Alto contraste\037Marcador de selección\037Nuevo %s\037Nueva carpeta\037Nuevo atajo"},
+    {L"fa", true, "باز کردن\037بازنشانی %s…\037پوشه فشرده (زیپ شده).\037پوشه\037میانبر\037درباره\037نمادها را با شبکه تراز کنید\037مرتب کردن خودکار نمادها\037محتوا\037کپی\037به عنوان مسیر کپی کنید\037ایجاد میانبر\037برش\037پیش فرض (تنظیم نشده)\037حذف\037جزئیات\037تنظیمات نمایش\037نمادهای بسیار بزرگ\037صورت\037گروه بندی بر اساس\037هگز\037آیکون های بزرگ\037فهرست کنید\037آیکون های متوسط\037تنظیمات منو\037تنظیمات منو…\037جدید\037Windhawk را باز کنید\037باز کردن در فرآیند جدید\037باز کردن در پنجره جدید\037menu.ini را باز کنید\037فایل تم را باز کنید\037باز کردن با\037چسباندن\037چسباندن میانبر\037شخصی سازی کنید\037پین به دسترسی سریع\037خواص\037تازه کردن\037تغییر نام\037بازپخش انیمیشن باز\037تمام ظاهر را بازنشانی کنید\037بازنشانی تمام ظاهر…\037گزینه های مقیاس…\037ارسال به\037اندازه\037گزینه های اسلاید…\037آیکون های کوچک\037مرتب سازی بر اساس\037وضعیت\037هدف\037موضوع\037کاشی\037استفاده از cornerRadius (تنظیم نشده)\037مشاهده\037تنظیمات Windhawk…\037نمایش منوی کلاسیک\037گزینه های بیشتر\037صعودی\037نزولی\037(هیچ کدام)\037نام\037تاریخ اصلاح شد\037تایپ کنید\037سند متنی\037تصویر بیت مپ\037سند متن غنی\037در\037خاموش\037سفارشی\037پیش فرض\037ذخیره شده\037ذخیره انجام نشد\037فونت پیدا نشد\037ظاهر پایه\037ظاهر سبک\037ظاهر تاریک\037منسوخ شده - از animationOpen/Close استفاده کنید\037موضوع: %s - ویرایش فایل تم\037طرح واره %d\037حالت منو\037سفارشی\037کلاسیک\037رنگ\037رنگ ها\037طرح بندی\037متن\037سایه\037جلوه ها\037انیمیشن\037پس زمینه\037مرز\037جداکننده\037پس زمینه شناور\037پس زمینه فشرده\037رنگ متن\037رنگ متن غیرفعال شد\037پیکان منوی فرعی\037رنگ سربرگ\037شعاع گوشه\037شعاع گوشه\037عرض حاشیه\037بالشتک\037بالشتک مورد\037بالشتک عمودی\037ارتفاع مورد\037اندازه آیکون\037حداقل عرض\037حداکثر عرض\037فاصله جداکننده\037نشانگر\037عرض نشانگر\037رنگ نشانگر\037فونت\037وزن فونت\037سبک فونت\037نمایشگر شتاب دهنده\037اندازه سایه\037سایه افست X\037افست سایه Y\037کدورت سایه\037سایه را با پس زمینه تطبیق دهید\037رنگ سایه\037تاری سایه\037محو کردن\037قدرت تاری\037جلوه های همپوشانی\037شدت پوشش\037سرعت همپوشانی\037اندازه روکش\037فاصله قاب روکش\037هنگام باز بودن همپوشانی ها را متحرک کنید\037انیمیشن را باز کنید\037بستن انیمیشن\037مدت زمان باز\037مدت زمان بستن\037فاصله فریم انیمیشن\037کاهش انیمیشن\037لنگر انیمیشن\037منوهای فرعی را متحرک کنید\037افست اسلاید X\037افست اسلاید Y\037مقیاس از\037اشباع / ارزش\037رنگ\037آلفا\037قرمز\037سبز\037آبی\037مقدار آلفا\037بالا سمت چپ\037بالا سمت راست\037پایین سمت راست\037پایین سمت چپ\037عادی\037نیمه پررنگ\037پررنگ\037عادی\037کج\037نقطه\037بررسی کنید\037نوار\037هیچ کدام\037زیر خط بکشید\037نوار\037خام\037خطی\037راحت شوید\037سهولت ورود به بیرون\037برگشت\037پرش\037الاستیک\037مکان نما\037مرکز\037هیچ کدام\037محو شدن\037اسلاید\037مقیاس\037حل کند\037CRT\037باز کردن\037هیچ کدام\037سر و صدا\037پلاسما\037رنگ\037درخشش\037اسکن لاین ها\037وینیت\037زبان\037نمایش آیتم منوی کلاسیک\037نوار اقدام بالا\037تاخیر در منوی فرعی\037کلیدهای دور زدن\037ثبت اشکال زدایی\037تاخیر گرم کردن\037سفارشی (menu.ini)\037Windows 11 تیره\037Windows 11 روشن\037Windows 10 تیره\037Windows 10 روشن\037کنتراست بالا\037نشانگر انتخاب\037%s جدید\037پوشه جدید\037میانبر جدید"},
+    {L"fr", false, "Ouvrir\037Réinitialiser %s…\037Dossier compressé (zippé)\037Dossier\037Raccourci\037À propos\037Aligner les icônes sur la grille\037Réorganiser automatiquement les icônes\037Contenu\037Copier\037Copier le chemin d'accès\037Créer un raccourci\037Couper\037Par défaut (non défini)\037Supprimer\037Détails\037Paramètres d'affichage\037Très grandes icônes\037Police\037Grouper par\037Hex\037Grandes icônes\037Liste\037Icônes moyennes\037Paramètres du menu\037Paramètres du menu…\037Nouveau\037Ouvrir Windhawk\037Ouvrir dans un nouveau processus\037Ouvrir dans une nouvelle fenêtre\037Ouvrir menu.ini\037Ouvrir le fichier de thème\037Ouvrir avec\037Coller\037Coller le raccourci\037Personnaliser\037Épingler à Accès rapide\037Propriétés\037Actualiser\037Renommer\037Rejouer l'animation d'ouverture\037Réinitialiser toute l'apparence\037Réinitialiser toute l'apparence…\037Options de mise à l'échelle…\037Envoyer vers\037Taille\037Options de glissement…\037Petites icônes\037Trier par\037Statut\037Cible\037Thème\037Tuiles\037Utiliser cornerRadius (non défini)\037Affichage\037Paramètres Windhawk…\037Afficher le menu classique\037Plus d'options\037Croissant\037Décroissant\037(Aucun)\037Nom\037Date de modification\037Type\037Document texte\037Image bitmap\037Document en texte enrichi\037activé\037désactivé\037personnalisé\037par défaut\037Enregistré\037Échec de l'enregistrement\037Police introuvable\037Apparence de base\037Apparence claire\037Apparence sombre\037obsolète — utilisez animationOpen/Close\037Thème : %s — modification du fichier de thème\037schéma %d\037Mode du menu\037Personnalisé\037Classique\037Couleur\037Couleurs\037Disposition\037Texte\037Ombre\037Effets\037Animation\037Arrière-plan\037Bordure\037Séparateur\037Arrière-plan au survol\037Arrière-plan pressé\037Couleur du texte\037Couleur du texte désactivé\037Flèche du sous-menu\037Couleur de l'en-tête\037Rayon des coins\037Rayons des coins\037Épaisseur de la bordure\037Marge intérieure\037Marge des éléments\037Marge verticale\037Hauteur des éléments\037Taille des icônes\037Largeur minimale\037Largeur maximale\037Espacement des séparateurs\037Marqueur\037Largeur du marqueur\037Couleur du marqueur\037Police\037Graisse de la police\037Style de la police\037Affichage des accélérateurs\037Taille de l'ombre\037Décalage horizontal de l'ombre\037Décalage vertical de l'ombre\037Opacité de l'ombre\037Adapter l'ombre à l'arrière-plan\037Couleur de l'ombre\037Flou de l'ombre\037Flou\037Intensité du flou\037Effets de superposition\037Intensité de la superposition\037Vitesse de la superposition\037Taille de la superposition\037Intervalle des images de superposition\037Animer les superpositions à l'ouverture\037Animation d'ouverture\037Animation de fermeture\037Durée d'ouverture\037Durée de fermeture\037Intervalle des images d'animation\037Courbe d'animation\037Ancre d'animation\037Animer les sous-menus\037Décalage horizontal du glissement\037Décalage vertical du glissement\037Échelle de départ\037Saturation / valeur\037Teinte\037Alpha\037Rouge\037Vert\037Bleu\037Valeur alpha\037En haut à gauche\037En haut à droite\037En bas à droite\037En bas à gauche\037Normal\037Demi-gras\037Gras\037Normal\037Italique\037Point\037Coche\037Barre\037Aucun\037Souligné\037Supprimer\037Brut\037Linéaire\037Sortie progressive\037Entrée-sortie progressive\037Retour\037Rebond\037Élastique\037Curseur\037Centre\037Aucun\037Fondu\037Glissement\037Mise à l'échelle\037Dissolution\037CRT\037Dépliage\037Aucun\037Bruit\037Plasma\037Teinte\037Lueur\037Lignes de balayage\037Vignettage\037Langue\037Afficher l'élément du menu classique\037Barre d'actions supérieure\037Délai des sous-menus\037Touches de contournement\037Journalisation de débogage\037Délai de préchauffage\037Personnalisé (menu.ini)\037Windows 11 sombre\037Windows 11 clair\037Windows 10 sombre\037Windows 10 clair\037Contraste élevé\037Marqueur de sélection\037Nouveau %s\037Nouveau dossier\037Nouveau raccourci"},
+    {L"hi", false, "खोलें\037%s रीसेट करें…\037संपीड़ित (ज़िपयुक्त) फ़ोल्डर\037फ़ोल्डर\037शॉर्टकट\037के बारे में\037आइकनों को ग्रिड में संरेखित करें\037चिह्नों को स्वतः व्यवस्थित करें\037सामग्री\037कॉपी करें\037पथ के रूप में कॉपी करें\037शॉर्टकट बनाएं\037कट\037डिफ़ॉल्ट (अनसेट)\037हटाएँ\037विवरण\037सेटिंग्स प्रदर्शित करें\037अतिरिक्त बड़े चिह्न\037चेहरा\037द्वारा समूहित करें\037हेक्स\037बड़े चिह्न\037सूची\037मध्यम चिह्न\037मेनू सेटिंग्स\037मेनू सेटिंग्स…\037नया\037Windhawk खोलें\037नई प्रक्रिया में खोलें\037नई विंडो में खोलें\037menu.ini खोलें\037थीम फ़ाइल खोलें\037के साथ खोलें\037चिपकाएँ\037शॉर्टकट चिपकाएँ\037वैयक्तिकृत करें\037त्वरित पहुंच पर पिन करें\037गुण\037ताज़ा करें\037नाम बदलें\037खुले एनीमेशन को फिर से चलाएँ\037सभी उपस्थिति रीसेट करें\037सभी उपस्थिति रीसेट करें…\037स्केल विकल्प...\037को भेजें\037आकार\037स्लाइड विकल्प…\037छोटे चिह्न\037क्रमबद्ध करें\037स्थिति\037लक्ष्य\037थीम\037टाइल्स\037कॉर्नररेडियस का उपयोग करें (अनसेट)\037देखें\037Windhawk सेटिंग्स…\037क्लासिक मेनू दिखाएँ\037अधिक विकल्प\037आरोही\037उतरता हुआ\037(कोई नहीं)\037नाम\037तिथि संशोधित\037प्रकार\037पाठ दस्तावेज़\037बिटमैप छवि\037रिच टेक्स्ट दस्तावेज़\037पर\037बंद\037कस्टम\037डिफ़ॉल्ट\037सहेजा गया\037सहेजना विफल\037फ़ॉन्ट नहीं मिला\037आधार स्वरूप\037हल्की उपस्थिति\037गहरा रूप\037बहिष्कृत - animationOpen/Close का उपयोग करें\037थीम: %s - थीम फ़ाइल का संपादन\037स्कीमा %d\037मेनू मोड\037कस्टम\037क्लासिक\037रंग\037रंग\037लेआउट\037पाठ\037छाया\037प्रभाव\037एनीमेशन\037पृष्ठभूमि\037सीमा\037विभाजक\037होवर पृष्ठभूमि\037दबाया हुआ पृष्ठभूमि\037पाठ का रंग\037अक्षम पाठ रंग\037सबमेनू तीर\037हेडर का रंग\037कोने की त्रिज्या\037कोने की त्रिज्या\037सीमा चौड़ाई\037पैडिंग\037आइटम पैडिंग\037लंबवत पैडिंग\037आइटम की ऊंचाई\037चिह्न का आकार\037न्यूनतम चौड़ाई\037अधिकतम चौड़ाई\037विभाजक रिक्ति\037मार्कर\037मार्कर की चौड़ाई\037मार्कर का रंग\037फ़ॉन्ट\037फ़ॉन्ट वजन\037फ़ॉन्ट शैली\037त्वरक प्रदर्शन\037छाया का आकार\037छाया ऑफसेट एक्स\037छाया ऑफसेट वाई\037छाया अपारदर्शिता\037छाया को पृष्ठभूमि के अनुरूप ढालें\037छाया रंग\037छाया धुंधलापन\037धुंधला\037धुंधला ताकत\037ओवरले प्रभाव\037ओवरले तीव्रता\037ओवरले गति\037ओवरले का आकार\037ओवरले फ़्रेम अंतराल\037खुले रहते हुए ओवरले को चेतन करें\037एनीमेशन खोलें\037एनिमेशन बंद करें\037खुली अवधि\037समाप्ति अवधि\037एनिमेशन फ़्रेम अंतराल\037एनीमेशन सहजता\037एनिमेशन एंकर\037सबमेनू चेतन करें\037स्लाइड ऑफसेट एक्स\037स्लाइड ऑफसेट Y\037से स्केल\037संतृप्ति/मूल्य\037रंग\037अल्फ़ा\037लाल\037हरा\037नीला\037अल्फ़ा मान\037ऊपर बाएँ\037शीर्ष दाईं ओर\037नीचे दाईं ओर\037नीचे बाएँ\037सामान्य\037सेमीबोल्ड\037साहसी\037सामान्य\037इटैलिक\037बिंदु\037जांचें\037बार\037कोई नहीं\037रेखांकित करें\037पट्टी\037कच्चा\037रैखिक\037आराम करो\037अंदर-बाहर आसानी से\037वापस\037उछाल\037लोचदार\037कर्सर\037केंद्र\037कोई नहीं\037फीका\037फिसल पट्टी\037पैमाना\037घुलना\037सीआरटी\037खोलना\037कोई नहीं\037शोर\037प्लाज्मा\037रंग\037चमक\037स्कैनलाइन\037विगनेट\037भाषा\037क्लासिक मेनू आइटम दिखाएँ\037शीर्ष एक्शन बार\037सबमेनू विलंब\037बायपास कुंजियाँ\037डिबग लॉगिंग\037वार्मअप में देरी\037कस्टम (menu.ini)\037Windows 11 डार्क\037Windows 11 लाइट\037Windows 10 डार्क\037Windows 10 लाइट\037उच्च कंट्रास्ट\037चयन मार्कर\037नया %s\037नया फ़ोल्डर\037नया शॉर्टकट"},
+    {L"hr", false, "Otvori\037Resetiraj %s…\037Komprimirana (zipana) mapa\037Mapa\037Prečac\037O\037Poravnajte ikone s mrežom\037Automatski raspored ikona\037Sadržaj\037Kopiraj\037Kopiraj kao put\037Stvori prečac\037Izreži\037Zadano (nije postavljeno)\037Izbriši\037pojedinosti\037Postavke zaslona\037Izuzetno velike ikone\037Lice\037Grupiraj po\037Hex\037Velike ikone\037Popis\037Srednje ikone\037Postavke izbornika\037Postavke izbornika…\037Novo\037Otvorite Windhawk\037Otvori u novom procesu\037Otvori u novom prozoru\037Otvorite menu.ini\037Otvori datoteku teme\037Otvori s\037Zalijepi\037Zalijepi prečac\037Personalizirajte\037Prikvači za brzi pristup\037Svojstva\037Osvježi\037Preimenuj\037Ponovno reproduciraj otvorenu animaciju\037Poništi sav izgled\037Poništi sav izgled...\037Opcije mjerila…\037Pošalji na\037Veličina\037Opcije slajda…\037Male ikone\037Poredaj po\037Status\037cilj\037Tema\037Pločice\037Koristi radijus kuta (nepostavljeno)\037Pogled\037Windhawk postavke…\037Prikaži klasični izbornik\037Više mogućnosti\037Uzlazno\037Spuštajući se\037(ništa)\037Ime\037Datum izmjene\037Vrsta\037Tekstualni dokument\037Bitmap slika\037Dokument obogaćenog teksta\037na\037isključeno\037običaj\037zadana vrijednost\037Spremljeno\037Spremanje nije uspjelo\037Font nije pronađen\037Izgled baze\037Lagani izgled\037Mračan izgled\037zastarjelo — koristite animationOpen/Close\037Tema: %s — uređivanje datoteke teme\037shema %d\037Način izbornika\037Prilagođeno\037Klasično\037Boja\037Boje\037Izgled\037Tekst\037Sjena\037Efekti\037Animacija\037Pozadina\037Granica\037Razdjelnik\037Lebdite u pozadini\037Prešana pozadina\037Boja teksta\037Onemogućena boja teksta\037Strelica podizbornika\037Boja zaglavlja\037Radijus kuta\037Radijusi kutova\037Širina ruba\037Padding\037Ispuna predmeta\037Okomito punjenje\037Visina predmeta\037Veličina ikone\037Minimalna širina\037Maksimalna širina\037Razmak separatora\037Marker\037Širina markera\037Boja markera\037Font\037Težina fonta\037Stil fonta\037Prikaz akceleratora\037Veličina sjene\037Pomak sjene X\037Pomak sjene Y\037Neprozirnost sjene\037Prilagodite sjenu pozadini\037Boja sjene\037Zamućenje sjene\037Zamutiti\037Snaga zamućenja\037Efekti preklapanja\037Intenzitet prekrivanja\037Brzina prekrivanja\037Veličina sloja\037Interval preklapanja okvira\037Animirajte slojeve dok su otvoreni\037Otvorena animacija\037Zatvori animaciju\037Otvoreno trajanje\037Zatvaranje trajanja\037Interval okvira animacije\037Ublažavanje animacije\037Animacijsko sidro\037Animirajte podizbornike\037Pomak klizača X\037Pomak klizača Y\037Skala od\037Zasićenost / vrijednost\037Nijansa\037alfa\037crvena\037zelena\037Plava\037Alfa vrijednost\037Gore lijevo\037Gore desno\037Dolje desno\037Dolje lijevo\037normalno\037Poludebljano\037Podebljano\037normalno\037kurziv\037točka\037Provjerite\037Bar\037Nijedan\037Podcrtano\037Skinuti se\037Sirovo\037Linearno\037Olakšajte se\037Lakoća unutra-van\037natrag\037Odskakanje\037Elastična\037Pokazivač\037Centar\037Nijedan\037Izblijediti\037slajd\037Skala\037Otopiti se\037CRT\037Otklopiti\037Nijedan\037Buka\037Plazma\037Nijansa\037Sjaj\037Scanlines\037Vinjeta\037Jezik\037Prikaži klasičnu stavku izbornika\037Gornja akcijska traka\037Odgoda podizbornika\037Premosni ključevi\037Zapisivanje otklanjanja pogrešaka\037Odgoda zagrijavanja\037Prilagođeno (menu.ini)\037Windows 11 Tamno\037Windows 11 Svjetlo\037Windows 10 Tamno\037Windows 10 Svjetlo\037Visoki kontrast\037Marker odabira\037Novi %s\037Nova mapa\037Novi prečac"},
+    {L"ht", false, "Louvri\037Reyajiste %s...\037Dosye konprese (konprese).\037Dosye\037Raccourci\037Konsènan\037Aliman ikon yo sou kadriyaj\037Oto fè aranjman pou ikon yo\037Kontni\037Kopi\037Kopi kòm chemen\037Kreye chemen kout\037Koupe\037Default (detache)\037Efase\037Detay yo\037Anviwònman ekspozisyon\037Siplemantè ikon gwo\037Figi\037Gwoup pa\037Egzagòn\037Gwo ikon\037Lis\037Ikon mwayen\037Anviwònman meni yo\037Anviwònman meni yo...\037Nouvo\037Louvri Windhawk\037Louvri nan nouvo pwosesis\037Louvri nan yon nouvo fenèt\037Louvri menu.ini\037Louvri dosye tèm\037Louvri ak\037Kole\037Kole chemen kout\037Pèsonalize\037Pin nan aksè rapid\037Pwopriyete\037Rafrechi\037Chanje non\037Repwodui animasyon ouvèti a\037Reyinisyalize tout aparans\037Reyinisyalize tout aparans…\037Opsyon echèl…\037Voye bay\037Gwosè\037Opsyon glisman…\037Ti ikòn\037Triye pa\037Estati\037Sib\037Tèm\037Mozayik\037Sèvi ak cornerRadius (detache)\037Afichaj\037Windhawk paramèt...\037Montre meni klasik\037Plis opsyon\037Asandan\037Desandan\037(Okenn)\037Non\037Dat modifye\037Kalite\037Dokiman tèks\037Imaj Bitmap\037Dokiman Tèks Rich\037sou\037koupe\037koutim\037pa défaut\037Sove\037Sove echwe\037Font pa jwenn\037Baz aparans\037Limyè aparans\037Aparans nwa\037depreche - sèvi ak animationOpen/Close\037Tèm: %s - koreksyon dosye tèm\037chema %d\037Mòd meni\037Pèsonalize\037Klasik\037Koulè\037Koulè\037Dispozisyon\037Tèks\037Lonbraj\037Efè\037Animasyon\037Jan nou koumanse\037Fwontyè\037Separatè\037Fon sou vole\037Fond bourade\037Koulè tèks la\037Koulè tèks ki andikape\037Flèch sou-menu\037Koulè header\037Reyon kwen\037Reyon kwen\037Lajè fwontyè\037Marge\037Atik padding\037Ansman twal gaz vètikal\037Wotè atik\037Gwosè ikon\037Lajè minimòm\037Maksimòm lajè\037Separatè espas\037Makè\037Lajè makè\037Koulè makè\037Polis\037Pwa font\037Estil polis\037Ekspozisyon akseleratè\037Gwosè lonbraj\037Lonbraj konpanse X\037Lonbraj konpanse Y\037Opakite lonbraj\037Adapte lonbraj ak seri\037Koulè lonbraj\037Lonbraj flou\037Flou\037Flou fòs\037Efè kouvri\037Entansite kouvri\037Koupe vitès\037Gwosè kouvri\037Entèval ankadreman kouvri\037Anime superpositions pandan w ap louvri\037Louvri animasyon\037Fèmen animasyon\037Louvri dire\037Fèmen dire\037Entèval ankadreman animasyon\037Animasyon soulajman\037Lank animasyon\037Anime sou-menu\037Glise konpanse X\037Glise konpanse Y\037Echèl soti nan\037Saturasyon / valè\037Koulè\037Alfa\037Wouj\037Vèt\037Ble\037Valè alfa\037Anlè gòch\037Anlè adwat\037Anba dwat\037Anba goch\037Nòmal\037Semibold\037Bold\037Nòmal\037Italik\037Dot\037Tcheke\037Bar\037Okenn\037Soulinye\037Dezabiye\037kri\037Lineyè\037Fasil soti\037Fasilite antre-soti\037Retounen\037Rebondisman\037Elastik\037Kurseur\037Sant\037Okenn\037Fennen\037Slide\037Echèl\037Fonn\037CRT\037Dewoulman\037Okenn\037Bri\037Plasma\037Hue\037Ekla\037Scanlines\037Viyèt\037Lang\037Montre atik meni klasik\037Top aksyon bar\037Sou-menu reta\037Bypass kle\037Debug antre\037Reta chofe\037Custom (menu.ini)\037Windows 11 nwa\037Windows 11 Limyè\037Windows 10 nwa\037Windows 10 Limyè\037Segondè kontras\037Makè seleksyon\037Nouvo %s\037Nouvo katab\037Nouvo chemen kout"},
+    {L"hu", false, "Megnyitás\037%s visszaállítása…\037Tömörített (cipzáras) mappa\037Mappa\037Parancsikon\037Névjegy\037Igazítsa az ikonokat a rácshoz\037Az ikonok automatikus elrendezése\037Tartalom\037Másolás\037Másolás útvonalként\037Parancsikon létrehozása\037Kivágás\037Alapértelmezett (beállítatlan)\037Törlés\037Részletek\037Megjelenítési beállítások\037Extra nagy ikonok\037Arc\037Csoportosítás szerint\037Hex\037Nagy ikonok\037Lista\037Közepes ikonok\037Menübeállítások\037Menübeállítások…\037Új\037Nyissa meg a Windhawk-t\037Megnyitás új folyamatban\037Megnyitás új ablakban\037Nyissa meg a menu.ini-t\037Nyissa meg a témafájlt\037Nyissa meg\037Beillesztés\037Parancsikon beillesztése\037Személyre szabhatja\037Rögzítés a Gyors hozzáféréshez\037Tulajdonságok\037Frissítés\037Átnevezés\037Nyitott animáció újrajátszása\037Állítsa vissza az összes megjelenést\037Minden megjelenés visszaállítása…\037Méretezési lehetőségek…\037Küldés ide\037Méret\037Diabeállítások…\037Kis ikonok\037Rendezés\037Állapot\037Cél\037téma\037csempe\037Saroksugár használata (beállítatlan)\037Nézet\037Windhawk beállítások…\037Klasszikus menü megjelenítése\037További lehetőségek\037Emelkedő\037Csökkenő\037(Nincs)\037Név\037Módosítás dátuma\037Írja be\037Szöveges dokumentum\037Bittérképes kép\037Gazdag szövegű dokumentum\037be\037kikapcsolva\037szokás\037alapértelmezett\037Mentve\037A mentés nem sikerült\037A betűtípus nem található\037Alap megjelenés\037Könnyű megjelenés\037Sötét megjelenés\037elavult – használja a animationOpen/Close-t\037Téma: %s — témafájl szerkesztése\037séma %d\037Menü mód\037Egyéni\037Klasszikus\037Szín\037Színek\037Elrendezés\037Szöveg\037Árnyék\037Hatások\037Animáció\037Háttér\037Határ\037Elválasztó\037Lebeg a háttérben\037Préselt háttér\037Szöveg színe\037Letiltott szövegszín\037Almenü nyíl\037Fejléc színe\037Saroksugár\037Sarok sugarai\037Szegély szélessége\037Padding\037Tétel kitöltése\037Függőleges párnázás\037A tétel magassága\037Ikon mérete\037Minimális szélesség\037Maximális szélesség\037Elválasztó távolság\037Marker\037Marker szélessége\037Marker színe\037Font\037Betűsúly\037Betűstílus\037Gyorsító kijelző\037Árnyék mérete\037Árnyékeltolás X\037Árnyékeltolás Y\037Árnyék átlátszatlansága\037Az árnyék hozzáigazítása a háttérhez\037Árnyék színe\037Árnyék elmosódása\037Elmosódás\037Elmosódás erőssége\037Overlay hatások\037Fedvény intenzitása\037Átfedési sebesség\037Fedvény mérete\037Overlay képkocka intervallum\037A fedvények animálása nyitott állapotban\037Animáció megnyitása\037Animáció bezárása\037Nyitott időtartam\037Bezárás időtartama\037Animációs képkocka intervallum\037Animáció könnyítés\037Animációs horgony\037Almenük animálása\037Eltolás X\037Eltolás Y\037Skála tól\037Telítettség / érték\037Hue\037Alpha\037Piros\037zöld\037Kék\037Alfa érték\037Balra fent\037Jobbra fent\037Jobbra lent\037Balra lent\037Normális\037Semibold\037Félkövér\037Normális\037Dőlt\037Dot\037Ellenőrizze\037Bár\037Egyik sem\037Aláhúzás\037Csík\037Nyers\037Lineáris\037Nyugodj meg\037Könnyű be-ki\037Vissza\037Ugrál\037Elasztikus\037Kurzor\037Központ\037Egyik sem\037Fade\037Dia\037Skála\037Oldjuk fel\037CRT\037Bontsa ki\037Egyik sem\037Zaj\037Plazma\037Hue\037Ragyog\037Scanlines\037Vignetta\037Nyelv\037Klasszikus menüelem megjelenítése\037Legfelső akciósáv\037Az almenü késleltetése\037Kulcsok megkerülése\037Hibakeresési naplózás\037Bemelegítés késleltetése\037Egyéni (menu.ini)\037Windows 11 Sötét\037Windows 11 Világos\037Windows 10 Sötét\037Windows 10 Világos\037Magas kontraszt\037Kiválasztás marker\037Új %s\037Új mappa\037Új parancsikon"},
+    {L"id", false, "Buka\037Setel ulang %s…\037Folder terkompresi (zip).\037Map\037Jalan pintas\037Tentang\037Sejajarkan ikon ke kisi\037Atur ikon secara otomatis\037Konten\037Salin\037Salin sebagai jalur\037Buat pintasan\037Potong\037Bawaan (tidak disetel)\037Hapus\037Detail\037Pengaturan tampilan\037Ikon ekstra besar\037Wajah\037Kelompokkan berdasarkan\037kutukan\037Ikon besar\037Daftar\037Ikon sedang\037Pengaturan menu\037Pengaturan menu…\037Baru\037Buka Windhawk\037Buka dalam proses baru\037Buka di jendela baru\037Buka menu.ini\037Buka file tema\037Buka dengan\037Tempel\037Tempel pintasan\037Personalisasi\037Sematkan ke Akses cepat\037Properti\037Segarkan\037Ganti nama\037Putar ulang animasi terbuka\037Atur ulang semua tampilan\037Setel ulang semua tampilan…\037Opsi skala…\037Kirim ke\037Ukuran\037Opsi geser…\037Ikon kecil\037Urutkan berdasarkan\037Status\037Sasaran\037Tema\037Ubin\037Gunakan cornerRadius (tidak disetel)\037Lihat\037Pengaturan Windhawk…\037Tampilkan menu klasik\037Opsi lainnya\037Naik\037Menurun\037(Tidak ada)\037Nama\037Tanggal diubah\037Ketik\037Dokumen Teks\037Gambar bitmap\037Dokumen Teks Kaya\037pada\037mati\037adat\037bawaan\037Disimpan\037Gagal menyimpan\037Font tidak ditemukan\037Penampilan dasar\037Penampilan ringan\037Penampilan gelap\037tidak digunakan lagi — gunakan animationOpen/Close\037Tema: %s — mengedit file tema\037skema %d\037Modus menu\037Kustom\037Klasik\037Warna\037Warna\037Tata Letak\037Teks\037Bayangan\037Efek\037Animasi\037Latar Belakang\037Perbatasan\037Pemisah\037Arahkan latar belakang\037Latar belakang yang ditekan\037Warna teks\037Warna teks dinonaktifkan\037Panah submenu\037Warna tajuk\037Jari-jari sudut\037Jari-jari sudut\037Lebar perbatasan\037bantalan\037Bantalan barang\037Bantalan vertikal\037Tinggi barang\037Ukuran ikon\037Lebar minimal\037Lebar maksimum\037Jarak pemisah\037Penanda\037Lebar penanda\037Warna penanda\037huruf\037Berat font\037Gaya huruf\037Tampilan akselerator\037Ukuran bayangan\037Bayangan diimbangi X\037Bayangan mengimbangi Y\037Opasitas bayangan\037Sesuaikan bayangan dengan latar belakang\037Warna bayangan\037Bayangan kabur\037Kabur\037Kekuatan kabur\037Efek hamparan\037Intensitas hamparan\037Kecepatan hamparan\037Ukuran hamparan\037Interval bingkai overlay\037Menganimasikan overlay saat terbuka\037Buka animasi\037Tutup animasi\037Durasi terbuka\037Durasi tutup\037Interval bingkai animasi\037Pelonggaran animasi\037Jangkar animasi\037Menganimasikan submenu\037Geser offset X\037Geser offset Y\037Skala dari\037Saturasi / nilai\037Warna\037Alfa\037Merah\037Hijau\037Biru\037Nilai alfa\037Kiri atas\037Kanan atas\037Kanan bawah\037Kiri bawah\037Biasa\037Setengah tebal\037Berani\037Biasa\037miring\037titik\037Periksa\037Batang\037Tidak ada\037Garis bawahi\037Mengupas\037Mentah\037Linier\037Bersantailah\037Kemudahan masuk-keluar\037Kembali\037Bangkit\037elastis\037Kursor\037Pusat\037Tidak ada\037Memudar\037Geser\037Skala\037Larutkan\037CRT\037Terungkap\037Tidak ada\037Kebisingan\037Plasma\037Warna\037Bersinar\037Garis pindaian\037sketsa\037Bahasa\037Tampilkan item menu klasik\037Bilah tindakan teratas\037Penundaan submenu\037Tombol pintas\037Pencatatan debug\037Penundaan pemanasan\037Kustom (menu.ini)\037Windows 11 Gelap\037Windows 11 Terang\037Windows 10 Gelap\037Windows 10 Terang\037Kontras Tinggi\037Penanda seleksi\037%s baru\037Folder baru\037Jalan pintas baru"},
+    {L"it", false, "Apri\037Ripristina %s…\037Cartella compressa (zippata).\037Cartella\037Collegamento\037Informazioni\037Allinea le icone alla griglia\037Disporre automaticamente le icone\037Contenuto\037Copia\037Copia come percorso\037Crea scorciatoia\037Taglia\037Predefinito (non impostato)\037Elimina\037Dettagli\037Impostazioni di visualizzazione\037Icone molto grandi\037Faccia\037Raggruppa per\037Esadecimale\037Icone grandi\037Elenco\037Icone medie\037Impostazioni del menu\037Impostazioni del menu...\037Nuovo\037Apri Windhawk\037Apri in un nuovo processo\037Apri in una nuova finestra\037Apri menu.ini\037Apri il file del tema\037Apri con\037Incolla\037Incolla scorciatoia\037Personalizza\037Aggiungi ad Accesso rapido\037Proprietà\037Aggiorna\037Rinomina\037Riproduci l'animazione aperta\037Ripristina tutto l'aspetto\037Ripristina tutto l'aspetto...\037Opzioni di scala...\037Invia a\037Dimensioni\037Opzioni diapositiva...\037Piccole icone\037Ordina per\037Stato\037Obiettivo\037Tema\037Piastrelle\037Usa raggio angolo (non impostato)\037Visualizza\037Impostazioni Windhawk...\037Mostra il menu classico\037Più opzioni\037Ascendente\037Discendente\037(Nessuno)\037Nome\037Data modificata\037Digitare\037Documento di testo\037Immagine bitmap\037Documento di testo ricco\037su\037spento\037personalizzato\037predefinito\037Salvato\037Salvataggio non riuscito\037Carattere non trovato\037Aspetto basso\037Aspetto leggero\037Aspetto scuro\037deprecato: utilizzare animationOpen/Close\037Tema: %s: modifica del file del tema\037schema %d\037Modalità menù\037Personalizzato\037Classico\037Colore\037Colori\037Disposizione\037Testo\037Ombra\037Effetti\037Animazione\037Sfondo\037Confine\037Separatore\037Passa il mouse sullo sfondo\037Fondo pressato\037Colore del testo\037Colore del testo disabilitato\037Freccia del sottomenu\037Colore dell'intestazione\037Raggio dell'angolo\037Raggi d'angolo\037Larghezza del bordo\037Imbottitura\037Imbottitura dell'articolo\037Imbottitura verticale\037Altezza dell'articolo\037Dimensione dell'icona\037Larghezza minima\037Larghezza massima\037Spaziatura del separatore\037Marcatore\037Larghezza del marcatore\037Colore del marcatore\037Carattere\037Peso del carattere\037Stile del carattere\037Visualizzazione dell'acceleratore\037Dimensione dell'ombra\037Compensazione ombra X\037Compensazione ombra Y\037Opacità dell'ombra\037Adatta l'ombra allo sfondo\037Colore dell'ombra\037Sfocatura dell'ombra\037Sfocatura\037Intensità della sfocatura\037Effetti di sovrapposizione\037Intensità di sovrapposizione\037Velocità di sovrapposizione\037Dimensioni sovrapposte\037Intervallo fotogrammi sovrapposti\037Anima le sovrapposizioni mentre sono aperte\037Apri l'animazione\037Chiudi l'animazione\037Durata aperta\037Durata della chiusura\037Intervallo del fotogramma dell'animazione\037Alleggerimento dell'animazione\037Ancoraggio dell'animazione\037Animare i sottomenu\037Spostamento della diapositiva X\037Offset slitta Y\037Scala da\037Saturazione/valore\037Tonalità\037Alfa\037Rosso\037Verde\037Blu\037Valore alfa\037In alto a sinistra\037In alto a destra\037In basso a destra\037In basso a sinistra\037Normale\037Semigrassetto\037Grassetto\037Normale\037Corsivo\037Punto\037Controlla\037Barra\037Nessuno\037Sottolineare\037Striscia\037Crudo\037Lineare\037Rilassati\037Facilità di entrata e uscita\037Indietro\037Rimbalza\037Elastico\037Cursore\037Centro\037Nessuno\037Svanire\037Scivolo\037Scala\037Sciogliere\037CRT\037Apri\037Nessuno\037Rumore\037Plasma\037Tonalità\037Bagliore\037Linee di scansione\037Vignetta\037Lingua\037Mostra la voce di menu classica\037Barra delle azioni superiore\037Ritardo sottomenu\037Chiavi di bypass\037Registrazione del debug\037Ritardo del riscaldamento\037Personalizzato (menu.ini)\037Windows 11 Scuro\037Windows 11 Luce\037Windows 10 Scuro\037Windows 10 Luce\037Contrasto elevato\037Indicatore di selezione\037Nuovo %s\037Nuova cartella\037Nuova scorciatoia"},
+    {L"ja", false, "開く\037%sをリセット…\037圧縮（zip）フォルダー\037フォルダー\037ショートカット\037について\037アイコンをグリッドに揃える\037アイコンの自動配置\037内容\037コピー\037パスとしてコピー\037ショートカットを作成する\037カット\037デフォルト (未設定)\037削除\037詳細\037表示設定\037特大アイコン\037顔\037グループ化\03716進数\037大きなアイコン\037リスト\037中アイコン\037メニュー設定\037メニュー設定…\037新規\037Windhawkを開く\037新しいプロセスで開く\037新しいウィンドウで開きます\037menu.iniを開く\037テーマファイルを開く\037で開く\037貼り付け\037ショートカットを貼り付け\037パーソナライズ\037クイックアクセスにピン留めする\037プロパティ\037更新\037名前の変更\037開いたアニメーションを再生する\037すべての外観をリセット\037すべての外観をリセット…\037スケールオプション…\037送信先\037サイズ\037スライドオプション…\037小さなアイコン\037並べ替え順\037ステータス\037ターゲット\037テーマ\037タイル\037コーナー半径を使用 (未設定)\037表示\037Windhawk設定…\037クラシックメニューを表示\037その他のオプション\037昇順\037降順\037(なし)\037名前\037変更日\037種類\037テキストドキュメント\037ビットマップ画像\037リッチテキストドキュメント\037に\037オフ\037カスタム\037デフォルト\037保存済み\037保存に失敗しました\037フォントが見つかりません\037ベースの外観\037軽い外観\037暗い外観\037非推奨 — animationOpen/Close を使用してください\037テーマ: %s — テーマ ファイルの編集\037スキーマ %d\037メニューモード\037カスタム\037クラシック\037色\037色\037レイアウト\037テキスト\037シャドウ\037効果\037アニメーション\037背景\037境界線\037セパレータ\037ホバー背景\037プレスされた背景\037文字の色\037無効なテキストの色\037サブメニューの矢印\037ヘッダーの色\037コーナー半径\037コーナー半径\037枠線の幅\037パディング\037項目のパディング\037垂直パディング\037アイテムの高さ\037アイコンのサイズ\037最小幅\037最大幅\037セパレータの間隔\037マーカー\037マーカー幅\037マーカーの色\037フォント\037フォントの太さ\037フォントスタイル\037アクセルディスプレイ\037影のサイズ\037影のオフセット X\037シャドウオフセットY\037影の不透明度\037影を背景に適応させる\037影の色\037影のぼかし\037ぼかし\037ぼかしの強さ\037オーバーレイ効果\037オーバーレイの強度\037オーバーレイ速度\037オーバーレイサイズ\037オーバーレイフレーム間隔\037開いているときにオーバーレイをアニメーション化する\037アニメーションを開く\037アニメーションを閉じる\037オープン期間\037クローズ期間\037アニメーションのフレーム間隔\037アニメーションイージング\037アニメーションアンカー\037アニメーションのサブメニュー\037スライドオフセットX\037スライドオフセットY\037からのスケール\037彩度/値\037色相\037アルファ\037赤\037緑\037ブルー\037アルファ値\037左上\037右上\037右下\037左下\037ノーマル\037半太字\037太字\037ノーマル\037イタリック体\037ドット\037チェックする\037バー\037なし\037下線\037ストリップ\037生\037リニア\037イーズアウト\037インアウトを容易にする\037戻る\037バウンス\037弾性のある\037カーソル\037センター\037なし\037フェード\037スライド\037スケール\037溶解する\037ブラウン管\037展開する\037なし\037騒音\037プラズマ\037色相\037グロー\037走査線\037ビネット\037言語\037クラシックメニュー項目を表示\037上部のアクションバー\037サブメニューの遅延\037バイパスキー\037デバッグログ\037ウォームアップ遅延\037カスタム (menu.ini)\037Windows 11 ダーク\037Windows 11 ライト\037Windows 10 ダーク\037Windows 10ライト\037ハイコントラスト\037選択マーカー\037新しい%s\037新しいフォルダー\037新しいショートカット"},
+    {L"ko", false, "열기\037%s 재설정…\037압축(zip) 폴더\037폴더\037바로가기\037소개\037아이콘을 그리드에 정렬\037자동 정렬 아이콘\037내용\037복사\037경로로 복사\037바로가기 만들기\037잘라내기\037기본값(설정되지 않음)\037삭제\037세부정보\037디스플레이 설정\037초대형 아이콘\037얼굴\037그룹화 기준\03716진수\037큰 아이콘\037목록\037중간 아이콘\037메뉴 설정\037메뉴 설정…\037새로 만들기\037Windhawk 열기\037새 프로세스에서 열기\037새 창에서 열기\037menu.ini 열기\037테마 파일 열기\037다음으로 열기\037붙여넣기\037바로가기 붙여넣기\037개인화\037빠른 액세스에 고정\037속성\037새로 고침\037이름 바꾸기\037오픈 애니메이션 재생\037모든 모습 재설정\037모든 모습을 재설정합니다…\037확장 옵션…\037다음으로 보내기\037크기\037슬라이드 옵션…\037작은 아이콘\037정렬 기준\037상태\037대상\037테마\037타일\037CornerRadius 사용(설정되지 않음)\037보기\037Windhawk 설정…\037클래식 메뉴 표시\037추가 옵션\037오름차순\037내림차순\037(없음)\037이름\037수정된 날짜\037유형\037텍스트 문서\037비트맵 이미지\037리치 텍스트 문서\037에\037떨어져서\037관습\037기본값\037저장됨\037저장 실패\037글꼴을 찾을 수 없습니다\037기본 외관\037가벼운 외관\037어두운 외관\037더 이상 사용되지 않음 — animationOpen/Close 사용\037테마: %s — 테마 파일 편집\037스키마 %d\037메뉴 모드\037사용자 정의\037클래식\037색상\037색상\037레이아웃\037텍스트\037그림자\037효과\037애니메이션\037배경\037국경\037구분 기호\037호버 배경\037눌러진 배경\037텍스트 색상\037비활성화된 텍스트 색상\037하위 메뉴 화살표\037헤더 색상\037코너 반경\037코너 반경\037테두리 너비\037패딩\037아이템 패딩\037수직 패딩\037품목 높이\037아이콘 크기\037최소 너비\037최대 너비\037구분자 간격\037마커\037마커 너비\037마커 색상\037글꼴\037글꼴 두께\037글꼴 스타일\037가속기 디스플레이\037그림자 크기\037그림자 오프셋 X\037그림자 오프셋 Y\037그림자 불투명도\037그림자를 배경에 맞게 조정\037그림자 색상\037그림자 흐림\037흐림\037흐림 강도\037오버레이 효과\037오버레이 강도\037오버레이 속도\037오버레이 크기\037오버레이 프레임 간격\037열려 있는 동안 오버레이에 애니메이션 적용\037애니메이션 열기\037애니메이션 닫기\037오픈 기간\037마감 기간\037애니메이션 프레임 간격\037애니메이션 이징\037애니메이션 앵커\037하위 메뉴 애니메이션\037슬라이드 오프셋 X\037슬라이드 오프셋 Y\037규모 조정\037채도 / 값\037색조\037알파\037빨간색\037녹색\037블루\037알파 값\037왼쪽 위\037오른쪽 상단\037오른쪽 하단\037왼쪽 하단\037보통\037세미볼드\037굵게\037보통\037이탤릭체\037도트\037확인\037바\037없음\037밑줄\037스트립\037원시\037선형\037천천히\037쉽게 들어오고 나가기\037뒤로\037바운스\037탄성\037커서\037센터\037없음\037페이드\037슬라이드\037규모\037디졸브\037브라운관\037펼치기\037없음\037소음\037플라즈마\037색조\037글로우\037스캔라인\037비네트\037언어\037클래식 메뉴 항목 표시\037상단 작업 표시줄\037하위 메뉴 지연\037바이패스 키\037디버그 로깅\037워밍업 지연\037커스텀(menu.ini)\037Windows 11 다크\037Windows 11 라이트\037Windows 10 다크\037Windows 10 라이트\037고대비\037선택 마커\037새로운 %s\037새 폴더\037새로운 단축키"},
+    {L"nb", false, "Åpne\037Tilbakestill %s...\037Komprimert (zippet) mappe\037Mappe\037Snarvei\037Om\037Juster ikonene til rutenettet\037Ordne ikoner automatisk\037Innhold\037Kopier\037Kopier som bane\037Lag snarvei\037Klipp ut\037Standard (ikke innstilt)\037Slett\037Detaljer\037Skjerminnstillinger\037Ekstra store ikoner\037Ansikt\037Grupper etter\037Hex\037Store ikoner\037Liste\037Middels ikoner\037Menyinnstillinger\037Menyinnstillinger...\037Ny\037Åpne Windhawk\037Åpne i ny prosess\037Åpne i nytt vindu\037Åpne menu.ini\037Åpne temafil\037Åpne med\037Lim inn\037Lim inn snarvei\037Tilpass\037Fest til hurtigtilgang\037Egenskaper\037Oppdater\037Gi nytt navn\037Spill av åpen animasjon på nytt\037Tilbakestill alt utseende\037Tilbakestill alt utseende...\037Skaleringsalternativer …\037Send til\037Størrelse\037Lysbildealternativer...\037Små ikoner\037Sorter etter\037Status\037Mål\037Tema\037Fliser\037Bruk cornerRadius (ikke innstilt)\037Vis\037Windhawk-innstillinger...\037Vis klassisk meny\037Flere alternativer\037Stigende\037Synkende\037(Ingen)\037Navn\037Dato endret\037Type\037Tekstdokument\037Bitmap-bilde\037Rik tekstdokument\037på\037av\037tilpasset\037standard\037Lagret\037Lagring mislyktes\037Finner ikke skrift\037Base utseende\037Lett utseende\037Mørkt utseende\037utdatert — bruk animationOpen/Close\037Tema: %s — redigering av temafil\037skjema %d\037Menymodus\037Egendefinert\037Klassisk\037Farge\037Farger\037Oppsett\037Tekst\037Skygge\037Effekter\037Animasjon\037Bakgrunn\037Border\037Separator\037Hover bakgrunn\037Trykket bakgrunn\037Tekstfarge\037Deaktivert tekstfarge\037Undermenypil\037Overskriftsfarge\037Hjørneradius\037Hjørneradier\037Kantbredde\037Polstring\037Varepolstring\037Vertikal polstring\037Varehøyde\037Ikonstørrelse\037Minimum bredde\037Maksimal bredde\037Skille mellomrom\037Markør\037Markør bredde\037Markør farge\037Font\037Skriftvekt\037Skriftstil\037Accelerator display\037Skyggestørrelse\037Skyggeforskyvning X\037Skyggeforskyvning Y\037Skyggeopasitet\037Tilpass skyggen til bakteppet\037Skygge farge\037Skyggeuskarphet\037Uskarphet\037Uskarphet styrke\037Overleggseffekter\037Overleggsintensitet\037Overleggshastighet\037Overleggsstørrelse\037Overleggsrammeintervall\037Animer overlegg mens de er åpne\037Åpne animasjon\037Lukk animasjon\037Åpen varighet\037Lukk varighet\037Animasjonsrammeintervall\037Forenkling av animasjon\037Animasjonsanker\037Animer undermenyer\037Glideforskyvning X\037Glideforskyvning Y\037Skala fra\037Metning / verdi\037Hue\037Alfa\037Rødt\037Grønn\037Blått\037Alfa-verdi\037Øverst til venstre\037Øverst til høyre\037Nederst til høyre\037Nederst til venstre\037Normal\037Halvfet\037Fet\037Normal\037Kursiv\037Prikk\037Sjekk\037Bar\037Ingen\037Understrek\037Strip\037Rå\037Lineær\037Slapp av\037Enkel inn-ut\037Tilbake\037Sprett\037Elastisk\037Markør\037Senter\037Ingen\037Fade\037Skyv\037Skala\037Oppløses\037CRT\037Utfolde seg\037Ingen\037Støy\037Plasma\037Hue\037Glød\037Scanlines\037Vignett\037Språk\037Vis klassisk menyelement\037Øverste handlingslinje\037Undermeny forsinkelse\037Omgå nøkler\037Feilsøk logging\037Oppvarmingsforsinkelse\037Egendefinert (menu.ini)\037Windows 11 Mørk\037Windows 11 lys\037Windows 10 Mørk\037Windows 10 lys\037Høy kontrast\037Markeringsmarkør\037Ny %s\037Ny mappe\037Ny snarvei"},
+    {L"nl", false, "Openen\037%s opnieuw instellen…\037Gecomprimeerde (gezipte) map\037Map\037Snelkoppeling\037Over\037Lijn pictogrammen uit op het raster\037Pictogrammen automatisch rangschikken\037Inhoud\037Kopiëren\037Kopieer als pad\037Snelkoppeling maken\037Knippen\037Standaard (niet ingesteld)\037Verwijderen\037Details\037Weergave-instellingen\037Extra grote pictogrammen\037Gezicht\037Groepeer op\037Hex\037Grote iconen\037Lijst\037Middelgrote pictogrammen\037Menu-instellingen\037Menu-instellingen…\037Nieuw\037Open Windhawk\037Openen in nieuw proces\037Openen in nieuw venster\037Open menu.ini\037Themabestand openen\037Openen met\037Plakken\037Snelkoppeling plakken\037Personaliseer\037Vastmaken aan Snelle toegang\037Eigenschappen\037Vernieuwen\037Hernoemen\037Open animatie opnieuw afspelen\037Reset alle uiterlijk\037Alle weergaven resetten…\037Schaalopties…\037Verzenden naar\037Grootte\037Dia-opties…\037Kleine iconen\037Sorteer op\037Status\037Doel\037Thema\037Tegels\037Gebruik cornerRadius (niet ingesteld)\037Bekijken\037Windhawk-instellingen…\037Klassiek menu weergeven\037Meer opties\037Oplopend\037Aflopend\037(Geen)\037Naam\037Datum gewijzigd\037Typ\037Tekstdocument\037Bitmapafbeelding\037Rich Text-document\037op\037uit\037gewoonte\037standaard\037Opgeslagen\037Opslaan mislukt\037Lettertype niet gevonden\037Basis uiterlijk\037Lichte uitstraling\037Donker uiterlijk\037verouderd - gebruik animationOpen/Close\037Thema: %s - themabestand bewerken\037schema %d\037Menumodus\037Aangepast\037Klassiek\037Kleur\037Kleuren\037Indeling\037Tekst\037Schaduw\037Effecten\037Animatie\037Achtergrond\037Grens\037Scheidingsteken\037Beweeg de achtergrond\037Ingedrukte achtergrond\037Tekstkleur\037Uitgeschakelde tekstkleur\037Submenupijl\037Kleur koptekst\037Hoekradius\037Hoekradii\037Randbreedte\037Opvulling\037Opvulling van artikelen\037Verticale vulling\037Artikel hoogte\037Pictogramgrootte\037Minimale breedte\037Maximale breedte\037Afstand tussen scheidingstekens\037Markering\037Breedte markering\037Kleur van de markering\037Lettertype\037Lettertype gewicht\037Lettertypestijl\037Versneller weergave\037Schaduwgrootte\037Schaduwverschuiving X\037Schaduwverschuiving Y\037Schaduwdekking\037Pas schaduw aan de achtergrond aan\037Schaduw kleur\037Schaduw vervagen\037Vervagen\037Vervaging kracht\037Overlay-effecten\037Overlay-intensiteit\037Overlay-snelheid\037Overlay-grootte\037Frame-interval overlay\037Animeer overlays terwijl ze geopend zijn\037Animatie openen\037Animatie sluiten\037Open duur\037Sluitingsduur\037Animatieframe-interval\037Animatie versoepeling\037Animatie anker\037Animeer submenu's\037Dia-offset X\037Glijverschuiving Y\037Schaal vanaf\037Verzadiging / waarde\037Tint\037Alfa\037Rood\037Groen\037Blauw\037Alfa-waarde\037Linksboven\037Rechtsboven\037Rechtsonder\037Linksonder\037Normaal\037Halfvet\037Vet\037Normaal\037Cursief\037Punt\037Controleer\037Balk\037Geen\037Onderstreep\037Strook\037Rauw\037Lineair\037Ontspan\037Gemakkelijk in- en uitstappen\037Terug\037Stuiteren\037Elastisch\037Cursor\037Centrum\037Geen\037Vervagen\037Dia\037Schaal\037Oplossen\037CRT\037Ontvouwen\037Geen\037Lawaai\037Plasma\037Tint\037Gloed\037Scanlijnen\037Vignet\037Taal\037Klassiek menu-item weergeven\037Actiebalk bovenaan\037Submenu vertraging\037Sleutels omzeilen\037Foutopsporingslogboekregistratie\037Opwarmvertraging\037Aangepast (menu.ini)\037Windows 11 Donker\037Windows 11 Licht\037Windows 10 Donker\037Windows 10 Licht\037Hoog contrast\037Selectiemarkering\037Nieuwe %s\037Nieuwe map\037Nieuwe snelkoppeling"},
+    {L"or", false, "ଖୋଲନ୍ତୁ\037%s ପୁନଃସେଟ୍ କରନ୍ତୁ…\037ସଙ୍କୋଚିତ (ଜିପ୍) ଫୋଲ୍ଡର୍\037ଫୋଲ୍ଡର\037ସର୍ଟକଟ୍\037ବିଷୟରେ\037ଆଇକନ୍ ଗ୍ରୀଡ୍ ସହିତ ଆଲାଇନ୍ କରନ୍ତୁ\037ଆଇକନ୍ ଗୁଡିକ ଅଟୋ ସଜାନ୍ତୁ\037ବିଷୟବସ୍ତୁ\037କପି କରନ୍ତୁ\037ପଥ ଭାବରେ କପି କରନ୍ତୁ\037ସର୍ଟକଟ୍ ସୃଷ୍ଟି କରନ୍ତୁ\037କାଟ\037ଡିଫଲ୍ଟ (ସେଟ୍)\037ବିଲୋପ କରନ୍ତୁ\037ବିବରଣୀ\037ସେଟିଂସମୂହ ପ୍ରଦର୍ଶନ କରନ୍ତୁ\037ଅତିରିକ୍ତ ବଡ଼ ଆଇକନ୍\037ଚେହେରା\037ଦ୍ୱାରା ଗୋଷ୍ଠୀଭୁକ୍ତ କରନ୍ତୁ\037ହେକ୍ସ\037ବଡ଼ ଆଇକନ୍\037ତାଲିକା\037ମଧ୍ୟମ ଆଇକନ୍\037ମେନୁ ସେଟିଂସମୂହ\037ମେନୁ ସେଟିଂସମୂହ…\037ନୂତନ\037Windhawk ଖୋଲନ୍ତୁ\037ନୂତନ ପ୍ରକ୍ରିୟାରେ ଖୋଲନ୍ତୁ\037ନୂଆ ୱିଣ୍ଡୋରେ ଖୋଲ\037menu.ini ଖୋଲନ୍ତୁ\037ଥିମ୍ ଫାଇଲ୍ ଖୋଲନ୍ତୁ\037ସହିତ ଖୋଲନ୍ତୁ\037ଲେପନ କରନ୍ତୁ\037ସର୍ଟକଟ୍ ଲେପନ କରନ୍ତୁ\037ବ୍ୟକ୍ତିଗତ କରନ୍ତୁ\037ଦ୍ରୁତ ପ୍ରବେଶ ପାଇଁ ପିନ୍ କରନ୍ତୁ\037ଗୁଣଧର୍ମ\037ସତେଜ\037ନାମ ପରିବର୍ତ୍ତନ କରନ୍ତୁ\037ଖୋଲା ଆନିମେସନ୍ ରିପ୍ଲେ କରନ୍ତୁ\037ସମସ୍ତ ରୂପ ପୁନଃସେଟ୍ କରନ୍ତୁ\037ସମସ୍ତ ରୂପ ପୁନଃସେଟ୍ କରନ୍ତୁ…\037ମାପକାଠି ବିକଳ୍ପ…\037ପଠାନ୍ତୁ\037ଆକାର\037ସ୍ଲାଇଡ୍ ଅପ୍ସନ୍…\037ଛୋଟ ଆଇକନ୍\037ଦ୍ୱାରା ସର୍ଟ କରନ୍ତୁ\037ସ୍ଥିତି\037ଲକ୍ଷ୍ୟ\037ଥିମ୍\037ଟାଇଲ୍ସ\037କୋଣାର୍କ ରେଡିୟସ୍ ବ୍ୟବହାର କରନ୍ତୁ (ସେଟ୍ କରନ୍ତୁ)\037ଦେଖନ୍ତୁ\037Windhawk ସେଟିଂସମୂହ…\037କ୍ଲାସିକ୍ ମେନୁ ଦେଖାନ୍ତୁ\037ଅଧିକ ବିକଳ୍ପ\037ଆରୋହଣ\037ଅବତରଣ\037(କିଛି ନୁହେଁ)\037ନାମ\037ତାରିଖ ସଂଶୋଧିତ\037ଟାଇପ୍ କରନ୍ତୁ\037ପାଠ୍ୟ ଡକ୍ୟୁମେଣ୍ଟ୍\037ବିଟମ୍ୟାପ୍ ପ୍ରତିଛବି\037ରିଚ୍ ଟେକ୍ସଟ୍ ଡକ୍ୟୁମେଣ୍ଟ୍\037ଉପରେ\037ବନ୍ଦ\037କଷ୍ଟମ୍\037ଡିଫଲ୍ଟ\037ସଞ୍ଚୟ ହୋଇଛି\037ସଞ୍ଚୟ ବିଫଳ ହେଲା\037ଫଣ୍ଟ ମିଳିଲା ନାହିଁ\037ମୂଳ ରୂପ\037ହାଲୁକା ରୂପ\037ଅନ୍ଧାର ରୂପ\037ପୁରୁଣା - animationOpen/Close ବ୍ୟବହାର କରନ୍ତୁ\037ଥିମ୍: %s - ଥିମ୍ ଫାଇଲ୍ ଏଡିଟ୍ କରିବା\037ସ୍କିମା %d\037ମେନୁ ମୋଡ୍\037କଷ୍ଟମ୍\037କ୍ଲାସିକ୍\037ରଙ୍ଗ\037ରଙ୍ଗଗୁଡିକ\037ଲେଆଉଟ୍\037ପାଠ\037ଛାୟା\037ପ୍ରଭାବ\037ଆନିମେସନ୍\037ପୃଷ୍ଠଭୂମି\037ସୀମା\037ବିଚ୍ଛିନ୍ନକର୍ତ୍ତା\037ହୋଭର୍ ପୃଷ୍ଠଭୂମି\037ଚାପିତ ପୃଷ୍ଠଭୂମି\037ପାଠ୍ୟ ରଙ୍ଗ\037ଅକ୍ଷମ ପାଠ୍ୟ ରଙ୍ଗ\037ସବମେନୁ ତୀର\037ହେଡର୍ ରଙ୍ଗ\037କୋଣାର୍କ ବ୍ୟାସାର୍ଦ୍ଧ\037କୋଣାର୍କ ରେଡିଓ\037ସୀମା ପ୍ରସ୍ଥ\037ପ୍ୟାଡିଂ\037ଆଇଟମ୍ ପ୍ୟାଡିଂ\037ଭର୍ଟିକାଲ୍ ପ୍ୟାଡିଂ\037ଆଇଟମ୍ ଉଚ୍ଚତା\037ଆଇକନ୍ ଆକାର\037ସର୍ବନିମ୍ନ ମୋଟେଇ\037ସର୍ବାଧିକ ମୋଟେଇ\037ପୃଥକ ବ୍ୟବଧାନ\037ମାର୍କର\037ମାର୍କର ମୋଟେଇ\037ମାର୍କର ରଙ୍ଗ\037ଫଣ୍ଟ\037ଫଣ୍ଟ ଓଜନ\037ଫଣ୍ଟ ଶୈଳୀ\037ତ୍ୱରଣକାରୀ ପ୍ରଦର୍ଶନ\037ଛାୟା ଆକାର\037ଛାୟା ଅଫସେଟ୍ X\037ଛାୟା ଅଫସେଟ୍ Y\037ଛାୟା ସ୍ୱଚ୍ଛତା\037ଛାୟାକୁ ପୃଷ୍ଠଭୂମି ସହିତ ଆଡାପ୍ଟ୍ କରନ୍ତୁ\037ଛାୟା ରଙ୍ଗ\037ଛାୟା ଅସ୍ପଷ୍ଟ\037ଅସ୍ପଷ୍ଟ\037ଅସ୍ପଷ୍ଟ ଶକ୍ତି\037ଆଚ୍ଛାଦନ ପ୍ରଭାବ\037ଆଚ୍ଛାଦନ ତୀବ୍ରତା\037ଓଭରଲେଡ୍ ଗତି\037ଓଭରଲେଜ୍ ସାଇଜ୍\037ଫ୍ରେମ୍ ବ୍ୟବଧାନକୁ ଓଭରଲେଟ୍ କରନ୍ତୁ\037ଖୋଲା ଥିବାବେଳେ ଆନିମେଟ ଓଭରଲେଜ୍\037ଆନିମେସନ୍ ଖୋଲ\037ଆନିମେସନ୍ ବନ୍ଦ କରନ୍ତୁ\037ଖୋଲା ଅବଧି\037ସମୟ ଅବଧି ବନ୍ଦ କରନ୍ତୁ\037ଆନିମେସନ୍ ଫ୍ରେମ୍ ବ୍ୟବଧାନ\037ଆନିମେସନ୍ ସହଜ\037ଆନିମେସନ୍ ଆଙ୍କର୍\037ଆନିମେଟ ସବମେନସ୍\037ସ୍ଲାଇଡ୍ ଅଫସେଟ୍ X\037ସ୍ଲାଇଡ୍ ଅଫସେଟ୍ Y\037ଠାରୁ ମାପ\037ପରିପୃଷ୍ଠା / ମୂଲ୍ୟ\037ରଙ୍ଗ\037ଆଲଫା\037ଲାଲ୍\037ସବୁଜ\037ନୀଳ\037ଆଲଫା ମୂଲ୍ୟ\037ଉପର ବାମ\037ଉପର ଡାହାଣ\037ତଳ ଡାହାଣ\037ତଳ ବାମ\037ସାଧାରଣ\037ସେମିବୋଲ୍ଡ\037ବୋଲ୍ଡ\037ସାଧାରଣ\037ଇଟାଲିକ୍\037ବିନ୍ଦୁ\037ଯାଞ୍ଚ କରନ୍ତୁ\037ବାର୍\037କିଛି ନୁହେଁ\037ଅଣ୍ଡରଲାଇନ୍\037ଷ୍ଟ୍ରିପ୍\037କଞ୍ଚା\037ରେଖା\037ସହଜ କରନ୍ତୁ\037ଇନ୍-ଆଉଟ୍ ସହଜ କରନ୍ତୁ\037ପଛକୁ\037ବାଉନ୍ସ\037ଇଲଷ୍ଟିକ୍\037କର୍ସର୍\037କେନ୍ଦ୍ର\037କିଛି ନୁହେଁ\037ମଳିନ\037ସ୍ଲାଇଡ୍\037ମାପ\037ବିସର୍ଜନ କରନ୍ତୁ\037CRT\037ଅନାବଶ୍ୟକ\037କିଛି ନୁହେଁ\037କୋଳାହଳ\037ପ୍ଲାଜ୍ମା\037ହୁ\037ଗ୍ଲୋ\037ସ୍କାନଲାଇନ୍ସ\037ଭିଗ୍ନେଟ୍\037ଭାଷା\037କ୍ଲାସିକ୍ ମେନୁ ଆଇଟମ୍ ଦେଖାନ୍ତୁ\037ଶୀର୍ଷ ଆକ୍ସନ୍ ବାର୍\037ସବମେନୁ ବିଳମ୍ବ\037ଚାବିଗୁଡିକ ବାଇପାସ୍ କରନ୍ତୁ\037ତ୍ରୁଟି ନିବାରଣ\037ୱାର୍ମଅପ୍ ବିଳମ୍ବ\037କଷ୍ଟମ୍ (menu.ini)\037Windows 11 ଅନ୍ଧାର\037Windows 11 ଉଜ୍ଜ୍ୱଳ\037Windows 10 ଅନ୍ଧାର\037Windows 10 ଉଜ୍ଜ୍ୱଳ\037ଉଚ୍ଚ କଣ୍ଟ୍ରାସ୍\037ଚୟନ ମାର୍କର\037ନୂତନ %s\037ନୂତନ ଫୋଲ୍ଡର୍\037ନୂତନ ସର୍ଟକଟ୍"},
+    {L"pl", false, "Otwórz\037Zresetuj %s…\037Folder skompresowany (spakowany).\037Folder\037Skrót\037O\037Wyrównaj ikony do siatki\037Automatyczne rozmieszczanie ikon\037Treść\037Kopiuj\037Skopiuj jako ścieżkę\037Utwórz skrót\037Wytnij\037Domyślne (nieustawione)\037Usuń\037Szczegóły\037Ustawienia wyświetlania\037Bardzo duże ikony\037Twarz\037Grupuj według\037Heks\037Duże ikony\037Lista\037Średnie ikony\037Ustawienia menu\037Ustawienia menu…\037Nowy\037Otwórz Windhawk\037Otwórz w nowym procesie\037Otwórz w nowym oknie\037Otwórz menu.ini\037Otwórz plik motywu\037Otwórz za pomocą\037Wklej\037Wklej skrót\037Personalizuj\037Przypnij do szybkiego dostępu\037Właściwości\037Odśwież\037Zmień nazwę\037Odtwórz ponownie otwartą animację\037Zresetuj cały wygląd\037Zresetuj cały wygląd…\037Opcje skali…\037Wyślij do\037Rozmiar\037Opcje slajdów…\037Małe ikony\037Sortuj według\037Stan\037Cel\037Motyw\037Płytki\037Użyj promienia narożnika (nieustawione)\037Widok\037Ustawienia Windhawk…\037Pokaż klasyczne menu\037Więcej opcji\037Rosnąco\037Malejąco\037(Brak)\037Imię\037Data modyfikacji\037Wpisz\037Dokument tekstowy\037Obraz bitmapowy\037Dokument bogaty w tekst\037na\037wyłączone\037niestandardowe\037domyślny\037Zapisano\037Zapisywanie nie powiodło się\037Nie znaleziono czcionki\037Wygląd podstawowy\037Lekki wygląd\037Ciemny wygląd\037przestarzałe — użyj animationOpen/Close\037Motyw: %s — edycja pliku motywu\037schemat %d\037Tryb menu\037Niestandardowe\037Klasyczny\037Kolor\037Kolory\037Układ\037Tekst\037Cień\037Efekty\037Animacja\037Tło\037Granica\037Separator\037Najedź na tło\037Tło tłoczone\037Kolor tekstu\037Wyłączony kolor tekstu\037Strzałka podmenu\037Kolor nagłówka\037Promień narożnika\037Promienie naroży\037Szerokość obramowania\037Wyściółka\037Wypełnienie przedmiotu\037Pionowe wypełnienie\037Wysokość przedmiotu\037Rozmiar ikony\037Minimalna szerokość\037Maksymalna szerokość\037Rozstaw separatorów\037Znacznik\037Szerokość znacznika\037Kolor znacznika\037Czcionka\037Waga czcionki\037Styl czcionki\037Wyświetlacz akceleratora\037Rozmiar cienia\037Przesunięcie cienia X\037Przesunięcie cienia Y\037Nieprzezroczystość cienia\037Dostosuj cień do tła\037Kolor cienia\037Rozmycie cienia\037Rozmycie\037Siła rozmycia\037Efekty nakładki\037Intensywność nakładki\037Szybkość nakładki\037Rozmiar nakładki\037Interwał klatek nakładki\037Animuj nakładki po otwarciu\037Otwórz animację\037Zamknij animację\037Czas otwarcia\037Czas trwania zamknięcia\037Interwał klatek animacji\037Złagodzenie animacji\037Kotwica animacji\037Animuj podmenu\037Przesunięcie slajdu X\037Przesunięcie suwaka Y\037Skala od\037Nasycenie / wartość\037Odcień\037Alfa\037Czerwony\037Zielony\037Niebieski\037Wartość alfa\037U góry po lewej\037U góry po prawej\037Prawy dolny róg\037Na dole po lewej\037Normalne\037Półpogrubiony\037Odważne\037Normalne\037Kursywa\037Kropka\037Sprawdź\037Bar\037Żadne\037Podkreśl\037Rozebrać się\037Surowy\037Liniowy\037Uspokój się\037Łatwe wejście i wyjście\037Powrót\037Odbić\037Elastyczny\037Kursor\037Centrum\037Żadne\037Zniknąć\037Przesuń\037Skala\037Rozpuścić\037CRT\037Rozwiń\037Żadne\037Hałas\037Plazma\037Odcień\037Blask\037Scanlines\037Winieta\037Język\037Pokaż klasyczny element menu\037Górny pasek akcji\037Opóźnienie podmenu\037Omiń klucze\037Rejestrowanie debugowania\037Opóźnienie rozgrzewki\037Niestandardowe (menu.ini)\037Windows 11 Ciemny\037Światło Windows 11\037Windows 10 Ciemny\037Światło Windows 10\037Wysoki kontrast\037Znacznik wyboru\037Nowy %s\037Nowy folder\037Nowy skrót"},
+    {L"pt-BR", false, "Abrir\037Redefinir %s…\037Pasta compactada (zipada)\037Pasta\037Atalho\037Sobre\037Alinhar ícones à grade\037Organizar ícones automaticamente\037Conteúdo\037Copiar\037Copiar como caminho\037Criar atalho\037Cortar\037Padrão (não definido)\037Excluir\037Detalhes\037Configurações de exibição\037Ícones extragrandes\037Cara\037Agrupar por\037Feitiço\037Ícones grandes\037Lista\037Ícones médios\037Configurações do menu\037Configurações do menu…\037Novo\037Abra Windhawk\037Abrir em novo processo\037Abrir em nova janela\037Abra menu.ini\037Abrir arquivo de tema\037Abrir com\037Colar\037Colar atalho\037Personalizar\037Fixar no acesso rápido\037Propriedades\037Atualizar\037Renomear\037Reproduzir animação aberta\037Redefinir toda a aparência\037Redefinir toda a aparência…\037Opções de escala…\037Enviar para\037Tamanho\037Opções de slides…\037Ícones pequenos\037Classificar por\037Status\037Alvo\037Tema\037Azulejos\037Use cornerRadius (não definido)\037Ver\037Configurações Windhawk…\037Mostrar menu clássico\037Mais opções\037Ascendente\037Descendente\037(Nenhum)\037Nome\037Data modificada\037Tipo\037Documento de texto\037Imagem bitmap\037Documento Rich Text\037ligado\037desligado\037personalizado\037padrão\037Salvo\037Falha ao salvar\037Fonte não encontrada\037Aparência básica\037Aparência leve\037Aparência escura\037obsoleto - use animationOpen/Close\037Tema: %s — editando arquivo de tema\037esquema %d\037Modo de menu\037Personalizado\037Clássico\037Cor\037Cores\037Disposição\037Texto\037Sombra\037Efeitos\037Animação\037Plano de fundo\037Fronteira\037Separador\037Passe o mouse sobre o fundo\037Fundo pressionado\037Cor do texto\037Cor do texto desativada\037Seta do submenu\037Cor do cabeçalho\037Raio de canto\037Raios de canto\037Largura da borda\037Preenchimento\037Preenchimento de item\037Preenchimento vertical\037Altura do item\037Tamanho do ícone\037Largura mínima\037Largura máxima\037Espaçamento entre separadores\037Marcador\037Largura do marcador\037Cor do marcador\037Fonte\037Peso da fonte\037Estilo da fonte\037Exibição do acelerador\037Tamanho da sombra\037Deslocamento de sombra X\037Deslocamento de sombra Y\037Opacidade da sombra\037Adapte a sombra ao cenário\037Cor da sombra\037Desfoque de sombra\037Desfoque\037Força do desfoque\037Efeitos de sobreposição\037Intensidade de sobreposição\037Velocidade de sobreposição\037Tamanho da sobreposição\037Intervalo de quadro de sobreposição\037Animar sobreposições enquanto abertas\037Abrir animação\037Fechar animação\037Duração aberta\037Duração do fechamento\037Intervalo de quadro de animação\037Facilitação de animação\037Âncora de animação\037Animar submenus\037Deslocamento de deslizamento X\037Deslocamento de deslizamento Y\037Escala de\037Saturação / valor\037Matiz\037Alfa\037Vermelho\037Verde\037Azul\037Valor alfa\037Canto superior esquerdo\037Canto superior direito\037Canto inferior direito\037Canto inferior esquerdo\037Normais\037Seminegrito\037Ousado\037Normais\037Itálico\037Ponto\037Verifique\037Barra\037Nenhum\037Sublinhado\037Tira\037Cru\037linear\037Facilite\037Facilidade de entrada e saída\037Voltar\037Saltar\037Elástico\037Cursor\037Centro\037Nenhum\037Desaparecer\037Deslizar\037Escala\037Dissolver\037CRT\037Desdobrar\037Nenhum\037Ruído\037Plasma\037Matiz\037Brilho\037Linhas de varredura\037Vinheta\037Idioma\037Mostrar item de menu clássico\037Barra de ação superior\037Atraso do submenu\037Ignorar chaves\037Registro de depuração\037Atraso no aquecimento\037Personalizado (menu.ini)\037Windows 11 Escuro\037Luz Windows 11\037Windows 10 Escuro\037Luz Windows 10\037Alto contraste\037Marcador de seleção\037Novo %s\037Nova pasta\037Novo atalho"},
+    {L"pt-PT", false, "Abrir\037Repor %s…\037Pasta compactada (zipada)\037Pasta\037Atalho\037Sobre\037Alinhar ícones à grelha\037Organizar os ícones automaticamente\037Conteúdo\037Copiar\037Copiar como caminho\037Criar atalho\037Cortar\037Padrão (não definido)\037Apagar\037Detalhes\037Configurações de visualização\037Ícones extragrandes\037Cara\037Agrupar por\037Feitiço\037Ícones grandes\037Lista\037Ícones médios\037Configurações do menu\037Definições do menu…\037Novo\037Abrir Windhawk\037Abrir em novo processo\037Abrir numa nova janela\037Abrir menu.ini\037Abrir ficheiro de tema\037Abrir com\037Colar\037Colar atalho\037Personalizar\037Fixar no acesso rápido\037Propriedades\037Atualizar\037Renomear\037Reproduzir animação aberta\037Redefinir toda a aparência\037Redefinir toda a aparência…\037Opções de escala…\037Enviar para\037Tamanho\037Opções de diapositivos…\037Ícones pequenos\037Classificar por\037Estado\037Alvo\037Tema\037Azulejos\037Utilizar cornerRadius (não definido)\037Ver\037Configurações Windhawk…\037Mostrar menu clássico\037Mais opções\037Ascendente\037Descendente\037(Nenhum)\037Nome\037Data modificada\037Tipo\037Documento de texto\037Imagem bitmap\037Documento Rich Text\037ligado\037desligado\037personalizado\037padrão\037Guardado\037Falha ao guardar\037Fonte não encontrada\037Aparência básica\037Aparência leve\037Aparência escura\037obsoleto - usar animationOpen/Close\037Tema: %s — editar ficheiro de tema\037esquema %d\037Modo de menu\037Personalizado\037Clássico\037Cor\037Cores\037Disposição\037Texto\037Sombra\037Efeitos\037Animação\037Plano de fundo\037Fronteira\037Separador\037Passe o rato sobre o fundo\037Fundo pressionado\037Cor do texto\037Cor do texto desativada\037Seta do submenu\037Cor do cabeçalho\037Raio de canto\037Raios de canto\037Largura da borda\037Preenchimento\037Preenchimento de item\037Preenchimento vertical\037Altura do item\037Tamanho do ícone\037Largura mínima\037Largura máxima\037Espaçamento entre separadores\037Marcador\037Largura do marcador\037Cor do marcador\037Fonte\037Peso da fonte\037Estilo da fonte\037Exibição do acelerador\037Tamanho da sombra\037Deslocamento de sombra X\037Deslocamento de sombra Y\037Opacidade da sombra\037Adapte a sombra ao cenário\037Cor da sombra\037Desfoque de sombra\037Desfoque\037Força do desfoque\037Efeitos de sobreposição\037Intensidade de sobreposição\037Velocidade de sobreposição\037Tamanho da sobreposição\037Intervalo de quadro de sobreposição\037Animar sobreposições enquanto abertas\037Abrir animação\037Fechar animação\037Duração aberta\037Duração do fecho\037Intervalo de fotogramas de animação\037Facilitação de animação\037Âncora de animação\037Animar submenus\037Deslocamento de deslizamento X\037Deslocamento de deslizamento Y\037Escala de\037Saturação / valor\037Matiz\037Alfa\037Vermelho\037Verde\037Azul\037Valor alfa\037Canto superior esquerdo\037Canto superior direito\037Canto inferior direito\037Canto inferior esquerdo\037Normais\037Seminegrito\037Ousado\037Normais\037Itálico\037Ponto\037Verifique\037Barra\037Nenhum\037Sublinhado\037Tira\037Cru\037linear\037Facilite\037Facilidade de entrada e saída\037Voltar\037Saltar\037Elástico\037Cursor\037Centro\037Nenhum\037Desaparecer\037Deslizar\037Escala\037Dissolver\037CRT\037Desdobrar\037Nenhum\037Ruído\037Plasma\037Matiz\037Brilho\037Linhas de varrimento\037Vinheta\037Idioma\037Mostrar item de menu clássico\037Barra de ação superior\037Atraso do submenu\037Ignorar chaves\037Registo de depuração\037Atraso no aquecimento\037Personalizado (menu.ini)\037Windows 11 Escuro\037Luz Windows 11\037Windows 10 Escuro\037Luz Windows 10\037Alto contraste\037Marcador de seleção\037Novo %s\037Nova pasta\037Novo atalho"},
+    {L"ro", false, "Deschide\037Resetați %s...\037Folder comprimat (zip).\037Folder\037Comandă rapidă\037Despre\037Aliniați pictogramele la grilă\037Aranjați automat pictogramele\037Conținut\037Copiere\037Copiați ca cale\037Creați o comandă rapidă\037Tăiați\037Implicit (dezactivat)\037Șterge\037Detalii\037Setări de afișare\037Pictograme foarte mari\037Față\037Grupați după\037Hex\037Pictograme mari\037Lista\037Pictograme medii\037Setări de meniu\037Setări de meniu...\037Nou\037Deschideți Windhawk\037Deschide în proces nou\037Deschide într-o fereastră nouă\037Deschideți menu.ini\037Deschideți fișierul cu temă\037Deschide cu\037Lipire\037Lipiți comanda rapidă\037Personalizează\037Fixați în Acces rapid\037Proprietăți\037Reîmprospătare\037Redenumiți\037Reluați animația deschisă\037Resetați toate aspectul\037Resetați toate aspectul...\037Opțiuni de scalare...\037Trimite la\037Dimensiune\037Opțiuni pentru diapozitive...\037Pictograme mici\037Sortați după\037Stare\037țintă\037Temă\037Placi\037Utilizați cornerRadius (dezactivat)\037Vizualizare\037Setări Windhawk...\037Afișează meniul clasic\037Mai multe opțiuni\037Crescatoare\037Descrescătoare\037(Niciuna)\037Nume\037Data modificată\037Tip\037Document text\037Imagine bitmap\037Document text îmbogățit\037pe\037oprit\037personalizat\037implicit\037Salvat\037Salvarea nu a reușit\037Fontul nu a fost găsit\037Aspectul de bază\037Aspect ușor\037Aspect întunecat\037depreciat — utilizați animationOpen/Close\037Tema: %s — editarea fișierului temă\037schema %d\037Modul meniu\037Personalizat\037Clasic\037Culoare\037Culori\037Aspect\037Text\037Umbra\037Efecte\037Animație\037Fundal\037Frontieră\037Separator\037Plasați pe fundal\037Fundal apăsat\037Culoarea textului\037Culoarea textului este dezactivată\037Săgeată pentru submeniu\037Culoarea antetului\037Raza colțului\037Raze de colț\037Lățimea chenarului\037Captuseala\037Umplutura articolului\037Captuseala verticala\037Înălțimea articolului\037Dimensiunea pictogramei\037Latime minima\037Latime maxima\037Distanța dintre separatori\037Marker\037Lățimea markerului\037Culoarea markerului\037Font\037Greutatea fontului\037Stilul fontului\037Afișaj accelerator\037Dimensiunea umbrei\037Decalaj de umbră X\037Compensarea umbrei Y\037Opacitatea umbrei\037Adaptați umbra la fundal\037Culoarea umbrei\037Umbre estompate\037Estompare\037Puterea estomparii\037Efecte de suprapunere\037Intensitatea suprapunerii\037Viteza de suprapunere\037Dimensiunea suprapunerii\037Interval de cadre de suprapunere\037Animați suprapunerile în timp ce sunt deschise\037Animație deschisă\037Închideți animația\037Durata deschisă\037Durata închiderii\037Interval de cadre de animație\037Ușurarea animației\037Ancoră de animație\037Animați submeniuri\037Slide offset X\037Diapozitiv offset Y\037Scala de la\037Saturație / valoare\037Hue\037Alfa\037roșu\037verde\037Albastru\037Valoarea alfa\037Sus stânga\037dreapta sus\037dreapta jos\037Stânga jos\037Normal\037Semibold\037Îndrăzneț\037Normal\037cursiv\037Dot\037Verificați\037bar\037Niciuna\037Subliniați\037Fâșie\037Brut\037Linear\037Eliberați-vă\037Ușurează intrarea și ieșirea\037Înapoi\037Bounce\037Elastic\037Cursorul\037Centru\037Niciuna\037Se estompează\037Slide\037Scară\037Dizolvați\037CRT\037Desfășurați\037Niciuna\037Zgomot\037Plasma\037Hue\037Strălucire\037Linii de scanare\037Vigneta\037Limba\037Afișează elementul de meniu clasic\037Bara de acțiuni de sus\037Întârziere submeniu\037Tastele de ocolire\037Jurnal de depanare\037Întârziere la încălzire\037Personalizat (menu.ini)\037Windows 11 Întunecat\037Windows 11 Lumină\037Windows 10 Întunecat\037Windows 10 Lumină\037Contrast ridicat\037Marker de selecție\037%s nou\037Dosar nou\037Comandă rapidă nouă"},
+    {L"ru", false, "Открыть\037Сбросить %s…\037Сжатая (заархивированная) папка\037Папка\037Ярлык\037О\037Выровнять значки по сетке\037Автоматическое расположение значков\037Содержание\037Копировать\037Скопировать как путь\037Создать ярлык\037Вырезать\037По умолчанию (не установлено)\037Удалить\037Подробности\037Настройки дисплея\037Очень большие значки\037Лицо\037Группировать по\037Шестигранник\037Большие значки\037Список\037Средние значки\037Настройки меню\037Настройки меню…\037Создать\037Открыть Windhawk\037Открыть в новом процессе\037Открыть в новом окне\037Открыть menu.ini\037Открыть файл темы\037Открыть с помощью\037Вставить\037Вставить ярлык\037Персонализация\037Закрепить для быстрого доступа\037Свойства\037Обновить\037Переименовать\037Воспроизвести открытую анимацию\037Сбросить весь внешний вид\037Сбросить весь внешний вид…\037Параметры масштабирования…\037Отправить\037Размер\037Варианты слайдов…\037Маленькие значки\037Сортировать по\037Статус\037Цель\037Тема\037Плитка\037Использовать angularRadius (не установлено)\037Просмотр\037Настройки Windhawk…\037Показать классическое меню\037Больше возможностей\037восходящий\037По убыванию\037(Нет)\037Имя\037Дата изменения\037Тип\037Текстовый документ\037Растровое изображение\037Документ с форматированным текстом\037на\037выкл.\037обычай\037по умолчанию\037Сохранено\037Сохранить не удалось\037Шрифт не найден\037Базовый внешний вид\037Легкий внешний вид\037Темный внешний вид\037устарел — используйте animationOpen/Close\037Theme: %s — редактирование файла темы.\037схема %d\037Режим меню\037Пользовательский\037Классический\037Цвет\037Цвета\037Макет\037Текст\037Тень\037Эффекты\037Анимация\037Фон\037Граница\037Сепаратор\037Фон при наведении\037Прессованный фон\037Цвет текста\037Отключен цвет текста\037Стрелка подменю\037Цвет заголовка\037Угловой радиус\037Угловые радиусы\037Ширина границы\037Заполнение\037Заполнение элемента\037Вертикальное отступы\037Высота предмета\037Размер значка\037Минимальная ширина\037Максимальная ширина\037Расстояние между сепараторами\037Маркер\037Ширина маркера\037Цвет маркера\037Шрифт\037Вес шрифта\037Стиль шрифта\037Дисплей акселератора\037Размер тени\037Смещение тени X\037Смещение тени Y\037Непрозрачность тени\037Адаптируйте тень к фону\037Цвет тени\037Размытие теней\037Размытие\037Сила размытия\037Эффекты наложения\037Интенсивность наложения\037Скорость наложения\037Размер наложения\037Интервал наложения кадров\037Анимация наложений при открытии\037Открыть анимацию\037Закрыть анимацию\037Открытая продолжительность\037Продолжительность закрытия\037Интервал кадров анимации\037Ослабление анимации\037Якорь анимации\037Анимация подменю\037Смещение слайда X\037Смещение слайда Y\037Масштабировать от\037Насыщенность/значение\037Оттенок\037Альфа\037Красный\037Зеленый\037Синий\037Альфа-значение\037Вверху слева\037Вверху справа\037Внизу справа\037Внизу слева\037Нормальный\037Полужирный\037Жирный\037Нормальный\037Курсив\037Точка\037Проверить\037Бар\037Нет\037Подчеркнуть\037Полоса\037сырой\037Линейный\037Расслабьтесь\037Легкость входа и выхода\037Назад\037Отказов\037Эластичный\037Курсор\037Центр\037Нет\037Затухание\037Слайд\037Масштаб\037Растворить\037ЭЛТ\037Развернуть\037Нет\037Шум\037Плазма\037Хюэ\037Свечение\037Развертки\037Виньетка\037Язык\037Показать пункт классического меню\037Верхняя панель действий\037Задержка подменю\037Клавиши обхода\037Ведение журнала отладки\037Задержка прогрева\037Пользовательский (menu.ini)\037Windows 11 Темный\037Windows 11 Светлая\037Windows 10 Темный\037Windows 10 Светлая\037Высокая контрастность\037Маркер выбора\037Новый %s\037Новая папка\037Новый ярлык"},
+    {L"sv", false, "Öppna\037Återställ %s...\037Komprimerad (zippad) mapp\037Mapp\037Genväg\037Om\037Rikta in ikonerna till rutnätet\037Ordna ikoner automatiskt\037Innehåll\037Kopiera\037Kopiera som sökväg\037Skapa genväg\037Klipp ut\037Standard (ej inställd)\037Ta bort\037Detaljer\037Displayinställningar\037Extra stora ikoner\037Ansikte\037Gruppera efter\037Hex\037Stora ikoner\037Lista\037Medelstora ikoner\037Menyinställningar\037Menyinställningar...\037Ny\037Öppna Windhawk\037Öppna i ny process\037Öppna i nytt fönster\037Öppna menu.ini\037Öppna temafilen\037Öppna med\037Klistra in\037Klistra in genväg\037Anpassa\037Fäst till snabbåtkomst\037Egenskaper\037Uppdatera\037Byt namn\037Spela om öppen animation\037Återställ allt utseende\037Återställ allt utseende...\037Skalalternativ...\037Skicka till\037Storlek\037Bildalternativ...\037Små ikoner\037Sortera efter\037Status\037Mål\037Tema\037Kakel\037Använd cornerRadius (ej inställd)\037Visa\037Windhawk-inställningar...\037Visa klassisk meny\037Fler alternativ\037Stigande\037Fallande\037(Inga)\037Namn\037Datum ändrat\037Typ\037Textdokument\037Bitmappsbild\037Rich Text-dokument\037på\037av\037anpassad\037standard\037Sparad\037Det gick inte att spara\037Typsnitt hittades inte\037Basutseende\037Lätt utseende\037Mörkt utseende\037utfasad — använd animationOpen/Close\037Tema: %s — redigering av temafil\037schema %d\037Menyläge\037Anpassad\037Classic\037Färg\037Färger\037Layout\037Text\037Skugga\037Effekter\037Animation\037Bakgrund\037Gräns\037Separator\037Hover bakgrund\037Tryckt bakgrund\037Textfärg\037Inaktiverad textfärg\037Undermenypil\037Färg på rubriken\037Hörnradie\037Hörnradier\037Kantbredd\037Vaddering\037Objektstoppning\037Vertikal stoppning\037Objektets höjd\037Ikonstorlek\037Minsta bredd\037Maximal bredd\037Separatoravstånd\037Markör\037Markörens bredd\037Markör färg\037Teckensnitt\037Teckensnittsvikt\037Typsnittsstil\037Accelerator display\037Skuggstorlek\037Skuggoffset X\037Skuggoffset Y\037Skuggopacitet\037Anpassa skugga till bakgrunden\037Skuggfärg\037Skuggoskärpa\037Oskärpa\037Suddig styrka\037Överlagringseffekter\037Överlagringsintensitet\037Överlagringshastighet\037Överläggsstorlek\037Överlagringsbildintervall\037Animera överlagringar när de är öppna\037Öppna animation\037Stäng animation\037Öppet varaktighet\037Stäng varaktighet\037Animeringsramintervall\037Animeringslättnader\037Animation ankare\037Animera undermenyer\037Slidoffset X\037Slidoffset Y\037Skala från\037Mättnad / värde\037Nyans\037Alfa\037Röd\037Grönt\037Blå\037Alfavärde\037Överst till vänster\037Överst till höger\037Nederst till höger\037Nederst till vänster\037Normal\037Halvfet\037Fet\037Normal\037Kursiv\037Prick\037Kontrollera\037Bar\037Inga\037Understryka\037Strip\037Rå\037Linjär\037Slappna av\037Lätt in-ut\037Tillbaka\037Studsa\037Elastisk\037Markör\037Center\037Inga\037Tona ut\037Skjut\037Skala\037Lös upp\037CRT\037Vik ut\037Inga\037Buller\037Plasma\037Nyans\037Glöd\037Scanlines\037Vinjett\037Språk\037Visa klassiska menyalternativ\037Översta åtgärdsfältet\037Undermeny fördröjning\037Bypass nycklar\037Felsökning av loggning\037Uppvärmningsfördröjning\037Anpassad (menu.ini)\037Windows 11 Mörk\037Windows 11 ljus\037Windows 10 mörk\037Windows 10 ljus\037Hög kontrast\037Urvalsmarkör\037Ny %s\037Ny mapp\037Ny genväg"},
+    {L"ta", false, "திற\037%s மீட்டமை…\037சுருக்கப்பட்ட (ஜிப் செய்யப்பட்ட) கோப்புறை\037கோப்புறை\037குறுக்குவழி\037பற்றி\037ஐகான்களை கட்டத்திற்கு சீரமைக்கவும்\037தானாக ஏற்பாடு சின்னங்கள்\037உள்ளடக்கம்\037நகலெடு\037பாதையாக நகலெடுக்கவும்\037குறுக்குவழியை உருவாக்கவும்\037வெட்டு\037இயல்புநிலை (அமைக்கப்படாதது)\037நீக்கு\037விவரங்கள்\037காட்சி அமைப்புகள்\037கூடுதல் பெரிய சின்னங்கள்\037முகம்\037குழு மூலம்\037ஹெக்ஸ்\037பெரிய சின்னங்கள்\037பட்டியல்\037நடுத்தர சின்னங்கள்\037மெனு அமைப்புகள்\037மெனு அமைப்புகள்…\037புதியது\037Windhawk ஐத் திறக்கவும்\037புதிய செயல்பாட்டில் திறக்கவும்\037புதிய சாளரத்தில் திறக்கவும்\037menu.ini ஐத் திறக்கவும்\037தீம் கோப்பைத் திறக்கவும்\037உடன் திறக்கவும்\037ஒட்டவும்\037குறுக்குவழியை ஒட்டவும்\037தனிப்பயனாக்கு\037விரைவு அணுகலுக்கு பின்\037பண்புகள்\037புதுப்பி\037மறுபெயரிடு\037திறந்த அனிமேஷனை மீண்டும் இயக்கவும்\037அனைத்து தோற்றத்தையும் மீட்டமைக்கவும்\037எல்லா தோற்றத்தையும் மீட்டமைக்கவும்…\037அளவுகோல் விருப்பங்கள்…\037க்கு அனுப்பு\037அளவு\037ஸ்லைடு விருப்பங்கள்…\037சிறிய சின்னங்கள்\037வரிசைப்படுத்து\037நிலை\037இலக்கு\037தீம்\037ஓடுகள்\037கார்னர்ரேடியஸைப் பயன்படுத்தவும் (அமைக்கப்படாதது)\037காண்க\037Windhawk அமைப்புகள்…\037கிளாசிக் மெனுவைக் காட்டு\037மேலும் விருப்பங்கள்\037ஏறுமுகம்\037இறங்குதல்\037(இல்லை)\037பெயர்\037தேதி மாற்றப்பட்டது\037வகை\037உரை ஆவணம்\037பிட்மேப் படம்\037பணக்கார உரை ஆவணம்\037அன்று\037ஆஃப்\037வழக்கம்\037இயல்புநிலை\037சேமிக்கப்பட்டது\037சேமிக்க முடியவில்லை\037எழுத்துரு கிடைக்கவில்லை\037அடிப்படை தோற்றம்\037ஒளி தோற்றம்\037இருண்ட தோற்றம்\037நிறுத்தப்பட்டது - animationOpen/Close ஐப் பயன்படுத்தவும்\037தீம்: %s — தீம் கோப்பை திருத்துதல்\037திட்டம் %d\037மெனு பயன்முறை\037தனிப்பயன்\037கிளாசிக்\037நிறம்\037நிறங்கள்\037தளவமைப்பு\037உரை\037நிழல்\037விளைவுகள்\037அனிமேஷன்\037பின்னணி\037எல்லை\037பிரிப்பான்\037பின்னணியை நகர்த்தவும்\037அழுத்தப்பட்ட பின்னணி\037உரை நிறம்\037முடக்கப்பட்ட உரை நிறம்\037துணைமெனு அம்புக்குறி\037தலைப்பு நிறம்\037மூலை ஆரம்\037மூலை ஆரங்கள்\037பார்டர் அகலம்\037திணிப்பு\037பொருள் திணிப்பு\037செங்குத்து திணிப்பு\037பொருளின் உயரம்\037ஐகான் அளவு\037குறைந்தபட்ச அகலம்\037அதிகபட்ச அகலம்\037பிரிப்பான் இடைவெளி\037குறிப்பான்\037மார்க்கர் அகலம்\037குறிப்பான் நிறம்\037எழுத்துரு\037எழுத்துரு எடை\037எழுத்துரு நடை\037முடுக்கி காட்சி\037நிழல் அளவு\037நிழல் ஆஃப்செட் எக்ஸ்\037நிழல் ஆஃப்செட் ஒய்\037நிழல் ஒளிபுகாநிலை\037பின்னணிக்கு நிழலை மாற்றவும்\037நிழல் நிறம்\037நிழல் தெளிவின்மை\037தெளிவின்மை\037மங்கலான வலிமை\037மேலடுக்கு விளைவுகள்\037மேலடுக்கு தீவிரம்\037மேலடுக்கு வேகம்\037மேலடுக்கு அளவு\037மேலடுக்கு சட்ட இடைவெளி\037திறந்திருக்கும் போது மேலடுக்குகளை அனிமேட் செய்யவும்\037திறந்த அனிமேஷன்\037மூடு அனிமேஷன்\037திறந்திருக்கும் காலம்\037நெருங்கிய காலம்\037அனிமேஷன் சட்ட இடைவெளி\037அனிமேஷன் எளிதாக்குதல்\037அனிமேஷன் தொகுப்பாளர்\037துணைமெனுக்களை உயிரூட்டு\037ஸ்லைடு ஆஃப்செட் எக்ஸ்\037ஸ்லைடு ஆஃப்செட் ஒய்\037இருந்து அளவுகோல்\037செறிவு / மதிப்பு\037சாயல்\037ஆல்பா\037சிவப்பு\037பச்சை\037நீலம்\037ஆல்பா மதிப்பு\037மேல் இடது\037மேல் வலது\037கீழ் வலது\037கீழே இடது\037இயல்பானது\037அரை போல்டு\037தடித்த\037இயல்பானது\037சாய்வு\037புள்ளி\037சரிபார்க்கவும்\037பார்\037இல்லை\037அடிக்கோடு\037துண்டு\037மூல\037நேரியல்\037எளிதாக வெளியேறு\037எளிதாக உள்ளே செல்லவும்\037மீண்டும்\037துள்ளல்\037எலாஸ்டிக்\037கர்சர்\037மையம்\037இல்லை\037மங்காது\037ஸ்லைடு\037அளவுகோல்\037கரைக்கவும்\037CRT\037திறக்கவும்\037இல்லை\037சத்தம்\037பிளாஸ்மா\037சாயல்\037ஒளிரும்\037ஸ்கேன்லைன்கள்\037விக்னெட்\037மொழி\037கிளாசிக் மெனு உருப்படியைக் காட்டு\037மேல் செயல் பட்டை\037துணைமெனு தாமதம்\037பைபாஸ் விசைகள்\037பிழைத்திருத்த பதிவு\037வெப்பமடைதல் தாமதம்\037தனிப்பயன் (menu.ini)\037Windows 11 டார்க்\037Windows 11 ஒளி\037Windows 10 டார்க்\037Windows 10 ஒளி\037உயர் மாறுபாடு\037தேர்வு குறிப்பான்\037புதிய %s\037புதிய கோப்புறை\037புதிய குறுக்குவழி"},
+    {L"th", false, "เปิด\037รีเซ็ต %s...\037โฟลเดอร์บีบอัด (ซิป)\037โฟลเดอร์\037ทางลัด\037เกี่ยวกับ\037จัดตำแหน่งไอคอนให้เป็นตาราง\037จัดเรียงไอคอนอัตโนมัติ\037เนื้อหา\037คัดลอก\037คัดลอกเป็นเส้นทาง\037สร้างทางลัด\037ตัด\037ค่าเริ่มต้น (ไม่ได้ตั้งค่า)\037ลบ\037รายละเอียด\037การตั้งค่าการแสดงผล\037ไอคอนขนาดใหญ่พิเศษ\037ใบหน้า\037จัดกลุ่มตาม\037ฐานสิบหก\037ไอคอนขนาดใหญ่\037รายการ\037ไอคอนขนาดกลาง\037การตั้งค่าเมนู\037การตั้งค่าเมนู...\037ใหม่\037เปิด Windhawk\037เปิดในกระบวนการใหม่\037เปิดในหน้าต่างใหม่\037เปิด menu.ini\037เปิดไฟล์ธีม\037เปิดด้วย\037วาง\037วางทางลัด\037ปรับแต่ง\037ปักหมุดไปที่การเข้าถึงด่วน\037คุณสมบัติ\037รีเฟรช\037เปลี่ยนชื่อ\037เล่นแอนิเมชันเปิดอีกครั้ง\037รีเซ็ตลักษณะที่ปรากฏทั้งหมด\037รีเซ็ตลักษณะที่ปรากฏทั้งหมด…\037ตัวเลือกการปรับขนาด…\037ส่งไปที่\037ขนาด\037ตัวเลือกการเลื่อน…\037ไอคอนขนาดเล็ก\037เรียงตาม\037สถานะ\037เป้าหมาย\037ธีม\037กระเบื้อง\037ใช้ cornerRadius (ไม่ได้ตั้งค่า)\037ดู\037การตั้งค่า Windhawk...\037แสดงเมนูคลาสสิก\037ตัวเลือกเพิ่มเติม\037จากน้อยไปมาก\037จากมากไปน้อย\037(ไม่มี)\037ชื่อ\037วันที่แก้ไข\037ประเภท\037เอกสารข้อความ\037ภาพบิตแมป\037เอกสารข้อความริช\037บน\037ปิด\037กำหนดเอง\037ค่าเริ่มต้น\037บันทึกแล้ว\037บันทึกล้มเหลว\037ไม่พบแบบอักษร\037ลักษณะฐาน\037ลักษณะแสง\037ลักษณะสีเข้ม\037เลิกใช้แล้ว — ใช้ animationOpen/Close\037ธีม: %s — แก้ไขไฟล์ธีม\037สคีมา %d\037โหมดเมนู\037กำหนดเอง\037คลาสสิก\037สี\037สี\037เค้าโครง\037ข้อความ\037เงา\037ผลกระทบ\037แอนิเมชั่น\037พื้นหลัง\037ชายแดน\037ตัวคั่น\037โฮเวอร์พื้นหลัง\037กดพื้นหลัง\037สีข้อความ\037สีข้อความที่ปิดใช้งาน\037ลูกศรเมนูย่อย\037สีส่วนหัว\037รัศมีมุม\037รัศมีมุม\037ความกว้างของเส้นขอบ\037ช่องว่างภายใน\037ช่องว่างภายในรายการ\037ช่องว่างภายในแนวตั้ง\037ความสูงของรายการ\037ขนาดไอคอน\037ความกว้างขั้นต่ำ\037ความกว้างสูงสุด\037ระยะห่างของตัวคั่น\037เครื่องหมาย\037ความกว้างของเครื่องหมาย\037สีมาร์กเกอร์\037แบบอักษร\037น้ำหนักตัวอักษร\037รูปแบบแบบอักษร\037จอแสดงผลคันเร่ง\037ขนาดเงา\037เงาออฟเซ็ต X\037เงาชดเชย Y\037ความทึบแสงของเงา\037ปรับเงาให้เข้ากับฉากหลัง\037สีเงา\037เงาเบลอ\037เบลอ\037ความเบลอ\037เอฟเฟกต์ซ้อนทับ\037ความเข้มของการซ้อนทับ\037ความเร็วซ้อนทับ\037ขนาดซ้อนทับ\037ช่วงเวลาเฟรมซ้อนทับ\037ภาพเคลื่อนไหวซ้อนทับในขณะที่เปิดอยู่\037เปิดภาพเคลื่อนไหว\037ปิดภาพเคลื่อนไหว\037ระยะเวลาเปิด\037ระยะเวลาปิด\037ช่วงเวลาเฟรมภาพเคลื่อนไหว\037การค่อยๆ เปลี่ยนภาพเคลื่อนไหว\037สมอนิเมชั่น\037เมนูย่อยเคลื่อนไหว\037เลื่อนออฟเซ็ต X\037เลื่อนออฟเซ็ต Y\037สเกลจาก\037ความอิ่มตัว/ค่า\037เว้\037อัลฟ่า\037สีแดง\037สีเขียว\037สีฟ้า\037ค่าอัลฟ่า\037ซ้ายบน\037ขวาบน\037ล่างขวา\037ซ้ายล่าง\037ปกติ\037กึ่งหนา\037ตัวหนา\037ปกติ\037ตัวเอียง\037จุด\037ตรวจสอบ\037บาร์\037ไม่มี\037ขีดเส้นใต้\037เปลื้องผ้า\037ดิบ\037เชิงเส้น\037สบายใจออก\037เข้า-ออกได้สะดวก\037กลับ\037เด้ง\037ยืดหยุ่น\037เคอร์เซอร์\037ศูนย์\037ไม่มี\037จางลง\037สไลด์\037สเกล\037ละลาย\037ซีอาร์ที\037แฉ\037ไม่มี\037เสียงรบกวน\037พลาสมา\037เว้\037เรืองแสง\037สแกนไลน์\037บทความสั้น\037ภาษา\037แสดงรายการเมนูแบบคลาสสิก\037แถบการกระทำยอดนิยม\037เมนูย่อยล่าช้า\037บายพาสคีย์\037การบันทึกการแก้ไขข้อบกพร่อง\037ความล่าช้าในการอุ่นเครื่อง\037กำหนดเอง (menu.ini)\037Windows 11 เข้ม\037ไฟ Windows 11\037Windows 10 เข้ม\037ไฟ Windows 10\037คอนทราสต์สูง\037เครื่องหมายการเลือก\037%s ใหม่\037โฟลเดอร์ใหม่\037ทางลัดใหม่"},
+    {L"tr", false, "Aç\037%s'yi sıfırlayın…\037Sıkıştırılmış (sıkıştırılmış) Klasör\037Klasör\037Kısayol\037Hakkında\037Simgeleri ızgaraya hizalayın\037Simgeleri otomatik olarak düzenle\037İçerik\037Kopyala\037Yol olarak kopyala\037Kısayol oluştur\037Kes\037Varsayılan (ayarlanmadı)\037Sil\037Ayrıntılar\037Ekran ayarları\037Ekstra büyük simgeler\037Yüz\037Gruplandırma ölçütü\037Altıgen\037Büyük simgeler\037Liste\037Orta simgeler\037Menü ayarları\037Menü ayarları…\037Yeni\037Windhawk'yi açın\037Yeni süreçte aç\037Yeni pencerede aç\037menu.ini'yi açın\037Tema dosyasını aç\037Şununla aç:\037Yapıştır\037Kısayolu yapıştır\037Kişiselleştir\037Hızlı erişime sabitle\037Özellikler\037Yenile\037Yeniden adlandır\037Açık animasyonu tekrar oynat\037Tüm görünümü sıfırla\037Tüm görünümü sıfırla…\037Ölçek seçenekleri…\037Gönder\037Boyut\037Slayt seçenekleri…\037Küçük simgeler\037Sırala\037Durum\037Hedef\037Tema\037Fayans\037CornerRadius'u kullan (ayarlanmadı)\037Görünüm\037Windhawk ayarları…\037Klasik menüyü göster\037Daha fazla seçenek\037Artan\037Azalan\037(Yok)\037İsim\037Değiştirilme tarihi\037Tür\037Metin Belgesi\037Bit eşlem resmi\037Zengin Metin Belgesi\037üzerinde\037kapalı\037özel\037varsayılan\037Kaydedildi\037Kaydetme başarısız oldu\037Yazı tipi bulunamadı\037Temel görünüm\037Hafif görünüm\037Koyu görünüm\037kullanımdan kaldırıldı - animationOpen/Close kullanın\037Tema: %s — tema dosyasını düzenleme\037şema %d\037Menü modu\037Özel\037Klasik\037Renk\037Renkler\037Düzen\037Metin\037Gölge\037Efektler\037Animasyon\037Arka plan\037Sınır\037Ayırıcı\037Vurgulu arka plan\037Basılmış arka plan\037Metin rengi\037Devre dışı bırakılmış metin rengi\037Alt menü oku\037Başlık rengi\037Köşe yarıçapı\037Köşe yarıçapları\037Kenarlık genişliği\037Dolgu\037Öğe dolgusu\037Dikey dolgu\037Öğe yüksekliği\037Simge boyutu\037Minimum genişlik\037Maksimum genişlik\037Ayırıcı aralığı\037işaretleyici\037İşaretleyici genişliği\037İşaretleyici rengi\037Yazı tipi\037Yazı tipi ağırlığı\037Yazı tipi stili\037Hızlandırıcı ekranı\037Gölge boyutu\037Gölge ofseti X\037Gölge ofseti Y\037Gölge opaklığı\037Gölgeyi arka plana uyarlayın\037Gölge rengi\037Gölge bulanıklığı\037Bulanıklaştırma\037Bulanıklık gücü\037Kaplama efektleri\037Kaplama yoğunluğu\037Kaplama hızı\037Kaplama boyutu\037Yer paylaşımlı çerçeve aralığı\037Açıkken kaplamaları canlandırın\037Animasyonu aç\037Animasyonu kapat\037Açık süre\037Kapatma süresi\037Animasyon kare aralığı\037Animasyon yumuşatma\037Animasyon çapası\037Alt menüleri canlandır\037Slayt ofseti X\037Slayt ofseti Y\037Ölçeklendirme:\037Doygunluk / değer\037renk tonu\037Alfa\037Kırmızı\037Yeşil\037Mavi\037Alfa değeri\037Sol üst\037Sağ üst\037Sağ alt\037Sol alt\037normal\037Yarı kalın\037Kalın\037normal\037italik\037Nokta\037Kontrol et\037Bar\037Yok\037Altı çizili\037Şerit\037Ham\037Doğrusal\037Rahatlamak\037Giriş-çıkış kolaylığı\037Geri\037Sıçrama\037elastik\037İmleç\037Merkez\037Yok\037solma\037Slayt\037Ölçek\037Çözün\037CRT\037Aç\037Yok\037Gürültü\037Plazma\037renk tonu\037Parıltı\037Tarama çizgileri\037Skeç\037Dil\037Klasik menü öğesini göster\037Üst işlem çubuğu\037Alt menü gecikmesi\037Anahtarları atla\037Hata ayıklama günlüğü\037Isınma gecikmesi\037Özel (menu.ini)\037Windows 11 Koyu\037Windows 11 Işık\037Windows 10 Koyu\037Windows 10 Işık\037Yüksek Kontrast\037Seçim işaretçisi\037Yeni %s\037Yeni klasör\037Yeni kısayol"},
+    {L"uk", false, "Відкрити\037Скинути %s…\037Стиснута (архівована) папка\037Папка\037Ярлик\037про\037Вирівняти піктограми за сіткою\037Автоматичне розташування значків\037Зміст\037Копіювати\037Копіювати як шлях\037Створити ярлик\037Вирізати\037За умовчанням (не встановлено)\037Видалити\037Подробиці\037Налаштування дисплея\037Дуже великі значки\037обличчя\037Групувати за\037Hex\037Великі значки\037Список\037Середні іконки\037Налаштування меню\037Налаштування меню…\037Створити\037Відкрийте Windhawk\037Відкрити в новому процесі\037Відкрити в новому вікні\037Відкрийте menu.ini\037Відкрити файл теми\037Відкрити за допомогою\037Вставити\037Вставити ярлик\037Персоналізація\037Прикріпити до швидкого доступу\037Властивості\037Оновити\037Перейменувати\037Повторити відкриту анімацію\037Скинути весь вигляд\037Скинути весь вигляд…\037Варіанти масштабу…\037Надіслати до\037Розмір\037Параметри слайдів…\037Маленькі значки\037Сортувати за\037Статус\037Цільова\037Тема\037Плитка\037Використовувати кутовий радіус (не встановлено)\037Переглянути\037Налаштування Windhawk…\037Показати класичне меню\037Більше варіантів\037Висхідний\037Спускається\037(Жодного)\037Ім'я\037Дата змінена\037Тип\037Текстовий документ\037Растрове зображення\037Форматований текстовий документ\037на\037вимкнено\037звичай\037за замовчуванням\037Збережено\037Не вдалося зберегти\037Шрифт не знайдено\037Зовнішній вигляд основи\037Легкий зовнішній вигляд\037Темний зовнішній вигляд\037застаріле — використовуйте animationOpen/Close\037Тема: %s — редагування файлу теми\037схема %d\037Режим меню\037Спеціальний\037Класичний\037колір\037Кольори\037Макет\037текст\037Тінь\037Ефекти\037Анімація\037Фон\037Кордон\037Роздільник\037Hover фону\037Пресований фон\037Колір тексту\037Вимкнено колір тексту\037Стрілка підменю\037Колір заголовка\037Радіус кута\037Радіуси кутів\037Ширина кордону\037Підкладка\037Заповнення предмета\037Вертикальна прокладка\037Висота предмета\037Розмір значка\037Мінімальна ширина\037Максимальна ширина\037Відстань між роздільниками\037Маркер\037Ширина маркера\037Колір маркера\037Шрифт\037Товщина шрифту\037Стиль шрифту\037Дисплей прискорювача\037Розмір тіні\037Зміщення тіні X\037Зсув тіні Y\037Непрозорість тіні\037Адаптуйте тінь до фону\037Колір тіні\037Розмиття тіні\037Розмиття\037Сила розмиття\037Ефекти накладання\037Інтенсивність накладання\037Швидкість накладання\037Розмір накладки\037Інтервал кадру накладання\037Анімація накладень у відкритому режимі\037Відкрита анімація\037Закрити анімацію\037Відкрита тривалість\037Тривалість закриття\037Інтервал кадрів анімації\037Послаблення анімації\037Якір анімації\037Анімація підменю\037Зміщення слайда X\037Зсув слайда Y\037Шкала від\037Насиченість / значення\037Відтінок\037Альфа\037Червоний\037Зелений\037Синій\037Значення альфа\037Вгорі ліворуч\037Вгорі справа\037Праворуч внизу\037Внизу зліва\037нормальний\037Напівжирний\037жирний\037нормальний\037Курсив\037Крапка\037Перевірте\037Бар\037Жодного\037Підкреслити\037Газа\037Сирий\037Лінійний\037Легко вийти\037Легкість вхід-вихід\037Назад\037Відскок\037Еластичний\037Курсор\037центр\037Жодного\037Зникати\037Слайд\037масштаб\037Розчинити\037CRT\037Розгорнути\037Жодного\037Шум\037плазма\037Відтінок\037Світіння\037Сканлайни\037Віньєтка\037Мова\037Показати класичний пункт меню\037Верхня панель дій\037Затримка підменю\037Обхідні ключі\037Журналування налагодження\037Затримка прогріву\037Спеціальний (menu.ini)\037Windows 11 Темний\037Windows 11 Світло\037Windows 10 Темний\037Windows 10 Світло\037Високий контраст\037Маркер виділення\037Новий %s\037Нова папка\037Новий ярлик"},
+    {L"uz", false, "Ochish\037%s sozlamalarini tiklash…\037Siqilgan (ziplangan) jild\037Jild\037Yorliq\037Haqida\037Belgilarni to'rga tekislang\037Belgilarni avtomatik tartibga solish\037Tarkib\037Nusxa olish\037Yo'l sifatida nusxalash\037Yorliq yaratish\037Kesish\037Birlamchi (oʻrnatilmagan)\037O'chirish\037Tafsilotlar\037Displey sozlamalari\037Juda katta piktogramma\037Yuz\037Bo'yicha guruhlash\037Hex\037Katta piktogramma\037Roʻyxat\037O'rta piktogramma\037Menyu sozlamalari\037Menyu sozlamalari…\037Yangi\037Windhawk-ni oching\037Yangi jarayonda oching\037Yangi oynada oching\037menu.ini-ni oching\037Mavzu faylini oching\037bilan oching\037Qo'yish\037Yorliqni joylashtirish\037Shaxsiylashtirish\037Tez kirish uchun mahkamlang\037Xususiyatlar\037Yangilash\037Nomini o'zgartirish\037Ochiq animatsiyani takrorlang\037Barcha ko'rinishni tiklash\037Barcha koʻrinishni tiklash…\037Masshtab parametrlari…\037Kimga yuboring\037Hajmi\037Slayd parametrlari…\037Kichik piktogramma\037Saralash\037Holat\037Maqsad\037Mavzu\037Plitkalar\037cornerRadius dan foydalanish (o‘rnatilmagan)\037Ko'rish\037Windhawk sozlamalari…\037Klassik menyuni ko'rsatish\037Boshqa variantlar\037Ko'tarilish\037Pastga\037(Yo'q)\037Ism\037O'zgartirilgan sana\037Turi\037Matnli hujjat\037Bitmap tasvir\037Boy matnli hujjat\037yoqilgan\037o'chirilgan\037odatiy\037standart\037Saqlangan\037Saqlash amalga oshmadi\037Shrift topilmadi\037Asosiy ko'rinish\037Yengil ko'rinish\037Qorong'i ko'rinish\037eskirgan — animationOpen/Close dan foydalaning\037Mavzu: %s — mavzu faylini tahrirlash\037%d sxemasi\037Menyu rejimi\037Maxsus\037Klassik\037Rang\037Ranglar\037Tartib\037Matn\037Soya\037Effektlar\037Animatsiya\037Fon\037Chegara\037Ajratuvchi\037Orqa fon\037Bosilgan fon\037Matn rangi\037O'chirilgan matn rangi\037Pastki menyu strelkasi\037Sarlavha rangi\037Burchak radiusi\037Burchak radiusi\037Chegara kengligi\037To'ldirish\037Elementni to'ldirish\037Vertikal to'ldirish\037Element balandligi\037Belgi o'lchami\037Minimal kenglik\037Maksimal kenglik\037Separator oralig'i\037Marker\037Marker kengligi\037Marker rangi\037Shrift\037Shrift og'irligi\037Shrift uslubi\037Tezlashtiruvchi displey\037Soya hajmi\037Soya ofset X\037Soya ofset Y\037Soya shaffofligi\037Soyani fonga moslashtiring\037Soya rangi\037Soya xiralashishi\037Xiralashtirish\037Loyqalik kuchi\037Overlay effektlari\037Overlay intensivligi\037Overlay tezligi\037Overlay hajmi\037Overlay ramka oralig'i\037Ochiq bo'lganda qoplamalarni animatsiya qiling\037Animatsiyani ochish\037Animatsiyani yopish\037Ochiq muddat\037Yopish muddati\037Animatsiya ramkalar oralig'i\037Animatsiyani engillashtirish\037Animatsiya langari\037Pastki menyularni jonlantirish\037Slayd ofset X\037Slayd ofset Y\037dan masshtab\037To'yinganlik / qiymat\037Hue\037Alfa\037Qizil\037Yashil\037Moviy\037Alfa qiymati\037Yuqori chap\037Yuqori o'ng\037Pastki o'ng\037Pastki chap\037Oddiy\037Semibold\037Qalin\037Oddiy\037Kursiv\037Nuqta\037Tekshirish\037Bar\037Yo'q\037tagiga chizish\037Ip\037Xom\037Chiziqli\037Yengil\037Kirish-chiqishni osonlashtiring\037Orqaga\037Bounce\037Elastik\037Kursor\037Markaz\037Yo'q\037So'nmoq\037Slayd\037Masshtab\037Eritmoq\037CRT\037Oching\037Yo'q\037Shovqin\037Plazma\037Hue\037Yorqin\037Skanerlar\037Vinyetka\037Til\037Klassik menyu elementini ko'rsatish\037Yuqori harakatlar paneli\037Pastki menyu kechikishi\037Bypass kalitlari\037Nosozliklarni tuzatish jurnali\037Isitish kechikishi\037Maxsus (menu.ini)\037Windows 11 To'q\037Windows 11 yorug'lik\037Windows 10 To'q\037Windows 10 yorug'lik\037Yuqori kontrast\037Tanlash belgisi\037Yangi %s\037Yangi jild\037Yangi yorliq"},
+    {L"vi", false, "Mở\037Đặt lại %s…\037Thư mục nén (nén)\037Thư mục\037Phím tắt\037Giới thiệu\037Căn chỉnh các biểu tượng vào lưới\037Tự động sắp xếp biểu tượng\037Nội dung\037Sao chép\037Sao chép dưới dạng đường dẫn\037Tạo lối tắt\037Cắt\037Mặc định (không đặt)\037Xóa\037Chi tiết\037Cài đặt hiển thị\037Biểu tượng cực lớn\037khuôn mặt\037Nhóm theo\037lục giác\037Biểu tượng lớn\037Danh sách\037Biểu tượng vừa\037Cài đặt thực đơn\037Cài đặt thực đơn…\037Mới\037Mở Windhawk\037Mở trong quy trình mới\037Mở trong cửa sổ mới\037Mở menu.ini\037Mở tập tin chủ đề\037Mở bằng\037Dán\037Dán phím tắt\037Cá nhân hóa\037Ghim vào Truy cập nhanh\037Thuộc tính\037Làm mới\037Đổi tên\037Phát lại hoạt ảnh đang mở\037Đặt lại tất cả diện mạo\037Đặt lại tất cả diện mạo…\037Tùy chọn tỷ lệ…\037Gửi tới\037Kích thước\037Tùy chọn trượt…\037Biểu tượng nhỏ\037Sắp xếp theo\037Trạng thái\037Mục tiêu\037chủ đề\037Gạch lát\037Sử dụng CornerRadius (không đặt)\037Xem\037Cài đặt Windhawk…\037Hiển thị menu cổ điển\037Nhiều lựa chọn hơn\037Tăng dần\037Giảm dần\037(Không có)\037Tên\037Ngày sửa đổi\037loại\037Tài liệu văn bản\037Hình ảnh bitmap\037Tài liệu văn bản có định dạng\037trên\037tắt\037tùy chỉnh\037mặc định\037Đã lưu\037Lưu không thành công\037Không tìm thấy phông chữ\037Ngoại hình cơ bản\037Ngoại hình nhẹ nhàng\037Ngoại hình tối\037không được dùng nữa - sử dụng animationOpen/Close\037Chủ đề: %s — chỉnh sửa tập tin chủ đề\037lược đồ %d\037Chế độ thực đơn\037Tùy chỉnh\037Cổ điển\037Màu sắc\037Màu sắc\037Bố cục\037văn bản\037Bóng tối\037Hiệu ứng\037Hoạt hình\037Nền\037Biên giới\037Dấu phân cách\037Nền di chuột\037Nền ép\037Màu văn bản\037Màu văn bản bị tắt\037Mũi tên menu con\037Màu tiêu đề\037Bán kính góc\037Bán kính góc\037Độ rộng đường viền\037Phần đệm\037Phần đệm mục\037Đệm dọc\037Chiều cao vật phẩm\037Kích thước biểu tượng\037Chiều rộng tối thiểu\037Chiều rộng tối đa\037Khoảng cách phân cách\037điểm đánh dấu\037Chiều rộng điểm đánh dấu\037Màu đánh dấu\037Phông chữ\037Độ dày phông chữ\037Kiểu phông chữ\037Màn hình tăng tốc\037Kích thước bóng\037Độ lệch bóng X\037Bù bóng Y\037Độ mờ bóng\037Điều chỉnh bóng theo phông nền\037Màu bóng\037Bóng mờ\037Làm mờ\037Độ mờ\037Hiệu ứng lớp phủ\037Cường độ lớp phủ\037Tốc độ lớp phủ\037Kích thước lớp phủ\037Khoảng thời gian khung lớp phủ\037Tạo hiệu ứng lớp phủ khi mở\037Mở hoạt ảnh\037Đóng hoạt ảnh\037Thời lượng mở\037Thời lượng đóng\037Khoảng thời gian khung hình hoạt hình\037Giảm bớt hoạt ảnh\037Neo hoạt hình\037Menu con sinh động\037Độ lệch trượt X\037Trượt bù Y\037Quy mô từ\037Độ bão hòa / giá trị\037Sắc thái\037Alpha\037màu đỏ\037màu xanh lá cây\037Màu xanh\037Giá trị alpha\037Trên cùng bên trái\037Trên cùng bên phải\037Dưới cùng bên phải\037Dưới cùng bên trái\037Bình thường\037nửa đậm\037Đậm\037Bình thường\037Nghiêng\037chấm\037Kiểm tra\037thanh\037không có\037gạch chân\037dải\037thô\037tuyến tính\037Dễ dàng ra ngoài\037Ra vào dễ dàng\037Quay lại\037Trả lại\037đàn hồi\037Con trỏ\037trung tâm\037không có\037Phai dần\037Trượt\037quy mô\037hòa tan\037màn hình CRT\037Mở ra\037không có\037Tiếng ồn\037Huyết tương\037Huế\037phát sáng\037Dòng quét\037họa tiết\037Ngôn ngữ\037Hiển thị mục menu cổ điển\037Thanh hành động hàng đầu\037Độ trễ menu con\037Bỏ qua phím\037Ghi nhật ký gỡ lỗi\037Độ trễ khởi động\037Tùy chỉnh (menu.ini)\037Windows 11 Tối\037Windows 11 Sáng\037Windows 10 Tối\037Windows 10 Sáng\037Độ tương phản cao\037Điểm đánh dấu lựa chọn\037%s mới\037Thư mục mới\037Phím tắt mới"},
+    {L"zh-CN", false, "打开\037重置%s…\037压缩（zipped）文件夹\037文件夹\037快捷方式\037关于\037将图标与网格对齐\037自动排列图标\037内容\037复制\037复制为路径\037创建快捷方式\037剪切\037默认（未设置）\037删除\037详情\037显示设置\037超大图标\037脸\037分组依据\037十六进制\037大图标\037列表\037中等图标\037菜单设置\037菜单设置...\037新建\037打开Windhawk\037在新进程中打开\037在新窗口中打开\037打开menu.ini\037打开主题文件\037打开方式\037粘贴\037粘贴快捷方式\037个性化\037固定到快速访问\037属性\037刷新\037重命名\037重放打开动画\037重置所有外观\037重置所有外观...\037规模选项...\037发送至\037尺寸\037幻灯片选项...\037小图标\037排序依据\037状态\037目标\037主题\037瓷砖\037使用cornerRadius（未设置）\037查看\037Windhawk设置...\037显示经典菜单\037更多选择\037升序\037降序\037（无）\037名称\037修改日期\037类型\037文本文档\037位图图像\037富文本文档\037上\037关闭\037定制\037默认\037已保存\037保存失败\037找不到字体\037底座外观\037光亮外观\037深色外观\037已弃用 — 使用 animationOpen/Close\037主题：%s — 编辑主题文件\037架构 %d\037菜单模式\037自定义\037经典\037颜色\037颜色\037布局\037文字\037影子\037效果\037动画\037背景\037边框\037分离器\037悬停背景\037按下背景\037文字颜色\037禁用文本颜色\037子菜单箭头\037标题颜色\037圆角半径\037拐角半径\037边框宽度\037填充\037物品填充\037垂直内边距\037物品高度\037图标大小\037最小宽度\037最大宽度\037分隔符间距\037标记\037标记宽度\037标记颜色\037字体\037字体粗细\037字体样式\037加速器显示\037阴影大小\037阴影偏移 X\037阴影偏移 Y\037阴影不透明度\037使阴影适应背景\037阴影颜色\037阴影模糊\037模糊\037模糊强度\037叠加效果\037叠加强度\037叠加速度\037覆盖尺寸\037叠加帧间隔\037打开时动画叠加\037打开动画\037关闭动画\037开放时间\037关闭持续时间\037动画帧间隔\037动画缓动\037动漫主播\037动画子菜单\037滑动偏移 X\037滑动偏移 Y\037规模从\037饱和度/值\037色调\037阿尔法\037红色\037绿色\037蓝色\037阿尔法值\037左上\037右上\037右下角\037左下角\037正常\037半粗体\037大胆\037正常\037斜体\037点\037检查\037酒吧\037无\037下划线\037地带\037原料\037线性\037缓出\037缓进缓出\037返回\037弹跳\037弹性\037光标\037中心\037无\037淡出\037幻灯片\037规模\037溶解\037显像管\037展开\037无\037噪音\037等离子\037色调\037发光\037扫描线\037小插图\037语言\037显示经典菜单项\037顶部操作栏\037子菜单延迟\037旁路键\037调试日志记录\037预热延迟\037定制（menu.ini）\037Windows 11 深色\037Windows 11 光\037Windows 10 深色\037Windows 10 光\037高对比度\037选择标记\037新建 %s\037新建文件夹\037新建快捷方式"},
+    {L"zh-TW", false, "開啟\037重置%s…\037壓縮（zipped）資料夾\037資料夾\037快速方式\037關於\037將圖示與網格對齊\037自動排列圖標\037內容\037複製\037複製為路徑\037建立快捷方式\037剪切\037預設（未設定）\037刪除\037詳情\037顯示設定\037超大圖示\037臉\037群組方式\037十六進位\037大圖示\037清單\037中等圖示\037選單設定\037選單設定...\037新增\037開啟Windhawk\037在新進程中開啟\037在新視窗中開啟\037開啟menu.ini\037開啟主題文件\037打開方式\037貼上\037貼上快捷方式\037個人化\037固定到快速訪問\037屬性\037重新整理\037重新命名\037重放打开动画\037重置所有外观\037重置所有外观...\037规模选项...\037發送至\037尺寸\037幻灯片选项...\037小圖示\037排序方式\037狀態\037目標\037主題\037磁磚\037使用cornerRadius（未設定）\037檢視\037Windhawk設定...\037顯示經典選單\037更多選項\037升序\037降序\037（無）\037名稱\037修改日期\037類型\037文字文檔\037點陣圖影像\037富文本文檔\037上\037關閉\037客製化\037預設\037已儲存\037保存失敗\037找不到字體\037底座外觀\037光亮外觀\037深色外觀\037已棄用 — 使用 animationOpen/Close\037主題：%s — 編輯主題文件\037架構 %d\037選單模式\037自訂\037經典\037顏色\037顏色\037佈局\037文字\037影子\037效果\037動畫\037背景\037邊框\037分離器\037懸停背景\037按下背景\037文字顏色\037禁用文字顏色\037子菜单箭头\037標題顏色\037圓角半徑\037轉角半徑\037邊框寬度\037填充\037物品填充\037垂直内边距\037物品高度\037圖示大小\037最小寬度\037最大寬度\037分隔符號間距\037標記\037標記寬度\037標記顏色\037字體\037字體粗細\037字體樣式\037加速器顯示\037陰影大小\037陰影偏移 X\037陰影偏移 Y\037陰影不透明度\037使陰影適應背景\037陰影顏色\037陰影模糊\037模糊\037模糊強度\037疊加效果\037疊加強度\037疊加速度\037覆蓋尺寸\037疊加訊框間隔\037開啟時動畫疊加\037開啟動畫\037關閉動畫\037開放時間\037關閉持續時間\037動畫影格間隔\037動畫緩動\037動漫主播\037動畫子選單\037滑動偏移 X\037滑動偏移 Y\037規模從\037飽和度/值\037色調\037阿爾法\037紅色\037綠色\037藍色\037阿爾法值\037左上\037右上\037右下角\037左下角\037正常\037半粗體\037大膽\037正常\037斜體\037點\037檢查\037酒吧\037無\037底線\037地帶\037原料\037線性\037緩出\037緩緩緩出\037返回\037彈跳\037彈性\037遊標\037中心\037無\037淡出\037幻燈片\037規模\037溶解\037顯像管\037展開\037無\037噪音\037電漿\037色調\037發光\037掃描線\037小插圖\037語言\037顯示經典選單項\037頂部操作欄\037子選單延遲\037旁路鍵\037調試日誌記錄\037預熱延遲\037客製化（menu.ini）\037Windows 11 深色\037Windows 11 光\037Windows 10 深色\037Windows 10 光\037高對比度\037選擇標記\037新增 %s\037新增資料夾\037新增捷徑"},
+};
+// [/CMO:LocalizationData]
+
+struct TranslationTable {
+    std::wstring tag;
+    bool rtl = false;
+    std::unordered_map<std::wstring, std::wstring> values;
+};
+
+std::mutex g_translationMutex;
+std::shared_ptr<const TranslationTable> g_translation;
+std::atomic<bool> g_rtlLanguage{false};
+
+std::shared_ptr<const TranslationTable> CurrentTranslation() {
+    std::lock_guard<std::mutex> lock(g_translationMutex);
+    return g_translation;
+}
+
+size_t PrimaryTagLength(const wchar_t* tag) {
+    size_t length = 0;
+    while (tag[length] && tag[length] != L'-') {
+        ++length;
+    }
+    return length;
+}
+
+bool TagEquals(const wchar_t* left, const wchar_t* right) {
+    while (*left && *right) {
+        if (towlower(*left) != towlower(*right)) {
+            return false;
+        }
+        ++left;
+        ++right;
+    }
+    return *left == *right;
+}
+
+bool TagHasSubtag(const wchar_t* tag, const wchar_t* subtag) {
+    for (const wchar_t* cursor = tag; *cursor; ++cursor) {
+        if (cursor != tag && cursor[-1] != L'-') {
+            continue;
+        }
+        size_t index = 0;
+        while (subtag[index] &&
+               towlower(cursor[index]) == towlower(subtag[index])) {
+            ++index;
+        }
+        if (!subtag[index] &&
+            (cursor[index] == 0 || cursor[index] == L'-')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const LocalizationLanguage* FindLanguage(const wchar_t* tag) {
+    if (!tag || !*tag) {
+        return nullptr;
+    }
+    for (const LocalizationLanguage& language : kLocalizationLanguages) {
+        if (TagEquals(tag, language.tag)) {
+            return &language;
+        }
+    }
+
+    // Chinese needs the script, not just the language: Hong Kong and Macau use
+    // traditional characters like Taiwan.
+    const size_t primary = PrimaryTagLength(tag);
+    if (primary == 2 && towlower(tag[0]) == L'z' && towlower(tag[1]) == L'h') {
+        // An explicit script wins over a region subtag (zh-Hans-HK is
+        // Simplified even though Hong Kong usually writes Traditional).
+        if (TagHasSubtag(tag, L"Hans")) {
+            return FindLanguage(L"zh-CN");
+        }
+        if (TagHasSubtag(tag, L"Hant")) {
+            return FindLanguage(L"zh-TW");
+        }
+        const bool traditional = TagHasSubtag(tag, L"TW") ||
+                                 TagHasSubtag(tag, L"HK") ||
+                                 TagHasSubtag(tag, L"MO");
+        return FindLanguage(traditional ? L"zh-TW" : L"zh-CN");
+    }
+
+    // Norwegian has three common tags for the same written language.
+    if (primary == 2 && towlower(tag[0]) == L'n' &&
+        (towlower(tag[1]) == L'o' || towlower(tag[1]) == L'n')) {
+        return FindLanguage(L"nb");
+    }
+
+    for (const LocalizationLanguage& language : kLocalizationLanguages) {
+        if (PrimaryTagLength(language.tag) != primary) {
+            continue;
+        }
+        size_t index = 0;
+        while (index < primary &&
+               towlower(tag[index]) == towlower(language.tag[index])) {
+            ++index;
+        }
+        if (index == primary) {
+            return &language;
+        }
+    }
+    return nullptr;
+}
+
+std::wstring SystemLanguageTag() {
+    ULONG count = 0;
+    ULONG chars = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, nullptr, &chars) &&
+        chars > 0) {
+        std::vector<wchar_t> buffer(chars);
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, buffer.data(),
+                                        &chars) &&
+            buffer[0]) {
+            return buffer.data();
+        }
+    }
+
+    wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
+    if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                         locale, ARRAYSIZE(locale), 0)) {
+        return locale;
+    }
+    return L"en";
+}
+
+const LocalizationLanguage* SystemLanguage() {
+    ULONG count = 0;
+    ULONG chars = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, nullptr, &chars) &&
+        chars > 0) {
+        std::vector<wchar_t> buffer(chars);
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, buffer.data(),
+                                        &chars)) {
+            for (const wchar_t* cursor = buffer.data(); *cursor;
+                 cursor += wcslen(cursor) + 1) {
+                if (const LocalizationLanguage* language =
+                        FindLanguage(cursor)) {
+                    return language;
+                }
+            }
+        }
+    }
+
+    wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
+    if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                         locale, ARRAYSIZE(locale), 0)) {
+        if (const LocalizationLanguage* language = FindLanguage(locale)) {
+            return language;
+        }
+    }
+    return nullptr;
+}
+
+std::wstring Utf8ToWide(const char* text) {
+    if (!text || !*text) {
+        return std::wstring();
+    }
+    const int length =
+        MultiByteToWideChar(CP_UTF8, 0, text, -1, nullptr, 0);
+    if (length <= 1) {
+        return std::wstring();
+    }
+    std::wstring result(static_cast<size_t>(length - 1), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text, -1, result.data(), length);
+    return result;
+}
+
+std::shared_ptr<const TranslationTable> BuildTranslationTable(
+    const LocalizationLanguage& language) {
+    auto table = std::make_shared<TranslationTable>();
+    table->tag = language.tag;
+    table->rtl = language.rtl;
+
+    std::vector<std::wstring> entries;
+    if (language.data && *language.data) {
+        const char* cursor = language.data;
+        while (true) {
+            const char* separator = strchr(cursor, '\x1F');
+            const size_t length = separator
+                                      ? static_cast<size_t>(separator - cursor)
+                                      : strlen(cursor);
+            std::string slice(cursor, length);
+            entries.push_back(Utf8ToWide(slice.c_str()));
+            if (!separator) {
+                break;
+            }
+            cursor = separator + 1;
+        }
+    }
+
+    const size_t keyCount = ARRAYSIZE(kLocalizationKeys);
+    for (size_t index = 0; index < keyCount; ++index) {
+        const LocalizationKey& key = kLocalizationKeys[index];
+        if (index < entries.size() && !entries[index].empty()) {
+            table->values[key.key] = entries[index];
+        }
+    }
+    return table;
+}
+
+void SelectLanguage(const std::wstring& setting) {
+    const LocalizationLanguage* language = nullptr;
+    if (setting.empty() || _wcsicmp(setting.c_str(), L"auto") == 0) {
+        language = SystemLanguage();
+    } else {
+        language = FindLanguage(setting.c_str());
+    }
+    if (!language) {
+        language = FindLanguage(L"en");
+    }
+    if (!language) {
+        return;
+    }
+    std::shared_ptr<const TranslationTable> table =
+        BuildTranslationTable(*language);
+    {
+        std::lock_guard<std::mutex> lock(g_translationMutex);
+        g_translation = std::move(table);
+    }
+    g_rtlLanguage.store(language->rtl, std::memory_order_relaxed);
+    if (g_settings->debugLogging) {
+        Wh_Log(L"language: %s", language->tag);
+    }
+}
+
+std::wstring Tr(const wchar_t* key, const wchar_t* fallback = nullptr) {
+    if (!key) {
+        return fallback ? fallback : std::wstring();
+    }
+    const std::shared_ptr<const TranslationTable> table = CurrentTranslation();
+    if (table) {
+        const auto found = table->values.find(key);
+        if (found != table->values.end() && !found->second.empty()) {
+            return found->second;
+        }
+    }
+    if (fallback) {
+        return fallback;
+    }
+    for (const LocalizationKey& entry : kLocalizationKeys) {
+        if (_wcsicmp(entry.key, key) == 0) {
+            return entry.english;
+        }
+    }
+    return key;
+}
+
+std::wstring FormatTr(const wchar_t* key,
+                      std::initializer_list<std::wstring> args) {
+    std::wstring result = Tr(key, key);
+    for (const std::wstring& arg : args) {
+        const size_t stringAt = result.find(L"%s");
+        const size_t numberAt = result.find(L"%d");
+        size_t at = std::wstring::npos;
+        if (stringAt != std::wstring::npos &&
+            (numberAt == std::wstring::npos || stringAt < numberAt)) {
+            at = stringAt;
+        } else {
+            at = numberAt;
+        }
+        if (at == std::wstring::npos) {
+            break;
+        }
+        result.replace(at, 2, arg);
+    }
+    return result;
+}
+
+std::wstring OptionEnglishLabel(const wchar_t* schemaKey,
+                                const wchar_t* value) {
+    const std::wstring key = schemaKey ? schemaKey : L"";
+    const std::wstring raw = value ? value : L"";
+    auto is = [&](const wchar_t* text) {
+        return _wcsicmp(raw.c_str(), text) == 0;
+    };
+    auto title = [&](const wchar_t* text) {
+        std::wstring out(text);
+        if (!out.empty()) {
+            out[0] = static_cast<wchar_t>(towupper(out[0]));
+        }
+        return out;
+    };
+
+    if (_wcsicmp(key.c_str(), L"fontWeight") == 0) {
+        if (is(L"semibold")) return L"Semibold";
+        if (is(L"bold")) return L"Bold";
+        return L"Normal";
+    }
+    if (_wcsicmp(key.c_str(), L"fontStyle") == 0) {
+        return is(L"italic") ? L"Italic" : L"Normal";
+    }
+    if (_wcsicmp(key.c_str(), L"marker") == 0) {
+        if (is(L"check")) return L"Check";
+        if (is(L"bar")) return L"Bar";
+        if (is(L"none")) return L"None";
+        return L"Dot";
+    }
+    if (_wcsicmp(key.c_str(), L"showAccelerators") == 0) {
+        if (is(L"strip")) return L"Strip";
+        if (is(L"raw")) return L"Raw";
+        return L"Underline";
+    }
+    if (_wcsicmp(key.c_str(), L"animationEasing") == 0) {
+        if (is(L"easeOut")) return L"Ease out";
+        if (is(L"easeInOut")) return L"Ease in-out";
+        if (is(L"back")) return L"Back";
+        if (is(L"bounce")) return L"Bounce";
+        if (is(L"elastic")) return L"Elastic";
+        return L"Linear";
+    }
+    if (_wcsicmp(key.c_str(), L"animationAnchor") == 0) {
+        return is(L"center") ? L"Center" : L"Cursor";
+    }
+    return title(raw.c_str());
+}
+
+std::wstring TrOption(const wchar_t* schemaKey, const wchar_t* value) {
+    const std::wstring key = std::wstring(L"@option:") +
+                             (schemaKey ? schemaKey : L"") + L":" +
+                             (value ? value : L"");
+    return Tr(key.c_str(), OptionEnglishLabel(schemaKey, value).c_str());
+}
+
+std::wstring OptionDisplayLabel(const wchar_t* schemaKey,
+                                const wchar_t* value) {
+    return TrOption(schemaKey, value);
+}
+
+std::wstring EffectEnglishLabel(const wchar_t* value) {
+    const std::wstring raw = value ? value : L"";
+    auto is = [&](const wchar_t* text) {
+        return _wcsicmp(raw.c_str(), text) == 0;
+    };
+    if (is(L"crt")) return L"CRT";
+    if (is(L"unfold")) return L"Unfold";
+    if (is(L"fade")) return L"Fade";
+    if (is(L"slide")) return L"Slide";
+    if (is(L"scale")) return L"Scale";
+    if (is(L"dissolve")) return L"Dissolve";
+    return L"None";
+}
+
+std::wstring OverlayEnglishLabel(const wchar_t* value) {
+    const std::wstring raw = value ? value : L"";
+    auto is = [&](const wchar_t* text) {
+        return _wcsicmp(raw.c_str(), text) == 0;
+    };
+    if (is(L"noise")) return L"Noise";
+    if (is(L"plasma")) return L"Plasma";
+    if (is(L"hue")) return L"Hue";
+    if (is(L"glow")) return L"Glow";
+    if (is(L"scanlines")) return L"Scanlines";
+    if (is(L"vignette")) return L"Vignette";
+    return L"None";
+}
+
+std::wstring TrEffect(const wchar_t* value) {
+    const std::wstring key = std::wstring(L"@effect:") + (value ? value : L"");
+    return Tr(key.c_str(), EffectEnglishLabel(value).c_str());
+}
+
+std::wstring TrOverlay(const wchar_t* value) {
+    const std::wstring key = std::wstring(L"@overlay:") + (value ? value : L"");
+    return Tr(key.c_str(), OverlayEnglishLabel(value).c_str());
+}
+
+std::wstring TrTheme(const wchar_t* value) {
+    if (!value || !*value) {
+        return std::wstring();
+    }
+    const std::wstring key = std::wstring(L"@theme:") + value;
+    return Tr(key.c_str(), value);
+}
+
+bool IsRtlLanguage() {
+    return g_rtlLanguage.load(std::memory_order_relaxed);
+}
+
+// DirectWrite applies LEADING/TRAILING relative to the reading direction, so
+// these stay fixed while the text format carries the RTL/LTR direction.
+DWRITE_TEXT_ALIGNMENT LeadingTextAlignment() {
+    return DWRITE_TEXT_ALIGNMENT_LEADING;
+}
+
+DWRITE_TEXT_ALIGNMENT TrailingTextAlignment() {
+    return DWRITE_TEXT_ALIGNMENT_TRAILING;
+}
+
+std::wstring CurrentLanguageTag() {
+    const std::shared_ptr<const TranslationTable> table = CurrentTranslation();
+    return table ? table->tag : L"en";
+}
+
+// [/CMO:Localization]
 
 }  // namespace cmo
 
@@ -605,11 +4797,25 @@ struct ControlSpec {
     std::vector<std::wstring> options;  // enums
 };
 
+enum class BuiltinRole : uint8_t {
+    None,
+    New,
+    SendTo,
+    View,
+    SortBy,
+    GroupBy,
+    MoreOptions,
+    Fallback,
+};
+
 struct MenuItem {
     uint32_t id = 0;
     ItemKind kind = ItemKind::Command;
     ActionKind action = ActionKind::ViewAction;
     std::wstring label;
+    // English label used by rules/overrides after label becomes presentational.
+    std::wstring canonicalLabel;
+    BuiltinRole builtinRole = BuiltinRole::None;
     std::wstring canonicalVerb;
     uint32_t viewAction = static_cast<uint32_t>(ViewAction::None);
     uint32_t verbOffset = 0;
@@ -618,6 +4824,8 @@ struct MenuItem {
     std::wstring targetPath;
     // Index into the ShellNew template list for ActionKind::NewItem.
     uint32_t newIndex = 0;
+    // Stable ShellNew identity; the index can change when the list is rebuilt.
+    std::wstring newTemplateId;
     // Index into RulesConfig::commands for ActionKind::CustomCommand.
     uint32_t customCommandIndex = 0;
     // Transient display overrides (not serialized): per-item label and marker.
@@ -651,6 +4859,31 @@ struct MenuModel {
     uint64_t sourceStamp = 0;
 };
 
+bool LabelsMatchIgnoreCase(const std::wstring& left, const std::wstring& right);
+
+inline const std::wstring& EffectiveLabel(const MenuItem& item) {
+    return item.displayLabel.empty() ? item.label : item.displayLabel;
+}
+
+inline bool ItemMatchesLabelToken(const MenuItem& item,
+                                  const std::wstring& token) {
+    if (LabelsMatchIgnoreCase(item.label, token)) {
+        return true;
+    }
+    return !item.canonicalLabel.empty() &&
+           LabelsMatchIgnoreCase(item.canonicalLabel, token);
+}
+
+inline bool ItemMatchesAnyLabelToken(
+    const MenuItem& item, const std::vector<std::wstring>& tokens) {
+    for (const std::wstring& token : tokens) {
+        if (ItemMatchesLabelToken(item, token)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void FlattenIdsInto(const std::vector<MenuItem>& items, std::vector<uint32_t>& out) {
     for (const MenuItem& item : items) {
         out.push_back(item.id);
@@ -681,13 +4914,6 @@ std::pair<std::wstring, uint32_t> ChooseInvokeDescriptor(const MenuItem& item) {
         return {item.canonicalVerb, 0};
     }
     return {L"", item.verbOffset};
-}
-
-std::wstring FormatMultiLabel(std::wstring_view verb, size_t count) {
-    if (count <= 1) {
-        return std::wstring(verb);
-    }
-    return std::wstring(verb) + L" " + std::to_wstring(count) + L" items";
 }
 
 // Prunes items that cannot be shown faithfully: non-separator items without
@@ -821,7 +5047,7 @@ std::wstring ResolveVerbAlias(const std::wstring& token) {
 bool IsBuiltinExtra(const MenuItem& item,
                     const std::vector<std::wstring>& windowsItems) {
     for (const std::wstring& token : windowsItems) {
-        if (LabelsMatchIgnoreCase(item.label, token) ||
+        if (ItemMatchesLabelToken(item, token) ||
             EqualsIgnoreCase(item.canonicalVerb, token) ||
             EqualsIgnoreCase(item.canonicalVerb, ResolveVerbAlias(token))) {
             return true;
@@ -860,16 +5086,26 @@ struct NewTemplate {
     enum class Kind : uint8_t { Folder, Shortcut, NullFile, Data, FileName, Command };
     Kind kind = Kind::NullFile;
     std::wstring displayName;
+    std::wstring canonicalName;  // English label for rules/overrides
+    std::wstring osDisplayName;  // OS-language type name for identity matching
+    std::wstring stableId;       // survives language rebuilds and reordering
+    bool syntheticName = false;  // displayName is an English catalog key
     std::wstring extension;      // includes the leading dot
     std::wstring fileName;       // FileName templates
     std::wstring command;        // Command/Shortcut templates
     std::vector<uint8_t> data;   // Data templates
 };
 
-std::mutex g_newTemplatesMutex;
+std::mutex g_newTemplatesMutex;  // guards the snapshot pointer only
+std::mutex g_newTemplatesBuildMutex;
 std::atomic<bool> g_newTemplatesReady{false};
-std::vector<NewTemplate> g_newTemplates;
-std::wstring g_shortcutCommand;
+using NewTemplateList = std::vector<NewTemplate>;
+std::shared_ptr<const NewTemplateList> g_newTemplates;
+
+std::shared_ptr<const NewTemplateList> NewTemplatesSnapshot() {
+    std::lock_guard<std::mutex> lock(g_newTemplatesMutex);
+    return g_newTemplates;
+}
 
 std::wstring ExpandEnv(const std::wstring& text) {
     wchar_t buffer[1024] = {};
@@ -909,6 +5145,42 @@ std::wstring ReadRegString(HKEY root, const std::wstring& subkey, const wchar_t*
     return type == REG_SZ ? buffer : L"";
 }
 
+std::wstring LowerText(std::wstring text) {
+    if (!text.empty()) {
+        CharLowerBuffW(text.data(), static_cast<DWORD>(text.size()));
+    }
+    return text;
+}
+
+std::wstring EnglishNewTypeName(const std::wstring& extension) {
+    if (_wcsicmp(extension.c_str(), L".txt") == 0) {
+        return L"Text Document";
+    }
+    if (_wcsicmp(extension.c_str(), L".bmp") == 0) {
+        return L"Bitmap image";
+    }
+    if (_wcsicmp(extension.c_str(), L".rtf") == 0) {
+        return L"Rich Text Document";
+    }
+    if (_wcsicmp(extension.c_str(), L".zip") == 0) {
+        return L"Compressed (zipped) Folder";
+    }
+    if (_wcsicmp(extension.c_str(), L".lnk") == 0) {
+        return L"Shortcut";
+    }
+    return std::wstring();
+}
+
+std::wstring LocalizedTypeName(const wchar_t* path, DWORD attributes) {
+    SHFILEINFOW info = {};
+    if (SHGetFileInfoW(path, attributes, &info, sizeof(info),
+                       SHGFI_USEFILEATTRIBUTES | SHGFI_TYPENAME) &&
+        info.szTypeName[0]) {
+        return info.szTypeName;
+    }
+    return path;
+}
+
 void AddShellNewTemplate(HKEY root, const std::wstring& classesPrefix,
                          const std::wstring& ext, std::vector<NewTemplate>& out) {
     const std::wstring extKey = classesPrefix + ext;
@@ -926,15 +5198,16 @@ void AddShellNewTemplate(HKEY root, const std::wstring& classesPrefix,
 
     NewTemplate tmpl;
     tmpl.extension = ext;
-
-    SHFILEINFOW info = {};
-    if (SHGetFileInfoW(ext.c_str(), FILE_ATTRIBUTE_NORMAL, &info, sizeof(info),
-                       SHGFI_USEFILEATTRIBUTES | SHGFI_TYPENAME) &&
-        info.szTypeName[0]) {
-        tmpl.displayName = info.szTypeName;
-    } else {
-        tmpl.displayName = ext;
+    tmpl.displayName = LocalizedTypeName(ext.c_str(), FILE_ATTRIBUTE_NORMAL);
+    // The registry only supplies a localized type name. Keep it for
+    // OS-language identity matching; the English canonical name is the best
+    // available fallback for rules on registry-only types.
+    tmpl.osDisplayName = tmpl.displayName;
+    tmpl.canonicalName = EnglishNewTypeName(ext);
+    if (tmpl.canonicalName.empty()) {
+        tmpl.canonicalName = tmpl.displayName;
     }
+    tmpl.stableId = L"ext:" + LowerText(ext);
     if (tmpl.displayName.empty()) {
         return;
     }
@@ -1113,11 +5386,19 @@ void LogShellNewProbe(const wchar_t* ext) {
 
 // Builds the template list once. The warm-up thread or the invalidation
 // thread prepares it, so the open path never pays for the registry walk.
+void ResetNewTemplates() {
+    {
+        std::lock_guard<std::mutex> lock(g_newTemplatesMutex);
+        g_newTemplates.reset();
+    }
+    g_newTemplatesReady.store(false, std::memory_order_release);
+}
+
 void EnsureNewTemplates() {
     if (g_newTemplatesReady.load(std::memory_order_acquire)) {
         return;
     }
-    std::lock_guard<std::mutex> lock(g_newTemplatesMutex);
+    std::lock_guard<std::mutex> buildLock(g_newTemplatesBuildMutex);
     if (g_newTemplatesReady.load(std::memory_order_relaxed)) {
         return;
     }
@@ -1156,6 +5437,11 @@ void EnsureNewTemplates() {
         NewTemplate zip;
         zip.kind = NewTemplate::Kind::Data;
         zip.displayName = L"Compressed (zipped) Folder";
+        zip.canonicalName = L"Compressed (zipped) Folder";
+        zip.syntheticName = true;
+        zip.osDisplayName =
+            LocalizedTypeName(L".zip", FILE_ATTRIBUTE_NORMAL);
+        zip.stableId = L"ext:.zip";
         zip.extension = L".zip";
         zip.data = {0x50, 0x4B, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -1189,7 +5475,12 @@ void EnsureNewTemplates() {
         }
         NewTemplate tmpl;
         tmpl.kind = builtin.kind;
+        tmpl.canonicalName = builtin.displayName;
+        tmpl.osDisplayName = LocalizedTypeName(
+            builtin.extension, FILE_ATTRIBUTE_NORMAL);
         tmpl.displayName = builtin.displayName;
+        tmpl.syntheticName = true;
+        tmpl.stableId = L"ext:" + LowerText(builtin.extension);
         tmpl.extension = builtin.extension;
         if (builtin.data) {
             tmpl.data.assign(builtin.data, builtin.data + strlen(builtin.data));
@@ -1205,44 +5496,72 @@ void EnsureNewTemplates() {
     std::vector<NewTemplate> built;
     NewTemplate folder;
     folder.kind = NewTemplate::Kind::Folder;
+    folder.canonicalName = L"Folder";
+    folder.osDisplayName =
+        LocalizedTypeName(L"folder", FILE_ATTRIBUTE_DIRECTORY);
     folder.displayName = L"Folder";
+    folder.syntheticName = true;
+    folder.stableId = L"kind:folder";
     built.push_back(std::move(folder));
     NewTemplate shortcut;
     shortcut.kind = NewTemplate::Kind::Shortcut;
+    shortcut.canonicalName = L"Shortcut";
+    shortcut.osDisplayName =
+        LocalizedTypeName(L"shortcut.lnk", FILE_ATTRIBUTE_NORMAL);
     shortcut.displayName = L"Shortcut";
+    shortcut.syntheticName = true;
+    shortcut.stableId = L"kind:shortcut";
     shortcut.command = ExpandEnv(shortcutCommand);
     built.push_back(std::move(shortcut));
     for (NewTemplate& tmpl : filtered) {
         built.push_back(std::move(tmpl));
     }
 
-    g_shortcutCommand = std::move(shortcutCommand);
-    g_newTemplates = std::move(built);
+    auto snapshot =
+        std::make_shared<const NewTemplateList>(std::move(built));
+    {
+        std::lock_guard<std::mutex> lock(g_newTemplatesMutex);
+        g_newTemplates = std::move(snapshot);
+    }
     g_newTemplatesReady.store(true, std::memory_order_release);
 
     if (g_settings->debugLogging) {
-        for (const NewTemplate& tmpl : g_newTemplates) {
-            Wh_Log(L"New template: ext='%s' name='%s' kind=%d", tmpl.extension.c_str(),
-                   tmpl.displayName.c_str(), static_cast<int>(tmpl.kind));
+        const auto published = NewTemplatesSnapshot();
+        if (published) {
+            for (const NewTemplate& tmpl : *published) {
+                Wh_Log(L"New template: ext='%s' name='%s' kind=%d",
+                       tmpl.extension.c_str(), tmpl.displayName.c_str(),
+                       static_cast<int>(tmpl.kind));
+            }
         }
     }
+}
+
+std::wstring NewTemplateDisplayName(const NewTemplate& tmpl) {
+    return tmpl.syntheticName
+               ? Tr(tmpl.canonicalName.c_str(), tmpl.canonicalName.c_str())
+               : tmpl.displayName;
 }
 
 void BuildNewMenuChildren(std::vector<MenuItem>& children, uint32_t& nextId) {
     // Never build templates on the open path: the warm-up thread prebuilds
     // them, and blocking on its registry walk can stall the menu right after
     // Explorer starts. New appears once the list is ready.
-    if (!g_newTemplatesReady.load(std::memory_order_acquire)) {
+    const std::shared_ptr<const NewTemplateList> snapshot =
+        NewTemplatesSnapshot();
+    if (!snapshot) {
         return;
     }
-    for (size_t i = 0; i < g_newTemplates.size(); ++i) {
-        const NewTemplate& tmpl = g_newTemplates[i];
+    for (size_t i = 0; i < snapshot->size(); ++i) {
+        const NewTemplate& tmpl = (*snapshot)[i];
         MenuItem item{};
         item.id = nextId++;
         item.kind = ItemKind::Command;
         item.action = ActionKind::NewItem;
-        item.label = tmpl.displayName;
+        item.label = NewTemplateDisplayName(tmpl);
+        item.canonicalLabel = tmpl.canonicalName;
         item.newIndex = static_cast<uint32_t>(i);
+        item.newTemplateId = tmpl.stableId;
         if (tmpl.kind == NewTemplate::Kind::Folder) {
             item.iconRef = L"@ext:folder";
         } else if (tmpl.kind == NewTemplate::Kind::Shortcut) {
@@ -1281,8 +5600,10 @@ bool CreateNewItemInFolder(const NewTemplate& tmpl, const std::wstring& director
         return false;
     }
 
+    const std::wstring displayName = NewTemplateDisplayName(tmpl);
     if (tmpl.kind == NewTemplate::Kind::Folder) {
-        const std::wstring path = MakeUniquePath(directory, L"New folder", L"");
+        const std::wstring path =
+            MakeUniquePath(directory, Tr(L"New folder"), L"");
         if (path.empty() || !CreateDirectoryW(path.c_str(), nullptr)) {
             return false;
         }
@@ -1296,7 +5617,8 @@ bool CreateNewItemInFolder(const NewTemplate& tmpl, const std::wstring& director
         // ShellNew command, quoted so paths with spaces survive.
         std::wstring itemPath;
         if (tmpl.kind == NewTemplate::Kind::Shortcut) {
-            itemPath = MakeUniquePath(directory, L"New shortcut", L".lnk");
+            itemPath =
+                MakeUniquePath(directory, Tr(L"New shortcut"), L".lnk");
             if (itemPath.empty()) {
                 return false;
             }
@@ -1335,7 +5657,8 @@ bool CreateNewItemInFolder(const NewTemplate& tmpl, const std::wstring& director
         return ok != FALSE;
     }
 
-    const std::wstring baseName = L"New " + tmpl.displayName;
+    const std::wstring baseName =
+        FormatTr(L"New %s", {displayName});
     const std::wstring path = MakeUniquePath(directory, baseName, tmpl.extension);
     if (path.empty()) {
         return false;
@@ -1808,6 +6131,43 @@ std::wstring OverlayEffectsText(uint32_t effects) {
     append(kOverlayScanlines, L"scanlines");
     append(kOverlayVignette, L"vignette");
     return text.empty() ? std::wstring(L"none") : text;
+}
+
+// Display-only counterpart: canonical values still go through
+// AnimationEffectsText/OverlayEffectsText when written to config files.
+std::wstring DisplayEffectsText(uint32_t effects, bool overlay) {
+    std::wstring text;
+    auto append = [&](uint32_t bit, const wchar_t* name) {
+        if ((effects & bit) == 0) {
+            return;
+        }
+        if (!text.empty()) {
+            text += L", ";
+        }
+        text += overlay ? TrOverlay(name) : TrEffect(name);
+    };
+    if (overlay) {
+        append(kOverlayNoise, L"noise");
+        append(kOverlayPlasma, L"plasma");
+        append(kOverlayHue, L"hue");
+        append(kOverlayGlow, L"glow");
+        append(kOverlayScanlines, L"scanlines");
+        append(kOverlayVignette, L"vignette");
+        if (text.empty()) {
+            text = TrOverlay(L"none");
+        }
+    } else {
+        append(kAnimFade, L"fade");
+        append(kAnimSlide, L"slide");
+        append(kAnimScale, L"scale");
+        append(kAnimDissolve, L"dissolve");
+        append(kAnimCrt, L"crt");
+        append(kAnimUnfold, L"unfold");
+        if (text.empty()) {
+            text = TrEffect(L"none");
+        }
+    }
+    return text;
 }
 
 bool ParseAnimEasing(const std::wstring& text, AnimEasing& easing) {
@@ -3696,8 +8056,13 @@ bool PredicateMatches(const Predicate& pred, const MenuItem& item,
     switch (pred.field) {
         case PredicateField::Label: {
             const std::wstring label = NormalizeMenuLabel(item.label);
+            const std::wstring canonical =
+                item.canonicalLabel.empty()
+                    ? std::wstring()
+                    : NormalizeMenuLabel(item.canonicalLabel);
             for (const std::wstring& value : pred.values) {
-                if (GlobMatches(value, label)) {
+                if (GlobMatches(value, label) ||
+                    (!canonical.empty() && GlobMatches(value, canonical))) {
                     return true;
                 }
             }
@@ -3958,7 +8323,13 @@ RulesApplication ApplyRulesToModel(MenuModel& model, const RulesConfig& config,
 
         MenuItem* existing = nullptr;
         for (MenuItem& item : model.items) {
-            if (item.kind == ItemKind::Submenu && item.label == destination) {
+            if (item.kind != ItemKind::Submenu) {
+                continue;
+            }
+            if (item.label == destination ||
+                (!item.canonicalLabel.empty() &&
+                 _wcsicmp(item.canonicalLabel.c_str(), destination.c_str()) ==
+                     0)) {
                 existing = &item;
                 break;
             }
@@ -3974,7 +8345,19 @@ RulesApplication ApplyRulesToModel(MenuModel& model, const RulesConfig& config,
         submenu.id = destinationId++;
         submenu.kind = ItemKind::Submenu;
         submenu.action = ActionKind::Submenu;
-        submenu.label = destination;
+        submenu.canonicalLabel = destination;
+        if (_wcsicmp(destination.c_str(), L"More options") == 0) {
+            submenu.builtinRole = BuiltinRole::MoreOptions;
+            submenu.label = Tr(L"More options", L"More options");
+        } else if (_wcsicmp(destination.c_str(), L"View") == 0 ||
+                   _wcsicmp(destination.c_str(), L"Sort by") == 0 ||
+                   _wcsicmp(destination.c_str(), L"Group by") == 0 ||
+                   _wcsicmp(destination.c_str(), L"New") == 0 ||
+                   _wcsicmp(destination.c_str(), L"Send to") == 0) {
+            submenu.label = Tr(destination.c_str(), destination.c_str());
+        } else {
+            submenu.label = destination;
+        }
         submenu.children = std::move(bucket->second);
 
         auto insertAt = model.items.end();
@@ -4613,7 +8996,7 @@ bool IsThirdPartyItem(const MenuItem& item) {
 bool MatchesAnyToken(const MenuItem& item,
                      const std::vector<std::wstring>& tokens) {
     for (const std::wstring& token : tokens) {
-        if (LabelsMatchIgnoreCase(item.label, token) ||
+        if (ItemMatchesLabelToken(item, token) ||
             EqualsIgnoreCase(item.canonicalVerb, token) ||
             EqualsIgnoreCase(item.canonicalVerb, ResolveVerbAlias(token))) {
             return true;
@@ -4698,7 +9081,13 @@ void ReorganizeAdvancedItems(std::vector<MenuItem>& items,
     submenu.id = 0xF000;
     submenu.kind = ItemKind::Submenu;
     submenu.action = ActionKind::Submenu;
-    submenu.label = options.label;
+    submenu.canonicalLabel = L"More options";
+    submenu.label =
+        options.label.empty() || _wcsicmp(options.label.c_str(),
+                                          L"More options") == 0
+            ? Tr(L"More options", L"More options")
+            : options.label;
+    submenu.builtinRole = BuiltinRole::MoreOptions;
     submenu.iconRef = L"@glyph:E712";
     submenu.children = std::move(advanced);
 
@@ -5630,8 +10019,11 @@ int SliderValueFromX(int x, int trackLeft, int trackWidth, int minValue,
     if (trackWidth <= 0 || maxValue <= minValue) {
         return minValue;
     }
-    const double fraction =
+    double fraction =
         static_cast<double>(x - trackLeft) / static_cast<double>(trackWidth);
+    if (IsRtlLanguage()) {
+        fraction = 1.0 - fraction;
+    }
     const double raw = minValue + fraction * (maxValue - minValue);
     long long value = 0;
     if (step > 0) {
@@ -5649,9 +10041,12 @@ int SliderXFromValue(int value, int trackLeft, int trackWidth, int minValue,
     if (maxValue <= minValue) {
         return trackLeft;
     }
-    const double fraction =
+    double fraction =
         static_cast<double>(value - minValue) /
         static_cast<double>(maxValue - minValue);
+    if (IsRtlLanguage()) {
+        fraction = 1.0 - fraction;
+    }
     return trackLeft + static_cast<int>(std::lround(fraction * trackWidth));
 }
 
@@ -5961,13 +10356,18 @@ struct SettingsModelInputs {
     std::vector<std::pair<std::wstring, std::wstring>> windhawkHints;
 };
 
-MenuItem MakeSettingsItem(ItemKind kind, std::wstring label) {
+MenuItem MakeSettingsItemRaw(ItemKind kind, std::wstring label) {
     MenuItem item;
     item.kind = kind;
     item.action = ActionKind::Builtin;
     item.builtinAction = BuiltinAction::None;
     item.label = std::move(label);
     return item;
+}
+
+MenuItem MakeSettingsItem(ItemKind kind, std::wstring label) {
+    return MakeSettingsItemRaw(
+        kind, Tr(label.c_str(), label.c_str()));
 }
 
 struct SettingsEffectName {
@@ -6075,6 +10475,18 @@ std::wstring SettingsDisplayLabel(const std::wstring& key) {
     return out;
 }
 
+int EnumOptionIndex(const ControlSpec& control,
+                     const std::wstring& display) {
+    for (size_t i = 0; i < control.options.size(); ++i) {
+        const std::wstring localized =
+            OptionDisplayLabel(control.key.c_str(), control.options[i].c_str());
+        if (_wcsicmp(localized.c_str(), display.c_str()) == 0) {
+            return static_cast<int>(i);
+        }
+    }
+    return 0;
+}
+
 MenuItem BuildSettingsRow(const Appearance& working,
                           const ConfigSchemaEntry& entry) {
     const std::wstring key = ToLowerCopy(entry.key);
@@ -6082,7 +10494,8 @@ MenuItem BuildSettingsRow(const Appearance& working,
         MenuItem row = MakeSettingsItem(ItemKind::Command, entry.key);
         row.control.kind = ControlKind::Info;
         row.control.key = entry.key;
-        row.controlText = L"deprecated \u2014 use animationOpen/Close";
+        row.controlText =
+            Tr(L"deprecated \u2014 use animationOpen/Close");
         return row;
     }
     const ControlSpec spec = MakeControlSpec(entry);
@@ -6139,7 +10552,7 @@ MenuItem BuildSettingsRow(const Appearance& working,
             const bool has = key == L"markercolor" ? working.hasMarkerColor
                                                    : working.hasHeaderColor;
             unset.controlValue = has ? 0 : 1;
-            unset.controlText = has ? L"off" : L"on";
+            unset.controlText = has ? Tr(L"off") : Tr(L"on");
             row.children.push_back(std::move(unset));
         }
         return row;
@@ -6151,9 +10564,11 @@ MenuItem BuildSettingsRow(const Appearance& working,
         row.control = spec;
         std::wstring current;
         AppearanceValueText(working, entry, current);
-        row.controlText = current;
+        row.controlText = OptionDisplayLabel(entry.key, current.c_str());
         for (const std::wstring& option : spec.options) {
-            MenuItem child = MakeSettingsItem(ItemKind::Command, option);
+            MenuItem child = MakeSettingsItemRaw(
+                ItemKind::Command,
+                OptionDisplayLabel(entry.key, option.c_str()));
             child.control.kind = ControlKind::Action;
             child.control.key =
                 L"@enum:" + std::wstring(entry.key) + L":" + option;
@@ -6174,15 +10589,16 @@ MenuItem BuildSettingsRow(const Appearance& working,
         const uint32_t effects =
             overlay ? working.overlay
                     : (opening ? working.animationOpen : working.animationClose);
-        row.controlText = overlay ? OverlayEffectsText(effects)
-                                  : AnimationEffectsText(effects);
+        row.controlText = DisplayEffectsText(effects, overlay);
         const SettingsEffectName* names =
             overlay ? kSettingsOverlayNames : kSettingsEffectNames;
         const size_t nameCount = overlay ? ARRAYSIZE(kSettingsOverlayNames)
                                          : ARRAYSIZE(kSettingsEffectNames);
         for (size_t i = 0; i < nameCount; ++i) {
             const SettingsEffectName& effect = names[i];
-            MenuItem child = MakeSettingsItem(ItemKind::Command, effect.name);
+            MenuItem child = MakeSettingsItemRaw(
+                ItemKind::Command,
+                overlay ? TrOverlay(effect.name) : TrEffect(effect.name));
             child.control.kind = ControlKind::Action;
             child.control.key =
                 std::wstring(overlay
@@ -6208,7 +10624,7 @@ MenuItem BuildSettingsRow(const Appearance& working,
         if (!working.hasCornerRadii) {
             ParseCornerRadii(entry.defaultValue, radii);
         }
-        row.controlText = working.hasCornerRadii ? L"custom" : L"default";
+        row.controlText = working.hasCornerRadii ? Tr(L"custom") : Tr(L"default");
         const wchar_t* ids[] = {L"tl", L"tr", L"br", L"bl"};
         const wchar_t* labels[] = {L"Top left", L"Top right", L"Bottom right",
                                    L"Bottom left"};
@@ -6225,7 +10641,7 @@ MenuItem BuildSettingsRow(const Appearance& working,
         unset.control.kind = ControlKind::Toggle;
         unset.control.key = L"@cornerRadii:unset";
         unset.controlValue = working.hasCornerRadii ? 0 : 1;
-        unset.controlText = working.hasCornerRadii ? L"off" : L"on";
+        unset.controlText = working.hasCornerRadii ? Tr(L"off") : Tr(L"on");
         row.children.push_back(std::move(unset));
         return row;
     }
@@ -6253,12 +10669,19 @@ MenuItem BuildSettingsRow(const Appearance& working,
     if (spec.kind == ControlKind::Toggle) {
         const bool value = AppearanceBoolValue(working, entry.key);
         row.controlValue = value ? 1 : 0;
-        row.controlText = value ? L"on" : L"off";
+        row.controlText = value ? Tr(L"on") : Tr(L"off");
     } else if (spec.kind == ControlKind::IntSlider) {
         row.controlValue = AppearanceIntValue(working, entry.key);
         row.controlText = std::to_wstring(row.controlValue);
     }
     return row;
+}
+
+std::wstring SettingsStatusLabel(const std::wstring& english) {
+    if (english.empty()) {
+        return Tr(L"Saved");
+    }
+    return Tr(english.c_str(), english.c_str());
 }
 
 std::vector<MenuItem> BuildSettingsTree(const SettingsModelInputs& inputs) {
@@ -6270,16 +10693,16 @@ std::vector<MenuItem> BuildSettingsTree(const SettingsModelInputs& inputs) {
     MenuItem status = MakeSettingsItem(ItemKind::Command, L"Status");
     status.control.kind = ControlKind::Info;
     status.control.key = L"@status";
-    status.controlText =
-        inputs.statusText.empty() ? L"Saved" : inputs.statusText;
+    status.controlText = SettingsStatusLabel(inputs.statusText);
     root.push_back(std::move(status));
 
     if (inputs.themeActive) {
         MenuItem theme = MakeSettingsItem(ItemKind::Command, L"Theme");
         theme.control.kind = ControlKind::Info;
         theme.control.key = L"@target";
-        theme.controlText =
-            inputs.themeName + L" \u2014 editing theme file";
+        theme.controlText = FormatTr(
+            L"Theme: %s \u2014 editing theme file",
+            {TrTheme(inputs.themeName.c_str())});
         root.push_back(std::move(theme));
     } else {
         MenuItem target = MakeSettingsItem(ItemKind::Submenu, L"Target");
@@ -6305,7 +10728,7 @@ std::vector<MenuItem> BuildSettingsTree(const SettingsModelInputs& inputs) {
             child.control.key = choice.id;
             if (choice.kind == inputs.target.kind) {
                 child.flags |= kModelChecked;
-                target.controlText = choice.label;
+                target.controlText = child.label;
             }
             target.children.push_back(std::move(child));
         }
@@ -6375,8 +10798,9 @@ std::vector<MenuItem> BuildSettingsTree(const SettingsModelInputs& inputs) {
             replay.control.key = L"@preview-open";
             groupItem.children.push_back(std::move(replay));
         }
-        MenuItem reset =
-            MakeSettingsItem(ItemKind::Command, L"Reset " + group + L"\u2026");
+        MenuItem reset = MakeSettingsItemRaw(
+            ItemKind::Command,
+            FormatTr(L"Reset %s\u2026", {Tr(group.c_str(), group.c_str())}));
         reset.control.kind = ControlKind::Action;
         reset.control.key = L"@reset:" + group;
         groupItem.children.push_back(std::move(reset));
@@ -6391,7 +10815,9 @@ std::vector<MenuItem> BuildSettingsTree(const SettingsModelInputs& inputs) {
         MenuItem row = MakeSettingsItem(ItemKind::Command, hint.first);
         row.control.kind = ControlKind::Info;
         row.control.key = L"@hint:" + hint.first;
-        row.controlText = hint.second;
+        row.controlText = _wcsicmp(hint.first.c_str(), L"Theme") == 0
+                              ? TrTheme(hint.second.c_str())
+                              : Tr(hint.second.c_str(), hint.second.c_str());
         windhawk.children.push_back(std::move(row));
     }
     MenuItem openWindhawk = MakeSettingsItem(ItemKind::Command, L"Open Windhawk");
@@ -6426,7 +10852,8 @@ std::vector<MenuItem> BuildSettingsTree(const SettingsModelInputs& inputs) {
     MenuItem about = MakeSettingsItem(ItemKind::Command, L"About");
     about.control.kind = ControlKind::Info;
     about.control.key = L"@about";
-    about.controlText = L"schema " + std::to_wstring(kConfigSchemaVersion);
+    about.controlText =
+        FormatTr(L"schema %d", {std::to_wstring(kConfigSchemaVersion)});
     root.push_back(std::move(about));
 
     return root;
@@ -6725,6 +11152,7 @@ struct InvocationDescriptor {
     uint32_t sortIndex = 0;
     uint32_t customCommandIndex = 0;
     uint32_t newIndex = 0;
+    std::wstring newTemplateId;
     std::wstring canonicalVerb;
     std::wstring targetPath;
     bool hasOffset = false;
@@ -6852,6 +11280,7 @@ void FillInvocation(const MenuItem& item, LayoutItem& layout) {
     layout.invocation.sortIndex = item.sortIndex;
     layout.invocation.customCommandIndex = item.customCommandIndex;
     layout.invocation.newIndex = item.newIndex;
+    layout.invocation.newTemplateId = item.newTemplateId;
     layout.invocation.canonicalVerb = item.canonicalVerb;
     layout.invocation.targetPath = item.targetPath;
     layout.invocation.hasOffset = (item.flags & kModelHasOffset) != 0;
@@ -7172,6 +11601,41 @@ LayoutPanel BuildLayoutPanel(const std::vector<MenuItem>& items,
     return panel;
 }
 
+void MirrorRectHorizontally(RECT& rect, int width) {
+    if (rect.right < rect.left) {
+        return;
+    }
+    if (rect.right == rect.left) {
+        rect.left = width - rect.left;
+        rect.right = rect.left;
+        return;
+    }
+    const int left = rect.left;
+    rect.left = width - rect.right;
+    rect.right = width - left;
+}
+
+void MirrorLayoutPanel(LayoutPanel& panel) {
+    const int width = static_cast<int>(panel.size.cx);
+    for (LayoutItem& item : panel.items) {
+        MirrorRectHorizontally(item.rect, width);
+        MirrorRectHorizontally(item.gutterRect, width);
+        MirrorRectHorizontally(item.markerRect, width);
+        MirrorRectHorizontally(item.iconRect, width);
+        MirrorRectHorizontally(item.textRect, width);
+        MirrorRectHorizontally(item.controlRect, width);
+        MirrorRectHorizontally(item.fieldRect, width);
+        MirrorRectHorizontally(item.trackRect, width);
+        MirrorRectHorizontally(item.thumbRect, width);
+        MirrorRectHorizontally(item.swatchRect, width);
+        MirrorRectHorizontally(item.areaRect, width);
+        MirrorRectHorizontally(item.stripRect, width);
+    }
+    for (LayoutPanel& child : panel.children) {
+        MirrorLayoutPanel(child);
+    }
+}
+
 // --- Control hit-testing and field editing ---------------------------------
 
 enum class ControlPart : uint8_t {
@@ -7376,9 +11840,14 @@ POINT ClampPanelPosition(POINT anchor, SIZE panelSize, const RECT& workArea) {
 }
 
 POINT SubmenuPosition(const RECT& parentItemScreenRect, SIZE childSize,
-                      const RECT& workArea, int overlapPx) {
-    int x = parentItemScreenRect.right - overlapPx;
-    if (x + childSize.cx > workArea.right) {
+                      const RECT& workArea, int overlapPx, bool rtl = false) {
+    int x = rtl ? parentItemScreenRect.left - childSize.cx + overlapPx
+                : parentItemScreenRect.right - overlapPx;
+    if (rtl) {
+        if (x < workArea.left) {
+            x = parentItemScreenRect.right - overlapPx;
+        }
+    } else if (x + childSize.cx > workArea.right) {
         x = parentItemScreenRect.left - childSize.cx;
     }
     const int left = static_cast<int>(workArea.left);
@@ -7417,6 +11886,7 @@ struct LayoutKey {
     uint32_t dpi = 96;
     bool darkTheme = false;
     bool topBarAtBottom = false;
+    bool rtl = false;
     uint64_t modelFingerprint = 0;
 
     bool operator==(const LayoutKey&) const = default;
@@ -7429,6 +11899,7 @@ struct LayoutKey {
         hash = HashCombine(hash, dpi);
         hash = HashCombine(hash, darkTheme ? 1 : 0);
         hash = HashCombine(hash, topBarAtBottom ? 1 : 0);
+        hash = HashCombine(hash, rtl ? 1 : 0);
         hash = HashCombine(hash, modelFingerprint);
         return hash;
     }
@@ -7444,6 +11915,7 @@ LayoutKey MakeLayoutKey(const ContextSignature& sig, const RulesConfig& config,
     key.themeRevision = themeRevision;
     key.dpi = dpi;
     key.darkTheme = darkTheme;
+    key.rtl = IsRtlLanguage();
     key.modelFingerprint = ModelFingerprint(model.items);
     return key;
 }
@@ -8681,7 +13153,8 @@ private:
             std::to_wstring(width) + L'\x1f' +
             std::to_wstring(static_cast<int>(metrics.acceleratorMode)) + L'\x1f' +
             std::to_wstring(static_cast<int>(metrics.fontWeight)) + L'\x1f' +
-            std::to_wstring(static_cast<int>(metrics.fontStyle));
+            std::to_wstring(static_cast<int>(metrics.fontStyle)) + L'\x1f' +
+            (IsRtlLanguage() ? L"rtl" : L"ltr");
         if (IDWriteTextLayout** cached = text_.Find(key)) {
             return *cached;
         }
@@ -8697,6 +13170,10 @@ private:
                 DWRITE_FONT_STRETCH_NORMAL, metrics.fontSize, L"", &format)) ||
             !format) {
             return nullptr;
+        }
+        format->SetTextAlignment(LeadingTextAlignment());
+        if (IsRtlLanguage()) {
+            format->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
         }
 
         const AcceleratorText accelerated = StripAccelerators(item.label);
@@ -9029,14 +13506,20 @@ void DrawSubmenuArrow(ID2D1DeviceContext* dc, const LayoutItem& item,
     if (FAILED(dc->CreateSolidColorBrush(ColorFromArgb(color), &brush)) || !brush) {
         return;
     }
-    const float right = static_cast<float>(panelWidth - ContentSideInset(metrics));
-    const float left = right - static_cast<float>(metrics.submenuArrowWidth) * 0.4f;
+    const bool rtl = IsRtlLanguage();
+    const float outer = rtl
+                            ? static_cast<float>(ContentSideInset(metrics))
+                            : static_cast<float>(panelWidth -
+                                                 ContentSideInset(metrics));
+    const float inner =
+        outer + (rtl ? 1.0f : -1.0f) *
+                    static_cast<float>(metrics.submenuArrowWidth) * 0.4f;
     const float midY = (static_cast<float>(item.rect.top) +
                         static_cast<float>(item.rect.bottom)) / 2.0f;
     const float half = static_cast<float>(metrics.submenuArrowWidth) * 0.22f;
-    dc->DrawLine(D2D1_POINT_2F{left, midY - half}, D2D1_POINT_2F{right, midY},
+    dc->DrawLine(D2D1_POINT_2F{inner, midY - half}, D2D1_POINT_2F{outer, midY},
                  brush, 1.5f);
-    dc->DrawLine(D2D1_POINT_2F{right, midY}, D2D1_POINT_2F{left, midY + half},
+    dc->DrawLine(D2D1_POINT_2F{outer, midY}, D2D1_POINT_2F{inner, midY + half},
                  brush, 1.5f);
     brush->Release();
 }
@@ -9099,6 +13582,9 @@ void DrawSettingsText(ID2D1DeviceContext* dc, const std::wstring& text,
         return;
     }
     format->SetTextAlignment(alignment);
+    if (IsRtlLanguage()) {
+        format->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
+    }
     format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     IDWriteTextLayout* layout = nullptr;
     if (SUCCEEDED(dwrite->CreateTextLayout(
@@ -9218,17 +13704,20 @@ void DrawSettingsField(ID2D1DeviceContext* dc, const LayoutItem& item,
         text = std::to_wstring(state.dragValue);
     }
     DrawSettingsText(dc, text, item.fieldRect, metrics.textColor, metrics,
-                     DWRITE_TEXT_ALIGNMENT_TRAILING);
+                     TrailingTextAlignment());
     if (focused && state.caretVisible) {
         const std::wstring prefix =
             state.editBuffer.substr(0, std::min(state.caretPos,
                                                 state.editBuffer.size()));
         const float fullWidth = SettingsTextWidth(text, metrics);
         const float prefixWidth = SettingsTextWidth(prefix, metrics);
-        // The field text is right-aligned to the field's right edge, so the
-        // caret needs no extra inset; six pixels here was about one digit.
+        // LTR fields are right-aligned; RTL fields use the leading (left)
+        // edge, so the caret follows the text alignment.
         const float caretX =
-            static_cast<float>(item.fieldRect.right) - fullWidth + prefixWidth;
+            IsRtlLanguage()
+                ? static_cast<float>(item.fieldRect.left) + prefixWidth
+                : static_cast<float>(item.fieldRect.right) - fullWidth +
+                      prefixWidth;
         if (SUCCEEDED(dc->CreateSolidColorBrush(ColorFromArgb(metrics.textColor),
                                                 &brush)) &&
             brush) {
@@ -9288,7 +13777,7 @@ void DrawSettingsEnum(ID2D1DeviceContext* dc, const LayoutItem& item,
     // The row's submenu chevron is drawn by the shared submenu pass; only the
     // current value goes here.
     DrawSettingsText(dc, item.controlText, item.controlRect, metrics.textColor,
-                     metrics, DWRITE_TEXT_ALIGNMENT_TRAILING);
+                     metrics, TrailingTextAlignment());
 }
 
 void DrawSettingsSwatch(ID2D1DeviceContext* dc, const LayoutItem& item,
@@ -9443,7 +13932,7 @@ void DrawSettingsInfo(ID2D1DeviceContext* dc, const LayoutItem& item,
                       const LayoutMetrics& metrics) {
     DrawSettingsText(dc, item.controlText, item.controlRect,
                      metrics.disabledTextColor, metrics,
-                     DWRITE_TEXT_ALIGNMENT_TRAILING);
+                     TrailingTextAlignment());
 }
 
 // --- Menu overlays ---------------------------------------------------------
@@ -10062,8 +14551,7 @@ void DrawPanel(ID2D1DeviceContext* dc, const LayoutPanel& panel,
                     ColorFromArgb(metrics.headerColor), &headerBrush)) &&
                 headerBrush) {
                 dc->DrawTextLayout(
-                    D2D1_POINT_2F{static_cast<float>(item.rect.left) +
-                                      static_cast<float>(metrics.padding),
+                    D2D1_POINT_2F{static_cast<float>(item.textRect.left),
                                   static_cast<float>(item.textRect.top)},
                     item.resources->text, headerBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
                 headerBrush->Release();
@@ -10591,6 +15079,9 @@ int MeasureTextWidthDirectWrite(const wchar_t* label, size_t length,
             metrics.fontSize, L"", &format)) ||
         !format) {
         return EstimateTextWidth(label, length, metrics);
+    }
+    if (IsRtlLanguage()) {
+        format->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
     }
     int width = EstimateTextWidth(label, length, metrics);
     IDWriteTextLayout* layout = nullptr;
@@ -11296,6 +15787,13 @@ bool SettingsHandleKey(MenuSession& session, UINT key, wchar_t ch) {
     }
     MenuInputState& state = session.states[session.active];
     const LayoutPanel& panel = *session.windows[session.active]->Panel();
+    if (IsRtlLanguage() && state.focusedControl.empty()) {
+        if (key == VK_LEFT) {
+            key = VK_RIGHT;
+        } else if (key == VK_RIGHT) {
+            key = VK_LEFT;
+        }
+    }
     if (!state.focusedControl.empty()) {
         const LayoutItem* item =
             SettingsFindItem(session, session.active, state.focusedControl);
@@ -11376,14 +15874,7 @@ bool SettingsHandleKey(MenuSession& session, UINT key, wchar_t ch) {
             return true;
         }
         if (control.kind == ControlKind::Enum && !control.options.empty()) {
-            int index = 0;
-            for (size_t i = 0; i < control.options.size(); ++i) {
-                if (_wcsicmp(control.options[i].c_str(),
-                             item->controlText.c_str()) == 0) {
-                    index = static_cast<int>(i);
-                    break;
-                }
-            }
+            int index = EnumOptionIndex(control, item->controlText);
             const int count = static_cast<int>(control.options.size());
             index = (index + (key == VK_RIGHT ? 1 : count - 1)) % count;
             SettingsApplyControlChange(session, control.key,
@@ -11925,7 +16416,8 @@ void OpenSubmenu(MenuSession* session, int index, int itemIndex) {
                              topLeft.y + (item.rect.bottom - item.rect.top)};
     const RECT workArea = WorkAreaForPoint(topLeft);
     POINT childPos =
-        SubmenuPosition(itemScreen, childPanel.size, workArea, 4);
+        SubmenuPosition(itemScreen, childPanel.size, workArea, 4,
+                                   IsRtlLanguage());
     childPos.x -= session->margin;
     childPos.y -= session->margin;
     child->Move(childPos);
@@ -12163,6 +16655,13 @@ bool HandleMenuKey(MenuSession* session, UINT vk) {
     }
     const LayoutPanel& panel = *session->windows[level]->Panel();
     MenuInputState& state = session->states[level];
+    if (IsRtlLanguage()) {
+        if (vk == VK_LEFT) {
+            vk = VK_RIGHT;
+        } else if (vk == VK_RIGHT) {
+            vk = VK_LEFT;
+        }
+    }
 
     switch (vk) {
         case VK_ESCAPE:
@@ -12575,6 +17074,9 @@ CustomMenuResult ShowCustomMenu(const MenuModel& model, const LayoutKey& key,
     if (!panel) {
         auto built = std::make_shared<LayoutPanel>(
             BuildLayoutPanel(model.items, metrics, &MeasureTextWidthDirectWrite));
+        if (key.rtl) {
+            MirrorLayoutPanel(*built);
+        }
         bool bound = false;
         ID2D1DeviceContext* bindDc = nullptr;
         if (SUCCEEDED(g_renderDevice.D2DDevice()->CreateDeviceContext(
@@ -12617,6 +17119,9 @@ CustomMenuResult ShowCustomMenu(const MenuModel& model, const LayoutKey& key,
                 auto built = std::make_shared<LayoutPanel>(BuildLayoutPanel(
                     model.items, metrics, &MeasureTextWidthDirectWrite,
                     altKey.topBarAtBottom));
+                if (altKey.rtl) {
+                    MirrorLayoutPanel(*built);
+                }
                 bool bound = false;
                 ID2D1DeviceContext* bindDc = nullptr;
                 if (SUCCEEDED(g_renderDevice.D2DDevice()->CreateDeviceContext(
@@ -12848,6 +17353,9 @@ void RelayoutSession(MenuSession& session) {
     }
     auto panel = std::make_shared<LayoutPanel>(BuildLayoutPanel(
         settings->model, session.metrics, &MeasureTextWidthDirectWrite));
+    if (IsRtlLanguage()) {
+        MirrorLayoutPanel(*panel);
+    }
     ID2D1DeviceContext* bindDc = nullptr;
     if (SUCCEEDED(g_renderDevice.D2DDevice()->CreateDeviceContext(
             D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &bindDc)) &&
@@ -12910,7 +17418,8 @@ void RelayoutSession(MenuSession& session) {
             const RECT workArea =
                 WorkAreaForPoint(POINT{itemScreen.left, itemScreen.top});
             POINT childPos =
-                SubmenuPosition(itemScreen, levelPanel->size, workArea, 4);
+                SubmenuPosition(itemScreen, levelPanel->size, workArea, 4,
+                              IsRtlLanguage());
             childPos.x -= session.margin;
             childPos.y -= session.margin;
             pos = childPos;
@@ -13097,6 +17606,7 @@ void OpenSettingsMenu(HWND owner, POINT pt, bool activate = false) {
     settings.inputs.statusText = L"Saved";
     settings.inputs.windhawkHints = {
         {L"Theme", g_settings->theme},
+        {L"Language", CurrentLanguageTag()},
         {L"Menu mode", g_settings->menuMode == 0 ? L"Custom" : L"Classic"},
         {L"Show classic menu item",
          g_settings->showMoreOptionsItem ? L"on" : L"off"},
@@ -13115,6 +17625,7 @@ void OpenSettingsMenu(HWND owner, POINT pt, bool activate = false) {
     LayoutKey key;
     key.dpi = owner ? DpiForWindow(owner) : 96;
     key.darkTheme = settings.darkSystemTheme;
+    key.rtl = IsRtlLanguage();
     settings.dpi = key.dpi;
     const CustomMenuResult result =
         ShowCustomMenu(model, key, owner, pt, &settings, activate);
@@ -13433,6 +17944,9 @@ void PrebuildLayoutsForWarmup(const std::vector<MenuModel>& models, uint32_t dpi
         auto panel =
             std::make_shared<LayoutPanel>(BuildLayoutPanel(
                 model.items, metrics, &MeasureTextWidthDirectWrite));
+        if (key.rtl) {
+            MirrorLayoutPanel(*panel);
+        }
         g_contentCaches->Bind(*panel, metrics, dc);
         g_layoutCache->Put(key, panel);
     }
@@ -13472,12 +17986,16 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
     model.sig = ContextSignature{scope, typeKey, shape, Variant::Normal};
 
     uint32_t nextId = 1;
+    auto translateLabel = [](const std::wstring& text) {
+        return Tr(text.c_str(), text.c_str());
+    };
     auto makeCommand = [&](std::wstring label, std::wstring verb, uint32_t flags,
                            std::wstring iconRef = L"") {
         MenuItem item{};
         item.id = nextId++;
         item.kind = ItemKind::Command;
-        item.label = std::move(label);
+        item.canonicalLabel = label;
+        item.label = translateLabel(label);
         item.canonicalVerb = std::move(verb);
         item.action = ActionKind::ShellVerb;
         item.flags = flags;
@@ -13490,7 +18008,8 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
         MenuItem item{};
         item.id = nextId++;
         item.kind = ItemKind::Command;
-        item.label = std::move(label);
+        item.canonicalLabel = label;
+        item.label = translateLabel(label);
         item.canonicalVerb = std::move(dedupVerb);
         item.action = ActionKind::ViewAction;
         item.viewAction = static_cast<uint32_t>(action);
@@ -13521,7 +18040,8 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
         item.id = nextId++;
         item.kind = ItemKind::Submenu;
         item.action = ActionKind::Submenu;
-        item.label = std::move(label);
+        item.canonicalLabel = label;
+        item.label = translateLabel(label);
         model.items.push_back(std::move(item));
         return model.items.back();
     };
@@ -13530,16 +18050,19 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
         item.id = nextId++;
         item.kind = ItemKind::Command;
         item.action = ActionKind::Fallback;
-        item.label = L"Show classic menu";
+        item.canonicalLabel = L"Show classic menu";
+        item.label = Tr(L"Show classic menu", L"Show classic menu");
+        item.builtinRole = BuiltinRole::Fallback;
         model.items.push_back(std::move(item));
     };
 
     const bool multi = shape == Shape::Multi;
     const uint32_t multiDisabled = multi ? kModelDisabled : kModelNone;
-    const std::wstring openLabel = FormatMultiLabel(L"Open", paths.size());
+    const std::wstring openLabel = L"Open";
 
     if (scope == Scope::Background || scope == Scope::Desktop) {
         MenuItem& viewMenu = addSubmenu(L"View");
+        viewMenu.builtinRole = BuiltinRole::View;
         viewMenu.iconRef = L"@glyph:E890";
         viewMenu.children.push_back(makeViewAction(L"Extra large icons", L"viewxlarge",
                                                    ViewAction::ViewExtraLargeIcons,
@@ -13577,12 +18100,14 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
                                                    ViewAction::AlignToGrid, kModelNone));
 
         MenuItem& sortMenu = addSubmenu(L"Sort by");
+        sortMenu.builtinRole = BuiltinRole::SortBy;
         sortMenu.iconRef = L"@glyph:E8CB";
         for (uint32_t i = 0; i < kShellPropertyKeyCount; ++i) {
             MenuItem sortItem{};
             sortItem.id = nextId++;
             sortItem.kind = ItemKind::Command;
-            sortItem.label = kShellPropertyLabels[i];
+            sortItem.canonicalLabel = kShellPropertyLabels[i];
+            sortItem.label = translateLabel(kShellPropertyLabels[i]);
             sortItem.action = ActionKind::SortBy;
             sortItem.sortIndex = i;
             sortItem.sortAscending = true;
@@ -13598,19 +18123,23 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
             MenuItem directionItem{};
             directionItem.id = nextId++;
             directionItem.kind = ItemKind::Command;
-            directionItem.label = ascending ? L"Ascending" : L"Descending";
+            directionItem.canonicalLabel =
+                ascending ? L"Ascending" : L"Descending";
+            directionItem.label = translateLabel(directionItem.canonicalLabel);
             directionItem.action = ActionKind::SortDirection;
             directionItem.sortAscending = ascending;
             sortMenu.children.push_back(std::move(directionItem));
         }
 
         MenuItem& groupMenu = addSubmenu(L"Group by");
+        groupMenu.builtinRole = BuiltinRole::GroupBy;
         groupMenu.iconRef = L"@glyph:E902";
         {
             MenuItem noneItem{};
             noneItem.id = nextId++;
             noneItem.kind = ItemKind::Command;
-            noneItem.label = L"(None)";
+            noneItem.canonicalLabel = L"(None)";
+            noneItem.label = translateLabel(noneItem.canonicalLabel);
             noneItem.action = ActionKind::GroupBy;
             noneItem.sortIndex = kGroupNoneIndex;
             groupMenu.children.push_back(std::move(noneItem));
@@ -13619,7 +18148,8 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
             MenuItem groupItem{};
             groupItem.id = nextId++;
             groupItem.kind = ItemKind::Command;
-            groupItem.label = kShellPropertyLabels[i];
+            groupItem.canonicalLabel = kShellPropertyLabels[i];
+            groupItem.label = translateLabel(kShellPropertyLabels[i]);
             groupItem.action = ActionKind::GroupBy;
             groupItem.sortIndex = i;
             groupMenu.children.push_back(std::move(groupItem));
@@ -13634,7 +18164,9 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
             MenuItem directionItem{};
             directionItem.id = nextId++;
             directionItem.kind = ItemKind::Command;
-            directionItem.label = ascending ? L"Ascending" : L"Descending";
+            directionItem.canonicalLabel =
+                ascending ? L"Ascending" : L"Descending";
+            directionItem.label = translateLabel(directionItem.canonicalLabel);
             directionItem.action = ActionKind::GroupDirection;
             directionItem.sortAscending = ascending;
             groupMenu.children.push_back(std::move(directionItem));
@@ -13647,6 +18179,7 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
         addCommand(L"Paste shortcut", L"pastelink");
         addSeparator();
         MenuItem& newMenu = addSubmenu(L"New");
+        newMenu.builtinRole = BuiltinRole::New;
         BuildNewMenuChildren(newMenu.children, nextId);
         if (scope == Scope::Desktop) {
             addSeparator();
@@ -13691,7 +18224,8 @@ MenuModel BuildCoreModel(Scope scope, const std::vector<std::wstring>& paths, Sh
     addCommand(L"Delete", L"delete", kModelNone, L"@glyph:E74D");
     addSeparator();
     addCommand(L"Create shortcut", L"createshortcut", multiDisabled);
-    addSubmenu(L"Send to");
+    MenuItem& sendTo = addSubmenu(L"Send to");
+    sendTo.builtinRole = BuiltinRole::SendTo;
     addCommand(L"Copy as path", L"copyaspath");
     addSeparator();
     addCommand(L"Properties", L"properties", kModelNone, L"@glyph:E713");
@@ -13723,10 +18257,184 @@ bool IsOpenGroupItem(const MenuItem& item) {
         }
     }
     const std::wstring normalized = NormalizeMenuLabel(item.label);
-    return normalized.rfind(L"Open", 0) == 0;
+    if (normalized.rfind(L"Open", 0) == 0) {
+        return true;
+    }
+    const std::wstring canonical = NormalizeMenuLabel(item.canonicalLabel);
+    return !canonical.empty() && canonical.rfind(L"Open", 0) == 0;
 }
 
-MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
+struct KnownCachedRoles {
+    std::wstring displayLabel;
+    std::wstring personalizeLabel;
+    const std::vector<MenuItem>* sendToChildren = nullptr;
+};
+
+// Forward declarations: these registry/MUI helpers are defined later in the
+// discovery section, while the merge lives here.
+std::wstring ReadClassesString(const std::wstring& subKey,
+                               const wchar_t* valueName);
+std::wstring ResolveIndirectString(const std::wstring& value);
+
+const MenuItem* FindCoreRole(const std::vector<MenuItem>& items,
+                             BuiltinRole role) {
+    for (const MenuItem& item : items) {
+        if (item.builtinRole == role) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+size_t CountChildLabelOverlap(const MenuItem& cached,
+                              const std::vector<MenuItem>& coreChildren) {
+    size_t overlap = 0;
+    for (const MenuItem& cachedChild : cached.children) {
+        if (cachedChild.kind == ItemKind::Separator) {
+            continue;
+        }
+        for (const MenuItem& coreChild : coreChildren) {
+            if (coreChild.kind == ItemKind::Separator) {
+                continue;
+            }
+            if (LabelsMatchIgnoreCase(cachedChild.label, coreChild.label)) {
+                ++overlap;
+                break;
+            }
+        }
+    }
+    return overlap;
+}
+
+size_t CountLabelOverlap(const MenuItem& cached,
+                         const std::vector<std::wstring>& labels) {
+    size_t overlap = 0;
+    for (const MenuItem& child : cached.children) {
+        if (child.kind == ItemKind::Separator) {
+            continue;
+        }
+        for (const std::wstring& label : labels) {
+            if (LabelsMatchIgnoreCase(child.label, label)) {
+                ++overlap;
+                break;
+            }
+        }
+    }
+    return overlap;
+}
+
+std::vector<std::wstring> OsNewTemplateLabels() {
+    std::vector<std::wstring> labels;
+    const std::shared_ptr<const NewTemplateList> snapshot =
+        NewTemplatesSnapshot();
+    if (!snapshot) {
+        return labels;
+    }
+    for (const NewTemplate& tmpl : *snapshot) {
+        if (!tmpl.osDisplayName.empty()) {
+            labels.push_back(tmpl.osDisplayName);
+        }
+        if (tmpl.syntheticName && !tmpl.canonicalName.empty()) {
+            labels.push_back(
+                Tr(tmpl.canonicalName.c_str(), tmpl.canonicalName.c_str()));
+        } else if (!tmpl.displayName.empty() &&
+                   _wcsicmp(tmpl.displayName.c_str(),
+                            tmpl.osDisplayName.c_str()) != 0) {
+            labels.push_back(tmpl.displayName);
+        }
+    }
+    return labels;
+}
+
+size_t CountNonSeparatorChildren(const MenuItem& item) {
+    size_t count = 0;
+    for (const MenuItem& child : item.children) {
+        if (child.kind != ItemKind::Separator) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+BuiltinRole InferCachedSubmenuRole(const MenuItem& cached,
+                                   const std::vector<MenuItem>& coreItems,
+                                   const KnownCachedRoles& known) {
+    if (cached.kind != ItemKind::Submenu) {
+        return BuiltinRole::None;
+    }
+
+    auto hasOverlap = [&](BuiltinRole role) {
+        const MenuItem* coreItem = FindCoreRole(coreItems, role);
+        return coreItem && CountChildLabelOverlap(cached, coreItem->children) >= 2;
+    };
+
+    if (_wcsicmp(cached.canonicalVerb.c_str(), L"new") == 0) {
+        return BuiltinRole::New;
+    }
+    // Match New against OS-language type names, not the mod's override
+    // language, so a French override on a German Windows still recognizes
+    // the shell's New submenu.
+    const std::vector<std::wstring> osNewLabels = OsNewTemplateLabels();
+    // Three matches distinguishes the shell's New submenu (which normally
+    // has many type entries) from a third-party two-item submenu; one and two
+    // item submenus are deliberately never matched by overlap.
+    if (CountLabelOverlap(cached, osNewLabels) >= 3) {
+        return BuiltinRole::New;
+    }
+    if (_wcsicmp(cached.canonicalVerb.c_str(), L"sendto") == 0) {
+        return BuiltinRole::SendTo;
+    }
+    if (known.sendToChildren) {
+        const size_t overlap =
+            CountChildLabelOverlap(cached, *known.sendToChildren);
+        const size_t total = CountNonSeparatorChildren(cached);
+        if (total > 0 && (overlap >= 2 || (total < 2 && overlap == total))) {
+            return BuiltinRole::SendTo;
+        }
+    }
+    if (hasOverlap(BuiltinRole::View)) {
+        return BuiltinRole::View;
+    }
+    if (hasOverlap(BuiltinRole::SortBy)) {
+        return BuiltinRole::SortBy;
+    }
+    if (hasOverlap(BuiltinRole::GroupBy)) {
+        return BuiltinRole::GroupBy;
+    }
+
+    const MenuItem* sendTo = FindCoreRole(coreItems, BuiltinRole::SendTo);
+    if (sendTo && LabelsMatchIgnoreCase(cached.label, sendTo->label)) {
+        return BuiltinRole::SendTo;
+    }
+    return BuiltinRole::None;
+}
+
+std::wstring ReadDesktopShellLabel(const wchar_t* key) {
+    const std::wstring verbKey =
+        std::wstring(L"DesktopBackground\\shell\\") + key;
+    std::wstring label = ReadClassesString(verbKey, L"MUIVerb");
+    if (label.empty()) {
+        label = ReadClassesString(verbKey, nullptr);
+    }
+    label = ResolveIndirectString(label);
+    label.erase(std::remove(label.begin(), label.end(), L'&'), label.end());
+    return label;
+}
+
+KnownCachedRoles BuildKnownCachedRoles(const ContextSignature& signature,
+                                       const std::vector<MenuItem>* sendTo) {
+    KnownCachedRoles known;
+    known.sendToChildren = sendTo;
+    if (signature.scope == Scope::Desktop ||
+        signature.scope == Scope::Background) {
+        known.displayLabel = ReadDesktopShellLabel(L"Display");
+        known.personalizeLabel = ReadDesktopShellLabel(L"Personalize");
+    }
+    return known;
+}
+
+MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached,
+                              const KnownCachedRoles& known = {}) {
     MenuModel result = core;
 
     MenuItem fallback{};
@@ -13737,26 +18445,43 @@ MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
         hadFallback = true;
     }
 
-    auto matches = [](const MenuItem& left, const MenuItem& right) {
-        if (LabelsMatchIgnoreCase(left.label, right.label)) {
-            return true;
+    auto findCommandByVerb = [&](const MenuItem& native) -> MenuItem* {
+        if (native.canonicalVerb.empty()) {
+            return nullptr;
         }
-        return !left.canonicalVerb.empty() && left.canonicalVerb == right.canonicalVerb;
-    };
-
-    std::unordered_set<std::wstring> coreLabels;
-    std::unordered_set<std::wstring> coreVerbs;
-    for (const MenuItem& item : result.items) {
-        if (!item.label.empty()) {
-            const std::wstring normalized = NormalizeMenuLabel(item.label);
-            if (!normalized.empty()) {
-                coreLabels.insert(normalized);
+        for (MenuItem& item : result.items) {
+            if (item.kind != ItemKind::Command || item.canonicalVerb.empty()) {
+                continue;
+            }
+            if (_wcsicmp(item.canonicalVerb.c_str(),
+                         native.canonicalVerb.c_str()) == 0) {
+                return &item;
             }
         }
-        if (!item.canonicalVerb.empty()) {
-            coreVerbs.insert(item.canonicalVerb);
+        return nullptr;
+    };
+    auto findByCanonicalLabel = [&](const wchar_t* label) -> MenuItem* {
+        for (MenuItem& item : result.items) {
+            if (!item.canonicalLabel.empty() &&
+                _wcsicmp(item.canonicalLabel.c_str(), label) == 0) {
+                return &item;
+            }
         }
-    }
+        return nullptr;
+    };
+    auto adoptDescriptor = [](MenuItem& item, const MenuItem& native) {
+        if (item.action != ActionKind::ShellVerb ||
+            native.action != ActionKind::ShellVerb) {
+            return;
+        }
+        if (!native.canonicalVerb.empty()) {
+            item.canonicalVerb = native.canonicalVerb;
+        }
+        if ((native.flags & kModelHasOffset) != 0 || native.verbOffset != 0) {
+            item.verbOffset = native.verbOffset;
+            item.flags |= kModelHasOffset;
+        }
+    };
 
     std::vector<MenuItem> added;
     std::vector<MenuItem> addedOpen;
@@ -13765,43 +18490,74 @@ MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
             continue;
         }
 
-        bool matchedCore = false;
-        for (MenuItem& coreItem : result.items) {
-            // A matching submenu donates its children (e.g. the shell's Send
-            // to list) instead of being dropped as a duplicate, which would
-            // leave the core submenu empty and pruned.
-            if (item.kind == ItemKind::Submenu &&
-                coreItem.kind == ItemKind::Submenu &&
-                coreItem.children.empty() && matches(coreItem, item)) {
-                coreItem.children = item.children;
-                matchedCore = true;
-                break;
+        MenuItem* matched = nullptr;
+        if (item.kind == ItemKind::Submenu) {
+            const BuiltinRole role =
+                InferCachedSubmenuRole(item, result.items, known);
+            if (role != BuiltinRole::None) {
+                matched = const_cast<MenuItem*>(
+                    FindCoreRole(result.items, role));
             }
-            // Only invokable commands donate a descriptor; a matching submenu
-            // has none and would otherwise clear the core verb and point the
-            // item at offset 0.
-            if (coreItem.action != ActionKind::ShellVerb ||
-                item.action != ActionKind::ShellVerb ||
-                item.kind != ItemKind::Command || !matches(coreItem, item)) {
-                continue;
+            if (matched) {
+                // New/View/Sort/Group own their children and keep them;
+                // Send to is empty in the core model and takes the native
+                // children. If a core submenu has no children, use the
+                // native ones rather than losing the menu to pruning.
+                if (role == BuiltinRole::SendTo || matched->children.empty()) {
+                    matched->children = item.children;
+                }
+            } else {
+                for (MenuItem& coreItem : result.items) {
+                    if (coreItem.kind != ItemKind::Submenu) {
+                        continue;
+                    }
+                    // Only the canonical English label may stand in for a
+                    // missing verb. Never compare translated display text:
+                    // that is how a third-party item gets absorbed as a
+                    // duplicate of a core item.
+                    if (coreItem.canonicalLabel.empty() ||
+                        !LabelsMatchIgnoreCase(coreItem.canonicalLabel,
+                                               item.label)) {
+                        continue;
+                    }
+                    matched = &coreItem;
+                    if (matched->children.empty()) {
+                        matched->children = item.children;
+                    }
+                    break;
+                }
             }
-            // Adopt the native invocation descriptor: the shell rejects some
-            // canonical verb strings but its own offsets always dispatch.
-            coreItem.canonicalVerb = item.canonicalVerb;
-            coreItem.verbOffset = item.verbOffset;
-            coreItem.flags |= kModelHasOffset;
-            matchedCore = true;
-            break;
+        } else {
+            matched = findCommandByVerb(item);
+            if (!matched && !known.displayLabel.empty() &&
+                LabelsMatchIgnoreCase(item.label, known.displayLabel)) {
+                matched = findByCanonicalLabel(L"Display settings");
+            }
+            if (!matched && !known.personalizeLabel.empty() &&
+                LabelsMatchIgnoreCase(item.label, known.personalizeLabel)) {
+                matched = findByCanonicalLabel(L"Personalize");
+            }
+            if (!matched) {
+                for (MenuItem& coreItem : result.items) {
+                    if (coreItem.kind != ItemKind::Command) {
+                        continue;
+                    }
+                    if (!coreItem.canonicalLabel.empty() &&
+                        LabelsMatchIgnoreCase(coreItem.canonicalLabel,
+                                              item.label)) {
+                        matched = &coreItem;
+                        break;
+                    }
+                }
+            }
+            if (matched) {
+                adoptDescriptor(*matched, item);
+            }
         }
-        if (matchedCore) {
+        if (matched) {
             continue;
         }
 
-        const std::wstring normalizedLabel = NormalizeMenuLabel(item.label);
-        if ((!normalizedLabel.empty() && coreLabels.count(normalizedLabel)) ||
-            (!item.canonicalVerb.empty() && coreVerbs.count(item.canonicalVerb))) {
-            continue;
-        }
         if (IsOpenGroupItem(item)) {
             addedOpen.push_back(item);
         } else {
@@ -13822,9 +18578,6 @@ MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
             result.items.insert(result.items.begin() + insertAt,
                                 addedOpen.begin(), addedOpen.end());
         } else {
-            // No open group to attach to (for example a background menu):
-            // keep these with the other extras at the bottom of the list
-            // instead of putting them at the very top.
             added.insert(added.end(), addedOpen.begin(), addedOpen.end());
         }
     }
@@ -13852,7 +18605,7 @@ MenuModel MergeCoreWithCached(const MenuModel& core, const MenuModel& cached) {
 namespace cmo {
 
 constexpr uint32_t kCacheMagic = 0x434F4D4F;  // "COMO"
-constexpr uint32_t kCacheVersion = 16;
+constexpr uint32_t kCacheVersion = 17;
 constexpr uint32_t kMaxCacheEntries = 1024;
 constexpr uint32_t kMaxModelItems = 4096;
 constexpr uint32_t kMaxMenuDepth = 16;
@@ -14194,6 +18947,14 @@ public:
         return true;
     }
 
+#ifdef CMO_TESTING
+    static bool DeserializeWithLanguageForTesting(
+        std::span<const uint8_t> data, const std::wstring& systemTag) {
+        std::vector<MenuModel> models;
+        return DeserializeModelsWithSystemTag(data, systemTag, models);
+    }
+#endif
+
     bool Load(const std::wstring& path) {
         HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -14346,6 +19107,7 @@ private:
         std::vector<uint8_t> out;
         WriteU32(out, kCacheMagic);
         WriteU32(out, kCacheVersion);
+        WriteString(out, SystemLanguageTag());
         uint32_t count = 0;
         for (const auto& pair : entries_) {
             if (pair.second.model.sig.scope != Scope::NavPane) {
@@ -14367,6 +19129,12 @@ private:
 
     static bool DeserializeModels(std::span<const uint8_t> data,
                                   std::vector<MenuModel>& out) {
+        return DeserializeModelsWithSystemTag(data, SystemLanguageTag(), out);
+    }
+
+    static bool DeserializeModelsWithSystemTag(
+        std::span<const uint8_t> data, const std::wstring& systemTag,
+        std::vector<MenuModel>& out) {
         if (data.size() < 12) {
             return false;
         }
@@ -14386,7 +19154,10 @@ private:
         uint32_t magic = 0;
         uint32_t version = 0;
         uint32_t entryCount = 0;
+        std::wstring storedLanguage;
         if (!reader.ReadU32(magic) || !reader.ReadU32(version) ||
+            !reader.ReadString(storedLanguage) ||
+            _wcsicmp(storedLanguage.c_str(), systemTag.c_str()) != 0 ||
             !reader.ReadU32(entryCount) || entryCount > kMaxCacheEntries) {
             return false;
         }
@@ -15582,8 +20353,9 @@ void ApplyRegistryIcons(std::vector<MenuItem>& items,
     ApplyRegistryIconsRecursive(items, signature, handlers, labelIcons);
 }
 
-void BuildItemsFromHMenu(HMENU menu, UINT idCmdFirst, IContextMenu* context,
-                         uint32_t& nextId, std::vector<MenuItem>& out, bool& ownerDraw) {
+void BuildItemsFromHMenu(HMENU menu, UINT idCmdFirst, UINT idCmdLast,
+                         IContextMenu* context, uint32_t& nextId,
+                         std::vector<MenuItem>& out, bool& ownerDraw) {
     const int count = GetMenuItemCount(menu);
     for (int index = 0; index < count; ++index) {
         MENUITEMINFOW info = {};
@@ -15635,16 +20407,27 @@ void BuildItemsFromHMenu(HMENU menu, UINT idCmdFirst, IContextMenu* context,
         if (info.hSubMenu) {
             item.kind = ItemKind::Submenu;
             item.action = ActionKind::Submenu;
-            BuildItemsFromHMenu(info.hSubMenu, idCmdFirst, context, nextId, item.children,
-                                ownerDraw);
+            if (context && info.wID >= idCmdFirst &&
+                info.wID <= idCmdLast) {
+                wchar_t verbBuffer[256] = {};
+                if (SUCCEEDED(context->GetCommandString(
+                        static_cast<UINT_PTR>(info.wID - idCmdFirst),
+                        GCS_VERBW, nullptr,
+                        reinterpret_cast<LPSTR>(verbBuffer),
+                        ARRAYSIZE(verbBuffer)))) {
+                    item.canonicalVerb = verbBuffer;
+                }
+            }
+            BuildItemsFromHMenu(info.hSubMenu, idCmdFirst, idCmdLast, context,
+                                nextId, item.children, ownerDraw);
         } else {
             item.kind = ItemKind::Command;
             item.action = ActionKind::ShellVerb;
-            if (info.wID >= idCmdFirst) {
+            if (info.wID >= idCmdFirst && info.wID <= idCmdLast) {
                 item.verbOffset = info.wID - idCmdFirst;
                 item.flags |= kModelHasOffset;
             }
-            if (context) {
+            if (context && (item.flags & kModelHasOffset) != 0) {
                 wchar_t verbBuffer[256] = {};
                 if (SUCCEEDED(context->GetCommandString(
                         static_cast<UINT_PTR>(item.verbOffset), GCS_VERBW, nullptr,
@@ -15658,12 +20441,15 @@ void BuildItemsFromHMenu(HMENU menu, UINT idCmdFirst, IContextMenu* context,
 }
 
 MenuModel BuildModelFromHMenu(HMENU menu, UINT idCmdFirst,
-                              const ContextSignature& signature, IContextMenu* context) {
+                              const ContextSignature& signature,
+                              IContextMenu* context,
+                              UINT idCmdLast = 0xFFFF) {
     MenuModel model{};
     model.sig = signature;
     uint32_t nextId = 10000;
     bool ownerDraw = false;
-    BuildItemsFromHMenu(menu, idCmdFirst, context, nextId, model.items, ownerDraw);
+    BuildItemsFromHMenu(menu, idCmdFirst, idCmdLast, context, nextId,
+                        model.items, ownerDraw);
     if (ownerDraw) {
         model.flags |= kModelOwnerDraw;
     }
@@ -16041,16 +20827,18 @@ void DiscoverIntoCache(PendingCapture& capture, const ContextSignature& signatur
     // Capture the menu as populated, before host initialization: extensions
     // often switch their bitmaps to callback-drawn icons on
     // WM_INITMENUPOPUP, which would lose the real images.
-    MenuModel preInit = BuildModelFromHMenu(capture.populatedMenu, capture.idCmdFirst,
-                                            signature, capture.obj);
+    MenuModel preInit = BuildModelFromHMenu(capture.populatedMenu,
+                                            capture.idCmdFirst, signature,
+                                            capture.obj, capture.idCmdLast);
 
     // Initialize like a real host, then rebuild for dynamic labels/children.
     if (!capture.menuInitialized) {
         InitializeMenuRecursive(capture, capture.populatedMenu, 0);
         capture.menuInitialized = true;
     }
-    MenuModel model = BuildModelFromHMenu(capture.populatedMenu, capture.idCmdFirst,
-                                          signature, capture.obj);
+    MenuModel model = BuildModelFromHMenu(capture.populatedMenu,
+                                          capture.idCmdFirst, signature,
+                                          capture.obj, capture.idCmdLast);
     MergePreInitIcons(model.items, preInit.items);
     ClearRecordedItemBitmaps();
 
@@ -16732,10 +21520,31 @@ void SelectCreatedItem(HWND owner, ShellViewKind kind, const std::wstring& path,
 
 // Creates the New submenu item chosen from the core model.
 bool CreateNewItemFromTemplate(const MenuItem& item, const InvocationContext& ctx) {
-    if (item.newIndex >= g_newTemplates.size()) {
-        return false;
+    NewTemplate tmpl;
+    {
+        const std::shared_ptr<const NewTemplateList> snapshot =
+            NewTemplatesSnapshot();
+        if (!snapshot) {
+            return false;
+        }
+        const NewTemplate* found = nullptr;
+        if (!item.newTemplateId.empty()) {
+            for (const NewTemplate& candidate : *snapshot) {
+                if (_wcsicmp(candidate.stableId.c_str(),
+                             item.newTemplateId.c_str()) == 0) {
+                    found = &candidate;
+                    break;
+                }
+            }
+        }
+        if (!found && item.newIndex < snapshot->size()) {
+            found = &(*snapshot)[item.newIndex];
+        }
+        if (!found) {
+            return false;
+        }
+        tmpl = *found;
     }
-    const NewTemplate& tmpl = g_newTemplates[item.newIndex];
     const std::wstring directory = GetCurrentFolderPath(ctx.owner, ctx.kind);
     if (directory.empty()) {
         return false;
@@ -20210,6 +25019,10 @@ private:
                 continue;
             }
 
+            if (!g_newTemplatesReady.load(std::memory_order_acquire)) {
+                EnsureNewTemplates();
+            }
+
             // Menus can open in bursts; never fingerprint more than once per
             // debounce window.
             const ULONGLONG now = GetTickCount64();
@@ -20338,6 +25151,15 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
 
     g_warmup.SetMenuOpen(true);
 
+    std::vector<MenuItem> sendToChildren;
+    const bool wantsSendTo = scope == Scope::Files || scope == Scope::Folders ||
+                             scope == Scope::Drive;
+    if (wantsSendTo) {
+        sendToChildren = GetSendToChildren();
+    }
+    const KnownCachedRoles knownRoles =
+        BuildKnownCachedRoles(signature, wantsSendTo ? &sendToChildren : nullptr);
+
     while (true) {
         std::optional<MenuModel> cached;
         bool needsDiscovery = false;
@@ -20370,7 +25192,7 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
                     }
                     model = BuildModelFromHMenu(capture.populatedMenu,
                                                 capture.idCmdFirst, signature,
-                                                capture.obj);
+                                                capture.obj, capture.idCmdLast);
                     if (g_settings->debugLogging) {
                         Wh_Log(L"NavPane: captured %zu items (key=%s)",
                                model.items.size(), typeKey.c_str());
@@ -20415,7 +25237,7 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
             }
             model = cached
                         ? MergeCoreWithCached(BuildCoreModel(scope, paths, shape),
-                                              *cached)
+                                              *cached, knownRoles)
                         : BuildCoreModel(scope, paths, shape);
         }
         if (!g_settings->showMoreOptionsItem) {
@@ -20445,9 +25267,10 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
             if (item.canonicalVerb == L"paste" && !clipboardHadData) {
                 item.flags |= kModelDisabled;
             }
-            if (item.kind == ItemKind::Submenu && item.label == L"Send to" &&
+            if (item.kind == ItemKind::Submenu &&
+                item.builtinRole == BuiltinRole::SendTo &&
                 item.children.empty()) {
-                item.children = GetSendToChildren();
+                item.children = sendToChildren;
             }
         }
 
@@ -20479,7 +25302,7 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
             std::vector<MenuItem>* container = &model.items;
             for (MenuItem& item : model.items) {
                 if (item.kind == ItemKind::Submenu &&
-                    item.label == g_settings->advancedSubmenuLabel) {
+                    item.builtinRole == BuiltinRole::MoreOptions) {
                     container = &item.children;
                     break;
                 }
