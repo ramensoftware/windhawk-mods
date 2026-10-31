@@ -12671,6 +12671,35 @@
         "version": "2.2.0"
       }
     },
+    "quick-settings-media-progress-bar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793457133000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793457133000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Peter2oo1",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject",
+        "description": "Adds a modern, interactive Fluent seek bar and live timestamps to the Windows 11 Quick Settings media player card.",
+        "github": "https://github.com/Peter2oo1",
+        "include": [
+          "ShellHost.exe",
+          "ShellExperienceHost.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Quick Settings Media Progress Bar",
+        "version": "1.2.12"
+      }
+    },
     "quick-translator-layout-switcher": {
       "details": {
         "defaultSorting": 600,

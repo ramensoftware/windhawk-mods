@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-31T02:03:55.000Z</updated>
+    <updated>2026-10-31T14:32:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Settings Media Progress Bar 1.2.12]]></title>
+        <id>https://windhawk.net/mods/quick-settings-media-progress-bar#6aaef1a7d8436612c57fb02a2d06006b7988b00d</id>
+        <link href="https://windhawk.net/mods/quick-settings-media-progress-bar"/>
+        <updated>2026-10-31T14:32:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="quicksettingsmediaprogressbarforwindows11">Quick Settings Media Progress Bar for Windows 11</h1>
+<p>Adds a modern, interactive seek bar and live playback timestamps directly to the default Windows 11 Quick Settings (<code>Win + A</code>) media player widget.</p>
+<p><img src="https://i.imgur.com/DGY7Rtj.png" alt="Preview" /></p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Interactive Seeking & Scrubbing:</strong> Click or drag the progress bar thumb to seek smoothly within any playing track.</li>
+<li><strong>Mouse Wheel Scrubbing:</strong> Hover anywhere over the progress bar and scroll the mouse wheel to seek forward or backward.</li>
+<li><strong>Accurate Timestamps:</strong> Displays current playback time and total track duration (or remaining time).</li>
+<li><strong>Smooth Playback Sync:</strong> Automatically syncs with Windows System Media Transport Controls (SMTC) in real time across Spotify, Microsoft Edge, Google Chrome, Apple Music, VLC, Windows Media Player, and more.</li>
+<li><strong>Accidental Click Protection:</strong> Interacting with the progress bar or timestamps will not trigger the underlying card button that opens the media application.</li>
+<li><strong>Native Fluent Styling:</strong> Seamlessly matches Windows 11 Fluent design, with optional system accent color tracking and zero clipping of the media card.</li>
+<li><strong>Multi-Session Support:</strong> Seamlessly switches timeline and position when switching between active media apps using the Quick Settings arrows.</li>
+<li><strong>Zero XAML Diagnostics Conflicts:</strong> Uses direct COM-interface symbol hooks in <code>ControlCenter.dll</code>, completely avoiding XAML Diagnostics. Fully compatible with Windows 11 Taskbar Styler, Notification Center Styler, and File Explorer Styler.</li>
+<li><strong>Auto-Restoring:</strong> Cleanly restores the native media player card when the mod is disabled or unloaded.</li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>ControlCenter discovery logic adapted with appreciation from <a href="https://windhawk.net/mods/refined-quick-settings-and-sound">Refined Quick Settings and Sound</a> by <a href="https://github.com/HeyOkay">HeyOkay</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>Peter2oo1</name>
+            <uri>https://github.com/Peter2oo1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar User Tile 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-user-tile#47c76d3904f84b899d7ca9f5c6199fb3e2689bea</id>
@@ -1281,46 +1310,6 @@ window on purpose, put a <code>*</code> in one of the match fields.</p>]]></cont
         <author>
             <name>metanoid18</name>
             <uri>https://github.com/Metanoid18</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Language Applet Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/language-applet-restorer#2e6bcbf393658d3d17205cd0aaaa012f79751153</id>
-        <link href="https://windhawk.net/mods/language-applet-restorer"/>
-        <updated>2026-10-26T15:04:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="languageappletrestorer">Language Applet Restorer</h1>
-<p>Restores the classic Control Panel <strong>Language</strong> applet from windows 10 1709 and optionally the classic <strong>Region</strong> applet (<code>intl.cpl</code>) of Windows 10 1709 on later versions of Windows.</p>
-<h2 id="preview">Preview:</h2>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151430.png" alt="mainpage" /></p>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151455.png" alt="advancepage" /></p>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screenshot%202026-10-21%20151500.png" alt="addlang" /></p>
-<p><img src="https://raw.githubusercontent.com/AdmXP8/assets/main/intl1709.png" alt="intl.cpl" /></p>
-<h2 id="whatisdownloadedfromwhereandwhen">What is downloaded, from where, and when</h2>
-<p>The mod does not contain any Microsoft binaries. The first time it runs inside <code>explorer.exe</code>, it downloads five files of Windows 10 1709 (build 16299), about 3.7 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
-<p><code>intl.cpl</code>, <code>UserLanguagesCpl.dll</code>, <code>WinLangdb.dll</code>, <code>Bcp47Langs.dll</code> and <code>dui70.dll</code>.</p>
-<p>The size and SHA-256 of every file are checked against values pinned in the mod, and a file that doesn't match is discarded. The originals are kept in the mod's storage folder (<code>dl</code>); patched copies and small compatibility shims are generated from them into <code>bin</code>. Nothing is downloaded again as long as <code>dl</code> is present.</p>
-<p><strong>Offline:</strong> if the files are not on disk and there is no internet connection, the applet is simply not added and the reason is written to the mod's log. Connect to the internet and restart <code>explorer.exe</code> once. After a successful first run the mod works offline, provided <em>Keep downloaded files</em> is on.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Page language</strong>: language of the restored Language page and its Control Panel tooltip. <em>Automatic</em> follows the Windows UI language. Available: English, Italian, Persian, Spanish, French, Portuguese.</li>
-<li><strong>Force translations</strong>: use the embedded translations for the six languages above, instead of relying only on the generated <code>.mui</code> files.</li>
-<li><strong>Keep downloaded files when the mod is disabled</strong>: keep <code>dl</code> and <code>bin</code> in the storage folder so the mod works offline and doesn't download again. If off, the files are deleted when the mod is unloaded.</li>
-<li><strong>Redirect Control Panel's intl.cpl to the restored one</strong>: when enabled, opening Region (<code>intl.cpl</code>) from Control Panel, the Run dialog or <code>control.exe</code> loads the restored 1709 <code>intl.cpl</code> instead of the system one. This is done in <code>explorer.exe</code>, <code>rundll32.exe</code> and <code>control.exe</code>; the mod does nothing in other processes. It only affects windows opened after the setting is changed. The restored file is checked against the expected contents right before it is loaded; if that fails, or the files are not downloaded yet, the system <code>intl.cpl</code> is used.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Only <strong>x64</strong> is supported (no ARM64).</li>
-<li>The 2017 components run inside <code>explorer.exe</code>. A crash in them restarts Explorer.</li>
-<li>The mod writes nothing to the user's registry. The applet's registry entries are provided virtually by registry hooks inside <code>explorer.exe</code> (<code>control.exe</code> only gets the part needed to find the applet by name), and the applet's COM classes are created from inside <code>explorer.exe</code>. Every virtual key is handed out as a real, read-only handle to an empty private registry hive (<code>vreg-&lt;pid&gt;.hiv</code> in the mod's storage folder, loaded with <code>RegLoadAppKeyW</code>), so that registry APIs that are not hooked cannot crash on it. The hive is not part of the user's registry, holds no data, and is deleted when the mod is unloaded (leftovers after a crash are removed at the next start). If the hive cannot be loaded, the applet is simply not shown.</li>
-<li><strong>Compatibility:</strong> <code>intl.cpl</code> redirection overlaps with the <code>win7-intl-control-panel-restorer</code> mod. Don't enable the redirect in both mods at the same time: whichever hook runs first decides which <code>intl.cpl</code> is opened.</li>
-<li>While the mod is enabled, one string in <code>shell32.dll</code>'s memory (the applet's entry in Windows' built-in hide list) is blanked so that Control Panel lists the applet. It is restored when the mod is disabled; nothing on disk is changed.</li>
-<li>Links in the applet that open the Settings app are not changed by this mod. The <code>settings-to-control-panel</code> mod can redirect them.</li>
-</ul>
-<h2 id="specialthanksto">Special Thanks to:</h2>
-<p>babamohammed2022 for adding various languages.</p>]]></content>
-        <author>
-            <name>AdmXP8</name>
-            <uri>https://github.com/AdmXP8</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-31T02:04:00.000Z</updated>
+    <updated>2026-10-31T14:32:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Settings Media Progress Bar 1.2.12]]></title>
+        <id>https://windhawk.net/mods/quick-settings-media-progress-bar#6aaef1a7d8436612c57fb02a2d06006b7988b00d</id>
+        <link href="https://windhawk.net/mods/quick-settings-media-progress-bar"/>
+        <updated>2026-10-31T14:32:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="quicksettingsmediaprogressbarforwindows11">Quick Settings Media Progress Bar for Windows 11</h1>
+<p>Adds a modern, interactive seek bar and live playback timestamps directly to the default Windows 11 Quick Settings (<code>Win + A</code>) media player widget.</p>
+<p><img src="https://i.imgur.com/DGY7Rtj.png" alt="Preview" /></p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Interactive Seeking & Scrubbing:</strong> Click or drag the progress bar thumb to seek smoothly within any playing track.</li>
+<li><strong>Mouse Wheel Scrubbing:</strong> Hover anywhere over the progress bar and scroll the mouse wheel to seek forward or backward.</li>
+<li><strong>Accurate Timestamps:</strong> Displays current playback time and total track duration (or remaining time).</li>
+<li><strong>Smooth Playback Sync:</strong> Automatically syncs with Windows System Media Transport Controls (SMTC) in real time across Spotify, Microsoft Edge, Google Chrome, Apple Music, VLC, Windows Media Player, and more.</li>
+<li><strong>Accidental Click Protection:</strong> Interacting with the progress bar or timestamps will not trigger the underlying card button that opens the media application.</li>
+<li><strong>Native Fluent Styling:</strong> Seamlessly matches Windows 11 Fluent design, with optional system accent color tracking and zero clipping of the media card.</li>
+<li><strong>Multi-Session Support:</strong> Seamlessly switches timeline and position when switching between active media apps using the Quick Settings arrows.</li>
+<li><strong>Zero XAML Diagnostics Conflicts:</strong> Uses direct COM-interface symbol hooks in <code>ControlCenter.dll</code>, completely avoiding XAML Diagnostics. Fully compatible with Windows 11 Taskbar Styler, Notification Center Styler, and File Explorer Styler.</li>
+<li><strong>Auto-Restoring:</strong> Cleanly restores the native media player card when the mod is disabled or unloaded.</li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>ControlCenter discovery logic adapted with appreciation from <a href="https://windhawk.net/mods/refined-quick-settings-and-sound">Refined Quick Settings and Sound</a> by <a href="https://github.com/HeyOkay">HeyOkay</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>Peter2oo1</name>
+            <uri>https://github.com/Peter2oo1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor Idle Fade 1.1.0]]></title>
         <id>https://windhawk.net/mods/cursor-idle-fade#3a6b53839a652b42503400a26faad86bad771d88</id>
@@ -967,34 +996,6 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></conte
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TopBar for Windows 1.4.2]]></title>
-        <id>https://windhawk.net/mods/windhawk-topbar#fb4b682804d2a506db5efda8d58bf5159580a812</id>
-        <link href="https://windhawk.net/mods/windhawk-topbar"/>
-        <updated>2026-10-29T18:02:24.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Addition:</strong></p>
-<ul>
-<li>Added Start Menu &amp; Search settings for hiding pinned apps, adding folders, and support for different start menu &amp; search menu's display alignment(top, center, bottom, etc).</li>
-<li>Added support for setting the TopBar height directly through control styles.</li>
-<li>Added Neon Blue and Neon Blue (Island) themes.</li>
-</ul>
-<p><strong>Updates:</strong></p>
-<ul>
-<li>Updated the Start menu with pinned apps, several other ui changes, optimized its initial loading time, and improved the styling support.</li>
-<li>Improved the Top Bar Search by adding more searches, Quick controls directly through search results(dark mode, night light, power plan, etc) without opening any app.</li>
-<li>Fixed the TopBar appearing in fullscreen apps.</li>
-<li>Fixed Island mode (Width=Auto) causing the Start Menu and Search flyouts to misalign and block mouse inputs.</li>
-<li>Improved the Navigation Panel UI in Settings app.</li>
-<li>Updated the Media Player flyout to remove unnecessary top padding.</li>
-<li>Updated theme: Midnight Neon - remove the Width=Auto causing it to be a island.</li>
-<li>Improved the Styling support</li>
-<li>Other minor updates.</li>
-</ul>]]></content>
-        <author>
-            <name>WasiXGamer</name>
-            <uri>https://github.com/wasixgamer</uri>
         </author>
     </entry>
 </feed>
