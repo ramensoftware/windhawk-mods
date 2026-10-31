@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         consent.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32
+// @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,6 +27,8 @@ authentication, and the secure desktop.
 - It matches the banner and shield to Windows' publisher verdict.
 - Optional Classic Theme colours for the four classic skins: `ButtonFace` as the background, `WindowText` as the text, read from the system through `GetSysColor` and refreshed on `WM_SYSCOLORCHANGE`.
 - It shows the requesting program's icon and native prompt details when available.
+- Optional Windows 7 background: the dimmed screenshot of the whole screen behind the prompt, instead of the
+  wallpaper that Windows 8 and later leave there.
 
 ## Emergency shortcut
 
@@ -50,6 +52,27 @@ Press `Ctrl+Shift+F10` to close the recreated dialog and return to the native pr
 ![Windows 10 UAC Style](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uacstyle.png)
 
 
+## The background behind the prompt
+
+**The background behind the prompt** setting chooses what the secure desktop shows behind the
+recreated dialog:
+
+- **Dimmed screenshot of the whole screen** (Windows 7, the default): when the prompt appears, the
+  screen as it was is photographed, and the picture is drawn behind the dialog with the windows, the
+  taskbar and the Start menu still in place, Windows' own dim over it, exactly the way the Windows 7,
+  8.1 and 10 (1507-1607) prompts looked.
+- **Only the wallpaper** (Windows 8 and later): what Windows shows by itself.
+
+The picture is taken before the switch to the secure desktop: it is a still image, so nothing behind
+the prompt moves, and the secure desktop stays enabled either way. The mod replaces the one
+full-screen draw with which Windows composes that background into a memory bitmap, and it does so
+once per prompt; a Windows build that composes the background some other way keeps its own wallpaper
+instead of showing a stale picture. The setting does not touch the prompt, the elevation decision or
+the secure desktop, and turning it off is enough to get Windows' wallpaper back.
+
+**Extra dim over the screenshot** adds more black over the picture, from 0 to 200; leave it at 0 to
+keep the dim Windows draws.
+
 ## Installation
 
 Windhawk excludes `consent.exe` by default. To enable the mod:
@@ -65,6 +88,8 @@ Without this change, the mod has no effect.
 | Setting | Description |
 |---|---|
 | **Dialog skin** | Choose one of the five themes. |
+| **The background behind the prompt** | Show the dimmed screenshot of the whole screen behind the prompt, as Windows 7 did, or only the wallpaper, as Windows 8 and later do. |
+| **Extra dim over the screenshot** | More black over the screenshot (0-200); leave it at 0 to keep the dim Windows draws. |
 | **Use the system Classic Theme colours (classic skins)** | Paint the four classic skins with `ButtonFace` as the background and `WindowText` as the text, read from the system, so the prompt follows the Classic theme or any other scheme. Never applies to the modern Windows 10 skin. |
 | **Replace the UAC prompt** | Replace the prompt or observe it and log events. |
 | **Which apps get the Classic UAC prompt** | Apply to all apps, only listed apps, or all except listed apps. |
@@ -97,6 +122,7 @@ Without this change, the mod has no effect.
 - The prompt offers Move and Close in its title bar menu: Size, Minimize, Maximize and Restore are removed from the system menu and refused as commands, so a UAC prompt can be neither resized nor minimised.
 - That skin is drawn with GDI+, which it needs: where GDI+ cannot start, the mod leaves the native prompt in place rather than drawing half a dialog.
 - Every other skin keeps the caption, the frame and the shield behaviour it always had. Selecting a skin changes the dialog, not the flow: the secure desktop, the native prompt and every elevation decision are untouched.
+- The background behind the prompt is a still picture of the screen as it was when the prompt process started: it cannot show live windows, and a display change while the prompt is up is not reflected in it.
 - Logs and diagnostic files can contain prompt text, command lines, file names, and user names. Enable them only when needed.
 
 ## Tested systems
@@ -128,6 +154,15 @@ If there are anomalies, please report them to the author. It is recommended to i
   - win81Native: Windows 8.1 (Native System Theme)
   - win10Flat: Windows 10 (versions 1507-1607, Flat Icons)
   - win10Modern: Windows 10 (versions 1709 and later, Modern Prompt)
+- backgroundStyle: screenshot
+  $name: The background behind the prompt
+  $description: "This setting chooses what the secure desktop shows behind the recreated prompt. Windows 7 dimmed a screenshot of the whole screen, windows, taskbar and Start menu included; Windows 8 and later leave only the wallpaper there. The picture is taken before the switch to the secure desktop, so it is a still image, and Windows itself still draws the dim over it. The prompt, the secure desktop and every elevation decision are untouched either way."
+  $options:
+  - screenshot: Dimmed screenshot of the whole screen (Windows 7)
+  - wallpaper: Only the wallpaper (Windows 8 and later)
+- backgroundExtraDim: 0
+  $name: Extra dim over the screenshot (0-200)
+  $description: "This setting adds more black over the screenshot. Keep it at 0 to keep the dim Windows draws by itself; it has no effect when only the wallpaper is shown."
 - replaceUAC: true
   $name: Replace the UAC prompt
   $description: "This setting chooses between replacing the UAC prompt and only observing it. When it is off, the Windows prompt is left exactly as it is and every decision is written to the log."
@@ -323,12 +358,22 @@ enum WindowThemePreset {
     WindowThemeWin10Modern = 4,
 };
 
+// The background behind the recreated prompt: Windows 7 dimmed a screenshot of the whole screen,
+// Windows 8 and later show the wallpaper alone. Read as a choice, spoken as these two numbers.
+enum BackgroundChoice {
+    BackgroundScreenshot = 0,
+    BackgroundWallpaper = 1,
+};
+
 struct Settings {
     int relayMode;          // Replace the UAC prompt: 1 on, 0 off (observe only)
     int whitelistMode;      // Which apps: 0 only the list, 1 all apps, 2 all except the list
     std::wstring appsWhitelist;   // App list
     int windowTheme;        // 0 Win7 Basic, 1 custom Win7 Aero, 2 Win8.1 native, 3 Win10 flat,
                             // 4 the modern Win10 prompt (1709 and later)
+    int backgroundStyle;    // The background behind the prompt: 0 the Windows 7 screenshot of the
+                            // whole screen, 1 the wallpaper alone (BackgroundChoice, below)
+    int backgroundExtraDim; // Extra dim over the screenshot, 0-200
     int style;              // Button style: 0 drawn by Windows, 1 Windows 7 Aero buttons
     BOOL classicThemeColours;   // the four classic skins follow COLOR_BTNFACE / COLOR_WINDOWTEXT
     BOOL readRequestBlock;
@@ -426,6 +471,12 @@ static void FillSettings(Settings& out) {
     static const WCHAR* kWindowThemeIds[] = {
         L"win7Basic", L"win7Aero", L"win81Native", L"win10Flat", L"win10Modern"};
     out.windowTheme = ReadChoice(L"windowTheme", kWindowThemeIds, ARRAYSIZE(kWindowThemeIds), WindowThemeWin7Basic);
+    static const WCHAR* kBackgroundIds[] = { L"screenshot", L"wallpaper" };
+    out.backgroundStyle = ReadChoice(L"backgroundStyle", kBackgroundIds,
+                                     ARRAYSIZE(kBackgroundIds), BackgroundScreenshot);
+    out.backgroundExtraDim = Wh_GetIntSetting(L"backgroundExtraDim");
+    if (out.backgroundExtraDim < 0) out.backgroundExtraDim = 0;
+    if (out.backgroundExtraDim > 200) out.backgroundExtraDim = 200;
     out.debugLog = Wh_GetIntSetting(L"debugLog");
     out.dumpUiTree = Wh_GetIntSetting(L"dumpDiagnostics");
 
@@ -523,6 +574,351 @@ static void LoadSettings() {
     }
     FillSettings(*next);
     InterlockedExchangePointer((PVOID volatile*)&g_settingsPublished, (PVOID)next);
+}
+
+//------------------------------------------------------------------------------
+// The background behind the recreated prompt
+//------------------------------------------------------------------------------
+
+// Windows 8 and later leave the wallpaper alone behind the UAC prompt. Windows 7 dimmed a screenshot
+// of the whole screen instead: the windows, the taskbar, the Start menu, everything that was there
+// when the prompt appeared. The screenshot is taken once, in Wh_ModInit, while consent.exe is still
+// on the normal desktop, and it is drawn in place of the one draw with which the process composes
+// that background, before it switches to the secure desktop.
+//
+// The draw that is replaced is identified by what it is, not by when it happens. The background is
+// composed once, into a memory bitmap, and presented afterwards, so only a full-screen draw whose
+// destination is a memory DC is replaced, and only once per process. A draw to a window DC - the
+// present of that finished bitmap, or a repaint of any window - is never touched, the substitution
+// cannot happen twice, and the veil Windows draws over the result is still drawn by Windows itself.
+// A prompt therefore cannot end up behind an undimmed or stale picture of the screen, and the budget
+// of substitutions is one by construction instead of a setting the user has to get right.
+
+static SRWLOCK g_backgroundLock = SRWLOCK_INIT;   // guards the capture below
+static HDC g_backgroundDc = nullptr;              // memory DC with the screenshot selected
+static HGDIOBJ g_backgroundOldBitmap = nullptr;
+static HBITMAP g_backgroundBitmap = nullptr;
+static int g_backgroundWidth = 0;
+static int g_backgroundHeight = 0;
+static RECT g_backgroundPrimary = {0, 0, 0, 0};   // the primary monitor inside the screenshot
+static HDC g_backgroundVeilDc = nullptr;          // 1x1 black, stretched for the extra dim
+static HGDIOBJ g_backgroundVeilOldBitmap = nullptr;
+static HBITMAP g_backgroundVeilBitmap = nullptr;
+static BOOL g_backgroundCaptureTried = FALSE;
+static BOOL g_backgroundHooksInstalled = FALSE;
+static volatile LONG g_backgroundReplaced = 0;    // 1 once the compose has been replaced
+// Per thread, and only around the drawing this file does itself: the screenshot must not be drawn
+// over itself, and the hooks must never take the mod's own blits for the compose.
+static thread_local bool t_inBackground = false;
+
+typedef decltype(&BitBlt) BitBlt_t;
+typedef decltype(&StretchBlt) StretchBlt_t;
+typedef decltype(&AlphaBlend) AlphaBlend_t;
+static BitBlt_t g_bitBltOrig = nullptr;
+static StretchBlt_t g_stretchBltOrig = nullptr;
+static AlphaBlend_t g_alphaBlendOrig = nullptr;
+
+// The screenshot can only be taken on the normal desktop: the secure desktop holds nothing but the
+// wallpaper, and this process switches to it once the prompt is ready. "Default" is that desk - the
+// same name the desktop watchers open (kDesktopDefault, below).
+static bool BackgroundOnDefaultDesktop() {
+    HDESK desk = GetThreadDesktop(GetCurrentThreadId());
+    WCHAR name[64] = L"";
+    DWORD need = 0;
+    if (!desk || !GetUserObjectInformationW(desk, UOI_NAME, name, sizeof(name), &need)) return false;
+    return _wcsicmp(name, L"Default") == 0;
+}
+
+static const WCHAR* BackgroundDcName(DWORD type) {
+    switch (type) {
+        case OBJ_DC: return L"window";
+        case OBJ_MEMDC: return L"memory";
+        case OBJ_METADC: return L"metafile";
+        case OBJ_ENHMETADC: return L"enhanced metafile";
+        default: return L"unknown";
+    }
+}
+
+// Within 2%: a compose and the monitor it copies differ by a rounding, not by a factor.
+static bool BackgroundNear(int a, int b) {
+    if (b <= 0) return false;
+    const int d = a > b ? a - b : b - a;
+    return d * 50 <= b;
+}
+
+static bool BackgroundSizeIsTheScreen(int w, int h) {
+    const int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (vw > 0 && vh > 0 && BackgroundNear(w, vw) && BackgroundNear(h, vh)) return true;
+    const int pw = GetSystemMetrics(SM_CXSCREEN);
+    const int ph = GetSystemMetrics(SM_CYSCREEN);
+    return pw > 0 && ph > 0 && BackgroundNear(w, pw) && BackgroundNear(h, ph);
+}
+
+// Releases everything the capture owns. The handles are detached under the exclusive lock, so no
+// thread can be in the middle of a blit from them, and only then deleted.
+static void FreeBackgroundCapture() {
+    HDC dc;
+    HGDIOBJ old;
+    HBITMAP bitmap;
+    HDC veilDc;
+    HGDIOBJ veilOld;
+    HBITMAP veil;
+    AcquireSRWLockExclusive(&g_backgroundLock);
+    dc = g_backgroundDc;
+    old = g_backgroundOldBitmap;
+    bitmap = g_backgroundBitmap;
+    veilDc = g_backgroundVeilDc;
+    veilOld = g_backgroundVeilOldBitmap;
+    veil = g_backgroundVeilBitmap;
+    g_backgroundDc = nullptr;
+    g_backgroundOldBitmap = nullptr;
+    g_backgroundBitmap = nullptr;
+    g_backgroundVeilDc = nullptr;
+    g_backgroundVeilOldBitmap = nullptr;
+    g_backgroundVeilBitmap = nullptr;
+    g_backgroundWidth = 0;
+    g_backgroundHeight = 0;
+    g_backgroundPrimary = {0, 0, 0, 0};
+    ReleaseSRWLockExclusive(&g_backgroundLock);
+
+    if (dc) {
+        if (old && old != HGDI_ERROR) SelectObject(dc, old);
+        DeleteDC(dc);
+    }
+    if (bitmap) DeleteObject(bitmap);
+    if (veilDc) {
+        if (veilOld && veilOld != HGDI_ERROR) SelectObject(veilDc, veilOld);
+        DeleteDC(veilDc);
+    }
+    if (veil) DeleteObject(veil);
+}
+
+// Copies the whole virtual screen into a DIB section. Called once, from Wh_ModInit, and from a
+// settings reload that turns the option on while the process is still on the normal desktop.
+static bool CaptureBackground() {
+    if (g_backgroundCaptureTried) return g_backgroundDc != nullptr;
+    if (g_settings.backgroundStyle != BackgroundScreenshot) return false;
+    g_backgroundCaptureTried = TRUE;
+
+    const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    // 16384 is the largest bitmap GDI can address on either axis.
+    if (vw <= 0 || vh <= 0 || vw > 16384 || vh > 16384) {
+        Log(L"background: unusable virtual screen %dx%d -> the wallpaper stays", vw, vh);
+        return false;
+    }
+
+    HDC screen = GetDC(nullptr);
+    if (!screen) {
+        Log(L"background: GetDC failed (%u) -> the wallpaper stays", GetLastError());
+        return false;
+    }
+
+    // A DIB section, so the pixels do not depend on the state of the display device they were copied
+    // from, and top-down, so the rows keep the order they were copied in.
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = vw;
+    bi.bmiHeader.biHeight = -vh;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    HDC memory = bitmap ? CreateCompatibleDC(screen) : nullptr;
+    HGDIOBJ old = (memory && bitmap) ? SelectObject(memory, bitmap) : nullptr;
+    // CAPTUREBLT as well, so layered windows - the Start menu, a translucent tooltip - are in the
+    // picture too: they are exactly what Windows 7 showed behind its prompt.
+    const bool copied = old && old != HGDI_ERROR &&
+                        BitBlt(memory, 0, 0, vw, vh, screen, vx, vy, SRCCOPY | CAPTUREBLT) != FALSE;
+
+    // The extra dim is one black pixel, stretched over the draw when the setting asks for it.
+    HBITMAP veil = CreateCompatibleBitmap(screen, 1, 1);
+    HDC veilDc = veil ? CreateCompatibleDC(screen) : nullptr;
+    HGDIOBJ veilOld = (veilDc && veil) ? SelectObject(veilDc, veil) : nullptr;
+    if (veilOld && veilOld != HGDI_ERROR) {
+        RECT one = {0, 0, 1, 1};
+        FillRect(veilDc, &one, (HBRUSH)GetStockObject(BLACK_BRUSH));
+    }
+    ReleaseDC(nullptr, screen);
+
+    if (!copied) {
+        Log(L"background: the screenshot could not be taken (%u) -> the wallpaper stays", GetLastError());
+        if (memory) {
+            if (old && old != HGDI_ERROR) SelectObject(memory, old);
+            DeleteDC(memory);
+        }
+        if (bitmap) DeleteObject(bitmap);
+    }
+    if (!veilOld || veilOld == HGDI_ERROR) {
+        if (veilDc) DeleteDC(veilDc);
+        if (veil) DeleteObject(veil);
+        veilDc = nullptr;
+        veil = nullptr;
+        veilOld = nullptr;
+    }
+    if (!copied) return false;
+
+    AcquireSRWLockExclusive(&g_backgroundLock);
+    g_backgroundDc = memory;
+    g_backgroundOldBitmap = old;
+    g_backgroundBitmap = bitmap;
+    g_backgroundWidth = vw;
+    g_backgroundHeight = vh;
+    g_backgroundPrimary.left = -vx;
+    g_backgroundPrimary.top = -vy;
+    g_backgroundPrimary.right = -vx + GetSystemMetrics(SM_CXSCREEN);
+    g_backgroundPrimary.bottom = -vy + GetSystemMetrics(SM_CYSCREEN);
+    g_backgroundVeilDc = veilDc;
+    g_backgroundVeilOldBitmap = veilOld;
+    g_backgroundVeilBitmap = veil;
+    ReleaseSRWLockExclusive(&g_backgroundLock);
+
+    Log(L"background: screenshot taken, %dx%d from %d,%d", vw, vh, vx, vy);
+    return true;
+}
+
+// Draws the screenshot over the destination instead of the background the process was composing.
+// Called from the three hooks below; false always means "the original function runs as it would
+// have", which is also the answer for every other draw in the process.
+static bool TryReplaceBackground(HDC hdcDest, int x, int y, int w, int h) {
+    if (!hdcDest || w <= 0 || h <= 0) return false;
+    if (g_settings.backgroundStyle != BackgroundScreenshot) return false;
+    // Cheap and silent first: only a draw that covers the whole screen can be the compose.
+    if (!BackgroundSizeIsTheScreen(w, h)) return false;
+
+    // A window DC here is the present of the finished background, or a repaint of some window:
+    // replacing it would drop the veil Windows draws, and the prompt could end up behind a bright
+    // screenshot of the desktop. Only the memory bitmap the background is composed into is replaced.
+    const DWORD type = GetObjectType(hdcDest);
+    if (type != OBJ_MEMDC) {
+        Dbg(L"background: full-screen draw into a %s DC left alone", BackgroundDcName(type));
+        return false;
+    }
+    // One compose, one substitution. The claim itself is the atomic step, so two threads that reach
+    // this draw at the same moment cannot both paint the picture; every later full-screen memory
+    // draw of the process is something else, and a prompt must never be repainted with a stale
+    // picture of the screen. A blit that fails gives the claim back.
+    if (t_inBackground) return false;
+    if (InterlockedCompareExchange(&g_backgroundReplaced, 1, 0) != 0) return false;
+
+    t_inBackground = true;
+    bool replaced = false;
+    AcquireSRWLockShared(&g_backgroundLock);
+    const HDC source = g_backgroundDc;
+    if (source) {
+        int sx = 0;
+        int sy = 0;
+        int sw = 0;
+        int sh = 0;
+        if (BackgroundNear(w, g_backgroundWidth) && BackgroundNear(h, g_backgroundHeight)) {
+            sw = g_backgroundWidth;
+            sh = g_backgroundHeight;
+        } else {
+            // A compose meant for the primary monitor alone, on a desktop whose other monitors are
+            // composed separately: the part of the picture that monitor shows.
+            sx = g_backgroundPrimary.left;
+            sy = g_backgroundPrimary.top;
+            sw = g_backgroundPrimary.right - g_backgroundPrimary.left;
+            sh = g_backgroundPrimary.bottom - g_backgroundPrimary.top;
+        }
+        if (sw > 0 && sh > 0) {
+            // HALFTONE for the scaled copy, and both settings put back afterwards: this DC belongs
+            // to the process, and a DC changed behind its back would be a bug of the mod.
+            const int oldMode = SetStretchBltMode(hdcDest, HALFTONE);
+            POINT oldOrg = {0, 0};
+            const BOOL haveOrg = GetBrushOrgEx(hdcDest, &oldOrg);
+            SetBrushOrgEx(hdcDest, 0, 0, nullptr);
+
+            if (g_stretchBltOrig &&
+                g_stretchBltOrig(hdcDest, x, y, w, h, source, sx, sy, sw, sh, SRCCOPY)) {
+                const int dim = g_settings.backgroundExtraDim;
+                if (dim > 0 && g_alphaBlendOrig && g_backgroundVeilDc) {
+                    BLENDFUNCTION blend = {AC_SRC_OVER, 0, (BYTE)dim, 0};
+                    g_alphaBlendOrig(hdcDest, x, y, w, h, g_backgroundVeilDc, 0, 0, 1, 1, blend);
+                }
+                replaced = true;
+            }
+            if (oldMode) SetStretchBltMode(hdcDest, oldMode);
+            if (haveOrg) SetBrushOrgEx(hdcDest, oldOrg.x, oldOrg.y, nullptr);
+        }
+    }
+    ReleaseSRWLockShared(&g_backgroundLock);
+    t_inBackground = false;
+
+    if (!replaced) {
+        // Nothing was drawn: the draw is left to Windows, and the next compose - if there is one -
+        // is free to be the one that is replaced.
+        InterlockedExchange(&g_backgroundReplaced, 0);
+        Dbg(L"background: the %dx%d memory draw was left alone", w, h);
+        return false;
+    }
+    Log(L"background: the Windows 7 screenshot replaced the %dx%d compose", w, h);
+    return true;
+}
+
+// The three documented ways to copy a picture, and the only ones this mod hooks for the background.
+// Each one falls through to the original function unless the draw was recognised and replaced.
+static BOOL WINAPI BitBltHook(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1,
+                              DWORD rop) {
+    if (!t_inBackground && rop == SRCCOPY && TryReplaceBackground(hdc, x, y, cx, cy)) return TRUE;
+    return g_bitBltOrig(hdc, x, y, cx, cy, hdcSrc, x1, y1, rop);
+}
+
+static BOOL WINAPI StretchBltHook(HDC hdcDest, int xDest, int yDest, int wDest, int hDest,
+                                  HDC hdcSrc, int xSrc, int ySrc, int wSrc, int hSrc, DWORD rop) {
+    if (!t_inBackground && rop == SRCCOPY && TryReplaceBackground(hdcDest, xDest, yDest, wDest, hDest))
+        return TRUE;
+    return g_stretchBltOrig(hdcDest, xDest, yDest, wDest, hDest, hdcSrc, xSrc, ySrc, wSrc, hSrc, rop);
+}
+
+static BOOL WINAPI AlphaBlendHook(HDC hdcDest, int xDest, int yDest, int wDest, int hDest,
+                                  HDC hdcSrc, int xSrc, int ySrc, int wSrc, int hSrc,
+                                  BLENDFUNCTION ftn) {
+    // An opaque blit can be the compose. A partial alpha is the veil Windows draws over the finished
+    // background, and it is deliberately left exactly as it is.
+    if (!t_inBackground && ftn.SourceConstantAlpha == 255 && ftn.AlphaFormat == 0 &&
+        TryReplaceBackground(hdcDest, xDest, yDest, wDest, hDest))
+        return TRUE;
+    return g_alphaBlendOrig(hdcDest, xDest, yDest, wDest, hDest, hdcSrc, xSrc, ySrc, wSrc, hSrc, ftn);
+}
+
+// Installed once. A hook that cannot be placed is logged and simply not used: the prompt then keeps
+// the background Windows draws, which is what the option is offering as the alternative anyway.
+static void EnsureBackgroundHooks() {
+    if (g_backgroundHooksInstalled) return;
+    g_backgroundHooksInstalled = TRUE;
+    struct BackgroundHook {
+        const WCHAR* name;
+        void* target;
+        void* replacement;
+        void** original;
+    } const hooks[] = {
+        {L"BitBlt", (void*)&BitBlt, (void*)BitBltHook, (void**)&g_bitBltOrig},
+        {L"StretchBlt", (void*)&StretchBlt, (void*)StretchBltHook, (void**)&g_stretchBltOrig},
+        {L"AlphaBlend", (void*)&AlphaBlend, (void*)AlphaBlendHook, (void**)&g_alphaBlendOrig},
+    };
+    for (const BackgroundHook& hook : hooks) {
+        if (!Wh_SetFunctionHook(hook.target, hook.replacement, hook.original)) {
+            *hook.original = nullptr;
+            Log(L"background: hooking %s failed -> the wallpaper stays", hook.name);
+        }
+    }
+}
+
+// The one honest line about the setting, written once per prompt: either the screenshot is behind
+// the dialog, or Windows' own wallpaper is, and the log says which.
+static void NoteBackgroundOutcome() {
+    if (g_settings.backgroundStyle != BackgroundScreenshot) return;
+    if (InterlockedCompareExchange(&g_backgroundReplaced, 0, 0) != 0) {
+        Dbg(L"background: the Windows 7 screenshot is behind the prompt");
+        return;
+    }
+    Log(L"background: this Windows build composed no memory-DC background, so its own wallpaper "
+        L"stays behind the prompt; the secure desktop and every decision are untouched");
 }
 
 //------------------------------------------------------------------------------
@@ -9710,6 +10106,9 @@ static DWORD WINAPI UiSessionRunInner() {
                  SWP_NOSIZE | SWP_NOACTIVATE);
     g_step = L"session: taking over the native window";
     TakeOverNativePrompt(info.hNative);
+    // The background was composed before this window existed: this is the moment to say whether the
+    // screenshot is behind the prompt or Windows' own wallpaper is.
+    NoteBackgroundOutcome();
     // Native operations are queued to its owner thread: never hold our state lock across a
     // synchronous cross-thread window move. Confirm that the move/hide actually took effect
     // before showing the replacement, with a short cancellable bound.
@@ -10172,6 +10571,7 @@ BOOL Wh_ModInit() {
     if (!g_stopEvent) return FALSE;
     auto failInit = []() -> BOOL {
         RemoveExceptionLogger();
+        FreeBackgroundCapture();
         if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
         return FALSE;
     };
@@ -10185,6 +10585,20 @@ BOOL Wh_ModInit() {
         L"process desktop='%s'",
         g_settings.relayMode, g_settings.whitelistMode, g_settings.detection,
         g_settings.dumpUiTree, deskName);
+
+    // The Windows 7 background is a picture of the desk the user is sitting at, and this is the only
+    // moment it can be taken: once the process switches to the secure desktop there is nothing left
+    // to photograph. Nothing is drawn here - the hooks below replace the one memory-bitmap compose
+    // Windows makes of that picture, and only that.
+    if (g_settings.backgroundStyle == BackgroundScreenshot) {
+        if (BackgroundOnDefaultDesktop()) {
+            CaptureBackground();
+        } else {
+            Log(L"background: the process is not on the Default desktop ('%s') -> the wallpaper "
+                L"stays", deskName);
+        }
+        EnsureBackgroundHooks();
+    }
 
     // Said out loud, because it is the one setting that makes the mod look broken: in observe or
     // dump mode the native prompt is everything that will appear, by design. The log names the
@@ -10241,7 +10655,15 @@ BOOL Wh_ModInit() {
 // cannot be read at all leaves the previous snapshot in place.
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Dbg(L"settings reloaded from a new snapshot (replaceUAC=%d)", g_settings.relayMode);
+    // Turning the Windows 7 background on while the process is still on the normal desktop is the
+    // last moment the picture can be taken; on the secure desktop it is too late, and this prompt
+    // keeps the wallpaper instead of showing something that was never photographed.
+    if (g_settings.backgroundStyle == BackgroundScreenshot) {
+        if (!g_backgroundCaptureTried && BackgroundOnDefaultDesktop()) CaptureBackground();
+        EnsureBackgroundHooks();
+    }
+    Dbg(L"settings reloaded from a new snapshot (replaceUAC=%d, background=%d)", g_settings.relayMode,
+        g_settings.backgroundStyle);
 }
 
 // Everything that ends the recreation and hands the prompt back, done here rather than at unload:
@@ -10304,6 +10726,8 @@ void Wh_ModUninit() {
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     ReleaseGlobalState();
     RemoveExceptionLogger();
+    // The screenshot of the desktop: no hook is left to draw it, so it goes with the mod.
+    FreeBackgroundCapture();
     // Last: every GDI+ object of the dialog was disposed with it (FreeUiResources), so the library
     // can be stopped and unloaded here.
     GdiplusStop();
