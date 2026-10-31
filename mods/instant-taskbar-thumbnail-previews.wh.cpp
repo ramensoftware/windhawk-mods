@@ -2,7 +2,7 @@
 // @id              instant-taskbar-thumbnail-previews
 // @name            Instant Taskbar Thumbnail Previews
 // @description     Controls taskbar thumbnail preview show and close behavior.
-// @version         1.2.0
+// @version         1.2.1
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
@@ -34,6 +34,10 @@ The trick is tracking the *motion* of the cursor. If the cursor is not moving to
 
 
 ## Changelog 
+### Version 1.2.1
+
+* Fixed the hover delay, the aim boundary, and "Close on outside click" not working on recent Windows 11 taskbar updates.
+
 ### Version 1.2
 
 * New feature: Aim boundary
@@ -133,8 +137,7 @@ constexpr int DEFAULT_AIM_ANCHOR_HEIGHT_PERCENT = 100;
 constexpr INT32 TASK_ITEM_VISUAL_STATE_NORMAL = 0;
 constexpr INT32 TASK_ITEM_VISUAL_STATE_POINTER_OVER = 1;
 
-std::atomic<LONGLONG> g_hoverDelayTimeSpan{
-    MINIMUM_DELAY_MS * TIME_SPAN_TICKS_PER_MILLISECOND};
+std::atomic<UINT> g_hoverDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<UINT> g_closeDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<UINT> g_thumbnailRemovalDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<bool> g_closeOnOutsideClick{false};
@@ -174,6 +177,8 @@ struct ThumbnailRemovalTrackingState {
 
 thread_local DismissDelaySource g_dismissDelaySource =
     DismissDelaySource::none;
+// The HoverFlyoutModel whose OnPointerEnteredItemWithHoverFlyout is running
+thread_local void* g_hoverDelayFlyoutModel = nullptr;
 thread_local ThumbnailRemovalTrackingState g_thumbnailRemovalTrackingState = {};
 thread_local HWND g_activeTaskbarWindow = nullptr;
 thread_local bool g_previewLightDismissArmed = false;
@@ -183,33 +188,29 @@ thread_local void* g_activeHoverFlyoutController = nullptr;
 thread_local void* g_pointerOverFlyoutFrameModel = nullptr;
 thread_local void* g_lastUnregisteredTaskbarHost = nullptr;
 
-struct ActiveTaskbarModelState {
-    void* hoverFlyoutController;
-    HWND taskbarWindow;
-    bool isExpanded;
-    bool valid;
-};
-
-thread_local ActiveTaskbarModelState g_activeTaskbarModelState = {};
-
-struct TaskbarModelStateCapture {
-    UINT64 hostWindowID;
-    bool isExpanded;
+// Window IDs UpdateFlyoutWindowPosition asks the taskbar model and the flyout
+// for while it positions the flyout
+struct WindowIDCapture {
+    UINT64 windowID;
     bool captured;
     bool active;
 };
 
 // Kept by value since MSVC exceptions unwind mod frames without destructors
 // A skipped restore then leaves stale state, never a dangling stack pointer
-thread_local TaskbarModelStateCapture g_taskbarModelStateCapture = {};
+thread_local WindowIDCapture g_hostWindowCapture = {};
+thread_local WindowIDCapture g_flyoutWindowCapture = {};
 
-struct FlyoutWindowCapture {
-    UINT64 windowID;
-    bool captured;
+// RegisterLightDismiss keeps an action the host already holds and skips a
+// frame outside the tree; it subscribes to Dismissed only on an action it
+// has just created.
+struct LightDismissRegistrationProbe {
+    bool actionCreated;
     bool active;
 };
 
-thread_local FlyoutWindowCapture g_flyoutWindowCapture = {};
+thread_local LightDismissRegistrationProbe g_lightDismissRegistrationProbe =
+    {};
 
 struct HoverAimCursorSample {
     POINT point;
@@ -270,6 +271,18 @@ void ClearThumbnailRemovalTag() {
     g_thumbnailRemovalTrackingState.removalTick = 0;
 }
 
+// Every visible-pending transition, inlined or not, starts a new hover
+// target, which supersedes an unconsumed removal transition.
+void BeginHoverTarget(void* flyoutModel) {
+    if (!HasThumbnailRemovalSymbols()) {
+        return;
+    }
+
+    ClearThumbnailRemovalTag();
+    g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection = nullptr;
+    g_thumbnailRemovalTrackingState.activeFlyoutModel = flyoutModel;
+}
+
 void* CTaskBand_ITaskListWndSite_Vftable;
 void* CSecondaryTaskBand_ITaskListWndSite_Vftable;
 
@@ -287,17 +300,26 @@ TaskbarHostRegisterLightDismiss_t TaskbarHostRegisterLightDismiss_Original;
 using TaskbarHostUnregisterLightDismiss_t = void(WINAPI*)(void* object);
 TaskbarHostUnregisterLightDismiss_t TaskbarHostUnregisterLightDismiss_Original;
 
+// Returns the event token through the hidden pointer, as MSVC does for every
+// member function that returns a class.
+using LightDismissActionDismissed_t = void*(WINAPI*)(const void* object,
+                                                     void* eventToken,
+                                                     const void* handler);
+LightDismissActionDismissed_t LightDismissActionDismissed_Original;
+
 using TaskbarHostDestructor_t = void(WINAPI*)(void* object);
 TaskbarHostDestructor_t TaskbarHostDestructor_Original;
 
-using TaskbarModelHostWindowID_t = UINT64(WINAPI*)(const void* object);
-TaskbarModelHostWindowID_t TaskbarModelHostWindowID_Original;
+// Taskbar.dll implements the WindowsUdk TaskbarModel and TaskbarFlyout, so
+// their ABI getters see every Taskbar.View.dll call, whether it goes through a
+// consume wrapper or, with newer C++/WinRT versions, straight to the vtable.
+using TaskbarModelGetHostWindowID_t =
+    HRESULT(WINAPI*)(void* object, UINT64* hostWindowID);
+TaskbarModelGetHostWindowID_t TaskbarModelGetHostWindowID_Original;
 
-using TaskbarModelIsExpanded_t = bool(WINAPI*)(const void* object);
-TaskbarModelIsExpanded_t TaskbarModelIsExpanded_Original;
-
-using TaskbarFlyoutWindowID_t = UINT64(WINAPI*)(const void* object);
-TaskbarFlyoutWindowID_t TaskbarFlyoutWindowID_Original;
+using TaskbarFlyoutGetWindowID_t =
+    HRESULT(WINAPI*)(void* object, UINT64* windowID);
+TaskbarFlyoutGetWindowID_t TaskbarFlyoutGetWindowID_Original;
 
 using TaskbarControllerOnLightDismissTriggered_t = void(WINAPI*)(
     void* object,
@@ -475,10 +497,6 @@ bool IsTaskbarHostForWindow(
                });
 }
 
-void SetLightDismissOwnership(
-    void* taskbarHost,
-    LightDismissOwnership ownership);
-
 LightDismissOwnership GetLightDismissOwnership(void* taskbarHost) {
     if (!taskbarHost ||
         !g_lightDismissOwnershipTrackingReliable.load(
@@ -497,23 +515,6 @@ LightDismissOwnership GetLightDismissOwnership(void* taskbarHost) {
     return iterator == g_lightDismissOwnershipByTaskbarHost.end()
                ? LightDismissOwnership::unknown
                : iterator->second;
-}
-
-void SeedLightDismissOwnership(
-    void* taskbarHost,
-    bool taskbarModelIsExpanded) {
-    if (!taskbarHost ||
-        GetLightDismissOwnership(taskbarHost) !=
-            LightDismissOwnership::unknown) {
-        return;
-    }
-
-    // TaskbarHost::OnIsExpandedChanged uses this property to choose between
-    // native registration and unregistration.
-    SetLightDismissOwnership(
-        taskbarHost,
-        taskbarModelIsExpanded ? LightDismissOwnership::windows
-                               : LightDismissOwnership::unregistered);
 }
 
 void SetLightDismissOwnership(
@@ -555,30 +556,6 @@ void SetLightDismissOwnership(
     }
 }
 
-bool TryClaimUnregisteredLightDismiss(void* taskbarHost) {
-    if (!taskbarHost ||
-        !g_lightDismissOwnershipTrackingReliable.load(
-            std::memory_order_acquire)) {
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(g_lightDismissOwnershipMutex);
-    if (!g_lightDismissOwnershipTrackingReliable.load(
-            std::memory_order_acquire)) {
-        return false;
-    }
-
-    LightDismissOwnershipMap::iterator iterator =
-        g_lightDismissOwnershipByTaskbarHost.find(taskbarHost);
-    if (iterator == g_lightDismissOwnershipByTaskbarHost.end() ||
-        iterator->second != LightDismissOwnership::unregistered) {
-        return false;
-    }
-
-    iterator->second = LightDismissOwnership::preview;
-    return true;
-}
-
 void ForgetLightDismissOwnership(void* taskbarHost) {
     std::lock_guard<std::mutex> lock(g_lightDismissOwnershipMutex);
     g_lightDismissOwnershipByTaskbarHost.erase(taskbarHost);
@@ -596,14 +573,44 @@ void ClearPreviewLightDismissStateForHost(void* taskbarHost) {
     }
 }
 
-void WINAPI TaskbarHostRegisterLightDismiss_Hook(void* object) {
-    TaskbarHostRegisterLightDismiss_Original(object);
+void* WINAPI LightDismissActionDismissed_Hook(const void* object,
+                                              void* eventToken,
+                                              const void* handler) {
+    void* result =
+        LightDismissActionDismissed_Original(object, eventToken, handler);
+    if (g_lightDismissRegistrationProbe.active) {
+        g_lightDismissRegistrationProbe.actionCreated = true;
+    }
 
+    return result;
+}
+
+// Calls the trampoline, which bypasses the ownership-tracking hook, and
+// returns whether the call created the host's action.
+bool RegisterLightDismissCreatingAction(void* taskbarHost) {
+    LightDismissRegistrationProbe previousProbe =
+        g_lightDismissRegistrationProbe;
+    g_lightDismissRegistrationProbe = {false, true};
+    TaskbarHostRegisterLightDismiss_Original(taskbarHost);
+    bool actionCreated = g_lightDismissRegistrationProbe.actionCreated;
+    g_lightDismissRegistrationProbe = previousProbe;
+    return actionCreated;
+}
+
+void WINAPI TaskbarHostRegisterLightDismiss_Hook(void* object) {
     if (!HasTaskbarLightDismissSymbols()) {
+        TaskbarHostRegisterLightDismiss_Original(object);
         return;
     }
 
-    SetLightDismissOwnership(object, LightDismissOwnership::windows);
+    bool previewActionHeld =
+        g_previewLightDismissTaskbarHost == object ||
+        GetLightDismissOwnership(object) == LightDismissOwnership::preview;
+    // Windows keeps a held preview action as its own.
+    if (RegisterLightDismissCreatingAction(object) || previewActionHeld) {
+        SetLightDismissOwnership(object, LightDismissOwnership::windows);
+    }
+
     ClearPreviewLightDismissStateForHost(object);
 }
 
@@ -626,43 +633,38 @@ void WINAPI TaskbarHostDestructor_Hook(void* object) {
     ForgetLightDismissOwnership(object);
 }
 
-using SetIsPointerOverFlyoutFrame_t =
-    void(WINAPI*)(void* object, bool isPointerOver);
-SetIsPointerOverFlyoutFrame_t SetIsPointerOverFlyoutFrame_Original;
-
+// Older builds reach these through HoverFlyoutModel::SetIsPointerOverFlyoutFrame,
+// which tail-calls them; newer builds inline that setter into the controller.
 using HoverFlyoutModelOnPointerEnteredFlyoutFrame_t =
     void(WINAPI*)(void* object);
 HoverFlyoutModelOnPointerEnteredFlyoutFrame_t
     HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original;
 
+using HoverFlyoutModelOnPointerExitedFlyoutFrame_t =
+    void(WINAPI*)(void* object);
+HoverFlyoutModelOnPointerExitedFlyoutFrame_t
+    HoverFlyoutModelOnPointerExitedFlyoutFrame_Original;
+
 using HoverFlyoutModelDestructor_t = void(WINAPI*)(void* object);
 HoverFlyoutModelDestructor_t HoverFlyoutModelDestructor_Original;
 
-void WINAPI SetIsPointerOverFlyoutFrame_Hook(
-    void* object,
-    bool isPointerOver) {
-    if (HasFlyoutPointerTrackingSymbols()) {
-        if (isPointerOver) {
-            g_pointerOverFlyoutFrameModel = object;
-        } else if (g_pointerOverFlyoutFrameModel == object) {
-            g_pointerOverFlyoutFrameModel = nullptr;
-        }
-    }
-
-    // Builds that inline this setter report frame entry only through
-    // OnPointerEnteredFlyoutFrame, which also releases held hover changes.
-    if (isPointerOver) {
-        FlushDeferredHoverAimEvents(L"pointer reached the previews");
-    }
-
-    SetIsPointerOverFlyoutFrame_Original(object, isPointerOver);
-}
-
 void WINAPI HoverFlyoutModelOnPointerEnteredFlyoutFrame_Hook(void* object) {
+    if (HasFlyoutPointerTrackingSymbols()) {
+        g_pointerOverFlyoutFrameModel = object;
+    }
+
     // Held hover changes precede the frame entry, matching the native order
     // of item exit, dismiss-pending, then frame entry cancelling it.
     FlushDeferredHoverAimEvents(L"pointer reached the previews");
     HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original(object);
+}
+
+void WINAPI HoverFlyoutModelOnPointerExitedFlyoutFrame_Hook(void* object) {
+    if (g_pointerOverFlyoutFrameModel == object) {
+        g_pointerOverFlyoutFrameModel = nullptr;
+    }
+
+    HoverFlyoutModelOnPointerExitedFlyoutFrame_Original(object);
 }
 
 void WINAPI HoverFlyoutModelDestructor_Hook(void* object) {
@@ -732,38 +734,38 @@ void ArmPreviewLightDismiss() {
         !g_initialized.load(std::memory_order_acquire) ||
         !g_closeOnOutsideClick.load(std::memory_order_relaxed) ||
         !g_activeTaskbarWindow ||
-        !HasOutsideClickSymbols()) {
+        !HasOutsideClickSymbols() ||
+        !g_lightDismissOwnershipTrackingReliable.load(
+            std::memory_order_acquire)) {
         return;
     }
 
     // LightDismissAction observes the taskbar InputSite without taking focus.
     HWND taskbarWindow = g_activeTaskbarWindow;
-    bool taskbarModelStateAvailable =
-        g_activeTaskbarModelState.valid &&
-        g_activeTaskbarModelState.hoverFlyoutController ==
-            g_activeHoverFlyoutController &&
-        g_activeTaskbarModelState.taskbarWindow == taskbarWindow;
-    bool taskbarModelIsExpanded =
-        g_activeTaskbarModelState.isExpanded;
     void* registeredTaskbarHost = nullptr;
     bool registered = WithTaskbarHost(
         taskbarWindow,
-        [taskbarModelStateAvailable,
-         taskbarModelIsExpanded,
-         &registeredTaskbarHost](void* taskbarHost) {
-            if (taskbarModelStateAvailable) {
-                SeedLightDismissOwnership(
-                    taskbarHost, taskbarModelIsExpanded);
-            }
-
-            // Without a semantic snapshot or observed native transition, an
-            // unseen host may already contain a Windows action.
-            if (!TryClaimUnregisteredLightDismiss(taskbarHost)) {
+        [&registeredTaskbarHost](void* taskbarHost) {
+            LightDismissOwnership ownership =
+                GetLightDismissOwnership(taskbarHost);
+            // A Windows action already raises the event the previews close on.
+            if (ownership == LightDismissOwnership::windows) {
                 return false;
             }
 
-            // The trampoline bypasses the ownership-tracking hook.
-            TaskbarHostRegisterLightDismiss_Original(taskbarHost);
+            // Registration creates an action only when the host holds none,
+            // and one the hooks never saw is Windows'. TaskbarModel::IsExpanded
+            // can't tell: the desktop taskbar reports expanded without
+            // registering one.
+            if (!RegisterLightDismissCreatingAction(taskbarHost)) {
+                if (ownership == LightDismissOwnership::unknown) {
+                    SetLightDismissOwnership(
+                        taskbarHost,
+                        LightDismissOwnership::windows);
+                }
+
+                return false;
+            }
 
             SetLightDismissOwnership(
                 taskbarHost,
@@ -793,7 +795,6 @@ void ClearActiveHoverFlyoutController(void* object) {
         g_thumbnailRemovalTrackingState = {};
         g_activeHoverFlyoutController = nullptr;
         g_activeTaskbarWindow = nullptr;
-        g_activeTaskbarModelState = {};
         g_pointerOverFlyoutFrameModel = nullptr;
         StopHoverAimTracking();
     }
@@ -832,52 +833,46 @@ void WINAPI CommitDismissFlyout_Hook(void* object) {
 using UpdateFlyoutWindowPosition_t = void(WINAPI*)(void* object);
 UpdateFlyoutWindowPosition_t UpdateFlyoutWindowPosition_Original;
 
-UINT64 WINAPI TaskbarModelHostWindowID_Hook(const void* object) {
-    UINT64 hostWindowID = TaskbarModelHostWindowID_Original(object);
-
-    // UpdateFlyoutWindowPosition asks its own TaskbarModel for this value. Use
-    // that semantic call to capture the matching per-taskbar expansion state.
-    TaskbarModelStateCapture& capture = g_taskbarModelStateCapture;
-    if (!capture.active || capture.captured || !hostWindowID ||
-        !TaskbarModelIsExpanded_Original) {
-        return hostWindowID;
+void CaptureWindowID(WindowIDCapture& capture,
+                     HRESULT result,
+                     const UINT64* windowID) {
+    if (capture.active && !capture.captured && SUCCEEDED(result) &&
+        *windowID) {
+        capture.captured = true;
+        capture.windowID = *windowID;
     }
-
-    // Claim the slot before calling back into taskbar model code.
-    capture.captured = true;
-    bool isExpanded = TaskbarModelIsExpanded_Original(object);
-    capture.hostWindowID = hostWindowID;
-    capture.isExpanded = isExpanded;
-    return hostWindowID;
 }
 
-UINT64 WINAPI TaskbarFlyoutWindowID_Hook(const void* object) {
-    UINT64 windowID = TaskbarFlyoutWindowID_Original(object);
+HRESULT WINAPI TaskbarModelGetHostWindowID_Hook(void* object,
+                                                UINT64* hostWindowID) {
+    HRESULT result =
+        TaskbarModelGetHostWindowID_Original(object, hostWindowID);
+
+    // UpdateFlyoutWindowPosition asks its own TaskbarModel for the taskbar
+    // window the flyout belongs to.
+    CaptureWindowID(g_hostWindowCapture, result, hostWindowID);
+    return result;
+}
+
+HRESULT WINAPI TaskbarFlyoutGetWindowID_Hook(void* object, UINT64* windowID) {
+    HRESULT result = TaskbarFlyoutGetWindowID_Original(object, windowID);
 
     // UpdateFlyoutWindowPosition asks its TaskbarFlyout for the window it
     // sizes to the monitor and hosts the flyout frame in.
-    FlyoutWindowCapture& capture = g_flyoutWindowCapture;
-    if (capture.active && !capture.captured && windowID) {
-        capture.captured = true;
-        capture.windowID = windowID;
-    }
-
-    return windowID;
+    CaptureWindowID(g_flyoutWindowCapture, result, windowID);
+    return result;
 }
 
 void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
-    TaskbarModelStateCapture previousCapture = g_taskbarModelStateCapture;
-    FlyoutWindowCapture previousFlyoutWindowCapture = g_flyoutWindowCapture;
+    WindowIDCapture previousHostWindowCapture = g_hostWindowCapture;
+    WindowIDCapture previousFlyoutWindowCapture = g_flyoutWindowCapture;
     bool initialized = g_initialized.load(std::memory_order_acquire);
-    g_taskbarModelStateCapture = {};
-    g_taskbarModelStateCapture.active = initialized;
-    g_flyoutWindowCapture = {};
-    g_flyoutWindowCapture.active = initialized;
+    g_hostWindowCapture = {0, false, initialized};
+    g_flyoutWindowCapture = {0, false, initialized};
     UpdateFlyoutWindowPosition_Original(object);
-    TaskbarModelStateCapture taskbarModelStateCapture =
-        g_taskbarModelStateCapture;
-    FlyoutWindowCapture flyoutWindowCapture = g_flyoutWindowCapture;
-    g_taskbarModelStateCapture = previousCapture;
+    WindowIDCapture hostWindowCapture = g_hostWindowCapture;
+    WindowIDCapture flyoutWindowCapture = g_flyoutWindowCapture;
+    g_hostWindowCapture = previousHostWindowCapture;
     g_flyoutWindowCapture = previousFlyoutWindowCapture;
 
     if (!g_initialized.load(std::memory_order_acquire) ||
@@ -886,10 +881,9 @@ void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
     }
 
     HWND taskbarWindow = nullptr;
-    if (taskbarModelStateCapture.captured) {
+    if (hostWindowCapture.captured) {
         taskbarWindow = NormalizeTaskbarWindow(
-            reinterpret_cast<HWND>(
-                taskbarModelStateCapture.hostWindowID));
+            reinterpret_cast<HWND>(hostWindowCapture.windowID));
     }
 
     bool controllerChanged =
@@ -897,10 +891,10 @@ void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
     bool taskbarChanged =
         taskbarWindow &&
         g_activeTaskbarWindow != taskbarWindow;
-    bool taskbarModelStateInvalidated =
-        taskbarModelStateCapture.captured && !taskbarWindow;
+    bool taskbarWindowInvalidated =
+        hostWindowCapture.captured && !taskbarWindow;
     if (controllerChanged || taskbarChanged ||
-        taskbarModelStateInvalidated) {
+        taskbarWindowInvalidated) {
         DisarmPreviewLightDismiss();
         if (controllerChanged) {
             // The visible-pending model transition precedes the controller's
@@ -908,21 +902,14 @@ void WINAPI UpdateFlyoutWindowPosition_Hook(void* object) {
             g_pointerOverFlyoutFrameModel = nullptr;
         }
 
-        if (controllerChanged || taskbarModelStateInvalidated) {
+        if (controllerChanged || taskbarWindowInvalidated) {
             g_activeTaskbarWindow = nullptr;
-            g_activeTaskbarModelState = {};
         }
     }
 
     g_activeHoverFlyoutController = object;
     if (taskbarWindow) {
         g_activeTaskbarWindow = taskbarWindow;
-        g_activeTaskbarModelState = {
-            object,
-            taskbarWindow,
-            taskbarModelStateCapture.isExpanded,
-            true,
-        };
     }
 
     if (controllerChanged) {
@@ -1153,16 +1140,12 @@ void WINAPI TransitionToFlyoutVisiblePendingState_Hook(
     void* object,
     void* targetItemKey,
     LONGLONG delayTimeSpan) {
-    if (HasThumbnailRemovalSymbols()) {
-        // A new hover target supersedes an unconsumed removal transition
-        ClearThumbnailRemovalTag();
-        g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection =
-            nullptr;
-        g_thumbnailRemovalTrackingState.activeFlyoutModel = object;
-    }
+    BeginHoverTarget(object);
 
     LONGLONG configuredDelayTimeSpan =
-        g_hoverDelayTimeSpan.load(std::memory_order_relaxed);
+        static_cast<LONGLONG>(
+            g_hoverDelayMilliseconds.load(std::memory_order_relaxed)) *
+        TIME_SPAN_TICKS_PER_MILLISECOND;
     LONGLONG appliedDelayTimeSpan =
         delayTimeSpan > 0 ? configuredDelayTimeSpan : delayTimeSpan;
 
@@ -1171,6 +1154,25 @@ void WINAPI TransitionToFlyoutVisiblePendingState_Hook(
 
     TransitionToFlyoutVisiblePendingState_Original(
         object, targetItemKey, appliedDelayTimeSpan);
+}
+
+// Windows times its visible-pending transition from MouseHoverTime here.
+// Newer builds inline that transition for a first hover instead of calling
+// TransitionToFlyoutVisiblePendingState.
+using HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_t =
+    void(WINAPI*)(void* object, const void* itemKey);
+HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_t
+    HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original;
+
+void WINAPI HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Hook(
+    void* object,
+    const void* itemKey) {
+    // Limits the MouseHoverTime override to this handler
+    // MSVC exceptions skip mod cleanup, so reset instead of restoring
+    g_hoverDelayFlyoutModel = object;
+    HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original(object,
+                                                                 itemKey);
+    g_hoverDelayFlyoutModel = nullptr;
 }
 
 using TransitionToFlyoutDismissPendingState_t = void(WINAPI*)(void* object);
@@ -1225,7 +1227,16 @@ UINT WINAPI MouseHoverTime_Hook(void* object) {
     const WCHAR* transitionName = nullptr;
     switch (g_dismissDelaySource) {
         case DismissDelaySource::none:
-            return systemDelayMilliseconds;
+            if (!g_hoverDelayFlyoutModel) {
+                return systemDelayMilliseconds;
+            }
+
+            // The handler reads it only to start a visible-pending transition
+            BeginHoverTarget(g_hoverDelayFlyoutModel);
+            configuredDelayMilliseconds =
+                g_hoverDelayMilliseconds.load(std::memory_order_relaxed);
+            transitionName = L"Hover";
+            break;
 
         case DismissDelaySource::pointerExit:
             configuredDelayMilliseconds =
@@ -2004,6 +2015,7 @@ void StopHoverAimTracking() {
 bool HasTaskbarLightDismissSymbols() {
     return TaskbarHostRegisterLightDismiss_Original &&
            TaskbarHostUnregisterLightDismiss_Original &&
+           LightDismissActionDismissed_Original &&
            TaskbarHostDestructor_Original &&
            CTaskBand_ITaskListWndSite_Vftable &&
            CSecondaryTaskBand_ITaskListWndSite_Vftable &&
@@ -2021,15 +2033,9 @@ bool HasActiveHoverFlyoutLifecycleSymbols() {
 
 bool HasFlyoutPointerTrackingSymbols() {
     return HasActiveHoverFlyoutLifecycleSymbols() &&
-           SetIsPointerOverFlyoutFrame_Original &&
+           HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original &&
+           HoverFlyoutModelOnPointerExitedFlyoutFrame_Original &&
            HoverFlyoutModelDestructor_Original;
-}
-
-bool HasOutsideClickViewSymbols() {
-    return HasFlyoutPointerTrackingSymbols() &&
-           TaskbarModelHostWindowID_Original &&
-           TaskbarModelIsExpanded_Original &&
-           TaskbarControllerOnLightDismissTriggered_Original;
 }
 
 bool HasStartButtonHoverSymbols() {
@@ -2041,6 +2047,7 @@ bool HasThumbnailRemovalSymbols() {
     return TransitionToFlyoutVisiblePendingState_Original &&
            TransitionToFlyoutDismissPendingState_Original &&
            MouseHoverTime_Original &&
+           HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original &&
            HoverUIItemsCollectionSetTargetItem_Original &&
            HoverUIItemsCollectionDestructor_Original &&
            ThumbnailSourceArraySize_Original &&
@@ -2050,19 +2057,17 @@ bool HasThumbnailRemovalSymbols() {
 
 bool HasOutsideClickSymbols() {
     return HasTaskbarLightDismissSymbols() &&
-           HasOutsideClickViewSymbols();
+           HasFlyoutPointerTrackingSymbols() &&
+           TaskbarModelGetHostWindowID_Original &&
+           TaskbarControllerOnLightDismissTriggered_Original;
 }
 
-// Some builds inline SetIsPointerOverFlyoutFrame into the controller, which
-// then calls OnPointerEnteredFlyoutFrame directly; either reports frame entry.
 bool HasHoverAimSymbols() {
     return HasActiveHoverFlyoutLifecycleSymbols() &&
            HoverFlyoutModelDestructor_Original &&
-           (HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original ||
-            SetIsPointerOverFlyoutFrame_Original) &&
-           TaskbarModelHostWindowID_Original &&
-           TaskbarModelIsExpanded_Original &&
-           TaskbarFlyoutWindowID_Original &&
+           HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original &&
+           TaskbarModelGetHostWindowID_Original &&
+           TaskbarFlyoutGetWindowID_Original &&
            TransitionToFlyoutDismissPendingState_Original &&
            HoverFlyoutModelOnVisualStateStateChanged_Original &&
            HoverFlyoutModelIsFlyoutVisible_Original &&
@@ -2086,10 +2091,9 @@ void LoadSettings() {
         thumbnailRemovalDelayMilliseconds = MINIMUM_DELAY_MS;
     }
 
-    LONGLONG delayTimeSpan =
-        static_cast<LONGLONG>(delayMilliseconds) *
-        TIME_SPAN_TICKS_PER_MILLISECOND;
-    g_hoverDelayTimeSpan.store(delayTimeSpan, std::memory_order_relaxed);
+    g_hoverDelayMilliseconds.store(
+        static_cast<UINT>(delayMilliseconds),
+        std::memory_order_relaxed);
     g_closeDelayMilliseconds.store(
         static_cast<UINT>(closeDelayMilliseconds),
         std::memory_order_relaxed);
@@ -2228,10 +2232,35 @@ bool ResolveTaskbarSymbols(HMODULE module) {
         },
         {
             {
+                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Internal_Input_ILightDismissAction<struct winrt::Windows::UI::Internal::Input::ILightDismissAction>::Dismissed(struct winrt::Windows::Foundation::TypedEventHandler<struct winrt::Windows::UI::Internal::Input::LightDismissAction,struct winrt::Windows::UI::Internal::Input::LightDismissEventArgs> const &)const )",
+                LR"(public: struct winrt::event_token __cdecl winrt::impl::consume_Windows_UI_Internal_Input_ILightDismissAction<struct winrt::Windows::UI::Internal::Input::ILightDismissAction>::Dismissed(struct winrt::Windows::Foundation::TypedEventHandler<struct winrt::Windows::UI::Internal::Input::LightDismissAction,struct winrt::Windows::UI::Internal::Input::LightDismissEventArgs> const &)const )",
+            },
+            &LightDismissActionDismissed_Original,
+            LightDismissActionDismissed_Hook,
+            true,
+        },
+        {
+            {
                 LR"(public: __cdecl TaskbarHost::~TaskbarHost(void))",
             },
             &TaskbarHostDestructor_Original,
             TaskbarHostDestructor_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarModel,struct winrt::WindowsUdk::UI::Shell::ITaskbarModel>::get_HostWindowId(unsigned __int64 *))",
+            },
+            &TaskbarModelGetHostWindowID_Original,
+            TaskbarModelGetHostWindowID_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarFlyout,struct winrt::WindowsUdk::UI::Shell::ITaskbarFlyout>::get_WindowId(unsigned __int64 *))",
+            },
+            &TaskbarFlyoutGetWindowID_Original,
+            TaskbarFlyoutGetWindowID_Hook,
             true,
         },
     };
@@ -2280,6 +2309,14 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
             },
             &MouseHoverTime_Original,
             MouseHoverTime_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnPointerEnteredItemWithHoverFlyout(struct winrt::hstring const &))",
+            },
+            &HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original,
+            HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Hook,
             true,
         },
         {
@@ -2333,24 +2370,6 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel<struct winrt::WindowsUdk::UI::Shell::ITaskbarModel>::HostWindowId(void)const )",
-                LR"(public: unsigned __int64 __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel<struct winrt::WindowsUdk::UI::Shell::ITaskbarModel>::HostWindowId(void)const )",
-            },
-            &TaskbarModelHostWindowID_Original,
-            TaskbarModelHostWindowID_Hook,
-            true,
-        },
-        {
-            {
-                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel3<struct winrt::WindowsUdk::UI::Shell::TaskbarModel>::IsExpanded(void)const )",
-                LR"(public: bool __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarModel3<struct winrt::WindowsUdk::UI::Shell::TaskbarModel>::IsExpanded(void)const )",
-            },
-            &TaskbarModelIsExpanded_Original,
-            nullptr,
-            true,
-        },
-        {
-            {
                 LR"(public: virtual __cdecl winrt::Taskbar::implementation::HoverFlyoutController::~HoverFlyoutController(void))",
             },
             &HoverFlyoutControllerDestructor_Original,
@@ -2367,18 +2386,18 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::SetIsPointerOverFlyoutFrame(bool))",
-            },
-            &SetIsPointerOverFlyoutFrame_Original,
-            SetIsPointerOverFlyoutFrame_Hook,
-            true,
-        },
-        {
-            {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnPointerEnteredFlyoutFrame(void))",
             },
             &HoverFlyoutModelOnPointerEnteredFlyoutFrame_Original,
             HoverFlyoutModelOnPointerEnteredFlyoutFrame_Hook,
+            true,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::OnPointerExitedFlyoutFrame(void))",
+            },
+            &HoverFlyoutModelOnPointerExitedFlyoutFrame_Original,
+            HoverFlyoutModelOnPointerExitedFlyoutFrame_Hook,
             true,
         },
         {
@@ -2403,15 +2422,6 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
             },
             &ExperienceToggleButtonOnPointerEntered_Original,
             ExperienceToggleButtonOnPointerEntered_Hook,
-            true,
-        },
-        {
-            {
-                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarFlyout<struct winrt::WindowsUdk::UI::Shell::ITaskbarFlyout>::WindowId(void)const )",
-                LR"(public: unsigned __int64 __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarFlyout<struct winrt::WindowsUdk::UI::Shell::ITaskbarFlyout>::WindowId(void)const )",
-            },
-            &TaskbarFlyoutWindowID_Original,
-            TaskbarFlyoutWindowID_Hook,
             true,
         },
         {
@@ -2455,12 +2465,20 @@ bool ResolveTaskbarViewSymbols(HMODULE module) {
                L"close-delay override is disabled on this build");
     }
 
+    if (!HoverFlyoutModelOnPointerEnteredItemWithHoverFlyout_Original ||
+        !MouseHoverTime_Original) {
+        Wh_Log(L"Item-hover delay symbols aren't available; the hover-delay "
+               L"override misses inlined first-hover transitions on this "
+               L"build");
+    }
+
     if (!HasThumbnailRemovalSymbols()) {
         Wh_Log(L"Thumbnail-removal delay isn't available on this build");
     }
 
+    // Taskbar.dll's TaskbarHost loads this module, so Taskbar.dll is handled.
     if (g_closeOnOutsideClick.load(std::memory_order_relaxed) &&
-        !HasOutsideClickViewSymbols()) {
+        !HasOutsideClickSymbols()) {
         Wh_Log(L"Thumbnail light-dismiss symbols aren't available; "
                L"close-on-outside-click is disabled on this build");
     }
@@ -2671,7 +2689,6 @@ void WINAPI CleanupTaskbarThreadState() {
     g_thumbnailRemovalTrackingState = {};
     g_activeHoverFlyoutController = nullptr;
     g_activeTaskbarWindow = nullptr;
-    g_activeTaskbarModelState = {};
     g_pointerOverFlyoutFrameModel = nullptr;
 }
 
