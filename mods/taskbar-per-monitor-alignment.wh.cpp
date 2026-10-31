@@ -6,6 +6,7 @@
 // @author          vmTools
 // @github          https://github.com/VitalyTz
 // @homepage        https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
+// @donateUrl       https://ko-fi.com/vtools
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
