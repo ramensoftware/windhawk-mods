@@ -2,7 +2,7 @@
 // @id              copy-file-contents
 // @name            Copy File Contents
 // @description     Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.
-// @version         1.1
+// @version         1.2
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -59,9 +59,13 @@ The size limit is 8 MB by default, with the unit chosen next to it, megabytes or
 kilobytes. A large selection is copied file by file, so one file over the limit is
 skipped and the rest are still copied. That partial copy is silent, because a
 dialog in the middle of copying five files is worse than a missing one. When
-nothing at all can be copied, you are asked instead. The whole selection is also
-held to a 32 MB budget, so selecting a whole folder of logs cannot make File
-Explorer allocate without bound.
+nothing at all can be copied, you are asked instead.
+
+The whole selection is also held to a 32 MB budget, so selecting a whole folder of
+logs cannot make File Explorer allocate without bound. Files are checked against
+what is left of that budget before they are opened, and once it is used up the
+rest of the selection is not read at all, which keeps a large Ctrl+A quick instead
+of slow.
 
 The ceilings are 64 MB per file and 32 MB per selection whatever the settings
 say. A text file that big is already beyond what a clipboard is good for, and
@@ -84,10 +88,11 @@ text with invisible gaps. Line endings are copied as they are.
 
 ## Large hashes
 
-Hashing a file reads all of it, and the work runs on the same thread that owns the
-File Explorer window, so that window does not repaint until the hash is done. For
-a normal file that is instant. Above the size set in the settings, 1 GB by
-default, the mod asks first, and says how big the file is. Answer no and nothing
+Hashing reads every byte, and the work runs on the same thread that owns the File
+Explorer window, so that window does not repaint until it is done. For a normal
+file that is instant. Above the size set in the settings, 1 GB by default, the
+mod asks first, and says how many files and how much data are involved, counting
+the whole selection rather than one file at a time. Answer no and nothing
 happens.
 
 ## Known limits
@@ -97,6 +102,9 @@ happens.
   programs and nothing on the desktop.
 * The contents are put on the clipboard as text. Nothing is written to disk, and
   no temporary file is created.
+* If the mod is turned off while its own prompt is open, the prompt is answered
+  No for you and the copy stops, because the mod cannot be unloaded with its code
+  still waiting on that dialog.
 * With separate clipboard items turned on, Ctrl+V pastes only the last file. The
   earlier ones are reachable through Windows clipboard history (Win+V), and only
   there, and clipboard history has to be turned on for them to be kept.
@@ -222,15 +230,6 @@ Settings g_settings = {
     'H',                      // hashKey
 };
 
-// A string setting. Wh_GetStringSetting always returns a string, never null, but
-// the buffer belongs to the mod SDK and is copied out here.
-std::wstring GetStringSetting(const wchar_t* name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
-}
-
 UINT ParseModifiers(const wchar_t* text, UINT fallback) {
     if (wcscmp(text, L"ctrl_shift") == 0) return MOD_CONTROL | MOD_SHIFT;
     if (wcscmp(text, L"win_shift") == 0) return MOD_WIN | MOD_SHIFT;
@@ -283,8 +282,9 @@ void LoadSettings() {
     }
     // Only the two units are offered, and anything unreadable means megabytes,
     // which is the default.
-    g_settings.maxSizeInMb =
-        wcscmp(GetStringSetting(L"maxSizeUnit").c_str(), L"kb") != 0;
+    WindhawkUtils::StringSetting unit =
+        WindhawkUtils::StringSetting::make(L"maxSizeUnit");
+    g_settings.maxSizeInMb = wcscmp(unit, L"kb") != 0;
     g_settings.copyContents = Wh_GetIntSetting(L"copyContents") != 0;
     g_settings.copyHash = Wh_GetIntSetting(L"copyHash") != 0;
     g_settings.offerEditor = Wh_GetIntSetting(L"offerEditor") != 0;
@@ -303,13 +303,19 @@ void LoadSettings() {
         g_settings.askHashMB = 0;
     }
     g_settings.hotkeys = Wh_GetIntSetting(L"hotkeys") != 0;
-    g_settings.contentsModifiers = ParseModifiers(
-        GetStringSetting(L"contentsModifiers").c_str(), MOD_CONTROL | MOD_SHIFT);
-    g_settings.contentsKey =
-        ParseKey(GetStringSetting(L"contentsKey").c_str(), 'T');
-    g_settings.hashModifiers = ParseModifiers(
-        GetStringSetting(L"hashModifiers").c_str(), MOD_CONTROL | MOD_SHIFT);
-    g_settings.hashKey = ParseKey(GetStringSetting(L"hashKey").c_str(), 'H');
+    WindhawkUtils::StringSetting contentsMods =
+        WindhawkUtils::StringSetting::make(L"contentsModifiers");
+    WindhawkUtils::StringSetting contentsKey =
+        WindhawkUtils::StringSetting::make(L"contentsKey");
+    WindhawkUtils::StringSetting hashMods =
+        WindhawkUtils::StringSetting::make(L"hashModifiers");
+    WindhawkUtils::StringSetting hashKey =
+        WindhawkUtils::StringSetting::make(L"hashKey");
+    g_settings.contentsModifiers =
+        ParseModifiers(contentsMods, MOD_CONTROL | MOD_SHIFT);
+    g_settings.contentsKey = ParseKey(contentsKey, 'T');
+    g_settings.hashModifiers = ParseModifiers(hashMods, MOD_CONTROL | MOD_SHIFT);
+    g_settings.hashKey = ParseKey(hashKey, 'H');
 }
 
 // ---------------------------------------------------------------------------
@@ -325,19 +331,41 @@ void LoadSettings() {
 std::atomic<bool> g_unloading{false};
 // Open menus carrying the entries, and copies in progress.
 std::atomic<int> g_busy{0};
-// The window that owns the menu or the shortcut, for prompts and the clipboard.
-std::atomic<HWND> g_busyOwner{nullptr};
 // Only the outer popup call adds entries, and only one copy runs at a time per
 // window thread.
 thread_local bool t_inMenuHook = false;
 thread_local bool t_copying = false;
 
+// Several windows can hold an open menu at once, so the owners are kept in a
+// small list rather than one slot: unloading has to cancel every one of them.
+constexpr int kMaxOwners = 8;
+std::atomic<HWND> g_ownerSlots[kMaxOwners];
+std::atomic<DWORD> g_ownerThreads[kMaxOwners];
+
+// Which prompts belong to this mod, so unloading can close them.
+const wchar_t kContentsTitle[] = L"Copy File Contents";
+const wchar_t kHashTitle[] = L"Copy SHA-256";
+
 struct BusyGuard {
     explicit BusyGuard(HWND owner) {
-        g_busyOwner = owner;
+        slot = -1;
+        for (int i = 0; i < kMaxOwners; i++) {
+            HWND expected = nullptr;
+            if (g_ownerSlots[i].compare_exchange_strong(expected, owner)) {
+                slot = i;
+                g_ownerThreads[i] = GetWindowThreadProcessId(owner, nullptr);
+                break;
+            }
+        }
         g_busy++;
     }
-    ~BusyGuard() { g_busy--; }
+    ~BusyGuard() {
+        if (slot >= 0) {
+            g_ownerSlots[slot] = nullptr;
+        }
+        g_busy--;
+    }
+    int slot;
 };
 
 // ---------------------------------------------------------------------------
@@ -398,8 +426,11 @@ bool InFileView(HWND hWnd) {
     return false;
 }
 
-// The shell browser behind a window in the file view, or null. The caller
-// releases it.
+// The shell browser behind a window in the file view, or null. WM_USER + 7
+// returns a borrowed pointer, so a reference is taken here and the caller
+// releases exactly that one. Releasing without this AddRef would take a
+// reference away from the shell, which owns the object, and explorer.exe would
+// eventually free it while still using it.
 IShellBrowser* BrowserForFileView(HWND hWnd) {
     if (!hWnd || !IsExplorerFrame(GetAncestor(hWnd, GA_ROOT))) {
         return nullptr;
@@ -413,8 +444,12 @@ IShellBrowser* BrowserForFileView(HWND hWnd) {
             continue;
         }
         if (HasClass(h, L"ShellTabWindowClass")) {
-            return reinterpret_cast<IShellBrowser*>(
+            IShellBrowser* browser = reinterpret_cast<IShellBrowser*>(
                 SendMessageW(h, kMsgGetShellBrowser, 0, 0));
+            if (browser) {
+                browser->AddRef();
+            }
+            return browser;
         }
         if (HasClass(h, L"CabinetWClass")) {
             break;
@@ -945,7 +980,7 @@ void OfferEditor(HWND owner, const std::wstring& path, const wchar_t* reason) {
     }
     std::wstring text = reason;
     text += L"\n\nOpen it instead?";
-    if (MessageBoxW(owner, text.c_str(), L"Copy File Contents",
+    if (MessageBoxW(owner, text.c_str(), kContentsTitle,
                     MB_YESNO | MB_ICONINFORMATION) == IDYES) {
         ShellExecuteW(owner, L"open", L"notepad.exe", path.c_str(), nullptr,
                       SW_SHOWNORMAL);
@@ -972,10 +1007,32 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
             if (IsDirectory(path)) {
                 continue;
             }
-            if (FileSizeBytes(path) > SizeLimitBytes()) {
+            if (budget < 2 * sizeof(wchar_t)) {
+                // The budget is gone. Reading more files would only throw the
+                // text away again, so the loop stops instead.
+                lastReason = L"That selection contains more text than the mod "
+                             L"will copy at once.";
+                break;
+            }
+            const long long onDisk = FileSizeBytes(path);
+            if (onDisk < 0) {
+                lastRefused = path;
+                lastReason = L"This file could not be read.";
+                continue;
+            }
+            if (onDisk > SizeLimitBytes()) {
                 // Checked before reading, so an oversized file costs nothing.
                 lastRefused = path;
                 lastReason = L"This file is larger than the size limit.";
+                continue;
+            }
+            // Text is held as UTF-16, so it is at most twice the bytes on disk.
+            // A file that cannot fit in what is left of the budget is skipped
+            // without being opened.
+            if (static_cast<size_t>(onDisk) * 2 > budget) {
+                lastRefused = path;
+                lastReason = L"That selection contains more text than the mod "
+                             L"will copy at once.";
                 continue;
             }
             std::wstring text;
@@ -989,8 +1046,6 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
                                        : L"This file could not be read.";
                 continue;
             }
-            // The whole selection is held to a budget, so Ctrl+A in a folder of
-            // logs cannot make File Explorer allocate without bound.
             const size_t bytes = text.size() * sizeof(wchar_t);
             if (bytes > budget) {
                 lastRefused = path;
@@ -1077,29 +1132,52 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
     }
 }
 
-bool ConfirmLargeHash(HWND owner, const std::wstring& path) {
-    const long long size = FileSizeBytes(path);
-    if (size < 0 || g_settings.askHashMB <= 0) {
+// One prompt for the whole operation. The sizes of every selected file are
+// added up, because three ISO images hash for as long as one file of their
+// combined size.
+bool ConfirmLargeHash(HWND owner, const std::vector<std::wstring>& paths) {
+    if (g_settings.askHashMB <= 0) {
         return true;
+    }
+    long long total = 0;
+    int files = 0;
+    for (const std::wstring& path : paths) {
+        if (IsDirectory(path)) {
+            continue;
+        }
+        const long long size = FileSizeBytes(path);
+        if (size > 0) {
+            total += size;
+            files++;
+        }
     }
     const long long limit = static_cast<long long>(g_settings.askHashMB) *
                             1024LL * 1024LL;
-    if (size <= limit) {
+    if (total <= limit) {
         return true;
+    }
+    // Megabytes when the total is under a gigabyte, because a lowered
+    // askHashMB would otherwise produce "about 0.0 GB", which says nothing.
+    wchar_t sizeText[64];
+    if (total >= 1024LL * 1024LL * 1024LL) {
+        swprintf_s(sizeText, L"%.1f GB",
+                   static_cast<double>(total) / (1024.0 * 1024.0 * 1024.0));
+    } else {
+        swprintf_s(sizeText, L"%lld MB",
+                   (total + 1024LL * 1024LL - 1) / (1024LL * 1024LL));
     }
     wchar_t text[512];
     swprintf_s(text,
-               L"This file is %.1f GB. Hashing reads all of it, and this window "
-               L"will not respond until it is done.\n\nHash it anyway?",
-               static_cast<double>(size) / (1024.0 * 1024.0 * 1024.0));
-    return MessageBoxW(owner, text, L"Copy SHA-256",
+               L"%d file%s, about %s in all. Hashing reads every byte, and this "
+               L"window will not respond until it is done.\n\nHash anyway?",
+               files, files == 1 ? L"" : L"s", sizeText);
+    return MessageBoxW(owner, text, kHashTitle,
                        MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES;
 }
 
 void DoCopyHash(HWND owner, const std::vector<std::wstring>& paths) {
     try {
-        // One prompt for the whole operation, about the largest file in it.
-        if (paths.size() == 1 && !ConfirmLargeHash(owner, paths[0])) {
+        if (!ConfirmLargeHash(owner, paths)) {
             return;
         }
         std::wstring combined;
@@ -1210,6 +1288,12 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable,
             // copy the file list's selection, which is not what is on screen.
             if (IsExplorerFrame(root) && InFileView(msg->hwnd) &&
                 !IsTextFieldFocused(root, msg->hwnd)) {
+                // Raised before the selection is read, and checked again with
+                // it raised, for the same reason as in the menu hook.
+                BusyGuard busy(root);
+                if (g_unloading) {
+                    return TranslateAcceleratorW_Original(hWnd, hAccTable, msg);
+                }
                 const std::vector<std::wstring> paths =
                     GetSelectedPaths(msg->hwnd);
                 bool anyFile = false;
@@ -1220,7 +1304,6 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable,
                     }
                 }
                 if (anyFile) {
-                    BusyGuard busy(root);
                     t_copying = true;
                     if (which == 1) {
                         DoCopyContents(root, paths);
@@ -1277,6 +1360,7 @@ void RemoveEntries(HMENU menu, UINT base) {
     }
     DeleteMenu(menu, base, MF_BYCOMMAND);
     DeleteMenu(menu, base + 1, MF_BYCOMMAND);
+    DeleteMenu(menu, base + 2, MF_BYCOMMAND);
 }
 
 // Adds the entries when this popup is a File Explorer file menu, and reports
@@ -1319,7 +1403,15 @@ UINT AddEntries(HMENU menu, UINT uFlags, HWND hWnd,
         return 0;
     }
 
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    // The separator is given an id of its own, because MF_SEPARATOR with id 0
+    // cannot be removed by command id, and a menu that keeps the line after its
+    // entries are gone is a menu left modified.
+    MENUITEMINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = MIIM_FTYPE | MIIM_ID;
+    info.fType = MFT_SEPARATOR;
+    info.wID = base + 2;
+    InsertMenuItemW(menu, GetMenuItemCount(menu), TRUE, &info);
     if (addContents) {
         AppendMenuW(menu, MF_STRING, base, L"Copy contents");
     }
@@ -1332,7 +1424,17 @@ UINT AddEntries(HMENU menu, UINT uFlags, HWND hWnd,
 template <typename Track>
 BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, Track track) {
     // TrackPopupMenu may call TrackPopupMenuEx. Only the outer call adds.
-    if (g_unloading || t_inMenuHook) {
+    if (t_inMenuHook) {
+        return track();
+    }
+
+    // Counted from here to the end of the scope, so unloading waits for the
+    // selection read, the open menu and the copy that may follow it, and so
+    // nothing is left behind if any of it throws. The unload flag is checked
+    // again with the count already raised: an unload that starts in between
+    // either sees this work or is seen here.
+    BusyGuard busy(owner);
+    if (g_unloading) {
         return track();
     }
 
@@ -1342,10 +1444,6 @@ BOOL TrackWithEntries(HMENU menu, UINT uFlags, HWND owner, Track track) {
         return track();
     }
 
-    // Counted from here to the end of the scope, so unloading waits for both
-    // the open menu and the copy that may follow it, and so nothing is left
-    // behind if the copy throws.
-    BusyGuard busy(owner);
     t_inMenuHook = true;
     const BOOL result = track();
     t_inMenuHook = false;
@@ -1396,7 +1494,7 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Copy File Contents 1.1");
+    Wh_Log(L"Copy File Contents 1.2");
     LoadSettings();
     Wh_Log(L"settings: max %d %s (%lld bytes), contents=%d hash=%d",
            g_settings.maxSize, g_settings.maxSizeInMb ? L"MB" : L"KB",
@@ -1440,18 +1538,43 @@ void Wh_ModSettingsChanged() {
            SizeLimitBytes());
 }
 
+// A prompt of this mod is a dialog with one of two captions, on the thread that
+// owns the window it was opened from. WM_CANCELMODE closes a menu but not a
+// message box, so unloading has to answer the box itself: it gets IDNO, which
+// is the answer that changes nothing. WM_COMMAND is posted rather than sent,
+// because sending would block until the box closes.
+BOOL CALLBACK CancelPromptProc(HWND hWnd, LPARAM) {
+    if (!HasClass(hWnd, L"#32770")) {
+        return TRUE;
+    }
+    wchar_t title[128];
+    if (!GetWindowTextW(hWnd, title, ARRAYSIZE(title))) {
+        return TRUE;
+    }
+    if (wcscmp(title, kContentsTitle) == 0 || wcscmp(title, kHashTitle) == 0) {
+        PostMessageW(hWnd, WM_COMMAND, IDNO, 0);
+    }
+    return TRUE;
+}
+
 void Wh_ModBeforeUninit() {
     // No new work from here on: the hooks pass everything straight through.
     g_unloading = true;
 
-    // A menu carrying the entries may still be open, and a copy or a prompt may
-    // still be running with this mod on the stack. Close the menu and give the
-    // work two seconds to finish, so nothing of this mod is on any thread when
-    // it is unloaded.
+    // An open menu, a prompt or a copy may still be running with this mod's
+    // code on some thread's stack. Close what can be closed and wait for the
+    // rest, so nothing of this mod is on any thread when it is unloaded.
     for (int i = 0; i < 100 && g_busy > 0; i++) {
-        HWND owner = g_busyOwner;
-        if (owner) {
+        for (int slot = 0; slot < kMaxOwners; slot++) {
+            HWND owner = g_ownerSlots[slot];
+            if (!owner) {
+                continue;
+            }
             PostMessageW(owner, WM_CANCELMODE, 0, 0);
+            const DWORD thread = g_ownerThreads[slot];
+            if (thread) {
+                EnumThreadWindows(thread, CancelPromptProc, 0);
+            }
         }
         Sleep(20);
     }
