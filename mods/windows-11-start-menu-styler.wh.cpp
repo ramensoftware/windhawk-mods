@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the Start menu with themes contributed by others or create your own
-// @version         1.7
+// @version         1.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,7 +11,7 @@
 // @include         SearchHost.exe
 // @include         SearchApp.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -160,6 +160,20 @@ FullScreen](https://github.com/ramensoftware/windows-11-start-menu-styling-guide
 \
 FrostyGlass](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/FrostyGlass/README.md)
 
+[![FlyoutStartMenu](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/FlyoutStartMenu/screenshot-small.png)
+\
+FlyoutStartMenu](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/FlyoutStartMenu/README.md)
+
+[![OS26 Tahoe App
+Launcher](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/OS26%20Tahoe%20App%20Launcher/screenshot-small.png)
+\
+OS26 Tahoe App
+Launcher](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/OS26%20Tahoe%20App%20Launcher/README.md)
+
+[![Raycast](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/Raycast/screenshot-small.png)
+\
+Raycast](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Raycast/README.md)
+
 More themes can be found in the **Themes** section of [The Windows 11 Start menu
 styling
 guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md#themes).
@@ -217,7 +231,8 @@ control can also include:
 
 Several target controls can be specified for the same styles by separating them
 with commas, for example: `ParentClass > Class#Name1, ParentClass >
-Class#Name2`.
+Class#Name2`. Commas inside `[...]` are part of the property value and don't
+separate targets, for example: `Class[Margin=0,0,0,1]` is a single target.
 
 **Note**: The target is evaluated only once. If, for example, the index or the
 properties of a control change, the target conditions aren't evaluated again.
@@ -266,8 +281,9 @@ Height={{width1}}
 
 A capture rule may match several controls at once. A style reading `{{VarName}}`
 gets the value from whichever capturing control is closest to it in the control
-tree, i.e. the one it shares the deepest common parent with. The variable only
-becomes undefined once the last capturing control is gone.
+tree, i.e. the one it shares the deepest common parent with; between equally
+close controls, the one that appeared last wins. The variable only becomes
+undefined once the last capturing control is gone.
 
 A substitution can appear anywhere in a value, including alongside literal text:
 
@@ -290,6 +306,9 @@ Inside `{{ ... }}`, the supported expression syntax is:
   The condition must be numeric, but each branch may be a number or a string,
   e.g. `` {{width > 0 ? `*` : `Auto`}} `` selects a `GridLength` keyword.
 * `min(a, b)` and `max(a, b)`.
+* `skip()`: leaves the style unapplied, so the property keeps (or returns to)
+  its original value, e.g. `{{width > 0 ? width : skip()}}` applies only once
+  `width` is positive.
 * Parentheses for grouping, and nesting such as `{{min(a, b + 1) * 2}}`.
 
 Arithmetic, the unary sign, the relational comparisons, and `min` / `max`
@@ -441,18 +460,28 @@ from the **TranslucentTB** project.
   - LegacyFluent: LegacyFluent
   - OnlySearch: OnlySearch
   - OnlySearch_variant_Minimal: OnlySearch (Minimal)
-  - WindowGlass: WindowGlass (for the redesigned Start menu)
-  - Fluid: Fluid (for the redesigned Start menu)
+  - WindowGlass: WindowGlass
+  - Fluid: Fluid
   - Oversimplified&Accentuated: Oversimplified&Accentuated
-  - LiquidGlass2: LiquidGlass (for the redesigned Start menu)
-  - LiquidGlass: LiquidGlass (Legacy) (for the redesigned Start menu)
+  - LiquidGlass2: LiquidGlass
+  - LiquidGlass: LiquidGlass (Legacy)
   - Windows10X: Windows10X
   - TintedGlass: TintedGlass
-  - LayerMicaUI: LayerMicaUI (for the redesigned Start menu)
+  - LayerMicaUI: LayerMicaUI
   - Borderless: Borderless
-  - Command Center: Command Center (for the redesigned Start menu)
+  - Command Center: Command Center
   - FullScreen: FullScreen
-  - FrostyGlass: FrostyGlass (for the redesigned Start menu)
+  - FrostyGlass: FrostyGlass
+  - FlyoutStartMenu: FlyoutStartMenu
+  - OS26 Tahoe App Launcher_variant_DarkCenter: >-
+      OS26 Tahoe App Launcher (Dark, Center)
+  - OS26 Tahoe App Launcher_variant_DarkBottom: >-
+      OS26 Tahoe App Launcher (Dark, Bottom)
+  - OS26 Tahoe App Launcher_variant_ClearCenter: >-
+      OS26 Tahoe App Launcher (Clear, Center)
+  - OS26 Tahoe App Launcher_variant_ClearBottom: >-
+      OS26 Tahoe App Launcher (Clear, Bottom)
+  - Raycast: Raycast
 - disableNewStartMenuLayout: ""
   $name: Start menu layout
   $description: >-
@@ -553,7 +582,7 @@ const Theme g_themeTranslucentStartMenu = {{
         L"Background:=$CommonBgBrush",
         L"BorderThickness=0",
         L"CornerRadius=15"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>",
@@ -660,7 +689,7 @@ const Theme g_themeTranslucentStartMenu_variant_ClassicStartMenu = {{
         L"Background:=$CommonBgBrush",
         L"BorderThickness=0",
         L"CornerRadius=15"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>",
@@ -833,7 +862,7 @@ const Theme g_themeSideBySide_variant_ClassicStartMenu = {{
         L"CornerRadius=4",
         L"VerticalAlignment=0",
         L"Margin=-8,-35,8,0"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0.1\" TintLuminosityOpacity=\"1\" Opacity=\"1\"/>"}},
 }};
 
@@ -1303,18 +1332,26 @@ const Theme g_themeWindows10 = {{
     ThemeTargetStyles{L"Grid#ShowMorePinnedGrid", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
-        L"Visibility=Visible",
-        L"Margin=-642,39,641-39"}},
+        L"Margin=-642,39,641,-39"}},
     ThemeTargetStyles{L"Button", {
         L"Style:=<ResourceKey=\"ButtonRevealStyle\" />"}},
-    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > Windows.UI.Xaml.Controls.ScrollViewer", {
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper", {
+        L"ActualHeight=>pinnedWrapperHeight"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > Windows.UI.Xaml.Controls.ScrollViewer#ScrollViewer", {
         L"RenderTransform:=<TranslateTransform X=\"-450\" />",
-        L"Margin=-92,-64,-152,-15"}},
+        L"Margin=-92,-23,-152,-15"}},
     ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > Windows.UI.Xaml.Controls.ScrollViewer#SideBySidePinnedScrollViewer", {
         L"RenderTransform:=<TranslateTransform X=\"267\" Y=\"67\" />",
+        L"Margin=-92,-64,-152,-15",
         L"Canvas.ZIndex=-1"}},
-    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > Grid#SideBySidePinnedWrapper > ScrollViewer#SideBySidePinnedScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#SideBySidePinnedContent > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
-        L"Margin=0,0,0,-86"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
+        L"MinHeight={{pinnedWrapperHeight - 35}}",
+        L"MaxHeight={{pinnedWrapperHeight - 35}}"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList", {
+        L"MinHeight=8400"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer", {
+        L"VerticalAlignment=Top",
+        L"Height={{pinnedWrapperHeight - 35}}"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#Border@CommonStates", {
         L"CornerRadius=0",
         L"BorderBrush@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.5\"/>"}},
@@ -1400,6 +1437,8 @@ const Theme g_themeWindows10 = {{
         L"MaxHeight=686",
         L"Canvas.ZIndex=99",
         L"RenderTransform:=<TranslateTransform X=\"-20\" Y=\"12\" />"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar", {
+        L"Margin=0,35,0,43"}},
     ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > Grid#SideBySidePinnedWrapper > ScrollViewer#SideBySidePinnedScrollViewer", {
         L"MaxWidth=396"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton > Grid > Windows.UI.Xaml.Controls.ContentPresenter > TextBlock", {
@@ -1409,7 +1448,7 @@ const Theme g_themeWindows10 = {{
         L"Margin=-8"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
         L"Style:=<StaticResource ResourceKey=\"ButtonRevealStyle\"/>",
-        L"Margin=-375,41,375,-41",
+        L"Margin=-375,0,375,0",
         L"Width=24",
         L"Padding=0,4,0,4",
         L"Height=24"}},
@@ -1515,7 +1554,7 @@ const Theme g_themeWindows10 = {{
         L"Width=708",
         L"Height=886",
         L"Margin=-60,-10,0,-28"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\"/>",
         L"BorderThickness=2"}},
     ThemeTargetStyles{L"Grid#QueryFormulationRoot", {
@@ -1711,7 +1750,7 @@ const Theme g_themeWindows10_variant_ClassicStartMenu = {{
         L"Width=740",
         L"Padding=0",
         L"Height=750"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\"/>"}},
     ThemeTargetStyles{L"Grid#QueryFormulationRoot", {
         L"Padding=-14,0,-14,0"}},
@@ -1852,7 +1891,7 @@ const Theme g_themeWindows10_variant_Minimal = {{
         L"Width=690",
         L"Height=886",
         L"Margin=-20,-10,0,-24"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\"/>"}},
     ThemeTargetStyles{L"Grid#QueryFormulationRoot", {
         L"Padding=-14,0,-14,0"}},
@@ -2154,7 +2193,7 @@ const Theme g_themeWindows10_variant_Minimal_ClassicStartMenu = {{
         L"Width=740",
         L"Padding=0",
         L"Height=750"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\"/>"}},
     ThemeTargetStyles{L"Grid#QueryFormulationRoot", {
         L"Padding=-14,0,-14,0"}},
@@ -2227,18 +2266,19 @@ const Theme g_themeWindows11_Metro10 = {{
         L"CornerRadius=5",
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.8\"/>"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
-        L"Visibility=Visible",
-        L"Margin=12,-8,-12,0"}},
+        L"Margin=12,-31,-12,0"}},
     ThemeTargetStyles{L"Button", {
         L"Style:=<ResourceKey=\"ButtonRevealStyle\" />"}},
     ThemeTargetStyles{L"Grid#TopLevelHeader", {
         L"Margin=0,0,-1,0"}},
-    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > Windows.UI.Xaml.Controls.ScrollViewer", {
-        L"RenderTransform:=<TranslateTransform X=\"-480\" />",
-        L"Margin=-92,-12,-172,-15"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"*\"/><ColumnDefinition Width=\"314\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > Windows.UI.Xaml.Controls.ScrollViewer#ScrollViewer", {
+        L"Grid.Column=0",
+        L"Margin=-32,-12,-6,-15"}},
     ThemeTargetStyles{L"Grid#SideBySidePinnedWrapper > Windows.UI.Xaml.Controls.ScrollViewer#SideBySidePinnedScrollViewer", {
-        L"RenderTransform:=<TranslateTransform X=\"172\" />",
-        L"Canvas.ZIndex=-1"}},
+        L"Grid.Column=1",
+        L"Margin=0,-12,0,-15"}},
     ThemeTargetStyles{L"Button#Header > Border#Border@CommonStates", {
         L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.3\"/>",
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.3\"/>",
@@ -2247,20 +2287,37 @@ const Theme g_themeWindows11_Metro10 = {{
         L"Background:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.3\"/>",
         L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.7\"/>",
         L"BorderThickness=1"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
+        L"Grid.Row=0",
+        L"VerticalAlignment=Top",
+        L"Margin=0,55,0,0",
+        L"MinHeight={{recommendedVisibility==1?529:265}}",
+        L"MaxHeight={{recommendedVisibility==1?529:265}}"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root", {
+        L"Padding=0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList", {
+        L"Grid.ColumnSpan=2",
+        L"HorizontalAlignment=Left",
+        L"MinHeight=8400"}},
     ThemeTargetStyles{L"GridView#PinnedList", {
-        L"Width=300",
-        L"RenderTransform:=<TranslateTransform Y=\"-24\"  />"}},
+        L"Width=300"}},
     ThemeTargetStyles{L"GridView#PinnedList > Border > Windows.UI.Xaml.Controls.ScrollViewer", {
         L"Height=265"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer", {
+        L"VerticalAlignment=Top",
+        L"Height={{recommendedVisibility==1?529:265}}"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#PinnedList > Border > Windows.UI.Xaml.Controls.ScrollViewer > Border > Grid > Windows.UI.Xaml.Controls.ScrollContentPresenter > Windows.UI.Xaml.Controls.ItemsPresenter > Windows.UI.Xaml.Controls.ItemsWrapGrid > Windows.UI.Xaml.Controls.GridViewItem > Border#ContentBorder@CommonStates > Grid#DroppedFlickerWorkaroundWrapper", {
         L"Background:=<RevealBorderBrush Color=\"#646464\" TargetTheme=\"1\" Opacity=\".1\"/>",
         L"Margin=2",
         L"CornerRadius=5"}},
     ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
+        L"Grid.Row=0",
+        L"VerticalAlignment=Top",
         L"MinHeight=132",
-        L"Margin=-65,31,-65,-31",
-        L"Width=400",
-        L"RenderTransform:=<TranslateTransform Y=\"-80\"/>"}},
+        L"Margin=-52,336,-34,0",
+        L"Canvas.ZIndex=1"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsContainerParent", {
+        L"Visibility=>recommendedVisibility"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#RecommendedList > Windows.UI.Xaml.Controls.Border > Windows.UI.Xaml.Controls.ScrollViewer#ScrollViewer > Windows.UI.Xaml.Controls.Border#Root > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ScrollContentPresenter#ScrollContentPresenter > Windows.UI.Xaml.Controls.ItemsPresenter > Windows.UI.Xaml.Controls.ItemsWrapGrid > Windows.UI.Xaml.Controls.GridViewItem", {
         L"MaxWidth=145",
         L"MinWidth=145",
@@ -2471,7 +2528,7 @@ const Theme g_themeFluent2Inspired = {{
         L"Margin=40,0,-40,0"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0.25\" TintLuminosityOpacity=\".96\" Opacity=\"1\"/>",
         L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>",
         L"CornerRadius=12"}},
@@ -2549,7 +2606,7 @@ const Theme g_themeFluent2Inspired = {{
         L"FontFamily=Aptos",
         L"Opacity=.85",
         L"FontWeight=ExtraBold"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FontIcon#SearchBoxOnTaskbarSearchGlyph", {
         L"Visibility=0",
@@ -2683,7 +2740,7 @@ const Theme g_themeFluent2Inspired_variant_ClassicStartMenu = {{
         L"Margin=-32,0,0,0"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0.25\" TintLuminosityOpacity=\".96\" Opacity=\"1\"/>",
         L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>",
         L"CornerRadius=12"}},
@@ -2781,7 +2838,7 @@ const Theme g_themeFluent2Inspired_variant_ClassicStartMenu = {{
         L"FontFamily=Aptos",
         L"Opacity=.85",
         L"FontWeight=ExtraBold"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FontIcon#SearchBoxOnTaskbarSearchGlyph", {
         L"Visibility=0",
@@ -2863,6 +2920,8 @@ const Theme g_themeRosePine = {{
         L"CornerRadius=25",
         L"BorderBrush=#ebbcba",
         L"Background=#191724"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame", {
         L"CornerRadius=25"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FontIcon > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock", {
@@ -2910,7 +2969,7 @@ const Theme g_themeRosePine = {{
         L"Foreground=#c4a7e7"}},
     ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
         L"Margin=0,0,-38,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"Background=#191724",
         L"BorderThickness=1.5",
         L"BorderBrush=#ebbcba",
@@ -3028,11 +3087,13 @@ const Theme g_themeRosePine_variant_ClassicStartMenu = {{
         L"Foreground=#c4a7e7"}},
     ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
         L"Margin=0,0,-38,0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"Background=#191724",
         L"BorderThickness=1.5",
         L"BorderBrush=#ebbcba",
         L"CornerRadius=25"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#OuterBorderGrid", {
         L"CornerRadius=25"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#TaskbarSearchBackground", {
@@ -3076,10 +3137,10 @@ const Theme g_themeWindows11_Metro10Minimal = {{
     ThemeTargetStyles{L"Border#AcrylicBorder", {
         L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>",
         L"BorderThickness=1"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\".85\" Opacity=\"1\"/>",
         L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader", {
         L"Visibility=Collapsed"}},
@@ -3170,10 +3231,10 @@ const Theme g_themeWindows11_Metro10Minimal_variant_ClassicStartMenu = {{
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\".85\" Opacity=\"1\"/>",
         L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>",
         L"BorderThickness=1"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\".85\" Opacity=\"1\"/>",
         L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1"}},
 }};
 
@@ -3183,6 +3244,8 @@ const Theme g_themeEverblush = {{
         L"BorderBrush=#268ccf7e"}},
     ThemeTargetStyles{L"Border#AcrylicOverlay", {
         L"Background=#141b1e"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton > Grid > Border", {
         L"Background=#232a2d",
         L"BorderBrush=transparent"}},
@@ -3227,7 +3290,7 @@ const Theme g_themeEverblush = {{
         L"CornerRadius=6"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#ContentBorder > Windows.UI.Xaml.Controls.Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
         L"Background=Transparent"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background=#141b1e"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Background=#232a2d",
@@ -3297,8 +3360,10 @@ const Theme g_themeEverblush_variant_ClassicStartMenu = {{
         L"CornerRadius=6"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#ContentBorder > Windows.UI.Xaml.Controls.Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
         L"Background=transparent"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background=#141b1e"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Background=#232a2d",
         L"BorderBrush=transparent"}},
@@ -3371,6 +3436,10 @@ const Theme g_themeSunValley = {{
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeAltHighColor}\" TintOpacity=\"0.4\" TintLuminosityOpacity=\"0.4\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />",
         L"Visibility=Visible",
         L"BorderThickness=1,1,1,0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentAppBorder", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#dropshadow", {
         L"Opacity=0"}},
     ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid > Grid#UnderlineContainer", {
@@ -3578,8 +3647,10 @@ const Theme g_theme21996 = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MainContent", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" TintLuminosityOpacity=\"0.5\" FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />",
         L"CornerRadius=7"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" TintLuminosityOpacity=\"0.7\" FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#FullBleedBackground", {
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.76\" TintLuminosityOpacity=\"0.77\" FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />"}},
     ThemeTargetStyles{L"Image#SearchIconOn", {
@@ -3697,24 +3768,30 @@ const Theme g_themeUniMenu = {{
         L"MaxHeight=520",
         L"Margin=-8,10,0,0"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"Margin=32,25,0,0"}},
+        L"Margin=26,40,12,0"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton", {
-        L"Width=430",
         L"Height=40",
-        L"Margin=-50,0,0,0",
+        L"Margin=49,0,{{showMorePinnedVisibility==1?62:112}},0",
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\".3\" TintLuminosityOpacity=\".5\" Opacity=\"1\"/>",
-        L"RenderTransform:=<TranslateTransform Y=\"11\" />"}},
+        L"RenderTransform:=<TranslateTransform Y=\"26\" />"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton > Grid > Border#BorderElement", {
         L"CornerRadius=5",
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\".3\" TintLuminosityOpacity=\".5\" Opacity=\"1\"/>"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Grid.Row=0",
+        L"Height=Auto",
+        L"VerticalAlignment=Stretch"}},
     ThemeTargetStyles{L"StartDocked.PowerOptionsView", {
-        L"Margin=-135,-950,0,0",
+        L"Margin={{showMorePinnedVisibility==1?-52:-102}},0,0,0",
+        L"RenderTransform:=<TranslateTransform Y=\"26\" />",
         L"Canvas.ZIndex=99"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#PinnedList > Windows.UI.Xaml.Controls.Border > Windows.UI.Xaml.Controls.ScrollViewer > Windows.UI.Xaml.Controls.Border > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ScrollContentPresenter > Windows.UI.Xaml.Controls.ItemsPresenter > Windows.UI.Xaml.Controls.ItemsWrapGrid > Windows.UI.Xaml.Controls.GridViewItem", {
         L"Margin=5,0,0,0",
         L"Padding=-1,0"}},
     ThemeTargetStyles{L"StartMenu.PinnedList > Grid#Root", {
         L"Padding=0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList > Grid#Root > GridView#PinnedList", {
+        L"Grid.ColumnSpan=2"}},
     ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
         L"Height=27",
         L"Text="}},
@@ -3754,17 +3831,24 @@ const Theme g_themeUniMenu = {{
         L"CornerRadius=8"}},
     ThemeTargetStyles{L"Border#StartDropShadow", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Grid#MainMenu", {
         L"MaxWidth=650"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer", {
+        L"VerticalOffset=>allAppsScrollOffset"}},
+    ThemeTargetStyles{L"Grid#ShowMorePinnedGrid", {
+        L"Visibility=>showMorePinnedVisibility",
+        L"Canvas.ZIndex=1"}},
     ThemeTargetStyles{L"Grid#TopLevelHeader > Grid[2] > Button", {
         L"Width=40",
         L"Height=40",
-        L"Margin=-73,-6,73,6"}},
+        L"Margin=-30,-6,30,6",
+        L"Padding=0",
+        L"RenderTransform:=<TranslateTransform Y=\"{{allAppsScrollOffset==``?15:15+allAppsScrollOffset}}\" />"}},
     ThemeTargetStyles{L"TextBlock#ShowMorePinnedButtonText", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FontIcon[Glyph=\uE70D]", {
+    ThemeTargetStyles{L"Grid#ShowMorePinnedGrid > Button > Grid > ContentPresenter > StackPanel > FontIcon", {
         L"Glyph=\uEA37",
         L"FontSize=16",
         L"Margin=0"}},
@@ -3775,6 +3859,9 @@ const Theme g_themeUniMenu = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton", {
         L"Height=40",
         L"Width=40"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
+        L"Margin={{showMorePinnedVisibility==1?-52:-102}},0,{{showMorePinnedVisibility==1?62:112}},0",
+        L"RenderTransform:=<TranslateTransform Y=\"26\" />"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton > Border@CommonStates > ContentPresenter", {
         L"Width=40",
         L"Height=40",
@@ -3783,7 +3870,6 @@ const Theme g_themeUniMenu = {{
         L"BorderThickness=1",
         L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\".3\" TintLuminosityOpacity=\".5\" Opacity=\"1\"/>",
         L"CornerRadius=5",
-        L"RenderTransform:=<TranslateTransform Y=\"11\" X=\"-4\" />",
         L"Background@CheckedPointerOver:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".2\" Opacity=\"1\"/>"}},
     ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Grid", {
         L"Canvas.ZIndex=1"}},
@@ -3953,7 +4039,7 @@ const Theme g_themeUniMenu_variant_ClassicStartMenu = {{
         L"CornerRadius=8"}},
     ThemeTargetStyles{L"Border#dropshadow", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
 }};
 
@@ -3979,6 +4065,13 @@ const Theme g_themeLegacyFluent = {{
         L"Height=0"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {
         L"Height=518"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList", {
+        L"MinHeight=8400"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border", {
+        L"VerticalAlignment=Top",
+        L"Height=518"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer", {
+        L"ScrollViewer.VerticalScrollMode=Enabled"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions > Windows.UI.Xaml.Controls.Button > Windows.UI.Xaml.Controls.ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.TextBlock", {
         L"Text=Recommended"}},
     ThemeTargetStyles{L"StartMenu.PinnedListTile > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Grid#DisplayNameAndDownloadIconContainer > Windows.UI.Xaml.Controls.TextBlock#DisplayName", {
@@ -4096,13 +4189,13 @@ const Theme g_themeLegacyFluent = {{
         L"BorderThickness@Pressed=2"}},
     ThemeTargetStyles{L"StartDocked.AllAppsZoomListViewItem > Windows.UI.Xaml.Controls.Grid#ContentBorder@DisabledStates > Windows.UI.Xaml.Controls.Border", {
         L"RenderTransform@Disabled:=<ScaleTransform ScaleX=\"0\" ScaleY=\"0\" CenterX=\"0.5\" CenterY=\"0.5\" />"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder, Windows.UI.Xaml.Controls.Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage", {
         L"RenderTransform:=<TranslateTransform X=\"-13\" Y=\"1\" />"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#TaskbarMargin", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"CornerRadius=0",
         L"BorderThickness=0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#StartDropShadow", {
@@ -4342,13 +4435,13 @@ const Theme g_themeLegacyFluent_variant_ClassicStartMenu = {{
         L"BorderThickness@Pressed=2"}},
     ThemeTargetStyles{L"StartDocked.AllAppsZoomListViewItem > Windows.UI.Xaml.Controls.Grid#ContentBorder@DisabledStates > Windows.UI.Xaml.Controls.Border", {
         L"RenderTransform@Disabled:=<ScaleTransform ScaleX=\"0\" ScaleY=\"0\" CenterX=\"0.5\" CenterY=\"0.5\" />"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder, Windows.UI.Xaml.Controls.Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage", {
         L"RenderTransform:=<TranslateTransform X=\"-13\" Y=\"1\" />"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#TaskbarMargin", {
         L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"CornerRadius=0",
         L"BorderThickness=0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#dropshadow", {
@@ -4605,7 +4698,7 @@ const Theme g_themeWindowGlass = {{
         L"Visibility=1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#dropshadow", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ToolTip > Windows.UI.Xaml.Controls.ContentPresenter#LayoutRoot", {
         L"Background:=$Background",
@@ -4663,6 +4756,11 @@ const Theme g_themeWindowGlass = {{
         L"MinHeight:=100",
         L"Width=300",
         L"Margin=0,0,60,0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.GridView#PinnedList", {
+        L"MinHeight=8400"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.GridView#PinnedList > Border", {
+        L"VerticalAlignment=Top",
+        L"Height=450"}},
     ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion", {
         L"Height=810",
         L"Margin=15,0,30,0"}},
@@ -4972,11 +5070,11 @@ const Theme g_themeOversimplified_Accentuated = {{
         L"CornerRadius=12"}},
     ThemeTargetStyles{L"Border#BorderBackground", {
         L"CornerRadius=12"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=$Alt",
         L"BorderBrush=Transparent",
         L"CornerRadius=20"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#dropshadow", {
         L"Visibility=Collapsed"}},
@@ -5040,15 +5138,15 @@ const Theme g_themeLiquidGlass2 = {{
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush"}},
     ThemeTargetStyles{L"Grid#Root > Border", {
-        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#40B5B5B5\" Offset=\"0.0\" /><GradientStop Color=\"#40B5B5B5\" Offset=\"0.3\" /><GradientStop Color=\"#20050505\" Offset=\"0.45\" /><GradientStop Color=\"#40040404\" Offset=\"0.75\" /><GradientStop Color=\"#20050505\" Offset=\"0.85\" /><GradientStop Color=\"#40ACACAC\" Offset=\"1\" /></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#69B5B5B5\" Offset=\"0.0\" /><GradientStop Color=\"#40B5B5B5\" Offset=\"0.2\" /><GradientStop Color=\"#50303030\" Offset=\"0.3\" /><GradientStop Color=\"#50101010\" Offset=\"0.65\" /><GradientStop Color=\"#50303030\" Offset=\"0.75\" /><GradientStop Color=\"#50ACACAC\" Offset=\"1\" /></LinearGradientBrush>",
         L"Background:=$GlassDark2",
-        L"BorderThickness=1,1,1,1",
-        L"CornerRadius=62,62,58,58"}},
+        L"BorderThickness=1",
+        L"CornerRadius=62"}},
     ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot", {
         L"Margin=10,0,10,0",
         L"CornerRadius=50",
         L"Background:=Transparent"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=$GlassDarkSearchPage",
         L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#40B5B5B5\" Offset=\"0.0\" /><GradientStop Color=\"#40B5B5B5\" Offset=\"0.1\" /><GradientStop Color=\"#10050505\" Offset=\"0.3\" /><GradientStop Color=\"#10040404\" Offset=\"0.5\" /><GradientStop Color=\"#10050505\" Offset=\"0.75\" /><GradientStop Color=\"#40ACACAC\" Offset=\"1\" /></LinearGradientBrush>",
         L"BorderThickness=0.5,1,0.5,1",
@@ -5062,8 +5160,8 @@ const Theme g_themeLiquidGlass2 = {{
         L"CornerRadius=20"}},
     ThemeTargetStyles{L"Grid#ContentBorder", {
         L"CornerRadius=10"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
-        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame", {
         L"Width=Auto",
         L"Height=Auto"}},
@@ -5082,7 +5180,7 @@ const Theme g_themeLiquidGlass2 = {{
         L"BorderBrush:=<WindhawkBlur BlurAmount=\"60\" TintColor=\"#100F0F0F\"/>"}},
     ThemeTargetStyles{L"Border#RootGridDropShadow", {
         L"CornerRadius=50",
-        L"Margin=0.4,0,0.3,0",
+        L"Margin=0.3,0,0.3,0",
         L"Canvas.ZIndex=-1"}},
     ThemeTargetStyles{L"Grid#TopLevelHeader > Grid > Button", {
         L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-5\" />"}},
@@ -5190,10 +5288,6 @@ const Theme g_themeLiquidGlass2 = {{
         L"Background=Transparent"}},
     ThemeTargetStyles{L"ScrollViewer#ContentScrollViewer", {
         L"Background=Transparent"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ContentDialog Border#BackgroundElement", {
-        L"Background=Transparent"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ContentDialog Border#Container", {
-        L"Background=Transparent"}},
     ThemeTargetStyles{L"ScrollViewer#ContentScrollViewer > Border", {
         L"Background=Transparent"}},
     ThemeTargetStyles{L"ContentControl#Title", {
@@ -5244,6 +5338,9 @@ const Theme g_themeLiquidGlass2 = {{
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOn", {
+        L"RenderTransformOrigin=0.5,0.5",
+        L"RenderTransform:=<ScaleTransform ScaleX=\"1.4\" ScaleY=\"1.4\" />"}},
     ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
         L"Visibility=Visible",
         L"HorizontalAlignment=Center",
@@ -5280,8 +5377,6 @@ const Theme g_themeLiquidGlass2 = {{
         L"CornerRadius=40",
         L"BorderThickness=1,1,1,1",
         L"Padding=8,6,8,7"}},
-    ThemeTargetStyles{L"FlyoutPresenter", {
-        L"CornerRadius=40"}},
     ThemeTargetStyles{L"MenuFlyoutItem", {
         L"CornerRadius=11",
         L"Margin=2,3,2,3"}},
@@ -5291,7 +5386,7 @@ const Theme g_themeLiquidGlass2 = {{
         L"BorderThickness=1",
         L"Padding={{ max(14, min(18.5, TooltipHeight * 0.25)) }},{{ max(8, min(12, TooltipHeight * 0.2)) }},{{ max(14, min(17, TooltipHeight * 0.25)) }},{{ max(9, min(12, TooltipHeight * 0.22)) }}",
         L"FontSize=14",
-        L"CornerRadius={{ max(19, min(65, (TooltipHeight / 2.1) * 1)) }}",
+        L"CornerRadius={{ max(19, min(67, (TooltipHeight / 2.1) * 1)) }}",
         L"ActualHeight=>TooltipHeight"}},
     ThemeTargetStyles{L"Button#ShowMoreSuggestionsButton > Grid@CommonStates", {
         L"CornerRadius=16",
@@ -5305,13 +5400,15 @@ const Theme g_themeLiquidGlass2 = {{
     ThemeTargetStyles{L"Grid#TopLevelSuggestionsListHeader", {
         L"CornerRadius=21.5",
         L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#10151515\"/>",
-        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.465,0\" EndPoint=\"0.535,1\"><GradientStop Color=\"#5FBFBFBF\" Offset=\"0.0\" /><GradientStop Color=\"#3F050505\" Offset=\"0.28\" /><GradientStop Color=\"#6F040404\" Offset=\"0.5\" /><GradientStop Color=\"#3F050505\" Offset=\"0.72\" /><GradientStop Color=\"#5FBFBFBF\" Offset=\"1\" /></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.475,0\" EndPoint=\"0.525,1\"><GradientStop Color=\"#5FBFBFBF\" Offset=\"0.0\" /><GradientStop Color=\"#3F050505\" Offset=\"0.28\" /><GradientStop Color=\"#6F040404\" Offset=\"0.5\" /><GradientStop Color=\"#3F050505\" Offset=\"0.72\" /><GradientStop Color=\"#5FBFBFBF\" Offset=\"1\" /></LinearGradientBrush>",
         L"BorderThickness=1",
         L"Visibility=>RecVis",
         L"HorizontalAlignment=Left",
         L"ActualHeight=>RecmHyt",
         L"Padding={{ -1 * max(44, min(88, RecmHyt * 1)) }},{{ max(0, min(1000, RecmHyt * 0.08)) }},{{ max(0, min(1000, RecmHyt * 0.09)) }},{{ max(0, min(1000, RecmHyt * 0.09)) }}",
         L"Margin={{ max(52, min(102, RecmHyt * 1.2)) }},{{ max(22, min(44, RecmHyt * 0.5)) }},0,0"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot > Grid#TopLevelSuggestionsListHeader > TextBlock#TopLevelSuggestionsListHeaderText", {
+        L"Text=Recent Apps & Files"}},
     ThemeTargetStyles{L"GridView#RecommendedList", {
         L"ActualWidth=>RecContainerWidth"}},
     ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
@@ -5346,9 +5443,9 @@ const Theme g_themeLiquidGlass2 = {{
         L"Margin=0"}},
     ThemeTargetStyles{L"Grid#MoreSuggestionsRoot > Grid", {
         L"Background=Transparent",
-        L"Margin=0,{{ -1 * max(80, min(120, MenuHeight * 0.135)) }},0,0"}},
+        L"Margin=0,{{ -1 * max(100, min(180, MenuHeight * 0.165)) }},0,0"}},
     ThemeTargetStyles{L"ListView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter", {
-        L"Margin=0,{{ max(80, min(120, MenuHeight * 0.135)) }},0,0"}},
+        L"Margin=0,{{ max(100, min(180, MenuHeight * 0.165)) }},0,{{ max(60, min(100, MenuHeight * 0.1)) }}"}},
     ThemeTargetStyles{L"Grid#MoreSuggestionsRoot > Grid[1]", {
         L"CornerRadius=21.5",
         L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#10151515\"/>",
@@ -5359,7 +5456,7 @@ const Theme g_themeLiquidGlass2 = {{
         L"Margin={{ max(52, min(90, MenuWidth * 0.08)) }},{{ max(75, min(120, MenuHeight * 0.101)) }},0,0",
         L"Canvas.ZIndex=10"}},
     ThemeTargetStyles{L"TextBlock#MoreSuggestionsListHeaderText", {
-        L"Text=Recommended - Recent Apps & Files"}},
+        L"Text=Recent Apps & Files"}},
     ThemeTargetStyles{L"ScrollViewer#MenuFlyoutPresenterScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > StackPanel", {
         L"ChildrenTransitions:=<TransitionCollection><EntranceThemeTransition IsStaggeringEnabled=\"False\" FromHorizontalOffset=\"-40\" FromVerticalOffset=\"0\" /></TransitionCollection>"}},
     ThemeTargetStyles{L"Grid#LayoutRoot", {
@@ -5436,8 +5533,6 @@ const Theme g_themeLiquidGlass2 = {{
         L"Width=Auto",
         L"Height=Auto"}},
     ThemeTargetStyles{L"StartMenu.PinnedListTile > Grid#Root > Grid#LogoContainer", {
-        L"RenderTransformOrigin=0.5,0.5",
-        L"RenderTransform:=<ScaleTransform ScaleX=\"1.02\" ScaleY=\"1.02\" />",
         L"ActualHeight=>PinAppHyt",
         L"ActualWidth=>PinAppWid",
         L"MinHeight=39",
@@ -5458,8 +5553,38 @@ const Theme g_themeLiquidGlass2 = {{
         L"MinWidth=55",
         L"Height={{ max(52, min(100, PinAppHyt * 1.22)) }}",
         L"Width={{ max(55, min(105, PinAppWid * 1.22)) }}"}},
-    ThemeTargetStyles{L"Border#FolderPlate > > TextBlock", {
-        L"FontSize=23"}},
+    ThemeTargetStyles{L"FlyoutPresenter", {
+        L"BorderThickness=0",
+        L"CornerRadius=40"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FlyoutPresenter > Windows.UI.Xaml.Controls.Border", {
+        L"Background:=Transparent",
+        L"BorderThickness=0",
+        L"CornerRadius=40",
+        L"Padding=0"}},
+    ThemeTargetStyles{L"AccountControl.View.AccountControlFlyout", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"AccountControl.View.AccountControlFlyout > Grid", {
+        L"Background:=<WindhawkBlur BlurAmount=\"6\" TintColor=\"#353A3A3A\"/>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#58BFBFBF\" Offset=\"0.0\" /><GradientStop Color=\"#1F050505\" Offset=\"0.28\" /><GradientStop Color=\"#50040404\" Offset=\"0.5\" /><GradientStop Color=\"#1F050505\" Offset=\"0.72\" /><GradientStop Color=\"#58B5B5B5\" Offset=\"1\" /></LinearGradientBrush>",
+        L"BorderThickness=1",
+        L"CornerRadius=40"}},
+    ThemeTargetStyles{L"AccountControl.View.UserProfileView", {
+        L"Background:=Transparent",
+        L"CornerRadius=40"}},
+    ThemeTargetStyles{L"AccountControl.View.UserProfileView > Grid", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"AccountControl.View.DeviceOpsView > StackPanel@CommonStates > Button", {
+        L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#19292929\"/>",
+        L"Background@PointerOver:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#19292929\"/>",
+        L"Background@Pressed:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#19292929\"/>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.45,0\" EndPoint=\"0.55,1\"><GradientStop Color=\"#5FBFBFBF\" Offset=\"0.0\" /><GradientStop Color=\"#2F050505\" Offset=\"0.28\" /><GradientStop Color=\"#5F040404\" Offset=\"0.5\" /><GradientStop Color=\"#2F050505\" Offset=\"0.72\" /><GradientStop Color=\"#5FB5B5B5\" Offset=\"1\" /></LinearGradientBrush>",
+        L"BorderThickness=1",
+        L"CornerRadius=19",
+        L"RenderTransformOrigin=0.5,0.5",
+        L"RenderTransform:=<ScaleTransform ScaleX=\"1.0\" ScaleY=\"1.0\" />",
+        L"RenderTransform@PointerOver:=<ScaleTransform ScaleX=\"1.03\" ScaleY=\"1.05\" />",
+        L"RenderTransform@Pressed:=<ScaleTransform ScaleX=\"0.95\" ScaleY=\"0.95\" />",
+        L"Margin=0,2,10,0"}},
 }, {
     L"Glass=<WindhawkBlur BlurAmount=\"5\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.1\" />",
     L"Frosted=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.3\" />",
@@ -5474,8 +5599,8 @@ const Theme g_themeLiquidGlass2 = {{
     L"ElementCornerRadius=20",
     L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>",
     L"ElementBorderBrush2=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>",
-    L"GlassDark=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#1A000000\" />",
-    L"GlassDark2=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#0D000000\" />",
+    L"GlassDark=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#1A000000\" TintSaturation=\"1.3\"  />",
+    L"GlassDark2=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#0D000000\" TintSaturation=\"1.3\" />",
     L"GlassDarkTitles=<WindhawkBlur BlurAmount=\"7\" TintColor=\"#10151515\"/>",
     L"GlassDarkBottomTray=<WindhawkBlur BlurAmount=\"14\" TintColor=\"#3E4A4A4A\"/>",
     L"fluidBorder=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Offset=\"0\" Color=\"#2FFFFFFF\" /><GradientStop Offset=\"0.2\" Color=\"#1AFFFFFF\" /><GradientStop Offset=\"0.65\" Color=\"#1AF0F0F0\" /><GradientStop Offset=\"1\" Color=\"#2F707070\" /></LinearGradientBrush>",
@@ -5541,11 +5666,13 @@ const Theme g_themeLiquidGlass = {{
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#ContentBorder@CommonStates > Grid > Border#BackgroundBorder", {
         L"BorderThickness=$ElementBorderThickness",
         L"BorderBrush@PointerOver:=$ElementBorderBrush",
@@ -5733,7 +5860,7 @@ const Theme g_themeWindows10X = {{
         L"BorderThickness=0,0,0,4",
         L"Height=48",
         L"BorderBrush:=$fakeShadow"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=$acrylic",
         L"CornerRadius=4",
         L"BorderThickness=0,1,0,0",
@@ -5748,7 +5875,7 @@ const Theme g_themeWindows10X = {{
         L"CornerRadius=4"}},
     ThemeTargetStyles{L"ItemsWrapGrid > GridViewItem > Border > Grid > ContentPresenter > ContentControl > Grid > TextBlock", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Border#LogoBackgroundPlate", {
         L"CornerRadius=2"}},
@@ -5783,7 +5910,7 @@ const Theme g_themeWindows10X = {{
         L"Margin=16,0,0,0"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"CornerRadius=4"}},
     ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage", {
         L"Margin=-28,42,-28,0",
@@ -6042,7 +6169,7 @@ const Theme g_themeWindows10X_variant_ClassicStartMenu = {{
         L"BorderThickness=0,0,0,4",
         L"Height=48",
         L"BorderBrush:=$fakeShadow"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=$acrylic",
         L"CornerRadius=4",
         L"BorderThickness=0,1,0,0",
@@ -6057,7 +6184,7 @@ const Theme g_themeWindows10X_variant_ClassicStartMenu = {{
         L"CornerRadius=4"}},
     ThemeTargetStyles{L"TextBlock#StatusMessage", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Border#LogoBackgroundPlate", {
         L"CornerRadius=2"}},
@@ -6123,7 +6250,7 @@ const Theme g_themeWindows10X_variant_ClassicStartMenu = {{
         L"FontFamily=Segoe MDL2 Assets",
         L"Text=\uE721",
         L"Foreground:=<SolidColorBrush Color=\"{ThemeResource FocusStrokeColorOuter}\"/>"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"CornerRadius=4"}},
     ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage", {
         L"Margin=-28,42,-28,0",
@@ -6321,7 +6448,7 @@ const Theme g_themeTintedGlass = {{
         L"Background:=$CommonBgBrush",
         L"BorderThickness=0",
         L"CornerRadius=14"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>",
@@ -6428,6 +6555,8 @@ const Theme g_themeTintedGlass_variant_ClassicStartMenu = {{
         L"Background:=$CommonBgBrush",
         L"BorderThickness=0",
         L"CornerRadius=14"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Border#TaskbarSearchBackground", {
         L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>",
         L"BorderThickness=0",
@@ -6576,9 +6705,9 @@ const Theme g_themeLayerMicaUI = {{
         L"MaxHeight=665",
         L"VerticalAlignment=Bottom",
         L"MinWidth=700"}},
-    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#LayerBorder", {
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#LayerBorder, Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentLayerBorder", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder", {
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder, Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentAppBorder", {
         L"BorderBrush:=$ThemeOutBorder",
         L"CornerRadius=$OuterRadius",
         L"Margin=1"}},
@@ -6814,55 +6943,48 @@ const Theme g_themeLayerMicaUI = {{
 
 const Theme g_themeBorderless = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$StartMenuSuggestions"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NoTopLevelSuggestionsText", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$StartMenuSuggestions"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsContainer", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$StartMenuSuggestions"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$StartMenuSuggestions"}},
     ThemeTargetStyles{L"Border#DropShadow", {
-        L"Opacity=0"}},
+        L"Visibility=$Shadows"}},
     ThemeTargetStyles{L"Border#AcrylicBorder", {
         L"BorderThickness=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox", {
-        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#ShowAllAppsButtonText", {
-        L"Text=All Apps"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.TextBlock", {
-        L"Text=Back"}},
+        L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#UserTileNameText", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton", {
-        L"Height=30",
-        L"Width=Auto"}},
+        L"Height=32",
+        L"Width=64"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton", {
-        L"Height=30",
-        L"Width=Auto"}},
+        L"Height=32",
+        L"Width=64"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#PinnedListHeaderText", {
-        L"Text=Start",
+        L"Text=$StartMenuText",
         L"FontSize=20"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#AllAppsHeading", {
-        L"Text=All Apps",
+        L"Text=$AllMenuText",
         L"FontSize=20"}},
     ThemeTargetStyles{L"StartDocked.NavigationPaneButton#UserTileButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ContentPresenter", {
-        L"Padding=3,0,3,0"}},
+        L"Margin=-7,0,-7,0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.FontIcon", {
-        L"Glyph=\uECAA",
+        L"Glyph=\uECAA \uE974",
         L"FontSize=16"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.FontIcon", {
-        L"Glyph=\uE0C4",
-        L"FontSize=10"}},
+        L"Glyph=\uE973 \uE141",
+        L"FontSize=16"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AcrylicOverlay", {
-        L"Opacity=0"}},
+        L"Opacity=0",
+        L"Margin=0,-48,0,48"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#StartDropShadow", {
-        L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MainContent > Windows.UI.Xaml.Controls.Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$Shadows"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#AllListHeadingText", {
-        L"Text=All Apps",
+        L"Text=$AllMenuText",
         L"FontSize=20"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton > Windows.UI.Xaml.Controls.Grid#RootGrid > ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.TextBlock", {
         L"Text=\uECAA",
@@ -6873,18 +6995,16 @@ const Theme g_themeBorderless = {{
         L"FontFamily=Segoe Fluent Icons",
         L"FontSize=16"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#RightCompanionDropShadow", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$Shadows"}},
     ThemeTargetStyles{L"Border#RootGridDropShadow", {
-        L"Visibility=Collapsed"}},
+        L"Visibility=$Shadows"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Windows.UI.Xaml.Controls.Border > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter", {
         L"CornerRadius=2"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Border > ContentPresenter#ContentPresenter > FontIcon > Grid > TextBlock", {
         L"FontSize=16",
-        L"Text=\uE8CC"}},
+        L"FontWeight=Light"}},
     ThemeTargetStyles{L"Frame#StartFrame", {
-        L"Margin=0,-64,0,0"}},
-    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Grid", {
-        L"Grid.Row=3"}},
+        L"Margin=0,-24,0,0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Border > ContentPresenter", {
         L"Height=40",
         L"Width=40",
@@ -6894,14 +7014,124 @@ const Theme g_themeBorderless = {{
         L"Width=40"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
         L"Height=40",
-        L"Width=40",
-        L"Margin=16,0,-16,0"}},
+        L"Width=52",
+        L"Margin=2,-48,-2,48"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#dropshadow", {
+        L"Visibility=$Shadows"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder, Windows.UI.Xaml.Controls.Border#AccentLayerBorder", {
         L"Opacity=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder", {
-        L"Opacity=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder, Windows.UI.Xaml.Controls.Border#AccentAppBorder", {
         L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MainMenu > Windows.UI.Xaml.Controls.Grid#MainContent > Windows.UI.Xaml.Controls.Grid", {
+        L"Grid.Row=4"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NavPanePlaceholder", {
+        L"Margin=32,0,32,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Frame#StartFrame", {
+        L"Margin=0,-64,0,48"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl", {
+        L"Grid.Row=2",
+        L"Margin=33,-65,33,65",
+        L"Height=32"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#TaskbarSearchBackground", {
+        L"Grid.Row=2",
+        L"Margin=33,-65,33,65"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#OuterBorderGrid", {
+        L"Grid.Row=1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#TaskbarMargin", {
+        L"Grid.Row=3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#QueryFormulationRoot", {
+        L"Margin=0,24,0,84"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#SearchGlyphContainer", {
+        L"Visibility=Visible",
+        L"Margin=16,0,12,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Image#SearchIconOff", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Image#SearchIconOn", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.FontIcon#SearchGlyph", {
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton > Grid > ContentPresenter > Windows.UI.Xaml.Controls.TextBlock#PlaceholderText", {
+        L"Text=$SearchBarText",
+        L"FontFamily=Segoe UI Variable Display"}},
+    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton > Grid > ContentPresenter > Windows.UI.Xaml.Controls.TextBlock#PlaceholderText", {
+        L"Text=$SearchBarText",
+        L"FontFamily=Segoe UI Variable Display"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Margin=0,-48,4,48"}},
+    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox", {
+        L"Grid.Row=2",
+        L"VerticalAlignment=Bottom",
+        L"Margin=32,0,32,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#InnerContent > Windows.UI.Xaml.Shapes.Rectangle", {
+        L"Grid.Row=2",
+        L"VerticalAlignment=Bottom",
+        L"Margin=76,0,0,8"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#InnerContent > Grid", {
+        L"Margin=0,0,0,40"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#NavigationPane", {
+        L"Margin=32,0,32,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ZoomInButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton > Windows.UI.Xaml.Controls.ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.TextBlock", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton > Windows.UI.Xaml.Controls.ContentPresenter@Normal", {
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton > Windows.UI.Xaml.Controls.ContentPresenter@PointerOver", {
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#ZoomedOutHeading", {
+        L"Text=Apps",
+        L"FontSize=20",
+        L"IsHitTestVisible=False"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox > Grid > Windows.UI.Xaml.Controls.TextBlock#PlaceholderTextContentPresenter", {
+        L"Text=Search Everywhere",
+        L"FontFamily=Segoe UI Variable Display"}},
+    ThemeTargetStyles{L"Grid#Root > Border", {
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=$StartMenuSuggestions"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowMoreSuggestionsButton > Grid > ContentPresenter > StackPanel > TextBlock", {
+        L"FontFamily=Segoe Fluent Icons",
+        L"Text=\uE81C"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowMoreSuggestionsButton", {
+        L"Width=60",
+        L"Height=30"}},
+    ThemeTargetStyles{L"TextBlock#TopLevelSuggestionsListHeaderText", {
+        L"FontSize=20"}},
+    ThemeTargetStyles{L"Button#HideMoreSuggestionsButton > Grid > ContentPresenter > StackPanel > TextBlock", {
+        L"FontFamily=Segoe Fluent Icons",
+        L"Text=\uE1E4",
+        L"FontSize=16"}},
+    ThemeTargetStyles{L"TextBlock#MoreSuggestionsListHeaderText", {
+        L"FontSize=20"}},
+}, {
+    L"Shadows=Collapsed",
+    L"SearchBarText=Search Everywhere",
+    L"StartMenuSuggestions=Collapsed",
+    L"StartMenuText=Start",
+    L"AllMenuText=Apps",
+}, {}, {
+    ThemeTargetStyles{L".curatedSettingsGroup", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".topItemsGroup", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".scope-tile__button", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L"body[dir] .groupTitle", {
+        L"font-size: 20px",
+        L"margin-left: 32px !important",
+        L"font-family: Segoe UI Variable Display",
+        L"line-height=32px"}},
+    ThemeTargetStyles{L".scopesListContainer", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".groupTitleText", {
+        L"font-size: 20px",
+        L"line-height: 32px"}},
+    ThemeTargetStyles{L".zeroInput19H1 #qfContainer #groups>div", {
+        L"display: flex !important"}},
+    ThemeTargetStyles{L"#qfPreviewPane", {
+        L"min-width: 300px !important"}},
 }};
 
 const Theme g_themeCommand_Center = {{
@@ -7110,7 +7340,8 @@ const Theme g_themeCommand_Center = {{
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=$BorderThickness",
-        L"CornerRadius=$ElementCornerRadius"}},
+        L"CornerRadius=$ElementCornerRadius",
+        L"Margin=0,0,10,0"}},
     ThemeTargetStyles{L"GridView#AllAppsGrid > ItemsWrapGrid", {
         L"Visibility=0"}},
     ThemeTargetStyles{L"Grid#TopLevelHeader > Grid > Button", {
@@ -7278,7 +7509,7 @@ const Theme g_themeFrostyGlass = {{
         L"CornerRadius=$CornerRadius",
         L"BorderThickness=$BorderThickness",
         L"BorderBrush:=$BorderBrush"}},
-    ThemeTargetStyles{L"Border#AppBorder", {
+    ThemeTargetStyles{L"Border#AppBorder, Border#AccentAppBorder", {
         L"Background:=$Background",
         L"CornerRadius:=$CornerRadius",
         L"BorderThickness:=$BorderThickness",
@@ -7335,7 +7566,7 @@ const Theme g_themeFrostyGlass = {{
         L"CornerRadius:=7"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
         L"CornerRadius:=7"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder, Windows.UI.Xaml.Controls.Border#AccentLayerBorder", {
         L"CornerRadius:=$CornerRadius",
         L"Background:=Transparent",
         L"BorderBrush:=$BorderBrush",
@@ -7356,6 +7587,8 @@ const Theme g_themeFrostyGlass = {{
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton", {
         L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"0\" />",
         L"Visibility=1"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.GridView#PinnedList", {
+        L"MinHeight=8400"}},
     ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.GridView#PinnedList > Windows.UI.Xaml.Controls.Border", {
         L"Background:=Transparent",
         L"BorderBrush:=Transparent",
@@ -7363,7 +7596,11 @@ const Theme g_themeFrostyGlass = {{
         L"BorderThickness:=0",
         L"Margin:=0,35,0,0",
         L"HorizontalAlignment=Center",
-        L"VerticalAlignment=Center"}},
+        L"VerticalAlignment=Top",
+        L"Height=315"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Windows.UI.Xaml.Controls.Grid#Root > Windows.UI.Xaml.Controls.GridView#PinnedList > Windows.UI.Xaml.Controls.Border > Windows.UI.Xaml.Controls.ScrollViewer", {
+        L"VerticalAlignment=Center",
+        L"ScrollViewer.VerticalScrollMode=Enabled"}},
     ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Windows.UI.Xaml.Controls.Grid#CompanionRoot > Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
         L"Background:=$Background",
         L"BorderBrush:=$BorderBrush",
@@ -7400,7 +7637,7 @@ const Theme g_themeFrostyGlass = {{
         L"Visibility=0"}},
     ThemeTargetStyles{L"Border#AcrylicOverlay", {
         L"Visibility=1"}},
-    ThemeTargetStyles{L"Border#LayerBorder", {
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
         L"Visibility=1",
         L"BorderThickness:=$BorderThickness",
         L"BorderBrush:=$BorderBrush",
@@ -7417,7 +7654,7 @@ const Theme g_themeFrostyGlass = {{
         L"MaxWidth=Auto"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {
         L"Height=350",
-        L"Margin=0,-25,0,-400",
+        L"Margin=-5,-25,0,-400",
         L"Visibility=0",
         L"VerticalAlignment=Center"}},
     ThemeTargetStyles{L"Grid@SearchBoxInputStates > Border#TaskbarSearchBackground", {
@@ -7537,7 +7774,7 @@ const Theme g_themeFrostyGlass = {{
     ThemeTargetStyles{L"Button", {
         L"CornerRadius=7"}},
 }, {
-    L"Background=<AcrylicBrush TintColor=\"#1000000F\"/>",
+    L"Background=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemChromeDarkColor}\" TintOpacity=\"0.15\" />",
     L"BorderBrush2=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SystemChromeLowColor}\" Offset=\"0.25\" /><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"1\" /></LinearGradientBrush>",
     L"BorderThickness=1",
     L"CornerRadius=10",
@@ -7559,14 +7796,2793 @@ const Theme g_themeFrostyGlass = {{
         L"min-width: 325px !important"}},
 }};
 
+
+const Theme g_themeFlyoutStartMenu = {{
+    ThemeTargetStyles{L":root > ScrollViewer > ScrollContentPresenter", {
+        L"Tag=$EnableFullscreenStartMenu"}},
+    ThemeTargetStyles{L"ScrollViewer#MenuFlyoutPresenterScrollViewer > Border > Grid > ScrollContentPresenter > ItemsPresenter > StackPanel", {
+        L"ChildrenTransitions:=<TransitionCollection><EntranceThemeTransition IsStaggeringEnabled=\"True\" FromHorizontalOffset=\"0\" FromVerticalOffset=\"-50\" /></TransitionCollection>"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox > Grid@CommonStates > Border#BorderElement", {
+        L"CornerRadius=4,4,0,0",
+        L"BorderThickness=1",
+        L"Background@Focused:=$Chrome",
+        L"BorderBrush:=transparent",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox", {
+        L"Margin=0",
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=2"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox > Grid@CommonStates", {
+        L"CornerRadius=2",
+        L"BorderBrush:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrush@Focused:=$AccentColor1",
+        L"BorderThickness=0",
+        L"BorderThickness@Focused=0,0,0,2",
+        L"Padding@Focused=0,0,0,-2"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid", {
+        L"CornerRadius=4"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Grid#UnderlineContainer", {
+        L"Visibility=1",
+        L"CornerRadius=4",
+        L"Margin=0",
+        L"Canvas.ZIndex=99",
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Grid#UnderlineContainer > Border#GradientUnderlineBorder", {
+        L"Canvas.ZIndex=99"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid@SearchBoxLocationStates > Border#TaskbarSearchBackground", {
+        L"CornerRadius=4",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"Visibility@SearchBoxOnBottomWithoutQFMargin=1"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#LayerBorder", {
+        L"Margin=0,64,0,0",
+        L"CornerRadius=0",
+        L"BorderThickness=0,1,0,0",
+        L"BorderBrush:=#19000000",
+        L"Visibility=0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid@SearchBoxLocationStates > Grid#OuterBorderGrid > Grid#BorderGrid > Border#LayerBorder", {
+        L"Visibility@SearchBoxOnBottomWithoutQFMargin=1"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentLayerBorder", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Border#dropshadow", {
+        L"Canvas.ZIndex=-99",
+        L"Visibility=0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#RightCompanionContainerGrid", {
+        L"Visibility=>PhoneLinkPaneVisibility",
+        L"Padding=7,0,0,25",
+        L"Width=356",
+        L"Height={{$EnableFullscreenStartMenu == 1 ? `Auto` : 670 }}",
+        L"VerticalAlignment={{$EnableFullscreenStartMenu + 2}}"}},
+    ThemeTargetStyles{L"Border#RightCompanionDropShadow", {
+        L"Visibility=0"}},
+    ThemeTargetStyles{L"Border#RightCompanionDropShadowDismissTarget", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#LeftCompanionContainerGrid", {
+        L"Visibility=1",
+        L"HorizontalAlignment=3",
+        L"VerticalAlignment=3",
+        L"Width=Auto",
+        L"Height=Auto",
+        L"Background:=$NativeAcrylic2",
+        L"BorderBrush:=$FloatBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=8",
+        L"Grid.Column=1",
+        L"Grid.ColumnSpan=12"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame", {
+        L"ActualWidth=>ScreenWidth",
+        L"ActualHeight=>ScreenHeight"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame", {
+        L"IsTaskbarCenteredProperty=>StartMenuCenter"}},
+    ThemeTargetStyles{L":root > ScrollViewer > ScrollContentPresenter[Tag=1] > Border > StartMenu.StartBlendedFlexFrame", {
+        L"IsTaskbarCenteredProperty=False"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Padding=12,{{$EnableFullscreenStartMenu * 12}},12,0",
+        L"Margin=0,0,0,-12"}},
+    ThemeTargetStyles{L":root > ScrollViewer > ScrollContentPresenter[Tag=1] > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"MaxHeight=Infinity",
+        L"HorizontalAlignment=3"}},
+    ThemeTargetStyles{L":root > ScrollViewer > ScrollContentPresenter[Tag=1] > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot", {
+        L"HorizontalAlignment=3",
+        L"Width=Auto",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L":root > ScrollViewer > ScrollContentPresenter[Tag=1] > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu", {
+        L"HorizontalAlignment=3",
+        L"Width=Auto",
+        L"MaxWidth={{ScreenWidth - 24 - (RightCompanionWidth * ((RightCompanionVisibility - 1) * -1))}}"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Border@CommonStates > ContentPresenter#ContentPresenter > FontIcon > Grid > TextBlock", {
+        L"Tag={{PhoneLinkPaneVisibility}}",
+        L"Text=\uEA5B",
+        L"Text@Checked=\uEA49",
+        L"Text@CheckedPointerOver=\uEA49",
+        L"Text@CheckedPressed=\uEA49",
+        L"Text@CheckedDisabled=\uEA49",
+        L"VerticalAlignment=Center",
+        L"HorizontalAlignment=Center"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion > Border@CommonStates > ContentPresenter#ContentPresenter", {
+        L"VerticalAlignment=3",
+        L"HorizontalAlignment=3",
+        L"Height=Auto",
+        L"Width=Auto",
+        L"Background:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"Background@Checked:=$NormalBtn",
+        L"Background@CheckedPointerOver:=$PointerOverBtn",
+        L"Background@CheckedPressed:=$PressedBtn",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderThickness=0,1,1,1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"CornerRadius=0,4,4,0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
+        L"Visibility=>PhoneLinkButtonVisibility",
+        L"Margin=0,0,{{3 * ((PhoneLinkButtonVisibility - 1) * -1)}},0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Margin=0,0,{{4 * PhoneLinkButtonVisibility}},0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid[1]", {
+        L"Margin=45,1,41,-1"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid@CommonStates > Border#BorderElement", {
+        L"Opacity=1",
+        L"CornerRadius=4,{{4 * PhoneLinkButtonVisibility}},{{4 * PhoneLinkButtonVisibility}},4",
+        L"Background@Normal:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"Background@Disabled:=$NormalBtn",
+        L"Opacity@Disabed=0.6",
+        L"Background@Checked:=$NormalBtn",
+        L"Background@CheckedPointerOver:=$PointerOverBtn",
+        L"Background@CheckedPressed:=$PressedBtn",
+        L"Background@CheckedDisabled:=$NormalBtn",
+        L"Opacity@CheckedDisabed=0.6",
+        L"BorderBrush@Normal:=$ButtonBorderAlt",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderBrush@Disabled:=$ButtonBorderAlt",
+        L"BorderBrush@Checked:=$ButtonBorderAlt",
+        L"BorderBrush@CheckedPointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@CheckedPressed:=$ButtonBorderAlt",
+        L"BorderBrush@CheckedDisabled:=$ButtonBorderAlt",
+        L"BorderThickness=1,1,{{PhoneLinkButtonVisibility}},1"}},
+    ThemeTargetStyles{L"Rectangle#TextCaret", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter > Border", {
+        L"BorderBrush:=$TaskbarBorderStroke",
+        L"BorderThickness=1"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Border#AcrylicBorder", {
+        L"VerticalAlignment=Top",
+        L"Height=114",
+        L"CornerRadius=8,8,8,8",
+        L"BorderBrush:=$FloatBorder",
+        L"BorderThickness=1,1,1,1"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"Visibility=0",
+        L"Canvas.ZIndex=-1",
+        L"BorderThickness=0,1,0,0",
+        L"CornerRadius=0,0,8,8",
+        L"Margin=13,1,13,-1",
+        L"Height=48",
+        L"VerticalAlignment=Top"}},
+    ThemeTargetStyles{L"Border#StartDropShadow", {
+        L"VerticalAlignment=Top",
+        L"Height=114",
+        L"Visibility=1",
+        L"Margin=0,0,0,1"}},
+    ThemeTargetStyles{L"GridViewItem > Border#ContentBorder@CommonStates > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Margin=0,0",
+        L"BorderThickness=1",
+        L"Style@PointerOver:=<Style TargetType=\"Border\"><Setter Property=\"BorderBrush\" Value=\"{ThemeResource ControlElevationBorderBrush}\"/></Style>",
+        L"Style@Pressed:=<Style TargetType=\"Border\"><Setter Property=\"BorderBrush\" Value=\"{ThemeResource ControlElevationBorderBrush}\"/></Style>",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Button#Header", {
+        L"Margin=0,0,26,0"}},
+    ThemeTargetStyles{L"Button#Header > Border#Border@CommonStates", {
+        L"BorderThickness=1",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Margin=0,0"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid", {
+        L"Canvas.ZIndex=-99",
+        L"Background:=$NativeAcrylic2",
+        L"BorderBrush:=$FloatBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=4"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot", {
+        L"Padding=-50,-15,-1,8",
+        L"Margin=0,0,0,0",
+        L"CornerRadius=8,8,8,8"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#TopLevelSuggestionsContainerParent > Grid#TopLevelSuggestionsContainer > Border#TopLevelSuggestionsBackground", {
+        L"Margin=0,0,0,-16",
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrush:=#19000000",
+        L"BorderThickness=0,1,0,0",
+        L"CornerRadius=0,0,0,0"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#TopLevelSuggestionsContainerParent > Grid#TopLevelSuggestionsContainer > ContentControl", {
+        L"Margin=0,0,0,0",
+        L"Padding=8,8,0,-8"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#TopLevelSuggestionsContainerParent > Grid#TopLevelSuggestionsContainer", {
+        L"Margin=50,0,0,0"}},
+    ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
+        L"MinWidth=230",
+        L"MaxWidth=230"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid[1]", {
+        L"Margin=0,14,0,12",
+        L"CornerRadius=8,8,8,8",
+        L"BorderThickness=1,1,1,1",
+        L"Grid.ColumnSpan=2",
+        L"Grid.RowSpan=2",
+        L"ActualHeight=>PinnedListHeaderHeight"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid[1] > TextBlock#PinnedListHeaderText", {
+        L"Margin=12,14,12,15",
+        L"FontWeight=Normal"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid[2]", {
+        L"Visibility=0",
+        L"Margin=0,14,0,0",
+        L"CornerRadius=0",
+        L"BorderThickness=0",
+        L"Background:=transparent",
+        L"BorderBrush:=transparent"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid[2] > Button", {
+        L"Margin=8,8,8,8"}},
+    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent", {
+        L"Margin=0",
+        L"Padding=0"}},
+    ThemeTargetStyles{L"Grid#MainMenu", {
+        L"Margin=0",
+        L"Padding=0",
+        L"Grid.ColumnSpan=0",
+        L"ActualWidth=>StartMenuWidth",
+        L"ActualHeight=>StartMenuHeight"}},
+    ThemeTargetStyles{L"Grid#MainMenu > Grid#MainContent > Grid#NavPanePlaceholder", {
+        L"Width=Auto",
+        L"HorizontalAlignment=3",
+        L"Canvas.ZIndex=99",
+        L"BorderBrush:=$FloatBorder",
+        L"Padding=4",
+        L"Height=Auto",
+        L"VerticalAlignment=Bottom",
+        L"Margin=12,50,12,-50",
+        L"Grid.Row=0"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > Grid#MoreSuggestionsRoot", {
+        L"Canvas.ZIndex=-99",
+        L"Background:=$NativeAcrylic2",
+        L"BorderBrush:=$FloatBorder",
+        L"BorderThickness=1,1,1,1",
+        L"CornerRadius=8,8,8,8",
+        L"Margin=12,65,12,-40",
+        L"Padding=0,-14,0,0",
+        L"VerticalAlignment=3",
+        L"Height=Auto"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > Grid#MoreSuggestionsRoot > Grid#MoreSuggestionsContainer > Border#MoreSuggestionsBackground", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrush:=#19000000",
+        L"BorderThickness=0,1,0,0",
+        L"CornerRadius=0,0,0,0"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > Grid#MoreSuggestionsRoot > Grid > TextBlock#MoreSuggestionsListHeaderText", {
+        L"Margin=22,6,12,7",
+        L"FontWeight=Normal",
+        L"Text=Recent Files & Apps"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > Grid#MoreSuggestionsRoot > Button#HideMoreSuggestionsButton", {
+        L"Margin=0,23,8,0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList > Grid#Root", {
+        L"Margin=1,0,1,-67",
+        L"Padding=31,32,-9,31",
+        L"Canvas.ZIndex=-99",
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrush:=#19000000",
+        L"BorderThickness=0,1,0,0",
+        L"CornerRadius=0,0,8,8"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
+        L"Margin=0,0,0,80"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#ShowMoreSuggestions > Button#ShowMoreSuggestionsButton", {
+        L"Margin=0,0,8,0"}},
+    ThemeTargetStyles{L"GridView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
+        L"Margin=0,0,16,0"}},
+    ThemeTargetStyles{L"ListView#RecommendedList", {
+        L"Margin=0,0,0,0",
+        L"HorizontalAlignment=1"}},
+    ThemeTargetStyles{L"ListView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel", {
+        L"Margin=0,1,0,0",
+        L"Width=Auto",
+        L"HorizontalAlignment=3"}},
+    ThemeTargetStyles{L"ListView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem", {
+        L"Margin=0,8,0,0",
+        L"Width=10",
+        L"HorizontalAlignment=1"}},
+    ThemeTargetStyles{L"ListView#RecommendedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem > Grid#ContentBorder@CommonStates > Border#BorderBackground", {
+        L"BorderThickness=1",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=transparent",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Grid@CommonStates > Border#BorderBackground", {
+        L"BorderThickness=1",
+        L"Style@PointerOver:=<Style TargetType=\"Border\"><Setter Property=\"BorderBrush\" Value=\"{ThemeResource ControlElevationBorderBrush}\"/></Style>",
+        L"Style@Pressed:=<Style TargetType=\"Border\"><Setter Property=\"BorderBrush\" Value=\"{ThemeResource ControlFillColorTertiary}\"/></Style>",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"StartDocked.UserTileView#UserTile", {
+        L"Width=40",
+        L"Margin=0",
+        L"Padding=0",
+        L"ActualWidth=>UserTileWidth",
+        L"HorizontalAlignment=Left"}},
+    ThemeTargetStyles{L"Grid#UserTileIcon > Windows.UI.Xaml.Shapes.Ellipse", {
+        L"Visibility=0"}},
+    ThemeTargetStyles{L"Grid#UserTileIcon", {
+        L"Visibility=0",
+        L"Grid.Column=0"}},
+    ThemeTargetStyles{L"TextBlock#UserTileNameText", {
+        L"Grid.Column=0",
+        L"Visibility=1",
+        L"Margin=0,0,0,0",
+        L"FontSize=16",
+        L"FontFamily=Segoe Fluent Icons",
+        L"Text=>Username",
+        L"Width=32",
+        L"HorizontalAlignment=Center",
+        L"TextAlignment=Center"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#UserTileButton", {
+        L"Padding=3,0,3,0"}},
+    ThemeTargetStyles{L"StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Padding=0,0,0,63",
+        L"Margin=0,50,0,-63"}},
+    ThemeTargetStyles{L"Grid#RightCompanionContainerGrid > StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent > Border#AcrylicOverlay", {
+        L"Margin=0,164,0,0",
+        L"BorderThickness=0,1",
+        L"CornerRadius=0",
+        L"Visibility=0",
+        L"Height=Auto",
+        L"VerticalAlignment=3"}},
+    ThemeTargetStyles{L"Grid#RightCompanionContainerGrid", {
+        L"ActualWidth=>RightCompanionWidth",
+        L"Visibility=>RightCompanionVisibility"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder > StartDocked.NavigationPaneView#UserControl > Grid#RootPanel > StackPanel[Tag=WH_SMB_Container] > Button", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem", {
+        L"Margin=0,0,4,0"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"GroupPadding=0,0,-4,0"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer > Border#Root", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border > ScrollViewer#ScrollViewer", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"ExtentHeight=Infinity",
+        L"ViewportHeight=Infinity",
+        L"ExtentWidth=Infinity",
+        L"ViewportWidth=Infinity"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView > Border", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView#PowerButton > StartDocked.NavigationPaneButton#PowerButton", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView#PowerButton", {
+        L"Visibility=0"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton > Grid@CommonStates > Border#BackgroundBorder", {
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Normal:=transparent",
+        L"BorderThickness=1",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"Grid#ContentBorder@CommonStates > Border#BackgroundBorder", {
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Normal:=transparent",
+        L"BorderThickness=1",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"Button > ContentPresenter@CommonStates", {
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Normal:=transparent",
+        L"BorderThickness=1",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"Button > Grid@CommonStates > Border#BackgroundBorder", {
+        L"Background:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent > Grid#ActionsBar > Button", {
+        L"Margin=12,0,0,0"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent > Grid#ActionsBar", {
+        L"Padding=12,0"}},
+    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Background:=$NativeAcrylic3",
+        L"BorderBrush:=$TaskbarBorderStroke",
+        L"BorderThickness=1",
+        L"CornerRadius=8"}},
+    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid[2]", {
+        L"Margin=28,0,0,0"}},
+    ThemeTargetStyles{L"StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid#FolderLabels", {
+        L"Margin=0,-24,0,8"}},
+    ThemeTargetStyles{L"TextBox > Grid@CommonStates > Border#BorderElement", {
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderBrush@Normal:=transparent",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"TextBlock#TopLevelSuggestionsListHeaderText", {
+        L"Margin=71,6,12,7",
+        L"FontWeight=Normal",
+        L"Text=Recent Files & Apps"}},
+    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
+        L"Margin=20,14,12,15",
+        L"FontWeight=Normal"}},
+    ThemeTargetStyles{L"Grid#QueryFormulationRoot", {
+        L"Margin=0,5,0,0"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#AllListHeading", {
+        L"Margin=0,12,0,0"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid", {
+        L"Visibility=1",
+        L"Grid.Column=0",
+        L"Padding=0",
+        L"Width=0",
+        L"Height=0"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrushProtected:=#19000000",
+        L"BorderThicknessProtected=0,1,0,0",
+        L"CornerRadiusProtected=0,0,8,8",
+        L"Margin=1,0,1,1",
+        L"GroupPadding=52,14,26,14",
+        L"VerticalAlignment=Top",
+        L"ActualHeight=>AAGHeight"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#AllListHeading", {
+        L"CornerRadius=8,8,8,8",
+        L"BorderBrush:=$FloatBorder",
+        L"BorderThickness=1,1,1,1",
+        L"Background:=$NativeAcrylic2",
+        L"MinHeight=50",
+        L"Grid.RowSpan=40",
+        L"Height={{50 + AAGHeight}}",
+        L"Margin=0,12,0,{{-1* AAGHeight}}",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"MaximumRowsOrColumns:="}},
+    ThemeTargetStyles{L"TextBlock#AllListHeadingText", {
+        L"Margin=24,15,0,0",
+        L"VerticalAlignment=Top",
+        L"HorizontalAlignment=3",
+        L"FontWeight=Normal",
+        L"Text=All Apps"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton > Grid@CommonStates", {
+        L"Background:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton", {
+        L"Margin=0,8,7,0",
+        L"VerticalAlignment=Top",
+        L"HorizontalAlignment=Right"}},
+    ThemeTargetStyles{L"ContentPresenter > Button > Grid@CommonStates > Border#BackgroundBorder", {
+        L"Margin=0,0",
+        L"BorderThickness=1",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=transparent",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"Button#SeeAllButton", {
+        L"Margin=0,8,0,0"}},
+    ThemeTargetStyles{L"StartMenu.CategoryControl > Grid#RootGrid > Border", {
+        L"BorderThickness=1",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"Background:=$NormalBtn",
+        L"CornerRadius=4"}},
+    ThemeTargetStyles{L"ContentPresenter#ZoomedOutPresenter", {
+        L"Margin=12,14,12,24",
+        L"Background:=$NativeAcrylic2",
+        L"BorderBrush:=$TaskbarBorderStroke",
+        L"BorderThickness=1",
+        L"CornerRadius=8",
+        L"ContentTransitions:=<TransitionCollection><NavigationThemeTransition /></TransitionCollection>"}},
+    ThemeTargetStyles{L"TextBlock#ZoomedOutHeading", {
+        L"Margin=36,79,0,-79",
+        L"FontWeight=Normal",
+        L"Text=All Apps Category"}},
+    ThemeTargetStyles{L"Button#ZoomInButton", {
+        L"Margin=0,73,22,-50"}},
+    ThemeTargetStyles{L"Button#ZoomOutButton", {
+        L"Margin=0,40,0,0",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center",
+        L"Visibility=1",
+        L"Canvas.ZIndex=99",
+        L"Height=32",
+        L"Width=32",
+        L"FontSize=16",
+        L"Opacity=1",
+        L"UseSystemFocusVisuals=0",
+        L"BackgroundSizing=InnerBorderEdge"}},
+    ThemeTargetStyles{L"ContentPresenter#ZoomedOutPresenter > ListView#ZoomedOutListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrushProtected:=#19000000",
+        L"BorderThicknessProtected=1,1,1,1",
+        L"CornerRadiusProtected=4,4,4,4",
+        L"GroupPadding=0,0,8,8"}},
+    ThemeTargetStyles{L"ContentPresenter#ZoomedOutPresenter > ListView#ZoomedOutListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > ListViewItem > Grid#ContentBorder@CommonStates > Border#BorderBackground", {
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Normal:=transparent",
+        L"BorderThickness=1",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ContentPresenter#ZoomedOutPresenter > ListView#ZoomedOutListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > ListViewItem", {
+        L"Margin=8,8,0,0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid@SearchBoxLocationStates", {
+        L"Tag=0",
+        L"Tag@SearchBoxOnBottom=1",
+        L"Tag@SearchBoxOnBottomWithoutQFMargin=1",
+        L"Tag=>SearchBoxLocation"}},
+    ThemeTargetStyles{L"Grid#GleamContainer", {
+        L"Visibility=0",
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=2",
+        L"HorizontalAlignment=2",
+        L"Height=32",
+        L"Width=32",
+        L"Padding=0",
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"Button#GleamButton", {
+        L"Visibility=0",
+        L"Height=32",
+        L"Width=32",
+        L"Background:=#09FFFFFF"}},
+    ThemeTargetStyles{L"Grid#SearchBoxOnTaskbarGleamContainer", {
+        L"Visibility=1",
+        L"IsHitTestVisible=0",
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=2",
+        L"HorizontalAlignment=2",
+        L"Canvas.ZIndex=0"}},
+    ThemeTargetStyles{L"Grid#SearchBoxOnTaskbarGleamImageContainer", {
+        L"IsHitTestVisible=0",
+        L"Margin=0,0,1,0",
+        L"CornerRadius=0,3,3,0"}},
+    ThemeTargetStyles{L"Image#SearchBoxOnTaskbarGleamImage", {
+        L"Height=32",
+        L"ActualWidth=>SearchBoxOnTaskbarGleamImage_ActualWidth"}},
+    ThemeTargetStyles{L"Grid#GleamContainer > Button#GleamButton > Grid#GleamBackplate > ContentPresenter > Image", {
+        L"Height=32",
+        L"Width=32",
+        L"Margin=0,0,-4,-4",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#GleamContainer > Button#GleamButton > Grid#GleamBackplate", {
+        L"Margin=0,4,4,4",
+        L"Height=Max",
+        L"Width=Max",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#GleamContainer > Button#GleamButton > Grid#GleamBackplate@CommonStates > ContentPresenter", {
+        L"CornerRadius=4",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Normal:=transparent",
+        L"BorderThickness=1",
+        L"Foreground@Normal:=<SolidColorBrush Color=\"{ThemeResource InactiveFontColor}\" />",
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"Visibility=0",
+        L"Content=\uF6FA",
+        L"FontFamily=Segoe Fluent Icons",
+        L"FontSize=16",
+        L"HorizontalContentAlignment=1",
+        L"VerticalContentAlignment=1",
+        L"ToolTipService.ToolTip=Web search is enabled",
+        L"Visibility=>GleamButtonVisibility",
+        L"Tag={{18 * ((GleamButtonVisibility - 1) * -1)}}",
+        L"Tag=>WebSearchEnabled"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox > Grid > ScrollViewer#ContentElement > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Windows.UI.Xaml.Internal.TextBoxView", {
+        L"Margin=0,0,{{WebSearchEnabled + 0}},0"}},
+    ThemeTargetStyles{L"SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Padding=0"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
+        L"Grid.Column=0",
+        L"HorizontalAlignment=Center",
+        L"Width=Auto",
+        L"Margin=0,0,0,0",
+        L"Grid.ColumnSpan=999"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#PinnedListHeaderGrid > ContentControl#CustomInjectedPresenter > Grid > ContentPresenter", {
+        L"Content:=<Border x:Name=\"Shadow\" Background=\"#00FFFFFF\" BorderBrush=\"transparent\" BorderThickness=\"0\" CornerRadius=\"8\" BackgroundSizing=\"InnerBorderEdge\" Translation=\"0,0,32\" Shadow=\"{StaticResource HoverFlyoutBackgroundShadow}\" Margin=\"24,24,24,24\"></Border>"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#PinnedListHeaderGrid > ContentControl#CustomInjectedPresenter", {
+        L"Canvas.ZIndex=99"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#ShowMorePinnedGrid > ContentControl#CustomInjectedPresenter > Grid@CommonStates > ContentPresenter", {
+        L"Background:=$NormalBtn",
+        L"Background@Disabled:=transparent",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Disabled:=transparent",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"CornerRadius=4",
+        L"Height=32",
+        L"Width=32",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center",
+        L"HorizontalContentAlignment=Center",
+        L"VerticalContentAlignment=Center",
+        L"Content=\uE840",
+        L"FontSize=16",
+        L"FontWeight=Normal",
+        L"FontFamily=Segoe Fluent Icons"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#ShowMorePinnedGrid > ContentControl#CustomInjectedPresenter > Grid", {
+        L"Height=32",
+        L"Width=32",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#ShowMorePinnedGrid > ContentControl#CustomInjectedPresenter", {
+        L"Height=32",
+        L"Width=32",
+        L"Grid.Column=1",
+        L"Grid.ColumnSpan=1",
+        L"Canvas.ZIndex=99",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#ShowMorePinnedGrid > Button", {
+        L"Grid.Column=2"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#ShowMorePinnedGrid", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > ContentControl#CustomInjectedPresenter", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#ShowMoreSuggestions > ContentControl#CustomInjectedPresenter > Grid@CommonStates > ContentPresenter", {
+        L"Background:=$NormalBtn",
+        L"Background@Disabled:=transparent",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=$ButtonBorderAlt",
+        L"BorderBrush@Disabled:=transparent",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"CornerRadius=4",
+        L"Height=32",
+        L"Width=32",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center",
+        L"HorizontalContentAlignment=Center",
+        L"VerticalContentAlignment=Center",
+        L"Content=\uE823",
+        L"FontSize=16",
+        L"FontWeight=Normal",
+        L"FontFamily=Segoe Fluent Icons"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#ShowMoreSuggestions > ContentControl#CustomInjectedPresenter > Grid", {
+        L"Height=Auto",
+        L"Width=Auto",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#ShowMoreSuggestions > ContentControl#CustomInjectedPresenter", {
+        L"Height=Auto",
+        L"Width=Auto",
+        L"Grid.Column=1",
+        L"Grid.ColumnSpan=1",
+        L"Canvas.ZIndex=99",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center",
+        L"Margin=0,0,8,0"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#ShowMoreSuggestions > Button", {
+        L"Grid.Column=2"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot > Grid#ShowMoreSuggestions", {
+        L"HorizontalAlignment=Right",
+        L"VerticalAlignment=Center",
+        L"Width=Auto",
+        L"Height=Auto",
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#AllListHeading > ContentControl#CustomInjectedPresenter > Grid@CommonStates > ContentPresenter", {
+        L"Background:=transparent",
+        L"Background@Normal:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=transparent",
+        L"BorderBrush@Normal:=$ButtonBorderAlt",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"CornerRadius=4",
+        L"Height=32",
+        L"Width=32",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center",
+        L"HorizontalContentAlignment=Center",
+        L"VerticalContentAlignment=Center",
+        L"Content=\uE71D",
+        L"FontSize=16",
+        L"FontWeight=Normal",
+        L"FontFamily=Segoe Fluent Icons"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#AllListHeading > ContentControl#CustomInjectedPresenter > Grid", {
+        L"Height=32",
+        L"Width=32",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#AllListHeading > ContentControl#CustomInjectedPresenter", {
+        L"Height=32",
+        L"Width=32",
+        L"Grid.Column=1",
+        L"Grid.ColumnSpan=1",
+        L"Canvas.ZIndex=99",
+        L"HorizontalAlignment=Right",
+        L"VerticalAlignment=Top",
+        L"Margin=0,9,8,0"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#AllListHeading > Microsoft.UI.Xaml.Controls.DropDownButton", {
+        L"Grid.Column=2"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid#AllListHeading", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"*\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/></ColumnDefinitionCollection>"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionPresenter", {
+        L"Visibility=0",
+        L"HorizontalAlignment=1",
+        L"VerticalAlignment=3",
+        L"Width=Auto",
+        L"Height=Auto",
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=1"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionPresenter > Grid", {
+        L"Background:=$NativeAcrylic2",
+        L"BorderBrush:=$FloatBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=8",
+        L"Width=282",
+        L"Margin=12,0,12,24",
+        L"RowDefinitions:=<RowDefinitionCollection><RowDefinition Height=\"Auto\"/><RowDefinition Height=\"Auto\"/><RowDefinition Height=\"*\"/><RowDefinition Height=\"Auto\"/></RowDefinitionCollection>",
+        L"ActualHeight=>CustomCompanionHeight",
+        L"ActualWidth=>CustomCompanionWidth"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionShadowPresenter", {
+        L"Visibility=0",
+        L"HorizontalAlignment=1",
+        L"VerticalAlignment=3",
+        L"Width=Auto",
+        L"Height=Auto",
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=1",
+        L"Canvas.ZIndex=-99",
+        L"IsHitTestVisible=0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionShadowPresenter > Grid", {
+        L"Width={{CustomCompanionWidth}}",
+        L"Padding=0,0,0,24"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionShadowPresenter > Grid > ContentPresenter", {
+        L"Content:=<Grid x:Name=\"Shadow\" Margin=\"0,0,0,0\" CornerRadius=\"8\" Translation=\"0,0,32\"><Grid.Shadow><ThemeShadow><ThemeShadow.Receivers><Grid /></ThemeShadow.Receivers></ThemeShadow></Grid.Shadow></Grid>"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionPresenter > Grid > ContentPresenter", {
+        L"Margin=0,0,0,0",
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrush:=#19000000",
+        L"BorderThickness=0,1,0,0",
+        L"CornerRadius=0",
+        L"Grid.Row=2",
+        L"Grid.RowSpan=1",
+        L"VerticalAlignment=3",
+        L"Height=Auto",
+        L"Content:=<Grid x:Name=\"BigTilesGrid\" Padding=\"0,0,0,0\" Width=\"Auto\" Height=\"Auto\" HorizontalAlignment=\"3\" VerticalAlignment=\"3\" Margin=\"0,0,0,0\"></Grid>"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionPresenter > Grid > ContentControl#BigTilesPresenter", {
+        L"Grid.Row=1",
+        L"Grid.RowSpan=1",
+        L"Height=272",
+        L"VerticalAlignment=1"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionPresenter > Grid > ContentControl#BigTilesPresenter > Grid > ContentPresenter", {
+        L"Margin=8",
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAutoOverlayColor}\" />",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.5,0\" EndPoint=\"0.5,1\"><GradientStop Offset=\"0\" Color=\"#04000000\"/><GradientStop Offset=\"1\" Color=\"#19000000\"/></LinearGradientBrush>",
+        L"BorderThickness=1,1,1,3",
+        L"CornerRadius=4",
+        L"HorizontalContentAlignment=3",
+        L"VerticalContentAlignment=3",
+        L"Padding=8,8,8,8",
+        L"Content:=<Grid x:Name=\"BigTilesGrid\" Padding=\"0,0,0,0\" Width=\"Auto\" Height=\"Auto\" HorizontalAlignment=\"3\" VerticalAlignment=\"Top\" Margin=\"0,0,0,0\"><FontIcon FontFamily=\"Segoe Fluent Icons\" Glyph=\"\uE944\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" FontSize=\"16\" Margin=\"0,0,0,0\" Grid.Column=\"1\" Grid.ColumnSpan=\"1\"/><TextBlock VerticalAlignment=\"Center\" HorizontalAlignment=\"Center\" Margin=\"0,0,0,0\" Grid.Column=\"2\" Grid.ColumnSpan=\"1\">Quick Launch</TextBlock></Grid>"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > ContentControl#CustomCompanionPresenter > Grid > ContentControl#BigTilesPresenter > Grid > ContentPresenter > Grid#BigTilesGrid", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"*\"/></ColumnDefinitionCollection>",
+        L"ColumnSpacing=8",
+        L"Padding=-4,0,0,0",
+        L"Grid.Column=1",
+        L"Grid.ColumnSpan=1"}},
+    ThemeTargetStyles{L"ContentControl#BigTilesPresenter > Grid > ContentPresenter > Grid#BigTilesGrid > ContentControl#BigTilesButton", {
+        L"HorizontalAlignment=3",
+        L"VerticalAlignment=Center",
+        L"Width=Auto",
+        L"Height=Auto",
+        L"Grid.Column=3",
+        L"Grid.ColumnSpan=999"}},
+    ThemeTargetStyles{L"ContentControl#BigTilesPresenter > Grid > ContentPresenter > Grid#BigTilesGrid > ContentControl#BigTilesButton > Grid", {
+        L"HorizontalAlignment=Right",
+        L"VerticalAlignment=Center",
+        L"Width=Auto",
+        L"Height=Auto"}},
+    ThemeTargetStyles{L"ContentControl#BigTilesPresenter > Grid > ContentPresenter > Grid#BigTilesGrid > ContentControl#BigTilesButton > Grid@CommonStates > ContentPresenter", {
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=transparent",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"CornerRadius=4",
+        L"Height=24",
+        L"Width=40",
+        L"HorizontalAlignment=Right",
+        L"VerticalAlignment=Center",
+        L"HorizontalContentAlignment=Center",
+        L"VerticalContentAlignment=Center",
+        L"Content=\uE712",
+        L"FontSize=24",
+        L"FontWeight=Normal",
+        L"FontFamily=Segoe Fluent Icons"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent", {
+        L"Margin=-12,0"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter", {
+        L"Padding=12,0,12,24",
+        L"Margin=0,0,0,0",
+        L"Canvas.ZIndex=99"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > ContentControl#PinnedListShadowPresenter", {
+        L"Grid.ColumnSpan=2",
+        L"Grid.Row=0",
+        L"Grid.RowSpan=2",
+        L"Margin=0,12,0,12",
+        L"Canvas.ZIndex=-99",
+        L"IsHitTestVisible=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > ContentControl#PinnedListShadowPresenter > Grid > ContentPresenter", {
+        L"Content:=<Grid x:Name=\"Shadow\" Margin=\"0,0,0,0\" CornerRadius=\"8\" Translation=\"0,0,32\"><Grid.Shadow><ThemeShadow><ThemeShadow.Receivers><Grid /></ThemeShadow.Receivers></ThemeShadow></Grid.Shadow></Grid>"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > ContentControl#RecommendedListShadowPresenter", {
+        L"Grid.ColumnSpan=2",
+        L"Grid.Row=2",
+        L"Grid.RowSpan=1",
+        L"Canvas.ZIndex=-99",
+        L"IsHitTestVisible=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > ContentControl#RecommendedListShadowPresenter > Grid > ContentPresenter", {
+        L"Content:=<Grid x:Name=\"Shadow\" Margin=\"0,0,0,0\" CornerRadius=\"8\" Translation=\"0,0,32\"><Grid.Shadow><ThemeShadow><ThemeShadow.Receivers><Grid /></ThemeShadow.Receivers></ThemeShadow></Grid.Shadow></Grid>"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > ContentControl#AllAppsListShadowPresenter", {
+        L"Grid.ColumnSpan=2",
+        L"Grid.Row=3",
+        L"Grid.RowSpan=1",
+        L"Height={{52 + AAGHeight}}",
+        L"Margin=0,12,0,{{-1* AAGHeight}}",
+        L"Canvas.ZIndex=-99",
+        L"IsHitTestVisible=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > ContentControl#AllAppsListShadowPresenter > Grid > ContentPresenter", {
+        L"Content:=<Grid x:Name=\"Shadow\" Margin=\"0,0,0,0\" CornerRadius=\"8\" Translation=\"0,0,32\"><Grid.Shadow><ThemeShadow><ThemeShadow.Receivers><Grid /></ThemeShadow.Receivers></ThemeShadow></Grid.Shadow></Grid>"}},
+    ThemeTargetStyles{L"Button#CloseButton > ContentPresenter#ContentPresenter@CommonStates", {
+        L"Background@Normal:=$AccentColor1",
+        L"Background@PointerOver:=$AccentColor3",
+        L"Background@Pressed:=$AccentColor2",
+        L"BorderBrush@Normal:=$AccentColor1",
+        L"BorderBrush@PointerOver:=$AccentColor3",
+        L"BorderBrush@Pressed:=$AccentColor2"}},
+    ThemeTargetStyles{L"Button#CloseButton > ContentPresenter#ContentPresenter > TextBlock", {
+        L"Foreground:=<SolidColorBrush Color=\"{ThemeResource SystemAltHighColor}\" />"}},
+    ThemeTargetStyles{L"Button#PrimaryButton > ContentPresenter#ContentPresenter@CommonStates", {
+        L"Background@Normal:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=$ButtonBorderAlt"}},
+    ThemeTargetStyles{L"Grid#RightCompanionContainerGrid > StartMenu.StartMenuCompanion#RightCompanion > Grid#CompanionRoot > Grid#MainContent", {
+        L"Padding=0,0,0,-14"}},
+    ThemeTargetStyles{L"Grid#ActionsBar", {
+        L"Height=48",
+        L"Padding=8,0,8,0",
+        L"Margin=0",
+        L"RowDefinitions:=<RowDefinitionCollection><RowDefinition Height=\"Auto\"/><RowDefinition Height=\"Auto\"/><RowDefinition Height=\"Auto\"/></RowDefinitionCollection>"}},
+    ThemeTargetStyles{L"Grid#ActionsBar > Button", {
+        L"Height=32",
+        L"Width=32",
+        L"Margin=8,0,0,0"}},
+    ThemeTargetStyles{L"Grid#ActionsBar > Button#PrimaryActionBarButton", {
+        L"HorizontalAlignment=Left",
+        L"Margin=0",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"Grid#ActionsBar > Button#PrimaryActionBarButton > Grid > ContentPresenter", {
+        L"Width=Auto",
+        L"Content:=<Grid x:Name=\"CustomLabel\" Width=\"Auto\" Height=\"Auto\" HorizontalAlignment=\"1\" VerticalAlignment=\"1\" Padding=\"8,4,8,4\" ><FontIcon FontFamily=\"Segoe Fluent Icons\" Glyph=\"\uE724\" HorizontalAlignment=\"1\" VerticalAlignment=\"1\" FontSize=\"16\" Margin=\"0,0,8,0\" Grid.Column=\"0\" /><TextBlock HorizontalAlignment=\"1\" VerticalAlignment=\"1\" Margin=\"0,0,0,0\" Grid.Column=\"1\" FontSize=\"14\" >Send Files</TextBlock></Grid>"}},
+    ThemeTargetStyles{L"Grid#ActionsBar > Button#PrimaryActionBarButton > Grid > ContentPresenter > Grid", {
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"Auto\"/></ColumnDefinitionCollection>",
+        L"Padding=7,0"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Features] > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem > Grid#ContentBorder@CommonStates > Border#BorderBackground", {
+        L"Background:=transparent",
+        L"Background@Normal:=$NormalBtn",
+        L"Background@PointerOver:=$PointerOverBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=transparent",
+        L"BorderBrush@Normal:=$ButtonBorderAlt",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt",
+        L"BorderThickness=1",
+        L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />",
+        L"BackgroundSizing=InnerBorderEdge",
+        L"CornerRadius=4"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Features] > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem", {
+        L"Height=80",
+        L"Width=100",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Features] > * > ListViewItem[AutomationProperties.Name=Messages, new messages are available in Phone Link. Open Phone Link to view and send text messages]", {
+        L"Margin=-108,0,108,0"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Features] > * > ListViewItem[AutomationProperties.Name=Calls. Open Phone Link to view and make calls]", {
+        L"Margin=0,-80,0,0"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Features] > * > ListViewItem[AutomationProperties.Name=Photos. Open Phone Link to view photos from your mobile device]", {
+        L"Margin=108,-80,-108,0"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Features] > * > ListViewItem[AutomationProperties.Name=Send files. Select files to send to your mobile device]", {
+        L"Margin=-108,8,108,0"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Messages, new messages are available in Phone Link. Open Phone Link to view and send text messages] > * > Grid > Border", {
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=6",
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Messages, new messages are available in Phone Link. Open Phone Link to view and send text messages] > * > Image", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Top",
+        L"Height=Auto",
+        L"Margin=0",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-12\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Messages, new messages are available in Phone Link. Open Phone Link to view and send text messages] > * > TextBlock", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Bottom",
+        L"Height=Auto",
+        L"Margin=0,20",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"14\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Messages, new messages are available in Phone Link. Open Phone Link to view and send text messages] > * > Border#BorderBackground", {
+        L"HorizontalAlignment=3"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Calls. Open Phone Link to view and make calls] > * > Grid > Border", {
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=6",
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Calls. Open Phone Link to view and make calls] > * > Image", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Top",
+        L"Height=Auto",
+        L"Margin=0",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-12\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Calls. Open Phone Link to view and make calls] > * > TextBlock", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Bottom",
+        L"Height=Auto",
+        L"Margin=0,20",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"14\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Calls. Open Phone Link to view and make calls] > * > Border#BorderBackground", {
+        L"HorizontalAlignment=3"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Photos. Open Phone Link to view photos from your mobile device] > * > Grid > Border", {
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=6",
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Photos. Open Phone Link to view photos from your mobile device] > * > Image", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Top",
+        L"Height=Auto",
+        L"Margin=0",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-12\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Photos. Open Phone Link to view photos from your mobile device] > * > TextBlock", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Bottom",
+        L"Height=Auto",
+        L"Margin=0,20",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"14\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Photos. Open Phone Link to view photos from your mobile device] > * > Border#BorderBackground", {
+        L"HorizontalAlignment=3"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Send files. Select files to send to your mobile device] > * > Grid > Border", {
+        L"Grid.Column=0",
+        L"Grid.ColumnSpan=6",
+        L"HorizontalAlignment=1",
+        L"Width=Auto"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Send files. Select files to send to your mobile device] > * > Image", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Top",
+        L"Height=Auto",
+        L"Margin=0",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"-12\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Send files. Select files to send to your mobile device] > * > TextBlock", {
+        L"HorizontalAlignment=1",
+        L"Width=Auto",
+        L"VerticalAlignment=Bottom",
+        L"Height=Auto",
+        L"Margin=0,20",
+        L"RenderTransform:=<TranslateTransform X=\"0\" Y=\"14\" />"}},
+    ThemeTargetStyles{L"ListViewItem[AutomationProperties.Name=Send files. Select files to send to your mobile device] > * > Border#BorderBackground", {
+        L"HorizontalAlignment=3"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Recent] > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ListViewItem > Grid#ContentBorder@CommonStates > Border#BorderBackground", {
+        L"Background:=transparent",
+        L"Background@PointerOver:=$NormalBtn",
+        L"Background@Pressed:=$PressedBtn",
+        L"BorderBrush:=transparent",
+        L"BorderBrush@PointerOver:=$ButtonBorderAlt",
+        L"BorderBrush@Pressed:=$ButtonBorderAlt"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Recent]", {
+        L"Margin=0,-8,0,8"}},
+    ThemeTargetStyles{L"Grid > ListView[AutomationProperties.Name=Recent] > * > ListViewItem", {
+        L"Margin=0,8,0,0"}},
+    ThemeTargetStyles{L":root > ScrollViewer > ScrollContentPresenter[Tag=1] > Border", {
+        L"Background:=<WindhawkBlur BlurAmount=\"5\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" TintLuminosityOpacity=\"0.5\" FallbackColor=\"#00FFFFFF\" />"}},
+}, {
+    L"NativeAcrylic1=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemChromeAutoColor}\"   TintOpacity=\"{ThemeResource NativeAcrylicOpacity}\"   TintLuminosityOpacity=\"0.93\"/>",
+    L"NativeAcrylic2=<AcrylicBrush x:Key=\"AcrylicBackgroundFillColorBaseBrush\"   TintColor=\"{ThemeResource SystemChromeAutoColor}\"   TintOpacity=\"{ThemeResource NativeAcrylicOpacity}\"   TintLuminosityOpacity=\"0.93\"   FallbackColor=\"{ThemeResource SystemChromeMediumColor}\"/>",
+    L"NativeAcrylic3=<AcrylicBrush x:Key=\"AcrylicBackgroundFillColorBaseBrush\"   TintColor=\"{ThemeResource SystemChromeAutoColor}\"   TintOpacity=\"0\"   TintLuminosityOpacity=\"0.93\"   FallbackColor=\"{ThemeResource SystemChromeMediumColor}\"/>",
+    L"TaskbarBorderStroke=<AcrylicBrush x:Key=\"AcrylicBackgroundFillColorBaseBrush\"   TintColor=\"#434343\"   TintOpacity=\"0\"   TintLuminosityOpacity=\"0.5\"   FallbackColor=\"#AA434343\"/>",
+    L"TaskbarBorderStrokeAlt=<WindhawkBlur BlurAmount=\"20\" TintColor=\"#FFFFFF\"  TintOpacity=\"0.15\"   TintLuminosityOpacity=\"0.5\" />",
+    L"FloatBorder=<SolidColorBrush Color=\"{ThemeResource SurfaceStrokeColorDefault}\" />",
+    L"ButtonBorder=<LinearGradientBrush x:Key=\"ShellTaskbarItemGradientStrokeColorSecondaryBrush\" MappingMode=\"Absolute\" StartPoint=\"0,0\" EndPoint=\"0,3\"><LinearGradientBrush.GradientStops><GradientStop Offset=\"0.33\" Color=\"{ThemeResource ControlFillColorSecondary}\" /><GradientStop Offset=\"1\" Color=\"{ThemeResource ControlFillColorTertiary}\" /></LinearGradientBrush.GradientStops></LinearGradientBrush>",
+    L"ButtonBorderAlt=<LinearGradientBrush x:Key=\"ControlElevationBorderBrush\" MappingMode=\"{ThemeResource GradientMappingMode}\" StartPoint=\"0,0\" EndPoint=\"0,3\"><GradientStop Offset=\"{ThemeResource ButtonBorderStopOffset1}\" Color=\"{ThemeResource ControlStrokeColorSecondary}\" /><GradientStop Offset=\"{ThemeResource ButtonBorderStopOffset2}\" Color=\"{ThemeResource ControlStrokeColorDefault}\" /></LinearGradientBrush>",
+    L"NormalBtn=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\" />",
+    L"PointerOverBtn=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\" />",
+    L"PressedBtn=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\" />",
+    L"NormalBtnAlt=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\" Opacity=\"0.75\" />",
+    L"PointerOverBtnAlt=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\" Opacity=\"0.75\" />",
+    L"PressedBtnAlt=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\" Opacity=\"0.75\" />",
+    L"Chrome=<SolidColorBrush Color=\"{ThemeResource Chrome}\" />",
+    L"AccentColor1=<SolidColorBrush Color=\"{ThemeResource AccentColor1}\" />",
+    L"AccentColor2=<SolidColorBrush Color=\"{ThemeResource AccentColor2}\" />",
+    L"AccentColor3=<SolidColorBrush Color=\"{ThemeResource AccentColor3}\" />",
+    L"EnableFullscreenStartMenu=0",
+}, {
+    L"GradientMappingMode@Dark=Absolute",
+    L"GradientMappingMode@Light=RelativeToBoundingBox",
+    L"ButtonBorderStartPoint@Dark=0,0",
+    L"ButtonBorderStartPoint@Light=0,0",
+    L"ButtonBorderEndPoint@Dark=0,3",
+    L"ButtonBorderEndPoint@Light=0,3",
+    L"ButtonBorderStopOffset1@Dark=0.33",
+    L"ButtonBorderStopOffset1@Light=0.33",
+    L"ButtonBorderStopOffset2@Dark=1",
+    L"ButtonBorderStopOffset2@Light=0.3",
+    L"ButtonBorderAltTop@Dark=#1DFFFFFF",
+    L"ButtonBorderAltTop@Light=#13000000",
+    L"ButtonBorderAltBottom@Dark=#13FFFFFF",
+    L"ButtonBorderAltBottom@Light=#8E000000",
+    L"AccentColor1@Dark={ThemeResource SystemAccentColorLight2}",
+    L"AccentColor1@Light={ThemeResource SystemAccentColorDark1}",
+    L"AccentColor2@Dark={ThemeResource SystemAccentColorLight1}",
+    L"AccentColor2@Light={ThemeResource SystemAccentColorDark2}",
+    L"AccentColor3@Dark={ThemeResource SystemAccentColorLight3}",
+    L"AccentColor3@Light={ThemeResource SystemAccentColorDark3}",
+    L"Chrome@Dark={ThemeResource SystemChromeMediumColor}",
+    L"Chrome@Light={ThemeResource SystemChromeLowColor}",
+    L"SystemChromeAutoAcrylicOverlayColor@Dark=#262626",
+    L"SystemChromeAutoAcrylicOverlayColor@Light=#F4F4F4",
+    L"SystemChromeAutoColor@Dark={ThemeResource SystemChromeMediumColor}",
+    L"SystemChromeAutoColor@Light={ThemeResource SystemChromeLowColor}",
+    L"SystemChromeAutoOverlayColor@Dark=#09FFFFFF",
+    L"SystemChromeAutoOverlayColor@Light=#40FFFFFF",
+    L"NativeAcrylicOpacity@Dark=0.5",
+    L"NativeAcrylicOpacity@Light=0",
+    L"NativeAcrylicLuminosity@Dark=0.96",
+    L"NativeAcrylicLuminosity@Light=0.9",
+    L"OtherButtonBorder@Dark=#20FFFFFF",
+    L"OtherButtonBorder@Light=#30000000",
+    L"InactiveFontColor@Dark=#9FFFFFFF",
+    L"InactiveFontColor@Light=#9F000000",
+}, {
+    ThemeTargetStyles{L".scope-with-background__backButton", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".scope-with-background__rightCaret, .scope-with-background__leftCaret", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L"#rewardsBadgeButton", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".suggContainer", {
+        L"background-color: #FFFFFF00 !important",
+        L"border: 0px solid transparent !important",
+        L"margin: 1px !important",
+        L"border-radius: 4px !important",
+        L"box-shadow: none !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".suggContainer:hover", {
+        L"background-color: #FDFDFD85 !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .suggContainer:hover", {
+        L"background-color: #FFFFFF10 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".suggContainer:active", {
+        L"background-color: #FFFFFFDD !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .suggContainer:active", {
+        L"background-color: #FFFFFF09 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".groupHeader", {
+        L"background-color: #FFFFFF00 !important"}},
+    ThemeTargetStyles{L".suggDetailsContainer", {
+        L"background-color: #FFFFFF00 !important"}},
+    ThemeTargetStyles{L".openPreviewPaneBtn", {
+        L"background-color: #FFFFFF00 !important",
+        L"border: none !important",
+        L"border-radius: 0px 4px 4px 0px !important",
+        L"width: 48px !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".openPreviewPaneBtn:hover", {
+        L"background-color: #00000010 !important",
+        L"border: none !important"}},
+    ThemeTargetStyles{L".darkTheme .openPreviewPaneBtn:hover", {
+        L"background-color: #FFFFFF10 !important"}},
+    ThemeTargetStyles{L".openPreviewPaneBtn:active", {
+        L"background-color: #00000009 !important",
+        L"border: none !important"}},
+    ThemeTargetStyles{L".darkTheme .openPreviewPaneBtn:active", {
+        L"background-color: #FFFFFF09 !important"}},
+    ThemeTargetStyles{L"#qfPreviewPane", {
+        L"margin-top: 0px",
+        L"margin-bottom: 24px"}},
+    ThemeTargetStyles{L".previewContainer", {
+        L"border: solid 1px #00000069 !important",
+        L"background-color: #FFFFFFAA !important"}},
+    ThemeTargetStyles{L".darkTheme .previewContainer", {
+        L"border: solid 1px #00000069 !important",
+        L"background-color: #FFFFFF09 !important"}},
+    ThemeTargetStyles{L"#temporaryMessage:has(> .indexingMessage)", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".groupTitleSeeMore", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".topItemsGroup > .group > .suggsListContainer > .suggsList > .suggestion", {
+        L"border: solid 0px white !important",
+        L"background: #FFFFFF00 !important",
+        L"box-shadow: none !important"}},
+    ThemeTargetStyles{L".topItemsGroup > .group > .suggsListContainer", {
+        L"background: #FFFFFFAA !important",
+        L"border: solid 1px #00000069 !important",
+        L"border-radius: 8px !important",
+        L"padding-top: 8px !important",
+        L"padding-left: 8px !important",
+        L"padding-bottom: 10px !important",
+        L"padding-right: 8px !important"}},
+    ThemeTargetStyles{L".darkTheme .topItemsGroup > .group > .suggsListContainer", {
+        L"background: #FFFFFF09 !important",
+        L"border: solid 1px #00000069 !important"}},
+    ThemeTargetStyles{L".storeAppsGroup", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L"#qfContainer", {
+        L"padding-right: 14px !important",
+        L"margin-top: 0px !important"}},
+    ThemeTargetStyles{L".suggestion", {
+        L"background-color: #FFFFFF00 !important",
+        L"border: none !important",
+        L"padding-right: 2px !important"}},
+    ThemeTargetStyles{L".suggestion.selectable.pointerCursor", {
+        L"border: none !important",
+        L"border-thickness: 0px !important",
+        L"background-color: #FFFFFF00 !important",
+        L"border-radius: 4px !important",
+        L"box-shadow: none !important"}},
+    ThemeTargetStyles{L".curatedSettingsGroup > .group > .suggsListContainer > .suggsList", {
+        L"border: solid 1px #00000069 !important",
+        L"background-color: #FFFFFFAA !important",
+        L"border-radius: 8px !important",
+        L"box-shadow: none !important"}},
+    ThemeTargetStyles{L".darkTheme .curatedSettingsGroup > .group > .suggsListContainer > .suggsList", {
+        L"border: solid 1px #00000069 !important",
+        L"background-color: #FFFFFF09 !important"}},
+    ThemeTargetStyles{L".resultsContainer", {
+        L"margin-top: 0px !important",
+        L"margin-bottom: 0px !important"}},
+    ThemeTargetStyles{L"#rootContainer", {
+        L"padding-top: 8px !important"}},
+    ThemeTargetStyles{L".scope-tile", {
+        L"margin-left: 0px !important",
+        L"margin-right: 4px !important"}},
+    ThemeTargetStyles{L".scope-tile > div", {
+        L"background: transparent !important",
+        L"border: solid 0px transparent !important",
+        L"border-radius: 4px !important",
+        L"transition: background-color 83ms ease-in-out !important",
+        L"width: 36px !important",
+        L"min-height: 36px !important",
+        L"margin-left: -1px !important"}},
+    ThemeTargetStyles{L".scope-tile > div:hover", {
+        L"background-color: #FDFDFD85 !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .scope-tile > div:hover", {
+        L"background-color: #FFFFFF10 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".scope-tile > div:active", {
+        L"background-color: #FFFFFFDD !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .scope-tile > div:active", {
+        L"background-color: #FFFFFF07 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".scope-tile > div:nth-child(1)", {
+        L"background: none !important",
+        L"border: none !important",
+        L"box-shadow: none !important",
+        L"margin-left: 0px !important",
+        L"margin-right: -7px !important",
+        L"border-radius: 4px 4px 0px 0px !important"}},
+    ThemeTargetStyles{L".scope-with-background__slider", {
+        L"padding-left: 4px !important",
+        L"padding-right: 4px !important",
+        L"padding-top: 4px !important",
+        L"padding-bottom: 0px !important",
+        L"margin-left: 4px !important",
+        L"margin-right: 4px !important",
+        L"max-height: 38px !important"}},
+    ThemeTargetStyles{L".scope-with-background__slider > ul", {
+        L"margin-top: -7px !important",
+        L"margin-right: -2px !important",
+        L"padding-bottom: -8px !important"}},
+    ThemeTargetStyles{L".bottomPill > div::after", {
+        L"content: '' !important",
+        L"width: 30% !important",
+        L"height: 4px !important",
+        L"background-color: var(--accent9) !important",
+        L"display: block !important",
+        L"border-radius: 99px !important",
+        L"bottom: 1px !important",
+        L"left: 35% !important",
+        L"position: absolute !important",
+        L"animation: selectorBar 187ms forwards !important",
+        L"transform-origin: center !important",
+        L"margin-left: -1px",
+        L"margin-right: 1px"}},
+    ThemeTargetStyles{L".bottomPill > div", {
+        L"opacity: 1 !important",
+        L"color: black !important",
+        L"font-weight: 400 !important"}},
+    ThemeTargetStyles{L".darkTheme .bottomPill > div", {
+        L"color: white !important"}},
+    ThemeTargetStyles{L".darkTheme .bottomPill > div::after", {
+        L"background-color: var(--accent19) !important"}},
+    ThemeTargetStyles{L".scope-tile__title", {
+        L"font-size: 0px !important"}},
+    ThemeTargetStyles{L"#l1scope0 .scope-tile__title::before", {
+        L"content: \"\uE80F\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"font-family: \"Segoe Fluent Icons\" !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important"}},
+    ThemeTargetStyles{L"#l1scope1 .scope-tile__title::before", {
+        L"content: \"\uECAA\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"font-family: \"Segoe Fluent Icons\" !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important"}},
+    ThemeTargetStyles{L"#l1scope8 .scope-tile__title::before", {
+        L"content: \"\uF6FA\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"font-family: \"Segoe Fluent Icons\" !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important"}},
+    ThemeTargetStyles{L"#l1scope6 .scope-tile__title::before", {
+        L"content: \"\uE8A5\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"font-family: \"Segoe Fluent Icons\" !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important"}},
+    ThemeTargetStyles{L"#l1scope2 .scope-tile__title::before", {
+        L"content: \"\uE713\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"font-family: \"Segoe Fluent Icons\" !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important"}},
+    ThemeTargetStyles{L"#scope2 .scope-tile__title::before", {
+        L"content: \"\uE713\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important",
+        L"font-family: \"Segoe Fluent Icons\" !important"}},
+    ThemeTargetStyles{L"#scope7 .scope-tile__title::before", {
+        L"content: \"\uE8B7\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"font-family: \"Segoe Fluent Icons\" !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important"}},
+    ThemeTargetStyles{L"#scope3 .scope-tile__title::before", {
+        L"content: \"\uE91B\"",
+        L"font-size: 18px !important",
+        L"visibility: visible",
+        L"display: inline-block",
+        L"margin-top: 4px !important",
+        L"margin-left: -2px !important",
+        L"vertical-align: middle",
+        L"font-weight: 575 !important",
+        L"font-family: \"Segoe Fluent Icons\" !important"}},
+    ThemeTargetStyles{L"*", {
+        L"scrollbar-width: none !important",
+        L"cursor: default !important"}},
+    ThemeTargetStyles{L":root", {
+        L"--webview-winui-menuPadding: 3px",
+        L"--webview-winui-menuRadius: 7px",
+        L"--webview-winui-menuGap: 2px",
+        L"--webview-winui-menuBorder: 1px solid rgba(0,0,0,0.26)",
+        L"--webview-winui-menuShadow: 0 9px 16px 0 rgba(0,0,0,0.26)",
+        L"--webview-winui-itemPadding: 3px 8px 3px 8px",
+        L"--webview-winui-itemRadius: 5px",
+        L"--webview-winui-itemHeight: 28px"}},
+    ThemeTargetStyles{L".contextMenu", {
+        L"padding: var(--webview-winui-menuPadding) !important",
+        L"margin: 0 !important",
+        L"background-color: transparent !important",
+        L"border: unset !important",
+        L"box-shadow: unset !important",
+        L"outline: unset !important",
+        L"min-width: unset !important",
+        L"width: unset !important",
+        L"display: flex !important",
+        L"flex-direction: column !important",
+        L"border-radius: var(--webview-winui-menuRadius) !important",
+        L"gap: var(--webview-winui-menuGap)  !important",
+        L"background-image: url(\"data:image/svg+xml,%3Csvg viewBox='0 0 250 250' style='opacity: 0.08' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='10' numOctaves='3' stitchTiles='stitch '/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E\") !important",
+        L"background-repeat: repeat !important",
+        L"background-blend-mode: overlay !important"}},
+    ThemeTargetStyles{L".contextMenu::after", {
+        L"content: \"\" !important",
+        L"width: calc(100%) !important",
+        L"height: calc(100%) !important",
+        L"display: block !important",
+        L"position: absolute !important",
+        L"top: 0px !important",
+        L"left: 0px !important",
+        L"background-color: #fff !important",
+        L"border-radius: var(--webview-winui-menuRadius) !important",
+        L"opacity: 0.5 !important",
+        L"z-index: -2 !important"}},
+    ThemeTargetStyles{L".contextMenu::before", {
+        L"border-radius: var(--webview-winui-menuRadius) !important"}},
+    ThemeTargetStyles{L".darkTheme .contextMenu::after", {
+        L"background-color: #242424 !important"}},
+    ThemeTargetStyles{L".contextMenu .menuItem", {
+        L"margin: 0 !important",
+        L"border: 0 !important",
+        L"padding: var(--webview-winui-itemPadding) !important",
+        L"background-color: transparent !important",
+        L"position: relative !important",
+        L"display: flex !important",
+        L"align-items: center !important",
+        L"border-radius: var(--webview-winui-itemRadius) !important",
+        L"min-height: var(--webview-winui-itemHeight) !important"}},
+    ThemeTargetStyles{L".contextMenu .menuItem:hover::after", {
+        L"content: \"\" !important",
+        L"width: calc(100%) !important",
+        L"height: calc(100%) !important",
+        L"display: block !important",
+        L"top: 0 !important",
+        L"left: 0 !important",
+        L"position: absolute !important",
+        L"border-radius: var(--webview-winui-itemRadius) !important",
+        L"opacity: 0.1 !important",
+        L"background-color: #000 !important"}},
+    ThemeTargetStyles{L".contextMenu .menuItem:focus::after", {
+        L"opacity: 0.05 !important"}},
+    ThemeTargetStyles{L".darkTheme .contextMenu .menuItem:hover::after", {
+        L"background-color: #fff !important"}},
+    ThemeTargetStyles{L".contextMenu .divider", {
+        L"border-top-color: rgba(0,0,0,.0803) !important",
+        L"margin-left: -3px !important",
+        L"margin-right: -3px !important"}},
+    ThemeTargetStyles{L".darkTheme .contextMenu .divider", {
+        L"border-top-color: rgba(255,255,255,.0837) !important"}},
+    ThemeTargetStyles{L"#menuContainer", {
+        L"background-color: transparent !important",
+        L"min-width: unset !important",
+        L"width: unset !important",
+        L"opacity: 0 !important",
+        L"transition: opacity 230ms ease, transform 280ms ease, box-shadow 830ms ease !important",
+        L"transform: translateY(-14px) !important",
+        L"box-shadow: unset !important",
+        L"border-radius: var(--webview-winui-menuRadius) !important",
+        L"border: var(--webview-winui-menuBorder) !important"}},
+    ThemeTargetStyles{L"#menuContainer.show", {
+        L"opacity: 1 !important",
+        L"transform: translateY(0px) !important",
+        L"box-shadow: var(--webview-winui-menuShadow) !important"}},
+    ThemeTargetStyles{L"*:not(.divider):not(#menuContainer)", {
+        L"border-color: transparent !important"}},
+    ThemeTargetStyles{L".userProfileMenuIcon", {
+        L"background: transparent !important",
+        L"border: solid 0px transparent !important",
+        L"border-radius: 4px !important",
+        L"transition: background-color 83ms ease-in-out !important",
+        L"width: 36px !important",
+        L"min-height: 36px !important",
+        L"margin-left: -1px !important"}},
+    ThemeTargetStyles{L".userProfileMenuIcon:hover", {
+        L"background-color: #FDFDFD85 !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .userProfileMenuIcon:hover", {
+        L"background-color: #FFFFFF10 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".userProfileMenuIcon:active", {
+        L"background-color: #FFFFFFDD !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .userProfileMenuIcon:active", {
+        L"background-color: #FFFFFF07 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".scope-tile__button", {
+        L"background: transparent !important",
+        L"border: solid 0px transparent !important",
+        L"border-radius: 4px !important",
+        L"transition: background-color 83ms ease-in-out !important",
+        L"width: 36px !important",
+        L"min-height: 36px !important",
+        L"margin-left: -1px !important"}},
+    ThemeTargetStyles{L".scope-tile__button:hover", {
+        L"background-color: #FDFDFD85 !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .scope-tile__button:hover", {
+        L"background-color: #FFFFFF10 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".scope-tile__button:active", {
+        L"background-color: #FFFFFFDD !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .scope-tile__button:active", {
+        L"background-color: #FFFFFF07 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L"#optionsButton > .scope-tile__button > .iconContainer", {
+        L"margin-top: 2px !important",
+        L"margin-left: 2px !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L"#optionsButton", {
+        L"margin-left: 4px !important"}},
+    ThemeTargetStyles{L".groupTitleSeeMoreAndChevron > .groupTitleChevron", {
+        L"background: transparent !important",
+        L"border: solid 0px transparent !important",
+        L"border-radius: 4px !important",
+        L"transition: background-color 83ms ease-in-out !important",
+        L"width: 32px !important",
+        L"height: 32px !important",
+        L"padding: 8px 4px 4px 6px !important",
+        L"font-size: 16px !important"}},
+    ThemeTargetStyles{L".groupTitleSeeMoreAndChevron > .groupTitleChevron:hover", {
+        L"color: black !important",
+        L"background-color: #FDFDFD85 !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .groupTitleSeeMoreAndChevron > .groupTitleChevron:hover", {
+        L"color: white !important",
+        L"background-color: #FFFFFF10 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".groupTitleSeeMoreAndChevron > .groupTitleChevron:active", {
+        L"color: black !important",
+        L"background-color: #FFFFFFDD !important",
+        L"box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 rgba(0,0,0,.1) !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .groupTitleSeeMoreAndChevron > .groupTitleChevron:active", {
+        L"color: white !important",
+        L"background-color: #FFFFFF07 !important",
+        L"box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 -1px 0 rgba(255,255,255,.02) !important"}},
+    ThemeTargetStyles{L".openPreviewPaneText", {
+        L"border-radius: 4px !important",
+        L"font-size: 0px !important",
+        L"max-width: 24px !important",
+        L"margin-top: 4px !important",
+        L"margin-right: 4px !important",
+        L"margin-bottom: 4px !important"}},
+    ThemeTargetStyles{L".openPreviewPaneText::after", {
+        L"content: \"\uE974\"",
+        L"font-family: Segoe Fluent Icons !important",
+        L"font-size: 16px !important",
+        L"font-weight: normal !important"}},
+    ThemeTargetStyles{L".removeIcon > .iconContainer > .icon", {
+        L"background: transparent !important",
+        L"border: solid 0px transparent !important",
+        L"border-radius: 4px !important",
+        L"transition: background-color 83ms ease-in-out !important",
+        L"width: 24px !important",
+        L"height: 24px !important",
+        L"padding: 4px 3px 2px 6px !important",
+        L"margin: -7px 4px 7px -4px !important",
+        L"font-size: 16px !important"}},
+    ThemeTargetStyles{L".removeIcon > .iconContainer > .icon:hover", {
+        L"background-color: #FDFDFD85 !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .removeIcon > .iconContainer > .icon:hover", {
+        L"background-color: #FFFFFF10 !important"}},
+    ThemeTargetStyles{L".removeIcon > .iconContainer > .icon:active", {
+        L"background-color: #FFFFFFDD !important",
+        L"transition: background-color 83ms ease-in-out !important"}},
+    ThemeTargetStyles{L".darkTheme .removeIcon > .iconContainer > .icon:active", {
+        L"background-color: #FFFFFF07 !important"}},
+}};
+
+const Theme g_themeOS26_Tahoe_App_Launcher_variant_DarkCenter = {{
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Height=624",
+        L"VerticalAlignment=Center",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Border#AcrylicBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\" />",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Border#StartDropShadow", {
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"CornerRadius=50,50,0,0",
+        L"Margin=0,-65,0,470"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot", {
+        L"Margin=0,-50,0,40",
+        L"Height=500"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot > Rectangle#VerticalTrackRect", {
+        L"Height=500"}},
+    ThemeTargetStyles{L"StartMenu.StartHome", {
+        L"Margin=0,5,0,-120"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Border#BorderElement", {
+        L"BorderBrush=transparent",
+        L"Background:=transparent",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOff", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOn", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > ContentPresenter#ContentPresenter > TextBlock#PlaceholderText", {
+        L"Text:=Applications",
+        L"FontSize=25"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#UserControl > Grid#RootPanel > StartDocked.UserTileView#UserTile", {
+        L"Height=45",
+        L"Width=55",
+        L"HorizontalAlignment=left"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#UserTileButton > Grid > ContentPresenter#ContentPresenter > Grid > Grid#UserTileIcon", {
+        L"Width=32",
+        L"Height=32"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#PowerButton > Grid > ContentPresenter#ContentPresenter > Grid > FontIcon > Grid > TextBlock", {
+        L"Margin=0,1,0,-1",
+        L"FontSize=22"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > Border", {
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter#ItemsPresenter > ItemsWrapGrid > ContentPresenter > Button#LogoContainer > Grid > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=7"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid", {
+        L"Height=541",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid", {
+        L"Margin=0,-200,0,0",
+        L"CornerRadius=50",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder, ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentAppBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"BorderBrush=Gray",
+        L"CornerRadius=50",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Border#TaskbarSearchBackground", {
+        L"Background=transparent",
+        L"Margin=20,10,20,10",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl", {
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox", {
+        L"FontSize=25",
+        L"Margin=10,-1,10,1",
+        L"Foreground=#BFBDB7"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"CornerRadius=50",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=30,20,30,43",
+        L"Height=60",
+        L"Width=60"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Grid.Row=0",
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PipsPager > StackPanel#RootPanel > ScrollViewer#PipsPagerScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=0,-100,0,100"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper", {
+        L"Padding=0,0,0,25"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
+        L"MaxWidth=120",
+        L"Margin=-55,0,55,0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Height=25"}},
+    ThemeTargetStyles{L"GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListCollapsedFolder > Grid#Root > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+}, {
+    L"IconBackground=<LinearGradientBrush StartPoint=\"0.47,-0.29\" EndPoint=\"0.50,1.29\"><GradientStop Offset=\"0.18\" Color=\"#2F2F2F\"/><GradientStop Offset=\"0.3\" Color=\"#292929\"/><GradientStop Offset=\"0.5\" Color=\"#141414\"/><GradientStop Offset=\"0.68\" Color=\"#080808\"/><GradientStop Offset=\"0.81\" Color=\"#000000\"/></LinearGradientBrush>",
+    L"IconBorder=<LinearGradientBrush StartPoint=\"0.04,-0.14\" EndPoint=\"1.22,1.10\"><GradientStop Offset=\"0.18\" Color=\"#4FFFFFFF\"/><GradientStop Offset=\"0.34\" Color=\"#661D1D1D\"/><GradientStop Offset=\"0.63\" Color=\"#00000000\"/><GradientStop Offset=\"0.71\" Color=\"#662D2D2D\"/><GradientStop Offset=\"0.77\" Color=\"#4FFFFFFF\"/></LinearGradientBrush>",
+}, {}, {
+    ThemeTargetStyles{L"#qfPreviewPane, .previewContainer, .preview-content-container", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".suggsListContainer, #qfSuggsList, .results-container, .left-pane", {
+        L"width: 100% !important",
+        L"max-width: 100% !important",
+        L"flex: 1 1 100% !important"}},
+    ThemeTargetStyles{L".main-content-container, .search-results-grid, #searchPane", {
+        L"grid-template-columns: 100% !important",
+        L"display: block !important",
+        L"width: 100% !important"}},
+    ThemeTargetStyles{L".suggContainer, .groupContainer, .card", {
+        L"width: 100% !important",
+        L"box-sizing: border-box !important"}},
+}};
+
+const Theme g_themeOS26_Tahoe_App_Launcher_variant_DarkBottom = {{
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Height=624"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Border#AcrylicBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\" />",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Border#StartDropShadow", {
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"CornerRadius=50,50,0,0",
+        L"Margin=0,-65,0,470"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot", {
+        L"Margin=0,-50,0,40",
+        L"Height=500"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot > Rectangle#VerticalTrackRect", {
+        L"Height=500"}},
+    ThemeTargetStyles{L"StartMenu.StartHome", {
+        L"Margin=0,5,0,-120"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Border#BorderElement", {
+        L"BorderBrush=transparent",
+        L"Background:=transparent",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOff", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOn", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > ContentPresenter#ContentPresenter > TextBlock#PlaceholderText", {
+        L"Text:=Applications",
+        L"FontSize=25"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#UserControl > Grid#RootPanel > StartDocked.UserTileView#UserTile", {
+        L"Height=45",
+        L"Width=55",
+        L"HorizontalAlignment=left"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#UserTileButton > Grid > ContentPresenter#ContentPresenter > Grid > Grid#UserTileIcon", {
+        L"Width=32",
+        L"Height=32"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#PowerButton > Grid > ContentPresenter#ContentPresenter > Grid > FontIcon > Grid > TextBlock", {
+        L"Margin=0,1,0,-1",
+        L"FontSize=22"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > Border", {
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter#ItemsPresenter > ItemsWrapGrid > ContentPresenter > Button#LogoContainer > Grid > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=7"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid", {
+        L"Height=541",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid", {
+        L"CornerRadius=50",
+        L"VerticalAlignment=Bottom"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder, ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentAppBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"BorderBrush=Gray",
+        L"CornerRadius=50",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Border#TaskbarSearchBackground", {
+        L"Background=transparent",
+        L"Margin=20,10,20,10",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl", {
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox", {
+        L"FontSize=25",
+        L"Margin=10,-1,10,1",
+        L"Foreground=#BFBDB7"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"CornerRadius=50",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=30,20,30,43",
+        L"Height=60",
+        L"Width=60"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Grid.Row=0",
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PipsPager > StackPanel#RootPanel > ScrollViewer#PipsPagerScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=0,-100,0,100"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper", {
+        L"Padding=0,0,0,25"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
+        L"MaxWidth=120",
+        L"Margin=-55,0,55,0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Height=25"}},
+    ThemeTargetStyles{L"GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListCollapsedFolder > Grid#Root > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+}, {
+    L"IconBackground=<LinearGradientBrush StartPoint=\"0.47,-0.29\" EndPoint=\"0.50,1.29\"><GradientStop Offset=\"0.18\" Color=\"#2F2F2F\"/><GradientStop Offset=\"0.3\" Color=\"#292929\"/><GradientStop Offset=\"0.5\" Color=\"#141414\"/><GradientStop Offset=\"0.68\" Color=\"#080808\"/><GradientStop Offset=\"0.81\" Color=\"#000000\"/></LinearGradientBrush>",
+    L"IconBorder=<LinearGradientBrush StartPoint=\"0.04,-0.14\" EndPoint=\"1.22,1.10\"><GradientStop Offset=\"0.18\" Color=\"#4FFFFFFF\"/><GradientStop Offset=\"0.34\" Color=\"#661D1D1D\"/><GradientStop Offset=\"0.63\" Color=\"#00000000\"/><GradientStop Offset=\"0.71\" Color=\"#662D2D2D\"/><GradientStop Offset=\"0.77\" Color=\"#4FFFFFFF\"/></LinearGradientBrush>",
+}, {}, {
+    ThemeTargetStyles{L"#qfPreviewPane, .previewContainer, .preview-content-container", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".suggsListContainer, #qfSuggsList, .results-container, .left-pane", {
+        L"width: 100% !important",
+        L"max-width: 100% !important",
+        L"flex: 1 1 100% !important"}},
+    ThemeTargetStyles{L".main-content-container, .search-results-grid, #searchPane", {
+        L"grid-template-columns: 100% !important",
+        L"display: block !important",
+        L"width: 100% !important"}},
+    ThemeTargetStyles{L".suggContainer, .groupContainer, .card", {
+        L"width: 100% !important",
+        L"box-sizing: border-box !important"}},
+}};
+
+const Theme g_themeOS26_Tahoe_App_Launcher_variant_ClearCenter = {{
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Height=624",
+        L"VerticalAlignment=Center",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Border#AcrylicBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\" />",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Border#StartDropShadow", {
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"CornerRadius=50,50,0,0",
+        L"Margin=0,-65,0,470"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot", {
+        L"Margin=0,-50,0,40",
+        L"Height=500"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot > Rectangle#VerticalTrackRect", {
+        L"Height=500"}},
+    ThemeTargetStyles{L"StartMenu.StartHome", {
+        L"Margin=0,5,0,-120"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Border#BorderElement", {
+        L"BorderBrush=transparent",
+        L"Background:=transparent",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOff", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOn", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > ContentPresenter#ContentPresenter > TextBlock#PlaceholderText", {
+        L"Text:=Applications",
+        L"FontSize=25"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#UserControl > Grid#RootPanel > StartDocked.UserTileView#UserTile", {
+        L"Height=45",
+        L"Width=55",
+        L"HorizontalAlignment=left"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#UserTileButton > Grid > ContentPresenter#ContentPresenter > Grid > Grid#UserTileIcon", {
+        L"Width=32",
+        L"Height=32"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#PowerButton > Grid > ContentPresenter#ContentPresenter > Grid > FontIcon > Grid > TextBlock", {
+        L"Margin=0,1,0,-1",
+        L"FontSize=22"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > Border", {
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter#ItemsPresenter > ItemsWrapGrid > ContentPresenter > Button#LogoContainer > Grid > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=7"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid", {
+        L"Height=541",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid", {
+        L"Margin=0,-200,0,0",
+        L"CornerRadius=50",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder, ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentAppBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"BorderBrush=Gray",
+        L"CornerRadius=50",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Border#TaskbarSearchBackground", {
+        L"Background=transparent",
+        L"Margin=20,10,20,10",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl", {
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox", {
+        L"FontSize=25",
+        L"Margin=10,-1,10,1",
+        L"Foreground=#BFBDB7"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"CornerRadius=50",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=30,20,30,43",
+        L"Height=60",
+        L"Width=60"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Grid.Row=0",
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PipsPager > StackPanel#RootPanel > ScrollViewer#PipsPagerScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=0,-100,0,100"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper", {
+        L"Padding=0,0,0,25"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
+        L"MaxWidth=120",
+        L"Margin=-55,0,55,0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Height=25"}},
+    ThemeTargetStyles{L"GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListCollapsedFolder > Grid#Root > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+}, {
+    L"IconBackground=<ImageBrush ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/refs/heads/main/Themes/OS26%20Tahoe%20App%20Launcher/Assets/tahoeappbg.png\" Stretch=\"UniformtoFill\"/>",
+    L"IconBorder=<LinearGradientBrush StartPoint=\"0.03,-0.15\" EndPoint=\"1.18,1.23\"><GradientStop Offset=\"0.07\" Color=\"#D6D7D7\"/><GradientStop Offset=\"0.3\" Color=\"#05D6D7D7\"/><GradientStop Offset=\"0.62\" Color=\"#00D6D7D7\"/><GradientStop Offset=\"0.84\" Color=\"#D6D7D7\"/></LinearGradientBrush>",
+}, {}, {
+    ThemeTargetStyles{L"#qfPreviewPane, .previewContainer, .preview-content-container", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".suggsListContainer, #qfSuggsList, .results-container, .left-pane", {
+        L"width: 100% !important",
+        L"max-width: 100% !important",
+        L"flex: 1 1 100% !important"}},
+    ThemeTargetStyles{L".main-content-container, .search-results-grid, #searchPane", {
+        L"grid-template-columns: 100% !important",
+        L"display: block !important",
+        L"width: 100% !important"}},
+    ThemeTargetStyles{L".suggContainer, .groupContainer, .card", {
+        L"width: 100% !important",
+        L"box-sizing: border-box !important"}},
+}};
+
+const Theme g_themeOS26_Tahoe_App_Launcher_variant_ClearBottom = {{
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Height=624"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Border#AcrylicBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\" />",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Border#StartDropShadow", {
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"CornerRadius=50,50,0,0",
+        L"Margin=0,-65,0,470"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot", {
+        L"Margin=0,-50,0,40",
+        L"Height=500"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar > Grid#Root > Grid#VerticalRoot > Rectangle#VerticalTrackRect", {
+        L"Height=500"}},
+    ThemeTargetStyles{L"StartMenu.StartHome", {
+        L"Margin=0,5,0,-120"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Border#BorderElement", {
+        L"BorderBrush=transparent",
+        L"Background:=transparent",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Margin=10,0,-10,0",
+        L"Height=55"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOff", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > Image#SearchIconOn", {
+        L"Margin=680,0,-680,0",
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Grid > StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > ContentPresenter#ContentPresenter > TextBlock#PlaceholderText", {
+        L"Text:=Applications",
+        L"FontSize=25"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#UserControl > Grid#RootPanel > StartDocked.UserTileView#UserTile", {
+        L"Height=45",
+        L"Width=55",
+        L"HorizontalAlignment=left"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#UserTileButton > Grid > ContentPresenter#ContentPresenter > Grid > Grid#UserTileIcon", {
+        L"Width=32",
+        L"Height=32"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneButton#PowerButton > Grid > ContentPresenter#ContentPresenter > Grid > FontIcon > Grid > TextBlock", {
+        L"Margin=0,1,0,-1",
+        L"FontSize=22"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > StartMenu.PinnedList#StartMenuPinnedList > Grid#Root > GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"BackgroundSizing=1",
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=18,0,18,27"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > Border", {
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Grid#RootGrid > ContentPresenter#ContentPresenter > StartMenu.CategoryControl > Grid#RootGrid > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter#ItemsPresenter > ItemsWrapGrid > ContentPresenter > Button#LogoContainer > Grid > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=7"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > SemanticZoom#TopLevelRoot > Grid > ScrollViewer#ScrollViewer > ScrollContentPresenter#ScrollContentPresenter > Grid > ContentPresenter#ZoomedInPresenter > GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ContentControl > ContentPresenter > Grid#TopLevelHeader > Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid", {
+        L"Height=541",
+        L"CornerRadius=50"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid", {
+        L"CornerRadius=50",
+        L"VerticalAlignment=Bottom"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AppBorder, ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid > Grid#BorderGrid > Border#AccentAppBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"BorderBrush=Gray",
+        L"CornerRadius=50",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Border#LayerBorder, Border#AccentLayerBorder", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Border#TaskbarSearchBackground", {
+        L"Background=transparent",
+        L"Margin=20,10,20,10",
+        L"Height=55"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl", {
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Microsoft.UI.Xaml.Controls.AnimatedIcon#SearchIconPlayer", {
+        L"Height=25",
+        L"Width=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid > Cortana.UI.Views.CortanaRichSearchBox#SearchTextBox", {
+        L"FontSize=25",
+        L"Margin=10,-1,10,1",
+        L"Foreground=#BFBDB7"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#761E1E1E\"/>",
+        L"CornerRadius=50",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Background:=$IconBackground",
+        L"BorderBrush:=$IconBorder",
+        L"BorderThickness=1.3",
+        L"CornerRadius=16",
+        L"Margin=30,20,30,43",
+        L"Height=60",
+        L"Width=60"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > TextBlock", {
+        L"Margin=0,15,0,-15"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Grid.Row=0",
+        L"Margin=20,0,20,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > Border", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > Microsoft.UI.Xaml.Controls.PipsPager#PipsPager > StackPanel#RootPanel > ScrollViewer#PipsPagerScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=0,-100,0,100"}},
+    ThemeTargetStyles{L"GridView#AllAppsGrid > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper", {
+        L"Padding=0,0,0,25"}},
+    ThemeTargetStyles{L"StartDocked.AppListView#NavigationPanePlacesListView", {
+        L"MaxWidth=120",
+        L"Margin=-55,0,55,0"}},
+    ThemeTargetStyles{L"StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"Height=25"}},
+    ThemeTargetStyles{L"GridView#PinnedList > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListCollapsedFolder > Grid#Root > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > StartMenu.StartBlendedFlexFrame > Grid#FrameRoot > Grid#AnimationRoot > Grid#MainMenu > Grid#MainContent > Frame#StartFrame > ContentPresenter > StartMenu.StartHome > Grid#PageRoot > StartMenu.FolderModal#StartFolderModal > Grid#Root > ContentControl#ContentControl > ContentPresenter > StartMenu.UniversalTileContainer#UniversalTileContainer > Grid#GridViewContainer > Grid > GridView#LevelOneGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Border#ContentBorder > Grid#DroppedFlickerWorkaroundWrapper > ContentPresenter#ContentPresenter > Grid > StartMenu.PinnedListTile > Grid#Root > Grid#DisplayNameAndDownloadIconContainer > TextBlock#DisplayName", {
+        L"VerticalAlignment=bottom",
+        L"Height=25"}},
+}, {
+    L"IconBackground=<ImageBrush ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/refs/heads/main/Themes/OS26%20Tahoe%20App%20Launcher/Assets/tahoeappbg.png\" Stretch=\"UniformtoFill\"/>",
+    L"IconBorder=<LinearGradientBrush StartPoint=\"0.03,-0.15\" EndPoint=\"1.18,1.23\"><GradientStop Offset=\"0.07\" Color=\"#D6D7D7\"/><GradientStop Offset=\"0.3\" Color=\"#05D6D7D7\"/><GradientStop Offset=\"0.62\" Color=\"#00D6D7D7\"/><GradientStop Offset=\"0.84\" Color=\"#D6D7D7\"/></LinearGradientBrush>",
+}, {}, {
+    ThemeTargetStyles{L"#qfPreviewPane, .previewContainer, .preview-content-container", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L".suggsListContainer, #qfSuggsList, .results-container, .left-pane", {
+        L"width: 100% !important",
+        L"max-width: 100% !important",
+        L"flex: 1 1 100% !important"}},
+    ThemeTargetStyles{L".main-content-container, .search-results-grid, #searchPane", {
+        L"grid-template-columns: 100% !important",
+        L"display: block !important",
+        L"width: 100% !important"}},
+    ThemeTargetStyles{L".suggContainer, .groupContainer, .card", {
+        L"width: 100% !important",
+        L"box-sizing: border-box !important"}},
+}};
+
+const Theme g_themeRaycast = {{
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame", {
+        L"HorizontalAlignment=Center",
+        L"RenderTransform:=<TranslateTransform Y=\"$PaletteOffsetY\" />",
+        L"CornerRadius=$PaletteRadius"}},
+    ThemeTargetStyles{L"StartMenu.StartBlendedFlexFrame > Grid#FrameRoot", {
+        L"Width=$PaletteWidth",
+        L"MinWidth=$PaletteWidth",
+        L"MaxWidth=$PaletteWidth",
+        L"Height=$PaletteHeight",
+        L"MinHeight=$PaletteHeight",
+        L"MaxHeight=$PaletteHeight",
+        L"Margin=0",
+        L"Padding=0"}},
+    ThemeTargetStyles{L"Grid#MainMenu", {
+        L"Width=$PaletteWidth",
+        L"MaxWidth=$PaletteWidth",
+        L"Height=$PaletteHeight",
+        L"MaxHeight=$PaletteHeight",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Top",
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Border#AcrylicBorder", {
+        L"Background:=$PaletteBackground",
+        L"BorderBrush=$PaletteBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=$PaletteRadius",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Border#StartDropShadow", {
+        L"CornerRadius=$PaletteRadius",
+        L"Margin=$ShadowMargin",
+        L"Opacity=$ShadowOpacity"}},
+    ThemeTargetStyles{L"Border#RootGridDropShadow", {
+        L"CornerRadius=$PaletteRadius",
+        L"Margin=$ShadowMargin",
+        L"Opacity=$ShadowOpacity"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton", {
+        L"Height=$SearchHeight",
+        L"MinHeight=$SearchHeight",
+        L"MaxHeight=$SearchHeight",
+        L"Margin=0",
+        L"Padding=0",
+        L"Background=Transparent",
+        L"BorderThickness=0",
+        L"HorizontalAlignment=Stretch",
+        L"VerticalAlignment=Top"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid@CommonStates > Border#BorderElement", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$Transparent",
+        L"Background@Pressed=$Transparent",
+        L"Background@Checked=$Transparent",
+        L"Background@CheckedPointerOver=$Transparent",
+        L"Background@CheckedPressed=$Transparent",
+        L"BorderBrush=$DividerBrush",
+        L"BorderThickness=0,0,0,1",
+        L"CornerRadius=$PaletteRadius,$PaletteRadius,0,0",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton#SearchBoxToggleButton > Grid > ContentPresenter > TextBlock#PlaceholderText", {
+        L"Text=Search for apps and commands...",
+        L"Foreground=$TextSecondary",
+        L"FontFamily=$UIFont",
+        L"FontSize=$SearchTextSize",
+        L"FontWeight=400",
+        L"Opacity=0.70",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton > Grid > FontIcon#SearchGlyph", {
+        L"Foreground=$TextSecondary",
+        L"FontSize=$SearchTextSize",
+        L"Width=$SearchGlyphBox",
+        L"Height=$SearchGlyphBox",
+        L"Margin=$EdgePadding,0,4,0"}},
+    ThemeTargetStyles{L"StartMenu.SearchBoxToggleButton > Grid > Rectangle#TextCaret", {
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList#StartMenuPinnedList", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0",
+        L"Height=0"}},
+    ThemeTargetStyles{L"GridView#PinnedList", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0",
+        L"MinHeight=0",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Grid#NavPanePlaceholder", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"Grid#AllAppsPaneHeader", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"Grid#SuggestionsParentContainer", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsContainer", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsListHeader", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#ShowMoreSuggestions", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"Grid#ShowMorePinnedGrid", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"TextBlock#ShowMorePinnedButtonText", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Button#ShowMoreSuggestionsButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Button#HideMoreSuggestionsButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#MoreSuggestionsRoot", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"Grid#MoreSuggestionsContainer", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TextBlock#MoreSuggestionsListHeaderText", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TextBlock#ShowAllAppsButtonText", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TextBlock#SeeAllButtonLabelTextblock", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"GridView#RecommendedList", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.PipsPager#PinnedListPipsPager", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Button#ShowAllAppsButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Button#SeeAllButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ToggleButton#ShowHideCompanion", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#RightCompanionContainerGrid", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.StartMenuCompanion#RightCompanion", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartMenu.StartMenuCompanion#RightCompanion", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.UserTileView", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#NavigationPane", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#AccountBadgePlaceholder", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#AllListHeading", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0",
+        L"MinHeight=0",
+        L"Height=0",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"TextBlock#AllListHeadingText", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton#ViewSelectionButton", {
+        L"Visibility=Collapsed",
+        L"MaxHeight=0"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListView#AppsList", {
+        L"MaxHeight=$AppsListHeight",
+        L"Padding=0,0,0,4",
+        L"Margin=$EdgePadding,0,$EdgePadding,0",
+        L"Background=Transparent",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListViewItem", {
+        L"Height=$RowHeight",
+        L"MinHeight=$RowHeight",
+        L"MaxHeight=$RowHeight",
+        L"Margin=0",
+        L"Padding=0",
+        L"FontFamily=$UIFont",
+        L"HorizontalContentAlignment=Stretch"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListViewItem > Grid@CommonStates > Border", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$RowHover",
+        L"Background@Pressed=$RowPressed",
+        L"Background@Selected=$RowSelected",
+        L"Background@SelectedPointerOver=$RowSelected",
+        L"Background@SelectedPressed=$RowPressed",
+        L"BorderThickness=0",
+        L"CornerRadius=$RowRadius",
+        L"Margin=$RowInset,1"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListViewItem > Grid@CommonStates > Border#BackgroundBorder", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$RowHover",
+        L"Background@Pressed=$RowPressed",
+        L"Background@Selected=$RowSelected",
+        L"BorderThickness=0",
+        L"CornerRadius=$RowRadius",
+        L"Margin=$RowInset,1"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListViewItem > Grid#ContentBorder@CommonStates", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$RowHover",
+        L"Background@Pressed=$RowPressed",
+        L"Background@Selected=$RowSelected",
+        L"CornerRadius=$RowRadius"}},
+    ThemeTargetStyles{L"StartDocked.AppListViewItem", {
+        L"Height=$RowHeight",
+        L"MinHeight=$RowHeight",
+        L"FontFamily=$UIFont"}},
+    ThemeTargetStyles{L"StartDocked.AppListViewItem > Grid@CommonStates > Border#BackgroundBorder", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$RowHover",
+        L"Background@Pressed=$RowPressed",
+        L"Background@Selected=$RowSelected",
+        L"BorderThickness=0",
+        L"CornerRadius=$RowRadius",
+        L"Margin=$RowInset,1"}},
+    ThemeTargetStyles{L"Border#LogoBackgroundPlate", {
+        L"Width=$IconSize",
+        L"Height=$IconSize",
+        L"MinWidth=$IconSize",
+        L"Background=Transparent",
+        L"CornerRadius=$IconRadius",
+        L"Margin=$IconMargin",
+        L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Image#AllAppsItemLogo", {
+        L"Width=$IconSize",
+        L"Height=$IconSize"}},
+    ThemeTargetStyles{L"TextBlock#DisplayName", {
+        L"Foreground=$TextPrimary",
+        L"FontFamily=$UIFont",
+        L"FontSize=$BodyTextSize",
+        L"FontWeight=400",
+        L"TextTrimming=CharacterEllipsis",
+        L"TextWrapping=NoWrap",
+        L"VerticalAlignment=Center",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"TextBlock#AllAppsHeading", {
+        L"Foreground=$TextMuted",
+        L"FontFamily=$UIFont",
+        L"FontSize=$CaptionTextSize",
+        L"FontWeight=$SectionTextWeight",
+        L"Margin=$RowInset,10,0,4"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsZoomListViewItem > Grid@CommonStates > Border", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$RowHover",
+        L"CornerRadius=$RowRadius",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ScrollBar", {
+        L"Opacity=$ScrollbarOpacity",
+        L"Width=$ScrollbarWidth",
+        L"MinWidth=$ScrollbarWidth"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage", {
+        L"Width=$SearchWidth",
+        L"MinWidth=$SearchWidth",
+        L"MaxWidth=$SearchWidth",
+        L"Height=$PaletteHeight",
+        L"MinHeight=$PaletteHeight",
+        L"MaxHeight=$PaletteHeight",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Bottom",
+        L"RenderTransform:=<TranslateTransform Y=\"$SearchOffsetY\" />",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid", {
+        L"Width=$SearchWidth",
+        L"MinWidth=$SearchWidth",
+        L"MaxWidth=$SearchWidth",
+        L"Height=$PaletteHeight",
+        L"MinHeight=$PaletteHeight",
+        L"MaxHeight=$PaletteHeight",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Bottom",
+        L"RequestedTheme=2",
+        L"CornerRadius=$PaletteRadius",
+        L"Background:=$SearchPaletteBackground",
+        L"BorderBrush=$PaletteBorder",
+        L"BorderThickness=1",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.TaskbarSearchPage > Grid#RootGrid > Grid#OuterBorderGrid", {
+        L"Width=$SearchWidth",
+        L"MinWidth=$SearchWidth",
+        L"MaxWidth=$SearchWidth",
+        L"Height=$PaletteHeight",
+        L"MinHeight=$PaletteHeight",
+        L"MaxHeight=$PaletteHeight",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Bottom",
+        L"Background=Transparent",
+        L"CornerRadius=$PaletteRadius",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Border#AppBorder", {
+        L"Background:=$SearchPaletteBackground",
+        L"BorderBrush=$PaletteBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=$PaletteRadius",
+        L"Width=$SearchWidth",
+        L"MinWidth=$SearchWidth",
+        L"MaxWidth=$SearchWidth",
+        L"Height=$PaletteHeight",
+        L"MinHeight=$PaletteHeight",
+        L"MaxHeight=$PaletteHeight",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Bottom",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Border#AccentAppBorder", {
+        L"Background=Transparent",
+        L"BorderThickness=0",
+        L"CornerRadius=$PaletteRadius"}},
+    ThemeTargetStyles{L"Border#LayerBorder", {
+        L"Background=Transparent",
+        L"BorderThickness=0",
+        L"CornerRadius=$PaletteRadius"}},
+    ThemeTargetStyles{L"Border#AccentLayerBorder", {
+        L"Background=Transparent",
+        L"BorderThickness=0",
+        L"CornerRadius=$PaletteRadius"}},
+    ThemeTargetStyles{L"Border#dropshadow", {
+        L"CornerRadius=$PaletteRadius"}},
+    ThemeTargetStyles{L"Border#TaskbarMargin", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid@SearchBoxInputStates > Border#TaskbarSearchBackground", {
+        L"Height=$SearchHeight",
+        L"Margin=0",
+        L"VerticalAlignment=Top",
+        L"Background@NoFocus=$Transparent",
+        L"Background@ActiveInput=$Transparent",
+        L"Background@SearchBoxHover=$Transparent",
+        L"BorderBrush=$DividerBrush",
+        L"BorderThickness=0,0,0,1",
+        L"CornerRadius=$PaletteRadius,$PaletteRadius,0,0"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl", {
+        L"Margin=$EdgePadding,0,$EdgePadding,0",
+        L"Height=$SearchHeight",
+        L"VerticalAlignment=Top",
+        L"FontFamily=$UIFont",
+        L"FontSize=$SearchTextSize"}},
+    ThemeTargetStyles{L"Cortana.UI.Views.RichSearchBoxControl#SearchBoxControl > Grid#RootGrid", {
+        L"Background=Transparent",
+        L"BorderThickness=0",
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"Grid#WebViewGrid", {
+        L"Background=Transparent",
+        L"HorizontalAlignment=Stretch",
+        L"VerticalAlignment=Stretch",
+        L"Margin=1,0,1,$PaletteRadius",
+        L"CornerRadius=0,0,$PaletteRadius,$PaletteRadius"}},
+    ThemeTargetStyles{L"WebView2Standalone.Controls.WebView2", {
+        L"HorizontalAlignment=Stretch",
+        L"VerticalAlignment=Stretch",
+        L"Margin=0",
+        L"CornerRadius=0,0,$PaletteRadius,$PaletteRadius"}},
+    ThemeTargetStyles{L"ListViewItem", {
+        L"MinHeight=$RowHeight",
+        L"FontFamily=$UIFont"}},
+    ThemeTargetStyles{L"ListViewItem > Grid@CommonStates > Border#BackgroundBorder", {
+        L"Background@Normal=$Transparent",
+        L"Background@PointerOver=$RowHover",
+        L"Background@Pressed=$RowPressed",
+        L"Background@Selected=$RowSelected",
+        L"BorderThickness=0",
+        L"CornerRadius=$RowRadius",
+        L"Margin=$RowInset,1"}},
+    ThemeTargetStyles{L"TextBlock#Title", {
+        L"Foreground=$TextPrimary",
+        L"FontFamily=$UIFont",
+        L"FontSize=$BodyTextSize",
+        L"FontWeight=400",
+        L"TextTrimming=CharacterEllipsis"}},
+    ThemeTargetStyles{L"TextBlock#Subtitle", {
+        L"Foreground=$TextSecondary",
+        L"FontFamily=$UIFont",
+        L"FontSize=$CaptionTextSize",
+        L"FontWeight=400",
+        L"TextTrimming=CharacterEllipsis"}},
+    ThemeTargetStyles{L"ToolTip > ContentPresenter#LayoutRoot", {
+        L"Background=$FlyoutBackground",
+        L"BorderBrush=$PaletteBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=$RowRadius"}},
+    ThemeTargetStyles{L"FlyoutPresenter", {
+        L"Background=$FlyoutBackground",
+        L"BorderBrush=$PaletteBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=$EdgePadding"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter", {
+        L"Background=$FlyoutBackground",
+        L"BorderBrush=$PaletteBorder",
+        L"BorderThickness=1",
+        L"CornerRadius=$EdgePadding"}},
+    ThemeTargetStyles{L"MenuFlyoutItem", {
+        L"CornerRadius=$MenuItemRadius",
+        L"Margin=$MenuItemMargin"}},
+}, {
+    L"PaletteWidth=700",
+    L"PaletteHeight=460",
+    L"PaletteOffsetY=-140",
+    L"SearchOffsetY=-140",
+    L"SearchWidth=700",
+    L"PaletteRadius=12",
+    L"EdgePadding=10",
+    L"SearchHeight=52",
+    L"SearchTextSize=17",
+    L"SearchGlyphBox=32",
+    L"RowHeight=38",
+    L"RowRadius=8",
+    L"RowInset=8",
+    L"IconSize=20",
+    L"IconRadius=4",
+    L"IconMargin=6,0,12,0",
+    L"MenuItemRadius=6",
+    L"MenuItemMargin=4,0,4,0",
+    L"BodyTextSize=14",
+    L"CaptionTextSize=11.5",
+    L"SectionTextWeight=600",
+    L"ShadowMargin=-26",
+    L"ShadowOpacity=0.5",
+    L"ScrollbarWidth=4",
+    L"ScrollbarOpacity=0.22",
+    L"WebPaletteRadius=12px",
+    L"WebEdgePadding=10px",
+    L"WebRowHeight=38px",
+    L"WebRowRadius=8px",
+    L"WebRowMargin=1px 8px",
+    L"WebSectionMargin=10px 8px 4px",
+    L"WebIconSize=20px",
+    L"WebIconTextSize=18px",
+    L"WebIconGap=12px",
+    L"WebBodyTextSize=14px",
+    L"WebCaptionTextSize=11.5px",
+    L"AppsListHeight=400",
+    L"PaletteBackground=<WindhawkBlur BlurAmount=\"40\" TintColor=\"#17171A\" TintOpacity=\"0.84\" TintSaturation=\"1.10\" NoiseOpacity=\"0.010\" FallbackColor=\"#E617171A\" />",
+    L"SearchPaletteBackground=<WindhawkBlur BlurAmount=\"40\" TintColor=\"#17171A\" TintOpacity=\"0.86\" TintSaturation=\"1.10\" NoiseOpacity=\"0.010\" FallbackColor=\"#EA17171A\" />",
+    L"FlyoutBackground=#F017171A",
+    L"PaletteBorder=#26FFFFFF",
+    L"DividerBrush=#14FFFFFF",
+    L"Transparent=#00000000",
+    L"RowHover=#0DFFFFFF",
+    L"RowSelected=#17FFFFFF",
+    L"RowPressed=#22FFFFFF",
+    L"WebRowHover=rgba(255,255,255,0.05)",
+    L"WebRowSelected=rgba(255,255,255,0.09)",
+    L"WebScrollbar=rgba(255,255,255,.16)",
+    L"TextPrimary=#EDEDEF",
+    L"TextSecondary=#8E8E93",
+    L"TextMuted=#7C7C82",
+    L"TextIcon=#D8D8DA",
+    L"UIFont=Segoe UI Variable Text",
+    L"WebUIFont='Segoe UI Variable Text', 'Segoe UI', sans-serif",
+    L"AccentColor=#8A8A92",
+    L"AccentColorLight=#A0A0A7",
+    L"AccentColorDark=#6E6E75",
+}, {
+    L"SystemAccentColor=$AccentColor",
+    L"SystemAccentColorLight1=$AccentColorLight",
+    L"SystemAccentColorDark1=$AccentColorDark",
+}, {
+    ThemeTargetStyles{L"html, body, #rootContainer, #root, .scr", {
+        L"background: transparent !important",
+        L"background-color: transparent !important",
+        L"color: $TextPrimary !important",
+        L"font-family: $WebUIFont !important",
+        L"overflow-x: hidden !important",
+        L"letter-spacing: 0 !important"}},
+    ThemeTargetStyles{L"html, body", {
+        L"border-bottom-left-radius: $WebPaletteRadius !important",
+        L"border-bottom-right-radius: $WebPaletteRadius !important",
+        L"overflow: hidden !important"}},
+    ThemeTargetStyles{L"#rootContainer, #root", {
+        L"border-bottom-left-radius: $WebPaletteRadius !important",
+        L"border-bottom-right-radius: $WebPaletteRadius !important",
+        L"overflow-x: hidden !important"}},
+    ThemeTargetStyles{L"#root.twoColumns", {
+        L"display: block !important",
+        L"width: 100% !important",
+        L"max-width: 100% !important"}},
+    ThemeTargetStyles{L"#scopesHeader, #scopesHeader *, #chatButtonRight, #topHitHeader, #qfPreviewPane, #qfPreviewPane *, .previewContainer, .scope-with-background__backButton, .scope-with-background__rightCaret, .scope-with-background__leftCaret, .curatedSettingsGroup, .userProfileMenuIcon, .openPreviewPaneBtn, .scope-tile__button", {
+        L"display: none !important",
+        L"visibility: hidden !important"}},
+    ThemeTargetStyles{L".leftPill::before", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L"#qfContainer, .leftPane, .leftPaneZIsuggestions, .suggsListContainer, .searchResults, .topResults, .groupContainer", {
+        L"width: 100% !important",
+        L"max-width: none !important",
+        L"box-sizing: border-box !important",
+        L"background: transparent !important"}},
+    ThemeTargetStyles{L".suggsList, .groupContainer", {
+        L"padding-left: $WebEdgePadding !important",
+        L"padding-right: $WebEdgePadding !important",
+        L"box-sizing: border-box !important"}},
+    ThemeTargetStyles{L".groupTitle, .groupHeader", {
+        L"color: $TextMuted !important",
+        L"font-family: $WebUIFont !important",
+        L"font-size: $WebCaptionTextSize !important",
+        L"font-weight: $SectionTextWeight !important",
+        L"margin: $WebSectionMargin !important",
+        L"background: transparent !important"}},
+    ThemeTargetStyles{L".suggContainer, .suggestion:not(.groupHeader)", {
+        L"min-height: $WebRowHeight !important",
+        L"height: $WebRowHeight !important",
+        L"margin: $WebRowMargin !important",
+        L"padding: 0 $WebEdgePadding !important",
+        L"border-radius: $WebRowRadius !important",
+        L"background-color: transparent !important",
+        L"border: none !important",
+        L"box-shadow: none !important",
+        L"box-sizing: border-box !important",
+        L"display: flex !important",
+        L"align-items: center !important",
+        L"transition: background-color 100ms ease !important"}},
+    ThemeTargetStyles{L".suggContainer:hover, .suggestion:not(.groupHeader):hover", {
+        L"background-color: $WebRowHover !important"}},
+    ThemeTargetStyles{L".suggContainer:focus-within, .suggContainer[aria-selected=\"true\"], .suggContainer.selected, .suggContainer.active, .suggestion[aria-selected=\"true\"]", {
+        L"background-color: $WebRowSelected !important"}},
+    ThemeTargetStyles{L"h1, h2, h3, h4, .title, .primaryText, .suggContainer, .menu-item_details", {
+        L"color: $TextPrimary !important",
+        L"font-family: $WebUIFont !important",
+        L"font-size: $WebBodyTextSize !important",
+        L"font-weight: 400 !important",
+        L"white-space: nowrap !important",
+        L"overflow: hidden !important",
+        L"text-overflow: ellipsis !important",
+        L"letter-spacing: 0 !important"}},
+    ThemeTargetStyles{L".secondaryText, .details, .metadata, .caption, .subtitle", {
+        L"color: $TextSecondary !important",
+        L"font-family: $WebUIFont !important",
+        L"font-size: $WebCaptionTextSize !important",
+        L"font-weight: 400 !important",
+        L"white-space: nowrap !important",
+        L"overflow: hidden !important",
+        L"text-overflow: ellipsis !important"}},
+    ThemeTargetStyles{L".cortanaFontIcon, .iconContent, .suggIcon, .iconContainer", {
+        L"width: $WebIconSize !important",
+        L"height: $WebIconSize !important",
+        L"font-size: $WebIconTextSize !important",
+        L"margin-right: $WebIconGap !important",
+        L"color: $TextIcon !important"}},
+    ThemeTargetStyles{L"*", {
+        L"letter-spacing: 0 !important",
+        L"scrollbar-width: thin !important",
+        L"scrollbar-color: $WebScrollbar transparent !important"}},
+    ThemeTargetStyles{L"[id*=\"iotd\" i], [class*=\"iotd\" i], [id*=\"imageOfTheDay\" i], [class*=\"imageOfTheDay\" i], [class*=\"image-of-the-day\" i], [id*=\"heroImage\" i], [class*=\"heroImage\" i], [class*=\"dailyImage\" i], [class*=\"bingImage\" i], [class*=\"wallpaperCard\" i], div[data-region=\"TopApps\"], div[data-region=\"News\"], div[data-region=\"Trending\"]", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L":is([id*=\"iotd\" i], [class*=\"iotd\" i], [data-region*=\"iotd\" i], [id*=\"imageOfTheDay\" i], [class*=\"imageOfTheDay\" i], [data-region*=\"imageOfTheDay\" i], [id*=\"image-of-the-day\" i], [class*=\"image-of-the-day\" i], [data-region*=\"image-of-the-day\" i]):not(#_)", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L":is([id*=\"heroImage\" i], [class*=\"heroImage\" i], [data-region*=\"heroImage\" i], [id*=\"dailyImage\" i], [class*=\"dailyImage\" i], [data-region*=\"dailyImage\" i], [id*=\"bingImage\" i], [class*=\"bingImage\" i], [data-region*=\"bingImage\" i], [id*=\"wallpaperCard\" i], [class*=\"wallpaperCard\" i], [data-region*=\"wallpaperCard\" i]):not(#_)", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L":is([id*=\"copilot\" i], [class*=\"copilot\" i], [data-region*=\"copilot\" i], [id*=\"chatButton\" i], [class*=\"chatButton\" i], [data-region*=\"chatButton\" i]):not(#_)", {
+        L"display: none !important"}},
+    ThemeTargetStyles{L":is(div[data-region=\"TopApps\"], div[data-region=\"News\"], div[data-region=\"Trending\"]):not(#_)", {
+        L"display: none !important"}},
+}, DisableNewStartMenuLayout::forceNewLayout};
+
 // clang-format on
 
 std::atomic<DWORD> g_targetThreadId = 0;
 
-void ApplyCustomizations(InstanceHandle handle,
+// An InstanceHandle is the address of an interface on the element, so it names
+// an element only for as long as that element lives: an element allocated over
+// a destroyed one is reported under the same handle. Everything the mod records
+// is therefore keyed by an id minted per reported element, which is never
+// reused, rather than by the handle itself.
+enum class ElementId : uint64_t { None = 0 };
+
+ElementId GetOrCreateElementId(
+    InstanceHandle handle,
+    winrt::Windows::Foundation::IInspectable const& element);
+ElementId FindElementId(InstanceHandle handle);
+void ForgetElementId(InstanceHandle handle);
+
+void ApplyCustomizations(ElementId elementId,
                          winrt::Windows::UI::Xaml::FrameworkElement element,
                          PCWSTR fallbackClassName);
-void CleanupCustomizations(InstanceHandle handle);
+void CleanupCustomizations(ElementId elementId);
+void QueueDiagnosticsRelease(InstanceHandle handle);
+void FlushDiagnosticsReleasesIfQuiet();
 
 HMODULE GetCurrentModuleHandle() {
     HMODULE module;
@@ -7579,12 +10595,24 @@ HMODULE GetCurrentModuleHandle() {
     return module;
 }
 
+// The XAML composition diagnostics rebuild a process-wide visual tree walker
+// without any locking whenever a DirectComposition visual is added, so any UI
+// thread which adds one corrupts the heap while another thread is in the same
+// code. Only element mutations are needed here, and those are reported by an
+// unrelated code path, so the composition diagnostics are kept from being
+// created at all: XamlDiagnostics::CreateCompVisualDiag skips them when the
+// HKLM\Software\Microsoft\XAML\Debug\DisableCompositionDiag value is 1.
+// Windows.UI.Xaml.dll reads and caches the value once, from within
+// AdviseVisualTreeChange, so answering that single read is enough.
+thread_local bool g_reportCompositionDiagAsDisabled;
+
 ////////////////////////////////////////////////////////////////////////////////
 // clang-format off
 
 #pragma region winrt_hpp
 
 #include <Unknwn.h>
+#include <weakreference.h>
 #include <winrt/base.h>
 
 // forward declare namespaces we alias
@@ -7599,11 +10627,51 @@ namespace winrt {
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
 
+// A weak reference for the object, or an empty one when the object is null or
+// doesn't support weak references: cppwinrt's make_weak dereferences a null
+// pointer for an object without that support instead of reporting it. Throws,
+// as make_weak does, when the object supports weak references but one can't be
+// made.
+winrt::weak_ref<wf::IInspectable> TryMakeWeak(wf::IInspectable const& object)
+{
+    if (!object.try_as<::IWeakReferenceSource>())
+    {
+        return nullptr;
+    }
+
+    return winrt::make_weak(object);
+}
+
 #pragma endregion  // winrt_hpp
 
 #pragma region visualtreewatcher_hpp
 
 #include <winrt/Windows.UI.Xaml.h>
+
+// XamlDiagnostics implements this interface too, and xamlom.h does not declare
+// it. UnregisterInstance closes the runtime object cached for a handle, the
+// only reference the diagnostics keep to an element once it was reported.
+static constexpr GUID IID_IXamlDiagnosticsTestHooks =
+    {0x735941a2, 0x3ee3, 0x495a, {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
+
+struct IXamlDiagnosticsTestHooks : IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE UnregisterInstance(InstanceHandle handle) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TryGetDispatcherQueueForObject(InstanceHandle handle, void** dispatcherQueue) = 0;
+};
+
+// The handle a mutation callback would report for an element, for elements
+// which were reached some other way, e.g. by walking the visual tree. Derived
+// the way the diagnostics derive it, by querying IInspectable and taking the
+// pointer, and not through GetHandleFromIInspectable: that one creates the
+// runtime object when none is cached, so asking it about an element whose
+// reference was released would take a new reference and pin it again.
+InstanceHandle HandleFromInspectable(wf::IInspectable const& instance)
+{
+    winrt::com_ptr<::IInspectable> inspectable;
+    winrt::check_hresult(reinterpret_cast<::IUnknown*>(winrt::get_abi(instance))->QueryInterface(winrt::guid_of<wf::IInspectable>(), inspectable.put_void()));
+    return reinterpret_cast<InstanceHandle>(inspectable.get());
+}
 
 class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile>
 {
@@ -7620,6 +10688,8 @@ public:
 
     void UnadviseVisualTreeChange();
 
+    bool ReleaseDiagnosticsReference(InstanceHandle handle);
+
 private:
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
     HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element, VisualElementState elementState, LPCWSTR context) noexcept override;
@@ -7632,6 +10702,7 @@ private:
     }
 
     winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
+    winrt::com_ptr<IXamlDiagnosticsTestHooks> m_XamlDiagnosticsTestHooks = nullptr;
 };
 
 #pragma endregion  // visualtreewatcher_hpp
@@ -7642,6 +10713,12 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
     Wh_Log(L"Constructing VisualTreeWatcher");
+
+    HRESULT hr = m_XamlDiagnostics->QueryInterface(IID_IXamlDiagnosticsTestHooks, m_XamlDiagnosticsTestHooks.put_void());
+    if (FAILED(hr)) {
+        Wh_Log(L"IXamlDiagnosticsTestHooks is unavailable, elements will be leaked: %08X", hr);
+    }
+
     // winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
 
     // Calling AdviseVisualTreeChange from the current thread causes the app to
@@ -7651,7 +10728,10 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
         nullptr, 0,
         [](LPVOID lpParam) -> DWORD {
             auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
-            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
+            auto service = watcher->m_XamlDiagnostics.as<IVisualTreeService3>();
+            g_reportCompositionDiagAsDisabled = true;
+            HRESULT hr = service->AdviseVisualTreeChange(watcher);
+            g_reportCompositionDiagAsDisabled = false;
             watcher->Release();
             if (FAILED(hr)) {
                 Wh_Log(L"Error %08X", hr);
@@ -7679,7 +10759,44 @@ void VisualTreeWatcher::UnadviseVisualTreeChange()
     }
 }
 
-HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
+// Reports whether dropping the reference destroyed the element, which is what
+// tells the caller that the handle is free to name a different element from now
+// on and that the id recorded for this one has to go.
+bool VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle)
+{
+    if (!m_XamlDiagnosticsTestHooks) {
+        return false;
+    }
+
+    winrt::weak_ref<wf::IInspectable> weakElement;
+    {
+        // Not through FromHandle: a handle whose runtime object is already gone
+        // fails to resolve routinely, and throwing for it would pay for an
+        // originate with a stack capture every time. The strong reference has
+        // to be gone again before the release below, hence the scope.
+        wf::IInspectable element;
+        HRESULT hr = m_XamlDiagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(element)));
+        if (SUCCEEDED(hr) && element) {
+            try {
+                weakElement = TryMakeWeak(element);
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult());
+            }
+        }
+    }
+
+    HRESULT hr = m_XamlDiagnosticsTestHooks->UnregisterInstance(handle);
+    if (FAILED(hr)) {
+        Wh_Log(L"UnregisterInstance failed with error %08X", hr);
+        return false;
+    }
+
+    // Not every reported object supports weak references, and then the release
+    // just proceeds unobserved.
+    return weakElement && !weakElement.get();
+}
+
+HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) try
 {
     if (GetCurrentThreadId() != g_targetThreadId)
     {
@@ -7706,23 +10823,58 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
 
     Wh_Log(L"Element type: %s", element.Type);
 
+    // Caught here rather than by the handler below, so that the bookkeeping
+    // which hands the element's reference back still runs when the styling work
+    // throws. Otherwise a single failed element would be held for good.
+    try
+    {
+        if (mutationType == Add)
+        {
+            const auto inspectable = FromHandle(element.Handle);
+            auto elementId = GetOrCreateElementId(element.Handle, inspectable);
+            auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
+            if (frameworkElement)
+            {
+                Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
+                if (elementId == ElementId::None)
+                {
+                    Wh_Log(L"Skipping element which can't be given an id");
+                }
+                else
+                {
+                    ApplyCustomizations(elementId, frameworkElement, element.Type);
+                }
+            }
+            else
+            {
+                Wh_Log(L"Skipping non-FrameworkElement");
+            }
+        }
+        else if (mutationType == Remove)
+        {
+            CleanupCustomizations(FindElementId(element.Handle));
+        }
+    }
+    catch (...)
+    {
+        Wh_Log(L"Error %08X", winrt::to_hresult());
+    }
+
+    // A tree discarded whole is never dismantled, so it reports no removals to
+    // be released by.
+    FlushDiagnosticsReleasesIfQuiet();
+
     if (mutationType == Add)
     {
-        const auto inspectable = FromHandle(element.Handle);
-        auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
-        if (frameworkElement)
-        {
-            Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
-            ApplyCustomizations(element.Handle, frameworkElement, element.Type);
-        }
-        else
-        {
-            Wh_Log(L"Skipping non-FrameworkElement");
-        }
+        QueueDiagnosticsRelease(element.Handle);
+        QueueDiagnosticsRelease(relation.Parent);
     }
     else if (mutationType == Remove)
     {
-        CleanupCustomizations(element.Handle);
+        // Queued rather than released outright: this report arrives from inside
+        // the Leave walk which is still visiting the subtree being removed.
+        QueueDiagnosticsRelease(element.Handle);
+        ForgetElementId(element.Handle);
     }
 
     return S_OK;
@@ -7749,7 +10901,10 @@ HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementSt
 
 #include <ocidl.h>
 
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+// Read by the UI threads while the thread which injects or uninitializes the TAP
+// replaces it.
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+SRWLOCK g_visualTreeWatcherLock = SRWLOCK_INIT;
 
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
 static constexpr CLSID CLSID_WindhawkTAP = { 0xc85d8cc7, 0x5463, 0x40e8, { 0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5 } };
@@ -7768,13 +10923,30 @@ private:
 
 #pragma region tap_cpp
 
+winrt::com_ptr<VisualTreeWatcher> GetVisualTreeWatcher()
+{
+    AcquireSRWLockShared(&g_visualTreeWatcherLock);
+    auto watcher = g_visualTreeWatcher;
+    ReleaseSRWLockShared(&g_visualTreeWatcherLock);
+    return watcher;
+}
+
+// Hands the previous watcher back to be unadvised and released outside the
+// lock: both can wait on the UI threads, which take it.
+winrt::com_ptr<VisualTreeWatcher> ExchangeVisualTreeWatcher(winrt::com_ptr<VisualTreeWatcher> watcher)
+{
+    AcquireSRWLockExclusive(&g_visualTreeWatcherLock);
+    std::swap(g_visualTreeWatcher, watcher);
+    ReleaseSRWLockExclusive(&g_visualTreeWatcherLock);
+    return watcher;
+}
+
 HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
 {
     // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher)
+    if (auto previous = ExchangeVisualTreeWatcher(nullptr))
     {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+        previous->UnadviseVisualTreeChange();
     }
 
     site.copy_from(pUnkSite);
@@ -7784,7 +10956,7 @@ HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
         // Decrease refcount increased by InitializeXamlDiagnosticsEx.
         FreeLibrary(GetCurrentModuleHandle());
 
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
+        ExchangeVisualTreeWatcher(winrt::make_self<VisualTreeWatcher>(site));
     }
 
     return S_OK;
@@ -7941,6 +11113,8 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <charconv>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <filesystem>
 #include <limits>
 #include <list>
 #include <memory>
@@ -7963,6 +11137,7 @@ using namespace std::string_view_literals;
 #include <commctrl.h>
 #include <d2d1_1.h>
 #include <roapi.h>
+#include <shlwapi.h>
 #include <windows.graphics.effects.h>
 #include <winstring.h>
 
@@ -7978,14 +11153,21 @@ using namespace std::string_view_literals;
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
+#define WH_WINRT_WINUI2
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+
 using namespace winrt::Windows::UI::Xaml;
 
+namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace wge = winrt::Windows::Graphics::Effects;
 namespace wuc = winrt::Windows::UI::Composition;
 namespace wuxh = wux::Hosting;
@@ -8118,8 +11300,18 @@ struct CaptureSpec {
     std::wstring varName;
 };
 
+// Property -> visual state -> setter XAML.
+using PropertyOverrideSetters =
+    std::unordered_map<DependencyProperty,
+                       std::unordered_map<std::wstring, std::wstring>>;
+
 struct ResolvedRules {
     PropertyOverrides propertyOverrides;
+    // Setters of the values in propertyOverrides that are objects, other than
+    // ones from resources. Each element gets its own instance parsed from them:
+    // an element or a geometry can't be shared, and a template animating a
+    // shared object, e.g. a brush's color, would change it for every element.
+    PropertyOverrideSetters elementInstanceSetters;
     std::vector<CaptureSpec> captures;
     // Whether this target consumes style variables. Lets ApplyCustomizations
     // skip the visual-tree bookkeeping that only variable users need.
@@ -8133,15 +11325,16 @@ using PropertyOverridesMaybeUnresolved =
 // value change on some other capture of the same name be skipped.
 struct StyleVariableDependency {
     std::wstring name;
-    InstanceHandle owner = 0;  // 0 when the variable was undefined
+    ElementId owner = ElementId::None;  // None when the variable was undefined
 };
 
 // Interned node of an element's visual-tree spine. Nodes are shared by every
 // tracked element under the same ancestor, so the pool holds one node per
 // distinct ancestor rather than a full path per element. Once a node exists its
 // `parent` and `depth` are final; an element that is later reparented keeps the
-// spine it was first seen with, and only a node interned as a root before its
-// object was attached (see GetOrCreateElementTreeNode) is ever replaced.
+// spine it was first seen with, and only the nodes of a spine interned before
+// its root object was attached (see GetOrCreateElementTreeNode) are ever
+// replaced.
 struct ElementTreeNode {
     // A node can outlive the object it describes -- descendant nodes and
     // not-yet-cleaned-up ElementCustomizationState entries keep it alive -- so
@@ -8149,6 +11342,9 @@ struct ElementTreeNode {
     winrt::weak_ref<DependencyObject> ref;
     std::shared_ptr<ElementTreeNode> parent;
     uint32_t depth = 0;
+    // The depth-0 node this spine hangs from, `this` for a root itself. The
+    // parent chain keeps it alive, so a raw pointer is enough.
+    ElementTreeNode* root = nullptr;
 };
 
 // Keyed by the object's IUnknown pointer: COM only guarantees a stable pointer
@@ -8162,6 +11358,16 @@ size_t g_elementTreeNodesReapThreshold = 64;
 
 void* ElementIdentityKey(DependencyObject const& object) {
     return winrt::get_abi(object.as<winrt::Windows::Foundation::IUnknown>());
+}
+
+// A depth-0 node is a placeholder root until proven otherwise: if its object
+// has since gained a parent, the spine was interned before that object was
+// attached and stops short of the real root. Asked of any node on the spine,
+// not just of the root itself, so that a descendant interned through a
+// placeholder root is repaired too.
+bool IsStaleSpine(ElementTreeNode const& node) {
+    auto object = node.root->ref.get();
+    return object && Media::VisualTreeHelper::GetParent(object);
 }
 
 // Fetch (or build) the spine node for `object`. Uses
@@ -8194,18 +11400,16 @@ std::shared_ptr<ElementTreeNode> GetOrCreateElementTreeNode(
                 if (!existing || !existing->ref.get()) {
                     Wh_Log(L"Replacing stale tree node for a reused address");
                     g_elementTreeNodes.erase(it);
-                } else if (existing->depth > 0 ||
-                           !Media::VisualTreeHelper::GetParent(iter)) {
+                } else if (!IsStaleSpine(*existing)) {
                     node = std::move(existing);
                     break;
                 } else {
-                    // A depth-0 node was interned as a root. Having a parent
-                    // now means the object was only partly attached back then
-                    // and the node stops short of the real root, so drop it and
-                    // let the walk rebuild the full spine. Elements interned
-                    // through the old node keep it and stay unrankable against
-                    // the rest of the tree, which is the same answer they got
-                    // before the repair.
+                    // Drop the node and keep walking: the ancestors above it
+                    // are stale for the same reason, up to the placeholder
+                    // root, above which the real spine gets built. A stale
+                    // shared_ptr already cached elsewhere (see
+                    // EnsureElementTreeNode) is refreshed the same way on its
+                    // own next use, so no element is stuck unrankable.
                     Wh_Log(L"Rebuilding tree node interned before attachment");
                     g_elementTreeNodes.erase(it);
                 }
@@ -8218,6 +11422,7 @@ std::shared_ptr<ElementTreeNode> GetOrCreateElementTreeNode(
             auto fresh = std::make_shared<ElementTreeNode>();
             fresh->ref = *it;
             fresh->depth = node ? node->depth + 1 : 0;
+            fresh->root = node ? node->root : fresh.get();
             fresh->parent = std::move(node);
             g_elementTreeNodes[ElementIdentityKey(*it)] = fresh;
             node = std::move(fresh);
@@ -8286,6 +11491,8 @@ struct ElementPropertyCustomizationState {
     // one of those before being stored, and the source template lives
     // separately in `dynamicTemplate` below.
     std::optional<PropertyOverrideValue> customValue;
+    // The value SetOrClearValue wrote for customValue, or XAML's animation copy
+    // of it, which is what a write by something else is told apart from.
     winrt::Windows::Foundation::IInspectable lastAppliedValue{nullptr};
     int64_t propertyChangedToken = 0;
     // Source template for dynamic styles whose value contains `{{...}}`
@@ -8342,16 +11549,118 @@ struct ElementCustomizationState {
         perVisualStateGroup;
 };
 
-std::unordered_map<InstanceHandle, ElementCustomizationState>
+std::unordered_map<ElementId, ElementCustomizationState>
     g_elementsCustomizationState;
 
-// The element's spine node, built on first use if the eager attempt in
-// ApplyCustomizations came up empty. An element can be matched before it is
-// attached, and a spine built then would stop short of the real root; retrying
-// on use picks up the real one once the element is in the tree.
+// Empties a thread local container and frees its storage, which clear() keeps.
+// A thread local isn't destroyed when the module is unloaded while its thread
+// lives on, so what it still holds then is leaked.
+template <typename T>
+void ResetThreadLocal(T& container) {
+    container = T{};
+}
+
+// The weak reference is what keeps an id honest. A handle is an address, so a
+// destroyed element can be replaced by one reporting the same handle, and an
+// entry whose element is gone, or is no longer the element being asked about,
+// belongs to that destroyed predecessor and must not name the new one.
+struct ElementIdEntry {
+    ElementId id = ElementId::None;
+    winrt::weak_ref<wf::IInspectable> element;
+};
+
+thread_local std::unordered_map<InstanceHandle, ElementIdEntry> g_elementIds;
+thread_local uint64_t g_lastElementId;
+
+ElementId GetOrCreateElementId(InstanceHandle handle,
+                               wf::IInspectable const& element) {
+    if (!handle || !element) {
+        return ElementId::None;
+    }
+
+    auto& entry = g_elementIds[handle];
+    if (entry.id != ElementId::None && entry.element.get() == element) {
+        return entry.id;
+    }
+
+    entry.id = static_cast<ElementId>(++g_lastElementId);
+
+    winrt::weak_ref<wf::IInspectable> weakElement;
+    try {
+        weakElement = TryMakeWeak(element);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    if (!weakElement) {
+        // Without a weak reference the entry cannot be told apart from one for
+        // a successor at the same address, so neither it nor the id it names is
+        // kept: an id no lookup can reach again would key state that nothing
+        // could ever tear down, on an element nothing would then hold back from
+        // being released.
+        g_elementIds.erase(handle);
+        return ElementId::None;
+    }
+
+    entry.element = std::move(weakElement);
+    return entry.id;
+}
+
+// By handle alone, for the element which is being reported as removed: it is
+// the element the entry was made for, and a stale entry names something already
+// destroyed, whose state is due for teardown either way.
+ElementId FindElementId(InstanceHandle handle) {
+    auto it = g_elementIds.find(handle);
+    return it != g_elementIds.end() ? it->second.id : ElementId::None;
+}
+
+void ForgetElementId(InstanceHandle handle) {
+    g_elementIds.erase(handle);
+}
+
+// Dead entries are reaped once the map grows past this, which is then set to
+// twice the surviving size, making the sweep amortized O(1).
+thread_local size_t g_elementIdsReapThreshold = 64;
+
+// An element whose diagnostics reference was handed back is destroyed without a
+// removal being reported for it, so what the mod keys by that element has to be
+// found rather than told. An entry whose weak reference no longer resolves
+// names such an element, and is torn down the way its removal would have.
+void ReapDeadElementIdsIfNeeded() {
+    if (g_elementIds.size() < g_elementIdsReapThreshold) {
+        return;
+    }
+
+    // Collected before anything is torn down: CleanupCustomizations runs XAML
+    // work which can re-enter ApplyCustomizations and rehash the map.
+    std::vector<std::pair<InstanceHandle, ElementId>> dead;
+    for (const auto& [handle, entry] : g_elementIds) {
+        if (!entry.element.get()) {
+            dead.push_back({handle, entry.id});
+        }
+    }
+
+    if (!dead.empty()) {
+        Wh_Log(L"Reaping %zu of %zu element ids", dead.size(),
+               g_elementIds.size());
+    }
+
+    for (const auto& [handle, elementId] : dead) {
+        CleanupCustomizations(elementId);
+        g_elementIds.erase(handle);
+    }
+
+    g_elementIdsReapThreshold = std::max<size_t>(64, g_elementIds.size() * 2);
+}
+
+// The element's spine node. An element can be matched before its subtree is
+// attached, in which case the eager build in ApplyCustomizations interns a
+// spine that stops at a placeholder root; re-checked on every use so it's
+// rebuilt once the subtree is actually in the tree.
 ElementTreeNode* EnsureElementTreeNode(
     ElementCustomizationState& elementCustomizationState) {
-    if (!elementCustomizationState.treeNode) {
+    if (!elementCustomizationState.treeNode ||
+        IsStaleSpine(*elementCustomizationState.treeNode)) {
         if (auto element = elementCustomizationState.element.get()) {
             elementCustomizationState.treeNode =
                 GetOrCreateElementTreeNode(element);
@@ -8377,14 +11686,14 @@ struct StyleVariableValue {
 };
 
 // One element's capture of a variable. FindElementPropertyOverrides dedupes
-// captures by name, so (name, elementHandle) identifies an entry.
+// captures by name, so (name, elementId) identifies an entry.
 struct StyleVariableCapture {
-    InstanceHandle elementHandle;
+    ElementId elementId;
     StyleVariableValue value;
 };
 
 struct StyleVariableConsumer {
-    InstanceHandle elementHandle;
+    ElementId elementId;
     DependencyProperty property{nullptr};
     // Each consumer remembers its own fallbackClassName so that propagation can
     // re-resolve dynamic styles using the consumer's match-site context, not
@@ -8400,6 +11709,13 @@ struct StyleVariableState {
         variables;
     std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
         consumers;
+    // How many entries the two maps above hold for each element. They're keyed
+    // by variable name, so without this, asking whether an element appears in
+    // either of them means walking every name.
+    std::unordered_map<ElementId, size_t> elementRefs;
+    // Elements whose captures are out of `variables` while they sit in a
+    // recycled repeater item. See RefreshRecycledItemCaptures.
+    std::unordered_set<ElementId> withdrawnCaptureOwners;
 };
 
 StyleVariableState g_styleVariableState;
@@ -8411,10 +11727,34 @@ int g_styleVariablePropagationDepth;
 struct PendingStyleVariablePropagation {
     StyleVariableState* state;
     std::wstring varName;
-    std::optional<InstanceHandle> changedOwner;
+    std::optional<ElementId> changedOwner;
 
     bool operator==(const PendingStyleVariablePropagation&) const = default;
 };
+
+void AddStyleVariableElementRef(StyleVariableState* state,
+                                ElementId elementId) {
+    state->elementRefs[elementId]++;
+}
+
+void ReleaseStyleVariableElementRefs(StyleVariableState* state,
+                                     ElementId elementId,
+                                     size_t count) {
+    if (!count) {
+        return;
+    }
+
+    auto it = state->elementRefs.find(elementId);
+    if (it == state->elementRefs.end()) {
+        return;
+    }
+
+    if (it->second > count) {
+        it->second -= count;
+    } else {
+        state->elementRefs.erase(it);
+    }
+}
 
 // Propagations queued while another one is running, drained by the outermost
 // PropagateStyleVariableChange frame.
@@ -8433,15 +11773,15 @@ struct WebViewCustomizationState {
     winrt::event_token navigationCompletedEventToken;
 };
 
-std::unordered_map<InstanceHandle, WebViewCustomizationState>
+std::unordered_map<ElementId, WebViewCustomizationState>
     g_webViewsCustomizationState;
 
 bool g_elementPropertyModifying;
 
-winrt::Windows::Foundation::IAsyncOperation<bool>
+[[clang::no_destroy]] winrt::Windows::Foundation::IAsyncOperation<bool>
     g_delayedAllAppsRootVisibilitySet;
 
-VisualStateGroup g_allAppsRootRenderTransformVsg{nullptr};
+[[clang::no_destroy]] VisualStateGroup g_allAppsRootRenderTransformVsg{nullptr};
 winrt::event_token g_allAppsRootRenderTransformToken{};
 
 bool g_windowsDefaultIsNewLayout = false;
@@ -8466,14 +11806,26 @@ bool DoesLayoutOverrideMatchWindowsDefault(DisableNewStartMenuLayout layout) {
     return false;
 }
 
-// An ImageBrush with a remote source fails to load when the process starts
-// before the network is up. Such brushes are tracked so that the load can be
-// retried once there's internet access. Only a brush which has no image is
-// retried, so replacing its source has nothing to hide, and the source is never
-// cleared, so an image that's currently displayed can't be blanked out.
-struct TrackedImageBrush {
-    winrt::weak_ref<Media::ImageBrush> brush;
+// An image with a remote source fails to load when the process starts before
+// the network is up. Such images are tracked so that the load can be retried
+// once there's internet access, and are cached in a file in the mod storage
+// folder, which is what's loaded when it's there, so that the image shows up at
+// once and offline. Only a target which has no image is retried, and only a
+// source which isn't showing anything is replaced, so an image that's currently
+// displayed can't be blanked out.
+struct TrackedImage {
+    // An ImageBrush or an Image element. Both hold an image source which can
+    // fail to load and both report the outcome, but through unrelated types, so
+    // the source is addressed by DependencyProperty and each type gets its own
+    // revoker pair.
+    winrt::weak_ref<DependencyObject> target;
+    DependencyProperty sourceProperty{nullptr};
+    // The remote address: the entry's identity and what's downloaded, even
+    // while the cached file is what's loaded.
     winrt::Windows::Foundation::Uri uri{nullptr};
+    std::wstring url;
+    // The cached copy of the image, empty when there's no cache folder.
+    std::filesystem::path cachePath;
 
     // Decode properties of the BitmapImage the style declared, reapplied to the
     // BitmapImage a retry creates.
@@ -8485,33 +11837,52 @@ struct TrackedImageBrush {
         Media::Imaging::BitmapCreateOptions::None;
     bool autoPlay = true;
 
-    Media::ImageBrush::ImageFailed_revoker imageFailedRevoker;
-    Media::ImageBrush::ImageOpened_revoker imageOpenedRevoker;
+    Media::ImageBrush::ImageFailed_revoker brushImageFailedRevoker;
+    Media::ImageBrush::ImageOpened_revoker brushImageOpenedRevoker;
+    Controls::Image::ImageFailed_revoker elementImageFailedRevoker;
+    Controls::Image::ImageOpened_revoker elementImageOpenedRevoker;
 
-    // Whether the brush has an image. Retries target the brushes which don't.
+    // Whether the target has an image. Retries target the ones which don't.
     bool loaded = false;
+
+    // Whether the target is loading from the cached file rather than from the
+    // remote address, which is what a load failure is judged by.
+    bool usingCache = false;
+
+    // The BitmapImage the last retry assigned to the target, which is the mod's
+    // value just like the one the style declared.
+    winrt::weak_ref<Media::Imaging::BitmapImage> retryImage;
 
     ULONGLONG lastRetryTick = 0;
     int retryCount = 0;
 };
 
-struct TrackedImageBrushesForThread {
+struct TrackedImagesForThread {
     // Entries are held by shared_ptr so that event handlers can reference them
     // via a weak_ptr and do nothing once an entry is gone.
-    std::list<std::shared_ptr<TrackedImageBrush>> brushes;
+    std::list<std::shared_ptr<TrackedImage>> images;
     winrt::Windows::System::DispatcherQueue dispatcher{nullptr};
-    winrt::Windows::System::DispatcherQueueTimer retryDebounceTimer{nullptr};
+    winrt::Windows::System::DispatcherQueueTimer retryTimer{nullptr};
     winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
-        retryDebounceTimerTickRevoker;
+        retryTimerTickRevoker;
+    // Tick the scheduled retry round is due at, zero if none is scheduled.
+    ULONGLONG retryDueTick = 0;
 };
 
-thread_local TrackedImageBrushesForThread g_trackedImageBrushesForThread;
+thread_local TrackedImagesForThread g_trackedImagesForThread;
+
+// The remote address of each cached file which has been substituted for one, so
+// that a target given an already substituted source is tracked as well.
+// Outlives the entries, since the style value it describes is shared by targets
+// which come and go. Thread local like that value.
+thread_local std::unordered_map<std::wstring, winrt::Windows::Foundation::Uri>
+    g_imageCacheUriRemotes;
 
 // A single connectivity transition raises several network status events, and
 // the state right after the first one isn't final yet.
 constexpr DWORD kNetworkChangeDebounceMs = 2000;
 
-// Minimum delay between the retries of a brush, doubling with each attempt up
+// Minimum delay between the retries of an image, doubling with each attempt up
 // to about five minutes. Also keeps a retry from being started while the
 // previous one is still loading.
 constexpr ULONGLONG kImageRetryBaseDelayMs = 5000;
@@ -8519,9 +11890,9 @@ constexpr int kImageRetryMaxBackoffShift = 6;
 constexpr ULONGLONG kImageRetryMaxDelayMs = kImageRetryBaseDelayMs
                                             << kImageRetryMaxBackoffShift;
 
-// Caps the attempts of a brush so that an event storm doesn't retry it
-// endlessly. The count starts over once the brush has been idle for the maximum
-// delay, so connectivity which returns much later can still recover the image.
+// Caps the attempts of an image, bounding the series of retries which a failure
+// starts. The count starts over once the image has been idle for the maximum
+// delay, so connectivity which returns much later can still recover it.
 constexpr int kImageRetryMaxCount = 20;
 
 // Guards the globals below it. The network status handler acquires it, so it
@@ -8530,14 +11901,49 @@ constexpr int kImageRetryMaxCount = 20;
 // UI thread pumps messages, which can re-enter this code on the same thread.
 std::mutex g_imageRetryMutex;
 bool g_imageRetryActive;
-// The dispatcher of each UI thread which has tracked brushes, used to run a
-// retry on the thread that owns the brush.
+// Set once the mod is being unloaded, so that nothing which runs during the
+// uninitialization tracks an image again.
+bool g_imageRetryStopping;
+// The dispatcher of each UI thread which has tracked images, used to run a
+// retry on the thread that owns the image.
 std::vector<winrt::weak_ref<winrt::Windows::System::DispatcherQueue>>
     g_imageRetryDispatchers;
 winrt::event_token g_networkStatusChangedToken;
 // Set while a thread is registering the handler outside the mutex, so that a
 // concurrent or re-entrant call doesn't register a second one.
 bool g_networkStatusChangedRegistering;
+// Callbacks which are on their way into mod code, counted so that the module
+// isn't freed out from under them.
+size_t g_imageRetryPendingCallbacks;
+std::condition_variable g_imageRetryPendingCallbacksCv;
+
+// A cached file is fetched again once it's this old, and its write time is
+// stamped whether or not the fetch gets through, so that the write time doubles
+// as when the file was last known to be in use.
+constexpr ULONGLONG kImageCacheRefreshIntervalMs = 7ULL * 24 * 60 * 60 * 1000;
+// A file which nothing stamps ages until it's swept. Long enough for a theme
+// which is switched away from and back to keep its images.
+constexpr ULONGLONG kImageCacheMaxUnusedMs = 30ULL * 24 * 60 * 60 * 1000;
+
+// Guards the globals below it.
+std::mutex g_imageDownloadMutex;
+// The URL of each image to fetch, or an empty string for a cache sweep. The
+// path a URL is cached at follows from the URL, so it isn't carried along.
+std::list<std::wstring> g_imageDownloadQueue;
+// The URL of every queued and in flight job, so that one image isn't fetched
+// twice at once. A job which failed is dropped: the retries of the image it's
+// for are what ask again, and they're already paced and capped.
+std::unordered_set<std::wstring> g_imageDownloadUrls;
+// The URL of every cached file which failed to load, taking the images it's
+// for back to the remote address for the rest of the process. Not per entry,
+// since the file is what was rejected and the entries which share the URL
+// would otherwise hand it out again. Global for the same reason: the file is
+// process wide, not thread wide.
+std::unordered_set<std::wstring> g_imageCacheRejectedUrls;
+PTP_WORK g_imageDownloadWork;
+// Whether a callback is draining the queue; a job added meanwhile joins it.
+bool g_imageDownloadRunning;
+bool g_imageDownloadStopping;
 
 enum class ResourceVariableTheme {
     None,
@@ -8562,14 +11968,22 @@ std::vector<ResourceVariableEntry> g_resourceVariables;
 
 // Track original resource values for restoration (per-thread since
 // Application::Current().Resources() is per-thread).
-std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>
-    g_originalResourceValues;
+[[clang::no_destroy]] std::optional<
+    std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>>
+    g_originalResourceValues{std::in_place};
 
 // Track our merged theme dictionary for cleanup (per-thread).
-ResourceDictionary g_resourceVariablesThemeDict{nullptr};
+[[clang::no_destroy]] ResourceDictionary g_resourceVariablesThemeDict{nullptr};
+bool g_resourceVariablesThemeDictMerged;
+
+// The application resources that the resource variables were merged into
+// (per-thread).
+[[clang::no_destroy]] ResourceDictionary g_resourceVariablesTargetResources{
+    nullptr};
 
 // For listening to theme color changes (per-thread).
-winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings
+    g_uiSettings{nullptr};
 thread_local winrt::event_token g_colorValuesChangedToken;
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -8629,80 +12043,57 @@ bool IsMainModuleVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
     DependencyProperty property) {
-    // Workaround for AcrylicBrushes returning an incorrect background brush.
-    // When restored, it doesn't look correct.
-    bool getValueWorkaround = false;
-    if (property == Controls::Border::BackgroundProperty()) {
-        auto border = elementDo.try_as<Controls::Border>();
-        if (border && border.Name() == L"AcrylicBorder") {
-            Wh_Log(L"Using GetValue workaround for AcrylicBorder background");
-            getValueWorkaround = true;
-        }
-    } else {
-        // The properties below return null from ReadLocalValue for some reason.
-        struct {
-            DependencyProperty property;
-            std::wstring_view elementType;
-            std::wstring_view elementName;
-        } propertiesForWorkaround[] = {
-            {FrameworkElement::MaxHeightProperty(),
-             L"Windows.UI.Xaml.Controls.Grid", L"FrameRoot"},
-            {FrameworkElement::WidthProperty(),
-             L"Windows.UI.Xaml.Controls.Grid", L"MainMenu"},
-            {FrameworkElement::WidthProperty(),
-             L"Windows.UI.Xaml.Controls.GridView", L"PinnedList"},
-        };
+    // These properties have a visual state's value over their local one, and
+    // restoring the local one would show it while the state lasts. The value in
+    // effect is restored instead, at the cost of keeping it once the state
+    // changes.
+    struct {
+        DependencyProperty property;
+        std::wstring_view elementType;
+        std::wstring_view elementName;
+    } propertiesForWorkaround[] = {
+        {Controls::Border::BackgroundProperty(),
+         L"Windows.UI.Xaml.Controls.Border", L"AcrylicBorder"},
+        {FrameworkElement::MaxHeightProperty(),
+         L"Windows.UI.Xaml.Controls.Grid", L"FrameRoot"},
+        {FrameworkElement::WidthProperty(), L"Windows.UI.Xaml.Controls.Grid",
+         L"MainMenu"},
+    };
 
-        auto element = elementDo.try_as<FrameworkElement>();
-        if (element) {
-            auto elementName = element.Name();
-            auto elementClassName = winrt::get_class_name(element);
-            for (const auto& [prop, type, name] : propertiesForWorkaround) {
-                if (property == prop && elementName == name &&
-                    elementClassName == type) {
-                    Wh_Log(L"Using GetValue workaround for %.*s",
-                           static_cast<int>(name.length()), name.data());
-                    getValueWorkaround = true;
-                    break;
-                }
+    if (auto element = elementDo.try_as<FrameworkElement>()) {
+        auto elementName = element.Name();
+        auto elementClassName = winrt::get_class_name(element);
+        for (const auto& [prop, type, name] : propertiesForWorkaround) {
+            if (property == prop && elementName == name &&
+                elementClassName == type) {
+                Wh_Log(L"Using GetValue workaround for %.*s",
+                       static_cast<int>(name.length()), name.data());
+                return elementDo.GetValue(property);
             }
         }
     }
 
-    auto value = getValueWorkaround ? elementDo.GetValue(property)
-                                    : elementDo.ReadLocalValue(property);
-
-    // Workaround for ColumnDefinitions on our SideBySidePinnedWrapper Grid.
-    if (!getValueWorkaround && value == DependencyProperty::UnsetValue()) {
-        auto grid = elementDo.try_as<Controls::Grid>();
-        if (grid && grid.Name() == L"SideBySidePinnedWrapper") {
-            auto value2 = elementDo.GetValue(property);
-            if (value2 &&
-                winrt::get_class_name(value2) ==
-                    L"Windows.UI.Xaml.Controls.ColumnDefinitionCollection") {
-                Wh_Log(
-                    L"Using GetValue workaround for SideBySidePinnedWrapper "
-                    L"ColumnDefinitions");
-                value = std::move(value2);
-            }
-        }
-    }
-
-    if (value) {
-        auto className = winrt::get_class_name(value);
-        if (className == L"Windows.UI.Xaml.Data.BindingExpressionBase" ||
-            className == L"Windows.UI.Xaml.Data.BindingExpression") {
-            // BindingExpressionBase was observed to be returned for XAML
-            // properties that were declared as following:
-            //
-            // <Border ... CornerRadius="{TemplateBinding CornerRadius}" />
-            //
-            // Calling SetValue with it fails with an error, so we won't be able
-            // to use it to restore the value. As a workaround, we use
-            // GetAnimationBaseValue to get the value.
-            Wh_Log(L"ReadLocalValue returned %s, using GetAnimationBaseValue",
-                   className.c_str());
-            value = elementDo.GetAnimationBaseValue(property);
+    auto value = elementDo.ReadLocalValue(property);
+    if (!value || value.try_as<Data::BindingExpressionBase>()) {
+        // A TemplateBinding reads as null, or for some properties such as
+        // CornerRadius as a BindingExpressionBase, and a Binding reads as a
+        // BindingExpression. None of these writes back the bound value, which
+        // is the base value. An explicit null has a null base value.
+        Wh_Log(L"ReadLocalValue returned %s, using GetAnimationBaseValue",
+               value ? winrt::get_class_name(value).c_str() : L"null");
+        value = elementDo.GetAnimationBaseValue(property);
+    } else if (value == DependencyProperty::UnsetValue()) {
+        // A Grid's definitions, and transitions which markup lists without
+        // naming the collection type, are in a collection which isn't a local
+        // value, and clearing the property would leave the element without
+        // them.
+        auto effectiveValue = elementDo.GetValue(property);
+        if (effectiveValue.try_as<Controls::ColumnDefinitionCollection>() ||
+            effectiveValue.try_as<Controls::RowDefinitionCollection>() ||
+            effectiveValue.try_as<Media::Animation::TransitionCollection>()) {
+            Wh_Log(L"ReadLocalValue returned unset, using GetValue for %s",
+                   winrt::get_class_name(effectiveValue).c_str());
+            value = std::move(effectiveValue);
         }
     }
 
@@ -8721,17 +12112,19 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 // Generates a tileable noise BMP in memory. Density controls the brightness
 // distribution curve via a power function (lower density = sparser bright
 // pixels). Opacity is handled downstream by the composition effect graph.
+
+// The last stream generated, cached to avoid regenerating when density hasn't
+// changed. The cached stream is never read directly; callers get independent
+// clones via CloneStream() so they don't share a seek cursor.
+thread_local float g_noiseStreamDensity =
+    std::numeric_limits<float>::quiet_NaN();
+thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
+    g_noiseStream{nullptr};
+
 winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     float density) {
-    // Cache the last stream to avoid regenerating when density hasn't changed.
-    // The cached stream is never read directly; callers get independent clones
-    // via CloneStream() so they don't share a seek cursor.
-    thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
-    thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
-        cachedStream{nullptr};
-
-    if (density == cachedDensity && cachedStream) {
-        return cachedStream.CloneStream();
+    if (density == g_noiseStreamDensity && g_noiseStream) {
+        return g_noiseStream.CloneStream();
     }
 
     // Use 256x256 to minimize visible tiling seams.
@@ -8791,10 +12184,10 @@ winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     writer.StoreAsync().get();
     writer.DetachStream();
 
-    cachedStream = std::move(stream);
-    cachedDensity = density;
+    g_noiseStream = std::move(stream);
+    g_noiseStreamDensity = density;
 
-    return cachedStream.CloneStream();
+    return g_noiseStream.CloneStream();
 }
 
 // Blur background implementation, copied from TranslucentTB.
@@ -10223,7 +13616,7 @@ void XamlBlurBrush::RefreshBrush()
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
-// Helper functions for tracking and retrying failed ImageBrush loads.
+// Helper functions for tracking, caching and retrying remote image loads.
 
 // Reports true if the query itself fails, as a retry which turns out to be
 // pointless is harmless, while skipping a necessary one leaves images missing.
@@ -10240,18 +13633,396 @@ bool HasInternetAccess() {
     }
 }
 
-void StartImageBrushRetry(const std::shared_ptr<TrackedImageBrush>& tracked) {
-    auto brush = tracked->brush.get();
-    if (!brush) {
+// The folder the remote images are cached in, empty if it's not available, in
+// which case images are only ever loaded from their remote source.
+const std::filesystem::path& GetImageCacheDir() {
+    static const std::filesystem::path dir = []() -> std::filesystem::path {
+        WCHAR storagePathBuffer[MAX_PATH];
+        if (!Wh_GetModStoragePath(storagePathBuffer,
+                                  ARRAYSIZE(storagePathBuffer))) {
+            Wh_Log(L"Wh_GetModStoragePath failed");
+            return std::filesystem::path();
+        }
+
+        auto path = std::filesystem::path{storagePathBuffer} / L"images";
+
+        std::error_code ec;
+        std::filesystem::create_directories(path, ec);
+        if (!std::filesystem::is_directory(path, ec)) {
+            Wh_Log(L"Failed to create %s", path.c_str());
+            return std::filesystem::path();
+        }
+
+        return path;
+    }();
+
+    return dir;
+}
+
+// The cached copy of a remote image, named uniquely after its URL. Empty when
+// there's no cache folder. The extension of the URL is kept so that the folder
+// can be looked through.
+std::filesystem::path ImageCachePath(std::wstring_view url) {
+    const auto& cacheDir = GetImageCacheDir();
+    if (cacheDir.empty()) {
+        return std::filesystem::path();
+    }
+
+    // FNV-1a; one mod's folder, so an unlikely collision is good enough.
+    uint64_t hash = 14695981039346656037ULL;
+    for (wchar_t c : url) {
+        hash ^= (uint16_t)c;
+        hash *= 1099511628211ULL;
+    }
+
+    WCHAR hashString[17];
+    swprintf_s(hashString, L"%016llx", hash);
+
+    std::wstring name = hashString;
+
+    auto urlPath = url.substr(0, url.find_first_of(L"?#"));
+    auto extension = std::filesystem::path(urlPath).extension().native();
+    if (extension.length() >= 2 && extension.length() <= 5 &&
+        std::all_of(extension.begin() + 1, extension.end(), [](wchar_t c) {
+            return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') ||
+                   (c >= L'0' && c <= L'9');
+        })) {
+        name += extension;
+    }
+
+    return cacheDir / name;
+}
+
+// XAML loads a local image through a file URI.
+winrt::Windows::Foundation::Uri ImageCacheFileUri(
+    const std::filesystem::path& path) {
+    // Room for every character to be escaped, plus the scheme.
+    std::wstring uri(path.native().size() * 3 + 16, L'\0');
+
+    DWORD uriLength = (DWORD)uri.size();
+    HRESULT hr = UrlCreateFromPath(path.c_str(), uri.data(), &uriLength, 0);
+    if (FAILED(hr)) {
+        Wh_Log(L"UrlCreateFromPath returned 0x%08X", hr);
+        return nullptr;
+    }
+
+    uri.resize(uriLength);
+
+    try {
+        return winrt::Windows::Foundation::Uri(uri);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return nullptr;
+    }
+}
+
+// The time since a file was written.
+ULONGLONG FileAgeMs(std::filesystem::file_time_type writeTime) {
+    auto age = std::filesystem::file_time_type::clock::now() - writeTime;
+
+    // A file stamped in the future, e.g. after a clock change, is brand new.
+    if (age.count() <= 0) {
+        return 0;
+    }
+
+    return std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
+}
+
+// The time since a file was written, nullopt if there's no such file.
+std::optional<ULONGLONG> FileAgeMs(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto writeTime = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+
+    return FileAgeMs(writeTime);
+}
+
+void TouchFile(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::last_write_time(
+        path, std::filesystem::file_time_type::clock::now(), ec);
+}
+
+// Removes the files which haven't been stamped for a long time, which is what
+// becomes of a theme's images once it's out of use, and of what an interrupted
+// download leaves behind.
+void SweepImageCache() {
+    const auto& cacheDir = GetImageCacheDir();
+    if (cacheDir.empty()) {
         return;
     }
 
-    Wh_Log(L"Retrying image load for: %s", tracked->uri.RawUri().c_str());
+    Wh_Log(L"Sweeping the image cache");
+
+    try {
+        std::error_code ec;
+        for (const auto& entry :
+             std::filesystem::directory_iterator(cacheDir, ec)) {
+            if (!entry.is_regular_file(ec)) {
+                continue;
+            }
+
+            auto writeTime = entry.last_write_time(ec);
+            if (ec || FileAgeMs(writeTime) < kImageCacheMaxUnusedMs) {
+                continue;
+            }
+
+            Wh_Log(L"Removing unused cached image: %s",
+                   entry.path().filename().c_str());
+            std::filesystem::remove(entry.path(), ec);
+        }
+    } catch (const std::exception& ex) {
+        Wh_Log(L"Error sweeping the image cache: %S", ex.what());
+    }
+}
+
+// Via a temporary file, so that a partial or failed response, which the engine
+// writes before the status code is known, never becomes the cached image.
+void DownloadImage(const std::wstring& url) {
+    auto cachePath = ImageCachePath(url);
+    if (cachePath.empty()) {
+        return;
+    }
+
+    auto tempPath = cachePath;
+    tempPath += L".tmp" + std::to_wstring(GetCurrentProcessId());
+
+    bool succeeded = false;
+
+    WH_GET_URL_CONTENT_OPTIONS options{
+        .optionsSize = sizeof(options),
+        .targetFilePath = tempPath.c_str(),
+    };
+
+    if (const WH_URL_CONTENT* urlContent =
+            Wh_GetUrlContent(url.c_str(), &options)) {
+        if (urlContent->statusCode == 200) {
+            succeeded = true;
+        } else {
+            Wh_Log(L"Wh_GetUrlContent returned %d", urlContent->statusCode);
+        }
+
+        Wh_FreeUrlContent(urlContent);
+    } else {
+        Wh_Log(L"Wh_GetUrlContent failed");
+    }
+
+    std::error_code ec;
+
+    if (succeeded) {
+        auto size = std::filesystem::file_size(tempPath, ec);
+        if (ec || size == 0) {
+            Wh_Log(L"No downloaded file to move into place");
+            succeeded = false;
+        }
+    }
+
+    if (succeeded) {
+        std::filesystem::rename(tempPath, cachePath, ec);
+        if (ec) {
+            // Another process can be reading it.
+            Wh_Log(L"Failed to move %s into place", tempPath.c_str());
+        }
+    }
+
+    std::filesystem::remove(tempPath, ec);
+}
+
+void ProcessImageDownloads() {
+    for (;;) {
+        std::wstring url;
+
+        {
+            std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+            if (g_imageDownloadStopping || g_imageDownloadQueue.empty()) {
+                g_imageDownloadRunning = false;
+                return;
+            }
+
+            url = std::move(g_imageDownloadQueue.front());
+            g_imageDownloadQueue.pop_front();
+        }
+
+        if (url.empty()) {
+            SweepImageCache();
+            continue;
+        }
+
+        Wh_Log(L"Downloading image: %s", url.c_str());
+        DownloadImage(url);
+
+        std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+        g_imageDownloadUrls.erase(url);
+    }
+}
+
+// Must be called with g_imageDownloadMutex held, with the job it's for already
+// queued.
+void SubmitImageDownloadWork() {
+    if (g_imageDownloadRunning) {
+        return;
+    }
+
+    if (!g_imageDownloadWork) {
+        g_imageDownloadWork =
+            CreateThreadpoolWork([](PTP_CALLBACK_INSTANCE, PVOID,
+                                    PTP_WORK) { ProcessImageDownloads(); },
+                                 nullptr, nullptr);
+        if (!g_imageDownloadWork) {
+            Wh_Log(L"Failed to create the image download work item");
+            g_imageDownloadQueue.clear();
+            g_imageDownloadUrls.clear();
+            return;
+        }
+    }
+
+    g_imageDownloadRunning = true;
+    SubmitThreadpoolWork(g_imageDownloadWork);
+}
+
+void QueueImageDownload(const std::wstring& url) {
+    std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+    if (g_imageDownloadStopping) {
+        return;
+    }
+
+    if (!g_imageDownloadUrls.insert(url).second) {
+        return;
+    }
+
+    g_imageDownloadQueue.push_back(url);
+
+    SubmitImageDownloadWork();
+}
+
+// Asks the download thread for a sweep, once per process. Not tied to there
+// being anything to download, so that a cache which is fully up to date, and
+// whose unused files nothing else removes, is swept too.
+void QueueImageCacheSweep() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+        if (g_imageDownloadStopping) {
+            return;
+        }
+
+        g_imageDownloadQueue.emplace_back();
+
+        SubmitImageDownloadWork();
+    });
+}
+
+// Whether the cached file of a URL failed to load, which takes the images it's
+// for back to the remote address.
+bool IsImageCacheRejected(const std::wstring& url) {
+    std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+    return g_imageCacheRejectedUrls.contains(url);
+}
+
+void RejectImageCache(const std::wstring& url) {
+    std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+    g_imageCacheRejectedUrls.insert(url);
+}
+
+void StopImageDownloads() {
+    PTP_WORK work;
+
+    {
+        std::lock_guard<std::mutex> lock(g_imageDownloadMutex);
+
+        g_imageDownloadStopping = true;
+        g_imageDownloadQueue.clear();
+        g_imageDownloadUrls.clear();
+        g_imageCacheRejectedUrls.clear();
+
+        work = g_imageDownloadWork;
+        g_imageDownloadWork = nullptr;
+    }
+
+    // A request which is in flight can't be cancelled, so a server which is
+    // slow to answer holds up the unload for as long as it takes. Accepted as
+    // it is: the alternative is letting the callback run on into a module which
+    // is going away.
+    if (work) {
+        WaitForThreadpoolWorkCallbacks(work, TRUE);
+        CloseThreadpoolWork(work);
+    }
+}
+
+// The address an entry should load from: the cached file when there is one, the
+// remote address otherwise. Asks for the download the answer implies.
+winrt::Windows::Foundation::Uri ImageSourceUri(
+    const std::shared_ptr<TrackedImage>& tracked) {
+    if (!tracked->cachePath.empty() && !IsImageCacheRejected(tracked->url)) {
+        if (auto age = FileAgeMs(tracked->cachePath)) {
+            if (*age >= kImageCacheRefreshIntervalMs) {
+                // Stamped whether or not the download gets through, so that an
+                // offline machine doesn't lose the images it's using.
+                TouchFile(tracked->cachePath);
+                QueueImageDownload(tracked->url);
+            }
+
+            if (auto uri = ImageCacheFileUri(tracked->cachePath)) {
+                return uri;
+            }
+        } else {
+            QueueImageDownload(tracked->url);
+        }
+    }
+
+    return tracked->uri;
+}
+
+// Takes the BitmapImage the style declared off a cached file which has been
+// rejected, so that reapplying the value doesn't put the file which failed back
+// on the target. Nothing is showing from that file, so this is the one case
+// where a source is replaced without regard for what the target holds.
+void RestoreRejectedImageSource(
+    const std::shared_ptr<TrackedImage>& tracked,
+    Media::Imaging::BitmapImage const& bitmapImage) {
+    try {
+        if (bitmapImage.UriSource().Equals(tracked->uri) ||
+            !IsImageCacheRejected(tracked->url)) {
+            return;
+        }
+
+        Wh_Log(L"Loading remote image for: %s", tracked->url.c_str());
+
+        bitmapImage.UriSource(tracked->uri);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StartImageRetry(const std::shared_ptr<TrackedImage>& tracked) {
+    auto target = tracked->target.get();
+    if (!target) {
+        return;
+    }
+
+    Wh_Log(L"Retrying image load for: %s", tracked->url.c_str());
 
     tracked->lastRetryTick = GetTickCount64();
     tracked->retryCount++;
 
+    // An Image element's source is a property the mod customizes, and writing
+    // to it would otherwise be seen as an external change and reverted to the
+    // failed source the style declared.
+    bool wasModifying = g_elementPropertyModifying;
+    g_elementPropertyModifying = true;
+
     try {
+        // The cached file when a download has landed since the last attempt.
+        auto uri = ImageSourceUri(tracked);
+        tracked->usingCache = !uri.Equals(tracked->uri);
+
         Media::Imaging::BitmapImage retryImage;
         // Bypass the XAML image cache: a retry is only needed when what the
         // cache holds for the URI is a failed or missing image.
@@ -10262,19 +14033,40 @@ void StartImageBrushRetry(const std::shared_ptr<TrackedImageBrush>& tracked) {
         retryImage.DecodePixelWidth(tracked->decodePixelWidth);
         retryImage.DecodePixelHeight(tracked->decodePixelHeight);
         retryImage.AutoPlay(tracked->autoPlay);
-        retryImage.UriSource(tracked->uri);
 
         // A BitmapImage is loaded by the framework as part of the tree it's
-        // used in, so it has to be assigned to the brush for anything to
+        // used in, so it has to be assigned to the target for anything to
         // happen. A new object rather than the failed one, since reassigning
-        // the same URI to a BitmapImage doesn't reload it. The brush's own
+        // the same URI to a BitmapImage doesn't reload it. The target's own
         // ImageOpened and ImageFailed report how this attempt went.
-        brush.ImageSource(retryImage);
+        target.SetValue(tracked->sourceProperty, retryImage);
+        tracked->retryImage = winrt::make_weak(retryImage);
+
+        // The URI goes last: XAML decodes an image to the size it's displayed
+        // at only when the BitmapImage is already connected to the live tree by
+        // the time its source is set. Setting the URI first decodes at the
+        // image's natural size, which is then scaled at render time and looks
+        // poor.
+        retryImage.UriSource(uri);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
+
+    g_elementPropertyModifying = wasModifying;
 }
 
+// The wait before the next attempt of an image which has been retried
+// `retryCount` times.
+ULONGLONG ImageRetryDelayMs(int retryCount) {
+    return kImageRetryBaseDelayMs
+           << std::clamp(retryCount - 1, 0, kImageRetryMaxBackoffShift);
+}
+
+void ScheduleImageLoadRetryOnCurrentThread(ULONGLONG delayMs, bool reschedule);
+
+// Retries every image which is due, and arms the next round for the earliest
+// image which isn't, so that a failed image recovers on its own instead of
+// waiting for something external to start a round.
 void RetryFailedImageLoadsOnCurrentThread() {
     if (GetCurrentThreadId() != g_targetThreadId) {
         return;
@@ -10282,78 +14074,136 @@ void RetryFailedImageLoadsOnCurrentThread() {
 
     Wh_Log(L"Retrying failed image loads on current thread");
 
-    auto& brushes = g_trackedImageBrushesForThread.brushes;
+    auto& images = g_trackedImagesForThread.images;
 
-    std::erase_if(brushes,
-                  [](const auto& tracked) { return !tracked->brush.get(); });
+    std::erase_if(images,
+                  [](const auto& tracked) { return !tracked->target.get(); });
 
-    // Copy the entries before iterating: a retry can raise ImageBrush events,
-    // and their handlers modify the entries.
-    std::vector<std::shared_ptr<TrackedImageBrush>> snapshot(brushes.begin(),
-                                                             brushes.end());
+    // Copy the entries before iterating: a retry can raise image events, and
+    // their handlers modify the entries.
+    std::vector<std::shared_ptr<TrackedImage>> snapshot(images.begin(),
+                                                        images.end());
 
     ULONGLONG tick = GetTickCount64();
+
+    ULONGLONG nextRoundDelay = 0;
+    auto armNextRoundIn = [&nextRoundDelay](ULONGLONG delay) {
+        if (!nextRoundDelay || delay < nextRoundDelay) {
+            nextRoundDelay = delay;
+        }
+    };
 
     for (const auto& tracked : snapshot) {
         if (tracked->loaded) {
             continue;
         }
 
+        ULONGLONG remaining = 0;
+
         if (tracked->lastRetryTick) {
             ULONGLONG sinceLastRetry = tick - tracked->lastRetryTick;
             if (sinceLastRetry >= kImageRetryMaxDelayMs) {
                 tracked->retryCount = 0;
             } else {
-                ULONGLONG delay = kImageRetryBaseDelayMs
-                                  << std::clamp(tracked->retryCount - 1, 0,
-                                                kImageRetryMaxBackoffShift);
+                ULONGLONG delay = ImageRetryDelayMs(tracked->retryCount);
                 if (sinceLastRetry < delay) {
-                    continue;
+                    remaining = delay - sinceLastRetry;
                 }
             }
         }
 
+        // An image which ran out of attempts is left to a network status
+        // change, which is what the count starting over is for.
         if (tracked->retryCount >= kImageRetryMaxCount) {
             continue;
         }
 
-        StartImageBrushRetry(tracked);
+        if (remaining) {
+            armNextRoundIn(remaining);
+            continue;
+        }
+
+        StartImageRetry(tracked);
+
+        if (tracked->retryCount < kImageRetryMaxCount) {
+            armNextRoundIn(ImageRetryDelayMs(tracked->retryCount));
+        }
+    }
+
+    if (nextRoundDelay) {
+        ScheduleImageLoadRetryOnCurrentThread(nextRoundDelay,
+                                              /*reschedule=*/false);
     }
 }
 
-// Retries once the network status events stop coming, since the connectivity a
-// single transition ends up at isn't there yet when the first of them arrives.
-void ScheduleImageLoadRetryOnCurrentThread() {
+// Runs a retry round in `delayMs`. A round which is already scheduled is kept
+// if it's due sooner, unless `reschedule` moves it to the new time.
+void ScheduleImageLoadRetryOnCurrentThread(ULONGLONG delayMs, bool reschedule) {
     if (GetCurrentThreadId() != g_targetThreadId) {
         return;
     }
 
-    auto& timer = g_trackedImageBrushesForThread.retryDebounceTimer;
+    auto& state = g_trackedImagesForThread;
+
+    ULONGLONG dueTick = GetTickCount64() + delayMs;
+
+    if (!reschedule && state.retryDueTick && state.retryDueTick <= dueTick) {
+        return;
+    }
 
     try {
-        if (!timer) {
-            auto dispatcher = g_trackedImageBrushesForThread.dispatcher;
-            if (!dispatcher) {
+        if (!state.retryTimer) {
+            if (!state.dispatcher) {
                 return;
             }
 
-            timer = dispatcher.CreateTimer();
-            timer.Interval(std::chrono::milliseconds{kNetworkChangeDebounceMs});
-            timer.IsRepeating(false);
-            g_trackedImageBrushesForThread.retryDebounceTimerTickRevoker =
-                timer.Tick(
-                    winrt::auto_revoke,
-                    [](winrt::Windows::System::DispatcherQueueTimer const&,
-                       winrt::Windows::Foundation::IInspectable const&) {
-                        RetryFailedImageLoadsOnCurrentThread();
-                    });
+            state.retryTimer = state.dispatcher.CreateTimer();
+            state.retryTimer.IsRepeating(false);
+            state.retryTimerTickRevoker = state.retryTimer.Tick(
+                winrt::auto_revoke,
+                [](winrt::Windows::System::DispatcherQueueTimer const&,
+                   winrt::Windows::Foundation::IInspectable const&) {
+                    g_trackedImagesForThread.retryDueTick = 0;
+                    RetryFailedImageLoadsOnCurrentThread();
+                });
         }
 
-        timer.Stop();
-        timer.Start();
+        state.retryTimer.Stop();
+        state.retryTimer.Interval(std::chrono::milliseconds{delayMs});
+        state.retryTimer.Start();
+        state.retryDueTick = dueTick;
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
+}
+
+// Counts a callback which is about to be handed to code outside the mod for as
+// long as the returned reference is alive, so that StopImageLoadRetries waits
+// for it whether it ends up running or being dropped. Null once the retries
+// have been stopped, which is the caller's cue not to hand it over at all.
+std::shared_ptr<void> TrackImageRetryCallback() {
+    {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
+
+        if (!g_imageRetryActive) {
+            return nullptr;
+        }
+
+        g_imageRetryPendingCallbacks++;
+    }
+
+    // The pointer is only a non-null tag; the deleter is what the reference is
+    // for, and it runs whether the shared_ptr is destroyed or its construction
+    // throws.
+    return std::shared_ptr<void>(&g_imageRetryPendingCallbacks, [](void*) {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
+
+        g_imageRetryPendingCallbacks--;
+
+        // Under the lock, since the module can be freed as soon as the waiter
+        // sees the count drop.
+        g_imageRetryPendingCallbacksCv.notify_all();
+    });
 }
 
 void ScheduleImageLoadRetryOnAllUiThreads() {
@@ -10384,9 +14234,16 @@ void ScheduleImageLoadRetryOnAllUiThreads() {
     }
 
     for (auto& dispatcher : dispatchers) {
+        auto callbackRef = TrackImageRetryCallback();
+        if (!callbackRef) {
+            return;
+        }
+
         try {
-            dispatcher.TryEnqueue(
-                []() { ScheduleImageLoadRetryOnCurrentThread(); });
+            dispatcher.TryEnqueue([callbackRef]() {
+                ScheduleImageLoadRetryOnCurrentThread(kNetworkChangeDebounceMs,
+                                                      /*reschedule=*/true);
+            });
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error dispatching retry to UI thread %08X: %s", ex.code(),
                    ex.message().c_str());
@@ -10405,9 +14262,22 @@ void OnNetworkStatusChanged(
 
 // Must not be called with g_imageRetryMutex held.
 winrt::event_token RegisterNetworkStatusChangedHandler() {
+    // Removing the handler doesn't wait for an invocation which is already in
+    // flight, and the event source releases the handler, which is mod code,
+    // only after that invocation. The handler holds the reference so that it
+    // covers both.
+    auto callbackRef = TrackImageRetryCallback();
+    if (!callbackRef) {
+        return {};
+    }
+
     try {
         auto token = winrt::Windows::Networking::Connectivity::
-            NetworkInformation::NetworkStatusChanged(OnNetworkStatusChanged);
+            NetworkInformation::NetworkStatusChanged(
+                [callbackRef](
+                    winrt::Windows::Foundation::IInspectable const& sender) {
+                    OnNetworkStatusChanged(sender);
+                });
         Wh_Log(L"Registered global network status change handler");
         return token;
     } catch (winrt::hresult_error const& ex) {
@@ -10439,6 +14309,7 @@ void StopImageLoadRetries() {
         // early, which is what stops the retries. Removing the handler only
         // stops further invocations.
         g_imageRetryActive = false;
+        g_imageRetryStopping = true;
 
         token = g_networkStatusChangedToken;
         g_networkStatusChangedToken = {};
@@ -10449,29 +14320,38 @@ void StopImageLoadRetries() {
     if (token) {
         UnregisterNetworkStatusChangedHandler(token);
     }
+
+    // The module is freed once the mod is uninitialized, so the callbacks which
+    // are already on their way into it are let through first. What they wait on
+    // is a connectivity query and a dispatcher pass of a UI thread, and the
+    // uninitialization which follows depends on those threads running anyway.
+    // A callback still returns through mod code after dropping its reference,
+    // which the rest of the uninitialization is left to outlast.
+    std::unique_lock<std::mutex> lock(g_imageRetryMutex);
+    g_imageRetryPendingCallbacksCv.wait(
+        lock, [] { return g_imageRetryPendingCallbacks == 0; });
 }
 
 // Drops the calling thread from the dispatcher registry, and stops the retries
 // altogether once the last thread is out of it.
 void StopImageLoadRetriesForCurrentThread() {
-    auto dispatcher = g_trackedImageBrushesForThread.dispatcher;
+    auto dispatcher = g_trackedImagesForThread.dispatcher;
     if (!dispatcher) {
         return;
     }
 
-    g_trackedImageBrushesForThread.dispatcher = nullptr;
+    g_trackedImagesForThread.dispatcher = nullptr;
 
     winrt::event_token token;
 
     {
         std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
-        std::erase_if(g_imageRetryDispatchers,
-                      [&dispatcher](const auto& weakDispatcher) {
-                          auto registeredDispatcher = weakDispatcher.get();
-                          return !registeredDispatcher ||
-                                 registeredDispatcher == dispatcher;
-                      });
+        std::erase_if(g_imageRetryDispatchers, [&dispatcher](
+                                                   const auto& weakDispatcher) {
+            auto registeredDispatcher = weakDispatcher.get();
+            return !registeredDispatcher || registeredDispatcher == dispatcher;
+        });
 
         if (!g_imageRetryDispatchers.empty()) {
             return;
@@ -10491,38 +14371,83 @@ void StopImageLoadRetriesForCurrentThread() {
     }
 }
 
-void SetupImageBrushTracking(Media::ImageBrush const& brush,
-                             Media::Imaging::BitmapImage const& bitmapImage,
-                             winrt::Windows::Foundation::Uri const& uri) {
-    auto& brushes = g_trackedImageBrushesForThread.brushes;
+Media::Imaging::BitmapImage SetupImageTracking(
+    DependencyObject const& target,
+    DependencyProperty const& sourceProperty,
+    Media::Imaging::BitmapImage const& bitmapImage,
+    winrt::Windows::Foundation::Uri const& uri) {
+    {
+        std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
-    std::erase_if(brushes,
-                  [](const auto& tracked) { return !tracked->brush.get(); });
+        if (g_imageRetryStopping) {
+            return nullptr;
+        }
+    }
 
-    auto it = std::find_if(brushes.begin(), brushes.end(),
-                           [&brush](const auto& tracked) {
-                               if (auto trackedBrush = tracked->brush.get()) {
-                                   return trackedBrush == brush;
+    auto& images = g_trackedImagesForThread.images;
+
+    std::erase_if(images,
+                  [](const auto& tracked) { return !tracked->target.get(); });
+
+    auto it = std::find_if(images.begin(), images.end(),
+                           [&target](const auto& tracked) {
+                               if (auto trackedTarget = tracked->target.get()) {
+                                   return trackedTarget == target;
                                }
                                return false;
                            });
 
-    if (it != brushes.end()) {
-        // Resolved style values are cached, so the same brush object is applied
-        // to many elements and reapplied on every visual state change. Keep the
-        // load state which was collected so far unless the source changed.
+    if (it != images.end()) {
+        // Resolved style values are cached, so the same source object is
+        // applied to many targets and reapplied on every visual state change.
+        // Keep the retry state which was collected so far unless the source
+        // changed.
         if ((*it)->uri.Equals(uri)) {
-            return;
+            RestoreRejectedImageSource(*it, bitmapImage);
+
+            // A declared image which shows nothing has typically failed, and
+            // isn't loaded again by being reapplied, so it would blank a retry
+            // image which has loaded since, or cut short one which is still
+            // loading. The target keeps its retry image instead.
+            Media::Imaging::BitmapImage retryImage{nullptr};
+            if (bitmapImage.PixelWidth() == 0) {
+                retryImage = (*it)->retryImage.get();
+            }
+            auto const& applied = retryImage ? retryImage : bitmapImage;
+
+            // The image being applied is what a load failure is judged by, and
+            // what decides whether the target has an image.
+            (*it)->usingCache = !applied.UriSource().Equals(uri);
+
+            bool wasLoaded = (*it)->loaded;
+            (*it)->loaded = applied.PixelWidth() != 0;
+
+            // Nothing else starts a round for a target which loses its image
+            // this way: the value may have failed already, which raises no
+            // further event.
+            if (wasLoaded && !(*it)->loaded) {
+                ScheduleImageLoadRetryOnCurrentThread(kImageRetryBaseDelayMs,
+                                                      /*reschedule=*/false);
+            }
+            return retryImage;
         }
 
-        brushes.erase(it);
+        images.erase(it);
     }
 
-    Wh_Log(L"Tracking ImageBrush with remote source: %s", uri.RawUri().c_str());
+    Wh_Log(L"Tracking %s with remote image source: %s",
+           winrt::get_class_name(target).c_str(), uri.RawUri().c_str());
 
-    auto tracked = std::make_shared<TrackedImageBrush>();
-    tracked->brush = winrt::make_weak(brush);
+    auto tracked = std::make_shared<TrackedImage>();
+    tracked->target = winrt::make_weak(target);
+    tracked->sourceProperty = sourceProperty;
     tracked->uri = uri;
+    tracked->url = std::wstring(uri.RawUri());
+    tracked->cachePath = ImageCachePath(tracked->url);
+
+    if (!tracked->cachePath.empty()) {
+        QueueImageCacheSweep();
+    }
 
     try {
         tracked->decodePixelWidth = bitmapImage.DecodePixelWidth();
@@ -10535,58 +14460,125 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
         // one that isn't. An image which is still loading counts as missing,
         // which at worst costs a redundant download.
         tracked->loaded = bitmapImage.PixelWidth() != 0;
+
+        // The cached file when there is one, and a download asked for when
+        // there isn't.
+        auto sourceUri = ImageSourceUri(tracked);
+
+        // Assigned to the BitmapImage the style declared rather than to a new
+        // object, so that the value the element customization state knows stays
+        // the one which is applied and nothing looks like an external change.
+        // Only while the image isn't showing anything: swapping a source which
+        // is would blank its targets for the length of a load, and the file is
+        // there for the next process either way.
+        if (!tracked->loaded && !sourceUri.Equals(bitmapImage.UriSource())) {
+            bool fromCache = !sourceUri.Equals(uri);
+            Wh_Log(L"Loading %s image for: %s",
+                   fromCache ? L"cached" : L"remote", tracked->url.c_str());
+
+            // Recorded before the substitution, so that a source which was
+            // pointed at a cached file is never one no entry can be recovered
+            // from.
+            if (fromCache) {
+                g_imageCacheUriRemotes.insert_or_assign(
+                    std::wstring(sourceUri.RawUri()), uri);
+            }
+
+            bitmapImage.UriSource(sourceUri);
+        }
+
+        tracked->usingCache = !bitmapImage.UriSource().Equals(uri);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
 
-    std::weak_ptr<TrackedImageBrush> trackedWeak = tracked;
+    std::weak_ptr<TrackedImage> trackedWeak = tracked;
 
-    tracked->imageFailedRevoker = brush.ImageFailed(
-        winrt::auto_revoke,
-        [trackedWeak](winrt::Windows::Foundation::IInspectable const&,
-                      ExceptionRoutedEventArgs const& e) {
-            auto tracked = trackedWeak.lock();
-            if (!tracked) {
-                return;
-            }
+    auto onImageFailed = [trackedWeak](
+                             winrt::Windows::Foundation::IInspectable const&,
+                             ExceptionRoutedEventArgs const& e) {
+        auto tracked = trackedWeak.lock();
+        if (!tracked) {
+            return;
+        }
 
-            Wh_Log(L"ImageBrush load failed for: %s, error: %s",
-                   tracked->uri.RawUri().c_str(), e.ErrorMessage().c_str());
+        Wh_Log(L"Image load failed for: %s, error: %s", tracked->url.c_str(),
+               e.ErrorMessage().c_str());
 
-            tracked->loaded = false;
-        });
+        tracked->loaded = false;
 
-    tracked->imageOpenedRevoker = brush.ImageOpened(
-        winrt::auto_revoke,
-        [trackedWeak](winrt::Windows::Foundation::IInspectable const&,
-                      RoutedEventArgs const&) {
-            auto tracked = trackedWeak.lock();
-            if (!tracked) {
-                return;
-            }
+        // A cached file which doesn't decode is dropped, taking every image the
+        // URL is for back to the remote address and fetching the file once
+        // more, in case it was left incomplete, for the next process. The
+        // declared source is pointed back at the remote address by the next
+        // apply, rather than from here, so that a source isn't swapped from
+        // within the event which reports how loading it went.
+        if (tracked->usingCache) {
+            Wh_Log(L"Dropping the cached image which failed to load");
 
-            Wh_Log(L"ImageBrush loaded for: %s", tracked->uri.RawUri().c_str());
+            tracked->usingCache = false;
+            RejectImageCache(tracked->url);
 
-            tracked->loaded = true;
-            tracked->retryCount = 0;
-            tracked->lastRetryTick = 0;
-        });
+            std::error_code ec;
+            std::filesystem::remove(tracked->cachePath, ec);
 
-    brushes.push_back(std::move(tracked));
+            QueueImageDownload(tracked->url);
+        }
+
+        // Waiting for the base delay coalesces the failures of a batch of
+        // images into a single round, and keeps the retries off the burst of
+        // requests the failures came from.
+        ScheduleImageLoadRetryOnCurrentThread(kImageRetryBaseDelayMs,
+                                              /*reschedule=*/false);
+    };
+
+    auto onImageOpened = [trackedWeak](
+                             winrt::Windows::Foundation::IInspectable const&,
+                             RoutedEventArgs const&) {
+        auto tracked = trackedWeak.lock();
+        if (!tracked) {
+            return;
+        }
+
+        Wh_Log(L"Image loaded for: %s", tracked->url.c_str());
+
+        tracked->loaded = true;
+        tracked->retryCount = 0;
+        tracked->lastRetryTick = 0;
+    };
+
+    if (auto brush = target.try_as<Media::ImageBrush>()) {
+        tracked->brushImageFailedRevoker =
+            brush.ImageFailed(winrt::auto_revoke, onImageFailed);
+        tracked->brushImageOpenedRevoker =
+            brush.ImageOpened(winrt::auto_revoke, onImageOpened);
+    } else if (auto image = target.try_as<Controls::Image>()) {
+        tracked->elementImageFailedRevoker =
+            image.ImageFailed(winrt::auto_revoke, onImageFailed);
+        tracked->elementImageOpenedRevoker =
+            image.ImageOpened(winrt::auto_revoke, onImageOpened);
+    }
+
+    images.push_back(std::move(tracked));
 
     bool registerHandler = false;
 
     {
         std::lock_guard<std::mutex> lock(g_imageRetryMutex);
 
+        // Checked again, since StopImageLoadRetries runs on another thread.
+        if (g_imageRetryStopping) {
+            return nullptr;
+        }
+
         g_imageRetryActive = true;
 
-        if (!g_trackedImageBrushesForThread.dispatcher) {
+        if (!g_trackedImagesForThread.dispatcher) {
             try {
                 auto dispatcher = winrt::Windows::System::DispatcherQueue::
                     GetForCurrentThread();
                 if (dispatcher) {
-                    g_trackedImageBrushesForThread.dispatcher = dispatcher;
+                    g_trackedImagesForThread.dispatcher = dispatcher;
                     g_imageRetryDispatchers.push_back(
                         winrt::make_weak(dispatcher));
                     Wh_Log(
@@ -10606,7 +14598,7 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
     }
 
     if (!registerHandler) {
-        return;
+        return nullptr;
     }
 
     winrt::event_token token = RegisterNetworkStatusChangedHandler();
@@ -10629,35 +14621,82 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
     if (stopped && token) {
         UnregisterNetworkStatusChangedHandler(token);
     }
+
+    return nullptr;
 }
 
-// Tracks the brush if the image source is a remote URL, which can fail to load
-// and be worth retrying.
-void TrackImageBrushIfRemoteSource(
-    Media::ImageBrush const& brush,
+// Tracks the target if the image source is a remote URL, which can fail to
+// load and is worth caching. Returns the image to apply in place of
+// `imageSource`, null if it's `imageSource` itself.
+Media::Imaging::BitmapImage TrackIfRemoteImageSource(
+    DependencyObject const& target,
+    DependencyProperty const& sourceProperty,
     winrt::Windows::Foundation::IInspectable const& imageSource) {
     auto bitmapImage = imageSource.try_as<Media::Imaging::BitmapImage>();
     if (!bitmapImage) {
-        return;
+        return nullptr;
     }
 
     auto uri = bitmapImage.UriSource();
     if (!uri) {
-        return;
+        return nullptr;
     }
 
     auto scheme = uri.SchemeName();
-    if (scheme != L"http" && scheme != L"https") {
-        return;
+    if (scheme == L"file") {
+        // A cached file which was substituted for its remote address, by which
+        // the entry is identified. A style value is shared by many targets, so
+        // the substitution a previous target's entry made is what the rest of
+        // them are given.
+        auto it = g_imageCacheUriRemotes.find(std::wstring(uri.RawUri()));
+        if (it == g_imageCacheUriRemotes.end()) {
+            return nullptr;
+        }
+
+        uri = it->second;
+    } else if (scheme != L"http" && scheme != L"https") {
+        return nullptr;
     }
 
-    SetupImageBrushTracking(brush, bitmapImage, uri);
+    return SetupImageTracking(target, sourceProperty, bitmapImage, uri);
 }
 
-void SetOrClearValue(DependencyObject elementDo,
-                     DependencyProperty property,
-                     const PropertyOverrideValue& overrideValue,
-                     bool initialApply = false) {
+// Stops tracking the image which the target shows through `sourceProperty`.
+void UntrackImageTarget(DependencyObject const& target,
+                        DependencyProperty const& sourceProperty) {
+    std::erase_if(g_trackedImagesForThread.images, [&](const auto& tracked) {
+        return tracked->sourceProperty == sourceProperty &&
+               tracked->target.get() == target;
+    });
+}
+
+// Whether `value` is the image a retry assigned to the target's
+// `sourceProperty`.
+bool IsImageRetryValue(DependencyObject const& target,
+                       DependencyProperty const& sourceProperty,
+                       winrt::Windows::Foundation::IInspectable const& value) {
+    if (!value) {
+        return false;
+    }
+
+    const auto& images = g_trackedImagesForThread.images;
+    return std::any_of(images.begin(), images.end(), [&](const auto& tracked) {
+        return tracked->sourceProperty == sourceProperty &&
+               tracked->retryImage.get() == value &&
+               tracked->target.get() == target;
+    });
+}
+
+// Returns the value written, UnsetValue for a clear, so that callers can
+// record what they applied. Reading it back is not an option: while a visual
+// state has a setter on the property, ReadLocalValue keeps reporting the value
+// from before that state rather than the one written.
+winrt::Windows::Foundation::IInspectable SetOrClearValue(
+    DependencyObject elementDo,
+    DependencyProperty property,
+    const PropertyOverrideValue& overrideValue,
+    bool initialApply = false,
+    bool styleValue = true) {
     winrt::Windows::Foundation::IInspectable value;
     if (auto* inspectable =
             std::get_if<winrt::Windows::Foundation::IInspectable>(
@@ -10676,11 +14715,11 @@ void SetOrClearValue(DependencyObject elementDo,
                 winrt::hstring(blurBrushParams->fallbackThemeResourceKey));
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
-            return;
+            return nullptr;
         }
     } else {
         Wh_Log(L"Unsupported override value");
-        return;
+        return nullptr;
     }
 
     // Below is a workaround to the following bug: If the AllAppsRoot Grid is
@@ -10697,9 +14736,7 @@ void SetOrClearValue(DependencyObject elementDo,
             g_delayedAllAppsRootVisibilitySet =
                 elementDo.Dispatcher().TryRunAsync(
                     winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                    [elementDo = std::move(elementDo),
-                     property = std::move(property),
-                     value = std::move(value)]() {
+                    [elementDo, property, value]() {
                         Wh_Log(
                             L"Running delayed SetValue for AllAppsRoot "
                             L"Visibility");
@@ -10713,7 +14750,7 @@ void SetOrClearValue(DependencyObject elementDo,
                         g_elementPropertyModifying = false;
                         g_delayedAllAppsRootVisibilitySet = nullptr;
                     });
-            return;
+            return value;
         } else if (g_delayedAllAppsRootVisibilitySet) {
             Wh_Log(L"Canceling delayed SetValue for AllAppsRoot Visibility");
             g_delayedAllAppsRootVisibilitySet.Cancel();
@@ -10809,7 +14846,7 @@ void SetOrClearValue(DependencyObject elementDo,
                         }
                         g_elementPropertyModifying = false;
                     });
-            return;
+            return value;
         }
 
         if (!contentStates) {
@@ -10830,7 +14867,7 @@ void SetOrClearValue(DependencyObject elementDo,
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
         g_elementPropertyModifying = false;
-        return;
+        return value;
     }
 
     if (value == DependencyProperty::UnsetValue()) {
@@ -10840,22 +14877,37 @@ void SetOrClearValue(DependencyObject elementDo,
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
-        return;
+        return value;
     }
 
     Wh_Log(L"Setting property value %s",
            value ? winrt::get_class_name(value).c_str() : L"(null)");
 
-    // Track ImageBrush with remote ImageSource for retry on network
-    // reconnection. This handles cases where an ImageBrush is set as a property
-    // value (e.g., Background).
-    if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
-        TrackImageBrushIfRemoteSource(imageBrush, imageBrush.ImageSource());
-    }
-    // Also handle direct ImageSource property being set on an ImageBrush.
-    else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
-        if (property == Media::ImageBrush::ImageSourceProperty()) {
-            TrackImageBrushIfRemoteSource(imageBrush, value);
+    // Track a remote image source for retry on network reconnection. A style
+    // can declare one as the ImageBrush a property is set to (e.g. Background),
+    // as the ImageSource of an ImageBrush it targets, or as the Source of an
+    // Image element. A value being restored isn't tracked: it's the app's own,
+    // and during uninitialization tracking it would register handlers which
+    // outlive the mod.
+    if (styleValue) {
+        if (auto imageBrush = value.try_as<Media::ImageBrush>()) {
+            TrackIfRemoteImageSource(imageBrush,
+                                     Media::ImageBrush::ImageSourceProperty(),
+                                     imageBrush.ImageSource());
+        } else if (auto imageBrush = elementDo.try_as<Media::ImageBrush>()) {
+            if (property == Media::ImageBrush::ImageSourceProperty()) {
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(imageBrush, property, value)) {
+                    value = retryImage;
+                }
+            }
+        } else if (auto image = elementDo.try_as<Controls::Image>()) {
+            if (property == Controls::Image::SourceProperty()) {
+                if (auto retryImage =
+                        TrackIfRemoteImageSource(image, property, value)) {
+                    value = retryImage;
+                }
+            }
         }
     }
 
@@ -10880,46 +14932,60 @@ void SetOrClearValue(DependencyObject elementDo,
             }
         }
 
-        // Grid ColumnDefinitions/RowDefinitions hold DependencyObjects
-        // (ColumnDefinition/RowDefinition) that the layout engine writes
-        // ActualWidth/ActualHeight back into. The resolved value is parsed once
-        // and cached, so applying it to more than one grid - e.g. a taskbar per
-        // monitor, all sharing one UI thread - would set the same collection on
-        // each, and one monitor's column sizes would then leak onto another's.
-        // Give each element a private copy. The scratch Grid owns the fresh
-        // collection until SetValue reassigns ownership to the target, so it's
-        // kept alive through the SetValue call below.
+        // A Grid treats row and column definitions as its own only while it's
+        // their parent, which setting a collection parsed from a style doesn't
+        // make it: ActualWidth/ActualHeight read 0, and changing a definition
+        // doesn't update the layout. SetValue does take over a collection which
+        // another Grid created, so the value is copied into a scratch Grid's
+        // collection, kept alive through the SetValue call below.
+        // A collection being restored is the Grid's own and goes back as is.
         Controls::Grid definitionsCloneOwner{nullptr};
-        if (auto sourceColumns =
-                value.try_as<Controls::ColumnDefinitionCollection>()) {
-            definitionsCloneOwner = Controls::Grid{};
-            auto clonedColumns = definitionsCloneOwner.ColumnDefinitions();
-            for (auto const& column : sourceColumns) {
-                Controls::ColumnDefinition clonedColumn;
-                clonedColumn.Width(column.Width());
-                clonedColumn.MinWidth(column.MinWidth());
-                clonedColumn.MaxWidth(column.MaxWidth());
-                clonedColumns.Append(clonedColumn);
+        if (styleValue) {
+            if (auto sourceColumns =
+                    value.try_as<Controls::ColumnDefinitionCollection>()) {
+                definitionsCloneOwner = Controls::Grid{};
+                auto clonedColumns = definitionsCloneOwner.ColumnDefinitions();
+                for (auto const& column : sourceColumns) {
+                    Controls::ColumnDefinition clonedColumn;
+                    clonedColumn.Width(column.Width());
+                    clonedColumn.MinWidth(column.MinWidth());
+                    clonedColumn.MaxWidth(column.MaxWidth());
+                    clonedColumns.Append(clonedColumn);
+                }
+                value = clonedColumns;
+            } else if (auto sourceRows =
+                           value.try_as<Controls::RowDefinitionCollection>()) {
+                definitionsCloneOwner = Controls::Grid{};
+                auto clonedRows = definitionsCloneOwner.RowDefinitions();
+                for (auto const& row : sourceRows) {
+                    Controls::RowDefinition clonedRow;
+                    clonedRow.Height(row.Height());
+                    clonedRow.MinHeight(row.MinHeight());
+                    clonedRow.MaxHeight(row.MaxHeight());
+                    clonedRows.Append(clonedRow);
+                }
+                value = clonedRows;
             }
-            value = clonedColumns;
-        } else if (auto sourceRows =
-                       value.try_as<Controls::RowDefinitionCollection>()) {
-            definitionsCloneOwner = Controls::Grid{};
-            auto clonedRows = definitionsCloneOwner.RowDefinitions();
-            for (auto const& row : sourceRows) {
-                Controls::RowDefinition clonedRow;
-                clonedRow.Height(row.Height());
-                clonedRow.MinHeight(row.MinHeight());
-                clonedRow.MaxHeight(row.MaxHeight());
-                clonedRows.Append(clonedRow);
-            }
-            value = clonedRows;
         }
 
         elementDo.SetValue(property, value);
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
+
+    return value;
+}
+
+// Puts back the value the property had before the style. The target's image
+// entry goes with the style's value: a retry would put that image back, and the
+// restored image's load events would be taken for it.
+void RestoreOriginalValue(
+    DependencyObject elementDo,
+    DependencyProperty property,
+    winrt::Windows::Foundation::IInspectable const& originalValue) {
+    UntrackImageTarget(elementDo, property);
+    SetOrClearValue(elementDo, property, originalValue, /*initialApply=*/false,
+                    /*styleValue=*/false);
 }
 
 // https://stackoverflow.com/a/5665377
@@ -11307,6 +15373,61 @@ Style GetStyleFromXamlSettersWithFallbackType(
     }
 }
 
+// Picks the setters of `style`, parsed from `xaml`, whose value is an object
+// that parsing creates anew. An object from resources, which parsing again
+// gives back unchanged, is shared anyway, and styles and templates are sealed
+// once in use. A later setter for the same property and visual state replaces
+// an earlier one.
+PropertyOverrideSetters GetElementInstanceSetters(
+    std::wstring_view type,
+    std::wstring_view fallbackType,
+    std::wstring const& xaml,
+    Style const& style,
+    std::vector<ValueRule> const& valueRules,
+    std::vector<std::wstring> const& valueRuleSetterXamls) {
+    PropertyOverrideSetters result;
+
+    auto isObject = [](winrt::Windows::Foundation::IInspectable const& value) {
+        return value.try_as<DependencyObject>() && !value.try_as<Style>() &&
+               !value.try_as<FrameworkTemplate>();
+    };
+
+    try {
+        bool hasObjectValues = false;
+        for (size_t i = 0; i < valueRules.size() && !hasObjectValues; i++) {
+            hasObjectValues =
+                isObject(style.Setters().GetAt(i).as<Setter>().Value());
+        }
+
+        if (!hasObjectValues) {
+            return result;
+        }
+
+        auto styleAgain =
+            GetStyleFromXamlSettersWithFallbackType(type, fallbackType, xaml);
+
+        for (size_t i = 0; i < valueRules.size(); i++) {
+            const auto setter = style.Setters().GetAt(i).as<Setter>();
+            const auto value = setter.Value();
+            const auto& visualState = valueRules[i].visualState;
+            auto& setters = result[setter.Property()];
+            if (isObject(value) &&
+                styleAgain.Setters().GetAt(i).as<Setter>().Value() != value) {
+                setters[visualState] = valueRuleSetterXamls[i];
+            } else {
+                setters.erase(visualState);
+            }
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        result.clear();
+    }
+
+    std::erase_if(result, [](const auto& item) { return item.second.empty(); });
+
+    return result;
+}
+
 const ResolvedRules& GetResolvedPropertyOverrides(
     const std::wstring_view type,
     const std::wstring_view fallbackType,
@@ -11337,8 +15458,12 @@ const ResolvedRules& GetResolvedPropertyOverrides(
                 propertyOverrideValues;
             propertyOverrideValues.reserve(valueRules.size());
 
+            std::vector<std::wstring> valueRuleSetterXamls;
+            valueRuleSetterXamls.reserve(valueRules.size());
+
             for (const auto& rule : valueRules) {
                 const bool isDynamic = rule.isDynamic();
+                const size_t setterStart = xaml.size();
 
                 propertyOverrideValues.push_back(
                     !isDynamic && rule.isXamlValue
@@ -11365,6 +15490,8 @@ const ResolvedRules& GetResolvedPropertyOverrides(
                         L"            </Setter.Value>\n"
                         L"        </Setter>\n";
                 }
+
+                valueRuleSetterXamls.push_back(xaml.substr(setterStart));
             }
 
             for (const auto& rule : captureRules) {
@@ -11401,6 +15528,10 @@ const ResolvedRules& GetResolvedPropertyOverrides(
                     style.Setters().GetAt(setterIndex++).as<Setter>();
                 resolved.captures.push_back({setter.Property(), rule.varName});
             }
+
+            resolved.elementInstanceSetters =
+                GetElementInstanceSetters(type, fallbackType, xaml, style,
+                                          valueRules, valueRuleSetterXamls);
         }
 
         Wh_Log(L"%.*s: %zu override styles, %zu captures",
@@ -11533,8 +15664,16 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement element,
 }
 
 // Locale-independent double formatter. Uses `std::to_chars` shortest round-trip
-// representation so XAML always sees `.` as the decimal separator.
+// representation so XAML always sees `.` as the decimal separator. Non-finite
+// values use the spellings the XAML double converter accepts (case-sensitive;
+// it rejects "-NaN").
 std::wstring FormatDoubleInvariant(double d) {
+    if (std::isnan(d)) {
+        return L"NaN";
+    }
+    if (std::isinf(d)) {
+        return d < 0 ? L"-Infinity" : L"Infinity";
+    }
     char buf[64];
     auto [end, ec] = std::to_chars(buf, buf + std::size(buf), d);
     if (ec != std::errc{}) {
@@ -11833,16 +15972,20 @@ ElementResolvedRules FindElementPropertyOverrides(FrameworkElement element,
             continue;
         }
 
-        const auto& resolvedRules = GetResolvedPropertyOverrides(
-            override.elementMatcher.type,
+        std::wstring_view fallbackType =
             fallbackClassName ? fallbackClassName
-                              : winrt::name_of<FrameworkElement>(),
+                              : winrt::name_of<FrameworkElement>();
+        const auto& resolvedRules = GetResolvedPropertyOverrides(
+            override.elementMatcher.type, fallbackType,
             &override.propertyOverrides);
 
         result.hasDynamicValues |= resolvedRules.hasDynamicValues;
 
         auto& propertyOverridesForVSG =
             result.overridesPerVSG[visualStateGroup];
+        std::wstring elementInstanceXaml;
+        std::vector<std::pair<DependencyProperty, std::wstring>>
+            elementInstanceCells;
         for (const auto& [property, valuesPerVisualState] :
              resolvedRules.propertyOverrides) {
             bool propertyInserted = propertiesAdded.insert(property).second;
@@ -11853,6 +15996,31 @@ ElementResolvedRules FindElementPropertyOverrides(FrameworkElement element,
             auto& propertyOverrides = propertyOverridesForVSG[property];
             for (const auto& [visualState, value] : valuesPerVisualState) {
                 propertyOverrides.insert({visualState, value});
+            }
+
+            if (auto it = resolvedRules.elementInstanceSetters.find(property);
+                it != resolvedRules.elementInstanceSetters.end()) {
+                for (const auto& [visualState, setterXaml] : it->second) {
+                    elementInstanceXaml += setterXaml;
+                    elementInstanceCells.push_back({property, visualState});
+                }
+            }
+        }
+
+        // On failure, the element keeps the values shared with other elements.
+        if (!elementInstanceCells.empty()) {
+            try {
+                auto style = GetStyleFromXamlSettersWithFallbackType(
+                    override.elementMatcher.type, fallbackType,
+                    elementInstanceXaml);
+                for (size_t i = 0; i < elementInstanceCells.size(); i++) {
+                    const auto& [property, visualState] =
+                        elementInstanceCells[i];
+                    propertyOverridesForVSG[property][visualState] =
+                        style.Setters().GetAt(i).as<Setter>().Value();
+                }
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
             }
         }
 
@@ -11875,7 +16043,7 @@ struct StyleVariableResolution {
     // Points into state->variables; only valid until that map is next touched,
     // so read it out before doing anything that could apply a style.
     const StyleVariableValue* value = nullptr;
-    InstanceHandle owner = 0;
+    ElementId owner = ElementId::None;
 };
 
 // How well a capture serves a consumer, as a sort key -- smaller is better.
@@ -11885,10 +16053,11 @@ struct StyleVariableResolution {
 //  2. Shallowest capture element. On a tie the capture that lies on the
 //     consumer's own parent chain *is* the common ancestor, so this is what
 //     makes a capture on an ancestor beat one on a cousin below it.
-//  3. Registration order, applied by the callers below keeping the first of
-//     equal keys. Only a last resort: it follows the order XamlDiagnostics
-//     reports elements in, which is not stable across boots or across taskbar
-//     item recycling.
+//  3. Registration order, applied by the callers below keeping the last of
+//     equal keys. Only a last resort, but latest-wins is the useful direction:
+//     a host that rebuilds a subtree often leaves the previous copy in the tree
+//     beside the new one, and a consumer above both ties on the keys above.
+//     The newer capture is the live one.
 //
 // The closest capture wins even when its value is opaque, in which case the
 // consuming style is skipped rather than falling through to a farther capture
@@ -11918,22 +16087,22 @@ StyleVariableResolution FindWinningCapture(
     if (captures.size() == 1) {
         // The common case by far: nothing to rank, and the owner's spine node
         // never has to be resolved.
-        return {&captures.front().value, captures.front().elementHandle};
+        return {&captures.front().value, captures.front().elementId};
     }
 
     std::pair<int, int> bestRank;
     for (const auto& capture : captures) {
         ElementTreeNode const* captureNode = nullptr;
         if (auto elementIt =
-                g_elementsCustomizationState.find(capture.elementHandle);
+                g_elementsCustomizationState.find(capture.elementId);
             elementIt != g_elementsCustomizationState.end()) {
             captureNode = EnsureElementTreeNode(elementIt->second);
         }
 
         auto rank = StyleVariableCaptureRank(consumerNode, captureNode);
-        if (!result.value || rank < bestRank) {
+        if (!result.value || rank <= bestRank) {
             bestRank = rank;
-            result = {&capture.value, capture.elementHandle};
+            result = {&capture.value, capture.elementId};
         }
     }
 
@@ -11944,7 +16113,7 @@ StyleVariableResolution FindWinningCapture(
 // snapshot stays usable even after re-entrant work tears the owning element
 // down.
 struct StyleVariableCandidate {
-    InstanceHandle owner = 0;
+    ElementId owner = ElementId::None;
     std::shared_ptr<ElementTreeNode> node;
 };
 
@@ -11958,9 +16127,9 @@ std::vector<StyleVariableCandidate> SnapshotStyleVariableCaptures(
 
     for (const auto& capture : captures) {
         StyleVariableCandidate candidate;
-        candidate.owner = capture.elementHandle;
+        candidate.owner = capture.elementId;
         if (auto elementIt =
-                g_elementsCustomizationState.find(capture.elementHandle);
+                g_elementsCustomizationState.find(capture.elementId);
             elementIt != g_elementsCustomizationState.end()) {
             auto& elementCustomizationState = elementIt->second;
             EnsureElementTreeNode(elementCustomizationState);
@@ -11977,17 +16146,17 @@ std::vector<StyleVariableCandidate> SnapshotStyleVariableCaptures(
 // taken before a re-entrant capture change can go stale, which at worst skips a
 // consumer that needed redoing -- the change that invalidated it queues its own
 // propagation, and that pass re-snapshots and picks the consumer up.
-InstanceHandle PickWinningCaptureOwner(
+ElementId PickWinningCaptureOwner(
     const std::vector<StyleVariableCandidate>& candidates,
     ElementTreeNode const* consumerNode) {
-    InstanceHandle owner = 0;
+    ElementId owner = ElementId::None;
     bool haveBest = false;
     std::pair<int, int> bestRank;
 
     for (const auto& candidate : candidates) {
         auto rank =
             StyleVariableCaptureRank(consumerNode, candidate.node.get());
-        if (!haveBest || rank < bestRank) {
+        if (!haveBest || rank <= bestRank) {
             haveBest = true;
             bestRank = rank;
             owner = candidate.owner;
@@ -12043,11 +16212,17 @@ struct StyleExpressionValue {
     bool IsNumber() const { return number.has_value(); }
 };
 
+// Thrown by a live skip() call to unwind the evaluator. Not a std::exception,
+// so a generic failure handler on the way up does not mistake it for an error.
+struct StyleVariableSkipRequested {};
+
 // Recursive-descent evaluator for `{{ ... }}` expressions. Operands: number
 // literals, backtick-delimited string literals, style variable references, and
 // parenthesized subexpressions. Operators: binary + - * /, unary - / +, the
-// comparisons < <= == >= > !=, the conditional operator cond ? a : b, and the
-// two-arg functions min(a, b) and max(a, b). Standard math precedence.
+// comparisons < <= == >= > !=, the conditional operator cond ? a : b, the
+// two-arg functions min(a, b) and max(a, b), and skip(), which throws
+// StyleVariableSkipRequested so the consuming style is left unapplied.
+// Standard math precedence.
 // Arithmetic, relational, unary-sign, and min/max operators require numeric
 // operands; == and != compare two numbers or two strings; the conditional
 // selects one of its (possibly string) branches. Evaluate() formats the result
@@ -12064,10 +16239,7 @@ class StyleVariableExpressionEvaluator {
     // Returns the text form of the result: numeric results are formatted with
     // FormatDoubleInvariant, string results are returned verbatim. Throws
     // std::runtime_error on parse / evaluation failure (including when a value
-    // is used where the grammar requires a number, or when a numeric result is
-    // non-finite -- NaN/Inf can't be formatted into XAML attributes
-    // meaningfully and would also break the consumer-equality check in
-    // SetStyleVariableIfChangedAndPropagate, since NaN != NaN).
+    // is used where the grammar requires a number).
     std::wstring Evaluate() {
         m_pos = 0;
         SkipWhitespace();
@@ -12078,10 +16250,6 @@ class StyleVariableExpressionEvaluator {
                 "Unexpected trailing characters in style variable expression");
         }
         if (v.IsNumber()) {
-            if (!std::isfinite(*v.number)) {
-                throw std::runtime_error(
-                    "Style variable expression produced a non-finite result");
-            }
             return FormatDoubleInvariant(*v.number);
         }
         return v.text;
@@ -12155,8 +16323,8 @@ class StyleVariableExpressionEvaluator {
     // Short-circuit: only the taken branch is evaluated. The untaken branch is
     // still parsed (to advance the position and enforce syntax) with m_live
     // cleared, which suppresses value-level errors (division by zero, a
-    // non-numeric / undefined variable, an unknown function) and dependency
-    // capture for that branch.
+    // non-numeric / undefined variable, an unknown function), skip(), and
+    // dependency capture for that branch.
     StyleExpressionValue ParseTernary() {
         StyleExpressionValue cond = ParseEquality();
         if (!ConsumeChar(L'?')) {
@@ -12400,6 +16568,18 @@ class StyleVariableExpressionEvaluator {
         SkipWhitespace();
         if (m_pos < m_text.size() && m_text[m_pos] == L'(') {
             m_pos++;
+            if (ident == L"skip") {
+                if (!ConsumeChar(L')')) {
+                    throw std::runtime_error(
+                        "skip() takes no arguments in style variable "
+                        "expression");
+                }
+                if (m_live) {
+                    throw StyleVariableSkipRequested{};
+                }
+                // Dead ternary branch: value discarded.
+                return StyleExpressionValue::Number(0.0);
+            }
             double a = RequireNumber(ParseExpression());
             if (!ConsumeChar(L',')) {
                 throw std::runtime_error(
@@ -12479,7 +16659,8 @@ class StyleVariableExpressionEvaluator {
 // both cause this function to return std::nullopt, at which point
 // ExpandStyleVariables aborts the whole expansion and the consuming style is
 // skipped. This matches the arithmetic path's behaviour of failing closed
-// rather than substituting a value that won't parse.
+// rather than substituting a value that won't parse. A live skip() call unwinds
+// through here as StyleVariableSkipRequested.
 std::optional<std::wstring> EvaluateStyleVariableExpression(
     std::wstring_view exprText,
     const StyleVariableLookupContext* context) {
@@ -12514,6 +16695,10 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
     try {
         StyleVariableExpressionEvaluator eval(trimmed, context);
         return eval.Evaluate();
+    } catch (StyleVariableSkipRequested const&) {
+        Wh_Log(L"skip() reached in '%.*s'; leaving style unapplied",
+               static_cast<int>(trimmed.size()), trimmed.data());
+        throw;
     } catch (std::exception const& ex) {
         Wh_Log(L"Style variable expression failed: %S (in '%.*s')", ex.what(),
                static_cast<int>(trimmed.size()), trimmed.data());
@@ -12522,7 +16707,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
 }
 
 // Walks the input text, repeatedly expanding the innermost `{{ ... }}`
-// substitution. Returns std::nullopt on parse failure (and logs a warning).
+// substitution. Returns std::nullopt on parse failure (and logs a warning); a
+// StyleVariableSkipRequested from an expression propagates out.
 //
 // Inner-matching rule: the first `}}` is paired with the *rightmost* `{{` that
 // precedes it. So `{{{x}}}` -> `{` + value-of-x + `}` (literal outer braces).
@@ -12628,14 +16814,14 @@ StyleVariableValue ReadCapturedStyleVariableValue(FrameworkElement element,
     return out;
 }
 
-// Remove this (handle, property) entry from the consumer lists of every
+// Remove this (elementId, property) entry from the consumer lists of every
 // variable named in oldDeps, then add it for every variable named in newDeps.
 // `fallbackClassName` is stored on each newly-added consumer entry so the
 // per-consumer context is preserved across propagations; it is irrelevant when
 // newDeps is empty (pure-removal calls from the cleanup paths).
 void UpdateStyleVariableConsumers(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     DependencyProperty property,
     PCWSTR fallbackClassName,
     const std::vector<StyleVariableDependency>& oldDeps,
@@ -12655,9 +16841,11 @@ void UpdateStyleVariableConsumers(
             continue;
         }
         auto& consumers = it->second;
-        std::erase_if(consumers, [&](const StyleVariableConsumer& c) {
-            return c.elementHandle == handle && c.property == property;
-        });
+        ReleaseStyleVariableElementRefs(
+            state, elementId,
+            std::erase_if(consumers, [&](const StyleVariableConsumer& c) {
+                return c.elementId == elementId && c.property == property;
+            }));
         if (consumers.empty()) {
             state->consumers.erase(it);
         }
@@ -12669,18 +16857,226 @@ void UpdateStyleVariableConsumers(
         auto& consumers = state->consumers[dep.name];
         bool already = std::any_of(consumers.begin(), consumers.end(),
                                    [&](const StyleVariableConsumer& c) {
-                                       return c.elementHandle == handle &&
+                                       return c.elementId == elementId &&
                                               c.property == property;
                                    });
         if (!already) {
-            consumers.push_back({handle, property, fallbackClassNameStr});
+            consumers.push_back({elementId, property, fallbackClassNameStr});
+            AddStyleVariableElementRef(state, elementId);
         }
     }
 }
 
+// Value comparison of `a` and `b` as boxes of the first struct type in
+// T, Ts... that `a` is a box of; nullopt when it is none of them.
+template <typename T, typename... Ts>
+std::optional<bool> SameBoxedStruct(
+    winrt::Windows::Foundation::IInspectable const& a,
+    winrt::Windows::Foundation::IInspectable const& b) {
+    if (auto ra = a.try_as<winrt::Windows::Foundation::IReference<T>>()) {
+        auto rb = b.try_as<winrt::Windows::Foundation::IReference<T>>();
+        return rb && ra.Value() == rb.Value();
+    }
+    if constexpr (sizeof...(Ts) > 0) {
+        return SameBoxedStruct<Ts...>(a, b);
+    } else {
+        return std::nullopt;
+    }
+}
+
+// Whether two values read from a property are the same local value. XAML boxes
+// value types anew on every read, so those compare by value: primitives and
+// enums through TryUnboxPropertyValue, then the struct types styles commonly
+// set. Any other boxed value type is taken as unchanged: adopting a value that
+// may be the mod's own would leave it in place on cleanup, the worse mistake.
+// Reference types, UnsetValue included, compare by identity.
+bool SameLocalValue(winrt::Windows::Foundation::IInspectable const& a,
+                    winrt::Windows::Foundation::IInspectable const& b) {
+    if (a == b) {
+        return true;
+    }
+    if (!a || !b) {
+        return false;
+    }
+
+    auto ua = TryUnboxPropertyValue(a);
+    auto ub = TryUnboxPropertyValue(b);
+    if (ua || ub) {
+        return ua && ub &&
+               std::visit(
+                   [](auto const& x, auto const& y) -> bool {
+                       using X = std::decay_t<decltype(x)>;
+                       if constexpr (!std::is_same_v<
+                                         X, std::decay_t<decltype(y)>>) {
+                           return false;
+                       } else if constexpr (std::is_floating_point_v<X>) {
+                           return x == y || (std::isnan(x) && std::isnan(y));
+                       } else {
+                           return x == y;
+                       }
+                   },
+                   *ua, *ub);
+    }
+
+    if (auto same = SameBoxedStruct<
+            Thickness, CornerRadius, GridLength,
+            winrt::Windows::Foundation::Point, winrt::Windows::Foundation::Size,
+            winrt::Windows::Foundation::Rect, winrt::Windows::UI::Color,
+            winrt::Windows::UI::Text::FontWeight>(a, b)) {
+        return *same;
+    }
+
+    auto isBoxedValue = [](winrt::Windows::Foundation::IInspectable const& v) {
+        return v.try_as<winrt::Windows::Foundation::IPropertyValue>() !=
+                   nullptr ||
+               std::wstring_view(winrt::get_class_name(v))
+                   .starts_with(L"Windows.Foundation.IReference`1<");
+    };
+    return isBoxedValue(a) && isBoxedValue(b);
+}
+
+// Before animating a property of a brush or a transform, such as Fill.Color in
+// ProgressBar's paused state, XAML replaces the value with a copy of it, unless
+// the value is such a copy itself. Whether `value` is one shows in whether a
+// storyboard that targets it through a holder replaces the holder's value.
+bool IsXamlAnimationCopy(
+    winrt::Windows::Foundation::IInspectable const& value) {
+    DependencyObject holder{nullptr};
+    DependencyProperty property{nullptr};
+    PCWSTR path = nullptr;
+    if (value.try_as<Media::SolidColorBrush>() ||
+        value.try_as<Media::LinearGradientBrush>()) {
+        holder = Controls::Border();
+        property = Controls::Border::BackgroundProperty();
+        path = L"(Border.Background).(Brush.Opacity)";
+    } else if (value.try_as<Media::Transform>()) {
+        // A path which doesn't resolve is an error, so it names a property of
+        // the transform's own type.
+        holder = Media::SolidColorBrush();
+        property = Media::Brush::TransformProperty();
+        if (value.try_as<Media::TranslateTransform>()) {
+            path = L"(Brush.Transform).(TranslateTransform.X)";
+        } else if (value.try_as<Media::ScaleTransform>()) {
+            path = L"(Brush.Transform).(ScaleTransform.ScaleX)";
+        } else if (value.try_as<Media::RotateTransform>()) {
+            path = L"(Brush.Transform).(RotateTransform.Angle)";
+        } else if (value.try_as<Media::SkewTransform>()) {
+            path = L"(Brush.Transform).(SkewTransform.AngleX)";
+        } else if (value.try_as<Media::CompositeTransform>()) {
+            path = L"(Brush.Transform).(CompositeTransform.Rotation)";
+        } else if (value.try_as<Media::MatrixTransform>()) {
+            path = L"(Brush.Transform).(MatrixTransform.Matrix)";
+        } else if (value.try_as<Media::TransformGroup>()) {
+            path = L"(Brush.Transform).(TransformGroup.Children)";
+        }
+    }
+
+    if (!path) {
+        return false;
+    }
+
+    try {
+        holder.SetValue(property, value);
+        // Without key frames, beginning the storyboard only resolves the path.
+        Media::Animation::ObjectAnimationUsingKeyFrames animation;
+        Media::Animation::Storyboard::SetTarget(animation, holder);
+        Media::Animation::Storyboard::SetTargetProperty(animation, path);
+        Media::Animation::Storyboard storyboard;
+        storyboard.Children().Append(animation);
+        storyboard.Begin();
+        storyboard.Stop();
+        return holder.ReadLocalValue(property) == value;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return false;
+    }
+}
+
+// Whether `value` is XAML's animation copy of `applied`. XAML copies only the
+// property's current value, so a copy of the same type is taken to be one of
+// `applied`.
+bool IsAnimationCopy(winrt::Windows::Foundation::IInspectable const& value,
+                     winrt::Windows::Foundation::IInspectable const& applied) {
+    return value && applied && value != applied &&
+           winrt::get_class_name(value) == winrt::get_class_name(applied) &&
+           IsXamlAnimationCopy(value);
+}
+
+// XAML's animation copy of a XamlCompositionBrushBase is an instance of that
+// base class itself, which nothing else creates. It lacks the original's
+// composition brush, so it renders nothing.
+bool IsCompositionBrushCopy(
+    winrt::Windows::Foundation::IInspectable const& value) {
+    return value && std::wstring_view(winrt::get_class_name(value)) ==
+                        winrt::name_of<Media::XamlCompositionBrushBase>();
+}
+
+// Let XAML's animation copy of the applied value stand in for it. Applying the
+// value again would make the running animation change it in place, for every
+// element that shares it. A composition brush's copy renders nothing, so it
+// isn't taken.
+bool TakeAnimationCopyAsApplied(
+    FrameworkElement element,
+    DependencyProperty property,
+    ElementPropertyCustomizationState* propertyCustomizationState) {
+    auto localValue = element.ReadLocalValue(property);
+    if (!IsAnimationCopy(localValue,
+                         propertyCustomizationState->lastAppliedValue)) {
+        return false;
+    }
+
+    Wh_Log(L"Taking animation copy of the applied value");
+    propertyCustomizationState->lastAppliedValue = localValue;
+    return true;
+}
+
+// Record a write by something other than the mod as the property's pre-style
+// value. A local value still equal to the one the mod applied means nothing
+// external happened (animating the property changes only the effective value),
+// and adopting the mod's own brush would make it survive cleanup and crash when
+// the DLL is unloaded. An image which a retry assigned is the mod's too, and so
+// is XAML's animation copy of the applied value.
+void AdoptExternalValueAsOriginal(
+    FrameworkElement element,
+    DependencyProperty property,
+    ElementPropertyCustomizationState* propertyCustomizationState) {
+    if (!propertyCustomizationState->customValue) {
+        return;
+    }
+    auto localValue = ReadLocalValueWithWorkaround(element, property);
+    if (!SameLocalValue(localValue,
+                        propertyCustomizationState->lastAppliedValue) &&
+        !IsImageRetryValue(element, property, localValue) &&
+        !IsCompositionBrushCopy(localValue) &&
+        !IsAnimationCopy(localValue,
+                         propertyCustomizationState->lastAppliedValue)) {
+        propertyCustomizationState->originalValue = localValue;
+    }
+}
+
+// Put the property back to its pre-style value and forget what was applied.
+// Leaves the dynamic template alone, so a later variable change can apply the
+// style again.
+void UnapplyStyleValue(
+    FrameworkElement element,
+    DependencyProperty property,
+    ElementPropertyCustomizationState* propertyCustomizationState) {
+    AdoptExternalValueAsOriginal(element, property, propertyCustomizationState);
+    if (propertyCustomizationState->originalValue) {
+        bool wasModifying = g_elementPropertyModifying;
+        g_elementPropertyModifying = true;
+        RestoreOriginalValue(element, property,
+                             *propertyCustomizationState->originalValue);
+        g_elementPropertyModifying = wasModifying;
+        propertyCustomizationState->originalValue.reset();
+    }
+    propertyCustomizationState->lastAppliedValue = nullptr;
+    propertyCustomizationState->customValue.reset();
+}
+
 // Re-evaluate the dynamic template stored on `propertyCustomizationState` and
 // return the resolved IInspectable / XamlBlurBrushParams ready to be applied.
-// Updates the (handle, property) -> state->consumers registry to match the
+// Updates the (elementId, property) -> state->consumers registry to match the
 // freshly computed dependency set so future variable changes route to this
 // property. The dependency registry is committed *before* the final XAML
 // resolution attempt: ExpandStyleVariables records every variable name it scans
@@ -12700,13 +17096,14 @@ void UpdateStyleVariableConsumers(
 //
 // `elementCustomizationState` is the consumer's own entry when the caller
 // already has it, saving the lookup needed to rank captures by proximity; pass
-// nullptr to have it looked up from `handle`.
+// nullptr to have it looked up from `elementId`.
 //
 // Returns std::nullopt if the state has no template, expansion failed, or XAML
-// resolution failed.
+// resolution failed. A skip() in the rule body also yields std::nullopt, after
+// putting the property back to its original value.
 std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     FrameworkElement element,
     DependencyProperty property,
     PCWSTR fallbackClassName,
@@ -12719,7 +17116,7 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
     const auto& tmpl = *propertyCustomizationState->dynamicTemplate;
 
     if (!elementCustomizationState) {
-        if (auto it = g_elementsCustomizationState.find(handle);
+        if (auto it = g_elementsCustomizationState.find(elementId);
             it != g_elementsCustomizationState.end()) {
             elementCustomizationState = &it->second;
         }
@@ -12732,12 +17129,26 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
 
     std::vector<StyleVariableDependency> newDeps;
     StyleVariableLookupContext context{state, consumerNode, &newDeps};
-    auto expanded = ExpandStyleVariables(tmpl.rawValue, &context);
+    std::optional<std::wstring> expanded;
+    bool skipped = false;
+    try {
+        expanded = ExpandStyleVariables(tmpl.rawValue, &context);
+    } catch (StyleVariableSkipRequested const&) {
+        skipped = true;
+    }
 
     UpdateStyleVariableConsumers(
-        state, handle, property, fallbackClassName,
+        state, elementId, property, fallbackClassName,
         propertyCustomizationState->variableDependencies, newDeps);
     propertyCustomizationState->variableDependencies = std::move(newDeps);
+
+    if (skipped) {
+        // Every variable that decides whether skip() is reached was read
+        // before it, so targeted propagation still reaches this property.
+        propertyCustomizationState->lastResolveFailed = false;
+        UnapplyStyleValue(element, property, propertyCustomizationState);
+        return std::nullopt;
+    }
 
     if (!expanded) {
         propertyCustomizationState->lastResolveFailed = true;
@@ -12769,8 +17180,8 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
 bool StyleVariableChangeAffectsConsumer(
     const ElementPropertyCustomizationState& propertyCustomizationState,
     const std::wstring& varName,
-    std::optional<InstanceHandle> changedOwner,
-    InstanceHandle winningOwner) {
+    std::optional<ElementId> changedOwner,
+    ElementId winningOwner) {
     if (propertyCustomizationState.lastResolveFailed) {
         return true;
     }
@@ -12792,10 +17203,9 @@ bool StyleVariableChangeAffectsConsumer(
 // was registered), so propagation uses the consumer's own match-site context to
 // re-parse the rule body, even when the capturer was matched against a
 // different type/fallback class.
-void PropagateStyleVariableChangeCore(
-    StyleVariableState* state,
-    const std::wstring& varName,
-    std::optional<InstanceHandle> changedOwner) {
+void PropagateStyleVariableChangeCore(StyleVariableState* state,
+                                      const std::wstring& varName,
+                                      std::optional<ElementId> changedOwner) {
     auto consumersIt = state->consumers.find(varName);
     if (consumersIt == state->consumers.end()) {
         return;
@@ -12814,15 +17224,16 @@ void PropagateStyleVariableChangeCore(
 
     auto consumersCopy = consumersIt->second;
     for (const auto& consumer : consumersCopy) {
-        auto stateIt =
-            g_elementsCustomizationState.find(consumer.elementHandle);
+        auto stateIt = g_elementsCustomizationState.find(consumer.elementId);
         if (stateIt == g_elementsCustomizationState.end()) {
             continue;
         }
         // A reference rather than the iterator: applying a style below can
         // realize children, which re-enters ApplyCustomizations and may rehash
         // g_elementsCustomizationState. Rehashing invalidates iterators but not
-        // references to the mapped values.
+        // references to the mapped values. A re-entrant cleanup or re-apply of
+        // this same elementId would invalidate both the reference and the loop
+        // below, but the re-entrancy is for the newly realized children.
         auto& elementState = stateIt->second;
 
         auto element = elementState.element.get();
@@ -12832,8 +17243,8 @@ void PropagateStyleVariableChangeCore(
 
         // A handful of pointer comparisons against the snapshot above, far
         // cheaper than the re-parse it avoids.
-        InstanceHandle winningOwner =
-            changedOwner ? 0
+        ElementId winningOwner =
+            changedOwner ? ElementId::None
                          : PickWinningCaptureOwner(
                                candidates, EnsureElementTreeNode(elementState));
 
@@ -12859,11 +17270,13 @@ void PropagateStyleVariableChangeCore(
             }
 
             auto resolved = ResolveDynamicStyleValue(
-                state, consumer.elementHandle, element, consumer.property,
+                state, consumer.elementId, element, consumer.property,
                 consumerFallbackClassName, &propState, &elementState);
             if (!resolved) {
                 continue;
             }
+            AdoptExternalValueAsOriginal(element, consumer.property,
+                                         &propState);
             if (!propState.originalValue) {
                 propState.originalValue =
                     ReadLocalValueWithWorkaround(element, consumer.property);
@@ -12872,9 +17285,8 @@ void PropagateStyleVariableChangeCore(
 
             bool wasModifying = g_elementPropertyModifying;
             g_elementPropertyModifying = true;
-            SetOrClearValue(element, consumer.property, *resolved);
             propState.lastAppliedValue =
-                ReadLocalValueWithWorkaround(element, consumer.property);
+                SetOrClearValue(element, consumer.property, *resolved);
             g_elementPropertyModifying = wasModifying;
         }
     }
@@ -12890,7 +17302,7 @@ void PropagateStyleVariableChangeCore(
 // drains the queue, which also coalesces a burst into one pass.
 void PropagateStyleVariableChange(StyleVariableState* state,
                                   const std::wstring& varName,
-                                  std::optional<InstanceHandle> changedOwner) {
+                                  std::optional<ElementId> changedOwner) {
     PendingStyleVariablePropagation propagation{state, varName, changedOwner};
 
     if (g_styleVariablePropagationDepth > 0) {
@@ -12935,6 +17347,16 @@ void PropagateStyleVariableChange(StyleVariableState* state,
     }
 }
 
+// std::optional<double>'s operator== follows IEEE (NaN != NaN), which would
+// report a NaN capture such as Height=Auto as changed on every re-read.
+bool SameNumericValue(const std::optional<double>& a,
+                      const std::optional<double>& b) {
+    if (a.has_value() != b.has_value()) {
+        return false;
+    }
+    return !a || *a == *b || (std::isnan(*a) && std::isnan(*b));
+}
+
 // Store a capture's freshly read value and notify dependents if it changed.
 // The comparison is against this capture's own previous value: comparing
 // against whichever capture currently wins would silently drop a second
@@ -12943,7 +17365,7 @@ void PropagateStyleVariableChange(StyleVariableState* state,
 // SizeChanged catch-all -- so the no-op fast path applies uniformly.
 void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
                                            const std::wstring& varName,
-                                           InstanceHandle owner,
+                                           ElementId owner,
                                            StyleVariableValue value) {
     auto varIt = state->variables.find(varName);
     if (varIt == state->variables.end()) {
@@ -12953,7 +17375,7 @@ void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
     auto& captures = varIt->second;
     auto it = std::find_if(captures.begin(), captures.end(),
                            [owner](const StyleVariableCapture& capture) {
-                               return capture.elementHandle == owner;
+                               return capture.elementId == owner;
                            });
     if (it == captures.end()) {
         // The capture was torn down between the notification and here.
@@ -12961,7 +17383,7 @@ void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
     }
 
     if (it->value.stringForm == value.stringForm &&
-        it->value.numeric == value.numeric &&
+        SameNumericValue(it->value.numeric, value.numeric) &&
         it->value.substitutable == value.substitutable) {
         Wh_Log(L"Style variable '%s' unchanged at '%s'", varName.c_str(),
                value.stringForm.c_str());
@@ -12999,7 +17421,7 @@ bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
 // carries its own consumer-side fallback, so propagation routes through the
 // right context per consumer.
 void SetUpCapturesForElement(StyleVariableState* state,
-                             InstanceHandle handle,
+                             ElementId elementId,
                              FrameworkElement element,
                              const std::vector<CaptureSpec>& captures,
                              ElementCustomizationState* elementState) {
@@ -13050,7 +17472,8 @@ void SetUpCapturesForElement(StyleVariableState* state,
             L"(%zu other capture(s))",
             capture.varName.c_str(), winrt::get_class_name(element).c_str(),
             value.stringForm.c_str(), capturesForVar.size());
-        capturesForVar.push_back({handle, std::move(value)});
+        capturesForVar.push_back({elementId, std::move(value)});
+        AddStyleVariableElementRef(state, elementId);
 
         seededVarNames.push_back(capture.varName);
 
@@ -13065,7 +17488,7 @@ void SetUpCapturesForElement(StyleVariableState* state,
         captureState.propertyChangedToken =
             elementDo.RegisterPropertyChangedCallback(
                 capture.property,
-                [state, varName, handle, elementWeakRef](
+                [state, varName, elementId, elementWeakRef](
                     DependencyObject sender, DependencyProperty property) {
                     auto element = elementWeakRef.get();
                     if (!element) {
@@ -13074,13 +17497,13 @@ void SetUpCapturesForElement(StyleVariableState* state,
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
                     SetStyleVariableIfChangedAndPropagate(
-                        state, varName, handle, std::move(value));
+                        state, varName, elementId, std::move(value));
                 });
     }
 
     if (!sizeChangedCaptures.empty()) {
         elementState->captureSizeChangedToken = element.SizeChanged(
-            [state, handle, elementWeakRef,
+            [state, elementId, elementWeakRef,
              sizeChangedCaptures = std::move(sizeChangedCaptures)](
                 winrt::Windows::Foundation::IInspectable const& sender,
                 SizeChangedEventArgs const& e) {
@@ -13095,7 +17518,7 @@ void SetUpCapturesForElement(StyleVariableState* state,
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
                     SetStyleVariableIfChangedAndPropagate(
-                        state, varName, handle, std::move(value));
+                        state, varName, elementId, std::move(value));
                 }
             });
     }
@@ -13138,9 +17561,82 @@ void RestoreCapturesForElement(FrameworkElement element,
     }
 }
 
+// Take an element's captures out of the registry, returning the names they were
+// under. Other elements may still capture the same names, so a name only
+// becomes undefined once its last capture is gone.
+std::vector<std::wstring> WithdrawCapturesForElement(
+    StyleVariableState* state,
+    ElementId elementId,
+    const ElementCustomizationState& elementState) {
+    std::vector<std::wstring> varNames;
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (captureState.varName.empty()) {
+            continue;
+        }
+
+        auto varIt = state->variables.find(captureState.varName);
+        if (varIt == state->variables.end()) {
+            continue;
+        }
+
+        size_t removed = std::erase_if(
+            varIt->second, [elementId](const StyleVariableCapture& capture) {
+                return capture.elementId == elementId;
+            });
+        if (!removed) {
+            continue;
+        }
+
+        ReleaseStyleVariableElementRefs(state, elementId, removed);
+
+        varNames.push_back(captureState.varName);
+        if (varIt->second.empty()) {
+            state->variables.erase(varIt);
+        }
+    }
+
+    return varNames;
+}
+
+// Put back the captures WithdrawCapturesForElement took out, returning the
+// names they're under. Values are read afresh: the capture callbacks drop
+// changes for a capture that isn't in the registry.
+std::vector<std::wstring> RepublishCapturesForElement(
+    StyleVariableState* state,
+    ElementId elementId,
+    FrameworkElement element,
+    const ElementCustomizationState& elementState) {
+    std::vector<std::wstring> varNames;
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (captureState.varName.empty()) {
+            continue;
+        }
+
+        auto& captures = state->variables[captureState.varName];
+        if (std::any_of(captures.begin(), captures.end(),
+                        [elementId](const StyleVariableCapture& capture) {
+                            return capture.elementId == elementId;
+                        })) {
+            continue;
+        }
+
+        captures.push_back(
+            {elementId, ReadCapturedStyleVariableValue(element, property)});
+        AddStyleVariableElementRef(state, elementId);
+
+        varNames.push_back(captureState.varName);
+    }
+
+    return varNames;
+}
+
 void ApplyCustomizationsForVisualStateGroup(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     FrameworkElement element,
     VisualStateGroup visualStateGroup,
     PCWSTR fallbackClassName,
@@ -13177,7 +17673,7 @@ void ApplyCustomizationsForVisualStateGroup(
             if (auto* tmpl = std::get_if<DynamicStyleTemplate>(&it->second)) {
                 propertyCustomizationState.dynamicTemplate = *tmpl;
                 resolved = ResolveDynamicStyleValue(
-                    state, handle, element, property, fallbackClassName,
+                    state, elementId, element, property, fallbackClassName,
                     &propertyCustomizationState,
                     /*elementCustomizationState=*/nullptr);
             } else {
@@ -13188,10 +17684,8 @@ void ApplyCustomizationsForVisualStateGroup(
                 propertyCustomizationState.originalValue =
                     ReadLocalValueWithWorkaround(element, property);
                 propertyCustomizationState.customValue = *resolved;
-                SetOrClearValue(element, property, *resolved,
-                                /*initialApply=*/true);
-                propertyCustomizationState.lastAppliedValue =
-                    ReadLocalValueWithWorkaround(element, property);
+                propertyCustomizationState.lastAppliedValue = SetOrClearValue(
+                    element, property, *resolved, /*initialApply=*/true);
             }
         }
 
@@ -13213,28 +17707,22 @@ void ApplyCustomizationsForVisualStateGroup(
                         return;
                     }
 
-                    auto localValue =
-                        ReadLocalValueWithWorkaround(element, property);
-
-                    // Only update originalValue if the local value was changed
-                    // externally (e.g. by a Setter). When an animation changes
-                    // only the effective value, the local value still matches
-                    // what we set, so updating originalValue would corrupt it
-                    // with our own brush - causing the brush to survive cleanup
-                    // and crash when the mod's DLL is unloaded.
-                    if (localValue !=
-                        propertyCustomizationState.lastAppliedValue) {
-                        propertyCustomizationState.originalValue = localValue;
+                    if (TakeAnimationCopyAsApplied(
+                            element, property, &propertyCustomizationState)) {
+                        return;
                     }
+
+                    AdoptExternalValueAsOriginal(element, property,
+                                                 &propertyCustomizationState);
 
                     Wh_Log(L"Re-applying style for %s",
                            winrt::get_class_name(element).c_str());
 
                     g_elementPropertyModifying = true;
-                    SetOrClearValue(element, property,
-                                    *propertyCustomizationState.customValue);
                     propertyCustomizationState.lastAppliedValue =
-                        ReadLocalValueWithWorkaround(element, property);
+                        SetOrClearValue(
+                            element, property,
+                            *propertyCustomizationState.customValue);
                     g_elementPropertyModifying = false;
                 });
     }
@@ -13246,7 +17734,7 @@ void ApplyCustomizationsForVisualStateGroup(
         elementCustomizationStateForVisualStateGroup
             ->visualStateGroupCurrentStateChangedToken =
             visualStateGroup.CurrentStateChanged(
-                [state, elementWeakRef, propertyOverrides, handle,
+                [state, elementWeakRef, propertyOverrides, elementId,
                  fallbackClassNameStr,
                  elementCustomizationStateForVisualStateGroup](
                     winrt::Windows::Foundation::IInspectable const& sender,
@@ -13299,7 +17787,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 propertyCustomizationState.dynamicTemplate =
                                     *tmpl;
                                 resolved = ResolveDynamicStyleValue(
-                                    state, handle, element, property,
+                                    state, elementId, element, property,
                                     fallbackClassNamePtr,
                                     &propertyCustomizationState,
                                     /*elementCustomizationState=*/nullptr);
@@ -13310,7 +17798,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 if (propertyCustomizationState
                                         .dynamicTemplate) {
                                     UpdateStyleVariableConsumers(
-                                        state, handle, property,
+                                        state, elementId, property,
                                         /*fallbackClassName=*/nullptr,
                                         propertyCustomizationState
                                             .variableDependencies,
@@ -13325,6 +17813,9 @@ void ApplyCustomizationsForVisualStateGroup(
                             }
 
                             if (resolved) {
+                                AdoptExternalValueAsOriginal(
+                                    element, property,
+                                    &propertyCustomizationState);
                                 if (!propertyCustomizationState.originalValue) {
                                     propertyCustomizationState.originalValue =
                                         ReadLocalValueWithWorkaround(element,
@@ -13333,15 +17824,14 @@ void ApplyCustomizationsForVisualStateGroup(
 
                                 propertyCustomizationState.customValue =
                                     *resolved;
-                                SetOrClearValue(element, property, *resolved);
                                 propertyCustomizationState.lastAppliedValue =
-                                    ReadLocalValueWithWorkaround(element,
-                                                                 property);
+                                    SetOrClearValue(element, property,
+                                                    *resolved);
                             }
                         } else {
                             if (propertyCustomizationState.dynamicTemplate) {
                                 UpdateStyleVariableConsumers(
-                                    state, handle, property,
+                                    state, elementId, property,
                                     /*fallbackClassName=*/nullptr,
                                     propertyCustomizationState
                                         .variableDependencies,
@@ -13351,17 +17841,8 @@ void ApplyCustomizationsForVisualStateGroup(
                                 propertyCustomizationState.dynamicTemplate
                                     .reset();
                             }
-                            if (propertyCustomizationState.originalValue) {
-                                SetOrClearValue(
-                                    element, property,
-                                    *propertyCustomizationState.originalValue);
-                                propertyCustomizationState.originalValue
-                                    .reset();
-                            }
-                            propertyCustomizationState.lastAppliedValue =
-                                nullptr;
-
-                            propertyCustomizationState.customValue.reset();
+                            UnapplyStyleValue(element, property,
+                                              &propertyCustomizationState);
                         }
                     }
 
@@ -13372,12 +17853,28 @@ void ApplyCustomizationsForVisualStateGroup(
 
 void RestoreCustomizationsForVisualStateGroup(
     StyleVariableState* state,
-    InstanceHandle handle,
+    ElementId elementId,
     FrameworkElement element,
     std::optional<winrt::weak_ref<VisualStateGroup>>
         visualStateGroupOptionalWeakPtr,
     const ElementCustomizationStateForVisualStateGroup&
         elementCustomizationStateForVisualStateGroup) {
+    // Before the properties are restored, so that a visual state change which
+    // restoring one causes can't apply the style again.
+    auto visualStateGroupIter = visualStateGroupOptionalWeakPtr
+                                    ? visualStateGroupOptionalWeakPtr->get()
+                                    : nullptr;
+    if (visualStateGroupIter && elementCustomizationStateForVisualStateGroup
+                                    .visualStateGroupCurrentStateChangedToken) {
+        try {
+            visualStateGroupIter.CurrentStateChanged(
+                elementCustomizationStateForVisualStateGroup
+                    .visualStateGroupCurrentStateChangedToken);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
     if (element) {
         for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
@@ -13390,42 +17887,29 @@ void RestoreCustomizationsForVisualStateGroup(
             }
 
             if (!propState.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(state, handle, property,
+                UpdateStyleVariableConsumers(state, elementId, property,
                                              /*fallbackClassName=*/nullptr,
                                              propState.variableDependencies,
                                              {});
             }
 
             if (propState.originalValue) {
-                SetOrClearValue(element, property, *propState.originalValue);
+                RestoreOriginalValue(element, property,
+                                     *propState.originalValue);
             }
         }
     } else {
-        // Element is gone; still clear consumer entries so a stale (handle,
+        // Element is gone; still clear consumer entries so a stale (elementId,
         // property) pair isn't visited during PropagateStyleVariableChange.
         for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
                  .propertyCustomizationStates) {
             if (!propState.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(state, handle, property,
+                UpdateStyleVariableConsumers(state, elementId, property,
                                              /*fallbackClassName=*/nullptr,
                                              propState.variableDependencies,
                                              {});
             }
-        }
-    }
-
-    auto visualStateGroupIter = visualStateGroupOptionalWeakPtr
-                                    ? visualStateGroupOptionalWeakPtr->get()
-                                    : nullptr;
-    if (visualStateGroupIter && elementCustomizationStateForVisualStateGroup
-                                    .visualStateGroupCurrentStateChangedToken) {
-        try {
-            visualStateGroupIter.CurrentStateChanged(
-                elementCustomizationStateForVisualStateGroup
-                    .visualStateGroupCurrentStateChangedToken);
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
 }
@@ -13605,11 +18089,12 @@ bool ApplyWebView2StyleCustomizations(
     return true;
 }
 
-void ApplyCustomizationsIfWebView(InstanceHandle handle,
+void ApplyCustomizationsIfWebView(ElementId elementId,
                                   FrameworkElement element) {
     auto className = winrt::get_class_name(element);
     if (className == L"Windows.UI.Xaml.Controls.WebView") {
-        auto& webViewCustomizationState = g_webViewsCustomizationState[handle];
+        auto& webViewCustomizationState =
+            g_webViewsCustomizationState[elementId];
         if (!webViewCustomizationState.element.get()) {
             webViewCustomizationState.element = element;
 
@@ -13628,7 +18113,8 @@ void ApplyCustomizationsIfWebView(InstanceHandle handle,
                     });
         }
     } else if (className == L"WebView2Standalone.Controls.WebView2") {
-        auto& webViewCustomizationState = g_webViewsCustomizationState[handle];
+        auto& webViewCustomizationState =
+            g_webViewsCustomizationState[elementId];
         if (!webViewCustomizationState.element.get()) {
             webViewCustomizationState.element = element;
             webViewCustomizationState.isWebView2 = true;
@@ -13751,7 +18237,395 @@ void ClearWebViewCustomizations(
     }
 }
 
+// Item elements the current virtualization pass recycled, consumed by the
+// matching ElementPrepared. A freshly created element is prepared without ever
+// having been cleared, and its Add mutation already applied the styles, so
+// re-matching it would restore and re-push every value for nothing.
+thread_local std::unordered_set<ElementId> g_recycledElements;
+
+// The item each element was last matched against, which lets a reuse for that
+// same item be left alone. A layout can realize elements during measure only to
+// ask for their size and recycle them again during arrange, so an element is
+// cleared and handed straight back for the same item on every layout pass.
+// Re-matching there sets dependency properties from inside the pass, which
+// dirties layout and schedules another one, and layout never settles: XAML
+// gives up after enough passes and fails the process with a layout cycle.
+//
+// A boxed value is recorded by value, since a source can box it anew on every
+// read. Anything else is recorded by a weak reference, so that a destroyed item
+// can't be mistaken for a successor at the same address, which would leave an
+// element wearing the styles matched for its predecessor.
+using RepeaterItem =
+    std::variant<winrt::weak_ref<wf::IInspectable>, UnboxedPropertyValue>;
+
+thread_local std::unordered_map<ElementId, RepeaterItem> g_elementMatchedItems;
+
+struct VirtualizingRepeaterState {
+    muxc::ItemsRepeater::ElementClearing_revoker elementClearingRevoker;
+    muxc::ItemsRepeater::ElementPrepared_revoker elementPreparedRevoker;
+};
+
+thread_local std::unordered_map<ElementId, VirtualizingRepeaterState>
+    g_virtualizingRepeaters;
+
+// The id of an element which was reached some other way, e.g. by walking the
+// visual tree. None for an element the mutation callbacks never reported, which
+// leaves callers to skip it rather than key it by something made up.
+ElementId ElementIdFromElement(FrameworkElement const& element) {
+    if (!element) {
+        return ElementId::None;
+    }
+
+    try {
+        auto it = g_elementIds.find(HandleFromInspectable(element));
+        if (it == g_elementIds.end() || it->second.element.get() != element) {
+            return ElementId::None;
+        }
+
+        return it->second.id;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return ElementId::None;
+    }
+}
+
+// Tear down and re-match every element of a subtree. The whole subtree is
+// revisited rather than only its root, since a rule can match a descendant
+// through a condition on an ancestor, and descendants of a reused element get
+// no mutation of their own.
+void ReapplyCustomizationsForSubtree(FrameworkElement element) {
+    // Caught per element, both because these run from a layout pass the caller
+    // can't fail, and so that one element's failure doesn't skip the rest of
+    // the subtree.
+    try {
+        if (auto elementId = ElementIdFromElement(element);
+            elementId != ElementId::None) {
+            CleanupCustomizations(elementId);
+            auto className = winrt::get_class_name(element);
+            ApplyCustomizations(elementId, element, className.c_str());
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    // Snapshotted because applying a style runs arbitrary XAML work which can
+    // change the children collection mid-walk.
+    std::vector<FrameworkElement> children;
+    try {
+        int count = Media::VisualTreeHelper::GetChildrenCount(element);
+        for (int i = 0; i < count; i++) {
+            if (auto child = Media::VisualTreeHelper::GetChild(element, i)
+                                 .try_as<FrameworkElement>()) {
+                children.push_back(std::move(child));
+            }
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return;
+    }
+
+    for (const auto& child : children) {
+        ReapplyCustomizationsForSubtree(child);
+    }
+}
+
+// The item a repeater realized an element for, nullopt when there is no such
+// item or it is neither a boxed value nor supports a weak reference.
+std::optional<RepeaterItem> RepeaterItemAt(muxc::ItemsRepeater const& repeater,
+                                           int index) {
+    try {
+        auto itemsSourceView = repeater.ItemsSourceView();
+        if (!itemsSourceView || index < 0 || index >= itemsSourceView.Count()) {
+            return std::nullopt;
+        }
+
+        auto item = itemsSourceView.GetAt(index);
+        if (auto value = TryUnboxPropertyValue(item)) {
+            return RepeaterItem{std::move(*value)};
+        }
+
+        if (auto weakItem = TryMakeWeak(item)) {
+            return RepeaterItem{std::move(weakItem)};
+        }
+
+        return std::nullopt;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        return std::nullopt;
+    }
+}
+
+// Never true for a destroyed item.
+bool SameRepeaterItem(RepeaterItem const& a, RepeaterItem const& b) {
+    using WeakItem = winrt::weak_ref<wf::IInspectable>;
+    if (auto* weakA = std::get_if<WeakItem>(&a)) {
+        auto* weakB = std::get_if<WeakItem>(&b);
+        auto strongA = weakA->get();
+        return weakB && strongA && strongA == weakB->get();
+    }
+
+    auto* valueB = std::get_if<UnboxedPropertyValue>(&b);
+    return valueB && std::get<UnboxedPropertyValue>(a) == *valueB;
+}
+
+// Whether the element is in an item element a repeater holds without having it
+// realized, i.e. one sitting in its recycle pool.
+bool IsInRecycledRepeaterItem(FrameworkElement element) {
+    try {
+        DependencyObject child = element;
+        while (child) {
+            auto parent = Media::VisualTreeHelper::GetParent(child);
+            if (auto repeater = parent.try_as<muxc::ItemsRepeater>()) {
+                if (repeater.GetElementIndex(child.as<UIElement>()) < 0) {
+                    return true;
+                }
+            }
+
+            child = std::move(parent);
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    return false;
+}
+
+thread_local bool g_recycledItemCapturesRefreshQueued;
+thread_local winrt::Windows::System::DispatcherQueueTimer
+    g_recycledItemCapturesRefreshTimer{nullptr};
+thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
+    g_recycledItemCapturesRefreshTimerTickRevoker;
+
+// The captures of an element in a recycled repeater item are withdrawn, as if
+// the item was removed: the recycle pool keeps the item in the tree, out of
+// sight, and its captures would keep publishing the values they last saw. This
+// runs once layout is done rather than on each clear and prepare, since a
+// layout can clear an element and hand it straight back within a pass, and
+// flipping the captures there would restyle their consumers on every pass.
+void RefreshRecycledItemCaptures() {
+    g_recycledItemCapturesRefreshQueued = false;
+
+    auto* state = GetStyleVariableState();
+
+    std::vector<ElementId> owners(state->withdrawnCaptureOwners.begin(),
+                                  state->withdrawnCaptureOwners.end());
+    for (const auto& [varName, captures] : state->variables) {
+        for (const auto& capture : captures) {
+            owners.push_back(capture.elementId);
+        }
+    }
+
+    std::sort(owners.begin(), owners.end());
+    owners.erase(std::unique(owners.begin(), owners.end()), owners.end());
+
+    std::vector<std::wstring> changedVarNames;
+    for (ElementId owner : owners) {
+        auto it = g_elementsCustomizationState.find(owner);
+        if (it == g_elementsCustomizationState.end()) {
+            continue;
+        }
+
+        auto& elementState = it->second;
+        auto element = elementState.element.get();
+        if (!element) {
+            continue;
+        }
+
+        bool withdrawn = state->withdrawnCaptureOwners.contains(owner);
+        if (IsInRecycledRepeaterItem(element) == withdrawn) {
+            continue;
+        }
+
+        std::vector<std::wstring> varNames;
+        if (withdrawn) {
+            Wh_Log(L"Republishing captures of %llu",
+                   static_cast<uint64_t>(owner));
+            varNames = RepublishCapturesForElement(state, owner, element,
+                                                   elementState);
+            state->withdrawnCaptureOwners.erase(owner);
+        } else {
+            Wh_Log(L"Withdrawing captures of %llu",
+                   static_cast<uint64_t>(owner));
+            varNames = WithdrawCapturesForElement(state, owner, elementState);
+            state->withdrawnCaptureOwners.insert(owner);
+        }
+
+        changedVarNames.insert(changedVarNames.end(), varNames.begin(),
+                               varNames.end());
+    }
+
+    std::sort(changedVarNames.begin(), changedVarNames.end());
+    changedVarNames.erase(
+        std::unique(changedVarNames.begin(), changedVarNames.end()),
+        changedVarNames.end());
+
+    for (const auto& varName : changedVarNames) {
+        PropagateStyleVariableChange(state, varName, std::nullopt);
+    }
+}
+
+// Armed from inside a layout pass, and the timer carries the refresh out of it.
+void QueueRecycledItemCapturesRefresh() {
+    if (g_recycledItemCapturesRefreshQueued) {
+        return;
+    }
+
+    auto* state = GetStyleVariableState();
+    if (state->variables.empty() && state->withdrawnCaptureOwners.empty()) {
+        return;
+    }
+
+    try {
+        if (!g_recycledItemCapturesRefreshTimer) {
+            auto dispatcherQueue =
+                winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+            if (!dispatcherQueue) {
+                Wh_Log(L"No dispatcher queue, recycled item captures stay");
+                return;
+            }
+
+            g_recycledItemCapturesRefreshTimer = dispatcherQueue.CreateTimer();
+            g_recycledItemCapturesRefreshTimer.IsRepeating(false);
+            g_recycledItemCapturesRefreshTimer.Interval(
+                std::chrono::milliseconds{1});
+            g_recycledItemCapturesRefreshTimerTickRevoker =
+                g_recycledItemCapturesRefreshTimer.Tick(
+                    winrt::auto_revoke,
+                    [](winrt::Windows::System::DispatcherQueueTimer const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                        RefreshRecycledItemCaptures();
+                    });
+        }
+
+        g_recycledItemCapturesRefreshTimer.Start();
+        g_recycledItemCapturesRefreshQueued = true;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StopRecycledItemCapturesRefresh() {
+    if (g_recycledItemCapturesRefreshTimer) {
+        try {
+            g_recycledItemCapturesRefreshTimer.Stop();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_recycledItemCapturesRefreshTimerTickRevoker.revoke();
+    g_recycledItemCapturesRefreshTimer = nullptr;
+    g_recycledItemCapturesRefreshQueued = false;
+}
+
+// A virtualizing container recycles its item elements instead of destroying
+// them: the recycle pool keeps the element parented, out of sight, so XAML
+// diagnostics reports no Remove/Add mutation and the styles matched for the
+// previous item would stay on the element once it's reused for another one.
+// Treat a cleared element as removed and a prepared one as newly added.
+void HandleVirtualizingRepeater(ElementId elementId, FrameworkElement element) {
+    auto repeater = element.try_as<muxc::ItemsRepeater>();
+    if (!repeater || g_virtualizingRepeaters.contains(elementId)) {
+        return;
+    }
+
+    Wh_Log(L"Tracking recycling of %s", winrt::get_class_name(element).c_str());
+
+    auto& state = g_virtualizingRepeaters[elementId];
+
+    state.elementClearingRevoker = repeater.ElementClearing(
+        winrt::auto_revoke,
+        [](muxc::ItemsRepeater const&,
+           muxc::ItemsRepeaterElementClearingEventArgs const& args) {
+            // Ahead of the early returns: the item's descendants can hold
+            // captures even when the item itself has no id.
+            QueueRecycledItemCapturesRefresh();
+
+            auto element = args.Element().try_as<FrameworkElement>();
+            if (!element) {
+                return;
+            }
+
+            auto elementId = ElementIdFromElement(element);
+            if (elementId == ElementId::None) {
+                return;
+            }
+
+            Wh_Log(L"Element cleared: %llu", static_cast<uint64_t>(elementId));
+
+            // Nothing is restored here. Whether the styles still apply depends
+            // on the item the element is handed back for, which only the
+            // matching ElementPrepared knows, and until then they sit on an
+            // element the recycle pool keeps out of sight.
+            g_recycledElements.insert(elementId);
+        });
+
+    state.elementPreparedRevoker = repeater.ElementPrepared(
+        winrt::auto_revoke,
+        [](muxc::ItemsRepeater const& sender,
+           muxc::ItemsRepeaterElementPreparedEventArgs const& args) {
+            QueueRecycledItemCapturesRefresh();
+
+            auto element = args.Element().try_as<FrameworkElement>();
+            if (!element) {
+                return;
+            }
+
+            auto elementId = ElementIdFromElement(element);
+            if (elementId == ElementId::None) {
+                return;
+            }
+
+            auto item = RepeaterItemAt(sender, args.Index());
+
+            // Held across the walk below, so that an item which no weak
+            // reference can get back, such as one a source wraps anew on every
+            // read, is never recorded: an entry which could match nothing would
+            // keep the element held for good.
+            wf::IInspectable strongItem;
+            if (item) {
+                if (auto* weakItem =
+                        std::get_if<winrt::weak_ref<wf::IInspectable>>(
+                            &*item)) {
+                    strongItem = weakItem->get();
+                    if (!strongItem) {
+                        item.reset();
+                    }
+                }
+            }
+
+            if (!g_recycledElements.erase(elementId)) {
+                // Freshly created, so the styles its Add mutation applied are
+                // the ones for this item, and only the item is recorded.
+                if (item) {
+                    g_elementMatchedItems[elementId] = std::move(*item);
+                }
+                return;
+            }
+
+            if (item) {
+                auto it = g_elementMatchedItems.find(elementId);
+                if (it != g_elementMatchedItems.end() &&
+                    SameRepeaterItem(it->second, *item)) {
+                    Wh_Log(L"Element reused for the same item: %llu",
+                           static_cast<uint64_t>(elementId));
+                    return;
+                }
+            }
+
+            Wh_Log(L"Element reused: %llu", static_cast<uint64_t>(elementId));
+
+            ReapplyCustomizationsForSubtree(element);
+
+            // After the walk, which erases the entry as part of the teardown.
+            if (item) {
+                g_elementMatchedItems[elementId] = std::move(*item);
+            }
+        });
+}
+
 void MergeResourceVariables();
+void EnsureResourceVariablesMerged();
 
 // === Separate pinned items scroll ===
 //
@@ -13790,11 +18664,35 @@ constexpr WCHAR kSeparatePinnedContentName[] = L"SideBySidePinnedContent";
 struct SeparatePinnedScrollEntry {
     winrt::weak_ref<Controls::Border> border;
     winrt::weak_ref<Controls::Grid> sourceTopLevelHeader;
+    Input::FocusManager::GettingFocus_revoker gettingFocusRevoker;
+    UIElement::KeyDown_revoker wrapperKeyDownRevoker;
 };
-std::vector<SeparatePinnedScrollEntry> g_separatePinnedScrollEntries;
+[[clang::no_destroy]] std::optional<std::vector<SeparatePinnedScrollEntry>>
+    g_separatePinnedScrollEntries{std::in_place};
 
-std::vector<winrt::Windows::Foundation::IAsyncOperation<bool>>
-    g_separatePinnedScrollPendingActions;
+// The index of the item each list in the pinned items was focused at last.
+std::vector<std::pair<winrt::weak_ref<Controls::ListViewBase>, int>>
+    g_separatePinnedListFocusedIndexes;
+
+[[clang::no_destroy]] std::optional<
+    std::vector<winrt::Windows::Foundation::IAsyncOperation<bool>>>
+    g_separatePinnedScrollPendingActions{std::in_place};
+
+// Tracks a pending dispatcher callback so UninitializeSettingsAndTap can cancel
+// it on teardown. Finished ones are pruned first to keep the list bounded (only
+// a handful are ever in flight).
+void TrackSeparatePinnedScrollAction(
+    winrt::Windows::Foundation::IAsyncOperation<bool> action) {
+    std::erase_if(
+        *g_separatePinnedScrollPendingActions,
+        [](winrt::Windows::Foundation::IAsyncOperation<bool> const& a) {
+            return !a || a.Status() !=
+                             winrt::Windows::Foundation::AsyncStatus::Started;
+        });
+    if (action) {
+        g_separatePinnedScrollPendingActions->push_back(std::move(action));
+    }
+}
 
 bool IsSeparatePinnedScrollTargetName(winrt::hstring const& name) {
     return name == L"PinnedListHeaderGrid" || name == L"ShowMorePinnedGrid" ||
@@ -13930,7 +18828,7 @@ void RevertSeparatePinnedScrollForBorder(Controls::Border border,
 // Walk every tracked entry and revert the tree mutation. Called when the
 // user toggles the setting off at runtime and on Wh_ModUninit.
 void RevertAllSeparatePinnedScroll() {
-    for (auto const& entry : g_separatePinnedScrollEntries) {
+    for (auto const& entry : *g_separatePinnedScrollEntries) {
         try {
             RevertSeparatePinnedScrollForBorder(
                 entry.border.get(), entry.sourceTopLevelHeader.get());
@@ -13939,7 +18837,8 @@ void RevertAllSeparatePinnedScroll() {
                    ex.code(), ex.message().c_str());
         }
     }
-    g_separatePinnedScrollEntries.clear();
+    g_separatePinnedScrollEntries.emplace();
+    g_separatePinnedListFocusedIndexes.clear();
 }
 
 // Wrap the inner ScrollViewer in a sibling-capable Grid the first time we see
@@ -14077,6 +18976,413 @@ void MoveElementToPinnedContent(FrameworkElement element,
     target.Children().Append(uiElement);
 }
 
+bool IsVisualTreeDescendant(DependencyObject element,
+                            DependencyObject const& ancestor) {
+    while (element) {
+        if (element == ancestor) {
+            return true;
+        }
+        element = Media::VisualTreeHelper::GetParent(element);
+    }
+    return false;
+}
+
+bool IsTabNavigationOnce(DependencyObject const& element) {
+    auto control = element.try_as<Controls::Control>();
+    if (control &&
+        control.TabNavigation() == Input::KeyboardNavigationMode::Once) {
+        return true;
+    }
+    auto uiElement = element.try_as<UIElement>();
+    return uiElement && uiElement.TabFocusNavigation() ==
+                            Input::KeyboardNavigationMode::Once;
+}
+
+// Whether `element` is a tab stop itself, as opposed to only containing one.
+bool IsTabStopElement(DependencyObject const& element) {
+    auto control = element.try_as<Controls::Control>();
+    return control && control.IsTabStop() &&
+           (control.IsEnabled() || control.AllowFocusWhenDisabled());
+}
+
+// The list item container `element` is in, and its list, if the list is in
+// `scope`.
+std::pair<Controls::ListViewBase, UIElement> FindListViewBaseItem(
+    DependencyObject element,
+    DependencyObject const& scope) {
+    for (; element && element != scope;
+         element = Media::VisualTreeHelper::GetParent(element)) {
+        auto list =
+            Controls::ItemsControl::ItemsControlFromItemContainer(element)
+                .try_as<Controls::ListViewBase>();
+        if (list) {
+            if (!IsVisualTreeDescendant(list, scope)) {
+                break;
+            }
+            return {list, element.try_as<UIElement>()};
+        }
+    }
+    return {nullptr, nullptr};
+}
+
+void RecordSeparatePinnedListFocus(DependencyObject const& element,
+                                   UIElement const& pinnedScroll) {
+    auto [list, container] = FindListViewBaseItem(element, pinnedScroll);
+    if (!list) {
+        return;
+    }
+
+    int index = list.IndexFromContainer(container);
+    if (index < 0) {
+        return;
+    }
+
+    std::erase_if(g_separatePinnedListFocusedIndexes,
+                  [](auto const& entry) { return !entry.first.get(); });
+    for (auto& [weakList, focusedIndex] : g_separatePinnedListFocusedIndexes) {
+        if (weakList.get() == list) {
+            focusedIndex = index;
+            return;
+        }
+    }
+    g_separatePinnedListFocusedIndexes.push_back(
+        {winrt::make_weak(list), index});
+}
+
+// The element Tab enters `scope` at from outside of it. While something else
+// is focused, XAML looks for it in tree order, but a list with
+// TabNavigation=Once is entered at the item it was focused at last, or else at
+// its first item.
+DependencyObject FindTabEntryElement(DependencyObject const& scope,
+                                     bool backward) {
+    auto found = backward
+                     ? Input::FocusManager::FindLastFocusableElement(scope)
+                     : Input::FocusManager::FindFirstFocusableElement(scope);
+
+    auto [list, container] = FindListViewBaseItem(found, scope);
+    if (!list || !IsTabNavigationOnce(list)) {
+        return found;
+    }
+
+    int index = 0;
+    for (auto const& [weakList, focusedIndex] :
+         g_separatePinnedListFocusedIndexes) {
+        if (weakList.get() == list) {
+            index = focusedIndex;
+            break;
+        }
+    }
+
+    for (int i : {index, 0}) {
+        if (i < static_cast<int>(list.Items().Size())) {
+            auto entry = list.ContainerFromIndex(i);
+            if (entry && IsTabStopElement(entry)) {
+                return entry;
+            }
+        }
+    }
+
+    return found;
+}
+
+// Appends the controls below `element`, without looking inside of them.
+void CollectTabScopeControls(DependencyObject const& element,
+                             std::vector<Controls::Control>& controls) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        auto child =
+            Media::VisualTreeHelper::GetChild(element, i).try_as<UIElement>();
+        if (!child || child.Visibility() != Visibility::Visible) {
+            continue;
+        }
+
+        if (auto control = child.try_as<Controls::Control>()) {
+            controls.push_back(std::move(control));
+        } else {
+            CollectTabScopeControls(child, controls);
+        }
+    }
+}
+
+// The tab stop after `from`, or before it if `backward`, among the descendants
+// of `scope`, or in the whole tree if `scope` is null. Follows the focus
+// manager: Tab moves between the controls in the scope of the nearest control
+// ancestor, ordered by TabIndex and then by tree order, and leaves a control
+// with TabNavigation=Once as a whole.
+DependencyObject FindAdjacentTabStop(DependencyObject const& from,
+                                     DependencyObject const& scope,
+                                     bool backward) {
+    DependencyObject current = from;
+    for (auto ancestor = Media::VisualTreeHelper::GetParent(from); ancestor;
+         ancestor = Media::VisualTreeHelper::GetParent(ancestor)) {
+        bool isRoot =
+            ancestor == scope || !Media::VisualTreeHelper::GetParent(ancestor);
+        auto ancestorControl = ancestor.try_as<Controls::Control>();
+        if (!isRoot && !ancestorControl) {
+            continue;
+        }
+
+        if (!isRoot && IsTabNavigationOnce(ancestor)) {
+            current = ancestor;
+            continue;
+        }
+
+        std::vector<Controls::Control> controls;
+        CollectTabScopeControls(ancestor, controls);
+        std::stable_sort(
+            controls.begin(), controls.end(),
+            [](Controls::Control const& a, Controls::Control const& b) {
+                return a.TabIndex() < b.TabIndex();
+            });
+
+        auto it = std::find(controls.begin(), controls.end(), current);
+        if (it != controls.end()) {
+            int index = static_cast<int>(it - controls.begin());
+            int step = backward ? -1 : 1;
+            for (int i = index + step;
+                 i >= 0 && i < static_cast<int>(controls.size()); i += step) {
+                auto const& control = controls[i];
+
+                // A control which is a tab stop comes before its descendants.
+                if (!backward && IsTabStopElement(control)) {
+                    return control;
+                }
+
+                if (auto found = FindTabEntryElement(control, backward)) {
+                    return found;
+                }
+
+                if (backward && IsTabStopElement(control)) {
+                    return control;
+                }
+            }
+        }
+
+        if (isRoot) {
+            break;
+        }
+
+        if (backward && IsTabStopElement(ancestor)) {
+            return ancestor;
+        }
+
+        current = ancestor;
+    }
+
+    return nullptr;
+}
+
+// The pinned ScrollViewer and the apps one.
+std::pair<UIElement, UIElement> GetSeparatePinnedScrollViewers(
+    Controls::Grid const& wrapper) {
+    UIElement pinnedScroll{nullptr};
+    UIElement appsScroll{nullptr};
+    for (auto const& child : wrapper.Children()) {
+        auto sv = child.try_as<Controls::ScrollViewer>();
+        if (sv && sv.Name() == kSeparatePinnedScrollName) {
+            pinnedScroll = child;
+        } else if (!appsScroll) {
+            appsScroll = child;
+        }
+    }
+    return {pinnedScroll, appsScroll};
+}
+
+// ListViewBase handles Tab for everything in its template by visiting only its
+// header, items and footer, so in the AllAppsGrid the pinned ScrollViewer is
+// skipped, and Tab from inside of it jumps to the apps list. Returns where a
+// focus change should go instead to put the pinned items right before the apps
+// list, as when they're in its header, or null to keep `newFocus`.
+DependencyObject GetSeparatePinnedFocusRedirect(
+    Controls::Grid const& wrapper,
+    DependencyObject const& oldFocus,
+    DependencyObject const& newFocus,
+    Input::FocusNavigationDirection direction,
+    Input::FocusInputDeviceKind inputDevice) {
+    auto [pinnedScroll, appsScroll] = GetSeparatePinnedScrollViewers(wrapper);
+    if (!pinnedScroll || !appsScroll) {
+        return nullptr;
+    }
+
+    bool oldInGrid = IsVisualTreeDescendant(oldFocus, wrapper);
+    bool newInGrid = IsVisualTreeDescendant(newFocus, wrapper);
+    bool newInPinned = IsVisualTreeDescendant(newFocus, pinnedScroll);
+
+    // The Start menu moves focus into the AllAppsGrid by itself, without a
+    // direction, when it opens and when tabbing from the tab stop before it.
+    if (direction == Input::FocusNavigationDirection::None) {
+        if (inputDevice == Input::FocusInputDeviceKind::Mouse ||
+            inputDevice == Input::FocusInputDeviceKind::Touch ||
+            inputDevice == Input::FocusInputDeviceKind::Pen || oldInGrid ||
+            !newInGrid || newInPinned ||
+            newFocus !=
+                Input::FocusManager::FindFirstFocusableElement(appsScroll) ||
+            (oldFocus && oldFocus != FindAdjacentTabStop(wrapper, nullptr,
+                                                         /*backward=*/true))) {
+            return nullptr;
+        }
+
+        return FindTabEntryElement(pinnedScroll, /*backward=*/false);
+    }
+
+    if (direction != Input::FocusNavigationDirection::Next &&
+        direction != Input::FocusNavigationDirection::Previous) {
+        return nullptr;
+    }
+
+    bool backward = direction == Input::FocusNavigationDirection::Previous;
+
+    if (IsVisualTreeDescendant(oldFocus, pinnedScroll)) {
+        if (newInPinned) {
+            return nullptr;
+        }
+
+        if (auto target =
+                FindAdjacentTabStop(oldFocus, pinnedScroll, backward)) {
+            return target;
+        }
+
+        // Leaving the pinned items forward goes into the apps list. Leaving
+        // them backward is done on key down, see
+        // OnSeparatePinnedWrapperKeyDown.
+        if (backward || newInGrid) {
+            return nullptr;
+        }
+
+        return Input::FocusManager::FindFirstFocusableElement(appsScroll);
+    }
+
+    // Entering the AllAppsGrid.
+    if (!backward && !oldInGrid && newInGrid && !newInPinned) {
+        return FindTabEntryElement(pinnedScroll, /*backward=*/false);
+    }
+
+    return nullptr;
+}
+
+// A handler of the focus manager's GettingFocus event, which is raised after
+// the routed one, so that ListViewBase can't undo the redirect: it uses the
+// routed event to send focus coming from outside of it to the item focused
+// last.
+void OnSeparatePinnedFocusChange(Controls::Grid const& wrapper,
+                                 Input::GettingFocusEventArgs const& args) {
+    try {
+        auto newFocus = args.NewFocusedElement();
+        if (!newFocus) {
+            return;
+        }
+
+        if (auto [pinnedScroll, appsScroll] =
+                GetSeparatePinnedScrollViewers(wrapper);
+            pinnedScroll && IsVisualTreeDescendant(newFocus, pinnedScroll)) {
+            RecordSeparatePinnedListFocus(newFocus, pinnedScroll);
+        }
+
+        auto target = GetSeparatePinnedFocusRedirect(
+            wrapper, args.OldFocusedElement(), newFocus, args.Direction(),
+            args.InputDevice());
+        if (!target || args.TrySetNewFocusedElement(target)) {
+            return;
+        }
+
+        // Some focus changes can't be redirected, such as the one made when
+        // the window is activated, so focus is moved once it's done instead.
+        auto action = wrapper.Dispatcher().TryRunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+            [weakWrapper = winrt::make_weak(wrapper),
+             weakNewFocus = winrt::make_weak(newFocus),
+             weakTarget = winrt::make_weak(target),
+             focusState = args.FocusState()]() {
+                auto wrapper = weakWrapper.get();
+                auto newFocus = weakNewFocus.get();
+                auto target = weakTarget.get();
+                if (!wrapper || !newFocus || !target) {
+                    return;
+                }
+
+                try {
+                    auto xamlRoot = wrapper.XamlRoot();
+                    auto focused =
+                        xamlRoot
+                            ? Input::FocusManager::GetFocusedElement(xamlRoot)
+                            : Input::FocusManager::GetFocusedElement();
+                    if (focused != newFocus) {
+                        return;
+                    }
+
+                    Input::FocusManager::TryFocusAsync(target, focusState);
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"SeparatePinnedScroll focus error %08X: %s",
+                           ex.code(), ex.message().c_str());
+                }
+            });
+        TrackSeparatePinnedScrollAction(std::move(action));
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"SeparatePinnedScroll focus error %08X: %s", ex.code(),
+               ex.message().c_str());
+    }
+}
+
+// Shift+Tab out of the AllAppsGrid, when nothing precedes it, wraps around,
+// which the Start menu follows by sending focus to the search box no matter
+// where the focus change was redirected to. So it's handled before XAML
+// processes the key: out of the apps list, focus moves to the pinned items,
+// keeping it from being a wrap-around. Out of the pinned items, focus moves to
+// the apps list's first element for XAML to leave the AllAppsGrid from there,
+// as it does when the pinned items are in its header.
+void OnSeparatePinnedWrapperKeyDown(Controls::Grid const& wrapper,
+                                    Input::KeyRoutedEventArgs const& args) {
+    try {
+        if (args.Key() != winrt::Windows::System::VirtualKey::Tab ||
+            !(GetKeyState(VK_SHIFT) & 0x8000) ||
+            (GetKeyState(VK_CONTROL) & 0x8000) ||
+            (GetKeyState(VK_MENU) & 0x8000)) {
+            return;
+        }
+
+        auto [pinnedScroll, appsScroll] =
+            GetSeparatePinnedScrollViewers(wrapper);
+        if (!pinnedScroll || !appsScroll) {
+            return;
+        }
+
+        auto source = args.OriginalSource().try_as<DependencyObject>();
+
+        if (IsVisualTreeDescendant(source, pinnedScroll)) {
+            if (FindAdjacentTabStop(source, pinnedScroll, /*backward=*/true)) {
+                return;
+            }
+
+            auto first =
+                Input::FocusManager::FindFirstFocusableElement(appsScroll)
+                    .try_as<Controls::Control>();
+            if (first) {
+                first.Focus(FocusState::Keyboard);
+            }
+            return;
+        }
+
+        if (!IsVisualTreeDescendant(source, appsScroll)) {
+            return;
+        }
+
+        auto next = Input::FocusManager::FindNextElement(
+            Input::FocusNavigationDirection::Previous);
+        if (next && IsVisualTreeDescendant(next, wrapper)) {
+            return;
+        }
+
+        auto target = FindTabEntryElement(pinnedScroll, /*backward=*/true)
+                          .try_as<Controls::Control>();
+        if (target && target.Focus(FocusState::Keyboard)) {
+            args.Handled(true);
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"SeparatePinnedScroll key error %08X: %s", ex.code(),
+               ex.message().c_str());
+    }
+}
+
 void HandleSeparatePinnedScroll(FrameworkElement element) {
     if (g_disableNewStartMenuLayout !=
         DisableNewStartMenuLayout::newLayoutSideBySide) {
@@ -14145,13 +19451,33 @@ void HandleSeparatePinnedScroll(FrameworkElement element) {
                     // Prune entries whose Border has been destroyed (e.g.
                     // Start menu instances opened in previous sessions of
                     // the host process) before pushing the new one.
-                    std::erase_if(g_separatePinnedScrollEntries,
+                    std::erase_if(*g_separatePinnedScrollEntries,
                                   [](SeparatePinnedScrollEntry const& e) {
                                       return !e.border.get();
                                   });
-                    g_separatePinnedScrollEntries.push_back(
+                    auto wrapper = border.Child().as<Controls::Grid>();
+                    g_separatePinnedScrollEntries->push_back(
                         {winrt::make_weak(border),
-                         winrt::make_weak(topLevelHeader)});
+                         winrt::make_weak(topLevelHeader),
+                         Input::FocusManager::GettingFocus(
+                             winrt::auto_revoke,
+                             [weakWrapper = winrt::make_weak(wrapper)](
+                                 wf::IInspectable const&,
+                                 Input::GettingFocusEventArgs const& args) {
+                                 if (auto wrapper = weakWrapper.get()) {
+                                     OnSeparatePinnedFocusChange(wrapper, args);
+                                 }
+                             }),
+                         wrapper.KeyDown(
+                             winrt::auto_revoke,
+                             [](wf::IInspectable const& sender,
+                                Input::KeyRoutedEventArgs const& args) {
+                                 if (auto wrapper =
+                                         sender.try_as<Controls::Grid>()) {
+                                     OnSeparatePinnedWrapperKeyDown(wrapper,
+                                                                    args);
+                                 }
+                             })});
                 }
 
                 MoveElementToPinnedContent(element, contentGrid);
@@ -14161,40 +19487,34 @@ void HandleSeparatePinnedScroll(FrameworkElement element) {
             }
         });
 
-    // Track the pending callback so UninitializeSettingsAndTap can cancel it on
-    // teardown. Prune already-finished actions first to keep the list bounded
-    // (at most a handful are ever in flight - one per target element per Start
-    // menu instance).
-    std::erase_if(
-        g_separatePinnedScrollPendingActions,
-        [](winrt::Windows::Foundation::IAsyncOperation<bool> const& a) {
-            return !a || a.Status() !=
-                             winrt::Windows::Foundation::AsyncStatus::Started;
-        });
-    if (action) {
-        g_separatePinnedScrollPendingActions.push_back(std::move(action));
-    }
+    TrackSeparatePinnedScrollAction(std::move(action));
 }
 
-void ApplyCustomizations(InstanceHandle handle,
+void ApplyCustomizations(ElementId elementId,
                          FrameworkElement element,
                          PCWSTR fallbackClassName) {
-    // Merge resource dictionary on first element add. Merging it earlier on
-    // window creation doesn't work, perhaps merged dictionaries are reset
-    // during initialization.
+    // The app's resources can be reset during initialization, even after the
+    // first element is added, so the resource variables are merged on the
+    // first element add and verified on subsequent ones.
     if (!g_resourceVariablesThemeDict) {
         MergeResourceVariables();
+    } else if (!g_resourceVariables.empty()) {
+        EnsureResourceVariablesMerged();
     }
 
     HandleSeparatePinnedScroll(element);
 
     if (!g_webContentCss.empty() || !g_webContentJs.empty()) {
         try {
-            ApplyCustomizationsIfWebView(handle, element);
+            ApplyCustomizationsIfWebView(elementId, element);
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
+
+    // Before the early return below: a repeater rarely has styles of its own,
+    // but its item elements do.
+    HandleVirtualizingRepeater(elementId, element);
 
     auto* state = GetStyleVariableState();
     if (!state) {
@@ -14210,12 +19530,12 @@ void ApplyCustomizations(InstanceHandle handle,
 
     Wh_Log(L"Applying styles to %s", winrt::get_class_name(element).c_str());
 
-    auto& elementCustomizationState = g_elementsCustomizationState[handle];
+    auto& elementCustomizationState = g_elementsCustomizationState[elementId];
 
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
         RestoreCustomizationsForVisualStateGroup(
-            state, handle, element, visualStateGroupOptionalWeakPtrIter,
+            state, elementId, element, visualStateGroupOptionalWeakPtrIter,
             stateIter);
     }
 
@@ -14224,9 +19544,10 @@ void ApplyCustomizations(InstanceHandle handle,
 
     // Elements that neither capture nor consume a variable pay nothing. The
     // rest get their spine now that the element has been matched; if it isn't
-    // attached yet the walk yields nothing and EnsureElementTreeNode retries on
-    // first use. Cleared unconditionally so a re-apply that drops all variable
-    // use cannot leave a stale node behind.
+    // attached yet the spine stops at a placeholder root, which
+    // EnsureElementTreeNode rebuilds on first use once the element is actually
+    // in the tree. Cleared unconditionally so a re-apply that drops all
+    // variable use cannot leave a stale node behind.
     elementCustomizationState.treeNode = nullptr;
     if (!resolved.captures.empty() || resolved.hasDynamicValues) {
         elementCustomizationState.treeNode =
@@ -14237,8 +19558,14 @@ void ApplyCustomizations(InstanceHandle handle,
     // dynamic value-rules applied below. Note: SetUpCapturesForElement does not
     // need this element's fallbackClassName -- propagation routes through each
     // consumer's own stored fallback.
-    SetUpCapturesForElement(state, handle, element, resolved.captures,
+    SetUpCapturesForElement(state, elementId, element, resolved.captures,
                             &elementCustomizationState);
+
+    // The element may be in an item already sitting in a recycle pool, which
+    // no clear will be reported for.
+    if (!resolved.captures.empty()) {
+        QueueRecycledItemCapturesRefresh();
+    }
 
     for (auto& [visualStateGroup, overridesForVisualStateGroup] :
          resolved.overridesPerVSG) {
@@ -14254,19 +19581,206 @@ void ApplyCustomizations(InstanceHandle handle,
             &elementCustomizationState.perVisualStateGroup.back().second;
 
         ApplyCustomizationsForVisualStateGroup(
-            state, handle, element, visualStateGroup, fallbackClassName,
+            state, elementId, element, visualStateGroup, fallbackClassName,
             std::move(overridesForVisualStateGroup),
             elementCustomizationStateForVisualStateGroup);
     }
 }
 
-void CleanupCustomizations(InstanceHandle handle) {
-    if (auto it = g_elementsCustomizationState.find(handle);
+// The diagnostics create a runtime object which holds every element they
+// report, and drop it only once the element is reported as removed. Removals
+// are reported for elements taken out of their parent, which is how a recycled
+// list item is released, but a tree which is discarded whole is never taken
+// apart that way: dropping its root would destroy it. Holding every element is
+// what stops that destruction, so nothing is ever removed and nothing is ever
+// reported. Elements nothing is keyed by are handed back from here so the
+// teardown can happen.
+//
+// Reporting an element recreates the runtime object of its parent, which is why
+// each report queues the parent as well, and why the queue is drained only once
+// the burst of reports has stopped: releasing mid-burst would just be undone by
+// the next child of whatever was released.
+thread_local std::vector<InstanceHandle> g_pendingDiagnosticsRelease;
+thread_local ULONGLONG g_lastDiagnosticsReleaseQueueTick;
+thread_local bool g_diagnosticsReleaseDrainQueued;
+thread_local winrt::Windows::System::DispatcherQueueTimer
+    g_diagnosticsReleaseDrainTimer{nullptr};
+thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
+    g_diagnosticsReleaseDrainTimerTickRevoker;
+
+// Long enough to sit out a tree being built.
+constexpr ULONGLONG kDiagnosticsReleaseDelay = 200;
+
+// The drain waits on a one-shot timer, which the thread teardown can stop,
+// rather than on a dispatcher item, which it cannot: the module is freed once
+// the mod is uninitialized, and an item still on the dispatcher would call into
+// it. The interval only has to carry the drain out of the report which arms it.
+constexpr ULONGLONG kDiagnosticsReleaseDrainDelay = 1;
+
+// Releasing an element the mod still records something for would strand that
+// recording, since no removal is reported for a handle whose runtime object is
+// gone. Such an element stays held, and its own removal releases it.
+//
+// Which leaves a styled element of a tree discarded whole held for good, and
+// with it everything below it, since a parent holds its children. Rules that
+// match the Start menu match almost nothing of such a tree, so what this
+// retains is small, but a rule written against a bare type would retain much
+// more.
+bool ElementHasState(ElementId elementId) {
+    if (elementId == ElementId::None) {
+        return false;
+    }
+
+    if (g_elementsCustomizationState.contains(elementId) ||
+        g_webViewsCustomizationState.contains(elementId) ||
+        g_virtualizingRepeaters.contains(elementId) ||
+        g_recycledElements.contains(elementId) ||
+        g_elementMatchedItems.contains(elementId)) {
+        return true;
+    }
+
+    if (g_styleVariableState.elementRefs.contains(elementId)) {
+        return true;
+    }
+
+    for (const auto& propagation : g_pendingStyleVariablePropagations) {
+        if (propagation.changedOwner == elementId) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void FlushDiagnosticsReleases() {
+    auto pending = std::move(g_pendingDiagnosticsRelease);
+    g_pendingDiagnosticsRelease.clear();
+
+    auto visualTreeWatcher = GetVisualTreeWatcher();
+    if (!visualTreeWatcher) {
+        return;
+    }
+
+    // A handle is queued once per report naming it, so a parent appears once
+    // per child, and each repeat would pay for another ElementHasState scan.
+    std::sort(pending.begin(), pending.end());
+    pending.erase(std::unique(pending.begin(), pending.end()), pending.end());
+
+    for (InstanceHandle handle : pending) {
+        if (ElementHasState(FindElementId(handle))) {
+            continue;
+        }
+
+        if (visualTreeWatcher->ReleaseDiagnosticsReference(handle)) {
+            ForgetElementId(handle);
+        }
+    }
+
+    // Here rather than anywhere else on the report path: the releases above are
+    // what let elements be destroyed unreported, and this runs from the
+    // dispatcher, so the teardown of what they were keyed by is outside the
+    // walk the reports came from.
+    ReapDeadElementIdsIfNeeded();
+}
+
+void QueueDiagnosticsRelease(InstanceHandle handle) {
+    if (!handle) {
+        return;
+    }
+
+    g_pendingDiagnosticsRelease.push_back(handle);
+    g_lastDiagnosticsReleaseQueueTick = GetTickCount64();
+}
+
+// Whether the burst has stopped is decided when this is scheduled: the report
+// which schedules it queues its own handles right afterwards, so the time since
+// the last queue is short again by the time this runs.
+void DrainDiagnosticsReleases() {
+    g_diagnosticsReleaseDrainQueued = false;
+    FlushDiagnosticsReleases();
+}
+
+// Reports arrive from inside XAML's own Enter and Leave walks, and a release
+// there re-enters the diagnostics while the tree is being mutated: dropping the
+// last reference to an element the walk is still visiting destroys it mid-walk.
+// The drain is therefore armed on the thread's dispatcher, which runs it once
+// the walk has finished.
+//
+// Whether to arm it is decided by the next report rather than by a recurring
+// timer, so that nothing of the mod is left waiting on a thread it does not
+// tear down. A thread which goes quiet therefore holds its last burst until it
+// is used again.
+void FlushDiagnosticsReleasesIfQuiet() {
+    if (g_pendingDiagnosticsRelease.empty() ||
+        g_diagnosticsReleaseDrainQueued ||
+        GetTickCount64() - g_lastDiagnosticsReleaseQueueTick <
+            kDiagnosticsReleaseDelay) {
+        return;
+    }
+
+    try {
+        if (!g_diagnosticsReleaseDrainTimer) {
+            auto dispatcherQueue =
+                winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+            if (!dispatcherQueue) {
+                // Releasing from here is the one thing that isn't safe, so the
+                // elements stay held instead.
+                Wh_Log(L"No dispatcher queue, elements will be held");
+                return;
+            }
+
+            g_diagnosticsReleaseDrainTimer = dispatcherQueue.CreateTimer();
+            g_diagnosticsReleaseDrainTimer.IsRepeating(false);
+            g_diagnosticsReleaseDrainTimer.Interval(
+                std::chrono::milliseconds{kDiagnosticsReleaseDrainDelay});
+            g_diagnosticsReleaseDrainTimerTickRevoker =
+                g_diagnosticsReleaseDrainTimer.Tick(
+                    winrt::auto_revoke,
+                    [](winrt::Windows::System::DispatcherQueueTimer const&,
+                       winrt::Windows::Foundation::IInspectable const&) {
+                        DrainDiagnosticsReleases();
+                    });
+        }
+
+        g_diagnosticsReleaseDrainTimer.Start();
+        g_diagnosticsReleaseDrainQueued = true;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void StopDiagnosticsReleases() {
+    ResetThreadLocal(g_pendingDiagnosticsRelease);
+
+    if (g_diagnosticsReleaseDrainTimer) {
+        try {
+            g_diagnosticsReleaseDrainTimer.Stop();
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_diagnosticsReleaseDrainTimerTickRevoker.revoke();
+    g_diagnosticsReleaseDrainTimer = nullptr;
+    g_diagnosticsReleaseDrainQueued = false;
+}
+
+void CleanupCustomizations(ElementId elementId) {
+    // Unconditional: a repeater, or an item element which matched no rule, has
+    // no customization state but can still have virtualization bookkeeping.
+    g_virtualizingRepeaters.erase(elementId);
+    g_recycledElements.erase(elementId);
+    g_elementMatchedItems.erase(elementId);
+
+    if (auto it = g_elementsCustomizationState.find(elementId);
         it != g_elementsCustomizationState.end()) {
         // A reference rather than the iterator: restoring a style below runs
         // arbitrary XAML work that can re-enter ApplyCustomizations and rehash
         // g_elementsCustomizationState, which invalidates iterators but not
-        // references to the mapped values.
+        // references to the mapped values. A re-entrant cleanup or re-apply of
+        // this same elementId would invalidate both the reference and the loop
+        // below, but the re-entrancy is for other elements, not the one being
+        // torn down here.
         auto& elementCustomizationState = it->second;
 
         auto element = elementCustomizationState.element.get();
@@ -14274,49 +19788,25 @@ void CleanupCustomizations(InstanceHandle handle) {
 
         RestoreCapturesForElement(element, elementCustomizationState);
 
-        // Drop this element's captures from the registry. Other elements may
-        // still capture the same names, so a name only becomes undefined once
-        // its last capture is gone. Runs after RestoreCapturesForElement so the
-        // just-unregistered capture callbacks can't re-seed a variable
-        // mid-teardown.
+        // After RestoreCapturesForElement so the just-unregistered capture
+        // callbacks can't re-seed a variable mid-teardown.
         std::vector<std::wstring> removedVarNames;
         if (state) {
-            for (const auto& [property, captureState] :
-                 elementCustomizationState.captureCustomizationStates) {
-                if (captureState.varName.empty()) {
-                    continue;
-                }
-
-                auto varIt = state->variables.find(captureState.varName);
-                if (varIt == state->variables.end()) {
-                    continue;
-                }
-
-                if (!std::erase_if(
-                        varIt->second,
-                        [handle](const StyleVariableCapture& capture) {
-                            return capture.elementHandle == handle;
-                        })) {
-                    continue;
-                }
-
-                removedVarNames.push_back(captureState.varName);
-                if (varIt->second.empty()) {
-                    state->variables.erase(varIt);
-                }
-            }
+            removedVarNames = WithdrawCapturesForElement(
+                state, elementId, elementCustomizationState);
+            state->withdrawnCaptureOwners.erase(elementId);
         }
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                state, handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, elementId, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
 
-        // By handle, not by `it`: a re-entrant apply above may have rehashed
-        // the map since the lookup.
-        g_elementsCustomizationState.erase(handle);
+        // By elementId, not by `it`: a re-entrant apply above may have
+        // rehashed the map since the lookup.
+        g_elementsCustomizationState.erase(elementId);
 
         ReapElementTreeNodesIfNeeded();
 
@@ -14331,7 +19821,7 @@ void CleanupCustomizations(InstanceHandle handle) {
         }
     }
 
-    if (auto it = g_webViewsCustomizationState.find(handle);
+    if (auto it = g_webViewsCustomizationState.find(elementId);
         it != g_webViewsCustomizationState.end()) {
         const auto& webViewCustomizationState = it->second;
         try {
@@ -14619,7 +20109,7 @@ std::wstring AdjustTypeName(std::wstring_view type) {
         adjustments = {
             {L"StartMenu:", L"StartMenu."},
             {L"muxc:", L"Microsoft.UI.Xaml.Controls."},
-        };
+    };
 
     for (const auto& adjustment : adjustments) {
         if (type.starts_with(adjustment.first)) {
@@ -14999,7 +20489,7 @@ bool ProcessResourceVariable(ResourceDictionary resources,
     }
 
     auto [it, inserted] =
-        g_originalResourceValues.try_emplace(entry.key, existingResource);
+        g_originalResourceValues->try_emplace(entry.key, existingResource);
     if (!inserted) {
         Wh_Log(L"Resource variable key '%s' already modified, skipping",
                entry.key.c_str());
@@ -15155,8 +20645,11 @@ void MergeResourceVariables() {
         resources.MergedDictionaries().Append(g_resourceVariablesThemeDict);
     }
 
+    g_resourceVariablesThemeDictMerged = hasThemeResources;
+    g_resourceVariablesTargetResources = resources;
+
     // Register for color changes to refresh theme resource references.
-    if (hasThemeResourceReferences) {
+    if (hasThemeResourceReferences && !g_colorValuesChangedToken) {
         g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
         auto dispatcherQueue =
             winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
@@ -15164,6 +20657,34 @@ void MergeResourceVariables() {
             g_uiSettings.ColorValuesChanged([dispatcherQueue](auto&&, auto&&) {
                 dispatcherQueue.TryEnqueue(RefreshThemeResourceEntries);
             });
+    }
+}
+
+void EnsureResourceVariablesMerged() {
+    try {
+        auto resources = Application::Current().Resources();
+        if (resources != g_resourceVariablesTargetResources) {
+            Wh_Log(
+                L"Application resources were replaced, merging resource "
+                L"variables again");
+            // The original values belong to the replaced resources.
+            g_originalResourceValues->clear();
+            MergeResourceVariables();
+            return;
+        }
+
+        if (g_resourceVariablesThemeDictMerged) {
+            auto merged = resources.MergedDictionaries();
+            uint32_t index;
+            if (!merged.IndexOf(g_resourceVariablesThemeDict, index)) {
+                Wh_Log(
+                    L"Resource variables dictionary was removed, merging "
+                    L"it again");
+                merged.Append(g_resourceVariablesThemeDict);
+            }
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
 }
 
@@ -15271,6 +20792,22 @@ const Theme* GetSelectedTheme(bool useNewLayoutVariant) {
                                     : &g_themeFullScreen_variant_1;
     } else if (wcscmp(themeName, L"FrostyGlass") == 0) {
         theme = &g_themeFrostyGlass;
+    } else if (wcscmp(themeName, L"FlyoutStartMenu") == 0) {
+        theme = &g_themeFlyoutStartMenu;
+    } else if (wcscmp(themeName,
+                      L"OS26 Tahoe App Launcher_variant_DarkCenter") == 0) {
+        theme = &g_themeOS26_Tahoe_App_Launcher_variant_DarkCenter;
+    } else if (wcscmp(themeName,
+                      L"OS26 Tahoe App Launcher_variant_DarkBottom") == 0) {
+        theme = &g_themeOS26_Tahoe_App_Launcher_variant_DarkBottom;
+    } else if (wcscmp(themeName,
+                      L"OS26 Tahoe App Launcher_variant_ClearCenter") == 0) {
+        theme = &g_themeOS26_Tahoe_App_Launcher_variant_ClearCenter;
+    } else if (wcscmp(themeName,
+                      L"OS26 Tahoe App Launcher_variant_ClearBottom") == 0) {
+        theme = &g_themeOS26_Tahoe_App_Launcher_variant_ClearBottom;
+    } else if (wcscmp(themeName, L"Raycast") == 0) {
+        theme = &g_themeRaycast;
     }
     Wh_FreeStringSetting(themeName);
     return theme;
@@ -15334,7 +20871,7 @@ void UninitializeResourceVariables() {
 
     // Restore original resource values.
     auto resources = Application::Current().Resources();
-    for (const auto& [key, originalValue] : g_originalResourceValues) {
+    for (const auto& [key, originalValue] : *g_originalResourceValues) {
         try {
             resources.Insert(winrt::box_value(key), originalValue);
         } catch (...) {
@@ -15342,7 +20879,7 @@ void UninitializeResourceVariables() {
             Wh_Log(L"Error %08X", hr);
         }
     }
-    g_originalResourceValues.clear();
+    g_originalResourceValues.emplace();
 
     // Remove our merged theme dictionary.
     if (g_resourceVariablesThemeDict) {
@@ -15353,21 +20890,25 @@ void UninitializeResourceVariables() {
         }
         g_resourceVariablesThemeDict = nullptr;
     }
+    g_resourceVariablesThemeDictMerged = false;
+    g_resourceVariablesTargetResources = nullptr;
 }
 
 void UninitializeSettingsAndTap() {
-    // Clear tracked image brushes for this thread (revokers will automatically
+    // Clear tracked images for this thread (revokers will automatically
     // unregister).
-    if (auto& timer = g_trackedImageBrushesForThread.retryDebounceTimer) {
+    if (auto& timer = g_trackedImagesForThread.retryTimer) {
         try {
             timer.Stop();
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
     }
-    g_trackedImageBrushesForThread.retryDebounceTimerTickRevoker.revoke();
-    g_trackedImageBrushesForThread.retryDebounceTimer = nullptr;
-    g_trackedImageBrushesForThread.brushes.clear();
+    g_trackedImagesForThread.retryTimerTickRevoker.revoke();
+    g_trackedImagesForThread.retryTimer = nullptr;
+    g_trackedImagesForThread.retryDueTick = 0;
+    g_trackedImagesForThread.images.clear();
+    ResetThreadLocal(g_imageCacheUriRemotes);
     StopImageLoadRetriesForCurrentThread();
 
     if (g_delayedAllAppsRootVisibilitySet) {
@@ -15375,13 +20916,13 @@ void UninitializeSettingsAndTap() {
         g_delayedAllAppsRootVisibilitySet = nullptr;
     }
 
-    for (auto const& action : g_separatePinnedScrollPendingActions) {
+    for (auto const& action : *g_separatePinnedScrollPendingActions) {
         if (action && action.Status() ==
                           winrt::Windows::Foundation::AsyncStatus::Started) {
             action.Cancel();
         }
     }
-    g_separatePinnedScrollPendingActions.clear();
+    g_separatePinnedScrollPendingActions.emplace();
 
     if (g_allAppsRootRenderTransformVsg) {
         g_allAppsRootRenderTransformVsg.CurrentStateChanged(
@@ -15390,8 +20931,25 @@ void UninitializeSettingsAndTap() {
         g_allAppsRootRenderTransformVsg = nullptr;
     }
 
-    for (const auto& [handle, elementCustomizationState] :
-         g_elementsCustomizationState) {
+    // Before the teardown below, so that no recycling callback can fire into
+    // half-cleared state, and no pending release can consult state which is
+    // being cleared.
+    StopDiagnosticsReleases();
+    StopRecycledItemCapturesRefresh();
+    ResetThreadLocal(g_virtualizingRepeaters);
+    ResetThreadLocal(g_recycledElements);
+    ResetThreadLocal(g_elementMatchedItems);
+
+    // Detached from the global before being walked: restoring a value runs
+    // arbitrary XAML work, and whatever it re-enters looks its elements up in
+    // g_elementsCustomizationState. Walking a map nothing else can reach keeps
+    // a re-entrant insert or erase from invalidating this loop, and leaving the
+    // global empty makes those lookups miss, which is what teardown wants.
+    auto elementsCustomizationState = std::move(g_elementsCustomizationState);
+    g_elementsCustomizationState.clear();
+
+    for (const auto& [elementId, elementCustomizationState] :
+         elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
         auto* state = GetStyleVariableState();
 
@@ -15400,14 +20958,14 @@ void UninitializeSettingsAndTap() {
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                state, handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, elementId, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
     }
 
     // Before g_elementTreeNodes, since the states hold the last strong refs to
     // the spine nodes.
-    g_elementsCustomizationState.clear();
+    elementsCustomizationState.clear();
     g_elementTreeNodes.clear();
     g_elementTreeNodesReapThreshold = 64;
     g_pendingStyleVariablePropagations.clear();
@@ -15417,7 +20975,9 @@ void UninitializeSettingsAndTap() {
 
     UninitializeResourceVariables();
 
-    for (const auto& [handle, webViewCustomizationState] :
+    g_noiseStream = nullptr;
+
+    for (const auto& [elementId, webViewCustomizationState] :
          g_webViewsCustomizationState) {
         try {
             ClearWebViewCustomizations(webViewCustomizationState);
@@ -15427,6 +20987,11 @@ void UninitializeSettingsAndTap() {
     }
 
     g_webViewsCustomizationState.clear();
+
+    // After everything keyed by an id. g_lastElementId keeps counting, since an
+    // id must never name two elements.
+    ResetThreadLocal(g_elementIds);
+    g_elementIdsReapThreshold = 64;
 
     g_targetThreadId = 0;
 }
@@ -15661,6 +21226,66 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+RegOpenKeyExW_t RegOpenKeyExW_Original;
+LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey,
+                                  LPCWSTR lpSubKey,
+                                  DWORD ulOptions,
+                                  REGSAM samDesired,
+                                  PHKEY phkResult) {
+    LSTATUS result = RegOpenKeyExW_Original(hKey, lpSubKey, ulOptions,
+                                            samDesired, phkResult);
+    if (result == ERROR_SUCCESS || !g_reportCompositionDiagAsDisabled ||
+        hKey != HKEY_LOCAL_MACHINE || !lpSubKey ||
+        _wcsicmp(lpSubKey, L"Software\\Microsoft\\XAML\\Debug") != 0) {
+        return result;
+    }
+
+    // The key usually doesn't exist, and the value isn't queried unless the key
+    // could be opened, so hand out a key which does exist.
+    Wh_Log(L"Substituting the XAML debug key");
+    return RegOpenKeyExW_Original(HKEY_LOCAL_MACHINE, L"Software\\Microsoft",
+                                  ulOptions, samDesired, phkResult);
+}
+
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+RegQueryValueExW_t RegQueryValueExW_Original;
+LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
+                                     LPCWSTR lpValueName,
+                                     LPDWORD lpReserved,
+                                     LPDWORD lpType,
+                                     LPBYTE lpData,
+                                     LPDWORD lpcbData) {
+    if (!g_reportCompositionDiagAsDisabled || !lpValueName ||
+        _wcsicmp(lpValueName, L"DisableCompositionDiag") != 0) {
+        return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType,
+                                         lpData, lpcbData);
+    }
+
+    Wh_Log(L"Reporting DisableCompositionDiag as set");
+
+    if (lpType) {
+        *lpType = REG_DWORD;
+    }
+
+    if (lpData && (!lpcbData || *lpcbData < sizeof(DWORD))) {
+        if (lpcbData) {
+            *lpcbData = sizeof(DWORD);
+        }
+        return ERROR_MORE_DATA;
+    }
+
+    if (lpData) {
+        *reinterpret_cast<DWORD*>(lpData) = 1;
+    }
+
+    if (lpcbData) {
+        *lpcbData = sizeof(DWORD);
+    }
+
+    return ERROR_SUCCESS;
+}
+
 HWND GetCoreWnd() {
     struct ENUM_WINDOWS_PARAM {
         HWND* hWnd;
@@ -15811,7 +21436,7 @@ bool StartStatsTimer() {
     static constexpr WCHAR kStatsBaseUrl[] =
         L"https://github.com/ramensoftware/"
         L"windows-11-start-menu-styling-guide/"
-        L"releases/download/stats-v5/";
+        L"releases/download/stats-v6/";
 
     ULONGLONG lastStatsTime = 0;
     Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
@@ -15876,6 +21501,8 @@ bool StartStatsTimer() {
                              L' ', L'_');
                 std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
                              L'&', L'_');
+                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
+                             L'.', L'_');
 
                 std::wstring statsUrl = kStatsBaseUrl;
                 statsUrl += themeNameEscaped;
@@ -16082,6 +21709,18 @@ BOOL Wh_ModInit() {
         }
     }
 
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    void* pKernelBaseRegOpenKeyExW =
+        (void*)GetProcAddress(kernelBaseModule, "RegOpenKeyExW");
+    Wh_SetFunctionHook(pKernelBaseRegOpenKeyExW, (void*)RegOpenKeyExW_Hook,
+                       (void**)&RegOpenKeyExW_Original);
+
+    void* pKernelBaseRegQueryValueExW =
+        (void*)GetProcAddress(kernelBaseModule, "RegQueryValueExW");
+    Wh_SetFunctionHook(pKernelBaseRegQueryValueExW,
+                       (void*)RegQueryValueExW_Hook,
+                       (void**)&RegQueryValueExW_Original);
+
     if (!DoesLayoutOverrideMatchWindowsDefault(g_disableNewStartMenuLayout)) {
         HMODULE hNtDll = GetModuleHandle(L"ntdll.dll");
         RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration =
@@ -16127,13 +21766,14 @@ void Wh_ModUninit() {
         StopStatsTimer();
     }
 
+    StopImageDownloads();
+
     // Before the UI threads are uninitialized, so that a retry can't be
     // scheduled on a thread which is being uninitialized.
     StopImageLoadRetries();
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+    if (auto watcher = ExchangeVisualTreeWatcher(nullptr)) {
+        watcher->UnadviseVisualTreeChange();
     }
 
     HWND hCoreWnd = GetCoreWnd();
@@ -16177,9 +21817,8 @@ void Wh_ModSettingsChanged() {
         oldLayout == DisableNewStartMenuLayout::newLayoutSideBySide &&
         newLayout != DisableNewStartMenuLayout::newLayoutSideBySide;
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+    if (auto watcher = ExchangeVisualTreeWatcher(nullptr)) {
+        watcher->UnadviseVisualTreeChange();
     }
 
     HWND hCoreWnd = GetCoreWnd();
