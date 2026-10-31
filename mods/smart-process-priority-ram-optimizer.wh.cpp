@@ -51,9 +51,9 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 - Automatically engages the High Performance power plan during demanding workloads on AC power.
 - Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while High Performance is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
 
-### 7. Inactive Browser Tab Trimming
-- Detects dormant background browser renderers and trims their unused memory while keeping active tabs intact.
-- Dynamically adapts to multi-process browser architectures (Chromium, Gecko, etc.) without hardcoded process names.
+### 7. Inactive Browser & Web App Tab Trimming
+- Detects dormant background browser and Electron renderers and trims their unused memory while keeping active UI and tabs intact.
+- Dynamically adapts to multi-process web architectures (Chromium, Gecko, Electron, etc.) without hardcoded process names.
 
 ## Settings
 
@@ -151,8 +151,8 @@ If you find this mod useful, you can support its development and maintenance:
   $name: Clean Minimized Windows
   $description: Reclaims unused memory in the background from applications minimized to the taskbar.
 - enableBrowserTabTrim: true
-  $name: Inactive Browser Tabs Memory Trim
-  $description: Safely reclaims unused memory from dormant background browser renderer tabs without closing tabs or affecting active ones.
+  $name: Inactive Browser & Web App Tabs Memory Trim
+  $description: Safely reclaims unused memory from dormant background browser tabs and Electron web renderer processes without affecting active UI or playback.
 - pauseOnBattery: true
   $name: Pause on Battery Power
   $description: Suspends memory cleanups and background throttling on battery to maximize laptop battery life.
@@ -1753,22 +1753,6 @@ static std::unordered_set<DWORD> GetActiveAudioProcessIds() {
                 }
             }
             pCaptureCollection->Release();
-        }
-
-        // Fallback to default console, multimedia, and communications endpoints
-        if (audioPids.empty()) {
-            static const ERole kRoles[] = {eConsole, eMultimedia, eCommunications};
-            for (auto role : kRoles) {
-                IMMDevice* pDef = nullptr;
-                if (SUCCEEDED(pEnumerator->GetDefaultAudioEndpoint(eRender, role, &pDef)) && pDef) {
-                    ScanDeviceAudioSessions(pDef, audioPids);
-                    pDef->Release();
-                }
-                if (SUCCEEDED(pEnumerator->GetDefaultAudioEndpoint(eCapture, role, &pDef)) && pDef) {
-                    ScanDeviceAudioSessions(pDef, audioPids);
-                    pDef->Release();
-                }
-            }
         }
 
         pEnumerator->Release();
@@ -4232,6 +4216,33 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
         return result;
     }
 
+    // Fast-path: When invoked strictly for early memory cap enforcement (capOnly),
+    // pre-screen working set size and runtime type before expensive I/O, CPU, and thread analysis.
+    if (capOnly) {
+        PROCESS_MEMORY_COUNTERS_EX pmcPre{};
+        pmcPre.cb = sizeof(pmcPre);
+        if (GetProcessMemoryInfo(
+                hProc, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmcPre),
+                sizeof(pmcPre))) {
+            SIZE_T wsMbPre = pmcPre.WorkingSetSize / (1024ULL * 1024ULL);
+            if (wsMbPre < static_cast<SIZE_T>(settings.electronMemoryCapMb)) {
+                CloseHandle(hProc);
+                return result;
+            }
+            bool isTargetListedPre =
+                (!settings.customTargetList.empty() &&
+                 IsInList(procName, settings.customTargetList)) ||
+                IsWebOrElectronRuntime(hProc, procName);
+            if (!isTargetListedPre) {
+                CloseHandle(hProc);
+                return result;
+            }
+        } else {
+            CloseHandle(hProc);
+            return result;
+        }
+    }
+
     ProcessIoActivity ioAct = GetProcessIoActivity(pid, hProc, settings);
     if (cpuPercent <= 0.0) {
         cpuPercent = SampleCpuPercent(pid, hProc);
@@ -4487,8 +4498,10 @@ static void PerformEarlyMemoryCapSweep(const ModSettings& settings, DWORD foregr
             g_sessionBytesReclaimed.fetch_add(attempt.freedBytes, std::memory_order_relaxed);
             LogEvent(LogCategory::Memory,
                      L"[Early Memory Cap] Enforced cap on %s (PID %u): %zu MB >= %d MB limit (reclaimed %zu MB)",
-                     entry.name.c_str(), pid, attempt.beforeBytes / (1024ULL * 1024ULL),
-                     settings.electronMemoryCapMb, attempt.freedBytes / (1024ULL * 1024ULL));
+                     entry.name.c_str(), pid,
+                     static_cast<size_t>(attempt.beforeBytes / (1024ULL * 1024ULL)),
+                     settings.electronMemoryCapMb,
+                     static_cast<size_t>(attempt.freedBytes / (1024ULL * 1024ULL)));
         }
     }
 }
@@ -4568,9 +4581,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
         std::unordered_set<DWORD> visited;
         CollectDescendants(foregroundPid, childrenOf, fgDescendants, visited);
         for (DWORD fgChild : fgDescendants) {
-            if (!isRendererPid(fgChild)) {
-                immuneFamilyPids.insert(fgChild);
-            }
+            immuneFamilyPids.insert(fgChild);
         }
     }
 
@@ -4586,9 +4597,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             std::unordered_set<DWORD> visited;
             CollectDescendants(kv.first, childrenOf, desc, visited);
             for (DWORD dPid : desc) {
-                if (!isRendererPid(dPid)) {
-                    immuneFamilyPids.insert(dPid);
-                }
+                immuneFamilyPids.insert(dPid);
             }
         }
     }
@@ -4762,7 +4771,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             static_cast<int64_t>(settings.browserTabInactivityMinutes) * 60;
         for (const auto& entry : processList) {
             DWORD pid = entry.pid;
-            if (pid == 0 || pid == 4 || pid == foregroundPid) {
+            if (pid == 0 || pid == 4 || pid == foregroundPid || handledPids.count(pid)) {
                 continue;
             }
             // Exclude main browser UI windows
