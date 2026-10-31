@@ -88,8 +88,8 @@ volume indicator when a dock is connected without changing the other indicators.
 
 To choose which monitor shows an indicator, use [Volume control open
 location](https://windhawk.net/mods/volume-control-open-location). It works with
-this mod. If offsets look wrong on displays with different scaling, try disabling
-the monitor-selection mod to check for a conflict.
+this mod. If offsets or monitor-specific profiles use the wrong display, try
+disabling the monitor-selection mod to check for a conflict.
 
 ## Timing and animation
 
