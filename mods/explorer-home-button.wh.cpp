@@ -77,13 +77,13 @@ Adds a native WinUI 3 **Home ("This PC")** button directly adjacent to the **Ref
 #undef GetCurrentTime
 
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
-#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>  // Required for ButtonBase::Click
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/base.h>
 
 namespace wf = winrt::Windows::Foundation;
@@ -91,7 +91,6 @@ namespace mux = winrt::Microsoft::UI::Xaml;
 namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace muxa = winrt::Microsoft::UI::Xaml::Automation;
 namespace muxm = winrt::Microsoft::UI::Xaml::Media;
-namespace muxi = winrt::Microsoft::UI::Xaml::Input;
 
 constexpr WCHAR kHomeButtonName[] = L"WindhawkHomeExplorerButton";
 constexpr WCHAR kThisPcClsidPath[] = L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
@@ -382,19 +381,30 @@ struct InjectedButtonRecord {
     winrt::weak_ref<muxc::AppBarButton> homeButton;
     winrt::weak_ref<muxc::AppBarButton> refreshButton;
     winrt::weak_ref<muxc::CommandBar> commandBar;
-    muxc::AppBarButton::Click_revoker clickRevoker;
-    mux::FrameworkElement::Loaded_revoker loadedRevoker;
+    winrt::event_token clickToken{};
+    winrt::event_token loadedToken{};
+    bool syncedWhenLoaded = false;
 };
 
 struct PendingRefreshRecord {
     winrt::weak_ref<muxc::AppBarButton> refreshButton;
-    mux::FrameworkElement::Loaded_revoker loadedRevoker;
+    winrt::event_token loadedToken{};
+};
+
+struct KnownCommandBarRecord {
+    winrt::weak_ref<muxc::CommandBar> commandBar;
+    winrt::event_token loadedToken{};
+};
+
+struct KnownNavBarRecord {
+    winrt::weak_ref<mux::UIElement> navBar;
+    void* refreshKey = nullptr;
 };
 
 thread_local std::unordered_map<void*, InjectedButtonRecord> g_injectedButtonsForThread;
 thread_local std::unordered_map<void*, PendingRefreshRecord> g_pendingRefreshForThread;
-thread_local std::unordered_map<void*, mux::FrameworkElement::Loaded_revoker> g_commandBarLoadedForThread;
-thread_local winrt::event_token g_focusGotFocusToken{};
+thread_local std::unordered_map<void*, KnownCommandBarRecord> g_knownCommandBarsForThread;
+thread_local std::unordered_map<void*, KnownNavBarRecord> g_knownNavBarsForThread;
 
 void* GetElementKey(mux::DependencyObject const& elem) {
     if (!elem) {
@@ -455,12 +465,65 @@ muxc::CommandBar FindAncestorCommandBar(mux::DependencyObject const& start) {
             break;
         }
         if (!parent) {
+            if (auto fe = current.try_as<mux::FrameworkElement>()) {
+                try {
+                    parent = fe.Parent();
+                } catch (...) {
+                }
+            }
+        }
+        if (!parent) {
             break;
         }
         if (auto cmdBar = parent.try_as<muxc::CommandBar>()) {
             return cmdBar;
         }
         current = parent;
+        ++depth;
+    }
+    return nullptr;
+}
+
+mux::Style FindNavigationBarAppBarButtonStyle(mux::DependencyObject const& start) {
+    mux::DependencyObject curr = start;
+    int depth = 0;
+    while (curr && depth < 32) {
+        if (auto fe = curr.try_as<mux::FrameworkElement>()) {
+            try {
+                if (auto res = fe.Resources()) {
+                    if (auto obj = res.TryLookup(winrt::box_value(
+                            winrt::xaml_typename<muxc::AppBarButton>()))) {
+                        if (auto style = obj.try_as<mux::Style>()) {
+                            return style;
+                        }
+                    }
+                    for (auto const& kvp : res) {
+                        if (auto style = kvp.Value().try_as<mux::Style>()) {
+                            if (style.TargetType().Name ==
+                                L"Microsoft.UI.Xaml.Controls.AppBarButton") {
+                                return style;
+                            }
+                        }
+                    }
+                }
+            } catch (...) {
+            }
+        }
+
+        mux::DependencyObject parent{nullptr};
+        try {
+            parent = muxm::VisualTreeHelper::GetParent(curr);
+        } catch (...) {
+        }
+        if (!parent) {
+            if (auto fe = curr.try_as<mux::FrameworkElement>()) {
+                try {
+                    parent = fe.Parent();
+                } catch (...) {
+                }
+            }
+        }
+        curr = parent;
         ++depth;
     }
     return nullptr;
@@ -473,46 +536,188 @@ void CopyVisualProperties(muxc::AppBarButton const& source,
     }
 
     try {
-        if (auto style = source.Style()) {
+        mux::Style style = source.Style();
+        if (!style) {
+            style = FindNavigationBarAppBarButtonStyle(source);
+        }
+        if (style) {
             target.Style(style);
         }
+    } catch (...) {
+    }
 
-        target.IsCompact(true);
+    try {
+        target.IsCompact(source.IsCompact());
         target.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
-        target.Label(winrt::hstring(L""));
+    } catch (...) {
+    }
 
-        double btnWidth = 32.0;
-        if (!std::isnan(source.Width()) && source.Width() > 0) {
-            btnWidth = source.Width();
-        } else if (source.ActualWidth() > 0) {
-            btnWidth = source.ActualWidth();
+    // In DefaultAppBarButtonStyle, Width defaults to 68.0 before
+    // NavigationBarControlGrid's implicit AppBarButton Style (32x32) is
+    // resolved. Ignore unstyled >= 60 DIP values and default to 32.0.
+    double btnWidth = 32.0;
+    try {
+        if (source.IsLoaded()) {
+            double aw = source.ActualWidth();
+            double w = source.Width();
+            if (aw > 0.0 && aw < 60.0) {
+                btnWidth = aw;
+            } else if (!std::isnan(w) && w > 0.0 && w < 60.0) {
+                btnWidth = w;
+            }
         }
+    } catch (...) {
+    }
+
+    try {
         target.Width(btnWidth);
         target.MinWidth(btnWidth);
         target.MaxWidth(btnWidth);
+    } catch (...) {
+    }
 
-        double btnHeight = 32.0;
-        if (!std::isnan(source.Height()) && source.Height() > 0) {
-            btnHeight = source.Height();
-        } else if (source.ActualHeight() > 0) {
-            btnHeight = source.ActualHeight();
+    double btnHeight = 32.0;
+    try {
+        if (source.IsLoaded()) {
+            double ah = source.ActualHeight();
+            double h = source.Height();
+            if (ah > 0.0 && ah < 60.0) {
+                btnHeight = ah;
+            } else if (!std::isnan(h) && h > 0.0 && h < 60.0) {
+                btnHeight = h;
+            }
         }
+    } catch (...) {
+    }
+
+    try {
         target.Height(btnHeight);
         target.MinHeight(btnHeight);
         target.MaxHeight(btnHeight);
+    } catch (...) {
+    }
 
-        target.VerticalAlignment(mux::VerticalAlignment::Center);
-        target.HorizontalAlignment(mux::HorizontalAlignment::Center);
+    // Native NavigationCommands (height 48) uses AppBarButton with Height=32,
+    // Margin={8,8,8,0}, VerticalAlignment=Top, and HorizontalAlignment=Left,
+    // which places the 32 DIP button at y=8..40 (centered with 8 DIPs top and
+    // 8 DIPs bottom). Using VerticalAlignment::Center with Margin.Top=8 would
+    // shift the button down by +4 DIPs to y=12..44.
+    try {
+        target.HorizontalContentAlignment(mux::HorizontalAlignment::Center);
+        target.VerticalContentAlignment(mux::VerticalAlignment::Center);
+        target.HorizontalAlignment(source.IsLoaded()
+                                       ? source.HorizontalAlignment()
+                                       : mux::HorizontalAlignment::Left);
+        target.VerticalAlignment(source.IsLoaded()
+                                     ? source.VerticalAlignment()
+                                     : mux::VerticalAlignment::Top);
+    } catch (...) {
+    }
 
-        target.Margin(source.Margin());
-        target.Padding(source.Padding());
-        target.CornerRadius(source.CornerRadius());
-        target.BorderThickness(source.BorderThickness());
-        target.UseSystemFocusVisuals(source.UseSystemFocusVisuals());
-        target.FocusVisualMargin(source.FocusVisualMargin());
-        target.FocusVisualPrimaryThickness(source.FocusVisualPrimaryThickness());
-        target.FocusVisualSecondaryThickness(source.FocusVisualSecondaryThickness());
-        target.RequestedTheme(source.RequestedTheme());
+    try {
+        mux::Thickness margin{8.0, 8.0, 8.0, 0.0};
+        if (source.IsLoaded()) {
+            mux::Thickness sm = source.Margin();
+            if (sm.Left != 0.0 || sm.Top != 0.0 || sm.Right != 0.0 || sm.Bottom != 0.0) {
+                margin = sm;
+            }
+        }
+        target.Margin(margin);
+        target.Padding(source.IsLoaded() ? source.Padding()
+                                         : mux::Thickness{0.0, 0.0, 0.0, 0.0});
+    } catch (...) {
+    }
+
+    try {
+        if (source.IsLoaded()) {
+            target.CornerRadius(source.CornerRadius());
+            target.BorderThickness(source.BorderThickness());
+            target.UseSystemFocusVisuals(source.UseSystemFocusVisuals());
+            target.FocusVisualMargin(source.FocusVisualMargin());
+            target.FocusVisualPrimaryThickness(source.FocusVisualPrimaryThickness());
+            target.FocusVisualSecondaryThickness(source.FocusVisualSecondaryThickness());
+        }
+    } catch (...) {
+    }
+}
+
+void SyncHomeButtonTemplateParts(muxc::AppBarButton const& homeButton,
+                                 muxc::AppBarButton const& refreshButton,
+                                 double targetIconSize,
+                                 double baseIconSize) {
+    if (!homeButton) {
+        return;
+    }
+
+    try {
+        homeButton.ApplyTemplate();
+    } catch (...) {
+    }
+
+    try {
+        mux::VisualStateManager::GoToState(homeButton, L"LabelCollapsed", false);
+    } catch (...) {
+    }
+
+    try {
+        if (auto textLabel =
+                FindDescendantByName<mux::UIElement>(homeButton, L"TextLabel")) {
+            textLabel.Visibility(mux::Visibility::Collapsed);
+        }
+    } catch (...) {
+    }
+
+    try {
+        if (auto homeInnerBorder = FindDescendantByName<mux::FrameworkElement>(
+                homeButton, L"AppBarButtonInnerBorder")) {
+            if (refreshButton) {
+                if (auto refreshInnerBorder =
+                        FindDescendantByName<mux::FrameworkElement>(
+                            refreshButton, L"AppBarButtonInnerBorder")) {
+                    homeInnerBorder.Margin(refreshInnerBorder.Margin());
+                } else {
+                    homeInnerBorder.Margin(mux::Thickness{0.0, 0.0, 0.0, 0.0});
+                }
+            } else {
+                homeInnerBorder.Margin(mux::Thickness{0.0, 0.0, 0.0, 0.0});
+            }
+        }
+    } catch (...) {
+    }
+
+    try {
+        if (auto homeViewbox = FindDescendantByName<mux::FrameworkElement>(
+                homeButton, L"ContentViewbox")) {
+            // In NavigationBarControlGrid, AppBarButtonContentHeight is 12.0 and
+            // AppBarButtonContentViewboxCollapsedMargin is {10, 10, 10, 10}
+            // inside the 32x32 button (10 + 12 + 10 = 32). When targetIconSize
+            // is optically scaled (e.g. 14.0 for E80F whose glyph outline is
+            // 1792/2048 of em vs 2048/2048 for Back/Forward/Up/Refresh), adjust
+            // the Viewbox size and margin symmetrically (9 + 14 + 9 = 32) so the
+            // Viewbox doesn't shrink the 14 DIP FontIcon back to 12 DIPs.
+            mux::Thickness baseMargin{10.0, 10.0, 10.0, 10.0};
+            if (refreshButton) {
+                if (auto refreshViewbox =
+                        FindDescendantByName<mux::FrameworkElement>(
+                            refreshButton, L"ContentViewbox")) {
+                    mux::Thickness rm = refreshViewbox.Margin();
+                    if (rm.Left > 0.0 && rm.Top > 0.0 && rm.Right > 0.0 &&
+                        rm.Bottom > 0.0) {
+                        baseMargin = rm;
+                    }
+                }
+            }
+
+            double halfDelta = (targetIconSize - baseIconSize) * 0.5;
+            homeViewbox.Height(targetIconSize);
+            homeViewbox.Width(targetIconSize);
+            homeViewbox.Margin(mux::Thickness{
+                (std::max)(0.0, baseMargin.Left - halfDelta),
+                (std::max)(0.0, baseMargin.Top - halfDelta),
+                (std::max)(0.0, baseMargin.Right - halfDelta),
+                (std::max)(0.0, baseMargin.Bottom - halfDelta),
+            });
+        }
     } catch (...) {
     }
 }
@@ -520,68 +725,53 @@ void CopyVisualProperties(muxc::AppBarButton const& source,
 void ConfigureHomeButtonVisuals(muxc::AppBarButton const& homeButton,
                                 muxc::AppBarButton const& refreshButton,
                                 ModSettings const& settings) {
-    if (!homeButton) {
+    if (!homeButton || !refreshButton) {
         return;
     }
 
-    if (refreshButton) {
-        CopyVisualProperties(refreshButton, homeButton);
+    CopyVisualProperties(refreshButton, homeButton);
 
-        muxc::FontIcon homeIcon;
-        homeIcon.Glyph(winrt::hstring(settings.iconGlyph));
+    muxc::FontIcon homeIcon;
+    homeIcon.Glyph(winrt::hstring(settings.iconGlyph));
 
-        double iconSize = 12.0; // Native NavBarIconSize in File Explorer NavigationCommands
+    double baseIconSize = 12.0; // Native NavBarIconSize in File Explorer NavigationCommands
+    try {
         if (auto refreshIcon = refreshButton.Icon().try_as<muxc::FontIcon>()) {
             if (auto ff = refreshIcon.FontFamily()) {
                 homeIcon.FontFamily(ff);
-            } else {
-                homeIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
             }
             if (!std::isnan(refreshIcon.FontSize()) && refreshIcon.FontSize() > 0) {
-                iconSize = refreshIcon.FontSize();
+                baseIconSize = refreshIcon.FontSize();
             }
             homeIcon.FontWeight(refreshIcon.FontWeight());
             homeIcon.FontStyle(refreshIcon.FontStyle());
             homeIcon.IsTextScaleFactorEnabled(refreshIcon.IsTextScaleFactorEnabled());
             homeIcon.MirroredWhenRightToLeft(refreshIcon.MirroredWhenRightToLeft());
-        } else {
-            homeIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
         }
-
-        homeIcon.FontSize(iconSize);
-        homeIcon.VerticalAlignment(mux::VerticalAlignment::Center);
-        homeIcon.HorizontalAlignment(mux::HorizontalAlignment::Center);
-        homeIcon.Margin(mux::Thickness{0, 0, 0, 0});
-
-        homeButton.Icon(homeIcon);
-    } else {
-        homeButton.IsCompact(true);
-        homeButton.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
-        homeButton.Label(winrt::hstring(L""));
-        homeButton.Width(32.0);
-        homeButton.Height(32.0);
-        homeButton.MinWidth(32.0);
-        homeButton.MinHeight(32.0);
-        homeButton.MaxWidth(32.0);
-        homeButton.MaxHeight(32.0);
-        homeButton.VerticalAlignment(mux::VerticalAlignment::Center);
-        homeButton.HorizontalAlignment(mux::HorizontalAlignment::Center);
-
-        muxc::FontIcon homeIcon;
-        homeIcon.Glyph(winrt::hstring(settings.iconGlyph));
-        homeIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
-        homeIcon.FontSize(12.0);
-        homeIcon.VerticalAlignment(mux::VerticalAlignment::Center);
-        homeIcon.HorizontalAlignment(mux::HorizontalAlignment::Center);
-        homeIcon.Margin(mux::Thickness{0, 0, 0, 0});
-        homeButton.Icon(homeIcon);
+    } catch (...) {
     }
 
-    muxc::ToolTipService::SetToolTip(homeButton,
-                                     winrt::box_value(winrt::hstring(settings.tooltip)));
+    // In Segoe Fluent Icons (UPM=2048), Back (E72B), Forward (E72A), Up (E74A),
+    // and Refresh (E72C) fill the full 2048-unit em box (11x11 px at 12 DIPs),
+    // whereas Home (E80F) has inset glyph bounds (1792x1918 units, walls 1536
+    // units = 9x10 px at 12 DIPs). Scaling E80F by 14/12 (14.0 DIPs) matches
+    // the exact 11x11 px visual size and stroke weight of the native buttons.
+    double targetIconSize = (settings.iconGlyph == kGlyphHome)
+                                ? std::round(baseIconSize * (14.0 / 12.0))
+                                : baseIconSize;
+
+    homeIcon.FontSize(targetIconSize);
+    homeButton.Icon(homeIcon);
+
+    SyncHomeButtonTemplateParts(homeButton, refreshButton, targetIconSize,
+                                baseIconSize);
+
+    muxc::ToolTipService::SetToolTip(
+        homeButton, winrt::box_value(winrt::hstring(settings.tooltip)));
 
     // Keep automation / accessible name in sync with user-facing tooltip
-    muxa::AutomationProperties::SetName(homeButton, winrt::hstring(settings.tooltip));
+    muxa::AutomationProperties::SetName(homeButton,
+                                        winrt::hstring(settings.tooltip));
 }
 
 void PositionHomeButtonInCommandBar(muxc::CommandBar const& commandBar,
@@ -593,12 +783,36 @@ void PositionHomeButtonInCommandBar(muxc::CommandBar const& commandBar,
     }
 
     auto commands = commandBar.PrimaryCommands();
+    uint32_t refreshIdx = 0;
     uint32_t existingHomeIdx = 0;
-    if (commands.IndexOf(homeButton, existingHomeIdx)) {
+    bool hasRefresh = commands.IndexOf(refreshButton, refreshIdx);
+    bool hasHome = commands.IndexOf(homeButton, existingHomeIdx);
+
+    if (hasRefresh && hasHome) {
+        if (placement == ButtonPlacement::BeforeRefresh) {
+            if (existingHomeIdx + 1 == refreshIdx) {
+                return;
+            }
+        } else {
+            uint32_t expectedIdx = refreshIdx + 1;
+            if (refreshIdx + 1 < commands.Size()) {
+                if (auto nextElem =
+                        commands.GetAt(refreshIdx + 1).try_as<mux::FrameworkElement>()) {
+                    if (nextElem.Name() == L"stopButton") {
+                        expectedIdx = refreshIdx + 2;
+                    }
+                }
+            }
+            if (existingHomeIdx == expectedIdx) {
+                return;
+            }
+        }
+    }
+
+    if (hasHome) {
         commands.RemoveAt(existingHomeIdx);
     }
 
-    uint32_t refreshIdx = 0;
     if (commands.IndexOf(refreshButton, refreshIdx)) {
         uint32_t insertIdx = refreshIdx + 1;
         if (placement == ButtonPlacement::BeforeRefresh) {
@@ -606,7 +820,8 @@ void PositionHomeButtonInCommandBar(muxc::CommandBar const& commandBar,
         } else {
             // If stopButton immediately follows refreshButton, insert after stopButton
             if (refreshIdx + 1 < commands.Size()) {
-                if (auto nextElem = commands.GetAt(refreshIdx + 1).try_as<mux::FrameworkElement>()) {
+                if (auto nextElem =
+                        commands.GetAt(refreshIdx + 1).try_as<mux::FrameworkElement>()) {
                     if (nextElem.Name() == L"stopButton") {
                         insertIdx = refreshIdx + 2;
                     }
@@ -620,6 +835,22 @@ void PositionHomeButtonInCommandBar(muxc::CommandBar const& commandBar,
     } else {
         commands.Append(homeButton);
     }
+}
+
+void RemovePendingRefreshRecord(void* key) {
+    auto it = g_pendingRefreshForThread.find(key);
+    if (it == g_pendingRefreshForThread.end()) {
+        return;
+    }
+    try {
+        if (auto btn = it->second.refreshButton.get()) {
+            if (it->second.loadedToken) {
+                btn.Loaded(it->second.loadedToken);
+            }
+        }
+    } catch (...) {
+    }
+    g_pendingRefreshForThread.erase(it);
 }
 
 bool TryInjectHomeButtonForRefreshButton(
@@ -637,6 +868,12 @@ bool TryInjectHomeButtonForRefreshButton(
     auto existingIt = g_injectedButtonsForThread.find(key);
     if (existingIt != g_injectedButtonsForThread.end()) {
         if (auto existingBtn = existingIt->second.homeButton.get()) {
+            if (!existingIt->second.syncedWhenLoaded &&
+                existingBtn.IsLoaded() && refreshButton.IsLoaded()) {
+                ConfigureHomeButtonVisuals(existingBtn, refreshButton,
+                                           GetSettingsSnapshot());
+                existingIt->second.syncedWhenLoaded = true;
+            }
             return true;
         }
         g_injectedButtonsForThread.erase(existingIt);
@@ -660,9 +897,6 @@ bool TryInjectHomeButtonForRefreshButton(
 
     muxc::AppBarButton homeButton;
     homeButton.Name(kHomeButtonName);
-    homeButton.IsCompact(true);
-    homeButton.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
-    homeButton.Label(winrt::hstring(L""));
     ConfigureHomeButtonVisuals(homeButton, refreshButton, settings);
 
     InjectedButtonRecord record;
@@ -670,18 +904,30 @@ bool TryInjectHomeButtonForRefreshButton(
     record.refreshButton = winrt::make_weak(refreshButton);
     record.commandBar = winrt::make_weak(commandBar);
 
-    record.loadedRevoker = homeButton.Loaded(
-        winrt::auto_revoke,
-        [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
-            if (auto btn = sender.try_as<muxc::AppBarButton>()) {
-                btn.IsCompact(true);
-                btn.LabelPosition(muxc::CommandBarLabelPosition::Collapsed);
-                btn.Label(winrt::hstring(L""));
+    winrt::weak_ref<muxc::AppBarButton> weakRefresh(refreshButton);
+    record.loadedToken = homeButton.Loaded(
+        [key, weakRefresh](wf::IInspectable const& sender,
+                           mux::RoutedEventArgs const&) {
+            if (g_unloading.load()) {
+                return;
+            }
+            try {
+                auto btn = sender.try_as<muxc::AppBarButton>();
+                auto refreshBtn = weakRefresh.get();
+                if (btn && refreshBtn) {
+                    ConfigureHomeButtonVisuals(btn, refreshBtn,
+                                               GetSettingsSnapshot());
+                    auto it = g_injectedButtonsForThread.find(key);
+                    if (it != g_injectedButtonsForThread.end()) {
+                        it->second.syncedWhenLoaded =
+                            btn.IsLoaded() && refreshBtn.IsLoaded();
+                    }
+                }
+            } catch (...) {
             }
         });
 
-    record.clickRevoker = homeButton.Click(
-        winrt::auto_revoke,
+    record.clickToken = homeButton.Click(
         [](wf::IInspectable const&, mux::RoutedEventArgs const&) {
             try {
                 NavigateActiveTabToHome();
@@ -694,71 +940,190 @@ bool TryInjectHomeButtonForRefreshButton(
     PositionHomeButtonInCommandBar(commandBar, refreshButton, homeButton,
                                    settings.placement);
 
+    // Re-sync visuals & template parts now that homeButton is inside CommandBar
+    ConfigureHomeButtonVisuals(homeButton, refreshButton, settings);
+    record.syncedWhenLoaded = homeButton.IsLoaded() && refreshButton.IsLoaded();
+
     g_injectedButtonsForThread.emplace(key, std::move(record));
-    g_pendingRefreshForThread.erase(key);
+    RemovePendingRefreshRecord(key);
 
     Wh_Log(L"Injected Home button adjacent to refreshButton (%p)", key);
     return true;
 }
 
-void EnsureRefreshButtonHooked(muxc::AppBarButton const& refreshButton,
+bool EnsureRefreshButtonHooked(muxc::AppBarButton const& refreshButton,
                                muxc::CommandBar const& knownCommandBar = nullptr) {
     if (!refreshButton || g_unloading.load()) {
-        return;
+        return false;
     }
 
     if (TryInjectHomeButtonForRefreshButton(refreshButton, knownCommandBar)) {
-        return;
+        return true;
     }
 
     void* key = GetElementKey(refreshButton);
-    if (!key || g_pendingRefreshForThread.contains(key)) {
-        return;
+    if (!key) {
+        return false;
+    }
+
+    auto existingIt = g_pendingRefreshForThread.find(key);
+    if (existingIt != g_pendingRefreshForThread.end()) {
+        if (existingIt->second.refreshButton.get()) {
+            return false;
+        }
+        g_pendingRefreshForThread.erase(existingIt);
     }
 
     PendingRefreshRecord pending;
     pending.refreshButton = winrt::make_weak(refreshButton);
-    pending.loadedRevoker = refreshButton.Loaded(
-        winrt::auto_revoke,
+    pending.loadedToken = refreshButton.Loaded(
         [key](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
-            g_pendingRefreshForThread.erase(key);
-            if (auto btn = sender.try_as<muxc::AppBarButton>()) {
-                TryInjectHomeButtonForRefreshButton(btn);
+            RemovePendingRefreshRecord(key);
+            if (g_unloading.load()) {
+                return;
+            }
+            try {
+                if (auto btn = sender.try_as<muxc::AppBarButton>()) {
+                    TryInjectHomeButtonForRefreshButton(btn);
+                }
+            } catch (...) {
             }
         });
     g_pendingRefreshForThread.emplace(key, std::move(pending));
+    return false;
 }
 
-void InspectXamlElement(mux::UIElement const& element) {
+void* InspectXamlElement(mux::UIElement const& element) {
     if (!element || g_unloading.load()) {
-        return;
+        return nullptr;
     }
 
     try {
         if (auto navCmds =
                 FindDescendantByName<muxc::CommandBar>(element, L"NavigationCommands")) {
+            muxc::AppBarButton targetBtn{nullptr};
             for (auto const& item : navCmds.PrimaryCommands()) {
                 if (auto btn = item.try_as<muxc::AppBarButton>()) {
-                    if (btn.Name() == L"refreshButton" || btn.Name() == L"stopButton") {
-                        EnsureRefreshButtonHooked(btn, navCmds);
-                        return;
+                    auto name = btn.Name();
+                    if (name == L"refreshButton") {
+                        targetBtn = btn;
+                        break;
+                    }
+                    if (name == L"stopButton" && !targetBtn) {
+                        targetBtn = btn;
                     }
                 }
+            }
+            if (targetBtn) {
+                if (EnsureRefreshButtonHooked(targetBtn, navCmds)) {
+                    return GetElementKey(targetBtn);
+                }
+                return nullptr;
             }
         }
 
         if (auto refreshBtn =
                 FindDescendantByName<muxc::AppBarButton>(element, L"refreshButton")) {
             muxc::CommandBar parentBar = FindAncestorCommandBar(refreshBtn);
-            EnsureRefreshButtonHooked(refreshBtn, parentBar);
-            return;
+            if (EnsureRefreshButtonHooked(refreshBtn, parentBar)) {
+                return GetElementKey(refreshBtn);
+            }
+            return nullptr;
         }
 
         if (auto stopBtn =
                 FindDescendantByName<muxc::AppBarButton>(element, L"stopButton")) {
             muxc::CommandBar parentBar = FindAncestorCommandBar(stopBtn);
-            EnsureRefreshButtonHooked(stopBtn, parentBar);
-            return;
+            if (EnsureRefreshButtonHooked(stopBtn, parentBar)) {
+                return GetElementKey(stopBtn);
+            }
+            return nullptr;
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+bool AllKnownNavBarsHaveLiveHomeButton() {
+    if (g_knownNavBarsForThread.empty()) {
+        return false;
+    }
+    bool anyLiveNavBar = false;
+    for (auto it = g_knownNavBarsForThread.begin();
+         it != g_knownNavBarsForThread.end();) {
+        auto navBar = it->second.navBar.get();
+        if (!navBar) {
+            it = g_knownNavBarsForThread.erase(it);
+            continue;
+        }
+        anyLiveNavBar = true;
+        if (!it->second.refreshKey) {
+            return false;
+        }
+        auto btnIt = g_injectedButtonsForThread.find(it->second.refreshKey);
+        if (btnIt == g_injectedButtonsForThread.end() ||
+            !btnIt->second.homeButton.get() ||
+            !btnIt->second.commandBar.get()) {
+            return false;
+        }
+        ++it;
+    }
+    return anyLiveNavBar;
+}
+
+void InspectNavigationBarOverridesThis(void* pOverridesThis, bool isLayoutPass) {
+    if (!pOverridesThis || g_unloading.load()) {
+        return;
+    }
+
+    if (isLayoutPass) {
+        auto it = g_knownNavBarsForThread.find(pOverridesThis);
+        if (it != g_knownNavBarsForThread.end()) {
+            if (!it->second.navBar.get()) {
+                g_knownNavBarsForThread.erase(it);
+            } else if (it->second.refreshKey) {
+                auto btnIt = g_injectedButtonsForThread.find(it->second.refreshKey);
+                if (btnIt != g_injectedButtonsForThread.end()) {
+                    auto homeBtn = btnIt->second.homeButton.get();
+                    auto refreshBtn = btnIt->second.refreshButton.get();
+                    auto cmdBar = btnIt->second.commandBar.get();
+                    if (homeBtn && refreshBtn && cmdBar) {
+                        if (!btnIt->second.syncedWhenLoaded &&
+                            homeBtn.IsLoaded() && refreshBtn.IsLoaded()) {
+                            try {
+                                ConfigureHomeButtonVisuals(homeBtn, refreshBtn,
+                                                           GetSettingsSnapshot());
+                                btnIt->second.syncedWhenLoaded = true;
+                            } catch (...) {
+                            }
+                        }
+                        return;
+                    }
+                }
+                it->second.refreshKey = nullptr;
+            }
+        }
+    }
+
+    try {
+        for (auto it = g_knownNavBarsForThread.begin();
+             it != g_knownNavBarsForThread.end();) {
+            if (!it->second.navBar.get()) {
+                it = g_knownNavBarsForThread.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        wf::IInspectable inspectable{nullptr};
+        winrt::copy_from_abi(inspectable, pOverridesThis);
+        if (auto navBarElement = inspectable ? inspectable.try_as<mux::UIElement>() : nullptr) {
+            void* refreshKey = InspectXamlElement(navBarElement);
+            KnownNavBarRecord& rec = g_knownNavBarsForThread[pOverridesThis];
+            rec.navBar = winrt::make_weak(navBarElement);
+            if (refreshKey) {
+                rec.refreshKey = refreshKey;
+            }
         }
     } catch (...) {
     }
@@ -769,41 +1134,40 @@ void ScanCurrentThreadForNavigationCommands() {
         return;
     }
 
-    try {
-        if (!g_focusGotFocusToken) {
-            g_focusGotFocusToken = muxi::FocusManager::GotFocus(
-                [](wf::IInspectable const&,
-                   muxi::FocusManagerGotFocusEventArgs const& args) {
-                    if (g_unloading.load()) {
-                        return;
-                    }
-                    try {
-                        if (auto el = args.NewFocusedElement()) {
-                            if (auto ui = el.try_as<mux::UIElement>()) {
-                                if (auto r = ui.XamlRoot()) {
-                                    if (auto c = r.Content()) {
-                                        InspectXamlElement(c);
-                                    }
-                                }
-                            }
-                        }
-                    } catch (...) {
-                    }
-                });
+    for (auto it = g_knownNavBarsForThread.begin();
+         it != g_knownNavBarsForThread.end();) {
+        auto navBar = it->second.navBar.get();
+        if (!navBar) {
+            it = g_knownNavBarsForThread.erase(it);
+            continue;
         }
-    } catch (...) {
+
+        try {
+            if (void* refreshKey = InspectXamlElement(navBar)) {
+                it->second.refreshKey = refreshKey;
+            }
+        } catch (...) {
+        }
+        ++it;
     }
 
-    try {
-        auto focused = muxi::FocusManager::GetFocusedElement();
-        if (auto element = focused ? focused.try_as<mux::UIElement>() : nullptr) {
-            if (auto root = element.XamlRoot()) {
+    for (auto it = g_knownCommandBarsForThread.begin();
+         it != g_knownCommandBarsForThread.end();) {
+        auto bar = it->second.commandBar.get();
+        if (!bar) {
+            it = g_knownCommandBarsForThread.erase(it);
+            continue;
+        }
+
+        try {
+            if (auto root = bar.XamlRoot()) {
                 if (auto content = root.Content()) {
                     InspectXamlElement(content);
                 }
             }
+        } catch (...) {
         }
-    } catch (...) {
+        ++it;
     }
 }
 
@@ -831,29 +1195,58 @@ void UpdateInjectedButtonsForCurrentThread() try {
 }
 
 void RemoveInjectedButtonsForCurrentThread() try {
-    if (g_focusGotFocusToken) {
+    g_knownNavBarsForThread.clear();
+
+    for (auto& [key, rec] : g_knownCommandBarsForThread) {
         try {
-            muxi::FocusManager::GotFocus(std::exchange(g_focusGotFocusToken, {}));
+            if (auto bar = rec.commandBar.get()) {
+                if (rec.loadedToken) {
+                    bar.Loaded(rec.loadedToken);
+                }
+            }
         } catch (...) {
         }
     }
+    g_knownCommandBarsForThread.clear();
 
-    std::exchange(g_commandBarLoadedForThread, {});
+    for (auto& [key, rec] : g_pendingRefreshForThread) {
+        try {
+            if (auto btn = rec.refreshButton.get()) {
+                if (rec.loadedToken) {
+                    btn.Loaded(rec.loadedToken);
+                }
+            }
+        } catch (...) {
+        }
+    }
+    g_pendingRefreshForThread.clear();
 
     for (auto& [key, record] : g_injectedButtonsForThread) {
-        record.clickRevoker.revoke();
-        record.loadedRevoker.revoke();
-        if (auto cmdBar = record.commandBar.get()) {
-            if (auto homeBtn = record.homeButton.get()) {
-                uint32_t idx = 0;
-                if (cmdBar.PrimaryCommands().IndexOf(homeBtn, idx)) {
-                    cmdBar.PrimaryCommands().RemoveAt(idx);
+        if (auto homeBtn = record.homeButton.get()) {
+            if (record.clickToken) {
+                try {
+                    homeBtn.Click(record.clickToken);
+                } catch (...) {
+                }
+            }
+            if (record.loadedToken) {
+                try {
+                    homeBtn.Loaded(record.loadedToken);
+                } catch (...) {
+                }
+            }
+            if (auto cmdBar = record.commandBar.get()) {
+                try {
+                    uint32_t idx = 0;
+                    if (cmdBar.PrimaryCommands().IndexOf(homeBtn, idx)) {
+                        cmdBar.PrimaryCommands().RemoveAt(idx);
+                    }
+                } catch (...) {
                 }
             }
         }
     }
-    std::exchange(g_injectedButtonsForThread, {});
-    std::exchange(g_pendingRefreshForThread, {});
+    g_injectedButtonsForThread.clear();
 } catch (...) {
     Wh_Log(L"Exception in RemoveInjectedButtonsForCurrentThread");
 }
@@ -862,100 +1255,88 @@ void RemoveInjectedButtonsForCurrentThread() try {
 // Hooks of File Explorer WinUI 3 (FileExplorerExtensions.dll)
 ////////////////////////////////////////////////////////////////////////////////
 
+void InspectHookSenderIfNeeded(void* sender) {
+    if (g_unloading.load() || !sender) {
+        return;
+    }
+
+    if (AllKnownNavBarsHaveLiveHomeButton()) {
+        return;
+    }
+
+    try {
+        auto inspectable = *reinterpret_cast<wf::IInspectable const*>(sender);
+        if (auto uiElement = inspectable ? inspectable.try_as<mux::UIElement>() : nullptr) {
+            InspectXamlElement(uiElement);
+            if (auto xamlRoot = uiElement.XamlRoot()) {
+                if (auto content = xamlRoot.Content()) {
+                    InspectXamlElement(content);
+                }
+            }
+        }
+    } catch (...) {
+    }
+}
+
+using NavigationBarControl_Overrides_OnApplyTemplate_t = int32_t(WINAPI*)(void* pThis);
+NavigationBarControl_Overrides_OnApplyTemplate_t
+    NavigationBarControl_Overrides_OnApplyTemplate_Original = nullptr;
+int32_t WINAPI NavigationBarControl_Overrides_OnApplyTemplate_Hook(void* pThis) {
+    int32_t hr = NavigationBarControl_Overrides_OnApplyTemplate_Original(pThis);
+    if (!g_unloading.load()) {
+        InspectNavigationBarOverridesThis(pThis, false);
+    }
+    return hr;
+}
+
+using NavigationBarControl_Overrides_MeasureOverride_t =
+    int32_t(WINAPI*)(void* pThis, uint64_t availableSize, void* resultSize);
+NavigationBarControl_Overrides_MeasureOverride_t
+    NavigationBarControl_Overrides_MeasureOverride_Original = nullptr;
+int32_t WINAPI NavigationBarControl_Overrides_MeasureOverride_Hook(
+    void* pThis,
+    uint64_t availableSize,
+    void* resultSize) {
+    if (!g_unloading.load()) {
+        InspectNavigationBarOverridesThis(pThis, true);
+    }
+    return NavigationBarControl_Overrides_MeasureOverride_Original(
+        pThis, availableSize, resultSize);
+}
+
+using NavigationBarControl_Overrides_ArrangeOverride_t =
+    int32_t(WINAPI*)(void* pThis, uint64_t finalSize, void* resultSize);
+NavigationBarControl_Overrides_ArrangeOverride_t
+    NavigationBarControl_Overrides_ArrangeOverride_Original = nullptr;
+int32_t WINAPI NavigationBarControl_Overrides_ArrangeOverride_Hook(
+    void* pThis,
+    uint64_t finalSize,
+    void* resultSize) {
+    int32_t hr = NavigationBarControl_Overrides_ArrangeOverride_Original(
+        pThis, finalSize, resultSize);
+    if (!g_unloading.load()) {
+        InspectNavigationBarOverridesThis(pThis, true);
+    }
+    return hr;
+}
+
 using NavigationBarControl_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
 NavigationBarControl_OnApplyTemplate_t NavigationBarControl_OnApplyTemplate_Original = nullptr;
 void WINAPI NavigationBarControl_OnApplyTemplate_Hook(void* pThis) {
     NavigationBarControl_OnApplyTemplate_Original(pThis);
-    if (g_unloading.load() || !pThis) {
-        return;
-    }
-
-    try {
-        winrt::com_ptr<::IUnknown> unk;
-        unk.copy_from(reinterpret_cast<::IUnknown*>(pThis));
-        if (auto element = unk.try_as<mux::UIElement>()) {
-            InspectXamlElement(element);
-
-            if (auto fe = element.try_as<mux::FrameworkElement>()) {
-                if (!fe.IsLoaded()) {
-                    void* elKey = GetElementKey(fe);
-                    if (elKey && !g_commandBarLoadedForThread.contains(elKey)) {
-                        g_commandBarLoadedForThread.emplace(
-                            elKey,
-                            fe.Loaded(winrt::auto_revoke,
-                                      [](wf::IInspectable const& sender,
-                                         mux::RoutedEventArgs const&) {
-                                          if (g_unloading.load()) {
-                                              return;
-                                          }
-                                          try {
-                                              if (auto el = sender.try_as<mux::UIElement>()) {
-                                                  InspectXamlElement(el);
-                                              }
-                                          } catch (...) {
-                                          }
-                                      }));
-                    }
-                }
-            }
-
-            if (auto root = element.XamlRoot()) {
-                if (auto content = root.Content()) {
-                    InspectXamlElement(content);
-                }
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"Exception in NavigationBarControl_OnApplyTemplate_Hook");
+    if (!g_unloading.load()) {
+        ScanCurrentThreadForNavigationCommands();
     }
 }
 
-using AddressBarControl_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
-AddressBarControl_OnApplyTemplate_t AddressBarControl_OnApplyTemplate_Original = nullptr;
-void WINAPI AddressBarControl_OnApplyTemplate_Hook(void* pThis) {
-    AddressBarControl_OnApplyTemplate_Original(pThis);
-    if (g_unloading.load() || !pThis) {
-        return;
-    }
-
-    try {
-        winrt::com_ptr<::IUnknown> unk;
-        unk.copy_from(reinterpret_cast<::IUnknown*>(pThis));
-        if (auto element = unk.try_as<mux::UIElement>()) {
-            InspectXamlElement(element);
-
-            if (auto fe = element.try_as<mux::FrameworkElement>()) {
-                if (!fe.IsLoaded()) {
-                    void* elKey = GetElementKey(fe);
-                    if (elKey && !g_commandBarLoadedForThread.contains(elKey)) {
-                        g_commandBarLoadedForThread.emplace(
-                            elKey,
-                            fe.Loaded(winrt::auto_revoke,
-                                      [](wf::IInspectable const& sender,
-                                         mux::RoutedEventArgs const&) {
-                                          if (g_unloading.load()) {
-                                              return;
-                                          }
-                                          try {
-                                              if (auto el = sender.try_as<mux::UIElement>()) {
-                                                  InspectXamlElement(el);
-                                              }
-                                          } catch (...) {
-                                          }
-                                      }));
-                    }
-                }
-            }
-
-            if (auto root = element.XamlRoot()) {
-                if (auto content = root.Content()) {
-                    InspectXamlElement(content);
-                }
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"Exception in AddressBarControl_OnApplyTemplate_Hook");
-    }
+using NavigationBarControl_LosingFocusHandler_t =
+    void(WINAPI*)(void* pThis, void* sender, void* args);
+NavigationBarControl_LosingFocusHandler_t NavigationBarControl_LosingFocusHandler_Original = nullptr;
+void WINAPI NavigationBarControl_LosingFocusHandler_Hook(void* pThis,
+                                                         void* sender,
+                                                         void* args) {
+    NavigationBarControl_LosingFocusHandler_Original(pThis, sender, args);
+    InspectHookSenderIfNeeded(sender);
 }
 
 using CommandBarManager_CommandBar_t = void(WINAPI*)(void* pThis, void* commandBar);
@@ -978,27 +1359,37 @@ void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
             }
         }
 
+        // Prune any dead commandBar records before inserting
+        for (auto it = g_knownCommandBarsForThread.begin();
+             it != g_knownCommandBarsForThread.end();) {
+            if (!it->second.commandBar.get()) {
+                it = g_knownCommandBarsForThread.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
         void* barKey = GetElementKey(bar);
-        if (barKey && !g_commandBarLoadedForThread.contains(barKey)) {
-            g_commandBarLoadedForThread.emplace(
-                barKey,
-                bar.Loaded(winrt::auto_revoke,
-                           [](wf::IInspectable const& sender,
-                              mux::RoutedEventArgs const&) {
-                               if (g_unloading.load()) {
-                                   return;
-                               }
-                               try {
-                                   if (auto b = sender.try_as<muxc::CommandBar>()) {
-                                       if (auto r = b.XamlRoot()) {
-                                           if (auto c = r.Content()) {
-                                               InspectXamlElement(c);
-                                           }
-                                       }
-                                   }
-                               } catch (...) {
-                               }
-                           }));
+        if (barKey && !g_knownCommandBarsForThread.contains(barKey)) {
+            KnownCommandBarRecord rec;
+            rec.commandBar = winrt::make_weak(bar);
+            rec.loadedToken = bar.Loaded(
+                [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+                    if (g_unloading.load()) {
+                        return;
+                    }
+                    try {
+                        if (auto b = sender.try_as<muxc::CommandBar>()) {
+                            if (auto r = b.XamlRoot()) {
+                                if (auto c = r.Content()) {
+                                    InspectXamlElement(c);
+                                }
+                            }
+                        }
+                    } catch (...) {
+                    }
+                });
+            g_knownCommandBarsForThread.emplace(barKey, std::move(rec));
         }
     } catch (...) {
         Wh_Log(L"Exception in CommandBarManager_CommandBar_Hook: %08X",
@@ -1031,24 +1422,43 @@ CommandBarControl_GotFocusHandler_t CommandBarControl_Wave1_GotFocusHandler_Orig
 
 void WINAPI CommandBarControl_GotFocusHandler_Hook(void* pThis, void* sender, void* args) {
     CommandBarControl_GotFocusHandler_Original(pThis, sender, args);
-    if (!g_unloading.load()) {
-        ScanCurrentThreadForNavigationCommands();
-    }
+    InspectHookSenderIfNeeded(sender);
 }
 
 void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis, void* sender, void* args) {
     CommandBarControl_Wave1_GotFocusHandler_Original(pThis, sender, args);
-    if (!g_unloading.load()) {
-        ScanCurrentThreadForNavigationCommands();
-    }
+    InspectHookSenderIfNeeded(sender);
 }
 
 bool HookFileExplorerExtensionsSymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
         {
             {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::FileExplorerExtensions::implementation::NavigationBarControl,struct winrt::Microsoft::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))",
+            },
+            &NavigationBarControl_Overrides_OnApplyTemplate_Original,
+            NavigationBarControl_Overrides_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::FileExplorerExtensions::implementation::NavigationBarControl,struct winrt::Microsoft::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))",
+            },
+            &NavigationBarControl_Overrides_MeasureOverride_Original,
+            NavigationBarControl_Overrides_MeasureOverride_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::FileExplorerExtensions::implementation::NavigationBarControl,struct winrt::Microsoft::UI::Xaml::IFrameworkElementOverrides>::ArrangeOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))",
+            },
+            &NavigationBarControl_Overrides_ArrangeOverride_Original,
+            NavigationBarControl_Overrides_ArrangeOverride_Hook,
+            true,
+        },
+        {
+            {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::NavigationBarControl::OnApplyTemplate(void))",
-                LR"(?OnApplyTemplate@NavigationBarControl@implementation@FileExplorerExtensions@winrt@@QEAAXXZ)",
             },
             &NavigationBarControl_OnApplyTemplate_Original,
             NavigationBarControl_OnApplyTemplate_Hook,
@@ -1056,17 +1466,15 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::AddressBarControl::OnApplyTemplate(void))",
-                LR"(?OnApplyTemplate@AddressBarControl@implementation@FileExplorerExtensions@winrt@@QEAAXXZ)",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::NavigationBarControl::LosingFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::Input::LosingFocusEventArgs const &))",
             },
-            &AddressBarControl_OnApplyTemplate_Original,
-            AddressBarControl_OnApplyTemplate_Hook,
+            &NavigationBarControl_LosingFocusHandler_Original,
+            NavigationBarControl_LosingFocusHandler_Hook,
             true,
         },
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
-                LR"(?CommandBar@CommandBarManager@implementation@FileExplorerExtensions@winrt@@QEAAXAEBU0Controls@Xaml@UI@Microsoft@4@@Z)",
             },
             &CommandBarManager_CommandBar_Original,
             CommandBarManager_CommandBar_Hook,
@@ -1075,7 +1483,6 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::OnApplyTemplate(void))",
-                LR"(?OnApplyTemplate@CommandBarControl@implementation@FileExplorerExtensions@winrt@@QEAAXXZ)",
             },
             &CommandBarControl_OnApplyTemplate_Original,
             CommandBarControl_OnApplyTemplate_Hook,
@@ -1084,7 +1491,6 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::OnApplyTemplate(void))",
-                LR"(?OnApplyTemplate@CommandBarControl_Wave1@implementation@FileExplorerExtensions@winrt@@QEAAXXZ)",
             },
             &CommandBarControl_Wave1_OnApplyTemplate_Original,
             CommandBarControl_Wave1_OnApplyTemplate_Hook,
@@ -1093,7 +1499,6 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
-                LR"(?CommandBarControlGotFocusHandler@CommandBarControl@implementation@FileExplorerExtensions@winrt@@QEAAXAEBUIInspectable@Foundation@Windows@4@AEBURoutedEventArgs@Xaml@UI@Microsoft@4@@Z)",
             },
             &CommandBarControl_GotFocusHandler_Original,
             CommandBarControl_GotFocusHandler_Hook,
@@ -1102,7 +1507,6 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
-                LR"(?CommandBarControlGotFocusHandler@CommandBarControl_Wave1@implementation@FileExplorerExtensions@winrt@@QEAAXAEBUIInspectable@Foundation@Windows@4@AEBURoutedEventArgs@Xaml@UI@Microsoft@4@@Z)",
             },
             &CommandBarControl_Wave1_GotFocusHandler_Original,
             CommandBarControl_Wave1_GotFocusHandler_Hook,
@@ -1159,7 +1563,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Thread Invocation Helpers
+// Thread Invocation and Live Window Layout Nudge Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
 using RUN_FROM_WINDOW_THREAD_PROC = void (*)(PVOID param);
@@ -1226,6 +1630,43 @@ std::vector<HWND> GetExplorerCabinetWindows() {
     return hWnds;
 }
 
+void TriggerLiveLayoutPassForWindow(HWND hCabinetWnd) {
+    if (!hCabinetWnd || g_unloading.load()) {
+        return;
+    }
+
+    ScanCurrentThreadForNavigationCommands();
+
+    EnumChildWindows(
+        hCabinetWnd,
+        [](HWND hChild, LPARAM) -> BOOL {
+            WCHAR cls[128] = {};
+            if (GetClassNameW(hChild, cls, ARRAYSIZE(cls))) {
+                if (wcscmp(cls, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0 ||
+                    wcscmp(cls, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 ||
+                    wcscmp(cls, L"WorkerW") == 0) {
+                    RECT rc{};
+                    if (GetWindowRect(hChild, &rc)) {
+                        int w = rc.right - rc.left;
+                        int h = rc.bottom - rc.top;
+                        if (w > 10 && h > 10) {
+                            constexpr UINT kFlags = SWP_NOMOVE | SWP_NOZORDER |
+                                                    SWP_NOACTIVATE |
+                                                    SWP_NOOWNERZORDER;
+                            SetWindowPos(hChild, nullptr, 0, 0, w + 1, h, kFlags);
+                            UpdateWindow(hChild);
+                            SetWindowPos(hChild, nullptr, 0, 0, w, h, kFlags);
+                        }
+                    }
+                }
+            }
+            return TRUE;
+        },
+        0);
+
+    ScanCurrentThreadForNavigationCommands();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk Mod Entry Points
 ////////////////////////////////////////////////////////////////////////////////
@@ -1235,6 +1676,11 @@ BOOL Wh_ModInit() {
 
     g_unloading.store(false);
     LoadSettings();
+
+    // If FileExplorerExtensions.dll is already loaded in explorer.exe, register
+    // its symbol hooks immediately during ModInit so Windhawk applies them
+    // alongside LoadLibraryExW.
+    HookFileExplorerExtensionsIfLoaded(false);
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     if (kernelBaseModule) {
@@ -1254,17 +1700,13 @@ void Wh_ModAfterInit() {
     HookFileExplorerExtensionsIfLoaded(true);
 
     auto windows = GetExplorerCabinetWindows();
-    std::unordered_set<DWORD> visitedThreads;
     for (HWND hWnd : windows) {
-        DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
-        if (tid && visitedThreads.insert(tid).second) {
-            RunFromWindowThread(
-                hWnd,
-                [](PVOID) {
-                    ScanCurrentThreadForNavigationCommands();
-                },
-                nullptr);
-        }
+        RunFromWindowThread(
+            hWnd,
+            [](PVOID param) {
+                TriggerLiveLayoutPassForWindow(static_cast<HWND>(param));
+            },
+            hWnd);
     }
 }
 
