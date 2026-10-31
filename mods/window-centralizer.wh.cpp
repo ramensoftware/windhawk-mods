@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              window-centralizer
 // @name            Window Centralizer
-// @description     Predictably centers new windows and dialogs to their parent or to the mouse cursor, with a configurable threshold and exclusion list.
+// @description     Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.
 // @version         1.0.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
