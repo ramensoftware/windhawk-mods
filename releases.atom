@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-31T16:04:17.000Z</updated>
+    <updated>2026-10-31T19:48:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Family Safety Applet Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#f7502792d29d0612ef13f0e3eab910b9f3cb79e7</id>
+        <link href="https://windhawk.net/mods/win8-family-safety-applet-restorer"/>
+        <updated>2026-10-31T19:48:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881familysafetyappletrestorer">Windows 8/8.1 Family Safety Applet Restorer</h1>
+<p>This mod restores the classic Windows 8/8.1 Family Safety (Parental Controls) Control Panel applet that was removed from modern versions of Windows.</p>
+<p><strong>IMPORTANT:</strong> <code>svchost.exe</code> must be included in the mod's target processes.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety1.png" alt="family1" /></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety2.png" alt="family2" /></p>
+<h2 id="about">About</h2>
+<p>The mod downloads the original Windows binaries from Microsoft’s public symbol server on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches in memory, and registers the applet virtually so that no permanent system files are modified.</p>
+<p>It supports 6 languages: English, Italian, Persian, Spanish, French and Portuguese.<br />
+The language can follow the Windows UI language or be forced to a specific locale.</p>
+<p>The applet appears under <strong>User Accounts</strong> in Control Panel Category view and can also be opened directly.</p>
+<p>Note: it might take a minute to load the applet because the mod downloads the required dependencies.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdministratoX - Original implementation and screenshots</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Recycle Bin File Preview 1.0.0]]></title>
         <id>https://windhawk.net/mods/recycle-bin-file-preview#de5d1d54404e8a578d1425dcfd654952d48ba9b8</id>
@@ -1116,44 +1142,6 @@ IAudioRenderClient), and apps that bypass WASAPI entirely may not be affected.</
         <author>
             <name>shubho</name>
             <uri>https://github.com/shubho193</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[GPU-accelerated explorer.exe list and grid views 0.9.240]]></title>
-        <id>https://windhawk.net/mods/gpu-accelerated-explorer-view#6937b85477825dcbee84bf84d05718f0e68436dd</id>
-        <link href="https://windhawk.net/mods/gpu-accelerated-explorer-view"/>
-        <updated>2026-10-26T15:04:30.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/refs/heads/main/assets/showcase.gif" alt="Showcase GIF" /></p>
-<h1 id="gpuacceleratedexplorerexelistandgridviews">GPU-accelerated <code>explorer.exe</code> list and grid views</h1>
-<p>A Windhawk mod for Windows 11 Explorer with GPU rendering for smooth animations and modern look.</p>
-<ul>
-<li>Replicates explorer views using hardware accelerated graphics: Details list and icons grid, including thumbnails, sorting and grouping.</li>
-<li>Animated interactions: grouping, sorting, selecting/cutting/copying files, and many more.</li>
-<li>Smooth scrolling, touchpad gestures and inertia scrolling.</li>
-<li>RTL language support.</li>
-<li>Optional button to switch back to native Explorer view; <strong>Ctrl+Alt+F9</strong> also works when the button is hidden.</li>
-<li>Prioritizes responsiveness and animations over efficiency.</li>
-<li>Less likely to break in future Windows updates since it does not modify the default views of explorer but recreates them</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Adjustable Item Height</strong> — Smooth zooming with <code>Ctrl</code>+ mouse wheel or pinch gestures.</li>
-<li><strong>Custom Fonts</strong> — Personalize the appearance with your preferred fonts.</li>
-<li><strong>Text Antialiasing</strong> — Use Windows monitor tuning, smooth grayscale, or no antialiasing while preserving transparent backgrounds.</li>
-<li><strong>Animated Selection & Hover States</strong> — Smooth visual transitions, including a dedicated selection style for file names only.</li>
-<li><strong>Dynamic Zebra Striping</strong> — Animated alternating row colors for improved readability.</li>
-<li><strong>Smooth Scrolling</strong> — Fluid scrolling for a more responsive browsing experience.</li>
-<li><strong>Seamless View Switching</strong> — Overlays the default Explorer views, letting you switch between the modded and native views directly from the Explorer window.</li>
-<li><strong>Faster Loading</strong> — Improves load times through caching and by skipping file pre-sorting.</li>
-<li><strong>Adaptive Image Quality</strong> — Matches icon and thumbnail resolution to visible size and available memory.</li>
-</ul>
-<h2 id="reportbugs">Report bugs</h2>
-<p>Report bugs in the mod's main repository <a href="https://github.com/DarkionAvey/windhawk-gpu-accelerated-explorer-view/issues">Here</a>.
-Enable <strong>Enable logging</strong> when reproducing a bug and include Windhawk's log in
-the report. Logs include file names and paths; disable the option afterward.</p>]]></content>
-        <author>
-            <name>DarkionAvey</name>
-            <uri>https://github.com/DarkionAvey</uri>
         </author>
     </entry>
 </feed>

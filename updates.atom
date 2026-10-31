@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-31T16:04:30.000Z</updated>
+    <updated>2026-10-31T19:48:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Family Safety Applet Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#f7502792d29d0612ef13f0e3eab910b9f3cb79e7</id>
+        <link href="https://windhawk.net/mods/win8-family-safety-applet-restorer"/>
+        <updated>2026-10-31T19:48:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881familysafetyappletrestorer">Windows 8/8.1 Family Safety Applet Restorer</h1>
+<p>This mod restores the classic Windows 8/8.1 Family Safety (Parental Controls) Control Panel applet that was removed from modern versions of Windows.</p>
+<p><strong>IMPORTANT:</strong> <code>svchost.exe</code> must be included in the mod's target processes.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety1.png" alt="family1" /></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety2.png" alt="family2" /></p>
+<h2 id="about">About</h2>
+<p>The mod downloads the original Windows binaries from Microsoft’s public symbol server on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches in memory, and registers the applet virtually so that no permanent system files are modified.</p>
+<p>It supports 6 languages: English, Italian, Persian, Spanish, French and Portuguese.<br />
+The language can follow the Windows UI language or be forced to a specific locale.</p>
+<p>The applet appears under <strong>User Accounts</strong> in Control Panel Category view and can also be opened directly.</p>
+<p>Note: it might take a minute to load the applet because the mod downloads the required dependencies.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdministratoX - Original implementation and screenshots</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1/10 UAC Recreation 1.1.0]]></title>
         <id>https://windhawk.net/mods/win7-uac-recreation#cd3169cd698f0ff2976ccddf3377e31e324db328</id>
@@ -984,25 +1010,6 @@ https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment</p>]]></conte
         <author>
             <name>vmTools</name>
             <uri>https://github.com/VitalyTz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Magic Pointer 1.0.4]]></title>
-        <id>https://windhawk.net/mods/magic-pointer#03aa5d1759a850ce6b8df6f9a68dc63b99c12cf9</id>
-        <link href="https://windhawk.net/mods/magic-pointer"/>
-        <updated>2026-10-29T18:02:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added ChatGPT and Claude next to Gemini. The one API key setting accepts a key from any of the three and the mod recognizes which service it is for. That service then answers questions and follow-ups and powers Smart suggestions and Translate. Without a key, Gemini in the browser works as before.</li>
-<li>The Model setting is now a level (Fast, Balanced, Smartest) that maps to each service's own models, and the separate suggestions model setting is gone. Gemini model names saved by 1.0.3 are still honored.</li>
-<li>When the chosen model is busy, slow to start or not available on the key's plan, a faster model answers instead and the card says so.</li>
-<li>New Start typing to ask setting (on by default): as soon as the pointer appears, start typing and the card opens at the pointer with your text and no image, and Enter asks. Turn it off to keep typing in the app you were using.</li>
-<li>New Custom pointer file setting to use your own .cur or .ani file (animated cursors included) instead of the pointer arrow. It only replaces the pointer while the Magic Pointer is on screen, scales with Pointer size and display scaling, and gets the same glow. The hint moves aside for large cursors.</li>
-<li>More reliable hand-off to Gemini in the browser: the image and question are retried when Gemini redraws its message box after loading, so an attachment is no longer sometimes left out.</li>
-<li>Translated the new texts and settings and updated the documentation. The new translations were written with AI assistance, so corrections are welcome on GitHub.</li>
-</ul>]]></content>
-        <author>
-            <name>Rono</name>
-            <uri>https://github.com/rono-zeroseven</uri>
         </author>
     </entry>
 </feed>
