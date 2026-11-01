@@ -1,3 +1,18 @@
+## 1.0.3 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/568f435119377c2e880191bb82cffe0d5498f2ce/mods/smart-process-priority-ram-optimizer.wh.cpp))
+
+- add WASAPI capture-endpoint audio scanning (microphones/line-in) with 5-second silence hysteresis
+- implement network transfer shielding via extended TCP and UDP owner tables
+- route early memory-cap sweeps through SystemActionArbiter with fast working-set pre-filtering
+- replace hardcoded browser process names with command-line role detection (`--type=renderer` and `-contentproc`)
+- preserve full process families in immunity sets to prevent active browser and Electron UI renderers from being trimmed
+- add minimize-aware and multitasking-adaptive memory trim grace periods
+- throttle runaway background tasks when saturating a single CPU core (>= 80%)
+- add borderless full-screen window geometry detection for gaming sanctuary
+- preserve original application EcoQoS power-throttling state across throttling cycles
+- reduce foreground focus debounce to 200 ms with bounded focus history
+- include touchpad driver helpers in essential system security process immunity
+- use native Windows SDK `<iphlpapi.h>` definitions and link `-liphlpapi` directly
+
 ## 1.0.2 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/25462332c30b60131ce2d02809ed23eecb17fe46/mods/smart-process-priority-ram-optimizer.wh.cpp))
 
 - Decouple immune family processes from handled PID set in memory trim arbiter

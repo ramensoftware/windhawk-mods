@@ -14313,21 +14313,21 @@
         "ratingUsers": 40,
         "reviews": 0,
         "trendingSorting": 19.80109375311775,
-        "updated": 1792861425000,
+        "updated": 1793574169000,
         "users": 896
       },
       "metadata": {
         "author": "gilnett",
-        "compilerOptions": "-lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof",
+        "compilerOptions": "-lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi",
         "description": "Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.",
-        "donateUrl": "https://ko-fi.com/gilnet",
+        "donateUrl": "https://buymeacoffee.com/gilnett",
         "github": "https://github.com/gilnett",
         "include": [
           "windhawk.exe"
         ],
         "license": "GPL-3.0",
         "name": "Smart Process Priority & RAM Optimizer",
-        "version": "1.0.2"
+        "version": "1.0.3"
       }
     },
     "smooth-desktop-icons-auto-hide": {

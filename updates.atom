@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-01T21:00:40.000Z</updated>
+    <updated>2026-11-01T23:02:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.0.3]]></title>
+        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#568f435119377c2e880191bb82cffe0d5498f2ce</id>
+        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
+        <updated>2026-11-01T23:02:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>add WASAPI capture-endpoint audio scanning (microphones/line-in) with 5-second silence hysteresis</li>
+<li>implement network transfer shielding via extended TCP and UDP owner tables</li>
+<li>route early memory-cap sweeps through SystemActionArbiter with fast working-set pre-filtering</li>
+<li>replace hardcoded browser process names with command-line role detection (<code>--type=renderer</code> and <code>-contentproc</code>)</li>
+<li>preserve full process families in immunity sets to prevent active browser and Electron UI renderers from being trimmed</li>
+<li>add minimize-aware and multitasking-adaptive memory trim grace periods</li>
+<li>throttle runaway background tasks when saturating a single CPU core (&gt;= 80%)</li>
+<li>add borderless full-screen window geometry detection for gaming sanctuary</li>
+<li>preserve original application EcoQoS power-throttling state across throttling cycles</li>
+<li>reduce foreground focus debounce to 200 ms with bounded focus history</li>
+<li>include touchpad driver helpers in essential system security process immunity</li>
+<li>use native Windows SDK <code>&lt;iphlpapi.h&gt;</code> definitions and link <code>-liphlpapi</code> directly</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Corner Click Fix 2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#0f752e6d527be1492ca41e8497c8c4bb723a3b2b</id>
@@ -964,19 +988,6 @@ The language can follow the Windows UI language or be forced to a specific local
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7.3]]></title>
-        <id>https://windhawk.net/mods/desktop-draggable-widgets#2d32e8e405b989702c69f1e918195bba0f051fd0</id>
-        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
-        <updated>2026-10-31T16:04:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Mods are now more interactive and have more styles, WiFi, Hotspot, Bluetooth and Mode widgets indicate the functions current status with the toggle button, the default appearance theme is changed, and Winblue appearance theme is removed</li>
-</ul>]]></content>
-        <author>
-            <name>Jona like it, code it</name>
-            <uri>https://github.com/Stunning-dev</uri>
         </author>
     </entry>
 </feed>
