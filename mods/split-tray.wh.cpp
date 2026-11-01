@@ -2,7 +2,7 @@
 // @id              split-tray
 // @name            Split Tray
 // @description     A notification area on every display's taskbar: choose, per application, which tray its icon shows in
-// @version         1.4.6
+// @version         1.4.7
 // @author          Brandon Stonebridge
 // @github          https://github.com/st0nebridge
 // @homepage        https://github.com/st0nebridge/SplitTray
@@ -32,6 +32,8 @@ and lets you choose which tray each application's icon lives in.
   for any other icon.
 * Per-application rules - "this program's icon goes to tray 3" - and a
   default for everything else.
+* Drag application icons directly between the primary tray and Split Tray's
+  trays, including the secondary overflow popup.
 * Move any icon by hand: **Shift+right-click** an icon in one of Split Tray's
   trays for its menu, or open **Arrange icons** to drag icons between every
   tray. Where you put an icon is remembered, until it has not been seen for a
@@ -71,9 +73,11 @@ to another tray is really gone from the main one - it is not an overlay.
   first time it has one to show; the copy goes when the icon does.
 * More displays connected at once than ever before move the extra trays'
   numbers up by one, to make room.
-### Keyboard and recovery
 
-Ctrl+Alt+T opens Arrange. Ctrl+Alt+Shift+T cycles floating trays.
+## Keyboard and recovery
+
+Global shortcuts are off by default. Enable them in Settings to use
+Ctrl+Shift+F11 for Arrange and Ctrl+Shift+F12 to cycle floating trays.
 Ctrl+Shift+F10 on an icon opens Split Tray's menu; Shift+F10 opens its
 application's menu. The chevron and empty-tray handle support keyboard and
 screen-reader invocation. In Arrange, Ctrl+Up/Down changes order, Ctrl+R
@@ -210,8 +214,14 @@ importing; the tool requires the checkout and is not part of the installed mod.
 - maxVisibleIcons: 8
   $name: Icons before the overflow chevron
   $description: >-
-    How many icons a tray in a taskbar shows before the rest move behind a
-    "show hidden icons" chevron, as the native tray does. 0 shows all of them.
+    Maximum visible icons in each embedded or floating tray before overflow.
+    0 removes the count limit. Embedded trays still use at most 25% of their
+    taskbar width; explicitly hidden icons stay in overflow.
+- enableGlobalHotkeys: false
+  $name: Enable global keyboard shortcuts
+  $description: >-
+    Opt in to Ctrl+Shift+F11 for Arrange and Ctrl+Shift+F12 to cycle floating
+    trays. Off by default so other applications keep their shortcuts.
 - repopulateOnLoad: true
   $name: Collect existing icons on load
   $description: >-
@@ -282,6 +292,7 @@ void RequestEmbeddedRefresh();
 // overflow.
 bool IconScreenRect(uint64_t serial, RECT* out);
 int EmbeddedDropTargetAt(POINT point);
+int OverflowDropTargetAt(POINT point);
 void UpdateInsertionPreviewLifetime();
 // Whether a display's tray still has to be put into its taskbar, so the tray
 // thread keeps asking the taskbar's thread to try. Safe from any thread.
@@ -793,6 +804,7 @@ struct Settings {
     bool repopulateOnLoad = true;
     bool embedInTaskbar = true;
     int maxVisibleIcons = 8;
+    bool enableGlobalHotkeys = false;
 };
 
 // For the log: "primary", "tray 3", or "tray 2 and primary".
@@ -957,6 +969,7 @@ Settings LoadSettings() {
     s.mirrorHiddenIcons = Wh_GetIntSetting(L"mirrorHiddenIcons") != 0;
     s.repopulateOnLoad = Wh_GetIntSetting(L"repopulateOnLoad") != 0;
     s.embedInTaskbar = Wh_GetIntSetting(L"embedInTaskbar") != 0;
+    s.enableGlobalHotkeys = Wh_GetIntSetting(L"enableGlobalHotkeys") != 0;
     s.maxVisibleIcons = Clamp(Wh_GetIntSetting(L"maxVisibleIcons"), 0, 64);
 
     return s;
@@ -2524,12 +2537,25 @@ void UnregisterModClass(PCWSTR name) {
 
 // Cross-tray input contains values only; no XAML object crosses threads.
 // Shell_TrayWnd consumes queued drops after native pointer handlers return.
-struct TrayDrop { uint64_t serial = 0; int source = 0; POINT point{}; ULONGLONG tick = 0; };
+struct TrayDrop {
+    uint64_t serial = 0;
+    int source = 0;
+    POINT point{};
+    ULONGLONG tick = 0;
+    bool fromOverflow = false;
+};
 std::mutex g_dropMutex;
 std::vector<TrayDrop> g_pendingDrops;
 std::map<int, HWND> g_dropWindows;  // protected by g_mutex
 std::map<int,double> g_dragIconSizeDips;  // actual embedded image sizes, g_mutex
-struct NativePress { uint64_t serial = 0; POINT point{}; ULONGLONG tick = 0; int source = 1; DWORD thread = 0; };
+struct NativePress {
+    uint64_t serial = 0;
+    POINT point{};
+    ULONGLONG tick = 0;
+    int source = 1;
+    DWORD thread = 0;
+    bool fromOverflow = false;
+};
 std::atomic<uint64_t> g_cancelGestureSerial{0};
 NativePress g_pendingNativePress;  // protected by g_dropMutex
 
@@ -2545,6 +2571,7 @@ struct TrayGesture {
     POINT start{};
     ULONGLONG tick = 0;
     bool dragging = false;
+    bool fromOverflow = false;
     bool Update(POINT point, bool down, bool cancel, ULONGLONG now,
                 int thresholdX, int thresholdY) {
         if (!serial) return false;
@@ -2556,6 +2583,9 @@ struct TrayGesture {
 };
 TrayGesture g_nativeGesture;  // worker thread only
 auto g_dragKeyState = GetAsyncKeyState;
+auto g_inputSystemMetrics = GetSystemMetrics;
+int PrimaryButtonKey() { return g_inputSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON; }
+int SecondaryButtonKey() { return g_inputSystemMetrics(SM_SWAPBUTTON) ? VK_LBUTTON : VK_RBUTTON; }
 auto g_dragCursor = GetCursorPos;
 auto g_dragCapture = GetCapture;
 auto g_dropWindowVisible = IsWindowVisible;
@@ -2727,11 +2757,11 @@ void UpdateDragFeedback(uint64_t serial,int source,POINT pointer,DWORD inputThre
 
 void ProcessDragHover();
 
-void QueueTrayDrop(uint64_t serial, int source, POINT point) {
+void QueueTrayDrop(uint64_t serial, int source, POINT point, bool fromOverflow=false) {
     if (!serial || g_unloading.load()) return;
     std::lock_guard<std::mutex> lock(g_dropMutex);
     if (g_pendingDrops.size() >= 16) return;
-    g_pendingDrops.push_back({serial,source,point,GetTickCount64()});
+    g_pendingDrops.push_back({serial,source,point,GetTickCount64(),fromOverflow});
     if (HWND taskbar = g_shellTrayWnd.load()) {
         if (!PostMessageW(taskbar,GetTrayDropMessage(),0,0)) g_pendingDrops.clear();
     } else g_pendingDrops.clear();
@@ -2743,19 +2773,19 @@ void BeginNativeGesture(HWND window) {
       press = std::exchange(g_pendingNativePress,NativePress{}); }
     if (!press.serial || g_unloading.load()) return;
     StopDragFeedback();
-    g_nativeGesture = {press.serial,press.source,press.point,press.tick,false};
+    g_nativeGesture = {press.serial,press.source,press.point,press.tick,false,press.fromOverflow};
     g_dragFeedbackThread.store(press.thread);
     if (!SetTimer(window,2,16,nullptr)) g_nativeGesture = {};  // never an idle poll
 }
 
 void PollNativeGesture(HWND window) {
     POINT point{};
-    const bool down = (g_dragKeyState(VK_LBUTTON)&0x8000) != 0;
+    const bool down = (g_dragKeyState(PrimaryButtonKey())&0x8000) != 0;
     const bool cancel = g_unloading.load() || g_cancelGestureSerial.load() == g_nativeGesture.serial || (g_dragKeyState(VK_ESCAPE)&0x8000) ||
-                        (g_dragKeyState(VK_RBUTTON)&0x8000) || !g_dragCursor(&point);
+                        (g_dragKeyState(SecondaryButtonKey())&0x8000) || !g_dragCursor(&point);
     if (g_nativeGesture.Update(point,down,cancel,GetTickCount64(),
                               GetSystemMetrics(SM_CXDRAG),GetSystemMetrics(SM_CYDRAG))) {
-        QueueTrayDrop(g_nativeGesture.serial,g_nativeGesture.source,point);
+        QueueTrayDrop(g_nativeGesture.serial,g_nativeGesture.source,point,g_nativeGesture.fromOverflow);
     }
     if (g_nativeGesture.serial && g_nativeGesture.dragging && down)
         UpdateDragFeedback(g_nativeGesture.serial,g_nativeGesture.source,point,g_dragFeedbackThread.load());
@@ -2778,20 +2808,28 @@ void CancelNativeGesture(HWND window) {
 }
 
 int TrayDropTargetAt(POINT point);
-bool DropIconAt(uint64_t serial,int source,POINT point);
+bool DropIconAt(uint64_t serial,int source,POINT point,bool fromOverflow=false);
 void ProcessTrayDrops();
 void ObserveNativeIconPress(POINT point);
-void QueueGesturePress(uint64_t serial,int source,POINT point) {
+void QueueGesturePress(uint64_t serial,int source,POINT point,bool fromOverflow=false) {
     HWND worker=g_trayWnd.load();
     if (!serial || !worker || g_unloading.load()) return;
     { std::lock_guard<std::mutex> lock(g_dropMutex);
-      g_pendingNativePress={serial,point,GetTickCount64(),source,GetCurrentThreadId()}; }
+      g_pendingNativePress={serial,point,GetTickCount64(),source,GetCurrentThreadId(),fromOverflow}; }
     g_cancelGestureSerial.store(0);
     PostMessageW(worker,WM_ST_NATIVE_PRESS,0,0);
 }
 
 using DropTargetLookup = int(*)(POINT);
 DropTargetLookup g_dropTargetAt = TrayDropTargetAt;
+int OwnedOverflowDropTargetAt(POINT point) {
+#ifndef SPLITTRAY_NO_XAML
+    return SplitTrayXaml::OverflowDropTargetAt(point);
+#else
+    return 0;
+#endif
+}
+DropTargetLookup g_overflowDropTargetAt=OwnedOverflowDropTargetAt;
 
 class FloatingTrayUia;
 
@@ -3437,7 +3475,8 @@ void ForwardKey(uint64_t serial, bool contextMenu, POINT anchor);
 void ApplySettingsToTrackedIcons();
 void ReplayRoutingChanges();
 void WakeReplayDelivery();
-void MoveIconToTray(std::wstring_view key, Destination destination);
+void MoveIconToTray(std::wstring_view key, Destination destination, bool inOverflow=false);
+void ShowIconOnTray(std::wstring_view key);
 void EnsureShellTrayWindowSubclassed();
 UINT TaskbarCreatedMessage();
 void NoteShellAnnouncedTaskbar();
@@ -3578,7 +3617,7 @@ void RunFloatingTrayMenuCommand(const FloatingTrayMenu& menu, int number, UINT c
             const int icon = IndexOfSerialLocked(menu.hidden[index]);
             if (icon >= 0) key = StableKeyOf(g_icons[icon]);
         }
-        if (!key.empty()) { SetIconHidden(key, false); RequestRedrawOfAllTrays(); }
+        if (!key.empty()) ShowIconOnTray(key);
     } else if (command >= FloatingTrayMenu::kHiddenContext) {
         const size_t index = command - FloatingTrayMenu::kHiddenContext;
         if (index < menu.hidden.size()) {
@@ -4421,7 +4460,7 @@ LRESULT CALLBACK FloatingTrayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_TIMER:
             if (wParam == 2) {
                 if (auto tray = FloatingTrayOfWindow(hWnd); tray && tray->gesture.serial) {
-                    if (!(g_dragKeyState(VK_LBUTTON)&0x8000) || (g_dragKeyState(VK_ESCAPE)&0x8000) || GetTickCount64()-tray->gesture.tick >= 30000) {
+                    if ((g_dragKeyState(VK_ESCAPE)&0x8000) || GetTickCount64()-tray->gesture.tick >= 30000) {
                         tray->gesture = {};
                         tray->insertionIndex=-1; InvalidateRect(hWnd,nullptr,FALSE);
                         StopDragFeedback();
@@ -4775,6 +4814,20 @@ void DestroyFloatingTrays() {
     g_floatingTrays.clear();
 }
 
+auto g_registerHotKey = RegisterHotKey;
+auto g_unregisterHotKey = UnregisterHotKey;
+void ConfigureGlobalHotkeys(HWND window) {
+    g_unregisterHotKey(window, 1);
+    g_unregisterHotKey(window, 2);
+    bool enabled;
+    { std::lock_guard<std::mutex> lock(g_mutex); enabled = g_settings.enableGlobalHotkeys; }
+    if (!enabled) return;
+    if (!g_registerHotKey(window, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_F11))
+        Wh_Log(L"Arrange shortcut Ctrl+Shift+F11 is unavailable");
+    if (!g_registerHotKey(window, 2, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_F12))
+        Wh_Log(L"Floating tray shortcut Ctrl+Shift+F12 is unavailable");
+}
+
 LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     // Explorer's own announcement that its taskbar is ready. This window is a
     // top-level one, so it hears it like any application's.
@@ -4803,6 +4856,7 @@ LRESULT CALLBACK ControllerProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             break;
 
         case WM_ST_SETTINGS:
+            ConfigureGlobalHotkeys(hWnd);
             // New rules can change where an icon that is already on screen
             // belongs, so re-resolve every tracked icon and replay the
             // difference into the shell before re-laying out.
@@ -4933,10 +4987,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         return giveUp();
     }
 
-    if (!RegisterHotKey(hWnd, 1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'T'))
-        Wh_Log(L"Arrange shortcut Ctrl+Alt+T is unavailable (already registered)");
-    if (!RegisterHotKey(hWnd, 2, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'T'))
-        Wh_Log(L"Floating tray shortcut Ctrl+Alt+Shift+T is unavailable");
+    ConfigureGlobalHotkeys(hWnd);
     g_trayWnd.store(hWnd);
     g_trayThreadState.store(TrayThreadState::Running);
     g_taskbarElsewhere = false;
@@ -5814,7 +5865,7 @@ void ShowArrangeWindow() {
 
 
 std::wstring TrayStatusText() {
-    std::wstring text = L"Shortcuts: Ctrl+Alt+T opens Arrange; Ctrl+Alt+Shift+T cycles floating trays.\n"
+    std::wstring text = L"Global shortcuts are off by default; enable in Settings: Ctrl+Shift+F11 opens Arrange; Ctrl+Shift+F12 cycles floating trays.\n"
         L"Ctrl+Shift+F10 on an icon opens Split Tray's menu.\n\n";
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -6701,7 +6752,19 @@ void FollowRulesForIcon(std::wstring_view key) {
     RequestRedrawOfAllTrays();
 }
 
-void MoveIconToTray(std::wstring_view key, Destination destination) {
+// Clearing a hidden flag alone cannot beat the visible-count/width budget.
+// An explicit show/move promotes this key while preserving everyone else's order.
+void ShowIconOnTray(std::wstring_view key) {
+    if (key.empty()) return;
+    SetIconHidden(key,false);
+    auto order=IconOrderSnapshot();
+    std::erase(order,std::wstring(key));
+    order.insert(order.begin(),std::wstring(key));
+    SetIconOrder(std::move(order));
+    RequestRedrawOfAllTrays();
+}
+
+void MoveIconToTray(std::wstring_view key, Destination destination, bool inOverflow) {
     bool settle = false;
     bool found = false;
     std::wstring label;
@@ -6732,6 +6795,9 @@ void MoveIconToTray(std::wstring_view key, Destination destination) {
     if (settle) {
         WakeReplayDelivery();
     }
+
+    if (destination.tray>1 && !inOverflow) ShowIconOnTray(key);
+    else SetIconHidden(key,inOverflow && destination.tray>1);
 
     Wh_Log(L"moved icon '%s' to %s%s", std::wstring(key).c_str(), label.c_str(),
            found ? L"" : L" (not currently present)");
@@ -6767,6 +6833,7 @@ void ProcessDragHover() {
 }
 
 int TrayDropTargetAt(POINT point) {
+    if (int overflow=g_overflowDropTargetAt(point)) return overflow;
 #ifndef SPLITTRAY_NO_XAML
     if (int embedded = SplitTrayXaml::EmbeddedDropTargetAt(point)) return embedded;
 #endif
@@ -6796,10 +6863,12 @@ int KnownTrayDragTargetAt(POINT point) {
     return 0;
 }
 
-bool DropIconAt(uint64_t serial,int source,POINT point) {
+bool DropIconAt(uint64_t serial,int source,POINT point,bool fromOverflow) {
     if (g_unloading.load()) return false;
     const int target = g_dropTargetAt(point);
-    if (target <= 0 || target == source) return false;
+    const bool inOverflow=target>1 && g_overflowDropTargetAt(point)==target;
+    if (target<=0 || (target==source && !fromOverflow && !inOverflow)) return false;
+    if (target==source && fromOverflow && inOverflow) return false;
     std::wstring key;
     { std::lock_guard<std::mutex> lock(g_mutex);
       if (target > 1) { const auto tray = FindTrayLocked(target); if (!tray || !tray->available) return false; }
@@ -6811,7 +6880,10 @@ bool DropIconAt(uint64_t serial,int source,POINT point) {
     }
     if (key.empty()) return false;
     Wh_Log(L"[drag] icon %llu: tray %d -> tray %d",static_cast<unsigned long long>(serial),source,target);
-    MoveIconToTray(key,Destination::Tray(target));
+    if (target==source) {
+        if (inOverflow) { SetIconHidden(key,true); RequestRedrawOfAllTrays(); }
+        else ShowIconOnTray(key);
+    } else MoveIconToTray(key,Destination::Tray(target),inOverflow);
     return true;
 }
 
@@ -6826,7 +6898,7 @@ void ProcessTrayDrops() {
             { std::lock_guard<std::mutex> lock(g_dropMutex);
               if (g_pendingDrops.size()<16) g_pendingDrops.push_back(drop); }
             if (HWND worker=g_trayWnd.load()) PostMessageW(worker,WM_ST_DROP_RETRY,0,0);
-        } else DropIconAt(drop.serial,drop.source,drop.point);
+        } else DropIconAt(drop.serial,drop.source,drop.point,drop.fromOverflow);
     }
 }
 
@@ -6858,7 +6930,7 @@ uint64_t PrimaryIconAt(POINT point) {
 }
 
 void ObserveNativeIconPress(POINT point) {
-    if (g_unloading.load() || !(g_dragKeyState(VK_LBUTTON)&0x8000)) return;
+    if (g_unloading.load() || !(g_dragKeyState(PrimaryButtonKey())&0x8000)) return;
     uint64_t serial = PrimaryIconAt(point);
     if (!serial) return;
     QueueGesturePress(serial,1,point);
@@ -7972,6 +8044,7 @@ void CorrectNativeDragVisual();
 using NotifyIconPressed_t = void(WINAPI*)(void*,const void*);
 NotifyIconPressed_t g_NotifyIconPressed_Original = nullptr;
 void WINAPI NotifyIconPressed_Hook(void* object,const void* args) {
+    if (!g_NotifyIconPressed_Original) return;
     POINT point{};
     try {
         if (GetCursorPos(&point)) SplitTray::ObserveNativeIconPress(point);
@@ -7985,10 +8058,12 @@ using NativeDragMove_t=void(WINAPI*)(void*,const void*,const void*);
 NativeDragBegin_t g_NativeDragBegin_Original=nullptr;
 NativeDragMove_t g_NativeDragMove_Original=nullptr;
 void WINAPI NativeDragBegin_Hook(void* manager,const void* source,const void* visual) {
+    if (!g_NativeDragBegin_Original) return;
     try { CaptureNativeDragVisual(visual); } catch (...) { Wh_Log(L"[drag] native visual capture failed"); }
     g_NativeDragBegin_Original(manager,source,visual);
 }
 void WINAPI NativeDragMove_Hook(void* manager,const void* source,const void* args) {
+    if (!g_NativeDragMove_Original) return;
     g_NativeDragMove_Original(manager,source,args);
     try { CorrectNativeDragVisual(); } catch (...) { Wh_Log(L"[drag] native visual correction failed"); }
 }
@@ -8059,12 +8134,12 @@ bool HookSystemTraySymbols(HMODULE module) {
     // Verified present in this exact binary by tools/check-symbols.py;
     // Taskbar.View.dll does not carry it (DECISIONS.md 26).
     WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
-        {{LR"(public: void __cdecl winrt::SystemTray::implementation::DragDropManager::BeginDrag(struct winrt::SystemTray::implementation::NotifyIconView const &,struct winrt::SystemTray::NotifyIconDragVisual))"}, &g_NativeDragBegin_Original, NativeDragBegin_Hook},
-        {{LR"(public: void __cdecl winrt::SystemTray::implementation::DragDropManager::DragMove(struct winrt::SystemTray::implementation::NotifyIconView const &,struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"}, &g_NativeDragMove_Original, NativeDragMove_Hook},
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::DragDropManager::BeginDrag(struct winrt::SystemTray::implementation::NotifyIconView const &,struct winrt::SystemTray::NotifyIconDragVisual))"}, &g_NativeDragBegin_Original, NativeDragBegin_Hook, true},
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::DragDropManager::DragMove(struct winrt::SystemTray::implementation::NotifyIconView const &,struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"}, &g_NativeDragMove_Original, NativeDragMove_Hook, true},
         {{LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
          &g_IconView_IconView_Original, IconView_IconView_Hook},
         {{LR"(private: virtual void __cdecl winrt::SystemTray::implementation::NotifyIconView::OnPointerPressed(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &))"},
-         &g_NotifyIconPressed_Original, NotifyIconPressed_Hook},
+         &g_NotifyIconPressed_Original, NotifyIconPressed_Hook, true},
     };
 
     if (!WindhawkUtils::HookSymbols(module, systemTrayDllHooks,
@@ -8074,8 +8149,11 @@ bool HookSystemTraySymbols(HMODULE module) {
         return false;
     }
 
+    if (!g_NativeDragBegin_Original) Wh_Log(L"[drag] BeginDrag unavailable; native image correction disabled");
+    if (!g_NativeDragMove_Original) Wh_Log(L"[drag] DragMove unavailable; native image correction disabled");
+    if (!g_NotifyIconPressed_Original) Wh_Log(L"[drag] OnPointerPressed unavailable; primary-source dragging disabled");
     g_systemTraySymbolsHooked.store(true);
-    Wh_Log(L"[xaml] SystemTray.dll IconView constructor and native icon press hooked");
+    Wh_Log(L"[xaml] SystemTray.dll IconView constructor hooked; optional drag availability logged above");
     return true;
 }
 
@@ -8105,6 +8183,7 @@ bool HookSystemTraySymbols(HMODULE module) {
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -8862,6 +8941,7 @@ uint64_t SerialOfCell(wux::FrameworkElement const& cell);
 void CommitVisualOrder(wuxc::StackPanel const& panel);
 
 struct DragState {
+    bool fromOverflow = false;
     bool pointerDown = false;
     bool dragging = false;
     bool observed = false;
@@ -8892,6 +8972,11 @@ struct DragState {
 
 [[clang::no_destroy]] DragState g_drag;
 
+// A refresh that arrived while the pointer was down, to run once it is released.
+// See RefreshEmbeddedTray for why it waits.
+bool g_refreshPending = false;
+
+
 // A composition child draws above our row without adding a XAML child,
 // moving cells, taking input, or interrupting pointer capture.
 void ClearInsertionLine() {
@@ -8909,11 +8994,20 @@ void ClearDragGhost() {
     g_drag.sourceCell=nullptr;
 }
 void UpdateInsertionPreviewLifetime() {
-    const bool released=!(SplitTray::g_dragKeyState(VK_LBUTTON)&0x8000);
+    const bool released=!(SplitTray::g_dragKeyState(SplitTray::PrimaryButtonKey())&0x8000);
     const bool cancelled=(SplitTray::g_dragKeyState(VK_ESCAPE)&0x8000) ||
-        (SplitTray::g_dragKeyState(VK_RBUTTON)&0x8000) ||
+        (SplitTray::g_dragKeyState(SplitTray::SecondaryButtonKey())&0x8000) ||
         (g_drag.pressTick && GetTickCount64()-g_drag.pressTick>=30000);
     if (released || cancelled) {
+        // Popup cells have no row capture. If release arrived outside the
+        // popup, its observer must end the press and unblock deferred refreshes.
+        // The independent value-only drop queue retains the valid transfer.
+        if (g_drag.fromOverflow && g_drag.pointerDown) {
+            g_drag.pointerDown=false;
+            g_drag.observed=false;
+            g_drag.suppressClick=true;
+            if (g_refreshPending) RequestEmbeddedRefresh();
+        }
         if (cancelled) { g_drag.gestureCancelled=true; g_drag.pendingTarget=-1; }
         if (g_drag.dragging || g_drag.insertionLine) g_drag.insertionCancelled=true;
         ClearInsertionLine(); ClearDragGhost();
@@ -8942,10 +9036,6 @@ void ShowInsertionLine(wuxc::StackPanel const& panel,int slot) {
     g_drag.insertionLine.Offset({x,static_cast<float>((g_drag.cellHeightDip-height)/2),0.0f});
     g_drag.insertionLine.IsVisible(true);
 }
-
-// A refresh that arrived while the pointer was down, to run once it is released.
-// See RefreshEmbeddedTray for why it waits.
-bool g_refreshPending = false;
 
 // Far enough that a click with a shaky hand is still a click.
 constexpr double kDragThresholdDip = 5;
@@ -9486,11 +9576,15 @@ wuxc::MenuFlyout BuildTrayContextMenu(uint64_t serial, HMONITOR monitor) {
         }
 
         wuxc::MenuFlyoutItem hide;
-        const bool hidden = SplitTray::IsIconHidden(key);
+        const auto tray=TrayOfMonitor(monitor);
+        const bool inOverflow=tray && std::any_of(tray->hiddenEntries.begin(),tray->hiddenEntries.end(),
+            [serial](auto const& entry) { return entry.serial==serial; });
+        const bool hidden = SplitTray::IsIconHidden(key) || inOverflow;
         hide.Text(hidden ? L"Show on the tray" : L"Hide in the overflow menu");
         hide.Click([key, hidden](wf::IInspectable const&,
                                  wux::RoutedEventArgs const&) {
-            SplitTray::SetIconHidden(key, !hidden);
+            if (hidden) SplitTray::ShowIconOnTray(key);
+            else SplitTray::SetIconHidden(key,true);
             RefreshEmbeddedTray();
         });
         menu.Items().Append(hide);
@@ -9660,6 +9754,7 @@ void CellOtherPressed(wuxc::Border const& border) {
 // row and can be dragged.
 bool CellPressed(wuxc::Border const& border, bool draggable, double rowX, double rowY = 10) {
     ClearInsertionLine(); ClearDragGhost();
+    g_drag.fromOverflow=!draggable;
     g_drag.sourceCell=winrt::make_weak(border);
     g_drag.pendingTarget=-1; g_drag.gestureCancelled=false;
     g_heldIcon = 0;
@@ -9800,7 +9895,7 @@ void CellReleased(wuxc::Border const& border, bool draggable, HMONITOR monitor,
         }
         g_drag.pendingTarget=-1;
         if (wasDragging && !suppressed && !cancelled && !(GetAsyncKeyState(VK_ESCAPE)&0x8000)) {
-            SplitTray::DropIconAt(SerialOfCell(border),TrayNumberOf(monitor),endPoint);
+            SplitTray::DropIconAt(SerialOfCell(border),TrayNumberOf(monitor),endPoint,!draggable);
         }
         if (!draggable) HideOverflowFlyout();
         return;
@@ -10010,8 +10105,8 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
         g_drag.observed=true;
         // Cross-tray transfer must survive Explorer refusing or taking capture.
         // The value-only observer also covers icons in the overflow popup.
-        if (GetAsyncKeyState(VK_LBUTTON)&0x8000)
-            SplitTray::QueueGesturePress(SerialOfCell(border),TrayNumberOf(monitor),start);
+        if (SplitTray::g_dragKeyState(SplitTray::PrimaryButtonKey())&0x8000)
+            SplitTray::QueueGesturePress(SerialOfCell(border),TrayNumberOf(monitor),start,!draggable);
         if (!capture) return;
         // Without capture the pointer stops reporting the moment it leaves this
         // 32-DIP cell. Failure disables in-row reordering; the value-only
@@ -10117,6 +10212,7 @@ wuxc::Border MakeCell(EmbeddedTray const& tray,
 // the runtime, like g_embeddedTrays.
 [[clang::no_destroy]] wuxc::Flyout g_overflowFlyout{nullptr};
 HMONITOR g_overflowMonitor = nullptr;
+winrt::event_token g_overflowClosedToken{};
 
 void HideOverflowFlyout() {
     g_overflowMonitor = nullptr;
@@ -10168,6 +10264,9 @@ void ChevronReleased(wux::FrameworkElement const& chevron, HMONITOR monitor, boo
     // vanished.
     if (!g_overflowFlyout) {
         g_overflowFlyout = wuxc::Flyout();
+        g_overflowClosedToken=g_overflowFlyout.Closed([](wf::IInspectable const&,wf::IInspectable const&) {
+            g_overflowMonitor=nullptr;
+        });
 
         // Its own window. By default a Flyout is drawn inside the XAML root it
         // belongs to, and this one belongs to the taskbar - an island about 48
@@ -10547,6 +10646,37 @@ bool ElementScreenRect(EmbeddedTray const& tray, wux::FrameworkElement const& el
     }
 }
 
+// The chevron itself is an overflow destination, and an open popup accepts
+// drops over its actual screen-space icon buttons. Automation supplies screen
+// pixels even when the flyout is outside the taskbar's XAML island.
+int OverflowDropTargetAt(POINT point) {
+    for (const auto& tray : g_embeddedTrays) {
+        auto panel=tray->panel.get();
+        if (!tray->active || !panel || tray->hiddenEntries.empty() ||
+            !SplitTray::g_dropWindowVisible(tray->taskbarWnd)) continue;
+        RECT rect{};
+        auto children=panel.Children();
+        if (children.Size() && ElementScreenRect(*tray,children.GetAt(0).as<wux::FrameworkElement>(),&rect) && PtInRect(&rect,point))
+            return tray->number;
+        if (g_overflowMonitor!=tray->monitor || !g_overflowFlyout) continue;
+        auto grid=g_overflowFlyout.Content().try_as<wuxc::VariableSizedWrapGrid>();
+        if (!grid) continue;
+        for (auto child : grid.Children()) {
+            try {
+                auto cell=child.try_as<wuxc::Border>();
+                auto face=cell ? FaceOfCell(cell) : nullptr;
+                if (!face) continue;
+                auto peer=winrt::Windows::UI::Xaml::Automation::Peers::FrameworkElementAutomationPeer::CreatePeerForElement(face);
+                if (!peer || peer.IsOffscreen()) continue;
+                auto bounds=peer.GetBoundingRectangle();
+                if (bounds.Width>0 && bounds.Height>0 && point.x>=bounds.X && point.x<bounds.X+bounds.Width &&
+                    point.y>=bounds.Y && point.y<bounds.Y+bounds.Height) return tray->number;
+            } catch (...) { /* A popup dismissed during the hit test accepts nothing. */ }
+        }
+    }
+    return 0;
+}
+
 int EmbeddedDropTargetAt(POINT point) {
     for (const auto& tray : g_embeddedTrays) {
         auto panel = tray->panel.get();
@@ -10899,6 +11029,12 @@ void RemoveEverything() {
         g_popupTimer.Stop();
         g_popupTimer = nullptr;
     }
+    // A closing animation can outlive Hide(). Revoke our callback before
+    // detaching the flyout so it cannot call the module after unload.
+    if (g_overflowFlyout && g_overflowClosedToken.value) {
+        g_overflowFlyout.Closed(g_overflowClosedToken);
+    }
+    g_overflowClosedToken={};
     HideOverflowFlyout();
     g_overflowFlyout = nullptr;
     for (auto& tray : g_embeddedTrays) {
