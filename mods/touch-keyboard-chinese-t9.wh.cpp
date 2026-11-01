@@ -22,11 +22,11 @@
 ## 鍔熻兘鐗规€?
 - **鍘熺敓涔濆鏍兼嫾闊宠緭鍏?*锛氱煭鎸夋寜閿甯镐骇鐢熶腑鏂囨眽瀛楀€欓€夎瘝銆?
 - **闀挎寜绾暟瀛楀€欓€?*锛氶暱鎸変節閿寜閿椂浠呰緭鍑鸿鏁板瓧鍊欓€夛紝鏉炬墜涓嶄骇鐢熶簩娆¤緭鍏ャ€?
-- **鏁板瓧闈㈡澘鐩存帴杈撳叆**锛氬垏鎹㈠埌鏁板瓧閿洏鏃讹紝鏁板瓧鐩存帴涓婂睆锛屼笉鍐嶅脊鍑哄浣欑殑鎷奸煶鍊欓€夎瘝銆?
+- **数字面板直接输入**：切换到数字键盘时，数字直接上屏，不再弹出多余的拼音候选词。
 - **原生表情符号面板唤起**：点击表情按钮及更多符号直接呼出与输入面板上方候选栏同款的原生 Windows 11 表情符号面板（支持表情、颜文字与全 Unicode 符号），彻底避免跳转到空白占位界面。
-- **绋冲畾鎬т笌闃查棯閫€**锛氬唴缃灞傞槻寰★紝鑷姩鎷︽埅 Windows 11 鍦ㄦ覆鏌撶嫮绐勪節閿強绗﹀彿澶氶〉甯冨眬鏃剁殑绌烘寚閽堜笌鍐呴儴鏈€傞厤鏂█锛岃繍琛岀ǔ瀹氭祦鐣呫€?
+- **稳定性与防闪退**：内置多层防御，自动拦截 Windows 11 在渲染狭窄九键及符号多页布局时的空指针与内部未适配断言，运行稳定流畅。
 
-## 浣跨敤鏂规硶
+## 使用方法
 1. 瀹夎骞跺惎鐢ㄦ湰妯＄粍锛?
 2. 纭繚褰撳墠杈撳叆娉曚负 **涓枃锛堢畝浣擄級- 寰蒋鎷奸煶**锛?
 3. 从任务栏唤起系统触摸键盘；
@@ -37,20 +37,18 @@
 // ==WindhawkModSettings==
 /*
 - enabled: true
-  $name: 鍚敤鍘熺敓涓枃涔濆鏍?
+  $name: 启用原生中文九宫格
 */
 // ==/WindhawkModSettings==
 #include <windhawk_utils.h>
 #include <stdio.h>
 #include <stdarg.h>
 static void TraceLog(const wchar_t* fmt, ...) {
-    FILE* f = _wfopen(L"C:/Users/MirraCare/t9-repair-trace.log", L"a, ccs=UTF-8");
-    if (!f) return;
+    wchar_t buffer[512]{};
     va_list ap; va_start(ap, fmt);
-    vfwprintf(f, fmt, ap);
+    _vsnwprintf_s(buffer, _TRUNCATE, fmt, ap);
     va_end(ap);
-    fwprintf(f, L"\n");
-    fclose(f);
+    Wh_Log(L"%s", buffer);
 }
 
 #include <windows.h>
@@ -125,7 +123,7 @@ std::atomic<unsigned> layoutCount{0};
 std::atomic<unsigned> decoded{0};
 thread_local bool twelveQuery = false;
 
-// MTF 瀵瑰崟涓В鐮佸璞′覆琛屾煡璇紱涓嶅悓瀵硅薄鐨勫苟鍙戞煡璇㈢敤 TLS 闅旂鏉ユ簮銆?
+// MTF 对单个解码对象串行查询；不同对象的并发查询用 TLS 隔离来源。
 struct QueryScope {
     explicit QueryScope(BYTE* data, bool isTwelve)
         : previousQuery(twelveQuery), pData(data), previousMode(0), modified(false) {
@@ -181,10 +179,10 @@ bool CodeMatches(const void* function, ULONG size, const char* expected) {
     }
     return strcmp(actual, expected) == 0;
 }
-// 瑙︽懜閿洏 12 閿殑涓や釜闈㈡澘浣跨敤**涓嶅悓鐨勯敭鐮佷綋绯?*锛岃繖鏄敮涓€鍙潬鐨勫垽鍒緷鎹細
-//   鎷奸煶闈㈡澘(Alpha)  : 鍙戦€?VK_NUMPAD0~VK_NUMPAD9 (0x60..0x69)
-//   鏁板瓧闈㈡澘(Symbols): 鍙戦€?ASCII '0'~'9'          (0x30..0x39)
-// 涓嶅啀渚濊禆 native-front-view 鈥斺€?璇ュ€煎湪鏈満浠庢湭琚啓鍏ワ紝鎭掍负榛樿 1锛屼細瀵艰嚧涓や釜闈㈡澘鍒ゅ弽銆?
+// 触摸键盘 12 键的两个面板使用不同的键码体系，据此判别面板来源：
+//   拼音面板(Alpha)  : 宫格键对应 VK_NUMPAD0~VK_NUMPAD9 (0x60..0x69)
+//   数字面板(Symbols): 宫格键对应 ASCII '0'~'9' (0x30..0x39)
+// 面板来源以 SIP 标志、当前输入通道与视图号共同判定。
 bool IsNumpadKeyCode(WORD key) {
     return key >= VK_NUMPAD0 && key <= VK_NUMPAD9;
 }
@@ -202,13 +200,11 @@ bool IsCurrentViewTwelveAlpha() {
 // self 属于当前同步文档回调，不缓存跨文档指针。物理输入保持原生返回值。
 HRESULT OnKeyDownHook(void* self, void* context, void* args) {
     const unsigned count = ++serviceKeyDownCount;
-    Wh_SetIntValue(L"native-service-key-down-count", count);
     return originalOnKeyDown(self, context, args);
 }
 
 HRESULT RegularizeHook(void* self, void* event) {
     const unsigned rCount = ++regEntryCount;
-    Wh_SetIntValue(L"native-reg-entry-count", rCount);
     if (!g_enabled.load() || !self || !event)
         return originalRegularize(self, event);
 
@@ -219,9 +215,6 @@ HRESULT RegularizeHook(void* self, void* event) {
     auto* key = reinterpret_cast<WORD*>(data + 92);
     const WORD origKey = *key;
 
-    Wh_SetIntValue(L"native-reg-channel", static_cast<int>(channel));
-    Wh_SetIntValue(L"native-reg-key", origKey);
-    Wh_SetIntValue(L"native-reg-flags", flags);
 
     const bool isHardware = (flags & 0x4010) == 0x10 && (flags & 5) != 0 && (flags & 5) != 5;
     if (isHardware) {
@@ -236,8 +229,6 @@ HRESULT RegularizeHook(void* self, void* event) {
     if (grid) {
         // 褰撳墠 ARM64 RegularizeStringKey 涓?InsertVKey 鍧囩‘璁?+92 涓虹嫭绔?WORD 閿爜銆?
         *key = static_cast<WORD>(VK_NUMPAD0 + origKey - L'0');
-        Wh_SetIntValue(L"native-normalized-key", *key);
-        Wh_SetIntValue(L"native-normalized-count", ++normalized);
     }
     TraceLog(L"REG sip view=%d key=0x%04X normalized=0x%04X flags=0x%04X ch=%llu",
              Wh_GetIntValue(L"native-front-view-name", -1), origKey, *key, flags, channel);
@@ -253,16 +244,13 @@ HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
         if (isTwelveAlpha) {
             *channel = 4;
             *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
-            Wh_SetIntValue(L"native-default-channel", 4);
         }
     }
     return res;
 }
 
 HRESULT LayoutHook(void* self, const NativeString* layout) {
-    Wh_SetIntValue(L"native-layout-count", ++layoutCount);
     if (layout && layout->length > 0 && layout->length < 100) {
-        Wh_SetStringValue(L"native-layout-name", layout->data());
     }
     const HRESULT res = originalLayout(self, layout);
     if (FAILED(res))
@@ -280,12 +268,10 @@ HRESULT LayoutHook(void* self, const NativeString* layout) {
             return status;
     }
     const size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
-    Wh_SetIntValue(L"native-layout-channel", static_cast<int>(channel));
     return res;
 }
 
 HRESULT ProcessStringHook(void* self, const void* event) {
-    Wh_SetIntValue(L"native-process-count", ++processCount);
     void* pinyinBase = static_cast<BYTE*>(self) - 136;
     size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(pinyinBase) + 112);
     auto* data = static_cast<const BYTE*>(event);
@@ -306,45 +292,30 @@ HRESULT ProcessStringHook(void* self, const void* event) {
             return ensured;
         channel = target;
     }
-    Wh_SetIntValue(L"native-process-channel", static_cast<int>(channel));
-    auto* text = reinterpret_cast<const NativeString*>(event);
-    Wh_SetIntValue(L"native-process-key", *reinterpret_cast<const WORD*>(data + 92));
-    Wh_SetIntValue(L"native-process-flags", flags);
-    if (text->length > 0)
-        Wh_SetIntValue(L"native-process-char", text->data()[0]);
     return originalProcess(self, event);
 }
 
 HRESULT ChannelHandleHook(void* self, const void* event, bool* a3, bool* a4) {
-    Wh_SetIntValue(L"native-channel-count", ++channelCount);
     return originalChannelHandle(self, event, a3, a4);
 }
 
 HRESULT VKeyHandleHook(void* self, const void* event, bool* a3, bool* a4) {
-    Wh_SetIntValue(L"native-vkey-count", ++vkeyCount);
     return originalVKeyHandle(self, event, a3, a4);
 }
 
 HRESULT NativeInsertHook(void* self, const void* event) {
-    Wh_SetIntValue(L"native-insert-count", ++insertedCount);
     return originalInsert(self, event);
 }
 
 HRESULT ChcOpicHook(void* self, int mask) {
-    Wh_SetIntValue(L"native-chc-opic-count", ++chcOpicCount);
-    Wh_SetIntValue(L"native-chc-opic-mask", mask);
     return originalChcOpic(self, mask);
 }
 
 HRESULT RequestSuggestionHook(void* self, const wchar_t* text, unsigned int len, void* propBag, void* handler, bool b) {
-    Wh_SetIntValue(L"native-rsbs-count", ++rsbsCount);
-    if (text && len > 0)
-        Wh_SetIntValue(L"native-rsbs-char", text[0]);
     return originalRequestSuggestion(self, text, len, propBag, handler, b);
 }
 
 HRESULT CandidatesHook(void* self, void* query, void** list) {
-    Wh_SetIntValue(L"native-cand-call-count", ++candCallCount);
     if (!g_enabled.load() || !query || !list)
         return originalCandidates(self, query, list);
     using GetProperties = HRESULT(WINAPI*)(void*, QueryProperties*);
@@ -354,19 +325,13 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
         reinterpret_cast<GetProperties>(methods[3])(query, &properties);
     if (FAILED(status))
         return status;
-    Wh_SetIntValue(L"native-cand-raw-type", properties.type);
-    Wh_SetIntValue(L"native-cand-raw-flags", properties.flags);
-    Wh_SetIntValue(L"native-cand-raw-mode", properties.mode);
     const bool isTwelveAlpha = IsCurrentViewTwelveAlpha();
     const bool isTwelve = isTwelveAlpha &&
                           ((properties.type & 0xFF) == 11 || properties.type == 11 || properties.type == 2 || properties.type == 0);
     QueryScope scope(static_cast<BYTE*>(self), isTwelve);
     if (isTwelve) {
-        Wh_SetIntValue(L"native-twelve-query-flags", properties.flags);
-        Wh_SetIntValue(L"native-cand-type", properties.type);
     }
     const HRESULT candStatus = originalCandidates(self, query, list);
-    Wh_SetIntValue(L"native-cand-res", candStatus);
     if (SUCCEEDED(candStatus) && list && *list) {
         using GetCountFn = HRESULT (*)(void*, int*);
         int cCount = 0;
@@ -374,7 +339,6 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
         if (vtbl) {
             GetCountFn getCount = reinterpret_cast<GetCountFn>(vtbl[3]);
             if (SUCCEEDED(getCount(*list, &cCount))) {
-                Wh_SetIntValue(L"native-cand-result-count", cCount);
             }
         }
     }
@@ -382,15 +346,13 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
 }
 
 HRESULT DecideHook(void* self, WORD first) {
-    Wh_SetIntValue(L"native-decide-call-count", ++decideCallCount);
-    Wh_SetIntValue(L"native-decide-char", first);
 
-    // 闈㈡澘鏉ユ簮鐢?RegularizeHook 璁板綍锛?=鎷奸煶闈㈡澘 0=鏁板瓧闈㈡澘 2=鐗╃悊閿洏
+    // 面板来源由 RegularizeHook 记录：1=拼音面板 0=数字面板 2=物理键盘
     const int panelMode = Wh_GetIntValue(L"native-panel-mode", 2);
     if (!g_enabled.load() || panelMode != 1)
         return originalDecide(self, first);
 
-    // 鎷奸煶闈㈡澘锛氭妸 VK_NUMPAD2..9 涓?ASCII '2'..'9' 缁熶竴褰掍竴涓哄鏍兼暟瀛?
+    // 拼音面板：把宫格数字统一归一为十二键键码
     WORD digit = 0;
     if (first >= VK_NUMPAD2 && first <= VK_NUMPAD9)
         digit = static_cast<WORD>(first - VK_NUMPAD0);
@@ -413,9 +375,8 @@ HRESULT DecideHook(void* self, WORD first) {
         *reinterpret_cast<BYTE**>(reading + 8072) = twelveProfile + 540;
     }
 
-    Wh_SetIntValue(L"native-decoded-count", ++decoded);
     TraceLog(L"DEC twelveProfile LOADED for digit=%u", digit);
-    // 涓嶈兘璋冪敤鍘熺敓锛欴ecideInputMode 鍦ㄦ敹鍒?'2'..'9' 鏃朵細鎶?profile 寮哄埗鍐欏洖 Qwerty锛?
+    // 不能调用原生：DecideInputMode 收到 '2'..'9' 时会把 profile 强制写回 Qwerty，
     // 浠庤€屾竻鎺夊垰瑁呬笂鐨?twelveProfile锛屽鑷村€欓€夋暟涓?0銆?
     return 0;
 }
@@ -605,7 +566,6 @@ GetStateFn originalGetPressedKeyHandlingState;
 using SetViewInternalFn = void (*)(void*, int, void*, bool);
 SetViewInternalFn originalSetViewInternal;
 void Hook_SetViewInternal(void* self, int viewName, void* layoutArgs, bool a4) {
-    Wh_SetIntValue(L"native-front-view-name", viewName);
     TraceLog(L"VIEW switch %d self=%p", viewName, self);
     if (originalSetViewInternal)
         originalSetViewInternal(self, viewName, layoutArgs, a4);
@@ -648,8 +608,6 @@ bool IsTwelve(HSTRING mode) {
 
 bool AvailabilityHook(void* self, HSTRING mode) {
     if (IsTwelve(mode)) {
-        Wh_SetStringValue(L"native-front-mode", L"narrow12key");
-        Wh_SetIntValue(L"native-front-avail-hook-hit", 1);
         return true;
     }
     return originalAvailability(self, mode);
@@ -670,8 +628,6 @@ ShowAsDisabledFn originalShowAsDisabled = nullptr;
 
 bool IsAvailableStrategyHook(void* self, HSTRING mode, void* sizeMgr, HSTRING a3, bool* outNarrow) {
     if (IsTwelve(mode)) {
-        Wh_SetStringValue(L"native-front-mode", L"narrow12key");
-        Wh_SetIntValue(L"native-front-strat-hit", 1);
         if (outNarrow) *outNarrow = true;
         return true;
     }
@@ -690,8 +646,6 @@ bool CanRenderModeCtrlHook(void* self, HSTRING mode) {
 
 bool IsModeAvailableInternalHook(void* self, void* stackMode, HSTRING modeName, bool* isAvailable) {
     if (IsTwelve(modeName)) {
-        Wh_SetStringValue(L"native-front-mode", L"narrow12key");
-        Wh_SetIntValue(L"native-front-is-mode-avail-hit", 1);
         if (isAvailable) *isAvailable = true;
         return true;
     }
@@ -721,7 +675,6 @@ bool IsAvailableOnModeSwitcherHook(void* self, HSTRING mode) {
 void ModeHook(void* self, HSTRING mode, int view) {
     Wh_SetStringValue(L"native-front-mode",
                       WindowsGetStringRawBuffer(mode, nullptr));
-    Wh_SetIntValue(L"native-front-view", view);
     originalMode(self, mode, view);
 }
 
@@ -731,13 +684,11 @@ using GetKeyboardSetFn = void* (*)(void*);
 GetKeyboardSetFn originalGetKeyboardSet;
 int GetItemTypeHook(void* self) {
     const int v = originalGetItemType ? originalGetItemType(self) : -1;
-    Wh_SetIntValue(L"native-front-item-type", v);
     return v;
 }
 
 void OnReleaseActionHook(void* self, void* action) {
     const unsigned count = ++frontReleaseCount;
-    Wh_SetIntValue(L"native-front-release-count", count);
     int handledBefore = -1;
     if (action)
         handledBefore = static_cast<BYTE*>(action)[144];
@@ -756,7 +707,6 @@ void OnReleaseActionHook(void* self, void* action) {
 }
 
 void OnPressActionHook(void* self, void* action) {
-    Wh_SetIntValue(L"native-front-press-count", ++frontPressCount);
     TraceLog(L"PRESS action=%p", action);
     originalOnPressAction(self, action);
 }
@@ -773,12 +723,9 @@ int DirectionHook(void* self) {
         return 0;
     const int val = originalGetDirection(self);
     if (val >= 30) {
-        Wh_SetIntValue(L"native-front-dir-30-intercepted", val);
         return 0;
     }
     if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-dir-val", val);
-        Wh_SetIntValue(L"native-front-dir-count", ++frontDirCount);
     }
     return val;
 }
@@ -786,8 +733,6 @@ int DirectionHook(void* self) {
 int HeightHook(void* self) {
     const int val = originalGetHeight(self);
     if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-height-val", val);
-        Wh_SetIntValue(L"native-front-height-count", ++frontHeightCount);
     }
     return val;
 }
@@ -805,14 +750,12 @@ void LabelVisualHook(void* self, void* label, HSTRING text, HSTRING font, double
                 scale *= 0.70;
             if (label == labels[1])
                 scale *= 0.40;
-            Wh_SetIntValue(L"native-front-label-layout-version", 2805);
         }
     }
     originalLabelVisual(self, label, text, font, scale);
 }
 bool IsEmojiViewEnabledHook(void* self) {
     const bool native = originalIsEmojiViewEnabled ? originalIsEmojiViewEnabled(self) : false;
-    Wh_SetIntValue(L"native-front-emoji-view-enabled", native ? 1 : 0);
     return native;
 }
 int GetPressedKeyHandlingStateHook(void* self, void* keyControl) {
@@ -824,18 +767,12 @@ HSTRING GetRecognizedTextHook(void* self) {
 
 bool IsDictionaryReadyHook(void* self, void* str) {
     const bool res = originalIsDictionaryReady ? originalIsDictionaryReady(self, str) : false;
-    Wh_SetIntValue(L"native-front-dict-ready-res", res ? 1 : 0);
-    Wh_SetIntValue(L"native-front-dict-ready-count", ++frontDictReadyCount);
     TraceLog(L"DICTREADY res=%d", res ? 1 : 0);
     return res;
 }
 
 void NotifyUIMessageHook(void* self, int a2, int a3, int a4, int a5, void* a6) {
     if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-notify-a2", a2);
-        Wh_SetIntValue(L"native-front-notify-a3", a3);
-        Wh_SetIntValue(L"native-front-notify-a4", a4);
-        Wh_SetIntValue(L"native-front-notify-count", ++frontNotifyMsgCount);
     }
     originalNotifyUIMessage(self, a2, a3, a4, a5, a6);
 }
@@ -846,66 +783,42 @@ void* KeyDataHook(void* self) {
 unsigned char VirtualKeyHook(void* self) {
     const unsigned char val = originalGetVirtualKey(self);
     if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-vk-val", val);
-        Wh_SetIntValue(L"native-front-vk-count", ++frontVkGetCount);
     }
     return val;
 }
 unsigned int GetBlockPageCountHook(void* self, HSTRING block) {
     if (!self) {
-        Wh_SetIntValue(L"native-front-block-page-null-intercepted", 1);
         return 0;
     }
     return originalGetBlockPageCount(self, block);
 }
 using AddKeySetBlockFn = void (*)(void*, void*, void*);
 AddKeySetBlockFn originalAddKeySetBlock;
-// 绗﹀彿涓庤〃鎯呴潰鏉挎瀯寤烘椂 this+104 鍙兘涓虹┖锛涘師鐢熷叆鍙ｅ姝ょ洿鎺?FailFast(0x8000FFFF)銆?
+    // 符号与表情面板构建时 this+104 可能为空；原生入口对此直接 FailFast(0x8000FFFF)。
 // 璇ョ粨鏋勪笌閿洏缃戞牸鍚岀嚎绋嬫瀯寤猴紝璋冪敤鏂规寔鏈?this 鐢熷懡鍛ㄦ湡銆?
 void AddKeySetBlockHook(void* self, void* row, void* keyData) {
     if (self) {
         auto* data = static_cast<BYTE*>(self);
         void** keySet104 = reinterpret_cast<void**>(data + 104);
         void** keySet128 = reinterpret_cast<void**>(data + 128);
-        Wh_SetIntValue(L"native-front-keyset-104-null", *keySet104 == nullptr ? 1 : 0);
-        Wh_SetIntValue(L"native-front-keyset-128-null", *keySet128 == nullptr ? 1 : 0);
         TraceLog(L"KEYSET entry self=%p k104=%p k128=%p", self, *keySet104, *keySet128);
         // 鍘熺敓鍏ュ彛瀵?this+104 涓虹┖鐩存帴 FailFast(0x8000FFFF) 缁堟瀹夸富銆?
-        // 鎵╁睍绗﹀彿/琛ㄦ儏闈㈡澘鏋勫缓鏃惰閿泦鏈缓绔嬶紝璺宠繃鏈閿潡鏋勫缓淇濇寔鐣岄潰鍙敤銆?
+        // 扩展符号与表情面板构建时该键集未建立，跳过本次键块构建保持界面可用。
         if (*keySet104 == nullptr) {
-            Wh_SetIntValue(L"native-front-keyset-skipped", 1);
             return;
         }
     }
     originalAddKeySetBlock(self, row, keyData);
 }
-bool IsSubTypeHook(void* self, int subType) {
-#if defined(__x86_64__) || defined(_M_X64)
-    if (subType == 19) {
-        const uintptr_t ret = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
-        const uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(L"TextInput.dll"));
-        if (base != 0 && (ret - base) == 0x000a8115) {
-            Wh_SetIntValue(L"native-front-subtype-intercepted", 19);
-            return false;
-        }
-    }
-#endif
-    return originalIsSubType(self, subType);
-}
 void NotifyStringKeyHook(void* self, unsigned int qualifiers, unsigned int key, HSTRING text, int x, int y, unsigned int time) {
     const unsigned count = ++frontNskCount;
-    Wh_SetIntValue(L"native-front-nsk-count", count);
-    Wh_SetIntValue(L"native-front-nsk-key-in", key);
-    Wh_SetIntValue(L"native-front-nsk-qual", qualifiers);
     WCHAR nbuf[8]{}; UINT32 nlen = 0;
     if (text) {
         const wchar_t* b = WindowsGetStringRawBuffer(text, &nlen);
         if (b && nlen > 0 && nlen < 8) wcsncpy(nbuf, b, nlen);
-        if (b && nlen > 0) Wh_SetIntValue(L"native-front-nsk-char", b[0]);
     }
     if (g_enabled.load() && NativeT9::IsCurrentViewTwelveAlpha() && nlen == 1 && nbuf[0] >= L'2' && nbuf[0] <= L'9' && key >= VK_NUMPAD2 && key <= VK_NUMPAD9) {
         key = static_cast<unsigned int>(nbuf[0]);
-        Wh_SetIntValue(L"native-front-nsk-key-fixed", key);
     }
     TraceLog(L"NOTIFYSTRKEY key=0x%04X qual=0x%X text='%ls' len=%u", key, qualifiers, nbuf, nlen);
     originalNotifyStringKey(self, qualifiers, key, text, x, y, time);
@@ -915,30 +828,20 @@ void NotifyStringKeyHook(void* self, unsigned int qualifiers, unsigned int key, 
 
 void HandleFlowerKeyReleaseHook(void* self, void* action) {
     const unsigned count = ++frontFlowerCount;
-    Wh_SetIntValue(L"native-front-flower-count", count);
     if (action) {
         auto* data = static_cast<BYTE*>(action);
-        Wh_SetIntValue(L"native-front-flower-f80", *reinterpret_cast<DWORD*>(data + 80));
-        Wh_SetIntValue(L"native-front-flower-f84", *reinterpret_cast<DWORD*>(data + 84));
-        Wh_SetIntValue(L"native-front-flower-has-str", *reinterpret_cast<void**>(data + 64) != nullptr ? 1 : 0);
     }
     originalHandleFlowerKeyRelease(self, action);
 }
 
 void InjectKeyWithoutKeyControlHook(void* self, void* str, void* keyData, unsigned int a4) {
     const unsigned count = ++frontInjectKcCount;
-    Wh_SetIntValue(L"native-front-inject-kc-count", count);
-    Wh_SetIntValue(L"native-front-inject-kc-a4", a4);
-    Wh_SetIntValue(L"native-front-inject-kc-has-data", keyData != nullptr ? 1 : 0);
-    Wh_SetIntValue(L"native-front-inject-kc-has-str", str != nullptr ? 1 : 0);
     if (g_inPressAndHold && str) {
         auto hStr = reinterpret_cast<HSTRING>(str);
         UINT32 len = 0;
         const wchar_t* buf = WindowsGetStringRawBuffer(hStr, &len);
         if (buf && len == 1 && buf[0] >= L'2' && buf[0] <= L'9') {
             static std::atomic<unsigned int> s_longPressSeq{0};
-            Wh_SetIntValue(L"native-t9-long-digit", buf[0]);
-            Wh_SetIntValue(L"native-t9-long-seq", ++s_longPressSeq);
         }
     }
     originalInjectKeyWithoutKeyControl(self, str, keyData, a4);
@@ -946,13 +849,10 @@ void InjectKeyWithoutKeyControlHook(void* self, void* str, void* keyData, unsign
 
 void InjectKeyHook(void* self, void* keyControl, HSTRING text, InputPoint point, unsigned __int64 a5, int flags) {
     const unsigned count = ++frontInjectKeyCount;
-    Wh_SetIntValue(L"native-front-inj-key-count", count);
-    Wh_SetIntValue(L"native-front-inj-key-flags", flags);
     WCHAR ibuf[8]{}; UINT32 ilen = 0;
     if (text) {
         const wchar_t* b = WindowsGetStringRawBuffer(text, &ilen);
         if (b && ilen > 0 && ilen < 8) wcsncpy(ibuf, b, ilen);
-        if (b && ilen > 0) Wh_SetIntValue(L"native-front-inj-key-char", b[0]);
     }
     TraceLog(L"INJECTKEY text='%ls' len=%u flags=0x%X", ibuf, ilen, flags);
 
@@ -972,17 +872,14 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
             if (wcsstr(lpLibFileName, L"TextInput.dll")) {
                 InstallFrontend(hModule);
                 Wh_ApplyHookOperations();
-                Wh_SetIntValue(L"native-front-hooked-via-loadlib", 1);
             }
         } else {
             if (wcsstr(lpLibFileName, L"InputService.dll")) {
                 NativeT9::InstallService(hModule);
                 Wh_ApplyHookOperations();
-                Wh_SetIntValue(L"native-service-hooked-via-loadlib", 1);
             } else if (wcsstr(lpLibFileName, L"ChsPinyinDS.dll")) {
                 NativeT9::InstallDecoder(hModule);
                 Wh_ApplyHookOperations();
-                Wh_SetIntValue(L"native-decoder-hooked-via-loadlib", 1);
             }
         }
     }
@@ -1066,7 +963,7 @@ bool InstallFrontend(HMODULE module) {
           L"ComposableShell@WindowsInternal@@AE$AAAXPE$AAVKeyboardKeyLabel@23456@PE$AAVString@Platform@@1N@Z"},
          &originalLabelVisual,
          LabelVisualHook},
-        // 杩借釜瑙︽懜閿洏鎸夐敭鍘诲悜
+        // 追踪触摸键盘按键去向
         {{L"?OnPressAction@WideNarrowChineseSimplifiedKeyActionHandler@Controls@TextInputUndocked@"
           L"Experiences@ComposableShell@WindowsInternal@@MEAAXPE$AAVSingleKeyAction@23456@@Z"},
          &originalOnPressAction,
@@ -1102,7 +999,6 @@ BOOL Wh_ModInit() {
     frontProcess = (wcsstr(procPath, L"TextInputHost") != nullptr);
     const wchar_t* ready =
         frontProcess ? L"native-front-ready" : L"native-service-ready";
-    Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
         2808);
@@ -1114,7 +1010,6 @@ BOOL Wh_ModInit() {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (front) {
             InstallFrontend(front);
-            Wh_SetIntValue(L"native-front-hooked-init", 1);
         }
         return TRUE;
     }
@@ -1123,12 +1018,10 @@ BOOL Wh_ModInit() {
     HMODULE service = GetModuleHandleW(L"InputService.dll");
     if (service) {
         NativeT9::InstallService(service);
-        Wh_SetIntValue(L"native-service-hooked-init", 1);
     }
     HMODULE decoder = GetModuleHandleW(L"ChsPinyinDS.dll");
     if (decoder) {
         NativeT9::InstallDecoder(decoder);
-        Wh_SetIntValue(L"native-decoder-hooked-init", 1);
     }
     return TRUE;
 }
