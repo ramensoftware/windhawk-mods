@@ -1,11 +1,11 @@
 // ==WindhawkMod==
 // @id              taskbar-autohide-plus
 // @name            Taskbar Auto-Hide Plus
-// @description     Auto-hide the taskbar with full control: modes, delay, hotkey, restore on unload
+// @description     One place for conditional taskbar auto-hide: modes, hide delay, hotkey. Runs as a tool mod.
 // @version         1.0.0
 // @author          Areeexx
 // @github          https://github.com/Areeexx
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lshell32 -luser32
 // @license         MIT
 // ==/WindhawkMod==
@@ -14,23 +14,60 @@
 /*
 # Taskbar Auto-Hide Plus
  
-Controls the built-in **"Automatically hide the taskbar"** feature
-(the same one found in Settings → Personalization → Taskbar → Taskbar behaviors)
-and adds flexible conditions on top of it.
+Controls the Windows **"Automatically hide the taskbar"** switch (Settings →
+Personalization → Taskbar → Taskbar behaviors) according to simple rules, so
+you don't have to toggle it by hand.
+ 
+## How it works
+ 
+* The mod is a **tool mod**: it runs in its own dedicated process, not inside
+  `explorer.exe`, so it can't affect shell stability and there is exactly one
+  copy no matter how many Explorer processes exist.
+* It uses the regular Windows auto-hide switch (`SHAppBarMessage` with
+  `ABM_SETSTATE`). It does **not** hook Explorer.
+* The mod remembers the state your setting had when it started. Whenever the
+  rule says "hide", auto-hide is turned on; otherwise your original state is
+  restored. If the rule never requires a change, nothing is written.
+* The original state is saved before the first change. If the mod exits
+  uncleanly (for example Explorer or Windows is shut down while the mod is
+  active), the original state is restored the next time the mod starts.
+* If you change the Windows setting yourself while the mod is running, the mod
+  treats your choice as the new "original" state.
+* When the mod is disabled or unloaded, your original state is always restored.
  
 ## Modes
-- **Always** - the taskbar is always hidden (it appears when the cursor touches the screen edge).
-- **Only when the active window is maximized** - auto-hide turns on while the active window is maximized.
-- **Only by hotkey** - does nothing until you press the toggle hotkey.
-- **Off** - the mod does not hide the taskbar (the hotkey still works).
  
-## Extra options
-- Hide delay (ms).
-- Don't hide while the cursor is over the taskbar.
-- Toggle hotkey (Ctrl / Alt / Shift / Win + a key).
-- Restore the original state when the mod is unloaded.
+* **Always** - the taskbar is always auto-hidden.
+* **Only when the active window is maximized** - auto-hide is on while the
+  active window is maximized.
+* **Only by hotkey** - nothing happens until you press the hotkey.
+* **Off** - the mod does not hide the taskbar (the hotkey still works).
  
-Note: the Windows auto-hide setting is shared by all monitors.
+If auto-hide is already enabled in Windows when the mod starts, the taskbar is
+simply always auto-hidden: the mod only adds auto-hide, it never forces it off.
+ 
+## Options
+ 
+* **Hide delay** - how long the rule must hold before auto-hide is turned on.
+* **Don't hide while the cursor is over the taskbar** - the taskbar never
+  disappears from under the mouse.
+* **Toggle hotkey** - registered with `RegisterHotKey`; at least one modifier
+  is required. The hotkey inverts the current rule. Note that on keyboard
+  layouts with AltGr, AltGr is reported as Ctrl+Alt, so Ctrl+Alt+<key> may also
+  be triggered by typing that AltGr character; add Shift or Win to avoid this.
+ 
+## How this differs from existing mods
+ 
+Several existing mods already cover parts of this, for example
+*Taskbar auto-hide when maximized*, *Taskbar auto-hide fine tuning*,
+*Taskbar auto-hide after a delay* and *Better Taskbar Autohide*. Those mods
+work through Explorer hooks or their own logic. This mod is deliberately
+simpler: it only drives the standard Windows setting and combines the mode,
+the hide delay, the cursor check and the hotkey in a single mod with a single
+settings page. If you only need one of those features, one of the existing mods
+may be a better fit.
+ 
+The Windows auto-hide setting is shared by all monitors.
 */
 // ==/WindhawkModReadme==
  
@@ -47,9 +84,6 @@ Note: the Windows auto-hide setting is shared by all monitors.
 - hideDelay: 0
   $name: Hide delay (ms)
   $description: How long the condition must hold before hiding (0 = immediately)
-- pollInterval: 150
-  $name: Check interval (ms)
-  $description: Lower = more responsive, higher = less CPU usage (50-2000)
 - waitForCursorLeave: true
   $name: Don't hide while the cursor is over the taskbar
 - hotkeyEnabled: true
@@ -64,9 +98,7 @@ Note: the Windows auto-hide setting is shared by all monitors.
   $name: Hotkey - Win
 - hotkeyKey: T
   $name: Hotkey - key
-  $description: A single letter or digit
-- restoreOnUnload: true
-  $name: Restore original state on unload
+  $description: A single letter or digit. At least one modifier must be selected.
 */
 // ==/WindhawkModSettings==
  
@@ -77,27 +109,38 @@ Note: the Windows auto-hide setting is shared by all monitors.
 enum Mode { MODE_ALWAYS, MODE_MAXIMIZED, MODE_HOTKEY, MODE_OFF };
  
 struct Settings {
-    Mode  mode;
-    int   hideDelay;
-    int   pollInterval;
-    bool  waitForCursorLeave;
-    bool  hotkeyEnabled;
-    bool  ctrl, alt, shift, win;
-    UINT  vk;
-    bool  restoreOnUnload;
+    Mode mode = MODE_ALWAYS;
+    int  hideDelay = 0;
+    bool waitForCursorLeave = true;
+    bool hotkeyEnabled = true;
+    bool ctrl = true, alt = true, shift = false, win = false;
+    UINT vk = 'T';
 };
  
-static Settings          g_settings;
-static CRITICAL_SECTION  g_cs;
-static HANDLE            g_stopEvent = nullptr;
-static HANDLE            g_thread    = nullptr;
-static bool              g_origAutoHide = false;
-static bool              g_manualToggle = false;  // flipped by the hotkey
+#define WM_APP_SETTINGS (WM_APP + 1)
+#define HOTKEY_ID       1
+ 
+// All of the state below is owned by the worker thread, except the handles
+// that WhTool_ModInit / WhTool_ModUninit use to start and stop it.
+static Settings        g_settings;
+static HANDLE          g_thread = nullptr;
+static HANDLE          g_readyEvent = nullptr;
+static DWORD           g_threadId = 0;
+static HWINEVENTHOOK   g_hookForeground = nullptr;
+static HWINEVENTHOOK   g_hookLocation = nullptr;
+static UINT_PTR        g_timer = 0;
+static bool            g_hotkeyRegistered = false;
+static bool            g_manualToggle = false;  // flipped by the hotkey
+static bool            g_ready = false;         // taskbar found, original state captured
+static bool            g_orig = false;          // user's auto-hide state
+static int             g_lastApplied = -1;      // state last written by the mod, -1 = none
+static ULONGLONG       g_pendingSince = 0;      // when a pending "hide" started
+static int             g_lastMax = -1;          // last observed "active window maximized"
  
 // ---------------------------------------------------------------- settings
  
 static void LoadSettings() {
-    Settings s{};
+    Settings s;
  
     PCWSTR m = Wh_GetStringSetting(L"mode");
     if (!wcscmp(m, L"maximized"))    s.mode = MODE_MAXIMIZED;
@@ -107,19 +150,15 @@ static void LoadSettings() {
     Wh_FreeStringSetting(m);
  
     s.hideDelay          = Wh_GetIntSetting(L"hideDelay");
-    s.pollInterval       = Wh_GetIntSetting(L"pollInterval");
     s.waitForCursorLeave = Wh_GetIntSetting(L"waitForCursorLeave") != 0;
     s.hotkeyEnabled      = Wh_GetIntSetting(L"hotkeyEnabled") != 0;
     s.ctrl               = Wh_GetIntSetting(L"hotkeyCtrl") != 0;
     s.alt                = Wh_GetIntSetting(L"hotkeyAlt") != 0;
     s.shift              = Wh_GetIntSetting(L"hotkeyShift") != 0;
     s.win                = Wh_GetIntSetting(L"hotkeyWin") != 0;
-    s.restoreOnUnload    = Wh_GetIntSetting(L"restoreOnUnload") != 0;
  
-    if (s.hideDelay < 0)        s.hideDelay = 0;
-    if (s.hideDelay > 60000)    s.hideDelay = 60000;
-    if (s.pollInterval < 50)    s.pollInterval = 50;
-    if (s.pollInterval > 2000)  s.pollInterval = 2000;
+    if (s.hideDelay < 0)     s.hideDelay = 0;
+    if (s.hideDelay > 60000) s.hideDelay = 60000;
  
     PCWSTR k = Wh_GetStringSetting(L"hotkeyKey");
     WCHAR c = k[0] ? k[0] : L'T';
@@ -127,16 +166,7 @@ static void LoadSettings() {
     s.vk = c;  // for A-Z and 0-9 the virtual-key code equals the character
     Wh_FreeStringSetting(k);
  
-    EnterCriticalSection(&g_cs);
     g_settings = s;
-    LeaveCriticalSection(&g_cs);
-}
- 
-static Settings GetSettings() {
-    EnterCriticalSection(&g_cs);
-    Settings s = g_settings;
-    LeaveCriticalSection(&g_cs);
-    return s;
 }
  
 // ---------------------------------------------------------- taskbar control
@@ -188,110 +218,467 @@ static bool ActiveWindowMaximized() {
     return IsZoomed(fg) != FALSE;
 }
  
-// ----------------------------------------------------------------- hotkey
+// -------------------------------------------------------------- state logic
  
-static bool IsDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
- 
-static bool HotkeyPressed(const Settings& s) {
-    if (!s.hotkeyEnabled) return false;
-    if (s.ctrl  != IsDown(VK_CONTROL)) return false;
-    if (s.alt   != IsDown(VK_MENU))    return false;
-    if (s.shift != IsDown(VK_SHIFT))   return false;
-    if (s.win   != (IsDown(VK_LWIN) || IsDown(VK_RWIN))) return false;
-    return IsDown((int)s.vk);
+static void ArmTimer(UINT ms) {
+    if (g_timer) KillTimer(nullptr, g_timer);
+    if (ms < USER_TIMER_MINIMUM) ms = USER_TIMER_MINIMUM;
+    g_timer = SetTimer(nullptr, 0, ms, nullptr);
 }
  
-// ------------------------------------------------------------ worker thread
+static void DisarmTimer() {
+    if (g_timer) {
+        KillTimer(nullptr, g_timer);
+        g_timer = 0;
+    }
+}
  
-static bool DesiredAutoHide(const Settings& s) {
+// Waits until the taskbar exists, undoes a leftover from an unclean exit and
+// captures the user's original state. Returns false while the taskbar is
+// not available yet.
+static bool EnsureReady() {
+    if (g_ready) return true;
+    if (!GetTaskbar()) return false;
+ 
+    if (Wh_GetIntValue(L"dirty", 0)) {
+        bool saved = Wh_GetIntValue(L"origAutoHide", 0) != 0;
+        Wh_Log(L"Restoring leftover state from previous run: %d", (int)saved);
+        if (GetAutoHide() != saved) SetAutoHide(saved);
+        Wh_SetIntValue(L"dirty", 0);
+    }
+ 
+    g_orig = GetAutoHide();
+    g_ready = true;
+    Wh_Log(L"Original auto-hide state: %d", (int)g_orig);
+    return true;
+}
+ 
+// Whether the rules currently ask for auto-hide.
+static bool DesiredHide() {
     bool base = false;
-    switch (s.mode) {
-        case MODE_ALWAYS:    base = true; break;
-        case MODE_MAXIMIZED: base = ActiveWindowMaximized(); break;
-        case MODE_HOTKEY:    base = false; break;
-        case MODE_OFF:       base = false; break;
+    switch (g_settings.mode) {
+        case MODE_ALWAYS:
+            base = true;
+            break;
+        case MODE_MAXIMIZED: {
+            bool m = ActiveWindowMaximized();
+            g_lastMax = m ? 1 : 0;
+            base = m;
+            break;
+        }
+        case MODE_HOTKEY:
+        case MODE_OFF:
+            base = false;
+            break;
     }
     return g_manualToggle ? !base : base;
 }
  
-static DWORD WINAPI WorkerThread(LPVOID) {
-    bool      hotkeyWasDown = false;
-    bool      pending       = false;
-    ULONGLONG pendingSince  = GetTickCount64();
+static void ApplyAutoHide(bool value) {
+    // Persist the original state before the first change away from it.
+    if (value != g_orig) {
+        Wh_SetIntValue(L"origAutoHide", g_orig ? 1 : 0);
+        Wh_SetIntValue(L"dirty", 1);
+    }
+    SetAutoHide(value);
+    g_lastApplied = value ? 1 : 0;
+    if (value == g_orig) {
+        Wh_SetIntValue(L"dirty", 0);
+    }
+}
  
-    for (;;) {
-        Settings s = GetSettings();
-        if (WaitForSingleObject(g_stopEvent, (DWORD)s.pollInterval) != WAIT_TIMEOUT)
-            break;
+static void Update() {
+    DisarmTimer();
  
-        // Hotkey toggle (fires on key press, not while held)
-        bool down = HotkeyPressed(s);
-        if (down && !hotkeyWasDown) {
-            g_manualToggle = !g_manualToggle;
-            Wh_Log(L"Hotkey toggle -> %d", (int)g_manualToggle);
-        }
-        hotkeyWasDown = down;
+    if (!EnsureReady()) {
+        ArmTimer(1000);  // taskbar not created yet, try again later
+        return;
+    }
  
-        bool want = DesiredAutoHide(s);
+    bool cur = GetAutoHide();
+ 
+    // The setting differs from what the mod last wrote: the user changed it,
+    // so take their choice as the new original state.
+    if (g_lastApplied != -1 && cur != (g_lastApplied != 0)) {
+        Wh_Log(L"Setting changed externally -> %d", (int)cur);
+        g_orig = cur;
+        g_lastApplied = -1;
+        Wh_SetIntValue(L"dirty", 0);
+    }
+ 
+    bool want   = DesiredHide();
+    bool target = want ? true : g_orig;
+ 
+    if (target == cur) {
+        g_pendingSince = 0;
+        return;
+    }
+ 
+    if (target) {
+        // Turning auto-hide on: honor the delay and the cursor check.
         ULONGLONG now = GetTickCount64();
- 
-        if (want != pending) {
-            pending = want;
-            pendingSince = now;
+        if (!g_pendingSince) g_pendingSince = now;
+        ULONGLONG elapsed = now - g_pendingSince;
+        if (elapsed < (ULONGLONG)g_settings.hideDelay) {
+            ArmTimer((UINT)((ULONGLONG)g_settings.hideDelay - elapsed));
+            return;
         }
- 
-        bool current = GetAutoHide();
-        if (want == current) continue;
- 
-        if (want) {
-            // Turning auto-hide on: wait for the delay and (optionally) for the cursor to leave
-            if (now - pendingSince < (ULONGLONG)s.hideDelay) continue;
-            if (s.waitForCursorLeave && CursorOverTaskbar()) continue;
-            SetAutoHide(true);
-        } else {
-            SetAutoHide(false);
+        if (g_settings.waitForCursorLeave && CursorOverTaskbar()) {
+            ArmTimer(100);
+            return;
         }
     }
+ 
+    g_pendingSince = 0;
+    ApplyAutoHide(target);
+}
+ 
+// On unload: put the user's setting back, unless the user changed it meanwhile.
+static void RestoreOriginal() {
+    if (!g_ready) return;
+    if (g_lastApplied != -1) {
+        bool cur = GetAutoHide();
+        if (cur == (g_lastApplied != 0) && cur != g_orig) {
+            SetAutoHide(g_orig);
+        }
+        g_lastApplied = -1;
+    }
+    Wh_SetIntValue(L"dirty", 0);
+}
+ 
+// ----------------------------------------------------------------- hotkey
+ 
+static void RegisterHotkeyFromSettings() {
+    if (g_hotkeyRegistered) {
+        UnregisterHotKey(nullptr, HOTKEY_ID);
+        g_hotkeyRegistered = false;
+    }
+ 
+    const Settings& s = g_settings;
+    if (!s.hotkeyEnabled) return;
+ 
+    UINT mods = MOD_NOREPEAT;
+    if (s.ctrl)  mods |= MOD_CONTROL;
+    if (s.alt)   mods |= MOD_ALT;
+    if (s.shift) mods |= MOD_SHIFT;
+    if (s.win)   mods |= MOD_WIN;
+ 
+    if (!(s.ctrl || s.alt || s.shift || s.win)) {
+        Wh_Log(L"Hotkey needs at least one modifier");
+        return;
+    }
+ 
+    if (RegisterHotKey(nullptr, HOTKEY_ID, mods, s.vk)) {
+        g_hotkeyRegistered = true;
+    } else {
+        Wh_Log(L"RegisterHotKey failed (%u)", GetLastError());
+    }
+}
+ 
+// ------------------------------------------------------- window state events
+ 
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
+                                  LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (g_settings.mode != MODE_MAXIMIZED) return;
+ 
+    if (event == EVENT_OBJECT_LOCATIONCHANGE &&
+        (idObject != OBJID_WINDOW || idChild != CHILDID_SELF ||
+         hwnd != GetForegroundWindow())) {
+        return;
+    }
+ 
+    int m = ActiveWindowMaximized() ? 1 : 0;
+    if (m == g_lastMax) return;
+    Update();
+}
+ 
+// ------------------------------------------------------------ worker thread
+ 
+static DWORD WINAPI WorkerThread(LPVOID) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the queue
+ 
+    LoadSettings();
+    RegisterHotkeyFromSettings();
+ 
+    g_hookForeground = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    g_hookLocation = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+ 
+    SetEvent(g_readyEvent);
+    Update();
+ 
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        switch (msg.message) {
+            case WM_HOTKEY:
+                if (msg.wParam == HOTKEY_ID) {
+                    g_manualToggle = !g_manualToggle;
+                    Wh_Log(L"Hotkey toggle -> %d", (int)g_manualToggle);
+                    Update();
+                }
+                break;
+ 
+            case WM_TIMER:
+                if (msg.wParam == g_timer) {
+                    Update();
+                }
+                break;
+ 
+            case WM_APP_SETTINGS:
+                LoadSettings();
+                RegisterHotkeyFromSettings();
+                g_manualToggle = false;
+                g_lastMax = -1;
+                Update();
+                break;
+ 
+            default:
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+                break;
+        }
+    }
+ 
+    if (g_hookForeground) UnhookWinEvent(g_hookForeground);
+    if (g_hookLocation)   UnhookWinEvent(g_hookLocation);
+    g_hookForeground = g_hookLocation = nullptr;
+    DisarmTimer();
+    if (g_hotkeyRegistered) {
+        UnregisterHotKey(nullptr, HOTKEY_ID);
+        g_hotkeyRegistered = false;
+    }
+    RestoreOriginal();
     return 0;
 }
  
-// ------------------------------------------------------------------ Windhawk
+// ------------------------------------------------------------ tool mod hooks
  
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
-    InitializeCriticalSection(&g_cs);
-    LoadSettings();
  
-    g_origAutoHide = GetAutoHide();
-    g_manualToggle = false;
+    g_readyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_readyEvent) return FALSE;
  
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_thread    = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
-    return g_stopEvent && g_thread;
+    g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, &g_threadId);
+    if (!g_thread) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+        return FALSE;
+    }
+ 
+    // Wait until the worker has a message queue, so that later posts succeed.
+    HANDLE handles[2] = {g_readyEvent, g_thread};
+    if (WaitForMultipleObjects(2, handles, FALSE, INFINITE) != WAIT_OBJECT_0) {
+        CloseHandle(g_thread);
+        CloseHandle(g_readyEvent);
+        g_thread = g_readyEvent = nullptr;
+        return FALSE;
+    }
+    return TRUE;
 }
  
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
-    LoadSettings();
-    g_manualToggle = false;
+    if (g_thread) {
+        PostThreadMessageW(g_threadId, WM_APP_SETTINGS, 0, 0);
+    }
 }
  
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
-    if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
-        WaitForSingleObject(g_thread, 5000);
+        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+        // Wait without a timeout: the worker must finish (and restore the
+        // user's setting) before the process exits.
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+    }
+}
+ 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+ 
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+ 
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+ 
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
  
-    if (GetSettings().restoreOnUnload) {
-        SetAutoHide(g_origAutoHide);
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
-    DeleteCriticalSection(&g_cs);
+ 
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+ 
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+ 
+    LocalFree(argv);
+ 
+    if (isExcluded) {
+        return FALSE;
+    }
+ 
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+ 
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+ 
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+ 
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+ 
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+ 
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+ 
+    if (isToolModProcess) {
+        return FALSE;
+    }
+ 
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+ 
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+ 
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+ 
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+ 
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+ 
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+ 
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+ 
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+ 
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+ 
+    WhTool_ModSettingsChanged();
+}
+ 
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+ 
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
  
