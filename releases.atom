@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-01T04:01:47.000Z</updated>
+    <updated>2026-11-01T05:02:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Desktop Widgets 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-desktop-widgets#e30d1f91b4bf2553646a6f156c4abd8cd7769e6e</id>
+        <link href="https://windhawk.net/mods/win7-desktop-widgets"/>
+        <updated>2026-11-01T05:02:49.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/u7F6iG9.png" alt="Screenshot" /> 
+<img src="https://i.imgur.com/cQDjOws.png" alt="Screenshot" />
+<img src="https://i.imgur.com/IdDURoO.png" alt="Screenshot" /> </p>
+<h1 id="windows7desktopwidgets">Windows 7 Desktop Widgets</h1>
+<p>I really missed the classic Windows 7 desktop widgets and couldn't find a proper, lightweight version anywhere without bloat, broken scaling, or missing multi-monitor support. I love how simple and handy they were, so I made this accurate recreation. Enjoy!</p>
+<h3 id="whatsincluded">What's included:</h3>
+<ul>
+<li><strong>Classic Windows 7 Clock</strong>: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -&gt; <strong>Options…</strong>).</li>
+<li><strong>Classic Windows 7 Calendar</strong>: Spiral-bound notebook with an expandable monthly grid (click the expand icon on the hover bar or double-click the calendar), date picking, and smooth navigation.</li>
+<li><strong>Clean & Fast</strong>: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.</li>
+</ul>
+<hr />
+<p>☕ <strong>Support / Donations:</strong>
+If you enjoy this mod and want to support its author:
+<a href="https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link">Support on Boosty</a></p>]]></content>
+        <author>
+            <name>dekvas</name>
+            <uri>https://github.com/dekvas</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Rounded Selection Rectangle 1.0]]></title>
         <id>https://windhawk.net/mods/rounded-selection-rectangle#aca316a66c25f7e2a896ccebf684d9ed9ddc7134</id>
@@ -1337,55 +1362,6 @@ in the foreground. Alt+Tab works there too, through Explorer.</li>
         <author>
             <name>kotikdetka</name>
             <uri>https://github.com/kotikdetka</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Secondary windows on the active monitor 2.1]]></title>
-        <id>https://windhawk.net/mods/secondary-windows-on-active-monitor#9400327e0c12f02a83208e7c2fc6e686a7bcd2e3</id>
-        <link href="https://windhawk.net/mods/secondary-windows-on-active-monitor"/>
-        <updated>2026-10-27T20:03:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="secondarywindowsontheactivemonitor">Secondary windows on the active monitor</h1>
-<p>Useful if you have <strong>several monitors</strong>. Many apps remember which monitor a
-secondary window (media viewer, player, dialog) was opened on and open it there
-again, even if you now work with the app on another monitor. For example,
-Telegram Desktop opens photos and videos on the monitor where the viewer was
-last time, not where the chat is.</p>
-<p><img src="https://raw.githubusercontent.com/limpompo/windhawk-mods-limpompo/main/mods/secondary-windows-on-active-monitor/demo.gif" alt="Demo" /></p>
-<p>The mod intercepts the showing of secondary windows of the apps from the
-<em>Applications</em> list and, if a window is about to appear on a different monitor
-than the app's active window, moves it to the active window's monitor before
-it is shown. By default the list contains a placeholder (<code>test.exe</code>), replace it with your app, for example Telegram Desktop (<code>Telegram.exe</code>);
-add any other app by its executable name in the mod settings.</p>
-<p>For apps that are not built with Qt, the mod decides which windows are regular
-ones by a heuristic (it skips menus, tooltips, tool windows and the like), so
-it may move something it shouldn't, such as a drop-down list or a splash
-screen. Telegram is the only app the mod was tested with; if another app
-misbehaves, use the <em>Window title filter</em> of that app.</p>
-<p>Which windows are moved: <strong>all</strong> secondary windows of the app that get their
-own window - for Telegram also picture-in-picture video, call windows and
-chats opened in a separate window. Menus, tooltips, notifications and tool
-windows are not moved. If you keep some windows on another monitor on purpose,
-set a <em>Window title filter</em> for the app to limit the mod to windows with a
-given title.</p>
-<p>How a window is placed:</p>
-<ul>
-<li>it keeps its relative position on the screen (a window in the top right
-corner of one monitor appears in the top right corner of the other);</li>
-<li>a window larger than the target monitor is shrunk to fit;</li>
-<li>a fullscreen window stays fullscreen;</li>
-<li>a maximized window stays maximized, and when restored it stays on the new
-monitor;</li>
-<li>monitors with different scaling are taken into account.</li>
-</ul>
-<p>Keeping the position and accounting for scaling can each be turned off in the
-settings.</p>
-<p>The mod is loaded into every process and unloads itself at once from those that
-are not in the <em>Applications</em> list. An app added to the list starts to work
-after it is restarted; removing an app from the list applies immediately.</p>
-<p>System files and app data are not modified.</p>]]></content>
-        <author>
-            <name>limpompo</name>
-            <uri>https://github.com/limpompo</uri>
         </author>
     </entry>
 </feed>

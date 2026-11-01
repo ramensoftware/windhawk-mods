@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-01T04:01:47.000Z</updated>
+    <updated>2026-11-01T05:02:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Desktop Widgets 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-desktop-widgets#e30d1f91b4bf2553646a6f156c4abd8cd7769e6e</id>
+        <link href="https://windhawk.net/mods/win7-desktop-widgets"/>
+        <updated>2026-11-01T05:02:49.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/u7F6iG9.png" alt="Screenshot" /> 
+<img src="https://i.imgur.com/cQDjOws.png" alt="Screenshot" />
+<img src="https://i.imgur.com/IdDURoO.png" alt="Screenshot" /> </p>
+<h1 id="windows7desktopwidgets">Windows 7 Desktop Widgets</h1>
+<p>I really missed the classic Windows 7 desktop widgets and couldn't find a proper, lightweight version anywhere without bloat, broken scaling, or missing multi-monitor support. I love how simple and handy they were, so I made this accurate recreation. Enjoy!</p>
+<h3 id="whatsincluded">What's included:</h3>
+<ul>
+<li><strong>Classic Windows 7 Clock</strong>: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -&gt; <strong>Options…</strong>).</li>
+<li><strong>Classic Windows 7 Calendar</strong>: Spiral-bound notebook with an expandable monthly grid (click the expand icon on the hover bar or double-click the calendar), date picking, and smooth navigation.</li>
+<li><strong>Clean & Fast</strong>: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.</li>
+</ul>
+<hr />
+<p>☕ <strong>Support / Donations:</strong>
+If you enjoy this mod and want to support its author:
+<a href="https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link">Support on Boosty</a></p>]]></content>
+        <author>
+            <name>dekvas</name>
+            <uri>https://github.com/dekvas</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Rounded Selection Rectangle 1.0]]></title>
         <id>https://windhawk.net/mods/rounded-selection-rectangle#aca316a66c25f7e2a896ccebf684d9ed9ddc7134</id>
@@ -1052,26 +1077,6 @@ F014
         <author>
             <name>erenalpars</name>
             <uri>https://github.com/erenalpars</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TopBar for Windows 1.4.3]]></title>
-        <id>https://windhawk.net/mods/windhawk-topbar#7ed9023b39470e6aa728949f1b38aa5e5dd8dc77</id>
-        <link href="https://windhawk.net/mods/windhawk-topbar"/>
-        <updated>2026-10-30T20:02:18.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Fixes:</strong></p>
-<ul>
-<li>Fixed the TopBar appearing over full-screen apps during the first 30 seconds after startup.</li>
-<li>Fixed Search vertically misaligned the first time it opens.</li>
-<li>Fixed startup styling glitches, including the Start button’s icon color theme styling(disappearing in Neon Blue Theme).</li>
-</ul>
-<p><strong>Updates:</strong></p>
-<ul>
-<li>Icon only mode in task buttons no longer shrink when soo many apps are opened.(may appear behind center panel items when too many apps are open)</li>
-</ul>]]></content>
-        <author>
-            <name>WasiXGamer</name>
-            <uri>https://github.com/wasixgamer</uri>
         </author>
     </entry>
 </feed>

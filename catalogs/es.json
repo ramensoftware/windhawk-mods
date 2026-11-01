@@ -20182,6 +20182,31 @@
         "version": "1.0.0"
       }
     },
+    "win7-desktop-widgets": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793509369000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793509369000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "dekvas",
+        "compilerOptions": "-lgdiplus -lgdi32 -lshell32 -lcomctl32",
+        "description": "Authentic Windows 7 Clock & Calendar desktop widgets with 8 skins, options dialog, expandable notebook and multi-monitor support.",
+        "github": "https://github.com/dekvas",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 7 Desktop Widgets",
+        "version": "1.0.0"
+      }
+    },
     "win7-display-control-panel-restorer": {
       "details": {
         "defaultSorting": 4640,
