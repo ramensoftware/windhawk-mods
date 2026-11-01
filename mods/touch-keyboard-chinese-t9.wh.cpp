@@ -470,6 +470,28 @@ bool InstallService(HMODULE module) {
             reinterpret_cast<void*>(originalOnKeyDown), 0x6b6,
             "91e1bf21e466cf3a9f53d578c490214f74abada736e90f0939ace40b9af7db7c"))
         return false;
+#else
+    // ARM64 上同样按函数字节校验，避免系统更新后按偏移读写到别的字段。
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalRegularize), 0x240,
+            "1dcd766fb6fb804689c13a7d0a9d439e8e58509a20b47cd531283191b393f0ec"))
+        return false;
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalDefaultChannel), 0x20,
+            "18910303cd906b1e7827f47e5dd118719d710607a5ef7871bf937a29ce8d61a5"))
+        return false;
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalEnsureChannel), 0x118,
+            "a702b58d29d7eb2d4eafea17a3d8f8402736c4c0d34aa613456df1c913c5574f"))
+        return false;
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalLayout), 0x3a8,
+            "ea7e3628ee99184bd0edbdba6ed5be1db4d95a5d3d9e3f013562a57dc6704241"))
+        return false;
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalProcess), 0x558,
+            "12e7a830a10e93172cc9372f4d50f3141ca724cc6569756fd3d870df39f61fdc"))
+        return false;
 #endif
     return WindhawkUtils::SetFunctionHook(originalRegularize, RegularizeHook,
                                           &originalRegularize) &&
@@ -515,6 +537,15 @@ bool InstallDecoder(HMODULE module) {
     if (!CodeMatches(
             reinterpret_cast<void*>(originalCandidates), 0x2ed3,
             "7e0b8b1dc419ec319a1bb3275cbc2e2735e21332a238cef6b25959c7dfcc0677"))
+        return false;
+#else
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalDecide), 0x1bc,
+            "6d3c9371379933e64d0e92adf9ec6e272898c5abaa8996fd345684d9b81e81fe"))
+        return false;
+    if (!CodeMatches(
+            reinterpret_cast<void*>(originalCandidates), 0x3384,
+            "340bf479b19b6e5d7b20f1d9326a12585dee2dbe572d9151ebdf0ab40bb7c1af"))
         return false;
 #endif
     return WindhawkUtils::SetFunctionHook(originalCandidates, CandidatesHook,
@@ -989,8 +1020,25 @@ bool InstallFrontend(HMODULE module) {
          IsDictionaryReadyHook},
     };
     // 一次解析该模块的全部符号，避免反复失效符号缓存。
-    return WindhawkUtils::HookSymbols(module, textinputDllHooks,
-                                      ARRAYSIZE(textinputDllHooks), &options);
+    if (!WindhawkUtils::HookSymbols(module, textinputDllHooks,
+                                    ARRAYSIZE(textinputDllHooks), &options))
+        return false;
+#if !defined(__x86_64__) && !defined(_M_X64)
+    // 前端钩子按固定偏移读取面板对象，ARM64 上按函数字节校验后再安装。
+    if (!NativeT9::CodeMatches(
+            reinterpret_cast<void*>(originalSetUpMenu), 0x3344,
+            "9d75fce205f59af78433f8a99254de34cb17bbbf122acf34dd418daa311d984b"))
+        return false;
+    if (!NativeT9::CodeMatches(
+            reinterpret_cast<void*>(originalLabelVisual), 0x750,
+            "72b53a442692dac3f921012e502bd184db269847ae174c65f4bcdccf22224853"))
+        return false;
+    if (!NativeT9::CodeMatches(
+            reinterpret_cast<void*>(originalAddKeySetBlock), 0x914,
+            "984c7027931860ad45a3214bbb866cf46b4d7cf272480ebe5ef6b3f55d49a4d2"))
+        return false;
+#endif
+    return true;
 }
 }  // namespace
 BOOL Wh_ModInit() {
