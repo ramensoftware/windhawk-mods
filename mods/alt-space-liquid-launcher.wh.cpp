@@ -859,14 +859,13 @@ static void LoadFrecencyHistory() {
     g_frecencyTable.clear();
     g_globalUseSequence = 1;
 
-    PCWSTR rawData = Wh_GetStringValue(FrecencyStorageKey().c_str());
-    if (!rawData || !rawData[0]) {
-        if (rawData) Wh_FreeStringValue(rawData);
+    std::vector<wchar_t> buffer(32768, 0);
+    size_t charsRead = Wh_GetStringValue(FrecencyStorageKey().c_str(), buffer.data(), buffer.size());
+    if (charsRead == 0 || buffer[0] == L'\0') {
         return;
     }
 
-    std::wstring data = rawData;
-    Wh_FreeStringValue(rawData);
+    std::wstring data(buffer.data(), charsRead);
 
     size_t start = 0;
     while (start < data.size()) {
