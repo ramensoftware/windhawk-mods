@@ -3,7 +3,7 @@
 // @name            Windows Search - Search Engine Redirect
 // @description     Redirects Windows Search web-result clicks to a configurable search engine and the registered HTTPS handler.
 // @version         1.1.0
-// @github          XRedxFoxx
+// @github          https://github.com/XRedxFoxx
 // @author          XRedxFoxx
 // @homepage         https://github.com/XRedxFoxx/windows-search-default-browser
 // @include          SearchHost.exe
