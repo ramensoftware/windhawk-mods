@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              transferglow
 // @name            TransferGlow
-// @description     Custom appearance window with circular color wheel and effect intensity control; Windows 11 26H2 compatibility candidate.
+// @description     Based on the original digART mod. Updated and modified for compatibility with Windows 11 26H2 and new features.
 // @version         1.5.0
-// @author          digART
+// @author          Miguelelesbaocampos
 // @github          https://github.com/miguelelesbaocampos-cmyk
 // @license         GPL-3.0
 // @include         explorer.exe
