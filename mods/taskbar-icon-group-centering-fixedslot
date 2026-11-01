@@ -1,0 +1,2742 @@
+// ==WindhawkMod==
+// @id              taskbar-top-fixed-alternating-center
+// @name            Taskbar Top & Alternating Center Wings
+// @name:zh-CN      任务栏置顶与居中固定组左右交替展开
+// @description     Place taskbar on top, keep N icons on the left, lock M pinned icons in the center, and expand unpinned icons alternately left/right without moving existing icons.
+// @description:zh-CN 任务栏置顶，左侧保留N个图标，中间固定图标组位置锁死，新开的未固定图标从中间固定组左右交替向外展开且绝不影响现有图标位置。
+// @version         1.0.0
+// @author          EricDeng1001
+// @github          https://github.com/EricDeng1001
+// @license         GPL-3.0
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ladvapi32 -lcomctl32 -lshell32
+// ==/WindhawkMod==
+
+/* Copyright (C) 2026 EricDeng1001, Suioio, digART
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * Based on Taskbar Icon Group Centering by Suioio (https://github.com/Suioio)
+ * and Taskbar Separators by digART (https://github.com/digart11/taskbar-separators).
+ *
+ * Taskbar hook and UI-thread infrastructure includes code and patterns adapted
+ * from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
+ * Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
+ */
+
+// ==WindhawkModReadme==
+/*
+# Taskbar Top & Alternating Center Wings (任务栏置顶与居中固定组左右交替展开)
+
+This mod customizes the Windows 11 taskbar layout with four core features (requires Windows taskbar alignment to be set to **Left** in *Settings -> Personalization -> Taskbar -> Taskbar behaviors*):
+
+1. **Taskbar on Top**: Docks the taskbar to the top of the screen via `SHAppBarMessage` (`ABM_QUERYPOS` / `ABM_SETPOS`) and adjusts the monitor work area automatically. Can be toggled off if you already use Windhawk's official *Taskbar on top for Windows 11* mod.
+2. **Fixed Left Icons ($N$)**: Keeps the first `leftIconCount` application icons anchored to the left side of the taskbar (`0` or any positive integer).
+3. **Locked Center Pinned Group ($M$)**: Centers `centerPinnedIconCount` pinned icons in the middle of the taskbar. Their position is strictly calculated from the pinned group's own width and never shifts when new applications are opened or closed.
+4. **Alternating Left/Right Unpinned Wings**: Newly opened unpinned applications expand alternately to the left and right of the center pinned group (`[L2] [L1] [Center Pinned Group] [R1] [R2]`). Existing icons never shift when new windows appear.
+
+---
+
+## 中文说明
+
+使用前请先在 **Windows 设置 -> 个性化 -> 任务栏 -> 任务栏行为** 中将“任务栏对齐方式”设为**左对齐**：
+
+1. **任务栏置顶**：通过拦截 `SHAppBarMessage` 原生将任务栏停靠在屏幕顶部并自动更新最大化工作区。若已安装官方 *Taskbar on top for Windows 11* Mod，可在设置中关闭本内置选项以获得完整的开始菜单置顶支持。
+2. **左侧固定 $N$ 个图标**：前 `leftIconCount` 个应用图标固定在任务栏左侧（可设为 `0`）。
+3. **中间固定图标组锁死居中**：中间 `centerPinnedIconCount` 个固定图标始终锁定在任务栏正中央，坐标仅由固定组自身宽度决定，绝不随新开窗口左右浮动。
+4. **未固定图标左右交替展开且不影响现有图标**：新打开的未固定图标依次从中间固定组的左侧、右侧交替向外展开（如：`[左2] [左1] [中间固定组] [右1] [右2]`），新开图标时任何现有图标的位置均保持静止。
+*/
+// ==/WindhawkModReadme==
+
+// clang-format off
+// ==WindhawkModSettings==
+/*
+- placeTaskbarOnTop: true
+  $name: Place taskbar on top
+  $name:zh-CN: 启用内置任务栏置顶
+  $description: Dock the taskbar to the top of the screen. Turn this off if you already use the "Taskbar on top for Windows 11" mod.
+  $description:zh-CN: 通过 AppBar 接口将任务栏置于屏幕顶部。若已安装 "Taskbar on top for Windows 11" Mod，请将此项设为关闭。
+- leftIconCount: 2
+  $name: Left fixed icon count (N)
+  $name:zh-CN: 左侧固定应用图标数量 (N)
+  $description: Number of application icons to keep anchored on the left side of the taskbar (0 or positive integer).
+  $description:zh-CN: 保留在任务栏最左侧的应用图标数量（可设为 0 或正整数）。
+- centerPinnedIconCount: 4
+  $name: Center pinned icon count (M)
+  $name:zh-CN: 中间固定图标组数量 (M)
+  $description: Number of pinned icons locked at the center of the taskbar. Set to 0 to automatically lock the initial icons present when the taskbar loads.
+  $description:zh-CN: 锁定在屏幕正中央的固定图标数量。若设为 0，则自动将任务栏首次加载时除左侧 N 个图标外的现有图标锁定为中间固定组。
+- firstExpandSide: left
+  $name: First expansion side for unpinned icons
+  $name:zh-CN: 新开未固定图标首个展开方向
+  $description: Which side of the center pinned group the first newly opened unpinned icon appears on.
+  $description:zh-CN: 第一个新开的未固定图标出现在中间固定组的左侧还是右侧。
+  $options:
+  - left: Left first (L1 -> R1 -> L2 -> R2)
+  - right: Right first (R1 -> L1 -> R2 -> L2)
+  $options:zh-CN:
+  - left: 先左后右（左1 -> 右1 -> 左2 -> 右2）
+  - right: 先右后左（右1 -> 左1 -> 右2 -> 左2）
+- compactWingOnClose: false
+  $name: Compact same-side wing when an unpinned icon closes
+  $name:zh-CN: 关闭未固定图标时同侧向内收拢
+  $description: When disabled, outer unpinned icons stay in place even if an inner unpinned icon closes (new icons reuse the empty slot). When enabled, outer icons on that same wing shift inward toward the center group.
+  $description:zh-CN: 关闭表示即使关掉内侧的未固定图标，外侧未固定图标也保持原坐标不动（新开图标会优先填补空缺槽位）；开启表示同侧外层图标向中间固定组收拢（中间固定组和另一侧图标依然绝不移动）。
+- stopCenteringIconCount: 0
+  $name: Stop centering icon count threshold
+  $name:zh-CN: 停止居中的图标总数阈值
+  $description: Disable centering when the number of icons after the left group reaches this count (0 = never stop).
+  $description:zh-CN: 当除左侧固定组外的图标数量达到此值时停止居中（设为 0 表示永不停止）。
+*/
+// ==/WindhawkModSettings==
+// clang-format on
+
+#include <windhawk_utils.h>
+
+#undef GetCurrentTime
+
+#include <Windows.h>
+#include <commctrl.h>
+#include <shellapi.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/base.h>
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cwctype>
+#include <vector>
+
+using namespace winrt::Windows::UI::Xaml;
+
+namespace {
+
+enum class ReconcileResult {
+    succeeded,
+    temporarilyNotReady,
+};
+
+enum class WingSide {
+    Left,
+    Right,
+};
+
+constexpr int kDefaultLeftIconCount = 2;
+constexpr int kDefaultCenterPinnedIconCount = 4;
+constexpr int kDefaultStopCenteringIconCount = 0;
+
+std::atomic<bool> g_placeTaskbarOnTop{true};
+std::atomic<int> g_leftIconCount{kDefaultLeftIconCount};
+std::atomic<int> g_centerPinnedIconCount{kDefaultCenterPinnedIconCount};
+std::atomic<bool> g_expandRightFirst{false};
+std::atomic<bool> g_compactWingOnClose{false};
+std::atomic<int> g_stopCenteringIconCount{kDefaultStopCenteringIconCount};
+std::atomic<unsigned int> g_settingsGeneration{0};
+
+std::atomic<bool> g_taskbarViewDllLoaded{false};
+std::atomic<bool> g_unloading{false};
+std::atomic<int> g_taskbarAlignment{0};
+
+static const wchar_t kTaskbarAdvancedKey[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+
+void SeedTaskbarAlignmentFromRegistry() {
+    DWORD alignment = 1;
+    DWORD size = sizeof(alignment);
+    if (RegGetValueW(HKEY_CURRENT_USER, kTaskbarAdvancedKey, L"TaskbarAl",
+                     RRF_RT_REG_DWORD, nullptr, &alignment, &size) ==
+        ERROR_SUCCESS) {
+        const int previous = g_taskbarAlignment.exchange(
+            static_cast<int>(alignment), std::memory_order_acq_rel);
+        if (previous != static_cast<int>(alignment)) {
+            Wh_Log(L"seed: stored alignment is %d",
+                   static_cast<int>(alignment));
+        }
+    }
+}
+
+using AnimationClock = std::chrono::steady_clock;
+constexpr auto kPostReleaseSettlingTimeout = std::chrono::seconds(1);
+constexpr auto kSlotMissingGraceTimeout = std::chrono::milliseconds(250);
+
+struct ReconciledButtonSignature {
+    int itemIndex = -1;
+    winrt::weak_ref<FrameworkElement> button;
+    double actualWidth = 0;
+    double actualHeight = 0;
+    Thickness margin{};
+    double translateX = 0;
+    Visibility visibility = Visibility::Visible;
+};
+
+struct TrackedButtonLayoutState {
+    winrt::weak_ref<FrameworkElement> button;
+    Thickness baseMargin{};
+    Thickness lastAppliedMargin{};
+    bool baseMarginWasLocal = false;
+    bool hasAppliedMargin = false;
+
+    double lastAppliedOffsetX = 0;
+    bool hasAppliedTransform = false;
+};
+
+struct ButtonGapContribution {
+    double left = 0;
+    double right = 0;
+};
+
+struct UnpinnedSlotEntry {
+    winrt::weak_ref<FrameworkElement> button;
+    WingSide side = WingSide::Left;
+    int slotIndex = 0;
+    double cachedAdvanceWidth = 48.0;
+    AnimationClock::time_point missingSince{};
+};
+
+struct TrackedTaskbarState {
+    size_t id = 0;
+    winrt::weak_ref<FrameworkElement> repeater;
+    winrt::weak_ref<Controls::Grid> rootGrid;
+
+    bool layoutLeftAligned = false;
+    bool centeringApplies = false;
+    bool alignmentVerdictValid = false;
+    bool loggedNotReady = false;
+
+    bool alignmentSettleActive = false;
+    AnimationClock::time_point alignmentFallbackReadAt{};
+
+    winrt::weak_ref<FrameworkElement> trayFrame;
+    unsigned int appliedSettingsGeneration = 0;
+
+    int autoLearnedCenterPinnedCount = -1;
+    unsigned int autoLearnedGeneration = 0;
+
+    std::vector<UnpinnedSlotEntry> unpinnedSlots;
+
+    bool reconciliationSignatureValid = false;
+    ReconcileResult cachedReconcileResult =
+        ReconcileResult::temporarilyNotReady;
+    winrt::weak_ref<FrameworkElement> reconciledRepeater;
+    winrt::weak_ref<Controls::Grid> reconciledRootGrid;
+    double reconciledRootWidth = 0;
+    double reconciledRootHeight = 0;
+    winrt::Windows::Foundation::Rect reconciledRepeaterBounds{};
+    std::vector<ReconciledButtonSignature> reconciledButtons;
+
+    std::vector<TrackedButtonLayoutState> buttonLayouts;
+
+    winrt::weak_ref<Controls::Grid> reorderPointerSource;
+    winrt::Windows::Foundation::IInspectable reorderPointerPressedHandler{
+        nullptr};
+    winrt::Windows::Foundation::IInspectable reorderPointerReleasedHandler{
+        nullptr};
+    bool reorderPointerHandlerAttached = false;
+    bool reorderStructuralReconcilePending = false;
+
+    int postReleaseReconcileFrames = 0;
+    AnimationClock::time_point postReleaseSettlingUntil{};
+
+    bool layoutMonitorAttached = false;
+    winrt::event_token layoutUpdatedToken{};
+    winrt::weak_ref<Controls::Panel> layoutMonitorPanel;
+    bool layoutForcedReconcileActive = false;
+    AnimationClock::time_point layoutForcedReconcileActiveSince{};
+    int layoutForcedReconcileAttempts = 0;
+    AnimationClock::time_point layoutForcedReconcileWindowStart{};
+    size_t layoutObservedButtonCount = 0;
+    bool layoutObservedButtonCountValid = false;
+    size_t layoutPanelChildCount = static_cast<size_t>(-1);
+
+    bool reorderDragActive = false;
+    int dragEndConfirmFrames = 0;
+
+    winrt::event_token animationRenderingToken{};
+    bool animationRenderingSubscribed = false;
+};
+
+using TrackedTaskbarCollection = std::vector<TrackedTaskbarState>;
+
+thread_local TrackedTaskbarCollection* g_trackedTaskbars = nullptr;
+thread_local size_t g_nextTrackedTaskbarId = 1;
+thread_local bool g_reconcilingTaskbars = false;
+
+ReconcileResult ReconcileTaskbarRepeater(FrameworkElement const& repeater,
+                                         bool forceStructuralReconcile);
+
+TrackedTaskbarCollection& GetTrackedTaskbars() {
+    if (!g_trackedTaskbars) {
+        g_trackedTaskbars = new TrackedTaskbarCollection;
+    }
+    return *g_trackedTaskbars;
+}
+
+void DestroyTrackedTaskbars() {
+    auto* trackedTaskbars = g_trackedTaskbars;
+    g_trackedTaskbars = nullptr;
+    delete trackedTaskbars;
+}
+
+void LoadSettings() {
+    g_placeTaskbarOnTop.store(Wh_GetIntSetting(L"placeTaskbarOnTop") != 0,
+                              std::memory_order_release);
+
+    int leftIconCount = Wh_GetIntSetting(L"leftIconCount");
+    if (leftIconCount < 0) {
+        leftIconCount = kDefaultLeftIconCount;
+    }
+    g_leftIconCount.store(leftIconCount, std::memory_order_release);
+
+    int centerPinnedCount = Wh_GetIntSetting(L"centerPinnedIconCount");
+    if (centerPinnedCount < 0) {
+        centerPinnedCount = kDefaultCenterPinnedIconCount;
+    }
+    g_centerPinnedIconCount.store(centerPinnedCount, std::memory_order_release);
+
+    PCWSTR expandSide = Wh_GetStringSetting(L"firstExpandSide");
+    bool rightFirst = (expandSide && _wcsicmp(expandSide, L"right") == 0);
+    Wh_FreeStringSetting(expandSide);
+    g_expandRightFirst.store(rightFirst, std::memory_order_release);
+
+    g_compactWingOnClose.store(Wh_GetIntSetting(L"compactWingOnClose") != 0,
+                               std::memory_order_release);
+
+    g_stopCenteringIconCount.store(
+        std::max(0, Wh_GetIntSetting(L"stopCenteringIconCount")),
+        std::memory_order_release);
+
+    g_settingsGeneration.fetch_add(1, std::memory_order_release);
+}
+
+// ============================================================================
+// Safe Taskbar-on-Top via SHAppBarMessage Hook & Non-Looping Subclass
+// ============================================================================
+
+constexpr UINT_PTR kTopTaskbarSubclassId = 0x5748544F;  // 'WHTO'
+
+struct SubclassedTopTaskbarInfo {
+    HWND hWnd = nullptr;
+    bool appliedTopState = false;
+};
+
+thread_local std::vector<SubclassedTopTaskbarInfo>* g_subclassedTaskbars =
+    nullptr;
+
+bool IsTaskbarWindowClass(HWND hWnd) {
+    if (!hWnd) {
+        return false;
+    }
+    WCHAR className[32]{};
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+    return _wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+using SHAppBarMessage_t = UINT_PTR(WINAPI*)(DWORD dwMessage, PAPPBARDATA pData);
+SHAppBarMessage_t SHAppBarMessage_Original;
+
+UINT_PTR WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
+    if (pData && !g_unloading.load(std::memory_order_acquire) &&
+        g_placeTaskbarOnTop.load(std::memory_order_acquire)) {
+        if ((dwMessage == ABM_QUERYPOS || dwMessage == ABM_SETPOS) &&
+            pData->hWnd && IsTaskbarWindowClass(pData->hWnd)) {
+            HMONITOR hMon =
+                MonitorFromWindow(pData->hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (hMon && GetMonitorInfoW(hMon, &mi)) {
+                int height = pData->rc.bottom - pData->rc.top;
+                int monHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+                if (height <= 0 || height > monHeight / 3) {
+                    RECT rcWnd{};
+                    if (GetWindowRect(pData->hWnd, &rcWnd)) {
+                        height = rcWnd.bottom - rcWnd.top;
+                    }
+                    if (height <= 0 || height > monHeight / 3) {
+                        height = 48;
+                    }
+                }
+                pData->uEdge = ABE_TOP;
+                pData->rc.top = mi.rcMonitor.top;
+                pData->rc.bottom = mi.rcMonitor.top + height;
+            }
+        }
+    }
+    return SHAppBarMessage_Original(dwMessage, pData);
+}
+
+LRESULT CALLBACK TopTaskbarSubclassProc(HWND hWnd,
+                                        UINT uMsg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        UINT_PTR /*uIdSubclass*/,
+                                        DWORD_PTR /*dwRefData*/) {
+    if (uMsg == WM_WINDOWPOSCHANGING && lParam &&
+        !g_unloading.load(std::memory_order_acquire) &&
+        g_placeTaskbarOnTop.load(std::memory_order_acquire)) {
+        auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+        if (!(wp->flags & SWP_NOMOVE)) {
+            HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (hMon && GetMonitorInfoW(hMon, &mi)) {
+                int monHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+                int height = wp->cy;
+                if ((wp->flags & SWP_NOSIZE) || height <= 0) {
+                    RECT rcWnd{};
+                    GetWindowRect(hWnd, &rcWnd);
+                    height = rcWnd.bottom - rcWnd.top;
+                }
+                if (height > 0 && height < monHeight / 3) {
+                    wp->y = mi.rcMonitor.top;
+                }
+            }
+        }
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+void ApplyTopTaskbarToWindowOnThread(HWND taskbarWnd, bool enable) {
+    if (!taskbarWnd || !IsWindow(taskbarWnd)) {
+        return;
+    }
+    if (!g_subclassedTaskbars) {
+        g_subclassedTaskbars = new std::vector<SubclassedTopTaskbarInfo>();
+    }
+
+    auto it = std::find_if(g_subclassedTaskbars->begin(),
+                           g_subclassedTaskbars->end(),
+                           [taskbarWnd](SubclassedTopTaskbarInfo const& info) {
+                               return info.hWnd == taskbarWnd;
+                           });
+
+    if (enable && it != g_subclassedTaskbars->end() && it->appliedTopState) {
+        return;
+    }
+    if (!enable &&
+        (it == g_subclassedTaskbars->end() || !it->appliedTopState)) {
+        return;
+    }
+
+    HMONITOR hMon = MonitorFromWindow(taskbarWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    bool hasMon = hMon && GetMonitorInfoW(hMon, &mi);
+
+    RECT rcWnd{};
+    GetWindowRect(taskbarWnd, &rcWnd);
+    int wndWidth = rcWnd.right - rcWnd.left;
+    int wndHeight = rcWnd.bottom - rcWnd.top;
+
+    if (enable) {
+        if (it == g_subclassedTaskbars->end()) {
+            if (SetWindowSubclass(taskbarWnd, TopTaskbarSubclassProc,
+                                  kTopTaskbarSubclassId, 0)) {
+                g_subclassedTaskbars->push_back({taskbarWnd, true});
+            }
+        } else {
+            it->appliedTopState = true;
+        }
+
+        SendNotifyMessageW(taskbarWnd, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
+        if (hasMon && wndHeight > 0 &&
+            wndHeight < (mi.rcMonitor.bottom - mi.rcMonitor.top) / 3) {
+            SetWindowPos(taskbarWnd, nullptr, mi.rcMonitor.left,
+                         mi.rcMonitor.top, wndWidth, wndHeight,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    } else {
+        if (it != g_subclassedTaskbars->end()) {
+            RemoveWindowSubclass(taskbarWnd, TopTaskbarSubclassProc,
+                                 kTopTaskbarSubclassId);
+            g_subclassedTaskbars->erase(it);
+        }
+
+        SendNotifyMessageW(taskbarWnd, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
+        if (hasMon && wndHeight > 0 &&
+            wndHeight < (mi.rcMonitor.bottom - mi.rcMonitor.top) / 3) {
+            SetWindowPos(taskbarWnd, nullptr, mi.rcMonitor.left,
+                         mi.rcMonitor.bottom - wndHeight, wndWidth, wndHeight,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+}
+
+void CleanupTopTaskbarSubclassesOnThread() {
+    if (!g_subclassedTaskbars) {
+        return;
+    }
+    auto copy = *g_subclassedTaskbars;
+    for (auto const& info : copy) {
+        ApplyTopTaskbarToWindowOnThread(info.hWnd, false);
+    }
+    delete g_subclassedTaskbars;
+    g_subclassedTaskbars = nullptr;
+}
+
+// ============================================================================
+// Geometry & XAML Helpers
+// ============================================================================
+
+bool ThicknessApproximatelyEqual(Thickness const& left,
+                                 Thickness const& right) {
+    constexpr double kMarginEpsilon = 0.01;
+    return std::isfinite(left.Left) && std::isfinite(left.Top) &&
+           std::isfinite(left.Right) && std::isfinite(left.Bottom) &&
+           std::isfinite(right.Left) && std::isfinite(right.Top) &&
+           std::isfinite(right.Right) && std::isfinite(right.Bottom) &&
+           std::fabs(left.Left - right.Left) <= kMarginEpsilon &&
+           std::fabs(left.Top - right.Top) <= kMarginEpsilon &&
+           std::fabs(left.Right - right.Right) <= kMarginEpsilon &&
+           std::fabs(left.Bottom - right.Bottom) <= kMarginEpsilon;
+}
+
+std::vector<HWND> EnumerateCurrentProcessTaskbarWindows() {
+    struct TaskbarWindows {
+        std::vector<HWND> primary;
+        std::vector<HWND> secondary;
+    } taskbarWindows;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32]{};
+
+            if (GetWindowThreadProcessId(hWnd, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className))) {
+                auto* taskbarWindows =
+                    reinterpret_cast<TaskbarWindows*>(lParam);
+                if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                    taskbarWindows->primary.push_back(hWnd);
+                } else if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") ==
+                           0) {
+                    taskbarWindows->secondary.push_back(hWnd);
+                }
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&taskbarWindows));
+
+    std::vector<HWND> result;
+    result.reserve(taskbarWindows.primary.size() +
+                   taskbarWindows.secondary.size());
+    result.insert(result.end(), taskbarWindows.primary.begin(),
+                  taskbarWindows.primary.end());
+    result.insert(result.end(), taskbarWindows.secondary.begin(),
+                  taskbarWindows.secondary.end());
+    return result;
+}
+
+HWND GetTaskbarDispatchWindow(HWND taskbarWnd) {
+    if (!taskbarWnd) {
+        return nullptr;
+    }
+    HWND taskbarUiWnd = FindWindowEx(
+        taskbarWnd, nullptr,
+        L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+    return taskbarUiWnd ? taskbarUiWnd : taskbarWnd;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+        bool callbackRan;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (threadId == 0) {
+        return false;
+    }
+
+    if (threadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp =
+                    reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    auto* param =
+                        reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(
+                            cwp->lParam);
+                    param->callbackRan = true;
+                    param->proc(param->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam, false};
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
+                reinterpret_cast<LPARAM>(&param));
+
+    UnhookWindowsHookEx(hook);
+    return param.callbackRan;
+}
+
+void* CTaskBand_ITaskListWndSite_vftable;
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                           void** result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+void RecordTaskbarAlignment(int alignment, const wchar_t* source) {
+    const int previous =
+        g_taskbarAlignment.exchange(alignment, std::memory_order_acq_rel);
+    if (previous != alignment) {
+        Wh_Log(L"taskbar alignment changed to %d (from %s)", alignment,
+               source);
+    }
+}
+
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                          int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
+                                                   int* alignment) {
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        RecordTaskbarAlignment(*alignment, L"taskbar.dll");
+    }
+    return ret;
+}
+
+using TaskbarFrame_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                      int* alignment);
+TaskbarFrame_get_Alignment_t TaskbarFrame_get_Alignment_Original;
+
+HRESULT WINAPI TaskbarFrame_get_Alignment_Hook(void* pThis, int* alignment) {
+    HRESULT ret = TaskbarFrame_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        RecordTaskbarAlignment(*alignment, L"Taskbar.View.dll");
+    }
+    return ret;
+}
+
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0]) {
+        if (taskbarHostSharedPtr[1]) {
+            std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+        }
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+#if defined(_M_X64)
+    {
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[3] == 0x28 &&
+            b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
+        static_cast<BYTE*>(taskbarHostSharedPtr[0]) +
+        taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    if (taskbarElementIUnknown) {
+        taskbarElementIUnknown->QueryInterface(
+            winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElement));
+    }
+
+    XamlRoot result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    if (taskbarHostSharedPtr[1]) {
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+    }
+
+    return result;
+}
+
+XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
+    HWND taskSwitchWnd =
+        reinterpret_cast<HWND>(GetProp(taskbarWnd, L"TaskbandHWND"));
+    if (!taskSwitchWnd) {
+        return nullptr;
+    }
+
+    void* taskBand =
+        reinterpret_cast<void*>(GetWindowLongPtr(taskSwitchWnd, 0));
+    if (!taskBand) {
+        return nullptr;
+    }
+
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *reinterpret_cast<void**>(taskBandForTaskListWndSite) !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+        taskBandForTaskListWndSite =
+            reinterpret_cast<void**>(taskBandForTaskListWndSite) + 1;
+    }
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND secondaryTaskbarWnd) {
+    HWND taskSwitchWnd =
+        FindWindowEx(secondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!taskSwitchWnd) {
+        return nullptr;
+    }
+
+    void* taskBand =
+        reinterpret_cast<void*>(GetWindowLongPtr(taskSwitchWnd, 0));
+    if (!taskBand) {
+        return nullptr;
+    }
+
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *reinterpret_cast<void**>(taskBandForTaskListWndSite) !=
+                    CSecondaryTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+        taskBandForTaskListWndSite =
+            reinterpret_cast<void**>(taskBandForTaskListWndSite) + 1;
+    }
+    void* taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                               taskbarHostSharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+XamlRoot GetTaskbarXamlRootForWindow(HWND taskbarWnd) {
+    WCHAR className[32]{};
+    if (!taskbarWnd ||
+        !GetClassName(taskbarWnd, className, ARRAYSIZE(className))) {
+        return nullptr;
+    }
+
+    if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+        return GetSecondaryTaskbarXamlRoot(taskbarWnd);
+    }
+    if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        return GetTaskbarXamlRoot(taskbarWnd);
+    }
+    return nullptr;
+}
+
+constexpr winrt::guid IItemsRepeater{
+    0x0BD894F2,
+    0xEDFC,
+    0x5DDF,
+    {0xA1, 0x66, 0x2D, 0xB1, 0x4B, 0xBF, 0xDF, 0x35}};
+
+int ItemsRepeater_GetElementIndex(FrameworkElement repeater,
+                                  UIElement element) {
+    winrt::Windows::Foundation::IUnknown repeaterUnknown = nullptr;
+    repeater.as(IItemsRepeater, winrt::put_abi(repeaterUnknown));
+
+    using GetElementIndex_t =
+        HRESULT(WINAPI*)(void* pThis, void* element, void* index);
+
+    void** vtable = *(void***)winrt::get_abi(repeaterUnknown);
+    auto getElementIndex = (GetElementIndex_t)vtable[19];
+
+    int index = -1;
+    getElementIndex(winrt::get_abi(repeaterUnknown), winrt::get_abi(element),
+                    &index);
+    return index;
+}
+
+FrameworkElement FindRepeaterAncestor(FrameworkElement element) {
+    auto current = element;
+    for (int depth = 0; depth < 16 && current; depth++) {
+        auto parentObject = Media::VisualTreeHelper::GetParent(current);
+        auto parent = parentObject.try_as<FrameworkElement>();
+        if (!parent) {
+            return nullptr;
+        }
+        if (parent.Name() == L"TaskbarFrameRepeater") {
+            return parent;
+        }
+        current = parent;
+    }
+    return nullptr;
+}
+
+FrameworkElement FindDescendantByName(FrameworkElement root,
+                                      PCWSTR name,
+                                      int depth = 0) {
+    if (!root || depth > 20) {
+        return nullptr;
+    }
+
+    int childCount = Media::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < childCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(root, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+        if (child.Name() == name) {
+            return child;
+        }
+        auto found = FindDescendantByName(child, name, depth + 1);
+        if (found) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+FrameworkElement FindAncestorByName(FrameworkElement element, PCWSTR name) {
+    for (int depth = 0; depth < 16 && element; depth++) {
+        if (element.Name() == name) {
+            return element;
+        }
+        element = Media::VisualTreeHelper::GetParent(element)
+                      .try_as<FrameworkElement>();
+    }
+    return nullptr;
+}
+
+Controls::Grid FindRootGridAncestor(FrameworkElement element) {
+    auto current = element;
+    for (int depth = 0; depth < 16 && current; depth++) {
+        auto parent = Media::VisualTreeHelper::GetParent(current)
+                          .try_as<FrameworkElement>();
+        if (!parent) {
+            return nullptr;
+        }
+        if (parent.Name() == L"RootGrid") {
+            return parent.try_as<Controls::Grid>();
+        }
+        current = parent;
+    }
+    return nullptr;
+}
+
+bool TryGetElementBounds(FrameworkElement const& referenceFrame,
+                         FrameworkElement const& element,
+                         winrt::Windows::Foundation::Rect* bounds) {
+    if (!referenceFrame || !element || !bounds) {
+        return false;
+    }
+
+    double width = element.ActualWidth();
+    double height = element.ActualHeight();
+    if (!std::isfinite(width) || width <= 0 || !std::isfinite(height) ||
+        height <= 0) {
+        return false;
+    }
+
+    auto transformedBounds =
+        element.TransformToVisual(referenceFrame)
+            .TransformBounds(winrt::Windows::Foundation::Rect{
+                0, 0, static_cast<float>(width), static_cast<float>(height)});
+    if (!std::isfinite(transformedBounds.X) ||
+        !std::isfinite(transformedBounds.Y) ||
+        !std::isfinite(transformedBounds.Width) ||
+        !std::isfinite(transformedBounds.Height) ||
+        transformedBounds.Width <= 0 || transformedBounds.Height <= 0) {
+        return false;
+    }
+
+    *bounds = transformedBounds;
+    return true;
+}
+
+bool IsUsableApplicationButton(FrameworkElement const& button) {
+    if (!button || button.Visibility() != Visibility::Visible) {
+        return false;
+    }
+    double width = button.ActualWidth();
+    double height = button.ActualHeight();
+    return std::isfinite(width) && width > 0 && std::isfinite(height) &&
+           height > 0;
+}
+
+double GetButtonTranslateX(FrameworkElement const& button) {
+    if (!button) {
+        return 0.0;
+    }
+    try {
+        if (auto translate =
+                button.RenderTransform().try_as<Media::TranslateTransform>()) {
+            double x = translate.X();
+            return std::isfinite(x) ? x : 0.0;
+        }
+    } catch (...) {
+    }
+    return 0.0;
+}
+
+double GetButtonAdvanceWidth(FrameworkElement const& button,
+                             Thickness const& baseMargin) {
+    double width = button ? button.ActualWidth() : 0.0;
+    if (!std::isfinite(width) || width <= 0) {
+        width = 48.0;
+    }
+    double leftM = std::isfinite(baseMargin.Left) ? baseMargin.Left : 0.0;
+    double rightM = std::isfinite(baseMargin.Right) ? baseMargin.Right : 0.0;
+    return leftM + width + rightM;
+}
+
+void AddButtonGap(ButtonGapContribution* contribution,
+                  bool leading,
+                  double amount) {
+    (leading ? contribution->left : contribution->right) += amount;
+}
+
+double GetRasterizationScale(FrameworkElement const& element) {
+    try {
+        auto xamlRoot = element ? element.XamlRoot() : nullptr;
+        double scale = xamlRoot ? xamlRoot.RasterizationScale() : 1.0;
+        if (std::isfinite(scale) && scale > 0) {
+            return scale;
+        }
+    } catch (...) {
+    }
+    return 1.0;
+}
+
+double SnapToPhysicalPixel(double value, double rasterizationScale) {
+    return std::round(value * rasterizationScale) / rasterizationScale;
+}
+
+TrackedTaskbarState* FindTrackedTaskbarById(size_t taskbarId) {
+    if (!g_trackedTaskbars) {
+        return nullptr;
+    }
+    auto& trackedTaskbars = *g_trackedTaskbars;
+    auto found = std::find_if(trackedTaskbars.begin(), trackedTaskbars.end(),
+                              [&](TrackedTaskbarState const& taskbar) {
+                                  return taskbar.id == taskbarId;
+                              });
+    return found != trackedTaskbars.end() ? &*found : nullptr;
+}
+
+void InvalidateReconciliationSignature(TrackedTaskbarState& taskbar) {
+    taskbar.reconciliationSignatureValid = false;
+    taskbar.cachedReconcileResult = ReconcileResult::temporarilyNotReady;
+    taskbar.reconciledRepeater = {};
+    taskbar.reconciledRootGrid = {};
+    taskbar.reconciledButtons.clear();
+}
+
+void UnsubscribeAnimationRendering(TrackedTaskbarState& taskbar) {
+    if (!taskbar.animationRenderingSubscribed) {
+        return;
+    }
+    try {
+        Media::CompositionTarget::Rendering(taskbar.animationRenderingToken);
+    } catch (...) {
+    }
+    taskbar.animationRenderingToken = {};
+    taskbar.animationRenderingSubscribed = false;
+}
+
+void OnAnimationRendering(size_t taskbarId,
+                          winrt::Windows::Foundation::IInspectable const&,
+                          winrt::Windows::Foundation::IInspectable const&) {
+    auto* taskbarState = FindTrackedTaskbarById(taskbarId);
+    if (!taskbarState) {
+        return;
+    }
+    auto& taskbar = *taskbarState;
+
+    if (g_unloading) {
+        UnsubscribeAnimationRendering(taskbar);
+        return;
+    }
+
+    if (taskbar.reorderDragActive) {
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+            taskbar.dragEndConfirmFrames = 0;
+        } else if (++taskbar.dragEndConfirmFrames >= 3) {
+            taskbar.reorderDragActive = false;
+            taskbar.dragEndConfirmFrames = 0;
+            taskbar.postReleaseReconcileFrames = 2;
+            taskbar.postReleaseSettlingUntil =
+                AnimationClock::now() + kPostReleaseSettlingTimeout;
+            taskbar.reorderStructuralReconcilePending = true;
+        }
+    }
+
+    if (taskbar.reorderStructuralReconcilePending) {
+        taskbar.reorderStructuralReconcilePending = false;
+        try {
+            auto repeater = taskbar.repeater.get();
+            if (repeater) {
+                if (taskbar.postReleaseReconcileFrames > 0) {
+                    taskbar.postReleaseReconcileFrames--;
+                    if (taskbar.postReleaseReconcileFrames > 0) {
+                        taskbar.reorderStructuralReconcilePending = true;
+                    }
+                }
+                ReconcileTaskbarRepeater(repeater, true);
+            }
+        } catch (...) {
+        }
+
+        auto* refreshed = FindTrackedTaskbarById(taskbarId);
+        if (refreshed && refreshed->alignmentSettleActive) {
+            if (AnimationClock::now() >= refreshed->postReleaseSettlingUntil) {
+                refreshed->alignmentSettleActive = false;
+            } else {
+                refreshed->reorderStructuralReconcilePending = true;
+            }
+        }
+        if (refreshed && !refreshed->reorderDragActive &&
+            refreshed->postReleaseReconcileFrames == 0 &&
+            !refreshed->reorderStructuralReconcilePending) {
+            UnsubscribeAnimationRendering(*refreshed);
+        }
+        return;
+    }
+
+    if (!taskbar.reorderDragActive && !taskbar.alignmentSettleActive &&
+        taskbar.postReleaseSettlingUntil != AnimationClock::time_point{} &&
+        AnimationClock::now() >= taskbar.postReleaseSettlingUntil) {
+        UnsubscribeAnimationRendering(taskbar);
+    }
+}
+
+void EnsureGeometryRenderingSubscribed(TrackedTaskbarState& taskbar) {
+    if (taskbar.animationRenderingSubscribed) {
+        return;
+    }
+    size_t taskbarId = taskbar.id;
+    try {
+        taskbar.animationRenderingToken = Media::CompositionTarget::Rendering(
+            [taskbarId](
+                winrt::Windows::Foundation::IInspectable const& sender,
+                winrt::Windows::Foundation::IInspectable const& args) {
+                OnAnimationRendering(taskbarId, sender, args);
+            });
+        taskbar.animationRenderingSubscribed = true;
+    } catch (...) {
+    }
+}
+
+void OnReorderPointerPressed(
+    size_t taskbarId,
+    winrt::Windows::Foundation::IInspectable const&,
+    Input::PointerRoutedEventArgs const& e) {
+    auto* taskbarState = FindTrackedTaskbarById(taskbarId);
+    if (!taskbarState || g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (taskbarState->reorderDragActive) {
+        return;
+    }
+
+    auto source = e.OriginalSource().try_as<FrameworkElement>();
+    auto pressedButton = FindAncestorByName(source, L"TaskListButton");
+    if (!pressedButton) {
+        return;
+    }
+    if (!e.GetCurrentPoint(nullptr).Properties().IsLeftButtonPressed()) {
+        return;
+    }
+
+    taskbarState->reorderDragActive = true;
+    taskbarState->reorderStructuralReconcilePending = false;
+    EnsureGeometryRenderingSubscribed(*taskbarState);
+}
+
+void OnReorderPointerReleased(size_t taskbarId,
+                              winrt::Windows::Foundation::IInspectable const&,
+                              Input::PointerRoutedEventArgs const&) {
+    auto* taskbarState = FindTrackedTaskbarById(taskbarId);
+    if (!taskbarState || g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    taskbarState->reorderDragActive = false;
+    taskbarState->dragEndConfirmFrames = 0;
+    taskbarState->reorderStructuralReconcilePending = true;
+    taskbarState->postReleaseReconcileFrames = 2;
+    taskbarState->postReleaseSettlingUntil =
+        AnimationClock::now() + kPostReleaseSettlingTimeout;
+    EnsureGeometryRenderingSubscribed(*taskbarState);
+}
+
+void DetachReorderPointerHandler(TrackedTaskbarState& taskbar) {
+    if (taskbar.reorderPointerHandlerAttached) {
+        if (auto source = taskbar.reorderPointerSource.get()) {
+            if (taskbar.reorderPointerPressedHandler) {
+                try {
+                    source.RemoveHandler(UIElement::PointerPressedEvent(),
+                                         taskbar.reorderPointerPressedHandler);
+                } catch (...) {
+                }
+            }
+            if (taskbar.reorderPointerReleasedHandler) {
+                try {
+                    source.RemoveHandler(UIElement::PointerReleasedEvent(),
+                                         taskbar.reorderPointerReleasedHandler);
+                } catch (...) {
+                }
+            }
+        }
+    }
+
+    taskbar.reorderPointerPressedHandler = nullptr;
+    taskbar.reorderPointerReleasedHandler = nullptr;
+    taskbar.reorderPointerSource = {};
+    taskbar.reorderPointerHandlerAttached = false;
+    taskbar.reorderStructuralReconcilePending = false;
+    taskbar.postReleaseReconcileFrames = 0;
+    taskbar.postReleaseSettlingUntil = {};
+    taskbar.reorderDragActive = false;
+    taskbar.dragEndConfirmFrames = 0;
+    taskbar.alignmentSettleActive = false;
+}
+
+void AttachReorderPointerHandler(TrackedTaskbarState& taskbar,
+                                 Controls::Grid const& source) {
+    if (!source || g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (taskbar.reorderPointerHandlerAttached) {
+        auto currentSource = taskbar.reorderPointerSource.get();
+        if (currentSource &&
+            winrt::get_abi(currentSource) == winrt::get_abi(source)) {
+            return;
+        }
+        DetachReorderPointerHandler(taskbar);
+    }
+
+    try {
+        taskbar.reorderPointerSource = winrt::make_weak(source);
+        size_t taskbarId = taskbar.id;
+        taskbar.reorderPointerPressedHandler =
+            winrt::box_value(Input::PointerEventHandler{
+                [taskbarId](
+                    winrt::Windows::Foundation::IInspectable const& sender,
+                    Input::PointerRoutedEventArgs const& args) {
+                    OnReorderPointerPressed(taskbarId, sender, args);
+                }});
+        taskbar.reorderPointerReleasedHandler =
+            winrt::box_value(Input::PointerEventHandler{
+                [taskbarId](
+                    winrt::Windows::Foundation::IInspectable const& sender,
+                    Input::PointerRoutedEventArgs const& args) {
+                    OnReorderPointerReleased(taskbarId, sender, args);
+                }});
+        source.AddHandler(UIElement::PointerPressedEvent(),
+                          taskbar.reorderPointerPressedHandler, true);
+        source.AddHandler(UIElement::PointerReleasedEvent(),
+                          taskbar.reorderPointerReleasedHandler, true);
+        taskbar.reorderPointerHandlerAttached = true;
+    } catch (...) {
+        DetachReorderPointerHandler(taskbar);
+    }
+}
+
+void RestoreTrackedButtonMargin(TrackedButtonLayoutState& tracked) {
+    if (!tracked.hasAppliedMargin) {
+        return;
+    }
+
+    try {
+        auto button = tracked.button.get();
+        if (!button) {
+            tracked.hasAppliedMargin = false;
+            return;
+        }
+
+        Thickness current = button.Margin();
+        if (ThicknessApproximatelyEqual(current, tracked.lastAppliedMargin)) {
+            if (tracked.baseMarginWasLocal) {
+                button.Margin(tracked.baseMargin);
+            } else {
+                button.ClearValue(FrameworkElement::MarginProperty());
+            }
+        }
+    } catch (...) {
+    }
+
+    tracked.hasAppliedMargin = false;
+}
+
+void RestoreTrackedButtonTransform(TrackedButtonLayoutState& tracked) {
+    if (!tracked.hasAppliedTransform) {
+        return;
+    }
+
+    try {
+        auto button = tracked.button.get();
+        if (!button) {
+            tracked.hasAppliedTransform = false;
+            tracked.lastAppliedOffsetX = 0;
+            return;
+        }
+
+        if (auto translate =
+                button.RenderTransform().try_as<Media::TranslateTransform>()) {
+            if (std::fabs(translate.X() - tracked.lastAppliedOffsetX) <= 0.1) {
+                translate.X(0.0);
+                button.ClearValue(UIElement::RenderTransformProperty());
+            }
+        }
+    } catch (...) {
+    }
+
+    tracked.lastAppliedOffsetX = 0;
+    tracked.hasAppliedTransform = false;
+}
+
+void RestoreTrackedButtonLayouts(TrackedTaskbarState& taskbar) {
+    for (auto& tracked : taskbar.buttonLayouts) {
+        RestoreTrackedButtonTransform(tracked);
+        RestoreTrackedButtonMargin(tracked);
+    }
+    taskbar.buttonLayouts.clear();
+}
+
+void CaptureBaseMargin(TrackedButtonLayoutState& tracked,
+                       FrameworkElement const& button,
+                       Thickness const& margin) {
+    tracked.baseMargin = margin;
+    auto buttonDo = button.as<DependencyObject>();
+    tracked.baseMarginWasLocal =
+        buttonDo.ReadLocalValue(FrameworkElement::MarginProperty()) !=
+        DependencyProperty::UnsetValue();
+    tracked.lastAppliedMargin = margin;
+    tracked.hasAppliedMargin = false;
+}
+
+void SynchronizeTrackedButtonLayouts(
+    TrackedTaskbarState& taskbar,
+    std::vector<FrameworkElement> const& appButtons) {
+    std::vector<TrackedButtonLayoutState> synchronized;
+    synchronized.reserve(appButtons.size());
+
+    std::vector<bool> reused(taskbar.buttonLayouts.size(), false);
+    for (auto const& button : appButtons) {
+        if (!button) {
+            continue;
+        }
+
+        Thickness current = button.Margin();
+        TrackedButtonLayoutState tracked;
+        bool found = false;
+        for (size_t index = 0; index < taskbar.buttonLayouts.size(); index++) {
+            auto existingButton = taskbar.buttonLayouts[index].button.get();
+            if (!existingButton ||
+                winrt::get_abi(existingButton) != winrt::get_abi(button)) {
+                continue;
+            }
+
+            tracked = taskbar.buttonLayouts[index];
+            reused[index] = true;
+            found = true;
+            break;
+        }
+
+        if (!found) {
+            tracked.button = winrt::make_weak(button);
+            CaptureBaseMargin(tracked, button, current);
+        } else {
+            tracked.button = winrt::make_weak(button);
+            if (tracked.hasAppliedMargin) {
+                if (!ThicknessApproximatelyEqual(current,
+                                                 tracked.lastAppliedMargin)) {
+                    CaptureBaseMargin(tracked, button, current);
+                }
+            } else {
+                CaptureBaseMargin(tracked, button, current);
+            }
+        }
+
+        synchronized.push_back(std::move(tracked));
+    }
+
+    for (size_t index = 0; index < taskbar.buttonLayouts.size(); index++) {
+        if (!reused[index]) {
+            RestoreTrackedButtonTransform(taskbar.buttonLayouts[index]);
+            RestoreTrackedButtonMargin(taskbar.buttonLayouts[index]);
+        }
+    }
+
+    taskbar.buttonLayouts = std::move(synchronized);
+}
+
+constexpr int kMaxLayoutForcedReconciles = 3;
+constexpr auto kLayoutForcedReconcileWindow = std::chrono::milliseconds(1000);
+constexpr auto kLayoutForcedReconcileWatchdog = std::chrono::milliseconds(2000);
+constexpr auto kAlignmentFallbackReadInterval = std::chrono::milliseconds(1000);
+
+void OnTaskbarLayoutUpdated(
+    size_t taskbarId,
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    auto* taskbarState = FindTrackedTaskbarById(taskbarId);
+    if (!taskbarState || g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (taskbarState->layoutForcedReconcileActive) {
+        const auto activeSince = taskbarState->layoutForcedReconcileActiveSince;
+        if (activeSince == AnimationClock::time_point{} ||
+            AnimationClock::now() - activeSince <
+                kLayoutForcedReconcileWatchdog) {
+            return;
+        }
+        taskbarState->layoutForcedReconcileActive = false;
+        taskbarState->layoutForcedReconcileActiveSince = {};
+    }
+
+    if (taskbarState->reorderDragActive) {
+        return;
+    }
+
+    auto repeater = taskbarState->repeater.get();
+    if (!repeater) {
+        return;
+    }
+
+    bool layoutInvariantDirty = false;
+    if (taskbarState->layoutObservedButtonCountValid &&
+        taskbarState->layoutObservedButtonCount !=
+            taskbarState->reconciledButtons.size()) {
+        layoutInvariantDirty = true;
+    }
+
+    auto alignmentRootGrid = taskbarState->rootGrid.get();
+    if (repeater && alignmentRootGrid) {
+        if (taskbarState->alignmentFallbackReadAt ==
+                AnimationClock::time_point{} ||
+            AnimationClock::now() - taskbarState->alignmentFallbackReadAt >=
+                kAlignmentFallbackReadInterval) {
+            taskbarState->alignmentFallbackReadAt = AnimationClock::now();
+            SeedTaskbarAlignmentFromRegistry();
+        }
+
+        const bool leftAligned =
+            g_taskbarAlignment.load(std::memory_order_acquire) == 0;
+        if (leftAligned != taskbarState->layoutLeftAligned) {
+            layoutInvariantDirty = true;
+        }
+    }
+
+    auto panel = repeater.try_as<Controls::Panel>();
+    if (!panel) {
+        return;
+    }
+
+    const size_t panelChildCount =
+        static_cast<size_t>(panel.Children().Size());
+    if (!layoutInvariantDirty &&
+        taskbarState->layoutPanelChildCount == panelChildCount) {
+        return;
+    }
+    taskbarState->layoutPanelChildCount = panelChildCount;
+
+    size_t realizedButtonCount = 0;
+    for (auto const& panelChild : panel.Children()) {
+        auto child = panelChild.try_as<FrameworkElement>();
+        if (!child || child.Name() != L"TaskListButton") {
+            continue;
+        }
+        if (ItemsRepeater_GetElementIndex(repeater, child) < 0) {
+            continue;
+        }
+        if (!IsUsableApplicationButton(child)) {
+            continue;
+        }
+        realizedButtonCount++;
+    }
+
+    if (!taskbarState->layoutObservedButtonCountValid ||
+        taskbarState->layoutObservedButtonCount != realizedButtonCount) {
+        taskbarState->layoutObservedButtonCount = realizedButtonCount;
+        taskbarState->layoutObservedButtonCountValid = true;
+    }
+
+    if (!layoutInvariantDirty &&
+        realizedButtonCount == taskbarState->reconciledButtons.size()) {
+        return;
+    }
+
+    const auto now = AnimationClock::now();
+    if (taskbarState->layoutForcedReconcileWindowStart ==
+            AnimationClock::time_point{} ||
+        now - taskbarState->layoutForcedReconcileWindowStart >=
+            kLayoutForcedReconcileWindow) {
+        taskbarState->layoutForcedReconcileAttempts = 0;
+        taskbarState->layoutForcedReconcileWindowStart = now;
+    }
+
+    if (taskbarState->layoutForcedReconcileAttempts >=
+        kMaxLayoutForcedReconciles) {
+        return;
+    }
+
+    taskbarState->layoutForcedReconcileAttempts++;
+    taskbarState->layoutForcedReconcileActive = true;
+    taskbarState->layoutForcedReconcileActiveSince = now;
+    taskbarState->layoutPanelChildCount = static_cast<size_t>(-1);
+    try {
+        ReconcileTaskbarRepeater(repeater, true);
+    } catch (...) {
+    }
+
+    if (auto* refreshed = FindTrackedTaskbarById(taskbarId)) {
+        refreshed->layoutForcedReconcileActive = false;
+    }
+}
+
+void DetachLayoutChangeMonitor(TrackedTaskbarState& taskbar) {
+    if (taskbar.layoutMonitorAttached) {
+        if (auto panel = taskbar.layoutMonitorPanel.get()) {
+            try {
+                panel.LayoutUpdated(taskbar.layoutUpdatedToken);
+            } catch (...) {
+            }
+        }
+    }
+    taskbar.layoutMonitorPanel = {};
+    taskbar.layoutUpdatedToken = {};
+    taskbar.layoutMonitorAttached = false;
+}
+
+void AttachLayoutChangeMonitor(TrackedTaskbarState& taskbar,
+                               Controls::Panel const& panel) {
+    if (!panel || g_unloading) {
+        return;
+    }
+
+    if (taskbar.layoutMonitorAttached) {
+        auto currentPanel = taskbar.layoutMonitorPanel.get();
+        if (currentPanel &&
+            winrt::get_abi(currentPanel) == winrt::get_abi(panel)) {
+            return;
+        }
+        DetachLayoutChangeMonitor(taskbar);
+    }
+
+    try {
+        taskbar.layoutMonitorPanel = winrt::make_weak(panel);
+        size_t taskbarId = taskbar.id;
+        taskbar.layoutUpdatedToken =
+            panel.LayoutUpdated(winrt::Windows::Foundation::EventHandler<
+                                winrt::Windows::Foundation::IInspectable>{
+                [taskbarId](
+                    winrt::Windows::Foundation::IInspectable const& sender,
+                    winrt::Windows::Foundation::IInspectable const& args) {
+                    OnTaskbarLayoutUpdated(taskbarId, sender, args);
+                }});
+        taskbar.layoutMonitorAttached = true;
+    } catch (...) {
+        DetachLayoutChangeMonitor(taskbar);
+    }
+}
+
+void ClearAnimationTrackingForUnload() {
+    if (!g_trackedTaskbars) {
+        return;
+    }
+    for (auto& taskbar : *g_trackedTaskbars) {
+        UnsubscribeAnimationRendering(taskbar);
+        try {
+            DetachReorderPointerHandler(taskbar);
+        } catch (...) {
+        }
+        try {
+            DetachLayoutChangeMonitor(taskbar);
+        } catch (...) {
+        }
+    }
+}
+
+void RemoveTrackedTaskbarElements(TrackedTaskbarState& taskbar) {
+    RestoreTrackedButtonLayouts(taskbar);
+    InvalidateReconciliationSignature(taskbar);
+    UnsubscribeAnimationRendering(taskbar);
+    try {
+        DetachLayoutChangeMonitor(taskbar);
+    } catch (...) {
+    }
+    try {
+        DetachReorderPointerHandler(taskbar);
+    } catch (...) {
+    }
+    taskbar.rootGrid = {};
+    taskbar.trayFrame = {};
+    taskbar.unpinnedSlots.clear();
+}
+
+void PruneExpiredTrackedTaskbars() {
+    if (!g_trackedTaskbars) {
+        return;
+    }
+    auto& trackedTaskbars = *g_trackedTaskbars;
+    for (size_t index = 0; index < trackedTaskbars.size();) {
+        bool taskbarIsLive = false;
+        try {
+            auto repeater = trackedTaskbars[index].repeater.get();
+            taskbarIsLive = repeater && FindRootGridAncestor(repeater);
+        } catch (...) {
+        }
+
+        if (taskbarIsLive) {
+            index++;
+            continue;
+        }
+
+        RemoveTrackedTaskbarElements(trackedTaskbars[index]);
+        trackedTaskbars.erase(trackedTaskbars.begin() + index);
+    }
+}
+
+TrackedTaskbarState* TrackTaskbarRepeater(FrameworkElement const& repeater) {
+    if (!repeater) {
+        return nullptr;
+    }
+
+    PruneExpiredTrackedTaskbars();
+    auto& trackedTaskbars = GetTrackedTaskbars();
+    for (auto& taskbar : trackedTaskbars) {
+        auto trackedRepeater = taskbar.repeater.get();
+        if (trackedRepeater &&
+            winrt::get_abi(trackedRepeater) == winrt::get_abi(repeater)) {
+            return &taskbar;
+        }
+    }
+
+    auto rootGrid = FindRootGridAncestor(repeater);
+    if (rootGrid) {
+        for (auto& taskbar : trackedTaskbars) {
+            auto trackedRootGrid = taskbar.rootGrid.get();
+            if (trackedRootGrid &&
+                winrt::get_abi(trackedRootGrid) == winrt::get_abi(rootGrid)) {
+                auto trackedRepeater = taskbar.repeater.get();
+                if (!trackedRepeater || winrt::get_abi(trackedRepeater) !=
+                                            winrt::get_abi(repeater)) {
+                    InvalidateReconciliationSignature(taskbar);
+                }
+                taskbar.repeater = winrt::make_weak(repeater);
+                return &taskbar;
+            }
+        }
+    }
+
+    TrackedTaskbarState taskbar;
+    taskbar.id = g_nextTrackedTaskbarId++;
+    taskbar.repeater = winrt::make_weak(repeater);
+    if (rootGrid) {
+        taskbar.rootGrid = winrt::make_weak(rootGrid);
+    }
+    trackedTaskbars.push_back(std::move(taskbar));
+    return &trackedTaskbars.back();
+}
+
+struct RealizedButtonSnapshot {
+    int itemIndex = -1;
+    FrameworkElement button{nullptr};
+    double actualWidth = 0;
+    double actualHeight = 0;
+    Thickness margin{};
+    double translateX = 0;
+    Visibility visibility = Visibility::Visible;
+};
+
+struct TaskbarReconciliationSnapshot {
+    bool signatureValid = false;
+    Controls::Grid rootGrid{nullptr};
+    double rootWidth = 0;
+    double rootHeight = 0;
+    winrt::Windows::Foundation::Rect repeaterBounds{};
+    std::vector<RealizedButtonSnapshot> buttons;
+};
+
+void ApplyTrackedButtonLayouts(
+    TrackedTaskbarState& taskbar,
+    std::vector<FrameworkElement> const& appButtons,
+    std::vector<ButtonGapContribution> const& gapContributions,
+    std::vector<double> const& translateContributions,
+    TaskbarReconciliationSnapshot* snapshot) {
+    if (gapContributions.size() != appButtons.size() ||
+        translateContributions.size() != appButtons.size()) {
+        return;
+    }
+
+    for (size_t index = 0; index < appButtons.size(); index++) {
+        auto const& button = appButtons[index];
+        if (!button || index >= taskbar.buttonLayouts.size()) {
+            continue;
+        }
+
+        auto& tracked = taskbar.buttonLayouts[index];
+        auto const& gap = gapContributions[index];
+        bool hasGap =
+            std::fabs(gap.left) > 0.001 || std::fabs(gap.right) > 0.001;
+        if (hasGap) {
+            Thickness desired = tracked.baseMargin;
+            desired.Left += gap.left;
+            desired.Right += gap.right;
+
+            Thickness current = button.Margin();
+            if (!ThicknessApproximatelyEqual(current, desired)) {
+                button.Margin(desired);
+            }
+            tracked.lastAppliedMargin = desired;
+            tracked.hasAppliedMargin = true;
+        } else if (tracked.hasAppliedMargin) {
+            RestoreTrackedButtonMargin(tracked);
+        }
+
+        double offsetX = translateContributions[index];
+        if (std::fabs(offsetX) > 0.001) {
+            auto translate =
+                button.RenderTransform().try_as<Media::TranslateTransform>();
+            if (!translate) {
+                Media::TranslateTransform newTranslate;
+                newTranslate.X(offsetX);
+                newTranslate.Y(0.0);
+                button.RenderTransform(newTranslate);
+            } else if (std::fabs(translate.X() - offsetX) > 0.01) {
+                translate.X(offsetX);
+            }
+            tracked.lastAppliedOffsetX = offsetX;
+            tracked.hasAppliedTransform = true;
+        } else if (tracked.hasAppliedTransform) {
+            RestoreTrackedButtonTransform(tracked);
+        }
+
+        if (snapshot && index < snapshot->buttons.size()) {
+            snapshot->buttons[index].margin = button.Margin();
+            snapshot->buttons[index].translateX = GetButtonTranslateX(button);
+        }
+    }
+}
+
+bool IsFiniteThickness(Thickness const& thickness) {
+    return std::isfinite(thickness.Left) && std::isfinite(thickness.Top) &&
+           std::isfinite(thickness.Right) && std::isfinite(thickness.Bottom);
+}
+
+bool LayoutScalarMatches(double left, double right) {
+    constexpr double kLayoutEpsilon = 0.01;
+    return std::isfinite(left) && std::isfinite(right) &&
+           std::fabs(left - right) <= kLayoutEpsilon;
+}
+
+bool LayoutRectMatches(winrt::Windows::Foundation::Rect const& left,
+                       winrt::Windows::Foundation::Rect const& right) {
+    return LayoutScalarMatches(left.X, right.X) &&
+           LayoutScalarMatches(left.Y, right.Y) &&
+           LayoutScalarMatches(left.Width, right.Width) &&
+           LayoutScalarMatches(left.Height, right.Height);
+}
+
+bool LayoutThicknessMatches(Thickness const& left, Thickness const& right) {
+    return LayoutScalarMatches(left.Left, right.Left) &&
+           LayoutScalarMatches(left.Top, right.Top) &&
+           LayoutScalarMatches(left.Right, right.Right) &&
+           LayoutScalarMatches(left.Bottom, right.Bottom);
+}
+
+TaskbarReconciliationSnapshot CaptureTaskbarReconciliationSnapshot(
+    FrameworkElement const& repeater) {
+    TaskbarReconciliationSnapshot snapshot;
+    auto repeaterPanel = repeater.try_as<Controls::Panel>();
+    if (!repeaterPanel) {
+        return snapshot;
+    }
+
+    struct RealizedElement {
+        int itemIndex;
+        FrameworkElement element;
+    };
+
+    std::vector<RealizedElement> realizedElements;
+    for (auto const& panelChild : repeaterPanel.Children()) {
+        auto child = panelChild.try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+        int itemIndex = ItemsRepeater_GetElementIndex(repeater, child);
+        if (itemIndex >= 0) {
+            realizedElements.push_back({itemIndex, child});
+        }
+    }
+
+    std::sort(realizedElements.begin(), realizedElements.end(),
+              [](RealizedElement const& left, RealizedElement const& right) {
+                  return left.itemIndex < right.itemIndex;
+              });
+
+    bool buttonLayoutValid = true;
+    for (auto const& realized : realizedElements) {
+        if (realized.element.Name() != L"TaskListButton") {
+            continue;
+        }
+        if (!IsUsableApplicationButton(realized.element)) {
+            continue;
+        }
+
+        RealizedButtonSnapshot button;
+        button.itemIndex = realized.itemIndex;
+        button.button = realized.element;
+        button.actualWidth = realized.element.ActualWidth();
+        button.actualHeight = realized.element.ActualHeight();
+        button.margin = realized.element.Margin();
+        button.translateX = GetButtonTranslateX(realized.element);
+        button.visibility = realized.element.Visibility();
+        if (!IsFiniteThickness(button.margin)) {
+            buttonLayoutValid = false;
+        }
+        snapshot.buttons.push_back(std::move(button));
+    }
+
+    snapshot.rootGrid = FindRootGridAncestor(repeater);
+    if (!snapshot.rootGrid) {
+        return snapshot;
+    }
+
+    snapshot.rootWidth = snapshot.rootGrid.ActualWidth();
+    snapshot.rootHeight = snapshot.rootGrid.ActualHeight();
+    double repeaterWidth = repeater.ActualWidth();
+    double repeaterHeight = repeater.ActualHeight();
+    if (!buttonLayoutValid || !std::isfinite(snapshot.rootWidth) ||
+        !std::isfinite(snapshot.rootHeight) || !std::isfinite(repeaterWidth) ||
+        !std::isfinite(repeaterHeight) || snapshot.rootWidth <= 0 ||
+        snapshot.rootHeight <= 0 || repeaterWidth < 0 || repeaterHeight < 0) {
+        return snapshot;
+    }
+
+    snapshot.repeaterBounds =
+        repeater.TransformToVisual(snapshot.rootGrid)
+            .TransformBounds(winrt::Windows::Foundation::Rect{
+                0, 0, static_cast<float>(repeaterWidth),
+                static_cast<float>(repeaterHeight)});
+    if (!std::isfinite(snapshot.repeaterBounds.X) ||
+        !std::isfinite(snapshot.repeaterBounds.Y) ||
+        !std::isfinite(snapshot.repeaterBounds.Width) ||
+        !std::isfinite(snapshot.repeaterBounds.Height)) {
+        return snapshot;
+    }
+
+    snapshot.signatureValid = true;
+    return snapshot;
+}
+
+bool CanReuseReconciledTaskbar(TrackedTaskbarState& taskbar,
+                               FrameworkElement const& repeater,
+                               TaskbarReconciliationSnapshot const& snapshot,
+                               unsigned int settingsGeneration) {
+    if (!taskbar.reconciliationSignatureValid || !snapshot.signatureValid ||
+        taskbar.appliedSettingsGeneration != settingsGeneration) {
+        return false;
+    }
+
+    if (taskbar.layoutLeftAligned !=
+        (g_taskbarAlignment.load(std::memory_order_acquire) == 0)) {
+        return false;
+    }
+
+    auto reconciledRepeater = taskbar.reconciledRepeater.get();
+    auto reconciledRootGrid = taskbar.reconciledRootGrid.get();
+    if (!reconciledRepeater || !reconciledRootGrid ||
+        winrt::get_abi(reconciledRepeater) != winrt::get_abi(repeater) ||
+        winrt::get_abi(reconciledRootGrid) !=
+            winrt::get_abi(snapshot.rootGrid) ||
+        !LayoutScalarMatches(taskbar.reconciledRootWidth, snapshot.rootWidth) ||
+        !LayoutScalarMatches(taskbar.reconciledRootHeight,
+                             snapshot.rootHeight) ||
+        !LayoutRectMatches(taskbar.reconciledRepeaterBounds,
+                           snapshot.repeaterBounds) ||
+        taskbar.reconciledButtons.size() != snapshot.buttons.size()) {
+        return false;
+    }
+
+    for (size_t index = 0; index < snapshot.buttons.size(); index++) {
+        auto const& cached = taskbar.reconciledButtons[index];
+        auto const& current = snapshot.buttons[index];
+        auto cachedButton = cached.button.get();
+        if (!cachedButton ||
+            winrt::get_abi(cachedButton) != winrt::get_abi(current.button) ||
+            cached.itemIndex != current.itemIndex ||
+            !LayoutScalarMatches(cached.actualWidth, current.actualWidth) ||
+            !LayoutScalarMatches(cached.actualHeight, current.actualHeight) ||
+            !LayoutThicknessMatches(cached.margin, current.margin) ||
+            !LayoutScalarMatches(cached.translateX, current.translateX) ||
+            cached.visibility != current.visibility) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void CommitReconciledTaskbar(
+    TrackedTaskbarState& taskbar,
+    FrameworkElement const& repeater,
+    TaskbarReconciliationSnapshot const& snapshot,
+    ReconcileResult result) {
+    if (!snapshot.signatureValid ||
+        result == ReconcileResult::temporarilyNotReady) {
+        return;
+    }
+
+    taskbar.cachedReconcileResult = result;
+    taskbar.reconciledRepeater = winrt::make_weak(repeater);
+    taskbar.reconciledRootGrid = winrt::make_weak(snapshot.rootGrid);
+    taskbar.reconciledRootWidth = snapshot.rootWidth;
+    taskbar.reconciledRootHeight = snapshot.rootHeight;
+    taskbar.reconciledRepeaterBounds = snapshot.repeaterBounds;
+    taskbar.reconciledButtons.clear();
+    taskbar.reconciledButtons.reserve(snapshot.buttons.size());
+    for (auto const& button : snapshot.buttons) {
+        taskbar.reconciledButtons.push_back(
+            {button.itemIndex, winrt::make_weak(button.button),
+             button.actualWidth, button.actualHeight, button.margin,
+             button.translateX, button.visibility});
+    }
+    taskbar.reconciliationSignatureValid = true;
+}
+
+void SynchronizeUnpinnedSlots(
+    TrackedTaskbarState& taskbar,
+    std::vector<FrameworkElement> const& appButtons,
+    std::vector<TrackedButtonLayoutState> const& buttonLayouts,
+    size_t unpinnedStartIndex,
+    bool expandRightFirst,
+    bool compactWingOnClose) {
+    const auto now = AnimationClock::now();
+
+    std::vector<bool> entryPresent(taskbar.unpinnedSlots.size(), false);
+    std::vector<bool> buttonMatched(appButtons.size(), false);
+
+    for (size_t i = unpinnedStartIndex; i < appButtons.size(); i++) {
+        auto const& btn = appButtons[i];
+        if (!btn) {
+            continue;
+        }
+        const void* btnAbi = winrt::get_abi(btn);
+        for (size_t s = 0; s < taskbar.unpinnedSlots.size(); s++) {
+            auto existingBtn = taskbar.unpinnedSlots[s].button.get();
+            if (existingBtn && winrt::get_abi(existingBtn) == btnAbi) {
+                entryPresent[s] = true;
+                buttonMatched[i] = true;
+                taskbar.unpinnedSlots[s].missingSince =
+                    AnimationClock::time_point{};
+                taskbar.unpinnedSlots[s].cachedAdvanceWidth =
+                    GetButtonAdvanceWidth(btn, buttonLayouts[i].baseMargin);
+                break;
+            }
+        }
+    }
+
+    bool removedAny = false;
+    for (size_t s = 0; s < taskbar.unpinnedSlots.size();) {
+        if (entryPresent[s]) {
+            s++;
+            continue;
+        }
+        auto existingBtn = taskbar.unpinnedSlots[s].button.get();
+        if (!existingBtn) {
+            taskbar.unpinnedSlots.erase(taskbar.unpinnedSlots.begin() + s);
+            entryPresent.erase(entryPresent.begin() + s);
+            removedAny = true;
+            continue;
+        }
+        if (taskbar.unpinnedSlots[s].missingSince ==
+            AnimationClock::time_point{}) {
+            taskbar.unpinnedSlots[s].missingSince = now;
+            s++;
+        } else if (now - taskbar.unpinnedSlots[s].missingSince >=
+                   kSlotMissingGraceTimeout) {
+            taskbar.unpinnedSlots.erase(taskbar.unpinnedSlots.begin() + s);
+            entryPresent.erase(entryPresent.begin() + s);
+            removedAny = true;
+        } else {
+            s++;
+        }
+    }
+
+    if (removedAny && compactWingOnClose) {
+        for (WingSide side : {WingSide::Left, WingSide::Right}) {
+            std::vector<size_t> indices;
+            for (size_t s = 0; s < taskbar.unpinnedSlots.size(); s++) {
+                if (taskbar.unpinnedSlots[s].side == side) {
+                    indices.push_back(s);
+                }
+            }
+            std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
+                return taskbar.unpinnedSlots[a].slotIndex <
+                       taskbar.unpinnedSlots[b].slotIndex;
+            });
+            for (size_t rank = 0; rank < indices.size(); rank++) {
+                taskbar.unpinnedSlots[indices[rank]].slotIndex =
+                    static_cast<int>(rank);
+            }
+        }
+    }
+
+    for (size_t i = unpinnedStartIndex; i < appButtons.size(); i++) {
+        if (buttonMatched[i] || !appButtons[i]) {
+            continue;
+        }
+
+        size_t leftCount = 0;
+        size_t rightCount = 0;
+        for (auto const& entry : taskbar.unpinnedSlots) {
+            if (entry.side == WingSide::Left) {
+                leftCount++;
+            } else {
+                rightCount++;
+            }
+        }
+
+        WingSide chosenSide = WingSide::Left;
+        if (!expandRightFirst) {
+            chosenSide =
+                (leftCount <= rightCount) ? WingSide::Left : WingSide::Right;
+        } else {
+            chosenSide =
+                (rightCount <= leftCount) ? WingSide::Right : WingSide::Left;
+        }
+
+        int candidateSlot = 0;
+        while (true) {
+            bool occupied = false;
+            for (auto const& entry : taskbar.unpinnedSlots) {
+                if (entry.side == chosenSide &&
+                    entry.slotIndex == candidateSlot) {
+                    occupied = true;
+                    break;
+                }
+            }
+            if (!occupied) {
+                break;
+            }
+            candidateSlot++;
+        }
+
+        UnpinnedSlotEntry newEntry{};
+        newEntry.button = winrt::make_weak(appButtons[i]);
+        newEntry.side = chosenSide;
+        newEntry.slotIndex = candidateSlot;
+        newEntry.cachedAdvanceWidth =
+            GetButtonAdvanceWidth(appButtons[i], buttonLayouts[i].baseMargin);
+        taskbar.unpinnedSlots.push_back(std::move(newEntry));
+    }
+}
+
+ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
+                                        FrameworkElement const& repeater,
+                                        bool forceStructuralReconcile) {
+    ReconcileResult result = ReconcileResult::temporarilyNotReady;
+
+    try {
+        if (repeater && repeater.Dispatcher().HasThreadAccess()) {
+            if (forceStructuralReconcile) {
+                InvalidateReconciliationSignature(taskbar);
+            }
+
+            auto snapshot = CaptureTaskbarReconciliationSnapshot(repeater);
+            const unsigned int settingsGeneration =
+                g_settingsGeneration.load(std::memory_order_acquire);
+
+            if (!forceStructuralReconcile &&
+                CanReuseReconciledTaskbar(taskbar, repeater, snapshot,
+                                          settingsGeneration)) {
+                return taskbar.cachedReconcileResult;
+            }
+
+            if (taskbar.reorderDragActive && !forceStructuralReconcile) {
+                return taskbar.cachedReconcileResult;
+            }
+
+            InvalidateReconciliationSignature(taskbar);
+
+            const bool geometryMoved =
+                !LayoutRectMatches(taskbar.reconciledRepeaterBounds,
+                                   snapshot.repeaterBounds) ||
+                !LayoutScalarMatches(taskbar.reconciledRootWidth,
+                                     snapshot.rootWidth);
+
+            const int configuredLeftCount =
+                std::max(0, g_leftIconCount.load(std::memory_order_acquire));
+            const int configuredCenterPinnedCount = std::max(
+                0, g_centerPinnedIconCount.load(std::memory_order_acquire));
+            const bool expandRightFirst =
+                g_expandRightFirst.load(std::memory_order_acquire);
+            const bool compactWingOnClose =
+                g_compactWingOnClose.load(std::memory_order_acquire);
+            const int stopCenteringIconCount =
+                g_stopCenteringIconCount.load(std::memory_order_acquire);
+
+            std::vector<FrameworkElement> appButtons;
+            appButtons.reserve(snapshot.buttons.size());
+            for (auto const& button : snapshot.buttons) {
+                appButtons.push_back(button.button);
+            }
+
+            auto rootGrid = snapshot.rootGrid;
+            auto trackedRootGrid = taskbar.rootGrid.get();
+            if (trackedRootGrid &&
+                (!rootGrid ||
+                 winrt::get_abi(trackedRootGrid) != winrt::get_abi(rootGrid))) {
+                RemoveTrackedTaskbarElements(taskbar);
+            }
+            if (rootGrid) {
+                taskbar.rootGrid = winrt::make_weak(rootGrid);
+            }
+
+            if (auto repeaterPanel = repeater.try_as<Controls::Panel>()) {
+                AttachLayoutChangeMonitor(taskbar, repeaterPanel);
+            } else {
+                DetachLayoutChangeMonitor(taskbar);
+            }
+
+            const bool horizontalLayoutValid =
+                snapshot.signatureValid && std::isfinite(snapshot.rootWidth) &&
+                std::isfinite(snapshot.rootHeight) &&
+                snapshot.rootHeight > 0 &&
+                snapshot.rootWidth >= snapshot.rootHeight;
+
+            const bool leftAlignedDerived =
+                g_taskbarAlignment.load(std::memory_order_acquire) == 0;
+
+            const bool centeringApplies =
+                leftAlignedDerived && horizontalLayoutValid;
+
+            if (!snapshot.signatureValid) {
+                if (!taskbar.loggedNotReady) {
+                    taskbar.loggedNotReady = true;
+                    Wh_Log(L"reconcile: layout not ready yet");
+                }
+                return ReconcileResult::temporarilyNotReady;
+            }
+
+            const bool alignmentChanged =
+                taskbar.alignmentVerdictValid &&
+                taskbar.centeringApplies != centeringApplies;
+            taskbar.layoutLeftAligned = leftAlignedDerived;
+            taskbar.centeringApplies = centeringApplies;
+            taskbar.alignmentVerdictValid = true;
+
+            SynchronizeTrackedButtonLayouts(taskbar, appButtons);
+            std::vector<ButtonGapContribution> gapContributions(
+                appButtons.size());
+            std::vector<double> translateContributions(appButtons.size(), 0.0);
+
+            const size_t totalButtons = appButtons.size();
+            const size_t leftCount = std::min(
+                static_cast<size_t>(configuredLeftCount), totalButtons);
+
+            if (taskbar.autoLearnedGeneration != settingsGeneration) {
+                taskbar.autoLearnedCenterPinnedCount = -1;
+                taskbar.autoLearnedGeneration = settingsGeneration;
+                taskbar.unpinnedSlots.clear();
+            }
+
+            size_t centerPinnedCount = 0;
+            if (configuredCenterPinnedCount > 0) {
+                centerPinnedCount =
+                    std::min(static_cast<size_t>(configuredCenterPinnedCount),
+                             totalButtons - leftCount);
+            } else {
+                if (taskbar.autoLearnedCenterPinnedCount < 0 &&
+                    totalButtons > leftCount) {
+                    taskbar.autoLearnedCenterPinnedCount =
+                        static_cast<int>(totalButtons - leftCount);
+                }
+                if (taskbar.autoLearnedCenterPinnedCount > 0) {
+                    centerPinnedCount = std::min(
+                        static_cast<size_t>(
+                            taskbar.autoLearnedCenterPinnedCount),
+                        totalButtons - leftCount);
+                }
+            }
+
+            const size_t unpinnedStartIndex = leftCount + centerPinnedCount;
+
+            const bool exceededStopCount =
+                stopCenteringIconCount > 0 &&
+                static_cast<int>(totalButtons - leftCount) >=
+                    stopCenteringIconCount;
+
+            if (centeringApplies && centerPinnedCount > 0 &&
+                !exceededStopCount) {
+                SynchronizeUnpinnedSlots(taskbar, appButtons,
+                                         taskbar.buttonLayouts,
+                                         unpinnedStartIndex, expandRightFirst,
+                                         compactWingOnClose);
+
+                const double scale = GetRasterizationScale(rootGrid);
+                const double taskbarWidth = rootGrid.ActualWidth();
+
+                double leftGroupRight = snapshot.repeaterBounds.X;
+                bool leftEdgeValid = std::isfinite(leftGroupRight);
+                if (leftCount > 0) {
+                    winrt::Windows::Foundation::Rect lastLeftBounds{};
+                    const size_t boundaryIdx = leftCount - 1;
+                    if (TryGetElementBounds(rootGrid, appButtons[boundaryIdx],
+                                            &lastLeftBounds)) {
+                        leftGroupRight =
+                            lastLeftBounds.X + lastLeftBounds.Width;
+                        leftEdgeValid = true;
+                    } else {
+                        leftEdgeValid = false;
+                    }
+                }
+
+                if (leftEdgeValid && std::isfinite(taskbarWidth) &&
+                    taskbarWidth > 0) {
+                    std::vector<double> advanceWidths(totalButtons, 0.0);
+                    for (size_t i = leftCount; i < totalButtons; i++) {
+                        advanceWidths[i] = GetButtonAdvanceWidth(
+                            appButtons[i], taskbar.buttonLayouts[i].baseMargin);
+                    }
+
+                    double pinnedGroupWidth = 0.0;
+                    for (size_t i = leftCount; i < unpinnedStartIndex; i++) {
+                        pinnedGroupWidth += advanceWidths[i];
+                    }
+
+                    const double desiredCenterStart = SnapToPhysicalPixel(
+                        (taskbarWidth - pinnedGroupWidth) / 2.0, scale);
+
+                    double boundaryBaseMargins = 0.0;
+                    if (leftCount > 0) {
+                        const Thickness& leftBase =
+                            taskbar.buttonLayouts[leftCount - 1].baseMargin;
+                        const Thickness& rightBase =
+                            taskbar.buttonLayouts[leftCount].baseMargin;
+                        if (std::isfinite(leftBase.Right) &&
+                            std::isfinite(rightBase.Left)) {
+                            boundaryBaseMargins =
+                                leftBase.Right + rightBase.Left;
+                        }
+                    } else {
+                        const Thickness& firstBase =
+                            taskbar.buttonLayouts[0].baseMargin;
+                        if (std::isfinite(firstBase.Left)) {
+                            boundaryBaseMargins = firstBase.Left;
+                        }
+                    }
+
+                    double desiredGap = desiredCenterStart - leftGroupRight -
+                                        boundaryBaseMargins;
+                    if (desiredGap < 0.0) {
+                        desiredGap = 0.0;
+                    }
+
+                    const double appliedGap =
+                        SnapToPhysicalPixel(desiredGap, scale);
+
+                    if (leftCount > 0) {
+                        double halfLeft =
+                            SnapToPhysicalPixel(appliedGap / 2.0, scale);
+                        double halfRight = SnapToPhysicalPixel(
+                            appliedGap - halfLeft, scale);
+                        AddButtonGap(&gapContributions[leftCount - 1], false,
+                                     halfLeft);
+                        AddButtonGap(&gapContributions[leftCount], true,
+                                     halfRight);
+                    } else {
+                        AddButtonGap(&gapContributions[0], true, appliedGap);
+                    }
+
+                    const double actualCenterStart =
+                        leftGroupRight + boundaryBaseMargins + appliedGap;
+                    const double actualCenterEnd =
+                        actualCenterStart + pinnedGroupWidth;
+
+                    int maxLeftSlot = -1;
+                    int maxRightSlot = -1;
+                    for (auto const& entry : taskbar.unpinnedSlots) {
+                        if (entry.side == WingSide::Left) {
+                            maxLeftSlot =
+                                std::max(maxLeftSlot, entry.slotIndex);
+                        } else {
+                            maxRightSlot =
+                                std::max(maxRightSlot, entry.slotIndex);
+                        }
+                    }
+
+                    std::vector<double> leftSlotWidths(maxLeftSlot + 1, 48.0);
+                    std::vector<double> rightSlotWidths(maxRightSlot + 1, 48.0);
+                    for (auto const& entry : taskbar.unpinnedSlots) {
+                        if (entry.side == WingSide::Left &&
+                            entry.slotIndex >= 0 &&
+                            entry.slotIndex <= maxLeftSlot) {
+                            leftSlotWidths[entry.slotIndex] =
+                                entry.cachedAdvanceWidth;
+                        } else if (entry.side == WingSide::Right &&
+                                   entry.slotIndex >= 0 &&
+                                   entry.slotIndex <= maxRightSlot) {
+                            rightSlotWidths[entry.slotIndex] =
+                                entry.cachedAdvanceWidth;
+                        }
+                    }
+
+                    std::vector<double> leftSlotCellStart(maxLeftSlot + 1,
+                                                          actualCenterStart);
+                    double runningLeftWingWidth = 0.0;
+                    for (int s = 0; s <= maxLeftSlot; s++) {
+                        runningLeftWingWidth += leftSlotWidths[s];
+                        leftSlotCellStart[s] =
+                            actualCenterStart - runningLeftWingWidth;
+                    }
+
+                    std::vector<double> rightSlotCellStart(maxRightSlot + 1,
+                                                           actualCenterEnd);
+                    double runningRightWingWidth = 0.0;
+                    for (int s = 0; s <= maxRightSlot; s++) {
+                        rightSlotCellStart[s] =
+                            actualCenterEnd + runningRightWingWidth;
+                        runningRightWingWidth += rightSlotWidths[s];
+                    }
+
+                    double runningUnpinnedNaturalOffset = 0.0;
+                    for (size_t i = unpinnedStartIndex; i < totalButtons; i++) {
+                        const double naturalCellX =
+                            actualCenterEnd + runningUnpinnedNaturalOffset;
+                        runningUnpinnedNaturalOffset += advanceWidths[i];
+
+                        double targetCellX = naturalCellX;
+                        const void* btnAbi = winrt::get_abi(appButtons[i]);
+                        for (auto const& entry : taskbar.unpinnedSlots) {
+                            auto slotBtn = entry.button.get();
+                            if (slotBtn &&
+                                winrt::get_abi(slotBtn) == btnAbi) {
+                                if (entry.side == WingSide::Left &&
+                                    entry.slotIndex >= 0 &&
+                                    entry.slotIndex <= maxLeftSlot) {
+                                    targetCellX =
+                                        leftSlotCellStart[entry.slotIndex];
+                                } else if (entry.side == WingSide::Right &&
+                                           entry.slotIndex >= 0 &&
+                                           entry.slotIndex <= maxRightSlot) {
+                                    targetCellX =
+                                        rightSlotCellStart[entry.slotIndex];
+                                }
+                                break;
+                            }
+                        }
+
+                        translateContributions[i] = SnapToPhysicalPixel(
+                            targetCellX - naturalCellX, scale);
+                    }
+                }
+            } else {
+                taskbar.unpinnedSlots.clear();
+            }
+
+            ApplyTrackedButtonLayouts(taskbar, appButtons, gapContributions,
+                                      translateContributions, &snapshot);
+
+            result = ReconcileResult::succeeded;
+
+            if (rootGrid && centeringApplies) {
+                AttachReorderPointerHandler(taskbar, rootGrid);
+            } else {
+                DetachReorderPointerHandler(taskbar);
+            }
+
+            if (alignmentChanged && !taskbar.reorderDragActive) {
+                taskbar.alignmentSettleActive = true;
+                taskbar.postReleaseSettlingUntil =
+                    AnimationClock::now() + kPostReleaseSettlingTimeout;
+                taskbar.postReleaseReconcileFrames = 2;
+                taskbar.reorderStructuralReconcilePending = true;
+                EnsureGeometryRenderingSubscribed(taskbar);
+            } else if (taskbar.alignmentSettleActive && !geometryMoved) {
+                taskbar.alignmentSettleActive = false;
+            }
+
+            taskbar.appliedSettingsGeneration = settingsGeneration;
+            CommitReconciledTaskbar(taskbar, repeater, snapshot, result);
+        }
+    } catch (winrt::hresult_error const& e) {
+        InvalidateReconciliationSignature(taskbar);
+        Wh_Log(L"Failed to reconcile: 0x%08X %s",
+               static_cast<unsigned int>(e.code().value), e.message().c_str());
+    } catch (...) {
+        InvalidateReconciliationSignature(taskbar);
+        Wh_Log(L"Failed to reconcile with an unknown exception");
+    }
+
+    return result;
+}
+
+FrameworkElement DiscoverTaskbarRepeater(HWND taskbarWnd) {
+    XamlRoot xamlRoot = GetTaskbarXamlRootForWindow(taskbarWnd);
+    auto root =
+        xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+    return FindDescendantByName(root, L"TaskbarFrameRepeater");
+}
+
+struct TaskbarDiscoveryResult {
+    std::vector<FrameworkElement> repeaters;
+};
+
+TaskbarDiscoveryResult DiscoverCurrentThreadTaskbars() {
+    TaskbarDiscoveryResult result;
+    std::vector<HWND> taskbarWindows;
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            if (IsTaskbarWindowClass(hWnd)) {
+                reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hWnd);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&taskbarWindows));
+
+    const bool topEnabled =
+        !g_unloading.load(std::memory_order_acquire) &&
+        g_placeTaskbarOnTop.load(std::memory_order_acquire);
+
+    for (HWND taskbarWnd : taskbarWindows) {
+        ApplyTopTaskbarToWindowOnThread(taskbarWnd, topEnabled);
+        try {
+            auto repeater = DiscoverTaskbarRepeater(taskbarWnd);
+            if (!repeater) {
+                continue;
+            }
+
+            auto existing =
+                std::find_if(result.repeaters.begin(), result.repeaters.end(),
+                             [&](FrameworkElement const& existingRepeater) {
+                                 return winrt::get_abi(existingRepeater) ==
+                                        winrt::get_abi(repeater);
+                             });
+            if (existing == result.repeaters.end()) {
+                result.repeaters.push_back(repeater);
+            }
+        } catch (...) {
+        }
+    }
+
+    return result;
+}
+
+void CleanupAllTaskbarsForUnload() {
+    ClearAnimationTrackingForUnload();
+    CleanupTopTaskbarSubclassesOnThread();
+
+    if (g_trackedTaskbars) {
+        for (auto& taskbar : *g_trackedTaskbars) {
+            RestoreTrackedButtonLayouts(taskbar);
+        }
+
+        for (auto& taskbar : *g_trackedTaskbars) {
+            taskbar.repeater = {};
+            taskbar.rootGrid = {};
+            taskbar.trayFrame = {};
+            taskbar.unpinnedSlots.clear();
+            taskbar.reorderPointerSource = {};
+            taskbar.reorderPointerPressedHandler = nullptr;
+            taskbar.reorderPointerReleasedHandler = nullptr;
+            taskbar.reorderPointerHandlerAttached = false;
+            taskbar.reorderStructuralReconcilePending = false;
+            taskbar.layoutMonitorPanel = {};
+            taskbar.layoutUpdatedToken = {};
+            taskbar.layoutMonitorAttached = false;
+        }
+        g_trackedTaskbars->clear();
+        DestroyTrackedTaskbars();
+    }
+}
+
+struct ReconcileGuard {
+    ~ReconcileGuard() { g_reconcilingTaskbars = false; }
+};
+
+ReconcileResult ReconcileTaskbarRepeater(FrameworkElement const& repeater,
+                                         bool forceStructuralReconcile) {
+    if (g_reconcilingTaskbars) {
+        return ReconcileResult::temporarilyNotReady;
+    }
+
+    g_reconcilingTaskbars = true;
+    ReconcileGuard guard;
+    try {
+        if (!repeater || repeater.Name() != L"TaskbarFrameRepeater" ||
+            !repeater.Dispatcher().HasThreadAccess()) {
+            return ReconcileResult::temporarilyNotReady;
+        }
+
+        auto* taskbar = TrackTaskbarRepeater(repeater);
+        if (!taskbar) {
+            return ReconcileResult::temporarilyNotReady;
+        }
+
+        return ReconcileTrackedTaskbar(*taskbar, repeater,
+                                       forceStructuralReconcile);
+    } catch (...) {
+    }
+
+    return ReconcileResult::temporarilyNotReady;
+}
+
+void ReconcileAllTaskbars(bool forceStructuralReconcile) {
+    if (g_reconcilingTaskbars) {
+        return;
+    }
+
+    g_reconcilingTaskbars = true;
+    ReconcileGuard guard;
+
+    try {
+        PruneExpiredTrackedTaskbars();
+        auto discovery = DiscoverCurrentThreadTaskbars();
+        for (auto const& repeater : discovery.repeaters) {
+            TrackTaskbarRepeater(repeater);
+        }
+
+        if (g_trackedTaskbars) {
+            for (auto& taskbar : *g_trackedTaskbars) {
+                try {
+                    auto repeater = taskbar.repeater.get();
+                    if (!repeater || !repeater.Dispatcher().HasThreadAccess()) {
+                        continue;
+                    }
+                    ReconcileTrackedTaskbar(taskbar, repeater,
+                                            forceStructuralReconcile);
+                } catch (...) {
+                }
+            }
+        }
+    } catch (...) {
+    }
+}
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+
+bool AnyTrackedTaskbarHoldsAppliedState() {
+    if (!g_trackedTaskbars) {
+        return false;
+    }
+    for (auto const& taskbar : *g_trackedTaskbars) {
+        for (auto const& tracked : taskbar.buttonLayouts) {
+            if (tracked.hasAppliedMargin || tracked.hasAppliedTransform) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    TaskListButton_UpdateVisualStates_Original(pThis);
+
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (g_taskbarAlignment.load(std::memory_order_acquire) != 0 &&
+        g_trackedTaskbars && !g_trackedTaskbars->empty() &&
+        !AnyTrackedTaskbarHoldsAppliedState()) {
+        return;
+    }
+
+    try {
+        void* taskListButtonIUnknownPtr = (void**)pThis + 3;
+        winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
+        winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
+
+        auto taskListButton = taskListButtonIUnknown.try_as<FrameworkElement>();
+        if (taskListButton) {
+            auto repeater = FindRepeaterAncestor(taskListButton);
+            if (repeater) {
+                ReconcileTaskbarRepeater(repeater, false);
+            }
+        }
+    } catch (...) {
+    }
+}
+
+bool RunReconcileOnTaskbarThread(bool enabled) {
+    if (enabled && g_unloading.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    struct RECONCILE_REQUEST {
+        bool enabled;
+        bool completed;
+    };
+
+    std::vector<HWND> taskbarUiWindows;
+    for (HWND taskbarWnd : EnumerateCurrentProcessTaskbarWindows()) {
+        HWND taskbarUiWnd = GetTaskbarDispatchWindow(taskbarWnd);
+        DWORD processId = 0;
+        DWORD threadId =
+            taskbarUiWnd ? GetWindowThreadProcessId(taskbarUiWnd, &processId)
+                         : 0;
+        if (threadId != 0 && processId == GetCurrentProcessId()) {
+            taskbarUiWindows.push_back(taskbarUiWnd);
+        }
+    }
+
+    if (taskbarUiWindows.empty()) {
+        return false;
+    }
+
+    auto reconcileProc = [](PVOID parameter) {
+        try {
+            auto* request = static_cast<RECONCILE_REQUEST*>(parameter);
+            if (request->enabled &&
+                g_unloading.load(std::memory_order_acquire)) {
+                request->completed = true;
+                return;
+            }
+            if (!request->enabled) {
+                CleanupAllTaskbarsForUnload();
+            } else {
+                ReconcileAllTaskbars(true);
+            }
+            request->completed = true;
+        } catch (...) {
+        }
+    };
+
+    bool anySucceeded = false;
+    for (HWND taskbarUiWnd : taskbarUiWindows) {
+        RECONCILE_REQUEST request{enabled, false};
+        bool callbackRan =
+            RunFromWindowThread(taskbarUiWnd, reconcileProc, &request);
+        if (callbackRan && request.completed) {
+            anySucceeded = true;
+        }
+    }
+
+    return anySucceeded;
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
+            &ITaskbarSettings_get_Alignment_Original,
+            ITaskbarSettings_get_Alignment_Hook,
+            true,
+        },
+    };
+
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+}
+
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
+            &TaskListButton_UpdateVisualStates_Original,
+            TaskListButton_UpdateVisualStates_Hook,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Taskbar::ITaskbarFrame>::get_Alignment(int *))"},
+            &TaskbarFrame_get_Alignment_Original,
+            TaskbarFrame_get_Alignment_Hook,
+            true,
+        },
+    };
+
+    return HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+    return module;
+}
+
+BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
+    return HookTaskbarViewDllSymbols(taskbarViewModule) ? TRUE : FALSE;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module) {
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        if (ModInitWithTaskbarView(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
+    if (module) {
+        HandleLoadedModuleIfTaskbarView(module);
+    }
+    return module;
+}
+
+}  // namespace
+
+BOOL Wh_ModInit() {
+    LoadSettings();
+    SeedTaskbarAlignmentFromRegistry();
+
+    if (HMODULE shell32Module = GetModuleHandleW(L"shell32.dll")) {
+        auto shAppBarMessage = reinterpret_cast<SHAppBarMessage_t>(
+            GetProcAddress(shell32Module, "SHAppBarMessage"));
+        if (shAppBarMessage) {
+            WindhawkUtils::SetFunctionHook(
+                shAppBarMessage, SHAppBarMessage_Hook, &SHAppBarMessage_Original);
+        }
+    }
+
+    if (!HookTaskbarDllSymbols()) {
+        return FALSE;
+    }
+
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+        if (!ModInitWithTaskbarView(taskbarViewModule)) {
+            return FALSE;
+        }
+    } else {
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto loadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+            kernelBaseModule, "LoadLibraryExW");
+        if (!loadLibraryExW) {
+            return FALSE;
+        }
+        WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+    }
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                if (ModInitWithTaskbarView(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+
+    if (g_taskbarViewDllLoaded) {
+        RunReconcileOnTaskbarThread(true);
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    g_unloading.store(true, std::memory_order_release);
+
+    if (g_taskbarViewDllLoaded) {
+        RunReconcileOnTaskbarThread(false);
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+
+    if (g_taskbarViewDllLoaded && !g_unloading) {
+        RunReconcileOnTaskbarThread(true);
+    }
+}
