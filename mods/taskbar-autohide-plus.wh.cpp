@@ -35,6 +35,11 @@ you don't have to toggle it by hand.
 * If you change the Windows setting yourself while the mod is running, the mod
   treats your choice as the new "original" state.
 * When the mod is disabled or unloaded, your original state is always restored.
+* If the mod is removed, or Windhawk is uninstalled or stopped, right after an
+  unclean exit (a crash, or Windows shutting down while the mod was active),
+  nobody is left to undo the change and auto-hide may stay on. In that case
+  turn **Automatically hide the taskbar** off by hand in Settings →
+  Personalization → Taskbar → Taskbar behaviors.
  
 ## Modes
  
