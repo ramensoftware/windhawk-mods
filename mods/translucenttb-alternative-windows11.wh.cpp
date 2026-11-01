@@ -1,8 +1,7 @@
 // ==WindhawkMod==
 // @id              translucenttb-alternative-windows11
 // @name            仿制TranslucentTB功能
-// @description     仿制TranslucentTB功能
-，通过八种独立的状态配置、六种背景模式（原生、普通、不透明、透明、模糊、亚克力）以及可随主题自动调整的前景颜色，来自定义 Windows 11 任务栏。这个是自用版本，目前仅支持 Wndows 11(专业版 26H2)
+// @description     仿制TranslucentTB功能，通过八种独立的状态配置、六种背景模式（原生、普通、不透明、透明、模糊、亚克力）以及可随主题自动调整的前景颜色，来自定义 Windows 11 任务栏。这个是自用版本，目前仅支持 Wndows 11(专业版 26H2)
 // @version         1.3.0
 // @author          greglee0
 // @github          https://github.com/greglee0
