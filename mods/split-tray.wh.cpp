@@ -2,7 +2,7 @@
 // @id              split-tray
 // @name            Split Tray
 // @description     A notification area on every display's taskbar: choose, per application, which tray its icon shows in
-// @version         1.4.7
+// @version         1.4.8
 // @author          Brandon Stonebridge
 // @github          https://github.com/st0nebridge
 // @homepage        https://github.com/st0nebridge/SplitTray
@@ -73,6 +73,11 @@ to another tray is really gone from the main one - it is not an overlay.
   first time it has one to show; the copy goes when the icon does.
 * More displays connected at once than ever before move the extra trays'
   numbers up by one, to make room.
+
+Moving icons between trays preserves their remembered order, including moves
+from menus and Arrange and round trips through the primary tray. Only explicit
+**Show on the tray** and dragging out of overflow promote an icon to the front
+to reveal it within the space budget. Drop onto a chevron or popup to hide it.
 
 ## Keyboard and recovery
 
@@ -2918,11 +2923,6 @@ void SaveDisplaySlotsLocked() {
     WriteStoredString(kDisplaySlotsValue, joined);
 }
 
-// Recomputes which trays exist and how the floating ones are laid out, for
-// `monitors`. Caller must hold g_mutex, and asks Windows for the displays
-// (g_enumerateMonitors) before taking it: that takes a call per display, and
-// every application's tray message waits on the lock (from Windhawk's catalog
-// review).
 // Guarded by g_mutex, like g_trays. Updated whenever displays are discovered.
 std::vector<MonitorInfoEntry> g_geometryMonitors;
 
@@ -3009,6 +3009,11 @@ bool ReorderIconKeys(std::vector<std::wstring> keys, size_t from, size_t to) {
     return true;
 }
 
+// Recomputes which trays exist and how the floating ones are laid out, for
+// `monitors`. Caller must hold g_mutex, and asks Windows for the displays
+// (g_enumerateMonitors) before taking it: that takes a call per display, and
+// every application's tray message waits on the lock (from Windhawk's catalog
+// review).
 void RecomputeGeometryLocked(const std::vector<MonitorInfoEntry>& monitors) {
     g_geometryMonitors = monitors;
     LoadDisplaySlotsLocked();
@@ -4937,6 +4942,9 @@ void UnregisterTrayThreadClasses() {
     UnregisterModClass(kControllerClassName);
 }
 
+// Owned by the tray thread, including its message loop.
+HWND g_arrangeWnd = nullptr;
+
 DWORD WINAPI TrayThreadProc(LPVOID) {
     if (g_trayThreadHold) {
         WaitForSingleObject(g_trayThreadHold, INFINITE);
@@ -5033,7 +5041,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
             continue;
         }
         if (msg.message == WM_KEYDOWN && msg.wParam == VK_TAB) {
-            if (HWND arrange = FindWindowW(kArrangeClassName, nullptr); arrange && IsDialogMessageW(arrange, &msg)) continue;
+            if (g_arrangeWnd && IsDialogMessageW(g_arrangeWnd, &msg)) continue;
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -5074,7 +5082,6 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 constexpr int kArrangeListIdBase = 1001;
 
 // Tray-thread state only; no locking needed beyond the snapshot itself.
-HWND g_arrangeWnd = nullptr;
 // Whether it is open, for the taskbar's thread: a tooltip changed in the main
 // tray asks the arrange window to rename its row only then (DECISIONS 83).
 std::atomic<bool> g_arrangeOpen{false};
@@ -6753,7 +6760,7 @@ void FollowRulesForIcon(std::wstring_view key) {
 }
 
 // Clearing a hidden flag alone cannot beat the visible-count/width budget.
-// An explicit show/move promotes this key while preserving everyone else's order.
+// Explicit Show and overflow-to-bar drops promote only the chosen key.
 void ShowIconOnTray(std::wstring_view key) {
     if (key.empty()) return;
     SetIconHidden(key,false);
@@ -6796,8 +6803,8 @@ void MoveIconToTray(std::wstring_view key, Destination destination, bool inOverf
         WakeReplayDelivery();
     }
 
-    if (destination.tray>1 && !inOverflow) ShowIconOnTray(key);
-    else SetIconHidden(key,inOverflow && destination.tray>1);
+    // Ordinary tray transfers retain the saved order, including round trips.
+    SetIconHidden(key,inOverflow && destination.tray>1);
 
     Wh_Log(L"moved icon '%s' to %s%s", std::wstring(key).c_str(), label.c_str(),
            found ? L"" : L" (not currently present)");
@@ -6883,7 +6890,10 @@ bool DropIconAt(uint64_t serial,int source,POINT point,bool fromOverflow) {
     if (target==source) {
         if (inOverflow) { SetIconHidden(key,true); RequestRedrawOfAllTrays(); }
         else ShowIconOnTray(key);
-    } else MoveIconToTray(key,Destination::Tray(target),inOverflow);
+    } else {
+        MoveIconToTray(key,Destination::Tray(target),inOverflow);
+        if (fromOverflow && target>1 && !inOverflow) ShowIconOnTray(key);
+    }
     return true;
 }
 
@@ -8495,7 +8505,7 @@ wux::XamlRoot XamlRootOfTaskbar(HWND taskbarWnd) {
 
 // Native SystemTray uses a manual drag visual, not XAML DataPackage drag/drop.
 // All access stays on the native taskbar input thread; no private object offsets.
-[[clang::no_destroy]] winrt::weak_ref<wuxc::Control> g_nativeDragVisual;
+winrt::weak_ref<wuxc::Control> g_nativeDragVisual;
 DWORD g_nativeDragThread=0;
 bool (*g_nativeDragGoToState)(wuxc::Control const&)=+[](wuxc::Control const& control) {
     return wux::VisualStateManager::GoToState(control,L"Normal",false);
@@ -8959,7 +8969,6 @@ struct DragState {
     winrt::weak_ref<wuxc::StackPanel> panel;
     double cellWidthDip = 32;
     double cellHeightDip = 38;
-    winrt::Windows::UI::Composition::SpriteVisual insertionLine{nullptr};
     int insertionSlot=-1;
     int pendingTarget=-1;
     winrt::weak_ref<wuxc::Border> sourceCell;
@@ -8970,7 +8979,9 @@ struct DragState {
     bool loggedMove = false;
 };
 
-[[clang::no_destroy]] DragState g_drag;
+DragState g_drag;
+// Only this strong composition reference requires UI-thread teardown.
+[[clang::no_destroy]] winrt::Windows::UI::Composition::SpriteVisual g_insertionLine{nullptr};
 
 // A refresh that arrived while the pointer was down, to run once it is released.
 // See RefreshEmbeddedTray for why it waits.
@@ -8980,7 +8991,7 @@ bool g_refreshPending = false;
 // A composition child draws above our row without adding a XAML child,
 // moving cells, taking input, or interrupting pointer capture.
 void ClearInsertionLine() {
-    auto line=std::exchange(g_drag.insertionLine,nullptr);
+    auto line=std::exchange(g_insertionLine,nullptr);
     g_drag.insertionSlot=-1;
     if (!line) return;
     try {
@@ -9009,7 +9020,7 @@ void UpdateInsertionPreviewLifetime() {
             if (g_refreshPending) RequestEmbeddedRefresh();
         }
         if (cancelled) { g_drag.gestureCancelled=true; g_drag.pendingTarget=-1; }
-        if (g_drag.dragging || g_drag.insertionLine) g_drag.insertionCancelled=true;
+        if (g_drag.dragging || g_insertionLine) g_drag.insertionCancelled=true;
         ClearInsertionLine(); ClearDragGhost();
     } else if (auto source=g_drag.sourceCell.get()) {
         if (SplitTray::g_dragFeedbackSource.load()>1 && SplitTray::g_dragFeedbackSerial.load()==SerialOfCell(source) && std::abs(source.Opacity()-0.4)>0.01)
@@ -9018,7 +9029,7 @@ void UpdateInsertionPreviewLifetime() {
 }
 void ShowInsertionLine(wuxc::StackPanel const& panel,int slot) {
     namespace hosting=winrt::Windows::UI::Xaml::Hosting;
-    if (!g_drag.insertionLine) {
+    if (!g_insertionLine) {
         auto compositor=hosting::ElementCompositionPreview::GetElementVisual(panel).Compositor();
         auto line=compositor.CreateSpriteVisual();
         auto color=panel.ActualTheme()==wux::ElementTheme::Light ? winrt::Windows::UI::Color{192,0,0,0} : winrt::Windows::UI::Color{192,255,255,255};
@@ -9028,13 +9039,13 @@ void ShowInsertionLine(wuxc::StackPanel const& panel,int slot) {
         }
         line.Brush(compositor.CreateColorBrush(color));
         hosting::ElementCompositionPreview::SetElementChildVisual(panel,line);
-        g_drag.insertionLine=line;
+        g_insertionLine=line;
     }
     const float height=static_cast<float>(std::min(20.0,std::max(1.0,g_drag.cellHeightDip-8.0)));
     const float x=static_cast<float>(std::clamp(slot*g_drag.cellWidthDip,0.0,std::max(0.0,panel.ActualWidth()-1.0)));
-    g_drag.insertionLine.Size({1.0f,height});
-    g_drag.insertionLine.Offset({x,static_cast<float>((g_drag.cellHeightDip-height)/2),0.0f});
-    g_drag.insertionLine.IsVisible(true);
+    g_insertionLine.Size({1.0f,height});
+    g_insertionLine.Offset({x,static_cast<float>((g_drag.cellHeightDip-height)/2),0.0f});
+    g_insertionLine.IsVisible(true);
 }
 
 // Far enough that a click with a shaky hand is still a click.
@@ -9827,7 +9838,7 @@ bool CellDragged(wuxc::Border const& border, double x, double y) {
         if (outside) g_drag.pendingTarget=-1;
     }
     if (outside) {
-        if (g_drag.insertionLine) g_drag.insertionLine.IsVisible(false);
+        if (g_insertionLine) g_insertionLine.IsVisible(false);
         return true;
     }
 
@@ -10646,33 +10657,71 @@ bool ElementScreenRect(EmbeddedTray const& tray, wux::FrameworkElement const& el
     }
 }
 
-// The chevron itself is an overflow destination, and an open popup accepts
-// drops over its actual screen-space icon buttons. Automation supplies screen
-// pixels even when the flyout is outside the taskbar's XAML island.
+// Read the visible presenter's screen bounds once per hover, not every cell.
+// The popup owns a separate window; a taskbar-relative origin is not valid.
+bool (*g_overflowScreenBounds)(wux::FrameworkElement const&, wf::Rect*) =
+    +[](wux::FrameworkElement const& element, wf::Rect* bounds) {
+        auto peer = winrt::Windows::UI::Xaml::Automation::Peers::
+            FrameworkElementAutomationPeer::CreatePeerForElement(element);
+        if (!peer || peer.IsOffscreen()) return false;
+        *bounds = peer.GetBoundingRectangle();
+        return bounds->Width > 0 && bounds->Height > 0;
+    };
+
+// The presenter remains visible when its content scrolls. Walk only this
+// owned popup's ancestors; do not search another XAML island or desktop window.
+wuxc::FlyoutPresenter OverflowPresenter(wux::FrameworkElement const& content) {
+    auto parent = wuxm::VisualTreeHelper::GetParent(content);
+    while (parent) {
+        if (auto presenter = parent.try_as<wuxc::FlyoutPresenter>()) return presenter;
+        parent = wuxm::VisualTreeHelper::GetParent(parent);
+    }
+    return nullptr;
+}
+
+// The chevron and the open popup's actual icon buttons accept overflow drops.
+// XAML transforms supply button bounds, clipped to the visible presenter.
+// A scrolled-out first cell cannot serve as the popup's origin.
 int OverflowDropTargetAt(POINT point) {
     for (const auto& tray : g_embeddedTrays) {
-        auto panel=tray->panel.get();
+        auto panel = tray->panel.get();
         if (!tray->active || !panel || tray->hiddenEntries.empty() ||
             !SplitTray::g_dropWindowVisible(tray->taskbarWnd)) continue;
         RECT rect{};
-        auto children=panel.Children();
-        if (children.Size() && ElementScreenRect(*tray,children.GetAt(0).as<wux::FrameworkElement>(),&rect) && PtInRect(&rect,point))
-            return tray->number;
-        if (g_overflowMonitor!=tray->monitor || !g_overflowFlyout) continue;
-        auto grid=g_overflowFlyout.Content().try_as<wuxc::VariableSizedWrapGrid>();
+        auto children = panel.Children();
+        if (children.Size() &&
+            ElementScreenRect(*tray, children.GetAt(0).as<wux::FrameworkElement>(), &rect) &&
+            PtInRect(&rect, point)) return tray->number;
+        if (g_overflowMonitor != tray->monitor || !g_overflowFlyout) continue;
+        auto grid = g_overflowFlyout.Content().try_as<wuxc::VariableSizedWrapGrid>();
         if (!grid) continue;
-        for (auto child : grid.Children()) {
-            try {
-                auto cell=child.try_as<wuxc::Border>();
-                auto face=cell ? FaceOfCell(cell) : nullptr;
-                if (!face) continue;
-                auto peer=winrt::Windows::UI::Xaml::Automation::Peers::FrameworkElementAutomationPeer::CreatePeerForElement(face);
-                if (!peer || peer.IsOffscreen()) continue;
-                auto bounds=peer.GetBoundingRectangle();
-                if (bounds.Width>0 && bounds.Height>0 && point.x>=bounds.X && point.x<bounds.X+bounds.Width &&
-                    point.y>=bounds.Y && point.y<bounds.Y+bounds.Height) return tray->number;
-            } catch (...) { /* A popup dismissed during the hit test accepts nothing. */ }
-        }
+        try {
+            auto reference = OverflowPresenter(grid);
+            wf::Rect origin{};
+            if (!reference || !g_overflowScreenBounds(reference, &origin) ||
+                point.x < origin.X || point.x >= origin.X + origin.Width ||
+                point.y < origin.Y || point.y >= origin.Y + origin.Height) continue;
+            auto root = reference.XamlRoot();
+            if (!root) continue;
+            const double scale = root.RasterizationScale();
+            for (auto child : grid.Children()) {
+                auto cell = child.try_as<wuxc::Border>();
+                auto face = cell ? FaceOfCell(cell) : nullptr;
+                // The Border owns pointer input; its button face deliberately
+                // disables hit testing while retaining keyboard/UIA support.
+                if (!face || cell.Visibility() != wux::Visibility::Visible ||
+                    !cell.IsHitTestVisible()) continue;
+                auto bounds = face.TransformToVisual(reference).TransformBounds(
+                    {0, 0, static_cast<float>(face.ActualWidth()),
+                     static_cast<float>(face.ActualHeight())});
+                const double left = origin.X + bounds.X * scale;
+                const double top = origin.Y + bounds.Y * scale;
+                if (bounds.Width > 0 && bounds.Height > 0 &&
+                    point.x >= left && point.x < left + bounds.Width * scale &&
+                    point.y >= top && point.y < top + bounds.Height * scale)
+                    return tray->number;
+            }
+        } catch (...) { /* A popup dismissed during the hit test accepts nothing. */ }
     }
     return 0;
 }
@@ -11036,6 +11085,8 @@ void RemoveEverything() {
     }
     g_overflowClosedToken={};
     HideOverflowFlyout();
+    // Detach cells and their input delegates even while Hide is animating.
+    if (g_overflowFlyout) g_overflowFlyout.Content(nullptr);
     g_overflowFlyout = nullptr;
     for (auto& tray : g_embeddedTrays) {
         RemovePanel(*tray);
