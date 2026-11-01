@@ -4,7 +4,7 @@
 // @description     Experimental: logs Edge's native View classes and clears chosen backgrounds. Requires Translucent Windows.
 // @version         0.8
 // @author          Adam Anderson
-// @github          https://github.com
+// @github          https://github.com/adamanderson3330
 // @license         MIT
 // @architecture    x86-64
 // @include         msedge.exe
