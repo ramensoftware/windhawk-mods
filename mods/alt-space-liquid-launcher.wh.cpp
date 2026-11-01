@@ -5,35 +5,46 @@
 // @version         6.2.0
 // @author          RobsHs
 // @github          https://github.com/RobsHs
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lcomctl32 -lshell32 -lole32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lcomctl32 -lshell32 -lole32 -lshcore -lpowrprof
+// @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Liquid Quick Launcher
 
-A high-performance, self-learning productivity launcher for Windows 11 with a **Liquid Glass** aesthetic, **120Hz Smooth Animations**, and an **Adaptive MRU & Frecency Learning Engine**, built natively in Win32 / C++ for Windhawk.
+A high-performance, self-learning productivity launcher for Windows 11 with a **Liquid Glass** aesthetic, **120Hz Smooth Animations**, and an **Adaptive MRU & Frecency Learning Engine**, built natively in Win32 / C++ for Windhawk as an isolated, standalone tool mod.
+
+![Liquid Quick Launcher Preview](https://raw.githubusercontent.com/RobsHs/liquid-quick-launcher/main/assets/preview.png)
 
 ## Key Features
-- **Global Shortcut (`Alt + Space`)**: Summons the launcher instantly from anywhere on a dedicated UI thread without blocking `explorer.exe`. Press `Esc` or click outside to dismiss.
+- **Dedicated Tool Process Isolation**: Runs completely in its own process outside of `explorer.exe` using Windhawk's Tool Mod architecture. Never crashes or blocks the Windows taskbar.
+- **Global Shortcut (Default: `Alt + Space`, Configurable)**: Summons the launcher instantly from anywhere on a dedicated UI thread. Press `Esc` or click outside to dismiss.
 - **Customizable Main Window & Card Shape (Sharp Box up to Full Oval Pill)**:
   - **Sharp Box (`0px`)**: Crisp rectangular main window and cards.
   - **Soft Rounded (`8px`)**: Subtle rounded main window corners.
   - **Balanced Rounded (`14px`)**: Classic modern rounded window frame.
   - **Super Smooth (`26px`)**: Deeply sculpted outer main card curvature (`SetWindowRgn` + anti-aliased GDI border).
   - **Full Pill / Oval Capsule (`70px`)**: When idle as a search bar, the entire main launcher window becomes a 100% stadium oval/pill capsule, and smoothly morphs into a deeply rounded capsule card as search results expand.
-- **Adaptive Smart Prediction (1-Letter Instant Recall)**: Automatically learns which applications, system commands, or URLs you open most frequently and recently. Type a single letter (e.g., `c`, `n`, `v`) or acronym (e.g., `tm` for Task Manager, `vsc` for Visual Studio Code) and your top pick jumps straight to #1.
+- **Adaptive Smart Prediction (1-Letter Instant Recall)**: Automatically learns which applications or URLs you open most frequently and recently. Type a single letter (e.g., `c`, `n`, `v`) or acronym (e.g., `vsc` for Visual Studio Code) and your top pick jumps straight to #1.
 - **120Hz Smooth Animation Engine**:
   - **Fluid Height Expansion**: Main window height and outer capsule contour smoothly expand and contract at 120Hz.
   - **Gliding Selection Capsule**: The active selection card and its accent indicator glide smoothly between rows.
   - **Fade & Slide Entrance**: Gently fades in and slides into position when summoned.
+  - **Zero Idle CPU**: Animation timers automatically disarm when cards and selection settle.
+- **Per-Monitor High-DPI Awareness**: All elements, fonts, borders, and margins dynamically adapt to any display scaling (100%, 125%, 150%, 200%).
 - **Clean, Customizable Appearance**:
   - **4 Curated Glass Themes**: Obsidian Dark Glass, Soft Alabaster Light (eye-friendly warm stone), Midnight Pitch Black, and Nordic Slate Glass.
   - **4 Transparency Presets**: Choose between `55%`, `70%`, `85%`, and `100%` glass opacity.
   - **6 Accent Colors**: Electric Blue, Royal Indigo, Emerald Mint, Sunset Rose, Amber Gold, and Crimson Red.
-  - **Minimalist Clutter Toggles**: Hide the `Alt+Space` shortcut badge, item subtitles/descriptions, category badges (`[App]`, `[Calculator]`, `[Command]`, `[System]`, `[Web]`), or the bottom status bar.
+  - **Minimalist Clutter Toggles**: Hide the shortcut badge, item subtitles/descriptions, category badges, or the bottom status bar.
+- **Built-in Safety & Power Management**:
+  - Two-step confirmation for destructive actions (Restart, Shut Down, Empty Recycle Bin).
+  - Instant calculator, direct URL launch, and terminal execution (`> ...`).
+
+> [!NOTE]
+> If you also use Spotlight Launcher or PowerToys Run, make sure to change the global shortcut in settings to avoid hotkey conflicts.
 */
 // ==/WindhawkModReadme==
 
@@ -76,10 +87,19 @@ A high-performance, self-learning productivity launcher for Windows 11 with a **
     - soft_round: Soft Rounded (8px Subtle Window)
     - rounded_standard: Balanced Rounded (14px Standard Window)
     - super_smooth: Super Smooth (26px Deep Sculpted Window)
-    - pill_capsule: Full Pill / Oval Capsule (Lonjong / Stadium Main Card)
+    - pill_capsule: Full Pill / Oval Capsule (35px Radius Stadium Pill)
+
+- hotkeyChoice: alt_space
+  $name: Global Shortcut
+  $description: Key combination used to toggle the launcher.
+  $options:
+    - alt_space: Alt + Space (Default)
+    - ctrl_space: Ctrl + Space
+    - win_alt_space: Win + Alt + Space
+    - alt_q: Alt + Q
 
 - showShortcutHint: true
-  $name: Show 'Alt+Space' Header Badge & Action Keys
+  $name: Show Shortcut Header Badge & Action Keys
   $description: Display the shortcut hint pill in the search bar and action keycaps on selected items.
 
 - showSubtitles: true
@@ -96,17 +116,6 @@ A high-performance, self-learning productivity launcher for Windows 11 with a **
 */
 // ==/WindhawkModSettings==
 
-#ifndef UNICODE
-#define UNICODE
-#endif
-#ifndef _UNICODE
-#define _UNICODE
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#define WIN32_LEAN_AND_MEAN
-
 #include <windows.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
@@ -114,6 +123,9 @@ A high-performance, self-learning productivity launcher for Windows 11 with a **
 #include <shellapi.h>
 #include <shlobj.h>
 #include <objbase.h>
+#include <shellscalingapi.h>
+#include <sddl.h>
+#include <powrprof.h>
 
 #include <string>
 #include <vector>
@@ -125,7 +137,7 @@ A high-performance, self-learning productivity launcher for Windows 11 with a **
 
 #include <windhawk_utils.h>
 
-// Safe guards for DWM attribute constants (never redefine enums)
+// Safe guards for DWM attribute constants
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
@@ -146,21 +158,29 @@ A high-performance, self-learning productivity launcher for Windows 11 with a **
 // Constants & Layout Metrics
 // ============================================================================
 static const wchar_t* kWindowClassName    = L"WindhawkLiquidQuickLauncherWnd";
-static const wchar_t* kRegHistoryPath     = L"Software\\RobsHs\\LiquidQuickLauncher\\Frecency";
 static const int kHotKeyId                = 0x4C51; // 'LQ'
 static const UINT_PTR kAnimTimerId        = 0x7701;
 static const UINT kAnimFrameIntervalMs    = 8;      // ~120 FPS animation tick
-static const UINT WM_APP_QUIT_LAUNCHER    = WM_APP + 0x101;
 static const UINT WM_APP_INDEX_DONE       = WM_APP + 0x102;
 static const UINT WM_APP_RELOAD_SETTINGS  = WM_APP + 0x103;
 
-static const int kWindowWidth             = 720;
-static const int kBaseHeight              = 70;
-static const int kDividerSpace            = 12;
-static const int kItemHeight              = 58;
-static const int kBottomPadNoFooter       = 10;
-static const int kFooterHeight            = 36;
+static const int kBaseWindowWidth         = 720;
+static const int kBaseWindowHeight        = 70;
+static const int kBaseDividerSpace        = 12;
+static const int kBaseItemHeight          = 58;
+static const int kBaseBottomPadNoFooter   = 10;
+static const int kBaseFooterHeight        = 36;
 static const int kMaxVisibleResults       = 5;
+
+// ============================================================================
+// DPI Scaling Helper
+// ============================================================================
+static UINT g_currentDpi = 96;
+
+static inline int ScaleDpi(int val, UINT dpi = 0) {
+    if (dpi == 0) dpi = g_currentDpi;
+    return MulDiv(val, (int)dpi, 96);
+}
 
 // ============================================================================
 // Dynamic Visual & UI Configuration
@@ -173,65 +193,72 @@ enum ShapeMode {
     SHAPE_PILL_CAPSULE
 };
 
+enum HotkeyChoice {
+    HOTKEY_ALT_SPACE = 0,
+    HOTKEY_CTRL_SPACE,
+    HOTKEY_WIN_ALT_SPACE,
+    HOTKEY_ALT_Q
+};
+
 struct LauncherVisualConfig {
-    bool      isLightMode;
-    BYTE      targetWindowAlpha;
-    bool      showShortcutHint;
-    bool      showSubtitles;
-    bool      showCategoryBadges;
-    bool      showFooterBar;
+    bool         isLightMode;
+    BYTE         targetWindowAlpha;
+    bool         showShortcutHint;
+    bool         showSubtitles;
+    bool         showCategoryBadges;
+    bool         showFooterBar;
 
     DWM_WINDOW_CORNER_PREFERENCE dwmCornerPref;
-    ShapeMode shapeMode;
-    bool      useCustomOuterRegion; // True when Super Smooth or Full Pill is active (exceeds DWM's 8px hardware limit)
-    int       outerWindowEllipse;   // Ellipse diameter for the main launcher window's outer corners
-    int       itemCardRadius;
-    int       iconTileRadius;
-    int       badgeRadius;
-    int       keycapRadius;
+    ShapeMode    shapeMode;
+    HotkeyChoice hotkeyChoice;
+    bool         useCustomOuterRegion;
+    int          outerWindowEllipse;
+    int          itemCardRadius;
+    int          iconTileRadius;
+    int          badgeRadius;
+    int          keycapRadius;
 
-    COLORREF  colBgSurface;
-    COLORREF  colHeaderSurface;
-    COLORREF  colFooterSurface;
-    COLORREF  colGlassRimTop;
-    COLORREF  colBorderGlass;
+    COLORREF     colBgSurface;
+    COLORREF     colHeaderSurface;
+    COLORREF     colFooterSurface;
+    COLORREF     colGlassRimTop;
+    COLORREF     colBorderGlass;
 
-    COLORREF  colItemHover;
-    COLORREF  colItemHoverBdr;
-    COLORREF  colItemActive;
-    COLORREF  colItemBorderAct;
-    COLORREF  colItemRimAct;
+    COLORREF     colItemHover;
+    COLORREF     colItemHoverBdr;
+    COLORREF     colItemActive;
+    COLORREF     colItemBorderAct;
+    COLORREF     colItemRimAct;
 
-    COLORREF  colIconTileBg;
-    COLORREF  colIconTileBdr;
-    COLORREF  colIconTileActBg;
-    COLORREF  colIconTileActBdr;
+    COLORREF     colIconTileBg;
+    COLORREF     colIconTileBdr;
+    COLORREF     colIconTileActBg;
+    COLORREF     colIconTileActBdr;
 
-    COLORREF  colAccentPrimary;
-    COLORREF  colAccentGlow;
-    COLORREF  colFreqGold;
-    COLORREF  colDivider;
+    COLORREF     colAccentPrimary;
+    COLORREF     colAccentGlow;
+    COLORREF     colFreqGold;
+    COLORREF     colDivider;
 
-    COLORREF  colTextPrimary;
-    COLORREF  colTextSub;
-    COLORREF  colTextSubActive;
-    COLORREF  colTextMuted;
+    COLORREF     colTextPrimary;
+    COLORREF     colTextSub;
+    COLORREF     colTextSubActive;
+    COLORREF     colTextMuted;
 
-    COLORREF  colBadgeBg;
-    COLORREF  colBadgeActive;
-    COLORREF  colBadgeBorder;
-    COLORREF  colBadgeText;
-    COLORREF  colBadgeTextActive;
+    COLORREF     colBadgeBg;
+    COLORREF     colBadgeActive;
+    COLORREF     colBadgeBorder;
+    COLORREF     colBadgeText;
+    COLORREF     colBadgeTextActive;
 
-    COLORREF  colKeycapBg;
-    COLORREF  colKeycapBorder;
-    COLORREF  colKeycapActBg;
-    COLORREF  colKeycapActBdr;
+    COLORREF     colKeycapBg;
+    COLORREF     colKeycapBorder;
+    COLORREF     colKeycapActBg;
+    COLORREF     colKeycapActBdr;
 };
 
 static LauncherVisualConfig g_cfg;
 
-// Status indicator dots in footer
 static const COLORREF kColDotRed    = RGB(235, 90, 82);
 static const COLORREF kColDotAmber  = RGB(240, 178, 44);
 static const COLORREF kColDotGreen  = RGB(42, 192, 66);
@@ -253,8 +280,7 @@ enum SystemActionType {
     SYS_SLEEP,
     SYS_RESTART,
     SYS_SHUTDOWN,
-    SYS_EMPTY_BIN,
-    SYS_TASKMGR
+    SYS_EMPTY_BIN
 };
 
 struct IndexedApp {
@@ -294,8 +320,9 @@ struct ResultItem {
 };
 
 // ============================================================================
-// Global State & 120Hz Smooth Animation State
+// Global State & 120Hz Animation State
 // ============================================================================
+static HINSTANCE g_hModInstance        = NULL;
 static HANDLE g_hUiThread              = NULL;
 static DWORD  g_dwUiThreadId           = 0;
 static HANDLE g_hIndexThread           = NULL;
@@ -325,11 +352,15 @@ static std::vector<ResultItem> g_results;
 static int    g_selectedIndex          = 0;
 static int    g_hoveredIndex           = -1;
 
-// Smooth Animation Engine State
+// Confirmation state for destructive actions
+static SystemActionType g_pendingConfirmAction = SYS_NONE;
+static DWORD  g_dwConfirmArmTime       = 0;
+
+// Animation State
 static int    g_anchorPosX             = 300;
 static int    g_anchorPosY             = 200;
-static float  g_animCurHeight          = (float)kBaseHeight;
-static float  g_animTargetHeight       = (float)kBaseHeight;
+static float  g_animCurHeight          = 70.0f;
+static float  g_animTargetHeight       = 70.0f;
 static float  g_animSelectionY         = 0.0f;
 static float  g_animTargetSelectionY   = 0.0f;
 static float  g_animHoverBlend         = 0.0f;
@@ -337,8 +368,30 @@ static float  g_animWindowAlpha        = 217.0f;
 static float  g_animSlideOffsetY       = 0.0f;
 static float  g_animPulsePhase         = 0.0f;
 
+// Forward Declarations
+static void CreateLauncherGdiResources();
+static void DestroyLauncherGdiResources();
+static void RefreshEditControlColorsAndLayout();
+static void UpdateOuterMainWindowShapeRegion(HWND hwnd, int width, int height);
+
 // ============================================================================
-// Color, String & Utility Helpers (Standard Static C++ Functions)
+// System32 / Sysnative Redirection Helper
+// ============================================================================
+static std::wstring GetSystem32OrSysnativePath() {
+    BOOL isWow64 = FALSE;
+    IsWow64Process(GetCurrentProcess(), &isWow64);
+    wchar_t winDir[MAX_PATH];
+    if (!GetWindowsDirectoryW(winDir, MAX_PATH)) {
+        wcscpy_s(winDir, L"C:\\Windows");
+    }
+    if (isWow64) {
+        return std::wstring(winDir) + L"\\Sysnative";
+    }
+    return std::wstring(winDir) + L"\\System32";
+}
+
+// ============================================================================
+// Color, String & Math Helpers
 // ============================================================================
 static int ClampInt(int val, int low, int high) {
     if (val < low) return low;
@@ -492,25 +545,6 @@ static bool CopyTextToClipboard(HWND hOwner, const std::wstring& text) {
     return true;
 }
 
-static bool EnableShutdownPrivilege() {
-    HANDLE hToken = NULL;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
-        return false;
-    }
-    TOKEN_PRIVILEGES tp;
-    ZeroMemory(&tp, sizeof(tp));
-    if (!LookupPrivilegeValueW(NULL, SE_SHUTDOWN_NAME, &tp.Privileges[0].Luid)) {
-        CloseHandle(hToken);
-        return false;
-    }
-    tp.PrivilegeCount = 1;
-    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-    AdjustTokenPrivileges(hToken, FALSE, &tp, 0, NULL, NULL);
-    bool ok = (GetLastError() == ERROR_SUCCESS);
-    CloseHandle(hToken);
-    return ok;
-}
-
 static HICON ExtractFileIcon32(const std::wstring& filePath) {
     if (filePath.empty()) {
         return NULL;
@@ -534,33 +568,27 @@ static void DestroyAppIconsInList(std::vector<IndexedApp>& list) {
 }
 
 // ============================================================================
-// Windhawk Settings Loader (Main Window Outer Shape & Audited Palettes)
+// Windhawk Settings Loader
 // ============================================================================
 static void LoadUserVisualSettings() {
-    // 1. Visual Theme Mode
-    PCWSTR rawTheme = Wh_GetStringSetting(L"themeMode");
-    std::wstring themeMode = rawTheme ? rawTheme : L"obsidian_dark";
-    if (rawTheme) {
-        Wh_FreeStringSetting(rawTheme);
-    }
+    auto themeModeSetting = WindhawkUtils::StringSetting::make(L"themeMode");
+    std::wstring themeMode = themeModeSetting.get();
+    if (themeMode.empty()) themeMode = L"obsidian_dark";
 
-    bool isLight = (themeMode == L"pearl_light" || themeMode == L"mac_light");
+    bool isLight = (themeMode == L"pearl_light");
 
-    // 2. Accent Color Preset
-    PCWSTR rawAccent = Wh_GetStringSetting(L"accentPreset");
-    std::wstring accentPreset = rawAccent ? rawAccent : L"electric_blue";
-    if (rawAccent) {
-        Wh_FreeStringSetting(rawAccent);
-    }
+    auto accentPresetSetting = WindhawkUtils::StringSetting::make(L"accentPreset");
+    std::wstring accentPreset = accentPresetSetting.get();
+    if (accentPreset.empty()) accentPreset = L"electric_blue";
 
     COLORREF accent = isLight ? RGB(0, 108, 218) : RGB(10, 132, 255);
-    if (accentPreset == L"royal_indigo" || accentPreset == L"mac_purple") {
+    if (accentPreset == L"royal_indigo") {
         accent = isLight ? RGB(104, 66, 214) : RGB(138, 92, 255);
     } else if (accentPreset == L"emerald_mint") {
         accent = isLight ? RGB(12, 152, 104) : RGB(16, 198, 136);
     } else if (accentPreset == L"sunset_rose") {
         accent = isLight ? RGB(214, 52, 108) : RGB(255, 78, 136);
-    } else if (accentPreset == L"amber_gold" || accentPreset == L"cyber_gold") {
+    } else if (accentPreset == L"amber_gold") {
         accent = isLight ? RGB(204, 132, 8) : RGB(255, 184, 28);
     } else if (accentPreset == L"crimson_red") {
         accent = isLight ? RGB(210, 44, 58) : RGB(255, 64, 76);
@@ -571,7 +599,6 @@ static void LoadUserVisualSettings() {
                              : BlendColorRgb(accent, RGB(255, 255, 255), 0.38f);
     g_cfg.colFreqGold      = isLight ? RGB(224, 152, 12) : RGB(255, 204, 77);
 
-    // 3. Apply Theme Palette
     if (isLight) {
         g_cfg.isLightMode        = true;
         g_cfg.colBgSurface       = RGB(228, 232, 240);
@@ -607,7 +634,7 @@ static void LoadUserVisualSettings() {
         g_cfg.colKeycapBorder    = RGB(186, 194, 210);
         g_cfg.colKeycapActBg     = BlendColorRgb(RGB(232, 236, 245), accent, 0.18f);
         g_cfg.colKeycapActBdr    = BlendColorRgb(RGB(174, 184, 202), accent, 0.50f);
-    } else if (themeMode == L"pitch_black" || themeMode == L"oled_black") {
+    } else if (themeMode == L"pitch_black") {
         g_cfg.isLightMode        = false;
         g_cfg.colBgSurface       = RGB(8, 8, 12);
         g_cfg.colHeaderSurface   = RGB(8, 8, 12);
@@ -678,7 +705,7 @@ static void LoadUserVisualSettings() {
         g_cfg.colKeycapActBg     = BlendColorRgb(RGB(40, 48, 64), accent, 0.32f);
         g_cfg.colKeycapActBdr    = BlendColorRgb(RGB(74, 86, 110), accent, 0.55f);
     } else {
-        // Default: obsidian_dark (Liquid Glass Dark)
+        // Default: obsidian_dark
         g_cfg.isLightMode        = false;
         g_cfg.colBgSurface       = RGB(20, 21, 27);
         g_cfg.colHeaderSurface   = RGB(20, 21, 27);
@@ -715,29 +742,23 @@ static void LoadUserVisualSettings() {
         g_cfg.colKeycapActBdr    = BlendColorRgb(RGB(68, 76, 96), accent, 0.55f);
     }
 
-    // 4. Glass Transparency Preset (55%, 70%, 85%, 100%)
-    PCWSTR rawOpacity = Wh_GetStringSetting(L"glassOpacity");
-    std::wstring opacityMode = rawOpacity ? rawOpacity : L"pct_85";
-    if (rawOpacity) {
-        Wh_FreeStringSetting(rawOpacity);
-    }
+    auto opacitySetting = WindhawkUtils::StringSetting::make(L"glassOpacity");
+    std::wstring opacityMode = opacitySetting.get();
+    if (opacityMode.empty()) opacityMode = L"pct_85";
 
     if (opacityMode == L"pct_55") {
-        g_cfg.targetWindowAlpha = (BYTE)140; // 55%
+        g_cfg.targetWindowAlpha = (BYTE)140;
     } else if (opacityMode == L"pct_70") {
-        g_cfg.targetWindowAlpha = (BYTE)179; // 70%
+        g_cfg.targetWindowAlpha = (BYTE)179;
     } else if (opacityMode == L"pct_100") {
-        g_cfg.targetWindowAlpha = (BYTE)255; // 100%
+        g_cfg.targetWindowAlpha = (BYTE)255;
     } else {
-        g_cfg.targetWindowAlpha = (BYTE)217; // 85%
+        g_cfg.targetWindowAlpha = (BYTE)217;
     }
 
-    // 5. Main Window & Card Shape Geometry (Controls BOTH Outer Main Window AND Inner Cards!)
-    PCWSTR rawShape = Wh_GetStringSetting(L"shapeStyle");
-    std::wstring shapeStyle = rawShape ? rawShape : L"rounded_standard";
-    if (rawShape) {
-        Wh_FreeStringSetting(rawShape);
-    }
+    auto shapeSetting = WindhawkUtils::StringSetting::make(L"shapeStyle");
+    std::wstring shapeStyle = shapeSetting.get();
+    if (shapeStyle.empty()) shapeStyle = L"rounded_standard";
 
     if (shapeStyle == L"sharp_box") {
         g_cfg.shapeMode            = SHAPE_SHARP_BOX;
@@ -758,27 +779,24 @@ static void LoadUserVisualSettings() {
         g_cfg.badgeRadius          = 4;
         g_cfg.keycapRadius         = 4;
     } else if (shapeStyle == L"super_smooth") {
-        // Exceeds DWM's 8px native corner limit -> Use custom dynamic RoundRect window region (48px ellipse = 24px radius)
         g_cfg.shapeMode            = SHAPE_SUPER_SMOOTH;
         g_cfg.dwmCornerPref        = DWMWCP_ROUND;
         g_cfg.useCustomOuterRegion = true;
-        g_cfg.outerWindowEllipse   = 48; // 24px radius on the outer main launcher card!
+        g_cfg.outerWindowEllipse   = 48;
         g_cfg.itemCardRadius       = 18;
         g_cfg.iconTileRadius       = 14;
         g_cfg.badgeRadius          = 10;
         g_cfg.keycapRadius         = 10;
     } else if (shapeStyle == L"pill_capsule") {
-        // Full Pill / Oval Capsule on the MAIN Launcher Card (70px ellipse = 35px radius -> 100% stadium pill when height is 70px!)
         g_cfg.shapeMode            = SHAPE_PILL_CAPSULE;
         g_cfg.dwmCornerPref        = DWMWCP_ROUND;
         g_cfg.useCustomOuterRegion = true;
-        g_cfg.outerWindowEllipse   = 70; // 35px radius -> Full lonjong/pill main card!
-        g_cfg.itemCardRadius       = 27; // Full pill inner selection cards too
-        g_cfg.iconTileRadius       = 21; // Full circular/capsule icon tile
+        g_cfg.outerWindowEllipse   = 70;
+        g_cfg.itemCardRadius       = 27;
+        g_cfg.iconTileRadius       = 21;
         g_cfg.badgeRadius          = 12;
         g_cfg.keycapRadius         = 12;
     } else {
-        // Default: rounded_standard (14px outer window + 12px inner cards)
         g_cfg.shapeMode            = SHAPE_ROUNDED_STANDARD;
         g_cfg.dwmCornerPref        = DWMWCP_ROUND;
         g_cfg.useCustomOuterRegion = false;
@@ -789,7 +807,18 @@ static void LoadUserVisualSettings() {
         g_cfg.keycapRadius         = 8;
     }
 
-    // 6. Clean UI Visibility Toggles
+    auto hotkeySetting = WindhawkUtils::StringSetting::make(L"hotkeyChoice");
+    std::wstring hotkey = hotkeySetting.get();
+    if (hotkey == L"ctrl_space") {
+        g_cfg.hotkeyChoice = HOTKEY_CTRL_SPACE;
+    } else if (hotkey == L"win_alt_space") {
+        g_cfg.hotkeyChoice = HOTKEY_WIN_ALT_SPACE;
+    } else if (hotkey == L"alt_q") {
+        g_cfg.hotkeyChoice = HOTKEY_ALT_Q;
+    } else {
+        g_cfg.hotkeyChoice = HOTKEY_ALT_SPACE;
+    }
+
     g_cfg.showShortcutHint   = (Wh_GetIntSetting(L"showShortcutHint") != 0);
     g_cfg.showSubtitles      = (Wh_GetIntSetting(L"showSubtitles") != 0);
     g_cfg.showCategoryBadges = (Wh_GetIntSetting(L"showCategoryBadges") != 0);
@@ -797,84 +826,99 @@ static void LoadUserVisualSettings() {
 }
 
 // ============================================================================
-// Persistent Adaptive Frecency & Prefix-Habit Engine (PowerToys Run Style)
+// Windhawk Mod Storage (Per-User SID Scoped)
 // ============================================================================
-static void LoadFrecencyHistoryFromRegistry() {
+static std::wstring CurrentUserSid() {
+    static std::wstring sid;
+    if (!sid.empty()) return sid;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token) && token) {
+        DWORD size = 0;
+        GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+        if (size > 0) {
+            std::vector<BYTE> buf(size);
+            TOKEN_USER* user = reinterpret_cast<TOKEN_USER*>(buf.data());
+            if (GetTokenInformation(token, TokenUser, user, size, &size) && user->User.Sid) {
+                LPWSTR str = nullptr;
+                if (ConvertSidToStringSidW(user->User.Sid, &str) && str) {
+                    sid = str;
+                    LocalFree(str);
+                }
+            }
+        }
+        CloseHandle(token);
+    }
+    return sid;
+}
+
+static std::wstring FrecencyStorageKey() {
+    return L"frecency.v1_" + CurrentUserSid();
+}
+
+static void LoadFrecencyHistory() {
     g_frecencyTable.clear();
     g_globalUseSequence = 1;
 
-    HKEY hKey = NULL;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegHistoryPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+    PCWSTR rawData = Wh_GetStringValue(FrecencyStorageKey().c_str());
+    if (!rawData || !rawData[0]) {
+        if (rawData) Wh_FreeStringValue(rawData);
         return;
     }
 
-    DWORD index = 0;
-    wchar_t valName[256];
-    BYTE valData[1024];
+    std::wstring data = rawData;
+    Wh_FreeStringValue(rawData);
 
-    while (true) {
-        DWORD nameLen = 256;
-        DWORD dataLen = sizeof(valData) - sizeof(wchar_t);
-        DWORD type = 0;
-        LONG res = RegEnumValueW(hKey, index++, valName, &nameLen, NULL, &type, valData, &dataLen);
-        if (res != ERROR_SUCCESS) {
-            break;
-        }
-        if (type != REG_SZ) {
-            continue;
-        }
+    size_t start = 0;
+    while (start < data.size()) {
+        size_t newline = data.find(L'\n', start);
+        std::wstring line = (newline == std::wstring::npos) ? data.substr(start) : data.substr(start, newline - start);
+        start = (newline == std::wstring::npos) ? data.size() : newline + 1;
 
-        valData[dataLen] = 0;
-        valData[dataLen + 1] = 0;
-        std::wstring raw = (const wchar_t*)valData;
+        if (line.empty()) continue;
+        size_t p1 = line.find(L'|');
+        if (p1 == std::wstring::npos) continue;
+        size_t p2 = line.find(L'|', p1 + 1);
+        if (p2 == std::wstring::npos) continue;
+        size_t p3 = line.find(L'|', p2 + 1);
+        if (p3 == std::wstring::npos) continue;
 
-        size_t bar1 = raw.find(L'|');
-        if (bar1 == std::wstring::npos) {
-            continue;
-        }
-        size_t bar2 = raw.find(L'|', bar1 + 1);
-        if (bar2 == std::wstring::npos) {
-            continue;
-        }
+        std::wstring key = line.substr(0, p1);
+        DWORD count = (DWORD)wcstoul(line.substr(p1 + 1, p2 - p1 - 1).c_str(), nullptr, 10);
+        DWORD seq = (DWORD)wcstoul(line.substr(p2 + 1, p3 - p2 - 1).c_str(), nullptr, 10);
+        std::wstring prefixes = line.substr(p3 + 1);
 
-        DWORD count = (DWORD)wcstoul(raw.substr(0, bar1).c_str(), NULL, 10);
-        DWORD seq   = (DWORD)wcstoul(raw.substr(bar1 + 1, bar2 - bar1 - 1).c_str(), NULL, 10);
-        std::wstring prefixes = raw.substr(bar2 + 1);
-
-        if (count > 0) {
+        if (count > 0 && !key.empty()) {
             FrecencyEntry entry;
-            entry.itemKey = ToLowerStr(valName);
+            entry.itemKey = key;
             entry.useCount = count;
             entry.lastSequence = seq;
-            entry.lastPrefixes = prefixes.empty() ? L";" : prefixes;
+            entry.lastPrefixes = prefixes;
             g_frecencyTable.push_back(entry);
-
             if (seq >= g_globalUseSequence) {
                 g_globalUseSequence = seq + 1;
             }
         }
     }
-
-    RegCloseKey(hKey);
 }
 
-static void SaveFrecencyEntryToRegistry(const FrecencyEntry& entry) {
-    HKEY hKey = NULL;
-    DWORD disp = 0;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegHistoryPath, 0, NULL,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, &disp) != ERROR_SUCCESS) {
-        return;
+static void SaveFrecencyHistory() {
+    // Keep top 100 entries to prevent unbounded growth
+    if (g_frecencyTable.size() > 100) {
+        std::sort(g_frecencyTable.begin(), g_frecencyTable.end(), [](const FrecencyEntry& a, const FrecencyEntry& b) {
+            return a.lastSequence > b.lastSequence;
+        });
+        g_frecencyTable.resize(100);
     }
 
-    wchar_t buf[1024];
-    swprintf(buf, 1024, L"%lu|%lu|%ls",
-             (unsigned long)entry.useCount,
-             (unsigned long)entry.lastSequence,
-             entry.lastPrefixes.c_str());
+    std::wstring serialized;
+    serialized.reserve(g_frecencyTable.size() * 64);
+    wchar_t buf[256];
+    for (const auto& entry : g_frecencyTable) {
+        swprintf(buf, 256, L"%lu|%lu", (unsigned long)entry.useCount, (unsigned long)entry.lastSequence);
+        serialized += entry.itemKey + L"|" + buf + L"|" + entry.lastPrefixes + L"\n";
+    }
 
-    DWORD byteLen = (DWORD)((wcslen(buf) + 1) * sizeof(wchar_t));
-    RegSetValueExW(hKey, entry.itemKey.c_str(), 0, REG_SZ, (const BYTE*)buf, byteLen);
-    RegCloseKey(hKey);
+    Wh_SetStringValue(FrecencyStorageKey().c_str(), serialized.c_str());
 }
 
 static void AddLearnedPrefixToken(std::wstring& prefixStore, const std::wstring& token) {
@@ -900,7 +944,8 @@ static void AddLearnedPrefixToken(std::wstring& prefixStore, const std::wstring&
 }
 
 static void RecordItemExecutionFrecency(const std::wstring& itemKey, const std::wstring& typedQuery) {
-    if (itemKey.empty()) {
+    // Only record genuine apps and URLs, never search queries or commands
+    if (itemKey.empty() || itemKey.find(L"app:") != 0 && itemKey.find(L"url:") != 0) {
         return;
     }
 
@@ -920,21 +965,17 @@ static void RecordItemExecutionFrecency(const std::wstring& itemKey, const std::
             if (g_frecencyTable[i].itemKey == normKey) {
                 continue;
             }
-            bool modifiedOther = false;
             for (size_t p = 0; p < prefixesToLearn.size(); ++p) {
                 std::wstring needle = L";" + prefixesToLearn[p] + L";";
                 size_t pos = g_frecencyTable[i].lastPrefixes.find(needle);
                 if (pos != std::wstring::npos) {
                     g_frecencyTable[i].lastPrefixes.erase(pos, needle.size() - 1);
-                    modifiedOther = true;
                 }
-            }
-            if (modifiedOther) {
-                SaveFrecencyEntryToRegistry(g_frecencyTable[i]);
             }
         }
     }
 
+    bool found = false;
     for (size_t i = 0; i < g_frecencyTable.size(); ++i) {
         if (g_frecencyTable[i].itemKey == normKey) {
             g_frecencyTable[i].useCount += 1;
@@ -942,21 +983,24 @@ static void RecordItemExecutionFrecency(const std::wstring& itemKey, const std::
             for (size_t p = 0; p < prefixesToLearn.size(); ++p) {
                 AddLearnedPrefixToken(g_frecencyTable[i].lastPrefixes, prefixesToLearn[p]);
             }
-            SaveFrecencyEntryToRegistry(g_frecencyTable[i]);
-            return;
+            found = true;
+            break;
         }
     }
 
-    FrecencyEntry newEntry;
-    newEntry.itemKey = normKey;
-    newEntry.useCount = 1;
-    newEntry.lastSequence = g_globalUseSequence++;
-    newEntry.lastPrefixes = L";";
-    for (size_t p = 0; p < prefixesToLearn.size(); ++p) {
-        AddLearnedPrefixToken(newEntry.lastPrefixes, prefixesToLearn[p]);
+    if (!found) {
+        FrecencyEntry newEntry;
+        newEntry.itemKey = normKey;
+        newEntry.useCount = 1;
+        newEntry.lastSequence = g_globalUseSequence++;
+        newEntry.lastPrefixes = L";";
+        for (size_t p = 0; p < prefixesToLearn.size(); ++p) {
+            AddLearnedPrefixToken(newEntry.lastPrefixes, prefixesToLearn[p]);
+        }
+        g_frecencyTable.push_back(newEntry);
     }
-    g_frecencyTable.push_back(newEntry);
-    SaveFrecencyEntryToRegistry(newEntry);
+
+    SaveFrecencyHistory();
 }
 
 static int ComputeFrecencyBoost(const std::wstring& itemKey,
@@ -1267,8 +1311,16 @@ static bool IsLikelyUrlOrDomain(const std::wstring& query, std::wstring& outFull
         return false;
     }
 
-    for (size_t i = lastDot + 1; i < hostPart.size(); ++i) {
-        if (!iswalpha(hostPart[i])) {
+    std::wstring tld = ToLowerStr(hostPart.substr(lastDot + 1));
+    // Filter out common code/file extensions from false-triggering as web domains
+    if (tld == L"exe" || tld == L"dll" || tld == L"py" || tld == L"cpp" ||
+        tld == L"h" || tld == L"json" || tld == L"xml" || tld == L"txt" ||
+        tld == L"log" || tld == L"md" || tld == L"bat" || tld == L"cmd") {
+        return false;
+    }
+
+    for (size_t i = 0; i < tld.size(); ++i) {
+        if (!iswalpha(tld[i])) {
             return false;
         }
     }
@@ -1356,11 +1408,7 @@ static DWORD WINAPI AppIndexerThreadProc(LPVOID lpParam) {
     std::vector<IndexedApp> localApps;
     localApps.reserve(256);
 
-    wchar_t sysDir[MAX_PATH];
-    if (!GetSystemDirectoryW(sysDir, MAX_PATH)) {
-        wcscpy_s(sysDir, L"C:\\Windows\\System32");
-    }
-    std::wstring sDir = sysDir;
+    std::wstring sDir = GetSystem32OrSysnativePath();
 
     wchar_t winDir[MAX_PATH];
     if (!GetWindowsDirectoryW(winDir, MAX_PATH)) {
@@ -1368,24 +1416,24 @@ static DWORD WINAPI AppIndexerThreadProc(LPVOID lpParam) {
     }
     std::wstring wDir = winDir;
 
-    // 1. Core Windows System Applications with real System32 icon extraction
-    AddAppToList(localApps, L"Notepad",            L"notepad.exe",      L"",            L"System Application  \x2022  Text Editor",           sDir + L"\\notepad.exe", true);
-    AddAppToList(localApps, L"Calculator",         L"calc.exe",         L"",            L"System Application  \x2022  Calculator",            sDir + L"\\calc.exe", true);
-    AddAppToList(localApps, L"Task Manager",       L"taskmgr.exe",      L"",            L"System Utility  \x2022  Process & Performance",     sDir + L"\\taskmgr.exe", true);
-    AddAppToList(localApps, L"Command Prompt",     L"cmd.exe",          L"",            L"Terminal  \x2022  Windows Command Processor",       sDir + L"\\cmd.exe", true);
-    AddAppToList(localApps, L"PowerShell",         L"powershell.exe",   L"",            L"Terminal  \x2022  Windows PowerShell Console",      sDir + L"\\WindowsPowerShell\\v1.0\\powershell.exe", true);
-    AddAppToList(localApps, L"Paint",              L"mspaint.exe",      L"",            L"System Application  \x2022  Graphics Editor",       sDir + L"\\mspaint.exe", true);
-    AddAppToList(localApps, L"Registry Editor",    L"regedit.exe",      L"",            L"System Utility  \x2022  Registry Configuration",    wDir + L"\\regedit.exe", true);
-    AddAppToList(localApps, L"Control Panel",      L"control.exe",      L"",            L"System Utility  \x2022  Control Panel",             sDir + L"\\control.exe", true);
-    AddAppToList(localApps, L"File Explorer",      L"explorer.exe",     L"",            L"System Application  \x2022  File Manager",          wDir + L"\\explorer.exe", true);
-    AddAppToList(localApps, L"Snipping Tool",      L"snippingtool.exe", L"",            L"System Utility  \x2022  Screen Capture",            sDir + L"\\SnippingTool.exe", true);
-    AddAppToList(localApps, L"Windows Settings",   L"ms-settings:",     L"",            L"System Preferences  \x2022  Windows 11 Settings",   sDir + L"\\control.exe", true);
-    AddAppToList(localApps, L"Device Manager",     L"mmc.exe",          L"devmgmt.msc", L"System Utility  \x2022  Hardware Devices",          sDir + L"\\mmc.exe", true);
-    AddAppToList(localApps, L"Services",           L"mmc.exe",          L"services.msc",L"System Utility  \x2022  Background Services",       sDir + L"\\mmc.exe", true);
-    AddAppToList(localApps, L"Resource Monitor",   L"resmon.exe",       L"",            L"System Utility  \x2022  Live Resource Telemetry",   sDir + L"\\resmon.exe", true);
-    AddAppToList(localApps, L"System Information", L"msinfo32.exe",     L"",            L"System Utility  \x2022  Hardware & OS Summary",     sDir + L"\\msinfo32.exe", true);
+    // Core Windows System Tools
+    AddAppToList(localApps, L"Notepad",            sDir + L"\\notepad.exe",      L"",            L"System Application  \x2022  Text Editor",           sDir + L"\\notepad.exe", true);
+    AddAppToList(localApps, L"Calculator",         sDir + L"\\calc.exe",         L"",            L"System Application  \x2022  Calculator",            sDir + L"\\calc.exe", true);
+    AddAppToList(localApps, L"Task Manager",       sDir + L"\\taskmgr.exe",      L"",            L"System Utility  \x2022  Process & Performance",     sDir + L"\\taskmgr.exe", true);
+    AddAppToList(localApps, L"Command Prompt",     sDir + L"\\cmd.exe",          L"",            L"Terminal  \x2022  Windows Command Processor",       sDir + L"\\cmd.exe", true);
+    AddAppToList(localApps, L"PowerShell",         sDir + L"\\WindowsPowerShell\\v1.0\\powershell.exe", L"", L"Terminal  \x2022  Windows PowerShell Console", sDir + L"\\WindowsPowerShell\\v1.0\\powershell.exe", true);
+    AddAppToList(localApps, L"Paint",              sDir + L"\\mspaint.exe",      L"",            L"System Application  \x2022  Graphics Editor",       sDir + L"\\mspaint.exe", true);
+    AddAppToList(localApps, L"Registry Editor",    wDir + L"\\regedit.exe",      L"",            L"System Utility  \x2022  Registry Configuration",    wDir + L"\\regedit.exe", true);
+    AddAppToList(localApps, L"Control Panel",      sDir + L"\\control.exe",      L"",            L"System Utility  \x2022  Control Panel",             sDir + L"\\control.exe", true);
+    AddAppToList(localApps, L"File Explorer",      wDir + L"\\explorer.exe",     L"",            L"System Application  \x2022  File Manager",          wDir + L"\\explorer.exe", true);
+    AddAppToList(localApps, L"Snipping Tool",      sDir + L"\\SnippingTool.exe", L"",            L"System Utility  \x2022  Screen Capture",            sDir + L"\\SnippingTool.exe", true);
+    AddAppToList(localApps, L"Windows Settings",   L"ms-settings:",              L"",            L"System Preferences  \x2022  Windows 11 Settings",   sDir + L"\\control.exe", true);
+    AddAppToList(localApps, L"Device Manager",     sDir + L"\\mmc.exe",          L"devmgmt.msc", L"System Utility  \x2022  Hardware Devices",          sDir + L"\\mmc.exe", true);
+    AddAppToList(localApps, L"Services",           sDir + L"\\mmc.exe",          L"services.msc",L"System Utility  \x2022  Background Services",       sDir + L"\\mmc.exe", true);
+    AddAppToList(localApps, L"Resource Monitor",   sDir + L"\\resmon.exe",       L"",            L"System Utility  \x2022  Live Resource Telemetry",   sDir + L"\\resmon.exe", true);
+    AddAppToList(localApps, L"System Information", sDir + L"\\msinfo32.exe",     L"",            L"System Utility  \x2022  Hardware & OS Summary",     sDir + L"\\msinfo32.exe", true);
 
-    // 2. Scan Start Menu folders (User + Common)
+    // Scan Start Menu folders
     wchar_t szPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, szPath))) {
         ScanDirectoryForShortcuts(szPath, localApps, 0);
@@ -1414,7 +1462,7 @@ static DWORD WINAPI AppIndexerThreadProc(LPVOID lpParam) {
 }
 
 // ============================================================================
-// Intent Engine, Smart Fuzzy Matcher & Frecency Ranking (All in English)
+// Built-in System Commands
 // ============================================================================
 struct BuiltinSystemCmd {
     const wchar_t* itemKey;
@@ -1431,8 +1479,7 @@ static const BuiltinSystemCmd kSystemCommands[] = {
     { L"sys:sleep",     L"sleep",     L"suspend",          L"Sleep System",            L"Power Management  \x2022  Enter low-power standby",        L"\x26B2", SYS_SLEEP },
     { L"sys:restart",   L"restart",   L"reboot",           L"Restart Computer",        L"Power Management  \x2022  Reboot Windows cleanly",         L"\x2672", SYS_RESTART },
     { L"sys:shutdown",  L"shutdown",  L"poweroff",         L"Shut Down Computer",      L"Power Management  \x2022  Power off Windows cleanly",      L"\x2699", SYS_SHUTDOWN },
-    { L"sys:emptybin",  L"empty bin", L"recycle bin",      L"Empty Recycle Bin",       L"Storage  \x2022  Permanently clear all Recycle Bin items", L"\x2672", SYS_EMPTY_BIN },
-    { L"sys:taskmgr",   L"taskmgr",   L"task manager",     L"Task Manager",            L"System Monitor  \x2022  Inspect active processes",         L"\x2699", SYS_TASKMGR }
+    { L"sys:emptybin",  L"empty bin", L"recycle bin",      L"Empty Recycle Bin",       L"Storage  \x2022  Clear all Recycle Bin items",             L"\x2672", SYS_EMPTY_BIN }
 };
 
 static bool CompareResultPriority(const ResultItem& a, const ResultItem& b) {
@@ -1442,8 +1489,8 @@ static bool CompareResultPriority(const ResultItem& a, const ResultItem& b) {
     return a.title < b.title;
 }
 
-static int ComputeListStartY() {
-    return kBaseHeight + (kDividerSpace / 2);
+static inline int ComputeListStartY() {
+    return ScaleDpi(kBaseWindowHeight) + (ScaleDpi(kBaseDividerSpace) / 2);
 }
 
 static void SetSelectedIndexSmooth(int newIndex, bool snapImmediately) {
@@ -1461,7 +1508,7 @@ static void SetSelectedIndexSmooth(int newIndex, bool snapImmediately) {
         newIndex = count - 1;
     }
     g_selectedIndex = newIndex;
-    g_animTargetSelectionY = (float)(ComputeListStartY() + (newIndex * kItemHeight));
+    g_animTargetSelectionY = (float)(ComputeListStartY() + (newIndex * ScaleDpi(kBaseItemHeight)));
     if (snapImmediately) {
         g_animSelectionY = g_animTargetSelectionY;
     }
@@ -1533,7 +1580,7 @@ static void RebuildResultsForQuery(const std::wstring& rawQuery) {
 
     std::wstring lowerQuery = ToLowerStr(query);
 
-    // 1. Command Runner Prefix ('>')
+    // 1. Terminal Command Runner Prefix ('>')
     if (query[0] == L'>') {
         std::wstring cmdText = TrimStr(query.substr(1));
         ResultItem item;
@@ -1548,15 +1595,16 @@ static void RebuildResultsForQuery(const std::wstring& rawQuery) {
         item.isPrefixHabitMatch = false;
         item.score = 3000;
 
+        std::wstring sDir = GetSystem32OrSysnativePath();
         if (cmdText.empty()) {
             item.title = L"Run Terminal Command...";
-            item.subtitle = L"Type any command after '>' (e.g. > ipconfig /all or > ping 1.1.1.1)";
-            item.execPath = L"cmd.exe";
+            item.subtitle = L"Type command after '>' (e.g. > ipconfig /all or > ping 1.1.1.1)";
+            item.execPath = sDir + L"\\cmd.exe";
             item.execArgs = L"";
         } else {
             item.title = cmdText;
             item.subtitle = L"Terminal Execution  \x2022  cmd.exe /K " + cmdText;
-            item.execPath = L"cmd.exe";
+            item.execPath = sDir + L"\\cmd.exe";
             item.execArgs = L"/K " + cmdText;
         }
         g_results.push_back(item);
@@ -1595,11 +1643,7 @@ static void RebuildResultsForQuery(const std::wstring& rawQuery) {
         int m2 = ComputeQueryMatchBaseScore(lowerQuery, kw2, init1);
         int baseScore = (m1 > m2) ? m1 : m2;
 
-        DWORD useCount = 0;
-        bool isHabit = false;
-        int frecencyBoost = ComputeFrecencyBoost(kSystemCommands[i].itemKey, lowerQuery, useCount, isHabit);
-
-        if (baseScore > 0 || isHabit) {
+        if (baseScore > 0) {
             ResultItem item;
             item.itemKey = kSystemCommands[i].itemKey;
             item.title = kSystemCommands[i].title;
@@ -1610,9 +1654,9 @@ static void RebuildResultsForQuery(const std::wstring& rawQuery) {
             item.hAppIcon = NULL;
             item.category = CAT_SYSTEM;
             item.sysAction = kSystemCommands[i].action;
-            item.learnedUseCount = useCount;
-            item.isPrefixHabitMatch = isHabit;
-            item.score = baseScore + frecencyBoost;
+            item.learnedUseCount = 0;
+            item.isPrefixHabitMatch = false;
+            item.score = baseScore;
             g_results.push_back(item);
         }
     }
@@ -1724,7 +1768,7 @@ static void RebuildResultsForQuery(const std::wstring& rawQuery) {
 }
 
 // ============================================================================
-// Outer Main Window Shape Region & DWM Attributes Helper
+// Outer Window Region & DWM Attributes
 // ============================================================================
 static void UpdateOuterMainWindowShapeRegion(HWND hwnd, int width, int height) {
     if (!hwnd || width <= 0 || height <= 0) {
@@ -1732,18 +1776,14 @@ static void UpdateOuterMainWindowShapeRegion(HWND hwnd, int width, int height) {
     }
 
     if (g_cfg.useCustomOuterRegion && g_cfg.outerWindowEllipse > 0) {
-        // Clamp ellipse diameter to current window dimensions so when height is 70px and ellipse is 70px,
-        // the entire main launcher window is a 100% stadium oval/pill capsule!
+        int scaledEllipse = ScaleDpi(g_cfg.outerWindowEllipse);
         int maxAllowed = (height < width) ? height : width;
-        int ellipse = g_cfg.outerWindowEllipse;
-        if (ellipse > maxAllowed) {
-            ellipse = maxAllowed;
+        if (scaledEllipse > maxAllowed) {
+            scaledEllipse = maxAllowed;
         }
-        // CreateRoundRectRgn's right/bottom are exclusive, so +1 ensures full width/height coverage
-        HRGN hRgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, ellipse, ellipse);
+        HRGN hRgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, scaledEllipse, scaledEllipse);
         SetWindowRgn(hwnd, hRgn, TRUE);
     } else {
-        // Let native DWM hardware rounding handle Sharp Box (0px), Soft Round (4px), and Standard Round (8px)
         SetWindowRgn(hwnd, NULL, TRUE);
     }
 }
@@ -1762,8 +1802,6 @@ static void ApplyLiquidGlassDwmAttributes(HWND hwnd) {
     DWM_SYSTEMBACKDROP_TYPE backdropType = DWMSBT_TRANSIENTWINDOW;
     DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
 
-    // When custom outer pill/super-smooth region is active, disable DWM's 8px hardware border
-    // so our custom GDI outer contour border follows the exact 24px / 35px pill curve!
     COLORREF dwmBorder = g_cfg.useCustomOuterRegion ? DWMWA_COLOR_NONE : g_cfg.colBorderGlass;
     DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &dwmBorder, sizeof(dwmBorder));
 
@@ -1785,32 +1823,35 @@ static void RefreshEditControlColorsAndLayout() {
     if (g_hEditWnd) {
         SetWindowTheme(g_hEditWnd, g_cfg.isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
 
-        // Inset slightly more when the outer main window is a full pill capsule so text never touches the curved left/right caps
-        int editLeft = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 72 : 66;
-        int rightReserve = g_cfg.showShortcutHint
+        int editLeft = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 72 : 66);
+        int rightReserve = ScaleDpi(g_cfg.showShortcutHint
                            ? ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 140 : 132)
-                           : ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 38 : 28);
-        int editWidth = kWindowWidth - editLeft - rightReserve;
-        SetWindowPos(g_hEditWnd, NULL, editLeft, 22, editWidth, 28, SWP_NOZORDER | SWP_NOACTIVATE);
+                           : ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 38 : 28));
+        int winW = ScaleDpi(kBaseWindowWidth);
+        int editWidth = winW - editLeft - rightReserve;
+        int editTop = ScaleDpi(22);
+        int editHeight = ScaleDpi(28);
+
+        SetWindowPos(g_hEditWnd, NULL, editLeft, editTop, editWidth, editHeight, SWP_NOZORDER | SWP_NOACTIVATE);
         InvalidateRect(g_hEditWnd, NULL, TRUE);
     }
 }
 
 // ============================================================================
-// 120Hz Smooth Animation Engine & Window Sizing
+// 120Hz Animation Engine & Window Sizing
 // ============================================================================
 static int ComputeTargetWindowHeight() {
     int count = (int)g_results.size();
     if (count > kMaxVisibleResults) {
         count = kMaxVisibleResults;
     }
-    int targetHeight = kBaseHeight;
+    int targetHeight = ScaleDpi(kBaseWindowHeight);
     if (count > 0) {
-        int bottomExtra = g_cfg.showFooterBar ? kFooterHeight : kBottomPadNoFooter;
+        int bottomExtra = g_cfg.showFooterBar ? ScaleDpi(kBaseFooterHeight) : ScaleDpi(kBaseBottomPadNoFooter);
         if (!g_cfg.showFooterBar && g_cfg.useCustomOuterRegion) {
-            bottomExtra += 6;
+            bottomExtra += ScaleDpi(6);
         }
-        targetHeight += kDividerSpace + (count * kItemHeight) + bottomExtra;
+        targetHeight += ScaleDpi(kBaseDividerSpace) + (count * ScaleDpi(kBaseItemHeight)) + bottomExtra;
     }
     return targetHeight;
 }
@@ -1833,7 +1874,7 @@ static void StepLauncherAnimationFrame(HWND hwnd) {
     bool needsRepaint = false;
     bool needsWindowPos = false;
 
-    // 1. Smooth Window Height Spring-Lerp
+    // 1. Smooth Height
     float heightDiff = g_animTargetHeight - g_animCurHeight;
     if (std::fabs(heightDiff) > 0.45f) {
         g_animCurHeight += heightDiff * 0.35f;
@@ -1845,7 +1886,7 @@ static void StepLauncherAnimationFrame(HWND hwnd) {
         needsRepaint = true;
     }
 
-    // 2. Smooth Gliding Selection Pill Interpolation
+    // 2. Smooth Gliding Selection
     float selDiff = g_animTargetSelectionY - g_animSelectionY;
     if (std::fabs(selDiff) > 0.35f) {
         g_animSelectionY += selDiff * 0.38f;
@@ -1855,7 +1896,7 @@ static void StepLauncherAnimationFrame(HWND hwnd) {
         needsRepaint = true;
     }
 
-    // 3. Smooth Hover Highlight Opacity Blend
+    // 3. Hover Blend
     float hoverTarget = (g_hoveredIndex >= 0 && g_hoveredIndex != g_selectedIndex) ? 1.0f : 0.0f;
     float hoverDiff = hoverTarget - g_animHoverBlend;
     if (std::fabs(hoverDiff) > 0.02f) {
@@ -1866,7 +1907,7 @@ static void StepLauncherAnimationFrame(HWND hwnd) {
         needsRepaint = true;
     }
 
-    // 4. Smooth Entrance Fade-In to User-Selected Glass Opacity (55% / 70% / 85% / 100%)
+    // 4. Alpha Entrance
     float targetAlpha = (float)g_cfg.targetWindowAlpha;
     float alphaDiff = targetAlpha - g_animWindowAlpha;
     if (std::fabs(alphaDiff) > 1.2f) {
@@ -1879,6 +1920,7 @@ static void StepLauncherAnimationFrame(HWND hwnd) {
         needsRepaint = true;
     }
 
+    // Slide Offset
     if (std::fabs(g_animSlideOffsetY) > 0.3f) {
         g_animSlideOffsetY *= 0.68f;
         needsWindowPos = true;
@@ -1887,28 +1929,31 @@ static void StepLauncherAnimationFrame(HWND hwnd) {
         needsWindowPos = true;
     }
 
-    // 5. Subtle Breathing Search Lens Glow
+    // Breathing pulse
     g_animPulsePhase += 0.075f;
     if (g_animPulsePhase > 6.2831853f) {
         g_animPulsePhase -= 6.2831853f;
     }
-    needsRepaint = true;
 
     if (needsWindowPos) {
+        int winW = ScaleDpi(kBaseWindowWidth);
         int newH = (int)(g_animCurHeight + 0.5f);
-        if (newH < kBaseHeight) {
-            newH = kBaseHeight;
+        if (newH < ScaleDpi(kBaseWindowHeight)) {
+            newH = ScaleDpi(kBaseWindowHeight);
         }
         int newY = g_anchorPosY + (int)(g_animSlideOffsetY);
-        SetWindowPos(hwnd, HWND_TOPMOST, g_anchorPosX, newY, kWindowWidth, newH,
+        SetWindowPos(hwnd, HWND_TOPMOST, g_anchorPosX, newY, winW, newH,
                      SWP_NOACTIVATE | SWP_NOZORDER);
         if (g_cfg.useCustomOuterRegion) {
-            UpdateOuterMainWindowShapeRegion(hwnd, kWindowWidth, newH);
+            UpdateOuterMainWindowShapeRegion(hwnd, winW, newH);
         }
     }
 
     if (needsRepaint) {
         InvalidateRect(hwnd, NULL, FALSE);
+    } else if (!needsWindowPos && (std::fabs(heightDiff) < 0.1f) && (std::fabs(selDiff) < 0.1f)) {
+        // Disarm timer when fully settled to save CPU
+        KillTimer(hwnd, kAnimTimerId);
     }
 }
 
@@ -1917,6 +1962,7 @@ static void HideLauncherWindow() {
         return;
     }
     g_bWindowVisible = false;
+    g_pendingConfirmAction = SYS_NONE;
     KillTimer(g_hMainWnd, kAnimTimerId);
     ShowWindow(g_hMainWnd, SW_HIDE);
 }
@@ -1933,12 +1979,31 @@ static void ShowLauncherWindow() {
     ZeroMemory(&mi, sizeof(mi));
     mi.cbSize = sizeof(mi);
 
+    // Query per-monitor DPI dynamically
+    UINT dpiX = 96, dpiY = 96;
+    HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+    if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+    if (hShcore) {
+        typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
+        GetDpiForMonitor_t pGetDpi = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
+        if (pGetDpi) {
+            pGetDpi(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+        }
+    }
+    if (dpiX > 0 && dpiX != g_currentDpi) {
+        g_currentDpi = dpiX;
+        CreateLauncherGdiResources();
+    }
+
+    int winW = ScaleDpi(kBaseWindowWidth);
+    int baseH = ScaleDpi(kBaseWindowHeight);
+
     g_anchorPosX = 300;
     g_anchorPosY = 200;
     if (GetMonitorInfoW(hMon, &mi)) {
         int workW = mi.rcWork.right - mi.rcWork.left;
         int workH = mi.rcWork.bottom - mi.rcWork.top;
-        g_anchorPosX = mi.rcWork.left + (workW - kWindowWidth) / 2;
+        g_anchorPosX = mi.rcWork.left + (workW - winW) / 2;
         g_anchorPosY = mi.rcWork.top + (workH / 5);
     }
 
@@ -1949,9 +2014,10 @@ static void ShowLauncherWindow() {
     g_currentTypedQuery.clear();
     g_selectedIndex = 0;
     g_hoveredIndex = -1;
+    g_pendingConfirmAction = SYS_NONE;
 
-    g_animCurHeight = (float)kBaseHeight;
-    g_animTargetHeight = (float)kBaseHeight;
+    g_animCurHeight = (float)baseH;
+    g_animTargetHeight = (float)baseH;
     g_animSelectionY = (float)ComputeListStartY();
     g_animTargetSelectionY = g_animSelectionY;
     g_animHoverBlend = 0.0f;
@@ -1959,28 +2025,23 @@ static void ShowLauncherWindow() {
     float startAlpha = (float)g_cfg.targetWindowAlpha * 0.58f;
     if (startAlpha < 70.0f) startAlpha = 70.0f;
     g_animWindowAlpha = startAlpha;
-    g_animSlideOffsetY = -12.0f;
+    g_animSlideOffsetY = (float)(-ScaleDpi(12));
 
+    RefreshEditControlColorsAndLayout();
     SetLayeredWindowAttributes(g_hMainWnd, 0, (BYTE)((int)g_animWindowAlpha), LWA_ALPHA);
-    UpdateOuterMainWindowShapeRegion(g_hMainWnd, kWindowWidth, kBaseHeight);
+    UpdateOuterMainWindowShapeRegion(g_hMainWnd, winW, baseH);
     SetWindowPos(g_hMainWnd, HWND_TOPMOST,
                  g_anchorPosX, g_anchorPosY + (int)g_animSlideOffsetY,
-                 kWindowWidth, kBaseHeight,
+                 winW, baseH,
                  SWP_SHOWWINDOW);
     g_bWindowVisible = true;
 
-    HWND hFore = GetForegroundWindow();
-    DWORD foreThread = hFore ? GetWindowThreadProcessId(hFore, NULL) : 0;
-    DWORD curThread = GetCurrentThreadId();
-    if (foreThread != 0 && foreThread != curThread) {
-        AttachThreadInput(foreThread, curThread, TRUE);
-        SetForegroundWindow(g_hMainWnd);
-        SetFocus(g_hEditWnd);
-        AttachThreadInput(foreThread, curThread, FALSE);
-    } else {
-        SetForegroundWindow(g_hMainWnd);
-        SetFocus(g_hEditWnd);
-    }
+    // Safe foreground activation without dangerous AttachThreadInput
+    INPUT emptyInput = { 0 };
+    emptyInput.type = INPUT_MOUSE;
+    SendInput(1, &emptyInput, sizeof(INPUT));
+    SetForegroundWindow(g_hMainWnd);
+    SetFocus(g_hEditWnd);
 
     SetTimer(g_hMainWnd, kAnimTimerId, kAnimFrameIntervalMs, NULL);
     InvalidateRect(g_hMainWnd, NULL, FALSE);
@@ -1991,17 +2052,28 @@ static void ExecuteSelectedResult() {
         return;
     }
     int idx = g_selectedIndex;
-    if (idx < 0) {
-        idx = 0;
-    }
-    if (idx >= (int)g_results.size()) {
-        idx = (int)g_results.size() - 1;
-    }
+    if (idx < 0) idx = 0;
+    if (idx >= (int)g_results.size()) idx = (int)g_results.size() - 1;
 
     ResultItem item = g_results[idx];
     std::wstring querySnapshot = g_currentTypedQuery;
 
-    if (!item.itemKey.empty() && item.category != CAT_CALC) {
+    // Two-step confirmation for destructive actions
+    if (item.category == CAT_SYSTEM) {
+        bool isDestructive = (item.sysAction == SYS_RESTART || item.sysAction == SYS_SHUTDOWN || item.sysAction == SYS_EMPTY_BIN);
+        if (isDestructive) {
+            DWORD now = GetTickCount();
+            if (g_pendingConfirmAction != item.sysAction || (now - g_dwConfirmArmTime > 4000)) {
+                g_pendingConfirmAction = item.sysAction;
+                g_dwConfirmArmTime = now;
+                g_results[idx].subtitle = L"\x26A0 Press Enter again within 4s to confirm!";
+                InvalidateRect(g_hMainWnd, NULL, FALSE);
+                return;
+            }
+        }
+    }
+
+    if (!item.itemKey.empty() && item.category != CAT_CALC && item.category != CAT_SYSTEM) {
         RecordItemExecutionFrecency(item.itemKey, querySnapshot);
     }
 
@@ -2018,21 +2090,17 @@ static void ExecuteSelectedResult() {
                 LockWorkStation();
                 break;
             case SYS_SLEEP:
-                SetSystemPowerState(TRUE, FALSE);
+                SetSuspendState(FALSE, FALSE, FALSE);
                 break;
             case SYS_RESTART:
-                EnableShutdownPrivilege();
                 ShellExecuteW(NULL, L"open", L"shutdown.exe", L"/r /t 0", NULL, SW_HIDE);
                 break;
             case SYS_SHUTDOWN:
-                EnableShutdownPrivilege();
                 ShellExecuteW(NULL, L"open", L"shutdown.exe", L"/s /t 0", NULL, SW_HIDE);
                 break;
             case SYS_EMPTY_BIN:
-                SHEmptyRecycleBinW(NULL, NULL, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI);
-                break;
-            case SYS_TASKMGR:
-                ShellExecuteW(NULL, L"open", L"taskmgr.exe", NULL, NULL, SW_SHOWNORMAL);
+                // Shell shows confirmation natively
+                SHEmptyRecycleBinW(NULL, NULL, 0);
                 break;
             default:
                 break;
@@ -2047,7 +2115,7 @@ static void ExecuteSelectedResult() {
 }
 
 // ============================================================================
-// Double-Buffered GDI Rendering (Supports Outer Main Card Curvature & Inner Pills)
+// Double-Buffered GDI Rendering (Per-Monitor DPI Scaled)
 // ============================================================================
 static void FillSolidRectGdi(HDC hdc, const RECT* rc, COLORREF color) {
     HBRUSH hBrush = CreateSolidBrush(color);
@@ -2067,7 +2135,7 @@ static void DrawShapeCardGdi(HDC hdc, int left, int top, int right, int bottom, 
         int h = bottom - top;
         int w = right - left;
         int maxR = (h < w ? h : w);
-        int ellipseDiameter = radius * 2;
+        int ellipseDiameter = ScaleDpi(radius * 2);
         if (ellipseDiameter > maxR) {
             ellipseDiameter = maxR;
         }
@@ -2081,13 +2149,11 @@ static void DrawShapeCardGdi(HDC hdc, int left, int top, int right, int bottom, 
 }
 
 static void DrawOuterWindowBorderGdi(HDC hdc, int width, int height) {
-    // When Super Smooth or Full Pill Capsule is active on the main window, draw a crisp 2px glass border
-    // along the outer RoundRect contour so the main card edge looks razor-sharp!
     if (!g_cfg.useCustomOuterRegion || g_cfg.outerWindowEllipse <= 0) {
         return;
     }
     int maxAllowed = (height < width) ? height : width;
-    int ellipse = g_cfg.outerWindowEllipse;
+    int ellipse = ScaleDpi(g_cfg.outerWindowEllipse);
     if (ellipse > maxAllowed) {
         ellipse = maxAllowed;
     }
@@ -2108,7 +2174,8 @@ static void DrawCircleDotGdi(HDC hdc, int centerX, int centerY, int radius, COLO
     HPEN hPen = CreatePen(PS_SOLID, 1, color);
     HGDIOBJ oldBrush = SelectObject(hdc, hBrush);
     HGDIOBJ oldPen = SelectObject(hdc, hPen);
-    Ellipse(hdc, centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+    int r = ScaleDpi(radius);
+    Ellipse(hdc, centerX - r, centerY - r, centerX + r, centerY + r);
     SelectObject(hdc, oldBrush);
     SelectObject(hdc, oldPen);
     DeleteObject(hBrush);
@@ -2127,10 +2194,10 @@ static void DrawSearchLensIcon(HDC hdc, int centerX, int centerY, float pulsePha
     HGDIOBJ oldPen = SelectObject(hdc, hPen);
     HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
 
-    int r = 7;
+    int r = ScaleDpi(7);
     Ellipse(hdc, centerX - r - 1, centerY - r - 1, centerX + r - 1, centerY + r - 1);
-    MoveToEx(hdc, centerX + 4, centerY + 4, NULL);
-    LineTo(hdc, centerX + 10, centerY + 10);
+    MoveToEx(hdc, centerX + ScaleDpi(4), centerY + ScaleDpi(4), NULL);
+    LineTo(hdc, centerX + ScaleDpi(10), centerY + ScaleDpi(10));
 
     SelectObject(hdc, oldBrush);
     SelectObject(hdc, oldPen);
@@ -2141,8 +2208,8 @@ static int DrawKeycapPill(HDC hdc, int rightEdge, int centerY, const wchar_t* la
     HGDIOBJ oldFont = SelectObject(hdc, g_hFontKeycap);
     RECT rcCalc = { 0, 0, 0, 0 };
     DrawTextW(hdc, label, -1, &rcCalc, DT_CALCRECT | DT_SINGLELINE);
-    int w = (rcCalc.right - rcCalc.left) + 18;
-    int h = 24;
+    int w = (rcCalc.right - rcCalc.left) + ScaleDpi(18);
+    int h = ScaleDpi(24);
     int left = rightEdge - w;
     int top = centerY - (h / 2);
     int bottom = top + h;
@@ -2174,26 +2241,29 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
 
     SetBkMode(hdcMem, TRANSPARENT);
 
-    // 1. Base Liquid Glass surface for the main window card
+    // Base Liquid Glass
     FillSolidRectGdi(hdcMem, &rcClient, g_cfg.colBgSurface);
 
-    // Specular top glass rim highlight (inset according to outer window corner radius)
-    int rimInset = (g_cfg.shapeMode == SHAPE_SHARP_BOX) ? 2 : (g_cfg.outerWindowEllipse / 2 + 8);
+    // Specular Top Rim Highlight
+    int rimInset = (g_cfg.shapeMode == SHAPE_SHARP_BOX) ? ScaleDpi(2) : ScaleDpi(g_cfg.outerWindowEllipse / 2 + 8);
     if (width - rimInset > rimInset) {
         RECT rcTopRim = { rimInset, 1, width - rimInset, 2 };
         FillSolidRectGdi(hdcMem, &rcTopRim, g_cfg.colGlassRimTop);
     }
 
-    // 2. Search Header (Seamless inside the sculpted main card!)
-    int lensCenterX = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 42 : 38;
-    DrawSearchLensIcon(hdcMem, lensCenterX, kBaseHeight / 2, g_animPulsePhase);
+    int baseH = ScaleDpi(kBaseWindowHeight);
+    int lensCenterX = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 42 : 38);
+    DrawSearchLensIcon(hdcMem, lensCenterX, baseH / 2, g_animPulsePhase);
 
     if (g_cfg.showShortcutHint) {
-        int badgeRightEdge = width - ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 28 : 22);
-        DrawKeycapPill(hdcMem, badgeRightEdge, kBaseHeight / 2, L"Alt+Space", false);
+        int badgeRightEdge = width - ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 28 : 22);
+        const wchar_t* hint = L"Alt+Space";
+        if (g_cfg.hotkeyChoice == HOTKEY_CTRL_SPACE) hint = L"Ctrl+Space";
+        else if (g_cfg.hotkeyChoice == HOTKEY_WIN_ALT_SPACE) hint = L"Win+Alt+Space";
+        else if (g_cfg.hotkeyChoice == HOTKEY_ALT_Q) hint = L"Alt+Q";
+        DrawKeycapPill(hdcMem, badgeRightEdge, baseH / 2, hint, false);
     }
 
-    // 3. Results List & Animated Gliding Selection Capsule
     int count = (int)g_results.size();
     if (count > kMaxVisibleResults) {
         count = kMaxVisibleResults;
@@ -2201,35 +2271,36 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
 
     HGDIOBJ hOldFont = SelectObject(hdcMem, g_hFontTitle);
 
-    if (count > 0 || height > kBaseHeight + 4) {
-        int sepInset = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 26 : 18;
-        RECT rcSep = { sepInset, kBaseHeight, width - sepInset, kBaseHeight + 1 };
+    if (count > 0 || height > baseH + 4) {
+        int sepInset = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 26 : 18);
+        RECT rcSep = { sepInset, baseH, width - sepInset, baseH + 1 };
         FillSolidRectGdi(hdcMem, &rcSep, g_cfg.colDivider);
 
         int listStartY = ComputeListStartY();
-        int bottomReserve = g_cfg.showFooterBar ? kFooterHeight : 0;
+        int itemH = ScaleDpi(kBaseItemHeight);
+        int bottomReserve = g_cfg.showFooterBar ? ScaleDpi(kBaseFooterHeight) : 0;
         int footerTop = height - bottomReserve;
 
         int clipBottom = (footerTop > listStartY) ? footerTop : height;
-        HRGN hClipRgn = CreateRectRgn(0, kBaseHeight + 1, width, clipBottom);
+        HRGN hClipRgn = CreateRectRgn(0, baseH + 1, width, clipBottom);
         SelectClipRgn(hdcMem, hClipRgn);
 
-        int cardSideMargin = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 16 : 12;
+        int cardSideMargin = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 16 : 12);
 
-        // 3A. Hover Card
+        // Hover Card
         if (g_hoveredIndex >= 0 && g_hoveredIndex < count && g_hoveredIndex != g_selectedIndex && g_animHoverBlend > 0.02f) {
-            int hovTop = listStartY + (g_hoveredIndex * kItemHeight);
-            int hovBottom = hovTop + kItemHeight;
+            int hovTop = listStartY + (g_hoveredIndex * itemH);
+            int hovBottom = hovTop + itemH;
             COLORREF hovFill = BlendColorRgb(g_cfg.colBgSurface, g_cfg.colItemHover, g_animHoverBlend);
             COLORREF hovBdr  = BlendColorRgb(g_cfg.colBgSurface, g_cfg.colItemHoverBdr, g_animHoverBlend);
             DrawShapeCardGdi(hdcMem, cardSideMargin, hovTop + 3, width - cardSideMargin, hovBottom - 3,
                              g_cfg.itemCardRadius, hovFill, hovBdr);
         }
 
-        // 3B. Smoothly Gliding Active Selection Capsule
+        // Active Selection Capsule
         if (count > 0) {
             int selTop = (int)(g_animSelectionY + 0.5f);
-            int selBottom = selTop + kItemHeight;
+            int selBottom = selTop + itemH;
             int cardLeft = cardSideMargin;
             int cardRight = width - cardSideMargin;
             int cardTop = selTop + 2;
@@ -2238,35 +2309,34 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
             DrawShapeCardGdi(hdcMem, cardLeft, cardTop, cardRight, cardBottom,
                              g_cfg.itemCardRadius, g_cfg.colItemActive, g_cfg.colItemBorderAct);
 
-            // Specular inner top highlight on the active glass capsule
-            int rimPad = (g_cfg.itemCardRadius > 14) ? g_cfg.itemCardRadius : 12;
+            int rimPad = ScaleDpi((g_cfg.itemCardRadius > 14) ? g_cfg.itemCardRadius : 12);
             if (cardRight - rimPad > cardLeft + rimPad) {
                 RECT rcCapsuleRim = { cardLeft + rimPad, cardTop + 1, cardRight - rimPad, cardTop + 2 };
                 FillSolidRectGdi(hdcMem, &rcCapsuleRim, g_cfg.colItemRimAct);
             }
 
-            // Left Accent Indicator Pill
-            int pillLeft   = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? (cardLeft + 14) : (cardLeft + 6);
-            int pillVInset = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 16 : 13;
+            int pillLeft   = cardLeft + ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 14 : 6);
+            int pillVInset = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 16 : 13);
             int pillRadius = (g_cfg.shapeMode == SHAPE_SHARP_BOX) ? 0 : 4;
-            DrawShapeCardGdi(hdcMem, pillLeft, cardTop + pillVInset, pillLeft + 4, cardBottom - pillVInset,
+            DrawShapeCardGdi(hdcMem, pillLeft, cardTop + pillVInset, pillLeft + ScaleDpi(4), cardBottom - pillVInset,
                              pillRadius, g_cfg.colAccentPrimary, g_cfg.colAccentGlow);
         }
 
-        // 3C. Draw Each Result Row
+        // Result Rows
+        int tileBoxSize = ScaleDpi(42);
         for (int i = 0; i < count; ++i) {
             const ResultItem& item = g_results[i];
-            int itemTop = listStartY + (i * kItemHeight);
-            int itemBottom = itemTop + kItemHeight;
-            int itemCenterY = itemTop + (kItemHeight / 2);
+            int itemTop = listStartY + (i * itemH);
+            int itemBottom = itemTop + itemH;
+            int itemCenterY = itemTop + (itemH / 2);
 
             bool isSelected = (i == g_selectedIndex);
             bool isHovered = (i == g_hoveredIndex);
 
-            int iconBoxLeft = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 38 : 28;
-            int iconBoxTop = itemTop + (kItemHeight - 42) / 2;
-            int iconBoxRight = iconBoxLeft + 42;
-            int iconBoxBottom = iconBoxTop + 42;
+            int iconBoxLeft = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 38 : 28);
+            int iconBoxTop = itemTop + (itemH - tileBoxSize) / 2;
+            int iconBoxRight = iconBoxLeft + tileBoxSize;
+            int iconBoxBottom = iconBoxTop + tileBoxSize;
 
             COLORREF iconTileBg  = isSelected ? g_cfg.colIconTileActBg  : g_cfg.colIconTileBg;
             COLORREF iconTileBdr = isSelected ? g_cfg.colIconTileActBdr : g_cfg.colIconTileBdr;
@@ -2274,7 +2344,8 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
                              g_cfg.iconTileRadius, iconTileBg, iconTileBdr);
 
             if (item.hAppIcon != NULL) {
-                DrawIconEx(hdcMem, iconBoxLeft + 5, iconBoxTop + 5, item.hAppIcon, 32, 32, 0, NULL, DI_NORMAL);
+                DrawIconEx(hdcMem, iconBoxLeft + ScaleDpi(5), iconBoxTop + ScaleDpi(5), item.hAppIcon,
+                           ScaleDpi(32), ScaleDpi(32), 0, NULL, DI_NORMAL);
             } else {
                 SelectObject(hdcMem, g_hFontIcon);
                 SetTextColor(hdcMem, isSelected ? g_cfg.colAccentPrimary : g_cfg.colBadgeText);
@@ -2283,23 +2354,21 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
             }
 
             if (item.isPrefixHabitMatch) {
-                DrawCircleDotGdi(hdcMem, iconBoxRight - 4, iconBoxTop + 4, 4, g_cfg.colFreqGold);
+                DrawCircleDotGdi(hdcMem, iconBoxRight - ScaleDpi(4), iconBoxTop + ScaleDpi(4), 4, g_cfg.colFreqGold);
             }
 
-            int rightCursor = width - ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 34 : 26);
+            int rightCursor = width - ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 34 : 26);
 
-            // Optional Action Keycap Hint
             if (g_cfg.showShortcutHint && (isSelected || isHovered)) {
-                rightCursor = DrawKeycapPill(hdcMem, rightCursor, itemCenterY, item.actionHint.c_str(), isSelected) - 8;
+                rightCursor = DrawKeycapPill(hdcMem, rightCursor, itemCenterY, item.actionHint.c_str(), isSelected) - ScaleDpi(8);
             }
 
-            // Optional Category Badge ([App], [Calculator], [Command], [System], [Web])
             if (g_cfg.showCategoryBadges) {
                 SelectObject(hdcMem, g_hFontBadge);
                 RECT rcBadgeCalc = { 0, 0, 0, 0 };
                 DrawTextW(hdcMem, item.badge.c_str(), -1, &rcBadgeCalc, DT_CALCRECT | DT_SINGLELINE);
-                int badgeW = (rcBadgeCalc.right - rcBadgeCalc.left) + 20;
-                int badgeH = 24;
+                int badgeW = (rcBadgeCalc.right - rcBadgeCalc.left) + ScaleDpi(20);
+                int badgeH = ScaleDpi(24);
                 int badgeRight = rightCursor;
                 int badgeLeft = badgeRight - badgeW;
                 int badgeTop = itemCenterY - (badgeH / 2);
@@ -2314,26 +2383,25 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
                 RECT rcBadgeText = { badgeLeft, badgeTop, badgeRight, badgeBottom };
                 DrawTextW(hdcMem, item.badge.c_str(), -1, &rcBadgeText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-                rightCursor = badgeLeft - 14;
+                rightCursor = badgeLeft - ScaleDpi(14);
             } else {
-                rightCursor -= 6;
+                rightCursor -= ScaleDpi(6);
             }
 
-            int textLeft = iconBoxRight + 15;
+            int textLeft = iconBoxRight + ScaleDpi(15);
             int textRightLimit = rightCursor;
 
             if (g_cfg.showSubtitles) {
                 SelectObject(hdcMem, g_hFontTitle);
                 SetTextColor(hdcMem, g_cfg.colTextPrimary);
-                RECT rcTitle = { textLeft, itemTop + 9, textRightLimit, itemTop + 32 };
+                RECT rcTitle = { textLeft, itemTop + ScaleDpi(9), textRightLimit, itemTop + ScaleDpi(32) };
                 DrawTextW(hdcMem, item.title.c_str(), -1, &rcTitle, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 
                 SelectObject(hdcMem, g_hFontSub);
                 SetTextColor(hdcMem, isSelected ? g_cfg.colTextSubActive : g_cfg.colTextSub);
-                RECT rcSub = { textLeft, itemTop + 32, textRightLimit, itemBottom - 8 };
+                RECT rcSub = { textLeft, itemTop + ScaleDpi(32), textRightLimit, itemBottom - ScaleDpi(8) };
                 DrawTextW(hdcMem, item.subtitle.c_str(), -1, &rcSub, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
             } else {
-                // Clean Single-Line Mode: vertically center the title
                 SelectObject(hdcMem, g_hFontTitle);
                 SetTextColor(hdcMem, g_cfg.colTextPrimary);
                 RECT rcTitle = { textLeft, itemTop, textRightLimit, itemBottom };
@@ -2344,31 +2412,31 @@ static void PaintLauncherWindow(HWND hwnd, HDC hdcScreen) {
         SelectClipRgn(hdcMem, NULL);
         DeleteObject(hClipRgn);
 
-        // 4. Optional Bottom Status Footer
-        if (g_cfg.showFooterBar && height > kBaseHeight + kFooterHeight) {
+        // Optional Bottom Footer
+        int footH = ScaleDpi(kBaseFooterHeight);
+        if (g_cfg.showFooterBar && height > baseH + footH) {
             RECT rcFooter = { 0, footerTop, width, height };
             FillSolidRectGdi(hdcMem, &rcFooter, g_cfg.colFooterSurface);
 
             RECT rcFooterLine = { 0, footerTop, width, footerTop + 1 };
             FillSolidRectGdi(hdcMem, &rcFooterLine, g_cfg.colDivider);
 
-            int footerInset = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 34 : 24;
-            int footerCenterY = footerTop + (kFooterHeight / 2);
+            int footerInset = ScaleDpi((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 34 : 24);
+            int footerCenterY = footerTop + (footH / 2);
             DrawCircleDotGdi(hdcMem, footerInset, footerCenterY, 4, kColDotRed);
-            DrawCircleDotGdi(hdcMem, footerInset + 14, footerCenterY, 4, kColDotAmber);
-            DrawCircleDotGdi(hdcMem, footerInset + 28, footerCenterY, 4, kColDotGreen);
+            DrawCircleDotGdi(hdcMem, footerInset + ScaleDpi(14), footerCenterY, 4, kColDotAmber);
+            DrawCircleDotGdi(hdcMem, footerInset + ScaleDpi(28), footerCenterY, 4, kColDotGreen);
 
             SelectObject(hdcMem, g_hFontKeycap);
             SetTextColor(hdcMem, g_cfg.colTextMuted);
-            RECT rcFooterLeft = { footerInset + 44, footerTop + 1, width / 2 + 60, height };
+            RECT rcFooterLeft = { footerInset + ScaleDpi(44), footerTop + 1, width / 2 + ScaleDpi(60), height };
             DrawTextW(hdcMem, L"\x2191\x2193 Navigate    \x21B5 Execute    Esc Dismiss", -1, &rcFooterLeft, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-            RECT rcFooterRight = { width / 2 + 40, footerTop + 1, width - footerInset, height };
+            RECT rcFooterRight = { width / 2 + ScaleDpi(40), footerTop + 1, width - footerInset, height };
             DrawTextW(hdcMem, L"Liquid Quick Launcher  \x2022  RobsHs", -1, &rcFooterRight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
         }
     }
 
-    // 5. Draw Custom Outer Main Card Border when Super Smooth or Full Pill Capsule is active
     DrawOuterWindowBorderGdi(hdcMem, width, height);
 
     SelectObject(hdcMem, hOldFont);
@@ -2438,30 +2506,24 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         case WM_CREATE: {
             ApplyLiquidGlassDwmAttributes(hwnd);
 
-            int editLeft = (g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 72 : 66;
-            int rightReserve = g_cfg.showShortcutHint
-                               ? ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 140 : 132)
-                               : ((g_cfg.shapeMode == SHAPE_PILL_CAPSULE) ? 38 : 28);
-            int editWidth = kWindowWidth - editLeft - rightReserve;
-
             g_hEditWnd = CreateWindowExW(
                 0,
                 L"EDIT",
                 L"",
                 WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL,
-                editLeft, 22, editWidth, 28,
+                0, 0, 0, 0,
                 hwnd,
                 (HMENU)1001,
-                GetModuleHandleW(NULL),
+                g_hModInstance,
                 NULL
             );
 
             if (g_hEditWnd) {
-                SetWindowTheme(g_hEditWnd, g_cfg.isLightMode ? L"Explorer" : L"DarkMode_Explorer", NULL);
                 SendMessageW(g_hEditWnd, WM_SETFONT, (WPARAM)g_hFontSearch, TRUE);
                 SendMessageW(g_hEditWnd, EM_SETCUEBANNER, TRUE, (LPARAM)L"Search apps, calculate, > command, or web...");
                 SetWindowSubclass(g_hEditWnd, SearchEditSubclassProc, 1, 0);
             }
+            RefreshEditControlColorsAndLayout();
             return 0;
         }
 
@@ -2505,10 +2567,11 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         case WM_MOUSEMOVE: {
             int mouseY = (short)HIWORD(lParam);
             int listStartY = ComputeListStartY();
-            int listEndY = listStartY + ((int)g_results.size() * kItemHeight);
+            int itemH = ScaleDpi(kBaseItemHeight);
+            int listEndY = listStartY + ((int)g_results.size() * itemH);
             int newHover = -1;
             if (mouseY >= listStartY && mouseY < listEndY) {
-                int idx = (mouseY - listStartY) / kItemHeight;
+                int idx = (mouseY - listStartY) / itemH;
                 if (idx >= 0 && idx < (int)g_results.size()) {
                     newHover = idx;
                 }
@@ -2524,9 +2587,10 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         case WM_LBUTTONDOWN: {
             int mouseY = (short)HIWORD(lParam);
             int listStartY = ComputeListStartY();
-            int listEndY = listStartY + ((int)g_results.size() * kItemHeight);
+            int itemH = ScaleDpi(kBaseItemHeight);
+            int listEndY = listStartY + ((int)g_results.size() * itemH);
             if (mouseY >= listStartY && mouseY < listEndY) {
-                int idx = (mouseY - listStartY) / kItemHeight;
+                int idx = (mouseY - listStartY) / itemH;
                 if (idx >= 0 && idx < (int)g_results.size()) {
                     SetSelectedIndexSmooth(idx, true);
                     ExecuteSelectedResult();
@@ -2576,28 +2640,15 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             SetLayeredWindowAttributes(hwnd, 0, g_cfg.targetWindowAlpha, LWA_ALPHA);
             if (g_bWindowVisible) {
                 int targetH = ComputeTargetWindowHeight();
+                int winW = ScaleDpi(kBaseWindowWidth);
                 g_animCurHeight = (float)targetH;
                 g_animTargetHeight = (float)targetH;
-                UpdateOuterMainWindowShapeRegion(hwnd, kWindowWidth, targetH);
+                UpdateOuterMainWindowShapeRegion(hwnd, winW, targetH);
                 SetWindowPos(hwnd, HWND_TOPMOST, g_anchorPosX, g_anchorPosY,
-                             kWindowWidth, targetH,
+                             winW, targetH,
                              SWP_NOACTIVATE | SWP_NOZORDER);
                 InvalidateRect(hwnd, NULL, TRUE);
             }
-            return 0;
-        }
-
-        case WM_APP_QUIT_LAUNCHER: {
-            KillTimer(hwnd, kAnimTimerId);
-            UnregisterHotKey(hwnd, kHotKeyId);
-            if (g_hEditWnd) {
-                RemoveWindowSubclass(g_hEditWnd, SearchEditSubclassProc, 1);
-                DestroyWindow(g_hEditWnd);
-                g_hEditWnd = NULL;
-            }
-            DestroyWindow(hwnd);
-            g_hMainWnd = NULL;
-            PostQuitMessage(0);
             return 0;
         }
 
@@ -2608,29 +2659,35 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 }
 
 // ============================================================================
-// Dedicated UI & Hotkey Thread (Isolates explorer.exe from blocking)
+// Dedicated UI & Hotkey Thread (Tool Mod Process)
 // ============================================================================
 static void CreateLauncherGdiResources() {
-    g_hFontSearch = CreateFontW(-21, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    DestroyLauncherGdiResources();
+
+    g_hFontSearch = CreateFontW(-ScaleDpi(21), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-    g_hFontTitle  = CreateFontW(-16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+    g_hFontTitle  = CreateFontW(-ScaleDpi(16), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-    g_hFontSub    = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    g_hFontSub    = CreateFontW(-ScaleDpi(13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-    g_hFontBadge  = CreateFontW(-12, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+    g_hFontBadge  = CreateFontW(-ScaleDpi(12), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-    g_hFontKeycap = CreateFontW(-12, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
+    g_hFontKeycap = CreateFontW(-ScaleDpi(12), 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-    g_hFontIcon   = CreateFontW(-19, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    g_hFontIcon   = CreateFontW(-ScaleDpi(19), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI Symbol");
 
     g_hEditBgBrush = CreateSolidBrush(g_cfg.colHeaderSurface);
+
+    if (g_hEditWnd && IsWindow(g_hEditWnd)) {
+        SendMessageW(g_hEditWnd, WM_SETFONT, (WPARAM)g_hFontSearch, TRUE);
+    }
 }
 
 static void DestroyLauncherGdiResources() {
@@ -2648,34 +2705,59 @@ static DWORD WINAPI LauncherUiThreadProc(LPVOID lpParam) {
     HRESULT hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     LoadUserVisualSettings();
-    LoadFrecencyHistoryFromRegistry();
+    LoadFrecencyHistory();
     CreateLauncherGdiResources();
 
-    HINSTANCE hInst = GetModuleHandleW(NULL);
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&LauncherWndProc, &g_hModInstance);
+
     WNDCLASSEXW wc;
     ZeroMemory(&wc, sizeof(wc));
     wc.cbSize        = sizeof(WNDCLASSEXW);
     wc.style         = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc   = LauncherWndProc;
-    wc.hInstance     = hInst;
+    wc.hInstance     = g_hModInstance;
     wc.hCursor       = LoadCursorW(NULL, IDC_ARROW);
     wc.hbrBackground = NULL;
     wc.lpszClassName = kWindowClassName;
 
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed for launcher window.");
+        if (SUCCEEDED(hrCom)) CoUninitialize();
+        return 1;
+    }
+
+    int winW = ScaleDpi(kBaseWindowWidth);
+    int baseH = ScaleDpi(kBaseWindowHeight);
 
     g_hMainWnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         kWindowClassName,
         L"Liquid Quick Launcher",
         WS_POPUP | WS_CLIPCHILDREN,
-        0, 0, kWindowWidth, kBaseHeight,
-        NULL, NULL, hInst, NULL
+        0, 0, winW, baseH,
+        NULL, NULL, g_hModInstance, NULL
     );
 
     if (g_hMainWnd) {
         SetLayeredWindowAttributes(g_hMainWnd, 0, g_cfg.targetWindowAlpha, LWA_ALPHA);
-        RegisterHotKey(g_hMainWnd, kHotKeyId, MOD_ALT | MOD_NOREPEAT, VK_SPACE);
+
+        UINT fsMod = MOD_ALT | MOD_NOREPEAT;
+        UINT vk = VK_SPACE;
+        if (g_cfg.hotkeyChoice == HOTKEY_CTRL_SPACE) {
+            fsMod = MOD_CONTROL | MOD_NOREPEAT;
+            vk = VK_SPACE;
+        } else if (g_cfg.hotkeyChoice == HOTKEY_WIN_ALT_SPACE) {
+            fsMod = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
+            vk = VK_SPACE;
+        } else if (g_cfg.hotkeyChoice == HOTKEY_ALT_Q) {
+            fsMod = MOD_ALT | MOD_NOREPEAT;
+            vk = 'Q';
+        }
+
+        if (!RegisterHotKey(g_hMainWnd, kHotKeyId, fsMod, vk)) {
+            Wh_Log(L"RegisterHotKey failed. Ensure shortcut is not occupied by another app.");
+        }
     }
 
     g_hIndexThread = CreateThread(NULL, 0, AppIndexerThreadProc, NULL, 0, NULL);
@@ -2686,13 +2768,27 @@ static DWORD WINAPI LauncherUiThreadProc(LPVOID lpParam) {
         DispatchMessageW(&msg);
     }
 
+    // Clean teardown after message loop
+    InterlockedExchange(&g_bStopRequested, 1);
+    if (g_hMainWnd) {
+        KillTimer(g_hMainWnd, kAnimTimerId);
+        UnregisterHotKey(g_hMainWnd, kHotKeyId);
+        if (g_hEditWnd) {
+            RemoveWindowSubclass(g_hEditWnd, SearchEditSubclassProc, 1);
+            DestroyWindow(g_hEditWnd);
+            g_hEditWnd = NULL;
+        }
+        DestroyWindow(g_hMainWnd);
+        g_hMainWnd = NULL;
+    }
+
     if (g_hIndexThread) {
-        WaitForSingleObject(g_hIndexThread, 3000);
+        WaitForSingleObject(g_hIndexThread, INFINITE);
         CloseHandle(g_hIndexThread);
         g_hIndexThread = NULL;
     }
 
-    UnregisterClassW(kWindowClassName, hInst);
+    UnregisterClassW(kWindowClassName, g_hModInstance);
     DestroyLauncherGdiResources();
 
     if (SUCCEEDED(hrCom)) {
@@ -2702,10 +2798,10 @@ static DWORD WINAPI LauncherUiThreadProc(LPVOID lpParam) {
 }
 
 // ============================================================================
-// Windhawk Mod Lifecycle & Live Settings Reload Entry Points
+// Windhawk Tool Mod Lifecycle Callbacks
 // ============================================================================
-BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Liquid Quick Launcher v6.2 by RobsHs...");
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Initializing Liquid Quick Launcher as tool mod...");
 
     InterlockedExchange(&g_bStopRequested, 0);
     InitializeCriticalSection(&g_csApps);
@@ -2722,26 +2818,24 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Reloading Liquid Quick Launcher settings live...");
     if (g_hMainWnd && IsWindow(g_hMainWnd)) {
         PostMessageW(g_hMainWnd, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Liquid Quick Launcher...");
+void WhTool_ModUninit() {
+    Wh_Log(L"Uninitializing Liquid Quick Launcher tool mod...");
 
     InterlockedExchange(&g_bStopRequested, 1);
 
-    if (g_hMainWnd && IsWindow(g_hMainWnd)) {
-        PostMessageW(g_hMainWnd, WM_APP_QUIT_LAUNCHER, 0, 0);
-    } else if (g_dwUiThreadId != 0) {
-        PostThreadMessageW(g_dwUiThreadId, WM_QUIT, 0, 0);
+    while (!PostThreadMessageW(g_dwUiThreadId, WM_QUIT, 0, 0) &&
+           WaitForSingleObject(g_hUiThread, 10) == WAIT_TIMEOUT) {
     }
 
     if (g_hUiThread) {
-        WaitForSingleObject(g_hUiThread, 5000);
+        WaitForSingleObject(g_hUiThread, INFINITE);
         CloseHandle(g_hUiThread);
         g_hUiThread = NULL;
         g_dwUiThreadId = 0;
@@ -2755,4 +2849,163 @@ void Wh_ModUninit() {
         DeleteCriticalSection(&g_csApps);
         g_bCsInitialized = false;
     }
+}
+
+// ============================================================================
+// Official Tool Mod Boilerplate (Runs mod in dedicated windhawk.exe process)
+// ============================================================================
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
