@@ -2,12 +2,201 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-01T03:00:54.000Z</updated>
+    <updated>2026-11-01T04:01:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Rounded Selection Rectangle 1.0]]></title>
+        <id>https://windhawk.net/mods/rounded-selection-rectangle#aca316a66c25f7e2a896ccebf684d9ed9ddc7134</id>
+        <link href="https://windhawk.net/mods/rounded-selection-rectangle"/>
+        <updated>2026-11-01T04:01:47.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/rounded-selection-rectangle.gif" alt="Rounded Selection Rectangle / Retângulo de Seleção Arredondado" /></p>
+<h2 id="english">English</h2>
+<p>Gives the rectangle you draw to select files rounded corners and a gentle fade
+when you release the mouse. Works on the desktop, in File Explorer and in apps
+that use standard Windows list controls.</p>
+<ul>
+<li>Adjust the corner roundness, border width and background opacity.</li>
+<li>Choose background and border colors independently, or keep <strong>Windows default</strong>
+for either one.</li>
+<li>Set the fade-out duration, or use <strong>0</strong> to turn it off. The mod respects the
+Windows animation setting.</li>
+</ul>
+<p>In <strong>Background color</strong> and <strong>Border color</strong>, choose <strong>Custom color</strong> and enter a
+color such as <code>#8B5CF6</code>. <strong>Windows default</strong> ignores the custom value and follows
+the system color. Custom colors affect only the selection rectangle.</p>
+<p>Compatible with <strong>Win32 UI Modernizer</strong>.</p>
+<p>Other selection-rectangle mods, such as <strong>Desktop Marquee Fade</strong> and <strong>Classic
+Selection Rectangle Color</strong>, can overlap with this mod's fade or override its
+colors. Disable overlapping features if you use them together.</p>
+<p>This mod depends on symbols published by Microsoft. If a Windows update has no
+published symbols, or changes the symbols the mod uses, the mod will stop working
+until compatible symbols or an updated mod are available.</p>
+<h3 id="roundedselectioninhomewinui">Rounded selection in Home (WinUI)</h3>
+<p>File Explorer's <strong>Home</strong> page uses WinUI. To round its selection rectangle,
+install and enable <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a> in Windhawk.
+In that mod's settings, add an entry under <strong>Control styles</strong> and set <strong>Target</strong>
+to:</p>
+<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
+</code></pre>
+<p>Under <strong>Styles</strong>, add each of these four lines as a separate style:</p>
+<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
+Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
+RadiusX:=8
+RadiusY:=8
+</code></pre>
+<p>Save the settings. This uses the Windows accent color, a 25% opacity fill and
+8-unit corner radii. To change the roundness, adjust both <code>RadiusX</code> and <code>RadiusY</code>.
+These styles are configured separately from this mod's settings.</p>
+<h2 id="portugus">Português</h2>
+<p>Deixa o retângulo que você arrasta para selecionar arquivos com cantos
+arredondados e um desaparecimento suave ao soltar o mouse. Funciona na área de
+trabalho, no Explorador de Arquivos e em aplicativos com listas padrão do Windows.</p>
+<ul>
+<li>Ajuste o arredondamento dos cantos, a espessura da borda e a opacidade do fundo.</li>
+<li>Escolha as cores do fundo e da borda separadamente, ou mantenha o <strong>Padrão do
+Windows</strong> em cada uma.</li>
+<li>Defina a duração do desaparecimento, ou use <strong>0</strong> para desativá-lo. O mod
+respeita a configuração de animações do Windows.</li>
+</ul>
+<p>Em <strong>Cor do fundo</strong> e <strong>Cor da borda</strong>, escolha <strong>Cor personalizada</strong> e informe uma
+cor como <code>#8B5CF6</code>. <strong>Padrão do Windows</strong> ignora o valor personalizado e acompanha a
+cor do sistema. As cores personalizadas afetam somente o retângulo de seleção.</p>
+<p>Compatível com o <strong>Win32 UI Modernizer</strong>.</p>
+<p>Outros mods de retângulo de seleção, como <strong>Desktop Marquee Fade</strong> e <strong>Classic
+Selection Rectangle Color</strong>, podem sobrepor o fade ou as cores deste mod.
+Desative as funções equivalentes se usar esses mods juntos.</p>
+<p>Este mod depende dos símbolos publicados pela Microsoft. Se uma atualização do
+Windows não tiver símbolos publicados, ou alterar os símbolos usados pelo mod,
+ele deixará de funcionar até que símbolos compatíveis ou uma atualização do mod
+estejam disponíveis.</p>
+<h3 id="seleoarredondadanapastainciowinui">Seleção arredondada na pasta Início (WinUI)</h3>
+<p>A pasta <strong>Início</strong> do Explorador de Arquivos usa WinUI. Para arredondar seu
+retângulo de seleção, instale e ative o <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
+no Windhawk. Nas configurações desse mod, adicione uma entrada em <strong>Control styles</strong>
+(estilos dos controles) e preencha <strong>Target</strong> (alvo) com:</p>
+<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
+</code></pre>
+<p>Em <strong>Styles</strong> (estilos), adicione cada uma destas quatro linhas como um estilo separado:</p>
+<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
+Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
+RadiusX:=8
+RadiusY:=8
+</code></pre>
+<p>Salve as configurações. Isso usa a cor de destaque do Windows, fundo com 25% de
+opacidade e cantos de 8 unidades. Para mudar o arredondamento, ajuste <code>RadiusX</code>
+e <code>RadiusY</code>. Esses estilos são configurados separadamente das opções deste mod.</p>
+<h2 id="espaol">Español</h2>
+<p>Da esquinas redondeadas y un desvanecimiento suave al rectángulo que arrastras
+para seleccionar archivos. Funciona en el escritorio, en el Explorador de archivos
+y en aplicaciones con listas estándar de Windows.</p>
+<ul>
+<li>Ajusta las esquinas, el grosor del borde y la opacidad del fondo.</li>
+<li>Elige los colores de fondo y borde por separado, o conserva el
+<strong>Predeterminado de Windows</strong> para cada uno.</li>
+<li>Ajusta la duración del desvanecimiento, o usa <strong>0</strong> para desactivarlo. El mod
+respeta la configuración de animaciones de Windows.</li>
+</ul>
+<p>En <strong>Color de fondo</strong> y <strong>Color del borde</strong>, selecciona <strong>Color personalizado</strong> e
+introduce un color como <code>#8B5CF6</code>. <strong>Predeterminado de Windows</strong> ignora el valor
+personalizado y sigue el color del sistema. Los colores personalizados afectan
+sólo al rectángulo de selección.</p>
+<p>Compatible con <strong>Win32 UI Modernizer</strong>.</p>
+<p>Otros mods del rectángulo de selección, como <strong>Desktop Marquee Fade</strong> y <strong>Classic
+Selection Rectangle Color</strong>, pueden superponer el desvanecimiento o los colores.
+Desactiva las funciones equivalentes si usas esos mods juntos.</p>
+<p>Este mod depende de los símbolos publicados por Microsoft. Si una actualización
+de Windows no tiene símbolos publicados, o cambia los símbolos que usa el mod,
+dejará de funcionar hasta que haya símbolos compatibles o una actualización
+del mod.</p>
+<h3 id="seleccinredondeadaeniniciowinui">Selección redondeada en Inicio (WinUI)</h3>
+<p>La página <strong>Inicio</strong> del Explorador de archivos usa WinUI. Para redondear su
+rectángulo de selección, instala y activa <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
+en Windhawk. En los ajustes de ese mod, añade una entrada en <strong>Control styles</strong>
+(estilos de controles) e introduce lo siguiente en <strong>Target</strong> (destino):</p>
+<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
+</code></pre>
+<p>En <strong>Styles</strong> (estilos), añade cada una de estas cuatro líneas como un estilo separado:</p>
+<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
+Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
+RadiusX:=8
+RadiusY:=8
+</code></pre>
+<p>Guarda los ajustes. Esto usa el color de énfasis de Windows, un fondo con un 25%
+de opacidad y esquinas de 8 unidades. Para cambiar el redondeado, ajusta <code>RadiusX</code>
+y <code>RadiusY</code>. Estos estilos se configuran por separado de las opciones de este mod.</p>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Crazy Time 0.7.0]]></title>
+        <id>https://windhawk.net/mods/crazy-time#f118f158f9aadaada6b351e15ad9f9e7a183573b</id>
+        <link href="https://windhawk.net/mods/crazy-time"/>
+        <updated>2026-11-01T04:01:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="crazytime">Crazy Time</h1>
+<p>A minimalist scheduler for shutdown, sleep and hibernate, living in the
+notification area. Português abaixo.</p>
+<p><img src="https://raw.githubusercontent.com/caikx11/Crazy-timer/c92d0c0f575f877a535377ca7ccf28734ca42306/docs/images/crazy-time-panel.png" alt="Crazy Time panel" /></p>
+<blockquote>
+  <p><strong>This mod really shuts down, sleeps or hibernates your computer</strong> when a
+  schedule fires. Save your work first. A warning notification appears before
+  the action, and you can cancel or postpone an occurrence from the panel.</p>
+  <p><strong>Windows 10 is untested.</strong> It was developed and tested on Windows 11 only.
+  It is expected to work on Windows 10 (version 1809 or newer for the dark
+  theme of the controls), but this has not been verified. Please report issues.</p>
+</blockquote>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li>Schedule an action <strong>by duration</strong> (1 minute to 7 days), at a <strong>date and time</strong>,
+or <strong>repeating on chosen weekdays</strong>.</li>
+<li>Keep several schedules at once: edit, pause, cancel one occurrence,
+postpone it by 10 minutes, or delete.</li>
+<li>Countdown warnings at 30, 15, 10, 5 and 1 minute, with optional sound.</li>
+<li>Schedules at the same instant are detected and refused.</li>
+<li>Optional per-schedule "force apps to close" (shutdown only), off by default,
+with a data-loss warning.</li>
+<li>Actions the computer cannot perform are explained instead of scheduled.</li>
+<li>Portuguese and English; automatic, light or dark theme; high contrast.</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Enable the mod. A tray icon appears; click it to open the panel.</li>
+<li>Pick the action and how it is scheduled, then press <strong>Add schedule</strong>.</li>
+<li>Click the tray icon to open the panel again. Closing the panel keeps the
+countdown running; right-click the icon or use <strong>Options</strong> to exit.
+<strong>Exit</strong> stops scheduling until Windhawk restarts or the mod is toggled off
+and on again; Windhawk still lists the mod as enabled.</li>
+<li>Disabling the mod stops everything and removes the icon. Schedules are saved
+per user; occurrences that expired while the mod was off are not run.</li>
+</ol>
+<p>Schedules are stored in Windhawk's mod storage, in a file named with your user
+SID. On first use, an existing legacy LocalAppData schedule file is copied there
+without overwriting an existing destination. The legacy file is kept as a backup.
+Removing the mod deletes Windhawk's managed storage; the legacy backup remains.</p>
+<h2 id="portugus">Português</h2>
+<p>Agendador minimalista de desligar, suspender e hibernar, na área de notificação.</p>
+<p><strong>Este mod realmente desliga, suspende ou hiberna o computador</strong> quando um
+agendamento dispara. Salve seu trabalho antes. Uma notificação de aviso aparece
+antes da ação e você pode cancelar ou adiar a ocorrência pelo painel.</p>
+<p><strong>Não testado no Windows 10.</strong> Desenvolvido e testado apenas no Windows 11. Deve
+funcionar no Windows 10 (versão 1809 ou mais nova para o tema escuro dos
+controles), mas isso não foi verificado. Relate problemas.</p>
+<p><strong>Como usar:</strong> ative o mod, escolha a ação e o tipo de agendamento (por
+duração, data e hora, ou repetição semanal) e clique em <strong>Adicionar
+agendamento</strong>. Clique no ícone da barra para reabrir o painel; fechar o
+painel não interrompe a contagem. Desativar o mod encerra tudo.
+<strong>Sair</strong> interrompe os agendamentos até reiniciar o Windhawk ou desativar e
+reativar o mod; ele ainda aparece como ativado no Windhawk.</p>]]></content>
+        <author>
+            <name>caikx11</name>
+            <uri>https://github.com/caikx11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Nested Tray Drawer 0.1.13]]></title>
         <id>https://windhawk.net/mods/nested-tray-drawer#f91f8178cbce4dd29474df0899481f0447415088</id>
@@ -1197,101 +1386,6 @@ after it is restarted; removing an app from the list applies immediately.</p>
         <author>
             <name>limpompo</name>
             <uri>https://github.com/limpompo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Task Manager Navigation Border 0.1]]></title>
-        <id>https://windhawk.net/mods/disable-taskmgr-navigation-border#d3c74881949732caeed9c3045880d991110129d4</id>
-        <link href="https://windhawk.net/mods/disable-taskmgr-navigation-border"/>
-        <updated>2026-10-27T00:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disabletaskmanagernavigationborder">Disable Task Manager Navigation Border</h1>
-<p><img src="https://i.imgur.com/00TkdHI.png" alt="Compared" /></p>
-<p>Disables the ugly focus borders in Windows 11 Task Manager.</p>
-<p>It works by replacing the following functions with empty implementations:</p>
-<ul>
-<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
-<li><code>SetBorderUponNavigatingIntoElement</code></li>
-</ul>
-<p>Functions are located using symbols for the running Taskmgr.exe version, not
-fixed addresses. First use may require internet access to download symbols.
-Initialization fails if any required symbol is unavailable.</p>
-<p>This MOD targets x64 Task Manager versions providing these methods. No system
-files or signatures are modified. </p>
-<hr />
-<p>禁用 Windows 11 任务管理器上丑陋的焦点边框。</p>
-<p>实现原理是将以下方法替换为空实现：</p>
-<ul>
-<li><code>AtmView::SetBorderUponNavigationForColumnHeader</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRow</code></li>
-<li><code>AtmView::SetBorderUponNavigationForListRowWithColumnTraversal</code></li>
-<li><code>SetBorderUponNavigatingIntoElement</code></li>
-</ul>
-<p>这些函数是通过当前运行的 Taskmgr.exe 版本的符号信息进行定位，而非固定内存地址。首次使用可能需要联网下载符号文件。若缺少任何所需符号，初始化将失败。</p>
-<p>此 MOD 适用于包含上述方法的 x64 版本任务管理器。不会修改任何系统文件或签名。</p>]]></content>
-        <author>
-            <name>GF-Huang</name>
-            <uri>https://github.com/GF-Huang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flashlight Desktop Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/flashlight-desktop-icons#18d4cc081c7dd2eeb3fdfac4f5ef52385baec3b8</id>
-        <link href="https://windhawk.net/mods/flashlight-desktop-icons"/>
-        <updated>2026-10-26T21:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="flashlightdesktopicons">Flashlight Desktop Icons</h1>
-<p>Makes desktop icons semi-transparent (or completely invisible) when idle. When
-the mouse cursor moves over the desktop, only the icons within the configured
-pixel radius smoothly reveal themselves, and they fade back to their idle
-opacity once the mouse stops moving.</p>
-<p><img src="https://i.imgur.com/UvM4nxK.gif" alt="Flashlight Desktop Icons demo" /></p>
-<ul>
-<li>No overlay windows: each icon's alpha is applied at draw time with GDI custom
-draw, so nothing blocks clicks and no wallpaper layers are duplicated.
-Compatible with Wallpaper Engine and other live wallpapers.</li>
-<li>No background threads and no polling: repainting is driven by mouse events
-and a fade timer running on the desktop's own thread, so the mod does no work
-at all while the mouse is away from the desktop.</li>
-<li>Labels fade together with their icons. Enable the "Hide Icon Labels" setting
-to remove the text under desktop icons entirely.</li>
-<li>Dragging a file over the desktop reveals the icons around the drag cursor,
-so you can see what you are dropping onto.</li>
-<li>Double-clicking empty desktop space hides all icons; double-clicking again
-returns to flashlight mode (rather than making all icons fully visible).</li>
-</ul>
-<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
-<ul>
-<li><a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Transparent Desktop Icons with Spotlight</a>
-reveals icons around the cursor using a DirectComposition overlay mask. This
-mod instead computes each icon's alpha from its distance to the cursor and
-applies it per icon at draw time (GDI custom draw), with no overlay or
-wallpaper layers.</li>
-<li><a href="https://windhawk.net/mods/desktop-icons-transparency">Desktop Icons Transparency</a>
-applies one fixed opacity to all desktop icons. This mod's opacity is
-per-icon and follows the cursor.</li>
-<li><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide & Fluent Hover Reveal</a>
-and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> hide and
-reveal icons in bulk (per section or on toggle). This mod's default
-experience is a continuous visibility gradient around the cursor.</li>
-</ul>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Faded labels are drawn in the mod's own style (white text with a glow)
-rather than Explorer's shadow style, so a label changes slightly when its
-icon reaches full opacity and Explorer takes over drawing it.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><a href="https://windhawk.net/mods/desktop-icons-transparency">desktop-icons-transparency</a>
-by zed712969-crypto: desktop window discovery and subclassing patterns.</li>
-<li><a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
-by HeyOkay: the drag-and-drop reveal approach (hooking the desktop's
-IDropTarget vtable methods).</li>
-</ul>]]></content>
-        <author>
-            <name>dantepicachu</name>
-            <uri>https://github.com/dantepicachu11-coder</uri>
         </author>
     </entry>
 </feed>

@@ -3498,6 +3498,31 @@
         "version": "1.0.1"
       }
     },
+    "crazy-time": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793505702000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793505702000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caikx11",
+        "compilerOptions": "-lshell32 -lcomctl32 -lgdi32 -ladvapi32",
+        "description": "Schedule shutdown, sleep or hibernate from a tray icon, with warnings and weekly repeats.",
+        "github": "https://github.com/caikx11",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Crazy Time",
+        "version": "0.7.0"
+      }
+    },
     "crystaldiskinfo-smart-auto-refresh": {
       "details": {
         "defaultSorting": 369,
@@ -13664,6 +13689,31 @@
         ],
         "name": "UIRibbon Caption Icon Fix",
         "version": "1.0.1"
+      }
+    },
+    "rounded-selection-rectangle": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793505707000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793505707000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "crazyboyybs",
+        "compilerOptions": "-ld2d1 -lgdi32 -lcomctl32",
+        "description": "Rounded selection rectangles with a gentle fade-out",
+        "github": "https://github.com/crazyboyybs",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Rounded Selection Rectangle",
+        "version": "1.0"
       }
     },
     "run-box-no-ime": {
