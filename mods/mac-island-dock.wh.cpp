@@ -2,8 +2,10 @@
 // @id              mac-island-dock
 // @name            Mac Island & Dock
 // @name:pt-BR      Ilha e Dock estilo Mac
+// @name:vi         Mac Island & Dock (Dynamic Island & Dock kiểu Mac)
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
+// @description:vi  Thanh đảo ở cạnh trên màn hình kết hợp phong cách menu bar macOS và Dynamic Island của iPhone (đồng hồ, trung tâm điều khiển, thông báo, trình phát nhạc, khay hệ thống), đi kèm thanh Dock kiểu macOS thay cho taskbar (hoặc làm trong suốt taskbar Windows)
 // @version         2.1.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
@@ -1233,6 +1235,7 @@ escrever em português.
   $name:es: Barra de tareas
   $name:ru-RU: Панель задач
   $name:ja-JP: タスクバー
+  $name:vi: Thanh tác vụ (Taskbar)
   $description: What happens to the Windows taskbar. Each group below says which of these it applies to
   $description:pt-BR: O que acontece com a barra de tarefas do Windows. Cada grupo abaixo diz para quais destas opções ele vale
   $description:zh-CN: Windows 任务栏的样子。下面每个分组都会说明它适用于哪些选项
@@ -1240,6 +1243,7 @@ escrever em português.
   $description:es: Qué pasa con la barra de tareas de Windows. Cada grupo de abajo indica a cuáles de estas opciones se aplica
   $description:ru-RU: Что происходит с панелью задач Windows. В каждой группе ниже указано, к каким из этих вариантов она относится
   $description:ja-JP: Windows のタスクバーの動作です。以下の各グループには、どの選択肢に適用されるかが書かれています
+  $description:vi: Chọn kiểu hiển thị cho thanh tác vụ Windows. Mỗi nhóm tùy chỉnh bên dưới sẽ ghi rõ áp dụng cho kiểu nào
   $options:
   - dock: "Dock: compact and floating, see-through, like on macOS"
   - windowsTransparent: "Windows taskbar, transparent: only the apps, with a soft shadow, hiding itself"
@@ -1275,6 +1279,11 @@ escrever em português.
   - windowsTransparent: "Windows タスクバー、透明: アプリのみ、やわらかい影付きで自動的に隠れる"
   - windowsApps: "Windows タスクバー、アプリのみ（その他はアイランドが表示）"
   - windows: "Windows タスクバー、変更なし（他のタスクバー Mod 用）"
+  $options:vi:
+  - dock: "Dock: nhỏ gọn, nổi và trong suốt giống macOS"
+  - windowsTransparent: "Taskbar Windows trong suốt: chỉ hiện icon ứng dụng, có đổ bóng nhẹ và tự ẩn"
+  - windowsApps: "Taskbar Windows chỉ hiện ứng dụng (đồng hồ và khay hệ thống chuyển lên đảo)"
+  - windows: "Taskbar Windows mặc định, giữ nguyên (để dùng chung với các mod taskbar khác)"
 - windowsHideTray: false
   $name: Hide the Windows taskbar's clock and tray (with the island)
   $name:pt-BR: Esconder o relógio e a bandeja da barra do Windows (com a ilha)
@@ -1283,6 +1292,7 @@ escrever em português.
   $name:es: Ocultar el reloj y la bandeja de la barra de tareas de Windows (con la isla)
   $name:ru-RU: Скрыть часы и область уведомлений панели задач Windows (вместе с островом)
   $name:ja-JP: Windows タスクバーの時計とトレイを非表示（アイランドと併用）
+  $name:vi: Ẩn đồng hồ và khay hệ thống trên taskbar Windows (khi bật đảo)
   $description: Only for the "Windows taskbar, unchanged" choice with the island at the top on. The island already shows the clock and the tray icons, so they don't show twice. The rest of the taskbar (and what other taskbar mods do to it) stays as it is. The other Windows taskbar choices hide them already
   $description:pt-BR: Só para a opção "Barra do Windows sem mudanças" com a ilha no topo ligada. A ilha já mostra o relógio e os ícones da bandeja, então eles não aparecem duas vezes. O resto da barra (e o que outros mods de barra fazem nela) fica como está. As outras opções da barra do Windows já escondem os dois
   $description:zh-CN: 仅适用于"Windows 任务栏，不做更改"选项，并且顶部灵动岛开启时。灵动岛已经显示了时钟和托盘图标，这样就不会重复显示。任务栏的其余部分（以及其他任务栏 mod 对它的修改）保持不变。其他 Windows 任务栏选项已经会隐藏它们
@@ -1290,6 +1300,7 @@ escrever em português.
   $description:es: Solo para la opción "Barra de tareas de Windows, sin cambios" con la isla arriba activada. La isla ya muestra el reloj y los iconos de la bandeja, así que no aparecen dos veces. El resto de la barra de tareas (y lo que otros mods le hagan) queda como está. Las otras opciones de barra de tareas de Windows ya los ocultan
   $description:ru-RU: Только для варианта «Панель задач Windows, без изменений» при включённом острове вверху. Остров уже показывает часы и значки области уведомлений, поэтому они не дублируются. Остальная панель задач (и то, что с ней делают другие моды панели задач) остаётся как есть. Другие варианты панели задач Windows их уже скрывают
   $description:ja-JP: 上部のアイランドがオンのときの「Windows タスクバー、変更なし」専用です。アイランドが時計とトレイ アイコンをすでに表示するため、二重には表示されません。タスクバーのそれ以外の部分（および他のタスクバー Mod による変更）はそのままです。他の Windows タスクバーの選択肢では、すでに非表示になります
+  $description:vi: Chỉ dành cho tùy chọn "Taskbar Windows mặc định, giữ nguyên" khi đang bật đảo ở cạnh trên. Vì đảo đã hiện sẵn đồng hồ và icon khay hệ thống nên ẩn đi để khỏi bị trùng. Phần còn lại của taskbar (cùng hiệu ứng từ các mod khác) vẫn giữ nguyên. Các chế độ taskbar khác đã tự ẩn sẵn
 - showIsland: true
   $name: Island at the top
   $name:pt-BR: Ilha no topo
@@ -1298,6 +1309,7 @@ escrever em português.
   $name:es: Isla arriba
   $name:ru-RU: Остров вверху
   $name:ja-JP: 上部のアイランド
+  $name:vi: Thanh đảo ở cạnh trên
   $description: The clock, the control center, notifications, what's playing and the other apps' tray icons, at the top of the screen. Its own options (style, colors, what it shows) are in it (right-click the island, then click the gear that comes out under it)
   $description:pt-BR: O relógio, a central de controle, as notificações, o que está tocando e os ícones dos outros apps, no topo da tela. As opções dela (estilo, cores, o que ela mostra) ficam nela mesma (clique com o botão direito na ilha e depois na engrenagem que sai embaixo dela)
   $description:zh-CN: 时钟、控制中心、通知、正在播放的内容和其他应用的托盘图标，显示在屏幕顶部。它自己的选项（样式、颜色、显示内容）在它里面（右键点击灵动岛，再点击下方出现的齿轮）
@@ -1305,6 +1317,7 @@ escrever em português.
   $description:es: El reloj, el centro de control, las notificaciones, lo que suena y los iconos de la bandeja de otras apps, en la parte superior de la pantalla. Sus propias opciones (estilo, colores, qué muestra) están en ella misma (clic derecho en la isla y luego clic en el engranaje que sale debajo)
   $description:ru-RU: Часы, центр управления, уведомления, воспроизводимое и значки области уведомлений других приложений вверху экрана. Его собственные параметры (стиль, цвета, что показывать) находятся в нём (щёлкните остров правой кнопкой, затем шестерёнку, появившуюся под ним)
   $description:ja-JP: 時計、コントロール センター、通知、再生中のもの、他のアプリのトレイ アイコンを画面の上部に表示します。専用のオプション（スタイル、色、表示内容）はアイランド自体にあります（アイランドを右クリックし、下に表示される歯車をクリック）
+  $description:vi: Hiển thị đồng hồ, trung tâm điều khiển, thông báo, nhạc đang phát và khay hệ thống ở cạnh trên màn hình. Để mở cài đặt chi tiết của đảo (kiểu dáng, màu sắc, tiện ích), hãy bấm chuột phải vào đảo rồi bấm biểu tượng bánh răng hiện ra bên dưới
 - calendarIcs: [""]
   $name: Calendar agendas (.ics)
   $name:pt-BR: Agendas do calendário (.ics)
@@ -1313,6 +1326,7 @@ escrever em português.
   $name:es: Agendas del calendario (.ics)
   $name:ru-RU: Календари (.ics)
   $name:ja-JP: カレンダーの登録 (.ics)
+  $name:vi: Lịch đăng ký (.ics)
   $description: Links (https) or paths of .ics calendars, like Google Calendar's "Secret address in iCal format". Their events show in the island's calendar, read only, in each agenda's color (chosen in the calendar, where agendas can also be added)
   $description:pt-BR: Links (https) ou caminhos de agendas .ics, como o "Endereço secreto no formato iCal" do Google Agenda. Os eventos aparecem no calendário da ilha, só para leitura, na cor de cada agenda (escolhida no calendário, onde também dá para adicionar agendas)
   $description:zh-CN: .ics 日历的链接（https）或路径，例如 Google 日历的“iCal 格式的私密地址”。其中的事件以只读方式显示在灵动岛的日历中，使用各自的颜色（在日历中选择，也可以在日历中添加订阅）
@@ -1320,6 +1334,7 @@ escrever em português.
   $description:es: Enlaces (https) o rutas de calendarios .ics, como la "Dirección secreta en formato iCal" de Google Calendar. Sus eventos aparecen en el calendario de la isla, solo lectura, con el color de cada agenda (se elige en el calendario, donde también se pueden añadir agendas)
   $description:ru-RU: Ссылки (https) или пути к календарям .ics, например «Закрытый адрес в формате iCal» Google Календаря. Их события показываются в календаре острова только для чтения, цветом каждого календаря (выбирается в календаре, где их можно и добавить)
   $description:ja-JP: .ics カレンダーのリンク (https) またはパス（Google カレンダーの「iCal 形式の非公開アドレス」など）。そのイベントはアイランドのカレンダーに読み取り専用で、カレンダーごとの色で表示されます（色の選択と追加はカレンダー内で行います）
+  $description:vi: Dán link (https) hoặc đường dẫn tệp lịch .ics, ví dụ "Địa chỉ bí mật ở định dạng iCal" của Google Calendar. Các sự kiện sẽ hiện trong lịch của đảo (chỉ đọc) với màu sắc riêng cho từng lịch (có thể thêm lịch và chọn màu trực tiếp trong bảng lịch)
 - hiding:
   - autoHide: false
     $name: Hide the taskbar until the mouse reaches the bottom edge
@@ -1329,6 +1344,7 @@ escrever em português.
     $name:es: Ocultar la barra de tareas hasta que el ratón llegue al borde inferior
     $name:ru-RU: Скрывать панель задач, пока мышь не достигнет нижнего края
     $name:ja-JP: マウスが下端に届くまでタスクバーを隠す
+    $name:vi: Tự ẩn thanh tác vụ cho tới khi đưa chuột xuống cạnh dưới
     $description: Turns on the Windows auto-hide while the mod is on, and back off when it's turned off (if it was off before), with every choice of "Taskbar" (off by default). The other options of this group need it
     $description:pt-BR: Liga o ocultar automaticamente do Windows enquanto o mod está ativo, e desliga de novo quando ele é desativado (se estava desligado antes), com qualquer opção de "Barra de tarefas" (desligado por padrão). As outras opções deste grupo precisam dela
     $description:zh-CN: mod 启用时打开 Windows 的自动隐藏，mod 关闭时再关掉（如果之前是关闭的），适用于"任务栏"的所有选项（默认关闭）。本组的其他选项需要它
@@ -1336,6 +1352,7 @@ escrever em português.
     $description:es: Activa el ocultado automático de Windows mientras el mod está activo y lo desactiva al apagarlo (si estaba desactivado antes), con cada opción de "Barra de tareas" (desactivado por defecto). Las demás opciones de este grupo lo necesitan
     $description:ru-RU: Включает автоскрытие Windows, пока мод включён, и снова выключает при его отключении (если раньше было выключено), для любого варианта «Панель задач» (по умолчанию выключено). Остальные параметры этой группы требуют его
     $description:ja-JP: Mod がオンの間は Windows の自動非表示をオンにし、Mod をオフにすると元に戻します（以前オフだった場合）。「タスクバー」のどの選択肢でも使えます（既定ではオフ）。このグループの他のオプションにはこれが必要です
+    $description:vi: Tự bật chế độ tự động ẩn taskbar của Windows khi dùng mod và trả lại như cũ khi tắt mod (mặc định tắt). Hoạt động với mọi kiểu "Thanh tác vụ", và là điều kiện bắt buộc cho các tùy chọn bên dưới
   - showDelay: 0
     $name: Wait before showing (ms)
     $name:pt-BR: Espera para aparecer (ms)
@@ -1344,6 +1361,7 @@ escrever em português.
     $name:es: Espera antes de mostrar (ms)
     $name:ru-RU: Задержка перед показом (мс)
     $name:ja-JP: 表示までの待ち時間 (ms)
+    $name:vi: Độ trễ trước khi hiện (ms)
     $description: How long the mouse has to stay at the bottom edge (0-2000, default 0)
     $description:pt-BR: Quanto tempo o mouse precisa ficar na borda de baixo (0-2000, padrão 0)
     $description:zh-CN: 鼠标需要在底部边缘停留多久（0-2000，默认 0）
@@ -1351,6 +1369,7 @@ escrever em português.
     $description:es: Cuánto tiempo debe quedarse el ratón en el borde inferior (0-2000, predeterminado 0)
     $description:ru-RU: Как долго мышь должна находиться у нижнего края (0-2000, по умолчанию 0)
     $description:ja-JP: マウスが下端にとどまる必要がある時間（0-2000、既定値 0）
+    $description:vi: Thời gian cần giữ chuột ở sát cạnh dưới để gọi thanh tác vụ lên (0-2000, mặc định 0)
   - revealHeight: 0
     $name: Height over the bottom edge that brings it up (px at 100% scale)
     $name:pt-BR: Altura acima da borda de baixo que faz ela aparecer (px na escala de 100%)
@@ -1359,6 +1378,7 @@ escrever em português.
     $name:es: Altura sobre el borde inferior que la muestra (px con escala al 100 %)
     $name:ru-RU: Высота над нижним краем, при которой она появляется (пикс. при масштабе 100%)
     $name:ja-JP: 表示のきっかけになる下端からの高さ (px、100% スケール時)
+    $name:vi: Độ cao vùng nhận diện chuột ở cạnh dưới (px ở tỷ lệ 100%)
     $description: The same on every monitor. 0 is automatic (the default), only the edge itself, and the icons' height on a monitor with another one below it (where the mouse easily goes past the edge). Only for "Dock" and "Windows taskbar, transparent" (0-120, default 0)
     $description:pt-BR: A mesma em todos os monitores. 0 é automático (o padrão), só a própria borda, e a altura dos ícones num monitor com outro embaixo dele (onde o mouse passa fácil da borda). Só para "Dock" e "Barra do Windows transparente" (0-120, padrão 0)
     $description:zh-CN: 所有显示器相同。0 为自动（默认）：只有边缘本身；下方还有另一台显示器时为图标的高度（鼠标很容易越过边缘）。仅适用于"程序坞"和"Windows 任务栏，透明"（0-120，默认 0）
@@ -1366,6 +1386,7 @@ escrever em português.
     $description:es: "Igual en todos los monitores. 0 es automático, el valor predeterminado: solo el borde en sí, y la altura de los iconos en un monitor con otro debajo (donde el ratón se pasa fácilmente del borde). Solo para \"Dock\" y \"Barra de tareas de Windows, transparente\" (0-120, predeterminado 0)"
     $description:ru-RU: "Одинаково на всех мониторах. 0 — автоматически, по умолчанию: только сам край, а на мониторе с другим монитором снизу (где мышь легко проскакивает край) — высота значков. Только для «Док» и «Панель задач Windows, прозрачная» (0-120, по умолчанию 0)"
     $description:ja-JP: "すべてのモニターで共通です。0 は自動（既定）: 端そのもののみ。下に別のモニターがある場合（マウスが端を通り過ぎやすい）はアイコンの高さになります。「Dock」と「Windows タスクバー、透明」のみ（0-120、既定値 0）"
+    $description:vi: "Áp dụng như nhau trên mọi màn hình. Đặt 0 là tự động (mặc định): chỉ nhận sát mép dưới cùng, hoặc lấy bằng chiều cao icon nếu bên dưới còn một màn hình nữa (giúp chuột không bị lố qua mép). Chỉ áp dụng cho \"Dock\" và \"Taskbar Windows trong suốt\" (0-120, mặc định 0)"
   - hideDelay: 400
     $name: Wait before hiding (ms)
     $name:pt-BR: Espera para esconder (ms)
@@ -1374,6 +1395,7 @@ escrever em português.
     $name:es: Espera antes de ocultar (ms)
     $name:ru-RU: Задержка перед скрытием (мс)
     $name:ja-JP: 非表示までの待ち時間 (ms)
+    $name:vi: Độ trễ trước khi ẩn (ms)
     $description: How long it stays after the mouse leaves it (0-5000, default 400)
     $description:pt-BR: Quanto tempo ela fica depois que o mouse sai (0-5000, padrão 400)
     $description:zh-CN: 鼠标离开后它保留多久（0-5000，默认 400）
@@ -1381,6 +1403,7 @@ escrever em português.
     $description:es: Cuánto tiempo se queda tras salir el ratón (0-5000, predeterminado 400)
     $description:ru-RU: Как долго она остаётся после ухода мыши (0-5000, по умолчанию 400)
     $description:ja-JP: マウスが離れてから表示を続ける時間（0-5000、既定値 400）
+    $description:vi: Thời gian chờ sau khi đưa chuột ra ngoài trước khi tự ẩn xuống (0-5000, mặc định 400)
   - showDuration: 260
     $name: Showing animation (ms)
     $name:pt-BR: Animação de aparecer (ms)
@@ -1389,6 +1412,7 @@ escrever em português.
     $name:es: Animación de aparición (ms)
     $name:ru-RU: Анимация появления (мс)
     $name:ja-JP: 表示アニメーション (ms)
+    $name:vi: Thời lượng hiệu ứng trượt lên (ms)
     $description: How long it takes to slide in, with a little spring; 0 is instant, and the speed in the animations group changes it too (0-1000, default 260)
     $description:pt-BR: Quanto tempo ela leva para entrar, com um leve efeito de mola; 0 é na hora, e a velocidade do grupo de animações também muda isso (0-1000, padrão 260)
     $description:zh-CN: 滑入所需的时间，带一点弹性；0 为立即，动画分组中的速度也会影响它（0-1000，默认 260）
@@ -1396,6 +1420,7 @@ escrever em português.
     $description:es: Cuánto tarda en deslizarse hacia dentro, con un pequeño rebote; 0 es instantáneo, y la velocidad del grupo de animaciones también lo cambia (0-1000, predeterminado 260)
     $description:ru-RU: Сколько длится выезд с лёгким пружинным эффектом; 0 — мгновенно, скорость в группе анимаций тоже влияет (0-1000, по умолчанию 260)
     $description:ja-JP: わずかなバネ効果でスライドインする時間。0 は即時で、アニメーション グループの速度にも影響されます（0-1000、既定値 260）
+    $description:vi: Thời gian trượt lên kèm độ nảy nhẹ; đặt 0 để hiện tức thì. Chịu ảnh hưởng thêm bởi mục Tốc độ ở nhóm chuyển động bên dưới (0-1000, mặc định 260)
   - hideDuration: 220
     $name: Hiding animation (ms)
     $name:pt-BR: Animação de esconder (ms)
@@ -1404,6 +1429,7 @@ escrever em português.
     $name:es: Animación de ocultación (ms)
     $name:ru-RU: Анимация скрытия (мс)
     $name:ja-JP: 非表示アニメーション (ms)
+    $name:vi: Thời lượng hiệu ứng trượt xuống (ms)
     $description: How long it takes to slide out; 0 is instant (0-1000, default 220)
     $description:pt-BR: Quanto tempo ela leva para sair; 0 é na hora (0-1000, padrão 220)
     $description:zh-CN: 滑出所需的时间；0 为立即（0-1000，默认 220）
@@ -1411,6 +1437,7 @@ escrever em português.
     $description:es: Cuánto tarda en deslizarse hacia fuera; 0 es instantáneo (0-1000, predeterminado 220)
     $description:ru-RU: Сколько длится уход; 0 — мгновенно (0-1000, по умолчанию 220)
     $description:ja-JP: スライドアウトする時間。0 は即時（0-1000、既定値 220）
+    $description:vi: Thời gian trượt xuống khi ẩn đi; đặt 0 để ẩn tức thì (0-1000, mặc định 220)
   - fullscreenGuard: true
     $name: Not over games and videos in full screen
     $name:pt-BR: Não aparecer sobre jogos e vídeos em tela cheia
@@ -1419,6 +1446,7 @@ escrever em português.
     $name:es: No sobre juegos ni vídeos en pantalla completa
     $name:ru-RU: Не поверх игр и видео на весь экран
     $name:ja-JP: 全画面のゲームや動画の上には表示しない
+    $name:vi: Không tự bung lên khi đang chơi game hoặc xem video toàn màn hình
     $description: The mouse at the bottom edge doesn't bring it up over them (the Windows key still does)
     $description:pt-BR: O mouse na borda de baixo não faz ela aparecer sobre eles (a tecla Windows continua funcionando)
     $description:zh-CN: 鼠标移到底部边缘不会让它出现在它们上方（Windows 键仍然可以）
@@ -1426,6 +1454,7 @@ escrever em português.
     $description:es: El ratón en el borde inferior no la muestra sobre ellos (la tecla Windows sí)
     $description:ru-RU: Мышь у нижнего края не вызывает её поверх них (клавиша Windows по-прежнему вызывает)
     $description:ja-JP: 下端にマウスを置いても、それらの上には表示されません（Windows キーでは引き続き表示されます）
+    $description:vi: Đưa chuột chạm cạnh dưới sẽ không làm thanh Dock hiện đè lên game hay video toàn màn hình (nhấn phím Windows thì vẫn hiện)
   $name: Hiding and showing
   $name:pt-BR: Esconder e mostrar
   $name:zh-CN: 隐藏和显示
@@ -1433,6 +1462,7 @@ escrever em português.
   $name:es: Ocultar y mostrar
   $name:ru-RU: Скрытие и показ
   $name:ja-JP: 非表示と表示
+  $name:vi: Tự động ẩn & hiện
   $description: Hiding the taskbar is for every choice above; the waits, the animations and full screen only for "Dock" and "Windows taskbar, transparent" (the others hide the Windows way)
   $description:pt-BR: Esconder a barra vale para todas as opções acima; as esperas, as animações e a tela cheia só para "Dock" e "Barra do Windows transparente" (as outras se escondem do jeito do Windows)
   $description:zh-CN: 隐藏任务栏适用于上面的所有选项；等待、动画和全屏仅适用于"程序坞"和"Windows 任务栏，透明"（其他选项按 Windows 自己的方式隐藏）
@@ -1440,6 +1470,7 @@ escrever em português.
   $description:es: Ocultar la barra de tareas vale para todas las opciones de arriba; las esperas, las animaciones y la pantalla completa solo para "Dock" y "Barra de tareas de Windows, transparente" (las demás se ocultan a la manera de Windows)
   $description:ru-RU: Скрытие панели задач действует для всех вариантов выше; задержки, анимации и полный экран — только для «Док» и «Панель задач Windows, прозрачная» (остальные скрываются средствами Windows)
   $description:ja-JP: タスクバーの非表示は上のすべての選択肢に適用されます。待ち時間、アニメーション、全画面は「Dock」と「Windows タスクバー、透明」のみ（他は Windows の方法で隠れます）
+  $description:vi: Tùy chọn tự ẩn áp dụng được cho mọi kiểu taskbar; riêng độ trễ, hiệu ứng trượt và chặn toàn màn hình chỉ dành cho "Dock" và "Taskbar Windows trong suốt" (các kiểu còn lại ẩn theo cơ chế mặc định của Windows)
 - icons:
   - magnification: 170
     $name: Icon magnification (%)
@@ -1449,6 +1480,7 @@ escrever em português.
     $name:es: Ampliación de iconos (%)
     $name:ru-RU: Увеличение значков (%)
     $name:ja-JP: アイコンの拡大 (%)
+    $name:vi: Độ phóng đại icon khi rê chuột (%)
     $description: How big the icon under the mouse gets, in a wave like on macOS, pushing its neighbors aside; 100 turns it off. The dock makes room above itself for them; on the transparent taskbar they only grow up to its top (100-200, default 170)
     $description:pt-BR: O quanto o ícone embaixo do mouse cresce, numa onda como no macOS, afastando os vizinhos; 100 desliga. A dock abre espaço acima dela para eles; na barra transparente eles só crescem até o topo dela (100-200, padrão 170)
     $description:zh-CN: 鼠标下的图标放大多少，像 macOS 一样呈波浪状，并把相邻图标推开；100 为关闭。程序坞会在上方留出空间；在透明任务栏上图标最多只能放大到任务栏顶部（100-200，默认 170）
@@ -1456,6 +1488,7 @@ escrever em português.
     $description:es: Cuánto crece el icono bajo el ratón, en una onda como en macOS, apartando a sus vecinos; 100 lo desactiva. El dock deja espacio encima para ellos; en la barra de tareas transparente solo crecen hasta su borde superior (100-200, predeterminado 170)
     $description:ru-RU: Насколько увеличивается значок под мышью волной, как в macOS, раздвигая соседние; 100 — выключено. Док освобождает над собой место для них; на прозрачной панели задач они вырастают только до её верха (100-200, по умолчанию 170)
     $description:ja-JP: マウスの下のアイコンが macOS のように波状に拡大し、隣のアイコンを押し広げる大きさ。100 でオフ。Dock は上に余白を作ります。透明タスクバーでは、上端までしか拡大しません（100-200、既定値 170）
+    $description:vi: Phóng to icon dưới trỏ chuột theo hiệu ứng lượn sóng giống macOS và đẩy nhẹ các icon bên cạnh ra; đặt 100 để tắt. Thanh Dock sẽ tự mở rộng không gian phía trên cho icon phóng to, còn taskbar trong suốt chỉ phóng to tối đa bằng chiều cao taskbar (100-200, mặc định 170)
   - magnificationRange: 150
     $name: Magnification reach (px)
     $name:pt-BR: Alcance da ampliação (px)
@@ -1464,6 +1497,7 @@ escrever em português.
     $name:es: Alcance de la ampliación (px)
     $name:ru-RU: Зона увеличения (px)
     $name:ja-JP: 拡大の範囲 (px)
+    $name:vi: Bán kính lan hiệu ứng sóng (px)
     $description: How far from the mouse the neighboring icons still grow. Only with magnification above 100 (40-300, default 150)
     $description:pt-BR: Até que distância do mouse os ícones vizinhos também crescem. Só com ampliação acima de 100 (40-300, padrão 150)
     $description:zh-CN: 距离鼠标多远的相邻图标也会放大。仅在放大大于 100 时有效（40-300，默认 150）
@@ -1471,6 +1505,7 @@ escrever em português.
     $description:es: A qué distancia del ratón siguen creciendo los iconos vecinos. Solo con ampliación superior a 100 (40-300, predeterminado 150)
     $description:ru-RU: На каком расстоянии от мыши соседние значки ещё увеличиваются. Только при увеличении больше 100 (40-300, по умолчанию 150)
     $description:ja-JP: マウスからどこまで離れた隣のアイコンまで拡大するか。拡大が 100 を超えるときのみ（40-300、既定値 150）
+    $description:vi: Khoảng cách tính từ trỏ chuột mà các icon lân cận vẫn được phóng to theo hiệu ứng sóng. Chỉ có tác dụng khi độ phóng đại lớn hơn 100 (40-300, mặc định 150)
   - bounceOnLaunch: true
     $name: Bounce while an app opens
     $name:pt-BR: Pular enquanto um app abre
@@ -1479,6 +1514,7 @@ escrever em português.
     $name:es: Rebotar mientras se abre una app
     $name:ru-RU: Подпрыгивание при открытии приложения
     $name:ja-JP: アプリの起動中にバウンス
+    $name:vi: Hiệu ứng nảy icon khi mở ứng dụng
     $description: The icon of an app being opened bounces until its window shows, like on macOS (not with the "partial" or no animations)
     $description:pt-BR: O ícone de um app abrindo pula até a janela dele aparecer, como no macOS (não com animações "parciais" ou sem animações)
     $description:zh-CN: 正在打开的应用图标会一直跳动，直到窗口出现，像 macOS 一样（"部分"动画或无动画时不会）
@@ -1486,6 +1522,7 @@ escrever em português.
     $description:es: El icono de una app que se abre rebota hasta que aparece su ventana, como en macOS (no con "Parcial" ni sin animaciones)
     $description:ru-RU: Значок открываемого приложения подпрыгивает, пока не появится его окно, как в macOS (не при «Частично» и без анимаций)
     $description:ja-JP: 起動中のアプリのアイコンは、macOS のようにウィンドウが表示されるまでバウンスします（「一部」またはアニメーションなしのときは無効）
+    $description:vi: Icon của ứng dụng vừa bấm mở sẽ nảy lên xuống như macOS cho tới khi cửa sổ hiện ra (không hoạt động nếu chọn hiệu ứng "Cơ bản" hoặc tắt hiệu ứng)
   - keepOpenOnLaunch: true
     $name: Stay up while a clicked app opens
     $name:pt-BR: Ficar aberta enquanto um app clicado abre
@@ -1494,6 +1531,7 @@ escrever em português.
     $name:es: Quedarse arriba mientras se abre una app pulsada
     $name:ru-RU: Оставаться, пока открывается нажатое приложение
     $name:ja-JP: クリックしたアプリの起動中は表示したままにする
+    $name:vi: Giữ thanh Dock hiện trong lúc chờ ứng dụng mở lên
     $description: After clicking an app that isn't open, the taskbar waits for it to open (and bounce) before hiding. Only with the hiding of the group above
     $description:pt-BR: Depois de clicar num app que não está aberto, a barra espera ele abrir (e pular) antes de se esconder. Só com o esconder do grupo acima
     $description:zh-CN: 点击一个未打开的应用后，任务栏会等它打开（并跳动）后再隐藏。仅在上面分组的隐藏开启时有效
@@ -1501,6 +1539,7 @@ escrever em português.
     $description:es: Tras hacer clic en una app que no está abierta, la barra de tareas espera a que se abra (y rebote) antes de ocultarse. Solo con el ocultado del grupo de arriba
     $description:ru-RU: После нажатия на неоткрытое приложение панель задач ждёт его открытия (и подпрыгивания) и только потом скрывается. Только при скрытии из группы выше
     $description:ja-JP: 開いていないアプリをクリックした後、タスクバーはそのアプリが開く（とバウンスする）まで待ってから隠れます。上のグループの自動非表示がオンのときのみ
+    $description:vi: Sau khi bấm mở một ứng dụng, thanh Dock sẽ chờ ứng dụng khởi động xong (kèm hiệu ứng nảy icon) rồi mới tự ẩn xuống. Chỉ áp dụng khi bật tự động ẩn ở nhóm trên
   - keepOpenDuration: 1500
     $name: How long it stays after the app opens (ms)
     $name:pt-BR: Quanto tempo ela fica depois que o app abre (ms)
@@ -1509,6 +1548,7 @@ escrever em português.
     $name:es: Cuánto se queda tras abrirse la app (ms)
     $name:ru-RU: Как долго остаётся после открытия приложения (мс)
     $name:ja-JP: アプリが開いてから表示を続ける時間 (ms)
+    $name:vi: Thời gian giữ thêm sau khi ứng dụng đã mở (ms)
     $description: Enough to see the bounces. Only with the option above on (0-5000, default 1500)
     $description:pt-BR: O suficiente para ver os pulos. Só com a opção acima ligada (0-5000, padrão 1500)
     $description:zh-CN: 足够看到跳动。仅在上面的选项开启时有效（0-5000，默认 1500）
@@ -1516,6 +1556,7 @@ escrever em português.
     $description:es: Suficiente para ver los rebotes. Solo con la opción de arriba activada (0-5000, predeterminado 1500)
     $description:ru-RU: Достаточно, чтобы увидеть подпрыгивания. Только при включённом параметре выше (0-5000, по умолчанию 1500)
     $description:ja-JP: バウンスが見える程度の長さです。上のオプションがオンのときのみ（0-5000、既定値 1500）
+    $description:vi: Đủ lâu để bạn nhìn thấy trọn vẹn nhịp nảy của icon. Chỉ có tác dụng khi bật tùy chọn ngay phía trên (0-5000, mặc định 1500)
   $name: App icons (dock and transparent taskbar)
   $name:pt-BR: Ícones dos apps (dock e barra transparente)
   $name:zh-CN: 应用图标（程序坞和透明任务栏）
@@ -1523,6 +1564,7 @@ escrever em português.
   $name:es: Iconos de apps (dock y barra de tareas transparente)
   $name:ru-RU: Значки приложений (док и прозрачная панель задач)
   $name:ja-JP: アプリのアイコン（Dock と透明タスクバー）
+  $name:vi: Biểu tượng ứng dụng (Dock & Taskbar trong suốt)
   $description: Only for the "Dock" and "Windows taskbar, transparent" choices above
   $description:pt-BR: Só para as opções "Dock" e "Barra do Windows transparente" acima
   $description:zh-CN: 仅适用于上面的"程序坞"和"Windows 任务栏，透明"选项
@@ -1530,6 +1572,7 @@ escrever em português.
   $description:es: Solo para las opciones "Dock" y "Barra de tareas de Windows, transparente" de arriba
   $description:ru-RU: Только для вариантов «Док» и «Панель задач Windows, прозрачная» выше
   $description:ja-JP: 上の「Dock」と「Windows タスクバー、透明」の選択肢のみ
+  $description:vi: Chỉ áp dụng cho chế độ "Dock" và "Taskbar Windows trong suốt"
 - dock:
   - iconSize: 32
     $name: Icon size (px)
@@ -1539,6 +1582,7 @@ escrever em português.
     $name:es: Tamaño de iconos (px)
     $name:ru-RU: Размер значков (px)
     $name:ja-JP: アイコンのサイズ (px)
+    $name:vi: Kích thước icon (px)
     $description: At rest, like on macOS; the dock's height and margins follow them. When the taskbar doesn't hide itself, the dock at rest fits in the taskbar's height (only the magnified icons go over the windows), so its icons may be smaller (24-64, default 32)
     $description:pt-BR: Em repouso, como no macOS; a altura e as margens da dock acompanham. Quando a barra não se esconde sozinha, a dock em repouso cabe na altura da barra (só os ícones ampliados passam por cima das janelas), então os ícones podem ficar menores (24-64, padrão 32)
     $description:zh-CN: 静止时的大小，像 macOS 一样；程序坞的高度和边距随之变化。任务栏不自动隐藏时，静止的程序坞会放进任务栏的高度内（只有放大的图标会盖住窗口），所以图标可能更小（24-64，默认 32）
@@ -1546,6 +1590,7 @@ escrever em português.
     $description:es: En reposo, como en macOS; la altura y los márgenes del dock los siguen. Si la barra de tareas no se oculta sola, el dock en reposo cabe en la altura de la barra (solo los iconos ampliados pasan por encima de las ventanas), por lo que sus iconos pueden ser más pequeños (24-64, predeterminado 32)
     $description:ru-RU: В покое, как в macOS; высота и поля дока следуют за ними. Если панель задач не скрывается сама, док в покое вписывается в высоту панели задач (поверх окон выходят только увеличенные значки), поэтому значки могут быть меньше (24-64, по умолчанию 32)
     $description:ja-JP: 通常時のサイズ（macOS と同様）。Dock の高さと余白もそれに合わせて変わります。タスクバーが自動で隠れない場合、通常時の Dock はタスクバーの高さに収まる（拡大したアイコンだけがウィンドウの上に出る）ため、アイコンが小さくなることがあります（24-64、既定値 32）
+    $description:vi: Kích thước icon ở trạng thái bình thường (chiều cao và lề của Dock sẽ tự co giãn theo). Nếu bạn không bật tự động ẩn taskbar, thanh Dock lúc nghỉ sẽ tự thu vừa trong chiều cao chuẩn của taskbar Windows nên icon có thể nhỏ hơn mức bạn đặt (24-64, mặc định 32)
   - iconGap: 8
     $name: Space between icons (px)
     $name:pt-BR: Espaço entre os ícones (px)
@@ -1554,6 +1599,7 @@ escrever em português.
     $name:es: Espacio entre iconos (px)
     $name:ru-RU: Расстояние между значками (px)
     $name:ja-JP: アイコンの間隔 (px)
+    $name:vi: Khoảng cách giữa các icon (px)
     $description: The dock gets wider with it (0-32, default 8)
     $description:pt-BR: A dock fica mais larga junto (0-32, padrão 8)
     $description:zh-CN: 程序坞会随之变宽（0-32，默认 8）
@@ -1561,6 +1607,7 @@ escrever em português.
     $description:es: El dock se hace más ancho con él (0-32, predeterminado 8)
     $description:ru-RU: Док становится шире вместе с ним (0-32, по умолчанию 8)
     $description:ja-JP: これに合わせて Dock も広くなります（0-32、既定値 8）
+    $description:vi: Tăng khoảng cách này sẽ làm thanh Dock dài ra tương ứng (0-32, mặc định 8)
   - bottomGap: 2
     $name: Gap at the bottom (px)
     $name:pt-BR: Espaço embaixo (px)
@@ -1569,6 +1616,7 @@ escrever em português.
     $name:es: Espacio inferior (px)
     $name:ru-RU: Отступ снизу (px)
     $name:ja-JP: 下端の余白 (px)
+    $name:vi: Khoảng cách nổi so với mép dưới (px)
     $description: Between the dock and the bottom edge of the screen (0-24, default 2)
     $description:pt-BR: Entre a dock e a borda de baixo da tela (0-24, padrão 2)
     $description:zh-CN: 程序坞与屏幕底部边缘之间的距离（0-24，默认 2）
@@ -1576,6 +1624,7 @@ escrever em português.
     $description:es: Entre el dock y el borde inferior de la pantalla (0-24, predeterminado 2)
     $description:ru-RU: Между доком и нижним краем экрана (0-24, по умолчанию 2)
     $description:ja-JP: Dock と画面の下端の間（0-24、既定値 2）
+    $description:vi: Khoảng hở giữa đáy thanh Dock và cạnh dưới cùng của màn hình (0-24, mặc định 2)
   - cornerRadius: 22
     $name: Corner roundness (px)
     $name:pt-BR: Arredondamento dos cantos (px)
@@ -1584,6 +1633,7 @@ escrever em português.
     $name:es: Redondez de las esquinas (px)
     $name:ru-RU: Скругление углов (px)
     $name:ja-JP: 角の丸み (px)
+    $name:vi: Độ bo tròn góc Dock (px)
     $description: 0 is square, 32 is very round (0-32, default 22)
     $description:pt-BR: 0 é quadrado, 32 é bem arredondado (0-32, padrão 22)
     $description:zh-CN: 0 为直角，32 为很圆（0-32，默认 22）
@@ -1591,6 +1641,7 @@ escrever em português.
     $description:es: 0 es cuadrado, 32 muy redondo (0-32, predeterminado 22)
     $description:ru-RU: 0 — прямые, 32 — очень круглые (0-32, по умолчанию 22)
     $description:ja-JP: 0 は直角、32 は非常に丸い（0-32、既定値 22）
+    $description:vi: Đặt 0 là góc vuông, 32 là bo tròn tối đa (0-32, mặc định 22)
   - background: true
     $name: Background behind the icons
     $name:pt-BR: Fundo atrás dos ícones
@@ -1599,6 +1650,7 @@ escrever em português.
     $name:es: Fondo detrás de los iconos
     $name:ru-RU: Фон за значками
     $name:ja-JP: アイコンの背景
+    $name:vi: Hiển thị nền thanh Dock
     $description: The rounded shelf with its thin edge (also around the tray). Off, only the icons show, with the same sizes and magnification
     $description:pt-BR: A base arredondada com a borda fina (também em volta da bandeja). Desligado, só os ícones aparecem, com os mesmos tamanhos e a mesma ampliação
     $description:zh-CN: 带细边框的圆角底座（托盘周围也有）。关闭后只显示图标，大小和放大效果不变
@@ -1606,6 +1658,7 @@ escrever em português.
     $description:es: El estante redondeado con su borde fino (también alrededor de la bandeja). Desactivado, solo se ven los iconos, con los mismos tamaños y ampliación
     $description:ru-RU: Скруглённая подложка с тонкой рамкой (также вокруг области уведомлений). Если выключено, показываются только значки, с теми же размерами и увеличением
     $description:ja-JP: 細い縁取りのある角丸の台座（トレイの周りにも）。オフにするとアイコンだけが表示され、サイズと拡大は同じです
+    $description:vi: Phần khung nền bo tròn có viền mảnh phía sau các icon. Khi tắt, chỉ còn các icon nổi trên màn hình nhưng vẫn giữ nguyên kích thước và hiệu ứng phóng đại
   - backgroundOpacity: 50
     $name: Background color (%)
     $name:pt-BR: Cor do fundo (%)
@@ -1614,6 +1667,7 @@ escrever em português.
     $name:es: Color de fondo (%)
     $name:ru-RU: Цвет фона (%)
     $name:ja-JP: 背景の色 (%)
+    $name:vi: Độ đậm nền Dock (%)
     $description: How much color the background has, in the theme's color; 0 is see-through (only its edge shows), 100 is solid (0-100, default 50)
     $description:pt-BR: Quanto de cor o fundo tem, na cor do tema; 0 é transparente (só a borda aparece), 100 é sólido (0-100, padrão 50)
     $description:zh-CN: 背景的颜色有多浓，使用主题颜色；0 为透明（只显示边框），100 为纯色（0-100，默认 50）
@@ -1621,6 +1675,7 @@ escrever em português.
     $description:es: Cuánto color tiene el fondo, en el color del tema; 0 es transparente (solo se ve su borde), 100 sólido (0-100, predeterminado 50)
     $description:ru-RU: Насколько фон окрашен цветом темы; 0 — прозрачный (виден только край), 100 — сплошной (0-100, по умолчанию 50)
     $description:ja-JP: 背景にテーマの色をどれだけ付けるか。0 は透明（縁のみ表示）、100 は不透明（0-100、既定値 50）
+    $description:vi: Độ đậm nhạt của lớp màu nền thanh Dock; 0 là trong suốt hoàn toàn (chỉ thấy viền mảnh), 100 là đặc hoàn toàn (0-100, mặc định 50)
   - dotIndicator: true
     $name: Dots under open apps
     $name:pt-BR: Pontinhos embaixo dos apps abertos
@@ -1629,6 +1684,7 @@ escrever em português.
     $name:es: Puntos bajo las apps abiertas
     $name:ru-RU: Точки под открытыми приложениями
     $name:ja-JP: 開いているアプリの下のドット
+    $name:vi: Hiện dấu chấm tròn dưới ứng dụng đang mở
     $description: Instead of the Windows line
     $description:pt-BR: No lugar do traço do Windows
     $description:zh-CN: 代替 Windows 的横线
@@ -1636,6 +1692,7 @@ escrever em português.
     $description:es: En lugar de la línea de Windows
     $description:ru-RU: Вместо линии Windows
     $description:ja-JP: Windows の線の代わりに表示します
+    $description:vi: Thay thế cho vạch ngang mặc định của Windows 11
   - attentionMode: icon
     $name: When an app needs attention with the dock hidden
     $name:pt-BR: Quando um app pede atenção com a dock escondida
@@ -1644,6 +1701,7 @@ escrever em português.
     $name:es: Cuando una app necesita atención con el dock oculto
     $name:ru-RU: Когда приложение требует внимания при скрытом доке
     $name:ja-JP: Dock が非表示のときにアプリが注意を求めたら
+    $name:vi: Khi có ứng dụng báo hiệu lúc Dock đang ẩn
     $description: An app flashing its taskbar button (a message, a download done) while the dock is hidden
     $description:pt-BR: Um app piscando o botão na barra (uma mensagem, um download pronto) enquanto a dock está escondida
     $description:zh-CN: 程序坞隐藏时，某个应用闪烁它的任务栏按钮（一条消息、一个下载完成）
@@ -1651,6 +1709,7 @@ escrever em português.
     $description:es: Una app cuyo botón de la barra de tareas parpadea (un mensaje, una descarga terminada) mientras el dock está oculto
     $description:ru-RU: Приложение мигает кнопкой на панели задач (сообщение, завершённая загрузка), пока док скрыт
     $description:ja-JP: Dock が非表示の間に、アプリがタスクバーのボタンを点滅させたとき（メッセージ、ダウンロード完了など）
+    $description:vi: Cách báo cho bạn biết khi một ứng dụng nhấp nháy icon trên taskbar (có tin nhắn mới, tải tệp xong...) trong lúc thanh Dock đang ẩn
     $options:
     - icon: Only the app's icon peeks out, bouncing
     - dock: The whole dock shows up
@@ -1679,6 +1738,10 @@ escrever em português.
     - icon: アプリのアイコンだけがバウンスしながらのぞく
     - dock: Dock 全体が表示される
     - none: 何もしない
+    $options:vi:
+    - icon: Chỉ nhô riêng icon của ứng dụng đó lên và nảy nhẹ
+    - dock: Trượt cả thanh Dock lên
+    - none: Không làm gì
   - hideTray: false
     $name: Hide the clock and the tray from the dock (without the island)
     $name:pt-BR: Esconder o relógio e a bandeja da dock (sem a ilha)
@@ -1687,6 +1750,7 @@ escrever em português.
     $name:es: Ocultar el reloj y la bandeja del dock (sin la isla)
     $name:ru-RU: Скрыть часы и область уведомлений из дока (без острова)
     $name:ja-JP: Dock の時計とトレイを非表示（アイランドなし）
+    $name:vi: Ẩn đồng hồ và khay hệ thống khỏi thanh Dock (khi tắt đảo)
     $description: Only for the "Dock" choice with the island at the top off. The dock shows only the apps. With the island on, the dock never shows them (the island does), so this changes nothing then
     $description:pt-BR: Só para a opção "Dock" com a ilha no topo desligada. A dock mostra só os apps. Com a ilha ligada, a dock nunca mostra os dois (a ilha mostra), então esta opção não muda nada
     $description:zh-CN: 仅适用于"程序坞"选项，并且顶部灵动岛关闭时：程序坞只显示应用。灵动岛开启时，程序坞从不显示它们（由灵动岛显示），所以这时此选项不起作用
@@ -1694,6 +1758,7 @@ escrever em português.
     $description:es: Solo para la opción "Dock" con la isla arriba desactivada. El dock muestra solo las apps. Con la isla activada, el dock nunca los muestra (lo hace la isla), así que esto no cambia nada entonces
     $description:ru-RU: Только для варианта «Док» при выключенном острове вверху. Док показывает только приложения. При включённом острове док никогда их не показывает (это делает остров), поэтому тогда параметр ничего не меняет
     $description:ja-JP: 上部のアイランドがオフのときの「Dock」専用です。Dock にはアプリだけが表示されます。アイランドがオンのときは Dock には表示されず（アイランドが表示します）、このオプションは何も変更しません
+    $description:vi: Chỉ dùng khi bạn chọn kiểu "Dock" nhưng tắt thanh đảo ở cạnh trên, giúp thanh Dock chỉ hiện thuần các icon ứng dụng. Còn khi bật đảo, đồng hồ và khay hệ thống đã tự chuyển lên đảo nên tùy chọn này không cần thiết
   $name: Dock look (dock only)
   $name:pt-BR: Visual da dock (só para a dock)
   $name:zh-CN: 程序坞外观（仅程序坞）
@@ -1701,6 +1766,7 @@ escrever em português.
   $name:es: Aspecto del dock (solo dock)
   $name:ru-RU: Вид дока (только для дока)
   $name:ja-JP: Dock の外観（Dock のみ）
+  $name:vi: Giao diện thanh Dock (chỉ dành cho Dock)
   $description: Only for the "Dock" choice above
   $description:pt-BR: Só para a opção "Dock" acima
   $description:zh-CN: 仅适用于上面的"程序坞"选项
@@ -1708,6 +1774,7 @@ escrever em português.
   $description:es: Solo para la opción "Dock" de arriba
   $description:ru-RU: Только для варианта «Док» выше
   $description:ja-JP: 上の「Dock」の選択肢のみ
+  $description:vi: Chỉ áp dụng khi chọn chế độ "Dock" ở mục đầu tiên
 - animations:
   - enabled: true
     $name: Animations
@@ -1717,6 +1784,7 @@ escrever em português.
     $name:es: Animaciones
     $name:ru-RU: Анимации
     $name:ja-JP: アニメーション
+    $name:vi: Bật hiệu ứng chuyển động
     $description: The dock's and the transparent taskbar's animations (sliding, magnifying, bouncing). Off, everything changes at once
     $description:pt-BR: As animações da dock e da barra transparente (deslizar, ampliar, pular). Desligadas, tudo muda na hora
     $description:zh-CN: 程序坞和透明任务栏的动画（滑动、放大、弹跳）。关闭后，一切立即变化
@@ -1724,6 +1792,7 @@ escrever em português.
     $description:es: Las animaciones del dock y de la barra de tareas transparente (deslizar, ampliar, rebotar). Desactivadas, todo cambia de golpe
     $description:ru-RU: Анимации дока и прозрачной панели задач (выезд, увеличение, подпрыгивание). Если выключено, всё меняется мгновенно
     $description:ja-JP: Dock と透明タスクバーのアニメーション（スライド、拡大、バウンス）。オフにすると、すべてが即座に切り替わります
+    $description:vi: Hiệu ứng trượt, phóng đại sóng và nảy icon của thanh Dock / taskbar trong suốt. Khi tắt, mọi thao tác sẽ phản hồi tức thì
   - level: all
     $name: How many
     $name:pt-BR: Quantas
@@ -1732,6 +1801,7 @@ escrever em português.
     $name:es: Cuántas
     $name:ru-RU: Сколько
     $name:ja-JP: 量
+    $name:vi: Mức độ hiệu ứng
     $description: '"Partial" keeps the taskbar sliding in and out, and drops what only decorates, for slower computers'
     $description:pt-BR: '"Parciais" mantém a barra entrando e saindo, e tira o que só enfeita, para computadores mais lentos'
     $description:zh-CN: '"部分"保留任务栏滑入和滑出的动画，去掉只用于装饰的动画，适合较慢的电脑'
@@ -1739,6 +1809,7 @@ escrever em português.
     $description:es: '"Parcial" mantiene el deslizamiento de la barra de tareas y quita lo que solo decora, para equipos más lentos'
     $description:ru-RU: '«Частично» оставляет выезд и уход панели задач и убирает то, что только украшает, для медленных компьютеров'
     $description:ja-JP: '「一部」はタスクバーのスライドイン/アウトを残し、装飾だけのものを省きます。低速な PC 向けです'
+    $description:vi: 'Chọn "Cơ bản" để giữ lại hiệu ứng trượt ẩn/hiện chính và tắt bớt các hiệu ứng trang trí phụ, giúp nhẹ máy hơn'
     $options:
     - all: All
     - partial: "Partial: no bounces, glows, color blends, counting numbers nor scrolling text"
@@ -1767,6 +1838,10 @@ escrever em português.
     - all: すべて
     - partial: "一部: バウンス、グロー、色のブレンド、数字のカウント、テキストのスクロールなし"
     - none: なし
+    $options:vi:
+    - all: Đầy đủ
+    - partial: "Cơ bản: tắt hiệu ứng nảy, phát sáng, chuyển màu, nhảy số và chạy chữ"
+    - none: Tắt hết
   - speed: 125
     $name: Speed (%)
     $name:pt-BR: Velocidade (%)
@@ -1775,6 +1850,7 @@ escrever em português.
     $name:es: Velocidad (%)
     $name:ru-RU: Скорость (%)
     $name:ja-JP: 速度 (%)
+    $name:vi: Tốc độ hiệu ứng (%)
     $description: More is faster, less is slower (50-200, default 125)
     $description:pt-BR: Mais é mais rápido, menos é mais lento (50-200, padrão 125)
     $description:zh-CN: 越大越快，越小越慢（50-200，默认 125）
@@ -1782,6 +1858,7 @@ escrever em português.
     $description:es: Más es más rápido, menos más lento (50-200, predeterminado 125)
     $description:ru-RU: Больше — быстрее, меньше — медленнее (50-200, по умолчанию 125)
     $description:ja-JP: 大きいほど速く、小さいほど遅くなります（50-200、既定値 125）
+    $description:vi: Số càng lớn chuyển động càng nhanh, số càng nhỏ càng chậm lại (50-200, mặc định 125)
   - frameRate: screen
     $name: Frame rate limit
     $name:pt-BR: Limite de quadros por segundo
@@ -1790,6 +1867,7 @@ escrever em português.
     $name:es: Límite de fotogramas
     $name:ru-RU: Ограничение частоты кадров
     $name:ja-JP: フレーム レートの上限
+    $name:vi: Giới hạn tốc độ khung hình (FPS)
     $description: Fewer frames cost less on slower computers; the animations keep their length
     $description:pt-BR: Menos quadros custam menos em computadores mais lentos; as animações mantêm a duração
     $description:zh-CN: 较少的帧在较慢的电脑上开销更小；动画时长不变
@@ -1797,6 +1875,7 @@ escrever em português.
     $description:es: Menos fotogramas cuestan menos en equipos más lentos; las animaciones mantienen su duración
     $description:ru-RU: Меньше кадров — меньше нагрузка на медленных компьютерах; длительность анимаций сохраняется
     $description:ja-JP: フレーム数が少ないほど低速な PC での負荷が下がります。アニメーションの長さは変わりません
+    $description:vi: Giảm số khung hình giúp tiết kiệm tài nguyên hơn trên máy cấu hình yếu mà không làm thay đổi tốc độ của hiệu ứng
     $options:
     - screen: The screen's rate
     - fps90: About 90 a second
@@ -1832,6 +1911,11 @@ escrever em português.
     - fps90: 約 90 フレーム/秒
     - fps60: 約 60 フレーム/秒
     - fps30: 約 30 フレーム/秒
+    $options:vi:
+    - screen: Theo tần số quét màn hình
+    - fps90: Khoảng 90 FPS
+    - fps60: Khoảng 60 FPS
+    - fps30: Khoảng 30 FPS
   $name: Dock animations
   $name:pt-BR: Animações da dock
   $name:zh-CN: 程序坞动画
@@ -1839,6 +1923,7 @@ escrever em português.
   $name:es: Animaciones del dock
   $name:ru-RU: Анимации дока
   $name:ja-JP: Dock のアニメーション
+  $name:vi: Chuyển động của thanh Dock
   $description: For the dock and the transparent taskbar. The island's own animations are in its settings (they start as these were)
   $description:pt-BR: Para a dock e a barra transparente. As animações da ilha ficam nas configurações dela (começam como estas estavam)
   $description:zh-CN: 适用于程序坞和透明任务栏。灵动岛自己的动画在它的设置中（初始与这里相同）
@@ -1846,6 +1931,7 @@ escrever em português.
   $description:es: Para el dock y la barra de tareas transparente. Las animaciones propias de la isla están en su configuración (empiezan como estas)
   $description:ru-RU: Для дока и прозрачной панели задач. Анимации острова — в его настройках (они начинаются такими же)
   $description:ja-JP: Dock と透明タスクバー用です。アイランドのアニメーションはその設定にあります（初期値はこれらと同じ）
+  $description:vi: Áp dụng cho thanh Dock và taskbar trong suốt. Riêng hiệu ứng chuyển động của đảo được chỉnh trực tiếp trong cửa sổ Cài đặt của đảo
 */
 // ==/WindhawkModSettings==
 
@@ -17509,6 +17595,939 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
 };
 // clang-format on
 
+// The island's texts in Vietnamese, by their English ones (see Tr).
+// Sorted by the English text.
+// clang-format off
+constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
+    {L" (all apps)", L" (mọi ứng dụng)"},
+    {L" (all monitors)", L" (mọi màn hình)"},
+    {L" by caliberda", L" bởi caliberda"},
+    {L" events", L" sự kiện"},
+    {L" files", L" tệp"},
+    {L" in progress", L" đang làm"},
+    {L" shortcuts imported", L" phím tắt đã nhập"},
+    {L" · almost full", L" · sắp đầy"},
+    {L" · click to hide", L" · bấm để ẩn"},
+    {L" · drag to move", L" · kéo để di chuyển"},
+    {L" · hidden, click to show", L" · đang ẩn, bấm để hiện"},
+    {L" · main island", L" · đảo chính"},
+    {L" · no sound", L" · tắt tiếng"},
+    {L" · plain color while Windows' energy saver is on", L" · chuyển sang màu đơn khi bật Tiết kiệm pin của Windows"},
+    {L" · plain color: Windows' transparency effects are off (Personalization > Colors)", L" · chuyển sang màu đơn do hiệu ứng trong suốt của Windows đang tắt (Personalization > Colors)"},
+    {L" · press the new keys (Esc cancels)", L" · nhấn tổ hợp phím mới (Esc để hủy)"},
+    {L" · this island", L" · đảo này"},
+    {L" · whkd isn't installed (winget install LGUG2Z.whkd)", L" · chưa cài whkd (winget install LGUG2Z.whkd)"},
+    {L"\"Follows the line\": as wide as each line; the others keep the widest line's width. A longer line ends with \u2026", L"\"Co giãn theo câu\": dài ngắn tùy theo từng câu hát; các mức còn lại giữ theo câu dài nhất. Câu quá dài sẽ cắt bằng dấu \u2026"},
+    {L"%d items", L"%d mục"},
+    {L"%zu of %zu events", L"%zu / %zu sự kiện"},
+    {L"(the wheel turns the pages)", L"(lăn chuột để chuyển trang)"},
+    {L"+  New event", L"+  Sự kiện mới"},
+    {L"+  New shortcut", L"+  Phím tắt mới"},
+    {L"+ Add alarm", L"+ Thêm báo thức"},
+    {L"+ saves the current settings as a profile, to switch back to them later.", L"+ lưu thiết lập hiện tại thành hồ sơ mới để tiện chuyển lại sau."},
+    {L".ics link or file path", L"Link .ics hoặc đường dẫn tệp"},
+    {L"1 day", L"1 ngày"},
+    {L"1 item", L"1 mục"},
+    {L"12 h AM/PM", L"12 giờ SA/CH"},
+    {L"24 h", L"24 giờ"},
+    {L"30 days", L"30 ngày"},
+    {L"7 days", L"7 ngày"},
+    {L"A file with all of it (agenda links too)", L"Lưu tất cả vào một tệp (gồm cả link lịch .ics)"},
+    {L"A long title keeps scrolling while it plays", L"Tên bài hát dài sẽ chạy chữ liên tục khi đang phát"},
+    {L"A summary of the PC, the island's settings and its last 300 log lines (the dock's are in Windhawk's log)", L"Thông tin tóm tắt về máy, thiết lập của đảo và 300 dòng log gần nhất (log của thanh Dock nằm trong Windhawk)"},
+    {L"A title too long to fit scrolls across while it plays", L"Tên bài hát dài quá khung sẽ tự chạy chữ khi đang phát"},
+    {L"A to Z", L"A đến Z"},
+    {L"About", L"Giới thiệu"},
+    {L"Accent", L"Màu nhấn"},
+    {L"Accent color", L"Màu nhấn"},
+    {L"Accessibility", L"Trợ năng"},
+    {L"Add", L"Thêm"},
+    {L"Add  (Enter)", L"Thêm  (Enter)"},
+    {L"Add a folder", L"Thêm thư mục"},
+    {L"Add an open app", L"Thêm ứng dụng đang mở"},
+    {L"Add clocks in Windows' date and time settings (Additional clocks)", L"Thêm múi giờ trong cài đặt Ngày & Giờ của Windows (Additional clocks)"},
+    {L"Add controls", L"Thêm nút điều khiển"},
+    {L"Add note  (Ctrl+Enter)", L"Thêm ghi chú  (Ctrl+Enter)"},
+    {L"Add the shortcuts you want to remember", L"Lưu lại các phím tắt bạn hay dùng để tiện tra cứu"},
+    {L"Adds a button for sleep, restart and shut down", L"Hiện nút Ngủ, Khởi động lại và Tắt máy"},
+    {L"Adds a button that lists the keyboard shortcuts", L"Hiện nút xem nhanh danh sách phím tắt"},
+    {L"Adds a button that mutes and unmutes the microphone", L"Hiện nút tắt/bật nhanh micrô"},
+    {L"Adds a button that opens your quick notes", L"Hiện nút mở nhanh bảng ghi chú"},
+    {L"Adds a button that opens your to-do list", L"Hiện nút mở danh sách việc cần làm"},
+    {L"Adds a button that switches Windows between light and dark", L"Hiện nút đổi nhanh giao diện Sáng / Tối của Windows"},
+    {L"Adds a button to switch profiles from the pill", L"Hiện nút đổi nhanh hồ sơ ngay trên thanh đảo"},
+    {L"Adds a small arrow at the pill's end that hides it to its line", L"Hiện nút mũi tên nhỏ ở cuối thanh đảo để thu gọn thành vạch mảnh"},
+    {L"Adds a timer, a stopwatch and a Pomodoro to the pill", L"Hiện bộ hẹn giờ, bấm giờ và Pomodoro trên thanh đảo"},
+    {L"Adds a way to reach the tray icons of other apps from the pill", L"Hiện nút mở các icon khay hệ thống trên thanh đảo"},
+    {L"Adds the Recycle Bin to the pill", L"Hiện Thùng rác trên thanh đảo"},
+    {L"Adds the day and the month to the clock", L"Hiện thêm ngày và tháng cạnh đồng hồ"},
+    {L"Adds the notifications bell to the pill", L"Hiện chuông thông báo trên thanh đảo"},
+    {L"Adds the seconds to the time", L"Hiện thêm số giây trên đồng hồ"},
+    {L"Adds the weekday to the clock", L"Hiện thêm thứ trong tuần cạnh đồng hồ"},
+    {L"Adds the year to the clock", L"Hiện thêm số năm cạnh đồng hồ"},
+    {L"Agendas", L"Lịch đăng ký"},
+    {L"Airplane mode", L"Chế độ máy bay"},
+    {L"Alarm", L"Báo thức"},
+    {L"Alarms", L"Báo thức"},
+    {L"All", L"Tất cả"},
+    {L"All day", L"Cả ngày"},
+    {L"All done", L"Đã xong hết"},
+    {L"All files", L"Tất cả tệp"},
+    {L"All up to date", L"Tất cả đã mới nhất"},
+    {L"Already added", L"Đã có trong danh sách"},
+    {L"Always", L"Luôn hiện"},
+    {L"Always, or only once what's in it weighs this much (it comes and goes by itself)", L"Luôn hiện, hoặc chỉ tự hiện ra khi dung lượng rác vượt mức này"},
+    {L"An app appears here once it plays something", L"Ứng dụng sẽ hiện ở đây sau khi phát nhạc lần đầu"},
+    {L"Animations", L"Chuyển động"},
+    {L"App", L"Ứng dụng"},
+    {L"App in focus", L"Ứng dụng đang dùng"},
+    {L"Applies to every monitor, and the island restarts to apply it", L"Áp dụng cho mọi màn hình (đảo sẽ tự khởi động lại)"},
+    {L"Apply", L"Áp dụng"},
+    {L"Apps (winget, in a terminal)", L"Ứng dụng (qua winget trong Terminal)"},
+    {L"Apps and tools", L"Ứng dụng & công cụ"},
+    {L"Apps that look for lyrics", L"Ứng dụng được phép tìm lời bài hát"},
+    {L"Apps with notifications", L"Ứng dụng có thông báo"},
+    {L"Apps with unsaved work can stop it.", L"Các ứng dụng chưa lưu dữ liệu có thể ngăn thao tác này."},
+    {L"Area that brings it back", L"Vùng đưa chuột để mở lại"},
+    {L"Ask", L"Hỏi mỗi lần"},
+    {L"Audio visualizer", L"Sóng nhạc"},
+    {L"Audio visualizer (bars moving with the sound)", L"Sóng nhạc (nhảy theo giai điệu đang phát)"},
+    {L"Auto", L"Tự động"},
+    {L"Auto (light or dark)", L"Tự động (theo chế độ Sáng/Tối)"},
+    {L"Auto, inverted (the other way from Windows)", L"Tự động đảo ngược (ngược với chế độ của Windows)"},
+    {L"Automatic", L"Tự động"},
+    {L"Available", L"Khả dụng"},
+    {L"BSP", L"BSP"},
+    {L"Back", L"Quay lại"},
+    {L"Back to default", L"Khôi phục mặc định"},
+    {L"Back to focus", L"Quay lại tập trung"},
+    {L"Backup", L"Sao lưu"},
+    {L"Backup (notes, tasks, profiles and settings)", L"Sao lưu (ghi chú, công việc, hồ sơ và cài đặt)"},
+    {L"Balanced", L"Cân bằng"},
+    {L"Banners even with the pill minimized", L"Hiện thông báo nổi cả khi đảo đang thu gọn"},
+    {L"Banners in the pill", L"Thông báo nổi trên thanh đảo"},
+    {L"Banners still appear while the pill is minimized to its line", L"Vẫn bung thông báo nổi khi thanh đảo đang thu gọn thành vạch mảnh"},
+    {L"Bar", L"Thanh ngang"},
+    {L"Bar: items at the screen's corners (the clock in the middle)", L"Thanh ngang: đẩy các mục sang hai góc màn hình (đồng hồ ở giữa)"},
+    {L"Base frequency", L"Xung nhịp cơ bản"},
+    {L"Battery", L"Pin"},
+    {L"Battery charging", L"Đang sạc pin"},
+    {L"Battery charging (own color)", L"Đang sạc pin (màu tùy chọn)"},
+    {L"Battery percentage beside its icon", L"Hiện phần trăm pin cạnh icon"},
+    {L"Black", L"Đen"},
+    {L"Blue", L"Xanh dương"},
+    {L"Bluetooth", L"Bluetooth"},
+    {L"Bluetooth & devices", L"Bluetooth & thiết bị"},
+    {L"Bluetooth is off", L"Bluetooth đang tắt"},
+    {L"Break", L"Nghỉ ngơi"},
+    {L"Brightness", L"Độ sáng"},
+    {L"Bugs and ideas", L"Báo lỗi & góp ý"},
+    {L"Built-in display", L"Màn hình tích hợp"},
+    {L"Buttons on the pill", L"Các nút trên thanh đảo"},
+    {L"By date modified", L"Theo ngày sửa"},
+    {L"By name", L"Theo tên"},
+    {L"By size", L"Theo dung lượng"},
+    {L"By type", L"Theo định dạng"},
+    {L"CPU, RAM and VRAM use", L"Mức dùng CPU, RAM và VRAM"},
+    {L"Cached", L"Bộ nhớ đệm"},
+    {L"Calculator", L"Máy tính"},
+    {L"Calendar", L"Lịch"},
+    {L"Calendar full: delete past events in the gear", L"Lịch đã đầy: bấm vào icon bánh răng để xóa bớt sự kiện cũ"},
+    {L"Camera", L"Camera"},
+    {L"Cancel", L"Hủy"},
+    {L"Captions", L"Phụ đề trực tiếp"},
+    {L"Cast", L"Truyền màn hình (Cast)"},
+    {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"Mọi thay đổi được lưu thẳng vào hồ sơ đang chọn · bấm hình cây bút để đổi tên, lưu đè hoặc xóa"},
+    {L"Charging", L"Đang sạc"},
+    {L"Check every", L"Kiểm tra mỗi"},
+    {L"Choose", L"Chọn"},
+    {L"Choose a power plan", L"Chọn chế độ nguồn (Power plan)"},
+    {L"Choose the folder with your pictures", L"Chọn thư mục chứa ảnh của bạn"},
+    {L"Chooses how many animations play, on every monitor", L"Chọn mức độ hiệu ứng chuyển động cho tất cả màn hình"},
+    {L"Chooses whether dragged-out files are copied, moved or asked about", L"Chọn sao chép, di chuyển hay hỏi lại mỗi khi kéo tệp ra khỏi bảng"},
+    {L"Chooses which monitors show the island, with a map of your screens", L"Chọn màn hình hiển thị đảo trên sơ đồ màn hình thực tế"},
+    {L"Circle", L"Vòng tròn"},
+    {L"City not found", L"Không tìm thấy thành phố"},
+    {L"Clear", L"Trời quang"},
+    {L"Clear all", L"Xóa tất cả"},
+    {L"Click a screen to choose where the island appears.", L"Bấm vào một màn hình để chọn nơi đặt đảo."},
+    {L"Click a screen to place the main island there (alerts and tray).", L"Bấm vào một màn hình để đặt đảo chính ở đó (hiện thông báo và khay hệ thống)."},
+    {L"Click and press the keys", L"Bấm vào đây rồi nhấn tổ hợp phím"},
+    {L"Clicking a screenshot notice opens the picture in Explorer", L"Bấm vào thông báo chụp màn hình để mở ngay ảnh đó trong Explorer"},
+    {L"Clipboard", L"Bộ nhớ tạm"},
+    {L"Clock", L"Đồng hồ"},
+    {L"Clock and calendar", L"Đồng hồ & lịch"},
+    {L"Clock and calendar (agendas: the calendar's gear)", L"Đồng hồ & lịch (thêm lịch .ics ở nút bánh răng trong lịch)"},
+    {L"Clock in the middle (the other items move around it)", L"Giữ đồng hồ ở chính giữa (các mục khác xếp hai bên)"},
+    {L"Close it to finish", L"Đóng ứng dụng để hoàn tất"},
+    {L"Clouds", L"Mây"},
+    {L"Color filters", L"Bộ lọc màu"},
+    {L"Color for downloads and other apps", L"Màu khi tải xuống và chạy tác vụ"},
+    {L"Color for file copies", L"Màu khi chép tệp"},
+    {L"Color for the battery charging", L"Màu khi đang sạc pin"},
+    {L"Colors", L"Màu sắc"},
+    {L"Colors following the app in front (its title bar or its icon)", L"Đổi màu theo ứng dụng đang dùng (lấy theo thanh tiêu đề hoặc icon)"},
+    {L"Columns", L"Chia cột"},
+    {L"Committed", L"Đã cấp phát"},
+    {L"Completed", L"Đã xong"},
+    {L"Compressed", L"Tệp nén"},
+    {L"Connect", L"Kết nối"},
+    {L"Connected", L"Đã kết nối"},
+    {L"Connecting...", L"Đang kết nối..."},
+    {L"Content hidden", L"Đã ẩn nội dung"},
+    {L"Control Panel", L"Control Panel"},
+    {L"Control center", L"Trung tâm điều khiển"},
+    {L"Control center buttons on the pill", L"Nút trung tâm điều khiển trên thanh đảo"},
+    {L"Copied", L"Đã chép"},
+    {L"Copy", L"Sao chép"},
+    {L"Cores / threads", L"Nhân / luồng"},
+    {L"Corners", L"Hai góc"},
+    {L"Couldn't connect.", L"Không kết nối được."},
+    {L"Couldn't connect. Check the password.", L"Không kết nối được. Hãy kiểm tra lại mật khẩu."},
+    {L"Couldn't empty it", L"Không thể dọn sạch thùng rác"},
+    {L"Couldn't forget the network.", L"Không thể quên mạng này."},
+    {L"Couldn't reach lrclib.net", L"Không kết nối được tới lrclib.net"},
+    {L"Couldn't read it", L"Không đọc được dữ liệu"},
+    {L"Counts down to Pomodoro's next part", L"Đếm ngược tới phiên Pomodoro tiếp theo"},
+    {L"Counts down to alarms", L"Đếm ngược tới giờ báo thức"},
+    {L"Counts down to events", L"Đếm ngược tới sự kiện sắp diễn ra"},
+    {L"Counts down to the timer's end", L"Đếm ngược tới lúc hết giờ hẹn"},
+    {L"Cover and title", L"Ảnh bìa và tên bài"},
+    {L"Cover and title on the pill", L"Hiện ảnh bìa và tên bài trên thanh đảo"},
+    {L"Custom", L"Tùy chỉnh"},
+    {L"Customize…", L"Tùy chỉnh…"},
+    {L"Cuts notches in the Fixed strip for the camera area (Fixed only)", L"Tạo phần khuyết tai thỏ trên thanh Cố định cho vùng webcam (chỉ kiểu Cố định)"},
+    {L"Cycles through the pictures of a folder as your wallpaper", L"Đổi hình nền luân phiên từ một thư mục ảnh của bạn"},
+    {L"D M Y", L"Ng Th Năm"},
+    {L"Dark mode", L"Chế độ tối"},
+    {L"Date", L"Ngày"},
+    {L"Date modified", L"Ngày sửa đổi"},
+    {L"Date order", L"Thứ tự ngày tháng"},
+    {L"Day and month", L"Ngày và tháng"},
+    {L"Day of the week", L"Thứ trong tuần"},
+    {L"Delete", L"Xóa"},
+    {L"Delete %zu past events?", L"Xóa %zu sự kiện đã qua?"},
+    {L"Delete it?", L"Xóa mục này?"},
+    {L"Delete past events", L"Xóa sự kiện đã qua"},
+    {L"Desktop", L"Màn hình nền"},
+    {L"Details", L"Chi tiết"},
+    {L"Device", L"Thiết bị"},
+    {L"Device Manager", L"Device Manager"},
+    {L"Devices", L"Thiết bị"},
+    {L"Disconnect", L"Ngắt kết nối"},
+    {L"Disconnected", L"Đã ngắt kết nối"},
+    {L"Disconnecting...", L"Đang ngắt kết nối..."},
+    {L"Dismiss", L"Bỏ qua"},
+    {L"Display", L"Màn hình"},
+    {L"Display brightness", L"Độ sáng màn hình"},
+    {L"Do not disturb", L"Không làm phiền"},
+    {L"Dock", L"Dock"},
+    {L"Documents", L"Tài liệu"},
+    {L"Done", L"Xong"},
+    {L"Download pictures from the web (goes online)", L"Tải ảnh đại diện từ mạng (cần internet)"},
+    {L"Downloads", L"Tải xuống"},
+    {L"Downloads and other apps", L"Tải xuống và ứng dụng khác"},
+    {L"Downloads and other apps (own color)", L"Tải xuống và ứng dụng khác (màu tùy chọn)"},
+    {L"Downloads, installs and other apps' progress; red for an error, yellow paused", L"Tiến trình tải xuống, cài đặt hoặc xử lý của ứng dụng; đỏ khi lỗi, vàng khi tạm dừng"},
+    {L"Drag from one notch to another · click to hide", L"Kéo qua lại giữa các tai thỏ · bấm để ẩn"},
+    {L"Drag the groups to reorder them, the minimize arrow stays last", L"Kéo các nhóm để đổi vị trí, nút mũi tên thu gọn luôn nằm cuối"},
+    {L"Drag the pill to any spot on the screen (not with notches)", L"Kéo thanh đảo tới bất kỳ đâu trên màn hình (không dùng được khi bật tai thỏ)"},
+    {L"Drag to change the order or to put one on the pill · middle click, or the pin after a moment on an icon: kept on the pill", L"Kéo để sắp xếp hoặc đưa lên thanh đảo · bấm chuột giữa hoặc bấm biểu tượng ghim hiện ra khi giữ chuột: ghim cố định lên đảo"},
+    {L"Drag to change the order · click to hide", L"Kéo để đổi thứ tự · bấm để ẩn"},
+    {L"Drive", L"Ổ đĩa"},
+    {L"Drizzle", L"Mưa phùn"},
+    {L"Duplicate", L"Phản chiếu (Duplicate)"},
+    {L"Each bar sways on its own, softly, as loud as the sound; off, they jump with the beat", L"Mỗi cột sóng đung đưa mượt theo độ lớn âm thanh; khi tắt sẽ nhảy theo nhịp bass"},
+    {L"Each new one opens the pill for a moment", L"Mỗi khi có thông báo mới sẽ mở thanh đảo ra trong giây lát"},
+    {L"Each notch hides alone instead of all at once (Fixed only)", L"Từng tai thỏ tự thu gọn riêng thay vì ẩn cùng lúc (chỉ kiểu Cố định)"},
+    {L"Each screen has its own island", L"Mỗi màn hình hiển thị một đảo riêng"},
+    {L"Edge", L"Cách lề"},
+    {L"Edge around", L"Viền bao quanh"},
+    {L"Edge distance", L"Khoảng cách tới mép màn hình"},
+    {L"Edit", L"Sửa"},
+    {L"Edit task", L"Sửa công việc"},
+    {L"Efficiency", L"Tiết kiệm điện"},
+    {L"Eject", L"Ngắt kết nối"},
+    {L"Ejecting…", L"Đang ngắt…"},
+    {L"Emoji", L"Emoji"},
+    {L"Empty", L"Trống"},
+    {L"Empty it? Click again", L"Dọn sạch rác? Bấm lần nữa"},
+    {L"Empty the bin", L"Dọn sạch thùng rác"},
+    {L"Emptying…", L"Đang dọn…"},
+    {L"English letters", L"Chữ tiếng Anh"},
+    {L"Ethernet", L"Mạng dây (Ethernet)"},
+    {L"Even when minimized", L"Cả khi đang thu gọn"},
+    {L"Event", L"Sự kiện"},
+    {L"Events, ", L"Sự kiện, "},
+    {L"Every day", L"Hằng ngày"},
+    {L"Everything", L"Tất cả"},
+    {L"Export", L"Xuất"},
+    {L"Export the island's backup", L"Xuất tệp sao lưu của đảo"},
+    {L"Extend", L"Mở rộng (Extend)"},
+    {L"Fade", L"Mờ dần"},
+    {L"Fan", L"Quạt"},
+    {L"Favorite moved or deleted", L"Tệp yêu thích đã bị chuyển đi hoặc xóa mất"},
+    {L"Favorites are full", L"Danh sách yêu thích đã đầy"},
+    {L"Feels like", L"Cảm giác như"},
+    {L"Fetches pictures for banners from the web, it needs an internet connection", L"Tải ảnh trong thông báo từ internet (cần kết nối mạng)"},
+    {L"File Explorer", L"File Explorer"},
+    {L"File copies", L"Chép tệp"},
+    {L"File copies (own color)", L"Chép tệp (màu tùy chọn)"},
+    {L"Files copied or moved by Windows (its copy window)", L"Tiến trình sao chép hoặc di chuyển tệp của Windows"},
+    {L"Files dragged out", L"Kéo tệp ra ngoài"},
+    {L"Files dragged out of the folders", L"Khi kéo tệp từ bảng thư mục ra ngoài"},
+    {L"Files dragged out of the island are:", L"Khi kéo tệp ra khỏi đảo:"},
+    {L"Fill", L"Nền"},
+    {L"Fill animation", L"Kiểu hiệu ứng lấp đầy"},
+    {L"Fixed", L"Cố định"},
+    {L"Floating", L"Cửa sổ nổi"},
+    {L"Focus", L"Tập trung"},
+    {L"Fog", L"Sương mù"},
+    {L"Fold the apps with notifications into an arrow (out when one comes, and under the mouse)", L"Gom các ứng dụng có thông báo vào một mũi tên (tự bung ra khi có thông báo mới hoặc khi đưa chuột vào)"},
+    {L"Folder", L"Thư mục"},
+    {L"Folders", L"Thư mục"},
+    {L"Folders and places", L"Thư mục & lối tắt"},
+    {L"Folders and places (your shortcuts)", L"Thư mục & lối tắt nhanh"},
+    {L"Folders mixed with files", L"Xếp chung thư mục với tệp"},
+    {L"Folds the app icons into an arrow, they come out for new ones or on hover", L"Thu gọn icon ứng dụng vào mũi tên, chỉ bung ra khi có thông báo mới hoặc khi rê chuột vào"},
+    {L"Following the mouse is unavailable with notches on the main island.", L"Không thể đi theo chuột khi đảo chính đang bật tai thỏ."},
+    {L"Follows Windows or forces a 24 hour or 12 hour clock", L"Theo định dạng của Windows hoặc ép dùng kiểu 24 giờ / 12 giờ"},
+    {L"Follows the line", L"Co giãn theo câu"},
+    {L"Follows the mouse", L"Đi theo trỏ chuột"},
+    {L"Forget", L"Quên mạng"},
+    {L"Forget it?", L"Quên mạng này?"},
+    {L"Frames a second", L"Giới hạn khung hình (FPS)"},
+    {L"Freezing drizzle", L"Mưa phùn giá rét"},
+    {L"Freezing rain", L"Mưa băng giá"},
+    {L"Frequency", L"Xung nhịp"},
+    {L"From square to fully round corners (not with the bar or notches)", L"Từ vuông vức đến bo tròn hoàn toàn (không áp dụng cho kiểu Thanh ngang hay tai thỏ)"},
+    {L"Frosted glass on the bar and the Fixed style's strip", L"Phủ kính mờ cho Thanh ngang và dải nền kiểu Cố định"},
+    {L"Frosted look for the bar and the Fixed strip, needs Windows transparency", L"Làm mờ kiểu kính nhám cho Thanh ngang và dải Cố định (cần bật hiệu ứng trong suốt của Windows)"},
+    {L"Gap between the pill and the screen edge (not with the bar or notches)", L"Khoảng cách từ thanh đảo tới mép màn hình (không áp dụng cho Thanh ngang hay tai thỏ)"},
+    {L"General", L"Chung"},
+    {L"Gives chosen apps their own spot and icons (Island style only)", L"Đặt vị trí và bộ icon riêng cho từng ứng dụng khi mở (chỉ áp dụng cho kiểu Viên thuốc)"},
+    {L"Glass", L"Kính trong"},
+    {L"Glass blur", L"Độ nhòe mặt kính"},
+    {L"Glass: see-through and blurred, with a bright edge (Windows' blur: needs its transparency effects)", L"Hiệu ứng kính: trong suốt và làm nhòe nền phía sau kèm viền sáng (cần bật hiệu ứng trong suốt của Windows)"},
+    {L"Glow and particles", L"Phát sáng & hạt"},
+    {L"Graphite", L"Xám than chì"},
+    {L"Green", L"Xanh lá"},
+    {L"Grid", L"Dạng lưới"},
+    {L"Grid columns", L"Số cột của lưới"},
+    {L"Hard to read: too alike", L"Khó đọc: màu chữ và nền quá giống nhau"},
+    {L"Heavy rain", L"Mưa lớn"},
+    {L"Hide after", L"Tự ẩn sau"},
+    {L"Hide as its line until the mouse reaches it", L"Thu gọn thành vạch mảnh cho tới khi đưa chuột vào"},
+    {L"Hide each notch on its own (not all together)", L"Ẩn riêng từng tai thỏ (thay vì ẩn cùng lúc)"},
+    {L"Hide past events after", L"Ẩn sự kiện cũ sau"},
+    {L"Hide the Windows banners", L"Ẩn thông báo nổi của Windows"},
+    {L"Highlight behind the item under the mouse", L"Làm sáng nền mục dưới trỏ chuột"},
+    {L"Holidays in the calendar (goes online)", L"Hiện ngày lễ trong lịch (cần internet)"},
+    {L"Home folder", L"Thư mục người dùng"},
+    {L"Horizontal stack", L"Xếp chồng ngang"},
+    {L"How big the line is on the pill", L"Cỡ chữ lời bài hát hiển thị trên thanh đảo"},
+    {L"How it moves; paused it breathes, an error shakes, done flashes with a check, canceled drains back", L"Kiểu chuyển động của thanh tiến trình: tạm dừng sẽ nhịp sáng, lỗi sẽ rung nhẹ, xong sẽ chớp dấu kiểm, hủy sẽ rút ngược về"},
+    {L"How many", L"Mức độ"},
+    {L"How many icons show before the list starts to scroll", L"Số icon tối đa trước khi danh sách bắt đầu cuộn"},
+    {L"How much the bars move with the sound (they follow the playing app's own sound)", L"Độ nhạy của các cột sóng theo âm lượng của ứng dụng đang phát"},
+    {L"How round the notch curves are in the Fixed style", L"Độ uốn cong của góc tai thỏ ở kiểu Cố định"},
+    {L"How solid the island's fill is, from see-through to full", L"Độ đặc của màu nền đảo, từ trong suốt đến đặc hoàn toàn"},
+    {L"How strongly the glass blurs what is behind it", L"Mức độ làm nhòe hình ảnh phía sau lớp kính"},
+    {L"How visible the thin line is when the pill is hidden", L"Độ rõ của vạch mảnh khi thanh đảo đang thu gọn"},
+    {L"How visible the thin outline around the pill is", L"Độ đậm của đường viền mảnh bao quanh đảo và các bảng"},
+    {L"Humidity", L"Độ ẩm"},
+    {L"Icon and color", L"Biểu tượng & màu sắc"},
+    {L"Icon and text size", L"Cỡ icon và chữ"},
+    {L"Icons", L"Biểu tượng"},
+    {L"Icons of the apps with notifications", L"Icon của ứng dụng có thông báo"},
+    {L"Icons that aren't pinned", L"Cách mở các icon chưa ghim"},
+    {L"Ignored (not counted)", L"Đã bỏ qua (không đếm)"},
+    {L"Import", L"Nhập"},
+    {L"Import a backup of the island", L"Nhập tệp sao lưu của đảo"},
+    {L"Import a file", L"Chọn tệp để nhập"},
+    {L"Import shortcuts (like komorebi's whkdrc)", L"Nhập từ tệp cấu hình (như whkdrc của komorebi)"},
+    {L"In the bar, sends items to the screen corners, clock in the middle", L"Khi dùng kiểu Thanh ngang, đẩy các mục ra hai góc màn hình và giữ đồng hồ ở giữa"},
+    {L"In the pill", L"Ngay trên đảo"},
+    {L"In the terminal", L"Mở trong Terminal"},
+    {L"In use", L"Đang dùng"},
+    {L"In use: close what's open on it", L"Đang bận: hãy đóng các tệp đang mở trên ổ đĩa này trước"},
+    {L"Installed apps", L"Ứng dụng trong máy"},
+    {L"Instrumental", L"Nhạc không lời"},
+    {L"Island", L"Đảo phụ"},
+    {L"Island backup (*.txt)", L"Tệp sao lưu đảo (*.txt)"},
+    {L"Island settings", L"Cài đặt đảo"},
+    {L"It failed (see the terminal)", L"Thất bại (xem chi tiết trong Terminal)"},
+    {L"It goes to the screen with the mouse", L"Đảo tự chuyển sang màn hình đang có trỏ chuột"},
+    {L"Its focus or break ending, while it runs", L"Đếm ngược hết phiên tập trung hoặc nghỉ ngơi khi Pomodoro đang chạy"},
+    {L"Its look (profile):", L"Giao diện (hồ sơ):"},
+    {L"Its style, size, hiding and animations are in Windhawk's settings for this mod", L"Kiểu dáng, kích thước, tự động ẩn và chuyển động của thanh Dock được chỉnh trong phần Settings của mod trên Windhawk"},
+    {L"Keep their list open", L"Giữ danh sách không tự đóng"},
+    {L"Keyboard language", L"Ngôn ngữ bàn phím"},
+    {L"Keyboard language (like Windows' input indicator)", L"Ngôn ngữ bàn phím (như chỉ báo bộ gõ trên taskbar)"},
+    {L"Keyboard shortcuts", L"Phím tắt"},
+    {L"Keyboard shortcuts button", L"Nút tra cứu phím tắt"},
+    {L"Keys", L"Tổ hợp phím"},
+    {L"Language", L"Ngôn ngữ"},
+    {L"Language of the island's texts (it starts again)", L"Ngôn ngữ hiển thị của đảo (đảo sẽ tự khởi động lại)"},
+    {L"Language of the notes", L"Ngôn ngữ của ghi chú phiên bản"},
+    {L"Language settings", L"Cài đặt ngôn ngữ"},
+    {L"Large", L"Lớn"},
+    {L"Largest first", L"Lớn nhất trước"},
+    {L"Later", L"Để sau"},
+    {L"Leaves out komorebi workspaces that have no windows", L"Ẩn bớt các workspace trống không có cửa sổ nào của komorebi"},
+    {L"Light", L"Sáng"},
+    {L"Light and dark mode", L"Chế độ Sáng / Tối"},
+    {L"Light and dark mode button", L"Nút đổi chế độ Sáng / Tối"},
+    {L"Light rain", L"Mưa nhỏ"},
+    {L"Lighter tint and livelier colors on the glass", L"Nền kính sáng nhẹ hơn và màu sắc tươi hơn"},
+    {L"Lights up the item the mouse is over", L"Làm sáng nhẹ mục mà chuột đang trỏ vào"},
+    {L"Like Ctrl+Shift+S, or Ctrl+K, Ctrl+S", L"VD: Ctrl+Shift+S, hoặc Ctrl+K, Ctrl+S"},
+    {L"Line opacity", L"Độ rõ vạch thu gọn"},
+    {L"Liquid wave", L"Sóng nước"},
+    {L"Location", L"Vị trí"},
+    {L"Lock", L"Khóa máy"},
+    {L"Logs", L"Nhật ký (Logs)"},
+    {L"Long", L"Dài"},
+    {L"Longest line on the pill", L"Độ rộng khung lời bài hát trên đảo"},
+    {L"Longest width the song title may take on the pill", L"Độ rộng tối đa dành cho tên bài hát trên thanh đảo"},
+    {L"Look", L"Giao diện"},
+    {L"Looking for networks...", L"Đang quét mạng Wi-Fi..."},
+    {L"Looking for the lyrics…", L"Đang tìm lời bài hát…"},
+    {L"Looking…", L"Đang tìm…"},
+    {L"Looks for lyrics", L"Tự tìm lời bài hát"},
+    {L"Low battery", L"Pin yếu"},
+    {L"Lyrics are looked for only for songs (with an artist, 45 s to 20 min, not videos)", L"Chỉ tìm lời cho bài hát (có tên ca sĩ, dài từ 45 giây đến 20 phút, bỏ qua video)"},
+    {L"Lyrics are off for this app (in the settings, What's playing)", L"Đã tắt tìm lời cho ứng dụng này (bật lại trong Cài đặt > Đang phát)"},
+    {L"Lyrics color", L"Màu lời bài hát"},
+    {L"Lyrics color (own)", L"Màu lời bài hát (tùy chọn)"},
+    {L"Lyrics from lrclib.net", L"Nguồn lời bài hát: lrclib.net"},
+    {L"Lyrics replace the song title", L"Hiện lời bài hát thay vào chỗ tên bài"},
+    {L"Lyrics size", L"Cỡ chữ lời bài hát"},
+    {L"Lyrics size on the pill", L"Cỡ chữ lời bài hát trên đảo"},
+    {L"M D Y", L"Th Ng Năm"},
+    {L"Made in Brazil, new versions bring fixes and what users ask for", L"Phát triển tại Brazil, cập nhật thường xuyên các bản vá lỗi và tính năng người dùng đề xuất"},
+    {L"Magnifier", L"Kính lúp"},
+    {L"Main island", L"Đảo chính"},
+    {L"Makes the pill taller or shorter (not with the bar)", L"Tăng giảm độ dày của thanh đảo (không áp dụng cho kiểu Thanh ngang)"},
+    {L"Manage profiles", L"Quản lý hồ sơ"},
+    {L"Marks holidays in the calendar, it needs an internet connection", L"Đánh dấu các ngày lễ trong năm trên lịch (cần internet)"},
+    {L"Media buttons", L"Nút điều khiển nhạc"},
+    {L"Media buttons on the pill", L"Hiện nút điều khiển nhạc trên thanh đảo"},
+    {L"Medium", L"Vừa"},
+    {L"Memory", L"Bộ nhớ"},
+    {L"Memory use (RAM)", L"Mức dùng RAM"},
+    {L"Merges an app's notifications into one icon, Phone Link's phone apps included", L"Gom thông báo của cùng một ứng dụng vào chung một icon (kể cả thông báo điện thoại qua Phone Link)"},
+    {L"Microphone", L"Micrô"},
+    {L"Microphone button (mute)", L"Nút tắt tiếng micrô"},
+    {L"Microphone, camera and location in use", L"Chỉ báo dùng mic, camera và vị trí"},
+    {L"Microphone, camera and location in use (and which app)", L"Chỉ báo khi có ứng dụng dùng mic, camera hoặc vị trí"},
+    {L"Middle", L"Ở giữa"},
+    {L"Minimize arrow at the end of the pill", L"Nút mũi tên thu gọn ở cuối thanh đảo"},
+    {L"Mixer", L"Bộ trộn âm"},
+    {L"Mobile hotspot", L"Điểm phát sóng (Hotspot)"},
+    {L"Monitor", L"Màn hình"},
+    {L"Monitor ", L"Màn hình "},
+    {L"Monitors", L"Màn hình"},
+    {L"Monocle (the window in focus fills the screen)", L"Monocle (phóng to cửa sổ đang dùng kín màn hình)"},
+    {L"Month as a number (9/10)", L"Viết tháng bằng số (9/10)"},
+    {L"More Windows controls", L"Các công cụ khác của Windows"},
+    {L"More in Explorer", L"Xem đầy đủ trong Explorer"},
+    {L"Mostly clear", L"Trời ít mây"},
+    {L"Move", L"Di chuyển"},
+    {L"Move the pill by dragging it", L"Cho phép kéo chuột để di chuyển thanh đảo"},
+    {L"Moved", L"Di chuyển"},
+    {L"Music", L"Nhạc"},
+    {L"Muted", L"Đã tắt tiếng"},
+    {L"My site, with my other projects and a Discord link", L"Trang cá nhân, các dự án khác của tôi và cộng đồng Discord"},
+    {L"Name", L"Tên"},
+    {L"Narrator", L"Trình đọc màn hình (Narrator)"},
+    {L"Needs Windows' transparency effects: click to open Personalization > Colors", L"Cần bật hiệu ứng trong suốt của Windows: bấm để mở Personalization > Colors"},
+    {L"Needs a fill on (downloads or charging)", L"Cần bật thanh tiến trình trên đảo (khi tải xuống hoặc sạc pin)"},
+    {L"Needs the bar style and the clock in the middle", L"Cần chọn kiểu Thanh ngang và bật giữ đồng hồ ở giữa"},
+    {L"Needs the date or the year on the clock", L"Cần bật hiện ngày hoặc năm trên đồng hồ"},
+    {L"Needs the notches (Fixed style)", L"Cần bật tai thỏ (kiểu Cố định)"},
+    {L"Needs “%s” on", L"Cần bật mục “%s”"},
+    {L"Network", L"Mạng"},
+    {L"Network & internet", L"Mạng & Internet"},
+    {L"Network cable", L"Mạng dây"},
+    {L"Network connections", L"Kết nối mạng (Network Connections)"},
+    {L"Network speed", L"Tốc độ mạng"},
+    {L"Network speed (up and down)", L"Tốc độ mạng (tải lên / tải xuống)"},
+    {L"Never", L"Không bao giờ"},
+    {L"New desktop", L"Màn hình ảo mới"},
+    {L"New notification", L"Thông báo mới"},
+    {L"New task", L"Việc cần làm mới"},
+    {L"Newest first", L"Mới nhất trước"},
+    {L"Next event", L"Sự kiện sắp tới"},
+    {L"Night light", L"Ánh sáng đêm"},
+    {L"Night light isn't available here", L"Máy không hỗ trợ Ánh sáng đêm"},
+    {L"No Bluetooth", L"Không có Bluetooth"},
+    {L"No USB drives", L"Không có USB nào"},
+    {L"No Wi-Fi adapter", L"Không tìm thấy card Wi-Fi"},
+    {L"No agendas yet.", L"Chưa thêm lịch đăng ký nào."},
+    {L"No alarms yet", L"Chưa có báo thức nào"},
+    {L"No apps using this output", L"Không có ứng dụng nào đang phát âm thanh ở đầu ra này"},
+    {L"No events", L"Không có sự kiện"},
+    {L"No internet", L"Không có kết nối mạng"},
+    {L"No lyrics found for this song", L"Không tìm thấy lời cho bài hát này"},
+    {L"No notes yet", L"Chưa có ghi chú nào"},
+    {L"No notifications", L"Không có thông báo mới"},
+    {L"No paired devices", L"Chưa ghép đôi thiết bị nào"},
+    {L"No pictures in this folder", L"Thư mục này không có ảnh nào"},
+    {L"No profile in use: click one to apply it", L"Chưa chọn hồ sơ nào: bấm vào một hồ sơ để áp dụng"},
+    {L"No profiles yet", L"Chưa tạo hồ sơ nào"},
+    {L"No settings match the search", L"Không tìm thấy cài đặt nào phù hợp"},
+    {L"None", L"Không dùng"},
+    {L"None found", L"Không tìm thấy"},
+    {L"Not a backup of the island", L"Tệp này không phải bản sao lưu của đảo"},
+    {L"Not an .ics link (Google: Secret address in iCal format)", L"Không phải link .ics hợp lệ (Google Calendar: Địa chỉ bí mật ở định dạng iCal)"},
+    {L"Not available here", L"Không hỗ trợ tại đây"},
+    {L"Not available on this PC", L"Máy tính này không hỗ trợ"},
+    {L"Not checked yet", L"Chưa kiểm tra"},
+    {L"Notch curves", L"Độ bo cong tai thỏ"},
+    {L"Notches", L"Tai thỏ"},
+    {L"Notes", L"Ghi chú"},
+    {L"Notes button", L"Nút mở ghi chú"},
+    {L"Nothing found", L"Không có kết quả"},
+    {L"Nothing in it", L"Trống"},
+    {L"Nothing playing", L"Chưa phát nội dung nào"},
+    {L"Nothing to do", L"Không có việc gì cần làm"},
+    {L"Nothing waiting", L"Không có bản cập nhật nào"},
+    {L"Notification", L"Thông báo"},
+    {L"Notifications", L"Thông báo"},
+    {L"Notifications (bell)", L"Thông báo (hình chuông)"},
+    {L"Notify when a USB drive is plugged in", L"Báo khi cắm USB mới"},
+    {L"Now", L"Hiện tại"},
+    {L"Number of columns in the icon grid (Grid style only)", L"Số cột hiển thị trong bảng lưới icon (chỉ áp dụng cho Dạng lưới)"},
+    {L"OK", L"OK"},
+    {L"Off", L"Tắt"},
+    {L"Off while “%s” is on", L"Không dùng được khi đang bật “%s”"},
+    {L"Off with no animations (“None”)", L"Không dùng được khi đã tắt hiệu ứng chuyển động (“Không dùng”)"},
+    {L"Off with the bar style", L"Không áp dụng cho kiểu Thanh ngang"},
+    {L"Off with the notches (Fixed style)", L"Không áp dụng khi bật tai thỏ (kiểu Cố định)"},
+    {L"Off: nothing is sent", L"Đang tắt: không gửi dữ liệu đi đâu"},
+    {L"Off: only the app's icon peeks out of the line", L"Khi tắt: chỉ nhô icon ứng dụng nhỏ trên vạch thu gọn"},
+    {L"Oldest first", L"Cũ nhất trước"},
+    {L"On", L"Bật"},
+    {L"On a laptop, the battery's percentage as it charges", L"Trên laptop, lấp đầy thanh đảo theo mức phần trăm pin đang sạc"},
+    {L"On battery", L"Đang dùng pin"},
+    {L"On every monitor", L"Trên mọi màn hình"},
+    {L"On one monitor", L"Trên 1 màn hình"},
+    {L"On the monitor with the mouse", L"Theo màn hình có trỏ chuột"},
+    {L"On-screen keyboard", L"Bàn phím ảo"},
+    {L"Once per version, a notice from the pill opens this page", L"Mỗi khi có bản cập nhật mới, hiện thông báo trên đảo để mở trang này"},
+    {L"One icon per app (Phone Link's phone apps together)", L"Gom thông báo theo từng ứng dụng (gộp chung cả các app từ Phone Link)"},
+    {L"Only for the Fixed style", L"Chỉ dành cho kiểu Cố định"},
+    {L"Only for the Island style: the Fixed style and the bar keep one place and the same items for every app", L"Chỉ dành cho kiểu Viên thuốc (kiểu Cố định và Thanh ngang luôn giữ cố định một vị trí cho mọi ứng dụng)"},
+    {L"Only for the notes below; the island keeps its language", L"Chỉ đổi ngôn ngữ phần ghi chú bên dưới, không đổi ngôn ngữ của đảo"},
+    {L"Only https links or file paths", L"Chỉ nhận đường dẫn tệp hoặc link bắt đầu bằng https"},
+    {L"Only on the main island: change it in its settings", L"Chỉ chỉnh được trên đảo chính (hãy mở cài đặt của đảo chính)"},
+    {L"Only with the Glass off (it blurs them already), on the bar or on the Fixed style without notches and not hiding as a line", L"Chỉ dùng khi tắt hiệu ứng Kính trong (vì Kính đã làm mờ sẵn), áp dụng cho Thanh ngang hoặc kiểu Cố định không bật tai thỏ và không tự thu gọn"},
+    {L"Only with the Grid style", L"Chỉ áp dụng cho kiểu Dạng lưới"},
+    {L"Only with the icons opening in the pill", L"Chỉ áp dụng khi chọn mở icon ngay trên đảo"},
+    {L"Opacity", L"Độ đậm nền"},
+    {L"Open", L"Mở"},
+    {L"Open Windhawk", L"Mở Windhawk"},
+    {L"Open Windows Update", L"Mở Windows Update"},
+    {L"Open Windows mixer", L"Mở Volume Mixer của Windows"},
+    {L"Open an app to give it a place", L"Hãy mở một ứng dụng để đặt vị trí riêng cho nó"},
+    {L"Open in Explorer", L"Mở bằng Explorer"},
+    {L"Open the Windows notification center", L"Mở trung tâm thông báo của Windows"},
+    {L"Opens a panel with your folder and place shortcuts", L"Mở bảng truy cập nhanh các thư mục đã ghim và lối tắt hệ thống"},
+    {L"Opens pickers for the fill, text and icon colors", L"Mở bảng chọn màu riêng cho nền, chữ và icon"},
+    {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"Chọn cách mở các icon chưa ghim: trượt ngang trên đảo, xếp dạng lưới hoặc xếp danh sách kèm tên"},
+    {L"Order of the items", L"Thứ tự các mục trên đảo"},
+    {L"Other apps' icons before scrolling", L"Số icon hiển thị trước khi cuộn"},
+    {L"Other apps' tray icons", L"Icon khay hệ thống của ứng dụng khác"},
+    {L"Other files", L"Tệp khác"},
+    {L"Output", L"Thiết bị phát"},
+    {L"Overcast", L"Trời âm u"},
+    {L"PC screen only", L"Chỉ màn hình chính (PC screen only)"},
+    {L"Padding before the first item and after the last one", L"Khoảng trống đệm ở hai đầu trái phải của thanh đảo"},
+    {L"Panels as wide as the island", L"Mở bảng rộng bằng thanh đảo"},
+    {L"Panels open as wide as the island is", L"Các bảng khi bung ra sẽ rộng bằng đúng chiều dài thanh đảo"},
+    {L"Panels size", L"Kích thước các bảng"},
+    {L"Partial", L"Cơ bản"},
+    {L"Partly cloudy", L"Có mây rải rác"},
+    {L"Password", L"Mật khẩu"},
+    {L"Paste an .ics link (Google Calendar: Settings, your calendar, Secret address in iCal format) or a file's path.", L"Dán link .ics (Google Calendar: Cài đặt > chọn lịch > Địa chỉ bí mật ở định dạng iCal) hoặc đường dẫn tệp vào đây."},
+    {L"Pause", L"Tạm dừng"},
+    {L"Paused", L"Đã tạm dừng"},
+    {L"Paused (every monitor)", L"Đã tạm dừng (mọi màn hình)"},
+    {L"Performance", L"Hiệu năng cao"},
+    {L"Personalization", L"Cá nhân hóa (Personalization)"},
+    {L"Picks a color theme from the swatches", L"Chọn tông màu chủ đạo cho đảo"},
+    {L"Picks the screen spot for the pill, on a grid", L"Chọn vị trí đặt thanh đảo trên lưới màn hình"},
+    {L"Picture copied", L"Đã chép hình ảnh"},
+    {L"Pictures", L"Hình ảnh"},
+    {L"Pill", L"Thanh đảo"},
+    {L"Pill corners", L"Độ bo góc thanh đảo"},
+    {L"Pill floats, Fixed keeps its room on the screen, Bar spans the edge", L"Thanh đảo nổi tự do, Cố định chừa khoảng trống riêng cho các cửa sổ, Thanh ngang trải dài toàn cạnh trên"},
+    {L"Pill height", L"Độ dày thanh đảo"},
+    {L"Pin a folder to the island", L"Ghim thư mục lên đảo"},
+    {L"Place", L"Vị trí"},
+    {L"Place (or drag the pill)", L"Vị trí (hoặc kéo trực tiếp thanh đảo)"},
+    {L"Place (the bar is at the top)", L"Vị trí (kiểu Thanh ngang luôn nằm ở cạnh trên)"},
+    {L"Place (the notches are at the top)", L"Vị trí (tai thỏ luôn nằm ở cạnh trên)"},
+    {L"Place and icons per app", L"Vị trí & icon riêng theo ứng dụng"},
+    {L"Plan: ", L"Chế độ: "},
+    {L"Power", L"Nguồn điện"},
+    {L"Power button", L"Nút nguồn"},
+    {L"Power button (sleep, restart, shut down)", L"Nút nguồn (ngủ, khởi động lại, tắt máy)"},
+    {L"Power draw", L"Công suất tiêu thụ"},
+    {L"Power options", L"Tùy chọn nguồn (Power Options)"},
+    {L"Power plan", L"Chế độ nguồn (Power Plan)"},
+    {L"Press", L"Bấm phím"},
+    {L"Press the keys", L"Nhấn tổ hợp phím"},
+    {L"Press the keys (Tab moves on)…", L"Nhấn tổ hợp phím (nhấn Tab để sang ô tiếp)…"},
+    {L"Pressing Win+A opens the island's control center instead of Windows'", L"Nhấn Win+A sẽ mở Trung tâm điều khiển của đảo thay vì của Windows"},
+    {L"Pressing Win+N opens the island's notifications instead of Windows'", L"Nhấn Win+N sẽ mở bảng Thông báo của đảo thay vì của Windows"},
+    {L"Pressure", L"Áp suất khí quyển"},
+    {L"Privacy", L"Quyền riêng tư"},
+    {L"Processor", L"Bộ xử lý (CPU)"},
+    {L"Processor use (CPU)", L"Mức dùng CPU"},
+    {L"Profile ", L"Hồ sơ "},
+    {L"Profiles", L"Hồ sơ"},
+    {L"Profiles button (switch profiles)", L"Nút chuyển đổi hồ sơ"},
+    {L"Programs and Features", L"Programs and Features"},
+    {L"Project", L"Chiếu màn hình (Project)"},
+    {L"Puts a button on the pill that locks the PC", L"Thêm nút khóa nhanh máy tính lên thanh đảo"},
+    {L"Puts a button on the pill that opens Calculator", L"Thêm nút mở nhanh Máy tính (Calculator) lên thanh đảo"},
+    {L"Puts a button on the pill that opens File Explorer", L"Thêm nút mở nhanh File Explorer lên thanh đảo"},
+    {L"Puts a button on the pill that opens Task Manager", L"Thêm nút mở nhanh Task Manager lên thanh đảo"},
+    {L"Puts a button on the pill that opens the accessibility options", L"Thêm nút mở tùy chọn Trợ năng lên thanh đảo"},
+    {L"Puts a button on the pill that opens the clipboard history", L"Thêm nút mở lịch sử bộ nhớ tạm (Clipboard) lên thanh đảo"},
+    {L"Puts a button on the pill that opens the emoji panel", L"Thêm nút mở bảng biểu tượng cảm xúc (Emoji) lên thanh đảo"},
+    {L"Puts a button on the pill that opens the on-screen keyboard", L"Thêm nút mở bàn phím ảo lên thanh đảo"},
+    {L"Puts a button on the pill that shows the desktop", L"Thêm nút thu nhỏ mọi cửa sổ để hiện màn hình nền lên thanh đảo"},
+    {L"Puts a button on the pill that takes a screenshot", L"Thêm nút chụp ảnh màn hình lên thanh đảo"},
+    {L"Puts a button on the pill that turns live captions on", L"Thêm nút bật/tắt Phụ đề trực tiếp lên thanh đảo"},
+    {L"Puts a button on the pill to cast the screen", L"Thêm nút truyền màn hình (Cast) lên thanh đảo"},
+    {L"Puts a button on the pill to choose the display mode", L"Thêm nút chọn chế độ xuất màn hình (Project) lên thanh đảo"},
+    {L"Puts a button on the pill to start, stop or reload komorebi", L"Thêm nút bật, tắt hoặc tải lại komorebi lên thanh đảo"},
+    {L"Puts a one-click Airplane mode button on the pill", L"Thêm nút bật/tắt nhanh Chế độ máy bay lên thanh đảo"},
+    {L"Puts a one-click Bluetooth button on the pill", L"Thêm nút mở nhanh Bluetooth lên thanh đảo"},
+    {L"Puts a one-click Mobile hotspot button on the pill", L"Thêm nút bật/tắt nhanh Điểm phát sóng di động lên thanh đảo"},
+    {L"Puts a one-click Night light button on the pill", L"Thêm nút bật/tắt nhanh Ánh sáng đêm lên thanh đảo"},
+    {L"Puts a one-click Wi-Fi and network button on the pill", L"Thêm nút mở nhanh Wi-Fi và mạng lên thanh đảo"},
+    {L"Puts previous, play and next buttons right on the pill", L"Hiện trực tiếp các nút Bài trước, Phát/Tạm dừng và Bài tiếp trên thanh đảo"},
+    {L"Puts the clock in the middle with the other items around it", L"Giữ đồng hồ cố định ở giữa và xếp các mục khác hai bên"},
+    {L"Rain", L"Mưa"},
+    {L"Rain chance", L"Khả năng mưa"},
+    {L"Rainbow", L"Cầu vồng"},
+    {L"Reading…", L"Đang đọc…"},
+    {L"Recycle Bin", L"Thùng rác"},
+    {L"Recycle Bin appears", L"Khi nào hiện Thùng rác"},
+    {L"Red", L"Đỏ"},
+    {L"Remember my choice (it's in the island's settings)", L"Nhớ lựa chọn này (có thể đổi lại trong cài đặt đảo)"},
+    {L"Repeat", L"Lặp lại"},
+    {L"Reply", L"Trả lời"},
+    {L"Report a bug or suggest an idea, GitHub tells you when it comes out", L"Báo lỗi hoặc góp ý tính năng trên GitHub để nhận thông báo khi có bản cập nhật mới"},
+    {L"Reset", L"Đặt lại"},
+    {L"Restart", L"Khởi động lại"},
+    {L"Restart now?", L"Khởi động lại máy ngay?"},
+    {L"Resume", L"Tiếp tục"},
+    {L"Room at the pill's ends", L"Khoảng đệm hai đầu đảo"},
+    {L"Rows", L"Chia hàng"},
+    {L"Safe to remove", L"Đã có thể rút USB an toàn"},
+    {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"Đang dùng chung với đảo chính: chỉnh ở đây sẽ đổi cả đảo chính · bấm + để tách hồ sơ riêng cho màn hình này"},
+    {L"Same as the main one", L"Giống đảo chính"},
+    {L"Save", L"Lưu"},
+    {L"Save  (Enter)", L"Lưu  (Enter)"},
+    {L"Save current here", L"Lưu đè thiết lập hiện tại"},
+    {L"Save current settings", L"Lưu thiết lập hiện tại"},
+    {L"Save the island's logs", L"Lưu tệp nhật ký (log) của đảo"},
+    {L"Save...", L"Lưu thành tệp..."},
+    {L"Saved \u2713", L"Đã lưu \u2713"},
+    {L"Saves a backup file or loads one, and shows the result", L"Xuất ra tệp sao lưu hoặc khôi phục từ tệp có sẵn"},
+    {L"Scales only the icons and texts on the pill", L"Chỉ chỉnh kích thước icon và chữ nằm trên thanh đảo"},
+    {L"Scales the control center, calendar and other panels", L"Chỉnh độ lớn của Trung tâm điều khiển, lịch và các bảng mở ra từ đảo"},
+    {L"Scales the pill, icons and panels together", L"Phóng to / thu nhỏ đồng bộ cả thanh đảo, icon lẫn các bảng"},
+    {L"Screen", L"Theo màn hình"},
+    {L"Screen brightness", L"Độ sáng màn hình"},
+    {L"Screen brightness (the mouse wheel changes it)", L"Độ sáng màn hình (lăn chuột để chỉnh)"},
+    {L"Screens", L"Màn hình"},
+    {L"Screenshot", L"Chụp màn hình"},
+    {L"Screenshot notifications open the picture (in Explorer)", L"Mở ảnh chụp màn hình trong Explorer khi bấm vào thông báo"},
+    {L"Scrolling", L"Cuộn ngang"},
+    {L"Scrolling on the player skips songs instead of changing the volume", L"Lăn chuột trên trình phát nhạc để chuyển bài thay vì chỉnh âm lượng"},
+    {L"Search", L"Tìm kiếm"},
+    {L"Search here (a name or *.pdf)", L"Tìm tại đây (tên tệp hoặc *.pdf)"},
+    {L"Search results", L"Kết quả tìm kiếm"},
+    {L"Second screen only", L"Chỉ màn hình phụ (Second screen only)"},
+    {L"Seconds", L"Số giây"},
+    {L"Seconds the pill waits after the mouse leaves before it hides", L"Số giây chờ sau khi đưa chuột ra ngoài trước khi thanh đảo tự thu gọn"},
+    {L"See it in a terminal", L"Xem trong cửa sổ Terminal"},
+    {L"See what's new in this version", L"Xem những điểm mới trong phiên bản này"},
+    {L"See-through blurred pill with a bright edge, needs Windows transparency", L"Thanh đảo trong suốt làm mờ hậu cảnh kèm viền sáng (cần bật hiệu ứng trong suốt của Windows)"},
+    {L"Sets the order of day, month and year when the date shows", L"Chọn thứ tự hiển thị ngày, tháng, năm trên đồng hồ"},
+    {L"Settings", L"Cài đặt"},
+    {L"Shared memory", L"VRAM dùng chung"},
+    {L"Short", L"Ngắn"},
+    {L"Shortcuts", L"Phím tắt"},
+    {L"Show", L"Hiện"},
+    {L"Show %zu hidden", L"Hiện %zu sự kiện đã ẩn"},
+    {L"Show all", L"Hiện tất cả"},
+    {L"Show desktop", L"Hiện màn hình nền"},
+    {L"Show what they say", L"Hiện nội dung thông báo"},
+    {L"Show what's copied (a bubble under the pill)", L"Báo nội dung vừa copy (hiện khung nhỏ dưới đảo)"},
+    {L"Showers", L"Mưa rào"},
+    {L"Shows a banner on the pill when a notification arrives", L"Bung thông báo nổi từ thanh đảo mỗi khi có thông báo mới"},
+    {L"Shows a bubble under the pill with what you just copied", L"Hiện khung nhỏ dưới thanh đảo cho biết nội dung bạn vừa sao chép"},
+    {L"Shows a mark and the app name while the mic, camera or location is used", L"Hiện chấm màu kèm tên ứng dụng đang dùng mic, camera hoặc vị trí"},
+    {L"Shows a notice each time a USB drive is plugged in", L"Hiện thông báo mỗi khi cắm USB vào máy"},
+    {L"Shows an icon on the pill for each app with notifications", L"Hiện icon của các ứng dụng đang có thông báo chưa đọc trên thanh đảo"},
+    {L"Shows an icon to open or eject plugged-in USB drives", L"Hiện icon trên đảo để mở nhanh hoặc ngắt kết nối USB an toàn"},
+    {L"Shows bars that move with the sound that is playing", L"Hiện các cột sóng nhạc nhấp nhô theo âm thanh đang phát"},
+    {L"Shows how busy the processor is", L"Hiện phần trăm tải của CPU"},
+    {L"Shows how long until the next event, alarm, timer or Pomodoro part", L"Hiện thời gian đếm ngược tới sự kiện, báo thức, hẹn giờ hoặc phiên Pomodoro tiếp theo"},
+    {L"Shows how much memory is in use", L"Hiện mức dung lượng RAM đang dùng"},
+    {L"Shows how much video memory is in use", L"Hiện mức dung lượng VRAM đang dùng"},
+    {L"Shows komorebi's workspaces and layout on the pill, a menu changes it", L"Hiện các workspace và bố cục cửa sổ của komorebi trên đảo (bấm để đổi nhanh)"},
+    {L"Shows notices for the charger, low battery, Bluetooth audio and Do not disturb", L"Hiện thông báo trạng thái khi cắm sạc, pin yếu, kết nối tai nghe Bluetooth và bật/tắt Không làm phiền"},
+    {L"Shows pending app and Windows updates from winget and Windows Update", L"Kiểm tra bản cập nhật ứng dụng (qua winget) và bản cập nhật Windows"},
+    {L"Shows small bubbles with names and app notifications on hover", L"Hiện chú thích tên mục hoặc nội dung thông báo khi đưa chuột vào icon"},
+    {L"Shows the battery icon on the pill", L"Hiện biểu tượng pin trên thanh đảo"},
+    {L"Shows the control center's icon, click for Wi-Fi, Bluetooth, volume and more", L"Hiện nút mở Trung tâm điều khiển (Wi-Fi, Bluetooth, âm lượng, độ sáng...)"},
+    {L"Shows the cover and the song title on the pill", L"Hiện ảnh bìa album và tên bài hát đang phát trên thanh đảo"},
+    {L"Shows the current keyboard language, like the Windows indicator", L"Hiện ngôn ngữ bàn phím / chế độ gõ hiện tại trên thanh đảo"},
+    {L"Shows the current upload and download speed", L"Hiện tốc độ mạng tải lên và tải xuống theo thời gian thực"},
+    {L"Shows the extra clocks you added in Windows", L"Hiện thêm giờ của các thành phố bạn đã cài trong Windows"},
+    {L"Shows the icon and name of the app in focus on this monitor", L"Hiện icon và tên của ứng dụng đang dùng trên màn hình này"},
+    {L"Shows the minimize keys, click them to record a new combination", L"Hiện phím tắt thu gọn đảo, bấm vào để đổi sang tổ hợp phím khác"},
+    {L"Shows the notifications", L"Hiện chuông thông báo và danh sách thông báo"},
+    {L"Shows the playing song or video with its cover and controls", L"Hiện bài hát hoặc video đang phát kèm ảnh bìa và nút điều khiển"},
+    {L"Shows the screen brightness, scroll the wheel on it to change", L"Hiện độ sáng màn hình, hỗ trợ lăn chuột ngay trên icon để tăng giảm"},
+    {L"Shows the time on the pill", L"Hiện đồng hồ trên thanh đảo"},
+    {L"Shows the virtual desktops, scroll the wheel on it to switch", L"Hiện các màn hình ảo (Virtual desktops), lăn chuột để chuyển nhanh"},
+    {L"Shows the volume icon, click for the volume panel", L"Hiện biểu tượng loa, bấm để mở bảng âm lượng hoặc lăn chuột để chỉnh"},
+    {L"Shows the weather, it needs an internet connection", L"Hiện nhiệt độ và thời tiết hiện tại (cần internet)"},
+    {L"Shrinks the pill to a thin line on the screen edge when idle", L"Tự thu nhỏ thanh đảo thành một vạch mảnh sát mép màn hình khi không dùng tới"},
+    {L"Shut down", L"Tắt máy"},
+    {L"Shut down now?", L"Tắt máy tính ngay?"},
+    {L"Sign out", L"Đăng xuất"},
+    {L"Sign out now?", L"Đăng xuất khỏi Windows ngay?"},
+    {L"Simple", L"Đơn giản"},
+    {L"Size", L"Kích thước"},
+    {L"Sizes", L"Kích thước"},
+    {L"Sleep", L"Ngủ (Sleep)"},
+    {L"Slide", L"Trượt ngang"},
+    {L"Small", L"Nhỏ"},
+    {L"Smallest first", L"Nhỏ nhất trước"},
+    {L"Smooth bars (like the iPhone)", L"Sóng đung đưa mượt (kiểu iPhone)"},
+    {L"Smoothness of the animations, matching the screen or a fixed rate", L"Độ mượt của chuyển động: theo tần số quét màn hình hoặc khóa ở mức cố định"},
+    {L"Snooze", L"Báo lại sau"},
+    {L"Snoozed: shows again in 5 minutes", L"Đã hoãn: sẽ kêu lại sau 5 phút"},
+    {L"Snow", L"Tuyết rơi"},
+    {L"Snow showers", L"Mưa tuyết"},
+    {L"Song lyrics", L"Lời bài hát"},
+    {L"Song lyrics (goes online: lrclib.net)", L"Lời bài hát (tải từ lrclib.net)"},
+    {L"Sort by", L"Sắp xếp"},
+    {L"Sound", L"Âm thanh"},
+    {L"Sound output", L"Thiết bị phát âm thanh"},
+    {L"Space", L"Space"},
+    {L"Speed", L"Tốc độ"},
+    {L"Speeds up or slows down the animations, on every monitor", L"Tăng hoặc giảm tốc độ chuyển động trên tất cả màn hình"},
+    {L"Stands the pill up on the left and right edges (not with notches)", L"Xoay dọc thanh đảo khi đặt ở cạnh trái hoặc phải màn hình (không dùng với tai thỏ)"},
+    {L"Start", L"Bắt đầu"},
+    {L"Status notices: charger, low battery, Bluetooth audio, Do not disturb", L"Báo trạng thái: cắm sạc, pin yếu, âm thanh Bluetooth, Không làm phiền"},
+    {L"Sticky keys", L"Phím dính (Sticky Keys)"},
+    {L"Stop", L"Dừng"},
+    {L"Stopped", L"Đã dừng"},
+    {L"Stops Windows' own banners so you only see the island's", L"Ẩn thông báo nổi mặc định ở góc dưới của Windows để chỉ hiện thông báo trên đảo"},
+    {L"Stopwatch", L"Bấm giờ"},
+    {L"Style", L"Kiểu dáng"},
+    {L"Switches, adds, renames, updates or deletes your profiles", L"Chuyển đổi, tạo mới, đổi tên, lưu đè hoặc xóa các hồ sơ cài đặt"},
+    {L"System", L"Hệ thống"},
+    {L"System sounds (notifications)", L"Âm thanh hệ thống (thông báo)"},
+    {L"Task", L"Việc cần làm"},
+    {L"Task Manager", L"Task Manager"},
+    {L"Task view", L"Xem tác vụ (Task View)"},
+    {L"Tasks", L"Công việc"},
+    {L"Tasks button", L"Nút danh sách công việc"},
+    {L"Tell me what's new after an update", L"Hiện thông báo giới thiệu tính năng mới sau khi cập nhật mod"},
+    {L"Temperature", L"Nhiệt độ"},
+    {L"Text", L"Chữ"},
+    {L"The app in focus on this monitor (its icon and name)", L"Ứng dụng đang dùng trên màn hình này (hiện icon và tên)"},
+    {L"The apps seen playing; a click turns one's lyrics off, and nothing of its songs is sent to lrclib.net", L"Danh sách ứng dụng từng phát nhạc; bấm vào một ứng dụng để tắt tìm lời bài hát cho ứng dụng đó (không gửi tên bài lên lrclib.net)"},
+    {L"The bar doesn't minimize", L"Kiểu Thanh ngang không hỗ trợ thu gọn"},
+    {L"The bars' color; the rainbow gives each bar its own, going around slowly", L"Màu của sóng nhạc; chọn Cầu vồng để các cột sóng chuyển sắc liên tục"},
+    {L"The battery's charge while a laptop charges", L"Hiện mức phần trăm pin đang sạc trên laptop"},
+    {L"The cover's", L"Theo ảnh bìa"},
+    {L"The dock is set up in Windhawk", L"Thanh Dock được chỉnh trong phần cài đặt mod của Windhawk"},
+    {L"The effect shown when the wallpaper changes", L"Hiệu ứng chuyển cảnh mỗi khi đổi hình nền"},
+    {L"The favorite's drive isn't connected", L"Ổ đĩa chứa tệp yêu thích này hiện chưa được kết nối"},
+    {L"The folder with your wallpapers", L"Thư mục chứa ảnh hình nền của bạn"},
+    {L"The icons'", L"Theo màu icon"},
+    {L"The island follows the mouse between screens.", L"Thanh đảo tự động di chuyển theo trỏ chuột sang màn hình bạn đang dùng."},
+    {L"The island handles notifications and their sounds (Windows' stay quiet)", L"Để đảo quản lý thông báo và âm báo (tắt chuông báo của Windows)"},
+    {L"The island shows the notifications and plays their sounds, Windows stays quiet", L"Đảo sẽ tự hiện thông báo và phát âm báo, còn Windows giữ im lặng để không bị kêu trùng"},
+    {L"The island takes the color of the app in front", L"Tự động đổi màu nền của đảo theo ứng dụng đang mở phía trước"},
+    {L"The island's logs", L"Nhật ký hoạt động (Logs)"},
+    {L"The island's: no banners or sounds from it", L"Chế độ của đảo: tắt thông báo nổi và âm báo"},
+    {L"The keys below send the island to its line, and again bring it back", L"Nhấn tổ hợp phím dưới đây để thu gọn đảo thành vạch mảnh, nhấn lần nữa để mở lại"},
+    {L"The komorebi buttons also start and stop masir, so focus follows the mouse", L"Khi bật/tắt komorebi sẽ chạy kèm masir (tự chuyển cửa sổ theo trỏ chuột)"},
+    {L"The komorebi buttons also start and stop whkd, its shortcut helper", L"Khi bật/tắt komorebi sẽ chạy kèm whkd (trình quản lý phím tắt)"},
+    {L"The line sung now on the pill (place it in the order above), all of them in its panel. Each song's title and artist are sent to lrclib.net (songs only: not videos, voice messages or the apps turned off below)", L"Hiện câu đang hát trên thanh đảo (kéo sắp xếp vị trí ở khung trên) và toàn bộ lời trong bảng riêng. Tên bài hát và ca sĩ sẽ được gửi tới lrclib.net để lấy lời (chỉ tìm cho bài hát, bỏ qua video, tin nhắn thoại và các ứng dụng đã tắt bên dưới)"},
+    {L"The line's color, on the pill and lit in the panel", L"Màu chữ của câu hát trên thanh đảo và câu đang sáng trong bảng lời bài hát"},
+    {L"The list stays open after you click an icon (In the pill style)", L"Không tự đóng danh sách sau khi bấm vào một icon (chỉ áp dụng cho kiểu Ngay trên đảo)"},
+    {L"The next alarm that's on", L"Báo thức tiếp theo đang bật"},
+    {L"The one chosen on the map", L"Màn hình được chọn trên sơ đồ"},
+    {L"The password has at least 8 characters.", L"Mật khẩu phải có ít nhất 8 ký tự."},
+    {L"The pill fills like a loading bar with downloads", L"Biến thanh đảo thành thanh tiến trình khi tải tệp hoặc cài đặt"},
+    {L"The pill fills with the battery's charge while charging", L"Lấp đầy thanh đảo theo mức pin khi đang cắm sạc"},
+    {L"The pill's shape", L"Hình dáng thanh đảo"},
+    {L"The progress apps show on their taskbar button (downloads, copies, installs)", L"Hiển thị tiến trình của ứng dụng trên taskbar (tải xuống, chép tệp, cài đặt)"},
+    {L"The text's", L"Theo màu chữ"},
+    {L"The title and the text, in the pill and in this list", L"Hiện tiêu đề và nội dung trên cả thanh đảo lẫn danh sách này"},
+    {L"The weather service didn't answer", L"Không nhận được phản hồi từ dịch vụ thời tiết"},
+    {L"The wheel on what's playing changes the song (not the volume)", L"Lăn chuột trên mục Đang phát để chuyển bài (thay vì chỉnh âm lượng)"},
+    {L"This PC", L"This PC"},
+    {L"This monitor's profile: changes here apply to every monitor using it", L"Hồ sơ của màn hình này: mọi thay đổi sẽ áp dụng cho tất cả màn hình dùng chung hồ sơ này"},
+    {L"Three", L"Ba tai thỏ"},
+    {L"Thunderstorm", L"Giông bão"},
+    {L"Thunderstorm with hail", L"Giông kèm mưa đá"},
+    {L"Tiling", L"Chia ô (Tiling)"},
+    {L"Time for a break", L"Đến giờ nghỉ ngơi rồi"},
+    {L"Time format", L"Định dạng giờ"},
+    {L"Time until the next", L"Đếm ngược tới sự kiện tiếp theo"},
+    {L"Time's up", L"Hết giờ"},
+    {L"Timer", L"Hẹn giờ"},
+    {L"Timer, stopwatch and Pomodoro", L"Hẹn giờ, bấm giờ và Pomodoro"},
+    {L"Tips under the icons and buttons (their names, an app's notifications)", L"Hiện chú thích nhỏ dưới icon (tên chức năng, nội dung thông báo)"},
+    {L"Title", L"Tiêu đề"},
+    {L"Title width", L"Độ rộng tên bài hát"},
+    {L"To talk to me and follow my projects", L"Trò chuyện với tác giả và theo dõi các dự án mới"},
+    {L"Today", L"Hôm nay"},
+    {L"Today's color", L"Màu đánh dấu ngày hôm nay"},
+    {L"Tomorrow", L"Ngày mai"},
+    {L"Too many agendas", L"Đã đạt giới hạn số lịch đăng ký"},
+    {L"Topics", L"Chủ đề"},
+    {L"Total", L"Tổng dung lượng"},
+    {L"Transition", L"Hiệu ứng chuyển cảnh"},
+    {L"Translucent glass: a lighter tint and livelier colors", L"Kính trong mờ: nền sáng nhẹ hơn và màu sắc rực rỡ hơn"},
+    {L"Tray icons", L"Khay hệ thống"},
+    {L"Turned off", L"Đã tắt"},
+    {L"Turned on", L"Đã bật"},
+    {L"Turns the island's animations on or off, on every monitor", L"Bật hoặc tắt hiệu ứng chuyển động của đảo trên mọi màn hình"},
+    {L"Type", L"Định dạng"},
+    {L"Type to filter the shortcuts…", L"Gõ để tìm nhanh phím tắt…"},
+    {L"Type your note here…", L"Nhập nội dung ghi chú…"},
+    {L"USB drive", L"Ổ USB"},
+    {L"USB drive plugged in", L"Đã cắm ổ USB"},
+    {L"USB drives", L"Ổ USB"},
+    {L"USB drives icon on the pill (open or eject them)", L"Hiện icon USB trên thanh đảo (để mở nhanh hoặc ngắt kết nối)"},
+    {L"UV index", L"Chỉ số UV"},
+    {L"Ultrawide vertical stack", L"Xếp chồng dọc siêu rộng (Ultrawide)"},
+    {L"Unavailable", L"Không khả dụng"},
+    {L"Up to 40 favorite files", L"Tối đa 40 tệp yêu thích"},
+    {L"Upcoming events", L"Sự kiện sắp tới"},
+    {L"Upcoming holidays", L"Ngày lễ sắp tới"},
+    {L"Update", L"Cập nhật"},
+    {L"Update all", L"Cập nhật tất cả"},
+    {L"Update ticked", L"Cập nhật mục đã chọn"},
+    {L"Updates", L"Cập nhật"},
+    {L"Updates (winget and Windows Update)", L"Kiểm tra cập nhật (winget & Windows Update)"},
+    {L"Upright on the left and right edges", L"Xoay dọc khi đặt ở cạnh trái / phải"},
+    {L"Usage", L"Mức tải"},
+    {L"Utilization", L"Mức sử dụng"},
+    {L"Vertical stack", L"Xếp chồng dọc"},
+    {L"Vertical stack, main on the right", L"Xếp chồng dọc (cửa sổ chính bên phải)"},
+    {L"Video memory in use (VRAM)", L"Mức dùng VRAM"},
+    {L"Videos", L"Video"},
+    {L"Virtual desktops", L"Màn hình ảo"},
+    {L"Virtual desktops (the mouse wheel switches them)", L"Màn hình ảo (lăn chuột để chuyển)"},
+    {L"Visualizer color", L"Màu sóng nhạc"},
+    {L"Visualizer color (own)", L"Màu sóng nhạc (tùy chọn)"},
+    {L"Visualizer sensitivity", L"Độ nhạy sóng nhạc"},
+    {L"Volume", L"Âm lượng"},
+    {L"Volume mixer", L"Bộ trộn âm (Volume Mixer)"},
+    {L"Volume percentage beside its icon", L"Hiện số phần trăm âm lượng cạnh icon"},
+    {L"Wallpaper", L"Hình nền"},
+    {L"Wallpaper (the wheel: the next one)", L"Đổi hình nền (lăn chuột để qua ảnh tiếp)"},
+    {L"Wallpaper transition", L"Hiệu ứng chuyển hình nền"},
+    {L"Wallpapers from a folder (with a transition)", L"Đổi hình nền từ thư mục (kèm hiệu ứng chuyển cảnh)"},
+    {L"Weather", L"Thời tiết"},
+    {L"Weather (goes online)", L"Thời tiết (cần internet)"},
+    {L"Weather data by Open-Meteo.com", L"Dữ liệu thời tiết từ Open-Meteo.com"},
+    {L"Website", L"Trang web"},
+    {L"Weekday", L"Thứ trong tuần"},
+    {L"What it does", L"Mô tả tác dụng"},
+    {L"What needs doing?", L"Thêm việc cần làm…"},
+    {L"What's new", L"Có gì mới"},
+    {L"What's playing", L"Đang phát"},
+    {L"Where the island appears", L"Màn hình hiển thị đảo"},
+    {L"While a line is sung, it takes the title and artist's place; between lines they come back", L"Khi có câu hát sẽ hiện đè vào chỗ tên bài hát; lúc nghỉ nhạc dạo sẽ hiện lại tên bài"},
+    {L"While the app is in front, the pill moves there and shows only the lit icons.", L"Khi mở ứng dụng này, thanh đảo sẽ tự dời tới vị trí riêng và chỉ hiện các icon được bật sáng."},
+    {L"While the app is in front, the pill moves there and shows only the lit icons. Dragging it then changes its place too.", L"Khi mở ứng dụng này, thanh đảo sẽ tự dời tới vị trí riêng và chỉ hiện các icon được bật sáng. Bạn cũng có thể kéo thanh đảo lúc đó để đổi vị trí riêng này."},
+    {L"While the timer runs", L"Khi bộ hẹn giờ đang chạy"},
+    {L"Wi-Fi / network", L"Wi-Fi / mạng"},
+    {L"Wi-Fi is off", L"Wi-Fi đang tắt"},
+    {L"Widgets", L"Widgets"},
+    {L"Width of the edge zone where the mouse brings the pill back", L"Độ rộng vùng mép màn hình nhận diện trỏ chuột để gọi đảo hiện lại"},
+    {L"Win+A opens the island's control center", L"Dùng Win+A để mở Trung tâm điều khiển của đảo"},
+    {L"Win+J minimizes the island to its line and brings it back", L"Dùng Win+J để thu gọn / mở lại thanh đảo"},
+    {L"Win+L stays Windows' (it locks the PC)", L"Win+L là phím khóa máy mặc định của Windows"},
+    {L"Win+N opens the island's notifications", L"Dùng Win+N để mở bảng Thông báo của đảo"},
+    {L"Windows", L"Theo Windows"},
+    {L"Windows Update", L"Windows Update"},
+    {L"Windows accent", L"Màu nhấn của Windows"},
+    {L"Windows or another app uses them too, the island takes them first", L"Trùng với phím tắt của Windows hoặc ứng dụng khác (đảo sẽ ưu tiên nhận trước)"},
+    {L"Windows places", L"Lối tắt hệ thống Windows"},
+    {L"Windows shows the networks only to apps allowed to use the location: click to turn on \"Let desktop apps access your location\"", L"Windows yêu cầu quyền vị trí mới cho phép quét mạng Wi-Fi: bấm vào đây để bật \"Cho phép ứng dụng máy tính truy cập vị trí của bạn\""},
+    {L"Windows' own: no notification sounds", L"Chế độ của Windows: tắt âm báo thông báo"},
+    {L"With names", L"Danh sách kèm tên"},
+    {L"Working…", L"Đang xử lý…"},
+    {L"Workspace", L"Không gian làm việc"},
+    {L"World clocks", L"Đồng hồ thế giới"},
+    {L"World clocks (Windows' additional clocks)", L"Đồng hồ thế giới (lấy từ đồng hồ phụ của Windows)"},
+    {L"Write", L"Gõ chữ"},
+    {L"Writes the charge level as a number next to its icon", L"Hiện con số phần trăm pin ngay cạnh biểu tượng pin"},
+    {L"Writes the month as a number, like 9/10, not as a name", L"Viết tháng bằng số (như 9/10) thay vì viết chữ"},
+    {L"Writes the volume level as a number next to its icon", L"Hiện con số mức âm lượng ngay cạnh biểu tượng loa"},
+    {L"Y M D", L"Năm Th Ng"},
+    {L"Year", L"Năm"},
+    {L"Your city (like Campinas)", L"Nhập tên thành phố (VD: TP. Hồ Chí Minh, Hà Nội)"},
+    {L"Your events and your agendas' events", L"Sự kiện tự tạo và sự kiện từ các lịch .ics"},
+    {L"Your own colors", L"Tự chọn màu riêng"},
+    {L"Z to A", L"Z đến A"},
+    {L"Zoom", L"Phóng to"},
+    {L"checking", L"đang kiểm tra"},
+    {L"en", L"vi"},
+    {L"from Windhawk", L"từ cài đặt Windhawk"},
+    {L"hours", L"giờ"},
+    {L"in %d h", L"còn %d giờ"},
+    {L"in %d h %d min", L"còn %d giờ %d phút"},
+    {L"in %d min", L"còn %d phút"},
+    {L"installed", L"đã cài"},
+    {L"komorebi", L"komorebi"},
+    {L"komorebi (start, stop, reload)", L"komorebi (bật, tắt, tải lại)"},
+    {L"komorebi isn't installed", L"chưa cài đặt komorebi"},
+    {L"komorebi's layout", L"Bố cục komorebi"},
+    {L"komorebi: hide the workspaces without windows", L"komorebi: ẩn các workspace trống không có cửa sổ"},
+    {L"komorebi: its layout on the pill (a menu changes it)", L"komorebi: hiện tên bố cục trên thanh đảo (bấm để đổi)"},
+    {L"komorebi: with masir (focus follows the mouse)", L"komorebi: chạy kèm masir (tự chuyển cửa sổ theo chuột)"},
+    {L"komorebi: with whkd (its shortcuts)", L"komorebi: chạy kèm whkd (phím tắt của komorebi)"},
+    {L"min", L"phút"},
+    {L"more", L"mục nữa"},
+    {L"not connected", L"chưa kết nối"},
+    {L"notification", L"thông báo"},
+    {L"notifications", L"thông báo"},
+    {L"now", L"vừa xong"},
+    {L"sec", L"giây"},
+    {L"starting now", L"sắp diễn ra"},
+    {L"taken by the island's Win+N or Win+A", L"đã trùng với phím tắt Win+N hoặc Win+A của đảo"},
+    {L"use Win, Ctrl or Alt with a key", L"hãy kết hợp phím Win, Ctrl hoặc Alt với một phím khác"},
+    {L"winget couldn't list them", L"winget không lấy được danh sách"},
+    {L"winget isn't installed", L"máy chưa cài winget"},
+    {L"yesterday", L"hôm qua"},
+    {L"✓ Copied", L"✓ Đã chép"},
+    {L"\u2713 Emptied", L"\u2713 Đã dọn sạch"},
+    {L"\u2713 Exported", L"\u2713 Đã xuất"},
+    {L"✓ Saved", L"✓ Đã lưu"},
+};
+// clang-format on
+
 // The language of the island's own texts: the one chosen, or like the
 // Windows display language, English unless it's one of these (Chinese only
 // Simplified; the traditional script reads English).
@@ -17519,15 +18538,16 @@ enum class TextLanguage {
     German,
     Spanish,
     Russian,
-    Japanese
+    Japanese,
+    Vietnamese
 };
 
 // The one chosen in the island's settings (islandLanguage, for every
 // island): 0 like Windows, then the languages above in their order (1
 // English, 2 Portuguese, 3 Chinese, 4 German, 5 Spanish, 6 Russian, 7
-// Japanese).
+// Japanese, 8 Vietnamese).
 int g_textLanguage = 0;
-constexpr int kTextLanguages = 7;
+constexpr int kTextLanguages = 8;
 
 // What each published version brought (the settings' "What's new", newest
 // first): a short summary for users, in each of the island's languages, in
@@ -17750,7 +18770,26 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Dock：アイコン上のプロフィール写真がくっきり表示され、複数のウィンドウを持つアプリに余分な台が表示されなくなりました。\n"
          L"#修正\n"
          L"Mod をオフにすると、タスク バーの自動非表示とアイコンが正しく元に戻ります。\n"
-         L"アプリの終了後や Windows の起動直後に、進行状況のアニメーションが止まらなくなる問題を修正しました。"}},
+         L"アプリの終了後や Windows の起動直後に、進行状況のアニメーションが止まらなくなる問題を修正しました。",
+         L"#Tính năng mới\n"
+         L"Tích hợp bộ trộn âm (Mixer) ngay trong bảng phát nhạc: chỉnh âm lượng và tắt tiếng riêng cho từng ứng dụng, kèm nút mở nhanh Volume Mixer của Windows.\n"
+         L"Bảng phát nhạc tự động chuyển tông màu theo ảnh bìa bài hát; hiển thị icon của từng nguồn phát với hiệu ứng chuyển cảnh mượt mà.\n"
+         L"Hỗ trợ hiển thị lời bài hát (Lyrics) trực tiếp trên thanh đảo và trong bảng riêng (lấy từ lrclib.net).\n"
+         L"Bổ sung Hẹn giờ, Bấm giờ, Pomodoro và Báo thức: thời gian đếm ngược hiện trực tiếp trên thanh đảo, bấm vào để xem danh sách tiến trình đang chạy kèm nút Tạm dừng / Hủy.\n"
+         L"Sóng nhạc (Visualizer) nhấp nhô theo nhịp bass hoặc đung đưa mượt như iPhone, tự lấy màu theo ảnh bìa album hoặc màu tùy chọn.\n"
+         L"Tiện ích mới trên đảo: tốc độ mạng, đồng hồ thế giới, đếm ngược sự kiện tiếp theo và Thùng rác.\n"
+         L"Thanh đảo có thể lấp đầy như thanh tiến trình khi đang tải tệp, chép dữ liệu hoặc khi cắm sạc pin.\n"
+         L"Thông báo trạng thái khi cắm sạc, pin yếu, kết nối tai nghe Bluetooth và bật/tắt Không làm phiền.\n"
+         L"Giao diện Cài đặt được tách thành cửa sổ riêng hiện đại, hỗ trợ tìm kiếm nhanh, phân chia tab rõ ràng và có thêm trang Có gì mới này.\n"
+         L"Bổ sung ngôn ngữ: Tiếng Đức, Tây Ban Nha, Nga, Nhật và Tiếng Việt.\n"
+         L"#Cải tiến\n"
+         L"Chuyển động mượt hơn: khi mở bảng, thanh đảo giữ nguyên chiều rộng và không bị cắt lẹm hai bên khi đóng bảng.\n"
+         L"Bảng thư mục cho phép sắp xếp theo tên, ngày sửa, dung lượng hoặc định dạng tệp.\n"
+         L"Đánh dấu tệp yêu thích: gắn sao cho tệp để ghim chung với các thư mục giúp mở nhanh hoặc chép đường dẫn.\n"
+         L"Thanh Dock: ảnh đại diện hồ sơ trên icon luôn sắc nét, và các ứng dụng mở nhiều cửa sổ không còn bị dư lớp nền phía sau.\n"
+         L"#Sửa lỗi\n"
+         L"Khi tắt mod sẽ khôi phục chuẩn xác trạng thái tự ẩn và các icon của taskbar Windows.\n"
+         L"Khắc phục lỗi hiệu ứng thanh tiến trình đôi khi bị kẹt sau khi tải xong hoặc lúc mới khởi động máy."}},
     {L"2.0.6",
      {
          L"#New\n"
@@ -17868,7 +18907,20 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#修正\n"
          L"サインイン時に Windows の準備ができていなくてもアイランドが起動します。\n"
          L"Mod を更新してもアイランドがオフのままにならなくなりました。\n"
-         L"Wi-Fi、Bluetooth、キーボード言語の吹き出し、Discord 通知を修正しました。"}},
+         L"Wi-Fi、Bluetooth、キーボード言語の吹き出し、Discord 通知を修正しました。",
+         L"#Tính năng mới\n"
+         L"Làm lại thanh Dock chuẩn phong cách macOS: icon phóng đại theo làn sóng trên nền bo tròn và giữ nguyên độ sắc nét khi phóng to.\n"
+         L"Hiệu ứng Kính trong: làm mờ hậu cảnh phía sau thanh đảo và các bảng, có thêm tùy chọn kính trong mờ tươi tắn hơn.\n"
+         L"Hỗ trợ đa ngôn ngữ cho thanh đảo.\n"
+         L"Tùy chỉnh độ dày, độ bo góc, chiều rộng và đường viền của thanh đảo; kiểu Thanh ngang có thể đẩy các mục sang hai góc màn hình.\n"
+         L"#Cải tiến\n"
+         L"Biểu tượng pin chuyển màu xanh lá khi cắm sạc, chữ số phần trăm đặt sát icon hơn.\n"
+         L"Lịch cho phép tự động ẩn các sự kiện đã qua.\n"
+         L"Cho phép tùy chọn chu kỳ kiểm tra bản cập nhật.\n"
+         L"#Sửa lỗi\n"
+         L"Thanh đảo khởi động ổn định ngay cả khi Windows chưa tải xong lúc vừa đăng nhập.\n"
+         L"Cập nhật mod không còn làm thanh đảo bị tắt ngoài ý muốn.\n"
+         L"Sửa lỗi kết nối Wi-Fi, Bluetooth, khung báo ngôn ngữ bàn phím và thông báo của Discord."}},
     {L"2.0.1",
      {
          L"#Improvements\n"
@@ -17940,7 +18992,16 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#修正\n"
          L"ウィジェットのニュースがアイコン付きで表示され、クリックでウィジェットが開きます。\n"
          L"Windows 自身の通知にアイコンが表示されます。\n"
-         L"すばやく開いて閉じたパネルの輪郭が残らなくなりました。"}},
+         L"すばやく開いて閉じたパネルの輪郭が残らなくなりました。",
+         L"#Cải tiến\n"
+         L"Các bảng luôn mở ra ngay chính giữa mục bạn vừa bấm.\n"
+         L"Thêm tùy chọn chỉnh kích thước icon từ 70% đến 150%.\n"
+         L"Phần khuyết tai thỏ tự động mở rộng theo số lượng mục bên trong.\n"
+         L"Hồ sơ của từng màn hình lưu giữ độc lập các thiết lập riêng.\n"
+         L"#Sửa lỗi\n"
+         L"Tin tức từ Widgets hiển thị đầy đủ icon và bấm vào sẽ mở ngay bảng Widgets.\n"
+         L"Thông báo hệ thống của Windows hiển thị đúng icon.\n"
+         L"Mở và đóng nhanh một bảng không còn bị lưu bóng đường viền trên màn hình."}},
     {L"2.0.0",
      {
          L"#New\n"
@@ -18016,7 +19077,14 @@ const ReleaseNotes kReleaseNotes[] = {
          L"コントロール センター：Wi-Fi、Bluetooth、アプリごとの音量、明るさ、応答不可、夜間モード。\n"
          L"再生中のメディア、予定表付きのカレンダー、天気、メモ、タスク、フォルダー、壁紙など、すべてオプション。\n"
          L"macOS のような Dock、または透明な Windows タスク バー。\n"
-         L"プロファイル、バックアップ、独自の色、各モニターのアイランド。"}},
+         L"プロファイル、バックアップ、独自の色、各モニターのアイランド。",
+         L"#Tính năng mới\n"
+         L"Thanh đảo: hiển thị dạng viên thuốc nổi ở cạnh trên, dạng tai thỏ MacBook, dải Cố định hoặc Thanh ngang toàn màn hình.\n"
+         L"Thông báo mới bung ra từ thanh đảo, hỗ trợ trả lời nhanh tin nhắn và lưu lịch sử trong biểu tượng chuông.\n"
+         L"Trung tâm điều khiển: chỉnh nhanh Wi-Fi, Bluetooth, âm lượng từng ứng dụng, độ sáng màn hình, Không làm phiền và Ánh sáng đêm.\n"
+         L"Tích hợp trình phát nhạc, lịch & sự kiện (.ics), thời tiết, ghi chú, việc cần làm, thư mục, đổi hình nền và nhiều tiện ích tùy chọn khác.\n"
+         L"Thanh Dock kiểu macOS hoặc làm trong suốt thanh taskbar Windows.\n"
+         L"Hỗ trợ nhiều hồ sơ cài đặt, sao lưu / khôi phục, tự chọn bảng màu và hiển thị đảo trên nhiều màn hình."}},
 };
 constexpr int kReleaseNotesCount = (int)std::size(kReleaseNotes);
 // The language they show in there (a TextLanguage; -1: the island's own,
@@ -18045,6 +19113,8 @@ TextLanguage IslandTextLanguage() {
                 return TextLanguage::Russian;
             case LANG_JAPANESE:
                 return TextLanguage::Japanese;
+            case LANG_VIETNAMESE:
+                return TextLanguage::Vietnamese;
         }
         return TextLanguage::English;
     }();
@@ -18070,6 +19140,8 @@ PCWSTR DateLocale() {
             return L"ru-RU";
         case 7:
             return L"ja-JP";
+        case 8:
+            return L"vi-VN";
     }
     return LOCALE_NAME_USER_DEFAULT;
 }
@@ -18137,6 +19209,8 @@ PCWSTR Tr(PCWSTR english, PCWSTR portuguese) {
             return TableText(kRussianTexts, english);
         case TextLanguage::Japanese:
             return TableText(kJapaneseTexts, english);
+        case TextLanguage::Vietnamese:
+            return TableText(kVietnameseTexts, english);
         default:
             return english;
     }
@@ -23049,6 +24123,10 @@ void DrawFlag(ID2D1RenderTarget* target,
             band(0, 1, 0xFFFFFF);
             target->FillEllipse({{cx, cy}, h * 0.3f, h * 0.3f},
                                 color(0xBC002D));
+            break;
+        case TextLanguage::Vietnamese:
+            band(0, 1, 0xDA251D);
+            star(cx, cy, h * 0.3f, 0xFFFF00);
             break;
     }
     target->PopLayer();
@@ -28981,7 +30059,8 @@ std::wstring ChoiceOption(int id, int index) {
                    : language == 4 ? L"Deutsch"
                    : language == 5 ? L"Español"
                    : language == 6 ? L"Русский"
-                                   : L"日本語";
+                   : language == 7 ? L"日本語"
+                                   : L"Tiếng Việt";
         }
         case kChoiceFillColor:
         case kChoiceFillCopyColor:
@@ -37782,7 +38861,7 @@ DWORD WINAPI WeatherThreadProc(LPVOID parameter) {
         // (In the island's language, so cities are found by their names
         // there.)
         static constexpr PCWSTR kCodes[] = {L"en", L"pt", L"zh", L"de",
-                                            L"es", L"ru", L"ja"};
+                                            L"es", L"ru", L"ja", L"vi"};
         const std::wstring language = kCodes[(int)IslandTextLanguage()];
         if (!HttpsGetJson(
                 L"https://geocoding-api.open-meteo.com/v1/search?count=1&"
@@ -56818,9 +57897,9 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                           L"arquivos copiar mover perguntar"
                     : entry.value == kChoiceLanguage
                         ? L" Language English Portuguese Chinese German "
-                          L"Spanish Russian Japanese translation Idioma inglês "
-                          L"português chinês alemão espanhol russo japonês "
-                          L"tradução 语言 Sprache Язык 言語"
+                          L"Spanish Russian Japanese Vietnamese translation Idioma inglês "
+                          L"português chinês alemão espanhol russo japonês vietnamita "
+                          L"tradução 语言 Sprache Язык 言語 Tiếng Việt ngôn ngữ"
                     : FillChoiceKind(entry.value) >= 0
                         ? L" Fill color progress download copy charge green "
                           L"blue accent customize Cor preenchimento progresso "
