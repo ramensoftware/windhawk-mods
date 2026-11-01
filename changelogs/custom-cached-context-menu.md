@@ -1,3 +1,43 @@
+## 1.2.0 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/62ce51acd0fe918b84e73bddcfa47f4f609891dc/mods/custom-cached-context-menu.wh.cpp))
+
+### Added
+- Localization for 36 languages: Arabic, Azerbaijani, Bengali, Czech, Danish,
+  German, Greek, English, Spanish, Persian, French, Hindi, Croatian, Haitian
+  Creole, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian, Dutch,
+  Odia, Polish, Portuguese (Brazil and Portugal), Romanian, Russian, Swedish,
+  Tamil, Thai, Turkish, Ukrainian, Uzbek, Vietnamese, and Chinese (Simplified
+  and Traditional).
+- The menu and the in-menu settings editor follow the Windows display language
+  by default. A new Language setting can override it without changing the
+  Windows language. Shell-extension labels stay in the language the extension
+  supplies.
+- The Windhawk settings page follows Windhawk's own language: setting names,
+  descriptions and option labels are localized through Windhawk's metadata
+  annotations.
+- Right-to-left layout for Arabic and Farsi: mirrored menu geometry, submenu
+  side, hit-testing, slider direction and keyboard Left/Right, with text drawn
+  in the correct reading direction.
+
+### Fixed
+- On non-English Windows, New, Display settings and Personalize no longer
+  appear twice (once in the mod's English labels and once in the system
+  language). Native items are matched by verb, known shell labels, or
+  OS-language New child names instead of translated text.
+- Existing menu.ini configuration keeps working on a localized menu: core
+  items retain canonical English labels for label predicates, per-item
+  overrides, advanced-submenu matching and move destinations.
+- The New submenu uses stable template identities and a locked snapshot, so a
+  language change cannot reorder the list into creating the wrong file type.
+- The cache records the Windows UI language and rebuilds after a system
+  language change instead of showing stale labels.
+- Multi-selection now uses the stock "Open" label instead of "Open N items",
+  avoiding per-language plural rules.
+
+### Changed
+- The menu and settings editor are no longer English-only. Native translations
+  can be corrected in the mod's source repository and regenerated; the
+  submission still contains only the single mod file.
+
 ## 1.1.1 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4d0e9c036ca788eae9817ed8d7b28714cac6e97f/mods/custom-cached-context-menu.wh.cpp))
 
 ### Added

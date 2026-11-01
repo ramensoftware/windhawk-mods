@@ -1,3 +1,47 @@
+## 1.1.0 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4d0e222da8df9e1d8a040cdb0c9cf3d2f46d9c7f/mods/spotlight-launcher.wh.cpp))
+
+* **Actions on the window switcher.** `win:` no longer only brings a window to the front. **Ctrl + M**
+  minimizes it, **Ctrl + Shift + M** maximizes or restores it, **Ctrl + Shift + T** keeps it always on
+  top, **Ctrl + Shift + ← / →** moves it to the previous or next monitor, and **Ctrl + W** closes it —
+  with a second **Ctrl + W** to confirm, because the app decides whether to ask about unsaved work.
+  **Ctrl + Enter** opens the folder of its `.exe` and **Ctrl + Shift + C** copies its path. Every action
+  leaves the bar open, so several windows can be handled in a row, and none of them steals the keyboard:
+  the bar takes it back. **Ctrl + I** shows the same card the app list uses, with the actions and the
+  window's process, state and path.
+* **Always-on-top feedback.** A window kept on top wears a gold pin on its icon, says **On top** in the
+  list and reports it in the panel, and toggling it says so in the footer. Windows has no indicator of
+  its own, so a forgotten pin is easy to spot and easy to undo.
+* **Date and size filters.** The file browser and `find:` both accept `size:>10mb`, `size:<500kb`,
+  `size:1mb..10mb`, `modified:today`, `modified:week`, `modified:2026-10-31`, `modified:>2026-06-01` and
+  the rest, mixed with the words and the existing filters in any order. Sizes are binary (`1mb` =
+  1,048,576 bytes), a lone date covers that whole day in local time, a space after the operator is
+  accepted, and a row without a known size or date is left out rather than guessed. The active filters
+  are listed in the path bar.
+* **Everything now answers with size and date.** The query asks its index for both, so file rows from
+  Everything show the same metadata as the built-in scan instead of the type alone, and the filters are
+  translated to Everything's own syntax (`size:>=1048576`, `datemodified:>=2026-10-31`) instead of
+  filtering a handful of arbitrary matches.
+* **`find:` shows the full metadata line.** Every result reads *type · size · date · folder*, so the
+  folder no longer hides the size when the row is narrow.
+* **The footer says “Searching.”** while a `find:` scan is still running, the way Files already did.
+* **Icons for packaged apps** come from the tile image the Start menu uses, so Notepad, Terminal, Paint
+  and the rest no longer fall back to a blank page.
+* **Run as administrator for packaged apps.** A full-trust package (Notepad, Terminal, Paint, Photos,
+  Snippets…) now offers the action, resolved from the executable its manifest declares; UWP apps such as
+  Calculator or Settings do not, because launching them without their package identity does nothing.
+* **Minimizing or closing a window no longer closes the launcher.** The focus the action takes away is
+  no longer read as a click outside, and the bar keeps the keyboard.
+* **A closed window leaves the list** even when the app takes a moment to shut down: Chromium-based
+  browsers destroy their window asynchronously, so the list is re-read for up to two seconds instead of
+  once.
+* **`find:` results** show their size and modified date with either engine.
+* **Clipboard history at startup.** With the feature off and nothing stored, the mod no longer creates
+  its image folder or writes empty values for accounts that never enabled it.
+* **A clipboard entry stored as plain text** (only possible in the first 1.0.0 build) is re-encrypted
+  when it is loaded instead of being written back unencrypted.
+* **The clipboard image folder** is resolved once, thread-safely, so the thumbnail worker and the UI can
+  no longer write the same cached path at the same time.
+
 ## 1.0.0 ([Oct 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/baa44b7b054e315d6b522775ecd1bb5a13594546/mods/spotlight-launcher.wh.cpp))
 
 * **Clipboard history.** An opt-in feature (off by default) that keeps the last 30 things you copied

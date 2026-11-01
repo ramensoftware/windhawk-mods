@@ -3727,7 +3727,7 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 2.3631968908530703,
-        "updated": 1793048549000,
+        "updated": 1793545404000,
         "users": 298
       },
       "metadata": {
@@ -3736,14 +3736,18 @@
         ],
         "author": "BOLT",
         "compilerOptions": "-lole32 -lshlwapi -luuid -lcomctl32 -ladvapi32 -lgdi32 -luxtheme -lversion -ld3d11 -ld2d1 -ldwrite -ldcomp",
-        "description": "Instantly-opening cached Explorer context menu that is fully customizable: themes, layout, colors, animations, rules, and custom commands.",
+        "description": "Menu konteks Explorer cache yang terbuka secara instan dan dapat disesuaikan sepenuhnya: tema, tata letak, warna, animasi, aturan, dan perintah khusus.",
         "github": "https://github.com/Bolt-Scripts",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
-        "name": "Custom Cached Context Menu",
-        "version": "1.1.1"
+        "name": "Menu Konteks Cache Khusus",
+        "version": "1.2.0"
+      },
+      "metadataEnglish": {
+        "description": "Instantly-opening cached Explorer context menu that is fully customizable: themes, layout, colors, animations, rules, and custom commands.",
+        "name": "Custom Cached Context Menu"
       }
     },
     "custom-cmd-startup-text": {
@@ -12004,7 +12008,7 @@
         "ratingUsers": 51,
         "reviews": 0,
         "trendingSorting": 5.315746224557489,
-        "updated": 1790280087000,
+        "updated": 1793545412000,
         "users": 2123
       },
       "metadata": {
@@ -12017,7 +12021,7 @@
         ],
         "license": "MIT",
         "name": "Parallax Wallpaper",
-        "version": "0.9.0"
+        "version": "0.9.2"
       }
     },
     "passkey-popup-blocker": {
@@ -14596,7 +14600,7 @@
         "ratingUsers": 55,
         "reviews": 1,
         "trendingSorting": 8.962216800414044,
-        "updated": 1793369099000,
+        "updated": 1793545408000,
         "users": 862
       },
       "metadata": {
@@ -14609,7 +14613,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "standard-title-bar-colors": {
@@ -16895,7 +16899,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793318470000,
+        "updated": 1793545399000,
         "users": 8
       },
       "metadata": {
@@ -16905,6 +16909,7 @@
         "author": "vmTools",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lcomctl32",
         "description": "Choose icon alignment (Left, Center, Right) and Start button placement (Left, Right) independently for each monitor (Windows 11).",
+        "donateUrl": "https://ko-fi.com/vtools",
         "github": "https://github.com/VitalyTz",
         "homepage": "https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment",
         "include": [
@@ -16912,7 +16917,7 @@
         ],
         "license": "MIT",
         "name": "Per-monitor taskbar icon alignment",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "taskbar-primary-on-secondary-monitor": {
