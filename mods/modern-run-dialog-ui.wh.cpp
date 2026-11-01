@@ -167,23 +167,23 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   - auto: Auto – Follow Windows
   - dark: Dark Mode
   - light: Light Mode
-- uiScalePercent: 100
+- uiScalePercent: "100"
   $name: Appearance · UI Size / Scale (85% – 125%)
   $name:vi-VN: Kích thước giao diện (85% – 125%)
   $description: Adjust the overall size of the Run dialog (85% Compact, 100% Default, 110% Medium, 120% Large). Also adjustable via the Gear button.
   $description:vi-VN: Điều chỉnh tỷ lệ kích thước tổng thể của hộp thoại Run (85% Nhỏ gọn, 100% Mặc định, 110% Vừa, 120% Lớn). Có thể chỉnh trực tiếp qua nút Bánh răng.
   $options:vi-VN:
-  - 85: 85% – Nhỏ gọn (Compact)
-  - 90: 90% – Hơi nhỏ
-  - 100: 100% – Mặc định (Chuẩn)
-  - 110: 110% – Lớn vừa (Medium)
-  - 120: 120% – Rất lớn (Large)
+  - "85": 85% – Nhỏ gọn (Compact)
+  - "90": 90% – Hơi nhỏ
+  - "100": 100% – Mặc định (Chuẩn)
+  - "110": 110% – Lớn vừa (Medium)
+  - "120": 120% – Rất lớn (Large)
   $options:
-  - 85: 85% – Compact
-  - 90: 90% – Slightly Smaller
-  - 100: 100% – Default (Standard)
-  - 110: 110% – Medium Large
-  - 120: 120% – Large
+  - "85": 85% – Compact
+  - "90": 90% – Slightly Smaller
+  - "100": 100% – Default (Standard)
+  - "110": 110% – Medium Large
+  - "120": 120% – Large
 - blurOpacity: 170
   $name: Appearance · Blur Opacity (0–255)
   $name:vi-VN: Độ đậm nền Blur (0–255)
@@ -1117,7 +1117,10 @@ void LoadSettings(bool fromSettingsChanged = false) {
         newSettings.colorMode = ColorMode::Auto;
     }
 
-    int scaleSetting = Wh_GetIntSetting(L"uiScalePercent");
+    auto scaleStrSetting = WindhawkUtils::StringSetting::make(L"uiScalePercent");
+    int scaleSetting = (scaleStrSetting.get() && scaleStrSetting.get()[0])
+                       ? _wtoi(scaleStrSetting.get())
+                       : Wh_GetIntSetting(L"uiScalePercent");
     if (scaleSetting <= 0) scaleSetting = 100;
     int scaleOverride = Wh_GetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), -1);
     newSettings.uiScalePercent = std::clamp(scaleOverride > 0 ? scaleOverride : scaleSetting, 85, 125);
