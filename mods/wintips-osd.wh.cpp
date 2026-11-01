@@ -301,29 +301,16 @@ using std::min;
 using namespace Gdiplus;
 
 // =============================================================================
-// Mod id
-//
-// The tool mod launcher at the end of the file uses this macro for the
-// "-tool-mod <id>" handover between windhawk.exe and the spawned process, so it
-// has to be defined in both builds, not just the standalone one.
-//
-// The wiki snippet calls it WH_MOD_ID. The name is different here on purpose: a
-// "#define WH_..." line is reported by the windhawk-mods CI as "Windhawk symbol
-// redefinition" (pr_validation.py flags "#define W[Hh]_"), and any warning in
-// that check fails it. The launcher logic itself is verbatim.
-// =============================================================================
-
-#ifndef WINTIPS_MOD_ID
-#define WINTIPS_MOD_ID L"wintips-osd"
-#endif
-
-// =============================================================================
 // Standalone build support
 //
 // This file is both a Windhawk mod and, when compiled with WINTIPS_STANDALONE,
 // a plain Win32 program that can be run and screenshotted without Windhawk.
 // Only the Wh_* API surface and the mod entry points are shimmed; everything
 // else is the exact code that runs inside Windhawk.
+//
+// WH_MOD_ID is a constant Windhawk passes to the compiler, so the mod build
+// gets it for free. The standalone build has to be given one: build-test.bat
+// passes /DWH_MOD_ID=L"wintips-osd".
 // =============================================================================
 
 #ifdef WINTIPS_STANDALONE
@@ -2619,7 +2606,7 @@ BOOL Wh_ModInit() {
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WINTIPS_MOD_ID) == 0) {
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
             break;
@@ -2634,14 +2621,14 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WINTIPS_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WINTIPS_MOD_ID);
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -2685,9 +2672,9 @@ void Wh_ModAfterInit() {
 
     WCHAR
     commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WINTIPS_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WINTIPS_MOD_ID);
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
