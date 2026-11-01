@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-01T05:02:49.000Z</updated>
+    <updated>2026-11-01T14:02:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Drag to Scroll 1.1.0]]></title>
+        <id>https://windhawk.net/mods/drag-to-scroll#d13d325a5443ddd931928f05762566bec3c0ac99</id>
+        <link href="https://windhawk.net/mods/drag-to-scroll"/>
+        <updated>2026-11-01T14:02:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>⚠️ <strong>Important for v1.0.0 Users:</strong> </p></li>
+<li><p>Due to an unloading bug in v1.0.0, clicking "Update" to install this version may cause active applications to freeze or close as the old version unloads. To avoid losing work, please save your open apps before updating, or restart your computer after the update completes. This issue is fully resolved in v1.1.0 and will not happen on future updates.</p></li>
+<li><p><strong>Horizontal & 2D Scrolling:</strong> Added full sideways drag-to-scroll with automatic directional snapping to keep vertical and horizontal movement straight and prevent diagonal drift.</p></li>
+<li><p><strong>Custom Dual-Contour Cursors:</strong> Added built-in, high-contrast dynamic drag cursors (vertical, horizontal, and cruising) with centered hotspots that automatically scale to match system display metrics without external assets.</p></li>
+<li><p><strong>Accidental Browser Zoom Prevention:</strong> Implemented a 250ms compositor drain shield that prevents browsers (Chrome, Edge, Firefox) from zooming in or out when letting go of the scroll gesture.</p></li>
+<li><p><strong>Motion Smoothing & Velocity Curve:</strong> Added a low-pass motion filter to eliminate sensor jitter and micro-stutter, paired with dynamic velocity scaling for responsive crawls and rapid flicks.</p></li>
+<li><p><strong>Initialization & Stability Hardening:</strong> Moved cursor loading to on-demand initialization and excluded non-interactive desktop sessions and sandboxed processes to eliminate mod load hangs.</p></li>
+<li><p><strong>Refined Discrete & Sub-Notch Scrolling:</strong> Optimized legacy Win32 line-stepping message dispatch and fine-tuned fractional wheel deltas for fluid modern app scrolling.</p></li>
+<li><p><strong>Clearer Documentation:</strong> Redesigned the README with everyday quick-start instructions, feature highlights, and clarified capability notes.</p></li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Desktop Widgets 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-desktop-widgets#e30d1f91b4bf2553646a6f156c4abd8cd7769e6e</id>
@@ -1062,21 +1083,6 @@ F014
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Middle-Click New Tab Chrome/Edge/Brave 1.1]]></title>
-        <id>https://windhawk.net/mods/chrome-middle-click-new-tab#392163440a38ef9648ffef5ac2c88e94a31fe4fc</id>
-        <link href="https://windhawk.net/mods/chrome-middle-click-new-tab"/>
-        <updated>2026-10-30T22:04:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Added support for vertical tabs in Edge and Brave: middle-clicking the empty area below the tabs opens a new tab.</p></li>
-<li><p>In Edge, the empty area is detected with UI Automation. It can be turned off with the new Edge vertical tabs setting.</p></li>
-<li><p>Renamed the mod title and description to make it clear that it's for browsers.</p></li>
-</ul>]]></content>
-        <author>
-            <name>erenalpars</name>
-            <uri>https://github.com/erenalpars</uri>
         </author>
     </entry>
 </feed>

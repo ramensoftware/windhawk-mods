@@ -5045,20 +5045,35 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792922585000,
+        "updated": 1793541744000,
         "users": 91
       },
       "metadata": {
         "author": "ArvindSaini978",
-        "compilerOptions": "-luser32",
+        "compilerOptions": "-luser32 -lgdi32 -lcrypt32",
         "description": "Hold Ctrl + Right-Click and drag to scroll smoothly in desktop applications with adaptive line precision, dynamic velocity, and hands-free cruising.",
+        "exclude": [
+          "unsecapp.exe",
+          "svchost.exe",
+          "dwm.exe",
+          "sihost.exe",
+          "taskhostw.exe",
+          "TextInputHost.exe",
+          "RuntimeBroker.exe",
+          "UserOOBEBroker.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "FileCoAuth.exe",
+          "OneDrive.exe",
+          "OneDrive.Sync.Service.exe"
+        ],
         "github": "https://github.com/ArvindSaini978",
         "include": [
           "*"
         ],
         "license": "MIT",
         "name": "Drag to Scroll",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "dropbox-reduce-explorer-cpu-usage": {
