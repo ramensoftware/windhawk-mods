@@ -2,12 +2,283 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-31T19:48:08.000Z</updated>
+    <updated>2026-11-01T03:00:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Nested Tray Drawer 0.1.13]]></title>
+        <id>https://windhawk.net/mods/nested-tray-drawer#f91f8178cbce4dd29474df0899481f0447415088</id>
+        <link href="https://windhawk.net/mods/nested-tray-drawer"/>
+        <updated>2026-11-01T03:00:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="nestedtraydrawer">Nested Tray Drawer</h1>
+<p>Add a second drawer to Windows 11's hidden notification-icons panel. Drag an
+icon onto the added chevron to collect it, then click the chevron to open the
+second drawer. Both drawers can remain visible together. Icons retain their
+native templates, input handlers and app context menus. The footer is 40 DIP high.</p>
+<p><img src="https://raw.githubusercontent.com/Meidios/nested-tray-drawer/0d4ae2b9b09aba9a907541d0855e86a55a51e711/assets/feature-overview-0edbded10469.png" alt="Nested Tray Drawer feature overview" /></p>
+<p><em>Concept illustration; example icons and panel styling are illustrative.</em></p>
+<h2 id="experimentalcompatibility">Experimental compatibility</h2>
+<p>Runtime validated on Windows 11 23H2 build 22631.5126 x64 with Windhawk 1.7.3,
+Taskbar.View.dll 2125.4507.10.0 and taskbar.dll from that installation.
+ARM64 builds and offline identity/symbol checks are also provided, using
+ARM64 taskbar.dll 10.0.26100.9549, SystemTray.dll 2608.26001.100.0 and
+Taskbar.View.dll 2125.26100.0.0. ARM64 UI behavior has not been tested on a
+physical device and remains experimental. Windows 10, other Windows builds,
+DPI/monitor combinations and interactions with other tray mods are unverified.</p>
+<p>The mod discovers SystemTray.dll, older Taskbar.View.dll or ExplorerExtensions.dll
+and resolves the required internal interfaces and methods from symbols. It no
+longer requires a particular DLL version, timestamp, image size or vtable address.
+This does not make every Windows build supported: the symbol names, root layout
+and native identity ABI must still be compatible.</p>
+<p>Persistent identity uses Wh_Disasm to follow a recognized interface-adjustment
+thunk and the HWND/UID/GUID copy on x64 or ARM64. Both constructor-based and
+inlined identity getters are recognized; the native owning-string return type
+is never called across C++ ABIs. Unrecognized symbols, instructions, field layouts
+or call targets are rejected rather than guessed. Some older ARM64 binaries
+(such as the inspected taskbar.dll 10.0.22621.3810) lack the required Identity()
+symbol. Do not bypass these checks to force compatibility.</p>
+<h2 id="use">Use</h2>
+<ol>
+<li>Open the normal taskbar hidden-icons drawer.</li>
+<li>Drag an icon onto the added chevron and release it. Repeat to collect more.</li>
+<li>Click the added chevron to open or close the second drawer. Both drawers can
+remain open; an empty second drawer does not open.</li>
+<li>Right-click the chevron and choose <strong>Restore all collected icons</strong> to return
+every collected icon and explicitly clear saved membership.</li>
+</ol>
+<p>There is no right-click icon picker or individual drag-out command. Disabling
+the mod using Windhawk's own toggle restores the native tray and preserves
+the saved collection. There is no second enable setting.</p>
+<h2 id="savedcollection">Saved collection</h2>
+<p>Records use Windhawk's public storage API, with a Windows-user SID suffix to
+separate users in installed Windhawk. Membership uses an app GUID, or the owning
+process's exact executable path and native UID. Missing apps keep their records;
+ambiguous or inaccessible identities remain visible. Changed app identifiers can
+require recollection. Records contain app identifiers/encoded paths, not secrets;
+the encoding is not encryption. No records are transmitted.</p>
+<p>An invalid record is kept intact and icons remain visible. The chevron's context
+menu offers <strong>Reset saved collection</strong> for explicit recovery; a readable invalid
+API record is backed up before resetting. Uninstalling removes Windhawk-owned
+storage. Updates and Explorer restarts preserve the collection within the same mod ID.</p>
+<h2 id="knownlimits">Known limits</h2>
+<ul>
+<li>Custom app menus that do not expose foreground native menu state can dismiss
+both drawers after the bounded menu-start grace period.</li>
+<li>Complete Explorer restart, full mouse/keyboard and drag-cancel coverage,
+light/high-contrast appearance and live theme switching remain untested.</li>
+<li>Symbol discovery across module families is implemented; runtime compatibility
+on 24H2/25H2 is not established by the local build tests.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Native overflow access is adapted from m417z's GPLv3
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp">Taskbar notification icon spacing</a>.
+Symbol-based interface resolution and vtable verification follow Ris Peng's GPLv3
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/system-tray-folders.wh.cpp">System Tray Folders</a>.
+The Wh_Disasm instruction-scanning approach follows m417z's GPLv3
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-icon-size.wh.cpp">Taskbar height and icon size</a>.
+Nested Tray Drawer keeps a separate simultaneous flyout and drag-based membership;
+it does not replace the first drawer with an in-grid folder view.
+The single-file mod retains its GPL-3.0 declaration.</p>]]></content>
+        <author>
+            <name>MEI</name>
+            <uri>https://github.com/Meidios</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Task View Customizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/task-view-customizer#867a54cd8ee88c95dbd71e4bdaa7dbf7e6de9b97</id>
+        <link href="https://windhawk.net/mods/task-view-customizer"/>
+        <updated>2026-11-01T03:00:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskviewcustomizer">Task View Customizer</h1>
+<p>Customize Windows 11 Task View's layout and appearance using its existing
+virtual desktop thumbnails and window overview. Choose where the desktop
+list appears or show it without the window overview. Customize background
+materials, theme colors, desktop highlights and the New desktop button.
+Control hover switching, slide direction and scrolling speed while keeping
+the native controls.</p>
+<h2 id="taskviewmodes">Task View modes</h2>
+<ul>
+<li><strong>Windows default</strong>: keeps desktops at the bottom while applying the mod's
+layout and appearance settings.
+This is the default mode.</li>
+<li><strong>Full Task View with desktops at the top</strong>: moves the desktop list above
+the window overview.</li>
+<li><strong>No Task View with Desktop list in the top</strong>: shows only the desktop list
+near the top of the screen.</li>
+<li><strong>No Task View with Desktop list at the center</strong>: shows only the desktop
+list, centered on the screen.</li>
+<li><strong>No Task View with Desktop list at the bottom</strong>: shows only the desktop
+list near the bottom.</li>
+</ul>
+<p>The mod does not change Alt+Tab or the desktop preview shown when hovering
+over the taskbar's Task View button.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>| Full Task View with Desktops list at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
+| :---: | :---: | :---: |
+| <img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/1.png" alt="Full Task View with Desktops list at the top" /> | <img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png" alt="No Task View with Desktops list at the center + Fit desktop tiles" /> | <img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png" alt="Windows default + Fit desktop tiles" /> |</p>
+<h2 id="settings">Settings</h2>
+<h3 id="taskviewbehavior">Task View behavior</h3>
+<p>Choose the mode, hide the New desktop button, or close Task View in any mode when
+the Windows key is released. In list-only modes, Tab navigates desktops and
+clicking outside the list closes it. Key-release closing requires holding
+Windows while using the list, then releasing it.</p>
+<h3 id="desktoplistlayout">Desktop list layout</h3>
+<p>Choose full width, fit the desktop tiles, or set a percentage of the screen.
+Adjust the frame margin. Taskbar clearance follows the taskbar's actual edge
+and size on each monitor, including small/default taskbars and display scaling.
+Space already excluded by Windows is not counted twice. Windows default mode
+keeps desktops at the bottom while applying these sizing controls.
+Enable <strong>Prevent switching desktops on hover</strong> to suppress delayed mouse-hover
+selection of desktop thumbnails. Click a desktop to switch instead. The option
+applies to all Task View modes and leaves keyboard navigation available.
+<strong>Desktop hover switching delay (ms)</strong> sets the wait before that preview switches.
+The default is <strong>400 ms</strong>, matching the current Windows mouse-hover delay read
+by Task View. Enter 0–600000; blank or invalid text preserves the native delay.
+Prevent switching desktops on hover takes priority over this setting.</p>
+<h3 id="newdesktopbutton">New desktop button</h3>
+<p>The button follows the last desktop by default. Enable <strong>Move New desktop
+button to the right</strong> to keep it at the list's right edge while desktops scroll.
+Width, stretch, background and plus-sign alignment controls apply in both
+positions. Adjust the button width, hide its background, or position the plus sign.
+<strong>Stretch New desktop button to highlight height</strong> extends the button to
+match its hover/selection frame and hides the New desktop label. The width
+and plus-sign alignment settings still apply. Turn the toggle off to restore
+the original vertical layout. Stretching also applies to Windows default mode through the shared button layout.</p>
+<h3 id="backgroundmaterials">Background materials</h3>
+<p>Choose <strong>Native</strong>, <strong>Solid color</strong>, <strong>Acrylic</strong>, <strong>Clear</strong>, or experimental
+<strong>Mica</strong>. Solid starts opaque and can be made translucent without blur.
+Acrylic uses a live blurred backdrop and tint. Clear removes the material.
+You can also hide the list background in list-only modes or remove its
+outer border without removing desktop selection borders.</p>
+<p>Material transparency accepts <strong>0-100</strong>. Zero keeps the material's default
+strength; 100 makes Native, Solid and Acrylic backgrounds clear. Values
+outside that range use default strength; <strong>-1</strong> is the default setting.
+Thumbnails and labels remain visible, and native hover/focus brush alpha is
+preserved rather than turning faint highlights opaque.</p>
+<p>Mica uses a panel-local blurred wallpaper brush with color and luminosity
+blends. Its transparency control reduces tint/luminosity while keeping the
+wallpaper layer opaque. This is an experimental approximation of the native
+window material: its appearance can differ from apps using Windows' DWM
+Mica backdrop. It falls back to a solid color when unavailable.
+Windows can also use Acrylic's solid fallback when transparency is disabled.
+Hiding the desktop list background takes priority over material styling.</p>
+<h3 id="desktophighlights">Desktop highlights</h3>
+<p>Keep Windows' highlight or choose border only, background only, or both.
+The highlight background opacity controls the hovered/selected desktop fill.</p>
+<h3 id="themecolors">Theme colors</h3>
+<p>Set background and border colors independently for dark and light mode.
+Accepts <strong>native</strong>, <strong>accent</strong>, <strong>#RRGGBB</strong>, or <strong>#AARRGGBB</strong>.
+<code>accent</code> follows the current Windows accent color; invalid values preserve
+native colors. Background colors also provide Acrylic/Mica tint and custom
+highlight fill. Border colors apply to panel borders and custom highlights.</p>
+<h3 id="fullscreenbackdrop">Full-screen backdrop</h3>
+<p>Keep the native backdrop, clear it, or use Acrylic with adjustable dimming.
+The list-only disable-blur option keeps the wallpaper clear even when
+Windows transparency is enabled. It is independent of the desktop strip's
+background. An explicit backdrop choice overrides the disable-blur option.</p>
+<h3 id="animationsandscrolling">Animations and scrolling</h3>
+<p>Choose <strong>Desktop list animation direction</strong>: <strong>From the bottom</strong> (default) or
+<strong>From the top</strong>, independently of Task View mode. This controls entrance and
+exit motion. Disable Task View animations independently of the background
+material. Adjust desktop reveal scrolling speed from 10-500%:
+100% uses Windows' current speed, 50% is half speed, and 200% is double speed.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Designed for Windows 11. Windows builds can change Task View's internal
+control names and layout; unrecognized controls are left alone. Mica remains
+experimental. Mixed-DPI monitors, desktop drag and drop, and interactions
+with other shell customization mods can depend on the Windows build.</p>
+<p>No PDB debugging symbols or byte-pattern scanning are required. Desktop-slide
+direction uses public animation properties and live layout geometry;
+unrecognized or ambiguous slides are left unchanged.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Brave Acrylic 3.9]]></title>
+        <id>https://windhawk.net/mods/brave-acrylic#74caff8729dc6a0ea6c843341bd56ae1479ca2dd</id>
+        <link href="https://windhawk.net/mods/brave-acrylic"/>
+        <updated>2026-11-01T03:00:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="braveacrylic">Brave Acrylic</h1>
+<blockquote>
+  <p><strong>Very important — Symbol cache:</strong> Controlled and maintained by <strong>bardelyne</strong>, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. Windhawk downloads the matching file for your installed Brave build and caches it locally. The large symbol files are processed by the workflow; your PC receives only the small compatibility data.</p>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png" alt="Brave Acrylic" /></p>
+<p>Reveal the Windows backdrop through Brave's vertical tab area, frame, toolbar, address field, and webpage area. Add rounded acrylic menus and native popups, plus blur behind address-bar suggestions. Native background targeting works across theme colors. Use a website-styling extension for backgrounds painted by websites.</p>
+<blockquote>
+  <p><strong>Alpha software.</strong> <strong><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> is required</strong>, configured for <code>brave.exe</code>. Brave Acrylic exposes the background; Translucent Windows supplies the effect.</p>
+</blockquote>
+<p><strong>Restart Brave after applying the mod, updating it, or changing its settings.</strong> Close all Brave windows normally and exit any remaining background Brave instance, then reopen it. This rebuilds native windows and their cached backgrounds.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>x64 version of Brave.</li>
+<li>Windhawk with Brave Acrylic enabled.</li>
+<li>Translucent Windows configured to apply a translucent effect to <code>brave.exe</code>.</li>
+<li>Windows Transparency effects enabled.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p>Windows 11 is the tested environment. Windows 10 is unverified; the backdrop provider and selected effect must support that Windows version. Native ARM64 Brave is unsupported.</p>
+<p>The native-popup suggestion method was tested with Brave 1.98.60 and with regular Brave 1.98.62 / Chromium 156, including YouTube with Zen Internet transparency enabled. The current native contract is validated separately against those two official DLL/PDB pairs. Other builds need valid compatibility data for their exact <code>chrome.dll</code>. Native interfaces and rendering behavior can change and may require a mod update.</p>
+<p>The earlier background-only native contract was validated on seven official releases from Brave 1.93.138 through 1.98.62 (Chromium 151–156). This checks the native compatibility data; it is separate from visual testing. See the <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/compiler-resilience.md">compiler study</a>.</p>
+<h2 id="fastsetup">Fast setup</h2>
+<ol>
+<li>Enable Translucent Windows for <code>brave.exe</code> and choose the desired backdrop.</li>
+<li>Enable Brave Acrylic. Leave <strong>Vertical tabs background</strong>, <strong>Toolbar</strong>, and <strong>Webpage background</strong> on.</li>
+<li>Close all Brave windows normally and reopen Brave. Exit its background instance too if it stays running.</li>
+<li>Optionally use Zen Internet or Stylus to remove backgrounds inside websites, as explained below. Stylus requires custom CSS.</li>
+</ol>
+<p>No theme-color setup is required.</p>
+<h2 id="controls">Controls</h2>
+<p>| Setting | Default | Purpose |
+| --- | --- | --- |
+| <strong>Vertical tabs background</strong> | On | Reveal the backdrop behind the vertical tab area and browser frame. |
+| <strong>Toolbar</strong> | On | Clear the toolbar, bookmarks bar, and unfocused address-field backgrounds. Focused address fields keep their native theme. |
+| <strong>Webpage background</strong> | On | Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS, and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS. |
+| <strong>Acrylic menus</strong> | On | Blur native context menus, the main menu, and submenus. Text, icons, selection, and input stay native. |
+| <strong>Acrylic popups</strong> | On | Blur supported native browser bubbles and the native Extensions manager. Extension and website HTML overlays keep their own styling. |
+| <strong>Blur search suggestions</strong> | On | Use a native results popup with Windows blur below the input cutout. Typed text, result text and input remain native and sharp. |
+| <strong>Hide duplicate Windows buttons</strong> | Off | Optional workaround that removes the real Windows system-menu style. It can affect Alt+Space, taskbar menus and other window tools. Prefer Brave's <strong>Use compact mode</strong> option in Appearance. |
+| <strong>Use online symbol cache</strong> | On | Let Windhawk download small exact-build files from the author-controlled cache. Turn off to use existing local cached symbols only, then restart Brave. |</p>
+<p>Restart Brave after applying settings, even when a change appears immediately. Some backing views and native popup choices are created with their windows. Webpage backing can apply on tab selection without refreshing the page; restarting after disabling it restores existing renderer defaults. The caption-button option can apply immediately.</p>
+<h2 id="websitebackgroundswithextensions">Website backgrounds with extensions</h2>
+<p><strong>Webpage background</strong> clears only Chromium's backing layer underneath websites, including the default white fallback. It does not modify website HTML, CSS, or content. To remove backgrounds painted by a website, use a styling extension such as Zen Internet or Stylus.</p>
+<h3 id="zeninternet">Zen Internet</h3>
+<p>For backgrounds inside websites, install <a href="https://chromewebstore.google.com/detail/zen-internet/dpkamhkboipomecencjpammmjdfkgjha">Zen Internet from the Chrome Web Store</a>. Open the extension, go to <strong>Advanced Settings</strong>, and turn <strong>Disable Transparency</strong> <strong>off</strong> under <strong>Global Feature Controls</strong>. Keep <strong>Webpage background</strong> enabled in Brave Acrylic. Open a new tab or reload an existing page to apply extension setting changes.</p>
+<p>Zen Internet applies website-specific styles; coverage and results vary by site. Brave Acrylic removes the browser's backing and white fallback so CSS-transparent page areas can reveal the Windows backdrop. The extension handles website styling. Brave Acrylic does not inject JavaScript or CSS into pages.</p>
+<p>The extension's store page cautions that ordinary Chromium does not support transparent pages. Brave Acrylic provides the native transparency path; an extension alone cannot provide the Windows effect. The extension's <a href="https://github.com/sameerasw/zeninternet">source</a> and <a href="https://github.com/sameerasw/my-internet">website styles</a> are available separately.</p>
+<h3 id="stylus">Stylus</h3>
+<p><a href="https://chromewebstore.google.com/detail/stylus/clngdbkpkpeebahjckkjfobafhncgmne">Stylus from the Chrome Web Store</a> lets you create and manage custom CSS styles for individual websites. <strong>It does not remove website backgrounds out of the box.</strong> You must write or paste CSS rules that make the desired backgrounds transparent, or install a suitable existing userstyle. Complex websites may need rules for several background elements. Keep <strong>Webpage background</strong> enabled in Brave Acrylic so those transparent areas reveal the backdrop.</p>
+<p>See the <a href="https://github.com/openstyles/stylus/wiki/Writing-styles">Stylus guide to writing styles</a> for creating a style and limiting it to a particular website.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Brave's existing transparent-host path enables its compositor to preserve transparency. The mod removes the actual vertical-tab backing through Brave's own setter and clears selected native background roles within their paint clip. Child controls and text retain their original painting. Native focus checks preserve the focused address field.</p>
+<p>The webpage option clears the native backing during content-view updates and sets Chromium's persistent page-base color when a tab is attached. That value is also used by future renderers, so switching or restoring tabs does not bring the default white background back. Explicit website backgrounds remain visible unless a website-styling extension changes them.</p>
+<p>The full native path uses <strong>29 functions</strong>, of which <strong>20 are private hooks</strong>, and one immutable background-class vtable. Each feature has its own dependency set; unavailable features keep their native appearance. The implementation uses no sampled colors, private object-member offsets, guessed screen rectangles, screenshot polling, input forwarding, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies the backdrop. Acrylic can turn gray when inactive; choose a suitable blur mode in Translucent Windows for the main window if you prefer a persistent effect.</p>
+<h2 id="menuspopupsandsuggestions">Menus, popups and suggestions</h2>
+<p>Native menus and bubbles keep their own theme colors with reduced background alpha. A Windows host-backdrop visual sits underneath Chromium in the same popup window and follows its actual rounded background geometry. There are no extra overlay windows or input forwarding. A private composition worker owns its own dispatcher; disabling the mod closes its targets and joins that worker without changing Brave's dispatcher. If Windows cannot read the host-backdrop capability flag, cleanup removes the visual effect without guessing a prior flag value.</p>
+<p>Tab and group hover cards, including their fading text and memory icons, keep their foreground painting. Their separate client and footer backgrounds are removed, while a tint derived from Brave’s own background color sits beneath Chromium’s content. This keeps the tint consistent during transitions and avoids black fade masks. The same native-popup path covers dialogs such as <strong>Restore pages?</strong>. Windows-drawn popup borders are suppressed where supported and their previous value is restored on unload.</p>
+<p>The native <strong>Extensions</strong> manager also clears its repeated scroll-container backgrounds so they cannot cover the blur. Extension names, icons, pin buttons, menus and the Manage extensions button keep their native painting and input. This does not alter HTML content inside an extension's own popup.</p>
+<p>Suggestions use Chromium's normal desktop-popup factory instead of its in-window Aura override. Windows supplies the blur behind that native results popup, which also works with the tested Zen Internet transparency setup. Chromium still owns its contents, layout, keyboard navigation and mouse input. Native view bounds and header height define a rounded window region below the address field; there is no input catcher or separate overlay. Resizing and DPI changes update the region, and cleanup restores the actual prior region on the owning UI thread. Restart Brave after applying this option so existing results widgets are rebuilt. These options do not turn website dialogs or extension HTML into acrylic. Windows high contrast and transparency preferences are cached and updated from Windows notifications off Brave’s paint path.</p>
+<h2 id="symbolresolutionprivacyandupdates">Symbol resolution, privacy and updates</h2>
+<p>Brave Acrylic resolves exact C++ prototypes and the background-class identity with Windhawk's supported <code>HookSymbols</code> / <code>WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl</code> mechanism. Windhawk handles its ordinary local cache and optional online download. No build-specific addresses are embedded and remote PDB downloads remain disabled. The mod retains local executable-range, unwind-boundary, approved-leaf, thunk and overlap checks before registering hooks.</p>
+<p>Small named-symbol files are published under <code>brave-acrylic-features-v7/</code> on our <a href="https://github.com/bardelyne/brave-acrylic/tree/symbol-cache"><code>symbol-cache</code> branch</a>. They contain the native function locations needed for each Brave build. The service and publishing workflow are controlled and maintained by bardelyne.</p>
+<p>Windhawk handles compatibility downloads and local caching through its standard mechanism. Our workflow uses pinned actions and checks the official Brave archive and matching symbols before publishing. See <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/trusted-pipeline.md">cache hosting</a> for the technical details.</p>
+<p><strong>No telemetry, uploads or login:</strong> the mod only downloads compatibility data through Windhawk. Browser cookies, history, page content, settings and account details stay on your PC. Turn <strong>Use online symbol cache</strong> off and restart Brave to use suitable existing local cached symbols only.</p>
+<p>The workflow requests a check <strong>every two hours, with a backup 30 minutes later</strong>. GitHub can delay or drop scheduled starts, so this is not an exact timer. It checks the stable release, asset identities and native contract before downloading large files. Unchanged releases skip browser and PDB downloads. Both generation and publication use the run's same source revision; large official files stay on the GitHub runner. Restart Brave after newly required compatibility data becomes available.</p>
+<p>The extractor handles verified compiler folding according to each function's role, while rejecting unrelated sharing on patched functions. The workflow reports compatibility separately for vertical tabs, the toolbar, webpage backing, menus, popups, and suggestions. A missing or changed function disables only its dependent features. Validated features are still published, and the workflow summary lists unavailable features with their reasons. Invalid files, mismatched symbols, failed downloads, and publishing errors still stop publication.</p>
+<h2 id="duplicatecornerbuttons">Duplicate corner buttons</h2>
+<p>If two sets of minimize/maximize/close buttons appear, first enable <strong>Use compact mode</strong> in Brave <strong>Settings → Appearance</strong>. The optional <strong>Hide duplicate Windows buttons</strong> workaround is off on a fresh install because it removes the window's actual <code>WS_SYSMENU</code> style. Windows system menus, taskbar interactions, accessibility tools or other window managers may be affected. Disabling the option or unloading the mod restores its recorded style changes.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Restart Brave after installing or applying changes: close all windows and its background instance, then reopen normally. Enable Windhawk debug logging to check each feature's availability or a symbol-cache message. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.</p>
+<p>For reports, include Windows/Brave versions, window type, enabled areas, backdrop configuration, and reproduction steps. See the <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md">advanced reference</a>, <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/compatibility.md">compatibility data</a>, <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/webview-background.md">webview investigation</a>, and <a href="https://github.com/bardelyne/brave-acrylic/blob/main/CHANGELOG.md">changelog</a>.</p>]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 8/8.1 Family Safety Applet Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#f7502792d29d0612ef13f0e3eab910b9f3cb79e7</id>
@@ -1021,127 +1292,6 @@ IDropTarget vtable methods).</li>
         <author>
             <name>dantepicachu</name>
             <uri>https://github.com/dantepicachu11-coder</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt.Binz Dark Mode 1.0.0]]></title>
-        <id>https://windhawk.net/mods/altbinz-dark#4028990b798d125c7ee88e143561bdb17b3eb643</id>
-        <link href="https://windhawk.net/mods/altbinz-dark"/>
-        <updated>2026-10-26T15:05:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="altbinzdarkmode">Alt.Binz Dark Mode</h1>
-<p><img src="https://raw.githubusercontent.com/MrSmith2017/altbinz-dark-mode/main/altbinz-dark-mode.png" alt="Before and after: the light blue Alt.Binz versus the dark one" /></p>
-<p>Alt.Binz draws its whole user interface from a light blue skin. This mod
-re-colors everything that is drawn with GDI: brushes, pens, text colors, system
-colors and the opaque skin bitmaps. Common dialogs and shell menus keep
-Windows' own dark mode.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested with Alt.Binz 0.48.4 (32-bit) at 100% display scaling on Windows 11. Some
-elements (the column header bars, the progress bar fills and the status bar button)
-are recognized by their size and color, so another version may look different.</p>
-<h2 id="surfacecolor">Surface color</h2>
-<p>The blue skin surface (toolbar, tabs, status bar, dialogs, Setup) can get another
-color: enter a hex code (for example <code>2F5A96</code>). Very bright colors are darkened
-so that the light text stays readable.</p>
-<h2 id="surfacegradient">Surface gradient</h2>
-<p>Instead of one color the surface can run between two colors. Enter both as hex
-codes, the angle in degrees (0 = left to right, 90 = top to bottom) and the
-balance: 50 is the middle, a higher value gives the end color more room, a lower
-value the start color. The gradient wins over the single surface color.</p>
-<h2 id="progressbars">Progress bars</h2>
-<p>The fill of the progress bars can get one color or, with a second color, a
-gradient, either from top to bottom or from left to right. Leave both empty for the
-default blue.</p>
-<h2 id="appearance">Appearance</h2>
-<p>These values are applied when Alt.Binz is restarted:</p>
-<ul>
-<li><strong>Background lightness</strong>: how dark the lists and dark areas are (percent).</li>
-<li><strong>Text lightness</strong>: how bright text and lines are (percent). Ignored when a text color is set.</li>
-<li><strong>Text color</strong>: an optional color for text and lines.</li>
-<li><strong>List background color</strong>: an optional color for the large list areas.</li>
-<li><strong>Saturation</strong>: how colorful the blue skin is (percent).</li>
-</ul>
-<p>The <strong>column header color</strong> (the header bars of the lists) and everything else is
-applied live. If you disable the mod, restart Alt.Binz to get the original look
-back completely.</p>]]></content>
-        <author>
-            <name>MrSmith</name>
-            <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PaintShop Pro Dark Image Windows 1.0.0]]></title>
-        <id>https://windhawk.net/mods/psp-dark-mdi-frames#fa09f39b629470ff8b921ca599c14d262d7d9b48</id>
-        <link href="https://windhawk.net/mods/psp-dark-mdi-frames"/>
-        <updated>2026-10-26T15:04:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="paintshopprodarkimagewindows">PaintShop Pro Dark Image Windows</h1>
-<p><img src="https://raw.githubusercontent.com/MrSmith2017/psp-dark-image-windows/main/psp-dark-image-windows.png" alt="Before and after: light blue-gray image window frames versus dark ones" /></p>
-<p>Corel PaintShop Pro has a dark theme, but the image windows inside the
-workspace keep a light blue-gray frame that looks like Windows XP or 7. They
-are classic MDI child windows, and Windows draws their frames itself, with no
-dark variant.</p>
-<p>This mod paints those frames in dark colors instead:</p>
-<ul>
-<li>title bar, border, icon and title text</li>
-<li>minimize, maximize and close buttons with hover and pressed states</li>
-<li>minimized image windows</li>
-</ul>
-<p>Maximized image windows are left to Windows. Everything is drawn by the mod,
-so no theme files or system settings are touched, and the mod only affects
-PaintShop Pro.</p>
-<h2 id="optionalflashfix">Optional flash fix</h2>
-<p>When you switch between images, PaintShop Pro rebuilds the drop-down lists in
-the tool options bar. For a few frames their selection fields flash white,
-because the Windows combo box falls back to its default brush. The flash fix
-paints that field in dark gray instead.</p>
-<h2 id="settings">Settings</h2>
-<p>All colors are entered as hex codes, for example <code>282828</code> or <code>#282828</code>. A
-value that cannot be read falls back to its default. Changes apply right away.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Tested with PaintShop Pro 2022 on Windows 11. Other versions may work, but
-have not been tested.</li>
-<li>If something looks wrong, disable the mod: the original frames come back
-immediately.</li>
-</ul>]]></content>
-        <author>
-            <name>MrSmith</name>
-            <uri>https://github.com/MrSmith2017</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[App Volume Booster 1.0]]></title>
-        <id>https://windhawk.net/mods/app-volume-booster#f7ba2c934c8f67d4488624208f890a0eb4c7614a</id>
-        <link href="https://windhawk.net/mods/app-volume-booster"/>
-        <updated>2026-10-26T15:04:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="appvolumebooster">App Volume Booster</h1>
-<p>Changes the loudness of the audio an app sends to Windows, so it can go past the
-100% limit of the volume mixer.</p>
-<p>This mod doesn't target any process by default.</p>
-<p><strong>Which apps:</strong> open this mod's <em>Advanced</em> tab -&gt; <em>Custom process inclusion list</em> and
-list the exe names you want affected (one per line). Only those processes get the mod.
-Restart an app after adding it to the list.</p>
-<p><em>Note for games:</em> Games are excluded by default in Windhawk. To work with games, they need
-to be specifically added to the inclusion list from Windhawk's Advanced settings:
-<em>Settings > Advanced settings > More advanced settings > Process Inclusion List</em>.</p>
-<p><strong>How loud:</strong> every included app uses the default settings. To give one app its own
-settings, click <strong>+</strong> under <em>Per-app overrides</em>, type its exe name and choose its volume
-and mode. An override only applies to apps that are also in the inclusion list.
-Overrides with an empty process name are ignored.</p>
-<p><strong>Modes</strong></p>
-<ul>
-<li><em>Gain</em> (default): multiplies the audio by the volume %. 100 = unchanged, 200 = twice as
-loud. Anything pushed past full scale is clipped.</li>
-<li><em>Compressor</em>: turns down the loud parts, then applies the volume % as makeup gain, so
-quiet material gets louder with less distortion on loud peaks. Tune it with threshold,
-ratio, attack and release (these settings are shared by all apps).</li>
-</ul>
-<p>Changes apply live. Lower your system volume before starting, boosted audio can be very loud.
-Exclusive-mode streams, spatial audio streams (e.g. Windows Sonic / Dolby Atmos, which bypass
-IAudioRenderClient), and apps that bypass WASAPI entirely may not be affected.</p>
-<p><strong>Troubleshooting:</strong> start the app <em>after</em> enabling the mod (streams created earlier are not seen), then check Windhawk's log for this mod. It reports each stream's format and whether audio is being processed.</p>]]></content>
-        <author>
-            <name>shubho</name>
-            <uri>https://github.com/shubho193</uri>
         </author>
     </entry>
 </feed>

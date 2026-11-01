@@ -260,7 +260,9 @@
     "author": "bardelyne",
     "github": "https://github.com/bardelyne",
     "githubId": 330463750,
-    "homepages": []
+    "homepages": [
+      "https://github.com/bardelyne/brave-acrylic"
+    ]
   },
   "https://github.com/barrypp": {
     "author": "barry",
@@ -1350,6 +1352,12 @@
     "author": "MCheng404",
     "github": "https://github.com/MCheng404",
     "githubId": 268778959,
+    "homepages": []
+  },
+  "https://github.com/meidios": {
+    "author": "MEI",
+    "github": "https://github.com/Meidios",
+    "githubId": 148635407,
     "homepages": []
   },
   "https://github.com/metanoid18": {
