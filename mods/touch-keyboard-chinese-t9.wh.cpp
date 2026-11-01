@@ -250,8 +250,9 @@ HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
 }
 
 HRESULT LayoutHook(void* self, const NativeString* layout) {
-    if (layout && layout->length > 0 && layout->length < 100) {
-    }
+    // 布局名是后续通道判定的唯一来源，属于必要状态而非逐键遥测。
+    if (layout && layout->length > 0 && layout->length < 100)
+        Wh_SetStringValue(L"native-layout-name", layout->data());
     const HRESULT res = originalLayout(self, layout);
     if (FAILED(res))
         return res;
@@ -417,9 +418,13 @@ bool InstallService(HMODULE module) {
          &originalOnKeyDown},
     };
     auto options = SymbolOptions();
-    for (size_t i = 0; i < ARRAYSIZE(inputserviceDllHooks); i++) {
-        WindhawkUtils::HookSymbols(module, &inputserviceDllHooks[i], 1, &options);
-    }
+    if (!WindhawkUtils::HookSymbols(module, inputserviceDllHooks,
+                                    ARRAYSIZE(inputserviceDllHooks), &options))
+        return false;
+    // 缺少任一必需符号时不再安装依赖其对象布局的钩子。
+    if (!originalRegularize || !originalProcess || !originalDefaultChannel ||
+        !originalEnsureChannel || !originalLayout)
+        return false;
 #if defined(__x86_64__) || defined(_M_X64)
     if (!CodeMatches(
             reinterpret_cast<void*>(originalRegularize), 0x213,
@@ -566,6 +571,8 @@ GetStateFn originalGetPressedKeyHandlingState;
 using SetViewInternalFn = void (*)(void*, int, void*, bool);
 SetViewInternalFn originalSetViewInternal;
 void Hook_SetViewInternal(void* self, int viewName, void* layoutArgs, bool a4) {
+    // 视图号用于区分拼音面板与数字/符号面板，是通道判定的必要状态。
+    Wh_SetIntValue(L"native-front-view-name", viewName);
     TraceLog(L"VIEW switch %d self=%p", viewName, self);
     if (originalSetViewInternal)
         originalSetViewInternal(self, viewName, layoutArgs, a4);
@@ -889,18 +896,13 @@ HMODULE WINAPI Hook_LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 bool InstallFrontend(HMODULE module) {
     auto options = NativeT9::SymbolOptions();
     // TextInput.dll
-    WindhawkUtils::SYMBOL_HOOK availHook[] = {
+    WindhawkUtils::SYMBOL_HOOK textinputDllHooks[] = {
         {{L"?IsNarrowModeAvailableInternal@"
           L"ChineseSimplifiedModeAvailabilityStrategy@Controls@"
           L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
           L"AEAA_NPE$AAVString@Platform@@@Z"},
          &originalAvailability,
          AvailabilityHook},
-    };
-    WindhawkUtils::HookSymbols(module, availHook, 1, &options);
-
-    // TextInput.dll
-    WindhawkUtils::SYMBOL_HOOK textinputDllHooks[] = {
         {{L"?SetKeyboardModeView@?QITextFrameworkAdapter@Common@TextInput@"
           L"Experiences@ComposableShell@WindowsInternal@@"
           L"SystemInputProcessorTextFrameworkAdapter@TextFramework@"
@@ -986,10 +988,9 @@ bool InstallFrontend(HMODULE module) {
          &originalIsDictionaryReady,
          IsDictionaryReadyHook},
     };
-    for (size_t i = 0; i < ARRAYSIZE(textinputDllHooks); i++) {
-        WindhawkUtils::HookSymbols(module, &textinputDllHooks[i], 1, &options);
-    }
-    return true;
+    // 一次解析该模块的全部符号，避免反复失效符号缓存。
+    return WindhawkUtils::HookSymbols(module, textinputDllHooks,
+                                      ARRAYSIZE(textinputDllHooks), &options);
 }
 }  // namespace
 BOOL Wh_ModInit() {
