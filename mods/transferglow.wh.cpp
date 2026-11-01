@@ -4,7 +4,7 @@
 // @description     Custom appearance window with circular color wheel and effect intensity control; Windows 11 26H2 compatibility candidate.
 // @version         1.5.0
 // @author          digART
-// @github          https://github.com/digart11
+// @github          https://github.com/miguelelesbaocampos-cmyk
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
