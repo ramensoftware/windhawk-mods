@@ -1,3 +1,13 @@
+## 1.8 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc94527af5fd94115d434ee6af3453295ff57a53/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added the following themes: FlyoutStartMenu, OS26 Tahoe App Launcher, Raycast.
+* Updated the following themes: Windows10, Windows11_Metro10, UniMenu, LegacyFluent, WindowGlass, LiquidGlass2, Borderless, Command Center, FrostyGlass.
+* Adjusted many themes to style the search menu background correctly on newer Windows 11 versions.
+* Improved keyboard navigation (e.g. arrow keys and tab) for the side by side layout.
+* Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.
+* Added `skip()` which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. `{{width > 0 ? width : skip()}}` applies only once `width` is positive.
+* Improved handling for `NaN` and `Infinity` values in expressions.
+
 ## 1.7 ([Aug 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0bf0b09ddd979fe8a604b1f3099c2ac1e8dfafde/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added the following themes: OnlySearch (Minimal), LiquidGlass, FrostyGlass.

@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-31T20:18:52.000Z</updated>
+    <updated>2026-11-01T00:06:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.8]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#cc94527af5fd94115d434ee6af3453295ff57a53</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2026-11-01T00:06:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the following themes: FlyoutStartMenu, OS26 Tahoe App Launcher, Raycast.</li>
+<li>Updated the following themes: Windows10, Windows11_Metro10, UniMenu, LegacyFluent, WindowGlass, LiquidGlass2, Borderless, Command Center, FrostyGlass.</li>
+<li>Adjusted many themes to style the search menu background correctly on newer Windows 11 versions.</li>
+<li>Improved keyboard navigation (e.g. arrow keys and tab) for the side by side layout.</li>
+<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
+<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
+<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.2.1]]></title>
         <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#dd78d9c692c1f7ece9d5f71ccd8292ff9758f37b</id>
@@ -880,40 +899,6 @@ input-insertion failures when logging is enabled. Failed batches are not retried
         <author>
             <name>Enrique Bos</name>
             <uri>https://github.com/enriquebos</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[RetroBar Clock Flyout Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/retrobar-clock-flyout-fix#5493bed495a3edc947fa3e51e3f129af313928cc</id>
-        <link href="https://windhawk.net/mods/retrobar-clock-flyout-fix"/>
-        <updated>2026-10-30T00:01:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="retrobarclockflyoutfix">RetroBar Clock Flyout Fix</h1>
-<p>This mod fixes the borders of the clock flyout to restore the Aero borders. It is made specifically
-for <a href="https://github.com/dremin/RetroBar">RetroBar</a>'s Aero (Windows Vista/7 style) clock/calendar flyout.
-This modification has been tested on Windows 10 21H2.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="before">Before</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/brokenclock.PNG" alt="Before" /></p>
-<h3 id="after">After</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/fixedclock.PNG" alt="After" /></p>
-<p>When <em>Clock click action</em> is set to the Aero calendar, RetroBar creates the flyout <strong>inside its own
-process</strong> (it instantiates the COM class from <code>timedate.cpl</code> and calls <code>ShowFlyout</code>), then nudges
-the window next to the taskbar. This mod therefore runs in <code>RetroBar.exe</code> and:</p>
-<ul>
-<li>It gives the flyout the thick Aero frame and keeps it non-resizable;</li>
-<li>It keeps it floating away from the work area edges, also after RetroBar repositions it.</li>
-</ul>
-<p>On Windows 10 the Win32 clock flyout must be available
-(<code>HKLM\Software\Microsoft\Windows\CurrentVersion\ImmersiveShell\UseWin32TrayClockExperience</code> = 1).</p>
-<h2 id="creditsreference">Credits &amp; Reference</h2>
-<ul>
-<li><a href="https://github.com/dremin/RetroBar">RetroBar</a> by dremin — the taskbar that hosts the Aero clock flyout.</li>
-<li><a href="https://windhawk.net/mods/aero-flyout-fix">Aero Flyout Fix</a> by aubymori — <code>timedate.cpl</code> hooks and flyout positioning logic.</li>
-<li>xoascf - Testing</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
