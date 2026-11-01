@@ -550,6 +550,7 @@ constexpr wchar_t kOverlayClass[] = L"WindhawkDesktopSnowfallOverlay";
 Overlay::~Overlay() {
     ReleaseDeviceResources();
     if (m_hwnd) {
+        RemoveProp(m_hwnd, L"NonRudeHWND");
         DestroyWindow(m_hwnd);
         UnregisterClass(kOverlayClass, GetModuleHandle(nullptr));
     }
@@ -612,6 +613,11 @@ bool Overlay::Create() {
     // Needed for a layered window to be shown; the content itself comes from
     // DirectComposition.
     SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
+
+    // The overlay covers the whole monitor, so the taskbar would treat it as a
+    // fullscreen app and stop staying on top of other windows: an auto-hidden
+    // taskbar would then slide out behind a maximized window.
+    SetProp(m_hwnd, L"NonRudeHWND", reinterpret_cast<HANDLE>(TRUE));
 
     if (!CreateDeviceResources()) {
         return false;
