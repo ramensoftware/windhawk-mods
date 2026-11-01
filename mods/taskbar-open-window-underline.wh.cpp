@@ -216,8 +216,9 @@ using winrt::Windows::UI::Text::TextDecorations;
 // WinEvent hooks for the new settings.
 #define WM_APP_RECONFIGURE_HOOKS (WM_APP + 1)
 
-// Posted to the event thread when the system colors changed, to schedule a
-// refresh pass that picks up the new icon underline color.
+// Posted to the event thread when the system colors or a tree's theme
+// changed, to schedule a coalesced refresh pass that re-reads every icon's
+// theme once the change has settled.
 #define WM_APP_COLORS_CHANGED (WM_APP + 2)
 
 // Delay for the second pass that follows every coalesced refresh, to catch
@@ -1536,6 +1537,14 @@ bool IsLightTheme(const Xaml::FrameworkElement& element) {
     return element.ActualTheme() == Xaml::ElementTheme::Light;
 }
 
+// Asks the event thread for a coalesced refresh pass (see ArmRefreshTimer).
+// Safe from any thread.
+void RequestRefreshPass() {
+    if (DWORD threadId = g_eventThreadId) {
+        PostThreadMessage(threadId, WM_APP_COLORS_CHANGED, 0, 0);
+    }
+}
+
 // Starts tracking the accent color, the first time the icon underline is
 // evaluated. ColorValuesChanged is raised on a worker thread; it only marks
 // the cached colors dirty and asks the event thread for a refresh pass, which
@@ -1550,9 +1559,7 @@ void EnsureTrackingColors() {
     g_colorValuesChangedToken =
         g_uiSettings.ColorValuesChanged([](auto&&, auto&&) {
             g_iconColorsDirty = true;
-            if (DWORD threadId = g_eventThreadId) {
-                PostThreadMessage(threadId, WM_APP_COLORS_CHANGED, 0, 0);
-            }
+            RequestRefreshPass();
         });
 }
 
@@ -1642,6 +1649,13 @@ void EnsureIconBrush(const Composition::SpriteVisual& sprite,
 // per-taskbar theme forced by another mod such as Top Taskbar Bleed) recolors
 // its line. Only the brush depends on the theme; the window state is covered
 // by the hooks and the refresh passes, so the button isn't re-evaluated here.
+//
+// The immediate recolor uses the theme the element reports at this moment.
+// Themes can flip twice in quick succession (a window that opens light and
+// turns dark a few frames later, with Top Taskbar Bleed following it), and
+// a line was seen left in the first theme until the next evaluation. So a
+// coalesced refresh pass is requested as well; it runs after the change has
+// settled and re-reads every icon's theme, the same way a hover would.
 void OnIconThemeChanged(const Xaml::FrameworkElement& sender,
                         const winrt::Windows::Foundation::IInspectable&) {
     if (g_unloading || !g_settings.iconUnderline.enabled) {
@@ -1662,6 +1676,8 @@ void OnIconThemeChanged(const Xaml::FrameworkElement& sender,
         Wh_Log(L"Theme change handler error: %08X",
                static_cast<unsigned int>(e.code()));
     }
+
+    RequestRefreshPass();
 }
 
 // Returns this mod's underline visual for `icon`, creating it on first use.
