@@ -4,12 +4,12 @@
 // @name:zh-CN      桌面图标 Dock
 // @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel
 // @description:zh-CN 独立的 macOS 风格 Dock：把快捷方式、文件和文件夹拖进来，拖动排序，拖出放回桌面；快捷方式会复制到 Dock 自己的目录，清理桌面不影响 Dock；可选液态玻璃面板
-// @version         1.1.0
+// @version         1.1.1
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdiplus -lgdi32 -luser32 -lole32 -loleaut32 -luuid -lshell32
+// @compilerOptions -lgdiplus -lgdi32 -luser32 -lole32 -loleaut32 -luuid -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -41,10 +41,12 @@ magnified with its label shown.*
   release it over the desktop. The icon is placed at the release point. If the
   item already lives on the desktop, its original icon is moved there;
   otherwise a shortcut is created on the desktop and the original file or
-  folder stays where it is. Items that have no filesystem location, such as
-  the Recycle Bin, are only removed from the dock. A dock-owned shortcut copy
-  is removed after it has been placed back. Removing the last item brings back
-  the empty-state hint.
+  folder stays where it is. For a shortcut that was copied into the dock, the
+  original shortcut is used, so dragging it out does not create a second
+  `(2)` copy. Releasing over any other window leaves the item in the dock.
+  Items that have no filesystem location, such as the Recycle Bin, are only
+  removed from the dock. A dock-owned shortcut copy is removed after it has
+  been placed back. Removing the last item brings back the empty-state hint.
 - **Empty state**: a visible drop target is shown when the list is empty, so
   the dock can always receive the first item. The window is never hidden just
   because the list is empty.
@@ -68,7 +70,8 @@ magnified with its label shown.*
   desktop icons does not change the dock. Shortcuts added to the dock are
   copied into its own folder, so even deleting them from the desktop does not
   affect the dock; files, folders and virtual items are referenced by path.
-  The list is stored per user in the registry and survives Explorer restarts.
+  The list is stored per user in Windhawk's mod storage and survives Explorer
+  restarts.
 - **Original desktop icons hidden in memory (optional)**: when enabled, the
   desktop's list view is hidden while the dock is active; no Explorer setting
   or registry value is changed, and the icons are shown again when the mod is
@@ -81,24 +84,30 @@ magnified with its label shown.*
 The dock keeps its own ordered list. It does not read or rearrange the system
 desktop icons.
 
-- **Storage**: the ordered list is saved under
-  `HKCU\Software\DesktopIconDock`, value `Items` (`REG_MULTI_SZ`). Each entry
-  is a desktop-absolute parsing name, such as a full file path or a shell GUID
-  for virtual items. Shortcut entries point to copies in
-  `%LOCALAPPDATA%\DesktopIconDock\Items`; other entries point to the original
-  path. Every add, reorder and removal is written immediately.
+- **Storage**: the ordered list is saved as `items.tsv` in Windhawk's mod
+  storage, in a subfolder named after the current user's security identifier
+  (SID), so each Windows user keeps a separate list. Each entry is a
+  desktop-absolute parsing name, such as a full file path or a shell GUID for
+  virtual items, followed by the original path for copied shortcuts. Shortcut
+  copies live in the `Items` subfolder of the same directory. Every add,
+  reorder and removal is written immediately. Windhawk removes the whole
+  storage folder when the mod is uninstalled.
 - **Adding**: external drags are received through an OLE drop target
   (`IDropTarget`), supporting file drops and shell item lists. The insertion
   position follows the pointer; `.lnk` and `.url` shortcuts are copied into
-  the dock folder first. Duplicates are skipped by parsing name.
+  the dock folder first. Duplicates are skipped by parsing name. The drop is
+  processed after the drop has been accepted, so a slow or unreachable path
+  does not freeze the drag source.
 - **Reordering and removing**: these are handled inside the dock window with
   mouse capture, so they also work in the transparent gaps between icons.
-- **Putting items back on the desktop**: dropping outside the panel places the
-  item at the release point. An item whose parent folder is already the user
-  or public desktop has its original icon repositioned through the desktop's
-  folder view; any other file or folder gets a uniquely named `.lnk` shortcut
-  on the user desktop (a source `.lnk` or `.url` is copied, other items get a
-  new shortcut). The original file is never moved or deleted, and a dock-owned
+- **Putting items back on the desktop**: releasing outside the panel over the
+  desktop places the item at the release point; releasing over any other
+  window snaps it back into the dock. An item whose parent folder is already
+  the user or public desktop has its original icon repositioned through the
+  desktop's folder view; for a copied shortcut the original shortcut path is
+  used. Any other file or folder gets a uniquely named `.lnk` shortcut on the
+  user desktop (a source `.lnk` or `.url` is copied, other items get a new
+  shortcut). The original file is never moved or deleted, and a dock-owned
   shortcut copy is removed after it has been placed back. Positioning follows
   the system "align icons to grid" setting.
 - **Empty state**: the centered hint pill is drawn with a non-transparent
@@ -106,10 +115,9 @@ desktop icons.
 - **Layout**: centered horizontally at the bottom of the primary monitor,
   above the taskbar; the panel widens as items are added, and icons are
   vertically centered at rest.
-- **Maintenance**: every 30 seconds the list is resolved again, so items that
-  could not be resolved earlier are retried and virtual icons stay current.
-  Items that still cannot be resolved are skipped on screen but kept in
-  storage.
+- **Maintenance**: every 30 seconds, entries that failed to resolve earlier
+  are retried and the icons of virtual items are refreshed. Items that still
+  cannot be resolved are skipped on screen but kept in storage.
 - **Performance**: in transparent mode the pointer position is polled every
   50 ms so hover magnification also works in the gaps between icons; idle CPU
   usage is negligible.
@@ -132,6 +140,25 @@ desktop icons.
 | Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
 | Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |
 
+## How it differs from existing mods
+
+This mod overlaps with Quick Launch Dock in the basic launcher behavior:
+drag in, reorder, click to launch, a persistent list. It exists separately
+because it targets a different use case: a dock that is part of the desktop,
+not a launcher that stays on top of other windows.
+
+- **Desktop level**: the window sits at the bottom of the Z-order, below all
+  normal windows, and never takes focus. It is visible when the desktop is
+  visible, like the desktop icons themselves.
+- **Drag out to the desktop**: items can be dragged from the dock back to the
+  desktop, reusing the original shortcut when it is still there instead of
+  creating a duplicate.
+- **Desktop integration**: hiding the system desktop icons in memory and
+  opening the native Explorer context menu both rely on running inside
+  explorer.exe next to the desktop window.
+- **Screen-sampled glass**: the backdrop and the name pills sample the screen
+  area behind the dock, which requires a desktop-level window.
+
 ## Compatibility and limitations
 
 - Windows 10 / 11 on x86-64 only, injected into explorer.exe by Windhawk.
@@ -147,14 +174,11 @@ desktop icons.
 - **Dock missing after an Explorer restart**: the mod reloads together with
   explorer.exe and restores the saved list; the dock comes back within a
   second.
-- **The dock is empty after upgrading from 1.0.x**: this version keeps its own
-  list instead of mirroring the desktop. Drag the items you want onto the
-  empty-state hint.
 - **An item disappeared**: its stored parsing name could not be resolved (for
   example, the referenced file or folder was deleted or renamed). Shortcuts
   are copied into the dock folder and are not affected by deleting the
-  desktop shortcut. The entry is kept in the registry and retried; it
-  reappears if the path is available again.
+  desktop shortcut. The entry is kept in storage and retried; it reappears if
+  the path is available again.
 - **After dragging an item out, a shortcut appeared on the desktop**: this is
   expected. Items that are not on the desktop are not moved; a shortcut is
   created at the release point instead. The original file or folder is not
@@ -164,19 +188,21 @@ desktop icons.
 - **Add an item**: drag it from the desktop or any File Explorer window onto
   the dock. You can also press Win+R and enter `shell:Desktop` to open a
   desktop folder and drag from there.
-- **Reset the list**: close the dock's mod, delete
-  `HKCU\Software\DesktopIconDock`, and reload the mod.
+- **Reset the list**: drag the items out, or uninstall the mod. Windhawk
+  deletes the mod's storage, including the list and the shortcut copies, when
+  the mod is removed.
 
 ## 中文说明
 
 本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。
 
 - 从桌面、资源管理器或 `shell:Desktop` 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（`.lnk` / `.url`）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。
-- 按住图标在 Dock 内拖动可实时排序；拖到 Dock 外松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。
-- Dock 是独立列表，不再同步桌面；列表保存在 `HKCU\Software\DesktopIconDock` 的 `Items` 值中，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于 `%LOCALAPPDATA%\DesktopIconDock\Items`。
+- 按住图标在 Dock 内拖动可实时排序；拖到 Dock 外、在桌面上松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；对于复制进来的快捷方式会优先使用原快捷方式，不会产生多余的 `(2)` 副本；在其他窗口上松手则项目留在 Dock。回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。
+- Dock 是独立列表，不同步桌面；列表保存在 Windhawk 模组存储的 `items.tsv` 中，并按当前用户 SID 分目录，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于同一目录的 `Items` 子目录。卸载模组时 Windhawk 会删除整个存储目录。
 - 图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。
 - “隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。
-- 解析失败的项目会跳过显示但保留在存储中，每 30 秒重试；快捷方式使用副本，不受桌面删除影响；回收站等虚拟项目的图标会定期刷新。
+- 解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。
+- 与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为依赖运行在 explorer.exe 中并贴近桌面窗口。
 - 仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。
 
 各设置项的说明见上方英文表格。
@@ -265,6 +291,7 @@ desktop icons.
 #include <map>
 #include <memory>
 #include <new>
+#include <set>
 #include <string>
 #include <vector>
 #include <windhawk_utils.h>
@@ -274,6 +301,7 @@ desktop icons.
 #include <shlguid.h>
 #include <exdisp.h>
 #include <shellapi.h>
+#include <sddl.h>
 #include <gdiplus.h>
 
 #ifdef min
@@ -288,11 +316,15 @@ using namespace Gdiplus;
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"WindhawkDesktopIconDock";
-constexpr wchar_t kStorageKey[] = L"Software\\DesktopIconDock";
-constexpr wchar_t kStorageItems[] = L"Items";
-constexpr wchar_t kDockItemsFolder[] = L"DesktopIconDock\\Items";
+// Pre-1.1.1 locations, migrated once into Windhawk's mod storage.
+constexpr wchar_t kLegacyStorageKey[] = L"Software\\DesktopIconDock";
+constexpr wchar_t kLegacyStorageItems[] = L"Items";
+constexpr wchar_t kLegacyItemsFolder[] = L"DesktopIconDock\\Items";
+constexpr wchar_t kItemsFileName[] = L"items.tsv";
+constexpr wchar_t kItemsHeader[] = L"DesktopIconDock/2";
 constexpr UINT kMsgReloadSettings = WM_APP + 1;
 constexpr UINT kMsgQuit = WM_APP + 3;
+constexpr UINT kMsgAddDropped = WM_APP + 4;
 constexpr UINT_PTR kTimerAnimation = 1;
 constexpr UINT_PTR kTimerMaintenance = 2;
 constexpr UINT_PTR kTimerRefresh = 3;
@@ -391,6 +423,21 @@ struct DockItem {
 std::vector<DockItem> g_items;
 std::vector<std::wstring> g_storedKeys;
 std::map<std::wstring, std::shared_ptr<Bitmap>> g_iconCache;
+
+// Windhawk's storage is shared between users, so the list and the shortcut
+// copies live in a per-user subfolder.
+std::wstring g_userStorageRoot;
+std::wstring g_itemsFolderPath;
+std::wstring g_itemsFilePath;
+// Original shortcut path of each dock copy, keyed by the lowercased copy path.
+std::map<std::wstring, std::wstring> g_shortcutSources;
+std::set<std::wstring> g_unresolvedKeys;
+
+struct PendingDrop {
+    std::vector<std::wstring> keys;
+    int index = 0;
+};
+std::vector<PendingDrop> g_pendingDrops;
 
 int g_windowX = 0;
 int g_windowY = 0;
@@ -596,23 +643,229 @@ bool ContainsKeyNoCase(const std::vector<std::wstring>& keys,
     return false;
 }
 
+std::wstring GetCurrentUserSidString() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"OpenProcessToken failed: %lu", GetLastError());
+        return L"";
+    }
+
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    std::wstring sid;
+    if (size > 0 &&
+        GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+        auto* user = reinterpret_cast<TOKEN_USER*>(buffer.data());
+        LPWSTR text = nullptr;
+        if (ConvertSidToStringSidW(user->User.Sid, &text)) {
+            sid = text;
+            LocalFree(text);
+        }
+    }
+    CloseHandle(token);
+    if (sid.empty()) Wh_Log(L"Reading the user SID failed: %lu", GetLastError());
+    return sid;
+}
+
+// All mod data lives in Windhawk's per-mod storage, which is removed together
+// with the mod. Shortcut copies and the list are separated per user because a
+// regular Windhawk install shares the storage folder between all users.
+void EnsureStoragePaths() {
+    if (!g_itemsFolderPath.empty()) return;
+
+    wchar_t storage[MAX_PATH * 4] = L"";
+    size_t length = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+    if (length == 0 || length >= ARRAYSIZE(storage)) {
+        Wh_Log(L"Getting the mod storage path failed");
+        return;
+    }
+
+    std::wstring sid = GetCurrentUserSidString();
+    if (sid.empty()) sid = L"default";
+    g_userStorageRoot = std::wstring(storage) + L"\\" + sid;
+    int result =
+        SHCreateDirectoryExW(nullptr, g_userStorageRoot.c_str(), nullptr);
+    if (result != ERROR_SUCCESS && result != ERROR_ALREADY_EXISTS) {
+        Wh_Log(L"Creating the mod storage folder failed: %d", result);
+        g_userStorageRoot.clear();
+        return;
+    }
+    g_itemsFolderPath = g_userStorageRoot + L"\\Items";
+    g_itemsFilePath = g_userStorageRoot + L"\\" + kItemsFileName;
+    Wh_Log(L"Mod storage folder: %ls", g_userStorageRoot.c_str());
+}
+
+bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& data) {
+    data.clear();
+    HANDLE file = CreateFileW(
+        path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart < 0 ||
+        size.QuadPart > 32 * 1024 * 1024) {
+        CloseHandle(file);
+        return false;
+    }
+    if (size.QuadPart > 0) {
+        data.resize((size_t)size.QuadPart);
+        DWORD read = 0;
+        BOOL ok =
+            ReadFile(file, data.data(), (DWORD)data.size(), &read, nullptr);
+        if (!ok || read != data.size()) {
+            data.clear();
+            CloseHandle(file);
+            return false;
+        }
+    }
+    CloseHandle(file);
+    return true;
+}
+
+bool WriteFileBytesAtomic(const std::wstring& path,
+                          const std::vector<BYTE>& data) {
+    std::wstring temp = path + L".tmp";
+    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Creating dock storage file failed: %lu", GetLastError());
+        return false;
+    }
+    DWORD written = 0;
+    BOOL ok = WriteFile(file, data.data(), (DWORD)data.size(), &written,
+                        nullptr) &&
+              written == data.size();
+    if (ok) FlushFileBuffers(file);
+    CloseHandle(file);
+    if (!ok) {
+        Wh_Log(L"Writing dock storage file failed: %lu", GetLastError());
+        DeleteFileW(temp.c_str());
+        return false;
+    }
+    if (!MoveFileExW(temp.c_str(), path.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        Wh_Log(L"Replacing dock storage file failed: %lu", GetLastError());
+        DeleteFileW(temp.c_str());
+        return false;
+    }
+    return true;
+}
+
+// Each line is the parsing name, a tab and the original shortcut path. The
+// second field is empty for plain references and virtual items.
+std::vector<BYTE> SerializeDockList(const std::vector<std::wstring>& keys) {
+    std::wstring text = kItemsHeader;
+    text += L"\r\n";
+    for (const auto& key : keys) {
+        text += key;
+        text += L'\t';
+        auto it = g_shortcutSources.find(ToLowerString(key));
+        if (it != g_shortcutSources.end()) text += it->second;
+        text += L"\r\n";
+    }
+
+    std::vector<BYTE> bytes;
+    bytes.reserve(2 + text.size() * sizeof(wchar_t));
+    bytes.push_back(0xFF);
+    bytes.push_back(0xFE);
+    const BYTE* raw = reinterpret_cast<const BYTE*>(text.data());
+    bytes.insert(bytes.end(), raw, raw + text.size() * sizeof(wchar_t));
+    return bytes;
+}
+
+bool ParseDockList(const std::vector<BYTE>& bytes,
+                   std::vector<std::wstring>& keys,
+                   std::map<std::wstring, std::wstring>& sources) {
+    keys.clear();
+    sources.clear();
+    if (bytes.size() < 2 || (bytes.size() % 2) != 0) return false;
+
+    size_t offset = 0;
+    if (bytes[0] == 0xFF && bytes[1] == 0xFE) offset = 2;
+    size_t count = (bytes.size() - offset) / sizeof(wchar_t);
+    const wchar_t* raw =
+        reinterpret_cast<const wchar_t*>(bytes.data() + offset);
+    std::wstring content(raw, count);
+    if (!content.empty() && content[0] == 0xFEFF) content.erase(0, 1);
+
+    size_t pos = 0;
+    bool first = true;
+    while (pos <= content.size()) {
+        size_t end = content.find(L'\n', pos);
+        std::wstring line =
+            content.substr(pos, end == std::wstring::npos ? std::wstring::npos
+                                                          : end - pos);
+        if (!line.empty() && line.back() == L'\r') line.pop_back();
+        if (first) {
+            if (line != kItemsHeader) return false;
+            first = false;
+        } else if (!line.empty()) {
+            size_t tab = line.find(L'\t');
+            std::wstring key =
+                tab == std::wstring::npos ? line : line.substr(0, tab);
+            std::wstring source =
+                tab == std::wstring::npos ? L"" : line.substr(tab + 1);
+            if (!key.empty()) {
+                keys.push_back(key);
+                if (!source.empty()) {
+                    sources[ToLowerString(key)] = source;
+                }
+            }
+        }
+        if (end == std::wstring::npos) break;
+        pos = end + 1;
+    }
+    return true;
+}
+
 std::vector<std::wstring> LoadDockKeys() {
+    EnsureStoragePaths();
+    std::vector<std::wstring> keys;
+    if (g_itemsFilePath.empty() ||
+        GetFileAttributesW(g_itemsFilePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return keys;
+    }
+
+    std::vector<BYTE> bytes;
+    if (!ReadFileBytes(g_itemsFilePath, bytes)) {
+        Wh_Log(L"Reading dock storage failed: %lu", GetLastError());
+        return keys;
+    }
+    std::map<std::wstring, std::wstring> sources;
+    if (!ParseDockList(bytes, keys, sources)) {
+        Wh_Log(L"Invalid dock storage file: %ls", g_itemsFilePath.c_str());
+        return {};
+    }
+    g_shortcutSources = std::move(sources);
+    return keys;
+}
+
+bool SaveDockKeys(const std::vector<std::wstring>& keys) {
+    EnsureStoragePaths();
+    if (g_itemsFilePath.empty()) return false;
+    return WriteFileBytesAtomic(g_itemsFilePath, SerializeDockList(keys));
+}
+
+std::vector<std::wstring> LoadLegacyDockKeys() {
     std::vector<std::wstring> keys;
     HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kStorageKey, 0, KEY_QUERY_VALUE, &key) !=
-        ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLegacyStorageKey, 0, KEY_QUERY_VALUE,
+                      &key) != ERROR_SUCCESS) {
         return keys;
     }
 
     DWORD type = 0;
     DWORD bytes = 0;
-    LSTATUS status = RegQueryValueExW(key, kStorageItems, nullptr, &type, nullptr,
-                                      &bytes);
+    LSTATUS status = RegQueryValueExW(key, kLegacyStorageItems, nullptr, &type,
+                                      nullptr, &bytes);
     if (status == ERROR_SUCCESS && type == REG_MULTI_SZ &&
         bytes >= sizeof(wchar_t) * 2 && bytes <= 16 * 1024 * 1024) {
         std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, 0);
         DWORD size = (DWORD)(buffer.size() * sizeof(wchar_t));
-        status = RegQueryValueExW(key, kStorageItems, nullptr, &type,
+        status = RegQueryValueExW(key, kLegacyStorageItems, nullptr, &type,
                                   reinterpret_cast<BYTE*>(buffer.data()), &size);
         if (status == ERROR_SUCCESS && type == REG_MULTI_SZ) {
             size_t count = size / sizeof(wchar_t);
@@ -626,41 +879,15 @@ std::vector<std::wstring> LoadDockKeys() {
                 pos += length + 1;
             }
         } else {
-            Wh_Log(L"Reading dock items failed: %ld", status);
+            Wh_Log(L"Reading legacy dock items failed: %ld", status);
         }
     } else if (status != ERROR_FILE_NOT_FOUND && status != ERROR_PATH_NOT_FOUND) {
-        Wh_Log(L"Reading dock items failed: %ld (type %lu)", status, type);
+        Wh_Log(L"Reading legacy dock items failed: %ld (type %lu)", status,
+               type);
     }
 
     RegCloseKey(key);
     return keys;
-}
-
-bool SaveDockKeys(const std::vector<std::wstring>& keys) {
-    HKEY key = nullptr;
-    LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, kStorageKey, 0, nullptr, 0,
-                                     KEY_SET_VALUE, nullptr, &key, nullptr);
-    if (status != ERROR_SUCCESS) {
-        Wh_Log(L"Opening dock storage failed: %ld", status);
-        return false;
-    }
-
-    std::vector<wchar_t> data;
-    for (const auto& entry : keys) {
-        data.insert(data.end(), entry.begin(), entry.end());
-        data.push_back(L'\0');
-    }
-    data.push_back(L'\0');
-
-    status = RegSetValueExW(key, kStorageItems, 0, REG_MULTI_SZ,
-                            reinterpret_cast<const BYTE*>(data.data()),
-                            (DWORD)(data.size() * sizeof(wchar_t)));
-    RegCloseKey(key);
-    if (status != ERROR_SUCCESS) {
-        Wh_Log(L"Writing dock items failed: %ld", status);
-        return false;
-    }
-    return true;
 }
 
 std::shared_ptr<Bitmap> CopyToOwnedBitmap(Bitmap* source) {
@@ -1460,14 +1687,15 @@ void DrawItemLabel(Graphics& graphics, int index, double panelTopNow) {
                         &textBrush);
 }
 
-bool g_emptyPrimaryChinese = false;
+bool g_emptyHintChinese = false;
 
 void EnsureEmptyFonts() {
     if (g_emptyPrimaryFont) return;
-    auto primaryFamily = std::make_unique<FontFamily>(L"Microsoft YaHei UI");
-    g_emptyPrimaryChinese =
-        primaryFamily->GetLastStatus() == Ok && primaryFamily->IsAvailable();
-    if (!g_emptyPrimaryChinese) {
+    g_emptyHintChinese =
+        PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
+    auto primaryFamily = std::make_unique<FontFamily>(
+        g_emptyHintChinese ? L"Microsoft YaHei UI" : L"Segoe UI");
+    if (primaryFamily->GetLastStatus() != Ok || !primaryFamily->IsAvailable()) {
         primaryFamily = std::make_unique<FontFamily>(L"Segoe UI");
     }
     g_emptyPrimaryFont = std::make_unique<Font>(
@@ -1556,9 +1784,9 @@ void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
     SolidBrush primaryBrush(primaryColor);
     SolidBrush secondaryBrush(secondaryColor);
     const wchar_t* primaryText =
-        g_emptyPrimaryChinese ? L"将图标拖到这里" : L"Drag items here";
-    const wchar_t* secondaryText = g_emptyPrimaryChinese
-                                       ? L"Drag shortcuts, files or folders here"
+        g_emptyHintChinese ? L"将图标拖到这里" : L"Drag items here";
+    const wchar_t* secondaryText = g_emptyHintChinese
+                                       ? L"拖动快捷方式、文件或文件夹到这里"
                                        : L"Shortcuts, files and folders";
     graphics.DrawString(primaryText, -1, g_emptyPrimaryFont.get(), primaryRect,
                         &format, &primaryBrush);
@@ -2044,41 +2272,24 @@ bool ResolveDockItem(const std::wstring& storedKey, size_t storedIndex,
     return true;
 }
 
-bool SameVisibleItems(const std::vector<ResolvedDockItem>& resolved) {
-    if (resolved.size() != g_items.size()) return false;
-    for (size_t i = 0; i < resolved.size(); ++i) {
-        if (!KeyEqualsNoCase(resolved[i].key, g_items[i].key) ||
-            resolved[i].name != g_items[i].name) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // Virtual items (Recycle Bin, This PC, ...) have no file-system events, so
 // their state changes (e.g. an emptied Recycle Bin) are picked up here.
-void RefreshVirtualIcons(const std::vector<ResolvedDockItem>& resolved) {
+// Parsing names of virtual items are local and never touch the network.
+void RefreshVirtualIconCache() {
     bool updated = false;
-    for (const auto& entry : resolved) {
-        if (entry.isFilesystem) continue;
-        bool visible = false;
-        for (const auto& item : g_items) {
-            if (KeyEqualsNoCase(item.key, entry.key)) {
-                visible = true;
-                break;
-            }
+    for (auto& item : g_items) {
+        if (item.isFilesystem) continue;
+        ComPtr<IShellItem> shellItem;
+        if (FAILED(SHCreateItemFromParsingName(item.key.c_str(), nullptr,
+                                               IID_PPV_ARGS(shellItem.put()))) ||
+            !shellItem) {
+            continue;
         }
-        if (!visible) continue;
-        g_iconCache.erase(entry.key);
-        auto icon = LoadShellIcon(entry.shellItem.Get(), entry.key);
+        g_iconCache.erase(item.key);
+        auto icon = LoadShellIcon(shellItem.Get(), item.key);
         if (!icon) continue;
-        for (auto& item : g_items) {
-            if (KeyEqualsNoCase(item.key, entry.key)) {
-                item.icon = icon;
-                updated = true;
-                break;
-            }
-        }
+        item.icon = std::move(icon);
+        updated = true;
     }
     if (updated && !g_animationTimerRunning) RenderFrame();
 }
@@ -2093,15 +2304,22 @@ void ResetInternalDragState() {
     if (GetCapture() == g_hwnd) ReleaseCapture();
 }
 
-bool RebuildFromList(bool force) {
+bool RebuildFromList(bool retryFailed = true) {
     if (g_stopRequested) return false;
 
     std::vector<ResolvedDockItem> resolved;
     resolved.reserve(g_storedKeys.size());
+    if (retryFailed) g_unresolvedKeys.clear();
     for (size_t i = 0; i < g_storedKeys.size(); ++i) {
         if (g_stopRequested) return false;
+        if (!retryFailed && g_unresolvedKeys.count(g_storedKeys[i])) {
+            continue;
+        }
         ResolvedDockItem entry;
-        if (!ResolveDockItem(g_storedKeys[i], i, entry)) continue;
+        if (!ResolveDockItem(g_storedKeys[i], i, entry)) {
+            g_unresolvedKeys.insert(g_storedKeys[i]);
+            continue;
+        }
         bool duplicate = false;
         for (const auto& existing : resolved) {
             if (KeyEqualsNoCase(existing.key, entry.key)) {
@@ -2110,12 +2328,6 @@ bool RebuildFromList(bool force) {
             }
         }
         if (!duplicate) resolved.push_back(std::move(entry));
-    }
-
-    if (!force && !g_internalDragActive && SameVisibleItems(resolved)) {
-        RefreshVirtualIcons(resolved);
-        g_lastItemCheckTime = std::chrono::steady_clock::now();
-        return true;
     }
 
     std::vector<DockItem> items;
@@ -2165,6 +2377,39 @@ bool RebuildFromList(bool force) {
     return true;
 }
 
+// Failed entries are retried on their own, so the periodic refresh cannot
+// stall on every stored path. A successful retry rebuilds the dock while the
+// entries that are still unresolved stay skipped.
+void RetryUnresolvedItems() {
+    if (g_unresolvedKeys.empty() || g_stopRequested) return;
+
+    std::vector<std::wstring> pending(g_unresolvedKeys.begin(),
+                                      g_unresolvedKeys.end());
+    bool resolvedAny = false;
+    for (const auto& key : pending) {
+        if (g_stopRequested) return;
+        size_t index = 0;
+        bool found = false;
+        for (size_t i = 0; i < g_storedKeys.size(); ++i) {
+            if (KeyEqualsNoCase(g_storedKeys[i], key)) {
+                index = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            g_unresolvedKeys.erase(key);
+            continue;
+        }
+        ResolvedDockItem entry;
+        if (ResolveDockItem(key, index, entry)) {
+            g_unresolvedKeys.erase(key);
+            resolvedAny = true;
+        }
+    }
+    if (resolvedAny) RebuildFromList(false);
+}
+
 void ReloadSettings() {
     LoadSettings();
     g_iconCache.clear();
@@ -2193,6 +2438,24 @@ bool IsPointOutsideDock(POINT screenPoint) {
     InflateRect(&rect, (int)lround(6 * g_dpiScale),
                 (int)lround(6 * g_dpiScale));
     return PtInRect(&rect, point) == FALSE;
+}
+
+// Dragging an item out only removes it when the pointer is released over the
+// desktop itself. Releasing over another window keeps the item in the dock.
+bool IsPointOverDesktop(POINT screenPoint) {
+    HWND window = WindowFromPoint(screenPoint);
+    if (!window) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(window, &pid);
+    if (pid != GetCurrentProcessId()) return false;
+    wchar_t className[64] = L"";
+    if (GetClassNameW(window, className, ARRAYSIZE(className)) == 0) {
+        return false;
+    }
+    return _wcsicmp(className, L"SysListView32") == 0 ||
+           _wcsicmp(className, L"WorkerW") == 0 ||
+           _wcsicmp(className, L"Progman") == 0 ||
+           _wcsicmp(className, L"SHELLDLL_DefView") == 0;
 }
 
 int DragTargetIndex(double x) {
@@ -2258,28 +2521,21 @@ std::wstring GetKnownFolder(REFKNOWNFOLDERID folderId) {
     return path;
 }
 
-// Shortcuts are copied into a dock-owned folder, so deleting the original
+// Shortcuts are copied into the mod's storage folder, so deleting the original
 // shortcut from the desktop does not remove the dock item.
 const std::wstring& GetDockItemsFolder() {
-    static const std::wstring folder = [] {
-        std::wstring localAppData = GetKnownFolder(FOLDERID_LocalAppData);
-        if (localAppData.empty()) return std::wstring();
-        std::wstring path = localAppData + L"\\" + kDockItemsFolder;
-        int result = SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
-        if (result != ERROR_SUCCESS && result != ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Creating dock items folder failed: %d", result);
-            return std::wstring();
-        }
-        return path;
-    }();
-    return folder;
+    EnsureStoragePaths();
+    return g_itemsFolderPath;
 }
 
-bool IsUnderDockItemsFolder(const std::wstring& path) {
-    const std::wstring& folder = GetDockItemsFolder();
+bool IsUnderFolder(const std::wstring& path, const std::wstring& folder) {
     if (folder.empty() || path.size() <= folder.size()) return false;
     if (_wcsnicmp(path.c_str(), folder.c_str(), folder.size()) != 0) return false;
     return path[folder.size()] == L'\\';
+}
+
+bool IsUnderDockItemsFolder(const std::wstring& path) {
+    return IsUnderFolder(path, GetDockItemsFolder());
 }
 
 uint64_t HashShortcutSource(const std::wstring& path) {
@@ -2359,32 +2615,111 @@ void RemoveShortcutCopy(const std::wstring& copyPath) {
     }
 }
 
-// Converts existing shortcut references to dock-owned copies. Unresolvable
-// entries and non-shortcut references are left untouched.
-void MigrateShortcutReferencesToCopies() {
-    std::vector<std::wstring> migrated;
-    migrated.reserve(g_storedKeys.size());
-    bool changed = false;
-    for (const auto& key : g_storedKeys) {
-        std::wstring target = ShortcutCopyTarget(key);
-        if (!target.empty() && EnsureShortcutCopy(key, target)) {
-            migrated.push_back(target);
-            changed = true;
+void SetShortcutSource(const std::wstring& copyPath,
+                       const std::wstring& sourcePath) {
+    if (copyPath.empty() || sourcePath.empty()) return;
+    g_shortcutSources[ToLowerString(copyPath)] = sourcePath;
+}
+
+bool FindShortcutSource(const std::wstring& copyPath,
+                        std::wstring& sourcePath) {
+    auto it = g_shortcutSources.find(ToLowerString(copyPath));
+    if (it == g_shortcutSources.end() || it->second.empty()) return false;
+    sourcePath = it->second;
+    return true;
+}
+
+void RemoveShortcutSource(const std::wstring& copyPath) {
+    g_shortcutSources.erase(ToLowerString(copyPath));
+}
+
+// Earlier versions kept the list in HKCU and the shortcut copies under
+// %LOCALAPPDATA%. Everything is moved into Windhawk's mod storage on first
+// start, and the old locations are removed afterwards.
+void MigrateLegacyStorage() {
+    EnsureStoragePaths();
+    if (g_itemsFilePath.empty() ||
+        GetFileAttributesW(g_itemsFilePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return;
+    }
+
+    std::vector<std::wstring> legacyKeys = LoadLegacyDockKeys();
+    std::wstring legacyFolder;
+    std::wstring localAppData = GetKnownFolder(FOLDERID_LocalAppData);
+    if (!localAppData.empty()) {
+        legacyFolder = localAppData + L"\\" + kLegacyItemsFolder;
+    }
+    if (legacyKeys.empty() &&
+        (legacyFolder.empty() ||
+         GetFileAttributesW(legacyFolder.c_str()) == INVALID_FILE_ATTRIBUTES)) {
+        return;
+    }
+
+    std::vector<std::wstring> keys;
+    keys.reserve(legacyKeys.size());
+    bool failed = false;
+    for (const auto& legacyKey : legacyKeys) {
+        if (legacyKey.empty()) continue;
+        std::wstring key = legacyKey;
+        if (!legacyFolder.empty() && IsUnderFolder(legacyKey, legacyFolder)) {
+            std::wstring relative = legacyKey.substr(legacyFolder.size() + 1);
+            std::wstring target = g_itemsFolderPath + L"\\" + relative;
+            if (GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                std::wstring parent = GetParentPath(target);
+                SHCreateDirectoryExW(nullptr, parent.c_str(), nullptr);
+                if (!CopyFileW(legacyKey.c_str(), target.c_str(), FALSE)) {
+                    Wh_Log(L"Migrating dock copy failed: %ls (%lu)",
+                           legacyKey.c_str(), GetLastError());
+                    failed = true;
+                    break;
+                }
+            }
+            // The target exists either way now, so the old copy is no longer
+            // needed.
+            DeleteFileW(legacyKey.c_str());
+            std::wstring legacyItemFolder = GetParentPath(legacyKey);
+            if (!legacyItemFolder.empty() &&
+                _wcsicmp(legacyItemFolder.c_str(), legacyFolder.c_str()) != 0) {
+                RemoveDirectoryW(legacyItemFolder.c_str());
+            }
+            key = std::move(target);
         } else {
-            migrated.push_back(key);
+            std::wstring target = ShortcutCopyTarget(legacyKey);
+            if (!target.empty()) {
+                if (GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES &&
+                    !EnsureShortcutCopy(legacyKey, target)) {
+                    failed = true;
+                    break;
+                }
+                SetShortcutSource(target, legacyKey);
+                key = std::move(target);
+            }
         }
+        if (!ContainsKeyNoCase(keys, key)) keys.push_back(std::move(key));
     }
-    if (changed) {
-        g_storedKeys = std::move(migrated);
-        SaveDockKeys(g_storedKeys);
-        Wh_Log(L"Migrated shortcut references to dock copies");
+
+    if (failed) {
+        Wh_Log(L"Migrating legacy dock storage failed, keeping the old data");
+        return;
     }
+
+    g_storedKeys = std::move(keys);
+    if (!SaveDockKeys(g_storedKeys)) return;
+
+    RegDeleteTreeW(HKEY_CURRENT_USER, kLegacyStorageKey);
+    if (!legacyFolder.empty()) {
+        RemoveDirectoryW(legacyFolder.c_str());
+        std::wstring parent = GetParentPath(legacyFolder);
+        if (!parent.empty()) RemoveDirectoryW(parent.c_str());
+    }
+    Wh_Log(L"Migrated legacy dock storage");
 }
 
 bool AddKeysAt(int insertIndex, const std::vector<std::wstring>& newKeys) {
     std::vector<std::wstring> stored = g_storedKeys;
     std::vector<std::wstring> accepted;
     bool restored = false;
+    bool sourcesChanged = false;
     accepted.reserve(newKeys.size());
     for (const auto& sourceKey : newKeys) {
         if (sourceKey.empty()) continue;
@@ -2397,19 +2732,31 @@ bool AddKeysAt(int insertIndex, const std::vector<std::wstring>& newKeys) {
             continue;
         }
         if (duplicate) {
-            if (GetFileAttributesW(copyPath.c_str()) !=
+            if (GetFileAttributesW(copyPath.c_str()) ==
                 INVALID_FILE_ATTRIBUTES) {
-                continue;
+                // The stored item lost its copy; recreate it so the add works
+                // again even though the entry is already in the list.
+                if (EnsureShortcutCopy(sourceKey, copyPath)) {
+                    restored = true;
+                    SetShortcutSource(copyPath, sourceKey);
+                    sourcesChanged = true;
+                }
+            } else {
+                std::wstring knownSource;
+                if (!FindShortcutSource(copyPath, knownSource)) {
+                    SetShortcutSource(copyPath, sourceKey);
+                    sourcesChanged = true;
+                }
             }
-            // The stored item lost its copy; recreate it so the add works
-            // again even though the entry is already in the list.
-            if (EnsureShortcutCopy(sourceKey, copyPath)) restored = true;
             continue;
         }
         if (!EnsureShortcutCopy(sourceKey, copyPath)) continue;
+        SetShortcutSource(copyPath, sourceKey);
+        sourcesChanged = true;
         accepted.push_back(std::move(key));
     }
     if (accepted.empty()) {
+        if (sourcesChanged) SaveDockKeys(g_storedKeys);
         return restored ? RebuildFromList(true) : false;
     }
 
@@ -2536,24 +2883,35 @@ bool PlaceOnDesktopAt(const DockItem& item, POINT screenPoint) {
         return true;
     }
     std::wstring publicDesktop = GetKnownFolder(FOLDERID_PublicDesktop);
-    std::wstring parent = GetParentPath(item.filePath);
+
+    // A dock copy keeps the path of the shortcut it was copied from. Prefer
+    // that original, so dragging the item out moves the original shortcut
+    // back instead of creating a second one next to it.
+    std::wstring sourcePath;
+    std::wstring placementPath = item.filePath;
+    if (FindShortcutSource(item.key, sourcePath) &&
+        GetFileAttributesW(sourcePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        placementPath = sourcePath;
+    }
+
+    std::wstring parent = GetParentPath(placementPath);
     bool alreadyOnDesktop =
         _wcsicmp(parent.c_str(), desktopPath.c_str()) == 0 ||
         (!publicDesktop.empty() &&
          _wcsicmp(parent.c_str(), publicDesktop.c_str()) == 0);
     if (alreadyOnDesktop) {
-        PositionDesktopItemAt(item.filePath, screenPoint);
+        PositionDesktopItemAt(placementPath, screenPoint);
         return true;
     }
 
-    if (GetFileAttributesW(item.filePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    if (GetFileAttributesW(placementPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
         Wh_Log(L"Desktop placement skipped, source missing: %ls",
-               item.filePath.c_str());
+               placementPath.c_str());
         return true;
     }
 
     std::wstring shortcutPath;
-    if (!CreateDesktopShortcut(item.filePath, item.name, desktopPath,
+    if (!CreateDesktopShortcut(placementPath, item.name, desktopPath,
                                shortcutPath)) {
         return false;
     }
@@ -2578,6 +2936,7 @@ void FinishInternalDrag(bool removeItem, POINT screenPoint) {
         }
         removedStoredIndex = (int)g_items[g_dragIndex].storedIndex;
         RemoveShortcutCopy(g_items[g_dragIndex].filePath);
+        RemoveShortcutSource(g_items[g_dragIndex].key);
         g_items.erase(g_items.begin() + g_dragIndex);
     }
     PersistVisibleOrder(removedStoredIndex);
@@ -2662,9 +3021,19 @@ class DockDropTarget final : public IDropTarget {
         std::vector<std::wstring> keys;
         ExtractKeys(data, keys);
         ClearExternalDrag();
-        bool added = chosen != DROPEFFECT_NONE && !keys.empty() &&
-                     AddKeysAt(index, keys);
-        *effect = added ? chosen : DROPEFFECT_NONE;
+        if (chosen == DROPEFFECT_NONE || keys.empty()) {
+            *effect = DROPEFFECT_NONE;
+            return S_OK;
+        }
+        // Adding an item copies shortcuts and resolves parsing names, which
+        // can block on a slow path. Post the work, so the drag source is not
+        // frozen while the drop is being processed.
+        PendingDrop pending;
+        pending.index = index;
+        pending.keys = std::move(keys);
+        g_pendingDrops.push_back(std::move(pending));
+        PostMessageW(g_hwnd, kMsgAddDropped, 0, 0);
+        *effect = chosen;
         return S_OK;
     }
 
@@ -2786,7 +3155,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                         now - g_lastItemCheckTime >
                             std::chrono::seconds(kMaintenanceSeconds)) {
                         g_lastItemCheckTime = now;
-                        RebuildFromList(false);
+                        RetryUnresolvedItems();
+                        RefreshVirtualIconCache();
                     }
                     EnsureDesktopIconsHidden();
                     if (g_settings.backdropRefreshSeconds > 0 && !g_menuOpen &&
@@ -2912,8 +3282,9 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             if (g_internalDragActive) {
                 POINT point{};
                 GetCursorPos(&point);
-                bool outside = IsPointOutsideDock(point);
-                FinishInternalDrag(outside, point);
+                bool onDesktop = IsPointOutsideDock(point) &&
+                                 IsPointOverDesktop(point);
+                FinishInternalDrag(onDesktop, point);
                 return 0;
             }
             if (!g_leftDown) return 0;
@@ -3046,6 +3417,16 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             ReloadSettings();
             return 0;
 
+        case kMsgAddDropped:
+            if (!g_pendingDrops.empty()) {
+                std::vector<PendingDrop> drops = std::move(g_pendingDrops);
+                g_pendingDrops.clear();
+                for (auto& drop : drops) {
+                    AddKeysAt(drop.index, drop.keys);
+                }
+            }
+            return 0;
+
         case kMsgQuit:
             PostQuitMessage(0);
             return 0;
@@ -3124,8 +3505,8 @@ int RunDockThread() {
     CreateTextures();
 
     LoadSettings();
+    MigrateLegacyStorage();
     g_storedKeys = LoadDockKeys();
-    MigrateShortcutReferencesToCopies();
     g_lastItemCheckTime = std::chrono::steady_clock::now();
     if (auto* dropTarget = new (std::nothrow) DockDropTarget()) {
         if (RegisterDragDrop(hwnd, dropTarget) == S_OK) {
@@ -3174,6 +3555,8 @@ int RunDockThread() {
     g_iconCache.clear();
     g_items.clear();
     g_storedKeys.clear();
+    g_unresolvedKeys.clear();
+    g_pendingDrops.clear();
     g_labelFont.reset();
     g_labelFontFamily.reset();
     g_emptyPrimaryFont.reset();
