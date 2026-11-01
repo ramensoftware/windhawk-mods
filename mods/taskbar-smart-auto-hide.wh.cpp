@@ -2,7 +2,7 @@
 // @id              taskbar-smart-auto-hide
 // @name            Taskbar Smart Auto-Hide
 // @description     One mod for taskbar auto-hide: hide when maximized/intersected/always, keep shown on the desktop, fast or instant reveal, notification handling, and a reliable edge reveal over apps like ChatGPT
-// @version         1.1
+// @version         1.2
 // @author          Josh
 // @github          https://github.com/jallison1193-crypto
 // @include         explorer.exe
@@ -69,6 +69,9 @@ Combines three auto-hide mods into one and adds a few things:
   bounce, slide + fade or overshoot animations. Separate show and hide delays.
 * **Notifications:** a flashing taskbar button no longer pins the taskbar open
   forever; it re-hides after a delay you choose.
+* **Toggle hotkey:** a shortcut (Ctrl+Win+T by default) switches between
+  auto-hide and an always visible taskbar, either reserving screen space like
+  the Windows setting or staying on top of windows.
 * **Maximized apps that look fullscreen:** some apps (for example ChatGPT)
   size their maximized window to exactly fill the screen. Windows mistakes
   them for fullscreen, drops the taskbar out of the always-on-top layer, and
@@ -194,6 +197,18 @@ taskbar functions.
     When an app flashes its taskbar button, Windows keeps the taskbar shown
     until you look at it. This lets the taskbar hide again after this many
     milliseconds. Set to -1 to keep the Windows behavior.
+- toggleHotkey: Ctrl+Win+T
+  $name: Toggle hotkey
+  $description: >-
+    Keyboard shortcut that switches the taskbar between auto-hide and always
+    visible. Combine Ctrl, Alt, Shift or Win with a key, for example
+    Ctrl+Win+T, Ctrl+Alt+H or Ctrl+Alt+F9. Leave empty to turn the hotkey
+    off. The taskbar goes back to auto-hide when Explorer restarts.
+- toggleStyle: reserve
+  $name: When toggled to visible
+  $options:
+  - reserve: Turn auto-hide off (maximized windows shrink to make room)
+  - overlay: Keep the taskbar on top (windows keep their size)
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -228,6 +243,11 @@ enum class Mode {
     never,
 };
 
+enum class ToggleStyle {
+    reserve,
+    overlay,
+};
+
 enum class AnimationType {
     none,
     slide,
@@ -257,8 +277,21 @@ struct {
     bool edgeReveal;
     bool edgeRevealOverFullscreen;
     int flashingHideDelay;
+    std::wstring toggleHotkey;
+    UINT toggleHotkeyModifiers;
+    UINT toggleHotkeyVk;
+    ToggleStyle toggleStyle;
     bool oldTaskbarOnWin11;
 } g_settings;
+
+// Set by the toggle hotkey: the taskbar is kept visible regardless of the
+// "when to auto-hide" rules.
+std::atomic<bool> g_toggledVisible;
+
+// Stored with Wh_SetIntValue while the hotkey has turned auto-hide off, so that
+// after an Explorer restart the mod knows auto-hide was off because of the
+// hotkey, not because of the user's Windows setting.
+constexpr WCHAR kAutoHideOffByHotkeyValue[] = L"AutoHideOffByHotkey";
 
 enum class WinVersion {
     Unsupported,
@@ -813,6 +846,10 @@ bool HasAppWindowOnMonitor(HMONITOR monitor) {
 }
 
 bool ShouldKeepTaskbarShown(HWND hTaskbarWnd, HMONITOR monitor) {
+    if (g_toggledVisible) {
+        return true;
+    }
+
     if (g_settings.primaryMonitorOnly &&
         monitor != MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY)) {
         return false;
@@ -1095,10 +1132,13 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             QueryViaVtableBackwards(pThis, TrayUI_vftable_IInspectable));
         g_taskbarToViewCoordinator.erase(hWnd);
     } else if (Msg == kHandleTrayPrivateSettingMessage) {
-        // Prevent auto-hide from being disabled while the mod is loaded.
+        // Prevent auto-hide from being disabled while the mod is loaded,
+        // unless the toggle hotkey is doing it.
         if ((DWORD)wParam == 4) {
             BOOL bSetAutoHideEnabled = (BOOL)lParam;
-            if (!bSetAutoHideEnabled) {
+            if (!bSetAutoHideEnabled &&
+                !(g_toggledVisible &&
+                  g_settings.toggleStyle == ToggleStyle::reserve)) {
                 return 0;
             }
         }
@@ -1134,6 +1174,14 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             g_wasAutoHideDisabled =
                 !SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
                              kTrayPrivateSettingAutoHideGet, 0);
+
+            // If Explorer restarted while the toggle hotkey had auto-hide
+            // off, auto-hide is off because of the mod, not the user.
+            if (Wh_GetIntValue(kAutoHideOffByHotkeyValue, 0)) {
+                g_wasAutoHideDisabled = false;
+                Wh_DeleteValue(kAutoHideOffByHotkeyValue);
+            }
+
             if (g_wasAutoHideDisabled) {
                 SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
                             kTrayPrivateSettingAutoHideSet, TRUE);
@@ -2182,6 +2230,197 @@ void UpdateEdgeRevealThread() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Toggle hotkey: switch between auto-hide and an always visible taskbar.
+
+constexpr int kToggleHotkeyId = 1;
+
+HANDLE g_hotkeyThread;
+
+UINT KeyNameToVirtualKey(const std::wstring& name) {
+    if (name.length() == 1) {
+        WCHAR c = name[0];
+        if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) {
+            return c;
+        }
+    }
+
+    if (name.length() >= 2 && name.length() <= 3 && name[0] == L'F') {
+        int number = _wtoi(name.c_str() + 1);
+        if (number >= 1 && number <= 24) {
+            return VK_F1 + number - 1;
+        }
+    }
+
+    static const struct {
+        PCWSTR name;
+        UINT vk;
+    } kKeys[] = {
+        {L"SPACE", VK_SPACE},       {L"TAB", VK_TAB},
+        {L"ENTER", VK_RETURN},      {L"ESC", VK_ESCAPE},
+        {L"ESCAPE", VK_ESCAPE},     {L"BACKSPACE", VK_BACK},
+        {L"INSERT", VK_INSERT},     {L"INS", VK_INSERT},
+        {L"DELETE", VK_DELETE},     {L"DEL", VK_DELETE},
+        {L"HOME", VK_HOME},         {L"END", VK_END},
+        {L"PAGEUP", VK_PRIOR},      {L"PGUP", VK_PRIOR},
+        {L"PAGEDOWN", VK_NEXT},     {L"PGDN", VK_NEXT},
+        {L"UP", VK_UP},             {L"DOWN", VK_DOWN},
+        {L"LEFT", VK_LEFT},         {L"RIGHT", VK_RIGHT},
+        {L"PAUSE", VK_PAUSE},       {L"SCROLLLOCK", VK_SCROLL},
+        {L"`", VK_OEM_3},           {L"-", VK_OEM_MINUS},
+        {L"=", VK_OEM_PLUS},        {L"[", VK_OEM_4},
+        {L"]", VK_OEM_6},           {L";", VK_OEM_1},
+        {L"'", VK_OEM_7},           {L",", VK_OEM_COMMA},
+        {L".", VK_OEM_PERIOD},      {L"/", VK_OEM_2},
+        {L"\\", VK_OEM_5},
+    };
+
+    for (const auto& key : kKeys) {
+        if (name == key.name) {
+            return key.vk;
+        }
+    }
+
+    return 0;
+}
+
+// Parses text like "Ctrl+Win+T". Requires at least one modifier and exactly
+// one key.
+bool ParseHotkey(PCWSTR text, UINT* modifiers, UINT* vk) {
+    *modifiers = 0;
+    *vk = 0;
+
+    std::wstring_view remaining = text;
+    while (!remaining.empty()) {
+        // "+" itself can't be the key; a stray "+" gives an empty token,
+        // which is skipped.
+        size_t plus = remaining.find(L'+');
+        std::wstring_view token = remaining.substr(0, plus);
+        remaining = plus == std::wstring_view::npos
+                        ? std::wstring_view{}
+                        : remaining.substr(plus + 1);
+
+        while (!token.empty() && iswspace(token.front())) {
+            token.remove_prefix(1);
+        }
+        while (!token.empty() && iswspace(token.back())) {
+            token.remove_suffix(1);
+        }
+        if (token.empty()) {
+            continue;
+        }
+
+        std::wstring upper(token);
+        for (auto& c : upper) {
+            c = towupper(c);
+        }
+
+        if (upper == L"CTRL" || upper == L"CONTROL") {
+            *modifiers |= MOD_CONTROL;
+        } else if (upper == L"ALT") {
+            *modifiers |= MOD_ALT;
+        } else if (upper == L"SHIFT") {
+            *modifiers |= MOD_SHIFT;
+        } else if (upper == L"WIN" || upper == L"WINDOWS") {
+            *modifiers |= MOD_WIN;
+        } else {
+            if (*vk) {
+                return false;
+            }
+            *vk = KeyNameToVirtualKey(upper);
+            if (!*vk) {
+                return false;
+            }
+        }
+    }
+
+    return *modifiers && *vk;
+}
+
+// Turns Windows auto-hide on or off through the taskbar's private setting
+// message. The window procedure hook lets this through while the hotkey has
+// the taskbar toggled visible.
+void SetTaskbarAutoHide(bool enabled) {
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        SendMessage(hTaskbarWnd, kHandleTrayPrivateSettingMessage,
+                    kTrayPrivateSettingAutoHideSet, enabled);
+    }
+}
+
+void SetToggledVisible(bool visible, ToggleStyle style) {
+    if (g_toggledVisible == visible) {
+        return;
+    }
+
+    Wh_Log(L"Toggled visible: %d", visible);
+
+    if (style == ToggleStyle::reserve) {
+        if (visible) {
+            Wh_SetIntValue(kAutoHideOffByHotkeyValue, 1);
+            g_toggledVisible = true;
+            SetTaskbarAutoHide(false);
+        } else {
+            SetTaskbarAutoHide(true);
+            g_toggledVisible = false;
+            Wh_DeleteValue(kAutoHideOffByHotkeyValue);
+        }
+    } else {
+        g_toggledVisible = visible;
+    }
+
+    AdjustAllTaskbars();
+}
+
+DWORD WINAPI HotkeyThread(LPVOID lpThreadParameter) {
+    if (!RegisterHotKey(nullptr, kToggleHotkeyId,
+                        g_settings.toggleHotkeyModifiers | MOD_NOREPEAT,
+                        g_settings.toggleHotkeyVk)) {
+        Wh_Log(L"Couldn't register the toggle hotkey %s (error %u), another "
+               L"program may be using it",
+               g_settings.toggleHotkey.c_str(), GetLastError());
+        return 0;
+    }
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_HOTKEY && msg.wParam == kToggleHotkeyId) {
+            SetToggledVisible(!g_toggledVisible, g_settings.toggleStyle);
+        } else if (msg.hwnd == nullptr && msg.message == WM_APP) {
+            break;
+        }
+    }
+
+    UnregisterHotKey(nullptr, kToggleHotkeyId);
+    return 0;
+}
+
+void StartHotkeyThread() {
+    if (g_hotkeyThread || !g_settings.toggleHotkeyVk) {
+        return;
+    }
+
+    g_hotkeyThread =
+        CreateThread(nullptr, 0, HotkeyThread, nullptr, 0, nullptr);
+}
+
+void StopHotkeyThread() {
+    if (!g_hotkeyThread) {
+        return;
+    }
+
+    // The thread may not have created its message queue yet, so retry until
+    // the message is accepted or the thread has exited.
+    DWORD threadId = GetThreadId(g_hotkeyThread);
+    while (!PostThreadMessage(threadId, WM_APP, 0, 0) &&
+           WaitForSingleObject(g_hotkeyThread, 10) == WAIT_TIMEOUT) {
+    }
+
+    WaitForSingleObject(g_hotkeyThread, INFINITE);
+    CloseHandle(g_hotkeyThread);
+    g_hotkeyThread = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
@@ -2586,6 +2825,26 @@ void LoadSettings() {
         Wh_GetIntSetting(L"edgeRevealOverFullscreen");
     g_settings.flashingHideDelay = Wh_GetIntSetting(L"flashingHideDelay");
 
+    PCWSTR toggleHotkey = Wh_GetStringSetting(L"toggleHotkey");
+    g_settings.toggleHotkey = toggleHotkey;
+    if (*toggleHotkey &&
+        !ParseHotkey(toggleHotkey, &g_settings.toggleHotkeyModifiers,
+                     &g_settings.toggleHotkeyVk)) {
+        Wh_Log(L"Invalid toggle hotkey: %s", toggleHotkey);
+        g_settings.toggleHotkeyModifiers = 0;
+        g_settings.toggleHotkeyVk = 0;
+    } else if (!*toggleHotkey) {
+        g_settings.toggleHotkeyModifiers = 0;
+        g_settings.toggleHotkeyVk = 0;
+    }
+    Wh_FreeStringSetting(toggleHotkey);
+
+    PCWSTR toggleStyle = Wh_GetStringSetting(L"toggleStyle");
+    g_settings.toggleStyle = wcscmp(toggleStyle, L"overlay") == 0
+                                 ? ToggleStyle::overlay
+                                 : ToggleStyle::reserve;
+    Wh_FreeStringSetting(toggleStyle);
+
     g_settings.excludedPrograms.clear();
 
     for (int i = 0;; i++) {
@@ -2735,12 +2994,18 @@ void Wh_ModAfterInit() {
     }
 
     UpdateEdgeRevealThread();
+    StartHotkeyThread();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
     StopEdgeRevealThread();
+    StopHotkeyThread();
+
+    // Hand back a taskbar in its normal auto-hide state; the code below then
+    // restores the user's original setting if needed.
+    SetToggledVisible(false, g_settings.toggleStyle);
 
     if (g_winEventHookThread) {
         PostThreadMessage(GetThreadId(g_winEventHookThread), WM_APP, 0, 0);
@@ -2764,6 +3029,10 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     bool prevForegroundWindowOnly = g_settings.foregroundWindowOnly;
     bool prevKeepShownOnDesktop = g_settings.keepShownOnDesktop;
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+    ToggleStyle prevToggleStyle = g_settings.toggleStyle;
+
+    // The hotkey thread reads the hotkey settings, so stop it first.
+    StopHotkeyThread();
 
     LoadSettings();
 
@@ -2773,6 +3042,15 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     }
 
     UpdateEdgeRevealThread();
+
+    // Undo the toggle with the style it was applied with if the style
+    // changed or the hotkey was removed.
+    if (g_settings.toggleStyle != prevToggleStyle ||
+        !g_settings.toggleHotkeyVk) {
+        SetToggledVisible(false, prevToggleStyle);
+    }
+
+    StartHotkeyThread();
 
     // The event hook thread only listens for foreground changes when one of
     // these settings needs them, so restart it when they change.
