@@ -1,4 +1,3 @@
-// clang-format off
 // ==WindhawkMod==
 // @id              bluetooth-auto-toggle
 // @name            Bluetooth Auto Toggle
@@ -32,7 +31,7 @@ Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluet
 
 // ==WindhawkModSettings==
 /*
-- onlyWhenDeviceConnected: true
+- onlyWhenDeviceConnected: true 
   $name: Only When Device Connected
   $description: If enabled, Bluetooth is only cycled after a connected Bluetooth device (headset, mouse, keyboard, etc.) is detected. If disabled, Bluetooth cycles on startup regardless of connected devices.
 
@@ -77,6 +76,7 @@ Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluet
 #define _UNICODE
 #endif
 
+// clang-format off
 #include <windows.h>
 #include <shellapi.h>
 #include <windhawk_api.h>
@@ -98,15 +98,15 @@ using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Radios;
 
 struct Settings {
-    bool onlyWhenDeviceConnected;
-    int delayAfterDeviceConnectedMs;
-    int deviceWaitTimeoutSec;
-    int startupDelayMs;
-    int toggleDelayMs;
-    int maxRetries;
-    int retryIntervalMs;
-    bool onlyOncePerSession;
-    bool forceToggleOnSettingsChange;
+  bool onlyWhenDeviceConnected;
+  int delayAfterDeviceConnectedMs;
+  int deviceWaitTimeoutSec;
+  int startupDelayMs;
+  int toggleDelayMs;
+  int maxRetries;
+  int retryIntervalMs;
+  bool onlyOncePerSession;
+  bool forceToggleOnSettingsChange;
 };
 
 static Settings g_settings;
@@ -118,356 +118,382 @@ static HANDLE g_hTriggerEvent = NULL;
 static HANDLE s_hSessionMutex = NULL;
 
 static void LoadSettings() {
-    AcquireSRWLockExclusive(&g_settingsLock);
+  AcquireSRWLockExclusive(&g_settingsLock);
 
-    g_settings.onlyWhenDeviceConnected = Wh_GetIntSetting(L"onlyWhenDeviceConnected") != 0;
+  g_settings.onlyWhenDeviceConnected =
+      Wh_GetIntSetting(L"onlyWhenDeviceConnected") != 0;
 
-    g_settings.delayAfterDeviceConnectedMs = Wh_GetIntSetting(L"delayAfterDeviceConnectedMs");
-    if (g_settings.delayAfterDeviceConnectedMs < 0) {
-        g_settings.delayAfterDeviceConnectedMs = 2000;
-    }
+  g_settings.delayAfterDeviceConnectedMs =
+      Wh_GetIntSetting(L"delayAfterDeviceConnectedMs");
+  if (g_settings.delayAfterDeviceConnectedMs < 0) {
+    g_settings.delayAfterDeviceConnectedMs = 2000;
+  }
 
-    g_settings.deviceWaitTimeoutSec = Wh_GetIntSetting(L"deviceWaitTimeoutSec");
-    if (g_settings.deviceWaitTimeoutSec < 0) {
-        g_settings.deviceWaitTimeoutSec = 60;
-    }
+  g_settings.deviceWaitTimeoutSec = Wh_GetIntSetting(L"deviceWaitTimeoutSec");
+  if (g_settings.deviceWaitTimeoutSec < 0) {
+    g_settings.deviceWaitTimeoutSec = 60;
+  }
 
-    g_settings.startupDelayMs = Wh_GetIntSetting(L"startupDelayMs");
-    if (g_settings.startupDelayMs < 0) {
-        g_settings.startupDelayMs = 2000;
-    }
+  g_settings.startupDelayMs = Wh_GetIntSetting(L"startupDelayMs");
+  if (g_settings.startupDelayMs < 0) {
+    g_settings.startupDelayMs = 2000;
+  }
 
-    g_settings.toggleDelayMs = Wh_GetIntSetting(L"toggleDelayMs");
-    if (g_settings.toggleDelayMs < 50) {
-        g_settings.toggleDelayMs = 500;
-    }
+  g_settings.toggleDelayMs = Wh_GetIntSetting(L"toggleDelayMs");
+  if (g_settings.toggleDelayMs < 50) {
+    g_settings.toggleDelayMs = 500;
+  }
 
-    g_settings.maxRetries = Wh_GetIntSetting(L"maxRetries");
-    if (g_settings.maxRetries < 1) {
-        g_settings.maxRetries = 10;
-    }
+  g_settings.maxRetries = Wh_GetIntSetting(L"maxRetries");
+  if (g_settings.maxRetries < 1) {
+    g_settings.maxRetries = 10;
+  }
 
-    g_settings.retryIntervalMs = Wh_GetIntSetting(L"retryIntervalMs");
-    if (g_settings.retryIntervalMs < 50) {
-        g_settings.retryIntervalMs = 500;
-    }
+  g_settings.retryIntervalMs = Wh_GetIntSetting(L"retryIntervalMs");
+  if (g_settings.retryIntervalMs < 50) {
+    g_settings.retryIntervalMs = 500;
+  }
 
-    g_settings.onlyOncePerSession = Wh_GetIntSetting(L"onlyOncePerSession") != 0;
-    g_settings.forceToggleOnSettingsChange = Wh_GetIntSetting(L"forceToggleOnSettingsChange") != 0;
+  g_settings.onlyOncePerSession = Wh_GetIntSetting(L"onlyOncePerSession") != 0;
+  g_settings.forceToggleOnSettingsChange =
+      Wh_GetIntSetting(L"forceToggleOnSettingsChange") != 0;
 
-    ReleaseSRWLockExclusive(&g_settingsLock);
+  ReleaseSRWLockExclusive(&g_settingsLock);
 
-    Wh_Log(L"Settings: onlyWhenConnected=%d, delayAfterConn=%dms, waitTimeout=%ds, startupDelay=%dms, toggleDelay=%dms, onlyOnce=%d",
-           (int)g_settings.onlyWhenDeviceConnected, g_settings.delayAfterDeviceConnectedMs,
-           g_settings.deviceWaitTimeoutSec, g_settings.startupDelayMs,
-           g_settings.toggleDelayMs, (int)g_settings.onlyOncePerSession);
+  Wh_Log(L"Settings: onlyWhenConnected=%d, delayAfterConn=%dms, "
+         L"waitTimeout=%ds, startupDelay=%dms, toggleDelay=%dms, onlyOnce=%d",
+         (int)g_settings.onlyWhenDeviceConnected,
+         g_settings.delayAfterDeviceConnectedMs,
+         g_settings.deviceWaitTimeoutSec, g_settings.startupDelayMs,
+         g_settings.toggleDelayMs, (int)g_settings.onlyOncePerSession);
 }
 
 static bool HasToggledInThisSession() {
-    HANDLE hMutex = OpenMutexW(MUTEX_ALL_ACCESS, FALSE, L"Local\\Windhawk_BluetoothAutoToggle_SessionExecuted");
-    if (hMutex) {
-        CloseHandle(hMutex);
-        return true;
-    }
-    return false;
+  HANDLE hMutex =
+      OpenMutexW(MUTEX_ALL_ACCESS, FALSE,
+                 L"Local\\Windhawk_BluetoothAutoToggle_SessionExecuted");
+  if (hMutex) {
+    CloseHandle(hMutex);
+    return true;
+  }
+  return false;
 }
 
 static void MarkToggledInThisSession() {
-    if (!s_hSessionMutex) {
-        s_hSessionMutex = CreateMutexW(NULL, TRUE, L"Local\\Windhawk_BluetoothAutoToggle_SessionExecuted");
-    }
+  if (!s_hSessionMutex) {
+    s_hSessionMutex = CreateMutexW(
+        NULL, TRUE, L"Local\\Windhawk_BluetoothAutoToggle_SessionExecuted");
+  }
 }
 
-static bool GetFirstConnectedBluetoothDevice(std::wstring& outName) {
-    try {
-        // 1. Check Classic Bluetooth connected devices
-        auto aqsClassic = BluetoothDevice::GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus::Connected);
-        auto devicesClassic = DeviceInformation::FindAllAsync(aqsClassic).get();
-        if (devicesClassic.Size() > 0) {
-            outName = devicesClassic.GetAt(0).Name().c_str();
-            return true;
-        }
-
-        // 2. Check BLE connected devices
-        auto aqsBle = BluetoothLEDevice::GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus::Connected);
-        auto devicesBle = DeviceInformation::FindAllAsync(aqsBle).get();
-        if (devicesBle.Size() > 0) {
-            outName = devicesBle.GetAt(0).Name().c_str();
-            return true;
-        }
-    } catch (const winrt::hresult_error& ex) {
-        Wh_Log(L"Exception checking connected devices: 0x%08X (%s)",
-               (unsigned int)ex.code(), ex.message().c_str());
+static bool GetFirstConnectedBluetoothDevice(std::wstring &outName) {
+  try {
+    // 1. Check Classic Bluetooth connected devices
+    auto aqsClassic = BluetoothDevice::GetDeviceSelectorFromConnectionStatus(
+        BluetoothConnectionStatus::Connected);
+    auto devicesClassic = DeviceInformation::FindAllAsync(aqsClassic).get();
+    if (devicesClassic.Size() > 0) {
+      outName = devicesClassic.GetAt(0).Name().c_str();
+      return true;
     }
-    return false;
+
+    // 2. Check BLE connected devices
+    auto aqsBle = BluetoothLEDevice::GetDeviceSelectorFromConnectionStatus(
+        BluetoothConnectionStatus::Connected);
+    auto devicesBle = DeviceInformation::FindAllAsync(aqsBle).get();
+    if (devicesBle.Size() > 0) {
+      outName = devicesBle.GetAt(0).Name().c_str();
+      return true;
+    }
+  } catch (const winrt::hresult_error &ex) {
+    Wh_Log(L"Exception checking connected devices: 0x%08X (%s)",
+           (unsigned int)ex.code(), ex.message().c_str());
+  }
+  return false;
 }
 
 static void PerformBluetoothToggle() {
-    Settings cfg;
-    AcquireSRWLockShared(&g_settingsLock);
-    cfg = g_settings;
-    ReleaseSRWLockShared(&g_settingsLock);
+  Settings cfg;
+  AcquireSRWLockShared(&g_settingsLock);
+  cfg = g_settings;
+  ReleaseSRWLockShared(&g_settingsLock);
 
-    if (cfg.onlyOncePerSession && HasToggledInThisSession()) {
-        Wh_Log(L"Bluetooth has already been toggled in this logon session. Skipping.");
+  if (cfg.onlyOncePerSession && HasToggledInThisSession()) {
+    Wh_Log(
+        L"Bluetooth has already been toggled in this logon session. Skipping.");
+    return;
+  }
+
+  if (cfg.startupDelayMs > 0) {
+    Wh_Log(L"Waiting initial startup delay of %d ms...", cfg.startupDelayMs);
+    if (WaitForSingleObject(g_hStopEvent, cfg.startupDelayMs) ==
+        WAIT_OBJECT_0) {
+      Wh_Log(L"Stop event signaled during startup delay.");
+      return;
+    }
+  }
+
+  // If configured to only toggle when a device is connected:
+  if (cfg.onlyWhenDeviceConnected) {
+    Wh_Log(L"Monitoring for connected Bluetooth device (timeout: %d s)...",
+           cfg.deviceWaitTimeoutSec);
+    std::wstring connectedDeviceName;
+    DWORD startTick = GetTickCount();
+    bool foundDevice = false;
+
+    while (true) {
+      if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
         return;
-    }
+      }
 
-    if (cfg.startupDelayMs > 0) {
-        Wh_Log(L"Waiting initial startup delay of %d ms...", cfg.startupDelayMs);
-        if (WaitForSingleObject(g_hStopEvent, cfg.startupDelayMs) == WAIT_OBJECT_0) {
-            Wh_Log(L"Stop event signaled during startup delay.");
-            return;
+      if (GetFirstConnectedBluetoothDevice(connectedDeviceName)) {
+        foundDevice = true;
+        Wh_Log(L"Connected Bluetooth device detected: \"%s\"",
+               connectedDeviceName.c_str());
+        break;
+      }
+
+      if (cfg.deviceWaitTimeoutSec > 0) {
+        DWORD elapsedSec = (GetTickCount() - startTick) / 1000;
+        if (elapsedSec >= (DWORD)cfg.deviceWaitTimeoutSec) {
+          Wh_Log(L"No Bluetooth device connected within timeout window (%d s). "
+                 L"Skipping toggle.",
+                 cfg.deviceWaitTimeoutSec);
+          return;
         }
-    }
+      }
 
-    // If configured to only toggle when a device is connected:
-    if (cfg.onlyWhenDeviceConnected) {
-        Wh_Log(L"Monitoring for connected Bluetooth device (timeout: %d s)...", cfg.deviceWaitTimeoutSec);
-        std::wstring connectedDeviceName;
-        DWORD startTick = GetTickCount();
-        bool foundDevice = false;
-
-        while (true) {
-            if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
-                return;
-            }
-
-            if (GetFirstConnectedBluetoothDevice(connectedDeviceName)) {
-                foundDevice = true;
-                Wh_Log(L"Connected Bluetooth device detected: \"%s\"", connectedDeviceName.c_str());
-                break;
-            }
-
-            if (cfg.deviceWaitTimeoutSec > 0) {
-                DWORD elapsedSec = (GetTickCount() - startTick) / 1000;
-                if (elapsedSec >= (DWORD)cfg.deviceWaitTimeoutSec) {
-                    Wh_Log(L"No Bluetooth device connected within timeout window (%d s). Skipping toggle.",
-                           cfg.deviceWaitTimeoutSec);
-                    return;
-                }
-            }
-
-            // Wait 1 second before re-checking, or until stop event
-            if (WaitForSingleObject(g_hStopEvent, 1000) == WAIT_OBJECT_0) {
-                return;
-            }
-        }
-
-        if (!foundDevice) {
-            return;
-        }
-
-        // Wait configured delay after device is found (the "within seconds" settle time)
-        if (cfg.delayAfterDeviceConnectedMs > 0) {
-            Wh_Log(L"Waiting %d ms settle time after device connection before toggling...",
-                   cfg.delayAfterDeviceConnectedMs);
-            if (WaitForSingleObject(g_hStopEvent, cfg.delayAfterDeviceConnectedMs) == WAIT_OBJECT_0) {
-                return;
-            }
-        }
-    }
-
-    // Locate Bluetooth radio(s) with retries
-    std::vector<Radio> targetRadios;
-    for (int attempt = 1; attempt <= cfg.maxRetries; ++attempt) {
-        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
-            return;
-        }
-
-        try {
-            RadioAccessStatus access = Radio::RequestAccessAsync().get();
-            if (access == RadioAccessStatus::Allowed) {
-                auto radios = Radio::GetRadiosAsync().get();
-                for (const auto& r : radios) {
-                    if (r.Kind() == RadioKind::Bluetooth) {
-                        targetRadios.push_back(r);
-                    }
-                }
-            } else {
-                Wh_Log(L"Radio::RequestAccessAsync returned status: %d (attempt %d/%d)",
-                       (int)access, attempt, cfg.maxRetries);
-            }
-        } catch (const winrt::hresult_error& ex) {
-            Wh_Log(L"Exception during radio discovery (attempt %d): 0x%08X (%s)",
-                   attempt, (unsigned int)ex.code(), ex.message().c_str());
-        }
-
-        if (!targetRadios.empty()) {
-            Wh_Log(L"Found %u Bluetooth radio(s) on attempt %d.", (unsigned int)targetRadios.size(), attempt);
-            break;
-        }
-
-        if (attempt < cfg.maxRetries) {
-            Wh_Log(L"Bluetooth radio not found yet (attempt %d/%d). Retrying in %d ms...",
-                   attempt, cfg.maxRetries, cfg.retryIntervalMs);
-            if (WaitForSingleObject(g_hStopEvent, cfg.retryIntervalMs) == WAIT_OBJECT_0) {
-                return;
-            }
-        }
-    }
-
-    if (targetRadios.empty()) {
-        Wh_Log(L"No Bluetooth radio found after %d detection attempts.", cfg.maxRetries);
+      // Wait 1 second before re-checking, or until stop event
+      if (WaitForSingleObject(g_hStopEvent, 1000) == WAIT_OBJECT_0) {
         return;
+      }
     }
 
-    // Step 1: Turn Bluetooth OFF
-    for (const auto& radio : targetRadios) {
-        try {
-            std::wstring name = radio.Name().c_str();
-            RadioState state = radio.State();
-            Wh_Log(L"Adapter \"%s\" (State: %d). Commanding OFF...", name.c_str(), (int)state);
-
-            RadioAccessStatus res = radio.SetStateAsync(RadioState::Off).get();
-            Wh_Log(L"Adapter \"%s\" -> SetStateAsync(Off) status: %d", name.c_str(), (int)res);
-        } catch (const winrt::hresult_error& ex) {
-            Wh_Log(L"Error commanding Bluetooth OFF: 0x%08X (%s)",
-                   (unsigned int)ex.code(), ex.message().c_str());
-        }
+    if (!foundDevice) {
+      return;
     }
 
-    // Step 2: Wait the configured milliseconds between OFF and ON
-    Wh_Log(L"Waiting %d ms before turning Bluetooth back ON...", cfg.toggleDelayMs);
-    if (WaitForSingleObject(g_hStopEvent, cfg.toggleDelayMs) == WAIT_OBJECT_0) {
-        Wh_Log(L"Stop event signaled during toggle delay; aborting.");
+    // Wait configured delay after device is found (the "within seconds" settle
+    // time)
+    if (cfg.delayAfterDeviceConnectedMs > 0) {
+      Wh_Log(L"Waiting %d ms settle time after device connection before "
+             L"toggling...",
+             cfg.delayAfterDeviceConnectedMs);
+      if (WaitForSingleObject(g_hStopEvent, cfg.delayAfterDeviceConnectedMs) ==
+          WAIT_OBJECT_0) {
         return;
+      }
+    }
+  }
+
+  // Locate Bluetooth radio(s) with retries
+  std::vector<Radio> targetRadios;
+  for (int attempt = 1; attempt <= cfg.maxRetries; ++attempt) {
+    if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+      return;
     }
 
-    // Step 3: Turn Bluetooth back ON
-    for (const auto& radio : targetRadios) {
-        try {
-            std::wstring name = radio.Name().c_str();
-            Wh_Log(L"Adapter \"%s\". Commanding back ON...", name.c_str());
-
-            RadioAccessStatus res = radio.SetStateAsync(RadioState::On).get();
-            Wh_Log(L"Adapter \"%s\" -> SetStateAsync(On) status: %d", name.c_str(), (int)res);
-
-            RadioState finalState = radio.State();
-            Wh_Log(L"Adapter \"%s\" final state: %d (%s)",
-                   name.c_str(), (int)finalState,
-                   finalState == RadioState::On ? L"ON" : L"NOT ON");
-        } catch (const winrt::hresult_error& ex) {
-            Wh_Log(L"Error commanding Bluetooth ON: 0x%08X (%s)",
-                   (unsigned int)ex.code(), ex.message().c_str());
+    try {
+      RadioAccessStatus access = Radio::RequestAccessAsync().get();
+      if (access == RadioAccessStatus::Allowed) {
+        auto radios = Radio::GetRadiosAsync().get();
+        for (const auto &r : radios) {
+          if (r.Kind() == RadioKind::Bluetooth) {
+            targetRadios.push_back(r);
+          }
         }
+      } else {
+        Wh_Log(L"Radio::RequestAccessAsync returned status: %d (attempt %d/%d)",
+               (int)access, attempt, cfg.maxRetries);
+      }
+    } catch (const winrt::hresult_error &ex) {
+      Wh_Log(L"Exception during radio discovery (attempt %d): 0x%08X (%s)",
+             attempt, (unsigned int)ex.code(), ex.message().c_str());
     }
 
-    MarkToggledInThisSession();
-    Wh_Log(L"Bluetooth automatic toggle cycle completed successfully.");
+    if (!targetRadios.empty()) {
+      Wh_Log(L"Found %u Bluetooth radio(s) on attempt %d.",
+             (unsigned int)targetRadios.size(), attempt);
+      break;
+    }
+
+    if (attempt < cfg.maxRetries) {
+      Wh_Log(L"Bluetooth radio not found yet (attempt %d/%d). Retrying in %d "
+             L"ms...",
+             attempt, cfg.maxRetries, cfg.retryIntervalMs);
+      if (WaitForSingleObject(g_hStopEvent, cfg.retryIntervalMs) ==
+          WAIT_OBJECT_0) {
+        return;
+      }
+    }
+  }
+
+  if (targetRadios.empty()) {
+    Wh_Log(L"No Bluetooth radio found after %d detection attempts.",
+           cfg.maxRetries);
+    return;
+  }
+
+  // Step 1: Turn Bluetooth OFF
+  for (const auto &radio : targetRadios) {
+    try {
+      std::wstring name = radio.Name().c_str();
+      RadioState state = radio.State();
+      Wh_Log(L"Adapter \"%s\" (State: %d). Commanding OFF...", name.c_str(),
+             (int)state);
+
+      RadioAccessStatus res = radio.SetStateAsync(RadioState::Off).get();
+      Wh_Log(L"Adapter \"%s\" -> SetStateAsync(Off) status: %d", name.c_str(),
+             (int)res);
+    } catch (const winrt::hresult_error &ex) {
+      Wh_Log(L"Error commanding Bluetooth OFF: 0x%08X (%s)",
+             (unsigned int)ex.code(), ex.message().c_str());
+    }
+  }
+
+  // Step 2: Wait the configured milliseconds between OFF and ON
+  Wh_Log(L"Waiting %d ms before turning Bluetooth back ON...",
+         cfg.toggleDelayMs);
+  if (WaitForSingleObject(g_hStopEvent, cfg.toggleDelayMs) == WAIT_OBJECT_0) {
+    Wh_Log(L"Stop event signaled during toggle delay; aborting.");
+    return;
+  }
+
+  // Step 3: Turn Bluetooth back ON
+  for (const auto &radio : targetRadios) {
+    try {
+      std::wstring name = radio.Name().c_str();
+      Wh_Log(L"Adapter \"%s\". Commanding back ON...", name.c_str());
+
+      RadioAccessStatus res = radio.SetStateAsync(RadioState::On).get();
+      Wh_Log(L"Adapter \"%s\" -> SetStateAsync(On) status: %d", name.c_str(),
+             (int)res);
+
+      RadioState finalState = radio.State();
+      Wh_Log(L"Adapter \"%s\" final state: %d (%s)", name.c_str(),
+             (int)finalState, finalState == RadioState::On ? L"ON" : L"NOT ON");
+    } catch (const winrt::hresult_error &ex) {
+      Wh_Log(L"Error commanding Bluetooth ON: 0x%08X (%s)",
+             (unsigned int)ex.code(), ex.message().c_str());
+    }
+  }
+
+  MarkToggledInThisSession();
+  Wh_Log(L"Bluetooth automatic toggle cycle completed successfully.");
 }
 
 static DWORD WINAPI BluetoothWorkerThread(LPVOID lpParam) {
-    Wh_Log(L"Bluetooth worker thread started.");
+  Wh_Log(L"Bluetooth worker thread started.");
 
-    try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    } catch (const winrt::hresult_error& ex) {
-        Wh_Log(L"Failed to initialize WinRT apartment: 0x%08X", (unsigned int)ex.code());
-        return 1;
+  try {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+  } catch (const winrt::hresult_error &ex) {
+    Wh_Log(L"Failed to initialize WinRT apartment: 0x%08X",
+           (unsigned int)ex.code());
+    return 1;
+  }
+
+  HANDLE waitHandles[] = {g_hStopEvent, g_hTriggerEvent};
+
+  while (true) {
+    DWORD waitRes = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+    if (waitRes == WAIT_OBJECT_0) {
+      Wh_Log(L"Worker thread stop event signaled.");
+      break;
+    } else if (waitRes == WAIT_OBJECT_0 + 1) {
+      Wh_Log(L"Toggle trigger event signaled.");
+      PerformBluetoothToggle();
+    } else {
+      break;
     }
+  }
 
-    HANDLE waitHandles[] = { g_hStopEvent, g_hTriggerEvent };
+  try {
+    winrt::uninit_apartment();
+  } catch (...) {
+  }
 
-    while (true) {
-        DWORD waitRes = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
-        if (waitRes == WAIT_OBJECT_0) {
-            Wh_Log(L"Worker thread stop event signaled.");
-            break;
-        } else if (waitRes == WAIT_OBJECT_0 + 1) {
-            Wh_Log(L"Toggle trigger event signaled.");
-            PerformBluetoothToggle();
-        } else {
-            break;
-        }
-    }
-
-    try {
-        winrt::uninit_apartment();
-    } catch (...) {
-    }
-
-    Wh_Log(L"Bluetooth worker thread exiting.");
-    return 0;
+  Wh_Log(L"Bluetooth worker thread exiting.");
+  return 0;
 }
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Bluetooth Auto Toggle tool mod initializing...");
+  Wh_Log(L"Bluetooth Auto Toggle tool mod initializing...");
 
-    LoadSettings();
+  LoadSettings();
 
-    g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if (!g_hStopEvent) {
-        Wh_Log(L"CreateEvent (stop) failed: %d", GetLastError());
-        return FALSE;
-    }
+  g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+  if (!g_hStopEvent) {
+    Wh_Log(L"CreateEvent (stop) failed: %d", GetLastError());
+    return FALSE;
+  }
 
-    // Auto-reset event, initially signaled to trigger on startup
-    g_hTriggerEvent = CreateEventW(NULL, FALSE, TRUE, NULL);
-    if (!g_hTriggerEvent) {
-        Wh_Log(L"CreateEvent (trigger) failed: %d", GetLastError());
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = NULL;
-        return FALSE;
-    }
+  // Auto-reset event, initially signaled to trigger on startup
+  g_hTriggerEvent = CreateEventW(NULL, FALSE, TRUE, NULL);
+  if (!g_hTriggerEvent) {
+    Wh_Log(L"CreateEvent (trigger) failed: %d", GetLastError());
+    CloseHandle(g_hStopEvent);
+    g_hStopEvent = NULL;
+    return FALSE;
+  }
 
-    g_hWorkerThread = CreateThread(NULL, 0, BluetoothWorkerThread, NULL, 0, NULL);
-    if (!g_hWorkerThread) {
-        Wh_Log(L"CreateThread failed: %d", GetLastError());
-        CloseHandle(g_hTriggerEvent);
-        g_hTriggerEvent = NULL;
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = NULL;
-        return FALSE;
-    }
+  g_hWorkerThread = CreateThread(NULL, 0, BluetoothWorkerThread, NULL, 0, NULL);
+  if (!g_hWorkerThread) {
+    Wh_Log(L"CreateThread failed: %d", GetLastError());
+    CloseHandle(g_hTriggerEvent);
+    g_hTriggerEvent = NULL;
+    CloseHandle(g_hStopEvent);
+    g_hStopEvent = NULL;
+    return FALSE;
+  }
 
-    Wh_Log(L"Bluetooth Auto Toggle tool mod initialized successfully.");
-    return TRUE;
+  Wh_Log(L"Bluetooth Auto Toggle tool mod initialized successfully.");
+  return TRUE;
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"Bluetooth Auto Toggle tool mod uninitializing...");
+  Wh_Log(L"Bluetooth Auto Toggle tool mod uninitializing...");
 
-    if (g_hStopEvent) {
-        SetEvent(g_hStopEvent);
-    }
+  if (g_hStopEvent) {
+    SetEvent(g_hStopEvent);
+  }
 
-    if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, 5000);
-        CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = NULL;
-    }
+  if (g_hWorkerThread) {
+    WaitForSingleObject(g_hWorkerThread, 5000);
+    CloseHandle(g_hWorkerThread);
+    g_hWorkerThread = NULL;
+  }
 
-    if (g_hStopEvent) {
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = NULL;
-    }
+  if (g_hStopEvent) {
+    CloseHandle(g_hStopEvent);
+    g_hStopEvent = NULL;
+  }
 
-    if (g_hTriggerEvent) {
-        CloseHandle(g_hTriggerEvent);
-        g_hTriggerEvent = NULL;
-    }
+  if (g_hTriggerEvent) {
+    CloseHandle(g_hTriggerEvent);
+    g_hTriggerEvent = NULL;
+  }
 
-    if (s_hSessionMutex) {
-        CloseHandle(s_hSessionMutex);
-        s_hSessionMutex = NULL;
-    }
+  if (s_hSessionMutex) {
+    CloseHandle(s_hSessionMutex);
+    s_hSessionMutex = NULL;
+  }
 
-    Wh_Log(L"Bluetooth Auto Toggle tool mod uninitialized.");
+  Wh_Log(L"Bluetooth Auto Toggle tool mod uninitialized.");
 }
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"Settings changed notification received.");
-    LoadSettings();
+  Wh_Log(L"Settings changed notification received.");
+  LoadSettings();
 
-    AcquireSRWLockShared(&g_settingsLock);
-    bool force = g_settings.forceToggleOnSettingsChange;
-    ReleaseSRWLockShared(&g_settingsLock);
+  AcquireSRWLockShared(&g_settingsLock);
+  bool force = g_settings.forceToggleOnSettingsChange;
+  ReleaseSRWLockShared(&g_settingsLock);
 
-    if (force && g_hTriggerEvent) {
-        Wh_Log(L"forceToggleOnSettingsChange enabled, triggering toggle test...");
-        SetEvent(g_hTriggerEvent);
-    }
+  if (force && g_hTriggerEvent) {
+    Wh_Log(L"forceToggleOnSettingsChange enabled, triggering toggle test...");
+    SetEvent(g_hTriggerEvent);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -488,161 +514,161 @@ bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
+  Wh_Log(L">");
+  ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
+  DWORD sessionId;
+  if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+      sessionId == 0) {
+    return FALSE;
+  }
+
+  bool isExcluded = false;
+  bool isToolModProcess = false;
+  bool isCurrentToolModProcess = false;
+  int argc;
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  if (!argv) {
+    Wh_Log(L"CommandLineToArgvW failed");
+    return FALSE;
+  }
+
+  for (int i = 1; i < argc; i++) {
+    if (wcscmp(argv[i], L"-service") == 0 ||
+        wcscmp(argv[i], L"-service-start") == 0 ||
+        wcscmp(argv[i], L"-service-stop") == 0) {
+      isExcluded = true;
+      break;
+    }
+  }
+
+  for (int i = 1; i < argc - 1; i++) {
+    if (wcscmp(argv[i], L"-tool-mod") == 0) {
+      isToolModProcess = true;
+      if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+        isCurrentToolModProcess = true;
+      }
+      break;
+    }
+  }
+
+  LocalFree(argv);
+
+  if (isExcluded) {
+    return FALSE;
+  }
+
+  if (isCurrentToolModProcess) {
+    g_toolModProcessMutex =
+        CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+    if (!g_toolModProcessMutex) {
+      Wh_Log(L"CreateMutex failed");
+      ExitProcess(1);
     }
 
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+      Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+      ExitProcess(1);
     }
 
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
+    if (!WhTool_ModInit()) {
+      ExitProcess(1);
     }
 
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
+    IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandleW(nullptr);
+    IMAGE_NT_HEADERS *ntHeaders =
+        (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
 
-    LocalFree(argv);
+    DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+    void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
 
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandleW(nullptr);
-        IMAGE_NT_HEADERS *ntHeaders =
-            (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
+    Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
     return TRUE;
+  }
+
+  if (isToolModProcess) {
+    return FALSE;
+  }
+
+  g_isToolModProcessLauncher = true;
+  return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
+  if (!g_isToolModProcessLauncher) {
+    return;
+  }
 
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
-    case 0:
-    case ARRAYSIZE(currentProcessPath):
-        Wh_Log(L"GetModuleFileName failed");
-        return;
-    }
+  WCHAR currentProcessPath[MAX_PATH];
+  switch (GetModuleFileNameW(nullptr, currentProcessPath,
+                             ARRAYSIZE(currentProcessPath))) {
+  case 0:
+  case ARRAYSIZE(currentProcessPath):
+    Wh_Log(L"GetModuleFileName failed");
+    return;
+  }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
-                      1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
+  WCHAR commandLine[MAX_PATH + 2 +
+                    (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                    1];
+  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+             WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+  HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+  if (!kernelModule) {
+    kernelModule = GetModuleHandleW(L"kernel32.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
+      Wh_Log(L"No kernelbase.dll/kernel32.dll");
+      return;
     }
+  }
 
-    using CreateProcessInternalW_t = BOOL(WINAPI *)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
+  using CreateProcessInternalW_t = BOOL(WINAPI *)(
+      HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+      LPSECURITY_ATTRIBUTES lpProcessAttributes,
+      LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+      DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+      LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+      PHANDLE hRestrictedUserToken);
+  CreateProcessInternalW_t pCreateProcessInternalW =
+      (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                               "CreateProcessInternalW");
+  if (!pCreateProcessInternalW) {
+    Wh_Log(L"No CreateProcessInternalW");
+    return;
+  }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
+  STARTUPINFOW si{
+      .cb = sizeof(STARTUPINFOW),
+      .dwFlags = STARTF_FORCEOFFFEEDBACK,
+  };
+  PROCESS_INFORMATION pi;
+  if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                               nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                               nullptr, nullptr, &si, &pi, nullptr)) {
+    Wh_Log(L"CreateProcess failed");
+    return;
+  }
 
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
 
-    WhTool_ModSettingsChanged();
+  WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
 
-    WhTool_ModUninit();
-    ExitProcess(0);
+  WhTool_ModUninit();
+  ExitProcess(0);
 }
