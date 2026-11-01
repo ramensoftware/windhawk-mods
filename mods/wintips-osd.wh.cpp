@@ -10,7 +10,7 @@
 // @homepage        https://github.com/DoYouNatureQ/WinTips
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -ladvapi32 -lshell32 -lshcore -ldwmapi
+// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
