@@ -412,7 +412,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::Wh_SetFunctionHookT(
+    WindhawkUtils::SetFunctionHook(
         target, WindowsCreateString_Hook, &g_windowsCreateStringOriginal);
 
     Wh_Log(L"[SearchDefaultBrowser] Hook installed");
