@@ -154,28 +154,22 @@ File Operation Styler has been tested on Windows 11 25H2 and 26H2 x64, including
   - footerColor: ""
     $name: Solid footer custom color
     $description: Used only when Solid footer color preset is Custom. Enter a hex color such as #1C3346.
-    #! $format: colorRgb
-    #! $showIf: {preset: glass, footerStyle: solid, footerColorPreset: custom}
+        #! $showIf: {preset: glass, footerStyle: solid, footerColorPreset: custom}
   - colors:
     - backgroundOverride: ""
       $name: Background
-      #! $format: colorRgb
-    - accentOverride: ""
+          - accentOverride: ""
       $name: Accent
-      #! $format: colorRgb
-      $description: Circle, progress bar, graph, and links.
+            $description: Circle, progress bar, graph, and links.
     - primaryTextOverride: ""
       $name: Main text
-      #! $format: colorRgb
-      $description: Large numbers and values.
+            $description: Large numbers and values.
     - secondaryTextOverride: ""
       $name: Secondary text
-      #! $format: colorRgb
-      $description: Labels and smaller text.
+            $description: Labels and smaller text.
     - inactiveOverride: ""
       $name: Track / inactive
-      #! $format: colorRgb
-      $description: Circle track and progress track.
+            $description: Circle track and progress track.
     $name: Colors
     $description: "Leave blank to use the theme color. Enter a hex color such as #2D8BE0."
   - style:
