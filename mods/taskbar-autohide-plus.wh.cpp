@@ -6,7 +6,7 @@
 // @author          Areeexx
 // @github          https://github.com/Areeexx
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -luser32
+// @compilerOptions -lshell32 -luser32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
  
@@ -28,9 +28,10 @@ you don't have to toggle it by hand.
 * The mod remembers the state your setting had when it started. Whenever the
   rule says "hide", auto-hide is turned on; otherwise your original state is
   restored. If the rule never requires a change, nothing is written.
-* The original state is saved before the first change. If the mod exits
-  uncleanly (for example Explorer or Windows is shut down while the mod is
-  active), the original state is restored the next time the mod starts.
+* The original state is saved (separately for each Windows user) before the
+  first change. If the mod exits uncleanly (for example Windows is shut down
+  while the mod is active), the leftover is detected the next time the mod
+  starts for that user and the original state is brought back.
 * If you change the Windows setting yourself while the mod is running, the mod
   treats your choice as the new "original" state.
 * When the mod is disabled or unloaded, your original state is always restored.
@@ -104,6 +105,7 @@ The Windows auto-hide setting is shared by all monitors.
  
 #include <windows.h>
 #include <shellapi.h>
+#include <sddl.h>
 #include <wchar.h>
  
 enum Mode { MODE_ALWAYS, MODE_MAXIMIZED, MODE_HOTKEY, MODE_OFF };
@@ -136,6 +138,8 @@ static bool            g_orig = false;          // user's auto-hide state
 static int             g_lastApplied = -1;      // state last written by the mod, -1 = none
 static ULONGLONG       g_pendingSince = 0;      // when a pending "hide" started
 static int             g_lastMax = -1;          // last observed "active window maximized"
+static WCHAR           g_dirtyName[256] = L"dirty";         // per-user value names
+static WCHAR           g_origName[256]  = L"origAutoHide";
  
 // ---------------------------------------------------------------- settings
  
@@ -233,6 +237,33 @@ static void DisarmTimer() {
     }
 }
  
+// Mod storage is machine-wide, while the taskbar setting is per user, so the
+// value names carry the SID of the current user.
+static void InitValueNames() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return;
+ 
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    if (size) {
+        BYTE* buf = (BYTE*)LocalAlloc(LMEM_FIXED, size);
+        if (buf) {
+            if (GetTokenInformation(token, TokenUser, buf, size, &size)) {
+                PWSTR sid = nullptr;
+                if (ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
+                    if (wcslen(sid) < 200) {
+                        swprintf_s(g_dirtyName, L"dirty_%s", sid);
+                        swprintf_s(g_origName, L"origAutoHide_%s", sid);
+                    }
+                    LocalFree(sid);
+                }
+            }
+            LocalFree(buf);
+        }
+    }
+    CloseHandle(token);
+}
+ 
 // Waits until the taskbar exists, undoes a leftover from an unclean exit and
 // captures the user's original state. Returns false while the taskbar is
 // not available yet.
@@ -240,11 +271,23 @@ static bool EnsureReady() {
     if (g_ready) return true;
     if (!GetTaskbar()) return false;
  
-    if (Wh_GetIntValue(L"dirty", 0)) {
-        bool saved = Wh_GetIntValue(L"origAutoHide", 0) != 0;
-        Wh_Log(L"Restoring leftover state from previous run: %d", (int)saved);
-        if (GetAutoHide() != saved) SetAutoHide(saved);
-        Wh_SetIntValue(L"dirty", 0);
+    if (Wh_GetIntValue(g_dirtyName, 0)) {
+        // The previous run ended without restoring the setting. Adopt the
+        // leftover as the state the mod itself applied and remember the real
+        // original; the next Update either keeps it (if the rules still want
+        // auto-hide) or restores the original with a single write.
+        bool saved = Wh_GetIntValue(g_origName, 0) != 0;
+        bool cur = GetAutoHide();
+        Wh_Log(L"Leftover from previous run: original=%d current=%d",
+               (int)saved, (int)cur);
+        g_orig = saved;
+        if (cur != saved) {
+            g_lastApplied = cur ? 1 : 0;
+        } else {
+            Wh_SetIntValue(g_dirtyName, 0);
+        }
+        g_ready = true;
+        return true;
     }
  
     g_orig = GetAutoHide();
@@ -277,13 +320,13 @@ static bool DesiredHide() {
 static void ApplyAutoHide(bool value) {
     // Persist the original state before the first change away from it.
     if (value != g_orig) {
-        Wh_SetIntValue(L"origAutoHide", g_orig ? 1 : 0);
-        Wh_SetIntValue(L"dirty", 1);
+        Wh_SetIntValue(g_origName, g_orig ? 1 : 0);
+        Wh_SetIntValue(g_dirtyName, 1);
     }
     SetAutoHide(value);
     g_lastApplied = value ? 1 : 0;
     if (value == g_orig) {
-        Wh_SetIntValue(L"dirty", 0);
+        Wh_SetIntValue(g_dirtyName, 0);
     }
 }
  
@@ -303,7 +346,7 @@ static void Update() {
         Wh_Log(L"Setting changed externally -> %d", (int)cur);
         g_orig = cur;
         g_lastApplied = -1;
-        Wh_SetIntValue(L"dirty", 0);
+        Wh_SetIntValue(g_dirtyName, 0);
     }
  
     bool want   = DesiredHide();
@@ -343,7 +386,7 @@ static void RestoreOriginal() {
         }
         g_lastApplied = -1;
     }
-    Wh_SetIntValue(L"dirty", 0);
+    Wh_SetIntValue(g_dirtyName, 0);
 }
  
 // ----------------------------------------------------------------- hotkey
@@ -398,6 +441,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the queue
  
+    InitValueNames();
     LoadSettings();
     RegisterHotkeyFromSettings();
  
