@@ -34,7 +34,7 @@ Notes:
 - Commands are stored as one line per command in the mod storage folder.
 - Elevated commands expand environment variables before a best-effort
   ShellExecute runas launch.
-- The UI added by this mod is intentionally English-only.
+- The added UI follows the Windows display language (English fallback).
 */
 // ==/WindhawkModReadme==
 
@@ -42,7 +42,27 @@ Notes:
 /*
 - maxCommands: 40
   $name: Maximum saved commands
+  $name:ja-JP: 保存するコマンドの最大数
+  $name:de-DE: Maximale Anzahl gespeicherter Befehle
+  $name:es-ES: Máximo de comandos guardados
+  $name:fr-FR: Nombre maximal de commandes enregistrées
+  $name:it-IT: Numero massimo di comandi salvati
+  $name:pt-BR: Máximo de comandos salvos
+  $name:ru-RU: Максимальное количество сохранённых команд
+  $name:ko-KR: 저장할 명령의 최대 개수
+  $name:zh-CN: 已保存命令的最大数量
+  $name:zh-TW: 已儲存命令的最大數量
   $description: Maximum number of commands to keep in the saved commands list.
+  $description:ja-JP: 保存するコマンドの最大数を設定します。
+  $description:de-DE: Maximale Anzahl der Befehle, die in der gespeicherten Befehlsliste behalten werden.
+  $description:es-ES: Número máximo de comandos que se conservarán en la lista de comandos guardados.
+  $description:fr-FR: Nombre maximal de commandes à conserver dans la liste des commandes enregistrées.
+  $description:it-IT: Numero massimo di comandi da mantenere nell'elenco dei comandi salvati.
+  $description:pt-BR: Número máximo de comandos a manter na lista de comandos salvos.
+  $description:ru-RU: Максимальное количество команд, сохраняемых в списке.
+  $description:ko-KR: 저장된 명령 목록에 유지할 명령의 최대 개수입니다.
+  $description:zh-CN: 保留在已保存命令列表中的最大命令数量。
+  $description:zh-TW: 保留在已儲存命令清單中的最大命令數量。
 */
 // ==/WindhawkModSettings==
 
@@ -84,6 +104,64 @@ const wchar_t kRunButtonInstalledProp[] =
 const wchar_t kRunDialogSubclassedProp[] =
     L"WindhawkSavedRunCommandsDialogSubclassed";
 const wchar_t kCommandsFileName[] = L"commands.txt";
+
+// The mod has no resource DLL, so keep the small UI string table here. The
+// selected table follows the Windows UI language; unsupported languages use
+// English, which also keeps the mod usable on every Windows installation.
+struct UiText {
+    PCWSTR savedCommands;
+    PCWSTR saveTypedCommand;
+    PCWSTR updateSelected;
+    PCWSTR saveCurrentCommand;
+    PCWSTR deleteSelected;
+    PCWSTR close;
+};
+
+const UiText kEnglishText = {L"Saved Commands", L"Save typed command",
+                             L"Update selected", L"Save current command",
+                             L"Delete selected", L"Close"};
+const UiText kJapaneseText = {L"保存したコマンド", L"入力したコマンドを保存",
+                              L"選択した項目を更新", L"現在のコマンドを保存",
+                              L"選択した項目を削除", L"閉じる"};
+const UiText kGermanText = {L"Gespeicherte Befehle", L"Eingegebenen Befehl speichern",
+                            L"Auswahl aktualisieren", L"Aktuellen Befehl speichern",
+                            L"Auswahl löschen", L"Schließen"};
+const UiText kSpanishText = {L"Comandos guardados", L"Guardar comando escrito",
+                             L"Actualizar selección", L"Guardar comando actual",
+                             L"Eliminar selección", L"Cerrar"};
+const UiText kFrenchText = {L"Commandes enregistrées", L"Enregistrer la commande saisie",
+                            L"Mettre à jour la sélection", L"Enregistrer la commande actuelle",
+                            L"Supprimer la sélection", L"Fermer"};
+const UiText kItalianText = {L"Comandi salvati", L"Salva comando digitato",
+                             L"Aggiorna selezione", L"Salva comando corrente",
+                             L"Elimina selezione", L"Chiudi"};
+const UiText kPortugueseText = {L"Comandos salvos", L"Salvar comando digitado",
+                                L"Atualizar seleção", L"Salvar comando atual",
+                                L"Excluir seleção", L"Fechar"};
+const UiText kRussianText = {L"Сохранённые команды", L"Сохранить введённую команду",
+                             L"Обновить выбранное", L"Сохранить текущую команду",
+                             L"Удалить выбранное", L"Закрыть"};
+const UiText kKoreanText = {L"저장된 명령", L"입력한 명령 저장",
+                            L"선택 항목 업데이트", L"현재 명령 저장",
+                            L"선택 항목 삭제", L"닫기"};
+const UiText kChineseText = {L"已保存的命令", L"保存输入的命令",
+                             L"更新所选内容", L"保存当前命令",
+                             L"删除所选内容", L"关闭"};
+
+const UiText& GetUiText() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+        case LANG_JAPANESE: return kJapaneseText;
+        case LANG_GERMAN: return kGermanText;
+        case LANG_SPANISH: return kSpanishText;
+        case LANG_FRENCH: return kFrenchText;
+        case LANG_ITALIAN: return kItalianText;
+        case LANG_PORTUGUESE: return kPortugueseText;
+        case LANG_RUSSIAN: return kRussianText;
+        case LANG_KOREAN: return kKoreanText;
+        case LANG_CHINESE: return kChineseText;
+        default: return kEnglishText;
+    }
+}
 
 HMODULE g_hModule;
 std::vector<std::wstring> g_commands;
@@ -1360,11 +1438,13 @@ void LayoutSavedWindow(HWND hwnd) {
     int margin = ScaleForWindow(hwnd, 10);
     int gap = ScaleForWindow(hwnd, 8);
     int buttonHeight = ScaleForWindow(hwnd, 24);
-    int saveButtonWidth = ScaleForWindow(hwnd, 142);
-    int saveTypedButtonWidth = ScaleForWindow(hwnd, 142);
-    int updateSelectedButtonWidth = ScaleForWindow(hwnd, 112);
-    int deleteButtonWidth = ScaleForWindow(hwnd, 100);
-    int closeButtonWidth = ScaleForWindow(hwnd, 72);
+    // Leave enough room for translated captions. Windows clips overly long
+    // captions otherwise, especially in German, Japanese, and Russian.
+    int saveButtonWidth = ScaleForWindow(hwnd, 172);
+    int saveTypedButtonWidth = ScaleForWindow(hwnd, 172);
+    int updateSelectedButtonWidth = ScaleForWindow(hwnd, 142);
+    int deleteButtonWidth = ScaleForWindow(hwnd, 122);
+    int closeButtonWidth = ScaleForWindow(hwnd, 82);
 
     int topY = margin;
     int listY = topY + buttonHeight + gap;
@@ -1591,6 +1671,7 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
 
         case WM_CREATE: {
             HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+            const UiText& text = GetUiText();
 
             HWND typedEdit = CreateWindowExW(
                 WS_EX_CLIENTEDGE, L"Edit", nullptr,
@@ -1601,7 +1682,7 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
                 g_hModule, nullptr);
 
             HWND saveTypedButton = CreateWindowExW(
-                0, L"Button", L"Save typed command",
+                0, L"Button", text.saveTypedCommand,
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 1, 1,
                 hwnd,
                 reinterpret_cast<HMENU>(
@@ -1609,7 +1690,7 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
                 g_hModule, nullptr);
 
             HWND updateSelectedButton = CreateWindowExW(
-                0, L"Button", L"Update selected",
+                0, L"Button", text.updateSelected,
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 1, 1,
                 hwnd,
                 reinterpret_cast<HMENU>(
@@ -1626,21 +1707,21 @@ LRESULT CALLBACK SavedCommandsWndProc(HWND hwnd,
                 g_hModule, nullptr);
 
             HWND saveButton = CreateWindowExW(
-                0, L"Button", L"Save current command",
+                0, L"Button", text.saveCurrentCommand,
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 1, 1,
                 hwnd,
                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kSaveButtonId)),
                 g_hModule, nullptr);
 
             HWND deleteButton = CreateWindowExW(
-                0, L"Button", L"Delete selected",
+                0, L"Button", text.deleteSelected,
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 1, 1,
                 hwnd,
                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDeleteButtonId)),
                 g_hModule, nullptr);
 
             HWND closeButton = CreateWindowExW(
-                0, L"Button", L"Close",
+                0, L"Button", text.close,
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 1, 1,
                 hwnd,
                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kCloseButtonId)),
@@ -1807,7 +1888,8 @@ void ShowSavedCommandsWindow(HWND runDialog) {
 
     HWND hwnd = CreateWindowExW(
         WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT, kSavedWindowClass,
-        L"Saved Commands", WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y,
+        GetUiText().savedCommands,
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y,
         width, height, runDialog, nullptr, g_hModule, runDialog);
 
     if (!hwnd) {
