@@ -2,9 +2,9 @@
 // @id              desktop-icon-dock
 // @name            Desktop Icon Dock
 // @name:zh-CN      桌面图标 Dock
-// @description     Turns desktop icons into a centered macOS-style dock with hover magnification and an optional glass panel
-// @description:zh-CN 将桌面图标变成居中的 macOS 风格 Dock，支持悬停放大，可选液态玻璃面板
-// @version         1.0.11
+// @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel
+// @description:zh-CN 独立的 macOS 风格 Dock：把快捷方式、文件和文件夹拖进来，拖动排序，拖出放回桌面；快捷方式会复制到 Dock 自己的目录，清理桌面不影响 Dock；可选液态玻璃面板
+// @version         1.1.0
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -16,17 +16,38 @@
 /*
 # Desktop Icon Dock
 
-Turns desktop icons into a centered macOS-style dock. A fully transparent
-background is used by default, showing only the icons; an optional Liquid Glass
-panel is available.
+Turns shortcuts, files and folders that you drag onto it into a centered
+macOS-style dock. The dock is an independent list, not a mirror of the
+desktop. A fully transparent background is used by default, showing only the
+icons; an optional Liquid Glass panel is available.
 
 ![Desktop Icon Dock preview](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg)
 
-*Example: desktop icons arranged as a centered macOS-style dock; the hovered
-icon is magnified with its label shown.*
+*Example: icons arranged as a centered macOS-style dock; the hovered icon is
+magnified with its label shown.*
 
 ## Features
 
+- **Drag to add**: drag a shortcut, file or folder from the desktop, File
+  Explorer or a `shell:Desktop` window onto the dock. It is inserted at the
+  drop position; items that are already in the dock are ignored. `.lnk` and
+  `.url` shortcuts are copied into a dock-owned folder, so deleting the
+  original shortcut from the desktop leaves the dock item intact; files,
+  folders and virtual items are referenced by path.
+- **Drag to reorder**: hold the left mouse button on an icon and drag it
+  within the dock. Icons rearrange live and the new order is saved when you
+  release the button.
+- **Drag out to put back on the desktop**: drag an item outside the dock and
+  release it over the desktop. The icon is placed at the release point. If the
+  item already lives on the desktop, its original icon is moved there;
+  otherwise a shortcut is created on the desktop and the original file or
+  folder stays where it is. Items that have no filesystem location, such as
+  the Recycle Bin, are only removed from the dock. A dock-owned shortcut copy
+  is removed after it has been placed back. Removing the last item brings back
+  the empty-state hint.
+- **Empty state**: a visible drop target is shown when the list is empty, so
+  the dock can always receive the first item. The window is never hidden just
+  because the list is empty.
 - **macOS-style hover magnification**: icons grow smoothly as the pointer
   approaches, with cosine falloff and neighboring icons spreading aside.
 - **Transparent background (default)**: only the icons and a soft drop shadow
@@ -43,30 +64,52 @@ icon is magnified with its label shown.*
 - **Native interaction**: left click opens an item; right click opens that
   item's native Explorer context menu (open, send to, create shortcut,
   properties, delete, ...).
-- **Automatic desktop sync**: items added, removed, renamed or moved on the
-  desktop appear in the dock automatically through shell change notifications,
-  ordered by their desktop grid position.
-- **Original desktop icons hidden in memory**: while the dock is active, the
-  desktop's list view is hidden; no Explorer setting or registry value is
-  changed, and the icons are shown again when the mod is unloaded.
-- **Icon cache with cleanup**: icons are cached per item path, evicted when an
-  item disappears, and refreshed when the shell reports an icon update.
+- **Independent from the desktop**: adding, removing, renaming or moving
+  desktop icons does not change the dock. Shortcuts added to the dock are
+  copied into its own folder, so even deleting them from the desktop does not
+  affect the dock; files, folders and virtual items are referenced by path.
+  The list is stored per user in the registry and survives Explorer restarts.
+- **Original desktop icons hidden in memory (optional)**: when enabled, the
+  desktop's list view is hidden while the dock is active; no Explorer setting
+  or registry value is changed, and the icons are shown again when the mod is
+  unloaded. Off by default, so the desktop remains available as a drag source.
+- **Icon cache with cleanup**: icons are cached per item path and reused;
+  virtual items such as the Recycle Bin refresh their icons periodically.
 
 ## How it works
 
-The dock does not rearrange the system desktop icons. It reads the desktop
-folder (Shell's IFolderView), draws the items itself, and hides the original
-icons by hiding the desktop's list view window in memory.
+The dock keeps its own ordered list. It does not read or rearrange the system
+desktop icons.
 
-- **Sync**: the dock listens for shell change notifications for the desktop
-  folders, so most changes appear immediately. A slow 30-second check covers
-  changes that do not raise a notification, such as a new sort order.
-- **Ordering**: items are sorted by desktop grid position (top to bottom, then
-  left to right), so the dock order matches the desktop layout and a new
-  shortcut appears at its corresponding position.
+- **Storage**: the ordered list is saved under
+  `HKCU\Software\DesktopIconDock`, value `Items` (`REG_MULTI_SZ`). Each entry
+  is a desktop-absolute parsing name, such as a full file path or a shell GUID
+  for virtual items. Shortcut entries point to copies in
+  `%LOCALAPPDATA%\DesktopIconDock\Items`; other entries point to the original
+  path. Every add, reorder and removal is written immediately.
+- **Adding**: external drags are received through an OLE drop target
+  (`IDropTarget`), supporting file drops and shell item lists. The insertion
+  position follows the pointer; `.lnk` and `.url` shortcuts are copied into
+  the dock folder first. Duplicates are skipped by parsing name.
+- **Reordering and removing**: these are handled inside the dock window with
+  mouse capture, so they also work in the transparent gaps between icons.
+- **Putting items back on the desktop**: dropping outside the panel places the
+  item at the release point. An item whose parent folder is already the user
+  or public desktop has its original icon repositioned through the desktop's
+  folder view; any other file or folder gets a uniquely named `.lnk` shortcut
+  on the user desktop (a source `.lnk` or `.url` is copied, other items get a
+  new shortcut). The original file is never moved or deleted, and a dock-owned
+  shortcut copy is removed after it has been placed back. Positioning follows
+  the system "align icons to grid" setting.
+- **Empty state**: the centered hint pill is drawn with a non-transparent
+  background and is registered as part of the same drop target.
 - **Layout**: centered horizontally at the bottom of the primary monitor,
   above the taskbar; the panel widens as items are added, and icons are
   vertically centered at rest.
+- **Maintenance**: every 30 seconds the list is resolved again, so items that
+  could not be resolved earlier are retried and virtual icons stay current.
+  Items that still cannot be resolved are skipped on screen but kept in
+  storage.
 - **Performance**: in transparent mode the pointer position is polled every
   50 ms so hover magnification also works in the gaps between icons; idle CPU
   usage is negligible.
@@ -86,8 +129,7 @@ icons by hiding the desktop's list view window in memory.
 | Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
 | Glass blur | 20 | Glass mode only: backdrop blur strength |
 | Show labels | On | Show a name pill for the hovered item |
-| Hide original desktop icons | On | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
-| Excluded items | empty | Comma-separated display names that should not appear in the dock |
+| Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
 | Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |
 
 ## Compatibility and limitations
@@ -103,26 +145,38 @@ icons by hiding the desktop's list view window in memory.
 ## Troubleshooting
 
 - **Dock missing after an Explorer restart**: the mod reloads together with
-  explorer.exe; the dock comes back within a second.
-- **A new shortcut does not appear immediately**: desktop changes are picked
-  up through shell notifications, so the item should appear within a second;
-  the 30-second fallback covers unusual changes such as a new sort order.
+  explorer.exe and restores the saved list; the dock comes back within a
+  second.
+- **The dock is empty after upgrading from 1.0.x**: this version keeps its own
+  list instead of mirroring the desktop. Drag the items you want onto the
+  empty-state hint.
+- **An item disappeared**: its stored parsing name could not be resolved (for
+  example, the referenced file or folder was deleted or renamed). Shortcuts
+  are copied into the dock folder and are not affected by deleting the
+  desktop shortcut. The entry is kept in the registry and retried; it
+  reappears if the path is available again.
+- **After dragging an item out, a shortcut appeared on the desktop**: this is
+  expected. Items that are not on the desktop are not moved; a shortcut is
+  created at the release point instead. The original file or folder is not
+  affected, and the shortcut can be deleted at any time.
 - **Settings changes seem to have no effect**: saving settings reloads and
   rebuilds the dock automatically; no Explorer restart is needed.
-- **Add an item**: put a shortcut or file on the desktop, or press Win+R and
-  enter `shell:Desktop` to open the desktop folder; the dock picks it up
-  within a second.
-- **Hide a specific item**: put its display name in "Excluded items"
-  (comma-separated).
+- **Add an item**: drag it from the desktop or any File Explorer window onto
+  the dock. You can also press Win+R and enter `shell:Desktop` to open a
+  desktop folder and drag from there.
+- **Reset the list**: close the dock's mod, delete
+  `HKCU\Software\DesktopIconDock`, and reload the mod.
 
 ## 中文说明
 
-本模组把桌面图标变成居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。
+本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。
 
-- 图标支持悬停放大、相邻图标让位和名称标签。
-- Dock 通过 shell 变更通知自动同步桌面上新增、删除、重命名和移动的项目，并按桌面网格位置排序。
-- 原始桌面图标只在 Dock 运行期间通过隐藏桌面列表视图在内存中隐藏，不会修改 Explorer 的任何设置或注册表项；卸载模组后图标自动恢复。
-- 左键打开项目，右键打开与桌面一致的资源管理器上下文菜单。
+- 从桌面、资源管理器或 `shell:Desktop` 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（`.lnk` / `.url`）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。
+- 按住图标在 Dock 内拖动可实时排序；拖到 Dock 外松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。
+- Dock 是独立列表，不再同步桌面；列表保存在 `HKCU\Software\DesktopIconDock` 的 `Items` 值中，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于 `%LOCALAPPDATA%\DesktopIconDock\Items`。
+- 图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。
+- “隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。
+- 解析失败的项目会跳过显示但保留在存储中，每 30 秒重试；快捷方式使用副本，不受桌面删除影响；回收站等虚拟项目的图标会定期刷新。
 - 仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。
 
 各设置项的说明见上方英文表格。
@@ -186,16 +240,11 @@ icons by hiding the desktop's list view window in memory.
   $name:zh-CN: 显示名称
   $description: Show the name of the hovered item in a floating glass pill
   $description:zh-CN: 悬停时在浮动玻璃标签中显示名称
-- HideDesktopIcons: true
+- HideDesktopIcons: false
   $name: Hide original desktop icons
   $name:zh-CN: 隐藏原始桌面图标
-  $description: Hide the original desktop icons while the dock is active by hiding the desktop list view in memory; restored on unload
-  $description:zh-CN: 启用 Dock 时在内存中隐藏桌面列表视图，不修改系统设置；卸载时恢复
-- ExcludeItems: ""
-  $name: Excluded items
-  $name:zh-CN: 排除项目
-  $description: Comma separated display names to keep out of the dock
-  $description:zh-CN: 用逗号分隔的显示名称，匹配的项目不会出现在 Dock 中
+  $description: Hide the original desktop icons while the dock is active by hiding the desktop list view in memory; restored on unload. Off by default so the desktop stays available as a drag source
+  $description:zh-CN: 启用 Dock 时在内存中隐藏桌面列表视图，不修改系统设置；卸载时恢复。默认关闭，便于随时从桌面拖入项目
 - BackdropRefreshSeconds: 20
   $name: Backdrop refresh interval (s)
   $name:zh-CN: 背景刷新间隔（秒）
@@ -215,11 +264,13 @@ icons by hiding the desktop's list view window in memory.
 #include <cwctype>
 #include <map>
 #include <memory>
+#include <new>
 #include <string>
 #include <vector>
 #include <windhawk_utils.h>
 #include <oleauto.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <shlguid.h>
 #include <exdisp.h>
 #include <shellapi.h>
@@ -237,18 +288,19 @@ using namespace Gdiplus;
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"WindhawkDesktopIconDock";
+constexpr wchar_t kStorageKey[] = L"Software\\DesktopIconDock";
+constexpr wchar_t kStorageItems[] = L"Items";
+constexpr wchar_t kDockItemsFolder[] = L"DesktopIconDock\\Items";
 constexpr UINT kMsgReloadSettings = WM_APP + 1;
-constexpr UINT kMsgShellNotify = WM_APP + 2;
 constexpr UINT kMsgQuit = WM_APP + 3;
 constexpr UINT_PTR kTimerAnimation = 1;
 constexpr UINT_PTR kTimerMaintenance = 2;
 constexpr UINT_PTR kTimerRefresh = 3;
 constexpr UINT_PTR kTimerHoverPoll = 5;
-constexpr UINT_PTR kTimerShellNotify = 6;
 constexpr int kHoverPollMs = 50;
 constexpr int kIconRequestPx = 256;
-constexpr int kFullRebuildSeconds = 30;
-constexpr int kNotifyRebuildDelayMs = 300;
+constexpr int kMaintenanceSeconds = 30;
+constexpr int kDragThresholdPx = 5;
 constexpr double kPi = 3.14159265358979323846;
 
 struct Settings {
@@ -263,9 +315,8 @@ struct Settings {
     int glassOpacity = 24;
     int glassBlur = 20;
     int showLabels = 1;
-    int hideDesktopIcons = 1;
+    int hideDesktopIcons = 0;
     int backdropRefreshSeconds = 20;
-    std::wstring excludeItems;
 };
 
 Settings g_settings;
@@ -325,9 +376,12 @@ LayoutMetrics g_layout;
 struct DockItem {
     std::wstring name;
     std::wstring key;
+    std::wstring filePath;
     std::shared_ptr<void> pidlOwner;
     PIDLIST_ABSOLUTE pidl = nullptr;
     std::shared_ptr<Bitmap> icon;
+    size_t storedIndex = 0;
+    bool isFilesystem = false;
     double baseCenterX = 0.0;
     double centerX = 0.0;
     double scale = 1.0;
@@ -335,8 +389,8 @@ struct DockItem {
 };
 
 std::vector<DockItem> g_items;
+std::vector<std::wstring> g_storedKeys;
 std::map<std::wstring, std::shared_ptr<Bitmap>> g_iconCache;
-std::wstring g_lastSignature;
 
 int g_windowX = 0;
 int g_windowY = 0;
@@ -356,6 +410,17 @@ std::chrono::steady_clock::time_point g_lastTickTime;
 std::chrono::steady_clock::time_point g_lastItemCheckTime;
 DWORD g_lastLaunchTick = 0;
 
+bool g_leftDown = false;
+bool g_dragCandidate = false;
+bool g_internalDragActive = false;
+bool g_dragOutside = false;
+int g_dragIndex = -1;
+std::wstring g_dragKey;
+POINT g_leftDownPoint{};
+
+bool g_externalDragActive = false;
+int g_dropInsertIndex = 0;
+
 bool g_dockShown = false;
 bool g_iconsHiddenByUs = false;
 bool g_menuOpen = false;
@@ -363,8 +428,9 @@ bool g_gdiplusStarted = false;
 ULONG_PTR g_gdiplusToken = 0;
 bool g_classRegistered = false;
 HWND g_desktopListView = nullptr;
-ULONG g_changeNotifyRegister = 0;
-bool g_notifyForceRebuild = false;
+
+class DockDropTarget;
+DockDropTarget* g_dropTarget = nullptr;
 
 template <typename T>
 class ComPtr {
@@ -404,6 +470,10 @@ ComPtr<IContextMenu2> g_activeMenu2;
 ComPtr<IContextMenu3> g_activeMenu3;
 std::unique_ptr<FontFamily> g_labelFontFamily;
 std::unique_ptr<Font> g_labelFont;
+std::unique_ptr<FontFamily> g_emptyPrimaryFamily;
+std::unique_ptr<Font> g_emptyPrimaryFont;
+std::unique_ptr<FontFamily> g_emptySecondaryFamily;
+std::unique_ptr<Font> g_emptySecondaryFont;
 
 int ClampInt(int value, int lo, int hi) {
     if (value < lo) return lo;
@@ -420,28 +490,6 @@ double ClampDouble(double value, double lo, double hi) {
 std::wstring ToLowerString(const std::wstring& value) {
     std::wstring out = value;
     for (auto& c : out) c = (wchar_t)towlower(c);
-    return out;
-}
-
-std::wstring TrimString(const std::wstring& value) {
-    size_t start = value.find_first_not_of(L" \t\r\n");
-    if (start == std::wstring::npos) return L"";
-    size_t end = value.find_last_not_of(L" \t\r\n");
-    return value.substr(start, end - start + 1);
-}
-
-std::vector<std::wstring> ParseExcludeList(const std::wstring& value) {
-    std::vector<std::wstring> out;
-    size_t start = 0;
-    while (start <= value.size()) {
-        size_t comma = value.find(L',', start);
-        std::wstring part =
-            value.substr(start, comma == std::wstring::npos ? std::wstring::npos : comma - start);
-        part = ToLowerString(TrimString(part));
-        if (!part.empty()) out.push_back(part);
-        if (comma == std::wstring::npos) break;
-        start = comma + 1;
-    }
     return out;
 }
 
@@ -488,7 +536,6 @@ void LoadSettings() {
     s.hideDesktopIcons = Wh_GetIntSetting(L"HideDesktopIcons") ? 1 : 0;
     s.backdropRefreshSeconds =
         ClampInt(Wh_GetIntSetting(L"BackdropRefreshSeconds"), 0, 3600);
-    s.excludeItems = WindhawkUtils::StringSetting::make(L"ExcludeItems").get();
     g_settings = std::move(s);
 }
 
@@ -537,78 +584,83 @@ bool GetDesktopView(ComPtr<IFolderView>& folderView, HWND* defViewOut) {
     return true;
 }
 
-struct EnumeratedItem {
-    std::wstring name;
-    std::wstring key;
-    std::shared_ptr<void> pidlOwner;
-    PIDLIST_ABSOLUTE pidl = nullptr;
-    POINT position{};
-    bool isFilesystem = false;
-    ComPtr<IShellItem> shellItem;
-};
+bool KeyEqualsNoCase(const std::wstring& a, const std::wstring& b) {
+    return _wcsicmp(a.c_str(), b.c_str()) == 0;
+}
 
-bool EnumerateDesktopItems(std::vector<EnumeratedItem>& out) {
-    out.clear();
-    ComPtr<IFolderView> folderView;
-    if (!GetDesktopView(folderView, nullptr)) return false;
+bool ContainsKeyNoCase(const std::vector<std::wstring>& keys,
+                       const std::wstring& key) {
+    for (const auto& existing : keys) {
+        if (KeyEqualsNoCase(existing, key)) return true;
+    }
+    return false;
+}
 
-    ComPtr<IShellFolder> folder;
-    if (FAILED(folderView->GetFolder(IID_PPV_ARGS(folder.put())))) return false;
-
-    PIDLIST_ABSOLUTE root = nullptr;
-    ComPtr<IPersistFolder2> persist;
-    if (SUCCEEDED(folder->QueryInterface(IID_PPV_ARGS(persist.put())))) {
-        persist->GetCurFolder(&root);
+std::vector<std::wstring> LoadDockKeys() {
+    std::vector<std::wstring> keys;
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kStorageKey, 0, KEY_QUERY_VALUE, &key) !=
+        ERROR_SUCCESS) {
+        return keys;
     }
 
-    int count = 0;
-    if (FAILED(folderView->ItemCount(SVGIO_ALLVIEW, &count))) {
-        if (root) CoTaskMemFree(root);
+    DWORD type = 0;
+    DWORD bytes = 0;
+    LSTATUS status = RegQueryValueExW(key, kStorageItems, nullptr, &type, nullptr,
+                                      &bytes);
+    if (status == ERROR_SUCCESS && type == REG_MULTI_SZ &&
+        bytes >= sizeof(wchar_t) * 2 && bytes <= 16 * 1024 * 1024) {
+        std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, 0);
+        DWORD size = (DWORD)(buffer.size() * sizeof(wchar_t));
+        status = RegQueryValueExW(key, kStorageItems, nullptr, &type,
+                                  reinterpret_cast<BYTE*>(buffer.data()), &size);
+        if (status == ERROR_SUCCESS && type == REG_MULTI_SZ) {
+            size_t count = size / sizeof(wchar_t);
+            size_t pos = 0;
+            while (pos < count) {
+                const wchar_t* entry = buffer.data() + pos;
+                size_t remaining = count - pos;
+                size_t length = wcsnlen(entry, remaining);
+                if (length == 0) break;
+                keys.emplace_back(entry, length);
+                pos += length + 1;
+            }
+        } else {
+            Wh_Log(L"Reading dock items failed: %ld", status);
+        }
+    } else if (status != ERROR_FILE_NOT_FOUND && status != ERROR_PATH_NOT_FOUND) {
+        Wh_Log(L"Reading dock items failed: %ld (type %lu)", status, type);
+    }
+
+    RegCloseKey(key);
+    return keys;
+}
+
+bool SaveDockKeys(const std::vector<std::wstring>& keys) {
+    HKEY key = nullptr;
+    LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, kStorageKey, 0, nullptr, 0,
+                                     KEY_SET_VALUE, nullptr, &key, nullptr);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Opening dock storage failed: %ld", status);
         return false;
     }
 
-    for (int i = 0; i < count; ++i) {
-        if (g_stopRequested) break;
-        PITEMID_CHILD child = nullptr;
-        if (FAILED(folderView->Item(i, &child)) || !child) continue;
-
-        PIDLIST_ABSOLUTE pidl = root ? ILCombine(root, child) : nullptr;
-        POINT position{};
-        folderView->GetItemPosition(child, &position);
-
-        ComPtr<IShellItem> item;
-        if (pidl) {
-            SHCreateItemFromIDList(pidl, IID_PPV_ARGS(item.put()));
-        }
-
-        std::wstring name = GetShellItemName(item.Get(), SIGDN_NORMALDISPLAY);
-        std::wstring key = GetShellItemName(item.Get(), SIGDN_DESKTOPABSOLUTEPARSING);
-        if (key.empty()) key = name + L"|" + std::to_wstring(i);
-        if (name.empty()) name = key;
-
-        EnumeratedItem entry;
-        entry.name = std::move(name);
-        entry.key = std::move(key);
-        entry.pidl = pidl;
-        if (pidl) {
-            entry.pidlOwner = std::shared_ptr<void>(
-                pidl, [](void* p) { if (p) ILFree((PIDLIST_ABSOLUTE)p); });
-        }
-        entry.position = position;
-        if (item) {
-            SFGAOF attributes = 0;
-            if (SUCCEEDED(item->GetAttributes(SFGAO_FILESYSTEM, &attributes))) {
-                entry.isFilesystem = (attributes & SFGAO_FILESYSTEM) != 0;
-            }
-        }
-        entry.shellItem = std::move(item);
-        out.push_back(std::move(entry));
-
-        CoTaskMemFree(child);
+    std::vector<wchar_t> data;
+    for (const auto& entry : keys) {
+        data.insert(data.end(), entry.begin(), entry.end());
+        data.push_back(L'\0');
     }
+    data.push_back(L'\0');
 
-    if (root) CoTaskMemFree(root);
-    return !g_stopRequested;
+    status = RegSetValueExW(key, kStorageItems, 0, REG_MULTI_SZ,
+                            reinterpret_cast<const BYTE*>(data.data()),
+                            (DWORD)(data.size() * sizeof(wchar_t)));
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Writing dock items failed: %ld", status);
+        return false;
+    }
+    return true;
 }
 
 std::shared_ptr<Bitmap> CopyToOwnedBitmap(Bitmap* source) {
@@ -966,26 +1018,10 @@ void ComputeLayout() {
     g_layout.spacingFactor = ClampDouble(g_settings.spacingFactor / 100.0, 0.0, 1.0);
     g_layout.panelPadX = std::max(8, (int)lround(g_layout.iconPx * 0.30));
     g_layout.panelPadY = std::max(4, (int)lround(g_layout.iconPx * 0.07));
-    int iconArea = (int)ceil(g_layout.iconPx * g_layout.maxScale);
-    int liftMax = (int)ceil(4.0 * g_dpiScale);
-    g_layout.panelHeightRest = g_layout.iconPx + 2 * g_layout.panelPadY;
-    g_layout.panelHeightMax = iconArea + liftMax + 2 * g_layout.panelPadY;
-    g_layout.panelHeight = g_layout.panelHeightMax;
-
-    int baseContent = 0;
-    if (count > 0) {
-        baseContent = count * g_layout.iconPx + (count - 1) * g_layout.spacingPx;
-    }
-    g_layout.panelBaseWidth = baseContent + 2 * g_layout.panelPadX;
-
-    double maxExpansion = 0.0;
-    if (count > 0) {
-        int affected = std::min(count, 5);
-        maxExpansion = (g_layout.maxScale - 1.0) * g_layout.iconPx *
-                       g_layout.spacingFactor * affected;
-    }
-    g_layout.panelMaxWidth =
-        (int)ceil(g_layout.panelBaseWidth + maxExpansion + 10 * g_dpiScale);
+    g_layout.glowMargin = (int)lround(10 * g_dpiScale);
+    g_layout.labelFontPx = std::max(12, (int)lround(13 * g_dpiScale));
+    g_layout.labelPillHeight = (int)lround(g_layout.labelFontPx * 1.9);
+    g_layout.labelGap = (int)lround(8 * g_dpiScale);
 
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
@@ -993,17 +1029,44 @@ void ComputeLayout() {
     GetMonitorInfoW(monitor, &monitorInfo);
     int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
     int widthCap = monitorWidth - (int)lround(48 * g_dpiScale);
+
+    if (count == 0) {
+        g_layout.panelHeightRest = (int)lround(84 * g_dpiScale);
+        g_layout.panelHeightMax = g_layout.panelHeightRest;
+        g_layout.panelHeight = g_layout.panelHeightRest;
+        g_layout.panelBaseWidth =
+            ClampInt((int)lround(340 * g_dpiScale), 200, std::max(200, widthCap));
+        g_layout.panelMaxWidth = g_layout.panelBaseWidth;
+        g_layout.labelAreaHeight = 0;
+        g_layout.windowWidth = g_layout.panelMaxWidth + 2 * g_layout.glowMargin;
+        g_layout.windowHeight = g_layout.glowMargin + g_layout.panelHeight +
+                                g_layout.glowMargin;
+        g_layout.panelTop = g_layout.glowMargin;
+        g_layout.panelBottom = g_layout.panelTop + g_layout.panelHeight;
+        g_layout.iconBottom = g_layout.panelBottom - g_layout.panelPadY;
+        return;
+    }
+
+    int iconArea = (int)ceil(g_layout.iconPx * g_layout.maxScale);
+    int liftMax = (int)ceil(4.0 * g_dpiScale);
+    g_layout.panelHeightRest = g_layout.iconPx + 2 * g_layout.panelPadY;
+    g_layout.panelHeightMax = iconArea + liftMax + 2 * g_layout.panelPadY;
+    g_layout.panelHeight = g_layout.panelHeightMax;
+
+    int baseContent = count * g_layout.iconPx + (count - 1) * g_layout.spacingPx;
+    g_layout.panelBaseWidth = baseContent + 2 * g_layout.panelPadX;
+
+    int affected = std::min(count, 5);
+    double maxExpansion = (g_layout.maxScale - 1.0) * g_layout.iconPx *
+                          g_layout.spacingFactor * affected;
+    g_layout.panelMaxWidth =
+        (int)ceil(g_layout.panelBaseWidth + maxExpansion + 10 * g_dpiScale);
     if (g_layout.panelMaxWidth > widthCap) {
         g_layout.panelMaxWidth = std::max(g_layout.panelBaseWidth, widthCap);
     }
 
-    g_layout.glowMargin = (int)lround(10 * g_dpiScale);
-    g_layout.labelFontPx = std::max(12, (int)lround(13 * g_dpiScale));
-    g_layout.labelPillHeight = (int)lround(g_layout.labelFontPx * 1.9);
-    g_layout.labelGap = (int)lround(8 * g_dpiScale);
     g_layout.labelAreaHeight =
         g_settings.showLabels ? g_layout.labelPillHeight + g_layout.labelGap : 0;
-
     g_layout.windowWidth = g_layout.panelMaxWidth + 2 * g_layout.glowMargin;
     g_layout.windowHeight = g_layout.glowMargin + g_layout.labelAreaHeight +
                             g_layout.panelHeight + g_layout.glowMargin;
@@ -1397,26 +1460,202 @@ void DrawItemLabel(Graphics& graphics, int index, double panelTopNow) {
                         &textBrush);
 }
 
+bool g_emptyPrimaryChinese = false;
+
+void EnsureEmptyFonts() {
+    if (g_emptyPrimaryFont) return;
+    auto primaryFamily = std::make_unique<FontFamily>(L"Microsoft YaHei UI");
+    g_emptyPrimaryChinese =
+        primaryFamily->GetLastStatus() == Ok && primaryFamily->IsAvailable();
+    if (!g_emptyPrimaryChinese) {
+        primaryFamily = std::make_unique<FontFamily>(L"Segoe UI");
+    }
+    g_emptyPrimaryFont = std::make_unique<Font>(
+        primaryFamily.get(), (REAL)lround(16 * g_dpiScale), FontStyleRegular,
+        UnitPixel);
+    if (g_emptyPrimaryFont->GetLastStatus() != Ok) {
+        g_emptyPrimaryFont.reset();
+        return;
+    }
+    g_emptyPrimaryFamily = std::move(primaryFamily);
+
+    auto secondaryFamily = std::make_unique<FontFamily>(L"Segoe UI Variable Text");
+    if (secondaryFamily->GetLastStatus() != Ok || !secondaryFamily->IsAvailable()) {
+        secondaryFamily = std::make_unique<FontFamily>(L"Segoe UI");
+    }
+    g_emptySecondaryFont = std::make_unique<Font>(
+        secondaryFamily.get(), (REAL)lround(10.5 * g_dpiScale), FontStyleRegular,
+        UnitPixel);
+    if (g_emptySecondaryFont->GetLastStatus() != Ok) {
+        g_emptySecondaryFont.reset();
+        g_emptyPrimaryFont.reset();
+        g_emptyPrimaryFamily.reset();
+        return;
+    }
+    g_emptySecondaryFamily = std::move(secondaryFamily);
+}
+
+void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
+    RectF panel((REAL)panelRect.left, (REAL)panelRect.top,
+                (REAL)(panelRect.right - panelRect.left),
+                (REAL)(panelRect.bottom - panelRect.top));
+    if (panel.Width < 8.0f || panel.Height < 8.0f) return;
+
+    EnsureEmptyFonts();
+    GraphicsPath panelPath;
+    AddRoundedRect(panelPath, panel, panel.Height * 0.30f);
+
+    for (int i = 3; i >= 1; --i) {
+        double expand = i * 1.4 * g_dpiScale;
+        RectF shadowRect(panel.X - (REAL)expand, panel.Y - (REAL)(expand * 0.3) + 2,
+                         panel.Width + (REAL)expand * 2,
+                         panel.Height + (REAL)expand * 2);
+        GraphicsPath shadowPath;
+        AddRoundedRect(shadowPath, shadowRect,
+                       (float)(panel.Height * 0.30 + expand));
+        SolidBrush shadow(Color((BYTE)(9 * i), 0, 0, 0));
+        graphics.FillPath(&shadow, &shadowPath);
+    }
+
+    bool glass = !g_settings.transparentBackground;
+    bool active = g_externalDragActive;
+    Color fill = glass
+                     ? Color(active ? 165 : 120, 248, 250, 254)
+                     : Color(active ? 82 : 46, 18, 20, 26);
+    SolidBrush fillBrush(fill);
+    graphics.FillPath(&fillBrush, &panelPath);
+
+    Pen borderPen(glass ? Color((BYTE)(active ? 170 : 130), 35, 40, 50)
+                        : Color((BYTE)(active ? 235 : 155), 255, 255, 255),
+                 (REAL)std::max(1.0, 1.4 * g_dpiScale));
+    borderPen.SetDashStyle(DashStyleDash);
+    graphics.DrawPath(&borderPen, &panelPath);
+
+    if (!g_emptyPrimaryFont || !g_emptySecondaryFont) return;
+
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    format.SetLineAlignment(StringAlignmentCenter);
+    format.SetFormatFlags(StringFormatFlagsNoWrap);
+    format.SetTrimming(StringTrimmingEllipsisCharacter);
+
+    double padX = 16.0 * g_dpiScale;
+    RectF primaryRect(panel.X + (REAL)padX,
+                      panel.Y + panel.Height * 0.16f,
+                      panel.Width - (REAL)(padX * 2.0),
+                      panel.Height * 0.38f);
+    RectF secondaryRect(panel.X + (REAL)padX,
+                        panel.Y + panel.Height * 0.50f,
+                        panel.Width - (REAL)(padX * 2.0),
+                        panel.Height * 0.30f);
+
+    Color primaryColor = glass ? Color(232, 30, 32, 38)
+                               : Color(238, 255, 255, 255);
+    Color secondaryColor = glass ? Color(165, 42, 46, 54)
+                                 : Color(172, 255, 255, 255);
+    SolidBrush primaryBrush(primaryColor);
+    SolidBrush secondaryBrush(secondaryColor);
+    const wchar_t* primaryText =
+        g_emptyPrimaryChinese ? L"将图标拖到这里" : L"Drag items here";
+    const wchar_t* secondaryText = g_emptyPrimaryChinese
+                                       ? L"Drag shortcuts, files or folders here"
+                                       : L"Shortcuts, files and folders";
+    graphics.DrawString(primaryText, -1, g_emptyPrimaryFont.get(), primaryRect,
+                        &format, &primaryBrush);
+    graphics.DrawString(secondaryText, -1, g_emptySecondaryFont.get(),
+                        secondaryRect, &format, &secondaryBrush);
+}
+
+void DrawDropBackdrop(Graphics& graphics, const RECT& panelRect) {
+    if (!g_externalDragActive) return;
+    RectF panel((REAL)panelRect.left, (REAL)panelRect.top,
+                (REAL)(panelRect.right - panelRect.left),
+                (REAL)(panelRect.bottom - panelRect.top));
+    if (panel.Width < 8.0f || panel.Height < 8.0f) return;
+    float radius = (float)(g_layout.panelHeightRest * 0.36);
+    GraphicsPath path;
+    AddRoundedRect(path, panel, radius);
+    if (g_settings.transparentBackground) {
+        // Any non-zero alpha makes the whole panel a valid OLE drop target,
+        // including the otherwise click-through gaps between icons.
+        SolidBrush fill(Color(24, 255, 255, 255));
+        graphics.FillPath(&fill, &path);
+    }
+    Pen border(Color(150, 120, 190, 255),
+               (REAL)std::max(1.0, 1.4 * g_dpiScale));
+    border.SetDashStyle(DashStyleDash);
+    graphics.DrawPath(&border, &path);
+}
+
+void DrawDropIndicator(Graphics& graphics) {
+    if (!g_externalDragActive || g_items.empty()) return;
+    int count = (int)g_items.size();
+    int index = ClampInt(g_dropInsertIndex, 0, count);
+    double pitch = g_layout.iconPx + g_layout.spacingPx;
+    double x = 0.0;
+    if (index <= 0) {
+        x = g_items.front().baseCenterX - pitch * 0.5;
+    } else if (index >= count) {
+        x = g_items.back().baseCenterX + pitch * 0.5;
+    } else {
+        x = (g_items[index - 1].baseCenterX + g_items[index].baseCenterX) * 0.5;
+    }
+
+    double width = std::max(2.0, 3.0 * g_dpiScale);
+    double top = g_layout.iconBottom - g_layout.iconPx - 4.0 * g_dpiScale;
+    double height = g_layout.iconPx + 8.0 * g_dpiScale;
+    RectF bar((REAL)(x - width * 0.5), (REAL)top, (REAL)width, (REAL)height);
+    GraphicsPath path;
+    AddRoundedRect(path, bar, (float)(width * 0.5));
+    SolidBrush glow(Color(55, 120, 190, 255));
+    RectF glowRect(bar.X - 3.0f * (REAL)g_dpiScale, bar.Y,
+                   bar.Width + 6.0f * (REAL)g_dpiScale, bar.Height);
+    GraphicsPath glowPath;
+    AddRoundedRect(glowPath, glowRect, (float)(glowRect.Width * 0.5));
+    graphics.FillPath(&glow, &glowPath);
+    SolidBrush brush(Color(245, 130, 200, 255));
+    graphics.FillPath(&brush, &path);
+}
+
 void DrawIcons(Graphics& graphics) {
+    int index = 0;
     for (const auto& item : g_items) {
         RectF rect = IconRectFor(item);
-        if (item.scale <= 0.002) continue;
+        bool dragging = g_internalDragActive && index == g_dragIndex;
+        if (dragging) {
+            double size = g_layout.iconPx * 1.10;
+            double lift = 6.0 * g_dpiScale;
+            rect = RectF((REAL)(item.centerX - size * 0.5),
+                         (REAL)(g_layout.iconBottom - size - lift), (REAL)size,
+                         (REAL)size);
+        }
+        if (item.scale <= 0.002) {
+            ++index;
+            continue;
+        }
         if (g_shadowTexture) {
             double shadowWidth = rect.Width * 0.92;
-            double shadowHeight = rect.Height * 0.30;
+            double shadowHeight = rect.Height * (dragging ? 0.36 : 0.30);
             RectF shadowRect(rect.X + (rect.Width - (REAL)shadowWidth) * 0.5f,
                              rect.Y + rect.Height - (REAL)(shadowHeight * 0.42),
                              (REAL)shadowWidth, (REAL)shadowHeight);
-            DrawTextureAlpha(graphics, g_shadowTexture.get(), shadowRect, 0.42);
+            DrawTextureAlpha(graphics, g_shadowTexture.get(), shadowRect,
+                             dragging ? 0.55 : 0.42);
         }
         if (item.icon) {
-            graphics.DrawImage(item.icon.get(), rect);
+            if (dragging && g_dragOutside) {
+                DrawTextureAlpha(graphics, item.icon.get(), rect, 0.35);
+            } else {
+                graphics.DrawImage(item.icon.get(), rect);
+            }
         } else {
-            SolidBrush placeholder(Color(90, 255, 255, 255));
+            SolidBrush placeholder(Color((BYTE)(dragging && g_dragOutside ? 35 : 90),
+                                         255, 255, 255));
             GraphicsPath path;
             AddRoundedRect(path, rect, rect.Width * 0.22f);
             graphics.FillPath(&placeholder, &path);
         }
+        ++index;
     }
 }
 
@@ -1430,6 +1669,8 @@ void RenderFrame() {
     graphics.Clear(Color(0, 0, 0, 0));
 
     if (g_items.empty()) {
+        RECT panelRect = PanelClientRect();
+        DrawEmptyState(graphics, panelRect);
         PresentFrame();
         return;
     }
@@ -1449,8 +1690,15 @@ void RenderFrame() {
         DrawGlassPanel(graphics, panel, radius);
         labelAnchor = panelTopNow;
     }
+    if (g_externalDragActive) {
+        RECT panelRect = PanelClientRect();
+        DrawDropBackdrop(graphics, panelRect);
+    }
     DrawIcons(graphics);
-    if (g_settings.showLabels) {
+    if (g_externalDragActive) {
+        DrawDropIndicator(graphics);
+    }
+    if (g_settings.showLabels && !g_externalDragActive && !g_internalDragActive) {
         DrawItemLabel(graphics, g_hoverIndex, labelAnchor);
     }
 
@@ -1495,7 +1743,8 @@ bool IsPointerOverDock(POINT screenPoint) {
 
 void UpdateHoverPollTimer() {
     if (!g_hwnd) return;
-    bool wantPoll = g_settings.transparentBackground && g_dockShown;
+    bool wantPoll =
+        g_settings.transparentBackground && g_dockShown && !g_items.empty();
     if (wantPoll && !g_hoverPollRunning) {
         SetTimer(g_hwnd, kTimerHoverPoll, kHoverPollMs, nullptr);
         g_hoverPollRunning = true;
@@ -1517,7 +1766,8 @@ bool UpdateAnimation() {
     GetCursorPos(&screenPoint);
     POINT clientPoint = screenPoint;
     ScreenToClient(g_hwnd, &clientPoint);
-    bool inside = IsPointerOverDock(screenPoint);
+    bool dragging = g_internalDragActive || g_externalDragActive;
+    bool inside = !dragging && IsPointerOverDock(screenPoint);
 
     if (inside) {
         g_lastMouseX = clientPoint.x;
@@ -1632,12 +1882,12 @@ int ItemAtCursor(POINT screenPoint) {
 }
 
 void LaunchItem(DockItem& item) {
-    if (!item.pidl) return;
     SHELLEXECUTEINFOW info{};
     info.cbSize = sizeof(info);
     info.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
     info.lpVerb = L"open";
     info.lpIDList = item.pidl;
+    info.lpFile = item.pidl ? nullptr : item.key.c_str();
     info.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&info)) {
         Wh_Log(L"ShellExecuteEx failed for %ls: %lu", item.name.c_str(), GetLastError());
@@ -1732,7 +1982,7 @@ void PruneIconCache() {
     for (auto it = g_iconCache.begin(); it != g_iconCache.end();) {
         bool used = false;
         for (const auto& item : g_items) {
-            if (item.key == it->first) {
+            if (KeyEqualsNoCase(item.key, it->first)) {
                 used = true;
                 break;
             }
@@ -1745,19 +1995,85 @@ void PruneIconCache() {
     }
 }
 
+struct ResolvedDockItem {
+    std::wstring name;
+    std::wstring key;
+    std::wstring filePath;
+    std::shared_ptr<void> pidlOwner;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    ComPtr<IShellItem> shellItem;
+    bool isFilesystem = false;
+    size_t storedIndex = 0;
+};
+
+bool ResolveDockItem(const std::wstring& storedKey, size_t storedIndex,
+                     ResolvedDockItem& out) {
+    ComPtr<IShellItem> item;
+    HRESULT hr = SHCreateItemFromParsingName(storedKey.c_str(), nullptr,
+                                             IID_PPV_ARGS(item.put()));
+    if (FAILED(hr) || !item) {
+        Wh_Log(L"Resolving dock item failed: %ls (0x%08X)", storedKey.c_str(), hr);
+        return false;
+    }
+
+    std::wstring name = GetShellItemName(item.Get(), SIGDN_NORMALDISPLAY);
+    std::wstring key = GetShellItemName(item.Get(), SIGDN_DESKTOPABSOLUTEPARSING);
+    if (key.empty()) key = storedKey;
+    if (name.empty()) name = key;
+
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHGetIDListFromObject(item.Get(), &pidl))) pidl = nullptr;
+
+    SFGAOF attributes = 0;
+    bool isFilesystem = false;
+    if (SUCCEEDED(item->GetAttributes(SFGAO_FILESYSTEM, &attributes))) {
+        isFilesystem = (attributes & SFGAO_FILESYSTEM) != 0;
+    }
+
+    out.name = std::move(name);
+    out.key = std::move(key);
+    out.filePath = GetShellItemName(item.Get(), SIGDN_FILESYSPATH);
+    out.pidl = pidl;
+    if (pidl) {
+        out.pidlOwner = std::shared_ptr<void>(
+            pidl, [](void* p) { if (p) ILFree((PIDLIST_ABSOLUTE)p); });
+    }
+    out.shellItem = std::move(item);
+    out.isFilesystem = isFilesystem;
+    out.storedIndex = storedIndex;
+    return true;
+}
+
+bool SameVisibleItems(const std::vector<ResolvedDockItem>& resolved) {
+    if (resolved.size() != g_items.size()) return false;
+    for (size_t i = 0; i < resolved.size(); ++i) {
+        if (!KeyEqualsNoCase(resolved[i].key, g_items[i].key) ||
+            resolved[i].name != g_items[i].name) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Virtual items (Recycle Bin, This PC, ...) have no file-system events, so
-// their state changes (e.g. an emptied Recycle Bin) are picked up by the
-// slow fallback check instead.
-void RefreshVirtualIcons(const std::vector<EnumeratedItem>& found) {
+// their state changes (e.g. an emptied Recycle Bin) are picked up here.
+void RefreshVirtualIcons(const std::vector<ResolvedDockItem>& resolved) {
     bool updated = false;
-    for (const auto& entry : found) {
+    for (const auto& entry : resolved) {
         if (entry.isFilesystem) continue;
-        if (g_iconCache.find(entry.key) == g_iconCache.end()) continue;
+        bool visible = false;
+        for (const auto& item : g_items) {
+            if (KeyEqualsNoCase(item.key, entry.key)) {
+                visible = true;
+                break;
+            }
+        }
+        if (!visible) continue;
         g_iconCache.erase(entry.key);
         auto icon = LoadShellIcon(entry.shellItem.Get(), entry.key);
         if (!icon) continue;
         for (auto& item : g_items) {
-            if (item.key == entry.key) {
+            if (KeyEqualsNoCase(item.key, entry.key)) {
                 item.icon = icon;
                 updated = true;
                 break;
@@ -1767,81 +2083,59 @@ void RefreshVirtualIcons(const std::vector<EnumeratedItem>& found) {
     if (updated && !g_animationTimerRunning) RenderFrame();
 }
 
-void HideDock() {
-    if (g_dockShown) {
-        ShowWindow(g_hwnd, SW_HIDE);
-        g_dockShown = false;
-    }
-    SetDesktopIconsHidden(false);
-    UpdateHoverPollTimer();
+void ResetInternalDragState() {
+    g_leftDown = false;
+    g_dragCandidate = false;
+    g_internalDragActive = false;
+    g_dragOutside = false;
+    g_dragIndex = -1;
+    g_dragKey.clear();
+    if (GetCapture() == g_hwnd) ReleaseCapture();
 }
 
-bool RebuildFromDesktop(bool force) {
+bool RebuildFromList(bool force) {
     if (g_stopRequested) return false;
-    std::vector<EnumeratedItem> found;
-    if (!EnumerateDesktopItems(found)) {
-        Wh_Log(L"Desktop item enumeration failed");
-        return false;
+
+    std::vector<ResolvedDockItem> resolved;
+    resolved.reserve(g_storedKeys.size());
+    for (size_t i = 0; i < g_storedKeys.size(); ++i) {
+        if (g_stopRequested) return false;
+        ResolvedDockItem entry;
+        if (!ResolveDockItem(g_storedKeys[i], i, entry)) continue;
+        bool duplicate = false;
+        for (const auto& existing : resolved) {
+            if (KeyEqualsNoCase(existing.key, entry.key)) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) resolved.push_back(std::move(entry));
     }
 
-    auto excludes = ParseExcludeList(g_settings.excludeItems);
-    if (!excludes.empty()) {
-        found.erase(std::remove_if(found.begin(), found.end(),
-                                   [&](const EnumeratedItem& entry) {
-                                       return std::find(excludes.begin(), excludes.end(),
-                                                        ToLowerString(entry.name)) !=
-                                              excludes.end();
-                                   }),
-                    found.end());
-    }
-
-    std::stable_sort(found.begin(), found.end(),
-                     [](const EnumeratedItem& a, const EnumeratedItem& b) {
-                         if (a.position.y != b.position.y)
-                             return a.position.y < b.position.y;
-                         if (a.position.x != b.position.x)
-                             return a.position.x < b.position.x;
-                         return a.name < b.name;
-                     });
-
-    if (found.empty()) {
-        Wh_Log(L"No desktop items to show");
-        g_items.clear();
-        g_lastSignature.clear();
-        HideDock();
-        return true;
-    }
-
-    std::wstring signature;
-    for (const auto& entry : found) {
-        signature += entry.key;
-        signature += L'|';
-        signature += std::to_wstring(entry.position.x);
-        signature += L'|';
-        signature += std::to_wstring(entry.position.y);
-        signature += L'\n';
-    }
-    if (!force && !g_items.empty() && signature == g_lastSignature) {
-        RefreshVirtualIcons(found);
+    if (!force && !g_internalDragActive && SameVisibleItems(resolved)) {
+        RefreshVirtualIcons(resolved);
         g_lastItemCheckTime = std::chrono::steady_clock::now();
         return true;
     }
 
     std::vector<DockItem> items;
-    items.reserve(found.size());
-    for (auto& entry : found) {
+    items.reserve(resolved.size());
+    for (auto& entry : resolved) {
         if (g_stopRequested) return false;
         DockItem item;
         item.name = entry.name;
         item.key = entry.key;
+        item.filePath = entry.filePath;
         item.pidlOwner = entry.pidlOwner;
         item.pidl = entry.pidl;
         item.icon = LoadShellIcon(entry.shellItem.Get(), entry.key);
+        item.storedIndex = entry.storedIndex;
+        item.isFilesystem = entry.isFilesystem;
         items.push_back(std::move(item));
     }
 
+    ResetInternalDragState();
     g_items = std::move(items);
-    g_lastSignature = std::move(signature);
     PruneIconCache();
     g_intensity = 0.0;
     g_hoverIndex = -1;
@@ -1853,18 +2147,17 @@ bool RebuildFromDesktop(bool force) {
     EnsureFrameBuffer(g_layout.windowWidth, g_layout.windowHeight);
     PositionWindow();
 
+    if (g_settings.hideDesktopIcons) {
+        SetDesktopIconsHidden(true);
+    } else {
+        SetDesktopIconsHidden(false);
+    }
+    CaptureBackdrop();
+    RenderFrame();
+
     if (!g_dockShown) {
-        if (g_settings.hideDesktopIcons) {
-            SetDesktopIconsHidden(true);
-        }
-        CaptureBackdrop();
-        RenderFrame();
         ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
         g_dockShown = true;
-        EnsureAnimationTimer();
-    } else {
-        CaptureBackdrop();
-        RenderFrame();
     }
     UpdateHoverPollTimer();
 
@@ -1875,84 +2168,584 @@ bool RebuildFromDesktop(bool force) {
 void ReloadSettings() {
     LoadSettings();
     g_iconCache.clear();
-    RebuildFromDesktop(true);
+    g_emptyPrimaryFont.reset();
+    g_emptyPrimaryFamily.reset();
+    g_emptySecondaryFont.reset();
+    g_emptySecondaryFamily.reset();
+    RebuildFromList(true);
     SetDesktopIconsHidden(g_settings.hideDesktopIcons != 0 && g_dockShown);
     UpdateHoverPollTimer();
 }
 
-void RegisterShellNotifications() {
-    if (!g_hwnd || g_changeNotifyRegister) return;
+int DropIndexAtScreenPoint(POINT screenPoint) {
+    POINT point = screenPoint;
+    ScreenToClient(g_hwnd, &point);
+    for (int i = 0; i < (int)g_items.size(); ++i) {
+        if (point.x < g_items[i].baseCenterX) return i;
+    }
+    return (int)g_items.size();
+}
 
-    PIDLIST_ABSOLUTE desktop = nullptr;
-    PIDLIST_ABSOLUTE publicDesktop = nullptr;
-    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, nullptr, &desktop);
-    SHGetKnownFolderIDList(FOLDERID_PublicDesktop, 0, nullptr, &publicDesktop);
+bool IsPointOutsideDock(POINT screenPoint) {
+    POINT point = screenPoint;
+    ScreenToClient(g_hwnd, &point);
+    RECT rect = PanelClientRect();
+    InflateRect(&rect, (int)lround(6 * g_dpiScale),
+                (int)lround(6 * g_dpiScale));
+    return PtInRect(&rect, point) == FALSE;
+}
 
-    // Non-recursive: only the items directly on the desktop appear in the
-    // dock, so file writes inside desktop folders do not wake us up.
-    SHChangeNotifyEntry entries[2] = {};
-    int entryCount = 0;
-    if (desktop) entries[entryCount++] = {desktop, FALSE};
-    if (publicDesktop) entries[entryCount++] = {publicDesktop, FALSE};
+int DragTargetIndex(double x) {
+    int count = (int)g_items.size();
+    if (count <= 1) return g_dragIndex;
+    int desired = 0;
+    for (int i = 0; i < count; ++i) {
+        if (i == g_dragIndex) continue;
+        if (x > g_items[i].baseCenterX) ++desired;
+    }
+    return ClampInt(desired, 0, count - 1);
+}
 
-    if (entryCount > 0) {
-        LONG events = SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
-                      SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER |
-                      SHCNE_UPDATEITEM | SHCNE_UPDATEIMAGE | SHCNE_UPDATEDIR;
-        // SHCNRF_ShellLevel delivers no messages on recent Windows 11 builds;
-        // interrupt-level notifications for these two folders are reliable.
-        g_changeNotifyRegister = SHChangeNotifyRegister(
-            g_hwnd, SHCNRF_InterruptLevel | SHCNRF_NewDelivery, events,
-            kMsgShellNotify, entryCount, entries);
-        if (!g_changeNotifyRegister) {
-            Wh_Log(L"SHChangeNotifyRegister failed");
+// Keeps unresolved entries in place and writes the current visible order into
+// the slots they occupy. This way a failed parsing name is never dropped just
+// because the user reordered or removed another item.
+void PersistVisibleOrder(int removedStoredIndex) {
+    std::vector<std::wstring> stored = g_storedKeys;
+    if (removedStoredIndex >= 0 &&
+        removedStoredIndex < (int)stored.size()) {
+        stored.erase(stored.begin() + removedStoredIndex);
+    }
+
+    std::vector<size_t> slots;
+    slots.reserve(g_items.size());
+    for (const auto& item : g_items) {
+        size_t slot = item.storedIndex;
+        if (removedStoredIndex >= 0 && item.storedIndex > (size_t)removedStoredIndex) {
+            --slot;
+        }
+        if (slot < stored.size()) slots.push_back(slot);
+    }
+    std::sort(slots.begin(), slots.end());
+    for (size_t i = 0; i < slots.size() && i < g_items.size(); ++i) {
+        stored[slots[i]] = g_items[i].key;
+    }
+
+    g_storedKeys = std::move(stored);
+    SaveDockKeys(g_storedKeys);
+}
+
+bool EndsWithNoCase(const std::wstring& value, const wchar_t* suffix) {
+    size_t length = wcslen(suffix);
+    return value.size() >= length &&
+           _wcsicmp(value.c_str() + value.size() - length, suffix) == 0;
+}
+
+std::wstring GetParentPath(const std::wstring& path) {
+    size_t pos = path.find_last_of(L"\\/");
+    if (pos == std::wstring::npos) return L"";
+    if (pos == 2 && path[1] == L':') return path.substr(0, 3);
+    return path.substr(0, pos);
+}
+
+std::wstring GetKnownFolder(REFKNOWNFOLDERID folderId) {
+    PWSTR raw = nullptr;
+    if (FAILED(SHGetKnownFolderPath(folderId, KF_FLAG_DEFAULT, nullptr, &raw)) ||
+        !raw) {
+        return L"";
+    }
+    std::wstring path = raw;
+    CoTaskMemFree(raw);
+    return path;
+}
+
+// Shortcuts are copied into a dock-owned folder, so deleting the original
+// shortcut from the desktop does not remove the dock item.
+const std::wstring& GetDockItemsFolder() {
+    static const std::wstring folder = [] {
+        std::wstring localAppData = GetKnownFolder(FOLDERID_LocalAppData);
+        if (localAppData.empty()) return std::wstring();
+        std::wstring path = localAppData + L"\\" + kDockItemsFolder;
+        int result = SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
+        if (result != ERROR_SUCCESS && result != ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Creating dock items folder failed: %d", result);
+            return std::wstring();
+        }
+        return path;
+    }();
+    return folder;
+}
+
+bool IsUnderDockItemsFolder(const std::wstring& path) {
+    const std::wstring& folder = GetDockItemsFolder();
+    if (folder.empty() || path.size() <= folder.size()) return false;
+    if (_wcsnicmp(path.c_str(), folder.c_str(), folder.size()) != 0) return false;
+    return path[folder.size()] == L'\\';
+}
+
+uint64_t HashShortcutSource(const std::wstring& path) {
+    uint64_t hash = 1469598103934665603ULL;
+    for (wchar_t ch : path) {
+        hash ^= (uint16_t)towlower(ch);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::wstring BuildShortcutCopyPath(const std::wstring& sourcePath) {
+    const std::wstring& folder = GetDockItemsFolder();
+    if (folder.empty()) return L"";
+    size_t slash = sourcePath.find_last_of(L"\\/");
+    if (slash == std::wstring::npos || slash + 1 >= sourcePath.size()) {
+        return L"";
+    }
+    std::wstring fileName = sourcePath.substr(slash + 1);
+
+    uint64_t hash = HashShortcutSource(sourcePath);
+    wchar_t hashText[17];
+    for (int i = 15; i >= 0; --i) {
+        uint64_t digit = hash & 0xF;
+        hashText[i] =
+            (wchar_t)(digit < 10 ? L'0' + digit : L'A' + (digit - 10));
+        hash >>= 4;
+    }
+    hashText[16] = L'\0';
+
+    std::wstring itemFolder = folder + L"\\" + hashText;
+    int result = SHCreateDirectoryExW(nullptr, itemFolder.c_str(), nullptr);
+    if (result != ERROR_SUCCESS && result != ERROR_ALREADY_EXISTS) {
+        Wh_Log(L"Creating dock copy folder failed: %d", result);
+        return L"";
+    }
+    return itemFolder + L"\\" + fileName;
+}
+
+// Returns the dock-owned copy path when the source should be copied, or an
+// empty string when it has to stay a plain reference (virtual items, folders,
+// regular files and files that already live in the dock folder).
+std::wstring ShortcutCopyTarget(const std::wstring& sourcePath) {
+    if (!EndsWithNoCase(sourcePath, L".lnk") &&
+        !EndsWithNoCase(sourcePath, L".url")) {
+        return L"";
+    }
+    if (IsUnderDockItemsFolder(sourcePath)) return L"";
+    DWORD attributes = GetFileAttributesW(sourcePath.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES ||
+        (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        return L"";
+    }
+    return BuildShortcutCopyPath(sourcePath);
+}
+
+bool EnsureShortcutCopy(const std::wstring& sourcePath,
+                        const std::wstring& targetPath) {
+    if (CopyFileW(sourcePath.c_str(), targetPath.c_str(), FALSE)) return true;
+    Wh_Log(L"Copying shortcut failed: %ls -> %ls (%lu)", sourcePath.c_str(),
+           targetPath.c_str(), GetLastError());
+    return false;
+}
+
+void RemoveShortcutCopy(const std::wstring& copyPath) {
+    if (!IsUnderDockItemsFolder(copyPath)) return;
+    if (!DeleteFileW(copyPath.c_str())) {
+        Wh_Log(L"Removing dock copy failed: %ls (%lu)", copyPath.c_str(),
+               GetLastError());
+        return;
+    }
+    std::wstring itemFolder = GetParentPath(copyPath);
+    const std::wstring& folder = GetDockItemsFolder();
+    if (!itemFolder.empty() &&
+        _wcsicmp(itemFolder.c_str(), folder.c_str()) != 0) {
+        RemoveDirectoryW(itemFolder.c_str());
+    }
+}
+
+// Converts existing shortcut references to dock-owned copies. Unresolvable
+// entries and non-shortcut references are left untouched.
+void MigrateShortcutReferencesToCopies() {
+    std::vector<std::wstring> migrated;
+    migrated.reserve(g_storedKeys.size());
+    bool changed = false;
+    for (const auto& key : g_storedKeys) {
+        std::wstring target = ShortcutCopyTarget(key);
+        if (!target.empty() && EnsureShortcutCopy(key, target)) {
+            migrated.push_back(target);
+            changed = true;
+        } else {
+            migrated.push_back(key);
         }
     }
-
-    if (desktop) CoTaskMemFree(desktop);
-    if (publicDesktop) CoTaskMemFree(publicDesktop);
-}
-
-void UnregisterShellNotifications() {
-    if (g_changeNotifyRegister) {
-        SHChangeNotifyDeregister(g_changeNotifyRegister);
-        g_changeNotifyRegister = 0;
+    if (changed) {
+        g_storedKeys = std::move(migrated);
+        SaveDockKeys(g_storedKeys);
+        Wh_Log(L"Migrated shortcut references to dock copies");
     }
 }
 
-void HandleShellNotification(WPARAM wParam, LPARAM lParam) {
-    PIDLIST_ABSOLUTE* pidls = nullptr;
-    LONG event = 0;
-    HANDLE lock =
-        SHChangeNotification_Lock((HANDLE)wParam, (DWORD)lParam, &pidls, &event);
-    bool needsRebuild = true;
-    if (lock) {
-        if (event & SHCNE_UPDATEIMAGE) {
-            g_iconCache.clear();
-            g_notifyForceRebuild = true;
-        } else if (event & SHCNE_UPDATEITEM) {
-            // A content update only affects the icon of that one item;
-            // everything else stays cached.
-            needsRebuild = false;
-            if (pidls && pidls[0]) {
-                ComPtr<IShellItem> item;
-                if (SUCCEEDED(SHCreateItemFromIDList(pidls[0],
-                                                     IID_PPV_ARGS(item.put())))) {
-                    std::wstring key = GetShellItemName(
-                        item.Get(), SIGDN_DESKTOPABSOLUTEPARSING);
-                    if (!key.empty() && g_iconCache.erase(key) > 0) {
-                        g_notifyForceRebuild = true;
-                        needsRebuild = true;
+bool AddKeysAt(int insertIndex, const std::vector<std::wstring>& newKeys) {
+    std::vector<std::wstring> stored = g_storedKeys;
+    std::vector<std::wstring> accepted;
+    bool restored = false;
+    accepted.reserve(newKeys.size());
+    for (const auto& sourceKey : newKeys) {
+        if (sourceKey.empty()) continue;
+        std::wstring copyPath = ShortcutCopyTarget(sourceKey);
+        std::wstring key = copyPath.empty() ? sourceKey : copyPath;
+        bool duplicate = ContainsKeyNoCase(stored, key) ||
+                         ContainsKeyNoCase(accepted, key);
+        if (copyPath.empty()) {
+            if (!duplicate) accepted.push_back(std::move(key));
+            continue;
+        }
+        if (duplicate) {
+            if (GetFileAttributesW(copyPath.c_str()) !=
+                INVALID_FILE_ATTRIBUTES) {
+                continue;
+            }
+            // The stored item lost its copy; recreate it so the add works
+            // again even though the entry is already in the list.
+            if (EnsureShortcutCopy(sourceKey, copyPath)) restored = true;
+            continue;
+        }
+        if (!EnsureShortcutCopy(sourceKey, copyPath)) continue;
+        accepted.push_back(std::move(key));
+    }
+    if (accepted.empty()) {
+        return restored ? RebuildFromList(true) : false;
+    }
+
+    size_t target = stored.size();
+    if (!g_items.empty()) {
+        int index = ClampInt(insertIndex, 0, (int)g_items.size());
+        if (index < (int)g_items.size()) {
+            target = g_items[index].storedIndex;
+        } else {
+            target = g_items.back().storedIndex + 1;
+        }
+        if (target > stored.size()) target = stored.size();
+    }
+    stored.insert(stored.begin() + target, accepted.begin(), accepted.end());
+    g_storedKeys = std::move(stored);
+    SaveDockKeys(g_storedKeys);
+    return RebuildFromList(true);
+}
+
+std::wstring MakeUniqueShortcutPath(const std::wstring& desktopPath,
+                                    const std::wstring& displayName,
+                                    const wchar_t* extension) {
+    std::wstring stem = displayName;
+    size_t extensionLength = wcslen(extension);
+    if (EndsWithNoCase(stem, extension)) {
+        stem.resize(stem.size() - extensionLength);
+    }
+    for (auto& c : stem) {
+        if (c < 32 || wcschr(L"\\/:*?\"<>|", c)) c = L'_';
+    }
+    while (!stem.empty() && (stem.back() == L'.' || stem.back() == L' ')) {
+        stem.pop_back();
+    }
+    if (stem.empty()) stem = L"Shortcut";
+
+    std::wstring candidate = desktopPath + L"\\" + stem + extension;
+    for (int i = 2; i < 1000; ++i) {
+        if (GetFileAttributesW(candidate.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            return candidate;
+        }
+        candidate = desktopPath + L"\\" + stem + L" (" + std::to_wstring(i) +
+                    L")" + extension;
+    }
+    return desktopPath + L"\\" + stem + extension;
+}
+
+bool PositionDesktopItemAt(const std::wstring& itemPath, POINT screenPoint) {
+    ComPtr<IFolderView> view;
+    HWND defView = nullptr;
+    if (!GetDesktopView(view, &defView) || !view) {
+        Wh_Log(L"Positioning desktop item: desktop view unavailable");
+        return false;
+    }
+
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHParseDisplayName(itemPath.c_str(), nullptr, &pidl, 0, nullptr)) ||
+        !pidl) {
+        Wh_Log(L"Positioning desktop item: %ls not found", itemPath.c_str());
+        return false;
+    }
+
+    POINT point = screenPoint;
+    if (defView) ScreenToClient(defView, &point);
+    point.x -= GetSystemMetrics(SM_CXICON) / 2;
+    point.y -= GetSystemMetrics(SM_CYICON) / 2;
+
+    PCUITEMID_CHILD child = ILFindLastID(pidl);
+    HRESULT hr =
+        view->SelectAndPositionItems(1, &child, &point, SVSI_POSITIONITEM);
+    CoTaskMemFree(pidl);
+    if (FAILED(hr)) {
+        Wh_Log(L"SelectAndPositionItems failed: 0x%08X", hr);
+        return false;
+    }
+    return true;
+}
+
+bool CreateDesktopShortcut(const std::wstring& sourcePath,
+                           const std::wstring& displayName,
+                           const std::wstring& desktopPath,
+                           std::wstring& outPath) {
+    bool sourceIsShortcutFile = EndsWithNoCase(sourcePath, L".lnk") ||
+                                EndsWithNoCase(sourcePath, L".url");
+    const wchar_t* extension =
+        EndsWithNoCase(sourcePath, L".url") ? L".url" : L".lnk";
+    std::wstring destination =
+        MakeUniqueShortcutPath(desktopPath, displayName, extension);
+    if (sourceIsShortcutFile) {
+        if (!CopyFileW(sourcePath.c_str(), destination.c_str(), TRUE)) {
+            Wh_Log(L"Copying shortcut failed: %ls (%lu)", sourcePath.c_str(),
+                   GetLastError());
+            return false;
+        }
+    } else {
+        ComPtr<IShellLinkW> link;
+        if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(link.put())))) {
+            return false;
+        }
+        link->SetPath(sourcePath.c_str());
+        link->SetDescription(displayName.c_str());
+        std::wstring parent = GetParentPath(sourcePath);
+        if (!parent.empty()) link->SetWorkingDirectory(parent.c_str());
+
+        ComPtr<IPersistFile> persist;
+        if (FAILED(link->QueryInterface(IID_PPV_ARGS(persist.put()))) ||
+            FAILED(persist->Save(destination.c_str(), TRUE))) {
+            Wh_Log(L"Creating desktop shortcut failed: %ls", destination.c_str());
+            return false;
+        }
+    }
+    outPath = std::move(destination);
+    return true;
+}
+
+// Returns false only when the item should stay in the dock because it could
+// not be placed on the desktop.
+bool PlaceOnDesktopAt(const DockItem& item, POINT screenPoint) {
+    if (!item.isFilesystem || item.filePath.empty()) return true;
+
+    std::wstring desktopPath = GetKnownFolder(FOLDERID_Desktop);
+    if (desktopPath.empty()) {
+        Wh_Log(L"Desktop folder unavailable");
+        return true;
+    }
+    std::wstring publicDesktop = GetKnownFolder(FOLDERID_PublicDesktop);
+    std::wstring parent = GetParentPath(item.filePath);
+    bool alreadyOnDesktop =
+        _wcsicmp(parent.c_str(), desktopPath.c_str()) == 0 ||
+        (!publicDesktop.empty() &&
+         _wcsicmp(parent.c_str(), publicDesktop.c_str()) == 0);
+    if (alreadyOnDesktop) {
+        PositionDesktopItemAt(item.filePath, screenPoint);
+        return true;
+    }
+
+    if (GetFileAttributesW(item.filePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        Wh_Log(L"Desktop placement skipped, source missing: %ls",
+               item.filePath.c_str());
+        return true;
+    }
+
+    std::wstring shortcutPath;
+    if (!CreateDesktopShortcut(item.filePath, item.name, desktopPath,
+                               shortcutPath)) {
+        return false;
+    }
+    SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, shortcutPath.c_str(), nullptr);
+    PositionDesktopItemAt(shortcutPath, screenPoint);
+    return true;
+}
+
+void FinishInternalDrag(bool removeItem, POINT screenPoint) {
+    if (!g_internalDragActive || g_dragIndex < 0 ||
+        g_dragIndex >= (int)g_items.size()) {
+        ResetInternalDragState();
+        return;
+    }
+
+    int removedStoredIndex = -1;
+    if (removeItem) {
+        if (!PlaceOnDesktopAt(g_items[g_dragIndex], screenPoint)) {
+            ResetInternalDragState();
+            RebuildFromList(true);
+            return;
+        }
+        removedStoredIndex = (int)g_items[g_dragIndex].storedIndex;
+        RemoveShortcutCopy(g_items[g_dragIndex].filePath);
+        g_items.erase(g_items.begin() + g_dragIndex);
+    }
+    PersistVisibleOrder(removedStoredIndex);
+    RebuildFromList(true);
+}
+
+void ClearExternalDrag() {
+    if (!g_externalDragActive) return;
+    g_externalDragActive = false;
+    g_dropInsertIndex = 0;
+    RenderFrame();
+}
+
+class DockDropTarget final : public IDropTarget {
+  public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IDropTarget)) {
+            *ppv = static_cast<IDropTarget*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return (ULONG)InterlockedIncrement(&ref_);
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG count = InterlockedDecrement(&ref_);
+        if (count == 0) delete this;
+        return (ULONG)count;
+    }
+
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL pt,
+                                        DWORD* effect) override {
+        if (!effect) return E_POINTER;
+        DWORD chosen = EffectFromAllowed(*effect);
+        if (!CanAcceptData(data) || chosen == DROPEFFECT_NONE) {
+            *effect = DROPEFFECT_NONE;
+            return S_OK;
+        }
+        g_externalDragActive = true;
+        g_hoverIndex = -1;
+        g_mouseXValid = false;
+        g_dropInsertIndex =
+            DropIndexAtScreenPoint(POINT{(LONG)pt.x, (LONG)pt.y});
+        EnsureAnimationTimer();
+        RenderFrame();
+        *effect = chosen;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* effect) override {
+        if (!effect) return E_POINTER;
+        DWORD chosen = EffectFromAllowed(*effect);
+        if (!g_externalDragActive || chosen == DROPEFFECT_NONE) {
+            *effect = DROPEFFECT_NONE;
+            return S_OK;
+        }
+        int index = DropIndexAtScreenPoint(POINT{(LONG)pt.x, (LONG)pt.y});
+        if (index != g_dropInsertIndex) {
+            g_dropInsertIndex = index;
+            RenderFrame();
+        }
+        *effect = chosen;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DragLeave() override {
+        ClearExternalDrag();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL,
+                                   DWORD* effect) override {
+        if (!effect) return E_POINTER;
+        DWORD chosen = EffectFromAllowed(*effect);
+        int index = g_dropInsertIndex;
+        std::vector<std::wstring> keys;
+        ExtractKeys(data, keys);
+        ClearExternalDrag();
+        bool added = chosen != DROPEFFECT_NONE && !keys.empty() &&
+                     AddKeysAt(index, keys);
+        *effect = added ? chosen : DROPEFFECT_NONE;
+        return S_OK;
+    }
+
+  private:
+    ~DockDropTarget() = default;
+
+    static DWORD EffectFromAllowed(DWORD allowed) {
+        if (allowed & DROPEFFECT_COPY) return DROPEFFECT_COPY;
+        if (allowed & DROPEFFECT_LINK) return DROPEFFECT_LINK;
+        return DROPEFFECT_NONE;
+    }
+
+    static UINT ShellIdListFormat() {
+        static UINT format = RegisterClipboardFormatW(L"Shell IDList Array");
+        return format;
+    }
+
+    static bool CanAcceptData(IDataObject* data) {
+        if (!data) return false;
+        FORMATETC format{};
+        format.dwAspect = DVASPECT_CONTENT;
+        format.lindex = -1;
+        format.tymed = TYMED_HGLOBAL;
+        format.cfFormat = CF_HDROP;
+        if (data->QueryGetData(&format) == S_OK) return true;
+        format.cfFormat = (CLIPFORMAT)ShellIdListFormat();
+        return format.cfFormat && data->QueryGetData(&format) == S_OK;
+    }
+
+    static void AddKeyFromShellItem(IShellItem* item,
+                                    std::vector<std::wstring>& keys) {
+        if (!item) return;
+        std::wstring key = GetShellItemName(item, SIGDN_DESKTOPABSOLUTEPARSING);
+        if (key.empty()) key = GetShellItemName(item, SIGDN_FILESYSPATH);
+        if (!key.empty()) keys.push_back(std::move(key));
+    }
+
+    static void ExtractKeys(IDataObject* data, std::vector<std::wstring>& keys) {
+        keys.clear();
+        if (!data) return;
+
+        ComPtr<IShellItemArray> array;
+        if (SUCCEEDED(SHCreateShellItemArrayFromDataObject(
+                data, IID_PPV_ARGS(array.put()))) &&
+            array) {
+            DWORD count = 0;
+            if (SUCCEEDED(array->GetCount(&count))) {
+                for (DWORD i = 0; i < count; ++i) {
+                    ComPtr<IShellItem> item;
+                    if (SUCCEEDED(array->GetItemAt(i, item.put()))) {
+                        AddKeyFromShellItem(item.Get(), keys);
                     }
                 }
             }
         }
-        SHChangeNotification_Unlock(lock);
+        if (!keys.empty()) return;
+
+        FORMATETC format{};
+        format.cfFormat = CF_HDROP;
+        format.dwAspect = DVASPECT_CONTENT;
+        format.lindex = -1;
+        format.tymed = TYMED_HGLOBAL;
+        STGMEDIUM medium{};
+        if (data->GetData(&format, &medium) != S_OK) return;
+        if (medium.tymed == TYMED_HGLOBAL && medium.hGlobal) {
+            HDROP drop = (HDROP)medium.hGlobal;
+            UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+            for (UINT i = 0; i < count; ++i) {
+                UINT length = DragQueryFileW(drop, i, nullptr, 0);
+                if (length == 0) continue;
+                std::vector<wchar_t> buffer((size_t)length + 1, 0);
+                if (DragQueryFileW(drop, i, buffer.data(), length + 1) > 0) {
+                    keys.emplace_back(buffer.data());
+                }
+            }
+        }
+        ReleaseStgMedium(&medium);
     }
-    if (needsRebuild && g_hwnd) {
-        SetTimer(g_hwnd, kTimerShellNotify, kNotifyRebuildDelayMs, nullptr);
-    }
-}
+
+    LONG ref_ = 1;
+};
 
 void RefreshWorkAreaIfNeeded() {
     MONITORINFO monitorInfo{};
@@ -1988,10 +2781,12 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                     return 0;
                 case kTimerMaintenance: {
                     auto now = std::chrono::steady_clock::now();
-                    if (now - g_lastItemCheckTime >
-                        std::chrono::seconds(kFullRebuildSeconds)) {
+                    if (!g_menuOpen && !g_internalDragActive &&
+                        !g_externalDragActive &&
+                        now - g_lastItemCheckTime >
+                            std::chrono::seconds(kMaintenanceSeconds)) {
                         g_lastItemCheckTime = now;
-                        RebuildFromDesktop(false);
+                        RebuildFromList(false);
                     }
                     EnsureDesktopIconsHidden();
                     if (g_settings.backdropRefreshSeconds > 0 && !g_menuOpen &&
@@ -2003,19 +2798,9 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                     RefreshWorkAreaIfNeeded();
                     return 0;
                 }
-                case kTimerShellNotify:
-                    KillTimer(hwnd, kTimerShellNotify);
-                    if (g_menuOpen) {
-                        SetTimer(hwnd, kTimerShellNotify, 500, nullptr);
-                        return 0;
-                    }
-                    if (RebuildFromDesktop(g_notifyForceRebuild)) {
-                        g_notifyForceRebuild = false;
-                    }
-                    return 0;
                 case kTimerRefresh:
                     KillTimer(hwnd, kTimerRefresh);
-                    if (!RebuildFromDesktop(true)) {
+                    if (!RebuildFromList(true)) {
                         SetTimer(hwnd, kTimerRefresh, 2000, nullptr);
                     }
                     return 0;
@@ -2030,20 +2815,115 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                 track.hwndTrack = hwnd;
                 if (TrackMouseEvent(&track)) g_trackingMouse = true;
             }
-            EnsureAnimationTimer();
+            if (g_leftDown && !g_internalDragActive) {
+                POINT point{};
+                GetCursorPos(&point);
+                int threshold = (int)lround(kDragThresholdPx * g_dpiScale);
+                if (abs(point.x - g_leftDownPoint.x) > threshold ||
+                    abs(point.y - g_leftDownPoint.y) > threshold) {
+                    int index = -1;
+                    for (int i = 0; i < (int)g_items.size(); ++i) {
+                        if (KeyEqualsNoCase(g_items[i].key, g_dragKey)) {
+                            index = i;
+                            break;
+                        }
+                    }
+                    if (index < 0) {
+                        ResetInternalDragState();
+                        return 0;
+                    }
+                    g_internalDragActive = true;
+                    g_dragCandidate = false;
+                    g_dragIndex = index;
+                    g_hoverIndex = -1;
+                    g_mouseXValid = false;
+                    g_intensity = 0.0;
+                    for (auto& item : g_items) {
+                        item.scale = 1.0;
+                        item.centerX = item.baseCenterX;
+                        item.labelAlpha = 0.0;
+                    }
+                    g_panelWidth = g_layout.panelBaseWidth;
+                    g_dragOutside = IsPointOutsideDock(point);
+                    SetCursor(LoadCursorW(nullptr, IDC_SIZEALL));
+                    RenderFrame();
+                }
+            }
+            if (g_internalDragActive) {
+                POINT point{};
+                GetCursorPos(&point);
+                bool changed = false;
+                bool outside = IsPointOutsideDock(point);
+                if (outside != g_dragOutside) {
+                    g_dragOutside = outside;
+                    changed = true;
+                }
+                if (!outside) {
+                    POINT client = point;
+                    ScreenToClient(hwnd, &client);
+                    int target = DragTargetIndex(client.x);
+                    if (target != g_dragIndex && target >= 0 &&
+                        target < (int)g_items.size()) {
+                        DockItem moved = std::move(g_items[g_dragIndex]);
+                        g_items.erase(g_items.begin() + g_dragIndex);
+                        g_items.insert(g_items.begin() + target, std::move(moved));
+                        g_dragIndex = target;
+                        ComputeLayout();
+                        g_panelWidth = g_layout.panelBaseWidth;
+                        for (auto& item : g_items) {
+                            item.centerX = item.baseCenterX;
+                            item.scale = 1.0;
+                            item.labelAlpha = 0.0;
+                        }
+                        EnsureFrameBuffer(g_layout.windowWidth,
+                                          g_layout.windowHeight);
+                        changed = true;
+                    }
+                }
+                if (changed) RenderFrame();
+                return 0;
+            }
+            if (!g_items.empty()) EnsureAnimationTimer();
             return 0;
 
         case WM_MOUSELEAVE:
             g_trackingMouse = false;
-            EnsureAnimationTimer();
+            if (!g_items.empty()) EnsureAnimationTimer();
             return 0;
 
-        case WM_LBUTTONUP: {
-            DWORD now = GetTickCount();
+        case WM_LBUTTONDOWN: {
+            if (g_externalDragActive || g_menuOpen) return 0;
             POINT point{};
             GetCursorPos(&point);
             int index = ItemAtCursor(point);
+            if (index < 0) return 0;
+            g_leftDown = true;
+            g_dragCandidate = true;
+            g_internalDragActive = false;
+            g_dragOutside = false;
+            g_leftDownPoint = point;
+            g_dragIndex = index;
+            g_dragKey = g_items[index].key;
+            SetCapture(hwnd);
+            return 0;
+        }
+
+        case WM_LBUTTONUP: {
+            if (g_internalDragActive) {
+                POINT point{};
+                GetCursorPos(&point);
+                bool outside = IsPointOutsideDock(point);
+                FinishInternalDrag(outside, point);
+                return 0;
+            }
+            if (!g_leftDown) return 0;
+            ResetInternalDragState();
+
+            DWORD now = GetTickCount();
             if (now - g_lastLaunchTick < 450) return 0;
+            POINT point{};
+            GetCursorPos(&point);
+            int index = ItemAtCursor(point);
             if (index >= 0) {
                 g_lastLaunchTick = now;
                 LaunchItem(g_items[index]);
@@ -2051,7 +2931,20 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             return 0;
         }
 
+        case WM_CAPTURECHANGED:
+            if (g_internalDragActive) {
+                PersistVisibleOrder(-1);
+                ResetInternalDragState();
+                RebuildFromList(true);
+            } else {
+                ResetInternalDragState();
+            }
+            return 0;
+
         case WM_RBUTTONUP: {
+            if (g_internalDragActive || g_leftDown || g_externalDragActive) {
+                return 0;
+            }
             POINT point{};
             GetCursorPos(&point);
             int index = ItemAtCursor(point);
@@ -2063,6 +2956,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
 
         case WM_SETCURSOR: {
             if (LOWORD(lParam) == HTCLIENT) {
+                if (g_internalDragActive) {
+                    SetCursor(LoadCursorW(
+                        nullptr, g_dragOutside ? IDC_NO : IDC_SIZEALL));
+                    return TRUE;
+                }
                 POINT point{};
                 GetCursorPos(&point);
                 int index = ItemAtCursor(point);
@@ -2117,7 +3015,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             UINT dpi = GetDpiForWindow(hwnd);
             g_dpiScale = (dpi ? dpi : 96) / 96.0;
             g_iconCache.clear();
-            if (!RebuildFromDesktop(true)) {
+            g_emptyPrimaryFont.reset();
+            g_emptyPrimaryFamily.reset();
+            g_emptySecondaryFont.reset();
+            g_emptySecondaryFamily.reset();
+            if (!RebuildFromList(true)) {
                 ComputeLayout();
                 g_panelWidth = g_layout.panelBaseWidth;
                 for (auto& item : g_items) {
@@ -2138,10 +3040,6 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                 CaptureBackdrop();
                 RenderFrame();
             }
-            return 0;
-
-        case kMsgShellNotify:
-            HandleShellNotification(wParam, lParam);
             return 0;
 
         case kMsgReloadSettings:
@@ -2226,11 +3124,18 @@ int RunDockThread() {
     CreateTextures();
 
     LoadSettings();
+    g_storedKeys = LoadDockKeys();
+    MigrateShortcutReferencesToCopies();
     g_lastItemCheckTime = std::chrono::steady_clock::now();
-    RegisterShellNotifications();
-    if (!RebuildFromDesktop(true)) {
-        SetTimer(hwnd, kTimerRefresh, 1000, nullptr);
+    if (auto* dropTarget = new (std::nothrow) DockDropTarget()) {
+        if (RegisterDragDrop(hwnd, dropTarget) == S_OK) {
+            g_dropTarget = dropTarget;
+        } else {
+            Wh_Log(L"RegisterDragDrop failed: %lu", GetLastError());
+            dropTarget->Release();
+        }
     }
+    RebuildFromList(true);
 
     if (g_stopRequested) PostQuitMessage(0);
 
@@ -2245,14 +3150,19 @@ int RunDockThread() {
     if (g_dockShown) {
         ShowWindow(hwnd, SW_HIDE);
     }
+    if (g_dropTarget) {
+        RevokeDragDrop(hwnd);
+        g_dropTarget->Release();
+        g_dropTarget = nullptr;
+    }
+    ResetInternalDragState();
+    g_externalDragActive = false;
     KillTimer(hwnd, kTimerAnimation);
     KillTimer(hwnd, kTimerMaintenance);
     KillTimer(hwnd, kTimerRefresh);
     KillTimer(hwnd, kTimerHoverPoll);
-    KillTimer(hwnd, kTimerShellNotify);
     g_hoverPollRunning = false;
 
-    UnregisterShellNotifications();
     SetDesktopIconsHidden(false);
     g_desktopListView = nullptr;
 
@@ -2263,8 +3173,13 @@ int RunDockThread() {
     g_backdropValid = false;
     g_iconCache.clear();
     g_items.clear();
+    g_storedKeys.clear();
     g_labelFont.reset();
     g_labelFontFamily.reset();
+    g_emptyPrimaryFont.reset();
+    g_emptyPrimaryFamily.reset();
+    g_emptySecondaryFont.reset();
+    g_emptySecondaryFamily.reset();
     g_glowTexture.reset();
     g_shadowTexture.reset();
     g_noiseTexture.reset();
