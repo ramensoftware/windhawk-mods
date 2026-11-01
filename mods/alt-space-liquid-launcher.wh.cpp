@@ -4,6 +4,7 @@
 // @description     Ultra-smooth Liquid Glass productivity launcher with Adaptive Frecency, 120Hz animations, and customizable Outer Window Shape
 // @version         6.2.0
 // @author          RobsHs
+// @github          https://github.com/RobsHs
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -ldwmapi -luxtheme -lcomctl32 -lshell32 -lole32
