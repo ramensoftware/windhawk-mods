@@ -4,6 +4,7 @@
 // @description     Experimental: logs Edge's native View classes and clears chosen backgrounds. Requires Translucent Windows.
 // @version         0.8
 // @author          scaffold based on the approach of Brave Acrylic by bardelyne
+// @author          Adam Anderson
 // @license         MIT
 // @architecture    x86-64
 // @include         msedge.exe
