@@ -95,11 +95,6 @@ The mod does **not** replace system files.
   Nothing of the shell is touched: the bottom strip of the Start window is clipped away with
   `SetWindowRgn` and restored as soon as the pointer leaves it. It can be turned off in the
   settings.
-- **Start hint and start button skin**: when the Start screen is open, the Windows 8
-  hint and start button appear in the bottom left corner, with the released Windows 8 /
-  8.1 skin only. Hovering it shades it like the Start button; a quick click on it closes
-  the Start screen (or opens All apps), and the screen also closes when the pointer
-  moves away from the button or when Start is another window's foreground.
 - **Layout kept across updates**: tiles, sizes, group names and groups are saved in
   Windhawk's per-mod storage (`Wh_GetModStoragePath`, one file per user account), which
   survives mod updates and a mod reinstall and is only removed with the mod itself. The
@@ -133,14 +128,6 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 - The mod is compatible with the **Windows 8/8.1 Charms Bar Recreation** and the
   **Windows 8/8.1 Search Charm Recreation** mods for a complete Windows 8.1
   experience.
-- **Start hint and start button**: this part of the Start experience used to be drawn by
-  the Windows 8/8.1 Charms Bar Recreation mod. Keeping it there was a development
-  mistake: it belongs to the Start screen, so it is implemented here now and will be
-  removed from the Charms mod. The mod understands both directions: it starts the
-  Charm's Start action when the hint is clicked while Start is not in front (so the
-  charms bar does not stay open), and it accepts the search charm requests of the two
-  companion mods. Only the released Windows 8 / 8.1 look is used for it, never a beta
-  build's.
 - The mod is available in English, Italian, Spanish, French and Portuguese. The language
   follows the Windows display language.
 - All options are documented on the mod's settings page in Windhawk.
@@ -330,17 +317,6 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración sustituye el nombre de tu cuenta de Windows por una etiqueta genérica localizada (por ejemplo Usuario) en el encabezado de la pantalla de inicio, para capturas, grabaciones y directos. La imagen de cuenta y su menú siguen funcionando con normalidad. Portada de la mod Windows 10 1507 Start Menu Recreation."
   $description:fr: "Ce paramètre remplace le nom de votre compte Windows par un libellé générique localisé (par exemple Utilisateur) dans l'en-tête de l'écran d'accueil, pour captures, enregistrements et streams. L'image du compte et son menu continuent de fonctionner normalement. Porté du mod Windows 10 1507 Start Menu Recreation."
   $description:pt: "Esta configuração substitui o nome da sua conta do Windows por um rótulo genérico localizado (por exemplo Usuário) no cabeçalho da Tela Inicial, para capturas, gravações e transmissões. A imagem da conta e seu menu continuam funcionando normalmente. Portado da mod Windows 10 1507 Start Menu Recreation."
-- appTileColors: false
-  $name: "Sample tile colours from the app icons (Windows 10 style)"
-  $name:it: "Campiona i colori delle tile dalle icone delle app (stile Windows 10)"
-  $name:es: "Muestrear los colores de los iconos de las aplicaciones (estilo Windows 10)"
-  $name:fr: "Échantillonner les couleurs des vignettes depuis les icônes (style Windows 10)"
-  $name:pt: "Amstrar as cores dos blocos a partir dos ícones dos aplicativos (estilo Windows 10)"
-  $description: "This setting gives every tile that has an icon a flat fill sampled from the dominant hue of that icon, like the Windows 10 Start menu option, instead of the fixed Windows 8.1 palette colours. Tiles without an icon keep their palette colour. Ported from the Windows 10 1507 Start Menu Recreation mod. Packaged apps always use their own tile colour, as in Windows 8.1; this setting extends icon sampling to every tile."
-  $description:it: "Questa impostazione dà a ogni tile con icona un riempimento pieno campionato dalla tinta dominante dell'icona, come l'opzione del menu Start di Windows 10, al posto dei colori fissi della palette di Windows 8.1. Le tile senza icona mantengono il colore di palette. Portata dalla mod Windows 10 1507 Start Menu Recreation. Le app in pacchetto usano sempre il colore della loro tile, come in Windows 8.1; questa impostazione estende il campionamento a ogni tile."
-  $description:es: "Esta configuración da a cada icono con imagen un relleno plano muestreado del tono dominante del icono, como la opción del menú Inicio de Windows 10, en lugar de los colores fijos de la paleta de Windows 8.1. Los iconos sin imagen mantienen su color de paleta. Portada de la mod Windows 10 1507 Start Menu Recreation. Las aplicaciones empaquetadas siempre usan el color de su propio icono, como en Windows 8.1; esta configuración extiende el muestreo a todos los iconos."
-  $description:fr: "Ce paramètre donne à chaque vignette avec icône un fond uni échantillonné depuis la teinte dominante de l'icône, comme l'option du menu Démarrer de Windows 10, au lieu des couleurs fixes de la palette Windows 8.1. Les vignettes sans icône gardent leur couleur de palette. Porté du mod Windows 10 1507 Start Menu Recreation. Les applications packagées utilisent toujours la couleur de leur propre vignette, comme Windows 8.1 ; ce paramètre étend l'échantillonnage à toutes les vignettes."
-  $description:pt: "Esta configuração dá a cada bloco com ícone um preenchimento sólido amostrado do tom dominante do ícone, como a opção do menu Iniciar do Windows 10, em vez das cores fixas da paleta do Windows 8.1. Blocos sem ícone mantêm a cor da paleta. Portado da mod Windows 10 1507 Start Menu Recreation. Os aplicativos empacotados sempre usam a cor do seu próprio bloco, como no Windows 8.1; esta configuração estende a amostragem a todos os blocos."
 - tileGradients: true
   $name: "Windows 8/8.1 tile gradients"
   $name:it: "Sfumatura delle tile in stile Windows 8/8.1"
@@ -1015,6 +991,8 @@ static volatile bool g_keyboardOnly = false;
 static volatile bool g_startHooked = false;
 static HANDLE g_startHookThread = NULL, g_startHookStop = NULL;
 static DWORD g_lastToggleTick = 0;
+static DWORD g_trayCloseTick = 0;   // when a taskbar click closed Start: the toggle that
+                                    // the same click still reports is dropped
 static volatile LONG g_closeSlideMs = 320;
 static volatile LONG g_openAtLogon = 1;
 static bool g_logonOpening = false;
@@ -1587,6 +1565,14 @@ static bool GroupBounds(int g, RECT* r) {
     bool any = false;
     for (int i = 0; i < g_tileCount; ++i) {
         if (!g_tiles[i].alive || g_tileGroup[i] != g) continue;
+        // The tile being dragged is in the air, out of the grid, until it is dropped: the
+        // documented Start layout drag (learn.microsoft.com, "Customize the Start layout":
+        // drag apps on Start to reorder or group them, the Name group field appears above the
+        // group) keeps the footprint of a group - and the name drawn above it - anchored to
+        // the tiles that stay in the grid, while the others reflow around the gap. Counting
+        // the tile at the cursor position stretched the bounds towards the pointer and made
+        // the group name fly across the screen while the tile moved towards it.
+        if (g_dragging && i == g_dragIdx) continue;
         RECT t; TileRect(g_tiles[i], &t);
         if (!any) { *r = t; any = true; }
         else {
@@ -3142,7 +3128,6 @@ static std::wstring ShortcutExecutable(const wchar_t* displayName);
 static std::wstring ResolveProgramPath(const wchar_t* name);
 static int DesktopShortcutGlyph(const wchar_t* target);
 static const wchar_t* MetroTileCaption(int glyph, const wchar_t* seedLabel);
-static bool LooksLikeExeName(const wchar_t* text);
 static const wchar_t* DupW(const wchar_t* s);
 static void ApplyShortcutLook(Tile& t) {
     t.mpShortcut = t.mg < 0 && t.style != DESKTOP_REFERENCE && t.style != STORE_CAPTION &&
@@ -3150,38 +3135,21 @@ static void ApplyShortcutLook(Tile& t) {
                    DesktopShortcutGlyph(t.target) >= 0;
 }
 
-// Shows on the tile the name the shell gives the program (the Italian "Blocco note" instead of the
-// English "Notepad"), as Windows 8.1 did. Only for the tiles of the shortcut look, and only when
-// the user has not named the tile by hand. The tile owns the string, so it is emptied before the
-// name is written again.
-// True when `text` is a bare executable name ("notepad.exe"). A tile must never be captioned like
-// that: it is what a tile saved by a previous version can look like, and the name of the program
-// is a better caption than the name of its file.
-static bool LooksLikeExeName(const wchar_t* text) {
-    if (!text) return false;
-    const size_t n = wcslen(text);
-    return n > 4 && _wcsicmp(text + n - 4, L".exe") == 0 && !wcschr(text, L' ');
-}
+
 
 static void SetShortcutName(Tile& t) {
     if (!t.mpShortcut || !t.target) return;
-    // A tile whose name is the bare file name ("notepad.exe") never shows it: the name of the
-    // program is used instead. This is what a tile saved by the previous version can look like.
-    if (LooksLikeExeName(t.label)) {
-        const int glyph = DesktopShortcutGlyph(t.target);
-        if (glyph >= 0) {
-            free((void*)t.label);
-            t.label = DupW(MetroTileCaption(glyph, NULL));
-            return;
-        }
-    }
     // The name comes from the program the tile opens, looked up by the file name of its target
     // ("notepad.exe") and not from anything the shell says: that is the only way to have the same
     // name on every system, and a tile can never end up with the name of another program.
     const int glyph = DesktopShortcutGlyph(t.target);
-    if (glyph < 0) return;
+    const wchar_t* name = glyph >= 0 ? MetroTileCaption(glyph, NULL) : NULL;
+    // explorer.exe, control.exe and Computer map to glyphs without a row in the caption table:
+    // there is no documented name to give them here, so the tile keeps the name it already has
+    // (a pinned control.exe tile must not lose its caption at the next Explorer start).
+    if (!name) return;
     free((void*)t.label);
-    t.label = DupW(MetroTileCaption(glyph, NULL));
+    t.label = DupW(name);
 }
 
 // A tile that opens a desktop program goes back to the Windows 8.1 blue. Used by the reading code
@@ -4026,6 +3994,15 @@ static void BuildOneTile(int i, HDC screenDC) {
 
         if (hover) DrawTileHover(tdc, w, h);
 
+        // The tiles of Windows 8.1 are opaque sheets: the alpha channel of the 32-bit DIB is
+        // never written by the GDI fills, and whatever it holds must not leak into the
+        // composition, or a tile that travels over the header or a group name while dragged
+        // shows them through. Force every pixel of the tile rectangle to opaque.
+        {
+            BYTE* px = (BYTE*)bits;
+            for (int n = 0; n < w * h; ++n) px[n * 4 + 3] = 0xFF;
+        }
+
     }
 }
 
@@ -4488,7 +4465,7 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     D2D1_RECT_F dest = D2D1::RectF(ncx - dw * 0.5f, ncy - dh * 0.5f, ncx + dw * 0.5f, ncy + dh * 0.5f);
     const bool pixelExact = dw == w && dh == h &&
                             dest.left == (float)(int)dest.left && dest.top == (float)(int)dest.top;
-    if (bitmap) g_rt->DrawBitmap(bitmap, dest, (i == g_dragIdx) ? 0.92f * Clamp01(a) : Clamp01(a),
+    if (bitmap) g_rt->DrawBitmap(bitmap, dest, Clamp01(a),
                                  pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                             : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
     if (g_scratch && g_barVisible && g_barMode == 1 && g_barIdx == i) {
@@ -4595,16 +4572,15 @@ static bool RenderGpu() {
             g_rt->SetTransform(D2D1::Matrix3x2F::Translation(0.0f, pageDy));
         }
         DrawHeaderGpu(HeaderOpacity(to) * pageA * (1.0f - zk), UserOpacity(to) * pageA * (1.0f - zk));
-        for (int pass = 0; pass < 2; ++pass)
-            for (int i = 0; i < g_tileCount; ++i) {
-                if ((i == g_dragIdx) != (pass == 1)) continue;
-                float a, slide, gs;
-                if (TileOpeningProgress(i, to, &a, &slide, &gs)) {
-                    // The tiles travel with their page: the staggered dissolve they used to play on
-                    // the way out is gone, the scroll itself is the transition.
-                    DrawTileGpu(i, a * pageA, slide, gs);
-                }
+        for (int i = 0; i < g_tileCount; ++i) {
+            if (i == g_dragIdx) continue;   // the tile in the air is drawn last, see below
+            float a, slide, gs;
+            if (TileOpeningProgress(i, to, &a, &slide, &gs)) {
+                // The tiles travel with their page: the staggered dissolve they used to play on
+                // the way out is gone, the scroll itself is the transition.
+                DrawTileGpu(i, a * pageA, slide, gs);
             }
+        }
         if (zk <= 0.0f && !g_charmOpen) {
             D2D1_RECT_F fr; float fa;
             if (FocusTileRect(to, now, &fr, &fa)) {
@@ -4669,6 +4645,15 @@ static bool RenderGpu() {
     if (!g_closing && g_open && g_view == VIEW_START) {
         if (paging) g_rt->SetTransform(D2D1::Matrix3x2F::Translation(0.0f, pageDy));
         DrawGroupNamesGpu(now, paging ? pageA : 1.0f);
+        // The tile being dragged travels over the header and the group names, so it is the
+        // topmost element of the page, as in Windows 8.1: it is drawn here, after the names,
+        // instead of with the other tiles, or the names painted over it while it moved.
+        if (g_dragging && g_dragIdx >= 0) {
+            const float toDrag = (float)OpeningElapsedMs(now) / 1000.0f;
+            float a, slide, gs;
+            if (TileOpeningProgress(g_dragIdx, toDrag, &a, &slide, &gs))
+                DrawTileGpu(g_dragIdx, a * pageA, slide, gs);
+        }
         if (paging) g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
     }
     if (!g_closing && g_open) {
@@ -10618,20 +10603,6 @@ static void DrawCharmBarGdi(HDC sdc, DWORD now) {
     DeleteDC(idc);
     } catch (...) { Wh_Log(L"[charm] gdi draw failed"); }
 }
-// ---------------------------------------------------------------------------------------------
-// The Windows 8 hint and start button, inside the Start screen
-//
-// Development note: this element used to be part of the Windows 8/8.1 Charms Bar Recreation mod,
-// where the start button belonged to the charms bar. That was a development mistake - the hint and
-// the start button are part of the Start screen, which is this mod - so they are implemented here,
-// this mod owns them, and the Charms mod will lose its own copy.
-//
-// The released Windows 8 / 8.1 design only: the hint is the plain bottom left label "Start" that
-// appears when the charms hint disappears, and the button is the Windows 8 start button glyph (four
-// white panes). Nothing from the beta builds is used here. The button only gets its shaded
-// background while the pointer is over it, which is also what "hovering the start button" means in
-// Windows 8.1.
-// ---------------------------------------------------------------------------------------------
 static bool DismissCompanionSearchCharm(POINT screenPt, bool havePt) {
     HWND other = FindWindowW(L"Win81SearchCharmMod", NULL);
     if (!other || !IsWindowVisible(other)) return false;
@@ -11902,6 +11873,7 @@ static void TrayEdgeHover(int mx, int my) {
 
 static void OpenStart(bool atLogon = false) {
     if (!g_wnd) return;
+    g_trayCloseTick = 0;
     TrayRevealReset();     // the window may be moved to another monitor, or resized
     if (g_appsRefresh && InterlockedCompareExchange(&g_appsReady, 0, 0) &&
         GetTickCount64() - g_catalogBuiltTick > kCatalogMaxAgeMs)
@@ -12359,6 +12331,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_TOGGLE: {
         DWORD now = NowMs();
+        // The Start button of the revealed taskbar reports the click that already closed
+        // Start through WM_APP_TRAY_CLICK: that second report of the same click is dropped.
+        if (g_trayCloseTick && now - g_trayCloseTick < 1000) { g_trayCloseTick = 0; return 0; }
         // The Start button, the Windows key and ShowStartView can report the same action twice in a
         // row: only the first report inside the debounce window acts.
         if (now - g_lastToggleTick < kOrbToggleDebounceMs) {
@@ -12399,7 +12374,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         // A click on the taskbar that the Start screen has just given back: in Windows 8.1 that
         // click goes to the taskbar and the Start screen closes.
         TrayRevealReset();
-        if (g_open && !g_closing) CloseStart();
+        if (g_open && !g_closing) { CloseStart(); g_trayCloseTick = NowMs(); }
         return 0;
     case WM_APP_CLOSE: CloseStart(); return 0;
     case WM_APP_ALL_APPS:
