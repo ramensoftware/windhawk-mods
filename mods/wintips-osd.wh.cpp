@@ -89,6 +89,25 @@ counts consecutive actions.
   solid for that tip instead of showing a black box.
 - Placement is preset based; fine positioning uses the offset settings.
 
+## Compared to Lock Keys Notifier
+
+[Lock Keys Notifier](https://windhawk.net/mods/lock-keys-notifier) reports the
+same lock keys, so the overlap is worth spelling out. The two aim at different
+things:
+
+- **Look.** This mod reproduces the Windows 11 OSD: the card blurs the desktop
+  behind it, slides in from the nearest edge and animates a padlock. Lock Keys
+  Notifier draws a configurable toast on a solid background.
+- **Scope.** Clipboard tips have no equivalent there.
+- **Configuration.** Here the size, theme and material follow Windows on
+  purpose. Lock Keys Notifier is built around being configurable — layouts,
+  fonts, shadows, sounds, per-key accents — so it isn't trying to match the
+  native OSD.
+
+If you want lock keys only, and want to tune every pixel of the card,
+Lock Keys Notifier is the better fit. If you want the native Windows 11 look, or
+clipboard tips, this mod is.
+
 ## Links
 
 - Standalone version, source and issue tracker:
@@ -282,6 +301,23 @@ using std::min;
 using namespace Gdiplus;
 
 // =============================================================================
+// Mod id
+//
+// The tool mod launcher at the end of the file uses this macro for the
+// "-tool-mod <id>" handover between windhawk.exe and the spawned process, so it
+// has to be defined in both builds, not just the standalone one.
+//
+// The wiki snippet calls it WH_MOD_ID. The name is different here on purpose: a
+// "#define WH_..." line is reported by the windhawk-mods CI as "Windhawk symbol
+// redefinition" (pr_validation.py flags "#define W[Hh]_"), and any warning in
+// that check fails it. The launcher logic itself is verbatim.
+// =============================================================================
+
+#ifndef WINTIPS_MOD_ID
+#define WINTIPS_MOD_ID L"wintips-osd"
+#endif
+
+// =============================================================================
 // Standalone build support
 //
 // This file is both a Windhawk mod and, when compiled with WINTIPS_STANDALONE,
@@ -291,10 +327,6 @@ using namespace Gdiplus;
 // =============================================================================
 
 #ifdef WINTIPS_STANDALONE
-
-#ifndef WINTIPS_MOD_ID
-#define WINTIPS_MOD_ID L"wintips-osd"
-#endif
 
 static std::wstring StandaloneIniPath() {
     WCHAR path[MAX_PATH];
