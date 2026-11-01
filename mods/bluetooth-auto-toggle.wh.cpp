@@ -16,7 +16,7 @@
 A Windhawk tool mod that automatically cycles Windows Bluetooth off and back on (in milliseconds) whenever Windhawk boots with your system and a connected Bluetooth device is detected.
 
 ### Why this mod?
-Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) fail to reconnect cleanly or encounter driver sleep glitches on fresh system boots unless Bluetooth is cycled. This mod automates that process by detecting when a device is connected, waiting a configurable few seconds, and cleanly cycling the Bluetooth radio off and then back on in the background.
+Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or degraded state on fresh system boots—even when Windows displays them as "connected"—causing audio silence, latency, or connection drops unless Bluetooth is power-cycled. This mod automates that process by waiting until a device is connected, pausing a configurable few seconds for the driver stack to settle, and cleanly cycling the Bluetooth radio off and then back on in the background.
 
 ### Key Features
 - **Device-Aware Activation:** By default, only cycles Bluetooth when a connected Bluetooth device (headset, mouse, keyboard, etc.) is found.
@@ -24,7 +24,7 @@ Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluet
 - **Dedicated Tool Mod Architecture:** Runs in an isolated `windhawk.exe` background tool process without injecting into or hooking `explorer.exe` or any other critical system process.
 - **Cold Boot Hardware Retry:** Automatically retries radio enumeration if the Bluetooth service (`bthserv`) or adapter driver is still initializing during Windows boot.
 - **State-Safe Cycling:** Only toggles radios that are already powered ON (leaving radios in Airplane mode or turned off alone).
-- **Guaranteed Power-On:** Ensures radios are always powered back on even if the mod is unloaded or Windhawk exits during the cycle.
+- **Safe Power Restoration:** Minimizes the off window and ensures radios are commanded back on with retries even if the mod is unloaded mid-cycle.
 - **Session-Safe:** Remembers the current Windows logon session across tool process restarts using Windows Terminal Services (WTS) logon timestamps.
 - **Graceful Lifecycle & Live Testing:** Responsive to settings updates, mod reload, and instant cancellation on shutdown.
 */
@@ -66,16 +66,9 @@ Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluet
 
 - forceToggleOnSettingsChange: false
   $name: Re-toggle on Settings Save
-  $description: If enabled, saving settings in Windhawk will immediately trigger a Bluetooth off-on toggle test (bypassing session check and startup delay).
+  $description: If enabled, saving settings in Windhawk will immediately trigger a Bluetooth off-on toggle test (bypassing session check, startup delay, and connected device check).
 */
 // ==/WindhawkModSettings==
-
-#ifndef UNICODE
-#define UNICODE
-#endif
-#ifndef _UNICODE
-#define _UNICODE
-#endif
 
 // clang-format off
 #include <windows.h>
@@ -84,8 +77,10 @@ Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluet
 #include <windhawk_api.h>
 
 #include <algorithm>
-#include <vector>
+#include <atomic>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
@@ -118,7 +113,7 @@ static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static HANDLE g_hWorkerThread = NULL;
 static HANDLE g_hStopEvent = NULL;
 static HANDLE g_hTriggerEvent = NULL;
-static bool g_forceNextRun = false;
+static std::atomic<bool> g_forceNextRun{false};
 
 static void LoadSettings() {
     AcquireSRWLockExclusive(&g_settingsLock);
@@ -314,7 +309,7 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
     }
 
     // Step 1: Turn OFF only radios that are currently ON
-    std::vector<Radio> cycledRadios;
+    std::vector<std::pair<Radio, std::wstring>> cycledRadios;
     for (const auto& radio : targetRadios) {
         try {
             std::wstring name = radio.Name().c_str();
@@ -327,7 +322,7 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
             Wh_Log(L"Adapter \"%s\" is ON. Commanding OFF...", name.c_str());
             RadioAccessStatus res = radio.SetStateAsync(RadioState::Off).get();
             if (res == RadioAccessStatus::Allowed) {
-                cycledRadios.push_back(radio);
+                cycledRadios.emplace_back(radio, name);
                 Wh_Log(L"Adapter \"%s\" commanded OFF successfully.", name.c_str());
             } else {
                 Wh_Log(L"Adapter \"%s\" -> SetStateAsync(Off) status: %d", name.c_str(), (int)res);
@@ -349,27 +344,28 @@ static void PerformBluetoothToggle(bool isManualTest = false) {
     WaitForSingleObject(g_hStopEvent, cfg.toggleDelayMs);
 
     // Step 3: Turn cycled radios back ON (with retry on failure)
-    for (const auto& radio : cycledRadios) {
-        std::wstring name = radio.Name().c_str();
+    for (const auto& [radio, name] : cycledRadios) {
         Wh_Log(L"Adapter \"%s\". Commanding back ON...", name.c_str());
 
         bool turnedOn = false;
-        for (int retry = 0; retry < 3; ++retry) {
+        for (int retry = 0; retry < 3 && !turnedOn; ++retry) {
             try {
-                RadioAccessStatus res = radio.SetStateAsync(RadioState::On).get();
-                if (res == RadioAccessStatus::Allowed) {
-                    turnedOn = true;
-                    break;
-                }
+                turnedOn = radio.SetStateAsync(RadioState::On).get() ==
+                           RadioAccessStatus::Allowed;
             } catch (...) {
             }
-            Sleep(100);
+            if (!turnedOn) {
+                Sleep(100);
+            }
         }
 
-        RadioState finalState = radio.State();
-        Wh_Log(L"Adapter \"%s\" final state: %d (%s, success=%d)",
-               name.c_str(), (int)finalState,
-               finalState == RadioState::On ? L"ON" : L"NOT ON", (int)turnedOn);
+        try {
+            Wh_Log(L"Adapter \"%s\" final state: %d (success=%d)", name.c_str(),
+                   (int)radio.State(), (int)turnedOn);
+        } catch (...) {
+            Wh_Log(L"Adapter \"%s\" state read failed after turn ON (success=%d)",
+                   name.c_str(), (int)turnedOn);
+        }
     }
 
     if (!isManualTest) {
@@ -397,8 +393,7 @@ static DWORD WINAPI BluetoothWorkerThread(LPVOID lpParam) {
             break;
         } else if (waitRes == WAIT_OBJECT_0 + 1) {
             Wh_Log(L"Toggle trigger event signaled.");
-            bool isManual = g_forceNextRun;
-            g_forceNextRun = false;
+            bool isManual = g_forceNextRun.exchange(false);
             PerformBluetoothToggle(isManual);
         } else {
             break;
@@ -456,7 +451,8 @@ void WhTool_ModUninit() {
     }
 
     if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, 5000);
+        // Wait up to 15 seconds for the worker thread to finish the turn-on step and exit cleanly
+        WaitForSingleObject(g_hWorkerThread, 15000);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = NULL;
     }
@@ -484,7 +480,7 @@ void WhTool_ModSettingsChanged() {
 
     if (force && g_hTriggerEvent) {
         Wh_Log(L"forceToggleOnSettingsChange enabled, triggering immediate test toggle...");
-        g_forceNextRun = true;
+        g_forceNextRun.store(true);
         SetEvent(g_hTriggerEvent);
     }
 }
