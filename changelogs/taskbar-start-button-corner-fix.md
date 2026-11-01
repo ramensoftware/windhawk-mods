@@ -1,3 +1,7 @@
+## 2.1 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0f752e6d527be1492ca41e8497c8c4bb723a3b2b/mods/taskbar-start-button-corner-fix.wh.cpp))
+
+* Drops UI Automation for the hidden legacy start button via its accessibility action. UI Automation was causing activation+focus racing.
+
 ## 2.0 ([Jul 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/846fb5c2697073198ff251c14fd373f94f16f977/mods/taskbar-start-button-corner-fix.wh.cpp))
 
 Reworked corner-click handling to hook the taskbar’s invisible InputSite window procedure and intercept its `WM_POINTER` messages directly. Existing InputSite windows are found through taskbar scans, while `CreateWindowInBand` covers future taskbar recreation. Runtime hook operations are applied only when necessary, with retry and unload protection.

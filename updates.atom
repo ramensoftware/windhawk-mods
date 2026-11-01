@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-01T16:05:05.000Z</updated>
+    <updated>2026-11-01T21:00:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Corner Click Fix 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#0f752e6d527be1492ca41e8497c8c4bb723a3b2b</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-corner-fix"/>
+        <updated>2026-11-01T21:00:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Drops UI Automation for the hidden legacy start button via its accessibility action. UI Automation was causing activation+focus racing.</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Siri Plus Launchpad 1.0.0]]></title>
         <id>https://windhawk.net/mods/siri-plus-launchpad#91b08e11456122862911513f39e4ca8f79542c49</id>
@@ -964,44 +977,6 @@ The language can follow the Windows UI language or be forced to a specific local
         <author>
             <name>Jona like it, code it</name>
             <uri>https://github.com/Stunning-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Recycle Bin File Preview 1.0.0]]></title>
-        <id>https://windhawk.net/mods/recycle-bin-file-preview#de5d1d54404e8a578d1425dcfd654952d48ba9b8</id>
-        <link href="https://windhawk.net/mods/recycle-bin-file-preview"/>
-        <updated>2026-10-31T16:04:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="recyclebinfilepreview">Recycle Bin File Preview</h1>
-<p>Use the built-in Windows File Explorer Preview Pane (<strong>Alt + P</strong>) to view
-files in the Recycle Bin without restoring them.</p>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/recycle-bin-file-preview/main/assets/recycle-bin-file-preview-comparison.png" alt="Recycle Bin File Preview before and after" /></p>
-<p>The image compares the default Recycle Bin view with the preview enabled
-by this mod.</p>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Open the Recycle Bin in File Explorer.</li>
-<li>Press <strong>Alt + P</strong> to show the Preview Pane.</li>
-<li>Select a file to see its preview.</li>
-</ol>
-<p>The mod uses your Windows file associations and installed preview handlers.
-It does not add new preview handlers or codecs.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>File types without preview support in normal Explorer folders may still
-show <strong>No preview available</strong> in the Recycle Bin.</li>
-<li>The mod does not let you browse inside deleted folders.</li>
-<li>It does not restore, copy, edit or delete your files.</li>
-<li>Windows updates can change how the Recycle Bin works.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Enable <strong>Debug logging</strong> in the mod settings and look for messages starting
-with <code>RBP:</code> in the Windhawk log. Keep logging off during normal use.</p>
-<h2 id="project">Project</h2>
-<p><a href="https://github.com/luizbizzio/recycle-bin-file-preview">Source code and issue reports</a></p>
-<p>Author: <strong>Luiz Bizzio</strong>. Licensed under <strong>MIT</strong>.</p>]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
         </author>
     </entry>
 </feed>

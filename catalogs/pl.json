@@ -17376,7 +17376,7 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0.1269261730846898,
-        "updated": 1785448486000,
+        "updated": 1793566840000,
         "users": 215
       },
       "metadata": {
@@ -17384,7 +17384,7 @@
           "x86-64"
         ],
         "author": "Alchemy",
-        "compilerOptions": "-lole32 -loleaut32",
+        "compilerOptions": "-loleacc",
         "description": "Fixes the issue where clicking in the corner of the taskbar doesn't open the Start menu on multi monitor setups.",
         "github": "https://github.com/alchemyyy",
         "include": [
@@ -17392,7 +17392,7 @@
         ],
         "license": "MIT",
         "name": "Start Menu Corner Click Fix",
-        "version": "2.0"
+        "version": "2.1"
       }
     },
     "taskbar-start-button-position": {
