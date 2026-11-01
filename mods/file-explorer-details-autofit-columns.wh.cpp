@@ -6,6 +6,7 @@
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lpropsys -lshell32 -lcomctl32 -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
