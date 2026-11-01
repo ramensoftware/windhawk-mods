@@ -2,7 +2,7 @@
 // @id              taskbar-snipper
 // @name            Taskbar Snipper
 // @description     Print Screen, or a button on the taskbar, selects part of the screen to mark up and copy or save; Win+Shift+R records it as a video to trim and copy or save
-// @version         1.2.0
+// @version         1.3.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
@@ -83,12 +83,13 @@ The screenshot and record buttons are part of the taskbar, which makes room for 
 take a screenshot or record, and right-click them for their menu. **Position** in the mod's
 settings puts them left of the notification area, of the Wi-Fi, volume and battery icons, or of
 the clock, or over the left end of the taskbar (free when its icons are centered and the Widgets
-button is off). **Which buttons** shows both, or just one of them, and **Buttons on the taskbar**
-turns them off; the shortcuts work either way.
+button is off). **Buttons on the taskbar** turns them off; the shortcuts work either way.
 
-The menu opens the screenshots and recordings folders, and **Choose the screenshots folder…** and
-**Choose the recordings folder…** pick others. The folders can be set in the mod's settings too;
-whichever you changed last is used.
+In the menu, **Screenshot button** and **Record button** show or hide each of them (one of them
+stays), and **Swap the buttons** puts the record button first, or back. The menu also opens the
+screenshots and recordings folders, and **Choose the screenshots folder…** and **Choose the
+recordings folder…** pick others. The buttons and the folders can be set in the mod's settings
+too (**Which buttons**, and the folders); whichever you changed last is used.
 
 ![Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher side by side on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/side-by-side.png)
 
@@ -124,12 +125,13 @@ too, widgets in the same position sit side by side, in that order; right-click o
 /*
 - showButton: true
   $name: Buttons on the taskbar
-  $description: Screenshot and record buttons on the taskbar. Right-click them to choose the folders to save in.
+  $description: Screenshot and record buttons on the taskbar. Right-click them to choose which of them show, their order, and the folders to save in.
 - buttons: both
   $name: Which buttons
-  $description: The screenshot button, the record button, or both. Their shortcuts work either way.
+  $description: The screenshot button, the record button, or both, in either order. Their shortcuts work either way. The buttons' right-click menu can change this too; whichever you changed last is used.
   $options:
   - both: Screenshot and record
+  - recordFirst: Record and screenshot
   - screenshot: Screenshot only
   - record: Record only
 - position: tray
@@ -391,9 +393,55 @@ struct SaveFolder {
     static std::wstring SettingValue(const wchar_t* chosenValue) { return std::wstring(chosenValue) + L"Setting"; }
 };
 
+// Which buttons are on the taskbar, and in what order: the ones chosen from the buttons' menu, until
+// the Which buttons setting is changed; then the setting's.
+struct ButtonChoice {
+    // The choice from the menu, as kept in the mod's storage: these added up.
+    static constexpr int kScreenshot = 1;
+    static constexpr int kRecord = 2;
+    static constexpr int kRecordFirst = 4;
+
+    bool screenshot = true;  // At least one of the two.
+    bool record = true;
+    bool recordFirst = false;
+    std::wstring setting;  // The setting: to tell when it changes.
+
+    static ButtonChoice Load() {
+        ButtonChoice choice;
+        choice.setting = WindhawkUtils::StringSetting::make(L"buttons").get();
+        int chosen = Storage::GetInt(L"Buttons", 0);
+        if ((chosen & (kScreenshot | kRecord)) && Storage::GetString(L"ButtonsSetting") == choice.setting) {
+            choice.screenshot = chosen & kScreenshot;
+            choice.record = chosen & kRecord;
+            choice.recordFirst = chosen & kRecordFirst;
+            return choice;
+        }
+        if (chosen) {
+            // The setting was changed after the buttons were chosen: the setting wins.
+            Storage::Delete(L"Buttons");
+            Storage::Delete(L"ButtonsSetting");
+        }
+        choice.screenshot = choice.setting != L"record";
+        choice.record = choice.setting != L"screenshot";
+        choice.recordFirst = choice.setting == L"recordFirst";
+        return choice;
+    }
+
+    // Uses buttons chosen from the menu, until the setting is changed. Without either, nothing changes.
+    void Choose(bool screenshotButton, bool recordButton, bool recordButtonFirst) {
+        if (!screenshotButton && !recordButton) {
+            return;
+        }
+        screenshot = screenshotButton;
+        record = recordButton;
+        recordFirst = recordButtonFirst;
+        Storage::SetInt(L"Buttons", (screenshot ? kScreenshot : 0) | (record ? kRecord : 0) | (recordFirst ? kRecordFirst : 0));
+        Storage::SetString(L"ButtonsSetting", setting);
+    }
+};
+
 struct ModSettings {
-    bool screenshotButton = true;  // At least one of the two.
-    bool recordButton = true;
+    ButtonChoice buttons;
     bool recordShortcut = true;
     AfterCapture afterCapture = AfterCapture::Both;
     SaveFolder screenshots;
@@ -401,9 +449,7 @@ struct ModSettings {
 
     static ModSettings Load() {
         ModSettings settings;
-        auto buttons = WindhawkUtils::StringSetting::make(L"buttons");
-        settings.screenshotButton = wcscmp(buttons, L"record") != 0;
-        settings.recordButton = wcscmp(buttons, L"screenshot") != 0;
+        settings.buttons = ButtonChoice::Load();
         settings.recordShortcut = Wh_GetIntSetting(L"recordShortcut") != 0;
         auto after = WindhawkUtils::StringSetting::make(L"afterCapture");
         if (wcscmp(after, L"copy") == 0) {
@@ -1739,7 +1785,8 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
 struct SnipButtons {
     bool screenshot = true;  // At least one of the two.
     bool record = true;
-    bool recording = false;  // The record button stops recording.
+    bool recordFirst = false;  // The record button on the left.
+    bool recording = false;    // The record button stops recording.
 };
 
 // The buttons, as the widget's parts.
@@ -1750,20 +1797,21 @@ constexpr int kRecordPart = 1;
 class SnipView : public TaskbarXaml::View {
 public:
     wux::FrameworkElement Build() override {
-        wuxc::StackPanel panel;
-        panel.Orientation(wuxc::Orientation::Horizontal);
+        panel_ = wuxc::StackPanel();
+        panel_.Orientation(wuxc::Orientation::Horizontal);
         recordIcon_ = TaskbarXaml::MakeGlyph(kGlyphRecord, 16);
         // Not highlighted in the screenshot or recording they start.
-        panel.Children().Append(snip_.Make(kSnipPart, TaskbarXaml::MakeGlyph(kGlyphSnip, 16), L"Take a screenshot", true));
-        panel.Children().Append(record_.Make(kRecordPart, recordIcon_, L"Record the screen", true));
+        panel_.Children().Append(snip_.Make(kSnipPart, TaskbarXaml::MakeGlyph(kGlyphSnip, 16), L"Take a screenshot", true));
+        panel_.Children().Append(record_.Make(kRecordPart, recordIcon_, L"Record the screen", true));
         Show(buttons_);
-        return panel;
+        return panel_;
     }
 
     void Forget() override {
         snip_.Forget();
         record_.Forget();
         recordIcon_ = nullptr;
+        panel_ = nullptr;
     }
 
     void Show(const SnipButtons& buttons) {
@@ -1779,9 +1827,18 @@ public:
         record_.Border().Visibility(buttons.record ? wux::Visibility::Visible : wux::Visibility::Collapsed);
         recordIcon_.Glyph(buttons.recording ? kGlyphRecordStop : kGlyphRecord);
         wux::Automation::AutomationProperties::SetName(record_.Border(), buttons.recording ? L"Stop recording" : L"Record the screen");
+        // In the order chosen: the second one moves to the front when it's the other way round.
+        auto children = panel_.Children();
+        wux::UIElement first = buttons.recordFirst ? record_.Border() : snip_.Border();
+        if (children.Size() == 2 && children.GetAt(0) != first) {
+            auto second = children.GetAt(1);
+            children.RemoveAt(1);
+            children.InsertAt(0, second);
+        }
     }
 
 private:
+    wuxc::StackPanel panel_{nullptr};
     TaskbarXaml::Part snip_;
     TaskbarXaml::Part record_;
     wuxc::FontIcon recordIcon_{nullptr};
@@ -6418,7 +6475,7 @@ private:
 
     // Tells the buttons on the taskbar what to show.
     void SendButtons() {
-        SnipButtons buttons{settings_.screenshotButton, settings_.recordButton, recordingBar_.Shown()};
+        SnipButtons buttons{settings_.buttons.screenshot, settings_.buttons.record, settings_.buttons.recordFirst, recordingBar_.Shown()};
         TaskbarXaml::g_bridge->Post([buttons]() { g_view->Show(buttons); });
     }
 
@@ -6587,6 +6644,12 @@ private:
         }
     }
 
+    // Shows or hides a button, or swaps them, as chosen from the menu.
+    void ChooseButtons(bool screenshot, bool record, bool recordFirst) {
+        settings_.buttons.Choose(screenshot, record, recordFirst);
+        SendButtons();
+    }
+
     void ShowMenu() {
         menu_ = std::make_unique<Menu>();
         Menu& menu = *menu_;
@@ -6597,6 +6660,14 @@ private:
             menu.Add(std::wstring(L"Record the screen") + (settings_.recordShortcut ? L"\tWin+Shift+R" : L""),
                      [this]() { ToggleRecording(); });
         }
+        menu.AddSeparator();
+        // Which buttons show, one of them always, and in what order.
+        bool screenshot = settings_.buttons.screenshot;
+        bool record = settings_.buttons.record;
+        bool recordFirst = settings_.buttons.recordFirst;
+        menu.Add(L"Screenshot button", [=, this]() { ChooseButtons(!screenshot, record, recordFirst); }, screenshot, record);
+        menu.Add(L"Record button", [=, this]() { ChooseButtons(screenshot, !record, recordFirst); }, record, screenshot);
+        menu.Add(L"Swap the buttons", [=, this]() { ChooseButtons(screenshot, record, !recordFirst); }, false, screenshot && record);
         menu.AddSeparator();
         menu.Add(L"Open the screenshots folder", [this]() { OpenFolder(settings_.screenshots.path); });
         menu.Add(L"Choose the screenshots folder…", [this]() {
