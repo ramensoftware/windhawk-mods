@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-auto-hide-when-maximized-multi-monitor
 // @name            Taskbar auto-hide when maximized - multi-monitor fix
-// @description     Auto-hide the taskbar only when a window is maximized or overlaps it. Fork of m417z's mod with multi-monitor, stuck-taskbar and hide-latency fixes on Windows 11.
+// @description     Auto-hide the taskbar only when a window is maximized or overlaps it. Fork of m417z's mod with multi-monitor, stuck-taskbar, hide-latency and hover-reveal fixes on Windows 11.
 // @version         1.3.0
 // @author          Saderius
 // @github          https://github.com/Saderius
@@ -67,6 +67,19 @@ takes over as soon as it's done.
   "a toolbar is already hidden" warning isn't spammed).
 - If the shell's hide timer can't work at all, the taskbar's own hide routine is
   called directly.
+- The taskbar's monitor handle is re-validated. After the displays re-enumerate,
+  Explorer can hold an `HMONITOR` that no longer resolves; the mod then uses the
+  monitor the taskbar is actually on instead of deciding that the bar must stay
+  shown.
+
+**The taskbar comes back on hover**
+
+- Hiding is done by calling the shell's own hide routine, for speed. The shell
+  arms its unhide timer - the one that watches the screen edge - only when it
+  hides the bar itself, so a bar hidden this way could not be brought back with
+  the mouse. The mod arms that timer after hiding and clears it when the bar is
+  meant to stay shown, so touching the bottom edge still reveals the taskbar,
+  on every monitor.
 
 **Faster hiding**
 
@@ -386,6 +399,26 @@ bool GetTaskbarRectForMonitor(HMONITOR monitor, RECT* rect) {
     SendMessage(hTaskbarWnd, g_getTaskbarRectRegisteredMsg, (WPARAM)monitor,
                 (LPARAM)rect);
     return true;
+}
+
+// The taskbar can hold an HMONITOR that no longer resolves after the displays
+// have been re-enumerated (monitor sleep/wake with DPMS, display off/on,
+// dock/undock). GetMonitorInfo() then fails, so every "is a window on this
+// monitor" check fails too and the mod decides to keep the taskbar shown
+// forever. Fall back to the monitor the taskbar window is actually on.
+HMONITOR GetTaskbarMonitor(HWND hTaskbarWnd, HMONITOR monitor) {
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {
+        return monitor;
+    }
+
+    HMONITOR fallbackMonitor =
+        MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
+    Wh_Log(L"Taskbar %08X has a stale monitor %p, using %p instead",
+           (DWORD)(ULONG_PTR)hTaskbarWnd, monitor, fallbackMonitor);
+    return fallbackMonitor;
 }
 
 bool GetAutoHideEnabled(HWND hTaskbarWnd) {
@@ -1148,7 +1181,8 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             }
         }
 
-        HMONITOR monitor = TrayUI_GetStuckMonitor_Original(pThis);
+        HMONITOR monitor =
+            GetTaskbarMonitor(hWnd, TrayUI_GetStuckMonitor_Original(pThis));
         bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
         void* pTrayUI_IInspectable =
@@ -1161,6 +1195,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             Wh_Log(L"> keepShown=%d", keepShown);
 
             if (keepShown) {
+                KillTimer(hWnd, kTrayUITimerUnhide);
                 g_taskbarsKeptShown[pTrayUI_IInspectable] = hWnd;
 
                 void* pTrayUI_ITrayComponentHost =
@@ -1190,6 +1225,13 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
 
             KillTimer(hWnd, kTrayUITimerHide);
             TrayUI__Hide_Original(pThis);
+
+            // The shell arms its unhide timer - the one that brings the bar
+            // back when the pointer touches the screen edge - only when it
+            // hides the taskbar itself. This hide is done here, so arm it too;
+            // without it the bar can't be revealed on secondary monitors (and
+            // sometimes not on the primary either).
+            SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
 
             if (!autoHideEnabled) {
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
@@ -1232,8 +1274,9 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         void* pCSecondaryTray_ISecondaryTray =
             QueryViaVtable(pThis, CSecondaryTray_vftable_ISecondaryTray);
 
-        HMONITOR monitor =
-            CSecondaryTray_GetMonitor_Original(pCSecondaryTray_ISecondaryTray);
+        HMONITOR monitor = GetTaskbarMonitor(
+            hWnd,
+            CSecondaryTray_GetMonitor_Original(pCSecondaryTray_ISecondaryTray));
 
         bool keepShown = ShouldKeepTaskbarShown(hWnd, monitor);
 
@@ -1245,6 +1288,7 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
             Wh_Log(L"> keepShown=%d", keepShown);
 
             if (keepShown) {
+                KillTimer(hWnd, kTrayUITimerUnhide);
                 g_taskbarsKeptShown[pThis] = hWnd;
 
                 CSecondaryTray__Unhide_Original(pThis, 0, 0);
@@ -1272,6 +1316,10 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
 
             KillTimer(hWnd, kTrayUITimerHide);
             CSecondaryTray__AutoHide_Original(pThis, true);
+
+            // Same as above: without the shell's unhide timer armed, a bar
+            // hidden by the mod can't be brought back with the mouse.
+            SetTimer(hWnd, kTrayUITimerUnhide, 100, nullptr);
 
             if (!autoHideEnabled) {
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
