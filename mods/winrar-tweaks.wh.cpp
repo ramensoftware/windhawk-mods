@@ -8,7 +8,7 @@
 // @homepage        https://github.com/ArvindSaini978/my-windhawk-mods
 // @license         MIT
 // @include         WinRAR.exe
-// @compilerOptions -luser32 -lcomctl32
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // clang-format off
@@ -47,7 +47,7 @@ All-in-one quality-of-life enhancements for **WinRAR** that modernize navigation
 
 ## ⚠️ Compatibility & Notes
 
-* **Refreshing After Changing Settings:** If you toggle the *Human-Readable File Sizes* setting on or off while WinRAR is open, please press **`F5`** or navigate to another folder and back to refresh the file list with the updated size format.
+* **Refreshing After Changing Settings or Disabling:** If you toggle the *Human-Readable File Sizes* setting on or off, or disable/remove the mod while WinRAR is open, please press **`F5`** or navigate to another folder and back to refresh the file list with the updated size format.
 * **Supported Column Languages:** Out-of-the-box header detection supports English (`Size`, `Packed`) as well as common localized headers (`Размер`, `Сжатый`, `Größe`, `Gepackt`, `Taille`, `Compressé`, `Tamaño`, `Comprimido`).
 * **Sorting Behavior:** Because WinRAR sorts internal archive records prior to display formatting, sorting by Size or Packed continues to sort accurately by exact byte count.
 
@@ -76,10 +76,10 @@ All-in-one quality-of-life enhancements for **WinRAR** that modernize navigation
 // clang-format on
 
 #include <commctrl.h>
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
-#include <windows.h>
+#include <climits>
 #include <cstdio>
+#include <cwchar>
 #include <cwctype>
 #include <mutex>
 #include <unordered_set>
@@ -94,6 +94,7 @@ static ModSettings g_settings;
 static std::mutex g_listViewMutex;
 static std::unordered_set<HWND> g_subclassedListViews;
 
+// Reads user configuration from Windhawk settings
 void LoadSettings() {
     g_settings.close_on_esc = Wh_GetIntSetting(L"close_on_esc") != 0;
     g_settings.readable_file_sizes =
@@ -104,6 +105,7 @@ void LoadSettings() {
 // 1. Smart Esc-to-Close Logic
 // ---------------------------------------------------------------------------
 
+// Returns true if keyboard focus is inside a text input or combobox control
 static bool IsFocusInEditableControl(HWND hFocus) {
     if (!hFocus)
         return false;
@@ -112,34 +114,13 @@ static bool IsFocusInEditableControl(HWND hFocus) {
     if (!GetClassNameW(hFocus, cls, ARRAYSIZE(cls)))
         return false;
 
-    if (_wcsicmp(cls, L"Edit") == 0 || _wcsicmp(cls, L"ComboBox") == 0 ||
-        _wcsicmp(cls, L"ComboBoxEx32") == 0 ||
-        wcsstr(cls, L"RichEdit") != nullptr ||
-        wcsstr(cls, L"RICHEDIT") != nullptr) {
-        HWND hParent = GetParent(hFocus);
-        if (hParent) {
-            WCHAR parentCls[64] = {};
-            GetClassNameW(hParent, parentCls, ARRAYSIZE(parentCls));
-
-            // Inline file rename inside ListView or TreeView
-            if (_wcsicmp(parentCls, WC_LISTVIEWW) == 0 ||
-                _wcsicmp(parentCls, WC_TREEVIEWW) == 0) {
-                return true;
-            }
-
-            // Address bar Edit inside ComboBox: only block Esc if dropdown list
-            // is open
-            if (_wcsicmp(parentCls, L"ComboBox") == 0 ||
-                _wcsicmp(parentCls, L"ComboBoxEx32") == 0) {
-                return SendMessageW(hParent, CB_GETDROPPEDSTATE, 0, 0) != 0;
-            }
-        }
-        return true;
-    }
-
-    return false;
+    return (_wcsicmp(cls, L"Edit") == 0 || _wcsicmp(cls, L"ComboBox") == 0 ||
+            _wcsicmp(cls, L"ComboBoxEx32") == 0 ||
+            wcsstr(cls, L"RichEdit") != nullptr ||
+            wcsstr(cls, L"RICHEDIT") != nullptr);
 }
 
+// Intercepts Escape keydown to close the active WinRAR dialog or main window
 static bool ProcessEscapeKey(MSG* pMsg) {
     if (!g_settings.close_on_esc || !pMsg)
         return false;
@@ -147,7 +128,6 @@ static bool ProcessEscapeKey(MSG* pMsg) {
     if (pMsg->message != WM_KEYDOWN || pMsg->wParam != VK_ESCAPE)
         return false;
 
-    // Ignore key auto-repeat while holding Esc
     if ((pMsg->lParam & (1LL << 30)) != 0)
         return false;
 
@@ -176,29 +156,11 @@ static bool ProcessEscapeKey(MSG* pMsg) {
     if (pid != GetCurrentProcessId())
         return false;
 
-    HWND hMain = GetAncestor(hActive, GA_ROOT);
-    if (!hMain)
-        hMain = hActive;
+    HWND hTarget = GetAncestor(hActive, GA_ROOT);
+    if (!hTarget)
+        hTarget = hActive;
 
-    // 1. If a child/owned dialog window is active, close only that dialog
-    HWND hOwner = GetWindow(hMain, GW_OWNER);
-    if (hOwner != nullptr) {
-        PostMessageW(hMain, WM_CLOSE, 0, 0);
-        pMsg->message = WM_NULL;
-        return true;
-    }
-
-    // 2. If an owned popup dialog is visible on top of main window, close it
-    // first
-    HWND hPopup = GetLastActivePopup(hMain);
-    if (hPopup && hPopup != hMain && IsWindowVisible(hPopup)) {
-        PostMessageW(hPopup, WM_CLOSE, 0, 0);
-        pMsg->message = WM_NULL;
-        return true;
-    }
-
-    // 3. Close main WinRAR window
-    PostMessageW(hMain, WM_CLOSE, 0, 0);
+    PostMessageW(hTarget, WM_CLOSE, 0, 0);
     pMsg->message = WM_NULL;
     return true;
 }
@@ -238,6 +200,7 @@ BOOL WINAPI PeekMessageW_Hook(LPMSG lpMsg,
 // 2. Human-Readable File Size Logic
 // ---------------------------------------------------------------------------
 
+// Converts a raw byte count into a 2-decimal human-readable string (B to TB)
 static void FormatBytesReadable(ULONGLONG bytes,
                                 WCHAR* outBuf,
                                 size_t outSize) {
@@ -246,27 +209,29 @@ static void FormatBytesReadable(ULONGLONG bytes,
     constexpr double GB = MB * 1024.0;
     constexpr double TB = GB * 1024.0;
 
+    if (bytes < 1024ULL) {
+        swprintf_s(outBuf, outSize, L"%llu B", bytes);
+        return;
+    }
+
     double dBytes = static_cast<double>(bytes);
 
-    if (dBytes >= TB) {
+    if (dBytes >= GB * 1023.995) {
         swprintf_s(outBuf, outSize, L"%.2f TB", dBytes / TB);
-    } else if (dBytes >= GB) {
+    } else if (dBytes >= MB * 1023.995) {
         swprintf_s(outBuf, outSize, L"%.2f GB", dBytes / GB);
-    } else if (dBytes >= MB) {
+    } else if (dBytes >= KB * 1023.995) {
         swprintf_s(outBuf, outSize, L"%.2f MB", dBytes / MB);
-    } else if (dBytes >= KB) {
-        swprintf_s(outBuf, outSize, L"%.2f KB", dBytes / KB);
     } else {
-        swprintf_s(outBuf, outSize, L"%llu B", bytes);
+        swprintf_s(outBuf, outSize, L"%.2f KB", dBytes / KB);
     }
 }
 
+// Parses a formatted numeric byte string while rejecting dates, ratios, or text
 static bool ParseNumericBytes(const WCHAR* str, ULONGLONG* outBytes) {
     if (!str || str == LPSTR_TEXTCALLBACKW || !*str || !outBytes)
         return false;
 
-    // Reject dates, times, ratios (%), or strings that already contain
-    // letters/units
     for (const WCHAR* p = str; *p; ++p) {
         if (*p == L':' || *p == L'-' || *p == L'/' || *p == L'%' ||
             iswalpha(*p)) {
@@ -280,8 +245,6 @@ static bool ParseNumericBytes(const WCHAR* str, ULONGLONG* outBytes) {
     for (const WCHAR* p = str; *p; ++p) {
         WCHAR ch = *p;
 
-        // Skip locale thousand separators & invisible Windows LTR/RTL
-        // formatting marks
         if (iswspace(ch) || ch == L',' || ch == L'.' || ch == L'\'' ||
             ch == 0x00A0 || ch == 0x202F || ch == 0x200E || ch == 0x200F) {
             continue;
@@ -305,6 +268,7 @@ static bool ParseNumericBytes(const WCHAR* str, ULONGLONG* outBytes) {
     return true;
 }
 
+// Checks whether the given ListView column index corresponds to Size or Packed
 static bool IsTargetSizeColumn(HWND hListView, int subItem) {
     if (subItem < 0)
         return false;
@@ -325,11 +289,8 @@ static bool IsTargetSizeColumn(HWND hListView, int subItem) {
     }
 
     static const WCHAR* const kKeywords[] = {
-        L"Size",   L"Packed",      // English
-        L"Размер", L"Сжатый",      // Russian
-        L"Größe",  L"Gepackt",     // German
-        L"Taille", L"Compressé",   // French
-        L"Tamaño", L"Comprimido",  // Spanish
+        L"Size",    L"Packed", L"Размер",    L"Сжатый", L"Größe",
+        L"Gepackt", L"Taille", L"Compressé", L"Tamaño", L"Comprimido",
     };
 
     for (const WCHAR* kw : kKeywords) {
@@ -339,13 +300,11 @@ static bool IsTargetSizeColumn(HWND hListView, int subItem) {
     return false;
 }
 
-// Re-formats any raw numeric byte cells already present in an existing ListView
+// Formats raw byte cells already present in an open ListView
 static void FormatExistingListViewItems(HWND hListView) {
     if (!g_settings.readable_file_sizes || !IsWindow(hListView))
         return;
 
-    // Skip virtual/owner-data ListViews where text is supplied via
-    // LVN_GETDISPINFO
     if (GetWindowLongPtrW(hListView, GWL_STYLE) & LVS_OWNERDATA)
         return;
 
@@ -388,6 +347,7 @@ static void FormatExistingListViewItems(HWND hListView) {
     }
 }
 
+// Intercepts ListView item text updates to format Size and Packed values
 static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
                                              UINT uMsg,
                                              WPARAM wParam,
@@ -401,10 +361,10 @@ static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
                 (uMsg == LVM_SETITEMTEXTW) || ((pItem->mask & LVIF_TEXT) != 0);
 
             if (hasText && pItem->pszText &&
-                pItem->pszText != LPSTR_TEXTCALLBACKW &&
-                IsTargetSizeColumn(hWnd, pItem->iSubItem)) {
+                pItem->pszText != LPSTR_TEXTCALLBACKW) {
                 ULONGLONG byteCount = 0;
-                if (ParseNumericBytes(pItem->pszText, &byteCount)) {
+                if (ParseNumericBytes(pItem->pszText, &byteCount) &&
+                    IsTargetSizeColumn(hWnd, pItem->iSubItem)) {
                     WCHAR szFormatted[64] = {};
                     FormatBytesReadable(byteCount, szFormatted,
                                         ARRAYSIZE(szFormatted));
@@ -419,9 +379,6 @@ static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
         }
     }
 
-    // Also catch virtual/callback ListView items via WM_NOTIFY ->
-    // LVN_GETDISPINFOW on parent if needed, and clean up tracking set when
-    // ListView is destroyed
     if (uMsg == WM_NCDESTROY) {
         std::lock_guard<std::mutex> lock(g_listViewMutex);
         g_subclassedListViews.erase(hWnd);
@@ -430,6 +387,7 @@ static LRESULT CALLBACK ListViewSubclassProc(HWND hWnd,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// Subclasses a SysListView32 window and tracks it for safe teardown
 static void AttachListViewSubclass(HWND hWnd, bool formatExisting) {
     if (!hWnd || !IsWindow(hWnd))
         return;
@@ -518,8 +476,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // Subclass and format any WinRAR ListView that was already open before mod
-    // load
     EnumWindows(EnumTopWindowsProc, 0);
 }
 
