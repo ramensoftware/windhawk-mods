@@ -4,7 +4,7 @@
 // @name:zh-CN      资源管理器页签路由
 // @description     Reuse and activate Explorer folder tabs, preserve file selection and explicit new windows
 // @description:zh-CN 复用并切换资源管理器页签，保留文件选中状态和明确的新窗口操作
-// @version         1.1.0
+// @version         1.1.1
 // @author          afate123
 // @github          https://github.com/afate123
 // @license         MIT
@@ -77,6 +77,8 @@ This mod builds on the routing approach introduced by [Explorer Single Window Ta
 
 Windows 11 x64 with native File Explorer tabs is required. This mod uses internal shell symbols, which are checked when it loads. A future Windows update can require a compatibility update.
 
+For routing between Explorer processes, use windows on the same desktop and at the same privilege level. Mixing ordinary and elevated Explorer windows is outside the supported configuration.
+
 Ctrl+N and dragging a tab into a separate window can create frames without the explicit folder-menu intent this mod recognizes. Those frames may be routed back into tabs. Disable window routing when you need to retain them as separate windows.
 
 Some requests are handled through a temporary transparent Explorer window before routing completes. This is not a guarantee of entirely window-free navigation. If a request cannot be completed safely, the temporary window is restored instead of discarding the request. Window presentation state, including existing layered transparency, is restored on recovery.
@@ -114,6 +116,8 @@ The mod is distributed under the MIT license.
 ### 兼容性与限制
 
 需要 Windows 11 x64 以及支持原生页签的资源管理器。加载时会检查所需的系统内部符号，未来 Windows 更新可能需要同步更新兼容实现。
+
+在资源管理器进程之间路由时，请使用同一桌面、相同权限级别的窗口；混用普通权限和管理员权限的资源管理器窗口不属于支持范围。
 
 Ctrl+N 和将页签拖出为独立窗口，可能不携带本 mod 能识别的文件夹菜单意图，因此产生的窗口仍可能被合并回页签；需要保留这些独立窗口时，可关闭窗口转页签设置。
 
@@ -284,24 +288,11 @@ class IntentPropertyChannel {
         const UINT bytes = ILGetSize(pidl);
         if (bytes < sizeof(USHORT))
             return false;
-        BCRYPT_ALG_HANDLE algorithm = nullptr;
-        BCRYPT_HASH_HANDLE hash = nullptr;
         unsigned char digest[32]{};
-        NTSTATUS status = BCryptOpenAlgorithmProvider(
-            &algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
-        if (status >= 0)
-            status =
-                BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0);
-        if (status >= 0)
-            status = BCryptHashData(
-                hash, reinterpret_cast<PUCHAR>(const_cast<ITEMIDLIST*>(pidl)),
-                bytes, 0);
-        if (status >= 0)
-            status = BCryptFinishHash(hash, digest, sizeof(digest), 0);
-        if (hash)
-            BCryptDestroyHash(hash);
-        if (algorithm)
-            BCryptCloseAlgorithmProvider(algorithm, 0);
+        const NTSTATUS status =
+            BCryptHash(BCRYPT_SHA256_ALG_HANDLE, nullptr, 0,
+                       reinterpret_cast<PUCHAR>(const_cast<ITEMIDLIST*>(pidl)),
+                       bytes, digest, sizeof(digest));
         if (status < 0)
             return false;
         constexpr wchar_t digits[] = L"0123456789abcdef";
@@ -797,10 +788,6 @@ inline bool IsShellWindowsServiceCommand(const wchar_t* command) {
 
 using Microsoft::WRL::ComPtr;
 
-static ComPtr<IShellBrowser> GetTabBrowser(IDispatch* dispatch) {
-    return etr::AcquireShellBrowser(dispatch);
-}
-
 static bool SameFolder(IShellView* view, PCIDLIST_ABSOLUTE requested) {
     if (!view || !requested)
         return false;
@@ -953,7 +940,6 @@ static ReuseResult ReuseFolderTab(Catalog& catalog,
                : ReuseResult::FailedAfterMatch;
 }
 
-// BEGIN INTENT POLICY
 namespace etr {
 enum class FolderIntent { Ordinary, NewTab, NewWindow };
 struct FolderCommand {
@@ -1100,11 +1086,18 @@ class PidlIntentRegistry {
 };
 }  // namespace etr
 static thread_local bool g_foregroundNewTabCall = false;
-// END INTENT POLICY
 static std::mutex g_explicitMutex;
 static etr::FolderCommandRegistry g_folderVerbs;
 static etr::PidlIntentRegistry g_explicitWindows;
 static etr::PidlIntentRegistry g_explicitNewTabs;
+using AddTabAtIndex_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, int, int, GUID*);
+static AddTabAtIndex_t AddTabAtIndex_Original;
+
+static bool CanPublishFolderIntent(etr::IntentPropertyKind kind) noexcept {
+    return kind == etr::IntentPropertyKind::Window
+               ? g_settings.mergeWindows.load()
+               : g_settings.activateNewTabs.load() && AddTabAtIndex_Original;
+}
 static etr::IntentPropertyChannel g_intentProperties;
 static HWND FastPrimary(HWND exclude);
 static constexpr ULONGLONG kSharedIntent = ULONGLONG{1} << 63;
@@ -1117,7 +1110,7 @@ static etr::PidlIntentRegistry& LocalIntentRegistry(
 static ULONGLONG RegisterFolderIntent(etr::IntentPropertyKind kind,
                                       PCIDLIST_ABSOLUTE pidl,
                                       ULONGLONG now) {
-    if (g_intentProperties.Closing())
+    if (!CanPublishFolderIntent(kind) || g_intentProperties.Closing())
         return 0;
     if (g_intentProperties.Ready()) {
         const auto token =
@@ -1328,7 +1321,8 @@ static HRESULT FolderExecute_Hook(void* self) {
             prepared = false;
         }
     };
-    if (command.intent == etr::FolderIntent::NewTab && command.foreground) {
+    if (command.intent == etr::FolderIntent::NewTab && command.foreground &&
+        CanPublishFolderIntent(etr::IntentPropertyKind::Tab)) {
         std::vector<etr::OwnedPidl> destinations;
         if (ReadFolderCommandSelection(self, destinations)) {
             try {
@@ -1365,8 +1359,6 @@ static HRESULT FolderExecute_Hook(void* self) {
     return hr;
 }
 
-using AddTabAtIndex_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, int, int, GUID*);
-static AddTabAtIndex_t AddTabAtIndex_Original;
 static HRESULT AddTabAtIndex_Hook(void* self,
                                   PCIDLIST_ABSOLUTE pidl,
                                   int entryPoint,
@@ -1642,9 +1634,6 @@ class WindowPresentationStore final {
                 entry->state == State::Staging);
     }
 
-    [[nodiscard]] static HWND Root(HWND window) noexcept {
-        return window == nullptr ? nullptr : ::GetAncestor(window, GA_ROOT);
-    }
     [[nodiscard]] static bool IsExplorerFrame(HWND window) noexcept {
         return HasWindowClass(window, L"CabinetWClass");
     }
@@ -1841,9 +1830,6 @@ struct MergeRequest {
     ULONGLONG deadline = 0;
     ULONG_PTR lease = 0;
 };
-
-// Routing host and location queries are implemented by etr::ShellTabCatalog
-// above.
 
 static std::atomic<bool> g_stop{false};
 static HANDLE g_stopEvent = nullptr, g_wakeEvent = nullptr,
@@ -2062,9 +2048,6 @@ static void QueueFocus(HWND tab, bool guardInput) {
     }
 }
 
-// Serialize redirects and identify the newly created tab by HWND, never by
-// global IShellWindows counts (which change while other requests are arriving).
-
 namespace etr {
 struct NavigationState {
     HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -2185,23 +2168,7 @@ class NavigationSubscription {
             const HRESULT hr = point_->Unadvise(cookie_);
             cookie_ = 0;
             if (FAILED(hr) && hr != CONNECT_E_NOCONNECTION) {
-                // A provider can retain a direct sink reference after a
-                // failed Unadvise. CoDisconnectObject only disconnects COM
-                // marshaling; it cannot revoke an arbitrary raw reference.
-                // Pin this image only on that exceptional failure path so
-                // late Invoke/Release can never enter an unloaded vtable.
-                // The disabled sink owns only its inert shared state.
-                HMODULE pinned = nullptr;
-                const BOOL kept =
-                    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                           GET_MODULE_HANDLE_EX_FLAG_PIN,
-                                       reinterpret_cast<LPCWSTR>(
-                                           &NavigationSubscription::PinAnchor),
-                                       &pinned);
-                Wh_Log(
-                    L"Navigation Unadvise failed hr=%08lx; image pin=%d; "
-                    L"disabled sink retained safely until provider release",
-                    hr, kept);
+                Wh_Log(L"Navigation Unadvise failed hr=%08lx", hr);
                 CoDisconnectObject(sink_.Get(), 0);
             }
         }
@@ -2209,9 +2176,6 @@ class NavigationSubscription {
         sink_.Reset();
         state_.reset();
     }
-
-   private:
-    static void PinAnchor() {}
 };
 
 class NavigationCheckSchedule {
@@ -2737,7 +2701,7 @@ static HRESULT STDMETHODCALLTYPE FindWindowSW_Hook(void* self,
     if (g_settings.activateShellLookups && SUCCEEDED(hr) && hr != S_FALSE &&
         out && *out && cls != SWC_DESKTOP && (options & SWFO_NEEDDISPATCH) &&
         !(GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
-        auto browser = GetTabBrowser(*out);
+        auto browser = etr::AcquireShellBrowser(*out);
         HWND tab = nullptr;
         if (browser && SUCCEEDED(browser->GetWindow(&tab)) && tab) {
             // Return from the ShellWindows RPC before issuing frame commands;
