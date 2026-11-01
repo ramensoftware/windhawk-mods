@@ -216,10 +216,10 @@ using winrt::Windows::UI::Text::TextDecorations;
 // WinEvent hooks for the new settings.
 #define WM_APP_RECONFIGURE_HOOKS (WM_APP + 1)
 
-// Posted to the event thread when the system colors or a tree's theme
-// changed, to schedule a coalesced refresh pass that re-reads every icon's
-// theme once the change has settled.
-#define WM_APP_COLORS_CHANGED (WM_APP + 2)
+// Posted to the event thread to schedule a coalesced refresh pass: after the
+// system colors or an icon's theme changed, so every icon's theme is re-read
+// once the change has settled.
+#define WM_APP_REQUEST_REFRESH (WM_APP + 2)
 
 // Delay for the second pass that follows every coalesced refresh, to catch
 // window-state transitions that were still in flight during the first pass.
@@ -1541,7 +1541,7 @@ bool IsLightTheme(const Xaml::FrameworkElement& element) {
 // Safe from any thread.
 void RequestRefreshPass() {
     if (DWORD threadId = g_eventThreadId) {
-        PostThreadMessage(threadId, WM_APP_COLORS_CHANGED, 0, 0);
+        PostThreadMessage(threadId, WM_APP_REQUEST_REFRESH, 0, 0);
     }
 }
 
@@ -2433,7 +2433,7 @@ DWORD WINAPI EventThreadProc(LPVOID) {
             HookWinEvents();
             continue;
         }
-        if (!msg.hwnd && msg.message == WM_APP_COLORS_CHANGED) {
+        if (!msg.hwnd && msg.message == WM_APP_REQUEST_REFRESH) {
             ArmRefreshTimer();
             continue;
         }
