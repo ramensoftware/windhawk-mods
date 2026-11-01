@@ -2,7 +2,7 @@
 // @id              hyprland-windows
 // @name            Hyprland Windows
 // @description     Hyprland-style window handling: move, resize, maximize and close windows with Win + mouse from anywhere on them, hide title bars, color window borders, and go round the virtual desktops with Win+Tab
-// @version         1.2.0
+// @version         1.2.1
 // @author          hiword9
 // @github          https://github.com/HiWord9
 // @homepage        https://github.com/HiWord9/hyprland-windows
@@ -37,8 +37,8 @@ Window handling the way Hyprland does it, on Windows.
   the title bar back.
 * **Win+Tab** - go to the next virtual desktop that has windows on it, at once;
   Win+Shift+Tab goes back. With no other one that has windows, it goes to an
-  empty desktop - a new one, if there is no other desktop at all. Task View
-  moves to Win+Ctrl+Tab.
+  empty desktop - a new one, if there is no other desktop at all, which stays
+  like one made with Win+Ctrl+D. Task View moves to Win+Ctrl+Tab.
 
 Moving and resizing feel like the real thing: windows still snap to the screen
 edges, dragging one to the top still offers the Windows 11 snap layouts, and
@@ -301,8 +301,8 @@ feedback is welcome.
     $name: With nowhere to go, an empty desktop
     $description: >-
       While no other desktop has windows, Win+Tab goes to an empty one - a new
-      one, if there is no other desktop at all. Off, Win+Tab opens Task View
-      then.
+      one, if there is no other desktop at all, which stays like one made with
+      Win+Ctrl+D. Off, Win+Tab opens Task View then.
   $name: Virtual desktops
 */
 // ==/WindhawkModSettings==
@@ -340,6 +340,7 @@ feedback is welcome.
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -604,6 +605,7 @@ constexpr ULONG_PTR kReplayMarker = 0x48797073;  // 'Hyps'
 void ArmWinMask(bool usingWin, bool usingAlt = false);
 void MaskModifierTap();
 bool WinKeyDown();
+bool AltKeyDown();
 bool IsShellProcess();
 bool IsElevatedProcess();
 void StartKeyboardServer();
@@ -712,6 +714,7 @@ int DoubleClickTimeMs();
 bool IsDoubleClickAt(HWND root, POINT pt, DWORD tick);
 bool TakeWindowAction(MSG* msg, WindowAction action);
 bool CanTakeAction(HWND root, WindowAction action);
+bool CanTakeActionUnderCursor(HWND root, WindowAction action);
 bool CanScale(HWND root);
 void ScaleWindow(HWND root, int wheelDelta);
 void RequestWindowAction(HWND root, WindowAction action);
@@ -2372,7 +2375,7 @@ bool HandleEscInAltDrag(bool keyUp) {
     if (keyUp) {
         return std::exchange(g_escForLoop, false);
     }
-    if (!(GetAsyncKeyState(VK_MENU) & 0x8000)) {
+    if (!AltKeyDown()) {
         return false;
     }
     HWND loop = ForegroundMoveSizeWindow();
@@ -3523,11 +3526,8 @@ void BringDesktopForwardForKey(UINT vk) {
 UINT g_msgDrag;  // RegisterWindowMessage, set in Wh_ModInit
 
 bool IsDragModifierDown() {
-    if (g_settings.dragModifier == DragModifier::Alt) {
-        return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    }
-    return ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) !=
-           0;
+    return g_settings.dragModifier == DragModifier::Alt ? AltKeyDown()
+                                                        : WinKeyDown();
 }
 
 // The other one of Win and Alt, held along with the modifier: the left button
@@ -3539,12 +3539,10 @@ bool IsLeftResizeDown() {
         return false;
     }
     if (g_settings.dragModifier == DragModifier::Alt) {
-        return ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) &
-                0x8000) != 0;
+        return WinKeyDown();
     }
     return g_settings.keepAspectVk != VK_MENU &&
-           g_settings.snapModifierVk != VK_MENU &&
-           (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+           g_settings.snapModifierVk != VK_MENU && AltKeyDown();
 }
 
 // Whether a system move/resize loop is running on a thread.
@@ -4529,6 +4527,18 @@ bool CanTakeAction(HWND root, WindowAction action) {
            !(GetClassLongPtrW(root, GCL_STYLE) & CS_NOCLOSE);
 }
 
+// With the mouse, the window is the one under the cursor rather than the
+// focused one - and that can be one that never takes the focus at all, a
+// flyout or a thumbnail of the shell, which closed breaks that part of the
+// shell until it restarts. So a window closed this way is a visible one that
+// is not a tool window, too.
+bool CanTakeActionUnderCursor(HWND root, WindowAction action) {
+    return CanTakeAction(root, action) &&
+           (action != WindowAction::Close ||
+            (IsWindowVisible(root) &&
+             !(GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)));
+}
+
 void RequestWindowAction(HWND root, WindowAction action) {
     if (!PostMessageW(root, g_msgDrag, kDragAction, (LPARAM)action)) {
         Wh_Log(L"Action request for %p failed (%u)", root, GetLastError());
@@ -4599,8 +4609,7 @@ bool MatchesShortcut(const Hotkey& binding, UINT vk, bool now) {
     bool ctrl = held(VK_CONTROL);
     bool alt = held(VK_MENU);
     bool shift = held(VK_SHIFT);
-    bool win =
-        ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+    bool win = WinKeyDown();
     return ctrl == binding.ctrl && alt == binding.alt &&
            shift == binding.shift && win == binding.win;
 }
@@ -4629,7 +4638,7 @@ bool HandleShortcutButton(const MSG* msg) {
     if (!root) {
         root = msg->hwnd;
     }
-    if (!CanTakeAction(root, action)) {
+    if (!CanTakeActionUnderCursor(root, action)) {
         return false;  // desktop, taskbar, menus... - normal click
     }
 
@@ -4898,7 +4907,10 @@ Magnification ScreenMagnification() {
     if (!FindWindowW(L"MagUIClass", nullptr)) {
         return none;
     }
-    HMODULE lib = LoadLibraryW(L"magnification.dll");
+    // From System32 only: in a program run from a folder anyone can write
+    // to, a DLL of that name next to it would be loaded instead.
+    HMODULE lib = LoadLibraryExW(L"magnification.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!lib) {
         return none;
     }
@@ -5029,8 +5041,10 @@ BOOL CALLBACK FindLayerProc(HWND child, LPARAM lParam) {
     return TRUE;
 }
 
-// Under g_uncoveredMutex.
-bool OpenHole(HWND content, POINT pt) {
+// Not under g_uncoveredMutex: the content can be another thread's, and
+// SetWindowRgn on its window waits for that thread. The hole is added to
+// `holes`, for the caller to record.
+bool OpenHole(HWND content, POINT pt, std::vector<Uncovered>* holes) {
     RECT rc;
     GetWindowRect(content, &rc);
     HRGN saved = CreateRectRgn(0, 0, 0, 0);
@@ -5054,7 +5068,7 @@ bool OpenHole(HWND content, POINT pt) {
         }
         return false;
     }
-    g_uncovered.push_back({content, saved, GetCurrentThreadId()});
+    holes->push_back({content, saved, GetCurrentThreadId()});
     return true;
 }
 
@@ -5081,16 +5095,32 @@ bool UncoverUnderCursor(HWND root) {
         if (patch) {
             DwmFlush();
         }
-        std::lock_guard<std::mutex> lock(g_uncoveredMutex);
-        // Once the teardown has closed everything there was, nothing new is
-        // opened for it to miss.
+        std::vector<Uncovered> holes;
         for (HWND layer : search.layers) {
-            opened |= !g_uninitializing && OpenHole(layer, pt);
+            if (!g_uninitializing) {
+                OpenHole(layer, pt, &holes);
+            }
         }
-        if (patch && opened) {
-            g_patches.push_back({patch, GetCurrentThreadId()});
-        } else if (patch) {
-            DestroyWindow(patch);
+        // Recorded under the lock - unless the teardown has closed everything
+        // there was meanwhile, and would miss these: they close again here.
+        {
+            std::lock_guard<std::mutex> lock(g_uncoveredMutex);
+            opened = !g_uninitializing && !holes.empty();
+            if (opened) {
+                g_uncovered.insert(g_uncovered.end(), holes.begin(),
+                                   holes.end());
+                if (patch) {
+                    g_patches.push_back({patch, GetCurrentThreadId()});
+                }
+            }
+        }
+        if (!opened) {
+            for (const Uncovered& u : holes) {
+                SetWindowRgn(u.hwnd, u.region, FALSE);
+            }
+            if (patch) {
+                DestroyWindow(patch);
+            }
         }
     }
     SetThreadDpiAwarenessContext(previous);
@@ -5186,7 +5216,7 @@ bool TakeShortcutPress(int button, POINT pt) {
         return false;
     }
     HWND root = GetAncestor(WindowFromPoint(pt), GA_ROOT);
-    if (!CanTakeAction(root, action)) {
+    if (!CanTakeActionUnderCursor(root, action)) {
         return false;  // desktop, taskbar, menus... - a normal click
     }
     ArmWinMask(shortcut.win, shortcut.alt);
@@ -6213,8 +6243,10 @@ void ProcessRetrievedMessage(MSG* msg) {
 // retrieves; the second is for the ones sent to its windows, which never go
 // near a queue - a window says that it has gained or lost focus by being sent
 // WM_NCACTIVATE, and that is the only word the mod gets about a window it has
-// not otherwise touched. The second one is only installed when there is a
-// border color to paint with, because until then it listens for nothing.
+// not otherwise touched - and a touchpad's two fingers are about to go to
+// the app by DM_POINTERHITTEST, sent too (mouse.cpp). So the second one is
+// installed for either: a border color to paint with, or the mouse wheel
+// scaling windows; with neither, it listens for nothing.
 struct ThreadHooks {
     HHOOK getMessage = nullptr;
     HHOOK callWndProc = nullptr;
@@ -6247,6 +6279,10 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+bool CallWndProcHookWanted() {
+    return BorderColorsWanted() || g_settings.wheelScale;
 }
 
 LRESULT CALLBACK CallWndProc(int code, WPARAM wParam, LPARAM lParam) {
@@ -6294,7 +6330,7 @@ void InstallMessageHookLocked(DWORD threadId) {
                    GetLastError());
         }
     }
-    if (!hooks.callWndProc && BorderColorsWanted()) {
+    if (!hooks.callWndProc && CallWndProcHookWanted()) {
         hooks.callWndProc =
             SetWindowsHookExW(WH_CALLWNDPROC, CallWndProc, nullptr, threadId);
         if (!hooks.callWndProc) {
@@ -6363,10 +6399,10 @@ void RemoveMessageHooks() {
     g_messageHooks.clear();
 }
 
-// The settings can take the border colors away again, and then there is
-// nothing left for the hook on sent messages to listen for.
+// The settings can take the border colors and the wheel away again, and then
+// there is nothing left for the hook on sent messages to listen for.
 void RefreshCallWndProcHooks() {
-    if (BorderColorsWanted()) {
+    if (CallWndProcHookWanted()) {
         InstallMessageHooks();
         return;
     }
