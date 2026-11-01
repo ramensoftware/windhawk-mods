@@ -1,4 +1,3 @@
-cpp
 // ==WindhawkMod==
 // @id              edge-acrylic-scaffold
 // @name            Edge Acrylic (discovery scaffold)
