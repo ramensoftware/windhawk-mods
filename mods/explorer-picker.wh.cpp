@@ -4,7 +4,7 @@
 // @description     Replaces the Open, Save As and folder picker dialogs of every program with a real Explorer window that has a File name / Files of type bar at the bottom
 // @name:ru         Проводник вместо окон выбора файла
 // @description:ru  Заменяет окна «Открыть», «Сохранить как» и выбора папки во всех программах настоящим окном Проводника с полями «Имя файла» и «Тип файлов» внизу
-// @version         1.5.4
+// @version         1.5.8
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         *
@@ -65,7 +65,9 @@ filters are checked before accepting files; Explorer keeps its usual folder
 contents. Programs
 running as administrator use their native dialogs by default. The optional
 setting to replace those dialogs allows programs without administrator rights
-to influence the choice made by an administrator program.
+to influence the choice made by an administrator program. When Explorer itself
+has administrator rights (for example with User Account Control turned off),
+programs are not treated as elevated.
 
 If a program asks for something Explorer cannot do, or Explorer is not
 available, the normal dialog is shown. The risky option below can ignore
@@ -73,20 +75,24 @@ additional application features.
 
 ## Risky: ignore additional application features
 
-**Ignore additional dialog features (risky)** is **disabled by default**.
-When enabled, the picker omits application controls, native panels, previews
-and dialog-event callbacks, including application-specific acceptance checks.
-Old Win32 dialog hooks, templates and editable custom filters are also
-ignored. This lets Explorer replace dialogs whose additional features would
-otherwise require the native window. Extra options cannot be changed; the
-application may use its defaults or retained values instead.
+**Ignore additional dialog features (risky)** is **off by default**.
+When enabled, fully supported extra controls and native panels are retained.
+If an optional extra feature, control or panel cannot be represented, the whole
+additional application UI can be omitted, including otherwise supported options.
+Application events, including OnFileOk/CDN_FILEOK, and supported Unicode Win32
+hooks are retained. Programs can perform the actual opening or saving in these
+callbacks.
+Unavailable extra options use their defaults or retained values instead.
 
-**Use at your own risk:** application-specific behavior and validation can be
-lost, causing incorrect opening or saving, crashes or data loss. Ordinary
-file types, result buffers, item filters, path checks and overwrite
-confirmation remain supported. Unrepresentable results, required unsupported
-file-dialog behavior or an unavailable Explorer can still require the native
-dialog. Disabling the option restores the usual compatibility handling.
+**Use at your own risk:** omitted extra options or previews can still cause
+incorrect opening or saving, crashes or data loss. Ordinary file types,
+result buffers, item filters, application acceptance checks, path checks and
+overwrite confirmation remain supported. Unrepresentable results, required
+unsupported behavior or an unavailable Explorer still require the native
+dialog. ANSI hooks/templates and Unicode hook contracts which cannot be
+retained use the native dialog even with this option enabled. Editable custom
+filters can be omitted only when no application hook/template is lost.
+Disabling the option restores strict extra-feature compatibility handling.
 
 By default, services, system accounts, critical processes, AppContainer
 processes, Chromium worker processes and Windhawk itself are skipped. Single
@@ -131,7 +137,9 @@ the rows grow to keep the text inside the controls.
 обычном Проводнике.
 Программы с правами администратора по умолчанию используют штатные диалоги.
 Опциональное включение замены позволяет программам без прав администратора
-влиять на выбор файла программой с правами администратора.
+влиять на выбор файла программой с правами администратора. Если сам Проводник
+работает с правами администратора (например, при отключённом контроле учётных
+записей), программы не считаются запущенными с повышенными правами.
 
 Если программа запрашивает то, что нельзя повторить в Проводнике, или
 Проводник недоступен, показывается обычное окно. Рискованная опция ниже позволяет
@@ -140,21 +148,25 @@ the rows grow to keep the text inside the controls.
 ### Рискованно: игнорирование дополнительных функций приложения
 
 **«Игнорировать дополнительные функции диалогов (рискованно)»**
-**по умолчанию выключено**. При включении не показываются элементы приложения,
-native-панели и предпросмотр, не вызываются обработчики событий диалога, включая
-дополнительные проверки принятия файла. В старых Win32-диалогах также
-игнорируются hooks, шаблоны и редактируемые пользовательские фильтры. Поэтому
-Проводник может заменить окно даже при несовместимых дополнительных элементах.
-Изменить дополнительные параметры нельзя: приложение может использовать
-значения по умолчанию или ранее заданные значения.
+**по умолчанию выключено**. Полностью поддерживаемые дополнительные элементы
+и native-панели сохраняются. Если дополнительную необязательную функцию,
+элемент или панель нельзя повторить, можно пропустить весь дополнительный
+интерфейс приложения, включая отдельно поддерживаемые параметры. События
+приложения и поддерживаемые Unicode Win32 hooks, включая OnFileOk/CDN_FILEOK,
+сохраняются: программа может выполнять само
+открытие или сохранение именно в этих обработчиках. Недоступные дополнительные
+параметры используют значения по умолчанию или ранее заданные значения.
 
-**Используйте на свой страх и риск:** потеря специальных функций и проверок
-может привести к неправильному открытию/сохранению, сбоям или потере данных.
-Обычные типы файлов, буферы результата, фильтр допустимых элементов, проверка
-пути и подтверждение перезаписи сохраняются. Непредставимый результат,
-обязательные неподдерживаемые функции или недоступный Проводник по-прежнему
-могут потребовать штатный диалог. Выключение опции возвращает обычную обработку
-совместимости.
+**Используйте на свой страх и риск:** потеря дополнительных параметров или
+предпросмотра может привести к неправильному открытию/сохранению, сбоям или
+потере данных. Типы файлов, буферы результата, фильтр допустимых элементов,
+проверки принятия файла приложением, проверка пути и подтверждение перезаписи
+сохраняются. Непредставимые результаты, обязательные неподдерживаемые функции
+или недоступный Проводник по-прежнему требуют штатный диалог. ANSI hooks/шаблоны
+и Unicode hooks, чей контракт невозможно сохранить, используют штатное окно
+даже при включённой опции. Редактируемый пользовательский фильтр можно пропустить
+только без потери hooks/шаблонов приложения. Выключение опции возвращает строгую
+проверку совместимости дополнительных функций.
 
 По умолчанию пропускаются службы, системные учётные записи, критические
 процессы, AppContainer, дочерние процессы Chromium и сам Windhawk.
@@ -191,8 +203,8 @@ Windows об изменении настроек стандартные подп
 - ignoreAppDialogFeatures: false
   $name: Ignore additional dialog features (risky)
   $name:ru: Игнорировать дополнительные функции диалогов (рискованно)
-  $description: Disabled by default. Replace dialogs even with unsupported application controls. Omit extra options, previews and application event callbacks, including additional acceptance checks; ignore old Win32 hooks, templates and editable custom filters. The application may use default or retained values. Use at your own risk; incorrect opening or saving, crashes and data loss are possible.
-  $description:ru: По умолчанию выключено. Заменять диалоги даже с неподдерживаемыми элементами приложения. Пропускать дополнительные параметры, предпросмотр и обработчики событий приложения, включая дополнительные проверки принятия файла; игнорировать старые Win32 hooks, шаблоны и редактируемые пользовательские фильтры. Приложение может использовать значения по умолчанию или ранее заданные значения. Используйте на свой страх и риск; возможны неправильное открытие или сохранение, сбои и потеря данных.
+  $description: Disabled by default. Retain fully supported extra controls and panels. If an optional feature is unsupported, the whole extra UI can be omitted, including otherwise supported controls. Completion callbacks and default or retained options are preserved. Unrepresentable callback contracts still use the native dialog. Use at your own risk; incorrect opening or saving, crashes and data loss are possible.
+  $description:ru: По умолчанию выключено. Полностью поддерживаемые дополнительные элементы и панели сохраняются. Если необязательная функция не поддерживается, можно пропустить весь дополнительный интерфейс, включая отдельно поддерживаемые элементы. Обработчики завершения и значения параметров сохраняются. Непредставимый контракт обработчика требует штатное окно. Используйте на свой страх и риск; возможны неправильное открытие или сохранение, сбои и потеря данных.
 - ansiApps: true
   $name: Old ANSI programs
   $name:ru: Старые ANSI-программы
@@ -729,6 +741,33 @@ UINT Dpi(State* s) {
 int Scale(State* s, int n) {
   return MulDiv(n, Dpi(s), 96);
 }
+// A folder window can be DPI unaware (GDI scaled by another mod) on a per
+// monitor aware thread. Its window procedures run in its own DPI context;
+// code reached from the dispatch hook must do the same, or rectangles come
+// back in physical pixels and the file area is later placed at 225% offsets.
+class WindowDpiContext {
+  using SetFn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+  using GetFn = DPI_AWARENESS_CONTEXT(WINAPI*)(HWND);
+  SetFn set = nullptr;
+  DPI_AWARENESS_CONTEXT previous = nullptr;
+
+ public:
+  explicit WindowDpiContext(HWND window) {
+    HMODULE user = GetModuleHandleW(L"user32.dll");
+    set = reinterpret_cast<SetFn>(
+        GetProcAddress(user, "SetThreadDpiAwarenessContext"));
+    auto get = reinterpret_cast<GetFn>(
+        GetProcAddress(user, "GetWindowDpiAwarenessContext"));
+    if (set && get)
+      if (auto context = get(window))
+        previous = set(context);
+  }
+  WindowDpiContext(const WindowDpiContext&) = delete;
+  ~WindowDpiContext() {
+    if (previous)
+      set(previous);
+  }
+};
 bool ClassIs(HWND h, const wchar_t* wanted) {
   wchar_t c[128] = {};
   GetClassNameW(h, c, 128);
@@ -1421,10 +1460,19 @@ bool ControllerAlive(State* s) {
   return IsWindow(s->controller) &&
          (!s->process || WaitForSingleObject(s->process, 0) == WAIT_TIMEOUT);
 }
+void AllowController(HWND controller) {
+  // Input in Explorer revokes the app's earlier foreground permission. Grant
+  // it back before the app handles confirmation, controls or cancellation.
+  DWORD process = 0;
+  GetWindowThreadProcessId(controller, &process);
+  if (process)
+    AllowSetForegroundWindow(process);
+}
 void SendCancel(State* s) {
   if (!s->closing) {
     s->closing = true;
     Picker::Writer w;
+    AllowController(s->controller);
     Picker::Post(s->controller, s->footer, Picker::Cancel, w, 1000);
   }
 }
@@ -1448,6 +1496,7 @@ void SendCommand(State* s, DWORD kind, DWORD dropItem = Picker::None) {
   w.string(folder);
   w.strings(paths);
   w.number(dropItem);
+  AllowController(s->controller);
   Picker::Post(s->controller, s->footer, Picker::Command, w, 2000);
 }
 void SendControl(State* s,
@@ -1460,6 +1509,7 @@ void SendControl(State* s,
   w.number(action);
   w.number(value);
   w.string(text);
+  AllowController(s->controller);
   Picker::Post(s->controller, s->footer, Picker::ControlChange, w, 2000);
 }
 std::wstring Display(State* s,
@@ -2095,8 +2145,13 @@ LRESULT CALLBACK FooterProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           auto text = r.string(), caption = r.string();
           if (!r.end())
             return FALSE;
+          // The prompt's modal loop can detach and delete s.
+          HWND controller = s->controller;
           // Owned by the picker frame, like the native dialog's own warnings.
-          return ShowPrompt(s->frame, kind, text.c_str(), caption.c_str());
+          int answer =
+              ShowPrompt(s->frame, kind, text.c_str(), caption.c_str());
+          AllowController(controller);
+          return answer;
         }
         case Picker::ShowMenu: {
           Picker::Reader r(copy->lpData, copy->cbData);
@@ -2304,9 +2359,12 @@ bool Attach(HWND frame, const Pending& p) {
   w.number(p.id);
   w.number(static_cast<DWORD>(reinterpret_cast<UINT_PTR>(frame) & 0xFFFFFFFF));
   Picker::Post(s->controller, s->footer, Picker::Ready, w, 2000);
-  SendState(s, true);
+  // Ready grants this exact Explorer process foreground permission before
+  // activation. Notify application callbacks only after focus is assigned;
+  // those callbacks can close the picker or unload the mod.
   SetForegroundWindow(frame);
   SetFocus(s->name);
+  SendState(s, true);
   return true;
 }
 // Windows 11 opens folder windows in a separate "explorer.exe /factory"
@@ -2385,6 +2443,7 @@ HWND ServiceOf(DWORD pid) {
 LRESULT WINAPI DispatchHook(const MSG* msg) {
   if (!g_unloading && msg && msg->hwnd) {
     if (msg->message == probeMessage) {
+      WindowDpiContext dpi(msg->hwnd);
       Probe(msg->hwnd, reinterpret_cast<HWND>(msg->wParam),
             static_cast<DWORD>(msg->lParam));
       return 0;
@@ -2823,9 +2882,9 @@ struct Result {
   std::vector<std::wstring> paths;
 };
 
-bool Elevated() {
+bool Elevated(HANDLE process = GetCurrentProcess()) {
   HANDLE token = nullptr;
-  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+  if (!OpenProcessToken(process, TOKEN_QUERY, &token))
     return false;
   TOKEN_ELEVATION elevation = {};
   DWORD bytes = 0;
@@ -2850,6 +2909,24 @@ HWND FindService() {
       any = h;
   }
   return any;
+}
+// The elevatedApps setting guards an administrator program against a less
+// privileged Explorer. Explorer with the same rights (UAC disabled, or an
+// elevated Explorer) is no such boundary; otherwise every program would count
+// as elevated there and keep its native dialog.
+bool ElevatedAbove(HWND service) {
+  if (!Elevated())
+    return false;
+  DWORD pid = 0;
+  GetWindowThreadProcessId(service, &pid);
+  HANDLE process =
+      pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)
+          : nullptr;
+  if (!process)
+    return true;
+  bool shellElevated = Elevated(process);
+  CloseHandle(process);
+  return !shellElevated;
 }
 
 struct Controller {
@@ -3045,6 +3122,7 @@ struct Controller {
                         L"Выберите только один файл."));
       return;
     }
+    std::wstring full(32768, L'\0');  // one buffer; each path keeps its length
     for (auto& path : list) {
       bool absolute = (path.size() > 2 && path[1] == L':' &&
                        (path[2] == L'\\' || path[2] == L'/')) ||
@@ -3060,13 +3138,13 @@ struct Controller {
         }
         path = folder + (folder.back() == L'\\' ? L"" : L"\\") + path;
       }
-      wchar_t full[32768];
-      DWORD n = GetFullPathNameW(path.c_str(), 32768, full, nullptr);
-      if (!n || n >= 32768) {
+      DWORD n = GetFullPathNameW(path.c_str(), static_cast<DWORD>(full.size()),
+                                 full.data(), nullptr);
+      if (!n || n >= full.size()) {
         Warn(UiText(L"The path is not valid.", L"Некорректный путь."));
         return;
       }
-      path = full;
+      path.assign(full.data(), n);
     }
     if (request.mode == Picker::Folder) {
       DWORD attr = GetFileAttributesW(list[0].c_str());
@@ -3317,6 +3395,14 @@ struct Controller {
           footer = sender;
           frame = GetAncestor(sender, GA_ROOT);
           bound = true;
+          // The service can hand the request to a different Explorer process.
+          // Only the requesting application has foreground rights; grant
+          // them to the process which actually owns the completed picker.
+          DWORD hostProcess = 0;
+          GetWindowThreadProcessId(frame, &hostProcess);
+          BOOL granted = hostProcess && AllowSetForegroundWindow(hostProcess);
+          Wh_Log(L"Picker foreground permission: process %lu granted=%d",
+                 hostProcess, granted);
           Wh_Log(L"Picker window ready: frame %p", frame);
           return TRUE;
         }
@@ -3450,13 +3536,14 @@ struct Controller {
     if (g_unloading)
       return;
     started = GetTickCount64();
-    if (Elevated() && !allowElevated) {
-      Wh_Log(L"Elevated process: picker disabled by settings");
-      return;
-    }
     service = FindService();
     if (!service) {
       Wh_Log(L"Explorer Picker is not active in Explorer -> native dialog");
+      return;
+    }
+    const bool elevatedAbove = ElevatedAbove(service);
+    if (elevatedAbove && !allowElevated) {
+      Wh_Log(L"Elevated process: picker disabled by settings");
       return;
     }
     panel = CreateWindowExW(0, Picker::ControllerClass, L"", 0, 0, 0, 0, 0,
@@ -3469,8 +3556,9 @@ struct Controller {
       panel = nullptr;
       return;
     }
-    // Explorer runs with ordinary rights; let it answer an elevated caller.
-    if (Elevated())
+    // Explorer runs with fewer rights; let it answer an elevated caller. With
+    // equal rights the filter stays closed to lower-integrity processes.
+    if (elevatedAbove)
       ChangeWindowMessageFilterEx(panel, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
     requestId = (GetTickCount() ^ (GetCurrentThreadId() << 8) ^
                  static_cast<DWORD>(reinterpret_cast<UINT_PTR>(this))) |
@@ -3543,11 +3631,14 @@ struct EventReceiver {
       DestroyWindow(window);
   }
 };
+// Like a native modal dialog, disable the owner's top-level window: with only
+// a child disabled, the program could be closed while it waits for the picker.
 struct OwnerModal {
   HWND h;
   bool enabled;
   explicit OwnerModal(HWND owner)
-      : h(owner), enabled(owner && IsWindowEnabled(owner)) {
+      : h(owner ? GetAncestor(owner, GA_ROOT) : nullptr),
+        enabled(h && IsWindowEnabled(h)) {
     if (enabled)
       EnableWindow(h, FALSE);
   }
@@ -3688,9 +3779,14 @@ std::wstring lastOpenKey, lastSaveKey;
 std::wstring Remembered(bool save) {
   if (!Wh_GetIntSetting(L"rememberFolders"))
     return {};
-  wchar_t value[32768] = {};
-  Wh_GetStringValue((save ? lastSaveKey : lastOpenKey).c_str(), value, 32768);
-  DWORD attr = GetFileAttributesW(value);
+  // Path buffers live on the heap: hooks run on application threads, whose
+  // stacks can be small.
+  std::wstring value(32768, L'\0');
+  value.resize(Wh_GetStringValue((save ? lastSaveKey : lastOpenKey).c_str(),
+                                 value.data(), value.size()));
+  value.shrink_to_fit();
+  DWORD attr = value.empty() ? INVALID_FILE_ATTRIBUTES
+                             : GetFileAttributesW(value.c_str());
   return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)
              ? value
              : L"";
@@ -3735,12 +3831,15 @@ void ResolveLinks(std::vector<std::wstring>& paths) {
                                    IID_PPV_ARGS(&link)))) {
       if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file))) &&
           SUCCEEDED(file->Load(path.c_str(), STGM_READ))) {
-        wchar_t target[32768] = {};
-        if (SUCCEEDED(link->GetPath(target, 32768, nullptr, 0)) && target[0]) {
-          DWORD attr = GetFileAttributesW(target);
+        std::wstring target(32768, L'\0');
+        if (SUCCEEDED(link->GetPath(
+                target.data(), static_cast<int>(target.size()), nullptr, 0)) &&
+            target[0]) {
+          target.resize(wcsnlen(target.c_str(), target.size()));
+          DWORD attr = GetFileAttributesW(target.c_str());
           if (attr != INVALID_FILE_ATTRIBUTES &&
               !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            Wh_Log(L"Shortcut resolved: %ls", target);
+            Wh_Log(L"Shortcut resolved: %ls", target.c_str());
             path = target;
           }
         }
@@ -3791,8 +3890,7 @@ inline bool Plain(const OPENFILENAMEW* p,
                   bool save,
                   bool ignoreFeatures = false) {
   return p && SizeValid(p->lStructSize) && p->lpstrFile && p->nMaxFile >= 2 &&
-         FlagsExValid(p) &&
-         !(p->Flags & ~(CommonFlags | (ignoreFeatures ? CustomFlags : 0))) &&
+         FlagsExValid(p) && !(p->Flags & ~CommonFlags) &&
          (ignoreFeatures || !p->lpstrCustomFilter) &&
          // Old-style multi-select returns space separated short names.
          (!(p->Flags & OFN_ALLOWMULTISELECT) ||
@@ -3845,9 +3943,10 @@ void InitialFolder(const OPENFILENAMEW* ofn, bool save, Picker::Request& q) {
   if (q.folder.empty())
     q.folder = Bridge::Remembered(save);
   if (q.folder.empty()) {
-    wchar_t cwd[32768];
-    DWORD n = GetCurrentDirectoryW(32768, cwd);
-    if (n && n < 32768 && Bridge::IsDirectory(cwd))
+    std::wstring cwd(32768, L'\0');
+    DWORD n = GetCurrentDirectoryW(static_cast<DWORD>(cwd.size()), cwd.data());
+    cwd.resize(n < cwd.size() ? n : 0);
+    if (Bridge::IsDirectory(cwd))
       q.folder = cwd;
   }
   if (q.folder.empty())
@@ -4150,6 +4249,7 @@ class Session final : public Ctl::Target {
       L"ExplorerPicker.Legacy.Custom.V6";
   OPENFILENAMEW* ofn;
   bool save;
+  bool ignoreControls, omittingControls = false;
   LPOFNHOOKPROC applicationHook;
   DWORD originalFlags;
   HWND native = nullptr, child = nullptr;
@@ -4195,11 +4295,18 @@ class Session final : public Ctl::Target {
   }
   bool Refresh() {
     Controls next;
-    if (!next.Read(native, child) || !controls.SameIdentity(next)) {
-      Revert();
-      return false;
+    if (!omittingControls) {
+      if (!next.Read(native, child) || !controls.SameIdentity(next)) {
+        if (!ignoreControls) {
+          Revert();
+          return false;
+        }
+        omittingControls = true;
+        controls = {};
+      } else {
+        controls = std::move(next);
+      }
     }
-    controls = std::move(next);
     request.controls = controls.checks;
     request.okLabel = Text(GetDlgItem(native, IDOK));
     request.nameLabel = Text(GetDlgItem(native, stc3));
@@ -4270,10 +4377,11 @@ class Session final : public Ctl::Target {
       request.title = ofn->lpstrTitle;
     if (ofn->lpstrDefExt)
       request.extension = ofn->lpstrDefExt;
-    wchar_t current[32768] = {};
-    LRESULT n = SendMessageW(native, CDM_GETFOLDERPATH, 32768,
-                             reinterpret_cast<LPARAM>(current));
-    if (n > 0 && n <= 32768 && Bridge::IsDirectory(current))
+    std::wstring current(32768, L'\0');
+    LRESULT n = SendMessageW(native, CDM_GETFOLDERPATH, current.size(),
+                             reinterpret_cast<LPARAM>(current.data()));
+    current.resize(n > 0 && n <= 32768 ? wcsnlen(current.c_str(), n) : 0);
+    if (Bridge::IsDirectory(current))
       request.folder = current;
     else
       InitialFolder(ofn, save, request);
@@ -4283,8 +4391,12 @@ class Session final : public Ctl::Target {
     request.index = ofn->nFilterIndex ? ofn->nFilterIndex : 1;
     if (request.index > (std::max)(size_t(1), request.filters.size()))
       return false;
-    if (!controls.Read(native, child))
-      return false;
+    if (!controls.Read(native, child)) {
+      if (!ignoreControls)
+        return false;
+      omittingControls = true;
+      controls = {};
+    }
     request.controls = controls.checks;
     request.okLabel = Text(GetDlgItem(native, IDOK));
     request.nameLabel = Text(GetDlgItem(native, stc3));
@@ -4456,9 +4568,10 @@ class Session final : public Ctl::Target {
   }
 
  public:
-  Session(OPENFILENAMEW* p, bool isSave)
+  Session(OPENFILENAMEW* p, bool isSave, bool ignoreExtraControls = false)
       : ofn(p),
         save(isSave),
+        ignoreControls(ignoreExtraControls),
         applicationHook((p->Flags & OFN_ENABLEHOOK) ? p->lpfnHook : nullptr),
         originalFlags(p->Flags) {}
   const Picker::Request* UiState() const override { return &request; }
@@ -4760,10 +4873,10 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
     return NativeLegacyDialog;
   }
   const bool ignoreFeatures = Wh_GetIntSetting(L"ignoreAppDialogFeatures") != 0;
-  if (!ignoreFeatures && PickerLegacy::Eligible(ofn, save)) {
+  if (PickerLegacy::Eligible(ofn, save)) {
     Ctl::PickerGuard guard;
     overrideError = false;
-    PickerLegacy::Session session(ofn, save);
+    PickerLegacy::Session session(ofn, save, ignoreFeatures);
     BOOL result = session.Run(original);
     if (session.Error()) {
       overrideError = true;
@@ -4773,6 +4886,13 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
       return result;
     return result != FALSE;
   }
+  // Hooks can perform the opening/saving inside CDN_FILEOK. If their native
+  // contract cannot be retained, never report a plain picker's success while
+  // silently omitting that application operation.
+  if (ignoreFeatures && ofn && (ofn->Flags & PickerLegacy::CustomFlags)) {
+    overrideError = false;
+    return NativeLegacyDialog;
+  }
   if (!PickerLegacy::Plain(ofn, save, ignoreFeatures)) {
     if (ofn)
       Wh_Log(L"GetOpen/SaveFileNameW with unsupported flags 0x%08lX -> native",
@@ -4780,9 +4900,8 @@ BOOL Wide(LPOPENFILENAMEW ofn, bool save) {
     overrideError = false;
     return NativeLegacyDialog;
   }
-  if (ignoreFeatures &&
-      ((ofn->Flags & PickerLegacy::CustomFlags) || ofn->lpstrCustomFilter))
-    Wh_Log(L"Win32 dialog application features ignored (risky option)");
+  if (ignoreFeatures && ofn->lpstrCustomFilter)
+    Wh_Log(L"Win32 dialog custom filter ignored (risky option)");
   ActiveSession active;
   if (!active)
     return FALSE;
@@ -4878,19 +4997,18 @@ BOOL Ansi(LPOPENFILENAMEA a, bool save) {
       (a->lStructSize != sizeof(OPENFILENAMEA) &&
        a->lStructSize != OPENFILENAME_SIZE_VERSION_400A) ||
       !a->lpstrFile || a->nMaxFile < 2 ||
+      (a->Flags & PickerLegacy::CustomFlags) ||
       (a->lStructSize == sizeof(OPENFILENAMEA) &&
        (a->FlagsEx & ~OFN_EX_NOPLACESBAR)) ||
-      (a->Flags & ~(PickerLegacy::CommonFlags |
-                    (ignoreFeatures ? PickerLegacy::CustomFlags : 0))) ||
+      (a->Flags & ~PickerLegacy::CommonFlags) ||
       (!ignoreFeatures && a->lpstrCustomFilter) ||
       ((a->Flags & OFN_ALLOWMULTISELECT) &&
        (save || !(a->Flags & OFN_EXPLORER)))) {
     overrideError = false;
     return NativeLegacyDialog;
   }
-  if (ignoreFeatures &&
-      ((a->Flags & PickerLegacy::CustomFlags) || a->lpstrCustomFilter))
-    Wh_Log(L"ANSI dialog application features ignored (risky option)");
+  if (ignoreFeatures && a->lpstrCustomFilter)
+    Wh_Log(L"ANSI dialog custom filter ignored (risky option)");
   size_t len = strnlen(a->lpstrFile, a->nMaxFile);
   if (len >= a->nMaxFile) {
     overrideError = false;
@@ -5123,7 +5241,7 @@ class FileDialogState final : public Ctl::Target {
   IFileDialogCustomize* customization = nullptr;
   IFileDialog2* dialog2 = nullptr;
   bool custom = false, advanced = false, showing = false;
-  bool requiredNative = false, ignoreFeatures = false;
+  bool requiredNative = false, ignoreFeatures = false, omittingFeatures = false;
   mutable Picker::Request basicUi;
   bool nativePanelNeeded = false;
   Picker::Request request;
@@ -5148,6 +5266,8 @@ class FileDialogState final : public Ctl::Target {
       Wh_Log(L"COM unsupported feature: %ls", what);
     advanced = true;
     requiredNative |= required;
+    if (showing && ignoreFeatures && !requiredNative)
+      omittingFeatures = true;
   }
   void Changed() {
     if (showing && controller)
@@ -5315,16 +5435,26 @@ class FileDialogState final : public Ctl::Target {
         return;
       }
       if (!child) {
-        if (GetTickCount64() >= deadline ||
-            (!timer &&
-             !(timer = SetTimer(root, reinterpret_cast<UINT_PTR>(this), 25,
-                                nullptr))))
+        if (GetTickCount64() < deadline &&
+            (timer || (timer = SetTimer(root, reinterpret_cast<UINT_PTR>(this),
+                                        25, nullptr))))
+          return;
+        if (!state.ignoreFeatures) {
           Reveal();
-        return;
+          return;
+        }
+        state.omittingFeatures = true;
       }
       StopTimer();
-      if (!controls.Read(root, child) || controls.checks.empty() ||
-          !Refresh()) {
+      if (!state.omittingFeatures &&
+          (!controls.Read(root, child) || controls.checks.empty())) {
+        if (!state.ignoreFeatures) {
+          Reveal();
+          return;
+        }
+        state.omittingFeatures = true;
+      }
+      if (!Refresh()) {
         Reveal();
         return;
       }
@@ -5407,8 +5537,19 @@ class FileDialogState final : public Ctl::Target {
     const Picker::Request* UiState() const { return &ui; }
     bool Refresh() {
       PickerLegacy::Controls next;
+      if (state.omittingFeatures) {
+        ui = state.request;
+        ui.controls.clear();
+        return true;
+      }
       if (state.advanced || !next.Read(root, child) ||
           !controls.SameIdentity(next)) {
+        if (state.ignoreFeatures && !state.requiredNative) {
+          state.omittingFeatures = true;
+          ui = state.request;
+          ui.controls.clear();
+          return true;
+        }
         if (running)
           Reveal();
         return false;
@@ -5518,7 +5659,7 @@ class FileDialogState final : public Ctl::Target {
   }
   bool NativePhase() const { return panel && !custom; }
   const Picker::Request* UiState() const override {
-    if (ignoreFeatures) {
+    if (omittingFeatures) {
       basicUi = request;
       basicUi.controls.clear();
       return &basicUi;
@@ -5549,17 +5690,16 @@ class FileDialogState final : public Ctl::Target {
     } refreshPanel{panel};
     if (e.kind == Ctl::RefreshEvent)
       return S_OK;
-    if (ignoreFeatures && e.kind == Ctl::ControlEvent)
+    if (omittingFeatures && e.kind == Ctl::ControlEvent)
       return E_INVALIDARG;
     // Hold a snapshot: callbacks may call Unadvise, including on themselves.
     Snapshot snapshot;
-    // Risk mode deliberately omits application callbacks. They can create a
-    // native panel or depend on controls which aren't present in this mode.
-    if (!ignoreFeatures)
-      for (auto& s : sinks) {
-        s.events->AddRef();
-        snapshot.list.push_back(s.events);
-      }
+    // Completion and navigation events are part of the application contract.
+    // OnFileOk can perform the actual open/save, not just extra validation.
+    for (auto& s : sinks) {
+      s.events->AddRef();
+      snapshot.list.push_back(s.events);
+    }
     custom = true;
     if (e.kind == Ctl::ControlEvent) {
       if (panel && panel->Active() && panel->Owns(e.control))
@@ -5737,9 +5877,11 @@ class FileDialogState final : public Ctl::Target {
   // ---- IModalWindow
   HRESULT Show(HWND owner, NativeShow original, void* object) {
     if (g_unloading || showing ||
-        (Ctl::Elevated() && !Wh_GetIntSetting(L"elevatedApps")))
+        (!Wh_GetIntSetting(L"elevatedApps") &&
+         Ctl::ElevatedAbove(Ctl::FindService())))
       return NativeDialog;
     ignoreFeatures = Wh_GetIntSetting(L"ignoreAppDialogFeatures") != 0;
+    omittingFeatures = false;
     ClearResult();
     custom = false;
     FILEOPENDIALOGOPTIONS options = 0;
@@ -5756,7 +5898,8 @@ class FileDialogState final : public Ctl::Target {
       return NativeDialog;
     }
     if (ignoreFeatures)
-      Wh_Log(L"COM application controls and callbacks ignored (risky option)");
+      Wh_Log(L"COM unsupported additional UI may be ignored (risky option)");
+    omittingFeatures = ignoreFeatures && advanced;
     request.mode = Save                               ? Picker::Save
                    : (options & FOS_PICKFOLDERS)      ? Picker::Folder
                    : (options & FOS_ALLOWMULTISELECT) ? Picker::Multi
@@ -5794,7 +5937,7 @@ class FileDialogState final : public Ctl::Target {
     {
       Ctl::PickerGuard guard;
       showing = true;
-      if (nativePanelNeeded && !ignoreFeatures) {
+      if (nativePanelNeeded) {
         Panel session(*this, owner);
         panel = &session;
         hr = session.Run(original, object);
@@ -6425,6 +6568,17 @@ void AddAlias(void* object, const std::shared_ptr<DialogRecord>& record) {
 }
 bool nativeHooksChanged = false;
 std::map<void*, const void*> nativeHookTargets;
+// Only the in-process implementation in comdlg32 is hooked. A dialog created
+// for another apartment is a proxy whose method thunks are shared by every
+// proxied interface of the process; hooking them corrupts unrelated COM calls.
+bool InDialogModule(const void* address) {
+  HMODULE comdlg = GetModuleHandleW(L"comdlg32.dll"), module = nullptr;
+  return comdlg &&
+         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            static_cast<LPCWSTR>(address), &module) &&
+         module == comdlg;
+}
 bool SameNativeModule(void* caller, void* target) {
   HMODULE first = nullptr, second = nullptr;
   constexpr DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -6466,7 +6620,8 @@ struct NativeMethod {
     if (Entry<N>::target == target)
       return true;
     if (!Entry<N>::target) {
-      if (g_unloading || !HoldHookModule(reinterpret_cast<void*>(target)))
+      if (g_unloading || !InDialogModule(reinterpret_cast<void*>(target)) ||
+          !HoldHookModule(reinterpret_cast<void*>(target)))
         return false;
       if (!WindhawkUtils::SetFunctionHook(target, Entry<N>::Hook,
                                           &Entry<N>::original))
@@ -6770,6 +6925,24 @@ bool TrackDialog(IUnknown* object) {
   if (FAILED(hr) || !native)
     return false;
   CallNative([&] { return native->QueryInterface(IID_PPV_ARGS(&identity)); });
+  // A proxy keeps the native dialog. An object reached through several
+  // activation paths (CoCreateInstance calls the class factory) is tracked
+  // once.
+  auto existing = identity ? FindDialog(identity) : nullptr;
+  if (!identity || existing ||
+      !InDialogModule((*reinterpret_cast<void***>(native))[3])) {
+    bool known = existing && existing->save == Save;
+    if (known)
+      AddAlias(object, existing);
+    else if (identity && !existing)
+      Wh_Log(
+          L"The file dialog is not implemented in comdlg32 (for example a "
+          L"proxy for another apartment)");
+    if (identity)
+      CallNative([&] { return identity->Release(); });
+    CallNative([&] { return native->Release(); });
+    return known;
+  }
   CallNative([&] { return native->QueryInterface(IID_PPV_ARGS(&base)); });
   CallNative([&] { return native->QueryInterface(IID_PPV_ARGS(&modal)); });
   CallNative(
@@ -6882,6 +7055,20 @@ bool TrackDialog(IUnknown* object) {
   CallNative([&] { return native->Release(); });
   return ok;
 }
+bool SupportedIid(REFIID iid, bool save) {
+  return iid == (save ? IID_IFileSaveDialog : IID_IFileOpenDialog) ||
+         iid == IID_IFileDialog || iid == IID_IModalWindow ||
+         iid == IID_IUnknown || iid == IID_IFileDialog2 ||
+         iid == IID_IFileDialogCustomize || iid == IID_IObjectWithSite ||
+         iid == IID_IOleWindow || iid == FileDialogPrivate;
+}
+void Track(IUnknown* object, bool save) {
+  bool tracked = save ? TrackDialog<true>(object) : TrackDialog<false>(object);
+  if (!tracked)
+    Wh_Log(
+        L"Native file dialog method hooks unavailable; keeping the native "
+        L"dialog");
+}
 using CreateFn = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
 CreateFn originalCreate = nullptr;
 HRESULT WINAPI CreateHook(REFCLSID clsid,
@@ -6891,42 +7078,142 @@ HRESULT WINAPI CreateHook(REFCLSID clsid,
                           LPVOID* out) {
   bool save = IsEqualCLSID(clsid, CLSID_FileSaveDialog),
        open = IsEqualCLSID(clsid, CLSID_FileOpenDialog);
-  bool supportedIid =
-      iid == (save ? IID_IFileSaveDialog : IID_IFileOpenDialog) ||
-      iid == IID_IFileDialog || iid == IID_IModalWindow ||
-      iid == IID_IUnknown || iid == IID_IFileDialog2 ||
-      iid == IID_IFileDialogCustomize || iid == IID_IObjectWithSite ||
-      iid == IID_IOleWindow || iid == FileDialogPrivate;
-  if (!g_unloading && !outer && out && (save || open) && supportedIid) {
+  if (!g_unloading && !outer && out && (save || open) &&
+      SupportedIid(iid, save)) {
     ActiveSession active;
     if (active) {
       HRESULT hr = originalCreate(clsid, outer, context, iid, out);
       if (FAILED(hr) || !*out || g_unloading)
         return hr;
-      auto native = static_cast<IUnknown*>(*out);
-      bool tracked =
-          save ? TrackDialog<true>(native) : TrackDialog<false>(native);
-      if (!tracked)
-        Wh_Log(
-            L"Native file dialog method hooks unavailable; keeping the native "
-            L"dialog");
+      Track(static_cast<IUnknown*>(*out), save);
       return hr;
     }
   }
   [[clang::musttail]] return originalCreate(clsid, outer, context, iid, out);
 }
+using CreateExFn = decltype(&CoCreateInstanceEx);
+CreateExFn originalCreateEx = nullptr;
+HRESULT WINAPI CreateExHook(REFCLSID clsid,
+                            IUnknown* outer,
+                            DWORD context,
+                            COSERVERINFO* server,
+                            DWORD count,
+                            MULTI_QI* results) {
+  bool save = IsEqualCLSID(clsid, CLSID_FileSaveDialog),
+       open = IsEqualCLSID(clsid, CLSID_FileOpenDialog);
+  bool supported =
+      !g_unloading && !outer && !server && count && results && (save || open);
+  for (DWORD i = 0; supported && i < count; i++)
+    supported = results[i].pIID && SupportedIid(*results[i].pIID, save);
+  if (supported) {
+    ActiveSession active;
+    if (active) {
+      HRESULT hr =
+          originalCreateEx(clsid, outer, context, server, count, results);
+      for (DWORD i = 0; SUCCEEDED(hr) && !g_unloading && i < count; i++)
+        if (SUCCEEDED(results[i].hr) && results[i].pItf) {
+          Track(results[i].pItf, save);
+          break;
+        }
+      return hr;
+    }
+  }
+  [[clang::musttail]] return originalCreateEx(clsid, outer, context, server,
+                                              count, results);
+}
+// The .NET runtime and other programs activate through the class object
+// instead of CoCreateInstance. The dialog factories' CreateInstance code in
+// comdlg32 is hooked once; only objects made by the factories handed out for
+// the two dialog classes are tracked. Each recorded factory keeps a reference
+// until unload, so its address cannot be reused by another object.
+[[clang::no_destroy]] std::map<void*, bool> dialogFactories;
+std::optional<bool> FactoryKind(void* factory) {
+  std::lock_guard lock(dialogLock);
+  auto found = dialogFactories.find(factory);
+  if (found == dialogFactories.end())
+    return std::nullopt;
+  return found->second;
+}
+struct FactoryCreateMethod {
+  template <class Function>
+  static HRESULT Invoke(Function original,
+                        void* factory,
+                        IUnknown* outer,
+                        REFIID iid,
+                        void** out) {
+    if (nativeCalls || g_unloading)
+      return original(factory, outer, iid, out);
+    ActiveSession active;
+    auto save = active && !outer && out ? FactoryKind(factory) : std::nullopt;
+    HRESULT hr = CallNative([&] { return original(factory, outer, iid, out); });
+    if (save && SUCCEEDED(hr) && *out && !g_unloading &&
+        SupportedIid(iid, *save))
+      Track(static_cast<IUnknown*>(*out), *save);
+    return hr;
+  }
+};
+using FactoryCreateHook =
+    NativeMethod<FactoryCreateMethod, HRESULT, 4, IUnknown*, REFIID, void**>;
+void WatchFactory(IUnknown* object, bool save) {
+  IClassFactory* factory = nullptr;
+  if (FAILED(object->QueryInterface(IID_PPV_ARGS(&factory))) || !factory)
+    return;
+  {
+    std::lock_guard lock(g_hookLock);
+    bool hooked = !g_unloading && FactoryCreateHook::Install(factory, 3);
+    if (hooked && nativeHooksChanged) {
+      nativeHooksChanged = false;
+      hooked = Wh_ApplyHookOperations();
+    }
+    if (hooked) {
+      std::lock_guard guard(dialogLock);
+      // comdlg32's factories are long-lived; the cap only bounds the map.
+      if (dialogFactories.size() < 64 &&
+          dialogFactories.try_emplace(factory, save).second)
+        factory = nullptr;  // the map owns this reference now
+    }
+  }
+  if (factory)
+    factory->Release();
+}
+using GetClassFn = decltype(&CoGetClassObject);
+GetClassFn originalGetClass = nullptr;
+HRESULT WINAPI GetClassHook(REFCLSID clsid,
+                            DWORD context,
+                            LPVOID reserved,
+                            REFIID iid,
+                            LPVOID* out) {
+  bool save = IsEqualCLSID(clsid, CLSID_FileSaveDialog),
+       open = IsEqualCLSID(clsid, CLSID_FileOpenDialog);
+  if (!g_unloading && !reserved && out && (save || open)) {
+    ActiveSession active;
+    if (active) {
+      HRESULT hr = originalGetClass(clsid, context, reserved, iid, out);
+      if (SUCCEEDED(hr) && *out && !g_unloading)
+        WatchFactory(static_cast<IUnknown*>(*out), save);
+      return hr;
+    }
+  }
+  [[clang::musttail]] return originalGetClass(clsid, context, reserved, iid,
+                                              out);
+}
 void UninitDialogs() {
   // Hooks have been removed and all active calls have completed. Release
-  // state without touching application-owned native dialog pointers.
+  // state without touching application-owned native dialog pointers; drop the
+  // mod's own references to the dialog class factories.
   std::map<void*, std::shared_ptr<DialogRecord>> old;
+  std::map<void*, bool> factories;
   {
     std::lock_guard lock(dialogLock);
     if (dialogs) {
       old.swap(*dialogs);
       dialogs.reset();
     }
+    factories.swap(dialogFactories);
   }
   old.clear();
+  for (auto& factory : factories)
+    static_cast<IUnknown*>(factory.first)->Release();
 }
 }  // namespace Bridge
 
@@ -7032,7 +7319,8 @@ bool InstallCommonDialogs(bool apply) {
   return ok;
 }
 HMODULE WINAPI LoadLibraryHook(LPCWSTR name, HANDLE file, DWORD flags) {
-  {
+  // Once comdlg32 is hooked, later loads pass straight through.
+  if (!commonDialogsHooked) {
     ActiveSession active;
     if (active) {
       HMODULE module = originalLoadLibrary(name, file, flags);
@@ -7062,6 +7350,18 @@ bool InstallBridge(const std::wstring& name) {
   if (!WindhawkUtils::SetFunctionHook(CoCreateInstance, Bridge::CreateHook,
                                       &Bridge::originalCreate))
     return false;
+  // Without these, programs activating through the class object (.NET
+  // WinForms/WPF) or CoCreateInstanceEx keep the native dialog.
+  bool classObjects = WindhawkUtils::SetFunctionHook(
+      CoCreateInstanceEx, Bridge::CreateExHook, &Bridge::originalCreateEx);
+  classObjects =
+      WindhawkUtils::SetFunctionHook(CoGetClassObject, Bridge::GetClassHook,
+                                     &Bridge::originalGetClass) &&
+      classObjects;
+  if (!classObjects)
+    Wh_Log(
+        L"Class object hooks unavailable; those programs keep the native "
+        L"dialog");
   InstallCommonDialogs(false);
   return true;
 }
@@ -7072,11 +7372,14 @@ BOOL Wh_ModInit() {
                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                           reinterpret_cast<LPCWSTR>(&Wh_ModInit), &g_module))
     return FALSE;
-  wchar_t exe[32768] = {};
-  DWORD length = GetModuleFileNameW(nullptr, exe, 32768);
-  if (!length || length >= 32768)
+  // Every interactive process loads the mod; keep its stack use small.
+  std::wstring exe(32768, L'\0');
+  DWORD length =
+      GetModuleFileNameW(nullptr, exe.data(), static_cast<DWORD>(exe.size()));
+  if (!length || length >= exe.size())
     return FALSE;
-  const wchar_t* name = PathFindFileNameW(exe);
+  exe.resize(length);
+  const wchar_t* name = PathFindFileNameW(exe.c_str());
   if (!ShouldInitializeProcess(name, GetCommandLineW()))
     return FALSE;
   g_explorer = !_wcsicmp(name, L"explorer.exe");

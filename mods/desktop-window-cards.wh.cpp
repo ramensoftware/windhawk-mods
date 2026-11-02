@@ -2,7 +2,7 @@
 // @id              desktop-window-cards
 // @name            Desktop Window Cards
 // @description     Minimized windows fall onto the desktop as dimmed thumbnail cards you can restore or close
-// @version         1.7
+// @version         1.8
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -14,7 +14,7 @@
 /*
 # Desktop Window Cards
 
-![Desktop Window Cards overview](https://i.imgur.com/4jPnn65.png)
+![Desktop Window Cards overview](https://i.imgur.com/SvRoyd6.jpeg)
 [Watch the overview video in full quality](https://i.imgur.com/kzgxJRg.mp4)
 
 When you minimize a window, a copy of it "falls" onto the desktop: it drops
@@ -46,6 +46,11 @@ underneath all other windows.
   animation whenever a card arrives or leaves. Tip: Win+M minimizes all windows
   at once, turning the desktop into an overview of everything that is open.
 * **Mouse over:** the card brightens and, optionally, grows a little.
+* **Not every window has to become a card:** hold a modifier key (Shift by
+  default) while minimizing, e.g. while clicking the minimize button, and the
+  window goes to the taskbar as usual. The setting can also be inverted, so that
+  only windows minimized while holding the key become cards. Programs in the
+  exclusion list never become cards.
 * **X button:** closes the window (or only removes the card, depending on the
   settings).
 * **Virtual desktops:** each card is shown only on the virtual desktop of its
@@ -109,6 +114,27 @@ and cards survive an Explorer restart.
   - card: Removes the card only
 - IncludeExisting: true
   $name: Create cards for windows already minimized at startup
+  $description: Not when cards are created only with the modifier key.
+- MinimizeModifier: shift
+  $name: Modifier key
+  $description: >-
+    Held while minimizing a window, e.g. while clicking its minimize button.
+    Note that Shift+click on a taskbar button opens a new instance of the app.
+  $options:
+  - shift: Shift
+  - ctrl: Ctrl
+  - alt: Alt
+  - none: None
+- ModifierAction: skip
+  $name: Modifier key action
+  $options:
+  - skip: Holding it minimizes to the taskbar only, without a card
+  - only: Only windows minimized while holding it become cards
+- ExcludedApps: [""]
+  $name: Excluded programs
+  $description: >-
+    Windows of these programs never become cards. Use the file name (e.g.
+    vlc.exe) or the full path.
 - NativeAnimationMode: restore
   $name: Native Windows animation
   $options:
@@ -218,6 +244,9 @@ struct Settings {
     int gridMaxWidth = 560;
     int dragOpenDelayMs = 600;  // 0 = disabled
     bool hoverZoom = true;
+    int modifierVk = VK_SHIFT;  // 0 = no modifier key
+    bool cardsOnlyWithModifier = false;
+    std::vector<std::wstring> excludedApps;  // lowercase file names or full paths
 } g_settings;
 
 enum class CardState { Falling, Resting, Rising, Handoff, Revealing, Vanishing };
@@ -412,6 +441,34 @@ void LoadSettings() {
     Wh_FreeStringSetting(layout);
     g_settings.gridMaxWidth = std::clamp(Wh_GetIntSetting(L"GridMaxWidth"), 200, 1600);
     g_settings.hoverZoom = Wh_GetIntSetting(L"HoverZoom") != 0;
+    PCWSTR modifier = Wh_GetStringSetting(L"MinimizeModifier");
+    if (modifier && wcscmp(modifier, L"ctrl") == 0) {
+        g_settings.modifierVk = VK_CONTROL;
+    } else if (modifier && wcscmp(modifier, L"alt") == 0) {
+        g_settings.modifierVk = VK_MENU;
+    } else if (modifier && wcscmp(modifier, L"none") == 0) {
+        g_settings.modifierVk = 0;
+    } else {
+        g_settings.modifierVk = VK_SHIFT;
+    }
+    Wh_FreeStringSetting(modifier);
+    PCWSTR action = Wh_GetStringSetting(L"ModifierAction");
+    g_settings.cardsOnlyWithModifier =
+        g_settings.modifierVk && action && wcscmp(action, L"only") == 0;
+    Wh_FreeStringSetting(action);
+    g_settings.excludedApps.clear();
+    for (int i = 0; i < 256; i++) {
+        PCWSTR app = Wh_GetStringSetting(L"ExcludedApps[%d]", i);
+        std::wstring entry = app ? app : L"";
+        Wh_FreeStringSetting(app);
+        // Trim spaces and quotes, compare case-insensitively.
+        size_t first = entry.find_first_not_of(L" \t\"");
+        size_t last = entry.find_last_not_of(L" \t\"");
+        if (first == std::wstring::npos) break;  // end of the list
+        entry = entry.substr(first, last - first + 1);
+        CharLowerBuffW(entry.data(), static_cast<DWORD>(entry.size()));
+        g_settings.excludedApps.push_back(std::move(entry));
+    }
     int dragDelay = Wh_GetIntSetting(L"DragOpenDelayMs");
     g_settings.dragOpenDelayMs = dragDelay <= 0 ? 0 : std::clamp(dragDelay, 200, 2000);
 }
@@ -545,6 +602,29 @@ void ForgetSavedPosition(HWND target) {
 // ---------------------------------------------------------------------------
 // Target window geometry
 
+// Whether the window belongs to a program in the exclusion list. Entries with
+// a backslash are compared with the full path, the others with the file name.
+bool IsExcludedProgram(HWND hwnd) {
+    if (g_settings.excludedApps.empty()) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return false;
+    wchar_t path[MAX_PATH * 2] = {};
+    DWORD size = ARRAYSIZE(path);
+    BOOL ok = QueryFullProcessImageNameW(process, 0, path, &size);
+    CloseHandle(process);
+    if (!ok) return false;
+    CharLowerBuffW(path, size);
+    const wchar_t* name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    for (const auto& entry : g_settings.excludedApps) {
+        bool fullPath = entry.find(L'\\') != std::wstring::npos;
+        if (entry == (fullPath ? path : name)) return true;
+    }
+    return false;
+}
+
 bool IsEligibleTarget(HWND hwnd) {
     if (!IsWindow(hwnd) || !IsWindowVisible(hwnd) || GetAncestor(hwnd, GA_ROOT) != hwnd ||
         IsOurWindow(hwnd)) {
@@ -561,7 +641,7 @@ bool IsEligibleTarget(HWND hwnd) {
         cloaked) {
         return false;
     }
-    return true;
+    return !IsExcludedProgram(hwnd);
 }
 
 // Invisible resize borders, measured on the real window. The system metrics
@@ -2460,6 +2540,12 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
                     UpdateThumbnail(*c);
                 }
             }
+            for (size_t i = 0; i < g_cards.size(); i++) {
+                Card& c = *g_cards[i];
+                if (c.state == CardState::Resting && IsExcludedProgram(c.target)) {
+                    StartVanishing(c);
+                }
+            }
             // Switching to grid arranges the cards already on the desk.
             // Switching back to floating leaves them where they are.
             RelayoutGrid(true);
@@ -2557,6 +2643,13 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         MeasureWindowFrame(hwnd);  // cheap, and touches no card
         return;
     }
+    if (event == EVENT_SYSTEM_MINIMIZESTART && g_settings.modifierVk) {
+        // Read now, while the click or shortcut that minimized the window is
+        // still happening: by the time the posted message is handled the key
+        // may already be released.
+        bool held = (GetAsyncKeyState(g_settings.modifierVk) & 0x8000) != 0;
+        if (held != g_settings.cardsOnlyWithModifier) return;  // no card
+    }
     if (event == EVENT_OBJECT_SHOW) {
         // Part of the hooked range: only the start of a desktop switch matters.
         if (GetAncestor(hwnd, GA_ROOT) != hwnd || !IsClassName(hwnd, kHotkeySwitcherClass)) {
@@ -2645,7 +2738,7 @@ DWORD WINAPI WorkerThread(void*) {
         RecoverNativeAnimationAfterCrash();
         ApplyNativeAnimationSetting(false);
 
-        if (g_settings.includeExisting) {
+        if (g_settings.includeExisting && !g_settings.cardsOnlyWithModifier) {
             std::vector<HWND> minimized;
             EnumWindows(CollectMinimizedWindow, reinterpret_cast<LPARAM>(&minimized));
             for (HWND hwnd : minimized) CreateCard(hwnd, false);
