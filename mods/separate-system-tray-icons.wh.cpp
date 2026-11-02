@@ -118,18 +118,6 @@ taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
 or the Menu key to open a context menu. Buttons expose their current tooltip
 information as accessible names and use system keyboard-focus visuals.
 
-## Changes in 1.2.0
-
-- Added the Sound output master-volume slider and mute button.
-- Added Volume percentage to the Sound menu and optional constant button width.
-- Added optional middle-click toggles for Bluetooth, Wi-Fi, and Energy saver.
-  These default to Custom action, preserving existing commands and leaving
-  empty commands inactive; Sound continues to default to Toggle mute.
-- Added the optional 16 px chevron size setting.
-- Open Project replaces Taskbar settings with Display settings in its menu;
-  recommended glyphs are E7F4 and EBC6.
-- Made menu-triggered button rebuilding use the unload-safe refresh window.
-
 ## Action formats
 
 The custom-action prefix scheme and action-format documentation are adapted from
