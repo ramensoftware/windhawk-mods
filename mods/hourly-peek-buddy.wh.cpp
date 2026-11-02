@@ -133,7 +133,7 @@ seferinde sürpriz için **Rastgele**'yi seçebilirsiniz.
 - Karakter, Hareket, Köşe (sağ alt veya sol alt), Monitör (ana monitör veya
   fare imlecinin olduğu monitör)
 - Zamanlama: her saat başı, her N dakikada bir, tam saatler, sessiz saatler
-- Kalma süresi (saniye), Boyut (%), Saydamlık (%)
+- Kalma süresi (saniye), Boyut (%), Opaklık (%)
 - Konuşma balonu: saat ve komik mesaj, sadece saat, kendi mesajınız
   (`{time}` yerine o anki saat yazılır) veya balonsuz
 - Mesaj dili: otomatik (Windows'u izler), Türkçe veya İngilizce
@@ -269,7 +269,7 @@ seferinde sürpriz için **Rastgele**'yi seçebilirsiniz.
   $description:tr-TR: 100, normal DPI'da yaklaşık 200 pikseldir. İzin verilen aralık 40 ile 300 arasıdır.
 - opacity: 100
   $name: Opacity (%)
-  $name:tr-TR: Saydamlık (%)
+  $name:tr-TR: Opaklık (%)
   $description: Allowed range is 30 to 100.
   $description:tr-TR: İzin verilen aralık 30 ile 100 arasıdır.
 - bubble: funny
