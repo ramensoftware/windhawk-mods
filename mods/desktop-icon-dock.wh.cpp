@@ -4,7 +4,7 @@
 // @name:zh-CN      桌面图标 Dock
 // @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel
 // @description:zh-CN 独立的 macOS 风格 Dock：把快捷方式、文件和文件夹拖进来，拖动排序，拖出放回桌面；快捷方式会复制到 Dock 自己的目录，清理桌面不影响 Dock；可选液态玻璃面板
-// @version         1.1.1
+// @version         1.1.2
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -154,14 +154,18 @@ not a launcher that stays on top of other windows.
   desktop, reusing the original shortcut when it is still there instead of
   creating a duplicate.
 - **Desktop integration**: hiding the system desktop icons in memory and
-  opening the native Explorer context menu both rely on running inside
-  explorer.exe next to the desktop window.
+  opening the native Explorer context menu both work with the shell's desktop
+  view from the mod's own process, without injecting into the running shell.
 - **Screen-sampled glass**: the backdrop and the name pills sample the screen
   area behind the dock, which requires a desktop-level window.
 
 ## Compatibility and limitations
 
-- Windows 10 / 11 on x86-64 only, injected into explorer.exe by Windhawk.
+- Windows 10 / 11 on x86-64 only. The mod runs as a Windhawk tool mod in a
+  dedicated explorer.exe process, separate from the shell's own explorer.exe;
+  the shell is only accessed through its published shell interfaces. (The
+  windhawk.exe host cannot be used here: Windhawk is a 32-bit app, while this
+  mod is x86-64.)
 - Primary monitor only; the dock is anchored to the bottom of the primary
   monitor, above the taskbar.
 - The dock is a layered window placed below normal windows; full-screen apps
@@ -171,9 +175,9 @@ not a launcher that stays on top of other windows.
 
 ## Troubleshooting
 
-- **Dock missing after an Explorer restart**: the mod reloads together with
-  explorer.exe and restores the saved list; the dock comes back within a
-  second.
+- **After an Explorer restart**: the dock runs in its own dedicated
+  explorer.exe process, so a shell restart does not unload it; it reconnects to
+  the new desktop view and reapplies the icon hiding.
 - **An item disappeared**: its stored parsing name could not be resolved (for
   example, the referenced file or folder was deleted or renamed). Shortcuts
   are copied into the dock folder and are not affected by deleting the
@@ -202,7 +206,7 @@ not a launcher that stays on top of other windows.
 - 图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。
 - “隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。
 - 解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。
-- 与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为依赖运行在 explorer.exe 中并贴近桌面窗口。
+- 与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。
 - 仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。
 
 各设置项的说明见上方英文表格。
@@ -285,6 +289,7 @@ not a launcher that stays on top of other windows.
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
@@ -316,10 +321,6 @@ using namespace Gdiplus;
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"WindhawkDesktopIconDock";
-// Pre-1.1.1 locations, migrated once into Windhawk's mod storage.
-constexpr wchar_t kLegacyStorageKey[] = L"Software\\DesktopIconDock";
-constexpr wchar_t kLegacyStorageItems[] = L"Items";
-constexpr wchar_t kLegacyItemsFolder[] = L"DesktopIconDock\\Items";
 constexpr wchar_t kItemsFileName[] = L"items.tsv";
 constexpr wchar_t kItemsHeader[] = L"DesktopIconDock/2";
 constexpr UINT kMsgReloadSettings = WM_APP + 1;
@@ -847,47 +848,6 @@ bool SaveDockKeys(const std::vector<std::wstring>& keys) {
     EnsureStoragePaths();
     if (g_itemsFilePath.empty()) return false;
     return WriteFileBytesAtomic(g_itemsFilePath, SerializeDockList(keys));
-}
-
-std::vector<std::wstring> LoadLegacyDockKeys() {
-    std::vector<std::wstring> keys;
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLegacyStorageKey, 0, KEY_QUERY_VALUE,
-                      &key) != ERROR_SUCCESS) {
-        return keys;
-    }
-
-    DWORD type = 0;
-    DWORD bytes = 0;
-    LSTATUS status = RegQueryValueExW(key, kLegacyStorageItems, nullptr, &type,
-                                      nullptr, &bytes);
-    if (status == ERROR_SUCCESS && type == REG_MULTI_SZ &&
-        bytes >= sizeof(wchar_t) * 2 && bytes <= 16 * 1024 * 1024) {
-        std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, 0);
-        DWORD size = (DWORD)(buffer.size() * sizeof(wchar_t));
-        status = RegQueryValueExW(key, kLegacyStorageItems, nullptr, &type,
-                                  reinterpret_cast<BYTE*>(buffer.data()), &size);
-        if (status == ERROR_SUCCESS && type == REG_MULTI_SZ) {
-            size_t count = size / sizeof(wchar_t);
-            size_t pos = 0;
-            while (pos < count) {
-                const wchar_t* entry = buffer.data() + pos;
-                size_t remaining = count - pos;
-                size_t length = wcsnlen(entry, remaining);
-                if (length == 0) break;
-                keys.emplace_back(entry, length);
-                pos += length + 1;
-            }
-        } else {
-            Wh_Log(L"Reading legacy dock items failed: %ld", status);
-        }
-    } else if (status != ERROR_FILE_NOT_FOUND && status != ERROR_PATH_NOT_FOUND) {
-        Wh_Log(L"Reading legacy dock items failed: %ld (type %lu)", status,
-               type);
-    }
-
-    RegCloseKey(key);
-    return keys;
 }
 
 std::shared_ptr<Bitmap> CopyToOwnedBitmap(Bitmap* source) {
@@ -1945,9 +1905,6 @@ void EnsureAnimationTimer() {
 bool IsPointerOverDock(POINT screenPoint) {
     HWND under = WindowFromPoint(screenPoint);
     if (!under) return false;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(under, &pid);
-    if (pid != GetCurrentProcessId()) return false;
     bool overDock = (under == g_hwnd);
     if (!overDock && g_settings.transparentBackground) {
         // Fully transparent pixels are click-through, so accept the desktop
@@ -2445,9 +2402,15 @@ bool IsPointOutsideDock(POINT screenPoint) {
 bool IsPointOverDesktop(POINT screenPoint) {
     HWND window = WindowFromPoint(screenPoint);
     if (!window) return false;
+    // The dock runs in its own process, so the desktop windows belong to the
+    // shell process rather than to this one.
+    DWORD shellPid = 0;
+    HWND shellWindow = GetShellWindow();
+    if (shellWindow) GetWindowThreadProcessId(shellWindow, &shellPid);
+    if (!shellPid) return false;
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
-    if (pid != GetCurrentProcessId()) return false;
+    if (pid != shellPid) return false;
     wchar_t className[64] = L"";
     if (GetClassNameW(window, className, ARRAYSIZE(className)) == 0) {
         return false;
@@ -2631,88 +2594,6 @@ bool FindShortcutSource(const std::wstring& copyPath,
 
 void RemoveShortcutSource(const std::wstring& copyPath) {
     g_shortcutSources.erase(ToLowerString(copyPath));
-}
-
-// Earlier versions kept the list in HKCU and the shortcut copies under
-// %LOCALAPPDATA%. Everything is moved into Windhawk's mod storage on first
-// start, and the old locations are removed afterwards.
-void MigrateLegacyStorage() {
-    EnsureStoragePaths();
-    if (g_itemsFilePath.empty() ||
-        GetFileAttributesW(g_itemsFilePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        return;
-    }
-
-    std::vector<std::wstring> legacyKeys = LoadLegacyDockKeys();
-    std::wstring legacyFolder;
-    std::wstring localAppData = GetKnownFolder(FOLDERID_LocalAppData);
-    if (!localAppData.empty()) {
-        legacyFolder = localAppData + L"\\" + kLegacyItemsFolder;
-    }
-    if (legacyKeys.empty() &&
-        (legacyFolder.empty() ||
-         GetFileAttributesW(legacyFolder.c_str()) == INVALID_FILE_ATTRIBUTES)) {
-        return;
-    }
-
-    std::vector<std::wstring> keys;
-    keys.reserve(legacyKeys.size());
-    bool failed = false;
-    for (const auto& legacyKey : legacyKeys) {
-        if (legacyKey.empty()) continue;
-        std::wstring key = legacyKey;
-        if (!legacyFolder.empty() && IsUnderFolder(legacyKey, legacyFolder)) {
-            std::wstring relative = legacyKey.substr(legacyFolder.size() + 1);
-            std::wstring target = g_itemsFolderPath + L"\\" + relative;
-            if (GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                std::wstring parent = GetParentPath(target);
-                SHCreateDirectoryExW(nullptr, parent.c_str(), nullptr);
-                if (!CopyFileW(legacyKey.c_str(), target.c_str(), FALSE)) {
-                    Wh_Log(L"Migrating dock copy failed: %ls (%lu)",
-                           legacyKey.c_str(), GetLastError());
-                    failed = true;
-                    break;
-                }
-            }
-            // The target exists either way now, so the old copy is no longer
-            // needed.
-            DeleteFileW(legacyKey.c_str());
-            std::wstring legacyItemFolder = GetParentPath(legacyKey);
-            if (!legacyItemFolder.empty() &&
-                _wcsicmp(legacyItemFolder.c_str(), legacyFolder.c_str()) != 0) {
-                RemoveDirectoryW(legacyItemFolder.c_str());
-            }
-            key = std::move(target);
-        } else {
-            std::wstring target = ShortcutCopyTarget(legacyKey);
-            if (!target.empty()) {
-                if (GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES &&
-                    !EnsureShortcutCopy(legacyKey, target)) {
-                    failed = true;
-                    break;
-                }
-                SetShortcutSource(target, legacyKey);
-                key = std::move(target);
-            }
-        }
-        if (!ContainsKeyNoCase(keys, key)) keys.push_back(std::move(key));
-    }
-
-    if (failed) {
-        Wh_Log(L"Migrating legacy dock storage failed, keeping the old data");
-        return;
-    }
-
-    g_storedKeys = std::move(keys);
-    if (!SaveDockKeys(g_storedKeys)) return;
-
-    RegDeleteTreeW(HKEY_CURRENT_USER, kLegacyStorageKey);
-    if (!legacyFolder.empty()) {
-        RemoveDirectoryW(legacyFolder.c_str());
-        std::wstring parent = GetParentPath(legacyFolder);
-        if (!parent.empty()) RemoveDirectoryW(parent.c_str());
-    }
-    Wh_Log(L"Migrated legacy dock storage");
 }
 
 bool AddKeysAt(int insertIndex, const std::vector<std::wstring>& newKeys) {
@@ -3450,10 +3331,7 @@ void DestroyFrameBuffer() {
 
 int RunDockThread() {
     while (!g_stopRequested) {
-        DWORD shellPid = 0;
-        HWND shellWindow = GetShellWindow();
-        if (shellWindow) GetWindowThreadProcessId(shellWindow, &shellPid);
-        if (shellPid == GetCurrentProcessId()) break;
+        if (GetShellWindow()) break;
         Sleep(500);
     }
     if (g_stopRequested) return 0;
@@ -3505,7 +3383,6 @@ int RunDockThread() {
     CreateTextures();
 
     LoadSettings();
-    MigrateLegacyStorage();
     g_storedKeys = LoadDockKeys();
     g_lastItemCheckTime = std::chrono::steady_clock::now();
     if (auto* dropTarget = new (std::nothrow) DockDropTarget()) {
@@ -3592,7 +3469,7 @@ DWORD WINAPI DockThreadProc(LPVOID) {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     g_stopRequested = false;
     HANDLE thread = CreateThread(nullptr, 0, DockThreadProc, nullptr, 0, nullptr);
     if (!thread) {
@@ -3603,7 +3480,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_stopRequested = true;
     HWND hwnd = g_hwnd.load();
     if (hwnd) PostMessageW(hwnd, kMsgQuit, 0, 0);
@@ -3614,7 +3491,182 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     HWND hwnd = g_hwnd.load();
     if (hwnd) PostMessageW(hwnd, kMsgReloadSettings, 0, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to
+// other processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod loads and runs in a dedicated explorer.exe process, not in the
+// shell's own explorer.exe. explorer.exe is used as the host because it
+// provides the shell interfaces this mod needs, and unlike windhawk.exe it is
+// x86-64 on x86-64 Windows.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
