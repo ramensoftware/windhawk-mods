@@ -4,7 +4,7 @@
 // @description     Restores Explorer WebView with Windows 2000/98/Me layouts, file thumbnails, image viewing, metadata, classic disk charts and special folder actions
 // @name:ru         Панель WebView как в Windows 2000
 // @description:ru  Возвращает WebView с компоновкой Windows 2000/98/Me, миниатюрами, просмотром изображений, метаданными, диаграммами дисков и действиями специальных папок
-// @version         2.17
+// @version         2.20
 // @author          appEW
 // @license         MIT
 // @github          https://github.com/appEW
@@ -436,9 +436,11 @@
 - colorText: windowtext
   $name: Custom text colour
   $name:ru: Собственный цвет текста
-- linkColorSource: custom
+- linkColorSource: theme
   $name: Link colour source
   $name:ru: Источник цвета ссылок
+  $description: Windows theme follows the system hyperlink colour (HotTrackingColor / COLOR_HOTLIGHT). Custom colour uses the value below. Saved choices are preserved. Applies to both WebView layouts.
+  $description:ru: Из темы Windows — системный цвет ссылок (HotTrackingColor / COLOR_HOTLIGHT). Собственный цвет — значение ниже. Сохранённый выбор не меняется. Действует в обеих компоновках WebView.
   $options:
   - theme: Windows theme
   - custom: Custom colour
@@ -448,13 +450,8 @@
 - colorLink: '#0000FF'
   $name: Custom link colour
   $name:ru: Собственный цвет ссылок
-  $description: >-
-    The blue of a link, as the web view had it. It is a colour of its own rather
-    than the system hotlight colour, which classic colour schemes are free to
-    set to anything and often do.
-  $description:ru: >-
-    Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным
-    hotlight: классические схемы вольны ставить туда что угодно и часто ставят.
+  $description: "Used when Link colour source is Custom colour. Accepts a hex colour such as #0000FF or a system colour name such as hotlight. Applies to both WebView layouts."
+  $description:ru: "Используется при выборе Собственного цвета в Источнике цвета ссылок. Принимает HEX-цвет, например #0000FF, или системное имя цвета, например hotlight. Действует в обеих компоновках WebView."
 - dividerColorSource: custom
   $name: Divider colour source
   $name:ru: Источник цвета разделителя
@@ -524,6 +521,21 @@ selection details, special-folder descriptions and actions, printer updates,
 Show Files/Hide Contents panels and the Windows 98 banner for narrow windows.
 Each added feature has its own switch in the mod settings.
 
+Version 2.20 uses the Windows hyperlink colour by default. **Link colour source**
+set to **Windows theme** follows `HotTrackingColor` through `COLOR_HOTLIGHT`,
+including colour scheme changes. **Custom colour** uses **Custom link colour**
+instead. Existing saved choices are preserved; choose **Windows theme** to switch
+an installation that previously used fixed blue. Both WebView layouts use this
+setting.
+
+Version 2.19 retains the ready panel while the current folder view temporarily
+has zero client size during a host resize. Usable geometry is applied immediately;
+failed views still release the reserved space through the existing bounded retry.
+The upper background image remains at the full pane width when a
+details scrollbar appears, so the scrollbar clips the image without rescaling it.
+The host DPI coordinate scope introduced in local version 2.19.1 is retained:
+layout uses the host window's DPI awareness and restores the caller's context.
+
 Choose **Original WebView layout** for the reference layout and one of the
 three **WebView styles**. Disabling the reference layout restores the previous
 appearance settings. Ordinary files use Shell thumbnails; Pictures folders and
@@ -587,6 +599,21 @@ layout. A patched shell32 WebView should be disabled to avoid duplicate panes.
 выделение, шаблоны специальных папок, действия с корзиной, обновление сведений
 о принтерах, «Показать файлы»/«Скрыть содержимое» и полоса Windows 98 для узких
 окон. У каждой добавленной функции есть отдельный переключатель в настройках.
+
+В 2.20 цвет ссылок по умолчанию следует Windows. **Источник цвета ссылок** →
+**Из темы Windows** использует `HotTrackingColor` через `COLOR_HOTLIGHT` и
+учитывает смену цветовой схемы. **Собственный цвет** использует настройку
+**Собственный цвет ссылок**. Сохранённый выбор не меняется: для перехода с
+фиксированного синего выберите **Из темы Windows**. Настройка действует
+в обеих компоновках WebView.
+
+В 2.19 готовая панель сохраняется, пока размер текущей области файлов
+временно равен нулю при изменении окна. Корректная геометрия применяется сразу;
+при сбое вида зарезервированное место освобождается после ограниченных повторов.
+Фон верхней области сохраняет полную ширину панели при появлении
+скроллбара сведений: полоса прокрутки обрезает его край без изменения масштаба.
+Сохранено исправление DPI из локальной 2.19.1: геометрия рассчитывается в
+контексте DPI окна Explorer, после чего контекст вызывающего потока возвращается.
 
 Включите **Исходную компоновку WebView** и выберите **Стиль WebView**. При
 отключении исходной компоновки работают прежние настройки оформления.
@@ -3260,7 +3287,7 @@ namespace win2kwebview
             void SetImgDetailsOptions(bool compactHeader,bool scroll) noexcept {
                 m_compactImgHeader=compactHeader; m_scrollImgDetails=scroll;
             }
-            SIZE PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POINT scroll,int dividerWidth=0) noexcept;
+            SIZE PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POINT scroll,int decorationWidth=0) noexcept;
             void PaintImgFrame(HDC dc,const RECT& paneRect) noexcept { PaintImgPreview(dc,paneRect); }
 
 			// Content for the current folder and selection. Rebuilt per navigation, never cached
@@ -3402,7 +3429,7 @@ namespace win2kwebview
 			void ReleaseFonts() noexcept;
 			void ReleaseResources() noexcept;
 			void PaintImgPreview(HDC dc, const RECT &paneRect) noexcept;
-            void PaintBody(HDC dc,const RECT& paneRect,UINT dpi,bool detailsOnly,int dividerWidth=0) noexcept;
+            void PaintBody(HDC dc,const RECT& paneRect,UINT dpi,bool detailsOnly,int decorationWidth=0) noexcept;
             SIZE m_imgDetailsExtent{};
             bool m_compactImgHeader=false, m_scrollImgDetails=true;
 
@@ -4719,7 +4746,7 @@ namespace win2kwebview
 		}
 	}
 
-	void WebViewNativePane::PaintBody(HDC dc, const RECT &paneRect, UINT dpi, bool detailsOnly, int dividerWidth) noexcept
+	void WebViewNativePane::PaintBody(HDC dc, const RECT &paneRect, UINT dpi, bool detailsOnly, int decorationWidth) noexcept
 	{
 		EnsureFonts(dpi);
         if(detailsOnly) m_imgDetailsExtent={paneRect.right-paneRect.left,0};
@@ -4751,16 +4778,18 @@ namespace win2kwebview
 			FillReferenceColour(dc,paneRect,BackgroundColour());
 			if (!compactImg && (m_useProfileCorner || m_customCorner || m_customCornerIcon))
 			{
+                const int cornerWidth=m_customCornerWidth>0 ? m_customCornerWidth :
+                    (detailsOnly && decorationWidth>0 ? decorationWidth : paneRect.right-paneRect.left);
 				if(m_useProfileCorner) DrawBitmapAt(dc,m_leftBitmap,m_leftSize,paneRect.left,paneRect.top);
                 else if(m_customCornerIcon) DrawIconEx(dc,paneRect.left,paneRect.top,m_customCornerIcon,
-                    m_customCornerWidth>0 ? m_customCornerWidth : paneRect.right-paneRect.left,
+                    cornerWidth,
                     m_customCornerSize.cx>0 ? MulDiv(m_customCornerSize.cy,
-                        m_customCornerWidth>0 ? m_customCornerWidth : paneRect.right-paneRect.left,
+                        cornerWidth,
                         m_customCornerSize.cx) : 0,0,nullptr,DI_NORMAL);
                 else DrawBitmapAt(dc, m_customCorner, m_customCornerSize, paneRect.left, paneRect.top,
-                    m_customCornerWidth > 0 ? m_customCornerWidth : paneRect.right-paneRect.left,
+                    cornerWidth,
                     m_customCornerSize.cx>0 ? MulDiv(m_customCornerSize.cy,
-                        m_customCornerWidth>0 ? m_customCornerWidth : paneRect.right-paneRect.left,
+                        cornerWidth,
                         m_customCornerSize.cx) : 0,m_customCornerAlpha,m_pictureWhiteBlend,BackgroundColour());
 			}
 		}
@@ -4812,7 +4841,7 @@ namespace win2kwebview
 		if (m_showDivider && (m_lineBitmap || m_divider.configured) && !barricadeFull)
 		{
 			// Native scrollbars clip decoration; they do not rescale its colour positions.
-            const int lineWidth=detailsOnly && dividerWidth>0 ? dividerWidth : flowRight-paneRect.left;
+            const int lineWidth=detailsOnly && decorationWidth>0 ? decorationWidth : flowRight-paneRect.left;
             if(m_divider.configured) m_divider.Paint(dc,paneRect.left,y,lineWidth,2);
             else DrawBitmapAt(dc,m_lineBitmap,m_lineSize,paneRect.left,y,lineWidth);
 		}
@@ -5346,7 +5375,7 @@ namespace ce { namespace win2kwebview {
 void WebViewNativePane::Paint(HDC dc,const RECT& paneRect,UINT dpi) noexcept {
     PaintBody(dc,paneRect,dpi,false);
 }
-SIZE WebViewNativePane::PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POINT scroll,int dividerWidth) noexcept {
+SIZE WebViewNativePane::PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POINT scroll,int decorationWidth) noexcept {
     if(!dc || m_profile!=PaneProfile::ImgView) return {};
     const int saved=SaveDC(dc);
     if(!saved) return {};
@@ -5355,7 +5384,7 @@ SIZE WebViewNativePane::PaintImgDetails(HDC dc,const RECT& viewport,UINT dpi,POI
     // belongs to the scroll extent, not to a permanently blank clipping strip.
     IntersectClipRect(dc,visible.left,visible.top,visible.right,visible.bottom);
     OffsetWindowOrgEx(dc,scroll.x,scroll.y,nullptr);
-    PaintBody(dc,viewport,dpi,true,dividerWidth);
+    PaintBody(dc,viewport,dpi,true,decorationWidth);
     RestoreDC(dc,saved);
     for(auto& line:m_lines) {
         RECT clipped{};
@@ -5628,11 +5657,11 @@ class ImgViewDetailsWindow {
         RECT logical{MulDiv(m_bounds.left,96,m_dpi),MulDiv(m_bounds.top,96,m_dpi),
             MulDiv(m_bounds.left+client.right,96,m_dpi),MulDiv(m_bounds.top+client.bottom,96,m_dpi)};
         POINT scroll{MulDiv(m_scroll.x,96,m_dpi),MulDiv(m_scroll.y,96,m_dpi)};
-        // Include the nonclient scrollbar in the divider's fixed width.
+        // Include the nonclient scrollbar in the background and divider width.
         // Text still wraps in the smaller client viewport above.
-        const int dividerWidth=std::max(0L,MulDiv(m_bounds.right,96,m_dpi)-logical.left);
-        const SIZE extent=m_painter ? m_painter(dc,logical,scroll,dividerWidth) :
-            m_renderer->PaintImgDetails(dc,logical,96,scroll,dividerWidth);
+        const int decorationWidth=std::max(0L,MulDiv(m_bounds.right,96,m_dpi)-logical.left);
+        const SIZE extent=m_painter ? m_painter(dc,logical,scroll,decorationWidth) :
+            m_renderer->PaintImgDetails(dc,logical,96,scroll,decorationWidth);
         RestoreDC(dc,saved);
         // A fitting logical width represents this exact native client. A
         // round trip through logical units can otherwise add a phantom pixel.
@@ -12072,7 +12101,7 @@ static void LoadSettings() {
         L"textColorSource", L"colorText", L"windowtext", L"windowtext",
         true);
     g_settings.link = ThemedOrCustomColor(
-        L"linkColorSource", L"colorLink", L"hotlight", L"#0000FF", false);
+        L"linkColorSource", L"colorLink", L"hotlight", L"#0000FF", true);
     g_settings.divider = ThemedOrCustomColor(
         L"dividerColorSource", L"colorDivider", L"highlight", L"#0000FF",
         false);
@@ -14059,6 +14088,27 @@ static bool IsShown(HWND hWnd) {
     return (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_VISIBLE) != 0;
 }
 
+// DirectUI can call layout from a PM-aware thread even when a DPI companion
+// created this host as bitmap/unaware. GetClientRect/GetWindowRect would then
+// report physical pixels, while GetDpiForWindow and spacer widths remain at 96.
+// Keep each complete geometry transaction in its host's coordinate space.
+// This is local and reversible; it does not change any HWND's awareness.
+class HostLayoutDpiScope {
+    DPI_AWARENESS_CONTEXT previous = nullptr;
+public:
+    explicit HostLayoutDpiScope(HWND host) {
+        if (auto context = GetWindowDpiAwarenessContext(host))
+            previous = SetThreadDpiAwarenessContext(context);
+    }
+    ~HostLayoutDpiScope() {
+        DWORD error = GetLastError();
+        if (previous) SetThreadDpiAwarenessContext(previous);
+        SetLastError(error);
+    }
+    HostLayoutDpiScope(const HostLayoutDpiScope&) = delete;
+    HostLayoutDpiScope& operator=(const HostLayoutDpiScope&) = delete;
+};
+
 // The window among the host's children that holds the folder view - the one
 // DirectUI moves, resizes and hides.
 static HWND GetHostChildOf(HWND host, HWND hWnd) {
@@ -14162,6 +14212,7 @@ static void* FindSpacer(HWND host,PCWSTR name=L"ClassicWebViewPane") {
 static int ReferencePanelWidth(Pane* pane);
 static RECT ReferenceAvailableRect(Pane* pane);
 static bool PaneFits(Pane* pane, HWND viewWindow) {
+    HostLayoutDpiScope coordinates(pane->host);
     if (g_webOptions.load()->classicLayout) return (pane->reference.viewReady || pane->referencePending) && ReferencePanelWidth(pane)>0;
     if (g_settings.minListWidth <= 0 || !g_dui.ok) {
         return true;
@@ -14289,6 +14340,8 @@ static void OnSyncSpacer(Pane* pane) {
     if (!pane->host || !pane->defView || !IsWindow(pane->defView)) {
         return;
     }
+
+    HostLayoutDpiScope coordinates(pane->host);
 
     void* spacer = FindSpacer(pane->host);
     if (!spacer) {
@@ -14531,6 +14584,7 @@ static int ReferenceTooltipAt(Pane* pane,POINT point) {
     return pane->reference.m_pane.HitTestTooltip(point);
 }
 static RECT ReferenceAvailableRect(Pane* pane) {
+    HostLayoutDpiScope coordinates(pane->host);
     RECT result{}; GetClientRect(pane->host,&result);
     HWND view=GetHostChildOf(pane->host,pane->defView);
     const RECT host=result;
@@ -14593,11 +14647,11 @@ static void PrepareReferenceViewer(Pane* pane) {
     RECT client{}; GetClientRect(pane->hwnd,&client);
     auto& reference=pane->reference;
     reference.m_pane.EnsureResources();
-    reference.details.SetPainter([pane](HDC detailsDc,const RECT& viewport,POINT scroll,int dividerWidth) {
+    reference.details.SetPainter([pane](HDC detailsDc,const RECT& viewport,POINT scroll,int decorationWidth) {
         LegacySettingsScope settingsReader{g_legacySettings.load()};
         std::lock_guard lock(g_imageMutex);
         ConfigureReferenceDecoration(pane->reference.m_pane);
-        return pane->reference.m_pane.PaintImgDetails(detailsDc,viewport,96,scroll,dividerWidth);
+        return pane->reference.m_pane.PaintImgDetails(detailsDc,viewport,96,scroll,decorationWidth);
     });
     reference.LayoutViewer(ReferencePaneContentRect(pane,client),pane->dpi,IsWindowVisible(pane->hwnd));
 }
@@ -14940,6 +14994,7 @@ static bool RegisterPaneClass() {
 // The gap the spacer opens up: everything between the file list and whatever
 // sits on the other side of it, which is the folder tree when it is open.
 static bool GetPaneRect(HWND host, HWND defView, HWND self, RECT* result) {
+    HostLayoutDpiScope coordinates(host);
     RECT hostClient;
     RECT viewRect;
     if (!GetClientRect(host, &hostClient) || !GetWindowRect(defView, &viewRect)) {
@@ -15191,6 +15246,8 @@ static void LayOutPane(HWND paneWindow) {
         return;
     }
 
+    HostLayoutDpiScope coordinates(pane->host);
+
     if(pane->referenceUpdating && !pane->referenceLayoutCommitting) return;
     if (g_webOptions.load()->classicLayout && !pane->reference.viewReady && !pane->referencePending) {
         ShowWindow(paneWindow,SW_HIDE); SyncSpacer(pane); return;
@@ -15263,6 +15320,23 @@ static void LayOutPane(HWND paneWindow) {
 
     RECT rect;
     if (!GetPaneRect(pane->host, pane->defView, paneWindow, &rect)) {
+        // The current view can temporarily have no client area during a
+        // host resize as well as during navigation. Its confirmed reservation
+        // still belongs to this visible panel. Keep that complete frame until
+        // the view has usable bounds again, rather than hiding and showing it.
+        if(g_webOptions.load()->classicLayout && pane->reference.viewReady &&
+            pane->spacerReady && !pane->spacerCollapsed && IsShown(paneWindow) &&
+            pane->reference.sideWidth>0 && !pane->reference.bannerHeight &&
+            pane->reference.CurrentBarricade()==ce::win2kwebview::BarricadeMode::None &&
+            !ReferenceViewHasLayout(pane)) {
+            SetWindowPos(paneWindow,HWND_TOP,0,0,0,0,
+                SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOREDRAW);
+            // If usable geometry never arrives, the existing bounded model
+            // refresh releases the reservation. Do not retain a stale pane
+            // indefinitely on a failed or unsupported view.
+            SetTimer(paneWindow,kRefreshTimer,120,nullptr);
+            return;
+        }
         ShowWindow(paneWindow, SW_HIDE);
         return;
     }

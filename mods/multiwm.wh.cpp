@@ -2,7 +2,7 @@
 // @id              multiwm
 // @name            MultiWM
 // @description     Lightweight, low-cortisol window manager with true per-virtual-desktop layouts. 
-// @version         1.13.58
+// @version         1.13.59
 // @author          meteoni
 // @github          https://github.com/Meteoni
 // @license         MIT
@@ -51,6 +51,9 @@ moving windows through the logical order (Alt+, / .), floating a window (Alt+F),
 and Manual management (Alt+R).
 
 A small tray indicator shows the active workspace layout and provides quick access to layouts and management mode.
+
+## Contributing
+MultiWM has a dedicated [GitHub repository](https://github.com/Meteoni/MultiWM)! Pull requests are welcome!
 
 
 ## Also check out
@@ -284,10 +287,10 @@ A small tray indicator shows the active workspace layout and provides quick acce
   $name: Hotkeys
 
 - diagnostics:
-  - DiagnosticsOutputPath: "%USERPROFILE%\\Documents\\MultiWMDiagnostics"
+  - DiagnosticsOutputPath: ""
     $name: Output Directory
     #! $format: folderPath
-    $description: Folder for diagnostic reports. Reports include window titles and app paths; review them before sharing.
+    $description: Folder for diagnostic reports. Leave blank to use %USERPROFILE%\Documents\MultiWMDiagnostics. Reports include window titles and app paths; review them before sharing.
   $name: Diagnostics
 
 - windowBehavior:
@@ -390,6 +393,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
 */
 // ==/WindhawkModSettings==
 
+// WHAM@3 begin 1: src/includes/multiwm_core.h
 #include <dwmapi.h>
 #include <initguid.h>
 #include <objbase.h>
@@ -1675,6 +1679,8 @@ static bool RecordConformanceLeaseAttempt(
   return retained;
 }
 
+// WHAM@3 end 1
+// WHAM@3 begin 2: src/includes/multiwm_gestures.h
 //=============================================================================
 // Move/size gesture tracking + classification
 //=============================================================================
@@ -1774,6 +1780,8 @@ static bool IsMoveSizeGestureInProgress(HWND hwnd) {
 
 
 
+// WHAM@3 end 2
+// WHAM@3 begin 3: src/includes/multiwm_configuration_helpers.h
 //=============================================================================
 // Configuration parsing + shared core helpers
 //=============================================================================
@@ -2449,6 +2457,8 @@ Workspace Workspace::AdoptGeometry(
   return workspace;
 }
 
+// WHAM@3 end 3
+// WHAM@3 begin 4: src/includes/multiwm_layout.h
 namespace Layout {
 
 std::vector<LONG> ComputeWeightedSizes(
@@ -2983,6 +2993,8 @@ bool LayoutMonocleConstrained(
 
 }  // namespace Layout
 
+// WHAM@3 end 4
+// WHAM@3 begin 5: src/includes/multiwm_window_observation.h
 //=============================================================================
 // Window observation + eligibility
 //=============================================================================
@@ -3631,6 +3643,8 @@ static void ClearAllMoveSizeSamples() {
 
 
 
+// WHAM@3 end 5
+// WHAM@3 begin 6: src/includes/multiwm_workspace_repository.h
 //=============================================================================
 // Workspace repository + authoritative model
 //=============================================================================
@@ -4298,6 +4312,8 @@ static void RefreshForCurrentWorkspace();
 
 
 
+// WHAM@3 end 6
+// WHAM@3 begin 7: src/includes/multiwm_workspace_operations.h
 //=============================================================================
 // Workspace model operations
 //=============================================================================
@@ -8079,6 +8095,8 @@ static bool SnapshotLooksTiled(const std::vector<HWND>& windows, const RECT& wor
   return sumArea >= lo && sumArea <= hi;
 }
 
+// WHAM@3 end 7
+// WHAM@3 begin 8: src/includes/multiwm_reconcile.h
 //=============================================================================
 // Workspace reconciliation
 //=============================================================================
@@ -10328,6 +10346,8 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
 
 }  // namespace Reconcile
 
+// WHAM@3 end 8
+// WHAM@3 begin 9: src/includes/multiwm_commands.h
 // Consumes and clears the WinEvent samples for one completed gesture.
 // The WM core never reads these caches piecemeal after this boundary.
 static MoveSizeGesture ConsumeMoveSizeGesture(HWND hwnd) {
@@ -10933,6 +10953,8 @@ void ApplyUserMoveSize(HWND hwnd) {
 
 }  // namespace Commands
 
+// WHAM@3 end 9
+// WHAM@3 begin 10: src/includes/multiwm_window_events.h
 //=============================================================================
 // Windows platform adapter: WinEvent observation + queueing
 //=============================================================================
@@ -11256,6 +11278,8 @@ void RemoveWinEventHooks() {
 
 }  // namespace Platform::WindowEvents
 
+// WHAM@3 end 10
+// WHAM@3 begin 11: src/includes/multiwm_virtual_desktop.h
 //=============================================================================
 // Windows platform adapters: private virtual desktops
 //=============================================================================
@@ -12386,6 +12410,8 @@ bool IsWindowOnCurrentDesktopSafe(HWND hwnd, BOOL* onCurrent) {
 
 }  // namespace Platform::VirtualDesktop
 
+// WHAM@3 end 11
+// WHAM@3 begin 12: src/includes/multiwm_runtime_lifecycle.h
 //=============================================================================
 // Runtime lifecycle maintenance
 //=============================================================================
@@ -12553,6 +12579,8 @@ void NotifyDisplayTopologyChanged() {
 
 }  // namespace RuntimeLifecycle
 
+// WHAM@3 end 12
+// WHAM@3 begin 13: src/includes/multiwm_tray_ui.h
 //=============================================================================
 // Notification-area layout indicator + layout flyout
 //=============================================================================
@@ -13489,7 +13517,8 @@ static void Shutdown() {
 
 }  // namespace TrayUi
 
-
+// WHAM@3 end 13
+// WHAM@3 begin 14: src/includes/multiwm_diagnostics.h
 namespace Diagnostics {
 
 //=============================================================================
@@ -15108,6 +15137,8 @@ static void WriteDiagnosticReport() {
 
 }  // namespace Diagnostics
 
+// WHAM@3 end 14
+// WHAM@3 begin 15: src/includes/multiwm_bootstrap.h
 //=============================================================================
 // Settings parsing + serialized WM thread
 //=============================================================================
@@ -16079,6 +16110,8 @@ bool StopHotkeyThread() {
   return true;
 }
 
+// WHAM@3 end 15
+
 //=============================================================================
 // Windhawk Tool Mod Entry Points
 //=============================================================================
@@ -16285,6 +16318,7 @@ void Wh_ModSettingsChanged() {
     return;
   }
 
+  
   WhTool_ModSettingsChanged();
 }
 
@@ -16296,3 +16330,205 @@ void Wh_ModUninit() {
   WhTool_ModUninit();
   ExitProcess(0);
 }
+// #region WHAM recovery
+// clang-format off
+// WHAM@3 recovery-begin
+// {
+//   "type": "manifest",
+//   "version": 3,
+//   "root": "src/multiwm.cpp",
+//   "files": [
+//     {
+//       "path": "src/includes/multiwm_bootstrap.h",
+//       "hash": "589f318e146249aa24692f88c027705f21d3d5cc523e6fa33ccd0340894c86e3",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_commands.h",
+//       "hash": "936cedfb1e4bb0de6e3c01ddd7ea25959a5321eb92e27f64e52b3759bc30e6e4",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_configuration_helpers.h",
+//       "hash": "9df1193bb6124932b9ddf788eef1e45362ded5ab55020718c92cfe68b5b236fa",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_core.h",
+//       "hash": "845c69dcce97a6f9ad1762fa96c93fd7a49169ac3ab2be7ddbe50ff785ce57bd",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_diagnostics.h",
+//       "hash": "50e31d5ee03dc3439d40b86b152e2b4fb0b4095db0974483998632bbf7674986",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_gestures.h",
+//       "hash": "005f6bbb16e2f1d2c7a0f33f3d122a86820da2b69679ee796a2a743704998d27",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_layout.h",
+//       "hash": "3e76e163313dd5e7de4fc45bba0e1b5bc83b20ce309712130e440fd21993bba2",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_reconcile.h",
+//       "hash": "c676e22206f00e5713dcaa1280d25524433fc6ec0f39f151784a7b4d288831b8",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_runtime_lifecycle.h",
+//       "hash": "844250777e5c234a136db980bb1fc3ca8a2bb2fde47156779114dc0e26d4eb45",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_tray_ui.h",
+//       "hash": "67e5167708ef710d22e0413f211638537bcc7f28f728932fca6abb9b9ff2bb3e",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_virtual_desktop.h",
+//       "hash": "cfc83fbbb6ccc7e02feecf1dd09e2038142313d9c49d77fb86d13dc6056fcc0e",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_window_events.h",
+//       "hash": "8aa4c7817b42c9ef4b4e27cf136efe0acd396e24e399d6a0d1669db4ad02c64b",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_window_observation.h",
+//       "hash": "7582a30f40c967d225a009eea418ed1110d3dcddf1d154b3bd3ff489adeb49c2",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_workspace_operations.h",
+//       "hash": "9ae9211a1097c919b1efd613ec161779daeff786edd3f4124ac6834c50261d89",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/includes/multiwm_workspace_repository.h",
+//       "hash": "ed6554d0a6e5dc0bf427bada263fc5a772c63cc16c939aa669a6ce2df2647193",
+//       "bom": false
+//     },
+//     {
+//       "path": "src/multiwm.cpp",
+//       "hash": "7ddb75784b77d351ae376206fb0dd232db4fe3c496b2a02157ce4de838e15fd5",
+//       "bom": false
+//     }
+//   ],
+//   "config": {
+//     "formatVersion": 1,
+//     "sourceDirectory": "src",
+//     "outputDirectory": "output",
+//     "entries": [
+//       "multiwm.cpp"
+//     ],
+//     "exclude": [],
+//     "includeDirectories": [
+//       "src"
+//     ],
+//     "externalIncludes": [],
+//     "inlineAngleIncludes": false,
+//     "generate": "onSave",
+//     "debounceMs": 250
+//   },
+//   "tail": "",
+//   "records": [
+//     {
+//       "type": "include",
+//       "id": 1,
+//       "path": "src/includes/multiwm_core.h",
+//       "directive": "#include \"includes/multiwm_core.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 2,
+//       "path": "src/includes/multiwm_gestures.h",
+//       "directive": "#include \"includes/multiwm_gestures.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 3,
+//       "path": "src/includes/multiwm_configuration_helpers.h",
+//       "directive": "#include \"includes/multiwm_configuration_helpers.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 4,
+//       "path": "src/includes/multiwm_layout.h",
+//       "directive": "#include \"includes/multiwm_layout.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 5,
+//       "path": "src/includes/multiwm_window_observation.h",
+//       "directive": "#include \"includes/multiwm_window_observation.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 6,
+//       "path": "src/includes/multiwm_workspace_repository.h",
+//       "directive": "#include \"includes/multiwm_workspace_repository.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 7,
+//       "path": "src/includes/multiwm_workspace_operations.h",
+//       "directive": "#include \"includes/multiwm_workspace_operations.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 8,
+//       "path": "src/includes/multiwm_reconcile.h",
+//       "directive": "#include \"includes/multiwm_reconcile.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 9,
+//       "path": "src/includes/multiwm_commands.h",
+//       "directive": "#include \"includes/multiwm_commands.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 10,
+//       "path": "src/includes/multiwm_window_events.h",
+//       "directive": "#include \"includes/multiwm_window_events.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 11,
+//       "path": "src/includes/multiwm_virtual_desktop.h",
+//       "directive": "#include \"includes/multiwm_virtual_desktop.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 12,
+//       "path": "src/includes/multiwm_runtime_lifecycle.h",
+//       "directive": "#include \"includes/multiwm_runtime_lifecycle.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 13,
+//       "path": "src/includes/multiwm_tray_ui.h",
+//       "directive": "#include \"includes/multiwm_tray_ui.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 14,
+//       "path": "src/includes/multiwm_diagnostics.h",
+//       "directive": "#include \"includes/multiwm_diagnostics.h\"\r\n"
+//     },
+//     {
+//       "type": "include",
+//       "id": 15,
+//       "path": "src/includes/multiwm_bootstrap.h",
+//       "directive": "#include \"includes/multiwm_bootstrap.h\"\r\n"
+//     }
+//   ]
+// }
+// WHAM@3 recovery-end
+// clang-format on
+// #endregion

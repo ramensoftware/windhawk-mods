@@ -12,7 +12,7 @@ on:
         required: true
         type: number
 
-# The workflow token labels issues, edits their titles and bodies, and comments.
+# The workflow token labels issues, edits their titles, and comments.
 # The project is updated with PROJECT_PAT, since the workflow token has no access
 # to organization projects. COPILOT_PAT is a personal token with Copilot
 # Requests access, used only by Copilot CLI.
@@ -28,7 +28,7 @@ jobs:
   run:
     # An edit matters only while the issue has no mod label, e.g. after the
     # opener fills in the mod name. Edits made with the workflow token, like the
-    # author tag, don't trigger workflows.
+    # new title, don't trigger workflows.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (!contains(join(github.event.issue.labels.*.name, ' '), 'mod/') &&
