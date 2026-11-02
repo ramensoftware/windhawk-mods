@@ -20,7 +20,7 @@ Move the pointer with more fingers resting on the precision touchpad, as if glid
 
 - **Trigger:** with 5 to as much fingers configured touching the pad.
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
-- **Movement:** the pointer follows the finger which moves the most. With fewer fingers movement or left touching, the lower speed multiplier applies; with more moving together, the higher one.
+- **Movement:** the pointer follows the fingers which move, leaving out the one which moves least (usually the thumb, so it doesn't fight the others). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
 - **Click:** you don't need to lift all fingers. With the hand resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to select word by word. A hold lasts until the whole hand leaves the pad. **Tap to click** option controls its sensitivity.
 - **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-figer tap-slide to scroll while "inside" the more-fingers action. **Both will get activated if you start with 2 and rest more on the touchpad.**
 
@@ -1296,9 +1296,8 @@ void ProcessFrame() {
         it = present ? std::next(it) : g_state.last.erase(it);
     }
 
-    // A single finger moving alone is followed on its own, not divided by the resting ones; otherwise the
-    // median of the fingers is: it cancels their jitter like an average, and a thumb which pivots or lags in a
-    // fast flick doesn't pull the pointer toward it.
+    // A single finger moving alone is followed on its own, not divided by the resting ones. Slow, the median of
+    // the fingers is followed: it cancels their jitter like an average.
     double dx = 0;
     double dy = 0;
     std::vector<double> allX;
@@ -1345,7 +1344,31 @@ void ProcessFrame() {
     } else if (second > best * kHandShare) {
         g_state.single = false;
     }
-    if (!g_state.single) {
+    int moving = counted;
+    if (!g_state.single && best >= kSingleStartMm) {
+        // Only the moving fingers count, over a share of the most moved one, and the least moving of them is
+        // left out: the thumb, which travels less than the fingers opposite it, stops pulling the pointer back.
+        std::vector<size_t> movers;
+        for (size_t i = 0; i < allX.size(); i++) {
+            if (std::hypot(allX[i], allY[i]) >= best * kSingleFingerShare) {
+                movers.push_back(i);
+            }
+        }
+        moving = (int)movers.size();
+        if (movers.size() >= 2) {
+            movers.erase(std::min_element(movers.begin(), movers.end(), [&](size_t a, size_t b) {
+                return std::hypot(allX[a], allY[a]) < std::hypot(allX[b], allY[b]);
+            }));
+        }
+        dx = 0;
+        dy = 0;
+        for (size_t i : movers) {
+            dx += allX[i];
+            dy += allY[i];
+        }
+        dx /= movers.size();
+        dy /= movers.size();
+    } else if (!g_state.single) {
         dx = Median(allX);
         dy = Median(allY);
     }
@@ -1367,7 +1390,7 @@ void ProcessFrame() {
         return;
     }
     // Up to two fingers moving, or one moving alone, aim like a single finger; three to five move the hand.
-    Move(dx, dy, dt, g_state.single || counted <= 2 ? g_multOne.load() : g_multFive.load());
+    Move(dx, dy, dt, g_state.single || moving <= 2 ? g_multOne.load() : g_multFive.load());
 }
 
 // The touchpad.
