@@ -2,7 +2,7 @@
 // @id              search-auto-input-disable
 // @name            Search Auto Input Disable
 // @description     Disables type-ahead in the File Explorer file view.
-// @version         1.1
+// @version         1.2
 // @author          ipEtroIlIu
 // @github          https://github.com/ipEtroIlIu
 // @include         explorer.exe
@@ -56,8 +56,19 @@ improvement, please report them on the project page.
 // ==/WindhawkModReadme==
 
 #include <windows.h>
-#include <windhawk_utils.h>
+#include <tlhelp32.h>
+#include <vector>
 #include <cwchar>
+
+struct HookRecord
+{
+    DWORD threadId;
+    HHOOK hook;
+};
+
+static std::vector<HookRecord> g_hooks;
+static HANDLE g_stopEvent = nullptr;
+static HANDLE g_workerThread = nullptr;
 
 // --------------------------------------------------
 // Check window class
@@ -84,16 +95,28 @@ bool IsWindowClass(HWND hwnd, const wchar_t* expected)
 bool IsFileViewWindow(HWND hwnd)
 {
     HWND current = hwnd;
+    bool hasFileView = false;
 
-    for (int i = 0; current && i < 12; i++)
+    while (current)
     {
         if (IsWindowClass(current, L"SHELLDLL_DefView"))
-            return true;
+        {
+            hasFileView = true;
+            break;
+        }
 
-        current = GetParent(current);
+        current = GetAncestor(current, GA_PARENT);
     }
 
-    return false;
+    if (!hasFileView)
+        return false;
+
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (!root)
+        return false;
+
+    return IsWindowClass(root, L"CabinetWClass") ||
+           IsWindowClass(root, L"ExploreWClass");
 }
 
 // --------------------------------------------------
@@ -194,7 +217,6 @@ bool ShouldBlockMessage(const MSG* msg)
     if (IsRenameEditWindow(msg->hwnd))
         return false;
 
-    // Preserve keyboard shortcuts.
     if (HasCommandModifier())
         return false;
 
@@ -216,32 +238,113 @@ bool ShouldBlockMessage(const MSG* msg)
 }
 
 // --------------------------------------------------
-// ExplorerFrame.dll accelerator hook
+// WH_GETMESSAGE callback
 // --------------------------------------------------
 
-using MayTranslateAccelerator_t =
-    HRESULT(WINAPI*)(void* pThis, MSG* msg, int flags);
-
-MayTranslateAccelerator_t MayTranslateAccelerator_Original = nullptr;
-
-HMODULE g_explorerFrame = nullptr;
-
-HRESULT WINAPI MayTranslateAccelerator_Hook(
-    void* pThis,
-    MSG* msg,
-    int flags)
+LRESULT CALLBACK GetMessageHook(
+    int code,
+    WPARAM wParam,
+    LPARAM lParam)
 {
-    if (ShouldBlockMessage(msg))
+    if (code >= 0 && lParam && wParam == PM_REMOVE)
     {
-        // Consume the message.
-        return S_OK;
+        MSG* msg = reinterpret_cast<MSG*>(lParam);
+
+        if (ShouldBlockMessage(msg))
+        {
+            msg->message = WM_NULL;
+            msg->wParam = 0;
+            msg->lParam = 0;
+        }
     }
 
-    return MayTranslateAccelerator_Original(
-        pThis,
-        msg,
-        flags
+    return CallNextHookEx(
+        nullptr,
+        code,
+        wParam,
+        lParam
     );
+}
+
+// --------------------------------------------------
+// Thread enumeration
+// --------------------------------------------------
+
+bool IsThreadHooked(DWORD threadId)
+{
+    for (const auto& record : g_hooks)
+    {
+        if (record.threadId == threadId)
+            return true;
+    }
+
+    return false;
+}
+
+bool InstallThreadHook(DWORD threadId)
+{
+    if (IsThreadHooked(threadId))
+        return true;
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_GETMESSAGE,
+        GetMessageHook,
+        nullptr,
+        threadId
+    );
+
+    if (!hook)
+        return false;
+
+    g_hooks.push_back({ threadId, hook });
+
+    return true;
+}
+
+void ScanThreads()
+{
+    DWORD processId = GetCurrentProcessId();
+    DWORD currentThreadId = GetCurrentThreadId();
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(
+        TH32CS_SNAPTHREAD,
+        0
+    );
+
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return;
+
+    THREADENTRY32 entry = {};
+    entry.dwSize = sizeof(entry);
+
+    if (Thread32First(snapshot, &entry))
+    {
+        do
+        {
+            if (entry.th32OwnerProcessID == processId &&
+                entry.th32ThreadID != currentThreadId)
+            {
+                InstallThreadHook(entry.th32ThreadID);
+            }
+
+        } while (Thread32Next(snapshot, &entry));
+    }
+
+    CloseHandle(snapshot);
+}
+
+// --------------------------------------------------
+// Background thread monitor
+// --------------------------------------------------
+
+DWORD WINAPI ThreadMonitorProc(LPVOID)
+{
+    while (WaitForSingleObject(g_stopEvent, 1000) == WAIT_TIMEOUT)
+    {
+        ScanThreads();
+    }
+
+    return 0;
 }
 
 // --------------------------------------------------
@@ -250,45 +353,52 @@ HRESULT WINAPI MayTranslateAccelerator_Hook(
 
 BOOL Wh_ModInit()
 {
-    g_explorerFrame = LoadLibraryExW(
-        L"ExplorerFrame.dll",
+    ScanThreads();
+
+    if (g_hooks.empty())
+        return FALSE;
+
+    g_stopEvent = CreateEventW(
         nullptr,
-        LOAD_LIBRARY_SEARCH_SYSTEM32
+        TRUE,
+        FALSE,
+        nullptr
     );
 
-    if (!g_explorerFrame)
-    {
-        Wh_Log(L"Failed to load ExplorerFrame.dll");
-        return FALSE;
-    }
+    if (!g_stopEvent)
+        goto failed;
 
-    WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] =
-    {
-        {
-            {
-                L"private: long __cdecl CShellBrowser::_MayTranslateAccelerator(struct tagMSG *,int)"
-            },
-            &MayTranslateAccelerator_Original,
-            MayTranslateAccelerator_Hook,
-        },
-    };
+    g_workerThread = CreateThread(
+        nullptr,
+        0,
+        ThreadMonitorProc,
+        nullptr,
+        0,
+        nullptr
+    );
 
-    if (!WindhawkUtils::HookSymbols(
-            g_explorerFrame,
-            explorerFrameDllHooks,
-            ARRAYSIZE(explorerFrameDllHooks)))
-    {
-        Wh_Log(L"Failed to hook CShellBrowser::_MayTranslateAccelerator");
-
-        FreeLibrary(g_explorerFrame);
-        g_explorerFrame = nullptr;
-
-        return FALSE;
-    }
-
-    Wh_Log(L"Successfully hooked CShellBrowser::_MayTranslateAccelerator");
+    if (!g_workerThread)
+        goto failed;
 
     return TRUE;
+
+failed:
+
+    if (g_stopEvent)
+    {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+
+    for (const auto& record : g_hooks)
+    {
+        if (record.hook)
+            UnhookWindowsHookEx(record.hook);
+    }
+
+    g_hooks.clear();
+
+    return FALSE;
 }
 
 // --------------------------------------------------
@@ -297,11 +407,27 @@ BOOL Wh_ModInit()
 
 void Wh_ModUninit()
 {
-    if (g_explorerFrame)
+    if (g_stopEvent)
+        SetEvent(g_stopEvent);
+
+    if (g_workerThread)
     {
-        FreeLibrary(g_explorerFrame);
-        g_explorerFrame = nullptr;
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
     }
 
-    MayTranslateAccelerator_Original = nullptr;
+    if (g_stopEvent)
+    {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+
+    for (const auto& record : g_hooks)
+    {
+        if (record.hook)
+            UnhookWindowsHookEx(record.hook);
+    }
+
+    g_hooks.clear();
 }
