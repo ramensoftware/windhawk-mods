@@ -4,7 +4,7 @@
 // @name:zh-CN      一拖即删
 // @description     Drag & Trash: a cursor-following or nearby/top Recycle Bin with custom still/animated icons, batch recycling and Ctrl+Z undo.
 // @description:zh-CN 一拖即删：回收站可跟随鼠标或显示在附近/顶部，支持自定义静态/动态图标，并保留批量删除与 Ctrl+Z 撤销。
-// @version         1.1.10
+// @version         1.1.11
 // @author          XandriW
 // @github          https://github.com/xandri19wang
 // @include         explorer.exe
@@ -53,6 +53,8 @@ Use the Windows Recycle Bin icon, a local image/GIF, or an HTTPS image URL fetch
 
 ## More / 其他功能
 
+- **Hover icon / 悬停图标:** Optional separate local still image or GIF; blank inherits the drag icon.
+- **Auto mirror / 自动翻转:** Flip custom images according to their position relative to the cursor.
 - **Batch recycling / 批量回收:** Drop several files together in one Shell operation.
 - **Ctrl+Z undo / 撤销:** Restore a supported recycle operation in File Explorer (within the active Shell session).
 - **Lightweight / 轻量:** GIF playback runs only while dragging. An explicitly selected HTTPS image is downloaded on a bounded background worker and cached, never on the drag or UI thread.
@@ -85,8 +87,8 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
     - nearby: 拖拽起点附近
     - top: 屏幕顶部（原版）
 - IconSource: system
-  $name: Icon appearance
-  $name:zh-CN: 图标类型
+  $name: Drag icon appearance
+  $name:zh-CN: 拖拽图标类型
   $options:
     - system: Current Windows Recycle Bin
     - local: Local image / GIF
@@ -98,8 +100,8 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
     - url: HTTPS 图片直链（后台加载）
 
 - IconPath: ""
-  $name: Local image path
-  $name:zh-CN: 本地图片路径
+  $name: Drag image path
+  $name:zh-CN: 拖拽图标图片路径
   $description: Full path to a PNG, JPG, BMP, ICO or GIF. Used when Icon appearance is Local.
   $description:zh-CN: 完整 PNG、JPG、BMP、ICO 或 GIF 路径；图标类型选本地时生效。
   #! $format: filePath
@@ -110,6 +112,17 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
   $description: Optional direct HTTPS URL to an image/GIF. Up to 8 MB, cached locally. Download never blocks the overlay.
   $description:zh-CN: 可选 HTTPS 图片直链，大小不超过 8 MB；下载后台执行并缓存在本地，不阻塞回收站。
   #! $showIf: {IconSource: url}
+- HoverIconPath: ""
+  $name: Hover image / GIF (optional)
+  $name:zh-CN: 悬停图片 / GIF（可留空）
+  $description: Leave empty to use the drag icon. Local PNG, JPG, ICO, BMP, and animated GIF are supported.
+  $description:zh-CN: 留空即沿用拖拽图标；支持本地 PNG、JPG、ICO、BMP 和 GIF 动图。
+  #! $format: filePath
+- AutoFlipIcon: true
+  $name: Auto-mirror based on cursor position
+  $name:zh-CN: 按鼠标位置自动水平镜像
+  $description: Flip the icon when the target is left of the cursor; hold orientation while hovering.
+  $description:zh-CN: 回收站在鼠标左侧时自动翻转，悬停期间方向保持稳定。
 
 - IconSize: 72
   $name: Icon size (px)
@@ -182,6 +195,13 @@ static RECT g_targetWorkArea = {};
 static POINT g_overlayOrigin = {};
 static HICON g_hRecycleIcon = nullptr;
 static LONG g_dragFromDesktop = 0;
+static bool g_hovering = false, g_lastRenderedHover = false, g_mirrorIcon = false;
+static std::wstring g_activeHoverImage;
+static Gdiplus::Image* g_hoverImage = nullptr;
+static HICON g_hoverIcon = nullptr;
+static std::vector<UINT> g_hoverDelaysMs;
+static UINT g_hoverFrame = 0, g_hoverFrameCount = 0;
+static ULONGLONG g_hoverNextFrameAt = 0;
 static volatile LONG g_imageStop = 0;
 static HANDLE g_imageWorker = nullptr;
 static std::wstring g_remoteCache;
@@ -195,6 +215,8 @@ struct UserSettings {
     std::wstring placement = L"follow";
     std::wstring iconSource = L"system";
     std::wstring iconPath, iconUrl;
+    std::wstring hoverIconPath;
+    bool autoFlipIcon = true;
     int iconSize = 72;
     int desktopDistance = 72;
     int folderDistance = 100;
@@ -225,6 +247,8 @@ static void ReadSettings() {
         g_settings.iconSource = L"system";
     g_settings.iconPath = ReadString(L"IconPath");
     g_settings.iconUrl = ReadString(L"IconUrl");
+    g_settings.hoverIconPath = ReadString(L"HoverIconPath");
+    g_settings.autoFlipIcon = Wh_GetIntSetting(L"AutoFlipIcon") != 0;
     g_settings.iconSize = ReadNumber(L"IconSize", 24, 72);
     g_settings.desktopDistance = ReadNumber(L"DesktopDistance", 48, 220);
     g_settings.folderDistance = ReadNumber(L"FolderDistance", 48, 220);
@@ -359,6 +383,9 @@ static bool FetchImageHttps(const std::wstring& url,
 static void PrepareImageForDrag() {
     g_activeImage.clear();
     g_remoteCache.clear();
+    g_activeHoverImage.clear();
+    if (SafeImageFile(g_settings.hoverIconPath))
+        g_activeHoverImage = g_settings.hoverIconPath;
     if (g_settings.iconSource == L"local") {
         if (SafeImageFile(g_settings.iconPath))
             g_activeImage = g_settings.iconPath;
@@ -512,6 +539,81 @@ bool StepDragGif() {
     return true;
 }
 
+void FreeHoverGif() {
+    if (g_hoverIcon) {
+        DestroyIcon(g_hoverIcon);
+        g_hoverIcon = nullptr;
+    }
+    delete g_hoverImage;
+    g_hoverImage = nullptr;
+    g_hoverDelaysMs.clear();
+    g_hoverFrame = 0;
+    g_hoverFrameCount = 0;
+    g_hoverNextFrameAt = 0;
+}
+
+void LoadHoverGif() {
+    if (g_hoverImage || g_hoverIcon) return;
+    if (g_activeHoverImage.empty()) return;
+    if (HasIcoHeader(g_activeHoverImage)) {
+        int pixels = std::clamp(
+            (int)(g_settings.iconSize * g_currentDpiScale + 0.5f), 16, 256);
+        g_hoverIcon = (HICON)LoadImageW(
+            nullptr, g_activeHoverImage.c_str(), IMAGE_ICON, pixels, pixels,
+            LR_LOADFROMFILE);
+        return;
+    }
+    auto* image = Gdiplus::Image::FromFile(g_activeHoverImage.c_str(), FALSE);
+    if (!image || image->GetLastStatus() != Gdiplus::Ok) {
+        delete image;
+        return; // Original Windows icon fallback.
+    }
+    // Still images do not have a FrameDimensionTime.
+    UINT dimensions = image->GetFrameDimensionsCount();
+    if (!dimensions) { delete image; return; }
+    std::vector<GUID> guidList(dimensions);
+    if (image->GetFrameDimensionsList(guidList.data(), dimensions) != Gdiplus::Ok) {
+        delete image; return;
+    }
+    UINT frames = image->GetFrameCount(&guidList[0]);
+    if (!frames || frames > 256 || image->GetWidth() > 1024 ||
+        image->GetHeight() > 1024) {
+        delete image; return;
+    }
+    bool animated = IsEqualGUID(guidList[0], Gdiplus::FrameDimensionTime) &&
+                    frames > 1;
+    g_hoverImage = image;
+    g_hoverFrameCount = animated ? frames : 1;
+    g_hoverFrame = 0;
+    g_hoverDelaysMs.assign(frames, 80);
+    UINT size = animated ? image->GetPropertyItemSize(PropertyTagFrameDelay) : 0;
+    if (size > sizeof(Gdiplus::PropertyItem) && size < 65536) {
+        std::vector<BYTE> bytes(size);
+        auto* item = reinterpret_cast<Gdiplus::PropertyItem*>(bytes.data());
+        if (image->GetPropertyItem(PropertyTagFrameDelay, size, item) == Gdiplus::Ok &&
+            item->value && item->length >= frames * sizeof(UINT)) {
+            const auto* durations = static_cast<const UINT*>(item->value);
+            for (UINT i = 0; i < frames; ++i) {
+                UINT ms = durations[i] * 10;
+                g_hoverDelaysMs[i] = ms < 30 ? 30 : ms > 250 ? 250 : ms;
+            }
+        }
+    }
+    if (animated)
+        image->SelectActiveFrame(&Gdiplus::FrameDimensionTime, 0);
+    g_hoverNextFrameAt = GetTickCount64() + g_hoverDelaysMs[0];
+}
+
+bool StepHoverGif() {
+    if (!g_hoverImage || g_hoverFrameCount < 2) return false;
+    ULONGLONG now = GetTickCount64();
+    if (now < g_hoverNextFrameAt) return false;
+    g_hoverFrame = (g_hoverFrame + 1) % g_hoverFrameCount;
+    g_hoverImage->SelectActiveFrame(&Gdiplus::FrameDimensionTime, g_hoverFrame);
+    g_hoverNextFrameAt = now + g_hoverDelaysMs[g_hoverFrame];
+    return true;
+}
+
 void RenderFrame(HWND hWnd);
 void MoveFilesToRecycleBin(const std::vector<wchar_t>& buffer);
 
@@ -556,6 +658,10 @@ void DrawModernTrashIcon(Graphics& g, float cx, float cy, float scale, Color col
 void RenderFrame(HWND hWnd) {
     if (g_animState == AnimState::HIDDEN || g_currentScale < 0.05f) return;
 
+    bool separate = g_hovering && (g_hoverImage || g_hoverIcon);
+    Gdiplus::Image* image = separate ? g_hoverImage : g_gifImage;
+    HICON icon = separate ? g_hoverIcon : g_customIcon;
+    bool mirrored = g_settings.autoFlipIcon && g_mirrorIcon;
     float dpiScale = g_currentDpiScale;
     int wndWidth = (int)(BASE_WND_WIDTH * dpiScale);
     int wndHeight = (int)(BASE_WND_HEIGHT * dpiScale);
@@ -591,20 +697,36 @@ void RenderFrame(HWND hWnd) {
             g.FillEllipse(&hoverBrush, cx - ringRadius, cy - ringRadius,
                           ringRadius * 2, ringRadius * 2);
         }
-        if (g_gifImage) {
+        if (image) {
             float side = (float)g_settings.iconSize * dpiScale * g_currentScale;
             g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-            g.DrawImage(g_gifImage,
-                        RectF(cx - side / 2.0f, cy - side / 2.0f, side, side));
-        } else if (!g_hRecycleIcon && !g_customIcon) {
+            if (mirrored) {
+                PointF corners[3] = {
+                    PointF(cx + side / 2, cy - side / 2),
+                    PointF(cx - side / 2, cy - side / 2),
+                    PointF(cx + side / 2, cy + side / 2)};
+                g.DrawImage(image, corners, 3);
+            } else {
+                g.DrawImage(image, RectF(cx - side / 2, cy - side / 2, side, side));
+            }
+        } else if (!g_hRecycleIcon && !icon) {
             DrawModernTrashIcon(g, cx, cy, g_currentScale * dpiScale,
                                 Color(245, 248, 250));
         }
+        if (mirrored && !image && (icon || g_hRecycleIcon)) {
+            Bitmap iconBitmap(icon ? icon : g_hRecycleIcon);
+            float side = (float)g_settings.iconSize * dpiScale * g_currentScale;
+            PointF corners[3] = {
+                PointF(cx + side / 2, cy - side / 2),
+                PointF(cx - side / 2, cy - side / 2),
+                PointF(cx + side / 2, cy + side / 2)};
+            g.DrawImage(&iconBitmap, corners, 3);
+        }
     }
     // Fall back to Windows native icon only if the GIF can't load.
-    if (!g_gifImage && (g_customIcon || g_hRecycleIcon)) {
+    if (!image && !mirrored && (icon || g_hRecycleIcon)) {
         int iconSize = (int)(g_settings.iconSize * dpiScale * g_currentScale);
-        HICON drawIcon = g_customIcon ? g_customIcon : g_hRecycleIcon;
+        HICON drawIcon = icon ? icon : g_hRecycleIcon;
         DrawIconEx(hdcMem, (int)(cx - iconSize / 2.0f),
                    (int)(cy - iconSize / 2.0f), drawIcon,
                    iconSize, iconSize, 0, nullptr, DI_NORMAL);
@@ -754,9 +876,11 @@ public:
         if (m_hasHDrop && canMove && IsOverTrash(pt)) {
             *pdwEffect = DROPEFFECT_MOVE;
             g_targetScale = 1.2f;
+            g_hovering = true;
         } else {
             if (pdwEffect) *pdwEffect = DROPEFFECT_NONE;
             g_targetScale = 1.0f;
+            g_hovering = false;
         }
         return S_OK;
     }
@@ -766,9 +890,11 @@ public:
         if (m_hasHDrop && canMove && IsOverTrash(pt)) {
             *pdwEffect = DROPEFFECT_MOVE;
             g_targetScale = 1.2f;
+            g_hovering = true;
         } else {
             if (pdwEffect) *pdwEffect = DROPEFFECT_NONE;
             g_targetScale = 1.0f;
+            g_hovering = false;
         }
         return S_OK;
     }
@@ -776,6 +902,7 @@ public:
     HRESULT STDMETHODCALLTYPE DragLeave() override {
         m_hasHDrop = false;
         g_targetScale = 1.0f;
+            g_hovering = false;
         return S_OK;
     }
 
@@ -981,6 +1108,21 @@ static bool FollowCursor(HWND hWnd) {
                           SWP_NOSIZE | SWP_NOOWNERZORDER);
 }
 
+static bool UpdateAutoMirror() {
+    if (!g_settings.autoFlipIcon || g_hovering) return false;
+    POINT cursor = {};
+    if (!GetCursorPos(&cursor)) return false;
+    int centerX = g_overlayOrigin.x +
+                  (int)(BASE_WND_WIDTH * g_currentDpiScale) / 2;
+    int hysteresis = (int)(14 * g_currentDpiScale);
+    bool next = g_mirrorIcon;
+    if (centerX < cursor.x - hysteresis) next = true;
+    else if (centerX > cursor.x + hysteresis) next = false;
+    if (next == g_mirrorIcon) return false;
+    g_mirrorIcon = next;
+    return true;
+}
+
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_HTTPS_IMAGE_READY: {
@@ -1045,10 +1187,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     g_overlayOrigin.y = g_targetWorkArea.top + margin;
                 if (g_overlayOrigin.y + h > g_targetWorkArea.bottom - margin)
                     g_overlayOrigin.y = g_targetWorkArea.bottom - margin - h;
+                g_hovering = false;
+                g_lastRenderedHover = false;
                 LoadDragGif();
+                LoadHoverGif();
                 g_animState = AnimState::VISIBLE;
                 g_currentScale = 0.3f;
                 g_targetScale = 1.0f;
+                g_mirrorIcon = false;
+                UpdateAutoMirror();
                 g_lastRenderedScale = -1.0f;
                 RenderFrame(hWnd);
                 g_lastRenderedScale = g_currentScale;
@@ -1075,14 +1222,20 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     KillTimer(hWnd, TIMER_ANIM);
                     ShowWindow(hWnd, SW_HIDE);
                     FreeDragGif();
+                    FreeHoverGif();
+                    g_hovering = false;
                     return 0;
                 }
 
-                bool frameChanged = StepDragGif();
+                bool frameChanged = (g_hovering && (g_hoverImage || g_hoverIcon))
+                                    ? StepHoverGif() : StepDragGif();
                 bool moved = FollowCursor(hWnd);
-                if (frameChanged || moved ||
+                bool flipped = UpdateAutoMirror();
+                bool hoverChanged = g_hovering != g_lastRenderedHover;
+                if (frameChanged || moved || flipped || hoverChanged ||
                     g_currentScale != g_lastRenderedScale) {
                     g_lastRenderedScale = g_currentScale;
+                    g_lastRenderedHover = g_hovering;
                     RenderFrame(hWnd);
                 }
             }
@@ -1208,6 +1361,7 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
         g_pDropTarget = nullptr;
     }
     FreeDragGif();
+    FreeHoverGif();
     if (g_hRecycleIcon) {
         DestroyIcon(g_hRecycleIcon);
         g_hRecycleIcon = nullptr;
