@@ -366,7 +366,8 @@ static void ReleaseThreadAutomation() {
 }
 
 // Returns true if pElement currently reports it can scroll horizontally.
-static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement) {
+static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement, double* pViewSize = nullptr) {
+    if (pViewSize) *pViewSize = 100.0;
     if (!pElement) return false;
 
     bool result = false;
@@ -381,6 +382,25 @@ static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement) {
         if (SUCCEEDED(pScroll->get_CurrentHorizontallyScrollable(&scrollable)) && scrollable &&
             SUCCEEDED(pScroll->get_CurrentHorizontalViewSize(&viewSize)))
             result = (viewSize < 99.5);
+        if (pViewSize) *pViewSize = viewSize;
+        pScroll->Release();
+    }
+    return result;
+}
+
+// True when the list currently shows a vertical scrollbar, whose width is
+// included in the UIA element's bounding rect but isn't usable by columns.
+static bool ElementHasVerticalScrollbar(IUIAutomationElement* pElement) {
+    if (!pElement) return false;
+
+    bool result = false;
+    IUIAutomationScrollPattern* pScroll = nullptr;
+    if (SUCCEEDED(pElement->GetCurrentPatternAs(UIA_ScrollPatternId, IID_PPV_ARGS(&pScroll))) && pScroll) {
+        BOOL scrollable = FALSE;
+        double viewSize = 100.0;
+        if (SUCCEEDED(pScroll->get_CurrentVerticallyScrollable(&scrollable)) && scrollable &&
+            SUCCEEDED(pScroll->get_CurrentVerticalViewSize(&viewSize)))
+            result = (viewSize < 99.99);
         pScroll->Release();
     }
     return result;
@@ -491,8 +511,13 @@ static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomati
         viewportWidth = rc.right - rc.left;
     } else if (pListElement) {
         RECT rcElem = {};
-        if (SUCCEEDED(pListElement->get_CurrentBoundingRectangle(&rcElem)))
+        if (SUCCEEDED(pListElement->get_CurrentBoundingRectangle(&rcElem))) {
             viewportWidth = rcElem.right - rcElem.left;
+            // The element rect includes a vertical scrollbar, which takes
+            // real width away from the columns.
+            if (ElementHasVerticalScrollbar(pListElement))
+                viewportWidth -= GetSystemMetricsForDpi(SM_CXVSCROLL, static_cast<UINT>(96 * dpiScale + 0.5));
+        }
     } else if (hwndView) {
         RECT rc = {};
         GetClientRect(hwndView, &rc);
@@ -578,6 +603,7 @@ struct FitContext {
 
     int elasticAttempt = 0;
     bool elasticConfirmed = false;
+    double lastUiaViewSize = -1.0;  // UIA reading that last triggered a shrink
     static constexpr int kMaxElasticAttempts = 8;
 
     // Only populated when hwndListView couldn't be found (no classic
@@ -1020,8 +1046,14 @@ static void Step_VerifyElasticFit(FitContext* ctx, HWND hwndOwner) {
     }
 
     bool uiaSaysScrolling = false;
-    if (!ctx->hwndListView && ctx->pElasticListElement)
-        uiaSaysScrolling = ElementHasHorizontalScroll(ctx->pElasticListElement);
+    double uiaViewSize = 100.0;
+    if (!ctx->hwndListView && ctx->pElasticListElement) {
+        uiaSaysScrolling = ElementHasHorizontalScroll(ctx->pElasticListElement, &uiaViewSize);
+        // Some builds report a snapshot that doesn't follow our width changes;
+        // an identical reading right after a shrink means it's stale.
+        if (uiaSaysScrolling && overflow == 0 && uiaViewSize == ctx->lastUiaViewSize)
+            uiaSaysScrolling = false;
+    }
 
     int minNameWidth = static_cast<int>(60 * ctx->dpiScale);
     bool canShrink = ctx->maxWidths[ctx->nameColumnIndex] > minNameWidth;
@@ -1041,6 +1073,7 @@ static void Step_VerifyElasticFit(FitContext* ctx, HWND hwndOwner) {
             ci.uWidth = static_cast<UINT>(newNameWidth);
             ctx->pCM->SetColumnInfo(ctx->keys[ctx->nameColumnIndex], &ci);
 
+            if (overflow == 0) ctx->lastUiaViewSize = uiaViewSize;
             ctx->elasticAttempt++;
             ctx->elasticConfirmed = false;
             SetTimer(hwndOwner, FITSTEP_TIMER_ID, kElasticVerifyDelayMs, nullptr);
