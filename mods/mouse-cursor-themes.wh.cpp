@@ -8,7 +8,7 @@
 // @author          DahaSakinOlamazdim
 // @github          https://github.com/DahaSakinOlamazdim
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -luser32 -lshell32 -ladvapi32
+// @compilerOptions -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,10 +19,10 @@ Replaces the Windows mouse cursors with a theme of your choice. All cursors are
 drawn by the mod itself, so every theme is available right after you enable the
 mod and you can switch themes from the settings at any time.
 
-The mod applies the theme the same way the Windows "Mouse > Pointers" settings
-page does: it creates cursor files for the theme and points the Windows pointer
-settings at them. Because of this, the theme works in every program that uses
-the standard Windows cursors.
+The mod draws cursor files for the theme and replaces the system cursors of
+your current Windows session with them. It does not change your saved pointer
+scheme or any registry settings. Because of this, the theme works in every
+program that uses the standard Windows cursors.
 
 ## Preview
 ![Preview 1](https://i.imgur.com/YBKMSqy.gif)
@@ -85,13 +85,16 @@ unavailable (forbidden) and help.
 ## Notes
 - The cursor size follows the Windows pointer size setting (Settings >
   Accessibility > Mouse pointer and touch). The cursors are drawn in several sizes, so they stay sharp.
-- Your original pointer settings are saved when the mod starts and restored
-  when you disable the mod.
+- The mod never changes your saved pointer scheme. When you disable the mod,
+  Windows reloads your own pointer scheme. The replaced cursors only live in
+  memory, so after you sign out they return to your pointer scheme until the
+  mod is started again.
 - Programs that use their own cursors (for example some games and drawing
   programs) keep their own cursors.
 - If you change the pointer scheme from the Windows settings while the mod is
-  running, turn the mod off and on again to apply the theme again.
-- The cursor files are kept in the folder %LOCALAPPDATA%\WindhawkMouseCursorThemes and are removed when the mod is disabled.
+  running, the mod notices it and applies the theme again.
+- The generated cursor files are kept in Windhawk's storage folder for this mod
+  and are removed when the mod is disabled.
 
 ---
 
@@ -101,9 +104,9 @@ Windows fare imleçlerini seçtiğiniz bir temayla değiştirir. Tüm imleçler 
 kendisi tarafından çizilir; bu yüzden modu açtığınız anda bütün temalar hazırdır
 ve ayarlardan istediğiniz zaman tema değiştirebilirsiniz.
 
-Mod temayı, Windows'un "Fare > İşaretçiler" ayar sayfasının yaptığı gibi uygular:
-tema için imleç dosyaları oluşturur ve Windows'un işaretçi ayarlarını bu
-dosyalara yönlendirir. Bu sayede tema, standart Windows imleçlerini kullanan her
+Mod, tema için imleç dosyaları çizer ve geçerli Windows oturumunuzun sistem
+imleçlerini bu dosyalarla değiştirir. Kayıtlı işaretçi şemanızı veya kayıt defteri
+ayarlarını değiştirmez. Bu sayede tema, standart Windows imleçlerini kullanan her
 programda çalışır.
 
 ## Temalar
@@ -160,12 +163,15 @@ taşıma, kullanılamaz (yasak) ve yardım.
 ## Notlar
 - İmleç boyutu Windows'un işaretçi boyutu ayarını izler (Ayarlar > Erişilebilirlik >
   Fare işaretçisi ve dokunma). İmleçler birkaç boyutta çizildiği için net kalır.
-- Özgün işaretçi ayarlarınız mod başlarken kaydedilir ve modu kapattığınızda geri yüklenir.
+- Mod kayıtlı işaretçi şemanızı hiçbir zaman değiştirmez. Modu kapattığınızda Windows
+  kendi işaretçi şemanızı yeniden yükler. Değiştirilen imleçler yalnızca bellekte
+  bulunur; oturumu kapattığınızda mod yeniden başlayana kadar işaretçi şemanıza döner.
 - Kendi imleçlerini kullanan programlar (örneğin bazı oyunlar ve çizim programları)
   kendi imleçlerini korur.
-- Mod çalışırken Windows ayarlarından işaretçi şemasını değiştirirseniz, temayı
-  yeniden uygulamak için modu kapatıp açın.
-- İmleç dosyaları %LOCALAPPDATA%\WindhawkMouseCursorThemes klasöründe tutulur ve mod kapatılınca silinir.
+- Mod çalışırken Windows ayarlarından işaretçi şemasını değiştirirseniz mod bunu
+  fark eder ve temayı yeniden uygular.
+- Oluşturulan imleç dosyaları, Windhawk'ın bu mod için ayırdığı depolama klasöründe
+  tutulur ve mod kapatılınca silinir.
 */
 // ==/WindhawkModReadme==
 
@@ -301,6 +307,7 @@ taşıma, kullanılamaz (yasak) ve yardım.
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <stdio.h>
 #include <wchar.h>
 
@@ -308,45 +315,9 @@ taşıma, kullanılamaz (yasak) ve yardım.
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <initializer_list>
 #include <string>
-#include <utility>
 #include <vector>
-
-#include <stdarg.h>
-
-// Tanı günlüğü: Windhawk günlüğüne ek olarak, kolay bulunsun diye herkese açık
-// bir klasördeki dosyaya da yazar.
-static void DiagLog(const wchar_t* fmt, ...) {
-    wchar_t msg[1024];
-    va_list ap;
-    va_start(ap, fmt);
-    vswprintf_s(msg, ARRAYSIZE(msg), fmt, ap);
-    va_end(ap);
-    wchar_t line[1200];
-    swprintf_s(line, L"[%llu pid=%lu] %s\r\n",
-               (unsigned long long)GetTickCount64(), GetCurrentProcessId(),
-               msg);
-    char utf8[4800];
-    int n = WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, sizeof(utf8),
-                                nullptr, nullptr);
-    if (n <= 1) return;
-    HANDLE f = CreateFileW(L"C:\\Users\\Public\\windhawk-cursor-theme-log.txt",
-                           FILE_APPEND_DATA,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    DWORD w = 0;
-    WriteFile(f, utf8, (DWORD)(n - 1), &w, nullptr);
-    CloseHandle(f);
-}
-
-#define DLOG(...)                \
-    do {                         \
-        Wh_Log(__VA_ARGS__);     \
-        DiagLog(__VA_ARGS__);    \
-    } while (0)
 
 // ---------------------------------------------------------------------------
 // Temalar ve ayarlar
@@ -639,7 +610,7 @@ enum Kind {
     K_HELP,
 };
 
-// "Control Panel\Cursors" altındaki kayıt defteri değer adları.
+// Cursor names (used for file names) and the OCR_* ids of the system cursors.
 struct CurDef {
     const wchar_t* valueName;
     int kind;
@@ -1138,47 +1109,58 @@ static bool WriteBytes(const std::wstring& path,
     HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) {
-        DLOG(L"Dosya olusturulamadi (%lu): %s", GetLastError(), path.c_str());
+        Wh_Log(L"Failed to create the file (%lu): %s", GetLastError(),
+               path.c_str());
         return false;
     }
     DWORD written = 0;
     BOOL ok = WriteFile(f, data.data(), (DWORD)data.size(), &written, nullptr);
     CloseHandle(f);
     if (!ok || written != data.size()) {
-        DLOG(L"Dosya yazilamadi (%lu): %s", GetLastError(), path.c_str());
+        Wh_Log(L"Failed to write the file (%lu): %s", GetLastError(),
+               path.c_str());
         return false;
     }
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Klasör, yedek ve kayıt defteri
+// Storage folder and cursor files
 // ---------------------------------------------------------------------------
 
-static const wchar_t* kCursorsKey = L"Control Panel\\Cursors";
-static const wchar_t* kBackupKey = L"Software\\WindhawkMouseCursorThemes\\Backup";
-static const wchar_t* kBackupParent = L"Software\\WindhawkMouseCursorThemes";
-
+// The cursor files live in a per-session subfolder of the mod storage, so
+// several signed-in users never delete each other's files.
 static std::wstring g_dir;
+static std::vector<std::wstring> g_paths;  // current files, empty = missing
+static std::wstring g_genPrefix;           // file name prefix of the current files
+static ULONGLONG g_lastApply = 0;
+
+static DWORD GetSessionId() {
+    DWORD sessionId = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+    return sessionId;
+}
 
 static bool EnsureDir() {
-    WCHAR base[MAX_PATH];
-    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-    if (!n || n >= ARRAYSIZE(base)) {
-        DLOG(L"LOCALAPPDATA okunamadi");
+    WCHAR storage[MAX_PATH];
+    size_t len = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+    if (len == 0 || len >= ARRAYSIZE(storage)) {
+        Wh_Log(L"The mod storage path is not available");
         return false;
     }
-    g_dir = std::wstring(base) + L"\\WindhawkMouseCursorThemes";
-    CreateDirectoryW(g_dir.c_str(), nullptr);
-    if (GetFileAttributesW(g_dir.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        DLOG(L"Klasor olusturulamadi (%lu): %s", GetLastError(),
-               g_dir.c_str());
+    WCHAR sub[32];
+    swprintf_s(sub, L"session-%lu", GetSessionId());
+    g_dir = std::wstring(storage) + L"\\" + sub;
+    int r = SHCreateDirectoryExW(nullptr, g_dir.c_str(), nullptr);
+    if (r != ERROR_SUCCESS && r != ERROR_ALREADY_EXISTS &&
+        r != ERROR_FILE_EXISTS) {
+        Wh_Log(L"Failed to create the folder (%d): %s", r, g_dir.c_str());
         return false;
     }
     return true;
 }
 
-// keepPrefix bos ise klasördeki tüm imleç dosyalarını siler.
+// If keepPrefix is empty, every cursor file in the session folder is deleted.
 static void CleanupFiles(const std::wstring& keepPrefix) {
     if (g_dir.empty()) return;
     WIN32_FIND_DATAW fd;
@@ -1197,113 +1179,51 @@ static void CleanupFiles(const std::wstring& keepPrefix) {
     FindClose(h);
 }
 
-// Özgün işaretçi ayarlarını (yalnızca ilk seferde) yedekle.
-static void EnsureBackup() {
-    HKEY bk = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kBackupKey, 0, KEY_QUERY_VALUE,
-                      &bk) == ERROR_SUCCESS) {
-        RegCloseKey(bk);
-        return;  // önceki bir çalışmadan kalan yedek var, üzerine yazma
-    }
-
-    HKEY cur = nullptr;
-    bool haveCur = RegOpenKeyExW(HKEY_CURRENT_USER, kCursorsKey, 0,
-                                 KEY_QUERY_VALUE, &cur) == ERROR_SUCCESS;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kBackupKey, 0, nullptr, 0,
-                        KEY_SET_VALUE, nullptr, &bk, nullptr) != ERROR_SUCCESS) {
-        DLOG(L"Yedek anahtari olusturulamadi");
-        if (haveCur) RegCloseKey(cur);
-        return;
-    }
-
-    for (const CurDef& d : kDefs) {
-        WCHAR buf[1024];
-        DWORD sz = sizeof(buf), type = 0;
-        LONG r = haveCur ? RegQueryValueExW(cur, d.valueName, nullptr, &type,
-                                            (BYTE*)buf, &sz)
-                         : ERROR_FILE_NOT_FOUND;
-        if (r == ERROR_SUCCESS && (type == REG_SZ || type == REG_EXPAND_SZ)) {
-            buf[ARRAYSIZE(buf) - 1] = 0;
-            RegSetValueExW(bk, d.valueName, 0, REG_SZ, (const BYTE*)buf,
-                           (DWORD)((wcslen(buf) + 1) * sizeof(WCHAR)));
-        } else {
-            std::wstring flag = std::wstring(d.valueName) + L"_missing";
-            DWORD one = 1;
-            RegSetValueExW(bk, flag.c_str(), 0, REG_DWORD, (const BYTE*)&one,
-                           sizeof(one));
-        }
-    }
-    RegCloseKey(bk);
-    if (haveCur) RegCloseKey(cur);
-    DLOG(L"Ozgun isaretci ayarlari yedeklendi");
+static void RemoveSessionDir() {
+    CleanupFiles(L"");
+    if (!g_dir.empty()) RemoveDirectoryW(g_dir.c_str());
 }
 
-// İşaretçi ayarlarını kayıt defterinden yeniden yükletir.
-static BOOL ReloadCursors() {
-    SetLastError(0);
-    BOOL ok = SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr,
-                                    SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
-    DLOG(L"SPI_SETCURSORS (UPDATEINIFILE|SENDCHANGE) = %d, err=%lu", (int)ok,
-         GetLastError());
-    if (!ok) {
-        SetLastError(0);
-        ok = SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
-        DLOG(L"SPI_SETCURSORS (0) = %d, err=%lu", (int)ok, GetLastError());
-    }
-    return ok;
+// ---------------------------------------------------------------------------
+// Applying and restoring the cursors
+//
+// The theme is applied only with SetSystemCursor, which changes the system
+// cursors of the current session in memory. The user's saved pointer scheme
+// (the registry) is never modified.
+// ---------------------------------------------------------------------------
+
+// Remembers that the cursors are replaced, so that the next start can undo
+// the change if the previous run did not exit cleanly.
+static void GetModifiedKey(WCHAR* key, size_t count) {
+    swprintf_s(key, count, L"cursorsModified_%lu", GetSessionId());
 }
 
-static void RestoreOriginal() {
-    HKEY bk = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kBackupKey, 0, KEY_QUERY_VALUE,
-                      &bk) != ERROR_SUCCESS) {
-        DLOG(L"Geri yuklenecek yedek yok");
-        return;
-    }
-    HKEY cur = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kCursorsKey, 0, KEY_SET_VALUE, &cur) !=
-        ERROR_SUCCESS) {
-        RegCloseKey(bk);
-        return;
-    }
-
-    for (const CurDef& d : kDefs) {
-        WCHAR buf[1024];
-        DWORD sz = sizeof(buf), type = 0;
-        if (RegQueryValueExW(bk, d.valueName, nullptr, &type, (BYTE*)buf,
-                             &sz) == ERROR_SUCCESS &&
-            type == REG_SZ) {
-            buf[ARRAYSIZE(buf) - 1] = 0;
-            RegSetValueExW(cur, d.valueName, 0, REG_EXPAND_SZ, (const BYTE*)buf,
-                           (DWORD)((wcslen(buf) + 1) * sizeof(WCHAR)));
-        } else {
-            RegDeleteValueW(cur, d.valueName);
-        }
-    }
-    RegCloseKey(cur);
-    RegCloseKey(bk);
-    RegDeleteKeyW(HKEY_CURRENT_USER, kBackupKey);
-    RegDeleteKeyW(HKEY_CURRENT_USER, kBackupParent);
-
-    BOOL ok = ReloadCursors();
-    DLOG(L"Ozgun imecler geri yuklendi (SPI=%d)", (int)ok);
+static void SetModifiedFlag(bool on) {
+    WCHAR key[64];
+    GetModifiedKey(key, ARRAYSIZE(key));
+    Wh_SetIntValue(key, on ? 1 : 0);
 }
 
-static void ApplyTheme() {
-    DLOG(L"Tema uygulaniyor: %s", g_theme.id);
-    if (!EnsureDir()) return;
-    EnsureBackup();
+static bool GetModifiedFlag() {
+    WCHAR key[64];
+    GetModifiedKey(key, ARRAYSIZE(key));
+    return Wh_GetIntValue(key, 0) != 0;
+}
+
+// Reloads the user's own pointer scheme from the registry.
+static void RestoreSystemCursors() {
+    if (!SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0)) {
+        Wh_Log(L"SPI_SETCURSORS failed: %lu", GetLastError());
+    }
+}
+
+// Generates the cursor files of the current theme. Returns true if at least
+// one file was written.
+static bool GenerateFiles() {
+    if (!EnsureDir()) return false;
 
     WCHAR gen[32];
-    swprintf_s(gen, L"%llu", (unsigned long long)GetTickCount64());
-
-    HKEY cur = nullptr;
-    LONG r = RegOpenKeyExW(HKEY_CURRENT_USER, kCursorsKey, 0, KEY_SET_VALUE,
-                           &cur);
-    if (r != ERROR_SUCCESS) {
-        DLOG(L"Kayit defteri anahtari acilamadi: %ld", r);
-        return;
-    }
+    swprintf_s(gen, L"%llu_", (unsigned long long)GetTickCount64());
 
     const int total = (int)ARRAYSIZE(kDefs);
     std::vector<std::wstring> paths(total);
@@ -1313,83 +1233,139 @@ static void ApplyTheme() {
         bool anim = d.animated && g_animBusy;
         std::vector<uint8_t> data =
             anim ? BuildAniFile(d.kind) : BuildCurFile(d.kind, 0.0f);
-        std::wstring path = g_dir + L"\\" + gen + L"_" + d.valueName +
-                            (anim ? L".ani" : L".cur");
+        std::wstring path =
+            g_dir + L"\\" + gen + d.valueName + (anim ? L".ani" : L".cur");
         if (!WriteBytes(path, data)) continue;
-        LONG rr = RegSetValueExW(cur, d.valueName, 0, REG_EXPAND_SZ,
-                                 (const BYTE*)path.c_str(),
-                                 (DWORD)((path.size() + 1) * sizeof(WCHAR)));
-        if (rr != ERROR_SUCCESS) {
-            DLOG(L"Kayit defterine yazilamadi (%s): %ld", d.valueName, rr);
-            continue;
-        }
         paths[i] = path;
         okCount++;
     }
-    RegCloseKey(cur);
-    DLOG(L"Imlec dosyalari: %d/%d", okCount, total);
+    Wh_Log(L"Cursor files: %d/%d", okCount, total);
 
-    BOOL ok = ReloadCursors();
-    DLOG(L"ReloadCursors sonucu: %d (basarili olsa da dogrudan uygulama da yapilacak)", (int)ok);
-    {
-        // Doğrudan yöntem: SPI_SETCURSORS başarılı görünse bile etkisiz kalabildiği
-        // için imleçleri her durumda ayrıca sisteme yükle (mod çalıştığı sürece geçerli).
-        int n = 0;
-        for (int i = 0; i < total; i++) {
-            if (paths[i].empty()) continue;
-            HCURSOR h = LoadCursorFromFileW(paths[i].c_str());
-            if (!h) {
-                DLOG(L"LoadCursorFromFile basarisiz (%s): %lu",
-                     kDefs[i].valueName, GetLastError());
-                continue;
-            }
-            if (SetSystemCursor(h, kDefs[i].ocr)) {
-                n++;
-            } else {
-                DLOG(L"SetSystemCursor basarisiz (%s): %lu", kDefs[i].valueName,
-                     GetLastError());
-                DestroyCursor(h);
-            }
+    g_paths = paths;
+    g_genPrefix = gen;
+    return okCount > 0;
+}
+
+// Loads the generated files and replaces the system cursors with them.
+static void ApplyCursors() {
+    const int total = (int)ARRAYSIZE(kDefs);
+    if ((int)g_paths.size() != total) return;
+
+    int n = 0;
+    for (int i = 0; i < total; i++) {
+        if (g_paths[i].empty()) continue;
+        HCURSOR h = LoadCursorFromFileW(g_paths[i].c_str());
+        if (!h) {
+            Wh_Log(L"LoadCursorFromFile failed (%s): %lu", kDefs[i].valueName,
+                   GetLastError());
+            continue;
         }
-        DLOG(L"Yedek yontem: %d/%d imlec uygulandi", n, total);
+        if (SetSystemCursor(h, kDefs[i].ocr)) {
+            n++;
+        } else {
+            Wh_Log(L"SetSystemCursor failed (%s): %lu", kDefs[i].valueName,
+                   GetLastError());
+            DestroyCursor(h);
+        }
     }
+    if (n > 0) SetModifiedFlag(true);
+    g_lastApply = GetTickCount64();
+    Wh_Log(L"Applied %d/%d cursors", n, total);
+}
 
-    CleanupFiles(gen);
+static void ApplyTheme() {
+    Wh_Log(L"Applying theme: %s", g_theme.id);
+    if (!GenerateFiles()) return;
+    ApplyCursors();
+
+    // The cursors are now loaded in memory, so older files can go. Keep the
+    // files of this generation, they are used to re-apply the theme.
+    CleanupFiles(g_genPrefix);
 }
 
 // ---------------------------------------------------------------------------
-// Tool mod giriş noktaları
+// Worker thread, message window and tool mod entry points
 // ---------------------------------------------------------------------------
 
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_readyEvent = nullptr;
 static HANDLE g_thread = nullptr;
+static HWND g_hwnd = nullptr;
 
-// Mod süreci canlı kalsın diye iş parçacığı kapatılana kadar bekler.
-// (Aksi hâlde süreç hemen biter ve imleçler eski haline döner.)
+static const UINT WM_APP_SETTINGS = WM_APP + 1;
+static const UINT_PTR kReapplyTimer = 1;
+
+// Hidden top-level window (message-only windows don't receive broadcasts). It
+// notices when Windows reloads the pointer scheme, for example after the user
+// picks another scheme in the Mouse settings, and applies the theme again.
+static LRESULT CALLBACK MsgWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    switch (m) {
+        case WM_APP_SETTINGS:
+            LoadSettings();
+            ApplyTheme();
+            return 0;
+        case WM_SETTINGCHANGE:
+            // Ignore the changes caused by our own SetSystemCursor calls.
+            if (w == SPI_SETCURSORS && GetTickCount64() - g_lastApply > 500) {
+                SetTimer(h, kReapplyTimer, 300, nullptr);
+            }
+            return 0;
+        case WM_TIMER:
+            if (w == kReapplyTimer) {
+                KillTimer(h, kReapplyTimer);
+                Wh_Log(L"The pointer scheme was reloaded, applying the theme "
+                       L"again");
+                ApplyCursors();
+            }
+            return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+// Keeps the tool mod process alive and runs the message loop until the mod is
+// unloaded.
 static DWORD WINAPI Worker(LPVOID) {
-    DLOG(L"Is parcacigi basladi");
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = MsgWndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"WindhawkMouseCursorThemesWindow";
+    RegisterClassW(&wc);
+    g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0,
+                             nullptr, nullptr, wc.hInstance, nullptr);
+    if (!g_hwnd) {
+        Wh_Log(L"Failed to create the message window: %lu", GetLastError());
+    }
+
+    // Undo the changes of a previous run that did not exit cleanly.
+    if (GetModifiedFlag()) {
+        Wh_Log(L"Restoring the cursors left by a previous run");
+        RestoreSystemCursors();
+        SetModifiedFlag(false);
+    }
+
     ApplyTheme();
     if (g_readyEvent) SetEvent(g_readyEvent);
-    WaitForSingleObject(g_stopEvent, INFINITE);
-    DLOG(L"Is parcacigi sonlaniyor");
+
+    for (;;) {
+        DWORD r = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
+                                            QS_ALLINPUT);
+        if (r == WAIT_OBJECT_0) break;
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if (g_hwnd) DestroyWindow(g_hwnd);
+    g_hwnd = nullptr;
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
     return 0;
 }
 
 BOOL WhTool_ModInit() {
-    DLOG(L"Mouse Cursor Themes basliyor (tool mod sureci)");
-
-    WCHAR user[256] = L"?";
-    DWORD un = ARRAYSIZE(user);
-    GetUserNameW(user, &un);
-    WCHAR lad[MAX_PATH] = L"?";
-    GetEnvironmentVariableW(L"LOCALAPPDATA", lad, ARRAYSIZE(lad));
-    DWORD sess = 0;
-    ProcessIdToSessionId(GetCurrentProcessId(), &sess);
-    DLOG(L"Kullanici=%s, oturum=%lu, LOCALAPPDATA=%s", user, sess, lad);
-
+    Wh_Log(L"Mouse Cursor Themes starting");
     LoadSettings();
-    DLOG(L"Ayarlar yuklendi: tema=%s", g_theme.id);
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1397,36 +1373,43 @@ BOOL WhTool_ModInit() {
 
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     if (!g_thread) {
-        DLOG(L"Is parcacigi olusturulamadi: %lu", GetLastError());
+        Wh_Log(L"Failed to create the worker thread: %lu", GetLastError());
         return FALSE;
     }
     DWORD w = WaitForSingleObject(g_readyEvent, 60000);
-    DLOG(L"Ilk uygulama bekleme sonucu: %lu", w);
+    if (w != WAIT_OBJECT_0) Wh_Log(L"The first apply did not finish: %lu", w);
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    DLOG(L"Ayarlar degisti");
-    LoadSettings();
-    ApplyTheme();
+    Wh_Log(L"Settings changed");
+    // Applied on the worker thread, which owns the cursor state.
+    if (g_hwnd) {
+        PostMessageW(g_hwnd, WM_APP_SETTINGS, 0, 0);
+    } else {
+        LoadSettings();
+        ApplyTheme();
+    }
 }
 
 void WhTool_ModUninit() {
-    DLOG(L"Mouse Cursor Themes kapaniyor");
+    Wh_Log(L"Mouse Cursor Themes stopping");
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    RestoreOriginal();
-    CleanupFiles(L"");
-    if (!g_dir.empty()) RemoveDirectoryW(g_dir.c_str());
+    // Reload the user's own pointer scheme, then delete the generated files.
+    RestoreSystemCursors();
+    SetModifiedFlag(false);
+    RemoveSessionDir();
     if (g_stopEvent) CloseHandle(g_stopEvent);
     if (g_readyEvent) CloseHandle(g_readyEvent);
     g_stopEvent = nullptr;
     g_readyEvent = nullptr;
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
@@ -1446,7 +1429,7 @@ bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    DLOG(L">");
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -1463,7 +1446,7 @@ BOOL Wh_ModInit() {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
-        DLOG(L"CommandLineToArgvW failed");
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
@@ -1488,10 +1471,6 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    DLOG(L"Wh_ModInit: excluded=%d toolProcess=%d currentTool=%d cmd=%s",
-         (int)isExcluded, (int)isToolModProcess, (int)isCurrentToolModProcess,
-         GetCommandLine());
-
     if (isExcluded) {
         return FALSE;
     }
@@ -1500,12 +1479,12 @@ BOOL Wh_ModInit() {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            DLOG(L"CreateMutex failed");
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            DLOG(L"Tool mod already running (%s)", WH_MOD_ID);
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -1534,7 +1513,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    DLOG(L"Wh_ModAfterInit: launcher=%d", (int)g_isToolModProcessLauncher);
     if (!g_isToolModProcessLauncher) {
         return;
     }
@@ -1544,7 +1522,7 @@ void Wh_ModAfterInit() {
                               ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
-            DLOG(L"GetModuleFileName failed");
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
@@ -1558,7 +1536,7 @@ void Wh_ModAfterInit() {
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
-            DLOG(L"No kernelbase.dll/kernel32.dll");
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
@@ -1575,7 +1553,7 @@ void Wh_ModAfterInit() {
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        DLOG(L"No CreateProcessInternalW");
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
@@ -1587,11 +1565,10 @@ void Wh_ModAfterInit() {
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
-        DLOG(L"CreateProcess failed");
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
-    DLOG(L"Arac sureci baslatildi: pid=%lu", pi.dwProcessId);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
