@@ -60,6 +60,9 @@ painting. The system-wide colour table is not changed.
 * The property-sheet tab strip is custom-painted; other tab layouts keep their
   native drawing. Push buttons generally keep native visuals, with a scoped
   dark face for the Task Scheduler summary Refresh button.
+* The maximized child window's menu-row buttons use scoped custom drawing.
+  Other layouts may keep the native appearance. Restored child-window captions
+  and their buttons can remain light.
 */
 // ==/WindhawkModReadme==
 
@@ -928,7 +931,10 @@ LRESULT HandleStrip(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         if (fromToolbar) {
             NMCUSTOMDRAW* custom = reinterpret_cast<NMCUSTOMDRAW*>(lParam);
             if (custom->dwDrawStage == CDDS_PREPAINT) {
-                return CDRF_NOTIFYITEMDRAW;
+                // MMC also custom-draws the maximized child's menu icon.
+                // Preserve its handler and request our hover notifications too.
+                return DefSubclassProc(hWnd, message, wParam, lParam) |
+                       CDRF_NOTIFYITEMDRAW;
             }
             if (custom->dwDrawStage == CDDS_ITEMPREPAINT) {
                 HotEntry* entry =
@@ -946,7 +952,8 @@ LRESULT HandleStrip(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                         FillRect(custom->hdc, &custom->rc, g_hoverBrush);
                     }
                 }
-                return CDRF_DODEFAULT;
+                // The native handler must see this before the toolbar draws.
+                return DefSubclassProc(hWnd, message, wParam, lParam);
             }
         }
     }
@@ -1401,6 +1408,8 @@ bool IsDiskManagementHeader(HWND hWnd) {
            WindowClassStarts(mmc, L"MMCOCXViewWindow");
 }
 
+bool IsMmcMdiButtonStrip(HWND hWnd);
+
 // Scope the non-owner-drawn Scheduler combo to its observed host hierarchy.
 bool IsMmcSummaryCombo(HWND hWnd) {
     if (!WindowClassStarts(hWnd, L"WindowsForms10.COMBOBOX.") ||
@@ -1638,6 +1647,9 @@ void ApplyToWindow(HWND hWnd) {
                         SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &ignored);
     ColourClassicControl(hWnd, true);
     DressExtraChrome(hWnd, true);
+    if (IsMmcMdiButtonStrip(hWnd)) {
+        InvalidateRect(hWnd, nullptr, TRUE);
+    }
 
     // Keep existing subclasses when handling the native owner-drawn description.
     WCHAR descriptionHostClass[64] = {};
@@ -2494,12 +2506,131 @@ HBRUSH WINAPI CreateHatchBrush_Hook(int hatch, COLORREF color) {
     return pCreateHatchBrush(hatch, color);
 }
 
+// Identify MMC's small MDI-button strip without changing its input handling.
+bool IsMmcMdiButtonStrip(HWND hWnd) {
+    WCHAR className[64] = {}, rootClass[64] = {};
+    if (!hWnd || !GetClassNameW(hWnd, className, ARRAYSIZE(className)) ||
+        wcscmp(className, L"AfxWnd42u") != 0) {
+        return false;
+    }
+    HWND root = GetAncestor(hWnd, GA_ROOT);
+    if (!root || root == hWnd ||
+        !GetClassNameW(root, rootClass, ARRAYSIZE(rootClass)) ||
+        wcscmp(rootClass, L"MMCMainFrame") != 0) {
+        return false;
+    }
+    RECT window = {}, frame = {};
+    if (!GetWindowRect(hWnd, &window) || !GetWindowRect(root, &frame)) {
+        return false;
+    }
+    int width = window.right - window.left;
+    int height = window.bottom - window.top;
+    int buttonWidth = GetSystemMetrics(SM_CXSMSIZE);
+    int buttonHeight = GetSystemMetrics(SM_CYSMSIZE);
+    return buttonWidth > 0 && buttonHeight > 0 &&
+           width >= buttonWidth && width <= buttonWidth * 5 &&
+           height >= buttonHeight / 2 && height <= buttonHeight * 2 &&
+           window.left >= frame.left && window.right <= frame.right &&
+           window.right >= frame.left + (frame.right - frame.left) * 2 / 3 &&
+           window.top >= frame.top &&
+           window.top <= frame.top + GetSystemMetrics(SM_CYSIZE) * 3;
+}
+
+bool IsMmcMdiButtonPaint(HDC dc, LPCRECT bounds) {
+    HWND hWnd = dc ? WindowFromDC(dc) : nullptr;
+    RECT client = {};
+    return bounds && IsMmcMdiButtonStrip(hWnd) && GetClientRect(hWnd, &client) &&
+           bounds->left >= client.left && bounds->top >= client.top &&
+           bounds->right <= client.right && bounds->bottom <= client.bottom;
+}
+
+// Draw only the face and glyph; native MMC still handles every button action.
+bool DrawMmcMdiButton(HDC dc, int part, int state, LPCRECT bounds, LPCRECT clip) {
+    if (!dc || !bounds || (part != WP_MDIMINBUTTON && part != WP_MAXBUTTON &&
+                           part != WP_MDICLOSEBUTTON && part != WP_MDIRESTOREBUTTON) ||
+        state < 1 || state > 4) {
+        return false;
+    }
+    int width = bounds->right - bounds->left;
+    int height = bounds->bottom - bounds->top;
+    if (width < 9 || height < 9 || width > 128 || height > 128) {
+        return false;
+    }
+    int saved = SaveDC(dc);
+    if (!saved) return false;
+    if (IntersectClipRect(dc, bounds->left, bounds->top, bounds->right,
+                          bounds->bottom) == ERROR ||
+        (clip && IntersectClipRect(dc, clip->left, clip->top, clip->right,
+                                   clip->bottom) == ERROR)) {
+        RestoreDC(dc, saved);
+        return false;
+    }
+    COLORREF face = RGB(45, 45, 45);
+    if (state == 2) face = part == WP_MDICLOSEBUTTON ? RGB(196, 43, 28) : kColorHover;
+    if (state == 3) face = part == WP_MDICLOSEBUTTON ? RGB(145, 32, 23) : RGB(76, 78, 84);
+    COLORREF edge = part == WP_MDICLOSEBUTTON && (state == 2 || state == 3)
+                        ? face : RGB(75, 75, 75);
+    COLORREF ink = state == 4 ? RGB(130, 130, 130) : kColorText;
+    HBRUSH brush = reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+    HPEN pen = CreatePen(PS_SOLID, height >= 32 ? 2 : 1, ink);
+    if (!brush || !pen || SetDCBrushColor(dc, face) == CLR_INVALID) {
+        RestoreDC(dc, saved);
+        if (pen) DeleteObject(pen);
+        return false;
+    }
+    HGDIOBJ oldPen = SelectObject(dc, pen);
+    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+    bool ok = oldPen && oldPen != HGDI_ERROR && oldBrush && oldBrush != HGDI_ERROR &&
+              FillRect(dc, bounds, brush);
+    if (ok) {
+        ok = SetDCBrushColor(dc, edge) != CLR_INVALID && FrameRect(dc, bounds, brush);
+    }
+    int side = (width < height ? width : height) * 3 / 5;
+    if (side < 5) side = 5;
+    int x = bounds->left + (width - side) / 2;
+    int y = bounds->top + (height - side) / 2;
+    auto line = [&](int x1, int y1, int x2, int y2) {
+        return MoveToEx(dc, x1, y1, nullptr) && LineTo(dc, x2, y2);
+    };
+    if (ok) {
+        if (part == WP_MDIMINBUTTON) {
+            ok = line(x, y + side - 1, x + side, y + side - 1);
+        } else if (part == WP_MDICLOSEBUTTON) {
+            ok = line(x, y, x + side, y + side) &&
+                 line(x + side - 1, y, x - 1, y + side);
+        } else if (part == WP_MDIRESTOREBUTTON) {
+            int shift = side / 3;
+            if (shift < 1) shift = 1;
+            ok = line(x + shift, y, x + side, y) &&
+                 line(x + side - 1, y, x + side - 1, y + side - shift) &&
+                 Rectangle(dc, x, y + shift, x + side - shift, y + side);
+        } else {
+            ok = Rectangle(dc, x, y, x + side, y + side);
+        }
+    }
+    RestoreDC(dc, saved);
+    DeleteObject(pen);
+    return ok;
+}
+
 // Replace only the scoped Scheduler button face; retain its native text and input.
 using DrawThemeBackground_t = decltype(&DrawThemeBackground);
 DrawThemeBackground_t pDrawThemeBackground = nullptr;
 HRESULT WINAPI DrawThemeBackground_Hook(HTHEME theme, HDC dc, int part, int state,
                                         LPCRECT bounds, LPCRECT clip) {
     RECT client = {};
+    HMODULE caller = nullptr;
+    if (g_active && dc && bounds &&
+        (part == WP_MDIMINBUTTON || part == WP_MAXBUTTON ||
+         part == WP_MDICLOSEBUTTON || part == WP_MDIRESTOREBUTTON) &&
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(__builtin_return_address(0)),
+                           &caller) && caller == GetModuleHandleW(nullptr) &&
+        IsMmcMdiButtonPaint(dc, bounds) &&
+        DrawMmcMdiButton(dc, part, state, bounds, clip)) {
+        return S_OK;
+    }
     if (g_active && g_drawingSummaryButton && dc && bounds &&
         part == BP_PUSHBUTTON && state >= PBS_NORMAL && state <= PBS_DEFAULTED &&
         GetClientRect(g_drawingSummaryButton, &client) &&
