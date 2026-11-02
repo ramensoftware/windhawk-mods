@@ -2,7 +2,7 @@
 // @id              application-windows-no-min-size
 // @name            Application Windows: No Minimum Size
 // @description     Allows supported application windows to resize below their standard minimum size
-// @version         1.8.0
+// @version         1.8.6
 // @author          SaiLuminous
 // @github          https://github.com/SaiLuminous
 // @include         *
@@ -20,11 +20,13 @@ Based on [Explorer No Minimum Window Size](https://windhawk.net/mods/explorer-no
 by [Anixx](https://github.com/Anixx). This adaptation extends the original
 Explorer-only approach to eligible top-level application windows.
 
+![Window resizing demonstration](https://i.imgur.com/iYyPe1o.gif)
+
+
 ## Usage
 
 Enable the mod, then resize a supported window normally or with your window
-manager. Existing windows and newly created windows are supported. Disable
-other minimum-size mods that target the same applications.
+manager. Disable other minimum-size mods that target the same applications.
 
 The mod targets all processes by default. Use Windhawk's per-mod advanced
 process inclusion/exclusion controls to restrict it to particular applications.
@@ -33,55 +35,70 @@ window classes are eligible.
 
 ## File Pilot support
 
-The optional **File Pilot minimum-size override** currently supports the
-verified 64-bit File Pilot 0.8.5 build. It is disabled by default.
+The optional **File Pilot minimum-size override** is disabled by default.
+Its code pattern was verified against 64-bit File Pilot 0.8.5. Other versions
+are eligible only when the same pattern matches uniquely; they have not been
+runtime-tested.
+
 Support is planned to be updated alongside File Pilot releases as new builds
-are checked. Updates are not automatically compatible: an unrecognized build
-is left unchanged until its override has been updated and verified.
+are checked. The scan tolerates changed object offsets and call displacements.
+Missing or ambiguous patterns leave the override disabled.
 
-File Pilot needs specific support because it enforces its minimum size through
-an internal correction that calls SetWindowPos, separately from the standard
-Windows minimum-size message. The generic override cannot prevent that
-correction. The optional hook suppresses only the identified correction call,
-after checking the executable build and code signature; it does not patch
-the executable on disk.
+File Pilot needs specific support because it enforces its minimum through an
+internal resize correction, separately from Windows' standard minimum-size
+message. The optional hook suppresses only the identified correction call.
+It does not patch the executable on disk.
 
-Enable this option in the mod's Settings tab. Other mods hooking the same
-function may interfere with it. Very small windows may expose application
-layout or rendering bugs.
+Enable the option in the Settings tab. Other mods hooking the same function
+may interfere with it.
+
+## Disabling or updating
+
+The mod restores normal minimum-size handling. It requests a normal close for
+visible, non-minimized, non-maximized windows below their observed minimum.
+Windows with no observed minimum cannot be detected by this check.
+
+If a requested window remains open after three seconds, a popup asks you to
+save your work and close the app. Save prompts and cancellation are respected.
+No process is force-terminated.
+
+Other windows are left open unless callback removal times out. Blocked
+attachment or callback cleanup can also trigger a close request and a popup,
+regardless of window size. The popup explains which step is blocked.
+
+This fallback cannot detect a later wait inside Windhawk's own hook removal.
+Applications may enforce their minimum again on a subsequent resize.
+
 ## Compatibility and limitations
 
-The standard override changes Windows' minimum tracking size. Applications
-with independent layout constraints can still refuse smaller sizes. Contents
-may clip, overlap, or become inaccessible in very small windows.
+Applications with independent layout constraints can still refuse smaller
+sizes. Contents may clip, overlap, or become inaccessible in very small windows.
+Exclude incompatible applications using Windhawk's per-mod advanced settings.
 
-This mod does not make fixed-size dialogs resizable or make a window manager
+The mod does not make fixed-size dialogs resizable or make a window manager
 manage excluded windows. Protected processes and applications excluded by
 Windhawk are unaffected. Window-manager borders and padding are unchanged.
 
-Disabling restores normal minimum-size handling without requiring you to resize
-or close windows first. It does not actively resize or close windows.
-Applications can apply their minimum on a subsequent resize.
+Existing eligible windows are handled at startup. Windows created through
+unhooked APIs, or made eligible by a later style change, may not be handled
+until their next ShowWindow call.
 
-Other applications may enforce independent minimum sizes that the standard override does not bypass. Very small windows can cause clipping or
-application-specific rendering problems. Exclude incompatible applications
-using Windhawk's per-mod advanced settings.
 ## Credits and license
 
 Original mod: **Explorer No Minimum Window Size** by **Anixx**.
 Adaptation: **[SaiLuminous](https://github.com/SaiLuminous)**.
 
-Original source:
-https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-no-min-size.wh.cpp
+[Original source](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/explorer-no-min-size.wh.cpp)
 
 Distributed under the MIT License; the notice is included below.
 */
 // ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - filePilotOverride: false
   $name: File Pilot minimum-size override (experimental)
-  $description: Suppress the separate size-correction call in the inspected File Pilot 0.8.5 x64 build. Off by default. Other builds are left unchanged. Support is planned to be updated alongside File Pilot releases. Very small windows may clip content or expose application bugs.
+  $description: Finds a unique minimum-size correction pattern in 64-bit File Pilot. Off by default. Verified against 0.8.5; missing or ambiguous patterns disable the override. Other releases are not guaranteed compatible.
 */
 // ==/WindhawkModSettings==
 // MIT License
@@ -114,13 +131,17 @@ Distributed under the MIT License; the notice is included below.
 #include <cstring>
 #include <mutex>
 #include <unordered_set>
+#include <unordered_map>
+#include <algorithm>
 #include <vector>
 
+static wchar_t g_processName[MAX_PATH]{};
 static bool g_isExplorer = false;
 static std::atomic<bool> g_stopping{false};
 static std::atomic<unsigned> g_attaching{0};
 static std::mutex g_windowsMutex;
 static std::unordered_set<HWND> g_windows;
+static std::unordered_map<HWND, SIZE> g_minimums;
 
 static bool IsApplicationWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
@@ -156,6 +177,7 @@ static LRESULT CALLBACK SubclassWndProc(HWND hwnd, UINT msg, WPARAM wp,
         {
             std::lock_guard lock(g_windowsMutex);
             g_windows.erase(hwnd);
+        g_minimums.erase(hwnd);
         }
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
@@ -164,6 +186,10 @@ static LRESULT CALLBACK SubclassWndProc(HWND hwnd, UINT msg, WPARAM wp,
     if (msg == WM_GETMINMAXINFO && lp && !g_stopping.load() &&
         IsApplicationWindow(hwnd)) {
         auto* limits = reinterpret_cast<MINMAXINFO*>(lp);
+        {
+            std::lock_guard lock(g_windowsMutex);
+            g_minimums[hwnd] = SIZE{limits->ptMinTrackSize.x, limits->ptMinTrackSize.y};
+        }
         limits->ptMinTrackSize.x = 1;
         limits->ptMinTrackSize.y = 1;
     }
@@ -185,6 +211,7 @@ static void Attach(HWND hwnd) {
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SubclassWndProc, 0)) {
         std::lock_guard lock(g_windowsMutex);
         g_windows.erase(hwnd);
+        g_minimums.erase(hwnd);
     }
 }
 static BOOL CALLBACK EnumAttach(HWND hwnd, LPARAM) {
@@ -223,45 +250,80 @@ static BOOL WINAPI FilePilotSetWindowPosHook(HWND hwnd, HWND after,
         flags == (SWP_NOMOVE | SWP_NOZORDER) && !after && x == 0 && y == 0 &&
         cx > 0 && cy > 0 && IsApplicationWindow(hwnd) &&
         !IsIconic(hwnd) && !IsZoomed(hwnd)) {
+        RECT current{};
+        if (GetWindowRect(hwnd, &current)) {
+            std::lock_guard lock(g_windowsMutex);
+            auto& minimum = g_minimums[hwnd];
+            if (cx > current.right - current.left) minimum.cx = cx;
+            if (cy > current.bottom - current.top) minimum.cy = cy;
+        }
         return TRUE;
     }
     return OriginalSetWindowPos(hwnd, after, x, y, cx, cy, flags);
 }
 
-static bool InstallFilePilotHook() {
+static bool InstallFilePilotHook(const wchar_t* processName) {
+    if (_wcsicmp(processName, L"FPilot.exe") != 0) return true;
 #ifdef _WIN64
-    wchar_t path[MAX_PATH];
-    DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) return true;
-    const wchar_t* name = wcsrchr(path, L'\\');
-    name = name ? name + 1 : path;
-    if (_wcsicmp(name, L"FPilot.exe") != 0) return true;
     auto* base = reinterpret_cast<unsigned char*>(GetModuleHandleW(nullptr));
     auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) return true;
     auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
-    // Fail closed on another build, even if it advertises the same version.
     if (nt->Signature != IMAGE_NT_SIGNATURE ||
         nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
-        nt->FileHeader.TimeDateStamp != 0x6a9571db ||
-        nt->OptionalHeader.SizeOfImage != 0x279000) {
-        Wh_Log(L"File Pilot override unavailable: executable build does not match");
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
         return true;
     }
-    static constexpr unsigned char signature[] = {
-        0x41,0x8b,0x8e,0xa4,0x08,0x00,0x00,0x44,0x3b,0xc1,0x7c,0x04,
-        0x3b,0xd1,0x7d,0x34,0x41,0x8b,0x86,0xa0,0x08,0x00,0x00,
+    // Negative entries are wildcards. Match the minimum-size clamp followed
+    // by SetWindowPos(hwnd, nullptr, 0, 0, width, height, SWP_NOMOVE|SWP_NOZORDER).
+    // Object-field offsets and the RIP-relative IAT displacement may change
+    // between builds without changing this instruction sequence.
+    static constexpr int signature[] = {
+        0x41,0x8b,0x8e,-1,-1,-1,-1,0x44,0x3b,0xc1,0x7c,0x04,
+        0x3b,0xd1,0x7d,0x34,0x41,0x8b,0x86,-1,-1,-1,-1,
         0x3b,0xd1,0xc7,0x44,0x24,0x30,0x06,0x00,0x00,0x00,
         0x0f,0x4f,0xca,0x44,0x3b,0xc0,0x89,0x4c,0x24,0x28,
         0x48,0x8b,0x0f,0x41,0x0f,0x4f,0xc0,0x45,0x33,0xc9,
         0x89,0x44,0x24,0x20,0x45,0x33,0xc0,0x33,0xd2,
-        0xff,0x15,0xff,0x26,0x01,0x00
+        0xff,0x15,-1,-1,-1,-1
     };
-    if (memcmp(base + 0x206f8d, signature, sizeof(signature)) != 0) {
-        Wh_Log(L"File Pilot override unavailable: correction code does not match");
+    constexpr size_t patternLength = ARRAYSIZE(signature);
+    const unsigned char* match = nullptr;
+    size_t matchCount = 0;
+    const auto* sections = IMAGE_FIRST_SECTION(nt);
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        const auto& section = sections[i];
+        if (memcmp(section.Name, ".text\0\0\0", IMAGE_SIZEOF_SHORT_NAME) != 0 ||
+            !(section.Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        size_t start = section.VirtualAddress;
+        size_t length = section.Misc.VirtualSize;
+        size_t imageSize = nt->OptionalHeader.SizeOfImage;
+        if (start >= imageSize || length > imageSize - start ||
+            length < patternLength) continue;
+        for (size_t offset = 0; offset <= length - patternLength; ++offset) {
+            const auto* candidate = base + start + offset;
+            bool matches = true;
+            for (size_t j = 0; j < patternLength; ++j) {
+                if (signature[j] >= 0 && candidate[j] != signature[j]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (!matches) continue;
+            match = candidate;
+            if (++matchCount > 1) {
+                Wh_Log(L"File Pilot override unavailable: ambiguous correction pattern");
+                return true;
+            }
+        }
+    }
+    if (matchCount != 1) {
+        Wh_Log(L"File Pilot override unavailable: correction pattern not found");
         return true;
     }
-    g_filePilotCorrectionReturn = base + 0x206fd1;
+    // The final instruction is the six-byte indirect call. Its end is the
+    // return address seen by our hook, regardless of this function's RVA.
+    g_filePilotCorrectionReturn = const_cast<unsigned char*>(match + patternLength);
     if (!WindhawkUtils::SetFunctionHook(SetWindowPos, FilePilotSetWindowPosHook,
                                         &OriginalSetWindowPos)) {
         Wh_Log(L"File Pilot correction hook failed");
@@ -282,11 +344,12 @@ BOOL Wh_ModInit() {
     DWORD pathLength = GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath));
     if (pathLength && pathLength < ARRAYSIZE(processPath)) {
         const wchar_t* name = wcsrchr(processPath, L'\\');
-        g_isExplorer = _wcsicmp(name ? name + 1 : processPath, L"explorer.exe") == 0;
+        wcscpy_s(g_processName, name ? name + 1 : processPath);
+        g_isExplorer = _wcsicmp(g_processName, L"explorer.exe") == 0;
     }
     g_stopping.store(false);
     Wh_ModSettingsChanged();
-    if (!InstallFilePilotHook()) return FALSE;
+    if (!InstallFilePilotHook(g_processName)) return FALSE;
     return WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWHook, &OriginalCreateW) &&
            WindhawkUtils::SetFunctionHook(CreateWindowExA, CreateAHook, &OriginalCreateA) &&
            WindhawkUtils::SetFunctionHook(ShowWindow, ShowHook, &OriginalShow);
@@ -294,10 +357,68 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     EnumWindows(EnumAttach, 0);
 }
+static void AskToCloseApplication(const wchar_t* reason) {
+    const wchar_t* name = g_processName;
+    wchar_t message[768]{};
+    swprintf_s(message, LR"(Please close %s to finish cleanup for Application Windows: No Minimum Size.
+
+%s
+Save your work, finish any save prompts, and close this application manually.
+
+No process will be force-terminated. Unloading may remain pending until it exits.)",
+        *name ? name : L"This application", reason);
+    MessageBoxW(nullptr, message, L"Please close the application",
+                MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+}
+
+static bool TryDetachWindow(HWND hwnd) {
+    if (!IsWindow(hwnd)) return true;
+    DWORD_PTR result = 0;
+    // Same protocol as WindhawkUtils::RemoveWindowSubclassFromAnyThread.
+    // The LPARAM is a function identifier, not a temporary data pointer.
+    return SendMessageTimeoutW(
+        hwnd, WindhawkUtils::detail::GetSubclassRegisteredMsg(), FALSE,
+        reinterpret_cast<LPARAM>(SubclassWndProc),
+        SMTO_ABORTIFHUNG | SMTO_BLOCK, 1500, &result) != 0;
+}
+static bool IsUndersized(HWND hwnd) {
+    // Judge the current on-screen window, not a saved restored rectangle.
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd)) return false;
+    SIZE minimum{};
+    {
+        std::lock_guard lock(g_windowsMutex);
+        auto it = g_minimums.find(hwnd);
+        if (it == g_minimums.end()) return false;
+        minimum = it->second;
+    }
+    RECT rect{};
+    if (!GetWindowRect(hwnd, &rect)) return false;
+    return (minimum.cx > 0 && rect.right - rect.left < minimum.cx) ||
+           (minimum.cy > 0 && rect.bottom - rect.top < minimum.cy);
+}
 void Wh_ModBeforeUninit() {
     g_stopping.store(true);
     // Finish attachments already in flight before taking the detach snapshot.
-    while (g_attaching.load()) Sleep(1);
+    bool prompted = false;
+    ULONGLONG attachmentStart = GetTickCount64();
+    while (g_attaching.load()) {
+        if (!prompted && GetTickCount64() - attachmentStart >= 3000) {
+            std::vector<HWND> pending;
+            {
+                std::lock_guard lock(g_windowsMutex);
+                pending.assign(g_windows.begin(), g_windows.end());
+            }
+            for (HWND hwnd : pending) {
+                if (IsWindowVisible(hwnd)) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
+            Sleep(1500);
+            if (g_attaching.load()) {
+                prompted = true;
+                AskToCloseApplication(L"A window attachment is still in progress. This is a cleanup problem, not a window-size warning. A close request was sent to visible windows.");
+            }
+        }
+        Sleep(50);
+    }
     std::vector<HWND> windows;
     {
         std::lock_guard lock(g_windowsMutex);
@@ -305,10 +426,30 @@ void Wh_ModBeforeUninit() {
     }
     // Never hold the tracking mutex while sending to a window thread.
     for (HWND hwnd : windows) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SubclassWndProc);
+        if (IsUndersized(hwnd)) {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            ULONGLONG deadline = GetTickCount64() + 3000;
+            while (IsWindow(hwnd) && GetTickCount64() < deadline) Sleep(50);
+            if (IsWindow(hwnd) && !prompted) {
+                prompted = true;
+                AskToCloseApplication(L"An undersized window was asked to close but remains open. The app may be waiting for you to save or confirm closing.");
+            }
+        }
+        if (TryDetachWindow(hwnd)) continue;
+        // Request closure only after detachment times out; preserve save prompts.
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        Sleep(1500);
+        while (!TryDetachWindow(hwnd)) {
+            if (!prompted) {
+                prompted = true;
+                AskToCloseApplication(L"Removing a window callback timed out. This can happen at any window size. A close request was sent, but cleanup is still blocked.");
+            }
+            Sleep(250);
+        }
     }
 }
 void Wh_ModUninit() {
     std::lock_guard lock(g_windowsMutex);
     g_windows.clear();
+    g_minimums.clear();
 }
