@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              MacAni
+// @id              macani
 // @name            MacAni
 // @description     macOS-style window motion for Windows: genie and scale minimize, pop launch, scale-and-fade close, slow-motion with Shift/Ctrl, and a GPU genie engine.
 // @version        1.0.0
