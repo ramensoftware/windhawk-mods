@@ -1173,6 +1173,30 @@
         "version": "1.4.1"
       }
     },
+    "bluetooth-auto-toggle": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793660551000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793660551000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lwtsapi32",
+        "description": "Automatically cycles Bluetooth off and back on in milliseconds when a connected device is detected at startup",
+        "github": "https://github.com/Dev-StudioCode",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Bluetooth Auto Toggle",
+        "version": "1.1.0"
+      }
+    },
     "borderless-fullscreen": {
       "details": {
         "defaultSorting": 5274,
@@ -8015,6 +8039,34 @@
         "version": "1.0.2"
       }
     },
+    "force-desktop-icon-spacing": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793660544000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793660544000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Koewen",
+        "compilerOptions": "-luser32 -lcomctl32",
+        "description": "Set the desktop icon grid spacing (X/Y) and reserve a blank margin above the taskbar. Event-driven and DPI-aware, with a short startup icon-count check; the original spacing and height are restored on unload.",
+        "github": "https://github.com/Koewen",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Force Desktop Icon Spacing",
+        "version": "1.1.6"
+      }
+    },
     "force-kill-active-window": {
       "details": {
         "defaultSorting": 17610,
@@ -9178,6 +9230,34 @@
         ],
         "name": "Language Applet Restorer",
         "version": "1.0.0"
+      }
+    },
+    "language-switcher-position": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793660539000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793660539000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "MaestroSky",
+        "description": "Customize the Windows 11 26H2 language switcher position with alignment and X/Y coordinates.",
+        "github": "https://github.com/MaestroSky",
+        "homepage": "https://github.com/MaestroSky/Language-Switcher-Position",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Language Switcher Position",
+        "version": "1.3"
       }
     },
     "legacy-alt-tab": {
@@ -14601,7 +14681,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791644680000,
+        "updated": 1793660556000,
         "users": 32
       },
       "metadata": {
@@ -14618,7 +14698,7 @@
         ],
         "license": "MIT",
         "name": "Split Tray",
-        "version": "1.3.3"
+        "version": "1.4.8"
       }
     },
     "spoof-light-dark-theme": {
@@ -15270,7 +15350,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793239523000,
+        "updated": 1793660572000,
         "users": 94
       },
       "metadata": {
@@ -15286,7 +15366,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Audio Flipper",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "taskbar-auto-hide-custom-activation-area": {
@@ -17060,7 +17140,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793239527000,
+        "updated": 1793660578000,
         "users": 23
       },
       "metadata": {
@@ -17076,7 +17156,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar RDP Launcher",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "taskbar-recent-focus-highlight": {
@@ -17305,7 +17385,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 1.3431658782579987,
-        "updated": 1793239532000,
+        "updated": 1793660566000,
         "users": 111
       },
       "metadata": {
@@ -17321,7 +17401,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Snipper",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "taskbar-spatial-order": {
@@ -21831,6 +21911,32 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinKlok",
+        "version": "1.0.0"
+      }
+    },
+    "winrar-tweaks": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793660561000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793660561000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "ArvindSaini978",
+        "compilerOptions": "-lcomctl32",
+        "description": "Closes WinRAR on Esc (dialog-aware) and converts Size and Packed columns into readable units (B, KB, MB, GB, TB).",
+        "github": "https://github.com/ArvindSaini978",
+        "homepage": "https://github.com/ArvindSaini978/my-windhawk-mods",
+        "include": [
+          "WinRAR.exe"
+        ],
+        "license": "MIT",
+        "name": "WinRAR Tweaks",
         "version": "1.0.0"
       }
     },

@@ -212,7 +212,9 @@
     "author": "ArvindSaini978",
     "github": "https://github.com/ArvindSaini978",
     "githubId": 123250522,
-    "homepages": []
+    "homepages": [
+      "https://github.com/ArvindSaini978/my-windhawk-mods"
+    ]
   },
   "https://github.com/asteski": {
     "author": "Asteski",
@@ -1118,6 +1120,12 @@
     "githubId": 170975967,
     "homepages": []
   },
+  "https://github.com/koewen": {
+    "author": "Koewen",
+    "github": "https://github.com/Koewen",
+    "githubId": 67965099,
+    "homepages": []
+  },
   "https://github.com/kotikdetka": {
     "author": "kotikdetka",
     "github": "https://github.com/kotikdetka",
@@ -1316,6 +1324,14 @@
     "github": "https://github.com/maciejlewand72",
     "githubId": 233310693,
     "homepages": []
+  },
+  "https://github.com/maestrosky": {
+    "author": "MaestroSky",
+    "github": "https://github.com/MaestroSky",
+    "githubId": 11834893,
+    "homepages": [
+      "https://github.com/MaestroSky/Language-Switcher-Position"
+    ]
   },
   "https://github.com/mak7im01": {
     "author": "mak7im01",

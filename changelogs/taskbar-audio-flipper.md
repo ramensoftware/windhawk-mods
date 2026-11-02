@@ -1,3 +1,8 @@
+## 1.4.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/44ac102d6a6a5925e36c52f488b4e5173920f41a/mods/taskbar-audio-flipper.wh.cpp))
+
+* **Change icons…** in the right-click menu gives the widget's icons other glyphs from the Windows icon font: each kind of device (speakers, headphones, headset, display, microphone), muted output and input, and the webcam. Choose an icon, then a glyph, or type its code; **Default** puts its own back.
+* The same picker shows the icons of Taskbar Snipper and Taskbar RDP Launcher when they're running, and changes theirs too.
+
 ## 1.3.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dd4a1eb36146f43188ef7f099ec9ef0cc7387d03/mods/taskbar-audio-flipper.wh.cpp))
 
 * The widget is part of the taskbar's own layout now, which makes room for it, rather than a window placed over it. The new **Position** setting puts it left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. It's no longer dragged.

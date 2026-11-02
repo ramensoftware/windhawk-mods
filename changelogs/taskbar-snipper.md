@@ -1,3 +1,9 @@
+## 1.3.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/38463a071b68590c96a5416dcb0ce84eb0ef3e2e/mods/taskbar-snipper.wh.cpp))
+
+* The buttons' right-click menu has **Screenshot button** and **Record button**, to show or hide each one (one of them stays), and **Swap the buttons**, to put the record button first.
+* **Which buttons** in the mod's settings has a new **Record and screenshot** option. A choice made in the menu is used until the setting is changed, as with the save folders.
+* **Change icons…** in the menu gives the buttons other glyphs from the Windows icon font (screenshot, record and stop recording). Choose an icon, then a glyph, or type its code; **Default** puts its own back. The same picker shows the icons of Taskbar Audio Flipper and Taskbar RDP Launcher when they're running.
+
 ## 1.2.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3e2422875c4232c20bb802f54806a8c81b71f58e/mods/taskbar-snipper.wh.cpp))
 
 * The screenshot and record buttons are part of the taskbar's own layout now, which makes room for them, rather than a window placed over it. The new **Position** setting puts them left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. They're no longer dragged.

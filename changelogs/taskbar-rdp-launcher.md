@@ -1,3 +1,8 @@
+## 1.4.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e195076df9a08f7c7c54fb458767393ec676fdba/mods/taskbar-rdp-launcher.wh.cpp))
+
+* **Change icons…** in the right-click menu gives the widget's icons other glyphs from the Windows icon font: the computer and the display buttons. Choose an icon, then a glyph, or type its code; **Default** puts its own back.
+* The same picker shows the icons of Taskbar Snipper and Taskbar Audio Flipper when they're running, and changes theirs too.
+
 ## 1.3.0 ([Oct 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/72291cdf01bb95ba90b95e01c9a46317ddd63903/mods/taskbar-rdp-launcher.wh.cpp))
 
 * The widget is part of the taskbar's own layout now, which makes room for it, rather than a window placed over it. The new **Position** setting puts it left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, or at the left end of the taskbar. It's no longer dragged.

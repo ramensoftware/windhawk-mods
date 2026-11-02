@@ -2,12 +2,272 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-02T21:05:19.000Z</updated>
+    <updated>2026-11-02T23:02:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar RDP Launcher 1.4.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-rdp-launcher#e195076df9a08f7c7c54fb458767393ec676fdba</id>
+        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
+        <updated>2026-11-02T23:02:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Change icons…</strong> in the right-click menu gives the widget's icons other glyphs from the Windows icon font: the computer and the display buttons. Choose an icon, then a glyph, or type its code; <strong>Default</strong> puts its own back.</li>
+<li>The same picker shows the icons of Taskbar Snipper and Taskbar Audio Flipper when they're running, and changes theirs too.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Audio Flipper 1.4.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-flipper#44ac102d6a6a5925e36c52f488b4e5173920f41a</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
+        <updated>2026-11-02T23:02:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Change icons…</strong> in the right-click menu gives the widget's icons other glyphs from the Windows icon font: each kind of device (speakers, headphones, headset, display, microphone), muted output and input, and the webcam. Choose an icon, then a glyph, or type its code; <strong>Default</strong> puts its own back.</li>
+<li>The same picker shows the icons of Taskbar Snipper and Taskbar RDP Launcher when they're running, and changes theirs too.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Snipper 1.3.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-snipper#38463a071b68590c96a5416dcb0ce84eb0ef3e2e</id>
+        <link href="https://windhawk.net/mods/taskbar-snipper"/>
+        <updated>2026-11-02T23:02:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The buttons' right-click menu has <strong>Screenshot button</strong> and <strong>Record button</strong>, to show or hide each one (one of them stays), and <strong>Swap the buttons</strong>, to put the record button first.</li>
+<li><strong>Which buttons</strong> in the mod's settings has a new <strong>Record and screenshot</strong> option. A choice made in the menu is used until the setting is changed, as with the save folders.</li>
+<li><strong>Change icons…</strong> in the menu gives the buttons other glyphs from the Windows icon font (screenshot, record and stop recording). Choose an icon, then a glyph, or type its code; <strong>Default</strong> puts its own back. The same picker shows the icons of Taskbar Audio Flipper and Taskbar RDP Launcher when they're running.</li>
+</ul>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinRAR Tweaks 1.0.0]]></title>
+        <id>https://windhawk.net/mods/winrar-tweaks#b7d208bbef124a2d7be33f9cb2099cd6faf6e33a</id>
+        <link href="https://windhawk.net/mods/winrar-tweaks"/>
+        <updated>2026-11-02T23:02:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winrartweaks">WinRAR Tweaks</h1>
+<p>All-in-one quality-of-life enhancements for <strong>WinRAR</strong> that modernize navigation and file size readability without altering archive behavior.</p>
+<hr />
+<h2 id="features">✨ Features</h2>
+<ul>
+<li>⌨️ <strong>Smart Close on <code>Esc</code>:</strong> Quickly close WinRAR with the <code>Escape</code> key—just like modern utilities and viewers. Intelligently respects active context menus, menu bars, dropdowns, inline file renaming, and child dialogs (closing open popups first before closing the main window).</li>
+<li>📊 <strong>Human-Readable File Sizes:</strong> Automatically converts hard-to-read raw byte counts (e.g., <code>121815</code>) in the <strong>Size</strong> and <strong>Packed</strong> columns into clean, readable units (<code>B</code>, <code>KB</code>, <code>MB</code>, <code>GB</code>, <code>TB</code>).</li>
+<li>⚙️ <strong>Modular Settings:</strong> Toggle either tweak independently at any time in the mod's Settings tab.</li>
+</ul>
+<h2 id="previews">🖼️ Previews</h2>
+<h3 id="humanreadablefilesizes">Human-Readable File Sizes</h3>
+<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_1.png" alt="WinRAR File Size Before and After Preview" /></p>
+<h3 id="smartcloseonesc">Smart Close on Esc</h3>
+<p><img src="https://raw.githubusercontent.com/ArvindSaini978/my-windhawk-mods/master/assets/wt_preview_2.webp" alt="WinRAR Close on Esc Demo Webp" /></p>
+<hr />
+<h2 id="howitworks">🛠️ How It Works</h2>
+<ul>
+<li><strong>Modal & Input Guarding:</strong> Queries live Win32 thread GUI state (<code>GetGUIThreadInfo</code>) so <code>Esc</code> never interrupts active menu loops, drag/capture operations, dropdowns, or inline <code>Edit</code> rename boxes before sending <code>WM_CLOSE</code>.</li>
+<li><strong>In-Place ListView Formatting:</strong> Subclasses WinRAR's <code>SysListView32</code> file list (both newly created and already-open windows) and formats raw byte counts on the fly as items are populated or refreshed.</li>
+</ul>
+<hr />
+<h2 id="compatibilitynotes">⚠️ Compatibility &amp; Notes</h2>
+<ul>
+<li><strong>Refreshing After Changing Settings or Disabling:</strong> If you toggle the <em>Human-Readable File Sizes</em> setting on or off, or disable/remove the mod while WinRAR is open, please press <strong><code>F5</code></strong> or navigate to another folder and back to refresh the file list with the updated size format.</li>
+<li><strong>Supported Column Languages:</strong> Out-of-the-box header detection supports English (<code>Size</code>, <code>Packed</code>) as well as common localized headers (<code>Размер</code>, <code>Сжатый</code>, <code>Größe</code>, <code>Gepackt</code>, <code>Taille</code>, <code>Compressé</code>, <code>Tamaño</code>, <code>Comprimido</code>).</li>
+<li><strong>Sorting Behavior:</strong> Because WinRAR sorts internal archive records prior to display formatting, sorting by Size or Packed continues to sort accurately by exact byte count.</li>
+</ul>
+<hr />
+<h3 id="morefromthisauthor">🧩 More from this author</h3>
+<ul>
+<li><strong><a href="https://windhawk.net/mods/drag-to-scroll">Drag to Scroll</a></strong> – Hold <code>Ctrl + Right-Click</code> and drag to scroll smoothly across desktop applications.</li>
+<li><strong><a href="https://windhawk.net/mods/explorer-custom-shortcuts">Explorer Custom Shortcuts</a></strong> – Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.</li>
+</ul>
+<h3 id="authorattribution">Author &amp; Attribution</h3>
+<ul>
+<li><strong>Created and maintained by ArvindSaini978 (<a href="https://github.com/ArvindSaini978">GitHub</a>).</strong></li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Split Tray 1.4.8]]></title>
+        <id>https://windhawk.net/mods/split-tray#4f5fa67cfa26842d4c144e4dcda0873310657043</id>
+        <link href="https://windhawk.net/mods/split-tray"/>
+        <updated>2026-11-02T23:02:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Drag application icons directly between Windows' primary notification area and Split Tray's embedded or floating trays.</p></li>
+<li><p>Show the dragged icon, allowed cursor feedback, insertion lines and dimmed source ghosts. Reordering commits on release and cancels cleanly.</p></li>
+<li><p>Coalesce icon refresh bursts and reuse maintained display geometry to avoid redundant taskbar work.</p></li>
+<li><p>Improve Arrange with search, explicit order controls, per-icon rule reset, resizing, scrolling and DPI updates.</p></li>
+<li><p>Share saved order and hidden choices across embedded and floating trays; refresh open overflow cells in place and protect taskbar space.</p></li>
+<li><p>Improve screen-reader controls and touch/pen hold menus; make global shortcuts opt-in and off by default with Ctrl+Shift+F11/F12.</p></li>
+<li><p>Integrate secondary overflow dragging, Show promotion for capacity overflow, and missed-release refresh recovery.</p></li>
+<li><p>Respect swapped mouse buttons and preserve captured floating clicks through release.</p></li>
+<li><p>Make private drag hooks optional so unavailable symbols do not disable the existing IconView constructor hook.</p></li>
+<li><p>Preserve remembered order across tray transfers; promote only explicit Show and overflow-to-bar drags.</p></li>
+<li><p>Improve overflow popup hit testing and unload cleanup; reuse the owned Arrange window handle.</p></li>
+</ul>]]></content>
+        <author>
+            <name>Brandon Stonebridge</name>
+            <uri>https://github.com/st0nebridge</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.1.0]]></title>
+        <id>https://windhawk.net/mods/bluetooth-auto-toggle#825ac6bf19f87740412dc3afba8254259886932a</id>
+        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
+        <updated>2026-11-02T23:02:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="bluetoothautotoggle">Bluetooth Auto Toggle</h1>
+<p>A Windhawk tool mod that automatically cycles Windows Bluetooth off and back on (in milliseconds) whenever Windhawk boots with your system and a connected Bluetooth device is detected.</p>
+<h3 id="whythismod">Why this mod?</h3>
+<p>Some Bluetooth hardware adapters, drivers, and wireless peripherals (e.g., Bluetooth headphones, earbuds, mice, and keyboards) enter an unresponsive or degraded state on fresh system boots—even when Windows displays them as "connected"—causing audio silence, latency, or connection drops unless Bluetooth is power-cycled. This mod automates that process by waiting until a device is connected, pausing a configurable few seconds for the driver stack to settle, and cleanly cycling the Bluetooth radio off and then back on in the background.</p>
+<h3 id="keyfeatures">Key Features</h3>
+<ul>
+<li><strong>Device-Aware Activation:</strong> By default, only cycles Bluetooth when a connected Bluetooth device (headset, mouse, keyboard, etc.) is found.</li>
+<li><strong>Precise Millisecond Timing:</strong> Configurable startup delay, post-connection delay, and off-to-on toggle duration in milliseconds.</li>
+<li><strong>Dedicated Tool Mod Architecture:</strong> Runs in an isolated <code>windhawk.exe</code> background tool process without injecting into or hooking <code>explorer.exe</code> or any other critical system process.</li>
+<li><strong>Cold Boot Hardware Retry:</strong> Automatically retries radio enumeration if the Bluetooth service (<code>bthserv</code>) or adapter driver is still initializing during Windows boot.</li>
+<li><strong>State-Safe Cycling:</strong> Only toggles radios that are already powered ON (leaving radios in Airplane mode or turned off alone).</li>
+<li><strong>Safe Power Restoration:</strong> Minimizes the off window and ensures radios are commanded back on with retries even if the mod is unloaded mid-cycle.</li>
+<li><strong>Session-Safe:</strong> Remembers the current Windows logon session across tool process restarts using Windows Terminal Services (WTS) logon timestamps.</li>
+<li><strong>Graceful Lifecycle & Live Testing:</strong> Responsive to settings updates, mod reload, and instant cancellation on shutdown.</li>
+</ul>]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Force Desktop Icon Spacing 1.1.6]]></title>
+        <id>https://windhawk.net/mods/force-desktop-icon-spacing#d73440af76a0f26cebb28452af94b9312da51b31</id>
+        <link href="https://windhawk.net/mods/force-desktop-icon-spacing"/>
+        <updated>2026-11-02T23:02:24.000Z</updated>
+        <content type="html"><![CDATA[<p>Precisely control the desktop icon spacing: set the horizontal/vertical icon grid spacing and reserve a blank margin at the bottom of the icon area (above the taskbar).</p>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li>The desktop list view (<code>SysListView32</code>) is subclassed (event-driven; the only polling is a one-time boot check that polls the icon count once a second for up to a minute after Explorer starts): every spacing request Explorer makes is transparently replaced with the configured values, and the icon area height is capped so it never enters the reserved bottom strip.</li>
+<li>Values are absolute and applied in one pass: the same settings always produce the same layout, never cumulative drift.</li>
+<li>The vertical grid is anchored at the top: increasing the vertical spacing stretches the grid downward, so the extra space is absorbed by the bottom region. No blank strip is created at the top, and the icon area is never shifted as a whole.</li>
+<li>The bottom margin caps the icon area height only (the top edge stays fixed), so icon columns wrap earlier and never enter the reserved bottom strip.</li>
+<li>All pixel values are scaled by the list view's DPI: the configured numbers apply at 100% scaling and scale up automatically on higher DPI.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Horizontal spacing (pixels)</strong>: width of each icon grid cell, at 100% scaling. Larger = more horizontal gap between icons.</li>
+<li><strong>Vertical spacing (pixels)</strong>: height of each icon grid cell, at 100% scaling. Larger = taller rows; the grid grows downward and the extra space is absorbed by the bottom region.</li>
+<li><strong>Bottom margin (pixels)</strong>: blank strip reserved at the bottom of the icon area, above the taskbar, at 100% scaling. The icon grid never enters it. 0 = no reservation.</li>
+<li><strong>Rearrange icons on startup</strong>: arrange icons once when the mod loads and every time Explorer starts (sign-in, reboot, Explorer restart), so the spacing/margin take effect. Turn this off to keep icons where you place them by hand. Changes made in the settings always rearrange.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The grid cell size stays fixed when you change the icon size (Large/Medium/Small icons or Ctrl+wheel); adjust the spacing settings when you switch to Large icons, otherwise large icons may overlap their labels.</li>
+<li>This mod doesn't write any registry values. If you want free icon placement, turn off "Auto arrange icons" and "Align icons to grid" in the desktop right-click menu yourself.</li>
+<li>Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual "Arrange icons").</li>
+<li>The bottom margin applies to the whole icon area (the list view spans all monitors); on multi-monitor setups it lands above the taskbar of the bottom-most monitor.</li>
+</ul>
+<h2 id="">简体中文说明</h2>
+<p>精确控制桌面图标间距：自由调节图标网格的水平/垂直间距，并在图标区域底部（任务栏上方）预留空白边距。</p>
+<h3 id="-1">工作原理</h3>
+<ul>
+<li>通过子类化（事件驱动；唯一的轮询是资源管理器启动后长达一分钟、每秒一次的图标数量一次性开机检查）挂钩桌面列表视图（<code>SysListView32</code>）：资源管理器发出的每个间距设置请求都会被透明替换为配置值，图标区域高度被限制在预留边距之上。</li>
+<li>所有数值均为绝对值、一次性应用——同一配置永远得到同一布局，不存在多次叠加漂移。</li>
+<li>垂直网格顶端锚定：调大垂直间距时行距拉大、网格向下延伸，多余空间挤占底部区域——顶部不会产生空白，图标区域也不会被整体移动。</li>
+<li>底部边距只限制图标区域高度（顶边固定），图标换列提前，永不进入底部预留区。</li>
+<li>所有像素值按列表视图的 DPI 自动缩放：配置数值对应 100% 缩放，高 DPI 下自动放大。</li>
+</ul>
+<h3 id="-2">设置项</h3>
+<ul>
+<li><strong>水平间距（像素）</strong>：图标网格单元宽度（100% 缩放下），数值越大图标水平间距越大。</li>
+<li><strong>垂直间距（像素）</strong>：图标网格单元高度（100% 缩放下），数值越大行距越大，网格向下延伸，多余空间挤占底部区域。</li>
+<li><strong>底部边距（像素）</strong>：图标区域底部（任务栏上方）预留的空白高度（100% 缩放下），图标网格不会进入该区域。0 = 不预留。</li>
+<li><strong>启动时重排图标</strong>：模组加载时以及资源管理器每次启动时（登录、重启、重启资源管理器）各执行一次"排列图标"，使间距/边距生效。若希望保留手动拖放的图标布局，可关闭此项。在设置面板修改参数时始终会重排。</li>
+</ul>
+<h3 id="-3">注意</h3>
+<ul>
+<li>切换图标大小（大/中/小图标或 Ctrl+滚轮）时网格单元尺寸保持不变；切换到大图标时请相应调大间距设置，否则大图标可能与文字标签重叠。</li>
+<li>本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭"自动排列图标"和"将图标与网格对齐"。</li>
+<li>停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动"排列图标"一致）。</li>
+<li>底部边距作用于整个图标区域（列表视图横跨所有显示器）；多显示器下预留空白位于最底部显示器的任务栏上方。</li>
+</ul>]]></content>
+        <author>
+            <name>Koewen</name>
+            <uri>https://github.com/Koewen</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Language Switcher Position 1.3]]></title>
+        <id>https://windhawk.net/mods/language-switcher-position#45b36d8bf133e4b61001eedfac9d5ac0a07909f0</id>
+        <link href="https://windhawk.net/mods/language-switcher-position"/>
+        <updated>2026-11-02T23:02:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="languageswitcherposition">Language Switcher Position</h1>
+<h2 id="english">English</h2>
+<p>This mod allows you to customize the position of the modern Windows 11 26H2 input language switcher, which appears when clicking the language indicator (РУС / ENG) in the system tray.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Left</strong> — positions the switcher at the left edge of the screen.</li>
+<li><strong>Center</strong> — positions the switcher in the center of the screen.</li>
+<li><strong>Right</strong> — positions the switcher at the right edge of the screen.</li>
+<li><strong>Custom X/Y</strong> — manually sets the window coordinates.</li>
+<li><strong>Vertical offset</strong> — provides additional vertical positioning control.</li>
+</ul>
+<h3 id="screenshots">Screenshots</h3>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/left.png" alt="Left position" /></p>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/center.png" alt="Center position" /></p>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/right.png" alt="Right position" /></p>
+<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/default.png" alt="Default position" /></p>
+<h3 id="settings">Settings</h3>
+<p><strong>Horizontal position</strong> — selects the horizontal alignment: Left, Center, Right, or Custom X/Y.</p>
+<p><strong>Custom X coordinate</strong> — the horizontal window coordinate in pixels.</p>
+<p><strong>Custom Y coordinate</strong> — the vertical window coordinate in pixels.</p>
+<p><strong>Vertical offset</strong> — additional vertical displacement relative to the original Windows position. Used with Left, Center, and Right modes.</p>
+<h3 id="compatibility">Compatibility</h3>
+<ul>
+<li>Windows 11 26H2</li>
+<li>Windows Explorer (explorer.exe)</li>
+<li>Modern XAML input language switcher.</li>
+</ul>
+<h3 id="note">Note</h3>
+<p>Positioning is calculated relative to the full monitor dimensions, including the taskbar area. Custom coordinates are specified in screen pixels.</p>
+<p>The mod only changes the position of the switcher window and does not modify Windows input language settings.</p>
+<hr />
+<h2 id="">Українська</h2>
+<p>Мод дозволяє змінювати положення сучасного перемикача мов введення Windows 11 26H2, який з'являється після натискання на індикатор мови (РУС / ENG) у системному треї.</p>
+<h3 id="-1">Можливості</h3>
+<ul>
+<li><strong>Left</strong> — розміщення перемикача біля лівого краю екрана.</li>
+<li><strong>Center</strong> — розміщення по центру екрана.</li>
+<li><strong>Right</strong> — розміщення біля правого краю екрана.</li>
+<li><strong>Custom X/Y</strong> — ручне налаштування координат вікна.</li>
+<li><strong>Vertical offset</strong> — додаткове вертикальне зміщення.</li>
+</ul>
+<h3 id="-2">Налаштування</h3>
+<p><strong>Horizontal position</strong> — вибір горизонтального розташування перемикача: Left, Center, Right або Custom X/Y.</p>
+<p><strong>Custom X coordinate</strong> — горизонтальна координата вікна в пікселях.</p>
+<p><strong>Custom Y coordinate</strong> — вертикальна координата вікна в пікселях.</p>
+<p><strong>Vertical offset</strong> — додаткове вертикальне зміщення відносно початкової позиції Windows. Використовується в режимах Left, Center та Right.</p>
+<h3 id="-3">Сумісність</h3>
+<ul>
+<li>Windows 11 26H2</li>
+<li>Windows Explorer (explorer.exe)</li>
+<li>Сучасний XAML-перемикач мов введення.</li>
+</ul>
+<h3 id="-4">Примітка</h3>
+<p>Позиціонування виконується відносно повного розміру монітора, включно з областю панелі завдань. Користувацькі координати задаються в екранних пікселях.</p>
+<p>Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.</p>]]></content>
+        <author>
+            <name>MaestroSky</name>
+            <uri>https://github.com/MaestroSky</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Steam Games in Explorer 1.2]]></title>
         <id>https://windhawk.net/mods/explorer-steam-games#60313640913ae0898aa64c4085841b4712fed91f</id>
@@ -456,526 +716,6 @@ submission still contains only the single mod file.</li>
         <author>
             <name>BOLT</name>
             <uri>https://github.com/Bolt-Scripts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-monitor taskbar icon alignment 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-per-monitor-alignment#befbd85e698506a52b44a708d7b81885e78e948f</id>
-        <link href="https://windhawk.net/mods/taskbar-per-monitor-alignment"/>
-        <updated>2026-11-01T15:03:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a Ko-fi support link (readme and @donateUrl).</li>
-<li>Readme: sharper settings and Start11 screenshots.</li>
-</ul>]]></content>
-        <author>
-            <name>vmTools</name>
-            <uri>https://github.com/VitalyTz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Scroll 1.1.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-scroll#d13d325a5443ddd931928f05762566bec3c0ac99</id>
-        <link href="https://windhawk.net/mods/drag-to-scroll"/>
-        <updated>2026-11-01T14:02:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>⚠️ <strong>Important for v1.0.0 Users:</strong> </p></li>
-<li><p>Due to an unloading bug in v1.0.0, clicking "Update" to install this version may cause active applications to freeze or close as the old version unloads. To avoid losing work, please save your open apps before updating, or restart your computer after the update completes. This issue is fully resolved in v1.1.0 and will not happen on future updates.</p></li>
-<li><p><strong>Horizontal & 2D Scrolling:</strong> Added full sideways drag-to-scroll with automatic directional snapping to keep vertical and horizontal movement straight and prevent diagonal drift.</p></li>
-<li><p><strong>Custom Dual-Contour Cursors:</strong> Added built-in, high-contrast dynamic drag cursors (vertical, horizontal, and cruising) with centered hotspots that automatically scale to match system display metrics without external assets.</p></li>
-<li><p><strong>Accidental Browser Zoom Prevention:</strong> Implemented a 250ms compositor drain shield that prevents browsers (Chrome, Edge, Firefox) from zooming in or out when letting go of the scroll gesture.</p></li>
-<li><p><strong>Motion Smoothing & Velocity Curve:</strong> Added a low-pass motion filter to eliminate sensor jitter and micro-stutter, paired with dynamic velocity scaling for responsive crawls and rapid flicks.</p></li>
-<li><p><strong>Initialization & Stability Hardening:</strong> Moved cursor loading to on-demand initialization and excluded non-interactive desktop sessions and sandboxed processes to eliminate mod load hangs.</p></li>
-<li><p><strong>Refined Discrete & Sub-Notch Scrolling:</strong> Optimized legacy Win32 line-stepping message dispatch and fine-tuned fractional wheel deltas for fluid modern app scrolling.</p></li>
-<li><p><strong>Clearer Documentation:</strong> Redesigned the README with everyday quick-start instructions, feature highlights, and clarified capability notes.</p></li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Desktop Widgets 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-desktop-widgets#e30d1f91b4bf2553646a6f156c4abd8cd7769e6e</id>
-        <link href="https://windhawk.net/mods/win7-desktop-widgets"/>
-        <updated>2026-11-01T05:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/u7F6iG9.png" alt="Screenshot" /> 
-<img src="https://i.imgur.com/cQDjOws.png" alt="Screenshot" />
-<img src="https://i.imgur.com/IdDURoO.png" alt="Screenshot" /> </p>
-<h1 id="windows7desktopwidgets">Windows 7 Desktop Widgets</h1>
-<p>I really missed the classic Windows 7 desktop widgets and couldn't find a proper, lightweight version anywhere without bloat, broken scaling, or missing multi-monitor support. I love how simple and handy they were, so I made this accurate recreation. Enjoy!</p>
-<h3 id="whatsincluded">What's included:</h3>
-<ul>
-<li><strong>Classic Windows 7 Clock</strong>: All 8 original skins, second hand toggle, clock label, time zone picker, and the authentic desktop options window (click the wrench icon on the widget hover bar or right-click -&gt; <strong>Options…</strong>).</li>
-<li><strong>Classic Windows 7 Calendar</strong>: Spiral-bound notebook with an expandable monthly grid (click the expand icon on the hover bar or double-click the calendar), date picking, and smooth navigation.</li>
-<li><strong>Clean & Fast</strong>: Each widget runs in its own lightweight window with native vector GDI+ rendering (no external images needed), per-monitor High-DPI scaling (125%/150%+), and full multi-monitor drag support.</li>
-</ul>
-<hr />
-<p>☕ <strong>Support / Donations:</strong>
-If you enjoy this mod and want to support its author:
-<a href="https://boosty.to/dekvas/single-payment/donation/838774/target?share=target_link">Support on Boosty</a></p>]]></content>
-        <author>
-            <name>dekvas</name>
-            <uri>https://github.com/dekvas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Rounded Selection Rectangle 1.0]]></title>
-        <id>https://windhawk.net/mods/rounded-selection-rectangle#aca316a66c25f7e2a896ccebf684d9ed9ddc7134</id>
-        <link href="https://windhawk.net/mods/rounded-selection-rectangle"/>
-        <updated>2026-11-01T04:01:47.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/rounded-selection-rectangle.gif" alt="Rounded Selection Rectangle / Retângulo de Seleção Arredondado" /></p>
-<h2 id="english">English</h2>
-<p>Gives the rectangle you draw to select files rounded corners and a gentle fade
-when you release the mouse. Works on the desktop, in File Explorer and in apps
-that use standard Windows list controls.</p>
-<ul>
-<li>Adjust the corner roundness, border width and background opacity.</li>
-<li>Choose background and border colors independently, or keep <strong>Windows default</strong>
-for either one.</li>
-<li>Set the fade-out duration, or use <strong>0</strong> to turn it off. The mod respects the
-Windows animation setting.</li>
-</ul>
-<p>In <strong>Background color</strong> and <strong>Border color</strong>, choose <strong>Custom color</strong> and enter a
-color such as <code>#8B5CF6</code>. <strong>Windows default</strong> ignores the custom value and follows
-the system color. Custom colors affect only the selection rectangle.</p>
-<p>Compatible with <strong>Win32 UI Modernizer</strong>.</p>
-<p>Other selection-rectangle mods, such as <strong>Desktop Marquee Fade</strong> and <strong>Classic
-Selection Rectangle Color</strong>, can overlap with this mod's fade or override its
-colors. Disable overlapping features if you use them together.</p>
-<p>This mod depends on symbols published by Microsoft. If a Windows update has no
-published symbols, or changes the symbols the mod uses, the mod will stop working
-until compatible symbols or an updated mod are available.</p>
-<h3 id="roundedselectioninhomewinui">Rounded selection in Home (WinUI)</h3>
-<p>File Explorer's <strong>Home</strong> page uses WinUI. To round its selection rectangle,
-install and enable <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a> in Windhawk.
-In that mod's settings, add an entry under <strong>Control styles</strong> and set <strong>Target</strong>
-to:</p>
-<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
-</code></pre>
-<p>Under <strong>Styles</strong>, add each of these four lines as a separate style:</p>
-<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
-Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
-RadiusX:=8
-RadiusY:=8
-</code></pre>
-<p>Save the settings. This uses the Windows accent color, a 25% opacity fill and
-8-unit corner radii. To change the roundness, adjust both <code>RadiusX</code> and <code>RadiusY</code>.
-These styles are configured separately from this mod's settings.</p>
-<h2 id="portugus">Português</h2>
-<p>Deixa o retângulo que você arrasta para selecionar arquivos com cantos
-arredondados e um desaparecimento suave ao soltar o mouse. Funciona na área de
-trabalho, no Explorador de Arquivos e em aplicativos com listas padrão do Windows.</p>
-<ul>
-<li>Ajuste o arredondamento dos cantos, a espessura da borda e a opacidade do fundo.</li>
-<li>Escolha as cores do fundo e da borda separadamente, ou mantenha o <strong>Padrão do
-Windows</strong> em cada uma.</li>
-<li>Defina a duração do desaparecimento, ou use <strong>0</strong> para desativá-lo. O mod
-respeita a configuração de animações do Windows.</li>
-</ul>
-<p>Em <strong>Cor do fundo</strong> e <strong>Cor da borda</strong>, escolha <strong>Cor personalizada</strong> e informe uma
-cor como <code>#8B5CF6</code>. <strong>Padrão do Windows</strong> ignora o valor personalizado e acompanha a
-cor do sistema. As cores personalizadas afetam somente o retângulo de seleção.</p>
-<p>Compatível com o <strong>Win32 UI Modernizer</strong>.</p>
-<p>Outros mods de retângulo de seleção, como <strong>Desktop Marquee Fade</strong> e <strong>Classic
-Selection Rectangle Color</strong>, podem sobrepor o fade ou as cores deste mod.
-Desative as funções equivalentes se usar esses mods juntos.</p>
-<p>Este mod depende dos símbolos publicados pela Microsoft. Se uma atualização do
-Windows não tiver símbolos publicados, ou alterar os símbolos usados pelo mod,
-ele deixará de funcionar até que símbolos compatíveis ou uma atualização do mod
-estejam disponíveis.</p>
-<h3 id="seleoarredondadanapastainciowinui">Seleção arredondada na pasta Início (WinUI)</h3>
-<p>A pasta <strong>Início</strong> do Explorador de Arquivos usa WinUI. Para arredondar seu
-retângulo de seleção, instale e ative o <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
-no Windhawk. Nas configurações desse mod, adicione uma entrada em <strong>Control styles</strong>
-(estilos dos controles) e preencha <strong>Target</strong> (alvo) com:</p>
-<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
-</code></pre>
-<p>Em <strong>Styles</strong> (estilos), adicione cada uma destas quatro linhas como um estilo separado:</p>
-<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
-Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
-RadiusX:=8
-RadiusY:=8
-</code></pre>
-<p>Salve as configurações. Isso usa a cor de destaque do Windows, fundo com 25% de
-opacidade e cantos de 8 unidades. Para mudar o arredondamento, ajuste <code>RadiusX</code>
-e <code>RadiusY</code>. Esses estilos são configurados separadamente das opções deste mod.</p>
-<h2 id="espaol">Español</h2>
-<p>Da esquinas redondeadas y un desvanecimiento suave al rectángulo que arrastras
-para seleccionar archivos. Funciona en el escritorio, en el Explorador de archivos
-y en aplicaciones con listas estándar de Windows.</p>
-<ul>
-<li>Ajusta las esquinas, el grosor del borde y la opacidad del fondo.</li>
-<li>Elige los colores de fondo y borde por separado, o conserva el
-<strong>Predeterminado de Windows</strong> para cada uno.</li>
-<li>Ajusta la duración del desvanecimiento, o usa <strong>0</strong> para desactivarlo. El mod
-respeta la configuración de animaciones de Windows.</li>
-</ul>
-<p>En <strong>Color de fondo</strong> y <strong>Color del borde</strong>, selecciona <strong>Color personalizado</strong> e
-introduce un color como <code>#8B5CF6</code>. <strong>Predeterminado de Windows</strong> ignora el valor
-personalizado y sigue el color del sistema. Los colores personalizados afectan
-sólo al rectángulo de selección.</p>
-<p>Compatible con <strong>Win32 UI Modernizer</strong>.</p>
-<p>Otros mods del rectángulo de selección, como <strong>Desktop Marquee Fade</strong> y <strong>Classic
-Selection Rectangle Color</strong>, pueden superponer el desvanecimiento o los colores.
-Desactiva las funciones equivalentes si usas esos mods juntos.</p>
-<p>Este mod depende de los símbolos publicados por Microsoft. Si una actualización
-de Windows no tiene símbolos publicados, o cambia los símbolos que usa el mod,
-dejará de funcionar hasta que haya símbolos compatibles o una actualización
-del mod.</p>
-<h3 id="seleccinredondeadaeniniciowinui">Selección redondeada en Inicio (WinUI)</h3>
-<p>La página <strong>Inicio</strong> del Explorador de archivos usa WinUI. Para redondear su
-rectángulo de selección, instala y activa <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>
-en Windhawk. En los ajustes de ese mod, añade una entrada en <strong>Control styles</strong>
-(estilos de controles) e introduce lo siguiente en <strong>Target</strong> (destino):</p>
-<pre><code class="text language-text">Microsoft.UI.Xaml.Shapes.Rectangle#SelectionRectangle
-</code></pre>
-<p>En <strong>Styles</strong> (estilos), añade cada una de estas cuatro líneas como un estilo separado:</p>
-<pre><code class="text language-text">Fill:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.25" /&gt;
-Stroke:=&lt;SolidColorBrush Color="{ThemeResource SystemAccentColor}" /&gt;
-RadiusX:=8
-RadiusY:=8
-</code></pre>
-<p>Guarda los ajustes. Esto usa el color de énfasis de Windows, un fondo con un 25%
-de opacidad y esquinas de 8 unidades. Para cambiar el redondeado, ajusta <code>RadiusX</code>
-y <code>RadiusY</code>. Estos estilos se configuran por separado de las opciones de este mod.</p>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Crazy Time 0.7.0]]></title>
-        <id>https://windhawk.net/mods/crazy-time#f118f158f9aadaada6b351e15ad9f9e7a183573b</id>
-        <link href="https://windhawk.net/mods/crazy-time"/>
-        <updated>2026-11-01T04:01:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="crazytime">Crazy Time</h1>
-<p>A minimalist scheduler for shutdown, sleep and hibernate, living in the
-notification area. Português abaixo.</p>
-<p><img src="https://raw.githubusercontent.com/caikx11/Crazy-timer/c92d0c0f575f877a535377ca7ccf28734ca42306/docs/images/crazy-time-panel.png" alt="Crazy Time panel" /></p>
-<blockquote>
-  <p><strong>This mod really shuts down, sleeps or hibernates your computer</strong> when a
-  schedule fires. Save your work first. A warning notification appears before
-  the action, and you can cancel or postpone an occurrence from the panel.</p>
-  <p><strong>Windows 10 is untested.</strong> It was developed and tested on Windows 11 only.
-  It is expected to work on Windows 10 (version 1809 or newer for the dark
-  theme of the controls), but this has not been verified. Please report issues.</p>
-</blockquote>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>Schedule an action <strong>by duration</strong> (1 minute to 7 days), at a <strong>date and time</strong>,
-or <strong>repeating on chosen weekdays</strong>.</li>
-<li>Keep several schedules at once: edit, pause, cancel one occurrence,
-postpone it by 10 minutes, or delete.</li>
-<li>Countdown warnings at 30, 15, 10, 5 and 1 minute, with optional sound.</li>
-<li>Schedules at the same instant are detected and refused.</li>
-<li>Optional per-schedule "force apps to close" (shutdown only), off by default,
-with a data-loss warning.</li>
-<li>Actions the computer cannot perform are explained instead of scheduled.</li>
-<li>Portuguese and English; automatic, light or dark theme; high contrast.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Enable the mod. A tray icon appears; click it to open the panel.</li>
-<li>Pick the action and how it is scheduled, then press <strong>Add schedule</strong>.</li>
-<li>Click the tray icon to open the panel again. Closing the panel keeps the
-countdown running; right-click the icon or use <strong>Options</strong> to exit.
-<strong>Exit</strong> stops scheduling until Windhawk restarts or the mod is toggled off
-and on again; Windhawk still lists the mod as enabled.</li>
-<li>Disabling the mod stops everything and removes the icon. Schedules are saved
-per user; occurrences that expired while the mod was off are not run.</li>
-</ol>
-<p>Schedules are stored in Windhawk's mod storage, in a file named with your user
-SID. On first use, an existing legacy LocalAppData schedule file is copied there
-without overwriting an existing destination. The legacy file is kept as a backup.
-Removing the mod deletes Windhawk's managed storage; the legacy backup remains.</p>
-<h2 id="portugus">Português</h2>
-<p>Agendador minimalista de desligar, suspender e hibernar, na área de notificação.</p>
-<p><strong>Este mod realmente desliga, suspende ou hiberna o computador</strong> quando um
-agendamento dispara. Salve seu trabalho antes. Uma notificação de aviso aparece
-antes da ação e você pode cancelar ou adiar a ocorrência pelo painel.</p>
-<p><strong>Não testado no Windows 10.</strong> Desenvolvido e testado apenas no Windows 11. Deve
-funcionar no Windows 10 (versão 1809 ou mais nova para o tema escuro dos
-controles), mas isso não foi verificado. Relate problemas.</p>
-<p><strong>Como usar:</strong> ative o mod, escolha a ação e o tipo de agendamento (por
-duração, data e hora, ou repetição semanal) e clique em <strong>Adicionar
-agendamento</strong>. Clique no ícone da barra para reabrir o painel; fechar o
-painel não interrompe a contagem. Desativar o mod encerra tudo.
-<strong>Sair</strong> interrompe os agendamentos até reiniciar o Windhawk ou desativar e
-reativar o mod; ele ainda aparece como ativado no Windhawk.</p>]]></content>
-        <author>
-            <name>caikx11</name>
-            <uri>https://github.com/caikx11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Nested Tray Drawer 0.1.13]]></title>
-        <id>https://windhawk.net/mods/nested-tray-drawer#f91f8178cbce4dd29474df0899481f0447415088</id>
-        <link href="https://windhawk.net/mods/nested-tray-drawer"/>
-        <updated>2026-11-01T03:00:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nestedtraydrawer">Nested Tray Drawer</h1>
-<p>Add a second drawer to Windows 11's hidden notification-icons panel. Drag an
-icon onto the added chevron to collect it, then click the chevron to open the
-second drawer. Both drawers can remain visible together. Icons retain their
-native templates, input handlers and app context menus. The footer is 40 DIP high.</p>
-<p><img src="https://raw.githubusercontent.com/Meidios/nested-tray-drawer/0d4ae2b9b09aba9a907541d0855e86a55a51e711/assets/feature-overview-0edbded10469.png" alt="Nested Tray Drawer feature overview" /></p>
-<p><em>Concept illustration; example icons and panel styling are illustrative.</em></p>
-<h2 id="experimentalcompatibility">Experimental compatibility</h2>
-<p>Runtime validated on Windows 11 23H2 build 22631.5126 x64 with Windhawk 1.7.3,
-Taskbar.View.dll 2125.4507.10.0 and taskbar.dll from that installation.
-ARM64 builds and offline identity/symbol checks are also provided, using
-ARM64 taskbar.dll 10.0.26100.9549, SystemTray.dll 2608.26001.100.0 and
-Taskbar.View.dll 2125.26100.0.0. ARM64 UI behavior has not been tested on a
-physical device and remains experimental. Windows 10, other Windows builds,
-DPI/monitor combinations and interactions with other tray mods are unverified.</p>
-<p>The mod discovers SystemTray.dll, older Taskbar.View.dll or ExplorerExtensions.dll
-and resolves the required internal interfaces and methods from symbols. It no
-longer requires a particular DLL version, timestamp, image size or vtable address.
-This does not make every Windows build supported: the symbol names, root layout
-and native identity ABI must still be compatible.</p>
-<p>Persistent identity uses Wh_Disasm to follow a recognized interface-adjustment
-thunk and the HWND/UID/GUID copy on x64 or ARM64. Both constructor-based and
-inlined identity getters are recognized; the native owning-string return type
-is never called across C++ ABIs. Unrecognized symbols, instructions, field layouts
-or call targets are rejected rather than guessed. Some older ARM64 binaries
-(such as the inspected taskbar.dll 10.0.22621.3810) lack the required Identity()
-symbol. Do not bypass these checks to force compatibility.</p>
-<h2 id="use">Use</h2>
-<ol>
-<li>Open the normal taskbar hidden-icons drawer.</li>
-<li>Drag an icon onto the added chevron and release it. Repeat to collect more.</li>
-<li>Click the added chevron to open or close the second drawer. Both drawers can
-remain open; an empty second drawer does not open.</li>
-<li>Right-click the chevron and choose <strong>Restore all collected icons</strong> to return
-every collected icon and explicitly clear saved membership.</li>
-</ol>
-<p>There is no right-click icon picker or individual drag-out command. Disabling
-the mod using Windhawk's own toggle restores the native tray and preserves
-the saved collection. There is no second enable setting.</p>
-<h2 id="savedcollection">Saved collection</h2>
-<p>Records use Windhawk's public storage API, with a Windows-user SID suffix to
-separate users in installed Windhawk. Membership uses an app GUID, or the owning
-process's exact executable path and native UID. Missing apps keep their records;
-ambiguous or inaccessible identities remain visible. Changed app identifiers can
-require recollection. Records contain app identifiers/encoded paths, not secrets;
-the encoding is not encryption. No records are transmitted.</p>
-<p>An invalid record is kept intact and icons remain visible. The chevron's context
-menu offers <strong>Reset saved collection</strong> for explicit recovery; a readable invalid
-API record is backed up before resetting. Uninstalling removes Windhawk-owned
-storage. Updates and Explorer restarts preserve the collection within the same mod ID.</p>
-<h2 id="knownlimits">Known limits</h2>
-<ul>
-<li>Custom app menus that do not expose foreground native menu state can dismiss
-both drawers after the bounded menu-start grace period.</li>
-<li>Complete Explorer restart, full mouse/keyboard and drag-cancel coverage,
-light/high-contrast appearance and live theme switching remain untested.</li>
-<li>Symbol discovery across module families is implemented; runtime compatibility
-on 24H2/25H2 is not established by the local build tests.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Native overflow access is adapted from m417z's GPLv3
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp">Taskbar notification icon spacing</a>.
-Symbol-based interface resolution and vtable verification follow Ris Peng's GPLv3
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/system-tray-folders.wh.cpp">System Tray Folders</a>.
-The Wh_Disasm instruction-scanning approach follows m417z's GPLv3
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-icon-size.wh.cpp">Taskbar height and icon size</a>.
-Nested Tray Drawer keeps a separate simultaneous flyout and drag-based membership;
-it does not replace the first drawer with an in-grid folder view.
-The single-file mod retains its GPL-3.0 declaration.</p>]]></content>
-        <author>
-            <name>MEI</name>
-            <uri>https://github.com/Meidios</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task View Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/task-view-customizer#867a54cd8ee88c95dbd71e4bdaa7dbf7e6de9b97</id>
-        <link href="https://windhawk.net/mods/task-view-customizer"/>
-        <updated>2026-11-01T03:00:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskviewcustomizer">Task View Customizer</h1>
-<p>Customize Windows 11 Task View's layout and appearance using its existing
-virtual desktop thumbnails and window overview. Choose where the desktop
-list appears or show it without the window overview. Customize background
-materials, theme colors, desktop highlights and the New desktop button.
-Control hover switching, slide direction and scrolling speed while keeping
-the native controls.</p>
-<h2 id="taskviewmodes">Task View modes</h2>
-<ul>
-<li><strong>Windows default</strong>: keeps desktops at the bottom while applying the mod's
-layout and appearance settings.
-This is the default mode.</li>
-<li><strong>Full Task View with desktops at the top</strong>: moves the desktop list above
-the window overview.</li>
-<li><strong>No Task View with Desktop list in the top</strong>: shows only the desktop list
-near the top of the screen.</li>
-<li><strong>No Task View with Desktop list at the center</strong>: shows only the desktop
-list, centered on the screen.</li>
-<li><strong>No Task View with Desktop list at the bottom</strong>: shows only the desktop
-list near the bottom.</li>
-</ul>
-<p>The mod does not change Alt+Tab or the desktop preview shown when hovering
-over the taskbar's Task View button.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>| Full Task View with Desktops list at the top | Desktop list at the center + Fit desktop tiles | Windows default + Fit desktop tiles |
-| :---: | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/1.png" alt="Full Task View with Desktops list at the top" /> | <img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/2.png" alt="No Task View with Desktops list at the center + Fit desktop tiles" /> | <img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/task-view-customizer/3.png" alt="Windows default + Fit desktop tiles" /> |</p>
-<h2 id="settings">Settings</h2>
-<h3 id="taskviewbehavior">Task View behavior</h3>
-<p>Choose the mode, hide the New desktop button, or close Task View in any mode when
-the Windows key is released. In list-only modes, Tab navigates desktops and
-clicking outside the list closes it. Key-release closing requires holding
-Windows while using the list, then releasing it.</p>
-<h3 id="desktoplistlayout">Desktop list layout</h3>
-<p>Choose full width, fit the desktop tiles, or set a percentage of the screen.
-Adjust the frame margin. Taskbar clearance follows the taskbar's actual edge
-and size on each monitor, including small/default taskbars and display scaling.
-Space already excluded by Windows is not counted twice. Windows default mode
-keeps desktops at the bottom while applying these sizing controls.
-Enable <strong>Prevent switching desktops on hover</strong> to suppress delayed mouse-hover
-selection of desktop thumbnails. Click a desktop to switch instead. The option
-applies to all Task View modes and leaves keyboard navigation available.
-<strong>Desktop hover switching delay (ms)</strong> sets the wait before that preview switches.
-The default is <strong>400 ms</strong>, matching the current Windows mouse-hover delay read
-by Task View. Enter 0–600000; blank or invalid text preserves the native delay.
-Prevent switching desktops on hover takes priority over this setting.</p>
-<h3 id="newdesktopbutton">New desktop button</h3>
-<p>The button follows the last desktop by default. Enable <strong>Move New desktop
-button to the right</strong> to keep it at the list's right edge while desktops scroll.
-Width, stretch, background and plus-sign alignment controls apply in both
-positions. Adjust the button width, hide its background, or position the plus sign.
-<strong>Stretch New desktop button to highlight height</strong> extends the button to
-match its hover/selection frame and hides the New desktop label. The width
-and plus-sign alignment settings still apply. Turn the toggle off to restore
-the original vertical layout. Stretching also applies to Windows default mode through the shared button layout.</p>
-<h3 id="backgroundmaterials">Background materials</h3>
-<p>Choose <strong>Native</strong>, <strong>Solid color</strong>, <strong>Acrylic</strong>, <strong>Clear</strong>, or experimental
-<strong>Mica</strong>. Solid starts opaque and can be made translucent without blur.
-Acrylic uses a live blurred backdrop and tint. Clear removes the material.
-You can also hide the list background in list-only modes or remove its
-outer border without removing desktop selection borders.</p>
-<p>Material transparency accepts <strong>0-100</strong>. Zero keeps the material's default
-strength; 100 makes Native, Solid and Acrylic backgrounds clear. Values
-outside that range use default strength; <strong>-1</strong> is the default setting.
-Thumbnails and labels remain visible, and native hover/focus brush alpha is
-preserved rather than turning faint highlights opaque.</p>
-<p>Mica uses a panel-local blurred wallpaper brush with color and luminosity
-blends. Its transparency control reduces tint/luminosity while keeping the
-wallpaper layer opaque. This is an experimental approximation of the native
-window material: its appearance can differ from apps using Windows' DWM
-Mica backdrop. It falls back to a solid color when unavailable.
-Windows can also use Acrylic's solid fallback when transparency is disabled.
-Hiding the desktop list background takes priority over material styling.</p>
-<h3 id="desktophighlights">Desktop highlights</h3>
-<p>Keep Windows' highlight or choose border only, background only, or both.
-The highlight background opacity controls the hovered/selected desktop fill.</p>
-<h3 id="themecolors">Theme colors</h3>
-<p>Set background and border colors independently for dark and light mode.
-Accepts <strong>native</strong>, <strong>accent</strong>, <strong>#RRGGBB</strong>, or <strong>#AARRGGBB</strong>.
-<code>accent</code> follows the current Windows accent color; invalid values preserve
-native colors. Background colors also provide Acrylic/Mica tint and custom
-highlight fill. Border colors apply to panel borders and custom highlights.</p>
-<h3 id="fullscreenbackdrop">Full-screen backdrop</h3>
-<p>Keep the native backdrop, clear it, or use Acrylic with adjustable dimming.
-The list-only disable-blur option keeps the wallpaper clear even when
-Windows transparency is enabled. It is independent of the desktop strip's
-background. An explicit backdrop choice overrides the disable-blur option.</p>
-<h3 id="animationsandscrolling">Animations and scrolling</h3>
-<p>Choose <strong>Desktop list animation direction</strong>: <strong>From the bottom</strong> (default) or
-<strong>From the top</strong>, independently of Task View mode. This controls entrance and
-exit motion. Disable Task View animations independently of the background
-material. Adjust desktop reveal scrolling speed from 10-500%:
-100% uses Windows' current speed, 50% is half speed, and 200% is double speed.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Designed for Windows 11. Windows builds can change Task View's internal
-control names and layout; unrecognized controls are left alone. Mica remains
-experimental. Mixed-DPI monitors, desktop drag and drop, and interactions
-with other shell customization mods can depend on the Windows build.</p>
-<p>No PDB debugging symbols or byte-pattern scanning are required. Desktop-slide
-direction uses public animation properties and live layout geometry;
-unrecognized or ambiguous slides are left unchanged.</p>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Brave Acrylic 3.9]]></title>
-        <id>https://windhawk.net/mods/brave-acrylic#74caff8729dc6a0ea6c843341bd56ae1479ca2dd</id>
-        <link href="https://windhawk.net/mods/brave-acrylic"/>
-        <updated>2026-11-01T03:00:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="braveacrylic">Brave Acrylic</h1>
-<blockquote>
-  <p><strong>Very important — Symbol cache:</strong> Controlled and maintained by <strong>bardelyne</strong>, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. Windhawk downloads the matching file for your installed Brave build and caches it locally. The large symbol files are processed by the workflow; your PC receives only the small compatibility data.</p>
-</blockquote>
-<p><img src="https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png" alt="Brave Acrylic" /></p>
-<p>Reveal the Windows backdrop through Brave's vertical tab area, frame, toolbar, address field, and webpage area. Add rounded acrylic menus and native popups, plus blur behind address-bar suggestions. Native background targeting works across theme colors. Use a website-styling extension for backgrounds painted by websites.</p>
-<blockquote>
-  <p><strong>Alpha software.</strong> <strong><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> is required</strong>, configured for <code>brave.exe</code>. Brave Acrylic exposes the background; Translucent Windows supplies the effect.</p>
-</blockquote>
-<p><strong>Restart Brave after applying the mod, updating it, or changing its settings.</strong> Close all Brave windows normally and exit any remaining background Brave instance, then reopen it. This rebuilds native windows and their cached backgrounds.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>x64 version of Brave.</li>
-<li>Windhawk with Brave Acrylic enabled.</li>
-<li>Translucent Windows configured to apply a translucent effect to <code>brave.exe</code>.</li>
-<li>Windows Transparency effects enabled.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>Windows 11 is the tested environment. Windows 10 is unverified; the backdrop provider and selected effect must support that Windows version. Native ARM64 Brave is unsupported.</p>
-<p>The native-popup suggestion method was tested with Brave 1.98.60 and with regular Brave 1.98.62 / Chromium 156, including YouTube with Zen Internet transparency enabled. The current native contract is validated separately against those two official DLL/PDB pairs. Other builds need valid compatibility data for their exact <code>chrome.dll</code>. Native interfaces and rendering behavior can change and may require a mod update.</p>
-<p>The earlier background-only native contract was validated on seven official releases from Brave 1.93.138 through 1.98.62 (Chromium 151–156). This checks the native compatibility data; it is separate from visual testing. See the <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/compiler-resilience.md">compiler study</a>.</p>
-<h2 id="fastsetup">Fast setup</h2>
-<ol>
-<li>Enable Translucent Windows for <code>brave.exe</code> and choose the desired backdrop.</li>
-<li>Enable Brave Acrylic. Leave <strong>Vertical tabs background</strong>, <strong>Toolbar</strong>, and <strong>Webpage background</strong> on.</li>
-<li>Close all Brave windows normally and reopen Brave. Exit its background instance too if it stays running.</li>
-<li>Optionally use Zen Internet or Stylus to remove backgrounds inside websites, as explained below. Stylus requires custom CSS.</li>
-</ol>
-<p>No theme-color setup is required.</p>
-<h2 id="controls">Controls</h2>
-<p>| Setting | Default | Purpose |
-| --- | --- | --- |
-| <strong>Vertical tabs background</strong> | On | Reveal the backdrop behind the vertical tab area and browser frame. |
-| <strong>Toolbar</strong> | On | Clear the toolbar, bookmarks bar, and unfocused address-field backgrounds. Focused address fields keep their native theme. |
-| <strong>Webpage background</strong> | On | Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS, and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS. |
-| <strong>Acrylic menus</strong> | On | Blur native context menus, the main menu, and submenus. Text, icons, selection, and input stay native. |
-| <strong>Acrylic popups</strong> | On | Blur supported native browser bubbles and the native Extensions manager. Extension and website HTML overlays keep their own styling. |
-| <strong>Blur search suggestions</strong> | On | Use a native results popup with Windows blur below the input cutout. Typed text, result text and input remain native and sharp. |
-| <strong>Hide duplicate Windows buttons</strong> | Off | Optional workaround that removes the real Windows system-menu style. It can affect Alt+Space, taskbar menus and other window tools. Prefer Brave's <strong>Use compact mode</strong> option in Appearance. |
-| <strong>Use online symbol cache</strong> | On | Let Windhawk download small exact-build files from the author-controlled cache. Turn off to use existing local cached symbols only, then restart Brave. |</p>
-<p>Restart Brave after applying settings, even when a change appears immediately. Some backing views and native popup choices are created with their windows. Webpage backing can apply on tab selection without refreshing the page; restarting after disabling it restores existing renderer defaults. The caption-button option can apply immediately.</p>
-<h2 id="websitebackgroundswithextensions">Website backgrounds with extensions</h2>
-<p><strong>Webpage background</strong> clears only Chromium's backing layer underneath websites, including the default white fallback. It does not modify website HTML, CSS, or content. To remove backgrounds painted by a website, use a styling extension such as Zen Internet or Stylus.</p>
-<h3 id="zeninternet">Zen Internet</h3>
-<p>For backgrounds inside websites, install <a href="https://chromewebstore.google.com/detail/zen-internet/dpkamhkboipomecencjpammmjdfkgjha">Zen Internet from the Chrome Web Store</a>. Open the extension, go to <strong>Advanced Settings</strong>, and turn <strong>Disable Transparency</strong> <strong>off</strong> under <strong>Global Feature Controls</strong>. Keep <strong>Webpage background</strong> enabled in Brave Acrylic. Open a new tab or reload an existing page to apply extension setting changes.</p>
-<p>Zen Internet applies website-specific styles; coverage and results vary by site. Brave Acrylic removes the browser's backing and white fallback so CSS-transparent page areas can reveal the Windows backdrop. The extension handles website styling. Brave Acrylic does not inject JavaScript or CSS into pages.</p>
-<p>The extension's store page cautions that ordinary Chromium does not support transparent pages. Brave Acrylic provides the native transparency path; an extension alone cannot provide the Windows effect. The extension's <a href="https://github.com/sameerasw/zeninternet">source</a> and <a href="https://github.com/sameerasw/my-internet">website styles</a> are available separately.</p>
-<h3 id="stylus">Stylus</h3>
-<p><a href="https://chromewebstore.google.com/detail/stylus/clngdbkpkpeebahjckkjfobafhncgmne">Stylus from the Chrome Web Store</a> lets you create and manage custom CSS styles for individual websites. <strong>It does not remove website backgrounds out of the box.</strong> You must write or paste CSS rules that make the desired backgrounds transparent, or install a suitable existing userstyle. Complex websites may need rules for several background elements. Keep <strong>Webpage background</strong> enabled in Brave Acrylic so those transparent areas reveal the backdrop.</p>
-<p>See the <a href="https://github.com/openstyles/stylus/wiki/Writing-styles">Stylus guide to writing styles</a> for creating a style and limiting it to a particular website.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Brave's existing transparent-host path enables its compositor to preserve transparency. The mod removes the actual vertical-tab backing through Brave's own setter and clears selected native background roles within their paint clip. Child controls and text retain their original painting. Native focus checks preserve the focused address field.</p>
-<p>The webpage option clears the native backing during content-view updates and sets Chromium's persistent page-base color when a tab is attached. That value is also used by future renderers, so switching or restoring tabs does not bring the default white background back. Explicit website backgrounds remain visible unless a website-styling extension changes them.</p>
-<p>The full native path uses <strong>29 functions</strong>, of which <strong>20 are private hooks</strong>, and one immutable background-class vtable. Each feature has its own dependency set; unavailable features keep their native appearance. The implementation uses no sampled colors, private object-member offsets, guessed screen rectangles, screenshot polling, input forwarding, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies the backdrop. Acrylic can turn gray when inactive; choose a suitable blur mode in Translucent Windows for the main window if you prefer a persistent effect.</p>
-<h2 id="menuspopupsandsuggestions">Menus, popups and suggestions</h2>
-<p>Native menus and bubbles keep their own theme colors with reduced background alpha. A Windows host-backdrop visual sits underneath Chromium in the same popup window and follows its actual rounded background geometry. There are no extra overlay windows or input forwarding. A private composition worker owns its own dispatcher; disabling the mod closes its targets and joins that worker without changing Brave's dispatcher. If Windows cannot read the host-backdrop capability flag, cleanup removes the visual effect without guessing a prior flag value.</p>
-<p>Tab and group hover cards, including their fading text and memory icons, keep their foreground painting. Their separate client and footer backgrounds are removed, while a tint derived from Brave’s own background color sits beneath Chromium’s content. This keeps the tint consistent during transitions and avoids black fade masks. The same native-popup path covers dialogs such as <strong>Restore pages?</strong>. Windows-drawn popup borders are suppressed where supported and their previous value is restored on unload.</p>
-<p>The native <strong>Extensions</strong> manager also clears its repeated scroll-container backgrounds so they cannot cover the blur. Extension names, icons, pin buttons, menus and the Manage extensions button keep their native painting and input. This does not alter HTML content inside an extension's own popup.</p>
-<p>Suggestions use Chromium's normal desktop-popup factory instead of its in-window Aura override. Windows supplies the blur behind that native results popup, which also works with the tested Zen Internet transparency setup. Chromium still owns its contents, layout, keyboard navigation and mouse input. Native view bounds and header height define a rounded window region below the address field; there is no input catcher or separate overlay. Resizing and DPI changes update the region, and cleanup restores the actual prior region on the owning UI thread. Restart Brave after applying this option so existing results widgets are rebuilt. These options do not turn website dialogs or extension HTML into acrylic. Windows high contrast and transparency preferences are cached and updated from Windows notifications off Brave’s paint path.</p>
-<h2 id="symbolresolutionprivacyandupdates">Symbol resolution, privacy and updates</h2>
-<p>Brave Acrylic resolves exact C++ prototypes and the background-class identity with Windhawk's supported <code>HookSymbols</code> / <code>WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl</code> mechanism. Windhawk handles its ordinary local cache and optional online download. No build-specific addresses are embedded and remote PDB downloads remain disabled. The mod retains local executable-range, unwind-boundary, approved-leaf, thunk and overlap checks before registering hooks.</p>
-<p>Small named-symbol files are published under <code>brave-acrylic-features-v7/</code> on our <a href="https://github.com/bardelyne/brave-acrylic/tree/symbol-cache"><code>symbol-cache</code> branch</a>. They contain the native function locations needed for each Brave build. The service and publishing workflow are controlled and maintained by bardelyne.</p>
-<p>Windhawk handles compatibility downloads and local caching through its standard mechanism. Our workflow uses pinned actions and checks the official Brave archive and matching symbols before publishing. See <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/trusted-pipeline.md">cache hosting</a> for the technical details.</p>
-<p><strong>No telemetry, uploads or login:</strong> the mod only downloads compatibility data through Windhawk. Browser cookies, history, page content, settings and account details stay on your PC. Turn <strong>Use online symbol cache</strong> off and restart Brave to use suitable existing local cached symbols only.</p>
-<p>The workflow requests a check <strong>every two hours, with a backup 30 minutes later</strong>. GitHub can delay or drop scheduled starts, so this is not an exact timer. It checks the stable release, asset identities and native contract before downloading large files. Unchanged releases skip browser and PDB downloads. Both generation and publication use the run's same source revision; large official files stay on the GitHub runner. Restart Brave after newly required compatibility data becomes available.</p>
-<p>The extractor handles verified compiler folding according to each function's role, while rejecting unrelated sharing on patched functions. The workflow reports compatibility separately for vertical tabs, the toolbar, webpage backing, menus, popups, and suggestions. A missing or changed function disables only its dependent features. Validated features are still published, and the workflow summary lists unavailable features with their reasons. Invalid files, mismatched symbols, failed downloads, and publishing errors still stop publication.</p>
-<h2 id="duplicatecornerbuttons">Duplicate corner buttons</h2>
-<p>If two sets of minimize/maximize/close buttons appear, first enable <strong>Use compact mode</strong> in Brave <strong>Settings → Appearance</strong>. The optional <strong>Hide duplicate Windows buttons</strong> workaround is off on a fresh install because it removes the window's actual <code>WS_SYSMENU</code> style. Windows system menus, taskbar interactions, accessibility tools or other window managers may be affected. Disabling the option or unloading the mod restores its recorded style changes.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Restart Brave after installing or applying changes: close all windows and its background instance, then reopen normally. Enable Windhawk debug logging to check each feature's availability or a symbol-cache message. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.</p>
-<p>For reports, include Windows/Brave versions, window type, enabled areas, backdrop configuration, and reproduction steps. See the <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md">advanced reference</a>, <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/compatibility.md">compatibility data</a>, <a href="https://github.com/bardelyne/brave-acrylic/blob/main/docs/webview-background.md">webview investigation</a>, and <a href="https://github.com/bardelyne/brave-acrylic/blob/main/CHANGELOG.md">changelog</a>.</p>]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
         </author>
     </entry>
 </feed>
