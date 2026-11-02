@@ -137,9 +137,6 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
 */
 // ==/WindhawkModSettings==
 
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"xandriw-drag-nearby-delete"
-#endif
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <winhttp.h>
