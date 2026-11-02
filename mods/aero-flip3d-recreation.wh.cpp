@@ -5,9 +5,9 @@
 // @version         2.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
+// @license         Apache-2.0
 // @include         windhawk.exe
-// @license         APACHE-2.0 License
-// @compilerOptions -std=c++17 -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -DNTDDI_VERSION=0x0A000006 -ldwmapi -ldcomp -ldxgi -ld3d11 -luser32 -lgdi32 -loleacc -lole32 -loleaut32 -luuid -lwindowscodecs -ladvapi32 -lshell32
+// @compilerOptions -ldwmapi -ldcomp -ldxgi -ld3d11 -luser32 -lgdi32 -loleacc -lole32 -loleaut32 -luuid -lwindowscodecs -ladvapi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -56,7 +56,8 @@ Releasing the Windows key selects the window in front.
 
 **Original implementation:** Flip3DComp by **ALTaleX531** and **milestprower92**
 (DirectComposition engine, DWM shared-thumbnail visuals, 3D transforms, shell backdrop and
-accessibility model). This mod is a port of that source into a single Windhawk tool mod, adapted with substantial modifications: Windhawk tool-process integration, the Win+Tab
+accessibility model). This mod is a port of that source into a single Windhawk tool mod, adapted by
+**babamohammed**, who made substantial modifications: Windhawk tool-process integration, the Win+Tab
 hotkey and low-level-hook lifecycle, Win-key conflict handling with other mods, crash logging,
 and a per-load window class that fixes a crash when the mod is reloaded.
 
@@ -82,15 +83,6 @@ https://www.apache.org/licenses/LICENSE-2.0.
 
 #define WIN32_LEAN_AND_MEAN
 #define FLIP3D_ENABLE_ANIMATION_EASING 0
-#ifndef WINVER
-#define WINVER 0x0A00
-#endif
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-#ifndef NTDDI_VERSION
-#define NTDDI_VERSION 0x0A000006 // Windows 10 1809 (RS5): exposes IDCompositionVisual3.
-#endif
 #include <windows.h>
 #include <shellapi.h>
 #include <windowsx.h>
@@ -156,10 +148,6 @@ __CRT_UUID_DECL(IDCompositionVisual3, 0x2775f462, 0xb6c1, 0x4015,
 // D2D_MATRIX_4X4_F uses an anonymous union; the flat 16-float initializers
 // below are intentional row-major values, not missing data.
 #pragma clang diagnostic ignored "-Wmissing-braces"
-#endif
-
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"aero-flip3d-comp-native"
 #endif
 
 
