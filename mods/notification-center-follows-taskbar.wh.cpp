@@ -85,8 +85,7 @@ creation only schedules initialization; XAML is accessed later on its UI thread.
 #include <cmath>
 #include <optional>
 #include <memory>
-#include <string>
-#include <cwctype>
+#include <windhawk_utils.h>
 #include <commctrl.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -905,40 +904,15 @@ HRESULT WINAPI Showing(void* self) {
     return hr;
 }
 
-bool IsShowingSymbol(PCWSTR symbol) {
-    if (!symbol || wcschr(symbol, L'`')) return false;
-    std::wstring normalized;
-    for (; *symbol; ++symbol) if (!iswspace(*symbol)) normalized += *symbol;
-    // DbgHelp's full undecoration can retain class/struct qualifiers inside
-    // template arguments. Match the ABI producer and private interface rather
-    // than one exact spelling of the entire template specialization.
-    auto method = normalized.find(L"::OnShowing");
-    return normalized.find(L"winrt::impl::produce<") != std::wstring::npos &&
-           normalized.find(L"winrt::ControlCenter::implementation::MediaTransportControls") != std::wstring::npos &&
-           normalized.find(L"winrt::ControlCenter::IMediaTransportControls") != std::wstring::npos &&
-           method != std::wstring::npos &&
-           (method + 11 == normalized.size() || normalized[method + 11] == L'(');
-}
-
 bool HookShowing(HMODULE module) {
-    WH_FIND_SYMBOL symbol{};
-    HANDLE search = Wh_FindFirstSymbol(module, nullptr, &symbol);
-    if (!search) {
-        Wh_SetStringValue(L"quickSettings.hook", L"Symbol enumeration failed");
-        return false;
-    }
-    void* target = nullptr;
-    do {
-        if (IsShowingSymbol(symbol.symbol)) {
-            Wh_SetStringValue(L"quickSettings.matchedSymbol", symbol.symbol);
-            target = symbol.address;
-            break;
-        }
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    bool hooked = target && Wh_SetFunctionHook(target, reinterpret_cast<void*>(Showing),
-                                              reinterpret_cast<void**>(&showingOriginal));
-    Wh_SetStringValue(L"quickSettings.hook", hooked ? L"OnShowing hooked" : target ? L"OnShowing hook failed" : L"OnShowing symbol not found");
+    // Exact ABI producer name verified in the running ShellHost. Keep the
+    // struct qualifiers: they are part of Windhawk's undecorated symbol name.
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::MediaTransportControls,struct winrt::ControlCenter::IMediaTransportControls>::OnShowing(void)"},
+         &showingOriginal, Showing},
+    };
+    bool hooked = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    Wh_SetStringValue(L"quickSettings.hook", hooked ? L"OnShowing hooked" : L"OnShowing symbol hook unavailable");
     return hooked;
 }
 
