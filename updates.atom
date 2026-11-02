@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-02T01:19:38.000Z</updated>
+    <updated>2026-11-02T17:04:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hyprland Windows 1.2.1]]></title>
+        <id>https://windhawk.net/mods/hyprland-windows#16e402d6bbc717c0cceb7e9262a8b52694842a7e</id>
+        <link href="https://windhawk.net/mods/hyprland-windows"/>
+        <updated>2026-11-02T17:04:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Win + mouse wheel makes a window larger or smaller, around its center or the cursor, also while it is being moved; two fingers on a touchpad do it too.</li>
+<li>Win + mouse now works over WinUI and XAML content as well (Paint, Windows Terminal, the tabs of File Explorer).</li>
+<li>A new setting: Win + Alt + left mouse button resizes a window, for a touchpad.</li>
+<li>A new setting for a click with the modifier held and no movement: with Alt it goes to the app by default, with Win it grabs the window.</li>
+<li>Win+Tab with no other desktop that has windows goes to an empty one, made if need be (can be turned off).</li>
+<li>A hidden menu bar no longer flickers: it shows up only while the keyboard is in it (Alt or F10).</li>
+<li>The window shortcut closes any window Alt+F4 would, Task Manager included.</li>
+<li>Fixes: Alt as the modifier works with Aero Snap and no longer opens menus, Esc cancels an Alt drag, closing an elevated window with Win held no longer opens Start, a window slow to resize keeps up with the cursor, and Win+Tab is left to Task View while it is open.</li>
+</ul>]]></content>
+        <author>
+            <name>hiword9</name>
+            <uri>https://github.com/HiWord9</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab per monitor 1.2.1]]></title>
         <id>https://windhawk.net/mods/alt-tab-per-monitor#252ab7ccd45d327de7be502a255e1c9b126828df</id>
@@ -955,22 +975,6 @@ The language can follow the Windows UI language or be forced to a specific local
 <h2 id="credits">Credits</h2>
 <ul>
 <li>AdministratoX - Original implementation and screenshots</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1/10 UAC Recreation 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-uac-recreation#cd3169cd698f0ff2976ccddf3377e31e324db328</id>
-        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
-        <updated>2026-10-31T16:04:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a skin that recreates the modern Windows 10 UAC prompt (mainly for Windows 11 setups that try to match the Windows 10 style - credits to Susie Deltarune for the feedback)</li>
-<li>Added best-effort support for the Classic theme</li>
-<li>Fixed the context menu of the recreated prompt</li>
-<li>Added an option to restore the background in the secure desktop (like in Windows 7)</li>
 </ul>]]></content>
         <author>
             <name>babamohammed</name>

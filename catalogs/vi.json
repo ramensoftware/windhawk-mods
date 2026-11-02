@@ -8707,20 +8707,21 @@
         "ratingUsers": 31,
         "reviews": 1,
         "trendingSorting": 2.30003488434549,
-        "updated": 1791190807000,
+        "updated": 1793639082000,
         "users": 540
       },
       "metadata": {
         "author": "hiword9",
-        "compilerOptions": "-lcomctl32 -ldwmapi -lole32 -luuid",
+        "compilerOptions": "-lcomctl32 -ldwmapi -lgdi32 -lole32 -luuid",
         "description": "Hyprland-style window handling: move, resize, maximize and close windows with Win + mouse from anywhere on them, hide title bars, color window borders, and go round the virtual desktops with Win+Tab",
         "github": "https://github.com/HiWord9",
+        "homepage": "https://github.com/HiWord9/hyprland-windows",
         "include": [
           "*"
         ],
         "license": "GPL-3.0",
         "name": "Hyprland Windows",
-        "version": "1.1.2"
+        "version": "1.2.1"
       }
     },
     "icon-customizer": {
