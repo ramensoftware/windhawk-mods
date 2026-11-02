@@ -907,19 +907,18 @@ HRESULT WINAPI Showing(void* self) {
 bool HookShowing(HMODULE module) {
     // Exact ABI producer name verified in the running ShellHost. Keep the
     // struct qualifiers: they are part of Windhawk's undecorated symbol name.
-    // ControlCenter.dll, Windows.UI.ControlCenter.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::MediaTransportControls,struct winrt::ControlCenter::IMediaTransportControls>::OnShowing(void)"},
          &showingOriginal, Showing},
     };
-    bool hooked = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    bool hooked = WindhawkUtils::HookSymbols(module, controlCenterDllHooks,
+                                           ARRAYSIZE(controlCenterDllHooks));
     Wh_SetStringValue(L"quickSettings.hook", hooked ? L"OnShowing hooked" : L"OnShowing symbol hook unavailable");
     return hooked;
 }
 
 HMODULE Module() {
-    auto module = GetModuleHandleW(L"ControlCenter.dll");
-    return module ? module : GetModuleHandleW(L"Windows.UI.ControlCenter.dll");
+    return GetModuleHandleW(L"ControlCenter.dll");
 }
 void Hook(bool apply) {
     auto module = Module();
