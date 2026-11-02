@@ -15,7 +15,7 @@
 # Aero Flip 3D Recreation
 ## Screenshot
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aeroflip3d.png)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aeroflip3d2.png)
 
 ## About the mod
 This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern Windows versions.
