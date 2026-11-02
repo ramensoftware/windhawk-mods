@@ -154,7 +154,6 @@ __CRT_UUID_DECL(IDCompositionVisual3, 0x2775f462, 0xb6c1, 0x4015,
 #endif
 
 
-// ===== Ported from src/Config.h =====
 // ============================================================================
 // Config.h — Constants, enums, type aliases, and DWM thumbnail API definitions
 // ============================================================================
@@ -322,7 +321,6 @@ using DwmpUpdateDesktopThumbnail_fn = HRESULT (WINAPI *)(
     HWND hwnd, LPCRECT rcDest, LPCRECT rcSrc, BYTE opacity, DWORD dwFlags);
 
 
-// ===== Ported from src/MathTypes.h =====
 // ============================================================================
 // MathTypes.h — POD vector types for 3D math
 // ============================================================================
@@ -337,7 +335,6 @@ struct Vec2
 };
 
 
-// ===== Ported from src/FlipMath.h =====
 // ============================================================================
 // FlipMath.h — 3D math utilities (row-vector DirectComposition convention)
 // ============================================================================
@@ -688,7 +685,6 @@ inline Matrix4x4 BuildViewportMatrix(float width, float height,
 } // namespace Math
 
 
-// ===== Ported from src/Timeline.h =====
 // ============================================================================
 // Timeline.h — Simple animation timeline with interpolation
 // ============================================================================
@@ -736,7 +732,6 @@ struct Timeline
 };
 
 
-// ===== Ported from src/CardModel.h =====
 // ============================================================================
 // CardModel.h — Per-window data for the Flip3D carousel
 // ============================================================================
@@ -843,7 +838,6 @@ struct CardModel
 };
 
 
-// ===== Ported from src/Flip3DComp.h =====
 // ============================================================================
 // Flip3DComp.h — DirectComposition 3D Window Switcher Application
 // ============================================================================
@@ -1213,7 +1207,6 @@ private:
 };
 
 
-// ===== Ported from src/Flip3DAccessible.h =====
 // ============================================================================
 // Flip3DAccessible.h — COM IAccessible for Flip3D (uDWM CFlip3DAccessible port)
 // ============================================================================
@@ -1285,7 +1278,6 @@ private:
 };
 
 
-// ===== Ported from src/Timeline.cpp =====
 // ============================================================================
 // Timeline.cpp — Animation timeline implementation
 // ============================================================================
@@ -1347,7 +1339,6 @@ float Timeline::LinearValue() const
 }
 
 
-// ===== Ported from src/Flip3DAccessible.cpp =====
 // ============================================================================
 // Flip3DAccessible.cpp — COM IAccessible (uDWM CFlip3DAccessible port)
 // ============================================================================
@@ -1801,7 +1792,6 @@ STDMETHODIMP Flip3DAccessible::put_accValue(VARIANT /*varChild*/, BSTR /*szValue
 }
 
 
-// ===== Ported from src/Flip3DComp.cpp =====
 // ============================================================================
 // Flip3DComp.cpp — Application lifecycle: Initialize, Run, WndProc, HandleMessage
 // ============================================================================
@@ -2154,7 +2144,6 @@ LRESULT Flip3DCompApp::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 
-// ===== Ported from src/Flip3DComp_Window.cpp =====
 // ============================================================================
 // Flip3DComp_Window.cpp — Window creation + enumeration
 // ============================================================================
@@ -2288,7 +2277,6 @@ bool Flip3DCompApp::CreateAppWindow()
 }
 
 
-// ===== Ported from src/Flip3DComp_Cards.cpp =====
 // ============================================================================
 // Flip3DComp_Cards.cpp — Card building + thumbnail visual creation + DWM API
 // ============================================================================
@@ -2675,7 +2663,6 @@ void Flip3DCompApp::OnThumbnailSourceSizeChanged()
 }
 
 
-// ===== Ported from src/Flip3DComp_Composition.cpp =====
 // ============================================================================
 // Flip3DComp_Composition.cpp — DirectComposition device init, desktop wash
 // ============================================================================
@@ -3668,7 +3655,6 @@ HRESULT Flip3DCompApp::CreateShellBackdrop()
 }
 
 
-// ===== Ported from src/Flip3DComp_Update.cpp =====
 // ============================================================================
 // Flip3DComp_Update.cpp — Per-frame update, camera, card transforms, scroll
 // ============================================================================
@@ -4930,7 +4916,6 @@ Matrix4x4 Flip3DCompApp::BuildModelMatrix(const CardModel& c, float t,
 }
 
 
-// ===== Ported from src/Flip3DComp_Rotation.cpp =====
 // ============================================================================
 // Flip3DComp_Rotation.cpp — uDWM-style discrete list rotation during exit
 // ============================================================================
@@ -5348,7 +5333,6 @@ float Flip3DCompApp::ComputeRotationAlpha(const CardModel& card, float enterProg
 }
 
 
-// ===== Ported from src/Flip3DComp_Input.cpp =====
 // ============================================================================
 // Flip3DComp_Input.cpp — Keyboard, mouse, and wheel input handling
 // ============================================================================
@@ -5484,7 +5468,6 @@ bool Flip3DCompApp::OnMouse(LONG x, LONG y, bool pressed)
 }
 
 
-// ===== Ported from src/Flip3DComp_View.cpp =====
 // ============================================================================
 // Flip3DComp_View.cpp — View state: Exit, Select, HitTest3DScene
 // ============================================================================
@@ -5686,7 +5669,6 @@ HWND Flip3DCompApp::HitTest3DScene(LONG screenX, LONG screenY) const
 }
         
 
-// ===== Ported from src/Flip3DComp_ShellHook.cpp =====
 // ============================================================================
 // Flip3DComp_ShellHook.cpp — dynamic card list via RegisterShellHookWindow
 // ============================================================================
@@ -5984,7 +5966,6 @@ void Flip3DCompApp::RemoveCardAt(size_t index)
 }
 
 
-// ===== Ported from src/Flip3DComp_Accessible.cpp =====
 // ============================================================================
 // Flip3DComp_Accessible.cpp — Accessibility helpers + NotifyWinEvent (uDWM port)
 // ============================================================================
