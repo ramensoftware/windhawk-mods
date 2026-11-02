@@ -2,7 +2,7 @@
 // @id              siri-plus-launchpad
 // @name            Siri Plus Launchpad
 // @description     Replaces the Start menu with a macOS 27 Siri-style launcher: search bar with categories, app tabs, files, clipboard, actions and live glass
-// @version         1.0.0
+// @version         1.0.1
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Siri-Plus-Launchpad
@@ -315,6 +315,24 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Desfoque atrás dos menus de contexto (%, 0 = nenhum)"
     $description: The icons and the window under a right-click menu are blurred. 100 = default, up to 200
     $description:pt-BR: "Os ícones e a janela sob um menu de clique direito ficam desfocados. 100 = padrão, até 200"
+  - menuSelection: glass
+    $name: "Clear glass theme: selection in menus"
+    $name:pt-BR: "Tema Vidro transparente: seleção nos menus"
+    $description: How the item under the mouse is highlighted in the menus. Colored and Frosted use the selection color
+    $description:pt-BR: "Como o item sob o mouse fica destacado nos menus. Colorida e Fosca usam a cor da seleção"
+    $options:
+    - glass: Glass
+    - color: Colored (like macOS)
+    - frosted: Frosted color
+    $options:pt-BR:
+    - glass: Vidro
+    - color: Colorida (como no macOS)
+    - frosted: Cor fosca
+  - menuSelectionColor: "#447FEF"
+    $name: "Clear glass theme: selection color"
+    $name:pt-BR: "Tema Vidro transparente: cor da seleção"
+    $description: "Starts with the macOS blue (#447FEF)"
+    $description:pt-BR: "Começa com o azul do macOS (#447FEF)"
   - glassStyle: frosted
     $name: "Clear glass and Siri themes: glass style"
     $name:pt-BR: "Temas Vidro transparente e Siri: estilo do vidro"
@@ -849,8 +867,7 @@ constexpr int kFolderBase = 100000;
 constexpr int kFolderAppBase = 1000000;
 constexpr int kTabBase = 900000000;
 
-enum { kMenuRename = 1, kMenuUndoFolder, kMenuNewFolder, kMenuSelect, kMenuSelectAll, kMenuClearSelection, kMenuPin,
-       kMenuChangeIcon, kMenuResetIcon, kMenuUninstall,
+enum { kMenuRename = 1, kMenuUndoFolder, kMenuNewFolder, kMenuSelect, kMenuSelectAll, kMenuClearSelection, kMenuPin, kMenuResetIcon, kMenuUninstall,
        kMenuLock, kMenuSleep, kMenuRestart, kMenuShutdown, kMenuSignOut,
        kMenuHistRemove, kMenuHistClear, kMenuTabApps, kMenuTabFiles, kMenuTabClipboard, kMenuTabActions,
        kMenuNewTab, kMenuAddApps, kMenuRenameTab, kMenuDeleteTab, kMenuRemoveFromTab, kMenuRestoreTabs,
@@ -893,6 +910,8 @@ struct Settings {
     int blurAmount = 60;
     int menuBlur = 100;            // blur behind context menus, % of the default
     int menuText = -1;             // text color: -1 automatic (clear glass: by the background), 0 white, 1 black
+    int menuSelection = 0;         // clear glass menus, item under the mouse: 0 glass, 1 solid color, 2 frosted color
+    D2D1_COLOR_F menuSelectionColor = D2D1::ColorF(0x447FEF);
     int glassTransparency = 80;   // Clear glass theme
     bool liveBackground = true;   // no snapshot: animated wallpapers and videos keep playing behind
     bool glassLiquid = false;      // Clear glass theme: refraction (liquid glass) instead of the live blur
@@ -1056,6 +1075,21 @@ struct CfgSection { PCWSTR en, pt, descEn, descPt, glyph; UINT32 color; };
 // Texts written with English and Portuguese side by side; Spanish, French, German and Italian come from this table
 struct CfgTranslation { PCWSTR en, es, fr, de, it; };
 const CfgTranslation kCfgTranslations[] = {
+    {L"Selection in menus", L"Selección en los menús", L"Sélection dans les menus", L"Auswahl in Menüs", L"Selezione nei menu"},
+    {L"Clear glass theme. Colored is like macOS; Frosted lets the glass show through",
+     L"Tema Cristal transparente. Coloreada es como en macOS; Esmerilada deja ver el cristal",
+     L"Thème Verre transparent. Colorée est comme sur macOS ; Givrée laisse voir le verre",
+     L"Design Klares Glas. Farbig wie bei macOS; Mattiert lässt das Glas durchscheinen",
+     L"Tema Vetro trasparente. Colorata è come su macOS; Satinata lascia vedere il vetro"},
+    {L"Glass", L"Cristal", L"Verre", L"Glas", L"Vetro"},
+    {L"Colored", L"Coloreada", L"Colorée", L"Farbig", L"Colorata"},
+    {L"Frosted color", L"Color esmerilado", L"Couleur givrée", L"Mattierte Farbe", L"Colore satinato"},
+    {L"Selection color", L"Color de selección", L"Couleur de sélection", L"Auswahlfarbe", L"Colore della selezione"},
+    {L"Colored and Frosted selection. Starts with the macOS blue",
+     L"Selección Coloreada y Esmerilada. Empieza con el azul de macOS",
+     L"Sélection Colorée et Givrée. Commence avec le bleu de macOS",
+     L"Farbige und mattierte Auswahl. Beginnt mit dem macOS-Blau",
+     L"Selezione Colorata e Satinata. Inizia con il blu di macOS"},
     {L"A folder with icon images, for example a downloaded icon pack. Then right-click an app > Icon from gallery...",
      L"Una carpeta con imágenes de iconos, por ejemplo un paquete de iconos descargado. Luego clic derecho en una aplicación > Icono de la galería...",
      L"Un dossier d’images d’icônes, par exemple un pack d’icônes téléchargé. Puis clic droit sur une application > Icône de la galerie...",
@@ -2177,6 +2211,7 @@ const CfgOpt kOptView[] = {{L"list", L"List", L"Lista"}, {L"icons", L"Icons (gri
 const CfgOpt kOptIndexer[] = {{L"auto", L"Automatic", L"Automático"}, {L"everything", L"Everything", L"Everything"},
                               {L"windows", L"Windows Search", L"Pesquisa do Windows"}, {L"scan", L"Direct scan (slow)", L"Verificação direta (lenta)"}};
 
+const CfgOpt kOptMenuSelection[] = {{L"glass", L"Glass", L"Vidro"}, {L"color", L"Colored", L"Colorida"}, {L"frosted", L"Frosted color", L"Cor fosca"}};
 const CfgOpt kOptMenuText[] = {{L"auto", L"Automatic", L"Automática"}, {L"white", L"White", L"Branco"}, {L"black", L"Black", L"Preto"}};
 const CfgOpt kOptLanguage[] = {{L"auto", L"Automatic (Windows)", L"Automático (Windows)"}, {L"pt", L"Português", L"Português"},
                                 {L"en", L"English", L"English"}, {L"es", L"Español", L"Español"}, {L"fr", L"Français", L"Français"},
@@ -2214,6 +2249,12 @@ const CfgItem kCfgItems[] = {
     {1, kCfgChoice, L"appearance.menuTextColor", L"Text color", L"Cor do texto",
      L"Automatic: on clear glass, black over a light background", L"Automática: no vidro transparente, preto sobre um fundo claro",
      0, 0, 0, nullptr, CFG_OPTS(kOptMenuText)},
+    {1, kCfgChoice, L"appearance.menuSelection", L"Selection in menus", L"Seleção nos menus",
+     L"Clear glass theme. Colored is like macOS; Frosted lets the glass show through",
+     L"Tema Vidro transparente. Colorida é como no macOS; Fosca deixa o vidro aparecer", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuSelection)},
+    {1, kCfgColor, L"appearance.menuSelectionColor", L"Selection color", L"Cor da seleção",
+     L"Colored and Frosted selection. Starts with the macOS blue", L"Seleção Colorida e Fosca. Começa com o azul do macOS",
+     0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgSlider, L"appearance.menuBlur", L"Blur behind menus", L"Desfoque atrás dos menus", L"Right-click menus. 100 = default, 0 = none",
      L"Menus de clique direito. 100 = padrão, 0 = nenhum", 0, 200, 5, L"%", nullptr, 0},
     {1, kCfgChoice, L"appearance.glassStyle", L"Clear glass style", L"Estilo do vidro transparente",
@@ -2473,6 +2514,8 @@ const CfgDefault kCfgDefaults[] = {
     {L"appearance.blur", L"60"},
     {L"appearance.menuBlur", L"100"},
     {L"appearance.menuTextColor", L"auto"},
+    {L"appearance.menuSelection", L"glass"},
+    {L"appearance.menuSelectionColor", L"#447FEF"},
     {L"appearance.glassStyle", L"frosted"},
     {L"appearance.refraction", L"60"},
     {L"appearance.glassEffect", L"1"},
@@ -2606,6 +2649,9 @@ void LoadSettings() {
     {
         std::wstring c = S(L"appearance.menuTextColor");
         s.menuText = c == L"white" ? 0 : c == L"black" ? 1 : -1;
+        std::wstring sel = S(L"appearance.menuSelection");
+        s.menuSelection = sel == L"color" ? 1 : sel == L"frosted" ? 2 : 0;
+        s.menuSelectionColor = ParseColor(S(L"appearance.menuSelectionColor"), D2D1::ColorF(0x447FEF));
     }
     s.liveBackground = s.blurAmount == 0;
     s.glassLiquid = S(L"appearance.glassStyle") == L"liquid";
@@ -5170,6 +5216,25 @@ int g_surfaceMaxTransparency = 100;
 void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow);
 void PushOpacity(float a);
 D2D1_COLOR_F Alpha(D2D1_COLOR_F c, float a);
+// Item under the mouse in the clear glass theme's menus: the theme's glass, a solid color (macOS) or a frosted color.
+// Returns true when the row is a solid color, so its text turns white
+bool DrawMenuSelection(const D2D1_RECT_F& row, float radius, bool danger) {
+    if (ActiveTheme() != Theme::Glass || g_settings.menuSelection == 0) return false;
+    float s = g_layout.scale;
+    D2D1_COLOR_F c = danger ? D2D1::ColorF(0.92f, 0.26f, 0.24f) : g_settings.menuSelectionColor;
+    if (g_settings.menuSelection == 1) { Fill(row, Alpha(c, 1.0f), radius); return true; }
+    Fill(row, Alpha(c, 0.40f), radius);
+    D2D1_GRADIENT_STOP veil[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.16f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.03f)}};
+    if (auto sheen = MakeGradient(veil, 2, D2D1::Point2F(0, row.top), D2D1::Point2F(0, row.bottom)))
+        g_target->FillRoundedRectangle(D2D1::RoundedRect(row, radius, radius), sheen.Get());
+    float bw = std::max(1.0f, 0.8f * s), half = bw / 2, rr = std::max(0.0f, radius - half);
+    D2D1_GRADIENT_STOP edge[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.30f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.08f)}};
+    if (auto rim = MakeGradient(edge, 2, D2D1::Point2F(0, row.top), D2D1::Point2F(0, row.bottom)))
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(row.left + half, row.top + half, row.right - half, row.bottom - half), rr, rr), rim.Get(), bw);
+    return false;
+}
+D2D1_COLOR_F MenuInk(bool onColor, float a) { return onColor ? D2D1::ColorF(1, 1, 1, std::min(1.0f, a + 0.05f)) : Fg(a); }
+
 void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
     const Layout& L = g_layout;
     float s = L.scale;
@@ -5185,9 +5250,15 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         float top = MenuItemTop(i);
         D2D1_RECT_F row = D2D1::RectF(r.left + 8 * s, top, r.right - 8 * s, top + g_menu.itemH);
         float cy = (row.top + row.bottom) / 2;
-        if (i == g_menu.hover) Fill(row, Fg(0.11f), std::max(4 * s, rad - 8 * s));   // concentric with the menu
+        bool onColor = false;
+        if (i == g_menu.hover) {
+            float rowRad = std::max(4 * s, rad - 8 * s);   // concentric with the menu
+            bool custom = ActiveTheme() == Theme::Glass && g_settings.menuSelection != 0;
+            if (custom) onColor = DrawMenuSelection(row, rowRad, false);
+            else Fill(row, Fg(0.11f), rowRad);
+        }
         if (it.glyph && g_glyphLargeFormat) {
-            g_brush->SetColor(Fg(0.88f));
+            g_brush->SetColor(MenuInk(onColor, 0.88f));
             g_target->DrawText(it.glyph, (UINT32)wcslen(it.glyph), g_glyphLargeFormat.Get(),
                                D2D1::RectF(row.left + 8 * s, row.top, row.left + 44 * s, row.bottom), g_brush.Get());
         }
@@ -5195,12 +5266,12 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         if (it.hint && g_keyFormat) {
             keyW = 58 * s;
             D2D1_RECT_F key = D2D1::RectF(row.right - 12 * s - keyW, cy - 12 * s, row.right - 12 * s, cy + 12 * s);
-            Fill(key, Fg(0.08f), 7 * s);
-            g_brush->SetColor(Fg(0.55f));
+            Fill(key, onColor ? D2D1::ColorF(1, 1, 1, 0.18f) : Fg(0.08f), 7 * s);
+            g_brush->SetColor(MenuInk(onColor, 0.55f));
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_keyFormat.Get(), key, g_brush.Get());
         }
         if (g_categoryFormat) {
-            g_brush->SetColor(Fg(0.95f));
+            g_brush->SetColor(MenuInk(onColor, 0.95f));
             g_target->DrawText(it.text.c_str(), (UINT32)it.text.size(), g_categoryFormat.Get(),
                                D2D1::RectF(row.left + 54 * s, row.top, row.right - keyW - 24 * s, row.bottom), g_brush.Get());
         }
@@ -5293,23 +5364,27 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
             continue;
         }
         D2D1_RECT_F row = D2D1::RectF(r.left + 6 * s, top, r.right - 6 * s, top + g_menu.itemH);
+        bool onColor = false;
         if (i == g_menu.hover) {
-            if (it.danger) Fill(row, D2D1::ColorF(1, 0.3f, 0.3f, 0.20f), 8 * s);
-            DrawGlassButton(row, 8 * s, 1.0f, 1.2f, false);
+            if (ActiveTheme() == Theme::Glass && g_settings.menuSelection != 0) onColor = DrawMenuSelection(row, 8 * s, it.danger);
+            else {
+                if (it.danger) Fill(row, D2D1::ColorF(1, 0.3f, 0.3f, 0.20f), 8 * s);
+                DrawGlassButton(row, 8 * s, 1.0f, 1.2f, false);
+            }
         }
         float textLeft = row.left + 10 * s;
         if (it.glyph && g_glyphFormat) {
-            g_brush->SetColor(Fg(0.85f));
+            g_brush->SetColor(MenuInk(onColor, 0.85f));
             g_target->DrawText(it.glyph, (UINT32)wcslen(it.glyph), g_glyphFormat.Get(), D2D1::RectF(row.left + 6 * s, row.top, row.left + 32 * s, row.bottom), g_brush.Get());
             textLeft = row.left + 38 * s;
         }
         if (g_menuFormat) {
-            g_brush->SetColor(it.danger ? DangerInk() : Fg(0.92f));
+            g_brush->SetColor(onColor ? MenuInk(true, 0.95f) : it.danger ? DangerInk() : Fg(0.92f));
             g_target->DrawText(it.text.c_str(), (UINT32)it.text.size(), g_menuFormat.Get(),
                 D2D1::RectF(textLeft, row.top, row.right - 10 * s, row.bottom), g_brush.Get());
         }
         if (it.hint && g_hintFormat) {
-            g_brush->SetColor(Fg(0.45f));
+            g_brush->SetColor(MenuInk(onColor, 0.45f + (onColor ? 0.25f : 0.0f)));
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_hintFormat.Get(), D2D1::RectF(row.left, row.top, row.right - 12 * s, row.bottom), g_brush.Get());
         }
     }
@@ -8885,15 +8960,7 @@ void ExecuteMenu(int id) {
         case kMenuHistClear:
             g_searchHistory.clear(); SaveSearchHistory(); RefreshTabItems(true);
             break;
-        case kMenuChangeIcon: {
-            std::wstring path;
-            if (app && PickImage(g_wnd, path)) {
-                if (LoadImageFile(path, CurrentIconPixels(), *app)) { g_customIcons[app->target] = path; SaveCustomIcons(); }
-                else MessageBoxW(g_wnd, Tr(L"Could not load this image."), L"Siri Plus Launchpad", MB_ICONWARNING);
-            }
-            if (g_shown) { ForceForeground(g_wnd); Render(); }
-            break;
-        }
+      
         case kMenuBarCenter: {
             g_barPosX = g_barPosY = -1;
             Wh_SetStringValue(L"barMonitor", L"");
@@ -11593,7 +11660,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     separate();
                     items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
                     separate();
-                    items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
                     items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
                     if (g_customIcons.count(a->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                     separate();
@@ -11635,7 +11701,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
                     }
                     items.push_back({L"", 0, true});
-                    items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
                     items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
                     if (g_customIcons.count(a->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                     items.push_back({L"", 0, true});
@@ -11654,8 +11719,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     int idx = ItemAt(x, y);
                     if (idx >= 0) {
                         g_menu.folderApp = idx;
-                        if (App* fa = MenuApp()) {
-                            items.push_back({Tr(L"Change icon..."), kMenuChangeIcon});
+                        if (App* fa = MenuApp()) {                          
                     items.push_back({CfgT(L"Icon from gallery...", L"Ícone da galeria..."), kMenuGhIcon});
                             if (g_customIcons.count(fa->target)) items.push_back({Tr(L"Reset icon"), kMenuResetIcon});
                             items.push_back({L"", 0, true});
@@ -11840,5 +11904,4 @@ void Wh_ModUninit() {
     WaitForSingleObject(g_thread, INFINITE);
     for (HANDLE* handle : {&g_thread, &g_readyEvent}) { CloseHandle(*handle); *handle = nullptr; }
 }
-
 void Wh_ModSettingsChanged() { if (HWND wnd = g_wnd) PostMessageW(wnd, WM_APP_RELOAD, 0, 0); }
