@@ -73,7 +73,7 @@ your own key: **Groq** is recommended (very fast, and its key is free).
 | **Ctrl+Shift+Space** | Dictate (press again to stop; in hold mode, hold it while you speak) |
 | **Ctrl+Shift+Y** | Dictate and translate |
 | **Ctrl+Alt+K** | Command on the selected text (while you speak, the card also offers the styles, to apply one without speaking) |
-| **Esc** | Cancel while recording or transcribing |
+| **Esc** | Cancel while recording (while it's being processed, the bar's ✕ cancels) |
 
 Every shortcut can be changed in the settings. "Paste again" (the last
 dictation into the app in front) and "Dictate now" are in the icon's menu;
@@ -89,9 +89,8 @@ for a quick menu): this session's history (with "Redo" in another style or
 language), the styles and your own ones, a style per app, the providers (keys,
 models and the order they're tried in), the shortcuts, the spoken language,
 microphone and dictionary, and the look: theme, accent color, the card's width
-and a glass look for the bar. Optional: start and stop sounds (on by default)
-and muting the PC while recording (off by default; the sound comes back when
-you stop).
+and a glass look for the bar. Start and stop sounds are on by default and can
+be turned off.
 
 ![The settings window](https://i.imgur.com/GKBPArQ.png)
 
@@ -100,9 +99,14 @@ you stop).
 - The audio goes only to the speech provider you set up (for example Groq,
   `api.groq.com`), and only with a key saved: while you speak (the live
   preview, which can be turned off) and when you stop. The transcript then
-  goes to the text provider for the style or the translation. With Command,
-  the selected text goes too. Each provider's own privacy policy applies (on
-  Gemini's free tier, Google may use what's sent to improve its products).
+  goes to the text provider for the style or the translation, along with the
+  name of the app you're typing into (so the text fits it) and the words in
+  your dictionary. With Command, the selected text goes too. Each provider's
+  own privacy policy applies (on Gemini's free tier, Google may use what's
+  sent to improve its products).
+- If Groq answers that the chosen model no longer exists, the mod asks Groq
+  for its current list of models, tries up to 4 of them with a short test
+  (a second of near-silence, or "OK"), and keeps the one that works.
 - Servers contacted, only those of the providers you set up:
   `api.groq.com`, `generativelanguage.googleapis.com` (Gemini),
   `openrouter.ai`, `api.mistral.ai`, `api.openai.com`, or the address you
@@ -130,6 +134,8 @@ you stop).
 - Cloud providers only (no local models), over https, so it needs an internet
   connection. The OpenAI-compatible server is used for the text, not for
   speech.
+- A recording stops by itself after 12 minutes and is transcribed (the
+  providers take files of about 13 minutes at most).
 
 Prefer a standalone app with more options? The same author makes
 [FlowVoice](https://flowvoice.caliberda.com.br).
@@ -193,7 +199,7 @@ e a chave é grátis).
 | **Ctrl+Shift+Espaço** | Ditar (aperte de novo para parar; no modo segurar, segure enquanto fala) |
 | **Ctrl+Shift+Y** | Ditar e traduzir |
 | **Ctrl+Alt+K** | Comando no texto selecionado (enquanto você fala, o card também oferece os estilos, para aplicar um sem falar) |
-| **Esc** | Cancela durante a gravação ou a transcrição |
+| **Esc** | Cancela durante a gravação (enquanto processa, o ✕ da barra cancela) |
 
 Todos os atalhos podem ser trocados nas configurações. "Colar de novo" (o
 último ditado no app da frente) e "Ditar agora" ficam no menu do ícone;
@@ -207,19 +213,22 @@ direito, um menu rápido): o histórico desta sessão (com "Refazer" em outro
 estilo ou idioma), os estilos e os seus, um estilo por app, os provedores
 (chaves, modelos e a ordem de tentativa), os atalhos, o idioma falado, o
 microfone e o dicionário, e a aparência: tema, cor de destaque, largura do
-card e o visual de vidro da barra. Opcionais: sons de início e fim (ligados
-por padrão) e silenciar o PC durante a gravação (desligado por padrão; o som
-volta quando você para).
+card e o visual de vidro da barra. Os sons de início e fim vêm ligados e dá
+para desligar.
 
 ### Privacidade
 
 - O áudio vai só para o provedor de voz que você configurou (por exemplo a
   Groq, `api.groq.com`) e só com uma chave salva: enquanto você fala (a
   prévia ao vivo, que dá para desligar) e quando você para. A transcrição
-  então vai ao provedor de texto para o estilo ou a tradução. No Comando, o
-  texto selecionado vai junto. Vale a política de privacidade de cada
-  provedor (no plano grátis do Gemini, o Google pode usar o que é enviado
-  para melhorar os produtos dele).
+  então vai ao provedor de texto para o estilo ou a tradução, junto com o
+  nome do app em que você está digitando (para o texto combinar com ele) e
+  as palavras do seu dicionário. No Comando, o texto selecionado vai junto.
+  Vale a política de privacidade de cada provedor (no plano grátis do
+  Gemini, o Google pode usar o que é enviado para melhorar os produtos dele).
+- Se a Groq responder que o modelo escolhido não existe mais, o mod pede à
+  Groq a lista atual de modelos, testa até 4 deles com um teste curto (um
+  segundo de quase silêncio, ou "OK") e fica com o que funcionar.
 - Servidores contatados, só os dos provedores que você configurou:
   `api.groq.com`, `generativelanguage.googleapis.com` (Gemini),
   `openrouter.ai`, `api.mistral.ai`, `api.openai.com`, ou o endereço que
@@ -247,6 +256,8 @@ volta quando você para).
 - Só provedores na nuvem (sem modelos locais), por https, então precisa de
   internet. O servidor compatível com a OpenAI é usado para o texto, não para
   a voz.
+- Uma gravação para sozinha depois de 12 minutos e é transcrita (os
+  provedores aceitam arquivos de uns 13 minutos no máximo).
 
 Prefere um app separado com mais opções? O mesmo autor faz o
 [FlowVoice](https://flowvoice.caliberda.com.br).
@@ -294,13 +305,17 @@ nuevo" y "Dictar ahora" están en el menú del icono del área de notificación.
 
 Privacidad: el audio va solo al proveedor de voz que configuraste, solo con
 una clave guardada (mientras hablas, para la vista previa en vivo, y al
-parar); el texto va al proveedor de texto, y con el Comando también va el
-texto seleccionado. Rige la política de privacidad de cada proveedor. No se
+parar); el texto va al proveedor de texto, con el nombre de la app en la que
+escribes y las palabras de tu diccionario, y con el Comando también va el
+texto seleccionado. Si Groq responde que el modelo elegido ya no existe, el
+mod pide su lista de modelos y prueba hasta 4 con una prueba corta. Rige la
+política de privacidad de cada proveedor. No se
 guarda nada en disco: si una transcripción falla, la grabación queda solo en
 memoria (las 3 últimas). Las claves se guardan cifradas para tu cuenta de
 Windows. Limitaciones: no escribe en apps abiertas como administrador (el
 texto queda copiado), el Comando no funciona en terminales, solo usa
-proveedores en la nube y necesita internet.
+proveedores en la nube y necesita internet, y una grabación se detiene sola a
+los 12 minutos.
 */
 // ==/WindhawkModReadme==
 
@@ -317,7 +332,6 @@ proveedores en la nube y necesita internet.
 // ==/WindhawkModSettings==
 
 #include <audioclient.h>
-#include <endpointvolume.h>
 #include <commctrl.h>
 #include <d2d1.h>
 #include <d2d1_3.h>
@@ -365,6 +379,9 @@ using Microsoft::WRL::ComPtr;
 // Constants
 
 constexpr int kSampleRate = 16000;
+// A recording stops by itself here: the providers take about 25 MB per file
+// (13 minutes of it), and a toggle left on mustn't fill the memory.
+constexpr int kMaxRecordingSeconds = 12 * 60;
 // A press shorter than this (a double press, a push-to-talk blip) isn't a
 // dictation: it's dropped without an error.
 constexpr ULONGLONG kTapMs = 250;
@@ -545,6 +562,11 @@ std::wstring Tidy(std::wstring_view input) {
         return c == L',' || c == L'.' || c == L';' || c == L':' || c == L'!' ||
                c == L'?';
     };
+    // Punctuation on its own at `j`, not the start of a word like ".NET".
+    auto loosePunct = [&](std::wstring_view text, size_t j) {
+        return j < text.size() && isPunct(text[j]) &&
+               !(j + 1 < text.size() && IsCharAlphaNumericW(text[j + 1]));
+    };
     std::wstring a;
     for (size_t i = 0; i < input.size(); i++) {
         if (input[i] == L',') {
@@ -552,7 +574,7 @@ std::wstring Tidy(std::wstring_view input) {
             while (j < input.size() && IsSpace(input[j])) {
                 j++;
             }
-            if (j < input.size() && isPunct(input[j])) {
+            if (loosePunct(input, j)) {
                 i = j - 1;
                 continue;
             }
@@ -566,7 +588,7 @@ std::wstring Tidy(std::wstring_view input) {
             while (j < a.size() && IsSpace(a[j])) {
                 j++;
             }
-            if (j < a.size() && isPunct(a[j])) {
+            if (loosePunct(a, j)) {
                 i = j - 1;
                 continue;
             }
@@ -1919,6 +1941,17 @@ std::wstring CleanCommandOutput(std::wstring_view output, std::wstring_view sele
     return std::wstring(selection.substr(0, lead)) + core + std::wstring(selection.substr(trail));
 }
 
+// The answer the system prompt asks for when a dictation asks for the
+// instructions (in Portuguese, whatever was spoken): the user gets what they
+// said instead.
+bool IsPromptRefusal(std::wstring_view text) {
+    std::wstring t = Trim(text);
+    while (!t.empty() && t.back() == L'.') {
+        t.pop_back();
+    }
+    return t == L"Não foi possível transcrever";
+}
+
 // Strips the wrappers some models add despite the instructions.
 std::wstring CleanLlmOutput(std::wstring_view input) {
     std::wstring t = Trim(input);
@@ -2229,8 +2262,6 @@ struct Config {
     bool historyEnabled = true;
     // A short blip when recording starts and ends.
     bool sounds = true;
-    // The default output is muted while recording (opt-in).
-    bool muteWhileRecording = false;
     // The highlight color ("#RRGGBB").
     std::string accent = "#D7FF3F";
     // The result card's width: "compact", "normal", "wide".
@@ -2581,7 +2612,6 @@ std::string ConfigToJson(const Config& c) {
                        ",\"commandHotkey\":" + JsonQuote(c.commandHotkey) +
                        ",\"pasteLastHotkey\":" + JsonQuote(c.pasteLastHotkey) +
                        ",\"sounds\":" + boolean(c.sounds) +
-                       ",\"muteWhileRecording\":" + boolean(c.muteWhileRecording) +
                        ",\"accent\":" + JsonQuote(c.accent) +
                        ",\"overlayWidth\":" + JsonQuote(c.overlayWidth) +
                        ",\"overlayGlass\":" + JsonQuote(c.overlayGlass) +
@@ -2664,7 +2694,6 @@ Config ConfigFromJson(std::string_view text) {
     str("overlayWidth", &c.overlayWidth);
     str("overlayGlass", &c.overlayGlass);
     boolean("sounds", &c.sounds);
-    boolean("muteWhileRecording", &c.muteWhileRecording);
     boolean("glassLight", &c.glassLight);
     boolean("windowGlass", &c.windowGlass);
     str("speechLanguage", &c.speechLanguage);
@@ -3170,8 +3199,9 @@ std::string ToWav(const std::vector<float>& samples) {
 ////////////////////////////////////////////////////////////////////////////////
 // Shortcuts
 
-// "Ctrl+Shift+Space" → MOD_* flags and a virtual key. Needs a modifier,
-// except for function keys (a plain letter would type nothing anywhere).
+// "Ctrl+Shift+Space" → MOD_* flags and a virtual key. Needs Ctrl, Alt or
+// Win, except for function keys (a plain or shifted letter would no longer
+// type anywhere).
 bool ParseHotkey(std::wstring_view text, UINT* modifiers, UINT* vk) {
     *modifiers = 0;
     *vk = 0;
@@ -3251,14 +3281,16 @@ bool ParseHotkey(std::wstring_view text, UINT* modifiers, UINT* vk) {
         return false;
     }
     const bool functionKey = *vk >= VK_F1 && *vk <= VK_F24;
-    return *modifiers || functionKey;
+    return (*modifiers & ~MOD_SHIFT) || functionKey;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // HTTPS
 
-// Lets another thread abort a request in progress: closing the request handle
-// makes the blocking WinHTTP call fail at once.
+// Lets another thread abort a request in progress: the request is
+// asynchronous, and closing its handle is WinHTTP's way to cancel it. The
+// worker calls WinHTTP on the handle only under `lock`, while it's still
+// `request`, so it never uses a closed one.
 struct HttpCancel {
     SRWLOCK lock = SRWLOCK_INIT;
     HINTERNET request = nullptr;
@@ -3339,12 +3371,54 @@ struct HttpResult {
     RateInfo rate;
 };
 
+// One request's progress, from WinHTTP's callback (its threads) to the
+// worker waiting for each step.
+struct HttpCall {
+    // Each step done (sent, headers, a read), or failed.
+    HANDLE step = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    // The request handle is gone: no callback comes after it.
+    HANDLE closed = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    std::atomic<DWORD> error = 0;
+    std::atomic<DWORD> read = 0;
+
+    ~HttpCall() {
+        CloseHandle(step);
+        CloseHandle(closed);
+    }
+};
+
+void CALLBACK HttpCallback(HINTERNET, DWORD_PTR context, DWORD status, LPVOID info, DWORD length) {
+    auto* call = (HttpCall*)context;
+    if (!call) {
+        return;
+    }
+    switch (status) {
+        case WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE:
+        case WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE:
+            SetEvent(call->step);
+            break;
+        case WINHTTP_CALLBACK_STATUS_READ_COMPLETE:
+            call->read = length;
+            SetEvent(call->step);
+            break;
+        case WINHTTP_CALLBACK_STATUS_REQUEST_ERROR: {
+            const DWORD error = ((WINHTTP_ASYNC_RESULT*)info)->dwError;
+            call->error = error ? error : ERROR_WINHTTP_INTERNAL_ERROR;
+            SetEvent(call->step);
+            break;
+        }
+        case WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING:
+            SetEvent(call->closed);
+            break;
+    }
+}
+
 HttpResult HttpsRequest(PCWSTR method,
                         const std::wstring& url,
-                     const std::wstring& headers,
-                     const std::string& body,
-                     DWORD timeoutMs,
-                     HttpCancel* cancel) {
+                        const std::wstring& headers,
+                        const std::string& body,
+                        DWORD timeoutMs,
+                        HttpCancel* cancel) {
     constexpr size_t kMaxAnswer = 4 * 1024 * 1024;
     HttpResult result;
     URL_COMPONENTS parts{sizeof(parts)};
@@ -3362,9 +3436,14 @@ HttpResult HttpsRequest(PCWSTR method,
             ? std::wstring(parts.lpszUrlPath,
                            parts.dwUrlPathLength + parts.dwExtraInfoLength)
             : std::wstring(L"/");
+    HttpCall call;
+    // (Lives until WinHTTP has let go of the request, waited for below.)
+    char buffer[16 * 1024];
     HINTERNET session =
-        WinHttpOpen(L"Windhawk-AIVoiceTyping", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        call.step && call.closed
+            ? WinHttpOpen(L"Windhawk-AIVoiceTyping", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                          WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC)
+            : nullptr;
     HINTERNET connection =
         session ? WinHttpConnect(session, host.c_str(), parts.nPort, 0)
                 : nullptr;
@@ -3375,44 +3454,82 @@ HttpResult HttpsRequest(PCWSTR method,
                                  WINHTTP_DEFAULT_ACCEPT_TYPES,
                                  WINHTTP_FLAG_SECURE)
             : nullptr;
-    if (!request) {
+    DWORD_PTR context = (DWORD_PTR)&call;
+    if (request &&
+        (WinHttpSetStatusCallback(request, HttpCallback,
+                                  WINHTTP_CALLBACK_FLAG_ALL_COMPLETIONS |
+                                      WINHTTP_CALLBACK_FLAG_HANDLES,
+                                  0) == WINHTTP_INVALID_STATUS_CALLBACK ||
+         !WinHttpSetOption(request, WINHTTP_OPTION_CONTEXT_VALUE, &context, sizeof(context)))) {
+        result.error = GetLastError();
+        WinHttpSetStatusCallback(request, nullptr, 0, 0);
+        WinHttpCloseHandle(std::exchange(request, nullptr));
+    } else if (!request) {
         result.error = GetLastError();
     }
+    // Canceled before it started: closed here, never sent.
+    bool registered = false;
     if (request && cancel) {
         AcquireSRWLockExclusive(&cancel->lock);
-        if (cancel->canceled) {
-            WinHttpCloseHandle(std::exchange(request, nullptr));
-            result.error = ERROR_WINHTTP_OPERATION_CANCELLED;
-        } else {
+        if (!cancel->canceled) {
             cancel->request = request;
+            registered = true;
         }
         ReleaseSRWLockExclusive(&cancel->lock);
     }
+    // A WinHTTP call on the request, unless it was canceled (closed).
+    auto live = [&](auto&& fn) {
+        if (!cancel) {
+            return (bool)fn();
+        }
+        AcquireSRWLockShared(&cancel->lock);
+        const bool ok = cancel->request == request && fn();
+        ReleaseSRWLockShared(&cancel->lock);
+        return ok;
+    };
+    // The step just started, done (false: failed, canceled or stuck).
+    const DWORD stepMs = timeoutMs + 15000;
+    bool stuck = false;
+    auto wait = [&] {
+        const HANDLE events[] = {call.step, call.closed};
+        const DWORD waited = WaitForMultipleObjects(2, events, FALSE, stepMs);
+        stuck = waited == WAIT_TIMEOUT;
+        return waited == WAIT_OBJECT_0 && !call.error;
+    };
     if (request) {
         const int connectMs = (int)std::min<DWORD>(timeoutMs, 10000);
         WinHttpSetTimeouts(request, connectMs, connectMs, (int)timeoutMs,
                            (int)timeoutMs);
         DWORD statusSize = sizeof(result.status);
-        if (WinHttpSendRequest(request, headers.c_str(), (DWORD)-1L,
-                               (LPVOID)body.data(), (DWORD)body.size(),
-                               (DWORD)body.size(), 0) &&
-            WinHttpReceiveResponse(request, nullptr) &&
-            WinHttpQueryHeaders(
-                request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                WINHTTP_HEADER_NAME_BY_INDEX, &result.status, &statusSize,
-                WINHTTP_NO_HEADER_INDEX)) {
+        if (live([&] {
+                return WinHttpSendRequest(request, headers.c_str(), (DWORD)-1L,
+                                          (LPVOID)body.data(), (DWORD)body.size(),
+                                          (DWORD)body.size(), 0);
+            }) &&
+            wait() && live([&] { return WinHttpReceiveResponse(request, nullptr); }) &&
+            wait() &&
+            live([&] {
+                return WinHttpQueryHeaders(
+                    request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                    WINHTTP_HEADER_NAME_BY_INDEX, &result.status, &statusSize,
+                    WINHTTP_NO_HEADER_INDEX);
+            })) {
             WCHAR retryAfter[64];
             DWORD retryAfterSize = sizeof(retryAfter);
-            if (WinHttpQueryHeaders(request, WINHTTP_QUERY_RETRY_AFTER,
-                                    WINHTTP_HEADER_NAME_BY_INDEX, retryAfter,
-                                    &retryAfterSize, WINHTTP_NO_HEADER_INDEX)) {
+            if (live([&] {
+                    return WinHttpQueryHeaders(request, WINHTTP_QUERY_RETRY_AFTER,
+                                               WINHTTP_HEADER_NAME_BY_INDEX, retryAfter,
+                                               &retryAfterSize, WINHTTP_NO_HEADER_INDEX);
+                })) {
                 result.retryAfter = retryAfter;
             }
             auto header = [&](PCWSTR name, bool duration) {
                 WCHAR value[64];
                 DWORD size = sizeof(value);
-                if (!WinHttpQueryHeaders(request, WINHTTP_QUERY_CUSTOM, name, value, &size,
-                                         WINHTTP_NO_HEADER_INDEX)) {
+                if (!live([&] {
+                        return WinHttpQueryHeaders(request, WINHTTP_QUERY_CUSTOM, name, value,
+                                                   &size, WINHTTP_NO_HEADER_INDEX);
+                    })) {
                     return -1.0f;
                 }
                 if (duration) {
@@ -3431,13 +3548,12 @@ HttpResult HttpsRequest(PCWSTR method,
             rate.resetAudio = header(L"x-ratelimit-reset-audio-seconds", true);
             // Whole, or nothing: a connection dropped halfway isn't taken
             // for the end of the answer.
-            char buffer[16 * 1024];
             for (;;) {
-                DWORD read = 0;
-                if (!WinHttpReadData(request, buffer, sizeof(buffer), &read)) {
-                    result.error = GetLastError();
+                if (!live([&] { return WinHttpReadData(request, buffer, sizeof(buffer), nullptr); }) ||
+                    !wait()) {
                     break;
                 }
+                const DWORD read = call.read;
                 if (read == 0) {
                     result.done = true;
                     break;
@@ -3448,17 +3564,20 @@ HttpResult HttpsRequest(PCWSTR method,
                 }
                 result.body.append(buffer, read);
             }
-        } else {
-            result.error = GetLastError();
+        }
+        if (!result.done && !result.error) {
+            result.error = call.error  ? call.error.load()
+                           : stuck     ? (DWORD)ERROR_WINHTTP_TIMEOUT
+                                       : GetLastError();
         }
         // (Unless canceled meanwhile: closed there already.)
         bool mine = true;
         if (cancel) {
             AcquireSRWLockExclusive(&cancel->lock);
-            mine = cancel->request == request;
-            if (mine) {
+            if (cancel->request == request) {
                 cancel->request = nullptr;
             } else {
+                mine = !registered;
                 result.done = false;
                 result.error = ERROR_WINHTTP_OPERATION_CANCELLED;
             }
@@ -3467,12 +3586,21 @@ HttpResult HttpsRequest(PCWSTR method,
         if (mine) {
             WinHttpCloseHandle(request);
         }
+        // WinHTTP is done with `call` and the buffer only once it says so.
+        WaitForSingleObject(call.closed, INFINITE);
     }
     if (connection) {
         WinHttpCloseHandle(connection);
     }
     if (session) {
         WinHttpCloseHandle(session);
+    }
+    if (cancel && !result.done) {
+        AcquireSRWLockShared(&cancel->lock);
+        if (cancel->canceled) {
+            result.error = ERROR_WINHTTP_OPERATION_CANCELLED;
+        }
+        ReleaseSRWLockShared(&cancel->lock);
     }
     if (!result.done && !result.error) {
         result.error = ERROR_WINHTTP_INTERNAL_ERROR;
@@ -3552,13 +3680,14 @@ struct ProviderError {
 };
 
 // True when the error says the model id itself is gone (retired, renamed,
-// unknown).
+// unknown). Not for a parameter the model doesn't take ("temperature is not
+// supported with this model"): that one isn't fixed by another model.
 bool ModelGone(int status, std::string_view lowerMessage) {
     static constexpr const char* kGone[] = {
-        "not found",     "does not exist", "decommissioned", "deprecated",
-        "not supported", "invalid model",  "no longer",      "unknown model",
-        "not available", "retired",        "model_not_found",
-        "unsupported model",
+        "not found",           "does not exist",       "decommissioned",
+        "invalid model",       "unknown model",        "unsupported model",
+        "not a valid model",   "no longer supported",  "no longer available",
+        "retired",             "model_not_found",
     };
     if (lowerMessage.find("model_not_found") != std::string_view::npos ||
         lowerMessage.find("no endpoints found") != std::string_view::npos) {
@@ -4422,15 +4551,17 @@ Config CurrentConfig() {
 template <typename Change>
 void UpdateConfig(Change change) {
     AcquireSRWLockExclusive(&g_configLock);
+    const Config before = g_config;
     change(g_config);
     NormalizeConfig(&g_config);
-    std::wstring json = Utf8ToWide(ConfigToJson(g_config));
-    // (Only a huge dictionary can get here.)
-    while (json.size() > kConfigMaxChars && !g_config.dictionary.empty()) {
-        g_config.dictionary.pop_back();
-        json = Utf8ToWide(ConfigToJson(g_config));
-    }
-    if (!Wh_SetStringValue(ConfigValueName().c_str(), json.c_str())) {
+    const std::wstring json = Utf8ToWide(ConfigToJson(g_config));
+    if (json.size() > kConfigMaxChars) {
+        // Saved, it couldn't be read back (everything would reset at the
+        // next start): the change isn't kept. Only many long custom styles
+        // get here.
+        Log(L"Change not saved: the configuration would be too big");
+        g_config = before;
+    } else if (!Wh_SetStringValue(ConfigValueName().c_str(), json.c_str())) {
         Log(L"Configuration not saved");
     }
     ReleaseSRWLockExclusive(&g_configLock);
@@ -4763,7 +4894,7 @@ Refined Refine(const std::wstring& raw,
         const ChatReply r = ChatAny(system, user, maxTokens, config, deadline, cancel, &used);
         if (r.ok) {
             const std::wstring out = CleanLlmOutput(r.text);
-            if (!out.empty()) {
+            if (!out.empty() && !IsPromptRefusal(out)) {
                 result.text = out;
                 result.provider = used;
             }
@@ -5000,8 +5131,10 @@ void Capture(CaptureState& state) {
             // maps near the top.
             g_micLevel = std::min(1.0f, std::sqrt(Rms(samples, frames) * 28));
             AcquireSRWLockExclusive(&state.lock);
-            state.samples.insert(state.samples.end(), samples,
-                                 samples + frames);
+            // (Past the limit, until the stop arrives: nothing more kept.)
+            if (state.samples.size() < (size_t)kSampleRate * kMaxRecordingSeconds) {
+                state.samples.insert(state.samples.end(), samples, samples + frames);
+            }
             ReleaseSRWLockExclusive(&state.lock);
             capture->ReleaseBuffer(frames);
         }
@@ -5323,8 +5456,9 @@ GUITHREADINFO FocusInfo(HWND window) {
     return info;
 }
 
-// After a dictation's paste: where the app put the caret once it handled
-// the Ctrl+V (moved since then = the user went elsewhere: no space).
+// After a dictation's or a Command's paste: where the app put the caret once
+// it handled the Ctrl+V (moved since then = the user went elsewhere: no
+// space, no "Replace").
 void NoteCaretAfterPaste() {
     ULONGLONG tick;
     {
@@ -5344,15 +5478,20 @@ void NoteCaretAfterPaste() {
 
 enum class PasteOutcome { Pasted, Copied, Failed };
 
+// What's pasted: a new dictation (spaced from the previous one when it
+// continues it), a Command's result, or anything else. The first two can be
+// replaced from the card afterwards.
+enum class PasteFor { Other, Dictation, Command };
+
 // Pastes `text` into `target` with Ctrl+V. Either way the text is left on
 // the clipboard afterwards: pressing Ctrl+V again must paste THIS text.
-// `why` says why it was only copied. `dictation`: a new dictation, spaced
-// from the previous one when it continues it.
+// `why` says why it was only copied.
 PasteOutcome PasteText(const std::wstring& text,
                        HWND target,
                        bool replace,
                        std::wstring* why,
-                       bool dictation = false) {
+                       PasteFor what = PasteFor::Other) {
+    const bool dictation = what == PasteFor::Dictation;
     std::lock_guard guard(g_inputLock);
     if (!SetClipboardText(text)) {
         return PasteOutcome::Failed;
@@ -5388,30 +5527,42 @@ PasteOutcome PasteText(const std::wstring& text,
                  L"com Ctrl+V.");
         return PasteOutcome::Copied;
     }
+    const GUITHREADINFO focus = FocusInfo(target);
+    PasteMark& mark = g_pasteMark;
+    // Still where the last paste left off: same field, and the caret where
+    // it was (when the app uses Windows' caret).
+    const bool samePlace =
+        target && mark.window == target && mark.focus == focus.hwndFocus &&
+        (!mark.caretWindow || !focus.hwndCaret ||
+         (mark.caretWindow == focus.hwndCaret && EqualRect(&mark.caret, &focus.rcCaret)));
     if (replace) {
+        // Ctrl+Z would undo what the user did since, not the paste.
+        if (!samePlace) {
+            *why = T(L"The text changed after the paste: the new version is copied, paste it "
+                     L"with Ctrl+V.",
+                     L"O texto mudou depois de colar: a nova versão está copiada, cole com "
+                     L"Ctrl+V.");
+            return PasteOutcome::Copied;
+        }
         SendCtrlKey('Z');
         if (WaitForSingleObject(g_stopEvent, 80) != WAIT_TIMEOUT) {
             return PasteOutcome::Copied;
         }
     }
-    const GUITHREADINFO focus = FocusInfo(target);
-    PasteMark& mark = g_pasteMark;
     // Typed, not on the clipboard: a "Replace" undoes only the paste.
-    if (dictation && !replace && target && !IsConsoleWindow(target) && mark.window == target &&
-        mark.focus == focus.hwndFocus && GetTickCount64() - mark.tick < kJoinMs &&
-        (!mark.caretWindow || !focus.hwndCaret ||
-         (mark.caretWindow == focus.hwndCaret && EqualRect(&mark.caret, &focus.rcCaret))) &&
-        NeedsJoinSpace(mark.last, text)) {
+    if (dictation && !replace && !IsConsoleWindow(target) && samePlace &&
+        GetTickCount64() - mark.tick < kJoinMs && NeedsJoinSpace(mark.last, text)) {
         SendChar(L' ');
     }
     SendCtrlKey('V');
-    if (dictation || replace) {
+    if (what != PasteFor::Other || replace) {
         // (A "Replace" keeps the place: the next dictation continues it.)
-        if (dictation) {
+        if (what != PasteFor::Other) {
             mark = {target, focus.hwndFocus};
         }
         mark.tick = GetTickCount64();
-        mark.last = text.empty() ? 0 : text.back();
+        // (After a Command, the next dictation isn't spaced from it.)
+        mark.last = text.empty() || what == PasteFor::Command ? 0 : text.back();
         mark.caretWindow = nullptr;
     } else {
         mark = {};
@@ -6185,7 +6336,8 @@ void FinishResult(Job& job, DictationResult result, float seconds) {
     std::wstring why;
     PasteOutcome outcome;
     if (job.settings.autoPaste) {
-        outcome = PasteText(result.text, job.target, false, &why, !result.command);
+        outcome = PasteText(result.text, job.target, false, &why,
+                            result.command ? PasteFor::Command : PasteFor::Dictation);
     } else {
         std::lock_guard guard(g_inputLock);
         outcome = SetClipboardText(result.text) ? PasteOutcome::Copied
@@ -6231,7 +6383,7 @@ void FinishResult(Job& job, DictationResult result, float seconds) {
         item.voice = result.voice;
         AddHistory(std::move(item));
     }
-    if (outcome == PasteOutcome::Pasted && !result.command) {
+    if (outcome == PasteOutcome::Pasted) {
         NoteCaretAfterPaste();
     }
 }
@@ -6656,32 +6808,44 @@ void ProcessRedoHistory(Job& job) {
 DWORD WINAPI JobThreadProc(void* param) {
     std::shared_ptr<Job> job = std::move(*(std::shared_ptr<Job>*)param);
     delete (std::shared_ptr<Job>*)param;
-    switch (job->kind) {
-        case JobKind::Dictation:
-            ProcessDictation(*job);
-            // Nothing asks about this dictation any more.
-            AcquireSRWLockExclusive(&g_overlayLock);
-            g_canceled.erase(job->gen);
-            ReleaseSRWLockExclusive(&g_overlayLock);
-            break;
-        case JobKind::CommandStyle:
-            ProcessCommandStyle(*job);
-            AcquireSRWLockExclusive(&g_overlayLock);
-            g_canceled.erase(job->gen);
-            ReleaseSRWLockExclusive(&g_overlayLock);
-            break;
-        case JobKind::Restyle:
-            ProcessRestyle(*job);
-            break;
-        case JobKind::Paste:
-            ProcessPaste(*job);
-            break;
-        case JobKind::KeyTest:
-            ProcessKeyTest(*job);
-            break;
-        case JobKind::RedoHistory:
-            ProcessRedoHistory(*job);
-            break;
+    // (An exception here, out of memory say, would end the whole process.)
+    try {
+        switch (job->kind) {
+            case JobKind::Dictation:
+                ProcessDictation(*job);
+                break;
+            case JobKind::CommandStyle:
+                ProcessCommandStyle(*job);
+                break;
+            case JobKind::Restyle:
+                ProcessRestyle(*job);
+                break;
+            case JobKind::Paste:
+                ProcessPaste(*job);
+                break;
+            case JobKind::KeyTest:
+                ProcessKeyTest(*job);
+                break;
+            case JobKind::RedoHistory:
+                ProcessRedoHistory(*job);
+                break;
+        }
+    } catch (const std::exception& e) {
+        Log(L"Job stopped by an error: %S", e.what());
+        // Its "Transcribing…" bar doesn't stay up.
+        AcquireSRWLockExclusive(&g_overlayLock);
+        if (job->gen == g_dictation && (g_overlayState.phase == Phase::Transcribing ||
+                                        g_overlayState.phase == Phase::Refining)) {
+            g_releasedUpTo = g_dictation;
+            PublishLocked(OverlayState{});
+        }
+        ReleaseSRWLockExclusive(&g_overlayLock);
+    }
+    if (job->kind == JobKind::Dictation || job->kind == JobKind::CommandStyle) {
+        // Nothing asks about this dictation any more.
+        AcquireSRWLockExclusive(&g_overlayLock);
+        g_canceled.erase(job->gen);
+        ReleaseSRWLockExclusive(&g_overlayLock);
     }
     return 0;
 }
@@ -7221,9 +7385,6 @@ struct Session {
     std::wstring appName;
     std::wstring appId;
     Selection selection;
-    // The output this recording muted (to unmute it, even if the default
-    // one changed meanwhile).
-    ComPtr<IAudioEndpointVolume> muted;
     std::shared_ptr<PreviewSession> preview;
     HANDLE previewThread = nullptr;
 };
@@ -7235,80 +7396,6 @@ UINT64 g_sessionCount;
 std::atomic<bool> g_holdActive;
 // That shortcut's key (set by the UI thread on the press).
 std::atomic<UINT> g_holdVk;
-
-// Which output a recording muted (per Windows account): a process that ends
-// mid-recording (crash, sign-out) still gets it unmuted at the next start.
-std::wstring MutedValueName() {
-    return L"mutedOutput_" + g_userSid;
-}
-
-ComPtr<IAudioEndpointVolume> OutputVolume(IMMDevice* device) {
-    ComPtr<IAudioEndpointVolume> volume;
-    if (FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
-                                (void**)volume.GetAddressOf()))) {
-        return nullptr;
-    }
-    return volume;
-}
-
-// Mutes the default output while recording (opt-in), so music and videos
-// don't get in the way. Only if it wasn't muted: that one is unmuted after.
-ComPtr<IAudioEndpointVolume> MuteOutput() {
-    ComPtr<IMMDeviceEnumerator> enumerator;
-    ComPtr<IMMDevice> device;
-    ComPtr<IAudioEndpointVolume> volume;
-    BOOL wasMuted = TRUE;
-    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator),
-                                (void**)enumerator.GetAddressOf())) ||
-        FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, device.GetAddressOf())) ||
-        !(volume = OutputVolume(device.Get())) || FAILED(volume->GetMute(&wasMuted)) ||
-        wasMuted) {
-        return nullptr;
-    }
-    // Remembered before muting: never muted without a way back.
-    LPWSTR id = nullptr;
-    if (FAILED(device->GetId(&id))) {
-        return nullptr;
-    }
-    const BOOL saved = Wh_SetStringValue(MutedValueName().c_str(), id);
-    CoTaskMemFree(id);
-    if (!saved || FAILED(volume->SetMute(TRUE, nullptr))) {
-        Wh_DeleteValue(MutedValueName().c_str());
-        return nullptr;
-    }
-    return volume;
-}
-
-void UnmuteOutput(Session& session) {
-    if (session.muted) {
-        session.muted->SetMute(FALSE, nullptr);
-        session.muted.Reset();
-        Wh_DeleteValue(MutedValueName().c_str());
-    }
-}
-
-// A recording the process didn't live to finish left its output muted:
-// unmuted now, if it still is.
-void UnmuteLeftOver() {
-    WCHAR id[512];
-    if (!Wh_GetStringValue(MutedValueName().c_str(), id, ARRAYSIZE(id))) {
-        return;
-    }
-    Wh_DeleteValue(MutedValueName().c_str());
-    ComPtr<IMMDeviceEnumerator> enumerator;
-    ComPtr<IMMDevice> device;
-    ComPtr<IAudioEndpointVolume> volume;
-    BOOL muted = FALSE;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                   __uuidof(IMMDeviceEnumerator),
-                                   (void**)enumerator.GetAddressOf())) &&
-        SUCCEEDED(enumerator->GetDevice(id, device.GetAddressOf())) &&
-        (volume = OutputVolume(device.Get())) && SUCCEEDED(volume->GetMute(&muted)) && muted) {
-        Log(L"Unmuting the output a stopped recording had muted");
-        volume->SetMute(FALSE, nullptr);
-    }
-}
 
 void StopPreview(Session& session) {
     if (!session.previewThread) {
@@ -7331,7 +7418,6 @@ void CancelRecording() {
     g_holdActive = false;
     StopPreview(*g_session);
     g_session->recorder->Finish();
-    UnmuteOutput(*g_session);
     g_session.reset();
     AcquireSRWLockExclusive(&g_overlayLock);
     g_recording = false;
@@ -7373,9 +7459,6 @@ void StartRecording(Mode mode, bool hold, HWND target) {
     if (!session.recorder->Start(session.settings.microphone, &error)) {
         ShowError(error);
         return;
-    }
-    if (session.config.muteWhileRecording) {
-        session.muted = MuteOutput();
     }
     session.started = GetTickCount64();
     Log(L"Recording started");
@@ -7467,7 +7550,6 @@ void StopRecording() {
     }
     g_holdActive = false;
     StopPreview(*g_session);
-    UnmuteOutput(*g_session);
     std::shared_ptr<Job> job = JobFromSession(*g_session);
     job->samples = g_session->recorder->Finish();
     if (g_session->recorder->UsedFallback()) {
@@ -7505,7 +7587,6 @@ void CommandStyle(const std::string& styleId, const std::string& target) {
     }
     g_holdActive = false;
     StopPreview(*g_session);
-    UnmuteOutput(*g_session);
     g_session->recorder->Finish();
     std::shared_ptr<Job> job = JobFromSession(*g_session);
     job->kind = JobKind::CommandStyle;
@@ -7629,9 +7710,6 @@ void Escape() {
 }
 
 DWORD WINAPI ControlThreadProc(void*) {
-    // (Muting the output while recording.)
-    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    UnmuteLeftOver();
     for (;;) {
         Ctl ctl;
         {
@@ -7691,11 +7769,7 @@ DWORD WINAPI ControlThreadProc(void*) {
     if (g_session) {
         StopPreview(*g_session);
         g_session->recorder->Finish();
-        UnmuteOutput(*g_session);
         g_session.reset();
-    }
-    if (SUCCEEDED(com)) {
-        CoUninitialize();
     }
     return 0;
 }
@@ -9023,8 +9097,8 @@ LRESULT CALLBACK GlassWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 class Glass {
    public:
     // The blur under `box` (pixels, in the overlay window), with `radius`
-    // (pixels) and `opacity`.
-    void Show(HWND owner, POINT position, SIZE size, D2D1_RECT_F box, float radius,
+    // (pixels) and `opacity`. False: Windows can't show it (Windows 10, say).
+    bool Show(HWND owner, POINT position, SIZE size, D2D1_RECT_F box, float radius,
               float opacity);
     void Hide();
     // Its window goes (the compositor stays).
@@ -9096,15 +9170,15 @@ bool Glass::Ensure() {
     return true;
 }
 
-void Glass::Show(HWND owner, POINT position, SIZE size, D2D1_RECT_F box, float radius,
+bool Glass::Show(HWND owner, POINT position, SIZE size, D2D1_RECT_F box, float radius,
                  float opacity) {
     if (m_failed) {
-        return;
+        return false;
     }
     try {
         if (!Ensure()) {
             m_failed = true;
-            return;
+            return false;
         }
         // Right under the overlay (which may have moved to another monitor,
         // or come back over it when shown).
@@ -9125,10 +9199,12 @@ void Glass::Show(HWND owner, POINT position, SIZE size, D2D1_RECT_F box, float r
         m_shape.CornerRadius({r, r});
         m_visual.Opacity(std::clamp(opacity, 0.0f, 1.0f));
         m_visible = true;
+        return true;
     } catch (winrt::hresult_error const& e) {
         Log(L"Glass unavailable: %08X", (unsigned)e.code());
         m_failed = true;
         Hide();
+        return false;
     }
 }
 
@@ -9250,6 +9326,8 @@ class Overlay {
     bool m_hiding = false;
     ULONGLONG m_appearStart = 0;
     bool m_escapeRegistered = false;
+    // The recording the 12-minute limit already stopped (its start).
+    ULONGLONG m_autoStopped = 0;
     // The global shortcuts (dictate, translate, Command, paste again), as
     // registered last (registered again only when they change).
     struct Shortcut {
@@ -9530,8 +9608,8 @@ void Overlay::RegisterHotkeys() {
     }
 }
 
-// Esc is taken only while recording or transcribing, so it keeps working in
-// other apps.
+// Esc is taken only while recording, so it keeps working in other apps (the
+// bar's cancel button stops the processing).
 void Overlay::SetEscapeHotkey(bool on) {
     if (on == m_escapeRegistered) {
         return;
@@ -9868,6 +9946,11 @@ void Overlay::OnState() {
     const bool previousChips = m_state.commandChips;
     const std::wstring previousText = m_state.result.text;
     m_state = state;
+    if (state.phase != Phase::Done) {
+        // A chip or paste pending belonged to the card that's gone (else an
+        // error card would never close, and keep redrawing).
+        m_busyChip.clear();
+    }
     if (state.phase == Phase::Hidden) {
         SetEscapeHotkey(false);
         if (m_visible && !m_hiding) {
@@ -9877,9 +9960,7 @@ void Overlay::OnState() {
         }
         return;
     }
-    SetEscapeHotkey(state.phase == Phase::Listening ||
-                    state.phase == Phase::Transcribing ||
-                    state.phase == Phase::Refining);
+    SetEscapeHotkey(state.phase == Phase::Listening);
     if (state.phase == Phase::Listening && previous != Phase::Listening) {
         m_floor = -1;
         m_amp = 0;
@@ -10176,12 +10257,14 @@ void Overlay::Layout() {
                        m_state.provider.empty() ? L"IA" : m_state.provider.c_str());
             m_processingLabel = label;
         }
+            // The label and cancel (Esc is the other apps' while processing).
             target.w = kPadLeft + kWaveW + 12 +
                        TextWidth(m_processingLabel,
                                  Format(13, false, DWRITE_FONT_WEIGHT_MEDIUM)) +
-                       24;
+                       12 + 30 + 9;
             target.h = kRowH;
             target.radius = kRowH / 2 + 1;
+            m_hits.push_back({D2D1::RectF(target.w - 9 - 30, 12, target.w - 9, 42), Hit::Cancel});
             break;
         case Phase::Done:
             LayoutDone();
@@ -10564,8 +10647,9 @@ void Overlay::Render(float appear, ULONGLONG now) {
     }
     const D2D1_RECT_F card = CardRect(size);
     const float originY = m_top ? card.top : card.bottom;
-    const bool glass = m_glassOn && EnsureGlassBrushes();
-    // Windows' blur under the card's box as it is now (pixels).
+    bool glass = m_glassOn && EnsureGlassBrushes();
+    // Windows' blur under the card's box as it is now (pixels). Without it
+    // the card is drawn solid, not see-through without the blur.
     if (glass) {
         auto toPixels = [&](float x, float y) {
             return D2D1::Point2F(((x - kWindowW / 2) * grow + kWindowW / 2) * scale,
@@ -10573,8 +10657,8 @@ void Overlay::Render(float appear, ULONGLONG now) {
         };
         const D2D1_POINT_2F a = toPixels(card.left, card.top);
         const D2D1_POINT_2F b = toPixels(card.right, card.bottom);
-        m_glass.Show(m_hwnd, m_position, m_size, D2D1::RectF(a.x, a.y, b.x, b.y),
-                     size.radius * grow * scale, EaseOutCubic(appear));
+        glass = m_glass.Show(m_hwnd, m_position, m_size, D2D1::RectF(a.x, a.y, b.x, b.y),
+                             size.radius * grow * scale, EaseOutCubic(appear));
     } else {
         m_glass.Hide();
     }
@@ -10675,12 +10759,11 @@ void Overlay::Render(float appear, ULONGLONG now) {
     }
     m_target->PopAxisAlignedClip();
     if (m_target->EndDraw() == D2DERR_RECREATE_TARGET) {
-        m_formats.clear();
-        m_mainText.Reset();
-        m_warnText.Reset();
-        m_previewText.Reset();
+        // Only the Direct2D side goes: the text layouts and formats are
+        // DirectWrite's, and the card keeps its text.
         ResetBrushes();
         m_target.Reset();
+        m_lastEvent = GetTickCount64();
         return;
     }
     BLENDFUNCTION blend{AC_SRC_OVER, 0,
@@ -10848,8 +10931,15 @@ void Overlay::DrawProcessing() {
             m_brush.Get());
     }
     DrawText(m_processingLabel, Format(13, false, DWRITE_FONT_WEIGHT_MEDIUM),
-             D2D1::RectF(kPadLeft + kWaveW + 12, middle - 10, m_to.w - 12, middle + 10),
+             D2D1::RectF(kPadLeft + kWaveW + 12, middle - 10, m_to.w - 9 - 30 - 6, middle + 10),
              p.text);
+    for (size_t i = 0; i < m_hits.size(); i++) {
+        const HitBox& h = m_hits[i];
+        const bool hover = m_hover == (int)i;
+        DrawRoundIcon({(h.rect.left + h.rect.right) / 2, (h.rect.top + h.rect.bottom) / 2},
+                      h.rect.right - h.rect.left, kIconClose,
+                      hover ? p.hover : D2D1::ColorF(0, 0), hover ? p.text : p.text2);
+    }
 }
 
 void Overlay::DrawButton(const D2D1_RECT_F& rect,
@@ -11261,6 +11351,14 @@ LRESULT Overlay::Handle(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_TIMER:
             if (wp == kFrameTimer) {
+                // A recording left running stops by itself at the limit, and
+                // is transcribed.
+                if (m_state.phase == Phase::Listening && m_autoStopped != m_state.listenStart &&
+                    GetTickCount64() - m_state.listenStart >= kMaxRecordingSeconds * 1000ull) {
+                    m_autoStopped = m_state.listenStart;
+                    Log(L"Recording stopped at the %d-minute limit", kMaxRecordingSeconds / 60);
+                    PostCtl({CtlKind::Stop});
+                }
                 Frame();
             }
             return 0;
@@ -11397,6 +11495,14 @@ COLORREF ToColorRef(D2D1_COLOR_F c) {
     return RGB((BYTE)(c.r * 255), (BYTE)(c.g * 255), (BYTE)(c.b * 255));
 }
 
+// A see-through `c` laid over `under`, for DWM (it takes opaque colors only:
+// the dark theme's faint lines would come out solid white).
+COLORREF ToColorRefOver(D2D1_COLOR_F c, D2D1_COLOR_F under) {
+    const float a = std::clamp(c.a, 0.0f, 1.0f);
+    return ToColorRef(D2D1::ColorF(c.r * a + under.r * (1 - a), c.g * a + under.g * (1 - a),
+                                   c.b * a + under.b * (1 - a)));
+}
+
 // The rail's pages, then the first-run wizard (without the rail).
 enum class Page { Home, Styles, Providers, Speech, Shortcuts, General, About, Wizard };
 
@@ -11479,7 +11585,6 @@ enum Act {
     ActMic,
     ActPreview,
     ActHotkey,
-    ActHotkeyClear,
     ActMode,
     ActTheme,
     ActPosition,
@@ -11492,7 +11597,6 @@ enum Act {
     ActHistoryRetry,
     ActGoto,
     ActSounds,
-    ActMute,
     ActAccent,
     ActAccentCustom,
     ActWidth,
@@ -11501,8 +11605,6 @@ enum Act {
     ActWindowGlass,
     ActRedoStyle,
     ActRedoLang,
-    ActPickSquare,
-    ActPickHue,
     ActFeedback,
     ActFeedbackLog,
     ActFeedbackLogShow,
@@ -11741,7 +11843,7 @@ class SettingsWindow {
     int HitPopup(float x, float y) const;
     void OnClick(float x, float y);
     void Run(const Widget& w, int option = -1);
-    void StartTest(const std::string& provider, bool voice);
+    void StartTest(const std::string& provider, bool voice, const std::string& key = {});
     void SaveFields();
     void BuildWizard(float x, float w, float& y);
     // The wizard has no rail, a fixed top and bottom.
@@ -11756,6 +11858,10 @@ class SettingsWindow {
     HWND m_hwnd = nullptr;
     UINT m_dpi = 96;
     Page m_page = Page::Home;
+    // The microphones, read once each time a page opens (not again at each
+    // rebuild, while the window is resized say).
+    std::vector<std::wstring> m_mics;
+    ULONGLONG m_micsRead = 0;
     ULONGLONG m_pageStart = 0;
     SettingsPalette m_palette = SettingsDark();
     bool m_dark = true;
@@ -11938,9 +12044,10 @@ void SettingsWindow::Open(Page page) {
     GetMonitorInfo(monitor, &info);
     UINT dpiX = 96, dpiY = 96;
     GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
-    const int w = MulDiv(1040, dpiX, 96);
-    const int h = MulDiv(720, dpiX, 96);
     const RECT& work = info.rcWork;
+    // (Within the screen's work area, on a small or very scaled screen too.)
+    const int w = std::min<int>(MulDiv(1040, dpiX, 96), work.right - work.left);
+    const int h = std::min<int>(MulDiv(720, dpiX, 96), work.bottom - work.top);
     m_hwnd = CreateWindowEx(
         0, kSettingsClass,
         T(L"AI Voice Typing", L"Digitação por Voz com IA"),
@@ -12023,9 +12130,9 @@ void SettingsWindow::LoadTheme() {
         // with the glass; a quiet title and edge.
         const COLORREF caption =
             m_glass ? 0xFFFFFFFE /* DWMWA_COLOR_NONE */ : ToColorRef(m_palette.rail);
-        const COLORREF title = ToColorRef(m_palette.text2);
+        const COLORREF title = ToColorRefOver(m_palette.text2, m_palette.rail);
         const COLORREF border = m_glass ? 0xFFFFFFFF /* DWMWA_COLOR_DEFAULT */
-                                        : ToColorRef(m_palette.line);
+                                        : ToColorRefOver(m_palette.line, m_palette.rail);
         DwmSetWindowAttribute(m_hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption,
                               sizeof(caption));
         DwmSetWindowAttribute(m_hwnd, 36 /* DWMWA_TEXT_COLOR */, &title, sizeof(title));
@@ -12317,6 +12424,12 @@ void SettingsWindow::Rebuild() {
     if (m_fieldsDirty) {
         SaveFields();
     }
+    // An open list stays on its own select (a new history item, say, moves
+    // the widgets around).
+    std::optional<Widget> popup;
+    if (m_popup >= 0 && m_popup < (int)m_widgets.size()) {
+        popup = m_widgets[m_popup];
+    }
     m_widgets.clear();
     for (EditField& field : m_edits) {
         field.used = false;
@@ -12348,8 +12461,14 @@ void SettingsWindow::Rebuild() {
     const float maxScroll = std::max(0.0f, m_contentH - client.bottom / Dpi());
     m_scrollTarget = std::clamp(m_scrollTarget, 0.0f, maxScroll);
     m_scroll = std::clamp(m_scroll, 0.0f, maxScroll);
-    if (m_popup >= (int)m_widgets.size()) {
-        m_popup = -1;
+    m_popup = -1;
+    for (size_t i = 0; popup && i < m_widgets.size(); i++) {
+        const Widget& w = m_widgets[i];
+        if (w.kind == popup->kind && w.act == popup->act && w.arg == popup->arg &&
+            w.sarg == popup->sarg) {
+            m_popup = (int)i;
+            break;
+        }
     }
     m_hover = -1;
     PlaceEdits();
@@ -13731,12 +13850,6 @@ void SettingsWindow::BuildWizard(float x, float w, float& y) {
                  T(L"A short click when recording starts and ends.",
                    L"Um clique curto ao começar e ao terminar."),
                  {}, c.sounds},
-                {ActMute, T(L"Mute PC audio while recording", L"Silenciar o som do PC durante a gravação"),
-                 T(L"Music and videos go quiet so they don't get in the way; the sound comes back "
-                   L"when you stop.",
-                   L"Músicas e vídeos ficam mudos para não atrapalhar a transcrição; o som volta "
-                   L"quando você para."),
-                 {}, c.muteWhileRecording},
             };
             for (const Option& option : options) {
                 const bool segment = !option.choices.empty();
@@ -13907,7 +14020,11 @@ void SettingsWindow::BuildSpeech(float x, float w, float& y) {
     mic.kind = W::Select;
     mic.act = ActMic;
     mic.options.push_back(T(L"System default", L"Padrão do sistema"));
-    for (const std::wstring& name : MicrophoneNames()) {
+    if (m_micsRead != m_pageStart) {
+        m_mics = MicrophoneNames();
+        m_micsRead = m_pageStart;
+    }
+    for (const std::wstring& name : m_mics) {
         mic.options.push_back(name);
         if (!c.microphone.empty() && Utf8ToWide(c.microphone) == name) {
             mic.selected = (int)mic.options.size() - 1;
@@ -13975,9 +14092,9 @@ void SettingsWindow::BuildShortcuts(float x, float w, float& y) {
     }
     if (m_capture) {
         y += AddText(x, y, w,
-                     T(L"Use Ctrl, Alt, Shift or Win with a key, or an F key. Esc cancels, "
+                     T(L"Use Ctrl, Alt or Win with a key, or an F key. Esc cancels, "
                        L"Backspace turns it off.",
-                       L"Use Ctrl, Alt, Shift ou Win junto, ou uma tecla F. Esc cancela, "
+                       L"Use Ctrl, Alt ou Win junto, ou uma tecla F. Esc cancela, "
                        L"Backspace desliga."),
                      12.5f, DWRITE_FONT_WEIGHT_NORMAL, 5) + 10;
     }
@@ -14047,12 +14164,10 @@ void SettingsWindow::BuildGeneral(float x, float w, float& y) {
         }
         Widget square;
         square.kind = W::ColorSquare;
-        square.act = ActPickSquare;
         square.r = D2D1::RectF(x + 16, y, x + 16 + 240, y + 110);
         m_widgets.push_back(square);
         Widget hue;
         hue.kind = W::HueStrip;
-        hue.act = ActPickHue;
         hue.r = D2D1::RectF(x + 16, y + 120, x + 16 + 240, y + 134);
         m_widgets.push_back(hue);
         y += 134 + 16;
@@ -14125,16 +14240,6 @@ void SettingsWindow::BuildGeneral(float x, float w, float& y) {
            T(L"A short click when recording starts and ends.",
              L"Um clique curto ao começar e ao terminar."),
            sounds, 44);
-    Widget mute;
-    mute.kind = W::Toggle;
-    mute.act = ActMute;
-    mute.on = c.muteWhileRecording;
-    AddRow(x, w, y, T(L"Mute PC audio while recording", L"Silenciar o som do PC durante a gravação"),
-           T(L"Music and videos go quiet so they don't get in the way; the sound comes back "
-             L"when you stop.",
-             L"Músicas e vídeos ficam mudos para não atrapalhar a transcrição; o som volta "
-             L"quando você para."),
-           mute, 44);
     Widget paste;
     paste.kind = W::Toggle;
     paste.act = ActAutoPaste;
@@ -14266,17 +14371,29 @@ std::wstring LogExcerpt(size_t maxChars) {
 // A new issue on the Windhawk mods repository for a problem, the versions
 // filled in (and the log's last lines when the user leaves it on).
 std::wstring FeedbackUrl(bool withLog) {
-    std::wstring body = std::wstring(L"Mod author: @cesarkali\n\nMod version: ") +
-                        WH_MOD_VERSION + L"\nWindows: " + WindowsVersionText() +
-                        L"\n\nWhat happened:\n\nWhat I expected:\n\nSteps to reproduce:\n";
-    if (withLog) {
-        if (const std::wstring log = LogExcerpt(1800); !log.empty()) {
-            body += L"\nTechnical log (the last lines; no dictated text, keys removed):\n```\n" +
-                    log + L"\n```\n";
+    const std::wstring form = std::wstring(L"Mod author: @cesarkali\n\nMod version: ") +
+                              WH_MOD_VERSION + L"\nWindows: " + WindowsVersionText() +
+                              L"\n\nWhat happened:\n\nWhat I expected:\n\nSteps to reproduce:\n";
+    auto url = [&](const std::wstring& body) {
+        return L"https://github.com/ramensoftware/windhawk-mods/issues/new?title=" +
+               UrlEncode(L"[AI Voice Typing] ") + L"&body=" + UrlEncode(body);
+    };
+    // Some of Windows' and the browsers' paths cut a URL past 2083
+    // characters: fewer log lines until it fits (encoded, a character can
+    // take up to 9).
+    for (size_t room = withLog ? 1800 : 0; room >= 200; room = room * 2 / 3) {
+        const std::wstring log = LogExcerpt(room);
+        if (log.empty()) {
+            break;
+        }
+        std::wstring withExcerpt = url(
+            form + L"\nTechnical log (the last lines; no dictated text, keys removed):\n```\n" +
+            log + L"\n```\n");
+        if (withExcerpt.size() <= 2083) {
+            return withExcerpt;
         }
     }
-    return L"https://github.com/ramensoftware/windhawk-mods/issues/new?title=" +
-           UrlEncode(L"[AI Voice Typing] ") + L"&body=" + UrlEncode(body);
+    return url(form);
 }
 
 void SettingsWindow::BuildAbout(float x, float w, float& y) {
@@ -14944,27 +15061,14 @@ void SettingsWindow::DrawWidget(const Widget& w, bool hover) {
                     }
                     break;
                 }
-                case ActSounds:
-                case ActMute: {
-                    if (w.act == ActSounds && icons) {
+                case ActSounds: {
+                    if (icons) {
                         // A speaker, playing or muted.
                         constexpr WCHAR kVolume[] = L"";
                         constexpr WCHAR kMuted[] = L"";
                         const D2D1_RECT_F box = D2D1::RectF(cx - 16, cy - 14, cx + 16, cy + 14);
                         text(kVolume, icons, box, WithAlpha(p.text, t));
                         text(kMuted, icons, box, WithAlpha(p.text3, 1 - t));
-                    } else if (icons) {
-                        // The PC's sound going flat while the mic records.
-                        const float heights[] = {0.55f, 0.9f, 0.7f, 1, 0.6f, 0.8f};
-                        for (int i = 0; i < 6; i++) {
-                            const float bh = 26 * heights[i] * (1 - 0.8f * t);
-                            const float bx = w.r.left + 14 + i * 7.0f;
-                            round(D2D1::RectF(bx, cy - bh / 2, bx + 4, cy + bh / 2), 2,
-                                  Mix(p.text2, p.text3, t), none);
-                        }
-                        constexpr WCHAR kMic[] = L"";
-                        text(kMic, icons, D2D1::RectF(w.r.right - 36, cy - 12, w.r.right - 8, cy + 12),
-                             p.accent);
                     }
                     break;
                 }
@@ -15453,8 +15557,11 @@ int SettingsWindow::HitPopup(float x, float y) const {
     return index >= 0 && index < (int)m_widgets[m_popup].options.size() ? index : -1;
 }
 
-// A provider's "Test text" / "Test voice", with its first key.
-void SettingsWindow::StartTest(const std::string& provider, bool voice) {
+// A provider's "Test text" / "Test voice", with `key` (its first one when
+// empty).
+void SettingsWindow::StartTest(const std::string& provider,
+                               bool voice,
+                               const std::string& key) {
     AcquireSRWLockExclusive(&g_keyTestLock);
     if (g_keyTestRunning) {
         ReleaseSRWLockExclusive(&g_keyTestLock);
@@ -15468,8 +15575,12 @@ void SettingsWindow::StartTest(const std::string& provider, bool voice) {
     job->kind = JobKind::KeyTest;
     job->chip = voice ? "voice" : "text";
     job->translateTo = provider;
-    const std::vector<std::string> keys = SplitKeys(LoadApiKey(provider));
-    job->key = keys.empty() ? std::string() : keys.front();
+    if (!key.empty()) {
+        job->key = key;
+    } else if (const std::vector<std::string> keys = SplitKeys(LoadApiKey(provider));
+               !keys.empty()) {
+        job->key = keys.front();
+    }
     job->config = CurrentConfig();
     StartJob(std::move(job));
 }
@@ -15518,12 +15629,12 @@ void SettingsWindow::FinishCapture(const std::wstring& hotkey, bool save) {
     const int which = m_capture;
     m_capture = 0;
     m_captureHint.clear();
+    // The global shortcuts come back (the new ones, when saved: UpdateConfig
+    // tells the bar).
     if (save) {
         UpdateConfig([&](Config& c) { HotkeyField(c, which) = WideToUtf8(hotkey); });
-    }
-    // The global shortcuts come back (the new ones, when saved).
-    if (HWND overlay = g_overlayWnd) {
-        SendMessage(overlay, WM_APP_RELOAD, 0, 0);
+    } else if (HWND overlay = g_overlayWnd) {
+        PostMessage(overlay, WM_APP_RELOAD, 0, 0);
     }
     Rebuild();
 }
@@ -15662,7 +15773,12 @@ void SettingsWindow::Run(const Widget& w, int option) {
                 return;
             }
             std::vector<std::string> list = SplitKeys(LoadApiKey(id));
+            // The key just pasted is the one tested, not the first one saved.
+            std::string tested;
             for (std::string& key : SplitKeys(pasted)) {
+                if (tested.empty()) {
+                    tested = key;
+                }
                 // (Room for a few dozen: the stored value has a size limit.)
                 if (std::find(list.begin(), list.end(), key) == list.end() &&
                     JoinKeys(list).size() + key.size() < 3000) {
@@ -15677,7 +15793,8 @@ void SettingsWindow::Run(const Widget& w, int option) {
                 SecureZeroMemory(key.data(), key.size());
             }
             SetEditText("key-" + id, L"");
-            StartTest(id, false);
+            StartTest(id, false, tested);
+            SecureZeroMemory(tested.data(), tested.size());
             break;
         }
         case ActKeyRemove: {
@@ -15898,9 +16015,6 @@ void SettingsWindow::Run(const Widget& w, int option) {
         case ActSounds:
             UpdateConfig([](Config& c) { c.sounds = !c.sounds; });
             break;
-        case ActMute:
-            UpdateConfig([](Config& c) { c.muteWhileRecording = !c.muteWhileRecording; });
-            break;
         case ActAccent:
         case ActAccentCustom: {
             std::string accent = w.act == ActAccent ? WideToUtf8(w.text)
@@ -16080,9 +16194,6 @@ void SettingsWindow::OnClick(float x, float y) {
             if (!w.on && x - RailW() > w.r.right - 34 && !w.text.empty()) {
                 const int which = w.arg;
                 UpdateConfig([&](Config& c) { HotkeyField(c, which).clear(); });
-                if (HWND overlay = g_overlayWnd) {
-                    SendMessage(overlay, WM_APP_RELOAD, 0, 0);
-                }
                 Rebuild();
                 return;
             }
@@ -16298,10 +16409,24 @@ LRESULT SettingsWindow::Handle(UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 UINT parsedMods, parsedVk;
                 if (!ParseHotkey(mods + name, &parsedMods, &parsedVk)) {
-                    m_captureHint = mods + name + T(L"  — add Ctrl, Alt, Shift or Win",
-                                                    L"  — use Ctrl, Alt, Shift ou Win junto");
+                    m_captureHint = mods + name + T(L"  — add Ctrl, Alt or Win",
+                                                    L"  — use Ctrl, Alt ou Win junto");
                     Rebuild();
                     return 0;
+                }
+                // One action per combination (the second one couldn't be
+                // registered).
+                const Config c = CurrentConfig();
+                for (int other = 1; other <= 4; other++) {
+                    UINT otherMods, otherVk;
+                    if (other != m_capture &&
+                        ParseHotkey(Utf8ToWide(HotkeyField(c, other)), &otherMods, &otherVk) &&
+                        otherMods == parsedMods && otherVk == parsedVk) {
+                        m_captureHint = mods + name + T(L"  — already used by another shortcut",
+                                                        L"  — já usado em outro atalho");
+                        Rebuild();
+                        return 0;
+                    }
                 }
                 FinishCapture(mods + name, true);
                 return 0;
@@ -16736,6 +16861,10 @@ DWORD WINAPI UiThreadProc(void*) {
             CoUninitialize();
         }
         return 0;
+    }
+    if (g_stopping) {
+        // WhTool_ModUninit may have looked for g_overlayWnd before it was set.
+        PostMessage(overlay.Hwnd(), WM_APP_QUIT, 0, 0);
     }
     SettingsWindow settings;
     g_settingsUi = &settings;
@@ -18470,16 +18599,16 @@ constexpr UiText kUiTexts[] = {
       L"Нажмите клавиши…",
       L"कुंजियाँ दबाएँ…",
       L"কীগুলো চাপুন…"}},
-    {{L"Use Ctrl, Alt, Shift or Win with a key, or an F key. Esc cancels, Backspace turns it off.",
-      L"Usa Ctrl, Alt, Shift o Win con una tecla, o una tecla F. Esc cancela, Retroceso lo desactiva.",
-      L"Use Ctrl, Alt, Shift ou Win junto, ou uma tecla F. Esc cancela, Backspace desliga.",
-      L"Utilisez Ctrl, Alt, Shift ou Win avec une touche, ou une touche F. Esc annule, Retour arrière le désactive.",
-      L"Verwenden Sie Ctrl, Alt, Shift oder Win zusammen mit einer Taste, oder eine F-Taste. Esc bricht ab, die Rücktaste deaktiviert sie.",
-      L"Ctrl、Alt、Shift、Win とキーの組み合わせ、または F キーを使います。Esc でキャンセル、Backspace でオフにします。",
-      L"使用 Ctrl、Alt、Shift 或 Win 加一个键，或使用 F 键。按 Esc 取消，按 Backspace 关闭。",
-      L"Используйте Ctrl, Alt, Shift или Win вместе с клавишей либо клавишу F. Esc — отмена, Backspace — отключить.",
-      L"किसी कुंजी के साथ Ctrl, Alt, Shift या Win, या कोई F कुंजी उपयोग करें। Esc रद्द करता है, Backspace इसे बंद करता है।",
-      L"একটি কী-এর সাথে Ctrl, Alt, Shift বা Win, অথবা একটি F কী ব্যবহার করুন। Esc বাতিল করে, Backspace এটি বন্ধ করে।"}},
+    {{L"Use Ctrl, Alt or Win with a key, or an F key. Esc cancels, Backspace turns it off.",
+      L"Usa Ctrl, Alt o Win con una tecla, o una tecla F. Esc cancela, Retroceso lo desactiva.",
+      L"Use Ctrl, Alt ou Win junto, ou uma tecla F. Esc cancela, Backspace desliga.",
+      L"Utilisez Ctrl, Alt ou Win avec une touche, ou une touche F. Esc annule, Retour arrière le désactive.",
+      L"Verwenden Sie Ctrl, Alt oder Win zusammen mit einer Taste, oder eine F-Taste. Esc bricht ab, die Rücktaste deaktiviert sie.",
+      L"Ctrl、Alt、Win とキーの組み合わせ、または F キーを使います。Esc でキャンセル、Backspace でオフにします。",
+      L"使用 Ctrl、Alt 或 Win 加一个键，或使用 F 键。按 Esc 取消，按 Backspace 关闭。",
+      L"Используйте Ctrl, Alt или Win вместе с клавишей либо клавишу F. Esc — отмена, Backspace — отключить.",
+      L"किसी कुंजी के साथ Ctrl, Alt या Win, या कोई F कुंजी उपयोग करें। Esc रद्द करता है, Backspace इसे बंद करता है।",
+      L"একটি কী-এর সাথে Ctrl, Alt বা Win, অথবা একটি F কী ব্যবহার করুন। Esc বাতিল করে, Backspace এটি বন্ধ করে।"}},
     {{L"Toggle",
       L"Alternar",
       L"Alternar",
@@ -18840,26 +18969,6 @@ constexpr UiText kUiTexts[] = {
       L"Короткий щелчок в начале и в конце записи.",
       L"रिकॉर्डिंग शुरू और खत्म होने पर एक छोटा क्लिक।",
       L"রেকর্ডিং শুরু ও শেষ হলে একটি ছোট ক্লিক।"}},
-    {{L"Mute PC audio while recording",
-      L"Silenciar el audio del PC durante la grabación",
-      L"Silenciar o som do PC durante a gravação",
-      L"Couper le son du PC pendant l'enregistrement",
-      L"PC-Audio während der Aufnahme stummschalten",
-      L"録音中は PC の音声をミュート",
-      L"录音时将电脑静音",
-      L"Отключать звук ПК во время записи",
-      L"रिकॉर्डिंग के दौरान PC की आवाज़ म्यूट करें",
-      L"রেকর্ডিংয়ের সময় PC-র শব্দ মিউট করুন"}},
-    {{L"Music and videos go quiet so they don't get in the way; the sound comes back when you stop.",
-      L"La música y los videos se silencian para que no estorben; el sonido vuelve cuando paras.",
-      L"Músicas e vídeos ficam mudos para não atrapalhar a transcrição; o som volta quando você para.",
-      L"La musique et les vidéos se taisent pour ne pas gêner ; le son revient quand vous arrêtez.",
-      L"Musik und Videos verstummen, damit sie nicht stören; der Ton kehrt zurück, wenn Sie aufhören.",
-      L"音楽や動画の音を消して邪魔にならないようにします。停止すると音が戻ります。",
-      L"音乐和视频会静音，以免干扰；停止后声音会恢复。",
-      L"Музыка и видео затихают, чтобы не мешать; звук возвращается, когда вы останавливаете запись.",
-      L"संगीत और वीडियो शांत हो जाते हैं ताकि बाधा न बनें; रोकने पर आवाज़ वापस आ जाती है।",
-      L"গান ও ভিডিও চুপ হয়ে যায় যাতে বাধা না দেয়; থামালে শব্দ ফিরে আসে।"}},
     {{L"Paste automatically",
       L"Pegar automáticamente",
       L"Colar automaticamente",
@@ -19000,16 +19109,16 @@ constexpr UiText kUiTexts[] = {
       L"О программе",
       L"परिचय",
       L"সম্পর্কে"}},
-    {{L"  — add Ctrl, Alt, Shift or Win",
-      L"  — usa Ctrl, Alt, Shift o Win",
-      L"  — use Ctrl, Alt, Shift ou Win junto",
-      L"  — ajoutez Ctrl, Alt, Shift ou Win",
-      L"  — Ctrl, Alt, Shift oder Win hinzufügen",
-      L"  — Ctrl、Alt、Shift、Win のいずれかを追加",
-      L"  — 请加上 Ctrl、Alt、Shift 或 Win",
-      L"  — добавьте Ctrl, Alt, Shift или Win",
-      L"  — Ctrl, Alt, Shift या Win जोड़ें",
-      L"  — Ctrl, Alt, Shift বা Win যোগ করুন"}},
+    {{L"  — add Ctrl, Alt or Win",
+      L"  — usa Ctrl, Alt o Win",
+      L"  — use Ctrl, Alt ou Win junto",
+      L"  — ajoutez Ctrl, Alt ou Win",
+      L"  — Ctrl, Alt oder Win hinzufügen",
+      L"  — Ctrl、Alt、Win のいずれかを追加",
+      L"  — 请加上 Ctrl、Alt 或 Win",
+      L"  — добавьте Ctrl, Alt или Win",
+      L"  — Ctrl, Alt या Win जोड़ें",
+      L"  — Ctrl, Alt বা Win যোগ করুন"}},
     {{L"Stop and paste",
       L"Parar y pegar",
       L"Parar e colar",
@@ -20920,6 +21029,26 @@ constexpr UiText kUiTexts[] = {
       L"Запись больше не хранится.",
       L"रिकॉर्डिंग अब रखी नहीं गई है।",
       L"রেকর্ডিংটি আর রাখা নেই।"}},
+    {{L"  — already used by another shortcut",
+      L"  — ya se usa en otro atajo",
+      L"  — já usado em outro atalho",
+      L"  — déjà utilisé par un autre raccourci",
+      L"  — schon für ein anderes Tastenkürzel verwendet",
+      L"  — 別のショートカットで使用中",
+      L"  — 已被另一个快捷键使用",
+      L"  — уже используется другим сочетанием",
+      L"  — किसी दूसरे शॉर्टकट में पहले से उपयोग में",
+      L"  — অন্য একটি শর্টকাটে আগেই ব্যবহৃত"}},
+    {{L"The text changed after the paste: the new version is copied, paste it with Ctrl+V.",
+      L"El texto cambió después de pegarlo: la nueva versión está copiada, pégala con Ctrl+V.",
+      L"O texto mudou depois de colar: a nova versão está copiada, cole com Ctrl+V.",
+      L"Le texte a changé après le collage : la nouvelle version est copiée, collez-la avec Ctrl+V.",
+      L"Der Text wurde nach dem Einfügen geändert: Die neue Version wurde kopiert, fügen Sie sie mit Ctrl+V ein.",
+      L"貼り付けた後にテキストが変更されました。新しいバージョンはコピー済みなので、Ctrl+V で貼り付けてください。",
+      L"粘贴后文本已更改：新版本已复制，请按 Ctrl+V 粘贴。",
+      L"Текст изменился после вставки: новая версия скопирована, вставьте её с помощью Ctrl+V.",
+      L"पेस्ट करने के बाद टेक्स्ट बदल गया: नया संस्करण कॉपी हो गया है, इसे Ctrl+V से पेस्ट करें।",
+      L"পেস্ট করার পরে টেক্সট বদলে গেছে: নতুন সংস্করণ কপি করা হয়েছে, Ctrl+V দিয়ে পেস্ট করুন।"}},
 };
 
 PCWSTR UiTextIn(const UiText* text, int language) {
