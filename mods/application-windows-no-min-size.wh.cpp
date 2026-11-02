@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              application-windows-no-min-size
 // @name            Application Windows: No Minimum Size
-// @description     Allows supported application windows to resize below their standard minimum size
-// @version         1.8.6
+// @description     Removes standard minimum window sizes; disabling with undersized windows may crash affected apps
+// @version         1.8.7
 // @author          SaiLuminous
 // @github          https://github.com/SaiLuminous
 // @include         *
@@ -23,6 +23,12 @@ Explorer-only approach to eligible top-level application windows.
 ![Window resizing demonstration](https://i.imgur.com/iYyPe1o.gif)
 
 
+**Before disabling or updating:** save your work and enlarge undersized windows
+to their normal minimum, or close them yourself. Crashes have been reported
+when disabling with undersized windows open; affected applications may crash.
+This is an application-dependent risk, not a guaranteed outcome for every window.
+The mod does not automatically close windows, show close prompts, or wait for
+you to resize them.
 ## Usage
 
 Enable the mod, then resize a supported window normally or with your window
@@ -31,7 +37,8 @@ manager. Disable other minimum-size mods that target the same applications.
 The mod targets all processes by default. Use Windhawk's per-mod advanced
 process inclusion/exclusion controls to restrict it to particular applications.
 Explorer's desktop, taskbar, and helper windows are excluded; only its folder
-window classes are eligible.
+window classes are eligible. Only resizable desktop windows are subclassed;
+fixed-size helpers and message-only windows are excluded.
 
 ## File Pilot support
 
@@ -51,23 +58,6 @@ It does not patch the executable on disk.
 
 Enable the option in the Settings tab. Other mods hooking the same function
 may interfere with it.
-
-## Disabling or updating
-
-The mod restores normal minimum-size handling. It requests a normal close for
-visible, non-minimized, non-maximized windows below their observed minimum.
-Windows with no observed minimum cannot be detected by this check.
-
-If a requested window remains open after three seconds, a popup asks you to
-save your work and close the app. Save prompts and cancellation are respected.
-No process is force-terminated.
-
-Other windows are left open unless callback removal times out. Blocked
-attachment or callback cleanup can also trigger a close request and a popup,
-regardless of window size. The popup explains which step is blocked.
-
-This fallback cannot detect a later wait inside Windhawk's own hook removal.
-Applications may enforce their minimum again on a subsequent resize.
 
 ## Compatibility and limitations
 
@@ -131,8 +121,6 @@ Distributed under the MIT License; the notice is included below.
 #include <cstring>
 #include <mutex>
 #include <unordered_set>
-#include <unordered_map>
-#include <algorithm>
 #include <vector>
 
 static wchar_t g_processName[MAX_PATH]{};
@@ -141,7 +129,6 @@ static std::atomic<bool> g_stopping{false};
 static std::atomic<unsigned> g_attaching{0};
 static std::mutex g_windowsMutex;
 static std::unordered_set<HWND> g_windows;
-static std::unordered_map<HWND, SIZE> g_minimums;
 
 static bool IsApplicationWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
@@ -151,6 +138,10 @@ static bool IsApplicationWindow(HWND hwnd) {
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if ((style & WS_CHILD) || (exStyle & WS_EX_NOACTIVATE)) return false;
+    // Only resizable desktop windows need a minimum-tracking-size override.
+    // Exclude worker-thread helpers and message-only windows from subclassing.
+    if (!(style & WS_THICKFRAME)) return false;
+    if (GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow()) return false;
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) return false;
     wchar_t cls[256] = {};
     if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
@@ -177,7 +168,6 @@ static LRESULT CALLBACK SubclassWndProc(HWND hwnd, UINT msg, WPARAM wp,
         {
             std::lock_guard lock(g_windowsMutex);
             g_windows.erase(hwnd);
-        g_minimums.erase(hwnd);
         }
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
@@ -186,10 +176,6 @@ static LRESULT CALLBACK SubclassWndProc(HWND hwnd, UINT msg, WPARAM wp,
     if (msg == WM_GETMINMAXINFO && lp && !g_stopping.load() &&
         IsApplicationWindow(hwnd)) {
         auto* limits = reinterpret_cast<MINMAXINFO*>(lp);
-        {
-            std::lock_guard lock(g_windowsMutex);
-            g_minimums[hwnd] = SIZE{limits->ptMinTrackSize.x, limits->ptMinTrackSize.y};
-        }
         limits->ptMinTrackSize.x = 1;
         limits->ptMinTrackSize.y = 1;
     }
@@ -211,7 +197,6 @@ static void Attach(HWND hwnd) {
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SubclassWndProc, 0)) {
         std::lock_guard lock(g_windowsMutex);
         g_windows.erase(hwnd);
-        g_minimums.erase(hwnd);
     }
 }
 static BOOL CALLBACK EnumAttach(HWND hwnd, LPARAM) {
@@ -250,13 +235,6 @@ static BOOL WINAPI FilePilotSetWindowPosHook(HWND hwnd, HWND after,
         flags == (SWP_NOMOVE | SWP_NOZORDER) && !after && x == 0 && y == 0 &&
         cx > 0 && cy > 0 && IsApplicationWindow(hwnd) &&
         !IsIconic(hwnd) && !IsZoomed(hwnd)) {
-        RECT current{};
-        if (GetWindowRect(hwnd, &current)) {
-            std::lock_guard lock(g_windowsMutex);
-            auto& minimum = g_minimums[hwnd];
-            if (cx > current.right - current.left) minimum.cx = cx;
-            if (cy > current.bottom - current.top) minimum.cy = cy;
-        }
         return TRUE;
     }
     return OriginalSetWindowPos(hwnd, after, x, y, cx, cy, flags);
@@ -357,68 +335,10 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     EnumWindows(EnumAttach, 0);
 }
-static void AskToCloseApplication(const wchar_t* reason) {
-    const wchar_t* name = g_processName;
-    wchar_t message[768]{};
-    swprintf_s(message, LR"(Please close %s to finish cleanup for Application Windows: No Minimum Size.
-
-%s
-Save your work, finish any save prompts, and close this application manually.
-
-No process will be force-terminated. Unloading may remain pending until it exits.)",
-        *name ? name : L"This application", reason);
-    MessageBoxW(nullptr, message, L"Please close the application",
-                MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
-}
-
-static bool TryDetachWindow(HWND hwnd) {
-    if (!IsWindow(hwnd)) return true;
-    DWORD_PTR result = 0;
-    // Same protocol as WindhawkUtils::RemoveWindowSubclassFromAnyThread.
-    // The LPARAM is a function identifier, not a temporary data pointer.
-    return SendMessageTimeoutW(
-        hwnd, WindhawkUtils::detail::GetSubclassRegisteredMsg(), FALSE,
-        reinterpret_cast<LPARAM>(SubclassWndProc),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, 1500, &result) != 0;
-}
-static bool IsUndersized(HWND hwnd) {
-    // Judge the current on-screen window, not a saved restored rectangle.
-    if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd)) return false;
-    SIZE minimum{};
-    {
-        std::lock_guard lock(g_windowsMutex);
-        auto it = g_minimums.find(hwnd);
-        if (it == g_minimums.end()) return false;
-        minimum = it->second;
-    }
-    RECT rect{};
-    if (!GetWindowRect(hwnd, &rect)) return false;
-    return (minimum.cx > 0 && rect.right - rect.left < minimum.cx) ||
-           (minimum.cy > 0 && rect.bottom - rect.top < minimum.cy);
-}
 void Wh_ModBeforeUninit() {
     g_stopping.store(true);
     // Finish attachments already in flight before taking the detach snapshot.
-    bool prompted = false;
-    ULONGLONG attachmentStart = GetTickCount64();
-    while (g_attaching.load()) {
-        if (!prompted && GetTickCount64() - attachmentStart >= 3000) {
-            std::vector<HWND> pending;
-            {
-                std::lock_guard lock(g_windowsMutex);
-                pending.assign(g_windows.begin(), g_windows.end());
-            }
-            for (HWND hwnd : pending) {
-                if (IsWindowVisible(hwnd)) PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            }
-            Sleep(1500);
-            if (g_attaching.load()) {
-                prompted = true;
-                AskToCloseApplication(L"A window attachment is still in progress. This is a cleanup problem, not a window-size warning. A close request was sent to visible windows.");
-            }
-        }
-        Sleep(50);
-    }
+    while (g_attaching.load()) Sleep(1);
     std::vector<HWND> windows;
     {
         std::lock_guard lock(g_windowsMutex);
@@ -426,30 +346,15 @@ void Wh_ModBeforeUninit() {
     }
     // Never hold the tracking mutex while sending to a window thread.
     for (HWND hwnd : windows) {
-        if (IsUndersized(hwnd)) {
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            ULONGLONG deadline = GetTickCount64() + 3000;
-            while (IsWindow(hwnd) && GetTickCount64() < deadline) Sleep(50);
-            if (IsWindow(hwnd) && !prompted) {
-                prompted = true;
-                AskToCloseApplication(L"An undersized window was asked to close but remains open. The app may be waiting for you to save or confirm closing.");
-            }
-        }
-        if (TryDetachWindow(hwnd)) continue;
-        // Request closure only after detachment times out; preserve save prompts.
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
-        Sleep(1500);
-        while (!TryDetachWindow(hwnd)) {
-            if (!prompted) {
-                prompted = true;
-                AskToCloseApplication(L"Removing a window callback timed out. This can happen at any window size. A close request was sent, but cleanup is still blocked.");
-            }
-            Sleep(250);
-        }
+        wchar_t className[256]{};
+        GetClassNameW(hwnd, className, ARRAYSIZE(className));
+        DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
+        Wh_Log(L"Removing subclass: hwnd=%p class=%s thread=%lu",
+               hwnd, className, threadId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SubclassWndProc);
     }
 }
 void Wh_ModUninit() {
     std::lock_guard lock(g_windowsMutex);
     g_windows.clear();
-    g_minimums.clear();
 }
