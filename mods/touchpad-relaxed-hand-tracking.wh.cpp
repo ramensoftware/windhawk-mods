@@ -5,8 +5,9 @@
 // @version         1.0.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
-// @include         windhawk-mod-uiaccess.exe
 // @include         windhawk.exe
+// @include         windhawk-mod.exe
+// @include         windhawk-mod-uiaccess.exe
 // @compilerOptions -lhid -lwtsapi32
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -104,7 +105,6 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 // end of this file.
 #if __has_include(<windhawk_tool_mod.h>)
 #include <windhawk_tool_mod.h>
-#define WH_TOOL_MOD_HEADER 1
 #endif
 #include <windhawk_utils.h>
 
@@ -1845,7 +1845,7 @@ void WhTool_ModUninit() {
     SaveCurve();
 }
 
-#ifndef WH_TOOL_MOD_HEADER
+#if !__has_include(<windhawk_tool_mod.h>)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
@@ -2026,4 +2026,4 @@ void Wh_ModUninit() {
     ExitProcess(0);
 }
 
-#endif  // WH_TOOL_MOD_HEADER
+#endif
