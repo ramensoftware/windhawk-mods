@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.86
+// @version         0.3.94
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -353,6 +353,7 @@ constexpr UINT kTrayCatalogMessage = WM_APP + 53;
 constexpr UINT kCatalogIconsMessage = WM_APP + 55;
 constexpr UINT_PTR kCatalogSearchTimerId = 56;
 constexpr UINT kEditorThemeMessage = WM_APP + 57;
+constexpr UINT kEditorBackdropSourcesMessage = WM_APP + 58;
 constexpr UINT kRefreshPlateFillsMessage = WM_APP + 60;
 constexpr UINT_PTR kEditorBackdropTimerId = 58;
 constexpr UINT_PTR kDiscoveryTimerId = 59;
@@ -1597,6 +1598,8 @@ struct SettingsEditor {
     std::array<std::optional<int64_t>, 3> captionPressedTokens;
     DWORD captionClickTime{};
     POINT captionClickPoint{};
+    // Press point as a fraction of the window size, while a caption drag runs.
+    std::optional<std::pair<double, double>> dragGrip;
     bool framePointerOver{};
     UINT dpi{96};
     bool syncing{}, valid{}, dirty{}, navigatingFocus{}, compactLayout{};
@@ -1633,6 +1636,9 @@ struct SettingsEditor {
     Media::Brush cardMaterial{nullptr};
     std::shared_ptr<LiquidRenderer> backgroundRenderer;
     std::shared_ptr<LiquidRenderer> desktopRenderer;
+    std::array<HWINEVENTHOOK, 2> backdropHooks{};
+    std::vector<std::pair<HWND, RECT>> backdropCandidates;
+    bool backdropRefreshPending{};
     std::unique_ptr<GlassPointerBinding> glassPointer;
     CompositionRoundedRectangleGeometry backgroundGeometry{nullptr};
     SIZE windowShapeSize{};
@@ -1659,6 +1665,7 @@ void CreateEditorPreview(SettingsEditor& editor);
 void UpdateEditorPreview(SettingsEditor& editor) noexcept;
 void UpdateEditorSurface(SettingsEditor& editor, bool updateCards = true) noexcept;
 void UpdateEditorPosition(SettingsEditor& editor) noexcept;
+void RefreshEditorBackdropSources(SettingsEditor& editor) noexcept;
 void CloseEditorSurface(SettingsEditor& editor);
 void CloseEditorPreview(SettingsEditor& editor);
 void LayoutEditor(SettingsEditor& editor);
@@ -2724,7 +2731,15 @@ bool RouteEditorFrameInput(SettingsEditor& editor, MSG const& message) {
         editor.captionClickPoint = point;
         if (doubleClick) nativeMessage = WM_NCLBUTTONDBLCLK;
     }
-    SendMessageW(editor.window, nativeMessage, hit, position);
+    RECT frame{};
+    // A maximized window restores mid-drag; the fraction keeps the cursor on the
+    // same part of the caption at the size Windows restores.
+    if (nativeMessage == WM_NCLBUTTONDOWN && hit == HTCAPTION &&
+        GetWindowRect(editor.window, &frame) && frame.right > frame.left && frame.bottom > frame.top)
+        editor.dragGrip = std::pair{double(point.x - frame.left) / (frame.right - frame.left),
+                                    double(point.y - frame.top) / (frame.bottom - frame.top)};
+    SendMessageW(editor.window, nativeMessage, hit, position); // Runs the whole caption move loop.
+    editor.dragGrip.reset();
     return true;
 }
 
@@ -3214,6 +3229,16 @@ void CreateEditorContent(SettingsEditor& editor) {
     UpdateEditorTheme(editor);
 }
 
+// A window that moves, shows or hides under the editor sends no capture frame,
+// so without this the backdrop sees it only on the 250 ms timer.
+void CALLBACK EditorBackdropEvent(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG child, DWORD, DWORD) {
+    HWND editorWindow = g_editorWindow;
+    if (g_stopping || !window || object != OBJID_WINDOW || child != CHILDID_SELF || !editorWindow) return;
+    auto* editor = reinterpret_cast<SettingsEditor*>(GetWindowLongPtrW(editorWindow, GWLP_USERDATA));
+    if (editor && !editor->backdropRefreshPending)
+        editor->backdropRefreshPending = PostMessageW(editorWindow, kEditorBackdropSourcesMessage, 0, 0);
+}
+
 LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
     auto* editor = reinterpret_cast<SettingsEditor*>(GetWindowLongPtrW(window, GWLP_USERDATA));
     try {
@@ -3303,8 +3328,23 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
             UpdatePreviewForeground(*editor);
             return 0;
         }
+        if (message == kEditorBackdropSourcesMessage) {
+            editor->backdropRefreshPending = false;
+            RefreshEditorBackdropSources(*editor);
+            return 0;
+        }
         if (message == kCatalogIconsMessage) { CatalogIconResult(*editor, wp); return 0; }
-        if (message == WM_CREATE) { editor->dpi = GetDpiForWindow(window); return 0; }
+        if (message == WM_CREATE) {
+            editor->dpi = GetDpiForWindow(window);
+            editor->backdropHooks = {
+                SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, nullptr,
+                                EditorBackdropEvent, 0, 0, WINEVENT_OUTOFCONTEXT),
+                SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+                                EditorBackdropEvent, 0, 0, WINEVENT_OUTOFCONTEXT)};
+            if (!editor->backdropHooks[0] || !editor->backdropHooks[1])
+                Wh_Log(L"[UWSET] backdrop window hooks failed error=%lu", GetLastError());
+            return 0;
+        }
         if (message == WM_SIZE) {
             LayoutEditor(*editor);
             if (wp == SIZE_MINIMIZED) CloseEditorPreview(*editor);
@@ -3339,6 +3379,25 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
              message == kEditorThemeMessage) && editor->content && !editor->updatingSurface) {
             editor->surfaceAppearance = -1;
             UpdateEditorTheme(*editor);
+        }
+        if (message == WM_MOVING && editor->dragGrip) {
+            // With a fast mouse this move loop falls behind and replays queued
+            // positions one at a time, seconds after the cursor and past the
+            // release. Place the window from the cursor instead, and keep it where
+            // the button was released while the queue drains. Only the position
+            // changes: Windows keeps choosing the size, e.g. on a DPI change.
+            auto& proposed = *reinterpret_cast<RECT*>(lp);
+            LONG width = proposed.right - proposed.left, height = proposed.bottom - proposed.top;
+            RECT current{};
+            POINT cursor{};
+            if (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) < 0 &&
+                GetCursorPos(&cursor)) {
+                OffsetRect(&proposed, cursor.x - LONG(std::lround(editor->dragGrip->first * width)) - proposed.left,
+                           cursor.y - LONG(std::lround(editor->dragGrip->second * height)) - proposed.top);
+            } else if (GetWindowRect(window, &current)) {
+                OffsetRect(&proposed, current.left - proposed.left, current.top - proposed.top);
+            }
+            return TRUE;
         }
         if (message == WM_MOVE && editor->content) UpdateEditorPosition(*editor);
         if (message == WM_SHOWWINDOW && editor->content) {
@@ -3400,6 +3459,7 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
             return 0;
         }
         if (message == WM_DESTROY) {
+            for (auto hook : editor->backdropHooks) if (hook) UnhookWinEvent(hook);
             editor->colorsChanged.revoke();
             editor->textScaleChanged.revoke();
             CloseEditorPreview(*editor);
@@ -4845,6 +4905,11 @@ void PostItemStateRefresh() {
     }
 }
 
+struct BusyScope {
+    bool previous = std::exchange(g_busy, true);
+    ~BusyScope() { g_busy = previous; PostItemStateRefresh(); }
+};
+
 void RequestItemStateRefresh(uintptr_t owner) {
     ActiveScope active;
     if (!owner || g_stopping || GetCurrentThreadId() != g_ownerThread) return;
@@ -5545,6 +5610,9 @@ float4 ps(VertexOutput input) : SV_Target {
 )";
 
     std::timed_mutex mutex;
+    // The newest origin UpdatePosition handed over while the mutex was busy.
+    std::atomic<bool> originDeferred{};
+    std::atomic<uint64_t> deferredOrigin{};
     DWORD compositorProcess{};
     ContainerVisual geometryVisual{nullptr};
     std::array<CompositionColorBrush, 4> dockSamples{nullptr, nullptr, nullptr, nullptr};
@@ -5846,6 +5914,7 @@ float4 ps(VertexOutput input) : SV_Target {
                             std::chrono::steady_clock::now();
                         renderer->RenderLocked();
                     }
+                    renderer->TakeDeferredOriginLocked(); // Handed over during this render.
                     renderer->presentWorkPending = false;
                     if (renderer->motionActive || renderer->effectsAnimating || renderer->pendingPresent)
                         renderer->SchedulePresentLocked();
@@ -6337,6 +6406,7 @@ float4 ps(VertexOutput input) : SV_Target {
             }
         }
         taskbarRect = taskbarBounds;
+        originDeferred = false; // These bounds are newer than any handed-over origin.
         for (auto const& source : sources)
             if (source->visualBackdrop) source->rect = taskbarBounds;
         geometryScale = dipScale;
@@ -6346,14 +6416,33 @@ float4 ps(VertexOutput input) : SV_Target {
         return true;
     }
 
+    // The UI thread calls this for every step of a window drag. A render holds
+    // the mutex while it submits GPU work, which took over 100 ms under load, so
+    // a busy mutex hands the newest origin to that render instead of waiting.
     bool UpdatePosition(POINT origin) {
-        std::lock_guard lock(mutex);
+        std::unique_lock lock(mutex, std::try_to_lock);
+        if (!lock) {
+            deferredOrigin = uint64_t(uint32_t(origin.x)) << 32 | uint32_t(origin.y);
+            originDeferred = true;
+            return true;
+        }
+        originDeferred = false;
+        return MoveToLocked(origin);
+    }
+
+    bool MoveToLocked(POINT origin) {
         if(!running || FAILED(failure) || !geometryReady) return false;
         if(taskbarRect.left==origin.x && taskbarRect.top==origin.y) return true;
         OffsetRect(&taskbarRect,origin.x-taskbarRect.left,origin.y-taskbarRect.top);
         for(auto const& source:sources) if(source->visualBackdrop) source->rect=taskbarRect;
         SchedulePresentLocked();
         return true;
+    }
+
+    void TakeDeferredOriginLocked() {
+        if (!originDeferred.exchange(false)) return;
+        uint64_t packed = deferredOrigin;
+        MoveToLocked({LONG(int32_t(packed >> 32)), LONG(int32_t(packed))});
     }
 
     void SetPointer(float x, float y, bool active) noexcept {
@@ -6462,7 +6551,11 @@ float4 ps(VertexOutput input) : SV_Target {
                 belowTaskbar = true;
                 continue;
             }
+            RECT rect{}, visible{}, intersection{};
+            // The visible frame lies inside the window rect, so this cheap test
+            // skips most windows before the class and DWM queries, which are syscalls.
             if (!belowTaskbar || !IsWindowVisible(window) || IsIconic(window) ||
+                !GetWindowRect(window, &rect) || !IntersectRect(&intersection, &rect, &dockStrip) ||
                 ClassIs(window, L"Shell_TrayWnd") ||
                 ClassIs(window, L"Shell_SecondaryTrayWnd") ||
                 ClassIs(window, L"Progman") ||
@@ -6471,8 +6564,6 @@ float4 ps(VertexOutput input) : SV_Target {
             if (SUCCEEDED(DwmGetWindowAttribute(
                     window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked)
                 continue;
-            RECT rect{}, visible{}, intersection{};
-            if (!GetWindowRect(window, &rect)) continue;
             // The window rect includes the invisible resize border, so a
             // maximized or snapped window next to the taskbar would qualify
             // and paint its edge rows into the strip. Qualify by the visible
@@ -6560,6 +6651,12 @@ float4 ps(VertexOutput input) : SV_Target {
             try { source->session.DirtyRegionMode(capture::GraphicsCaptureDirtyRegionMode::ReportOnly); } catch (...) {}
             try { source->session.IsBorderRequired(false); } catch (...) {}
             try { source->session.IsCursorCaptureEnabled(false); } catch (...) {}
+            // WGC delivers at most one frame per 16 ms by default, which held the
+            // uncapped editor body to about 55 Hz through its two capture stages.
+            // The desktop keeps that default: it is the whole virtual desktop, and
+            // an animated wallpaper would have dwm capture it every composition.
+            if (!limitToDisplay && (!window || window != GetShellWindow()))
+                try { source->session.MinUpdateInterval(std::chrono::milliseconds(1)); } catch (...) {}
             return source;
         } catch (...) {
             Wh_Log(L"[UWLIQUID] capture prepare failed hwnd=%p hr=%08X", window,
@@ -7041,6 +7138,13 @@ float4 ps(VertexOutput input) : SV_Target {
             auto previousDpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             bool haveRect = source->window && previousDpi && GetWindowRect(source->window, &currentRect);
             if (previousDpi) SetThreadDpiAwarenessContext(previousDpi);
+            // A captured visual that grows keeps sending frames at the old pool
+            // size; only its item reports the new size, e.g. after maximizing.
+            auto targetSize = contentSize;
+            if (source->visualBackdrop) {
+                auto itemSize = source->item.Size();
+                if (itemSize.Width > 0 && itemSize.Height > 0) targetSize = itemSize;
+            }
             std::lock_guard lock(mutex);
             if (!running ||
                 !source->active.load(std::memory_order_acquire) ||
@@ -7049,9 +7153,9 @@ float4 ps(VertexOutput input) : SV_Target {
             if (!StoreFrameLocked(source, texture.get(), contentSize,
                                   haveRect ? &currentRect : nullptr))
                 return;
-            if (source->poolSize.Width != contentSize.Width ||
-                source->poolSize.Height != contentSize.Height) {
-                recreateSize = contentSize;
+            if (source->poolSize.Width != targetSize.Width ||
+                source->poolSize.Height != targetSize.Height) {
+                recreateSize = targetSize;
                 recreatePool = true;
             }
             SchedulePresentLocked();
@@ -7090,6 +7194,7 @@ float4 ps(VertexOutput input) : SV_Target {
     void RenderLocked() {
         if (!running || !composite || !swapChain || width == 0 || height == 0)
             return;
+        TakeDeferredOriginLocked();
         pendingPresent = false;
         CommitMotionObservationLocked(std::chrono::steady_clock::now());
         float clear[]{0, 0, 0, 0};
@@ -7585,6 +7690,22 @@ void UpdateEditorPosition(SettingsEditor& editor) noexcept {
         if(!ready) UpdateEditorSurface(editor,false);
     } catch (...) {
         Wh_Log(L"[UWSET] background position update failed hr=%08X",winrt::to_hresult().value);
+    }
+}
+
+void RefreshEditorBackdropSources(SettingsEditor& editor) noexcept {
+    if (!editor.desktopRenderer) return;
+    try {
+        auto candidates = editor.desktopRenderer->CandidateWindows();
+        if (std::equal(candidates.begin(), candidates.end(), editor.backdropCandidates.begin(),
+                       editor.backdropCandidates.end(), [](auto const& a, auto const& b) {
+                           return a.first == b.first && EqualRect(&a.second, &b.second);
+                       }))
+            return;
+        editor.desktopRenderer->UpdateSources(candidates);
+        editor.backdropCandidates = std::move(candidates);
+    } catch (...) {
+        Wh_Log(L"[UWSET] backdrop source refresh failed hr=%08X", winrt::to_hresult().value);
     }
 }
 
@@ -8268,8 +8389,7 @@ void StopLiquidMotionTracking() noexcept {
 void OnLiquidRendering() noexcept {
     ActiveScope active;
     if (g_stopping || GetCurrentThreadId() != g_ownerThread || g_busy) return;
-    g_busy = true;
-    struct Unbusy { ~Unbusy() { g_busy = false; PostItemStateRefresh(); } } unbusy;
+    BusyScope busy;
     bool needed = false;
     try {
         for (auto& root : g_roots) {
@@ -8436,16 +8556,10 @@ void WINAPI HideCompleted_Hook(void* projectedAnimator, const void* projectedEle
         auto frame =
             MotionEvent(abi, Root::Source::Life::Retired, false, false);
         bool previousBusy = g_busy;
-        g_busy = true;
-        try {
+        {
+            BusyScope busy;
             HideCompleted_Original(projectedAnimator, projectedElement);
-        } catch (...) {
-            g_busy = previousBusy;
-            PostItemStateRefresh();
-            throw;
         }
-        g_busy = previousBusy;
-        PostItemStateRefresh();
         if (!previousBusy && frame) OnLayout(frame);
         return;
     }
@@ -8975,6 +9089,11 @@ winrt::Windows::Foundation::IInspectable ReadPlateLocalValue(
     return value;
 }
 
+enum class PlateProperty : size_t {
+    CornerRadius, Margin, Height, VerticalAlignment, Background, BorderBrush, MaxHeight, MinHeight
+};
+constexpr size_t kPlateProperties = size_t(PlateProperty::MinHeight) + 1;
+
 // Visual-state setters preserve underlying bindings/local values while native
 // taskbar states change the effective appearance. SetValue detaches bindings.
 struct PlateTemplateValues {
@@ -8984,27 +9103,31 @@ struct PlateTemplateValues {
     VisualStateGroup group{nullptr};
     VisualState active{nullptr};
     std::wstring activeName, releasedName;
-    std::array<Setter,8> setters{nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr};
-    std::array<winrt::Windows::Foundation::IInspectable,8> locals{};
-    std::array<bool,8> managed{};
+    std::array<Setter,kPlateProperties> setters{nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr};
+    std::array<winrt::Windows::Foundation::IInspectable,kPlateProperties> locals{};
+    std::array<bool,kPlateProperties> managed{};
 
-    static DependencyProperty Property(size_t i) {
-        switch(i) {
-        case 0: return Controls::Border::CornerRadiusProperty();
-        case 1: return FrameworkElement::MarginProperty();
-        case 2: return FrameworkElement::HeightProperty();
-        case 3: return FrameworkElement::VerticalAlignmentProperty();
-        case 4: return Controls::Border::BackgroundProperty();
-        case 5: return Controls::Border::BorderBrushProperty();
-        case 6: return FrameworkElement::MaxHeightProperty();
+    static DependencyProperty Property(PlateProperty property) {
+        switch(property) {
+        case PlateProperty::CornerRadius: return Controls::Border::CornerRadiusProperty();
+        case PlateProperty::Margin: return FrameworkElement::MarginProperty();
+        case PlateProperty::Height: return FrameworkElement::HeightProperty();
+        case PlateProperty::VerticalAlignment: return FrameworkElement::VerticalAlignmentProperty();
+        case PlateProperty::Background: return Controls::Border::BackgroundProperty();
+        case PlateProperty::BorderBrush: return Controls::Border::BorderBrushProperty();
+        case PlateProperty::MaxHeight: return FrameworkElement::MaxHeightProperty();
         default: return FrameworkElement::MinHeightProperty();
         }
     }
+    bool Managed(PlateProperty property) const { return managed[size_t(property)]; }
+    bool Applied(PlateProperty property) const { return bool(setters[size_t(property)]); }
     static std::shared_ptr<PlateTemplateValues> Create(Controls::Border const& element) {
-        std::array<bool,8> managed{};
-        for(size_t i=0;i<8;++i) {
-            auto local=element.ReadLocalValue(Property(i));
-            managed[i]=i<4 || i>=6 || !local || winrt::get_class_name(local)==L"Windows.UI.Xaml.Data.BindingExpressionBase";
+        std::array<bool,kPlateProperties> managed{};
+        for(size_t i=0;i<kPlateProperties;++i) {
+            auto property=PlateProperty(i);
+            bool brush=property==PlateProperty::Background || property==PlateProperty::BorderBrush;
+            auto local=element.ReadLocalValue(Property(property));
+            managed[i]=!brush || !local || winrt::get_class_name(local)==L"Windows.UI.Xaml.Data.BindingExpressionBase";
         }
         auto parent=Media::VisualTreeHelper::GetParent(element).try_as<FrameworkElement>();
         Controls::Control control{nullptr};
@@ -9034,13 +9157,14 @@ struct PlateTemplateValues {
         VisualStateManager::GetVisualStateGroups(result->root).Append(result->group);
         return result;
     }
-    void Apply(size_t i, winrt::Windows::Foundation::IInspectable const& value) {
+    void Apply(PlateProperty property, winrt::Windows::Foundation::IInspectable const& value) {
+        auto i=size_t(property);
         // Re-enter to take precedence after a native group changes the same
         // property. GoToState(active) alone leaves an unchanged setter behind.
         if(active.Setters().Size() && !VisualStateManager::GoToState(control,releasedName,false))
             winrt::throw_hresult(E_FAIL);
         if(!setters[i]) {
-            locals[i]=element.ReadLocalValue(Property(i));
+            locals[i]=element.ReadLocalValue(Property(property));
             static constexpr PCWSTR names[]{L"CornerRadius",L"Margin",L"Height",
                 L"VerticalAlignment",L"Background",L"BorderBrush",L"MaxHeight",L"MinHeight"};
             Setter setter; TargetPropertyPath target;
@@ -9051,7 +9175,8 @@ struct PlateTemplateValues {
         setters[i].Value(value);
         if(!VisualStateManager::GoToState(control,activeName,false)) winrt::throw_hresult(E_FAIL);
     }
-    void Remove(size_t i) {
+    void Remove(PlateProperty property) {
+        auto i=size_t(property);
         if(!setters[i]) return;
         // A same-state update does not release removed setters. Leave first,
         // then reapply the remaining overrides in this UI-thread operation.
@@ -9062,9 +9187,14 @@ struct PlateTemplateValues {
         if(active.Setters().Size() && !VisualStateManager::GoToState(control,activeName,false))
             winrt::throw_hresult(E_FAIL);
     }
-    bool LocalUnchanged(size_t i) const {
+    void Release(PlateProperty property) {
+        Remove(property);
+        managed[size_t(property)]=false;
+    }
+    bool LocalUnchanged(PlateProperty property) const {
+        auto i=size_t(property);
         if(!setters[i]) return true;
-        auto current=element.ReadLocalValue(Property(i));
+        auto current=element.ReadLocalValue(Property(property));
         if(current==locals[i]) return true;
         auto templateBinding=[](auto const& value) {
             return !value || (winrt::get_class_name(value)==L"Windows.UI.Xaml.Data.BindingExpressionBase" &&
@@ -9073,15 +9203,19 @@ struct PlateTemplateValues {
         if(templateBinding(current) && templateBinding(locals[i])) return true;
         if(!current || !locals[i]) return false;
         try {
-            switch(i) {
-            case 0: return winrt::unbox_value<CornerRadius>(current)==winrt::unbox_value<CornerRadius>(locals[i]);
-            case 1: return winrt::unbox_value<Thickness>(current)==winrt::unbox_value<Thickness>(locals[i]);
-            case 2: {
+            switch(property) {
+            case PlateProperty::CornerRadius:
+                return winrt::unbox_value<CornerRadius>(current)==winrt::unbox_value<CornerRadius>(locals[i]);
+            case PlateProperty::Margin:
+                return winrt::unbox_value<Thickness>(current)==winrt::unbox_value<Thickness>(locals[i]);
+            case PlateProperty::Height: {
                 auto a=winrt::unbox_value<double>(current),b=winrt::unbox_value<double>(locals[i]);
                 return a==b || (std::isnan(a) && std::isnan(b));
             }
-            case 6: case 7: return winrt::unbox_value<double>(current)==winrt::unbox_value<double>(locals[i]);
-            case 3: return winrt::unbox_value<VerticalAlignment>(current)==winrt::unbox_value<VerticalAlignment>(locals[i]);
+            case PlateProperty::MaxHeight: case PlateProperty::MinHeight:
+                return winrt::unbox_value<double>(current)==winrt::unbox_value<double>(locals[i]);
+            case PlateProperty::VerticalAlignment:
+                return winrt::unbox_value<VerticalAlignment>(current)==winrt::unbox_value<VerticalAlignment>(locals[i]);
             default: return false;
             }
         } catch (...) { return false; }
@@ -9131,6 +9265,7 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
     static DependencyProperty Property(size_t i) {
         return i ? Controls::Border::BorderBrushProperty() : Controls::Border::BackgroundProperty();
     }
+    static PlateProperty Slot(size_t i) { return i ? PlateProperty::BorderBrush : PlateProperty::Background; }
     static Media::Brush Copy(Media::Brush const& brush) {
         if (!brush) return nullptr;
         auto follow=[](DependencyObject const& target, DependencyObject const& from,
@@ -9175,8 +9310,8 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
         UnwatchOpacity(i);
         auto local=element.ReadLocalValue(Property(i));
         auto current=element.GetValue(Property(i));
-        if(templateValues && templateValues->managed[i+4]) {
-            templateValues->Remove(i+4);
+        if(templateValues && templateValues->Managed(Slot(i))) {
+            templateValues->Remove(Slot(i));
         } else if (paint[i] && (local==paint[i] || current==paint[i] ||
                         (animatedPaint[i] && (local==animatedPaint[i] || current==animatedPaint[i])))) {
             if (binding[i]) element.SetBinding(Property(i),binding[i]);
@@ -9192,7 +9327,7 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
         struct Reset { bool& value; ~Reset(){value=false;} } reset{updating};
         for (size_t i=0;i<2;++i) {
             auto property=Property(i);
-            bool templateProperty=templateValues && templateValues->managed[i+4];
+            bool templateProperty=templateValues && templateValues->Managed(Slot(i));
             bool outline=i==1 || element.Name()==L"BackgroundBorder";
             double multiplier=factor==0 ? 0 : outline ? (borders ? 1 : 0) : factor;
             if (multiplier==1) {
@@ -9208,7 +9343,7 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
             }
             if(animatedPaint[i] && !animated) {
                 if(current==animatedPaint[i]) {
-                    if(templateProperty) templateValues->Apply(i+4,paint[i]);
+                    if(templateProperty) templateValues->Apply(Slot(i),paint[i]);
                     else element.SetValue(property,paint[i]);
                     current=paint[i];
                 }
@@ -9248,10 +9383,10 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
                             }
                         });
                     paint[i].Opacity(source[i].Opacity()*multiplier);
-                    if(templateProperty) templateValues->Apply(i+4,paint[i]);
+                    if(templateProperty) templateValues->Apply(Slot(i),paint[i]);
                     else element.SetValue(property,paint[i]);
                 } else if(templateProperty) {
-                    templateValues->Remove(i+4);
+                    templateValues->Remove(Slot(i));
                 }
             }
             if (paint[i] && source[i]) {
@@ -9328,13 +9463,12 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
                                 try {
                                     auto group=groupWeak.get();
                                     for(size_t i=0;i<2;++i) {
-                                        if(self->templateValues && self->templateValues->managed[i+4] &&
+                                        if(self->templateValues && self->templateValues->Managed(Slot(i)) &&
                                            self->TouchesBrush(args.NewState(),i,false)) {
                                             // XAML promotes the animated brush to a local value,
                                             // detaching TemplateBinding even without the mod.
                                             // Release our setter so it cannot mask that animation.
-                                            self->templateValues->Remove(i+4);
-                                            self->templateValues->managed[i+4]=false;
+                                            self->templateValues->Release(Slot(i));
                                             self->original[i]=self->source[i];
                                             self->binding[i]=nullptr;
                                         }
@@ -9429,21 +9563,22 @@ std::array<DependencyProperty,3> PlateLayoutProperties() {
     return {FrameworkElement::MarginProperty(),FrameworkElement::HeightProperty(),
             FrameworkElement::VerticalAlignmentProperty()};
 }
+constexpr PlateProperty kPlateLayoutSlots[]{PlateProperty::Margin,PlateProperty::Height,PlateProperty::VerticalAlignment};
 
 void RestoreStatePlate(Root::StatePlate& state) {
     if (!state.element) return;
     state.trayStates.reset();
     state.stateRefreshPending=false;
     RestorePlateFill(state);
-    if(state.templateValues) for(size_t i:{6u,7u}) {
-        try {state.templateValues->Remove(i);}
+    if(state.templateValues) for(auto property:{PlateProperty::MaxHeight,PlateProperty::MinHeight}) {
+        try {state.templateValues->Remove(property);}
         catch (...) {Wh_Log(L"[UWITEM] tray height limit restore failed");}
     }
     // A rejected property restore must not strand other owned properties,
     // the composition clip or the rim. Each attempt keeps its ownership check.
     try {
-        if(state.templateValues && state.templateValues->managed[0]) {
-            state.templateValues->Remove(0);
+        if(state.templateValues && state.templateValues->Managed(PlateProperty::CornerRadius)) {
+            state.templateValues->Remove(PlateProperty::CornerRadius);
         } else if (state.cornersOwned && state.element.CornerRadius() == state.appliedCorners) {
             if (state.originalCornerBinding)
                 state.element.SetBinding(Controls::Border::CornerRadiusProperty(), state.originalCornerBinding);
@@ -9459,8 +9594,8 @@ void RestoreStatePlate(Root::StatePlate& state) {
     if (state.layoutOwned) {
         for(size_t i=0;i<state.originalLayout.size();++i) {
             try {
-                if(state.templateValues && state.templateValues->managed[i+1]) {
-                    state.templateValues->Remove(i+1);
+                if(state.templateValues && state.templateValues->Managed(kPlateLayoutSlots[i])) {
+                    state.templateValues->Remove(kPlateLayoutSlots[i]);
                     continue;
                 }
                 auto property=PlateLayoutProperties()[i];
@@ -9564,17 +9699,18 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         // Radius, layout and the glass clip describe one shape. Yield the plate
         // if another writer changes it, before replacing our applied snapshots
         // or resetting them on a glass/theme transition.
-        auto geometryChanged=[&](size_t i,bool changed) {
+        auto geometryChanged=[&](PlateProperty property,bool changed) {
             // Tray highlight controls deliberately take precedence over the
             // native/local size policies used by different tray providers.
             // VSM setters retain their latest underlying values for cleanup.
             if(state.trayHighlight) return false;
-            return state.templateValues ? !state.templateValues->LocalUnchanged(i) : changed;
+            return state.templateValues ? !state.templateValues->LocalUnchanged(property) : changed;
         };
-        if ((state.cornersOwned && geometryChanged(0,plate.CornerRadius()!=state.appliedCorners)) ||
-            (state.layoutOwned && (geometryChanged(1,plate.Margin()!=state.appliedMargin) ||
-                geometryChanged(2,plate.Height()!=state.appliedHeight) ||
-                geometryChanged(3,plate.VerticalAlignment()!=VerticalAlignment::Top)))) {
+        if ((state.cornersOwned &&
+                geometryChanged(PlateProperty::CornerRadius,plate.CornerRadius()!=state.appliedCorners)) ||
+            (state.layoutOwned && (geometryChanged(PlateProperty::Margin,plate.Margin()!=state.appliedMargin) ||
+                geometryChanged(PlateProperty::Height,plate.Height()!=state.appliedHeight) ||
+                geometryChanged(PlateProperty::VerticalAlignment,plate.VerticalAlignment()!=VerticalAlignment::Top)))) {
             BlockStatePlate(state);
             Wh_Log(L"[UWITEM] external state plate geometry retained");
             return;
@@ -9597,9 +9733,9 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         double corner=state.trayHighlight?g_trayHighlightRadius:g_buttonCornerRadius;
         state.appliedCorners = {corner,corner,corner,corner};
         if (plate.CornerRadius() != state.appliedCorners ||
-            (state.templateValues && !state.templateValues->setters[0])) {
-            if(state.templateValues && state.templateValues->managed[0])
-                state.templateValues->Apply(0,winrt::box_value(state.appliedCorners));
+            (state.templateValues && !state.templateValues->Applied(PlateProperty::CornerRadius))) {
+            if(state.templateValues && state.templateValues->Managed(PlateProperty::CornerRadius))
+                state.templateValues->Apply(PlateProperty::CornerRadius,winrt::box_value(state.appliedCorners));
             else plate.CornerRadius(state.appliedCorners);
         }
         // Keep native fills intact unless an accepted liquid lens replaces them.
@@ -9614,10 +9750,10 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         double bottom=transform.TransformPoint(
             {0,float(root.dock.background.ActualHeight()-insets.bottom)}).Y-slot.Y;
         if(state.trayHighlight) {
-            if(plate.MaxHeight()!=INFINITY || !state.templateValues->setters[6])
-                state.templateValues->Apply(6,winrt::box_value(double(INFINITY)));
-            if(plate.MinHeight()!=0 || !state.templateValues->setters[7])
-                state.templateValues->Apply(7,winrt::box_value(0.0));
+            if(plate.MaxHeight()!=INFINITY || !state.templateValues->Applied(PlateProperty::MaxHeight))
+                state.templateValues->Apply(PlateProperty::MaxHeight,winrt::box_value(double(INFINITY)));
+            if(plate.MinHeight()!=0 || !state.templateValues->Applied(PlateProperty::MinHeight))
+                state.templateValues->Apply(PlateProperty::MinHeight,winrt::box_value(0.0));
         } else {
             top=std::clamp(top,0.0,double(slot.Height));
             bottom=std::clamp(bottom,top,double(slot.Height));
@@ -9640,21 +9776,21 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         state.appliedMargin={margin.Left,float(top),margin.Right,float(double(slot.Height)-bottom)};
         state.appliedHeight=float(bottom-top);
         if(plate.Margin()!=state.appliedMargin ||
-           (state.templateValues && !state.templateValues->setters[1])) {
-            if(state.templateValues && state.templateValues->managed[1])
-                state.templateValues->Apply(1,winrt::box_value(state.appliedMargin));
+           (state.templateValues && !state.templateValues->Applied(PlateProperty::Margin))) {
+            if(state.templateValues && state.templateValues->Managed(PlateProperty::Margin))
+                state.templateValues->Apply(PlateProperty::Margin,winrt::box_value(state.appliedMargin));
             else plate.Margin(state.appliedMargin);
         }
         if(plate.Height()!=state.appliedHeight ||
-           (state.templateValues && !state.templateValues->setters[2])) {
-            if(state.templateValues && state.templateValues->managed[2])
-                state.templateValues->Apply(2,winrt::box_value(state.appliedHeight));
+           (state.templateValues && !state.templateValues->Applied(PlateProperty::Height))) {
+            if(state.templateValues && state.templateValues->Managed(PlateProperty::Height))
+                state.templateValues->Apply(PlateProperty::Height,winrt::box_value(state.appliedHeight));
             else plate.Height(state.appliedHeight);
         }
         if(plate.VerticalAlignment()!=VerticalAlignment::Top ||
-           (state.templateValues && !state.templateValues->setters[3])) {
-            if(state.templateValues && state.templateValues->managed[3])
-                state.templateValues->Apply(3,winrt::box_value(VerticalAlignment::Top));
+           (state.templateValues && !state.templateValues->Applied(PlateProperty::VerticalAlignment))) {
+            if(state.templateValues && state.templateValues->Managed(PlateProperty::VerticalAlignment))
+                state.templateValues->Apply(PlateProperty::VerticalAlignment,winrt::box_value(VerticalAlignment::Top));
             else plate.VerticalAlignment(VerticalAlignment::Top);
         }
         if(state.rim && !g_keepButtonRim) {
@@ -10638,7 +10774,6 @@ void ApplyAdaptiveForeground(ForegroundSampleResult const& result) {
     if (root == g_roots.end()) return;
     root->foregroundSamplePending = false;
     if (g_fontColorMode != FontColorMode::Adaptive) return;
-    size_t initialized{}, changed{}, lightCount{}, darkCount{};
     for (auto const& sample : result.items) {
         auto state = std::find_if(
             root->foregrounds.begin(), root->foregrounds.end(),
@@ -10646,20 +10781,10 @@ void ApplyAdaptiveForeground(ForegroundSampleResult const& result) {
                 return candidate.identity == sample.identity;
             });
         if (state != root->foregrounds.end() && state->owned) {
-            bool wasReady = state->ready;
             double luminance = state->luminance.Add(sample.luminance, result.capturedAt, g_adaptiveWindowMs);
             bool light = PreferLightForeground(luminance, state->light,
                                                state->ready);
-            if (SetForegroundColor(*state, light, true)) {
-                if (wasReady)
-                    ++changed;
-                else
-                    ++initialized;
-            }
-            if (state->light)
-                ++lightCount;
-            else
-                ++darkCount;
+            SetForegroundColor(*state, light, true);
             continue;
         }
         for (auto& icon : g_trayIcons) {
@@ -10673,9 +10798,6 @@ void ApplyAdaptiveForeground(ForegroundSampleResult const& result) {
             break;
         }
     }
-    if (initialized || changed)
-        Wh_Log(L"[UWFONT] adaptive initialized=%zu changed=%zu light=%zu dark=%zu",
-               initialized, changed, lightCount, darkCount);
 }
 
 void ApplyPendingForegroundSamples() {
@@ -11430,8 +11552,9 @@ bool RootLayoutUnchanged(Root& root) {
         if (plate.blocked || !plate.element) continue;
         if (plate.fill && !plate.fill->refreshSucceeded) return false;
         if (plate.templateValues && !plate.trayHighlight)
-            for (size_t i=0;i<4;++i)
-                if (!plate.templateValues->LocalUnchanged(i)) return false;
+            for (auto property:{PlateProperty::CornerRadius,PlateProperty::Margin,
+                                PlateProperty::Height,PlateProperty::VerticalAlignment})
+                if (!plate.templateValues->LocalUnchanged(property)) return false;
         if (plate.clip && plate.visual.Clip()!=plate.clip) return false;
     }
     for (auto const& state:root.foregrounds)
@@ -11500,8 +11623,7 @@ void OnLayout(winrt::weak_ref<FrameworkElement> const& weak, bool notification) 
     try { frame = weak.get(); }
     catch (...) { Wh_Log(L"[UWPOS] layout owner unavailable"); return; }
     if (!frame) return;
-    g_busy = true;
-    struct Unbusy { ~Unbusy() { g_busy = false; PostItemStateRefresh(); } } unbusy;
+    BusyScope busy;
     for (auto& root : g_roots) {
         if (root.frame != frame) continue;
         try {
@@ -11647,8 +11769,7 @@ void RefreshItemStates() {
     ActiveScope active;
     g_itemStateRefreshPending=false;
     if (g_stopping || g_busy || GetCurrentThreadId()!=g_ownerThread) return;
-    g_busy=true;
-    struct Unbusy { ~Unbusy() { g_busy=false; PostItemStateRefresh(); } } unbusy;
+    BusyScope busy;
     for (auto& root : g_roots) {
         if (root.retired || root.blocked || !root.measurementsReady) continue;
         if (std::none_of(root.sources.begin(),root.sources.end(),
@@ -11840,10 +11961,7 @@ void WatchFrame(FrameworkElement frame) {
     if (!frame || !EnsureDispatcher()) return;
     for (auto& root : g_roots)
         if (!root.retired && root.frame == frame) return;
-    g_busy = true;
-    struct Unbusy {
-        ~Unbusy() { g_busy = false; PostItemStateRefresh(); }
-    } unbusy;
+    BusyScope busy;
     // Retirement only marks entries while references/iterations may exist.
     // WatchFrame is the mutation boundary and reaps before appending.
     for (auto& root : g_roots) {
@@ -12101,8 +12219,7 @@ void ApplySavedSettings(HWND editor) {
             applied = true;
         } else if (settings) {
             {
-                g_busy = true;
-                struct Unbusy { ~Unbusy() { g_busy = false; PostItemStateRefresh(); } } unbusy;
+                BusyScope busy;
                 ++g_configurationGeneration;
                 for (auto& root : g_roots) {
                     g_liquidHandoff.Hold(std::move(root.dock.liquid));
