@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-02T19:02:22.000Z</updated>
+    <updated>2026-11-02T21:05:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Steam Games in Explorer 1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-steam-games#60313640913ae0898aa64c4085841b4712fed91f</id>
+        <link href="https://windhawk.net/mods/explorer-steam-games"/>
+        <updated>2026-11-02T21:05:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>added an optional “Navigation pane icons” setting, so you can use your own icon for each navigation pane entry (an .ico file or an .exe/.dll with an index). If the field is empty or the file doesn’t exist, the default icon is used. Like before, it only writes to the private hive, never the real registry.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.2.0]]></title>
+        <id>https://windhawk.net/mods/win81-start-screen-recreation#208aff70c74897d4deff49304a06090ca069e814</id>
+        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
+        <updated>2026-11-02T21:05:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the context menus to match the Windows 8/8.1 interface</li>
+<li>Improved the animations to be more accurate to the original Windows 8.1</li>
+<li>Improved the arrow that switches from "All apps" to Start (and viceversa)</li>
+<li>Implemented a best-effort mechanism to display the taskbar when hovering at the bottom of the screen, replicating the behavior introduced in Windows 8.1 Update 1</li>
+<li>Applied minor improvements to the tile logic</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Open Window Underline 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-open-window-underline#163f117dea654633b7f6b69312420f17df7af7c5</id>
+        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
+        <updated>2026-11-02T21:05:09.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Icon underline color under per-taskbar theme overrides.</strong> The light/dark color was chosen from the Windows mode (<code>SystemUsesLightTheme</code>), so a taskbar that another mod had switched to the other theme — Top Taskbar Bleed does this through <code>RequestedTheme</code> when a light window is maximized — kept the wrong color. The theme is now read from the icon element's <code>ActualTheme</code>, which reflects the Windows mode as mirrored into the tree <em>and</em> any per-taskbar override, and colors are cached per theme.</li>
+<li><strong>All lines recolor together on a theme change.</strong> Each icon subscribes to its own <code>ActualThemeChanged</code> and recolors its line when it fires (a brush swap only; window state is left to the hooks and refresh passes). A single tree-root subscription was tried first and left buttons inconsistent, since it can run while some icons still report the old theme. Windows mode switches take the same path.</li>
+<li><strong>Fast double theme flips.</strong> A window that opens light and turns dark a few frames later (with Top Taskbar Bleed following it) could leave the line in the first theme until the button was next evaluated. A theme change now also requests a coalesced refresh pass (<code>WM_APP_REQUEST_REFRESH</code>, 60 ms plus the 300 ms follow-up) that re-reads every icon's settled theme.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>Accent default is theme-shaded: <code>AccentLight2</code> on a dark taskbar, <code>AccentDark1</code> on a light one (the shades WinUI's accent fills use), so the line keeps its contrast on both themes. Setting description and README say so.</li>
+<li>Each icon's <code>ActualThemeChanged</code> subscription is made once, with the <code>winrt::event_token</code> kept in the icon's entry; it is revoked when the option is turned off and on unload.</li>
+<li>README: the icon underline's theme is the one each button is rendered with; the How-it-works bullet mentions <code>ActualTheme</code>.</li>
+</ul>
+<h3 id="unchanged">Unchanged</h3>
+<p>Label underline, resolver, WinEvent handling and the running-indicator option are as in v2.0. The unload path gains only the revocation of the per-icon theme subscriptions.</p>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Operation Styler 1.3.0]]></title>
         <id>https://windhawk.net/mods/file-operation-styler#2ca0c456759cd0eeb5f5d0f4d737362b6b406d74</id>
@@ -922,54 +976,6 @@ unrecognized or ambiguous slides are left unchanged.</p>]]></content>
         <author>
             <name>bardelyne</name>
             <uri>https://github.com/bardelyne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.8]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#cc94527af5fd94115d434ee6af3453295ff57a53</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2026-11-01T00:06:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the following themes: FlyoutStartMenu, OS26 Tahoe App Launcher, Raycast.</li>
-<li>Updated the following themes: Windows10, Windows11_Metro10, UniMenu, LegacyFluent, WindowGlass, LiquidGlass2, Borderless, Command Center, FrostyGlass.</li>
-<li>Adjusted many themes to style the search menu background correctly on newer Windows 11 versions.</li>
-<li>Improved keyboard navigation (e.g. arrow keys and tab) for the side by side layout.</li>
-<li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
-<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
-<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.2.1]]></title>
-        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#dd78d9c692c1f7ece9d5f71ccd8292ff9758f37b</id>
-        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
-        <updated>2026-10-31T20:18:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the hover delay, the aim boundary, and "Close on outside click" not working on recent Windows 11 taskbar updates. (#6731)</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.8.0]]></title>
-        <id>https://windhawk.net/mods/windhawk-mawaqit#aa96df48d25cc044f44e1e0aaa6d8e61f18ac8de</id>
-        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
-        <updated>2026-10-31T20:03:29.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds 12- and 24-hour clock formats, with an optional AM/PM indicator.</p>
-<p>Expands the theme selection to 26 presets, including light variants and Monochrome, and adds more pill and popup color overrides plus pill border opacity.</p>
-<p>Adds typography controls for the pill and popup, including font size and weight.</p>
-<p>Improves taskbar placement options and popup hover behavior, including delayed opening and click pinning.</p>
-<p>Reorganizes settings and changes the refresh interval default from 24 to 168 hours.</p>
-<p>On upgrade, the mosque, selected theme, and taskbar position are preserved; other settings may need to be configured again.</p>]]></content>
-        <author>
-            <name>HHeitlager</name>
-            <uri>https://github.com/hheitlager</uri>
         </author>
     </entry>
 </feed>

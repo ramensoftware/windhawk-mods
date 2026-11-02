@@ -6591,7 +6591,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 3.3495379967741874,
-        "updated": 1791658855000,
+        "updated": 1793653519000,
         "users": 498
       },
       "metadata": {
@@ -6604,7 +6604,7 @@
           "explorer.exe"
         ],
         "name": "Steam Games in Explorer",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "explorer-tab-utility-window-hider": {
@@ -16918,7 +16918,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793462666000,
+        "updated": 1793653509000,
         "users": 34
       },
       "metadata": {
@@ -16933,7 +16933,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Open Window Underline",
-        "version": "2.0"
+        "version": "2.1"
       }
     },
     "taskbar-per-monitor-alignment": {
@@ -20833,7 +20833,7 @@
         "ratingUsers": 20,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793214113000,
+        "updated": 1793653514000,
         "users": 74
       },
       "metadata": {
@@ -20849,7 +20849,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Recréation de l'écran d'accueil de Windows 8.1",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "metadataEnglish": {
         "description": "This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11",

@@ -1,3 +1,18 @@
+## 2.1 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/163f117dea654633b7f6b69312420f17df7af7c5/mods/taskbar-open-window-underline.wh.cpp))
+
+### Fixed
+- **Icon underline color under per-taskbar theme overrides.** The light/dark color was chosen from the Windows mode (`SystemUsesLightTheme`), so a taskbar that another mod had switched to the other theme — Top Taskbar Bleed does this through `RequestedTheme` when a light window is maximized — kept the wrong color. The theme is now read from the icon element's `ActualTheme`, which reflects the Windows mode as mirrored into the tree *and* any per-taskbar override, and colors are cached per theme.
+- **All lines recolor together on a theme change.** Each icon subscribes to its own `ActualThemeChanged` and recolors its line when it fires (a brush swap only; window state is left to the hooks and refresh passes). A single tree-root subscription was tried first and left buttons inconsistent, since it can run while some icons still report the old theme. Windows mode switches take the same path.
+- **Fast double theme flips.** A window that opens light and turns dark a few frames later (with Top Taskbar Bleed following it) could leave the line in the first theme until the button was next evaluated. A theme change now also requests a coalesced refresh pass (`WM_APP_REQUEST_REFRESH`, 60 ms plus the 300 ms follow-up) that re-reads every icon's settled theme.
+
+### Changed
+- Accent default is theme-shaded: `AccentLight2` on a dark taskbar, `AccentDark1` on a light one (the shades WinUI's accent fills use), so the line keeps its contrast on both themes. Setting description and README say so.
+- Each icon's `ActualThemeChanged` subscription is made once, with the `winrt::event_token` kept in the icon's entry; it is revoked when the option is turned off and on unload.
+- README: the icon underline's theme is the one each button is rendered with; the How-it-works bullet mentions `ActualTheme`.
+
+### Unchanged
+Label underline, resolver, WinEvent handling and the running-indicator option are as in v2.0. The unload path gains only the revocation of the per-icon theme subscriptions.
+
 ## 2.0 ([Oct 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5685777d56f943dad16b7817f4ada0d71b0a1380/mods/taskbar-open-window-underline.wh.cpp))
 
 ### Added
