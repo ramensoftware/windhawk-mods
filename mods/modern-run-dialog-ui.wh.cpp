@@ -16,72 +16,96 @@
 /*
 # Modern Run Dialog UI For Windows 10 & 11
 
-![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306liquidglass.png)
+![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402liquidglass.png)
 
 *Liquid Glass mode*
 
-![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306windowsblur.png)
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402windowsblur.png)
 
 *Windows Blur mode*
 
-![Modern Run Dialog UI Preview (App Suggestions)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/306goiyungdung.png)
+![Modern Run Dialog UI Preview (App Suggestions)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402recommendprogram.png)
 
 *App & command suggestions*
+
+![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402minimalmode.png)
+
+*Minimal Mode*
+
+![Modern Run Dialog UI Preview (Google Search)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402googlesearch.png)
+
+*Google Search (`ggsearch:`)*
+
+![Modern Run Dialog UI Preview (Menu Mod And Custom Background)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402modmenuandcustombackground.png)
+
+*In-App Quick Settings Menu (`⚙️`) & Custom Background*
 
 ---
 
 ## 🌐 English
 
-Replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid Glass / Fluent** launcher rendered with **Direct2D & DirectWrite**. Works on both **Windows 10** and **Windows 11** without downloading `shell32.pdb`.
+Replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid Glass / Fluent** launcher rendered with **Direct2D & DirectWrite**. Works across **Windows 10** and **Windows 11** (including the latest Insider Canary/Dev builds with `.dll.mui` localized resources) without downloading `shell32.pdb`.
 
 ### Key Features
 
 - **Liquid Glass, Windows Blur & Opaque Themes:**
-  * Three surface styles (**Liquid Glass** with refractive rim highlights and pointer glow, **Windows Blur**, and **Opaque**) with automatic Light/Dark mode and backdrop contrast detection.
-  * Adjustable UI scale (`85%` – `120%`) and taskbar-anchored positioning.
+  * Three surface styles (**Liquid Glass** with refractive rim highlights and pointer specular glow, **Windows Blur**, and **Opaque**) with automatic Light/Dark mode and real-time desktop backdrop luminance detection.
+  * Adjustable UI scale (`85%` – `120%`) and taskbar-anchored positioning with smooth spring entrance animations.
+
+- **Minimal Mode (Hide Browse & Exit Buttons):**
+  * Toggle **Minimal Mode** with a single click from the main `⚙️` menu (or Windhawk settings) to hide the **Browse** and **Exit** buttons, keeping the standard dialog width while expanding the command input box right up to the **Run** button for a clean, distraction-free layout.
 
 - **Custom Image, GIF & Video Backgrounds:**
-  * Set any static image (`.png`, `.jpg`, `.webp`, `.bmp`), animated `.gif`, or `.mp4` / `.webm` video (up to 20–50 MB) as the dialog background with customizable media opacity.
+  * Set any static image (`.png`, `.jpg`, `.webp`, `.bmp`), animated `.gif`, or `.mp4` / `.webm` video (up to 50 MB, decoded via Windows Media Foundation & WIC) as the dialog background with adjustable media opacity presets (`35%`, `60%`, `85%`, `100%`).
 
 - **In-App Quick Settings Menu (`⚙️`):**
-  * Fluent Acrylic popup menu next to the **Exit** button to switch themes, color mode, UI scale, custom backgrounds, display language, or clear history directly from the Run dialog.
+  * Built-in Fluent Acrylic popup menu on the command bar to switch surface themes, Light/Dark mode, UI scale (`85%` – `120%`), **Minimal Mode**, custom background media, history preferences, and display language, or clear stored history on the fly without opening Windhawk.
 
-- **App Suggestions & Browser Search (`ggsearch:` / `msesearch:`):**
-  * Live suggestions for installed Start Menu apps, Registry `App Paths`, and system commands (`cmd`, `regedit`, `.cpl`, `.msc`) while typing.
+- **Live App Suggestions & Instant Web Search (`ggsearch:` / `msesearch:`):**
+  * Real-time suggestions for installed Start Menu applications, Registry `App Paths`, and system utilities (`cmd`, `powershell`, `regedit`, `wt`, `.cpl`, `.msc`) as you type.
   * Type `ggsearch:<query>` to search Google in Chrome (or your default browser) and `msesearch:<query>` to search in Microsoft Edge.
 
-- **Scrollable History & Execution Timestamps:**
-  * Stores up to **50 recent commands** in a compact 5-row scrollable list (supports mouse wheel, draggable scrollbar, `Up`/`Down`/`PageUp`/`PageDown`, and `Delete` to remove individual entries).
-  * Shows each command's native icon, application name, and last executed time.
+- **Scrollable History (Up to 50 Items) & Execution Timestamps:**
+  * Stores up to **50 recent commands** in a compact 5-row scrollable list (supports mouse wheel, draggable scrollbar, `Up`/`Down`/`PageUp`/`PageDown`, and `Delete` or the row `×` button to remove individual entries).
+  * Displays each command's native system icon, friendly application title, and relative execution timestamp, plus quick-launch footer buttons for **Run as Administrator**, **Open File Location**, **Environment Variables**, and **Pin Always on Top**.
+
+- **Smart Taskbar & `Win + R` Window Behavior:**
+  * Pressing `Win + R` or clicking the Taskbar icon brings an unfocused Run dialog back to the foreground in a single action, or minimizes/closes it when already focused.
 
 - **Multi-Language Support (21 Languages):**
-  * Auto-detects the system language or lets you choose from 21 languages (English, Vietnamese, Japanese, Korean, Simplified/Traditional Chinese, Thai, Indonesian, Malay, French, German, Spanish, Portuguese, Italian, Russian, Ukrainian, Polish, Dutch, Turkish, Hindi, and Arabic).
+  * Auto-detects your Windows UI language or lets you choose from 21 built-in languages (English, Vietnamese, Japanese, Korean, Simplified/Traditional Chinese, Thai, Indonesian, Malay, French, German, Spanish, Portuguese, Italian, Russian, Ukrainian, Polish, Dutch, Turkish, Hindi, and Arabic).
 
 ---
 
 ## 🇻🇳 Tiếng Việt
 
-Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng giao diện **Liquid Glass / Fluent** không viền, vẽ trực tiếp bằng **Direct2D & DirectWrite**. Tương thích với cả **Windows 10** và **Windows 11** mà không cần tải `shell32.pdb`.
+Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng giao diện **Liquid Glass / Fluent** không viền, vẽ trực tiếp bằng **Direct2D & DirectWrite**. Tương thích mượt mà với cả **Windows 10** và **Windows 11** (bao gồm các bản Windows 11 Insider mới nhất dùng tài nguyên `.dll.mui`) mà không cần tải `shell32.pdb`.
 
 ### Tính năng chính
 
 - **3 Chế độ bề mặt (Liquid Glass, Làm mờ Windows & Nền đặc):**
-  * Hỗ trợ hiệu ứng kính **Liquid Glass** (viền khúc xạ ánh sáng và phản chiếu theo trỏ chuột), **Windows Blur** và **Nền đặc**, tự động chuyển đổi giao diện Sáng / Tối theo hệ thống và độ sáng nền.
-  * Tùy chỉnh tỷ lệ kích thước giao diện (`85%` – `120%`).
+  * Hỗ trợ hiệu ứng kính **Liquid Glass** (viền khúc xạ ánh sáng và phản chiếu theo trỏ chuột), **Windows Blur** và **Nền đặc**, tự động chuyển đổi giao diện Sáng / Tối theo hệ thống và độ sáng thực tế của màn hình nền.
+  * Tùy chỉnh tỷ lệ kích thước giao diện (`85%` – `120%`) kèm hiệu ứng chuyển động mượt mà.
+
+- **Chế độ tối giản – Minimal Mode (Ẩn nút Duyệt & Thoát):**
+  * Bật/tắt **Chế độ tối giản** chỉ với 1 cú nhấp chuột ngay trên menu chính `⚙️` (hoặc trong cài đặt Windhawk) để ẩn hai nút **Duyệt** và **Thoát**, giữ nguyên chiều rộng gốc của hộp thoại và mở rộng tối đa khung nhập lệnh sát tới nút **Chạy**.
 
 - **Hình nền tùy chỉnh (Ảnh tĩnh, GIF động & Video MP4):**
-  * Cho phép chọn ảnh tĩnh (`.png`, `.jpg`, `.webp`, `.bmp`), ảnh động `.gif` hoặc video `.mp4` / `.webm` (giới hạn 20–50 MB) làm nền hộp thoại Run kèm tùy chỉnh độ mờ lớp phủ.
+  * Cho phép chọn ảnh tĩnh (`.png`, `.jpg`, `.webp`, `.bmp`), ảnh động `.gif` hoặc video `.mp4` / `.webm` (tối đa 50 MB) làm nền hộp thoại Run với các mức độ rõ lớp phủ tùy chọn (`35%`, `60%`, `85%`, `100%`).
 
 - **Menu Cài đặt nhanh trực tiếp (`⚙️`):**
-  * Nút bánh răng cạnh nút **Thoát** mở menu Fluent Acrylic có icon ngay trên hộp thoại Run, giúp đổi nhanh giao diện, chế độ Sáng/Tối, kích thước UI, hình nền, ngôn ngữ hoặc xóa lịch sử mà không cần mở lại Windhawk.
+  * Nút bánh răng trên thanh lệnh mở menu Fluent Acrylic có icon trực quan, giúp đổi tức thì giao diện bề mặt, chế độ Sáng/Tối, kích thước UI, **Chế độ tối giản**, hình nền tùy chỉnh, tùy chọn lịch sử, ngôn ngữ hiển thị hoặc xóa toàn bộ lịch sử ngay trên hộp thoại Run.
 
-- **Gợi ý ứng dụng & Tìm kiếm nhanh (`ggsearch:` / `msesearch:`):**
-  * Tự động gợi ý ứng dụng trong Start Menu, `App Paths` và các lệnh hệ thống (`cmd`, `regedit`, `.cpl`, `.msc`) ngay khi đang gõ.
-  * Gõ `ggsearch:<từ khóa>` để tìm trên Google bằng Chrome (hoặc trình duyệt mặc định) và `msesearch:<từ khóa>` để tìm bằng Microsoft Edge.
+- **Gợi ý ứng dụng & Tìm kiếm trình duyệt (`ggsearch:` / `msesearch:`):**
+  * Tự động gợi ý theo thời gian thực các ứng dụng trong Start Menu, `App Paths` và các công cụ hệ thống (`cmd`, `powershell`, `regedit`, `wt`, `.cpl`, `.msc`) ngay khi đang gõ.
+  * Gõ `ggsearch:<từ khóa>` để tìm nhanh trên Google bằng Chrome (hoặc trình duyệt mặc định) và `msesearch:<từ khóa>` để tìm bằng Microsoft Edge.
 
-- **Lịch sử 50 mục có thanh cuộn & Thời gian chạy lệnh:**
-  * Lưu tối đa **50 lệnh gần đây** trong khung nhìn gọn 5 dòng (hỗ trợ lăn chuột, kéo thanh cuộn, phím `Lên`/`Xuống`/`PageUp`/`PageDown` và phím `Delete` để xóa từng lệnh).
-  * Hiển thị biểu tượng gốc của phần mềm, tên ứng dụng và thời gian thực thi gần nhất.
+- **Lịch sử 50 mục có thanh cuộn & Thanh công cụ tiện ích:**
+  * Lưu tối đa **50 lệnh gần đây** trong khung nhìn gọn 5 dòng (hỗ trợ lăn chuột, kéo thanh cuộn, phím `Lên`/`Xuống`/`PageUp`/`PageDown`, và phím `Delete` hoặc nút `×` để xóa từng mục).
+  * Hiển thị biểu tượng gốc của phần mềm, tên ứng dụng và thời gian chạy lệnh gần nhất; tích hợp dải nút công cụ nhanh phía dưới gồm **Chạy với quyền Quản trị (Admin)**, **Mở vị trí tệp**, **Biến môi trường** và **Ghim cửa sổ lên trên cùng**.
+
+- **Tương tác thông minh với `Win + R` và Taskbar:**
+  * Khi hộp thoại đang bị che bởi cửa sổ khác, chỉ cần bấm 1 lần vào biểu tượng Run dưới Taskbar hoặc nhấn `Win + R` là hộp thoại nổi ngay lên trên cùng.
 
 - **Hỗ trợ 21 ngôn ngữ hiển thị:**
   * Tự động nhận diện ngôn ngữ Windows hoặc chọn cố định trong 21 ngôn ngữ (Tiếng Việt, Tiếng Anh, Nhật, Hàn, Trung Giản thể/Phồn thể, Thái, Indonesia, Mã Lai, Pháp, Đức, Tây Ban Nha, Bồ Đào Nha, Ý, Nga, Ukraina, Ba Lan, Hà Lan, Thổ Nhĩ Kỳ, Hindi và Ả Rập).
@@ -167,9 +191,14 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   - auto: Auto – Follow Windows
   - dark: Dark Mode
   - light: Light Mode
+- minimalMode: false
+  $name: Appearance · Minimal Mode (Hide Browse & Exit)
+  $name:vi-VN: Chế độ tối giản (Ẩn nút Duyệt & Thoát)
+  $description: Hides the Browse and Exit buttons on the command bar while keeping the standard dialog width.
+  $description:vi-VN: Ẩn hai nút Duyệt và Thoát trên thanh nhập lệnh (chỉ giữ nút Chạy và Cài đặt nhanh), giữ nguyên chiều rộng hộp thoại.
 - uiScalePercent: "100"
-  $name: Appearance · UI Size / Scale (85% – 125%)
-  $name:vi-VN: Kích thước giao diện (85% – 125%)
+  $name: Appearance · UI Size / Scale (85% – 120%)
+  $name:vi-VN: Kích thước giao diện (85% – 120%)
   $description: Adjust the overall size of the Run dialog (85% Compact, 100% Default, 110% Medium, 120% Large). Also adjustable via the Gear button.
   $description:vi-VN: Điều chỉnh tỷ lệ kích thước tổng thể của hộp thoại Run (85% Nhỏ gọn, 100% Mặc định, 110% Vừa, 120% Lớn). Có thể chỉnh trực tiếp qua nút Bánh răng.
   $options:vi-VN:
@@ -200,10 +229,10 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   $description: Maximum allowed file size in megabytes for custom background files (20–50 MB, default is 50 MB).
   $description:vi-VN: Giới hạn dung lượng tối đa cho phép đối với tệp hình nền động/video MP4 (từ 20 đến 50 MB, mặc định 50 MB).
 - customBackgroundOpacity: 150
-  $name: Custom Background · Media Opacity (0–255)
-  $name:vi-VN: Hình nền tùy chỉnh · Độ rõ hình nền (0–255)
-  $description: Opacity of the custom background image/video layer (0–255, default is 150 so text remains easy to read).
-  $description:vi-VN: Độ rõ của lớp hình nền ảnh/video tùy chỉnh (0–255, mặc định 150 để chữ và hiệu ứng kính luôn sắc nét, dễ đọc).
+  $name: Custom Background · Media Opacity (20–255)
+  $name:vi-VN: Hình nền tùy chỉnh · Độ rõ hình nền (20–255)
+  $description: Opacity of the custom background image/video layer (20–255, default is 150 so text remains easy to read).
+  $description:vi-VN: Độ rõ của lớp hình nền ảnh/video tùy chỉnh (20–255, mặc định 150 để chữ và hiệu ứng kính luôn sắc nét, dễ đọc).
 - enableAppSuggestions: true
   $name: Experimental · App Suggestions & Web Search (ggsearch / msesearch)
   $name:vi-VN: Gợi ý ứng dụng & Tìm kiếm trình duyệt (ggsearch / msesearch)
@@ -320,24 +349,25 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
     SIZE_T cbData;
 };
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
+inline HINSTANCE GetModInstanceHandle() {
+    return reinterpret_cast<HINSTANCE>(&__ImageBase);
+}
+
 using SetWindowCompositionAttribute_t = BOOL(WINAPI*)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 using ShowWindow_t = decltype(&ShowWindow);
 using SetForegroundWindow_t = decltype(&SetForegroundWindow);
 using SwitchToThisWindow_t = decltype(&SwitchToThisWindow);
 using DialogBoxParamW_t = decltype(&DialogBoxParamW);
-using DialogBoxIndirectParamW_t = decltype(&DialogBoxIndirectParamW);
-using CreateDialogParamW_t = decltype(&CreateDialogParamW);
-using CreateDialogIndirectParamW_t = decltype(&CreateDialogIndirectParamW);
 
 ShowWindow_t ShowWindow_Orig = nullptr;
 SetForegroundWindow_t SetForegroundWindow_Orig = nullptr;
 SwitchToThisWindow_t SwitchToThisWindow_Orig = nullptr;
 DialogBoxParamW_t DialogBoxParamW_Orig = nullptr;
-DialogBoxIndirectParamW_t DialogBoxIndirectParamW_Orig = nullptr;
-CreateDialogParamW_t CreateDialogParamW_Orig = nullptr;
-CreateDialogIndirectParamW_t CreateDialogIndirectParamW_Orig = nullptr;
 
 HMODULE g_hShell32 = nullptr;
+bool g_fluentMenuClassRegistered = false;
 ID2D1Factory* g_pD2DFactory = nullptr;
 IDWriteFactory* g_pDWriteFactory = nullptr;
 
@@ -430,6 +460,7 @@ struct ModSettings {
     std::wstring language = L"auto";
     SurfaceTheme surfaceTheme = SurfaceTheme::Glass;
     ColorMode colorMode = ColorMode::Auto;
+    bool minimalMode = false;
     int uiScalePercent = 100;
     bool taskbarCloseInsteadOfMinimize = false;
     int blurOpacity = 170;
@@ -726,7 +757,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
     }
     if (lang == L"fr") {
         return {
-            L"Entrez le nom d'une commande à exécuter",
+            L"Entrez le nom d'une commande",
             L"Parcourir",
             L"Exécuter",
             L"Quitter",
@@ -933,18 +964,23 @@ std::wstring GetCurrentUserSidString() {
     return sidResult;
 }
 
+const std::wstring& GetCachedUserSidString() {
+    static const std::wstring kSid = GetCurrentUserSidString();
+    return kSid;
+}
+
 const std::wstring& GetHistoryStorageKey() {
-    static const std::wstring kKey = L"HistoryTimestamps_" + GetCurrentUserSidString();
+    static const std::wstring kKey = L"HistoryTimestamps_" + GetCachedUserSidString();
     return kKey;
 }
 
 const std::wstring& GetHiddenMruStorageKey() {
-    static const std::wstring kHiddenKey = L"HiddenRunMru_" + GetCurrentUserSidString();
+    static const std::wstring kHiddenKey = L"HiddenRunMru_" + GetCachedUserSidString();
     return kHiddenKey;
 }
 
 const std::wstring& GetClearAckStorageKey() {
-    static const std::wstring kAckKey = L"ClearHistoryAck_" + GetCurrentUserSidString();
+    static const std::wstring kAckKey = L"ClearHistoryAck_" + GetCachedUserSidString();
     return kAckKey;
 }
 
@@ -1049,13 +1085,13 @@ void ClearCurrentUserStoredHistory() {
 }
 
 std::wstring GetUserOverrideKey(const wchar_t* name) {
-    return std::wstring(L"InAppCfg_") + name + L"_" + GetCurrentUserSidString();
+    return std::wstring(L"InAppCfg_") + name + L"_" + GetCachedUserSidString();
 }
 
 void ClearAllInAppOverrides() {
     const wchar_t* keys[] = {
-        L"language", L"surfaceTheme", L"colorMode", L"uiScalePercent",
-        L"maxHistoryItems", L"visibleHistoryRows", L"showTimestamp",
+        L"language", L"surfaceTheme", L"colorMode", L"minimalMode", L"uiScalePercent",
+        L"maxHistoryItems", L"showTimestamp",
         L"enableAppSuggestions", L"customBackgroundPath", L"customBackgroundOpacity"
     };
     for (const wchar_t* k : keys) {
@@ -1117,13 +1153,16 @@ void LoadSettings(bool fromSettingsChanged = false) {
         newSettings.colorMode = ColorMode::Auto;
     }
 
+    int minModeOverride = Wh_GetIntValue(GetUserOverrideKey(L"minimalMode").c_str(), -1);
+    newSettings.minimalMode = (minModeOverride >= 0) ? (minModeOverride != 0) : (Wh_GetIntSetting(L"minimalMode") != 0);
+
     auto scaleStrSetting = WindhawkUtils::StringSetting::make(L"uiScalePercent");
     int scaleSetting = (scaleStrSetting.get() && scaleStrSetting.get()[0])
                        ? _wtoi(scaleStrSetting.get())
-                       : Wh_GetIntSetting(L"uiScalePercent");
+                       : 100;
     if (scaleSetting <= 0) scaleSetting = 100;
     int scaleOverride = Wh_GetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), -1);
-    newSettings.uiScalePercent = std::clamp(scaleOverride > 0 ? scaleOverride : scaleSetting, 85, 125);
+    newSettings.uiScalePercent = std::clamp(scaleOverride > 0 ? scaleOverride : scaleSetting, 85, 120);
 
     newSettings.taskbarCloseInsteadOfMinimize = (wcscmp(tbAction.get(), L"close") == 0);
     newSettings.blurOpacity = std::clamp(Wh_GetIntSetting(L"blurOpacity"), 0, 255);
@@ -1145,7 +1184,7 @@ void LoadSettings(bool fromSettingsChanged = false) {
     newSettings.customBackgroundMaxMb = std::clamp(maxMbSetting, 20, 50);
 
     int bgOpSetting = Wh_GetIntSetting(L"customBackgroundOpacity");
-    if (bgOpSetting <= 0 && Wh_GetIntSetting(L"blurOpacity") > 0 && bgOpSetting != 0) {
+    if (bgOpSetting < 0) {
         bgOpSetting = 150;
     }
     int bgOpOverride = Wh_GetIntValue(GetUserOverrideKey(L"customBackgroundOpacity").c_str(), -1);
@@ -1160,8 +1199,7 @@ void LoadSettings(bool fromSettingsChanged = false) {
 
     int visRowsSetting = Wh_GetIntSetting(L"visibleHistoryRows");
     if (visRowsSetting <= 0) visRowsSetting = 5;
-    int visRowsOverride = Wh_GetIntValue(GetUserOverrideKey(L"visibleHistoryRows").c_str(), -1);
-    newSettings.visibleHistoryRows = std::clamp(visRowsOverride > 0 ? visRowsOverride : visRowsSetting, 3, 10);
+    newSettings.visibleHistoryRows = std::clamp(visRowsSetting, 3, 10);
 
     int showTsOverride = Wh_GetIntValue(GetUserOverrideKey(L"showTimestamp").c_str(), -1);
     newSettings.showTimestamp = (showTsOverride >= 0) ? (showTsOverride != 0) : (Wh_GetIntSetting(L"showTimestamp") != 0);
@@ -1284,6 +1322,7 @@ const std::vector<HistoryItem>& GetActiveRowItems(const RunDialogState* state) {
 
 // Atomic state shared safely across threads
 std::atomic<HWND> g_hActiveRunDlg{nullptr};
+std::atomic<HWND> g_hTrackedRunDlg{nullptr};
 std::atomic<HWND> g_hFallbackInterceptedDlg{nullptr};
 std::atomic<int> g_fallbackDialogRefCount{0};
 std::atomic<ULONGLONG> g_openTick{0};
@@ -1291,7 +1330,45 @@ std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
 std::atomic<bool> g_isBrowsingFile{false};
 std::atomic<bool> g_unloading{false};
+std::atomic<bool> g_dlgIsForeground{false};
+std::atomic<ULONGLONG> g_deactivatedByTaskbarTick{0};
 thread_local bool g_internalActivation = false;
+
+inline bool IsActiveRunDialogAlive(HWND hDlg) {
+    return hDlg && IsWindow(hDlg) && (IsWindowVisible(hDlg) || IsIconic(hDlg));
+}
+
+bool IsPointOnTaskbar(POINT pt) {
+    HWND hHit = WindowFromPoint(pt);
+    if (!hHit) return false;
+    HWND hRoot = GetAncestor(hHit, GA_ROOT);
+    if (!hRoot) hRoot = hHit;
+    wchar_t cls[64] = {};
+    if (!GetClassNameW(hRoot, cls, ARRAYSIZE(cls))) return false;
+    return _wcsicmp(cls, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(cls, L"SecondaryTrayWnd") == 0;
+}
+
+bool ShouldMinimizeOnTaskbarClick(HWND hWnd, ULONGLONG now) {
+    if (IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
+        return false;
+    }
+    POINT pt = {};
+    GetCursorPos(&pt);
+    RECT rcDlg = {};
+    GetWindowRect(hWnd, &rcDlg);
+    if (PtInRect(&rcDlg, pt)) {
+        return false;
+    }
+    if (g_dlgIsForeground.load() && GetForegroundWindow() == hWnd) {
+        return true;
+    }
+    ULONGLONG taskbarTick = g_deactivatedByTaskbarTick.load();
+    if (taskbarTick != 0 && (now - taskbarTick < 500)) {
+        return true;
+    }
+    return false;
+}
 
 // Wrapped in std::optional with [[clang::no_destroy]] so the CRT does not invoke
 // std::thread::~thread() (which calls std::terminate() if joinable) when Explorer
@@ -1305,7 +1382,7 @@ bool g_keyHookThreadReady = false;
 LRESULT CALLBACK LowLevelKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         HWND hDlg = g_hActiveRunDlg.load();
-        if (hDlg && IsWindow(hDlg)) {
+        if (IsActiveRunDialogAlive(hDlg)) {
             auto* kbd = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
             bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             bool isKeyUp   = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
@@ -1382,6 +1459,7 @@ void StopKeyHookThread() {
 }
 
 void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
+void CloseActiveGearMenu();
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
 void PerformDialogUninit(HWND hWnd, RunDialogState* state);
@@ -1391,10 +1469,11 @@ void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& que
 void ReleaseCustomBackgroundMedia(RunDialogState* state);
 void ReloadCustomBackgroundMedia(RunDialogState* state, bool showErrorIfTooLarge = false);
 void StepCustomBackgroundAnimation(RunDialogState* state);
+void ApplyReloadedSettingsToDialog(RunDialogState* state);
 void OpenGearSettingsMenu(RunDialogState* state);
 
 int GetDlgScale(const RunDialogState* state) {
-    return state ? std::clamp(state->settings.uiScalePercent, 85, 125) : 100;
+    return state ? std::clamp(state->settings.uiScalePercent, 85, 120) : 100;
 }
 
 int DpiScaleS(int value, const RunDialogState* state) {
@@ -1819,6 +1898,7 @@ void ResizeDialogPreservingBottomAnchor(RunDialogState* state, int oldHeight) {
 
 void MinimizeRunDialog(RunDialogState* state) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
+    CloseActiveGearMenu();
     ULONGLONG now = GetTickCount64();
     if (now - g_lastToggleTick.load() < 250) return;
 
@@ -1826,6 +1906,9 @@ void MinimizeRunDialog(RunDialogState* state) {
         CloseRunDialog(state->hDlg);
         return;
     }
+
+    g_dlgIsForeground.store(false);
+    g_deactivatedByTaskbarTick.store(0);
 
     g_lastToggleTick.store(now);
 
@@ -1858,10 +1941,12 @@ void RestoreRunDialog(RunDialogState* state) {
         state->normalX, state->normalY, dlgW, state->totalHeight, false, state->backdropLightSample);
 
     g_internalActivation = true;
-    if (ShowWindow_Orig) {
-        ShowWindow_Orig(state->hDlg, SW_RESTORE);
-    } else {
-        ShowWindow(state->hDlg, SW_RESTORE);
+    if (IsIconic(state->hDlg)) {
+        if (ShowWindow_Orig) {
+            ShowWindow_Orig(state->hDlg, SW_RESTORE);
+        } else {
+            ShowWindow(state->hDlg, SW_RESTORE);
+        }
     }
 
     LONG_PTR style = GetWindowLongPtrW(state->hDlg, GWL_STYLE);
@@ -1869,18 +1954,28 @@ void RestoreRunDialog(RunDialogState* state) {
     style |= (WS_SYSMENU | WS_MINIMIZEBOX);
     SetWindowLongPtrW(state->hDlg, GWL_STYLE, style);
 
-    SetWindowPos(state->hDlg, HWND_TOP,
+    SetWindowPos(state->hDlg, HWND_TOPMOST,
                  state->normalX, state->normalY,
                  dlgW, state->totalHeight,
                  SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+    SetWindowPos(state->hDlg, HWND_NOTOPMOST,
+                 state->normalX, state->normalY,
+                 dlgW, state->totalHeight,
+                 SWP_SHOWWINDOW);
 
     ApplyWindowAppearance(state->hDlg, state);
 
+    if (SwitchToThisWindow_Orig) {
+        SwitchToThisWindow_Orig(state->hDlg, TRUE);
+    }
     if (SetForegroundWindow_Orig) {
         SetForegroundWindow_Orig(state->hDlg);
     } else {
         SetForegroundWindow(state->hDlg);
     }
+
+    g_dlgIsForeground.store(true);
+    g_deactivatedByTaskbarTick.store(0);
 
     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
         SetFocus(state->hModernEdit);
@@ -1954,7 +2049,7 @@ ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state);
 std::wstring GetEffectiveInputText(HWND hEdit);
 
 void OpenBrowseCustomBackgroundDialog(RunDialogState* state) {
-    if (!state || !state->hDlg || state->isBrowsingFile) return;
+    if (!state || !state->hDlg || state->isBrowsingFile || state->pendingUninit || g_unloading.load()) return;
     HWND hDlg = state->hDlg;
     state->isBrowsingFile = true;
     g_isBrowsingFile.store(true);
@@ -1980,6 +2075,12 @@ void OpenBrowseCustomBackgroundDialog(RunDialogState* state) {
 
     if (g_hActiveRunDlg.load() != hDlg || !IsWindow(hDlg)) {
         g_isBrowsingFile.store(false);
+        return;
+    }
+
+    if (state->pendingUninit || g_unloading.load()) {
+        g_isBrowsingFile.store(false);
+        state->isBrowsingFile = false;
         return;
     }
 
@@ -2190,10 +2291,23 @@ std::wstring LookupOrInitTimestamp(const std::wstring& cmd,
 }
 
 void CloseRunDialog(HWND hDlg) {
+    CloseActiveGearMenu();
     if (!hDlg || !IsWindow(hDlg)) return;
+    HWND expected = hDlg;
+    g_hActiveRunDlg.compare_exchange_strong(expected, nullptr);
     HWND hCancel = GetDlgItem(hDlg, IDCANCEL);
     if (hCancel) EnableWindow(hCancel, TRUE);
-    PostMessageW(hDlg, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), (LPARAM)hCancel);
+    if (GetWindowThreadProcessId(hDlg, nullptr) == GetCurrentThreadId()) {
+        SendMessageW(hDlg, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), (LPARAM)hCancel);
+        if (IsWindow(hDlg)) {
+            EndDialog(hDlg, IDCANCEL);
+            PostMessageW(hDlg, WM_NULL, 0, 0);
+        }
+    } else {
+        PostMessageW(hDlg, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), (LPARAM)hCancel);
+        PostMessageW(hDlg, WM_CLOSE, 0, 0);
+        PostMessageW(hDlg, WM_NULL, 0, 0);
+    }
 }
 
 std::wstring GetEffectiveInputText(HWND hEdit) {
@@ -2281,7 +2395,7 @@ int ParseWebSearchCommand(std::wstring_view rawCmd, std::wstring* outQuery) {
     return 0;
 }
 
-bool LaunchWebSearchCommand(HWND hwndOwner, int searchKind, const std::wstring& query) {
+bool LaunchWebSearchCommand(HWND, int searchKind, const std::wstring& query) {
     std::wstring encoded = UrlEncodeUtf8(query);
     std::wstring url = encoded.empty()
         ? L"https://www.google.com"
@@ -2291,7 +2405,7 @@ bool LaunchWebSearchCommand(HWND hwndOwner, int searchKind, const std::wstring& 
 
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_DOENVSUBST | SEE_MASK_FLAG_NO_UI;
-    sei.hwnd = hwndOwner;
+    sei.hwnd = nullptr;
     sei.lpVerb = L"open";
     sei.lpFile = browserExe;
     sei.lpParameters = url.c_str();
@@ -2304,7 +2418,7 @@ bool LaunchWebSearchCommand(HWND hwndOwner, int searchKind, const std::wstring& 
     // Fallback to default system browser if chrome.exe or msedge.exe is not installed
     SHELLEXECUTEINFOW seiFallback = { sizeof(seiFallback) };
     seiFallback.fMask = SEE_MASK_DOENVSUBST;
-    seiFallback.hwnd = hwndOwner;
+    seiFallback.hwnd = nullptr;
     seiFallback.lpVerb = L"open";
     seiFallback.lpFile = url.c_str();
     seiFallback.nShow = SW_SHOWNORMAL;
@@ -2313,6 +2427,7 @@ bool LaunchWebSearchCommand(HWND hwndOwner, int searchKind, const std::wstring& 
 
 void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& item) {
     if (!state || !state->hDlg || state->isTriggeringRun) return;
+    CloseActiveGearMenu();
 
     // Handle ggsearch:<keyword> (Google Chrome) and msesearch:<keyword> (Microsoft Edge)
     std::wstring parsedSearchQuery = item.webSearchQuery;
@@ -2323,20 +2438,19 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
     if (searchKind != 0) {
         std::wstring recordCmd = !item.cmd.empty() ? item.cmd : item.execTarget;
         SaveCommandTimestamp(recordCmd);
-        if (LaunchWebSearchCommand(state->hDlg, searchKind, parsedSearchQuery)) {
+        if (LaunchWebSearchCommand( nullptr, searchKind, parsedSearchQuery)) {
             CloseRunDialog(state->hDlg);
             return;
         }
     }
 
     // For Start Menu shortcut files (.lnk / .appref-ms), launch directly via ShellExecuteExW
-    // so we don't pollute the native RunMRU box with a long Start Menu path, while recording
-    // the friendly shortcut or command in our history.
+    // with hwnd = nullptr so the launched process is never owned by or tied to the closing Run dialog.
     if (item.isShortcutFile && !item.execTarget.empty()) {
         SaveCommandTimestamp(item.cmd);
         SHELLEXECUTEINFOW sei = { sizeof(sei) };
         sei.fMask = SEE_MASK_DOENVSUBST;
-        sei.hwnd = state->hDlg;
+        sei.hwnd = nullptr;
         sei.lpVerb = nullptr;
         sei.lpFile = item.execTarget.c_str();
         sei.nShow = SW_SHOWNORMAL;
@@ -2373,8 +2487,15 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
 
     SendMessageW(hDlg, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), (LPARAM)hOk);
 
-    if (g_hActiveRunDlg.load() == hDlg && IsWindow(hDlg)) {
-        state->isTriggeringRun = false;
+    if (IsWindow(hDlg)) {
+        if (!IsWindowVisible(hDlg) && !IsIconic(hDlg)) {
+            HWND expected = hDlg;
+            g_hActiveRunDlg.compare_exchange_strong(expected, nullptr);
+            EndDialog(hDlg, IDOK);
+            PostMessageW(hDlg, WM_NULL, 0, 0);
+        } else if (g_hActiveRunDlg.load() == hDlg) {
+            state->isTriggeringRun = false;
+        }
     }
 }
 
@@ -3245,17 +3366,24 @@ ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
     int wClose  = DpiScaleS(MeasureButtonWidthAt96Dpi(state->i18n.exitBtn,   76), state);
 
     ActionButtonsLayout layout = {};
-    layout.rcGear   = { dlgW - rightMargin - wGear, top, dlgW - rightMargin, top + btnH };
-    layout.rcClose  = { layout.rcGear.left - gap - wClose, top, layout.rcGear.left - gap, top + btnH };
-    layout.rcRun    = { layout.rcClose.left - gap - wRun, top, layout.rcClose.left - gap, top + btnH };
-    layout.rcBrowse = { layout.rcRun.left - gap - wBrowse, top, layout.rcRun.left - gap, top + btnH };
+    layout.rcGear = { dlgW - rightMargin - wGear, top, dlgW - rightMargin, top + btnH };
+    if (state && state->settings.minimalMode) {
+        layout.rcClose  = { 0, 0, 0, 0 };
+        layout.rcBrowse = { 0, 0, 0, 0 };
+        layout.rcRun    = { layout.rcGear.left - gap - wRun, top, layout.rcGear.left - gap, top + btnH };
+    } else {
+        layout.rcClose  = { layout.rcGear.left - gap - wClose, top, layout.rcGear.left - gap, top + btnH };
+        layout.rcRun    = { layout.rcClose.left - gap - wRun, top, layout.rcClose.left - gap, top + btnH };
+        layout.rcBrowse = { layout.rcRun.left - gap - wBrowse, top, layout.rcRun.left - gap, top + btnH };
+    }
 
+    int editRightAnchor = (state && state->settings.minimalMode) ? layout.rcRun.left : layout.rcBrowse.left;
     int editH = DpiScaleS(24, state);
     int editTop = state->topAreaHeight + (barH - editH) / 2;
     layout.rcEdit = {
         DpiScaleS(46, state),
         editTop,
-        layout.rcBrowse.left - DpiScaleS(10, state),
+        editRightAnchor - DpiScaleS(10, state),
         editTop + editH
     };
     return layout;
@@ -3539,7 +3667,8 @@ enum class FluentMenuIcon {
     Language,
     ClearTrash,
     FolderPick,
-    RemoveBg
+    RemoveBg,
+    MinimalLayout
 };
 
 void DrawD2DMenuChevronRight(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1StrokeStyle* pStroke,
@@ -3566,7 +3695,7 @@ void DrawD2DFluentMenuIcon(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1Stro
     float sw = DpiScaleF(1.3f, dpi);
     switch (icon) {
         case FluentMenuIcon::Surface: {
-            // 2x2 Fluent rounded grid icon (like Windows 11 "View / Surface" icon in Image 2)
+            // 2x2 Fluent rounded grid icon
             float gap = DpiScaleF(1.1f, dpi);
             float sz  = DpiScaleF(4.8f, dpi);
             float rad = DpiScaleF(1.2f, dpi);
@@ -3665,6 +3794,20 @@ void DrawD2DFluentMenuIcon(ID2D1RenderTarget* pRT, ID2D1Brush* pBrush, ID2D1Stro
             DrawD2DCloseCrossVector(pRT, pBrush, pStroke, cx, cy, dpi);
             break;
         }
+        case FluentMenuIcon::MinimalLayout: {
+            // Sleek command bar pill icon with prompt & action button
+            float hw = DpiScaleF(6.4f, dpi);
+            float hh = DpiScaleF(4.2f, dpi);
+            float rad = DpiScaleF(2.0f, dpi);
+            D2D1_RECT_F rcBar = D2D1::RectF(cx - hw, cy - hh, cx + hw, cy + hh);
+            pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcBar, rad, rad), pBrush, sw, pStroke);
+            pRT->DrawLine(D2D1::Point2F(cx - hw + DpiScaleF(2.6f, dpi), cy),
+                          D2D1::Point2F(cx + DpiScaleF(0.6f, dpi), cy), pBrush, sw, pStroke);
+            D2D1_RECT_F rcBtn = D2D1::RectF(cx + DpiScaleF(2.2f, dpi), cy - DpiScaleF(2.0f, dpi),
+                                            cx + hw - DpiScaleF(1.8f, dpi), cy + DpiScaleF(2.0f, dpi));
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(rcBtn, DpiScaleF(1.0f, dpi), DpiScaleF(1.0f, dpi)), pBrush);
+            break;
+        }
         default:
             break;
     }
@@ -3706,12 +3849,23 @@ struct FluentMenuSession {
     FluentMenuPanelState subPanel;
     UINT selectedCmd = 0;
     bool running = true;
+    bool mouseReleasedSinceOpen = false;
+    bool wasForeground = false;
     int pendingHoverSubIdx = -1;
 };
 
 std::atomic<HWND> g_hActiveGearMenu{nullptr};
 constexpr UINT_PTR kTimerMenuSubHover = 9501;
+constexpr UINT_PTR kTimerMenuWatchdog = 9502;
 constexpr wchar_t kFluentMenuClassName[] = L"WindhawkModernRunFluentMenuWnd";
+
+void CloseActiveGearMenu() {
+    if (HWND hGearMenu = g_hActiveGearMenu.load()) {
+        if (IsWindow(hGearMenu)) {
+            PostMessageW(hGearMenu, WM_CLOSE, 0, 0);
+        }
+    }
+}
 
 int GetMenuRowHeight(const FluentMenuSession* s) {
     return DpiScale(34, s->effectiveDpi);
@@ -3970,7 +4124,7 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                     pRT->Clear(isLight ? D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f)
                                        : D2D1::ColorF(0.11f, 0.12f, 0.16f, 1.0f));
                 } else {
-                    // Rich translucent navy/charcoal or frost tint matching Image 2
+                    // Translucent dark or light frost tint
                     pRT->Clear(isLight ? D2D1::ColorF(0.95f, 0.96f, 0.99f, 0.30f)
                                        : D2D1::ColorF(0.06f, 0.08f, 0.14f, 0.34f));
                 }
@@ -4090,9 +4244,9 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                     float iconCx = DpiScaleF(22.0f, dpi);
                     float iconCy = curY + rowH * 0.5f;
                     ID2D1Brush* pItemTextBr = item.disabled ? pBrMuted : pBrText;
-                    ID2D1Brush* pItemIconBr = item.disabled ? pBrMuted : pBrIcon;
+                    ID2D1Brush* pItemIconBr = item.disabled ? pBrMuted : (item.checked && pBrAccent ? pBrAccent : pBrIcon);
 
-                    if (item.checked && pBrAccent && pRoundStroke) {
+                    if (item.checked && item.icon == FluentMenuIcon::None && pBrAccent && pRoundStroke) {
                         DrawD2DMenuCheckmark(pRT, pBrAccent, pRoundStroke, iconCx, iconCy, dpi);
                     } else if (item.icon != FluentMenuIcon::None && pItemIconBr && pRoundStroke) {
                         DrawD2DFluentMenuIcon(pRT, pItemIconBr, pRoundStroke, item.icon, iconCx, iconCy, dpi);
@@ -4111,6 +4265,9 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                     if (!item.subItems.empty() && pBrSub && pRoundStroke) {
                         float chevX = (float)w - DpiScaleF(16.0f, dpi) - sbReserve;
                         DrawD2DMenuChevronRight(pRT, pBrSub, pRoundStroke, chevX, iconCy, dpi);
+                    } else if (item.checked && item.icon != FluentMenuIcon::None && pBrAccent && pRoundStroke) {
+                        float chkX = (float)w - DpiScaleF(17.0f, dpi) - sbReserve;
+                        DrawD2DMenuCheckmark(pRT, pBrAccent, pRoundStroke, chkX, iconCy, dpi);
                     }
 
                     curY += rowH;
@@ -4228,6 +4385,46 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
                 ShowSubMenuForParentRow(s, s->pendingHoverSubIdx);
                 return 0;
             }
+            if (wParam == kTimerMenuWatchdog && p && p->session && !p->isSubMenu) {
+                FluentMenuSession* s = p->session;
+                HWND hDlg = s->dlgState ? s->dlgState->hDlg : nullptr;
+                if (!hDlg || !IsWindow(hDlg) || !IsWindowVisible(hDlg) || IsIconic(hDlg) ||
+                    s->dlgState->pendingUninit || g_unloading.load()) {
+                    s->running = false;
+                    PostMessageW(hWnd, WM_NULL, 0, 0);
+                    return 0;
+                }
+
+                HWND hFg = GetForegroundWindow();
+                if (hFg == hDlg || hFg == s->mainPanel.hWnd || hFg == s->subPanel.hWnd) {
+                    s->wasForeground = true;
+                } else if (s->wasForeground && hFg != nullptr) {
+                    s->running = false;
+                    PostMessageW(hWnd, WM_NULL, 0, 0);
+                    return 0;
+                }
+
+                bool anyMouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+                                    (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
+                                    (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+                if (!anyMouseDown) {
+                    s->mouseReleasedSinceOpen = true;
+                } else if (s->mouseReleasedSinceOpen) {
+                    POINT ptCursor = {};
+                    GetCursorPos(&ptCursor);
+                    RECT rcMain = {}, rcSub = {};
+                    GetWindowRect(s->mainPanel.hWnd, &rcMain);
+                    bool inMain = PtInRect(&rcMain, ptCursor);
+                    bool inSub  = s->subPanel.hWnd && IsWindowVisible(s->subPanel.hWnd) &&
+                                  GetWindowRect(s->subPanel.hWnd, &rcSub) && PtInRect(&rcSub, ptCursor);
+                    if (!inMain && !inSub) {
+                        s->running = false;
+                        PostMessageW(hWnd, WM_NULL, 0, 0);
+                        return 0;
+                    }
+                }
+                return 0;
+            }
             break;
         }
 
@@ -4312,9 +4509,18 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             break;
         }
 
+        case WM_ACTIVATEAPP: {
+            if (wParam == FALSE && p && p->session) {
+                p->session->running = false;
+                PostMessageW(hWnd, WM_NULL, 0, 0);
+            }
+            return 0;
+        }
+
         case WM_CLOSE: {
             if (p && p->session) {
                 p->session->running = false;
+                PostMessageW(hWnd, WM_NULL, 0, 0);
             }
             return 0;
         }
@@ -4324,15 +4530,7 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 }
 
 UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& menuItems, POINT ptAnchorRightBottom) {
-    if (!state || !state->hDlg) return 0;
-
-    WNDCLASSEXW wc = { sizeof(wc) };
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = FluentMenuWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.lpszClassName = kFluentMenuClassName;
-    RegisterClassExW(&wc);
+    if (!state || !state->hDlg || !g_fluentMenuClassRegistered) return 0;
 
     FluentMenuSession session;
     session.dlgState = state;
@@ -4340,6 +4538,11 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
     session.effectiveDpi = MulDiv(state->dpi, GetDlgScale(state), 100);
     session.isLight = state->isLightMode;
     session.surface = state->effectiveSurface;
+    session.mouseReleasedSinceOpen =
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0 &&
+        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) == 0 &&
+        (GetAsyncKeyState(VK_MBUTTON) & 0x8000) == 0;
+    session.wasForeground = (GetForegroundWindow() == state->hDlg);
 
     session.mainPanel.items = std::move(menuItems);
     session.mainPanel.isSubMenu = false;
@@ -4369,14 +4572,14 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
         kFluentMenuClassName, L"",
         WS_POPUP,
         mainX, mainY, session.mainPanel.width, session.mainPanel.height,
-        state->hDlg, nullptr, GetModuleHandleW(nullptr), &session.mainPanel);
+        state->hDlg, nullptr, GetModInstanceHandle(), &session.mainPanel);
 
     HWND hSubWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
         kFluentMenuClassName, L"",
         WS_POPUP,
         0, 0, 10, 10,
-        state->hDlg, nullptr, GetModuleHandleW(nullptr), &session.subPanel);
+        state->hDlg, nullptr, GetModInstanceHandle(), &session.subPanel);
 
     session.mainPanel.hWnd = hMainWnd;
     session.subPanel.hWnd = hSubWnd;
@@ -4387,16 +4590,17 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
 
     ShowWindow(hMainWnd, SW_SHOWNOACTIVATE);
     InvalidateRect(hMainWnd, nullptr, TRUE);
+    SetTimer(hMainWnd, kTimerMenuWatchdog, 30, nullptr);
 
     MSG msg = {};
-    while (session.running && !g_unloading.load() && IsWindow(state->hDlg) && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_QUIT) {
-            PostQuitMessage((int)msg.wParam);
-            break;
-        }
-
-        if (msg.message == g_msgUninit && g_msgUninit != 0) {
+    while (session.running && !g_unloading.load() && !state->pendingUninit &&
+           IsWindow(state->hDlg) && IsWindowVisible(state->hDlg) && !IsIconic(state->hDlg) &&
+           GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if ((msg.message == g_msgUninit && g_msgUninit != 0) ||
+            (msg.message == g_msgToggle && g_msgToggle != 0 && msg.wParam != kActionReloadSettings)) {
             session.running = false;
+            if (IsWindow(hSubWnd)) ShowWindow(hSubWnd, SW_HIDE);
+            if (IsWindow(hMainWnd)) ShowWindow(hMainWnd, SW_HIDE);
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
             break;
@@ -4413,6 +4617,8 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
             bool inSub  = IsWindowVisible(hSubWnd) && GetWindowRect(hSubWnd, &rcSub) && PtInRect(&rcSub, ptClick);
             if (!inMain && !inSub) {
                 session.running = false;
+                if (IsWindow(hSubWnd)) ShowWindow(hSubWnd, SW_HIDE);
+                if (IsWindow(hMainWnd)) ShowWindow(hMainWnd, SW_HIDE);
                 // Swallow click if it was on the Gear button itself so it toggles closed instead of re-opening
                 ActionButtonsLayout layout = GetActionButtonsLayout(state);
                 POINT ptClient = ptClick;
@@ -4518,9 +4724,15 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
 
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+
+        if (!IsWindow(state->hDlg) || !IsWindowVisible(state->hDlg) || IsIconic(state->hDlg) || state->pendingUninit) {
+            session.running = false;
+            break;
+        }
     }
 
     g_hActiveGearMenu.store(nullptr);
+    if (IsWindow(hMainWnd)) KillTimer(hMainWnd, kTimerMenuWatchdog);
     if (IsWindow(hSubWnd)) DestroyWindow(hSubWnd);
     if (IsWindow(hMainWnd)) DestroyWindow(hMainWnd);
 
@@ -4578,6 +4790,16 @@ void OpenGearSettingsMenu(RunDialogState* state) {
             { 305, isVi ? L"120% – Rất lớn (Large)" : L"120% – Large", FluentMenuIcon::None, curScale == 120, false, false, {} }
         };
         menuItems.push_back(std::move(item));
+    }
+
+    // 3b. Minimal Mode direct toggle on main menu
+    {
+        FluentMenuItem minItem;
+        minItem.id      = 350;
+        minItem.label   = isVi ? L"Chế độ tối giản (Ẩn Duyệt & Thoát)" : L"Minimal Mode (Hide Browse & Exit)";
+        minItem.icon    = FluentMenuIcon::MinimalLayout;
+        minItem.checked = state->settings.minimalMode;
+        menuItems.push_back(std::move(minItem));
     }
 
     // 4. Custom Background Media Submenu
@@ -4683,6 +4905,12 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         return;
     }
 
+    if (state->pendingUninit || g_unloading.load() || !IsWindowVisible(hDlg)) {
+        g_isBrowsingFile.store(false);
+        state->isBrowsingFile = false;
+        return;
+    }
+
     g_isBrowsingFile.store(false);
     state->isBrowsingFile = false;
 
@@ -4703,6 +4931,7 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         else if (cmd == 303) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 100);
         else if (cmd == 304) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 110);
         else if (cmd == 305) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 120);
+        else if (cmd == 350) Wh_SetIntValue(GetUserOverrideKey(L"minimalMode").c_str(), state->settings.minimalMode ? 0 : 1);
         else if (cmd == 401) Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), 10);
         else if (cmd == 402) Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), 30);
         else if (cmd == 403) Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), 35);
@@ -4726,30 +4955,37 @@ void OpenGearSettingsMenu(RunDialogState* state) {
             ClearCurrentUserStoredHistory();
         }
 
-        int oldHeight = state->totalHeight;
         LoadSettings(false);
-        {
-            std::lock_guard<std::mutex> lock(g_settingsMutex);
-            state->settings = g_settings;
-            state->i18n = g_i18n;
-        }
-        UpdateDialogEditFont(state);
-        ReloadCustomBackgroundMedia(state, false);
-        LoadHistoryItems(state);
-        std::wstring curText = GetEffectiveInputText(state->hModernEdit);
-        UpdateAppSuggestionsForQuery(state, curText);
-        RecomputeDialogMetrics(state);
-        ResizeDialogPreservingBottomAnchor(state, oldHeight);
-        ApplyWindowAppearance(hDlg, state);
+        ApplyReloadedSettingsToDialog(state);
     }
 
-    if (IsWindow(hDlg)) {
-        if (state->hModernEdit && IsWindow(state->hModernEdit)) {
+    if (IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg)) {
+        if (GetForegroundWindow() == hDlg && !state->closePressed &&
+            state->hModernEdit && IsWindow(state->hModernEdit)) {
             SetFocus(state->hModernEdit);
         }
         state->caretVisible = true;
         InvalidateRect(hDlg, nullptr, TRUE);
     }
+}
+
+void ApplyReloadedSettingsToDialog(RunDialogState* state) {
+    if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
+    int oldHeight = state->totalHeight;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        state->settings = g_settings;
+        state->i18n = g_i18n;
+    }
+    UpdateDialogEditFont(state);
+    ReloadCustomBackgroundMedia(state, false);
+    LoadHistoryItems(state);
+    std::wstring curText = GetEffectiveInputText(state->hModernEdit);
+    UpdateAppSuggestionsForQuery(state, curText);
+    RecomputeDialogMetrics(state);
+    ResizeDialogPreservingBottomAnchor(state, oldHeight);
+    ApplyWindowAppearance(state->hDlg, state);
+    InvalidateRect(state->hDlg, nullptr, TRUE);
 }
 
 void UpdateDialogEditFont(RunDialogState* state) {
@@ -4893,16 +5129,20 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 }
 
 void CleanupDialogState(HWND hWnd, RunDialogState* state) {
+    CloseActiveGearMenu();
     KillTimer(hWnd, kTimerCaret);
     KillTimer(hWnd, kTimerLuminance);
     KillTimer(hWnd, kTimerBgMedia);
-    HWND expected = hWnd;
-    g_hActiveRunDlg.compare_exchange_strong(expected, nullptr);
+    HWND expectedActive = hWnd;
+    g_hActiveRunDlg.compare_exchange_strong(expectedActive, nullptr);
+    HWND expectedTracked = hWnd;
+    g_hTrackedRunDlg.compare_exchange_strong(expectedTracked, nullptr);
     HWND expectedFallback = hWnd;
     g_hFallbackInterceptedDlg.compare_exchange_strong(expectedFallback, nullptr);
     g_isBrowsingFile.store(false);
     StopKeyHookThread();
     RemovePropW(hWnd, L"WindhawkModernRunApplied");
+    RemovePropW(hWnd, L"WindhawkOrigShellDlgProc");
 
     if (state) {
         ReleaseCustomBackgroundMedia(state);
@@ -4936,7 +5176,12 @@ void PerformDialogUninit(HWND hWnd, RunDialogState* state) {
     CleanupDialogState(hWnd, state);
     HWND hCancel = GetDlgItem(hWnd, IDCANCEL);
     if (hCancel) EnableWindow(hCancel, TRUE);
-    PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), (LPARAM)hCancel);
+    SendMessageW(hWnd, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), (LPARAM)hCancel);
+    if (IsWindow(hWnd)) {
+        EndDialog(hWnd, IDCANCEL);
+        PostMessageW(hWnd, WM_CLOSE, 0, 0);
+        PostMessageW(hWnd, WM_NULL, 0, 0);
+    }
 }
 
 LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -4948,15 +5193,12 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             return 1;
         }
         if (state->isBrowsingFile || state->isTriggeringRun) {
-            if (!state->pendingUninit) {
-                state->pendingUninit = true;
-                if (HWND hGearMenu = g_hActiveGearMenu.load()) {
-                    if (IsWindow(hGearMenu)) PostMessageW(hGearMenu, WM_CLOSE, 0, 0);
-                }
-                HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
-                if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
-                    PostMessageW(hPopup, WM_CLOSE, 0, 0);
-                }
+            state->pendingUninit = true;
+            CloseActiveGearMenu();
+            HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
+            if (hPopup && hPopup != hWnd && IsWindow(hPopup)) {
+                PostMessageW(hPopup, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+                PostMessageW(hPopup, WM_CLOSE, 0, 0);
             }
             return 0;
         }
@@ -4974,30 +5216,15 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 RestoreRunDialog(state);
                 break;
             case kActionToggleWinR:
-                if (IsIconic(hWnd)) {
+                if (IsIconic(hWnd) || !g_dlgIsForeground.load() || GetForegroundWindow() != hWnd) {
                     RestoreRunDialog(state);
                 } else {
                     CloseRunDialog(hWnd);
                 }
                 break;
-            case kActionReloadSettings: {
-                int oldHeight = state->totalHeight;
-                {
-                    std::lock_guard<std::mutex> lock(g_settingsMutex);
-                    state->settings = g_settings;
-                    state->i18n = g_i18n;
-                }
-                UpdateDialogEditFont(state);
-                ReloadCustomBackgroundMedia(state, false);
-                LoadHistoryItems(state);
-                std::wstring curText = GetEffectiveInputText(state->hModernEdit);
-                UpdateAppSuggestionsForQuery(state, curText);
-                RecomputeDialogMetrics(state);
-                ResizeDialogPreservingBottomAnchor(state, oldHeight);
-                ApplyWindowAppearance(hWnd, state);
-                InvalidateRect(hWnd, nullptr, TRUE);
+            case kActionReloadSettings:
+                ApplyReloadedSettingsToDialog(state);
                 break;
-            }
         }
         return 0;
     }
@@ -5093,6 +5320,18 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             break;
         }
 
+        case WM_SHOWWINDOW:
+            if (wParam == FALSE) {
+                CloseActiveGearMenu();
+                if (!IsIconic(hWnd)) {
+                    HWND expected = hWnd;
+                    if (g_hActiveRunDlg.compare_exchange_strong(expected, nullptr)) {
+                        StopKeyHookThread();
+                    }
+                }
+            }
+            break;
+
         case WM_CLOSE:
             CloseRunDialog(hWnd);
             return 0;
@@ -5169,16 +5408,42 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             break;
         }
 
+        case WM_ACTIVATEAPP: {
+            if (wParam == FALSE) {
+                CloseActiveGearMenu();
+            }
+            break;
+        }
+
         case WM_ACTIVATE: {
-            if (LOWORD(wParam) != WA_INACTIVE && !IsIconic(hWnd) && state && state->hModernEdit && !state->isBrowsingFile) {
-                SetFocus(state->hModernEdit);
-            } else if (LOWORD(wParam) == WA_INACTIVE && state && state->settings.closeOnClickOutside && !state->isBrowsingFile) {
-                if (GetTickCount64() - g_openTick.load() > 300) {
-                    CloseRunDialog(hWnd);
-                    return 0;
+            if (LOWORD(wParam) == WA_INACTIVE) {
+                POINT pt = {};
+                GetCursorPos(&pt);
+                if (g_dlgIsForeground.load() && IsPointOnTaskbar(pt)) {
+                    g_deactivatedByTaskbarTick.store(GetTickCount64());
+                } else {
+                    g_deactivatedByTaskbarTick.store(0);
+                }
+                g_dlgIsForeground.store(false);
+                CloseActiveGearMenu();
+                if (state && state->settings.closeOnClickOutside &&
+                    IsWindowVisible(hWnd) && !IsIconic(hWnd) && !state->isTriggeringRun &&
+                    (!state->isBrowsingFile || g_hActiveGearMenu.load() != nullptr)) {
+                    if (GetTickCount64() - g_openTick.load() > 300) {
+                        CloseRunDialog(hWnd);
+                        return 0;
+                    }
+                }
+            } else {
+                g_dlgIsForeground.store(true);
+                g_deactivatedByTaskbarTick.store(0);
+                if (!IsIconic(hWnd) && IsWindowVisible(hWnd) && state && state->hModernEdit && !state->isBrowsingFile) {
+                    SetFocus(state->hModernEdit);
                 }
             }
-            InvalidateRect(hWnd, nullptr, FALSE);
+            if (IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
             return 0;
         }
 
@@ -5852,7 +6117,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                 borderCol = D2D1::ColorF(0.38f, 0.68f, 0.98f, hovered ? 0.65f : 0.40f);
                                 contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
                             } else {
-                                // Exit button: Dark Crimson / Wine Red matching reference screenshot
+                                // Exit button: dark crimson fill
                                 fillCol = pressed
                                     ? D2D1::ColorF(0.25f, 0.11f, 0.14f, 0.94f)
                                     : (hovered ? D2D1::ColorF(0.39f, 0.16f, 0.21f, 0.96f)
@@ -5908,12 +6173,16 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         };
 
-                        drawActionButton(layout.rcBrowse, state->i18n.browseBtn, ActionBtnKind::Browse,
-                                         state->browseHovered, state->browsePressed);
+                        if (!state->settings.minimalMode) {
+                            drawActionButton(layout.rcBrowse, state->i18n.browseBtn, ActionBtnKind::Browse,
+                                             state->browseHovered, state->browsePressed);
+                        }
                         drawActionButton(layout.rcRun, state->i18n.runBtn, ActionBtnKind::Run,
                                          state->btnHovered, state->btnPressed);
-                        drawActionButton(layout.rcClose, state->i18n.exitBtn, ActionBtnKind::Exit,
-                                         state->closeHovered, state->closePressed);
+                        if (!state->settings.minimalMode) {
+                            drawActionButton(layout.rcClose, state->i18n.exitBtn, ActionBtnKind::Exit,
+                                             state->closeHovered, state->closePressed);
+                        }
                         drawActionButton(layout.rcGear, nullptr, ActionBtnKind::Gear,
                                          state->gearHovered, state->gearPressed);
 
@@ -6108,6 +6377,9 @@ void TransformRunDialog(HWND hDlg) {
     g_lastToggleTick.store(now);
     g_winRReleasedSinceOpen.store((GetAsyncKeyState('R') & 0x8000) == 0);
     g_isBrowsingFile.store(false);
+    g_dlgIsForeground.store(true);
+    g_deactivatedByTaskbarTick.store(0);
+    g_hTrackedRunDlg.store(hDlg);
     g_hActiveRunDlg.store(hDlg);
 
     StartKeyHookThread();
@@ -6118,50 +6390,24 @@ void TransformRunDialog(HWND hDlg) {
     InvalidateRect(hDlg, nullptr, TRUE);
 }
 
-// --- Symbol-Less Run Dialog Detection & Multi-API Hooking (Fixes #6544 & #6712 on Windows 11 26H2 26300.9818+) ---
+// --- Run Dialog Detection & Hooking ---
 
 bool IsRunDialogWindow(HWND hDlg) {
     if (!hDlg || !IsWindow(hDlg)) return false;
 
-    // 1. Standard Run dialog control IDs in shell32.dll (ComboBox 12298 + Browse 12288 + OK + Cancel)
-    HWND hCombo  = GetDlgItem(hDlg, kRunDlgComboId);
-    HWND hBrowse = GetDlgItem(hDlg, kRunDlgBrowseId);
-    if (hCombo && hBrowse && GetDlgItem(hDlg, IDOK) && GetDlgItem(hDlg, IDCANCEL)) {
-        return true;
-    }
-
-    // 2. Fallback structural check in case control IDs were altered in newer builds:
-    //    Must be a top-level #32770 dialog with an Edit-capable ComboBox and 3 push buttons (OK, Cancel, Browse)
     wchar_t dlgCls[32] = {};
     if (!GetClassNameW(hDlg, dlgCls, ARRAYSIZE(dlgCls)) || wcscmp(dlgCls, L"#32770") != 0) {
         return false;
     }
-    if (!GetDlgItem(hDlg, IDOK) || !GetDlgItem(hDlg, IDCANCEL)) {
-        return false;
-    }
 
-    int comboCount = 0;
-    int buttonCount = 0;
-    for (HWND hChild = GetWindow(hDlg, GW_CHILD); hChild != nullptr; hChild = GetWindow(hChild, GW_HWNDNEXT)) {
-        wchar_t cls[64] = {};
-        if (GetClassNameW(hChild, cls, ARRAYSIZE(cls))) {
-            if (_wcsicmp(cls, L"ComboBox") == 0 || _wcsicmp(cls, L"ComboBoxEx32") == 0) {
-                ++comboCount;
-            } else if (_wcsicmp(cls, L"Button") == 0) {
-                LONG style = GetWindowLongW(hChild, GWL_STYLE) & BS_TYPEMASK;
-                if (style == BS_PUSHBUTTON || style == BS_DEFPUSHBUTTON ||
-                    style == BS_SPLITBUTTON || style == BS_DEFSPLITBUTTON ||
-                    style == BS_OWNERDRAW) {
-                    ++buttonCount;
-                }
-            }
-        }
-    }
-    return (comboCount == 1 && buttonCount == 3 && hBrowse != nullptr);
+    return GetDlgItem(hDlg, kRunDlgComboId) != nullptr &&
+           GetDlgItem(hDlg, kRunDlgBrowseId) != nullptr &&
+           GetDlgItem(hDlg, IDOK) != nullptr &&
+           GetDlgItem(hDlg, IDCANCEL) != nullptr;
 }
 
-bool IsShellDialogCallback(DLGPROC lpDialogFunc) {
-    if (!lpDialogFunc) return false;
+bool IsShell32DialogCallback(DLGPROC lpDialogFunc) {
+    if (!lpDialogFunc || !g_hShell32) return false;
     HMODULE hMod = nullptr;
     if (!GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -6169,55 +6415,18 @@ bool IsShellDialogCallback(DLGPROC lpDialogFunc) {
             &hMod) || !hMod) {
         return false;
     }
-    if (hMod == g_hShell32) return true;
-
-    static constexpr const wchar_t* kShellModules[] = {
-        L"windows.storage.dll",
-        L"explorerframe.dll",
-        L"twinui.pcshell.dll",
-        L"twinui.dll",
-        L"shlwapi.dll",
-        L"shcore.dll",
-        L"comctl32.dll",
-        L"explorer.exe"
-    };
-    for (const wchar_t* modName : kShellModules) {
-        HMODULE hCandidate = GetModuleHandleW(modName);
-        if (hCandidate && hMod == hCandidate) {
-            return true;
-        }
-    }
-    return false;
+    return hMod == g_hShell32;
 }
 
 INT_PTR CALLBACK FallbackRunDlgProcWrapper(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-bool ShouldInterceptDialogCreation(HINSTANCE hInstance, LPCWSTR lpTemplateName, DLGPROC lpDialogFunc) {
-    if (g_unloading.load() || !lpDialogFunc) return false;
-
-    // Do not intercept child dialogs or file pickers while Run dialog is already open or browsing files
+bool ShouldInterceptDialogCreation(HINSTANCE, LPCWSTR lpTemplateName, DLGPROC lpDialogFunc) {
+    if (g_unloading.load() || !lpDialogFunc || lpDialogFunc == FallbackRunDlgProcWrapper) return false;
     if (g_isBrowsingFile.load()) return false;
-    if (HWND hActive = g_hActiveRunDlg.load()) {
-        if (IsWindow(hActive)) return false;
-    }
-
-    // Prevent double-wrapping when DialogBoxParamW internally delegates to DialogBoxIndirectParamW
-    // or when CreateDialogParamW internally delegates to CreateDialogIndirectParamW.
-    if (lpDialogFunc == FallbackRunDlgProcWrapper) return false;
-
-    // Match by classic #1003 resource ID regardless of hInstance (supports localized .dll.mui handles)
-    if (lpTemplateName && IS_INTRESOURCE(lpTemplateName) &&
-        LOWORD(reinterpret_cast<ULONG_PTR>(lpTemplateName)) == kRunDialogResourceId) {
-        return true;
-    }
-
-    // Match any dialog whose hInstance is shell32.dll or whose DLGPROC resides inside shell/UI modules;
-    // non-Run dialogs will be safely ignored by IsRunDialogWindow(hDlg) during WM_INITDIALOG.
-    if (hInstance && g_hShell32 && hInstance == g_hShell32) {
-        return true;
-    }
-
-    return IsShellDialogCallback(lpDialogFunc);
+    if (HWND hActive = g_hActiveRunDlg.load(); IsActiveRunDialogAlive(hActive)) return false;
+    return lpTemplateName && IS_INTRESOURCE(lpTemplateName) &&
+           LOWORD(reinterpret_cast<ULONG_PTR>(lpTemplateName)) == kRunDialogResourceId &&
+           IsShell32DialogCallback(lpDialogFunc);
 }
 
 thread_local DLGPROC tl_pendingShellDlgProc = nullptr;
@@ -6237,7 +6446,6 @@ INT_PTR CALLBACK FallbackRunDlgProcWrapper(HWND hDlg, UINT uMsg, WPARAM wParam, 
         if (origProc) {
             SetWindowLongPtrW(hDlg, DWLP_DLGPROC, reinterpret_cast<LONG_PTR>(origProc));
         }
-        RemovePropW(hDlg, L"WindhawkOrigShellDlgProc");
 
         INT_PTR ret = origProc ? origProc(hDlg, uMsg, wParam, lParam) : FALSE;
 
@@ -6291,63 +6499,14 @@ INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE hInstance, LPCWSTR lpTemplateName,
     return res;
 }
 
-INT_PTR WINAPI DialogBoxIndirectParamW_Hook(HINSTANCE hInstance, LPCDLGTEMPLATEW hDialogTemplate,
-                                            HWND hWndParent, DLGPROC lpDialogFunc, LPARAM dwInitParam) {
-    if (!ShouldInterceptDialogCreation(hInstance, nullptr, lpDialogFunc)) {
-        return DialogBoxIndirectParamW_Orig(hInstance, hDialogTemplate, hWndParent, lpDialogFunc, dwInitParam);
-    }
-
-    g_fallbackDialogRefCount.fetch_add(1);
-    DLGPROC prevPending = tl_pendingShellDlgProc;
-    tl_pendingShellDlgProc = lpDialogFunc;
-    INT_PTR res = DialogBoxIndirectParamW_Orig(hInstance, hDialogTemplate, hWndParent,
-                                               FallbackRunDlgProcWrapper, dwInitParam);
-    tl_pendingShellDlgProc = prevPending;
-    g_fallbackDialogRefCount.fetch_sub(1);
-    return res;
-}
-
-HWND WINAPI CreateDialogParamW_Hook(HINSTANCE hInstance, LPCWSTR lpTemplateName, HWND hWndParent,
-                                    DLGPROC lpDialogFunc, LPARAM dwInitParam) {
-    if (!ShouldInterceptDialogCreation(hInstance, lpTemplateName, lpDialogFunc)) {
-        return CreateDialogParamW_Orig(hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
-    }
-
-    g_fallbackDialogRefCount.fetch_add(1);
-    DLGPROC prevPending = tl_pendingShellDlgProc;
-    tl_pendingShellDlgProc = lpDialogFunc;
-    HWND hDlg = CreateDialogParamW_Orig(hInstance, lpTemplateName, hWndParent,
-                                        FallbackRunDlgProcWrapper, dwInitParam);
-    tl_pendingShellDlgProc = prevPending;
-    g_fallbackDialogRefCount.fetch_sub(1);
-    return hDlg;
-}
-
-HWND WINAPI CreateDialogIndirectParamW_Hook(HINSTANCE hInstance, LPCDLGTEMPLATEW lpTemplate,
-                                            HWND hWndParent, DLGPROC lpDialogFunc, LPARAM lParamInit) {
-    if (!ShouldInterceptDialogCreation(hInstance, nullptr, lpDialogFunc)) {
-        return CreateDialogIndirectParamW_Orig(hInstance, lpTemplate, hWndParent, lpDialogFunc, lParamInit);
-    }
-
-    g_fallbackDialogRefCount.fetch_add(1);
-    DLGPROC prevPending = tl_pendingShellDlgProc;
-    tl_pendingShellDlgProc = lpDialogFunc;
-    HWND hDlg = CreateDialogIndirectParamW_Orig(hInstance, lpTemplate, hWndParent,
-                                                FallbackRunDlgProcWrapper, lParamInit);
-    tl_pendingShellDlgProc = prevPending;
-    g_fallbackDialogRefCount.fetch_sub(1);
-    return hDlg;
-}
-
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     HWND hActive = g_hActiveRunDlg.load();
-    // Ultimate fallback: if a future Windows build creates the Run dialog via an internal API
-    // that bypassed DialogBox*/CreateDialog*, catch and transform it right before it shows on screen.
+    // Fallback: transform the Run dialog on first show if it wasn't caught by DialogBoxParamW_Hook.
     if (!g_unloading.load() && !g_isBrowsingFile.load() &&
-        (!hActive || !IsWindow(hActive)) &&
+        !IsActiveRunDialogAlive(hActive) &&
         nCmdShow != SW_HIDE && hWnd && IsWindow(hWnd) &&
+        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId() &&
         (GetWindowLongW(hWnd, GWL_STYLE) & WS_CHILD) == 0 &&
-        GetDlgItem(hWnd, kRunDlgComboId) != nullptr &&
         !GetPropW(hWnd, L"WindhawkModernRunApplied") &&
         IsRunDialogWindow(hWnd)) {
         TransformRunDialog(hWnd);
@@ -6371,18 +6530,17 @@ void WINAPI SwitchToThisWindow_Hook(HWND hWnd, BOOL fUnknown) {
     if (!g_internalActivation && hActive && hWnd == hActive && !g_isBrowsingFile.load()) {
         ULONGLONG now = GetTickCount64();
         if (now - g_openTick.load() > 350 && now - g_lastToggleTick.load() > 250) {
-            if (IsIconic(hWnd)) {
-                PostMessageW(hActive, g_msgToggle, kActionRestore, 0);
-                return;
-            } else if (IsWindowVisible(hWnd)) {
-                POINT pt = {};
-                GetCursorPos(&pt);
-                RECT rcDlg = {};
-                GetWindowRect(hWnd, &rcDlg);
-                if (!PtInRect(&rcDlg, pt)) {
+            POINT pt = {};
+            GetCursorPos(&pt);
+            RECT rcDlg = {};
+            GetWindowRect(hWnd, &rcDlg);
+            if (!PtInRect(&rcDlg, pt)) {
+                if (ShouldMinimizeOnTaskbarClick(hWnd, now)) {
                     PostMessageW(hActive, g_msgToggle, kActionMinimize, 0);
-                    return;
+                } else {
+                    PostMessageW(hActive, g_msgToggle, kActionRestore, 0);
                 }
+                return;
             }
         }
     }
@@ -6396,18 +6554,17 @@ BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
     if (!g_internalActivation && hActive && hWnd == hActive && !g_isBrowsingFile.load()) {
         ULONGLONG now = GetTickCount64();
         if (now - g_openTick.load() > 350 && now - g_lastToggleTick.load() > 250) {
-            if (IsIconic(hWnd)) {
-                PostMessageW(hActive, g_msgToggle, kActionRestore, 0);
-                return TRUE;
-            } else if (IsWindowVisible(hWnd)) {
-                POINT pt = {};
-                GetCursorPos(&pt);
-                RECT rcDlg = {};
-                GetWindowRect(hWnd, &rcDlg);
-                if (!PtInRect(&rcDlg, pt)) {
+            POINT pt = {};
+            GetCursorPos(&pt);
+            RECT rcDlg = {};
+            GetWindowRect(hWnd, &rcDlg);
+            if (!PtInRect(&rcDlg, pt)) {
+                if (ShouldMinimizeOnTaskbarClick(hWnd, now)) {
                     PostMessageW(hActive, g_msgToggle, kActionMinimize, 0);
-                    return TRUE;
+                } else {
+                    PostMessageW(hActive, g_msgToggle, kActionRestore, 0);
                 }
+                return TRUE;
             }
         }
     }
@@ -6434,7 +6591,10 @@ void ReleaseGlobalResources() {
         g_pD2DFactory->Release();
         g_pD2DFactory = nullptr;
     }
-    UnregisterClassW(kFluentMenuClassName, GetModuleHandleW(nullptr));
+    if (g_fluentMenuClassRegistered) {
+        UnregisterClassW(kFluentMenuClassName, GetModInstanceHandle());
+        g_fluentMenuClassRegistered = false;
+    }
 }
 
 BOOL Wh_ModInit() {
@@ -6458,6 +6618,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = FluentMenuWndProc;
+    wc.hInstance = GetModInstanceHandle();
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = kFluentMenuClassName;
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"Failed to register Fluent menu window class (error %lu)", GetLastError());
+        ReleaseGlobalResources();
+        return FALSE;
+    }
+    g_fluentMenuClassRegistered = true;
+
     LoadSettings(false);
     g_msgUninit = RegisterWindowMessageW(L"Windhawk_Uninit_" WH_MOD_ID);
     g_msgToggle = RegisterWindowMessageW(L"Windhawk_Toggle_" WH_MOD_ID);
@@ -6472,16 +6645,9 @@ BOOL Wh_ModInit() {
     // Clean up legacy symbol cache value if present
     Wh_DeleteValue(L"SkipSymbolShell32Sig");
 
-    // Multi-API symbol-less dialog creation hooks (DialogBoxParamW, DialogBoxIndirectParamW,
-    // CreateDialogParamW, CreateDialogIndirectParamW). This intercepts the Run dialog instantaneously
-    // on all Windows 10 & Windows 11 builds (including 24H2, 25H2, and 26H2 build 26300.9818+)
-    // without downloading shell32.pdb (~40MB) or failing when RunDlgProc is inlined/wrapped or
-    // loaded from localized .dll.mui / SHFusion resources.
+    // Hook DialogBoxParamW to intercept the Run dialog (resource #1003 in shell32), including when
+    // shell32 loads the template from a localized .dll.mui instance handle.
     WindhawkUtils::SetFunctionHook(DialogBoxParamW, DialogBoxParamW_Hook, &DialogBoxParamW_Orig);
-    WindhawkUtils::SetFunctionHook(DialogBoxIndirectParamW, DialogBoxIndirectParamW_Hook, &DialogBoxIndirectParamW_Orig);
-    WindhawkUtils::SetFunctionHook(CreateDialogParamW, CreateDialogParamW_Hook, &CreateDialogParamW_Orig);
-    WindhawkUtils::SetFunctionHook(CreateDialogIndirectParamW, CreateDialogIndirectParamW_Hook, &CreateDialogIndirectParamW_Orig);
-
     WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook, &ShowWindow_Orig);
     WindhawkUtils::SetFunctionHook(SetForegroundWindow, SetForegroundWindow_Hook, &SetForegroundWindow_Orig);
     WindhawkUtils::SetFunctionHook(SwitchToThisWindow, SwitchToThisWindow_Hook, &SwitchToThisWindow_Orig);
@@ -6498,10 +6664,13 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true);
-    HWND hDlg = g_hActiveRunDlg.load();
-    while (hDlg && IsWindow(hDlg) && g_hActiveRunDlg.load() == hDlg &&
+    CloseActiveGearMenu();
+
+    HWND hDlg = g_hTrackedRunDlg.load();
+    if (!hDlg) hDlg = g_hActiveRunDlg.load();
+    while (hDlg && IsWindow(hDlg) &&
            SendMessageW(hDlg, g_msgUninit, 0, 0) != 1) {
-        Sleep(50);
+        Sleep(30);
     }
 
     // If a fallback-intercepted dialog is still open (even if not transformed), close it
@@ -6512,12 +6681,20 @@ void Wh_ModBeforeUninit() {
         }
     }
 
+    for (int waitTick = 0; waitTick < 40 && g_fallbackDialogRefCount.load() > 0; ++waitTick) {
+        if (hDlg && IsWindow(hDlg)) {
+            PostMessageW(hDlg, WM_CLOSE, 0, 0);
+            PostMessageW(hDlg, WM_NULL, 0, 0);
+        }
+        Sleep(25);
+    }
+
     StopKeyHookThread();
 }
 
 void Wh_ModUninit() {
     while (g_fallbackDialogRefCount.load() > 0) {
-        Sleep(200);
+        Sleep(50);
     }
     StopKeyHookThread();
     ReleaseGlobalResources();
