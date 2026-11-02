@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              maycon-desktop-window-cards
-// @name            Desktop Window Cards — DevMaycon
-// @description     Animated desktop previews, monitor-aware grids, and app exclusions. Customized by DevMaycon.
+// @name            Desktop Window Cards — Dev_Maycon
+// @description     Animated desktop previews, monitor-aware grids, and app exclusions. Customized by Dev_Maycon.
 // @version         1.0.1
-// @author          DevMaycon
+// @author          Dev_Maycon
 // @github          https://github.com/MayconDIS
 // @homepage        https://github.com/MayconDIS/Windhawk_Mods
 // @include         windhawk.exe
@@ -13,22 +13,22 @@
 
 // Fork of Desktop Window Cards 1.8 by HaVeN80, GPL-3.0-only.
 // Original: https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-window-cards.wh.cpp
-// Modified for DevMaycon with Codex assistance on 2026-11-02.
+// Modified for Dev_Maycon with Codex assistance on 2026-11-02.
 // Changes: English product documentation, personal defaults, scoped settings
 // ownership, snapshot-based configuration loading, normalized exclusions,
 // private window class names, and guarded worker initialization/waits.
 
 // ==WindhawkModReadme==
 /*
-# Desktop Window Cards — DevMaycon
+# Desktop Window Cards — Dev_Maycon
 
-![Desktop Window Cards — DevMaycon](https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/desktop-window-cards.svg)
+![Desktop Window Cards — Dev_Maycon](https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/desktop-window-cards.svg)
 
 *Original project illustration.*
 
 **Turn minimized windows into an organized desktop workspace.**
 
-Customized for DevMaycon with Codex assistance. This edition provides
+Customized for Dev_Maycon with Codex assistance. This edition provides
 animated preview cards with its own defaults, settings refactoring, and guide.
 
 ## Quick start
@@ -100,7 +100,7 @@ editions together. Large icons is a separate project and remains independent.
 
 ## Version 1.0.1
 
-DevMaycon branding and an original English guide based on this project's
+Dev_Maycon branding and an original English guide based on this project's
 files and recorded tests. No third-party promotional images are embedded.
 Existing user settings and card engine behavior are preserved.
 
@@ -109,7 +109,7 @@ Existing user settings and card engine behavior are preserved.
 
 Original card engine: **HaVeN80**, Desktop Window Cards 1.8. This edition is a derivative work under **GPL-3.0-only**; customization does not claim authorship of the original engine. [Upstream reference](https://github.com/ramensoftware/windhawk-mods/blob/15eab1d96589bcbec11e4d9e8aeb2659510e1206/mods/desktop-window-cards.wh.cpp).
 
-- Custom edition and maintenance: **DevMaycon**.
+- Custom edition and maintenance: **Dev_Maycon**.
 - Development assistance: **OpenAI Codex**.
 - Repository: [MayconDIS/Windhawk_Mods](https://github.com/MayconDIS/Windhawk_Mods).
 - GitHub profile: [MayconDIS](https://github.com/MayconDIS).
