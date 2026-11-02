@@ -1,12 +1,12 @@
-
 // ==WindhawkMod==
 // @id              search-auto-input-disable
 // @name            Search Auto Input Disable
-// @description     Disables type-to-search in the File Explorer file view.
-// @version         1.0
+// @description     Disables type-ahead in the File Explorer file view.
+// @version         1.1
 // @author          ipEtroIlIu
+// @github          https://github.com/ipEtroIlIu
 // @include         explorer.exe
-// @compilerOptions -std=c++17
+// @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,19 +14,35 @@
 /*
 # Search Auto Input Disable
 
-Tired of Windows File Explorer unexpectedly starting a search whenever you accidentally press a key or type something?
+Disables automatic type-ahead in the File Explorer file view.
 
-For example, you're scrolling through a folder looking for a specific file. You finally find it, but an accidental key press switches the view to the search field. Your current position in the file list is lost, interrupting your navigation.
+Normally, when you type characters while the file list is focused, Windows
+either selects the first matching item or automatically enters the Search Box,
+depending on your Folder Options settings.
 
-**Search Auto Input Disable** solves this by disabling automatic type-to-search in the File Explorer file view.
+This mod disables both behaviors, preventing accidental keyboard input from
+changing the selected file or interrupting navigation.
 
 ## Features
 
-- Disables automatic search when typing letters, numbers, or other printable characters in the file list.
-- Preserves your current scroll position and file selection, preventing accidental interruptions while navigating folders.
+- Disables automatic selection of files and folders when typing.
+- Disables automatic switching to the Search Box when typing.
+- Blocks letters, numbers, printable characters, Space, and numpad operators.
+- Preserves the current file selection and scroll position.
 - Does not block standard keyboard shortcuts involving Ctrl, Alt, or Win.
-- Does not interfere with normal text input in the address bar, search field, or file rename field.
-- Does not disable the search feature itself — you can still use it manually whenever you need it.
+- Does not interfere with normal text input in the address bar, Search Box,
+  or file rename field.
+- Does not disable manual use of the Search Box.
+
+## Built-in Windows alternative
+
+If you only want to prevent Windows from switching to the Search Box,
+you can use the built-in setting instead:
+
+Folder Options -> View -> When typing into list view ->
+Select the typed item in the view.
+
+This mod goes further by disabling type-ahead entirely.
 
 ## Development
 
@@ -34,22 +50,14 @@ This modification was developed with the assistance of artificial intelligence.
 
 ## Feedback
 
-If you encounter any bugs, compatibility issues, or have suggestions for improvement, please report them on the project page.
+If you encounter any bugs, compatibility issues, or have suggestions for
+improvement, please report them on the project page.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
-#include <tlhelp32.h>
-#include <vector>
+#include <windhawk_utils.h>
 #include <cwchar>
-
-struct HookRecord
-{
-    DWORD threadId;
-    HHOOK hook;
-};
-
-static std::vector<HookRecord> g_hooks;
 
 // --------------------------------------------------
 // Check window class
@@ -186,6 +194,7 @@ bool ShouldBlockMessage(const MSG* msg)
     if (IsRenameEditWindow(msg->hwnd))
         return false;
 
+    // Preserve keyboard shortcuts.
     if (HasCommandModifier())
         return false;
 
@@ -207,53 +216,32 @@ bool ShouldBlockMessage(const MSG* msg)
 }
 
 // --------------------------------------------------
-// WH_GETMESSAGE callback
+// ExplorerFrame.dll accelerator hook
 // --------------------------------------------------
 
-LRESULT CALLBACK GetMessageHook(
-    int code,
-    WPARAM wParam,
-    LPARAM lParam)
-{
-    if (code >= 0 && lParam && wParam == PM_REMOVE)
-    {
-        MSG* msg = reinterpret_cast<MSG*>(lParam);
+using MayTranslateAccelerator_t =
+    HRESULT(WINAPI*)(void* pThis, MSG* msg, int flags);
 
-        if (ShouldBlockMessage(msg))
-        {
-            msg->message = WM_NULL;
-            msg->wParam = 0;
-            msg->lParam = 0;
-        }
+MayTranslateAccelerator_t MayTranslateAccelerator_Original = nullptr;
+
+HMODULE g_explorerFrame = nullptr;
+
+HRESULT WINAPI MayTranslateAccelerator_Hook(
+    void* pThis,
+    MSG* msg,
+    int flags)
+{
+    if (ShouldBlockMessage(msg))
+    {
+        // Consume the message.
+        return S_OK;
     }
 
-    return CallNextHookEx(
-        nullptr,
-        code,
-        wParam,
-        lParam
+    return MayTranslateAccelerator_Original(
+        pThis,
+        msg,
+        flags
     );
-}
-
-// --------------------------------------------------
-// Thread enumeration
-// --------------------------------------------------
-
-bool InstallThreadHook(DWORD threadId)
-{
-    HHOOK hook = SetWindowsHookExW(
-        WH_GETMESSAGE,
-        GetMessageHook,
-        nullptr,
-        threadId
-    );
-
-    if (!hook)
-        return false;
-
-    g_hooks.push_back({ threadId, hook });
-
-    return true;
 }
 
 // --------------------------------------------------
@@ -262,32 +250,45 @@ bool InstallThreadHook(DWORD threadId)
 
 BOOL Wh_ModInit()
 {
-    DWORD processId = GetCurrentProcessId();
-
-    HANDLE snapshot = CreateToolhelp32Snapshot(
-        TH32CS_SNAPTHREAD,
-        0
+    g_explorerFrame = LoadLibraryExW(
+        L"ExplorerFrame.dll",
+        nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32
     );
 
-    if (snapshot == INVALID_HANDLE_VALUE)
-        return FALSE;
-
-    THREADENTRY32 entry = {};
-    entry.dwSize = sizeof(entry);
-
-    if (Thread32First(snapshot, &entry))
+    if (!g_explorerFrame)
     {
-        do
-        {
-            if (entry.th32OwnerProcessID == processId)
-                InstallThreadHook(entry.th32ThreadID);
-
-        } while (Thread32Next(snapshot, &entry));
+        Wh_Log(L"Failed to load ExplorerFrame.dll");
+        return FALSE;
     }
 
-    CloseHandle(snapshot);
+    WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] =
+    {
+        {
+            {
+                L"private: long __cdecl CShellBrowser::_MayTranslateAccelerator(struct tagMSG *,int)"
+            },
+            &MayTranslateAccelerator_Original,
+            MayTranslateAccelerator_Hook,
+        },
+    };
 
-    return !g_hooks.empty();
+    if (!WindhawkUtils::HookSymbols(
+            g_explorerFrame,
+            explorerFrameDllHooks,
+            ARRAYSIZE(explorerFrameDllHooks)))
+    {
+        Wh_Log(L"Failed to hook CShellBrowser::_MayTranslateAccelerator");
+
+        FreeLibrary(g_explorerFrame);
+        g_explorerFrame = nullptr;
+
+        return FALSE;
+    }
+
+    Wh_Log(L"Successfully hooked CShellBrowser::_MayTranslateAccelerator");
+
+    return TRUE;
 }
 
 // --------------------------------------------------
@@ -296,11 +297,11 @@ BOOL Wh_ModInit()
 
 void Wh_ModUninit()
 {
-    for (const auto& record : g_hooks)
+    if (g_explorerFrame)
     {
-        if (record.hook)
-            UnhookWindowsHookEx(record.hook);
+        FreeLibrary(g_explorerFrame);
+        g_explorerFrame = nullptr;
     }
 
-    g_hooks.clear();
+    MayTranslateAccelerator_Original = nullptr;
 }
