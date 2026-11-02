@@ -118,6 +118,18 @@ taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
 or the Menu key to open a context menu. Buttons expose their current tooltip
 information as accessible names and use system keyboard-focus visuals.
 
+## Changes in 1.2.0
+
+- Added the Sound output master-volume slider and mute button.
+- Added Volume percentage to the Sound menu and optional constant button width.
+- Added optional middle-click toggles for Bluetooth, Wi-Fi, and Energy saver.
+  These default to Custom action, preserving existing commands and leaving
+  empty commands inactive; Sound continues to default to Toggle mute.
+- Added the optional 16 px chevron size setting.
+- Open Project replaces Taskbar settings with Display settings in its menu;
+  recommended glyphs are E7F4 and EBC6.
+- Made menu-triggered button rebuilding use the unload-safe refresh window.
+
 ## Action formats
 
 The custom-action prefix scheme and action-format documentation are adapted from
@@ -403,7 +415,7 @@ SOFTWARE.
   $description: "Move troubleshooting to the bottom of Bluetooth, network, and sound menus, swapping it with the bottom action(s)."
 - increaseChevronSize: false
   $name: Increase chevron size
-  $description: Increase the chevron glyph to 16 px to match the tray icons size.
+  $description: Increase the chevron glyph to 16 px to match the tray icons' size.
 */
 // ==/WindhawkModSettings==
 
@@ -853,12 +865,7 @@ static void LoadSettings() {
     g_settings.showCurrentlyPlayingInSoundTooltip =
         Wh_GetIntSetting(L"sound.showCurrentlyPlayingInSoundTooltip") != 0;
     g_settings.constantVolumeWidth = Wh_GetIntSetting(L"sound.constantVolumeWidth") != 0;
-    // Menu owns this preference. Import the old setting on first use.
-    const int savedVolumePercentage = Wh_GetIntValue(L"volumePercentageMenuOverride", -1);
-    g_settings.showVolumePercentage = savedVolumePercentage >= 0
-        ? savedVolumePercentage != 0 : Wh_GetIntSetting(L"sound.showVolumePercentage") != 0;
-    if (savedVolumePercentage < 0)
-        Wh_SetIntValue(L"volumePercentageMenuOverride", g_settings.showVolumePercentage ? 1 : 0);
+    g_settings.showVolumePercentage = Wh_GetIntValue(L"volumePercentageMenuOverride", 0) != 0;
     g_settings.soundIconFollowsOutputDevice =
         Wh_GetIntSetting(L"sound.soundIconFollowsOutputDevice") != 0;
     g_settings.buttonOrder = LoadButtonOrderSetting();
@@ -2724,7 +2731,7 @@ static bool GetTaskbarGeometry(RECT* taskbarRect, RECT* hostRect,
     return true;
 }
 
-static bool IsBatteryLayoutHorizontal() {
+static bool IsTrayLayoutHorizontal() {
     RECT bar{}, host{};
     bool horizontal = true, first = true;
     GetTaskbarGeometry(&bar, &host, &horizontal, &first);
@@ -2750,7 +2757,7 @@ static double GetBatteryLeafOffsetX() {
     const double base = g_settings.smallBatteryGlyph ? -4 : -5;
     const bool shiftRight = !g_settings.smallBatteryGlyph &&
         g_settings.energySaverLeafGlyph && g_settings.batteryMatchOtherButtonSize &&
-        IsBatteryLayoutHorizontal();
+        IsTrayLayoutHorizontal();
     return base + (shiftRight ? 2 : 0);
 }
 
@@ -3220,7 +3227,7 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
     element.MinWidth(0);
     element.MaxWidth(g_trayButtonWidth);
     if (element.Name() == L"SeparateQuickSettingsXamlSound" && g_settings.showVolumePercentage) {
-        const bool horizontal = IsBatteryLayoutHorizontal();
+        const bool horizontal = IsTrayLayoutHorizontal();
         element.Width(horizontal ? NAN : g_trayButtonWidth);
         element.MaxWidth(horizontal ? INFINITY : g_trayButtonWidth);
         if (!horizontal) {
@@ -3233,7 +3240,7 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
         }
     }
     if (element.Name() == L"SeparateQuickSettingsXamlBattery") {
-        const bool horizontal = IsBatteryLayoutHorizontal();
+        const bool horizontal = IsTrayLayoutHorizontal();
         const bool percentage = ShouldShowBatteryPercentage();
         // Icon-only layout must not depend on repeated glyph measurements.
         const double iconWidth = horizontal && !g_settings.batteryMatchOtherButtonSize
@@ -3335,7 +3342,7 @@ static void RefreshInjectedButtonMetrics() {
 static void AttachTaskbarSizeRefreshHandlers(
     wux::FrameworkElement const& trayElement,
     wux::FrameworkElement const& controlCenterButton) {
-    auto lastHorizontal = std::make_shared<bool>(IsBatteryLayoutHorizontal());
+    auto lastHorizontal = std::make_shared<bool>(IsTrayLayoutHorizontal());
     auto handler = [lastHorizontal](wf::IInspectable const& sender,
                       wux::SizeChangedEventArgs const& args) {
         const auto oldSize = args.PreviousSize();
@@ -3349,7 +3356,7 @@ static void AttachTaskbarSizeRefreshHandlers(
         // leave the battery horizontal until the next power-status update.
         PostTrayRefresh(false);
 
-        const bool horizontal = IsBatteryLayoutHorizontal();
+        const bool horizontal = IsTrayLayoutHorizontal();
         const bool sameOrientation = horizontal == *lastHorizontal;
         *lastHorizontal = horizontal;
         if (sameOrientation) {
@@ -3972,24 +3979,11 @@ static wuxm::Brush BatteryStatusBrush(PCWSTR resource, wu::Color fallback) {
     return wuxm::SolidColorBrush(fallback);
 }
 
-static void UpdateSoundPercentage(SoundState const& state) {
-    if (!g_soundPercentageText || !g_soundContent || !g_soundButton) return;
-    const bool showPercent = g_settings.showVolumePercentage;
-    const int percent = (std::clamp)(static_cast<int>(state.volume * 100.0f + 0.5f), 0, 100);
-    const std::wstring label = state.available ? std::to_wstring(percent) + L"%" : L"";
-    if (g_soundPercentageText.Text() != label) g_soundPercentageText.Text(label);
-    SetTrayForeground(g_soundPercentageText, MakeIconBrush());
-    const bool horizontal = IsBatteryLayoutHorizontal();
-    // Right-align inside the reserved width so the percent sign stays in place.
-    const double textWidth = horizontal && g_settings.constantVolumeWidth
-        ? g_soundPercentageReservedWidth : NAN;
-    const double currentTextWidth = g_soundPercentageText.Width();
-    if (std::isnan(textWidth) ? !std::isnan(currentTextWidth) : currentTextWidth != textWidth)
-        g_soundPercentageText.Width(textWidth);
-    g_soundPercentageText.TextAlignment(horizontal && g_settings.constantVolumeWidth
-        ? wux::TextAlignment::Right : wux::TextAlignment::Center);
-
-    if (auto content = g_soundContent) {
+static void UpdateTrayPercentageLayout(
+    wux::FrameworkElement const& button, wuc::StackPanel const& contentPanel,
+    wuc::TextBlock const& percentageText, wux::FrameworkElement const& iconHost,
+    bool showPercent, bool horizontal, double iconWidth) {
+    if (auto content = contentPanel) {
         auto orientation = horizontal ? wuc::Orientation::Horizontal : wuc::Orientation::Vertical;
         double spacing = horizontal ? 4 : 0;
         // Glyph-layer panels are not the glyph/percentage layout panel.
@@ -4004,24 +3998,23 @@ static void UpdateSoundPercentage(SoundState const& state) {
         if (margin.Left != inset || margin.Right != inset)
             content.Margin({inset, 0, inset, 0});
     }
-    const double iconWidth = g_trayButtonWidth;
-    const double soundWidth = showPercent && horizontal ? NAN : iconWidth;
-    const double soundMaxWidth = showPercent ? INFINITY : iconWidth;
-    if (g_soundButton.MaxWidth() != soundMaxWidth)
-        g_soundButton.MaxWidth(soundMaxWidth);
-    const double currentWidth = g_soundButton.Width();
-    if (std::isnan(soundWidth) ? !std::isnan(currentWidth) : currentWidth != soundWidth)
-        g_soundButton.Width(soundWidth);
+    const double buttonWidth = showPercent && horizontal ? NAN : iconWidth;
+    const double buttonMaxWidth = showPercent ? INFINITY : iconWidth;
+    if (button.MaxWidth() != buttonMaxWidth)
+        button.MaxWidth(buttonMaxWidth);
+    const double currentWidth = button.Width();
+    if (std::isnan(buttonWidth) ? !std::isnan(currentWidth) : currentWidth != buttonWidth)
+        button.Width(buttonWidth);
     // Two vertical rows must measure naturally instead of being clipped to
     // the height captured from a single-glyph notification button.
     const bool stackedPercentage = showPercent && !horizontal;
     // Measure only our own stack. Do not change native template ancestors:
     // those participate in the tray's shared layout and visual states.
-    double soundHeight = g_trayButtonHeight;
-    if (stackedPercentage && g_soundContent) {
-        g_soundContent.Measure({static_cast<float>(soundWidth), INFINITY});
+    double buttonHeight = g_trayButtonHeight;
+    if (stackedPercentage && contentPanel) {
+        contentPanel.Measure({static_cast<float>(buttonWidth), INFINITY});
         double padding = 0;
-        if (auto control = g_soundButton.try_as<wuc::Control>()) {
+        if (auto control = button.try_as<wuc::Control>()) {
             const auto p = control.Padding();
             padding = p.Top + p.Bottom;
         }
@@ -4029,25 +4022,46 @@ static void UpdateSoundPercentage(SoundState const& state) {
         // row. Merely max(normal row, glyph + text) often keeps the old height
         // unchanged, squeezing both rows into one notification hit target.
         const double extraRow = std::max(0.0,
-            static_cast<double>(g_soundContent.DesiredSize().Height) -
-            static_cast<double>(g_soundIcon.host.DesiredSize().Height));
-        soundHeight = std::max(g_trayButtonHeight,
+            static_cast<double>(contentPanel.DesiredSize().Height) -
+            static_cast<double>(iconHost.DesiredSize().Height));
+        buttonHeight = std::max(g_trayButtonHeight,
             std::max(g_trayButtonHeight + extraRow,
-                static_cast<double>(g_soundContent.DesiredSize().Height) + padding));
+                static_cast<double>(contentPanel.DesiredSize().Height) + padding));
     }
-    if (g_soundButton.MinHeight() != 0) g_soundButton.MinHeight(0);
-    if (g_soundButton.MaxHeight() != INFINITY) g_soundButton.MaxHeight(INFINITY);
-    if (g_soundButton.Height() != soundHeight) {
-        g_soundButton.Height(soundHeight);
-        g_soundButton.InvalidateMeasure();
+    if (button.MinHeight() != 0) button.MinHeight(0);
+    if (button.MaxHeight() != INFINITY) button.MaxHeight(INFINITY);
+    if (button.Height() != buttonHeight) {
+        button.Height(buttonHeight);
+        button.InvalidateMeasure();
         if (g_trayPanel) g_trayPanel.InvalidateMeasure();
-        Wh_Log(L"Sound measured layout: horizontal=%d percentage=%d height=%.1f.",
-               horizontal, showPercent, soundHeight);
+        Wh_Log(L"Percentage measured layout: horizontal=%d percentage=%d height=%.1f.",
+               horizontal, showPercent, buttonHeight);
     }
-    if (auto offset = g_soundPercentageText.RenderTransform().try_as<wuxm::TranslateTransform>()) {
+    if (auto offset = percentageText.RenderTransform().try_as<wuxm::TranslateTransform>()) {
         const double y = horizontal ? -1 : 0;
         if (offset.Y() != y) offset.Y(y);
     }
+}
+
+static void UpdateSoundPercentage(SoundState const& state) {
+    if (!g_soundPercentageText || !g_soundContent || !g_soundButton) return;
+    const bool showPercent = g_settings.showVolumePercentage;
+    const int percent = (std::clamp)(static_cast<int>(state.volume * 100.0f + 0.5f), 0, 100);
+    const std::wstring label = state.available ? std::to_wstring(percent) + L"%" : L"";
+    if (g_soundPercentageText.Text() != label) g_soundPercentageText.Text(label);
+    SetTrayForeground(g_soundPercentageText, MakeIconBrush());
+    const bool horizontal = IsTrayLayoutHorizontal();
+    // Right-align inside the reserved width so the percent sign stays in place.
+    const double textWidth = horizontal && g_settings.constantVolumeWidth
+        ? g_soundPercentageReservedWidth : NAN;
+    const double currentTextWidth = g_soundPercentageText.Width();
+    if (std::isnan(textWidth) ? !std::isnan(currentTextWidth) : currentTextWidth != textWidth)
+        g_soundPercentageText.Width(textWidth);
+    g_soundPercentageText.TextAlignment(horizontal && g_settings.constantVolumeWidth
+        ? wux::TextAlignment::Right : wux::TextAlignment::Center);
+
+    UpdateTrayPercentageLayout(g_soundButton, g_soundContent,
+        g_soundPercentageText, g_soundIcon.host, showPercent, horizontal, g_trayButtonWidth);
     ApplyHoverBackgroundMetrics(g_soundButton);
 }
 
@@ -4140,67 +4154,11 @@ static void UpdateSeparateBatteryButton() {
     const std::wstring label = percentKnown ? std::to_wstring(percent) + L"%" : L"";
     if (g_batteryPercentageText.Text() != label) g_batteryPercentageText.Text(label);
     SetTrayVisibility(g_batteryPercentageText, showPercent ? wux::Visibility::Visible : wux::Visibility::Collapsed);
-    const bool horizontal = IsBatteryLayoutHorizontal();
-    if (auto content = g_batteryContent) {
-        auto orientation = horizontal ? wuc::Orientation::Horizontal : wuc::Orientation::Vertical;
-        double spacing = horizontal ? 4 : 0;
-        // Glyph-layer panels are not the glyph/percentage layout panel.
-        // Do not copy their zero inter-layer spacing into the visible row.
-        if (content.Orientation() != orientation) content.Orientation(orientation);
-        if (content.Spacing() != spacing) content.Spacing(spacing);
-        // The fixed icon-only button already gets its inset from the native
-        // OmniButton template. Extra content margins consume the glyph's space
-        // and clip it inside that fixed width.
-        const double inset = showPercent && horizontal ? 8 : 0;
-        const auto margin = content.Margin();
-        if (margin.Left != inset || margin.Right != inset)
-            content.Margin({inset, 0, inset, 0});
-    }
+    const bool horizontal = IsTrayLayoutHorizontal();
     const double iconWidth = horizontal && !g_settings.batteryMatchOtherButtonSize
         ? (g_settings.smallBatteryGlyph ? 31.0 : 36.0) : g_trayButtonWidth;
-    const double batteryWidth = showPercent && horizontal ? NAN : iconWidth;
-    const double batteryMaxWidth = showPercent ? INFINITY : iconWidth;
-    if (g_batteryButton.MaxWidth() != batteryMaxWidth)
-        g_batteryButton.MaxWidth(batteryMaxWidth);
-    const double currentWidth = g_batteryButton.Width();
-    if (std::isnan(batteryWidth) ? !std::isnan(currentWidth) : currentWidth != batteryWidth)
-        g_batteryButton.Width(batteryWidth);
-    // Two vertical rows must measure naturally instead of being clipped to
-    // the height captured from a single-glyph notification button.
-    const bool stackedPercentage = showPercent && !horizontal;
-    // Measure only our own stack. Do not change native template ancestors:
-    // those participate in the tray's shared layout and visual states.
-    double batteryHeight = g_trayButtonHeight;
-    if (stackedPercentage && g_batteryContent) {
-        g_batteryContent.Measure({static_cast<float>(batteryWidth), INFINITY});
-        double padding = 0;
-        if (auto control = g_batteryButton.try_as<wuc::Control>()) {
-            const auto p = control.Padding();
-            padding = p.Top + p.Bottom;
-        }
-        // Keep the normal row's surrounding space, then add the percentage
-        // row. Merely max(normal row, glyph + text) often keeps the old height
-        // unchanged, squeezing both rows into one notification hit target.
-        const double extraRow = std::max(0.0,
-            static_cast<double>(g_batteryContent.DesiredSize().Height) -
-            static_cast<double>(g_batteryIcon.host.DesiredSize().Height));
-        batteryHeight = std::max(g_trayButtonHeight,
-            std::max(g_trayButtonHeight + extraRow,
-                static_cast<double>(g_batteryContent.DesiredSize().Height) + padding));
-    }
-    if (g_batteryButton.MinHeight() != 0) g_batteryButton.MinHeight(0);
-    if (g_batteryButton.MaxHeight() != INFINITY) g_batteryButton.MaxHeight(INFINITY);
-    if (g_batteryButton.Height() != batteryHeight) {
-        g_batteryButton.Height(batteryHeight);
-        g_batteryButton.InvalidateMeasure();
-        if (g_trayPanel) g_trayPanel.InvalidateMeasure();
-        Wh_Log(L"Battery measured layout: horizontal=%d percentage=%d height=%.1f.",
-               horizontal, showPercent, batteryHeight);
-    }
-    if (auto offset = g_batteryPercentageText.RenderTransform().try_as<wuxm::TranslateTransform>()) {
-        const double y = horizontal ? -1 : 0;
-        if (offset.Y() != y) offset.Y(y);
-    }
+    UpdateTrayPercentageLayout(g_batteryButton, g_batteryContent,
+        g_batteryPercentageText, g_batteryIcon.host, showPercent, horizontal, iconWidth);
     // Center the visible SysBatt outline, whose ink is offset in its font box.
     if (auto offset = g_batteryIcon.host.RenderTransform().try_as<wuxm::TranslateTransform>()) {
         // SysBatt's advance box is asymmetric even when copied from the
@@ -6945,6 +6903,49 @@ static wux::FrameworkElement ButtonElementForKind(ButtonKind kind) {
     }
 }
 
+static void SetTrayPercentageContent(
+    wux::FrameworkElement const& button, wux::FrameworkElement const& iconHost,
+    wuc::StackPanel& contentPanel, wuc::TextBlock& percentageText,
+    PCWSTR contentName, PCWSTR textName, wux::Visibility visibility) {
+    // Detach the glyph host from the original icon content before reparenting.
+    if (auto items = button.try_as<wuc::ItemsControl>()) items.Items().Clear();
+    else if (auto control = button.try_as<wuc::ContentControl>()) control.Content(nullptr);
+    wuc::StackPanel content;
+    contentPanel = content;
+    content.Name(contentName);
+    content.Orientation(wuc::Orientation::Horizontal);
+    content.VerticalAlignment(wux::VerticalAlignment::Center);
+    content.Spacing(4);
+    // Percentage content has breathing room inside its hover surface.
+    content.Margin({8, 0, 8, 0});
+    content.Children().Append(iconHost);
+    percentageText = wuc::TextBlock();
+    percentageText.Name(textName);
+    // Percentage is caption text, not a 16-DIP icon glyph. Let the tray's
+    // caption style supply typography; retain a 12-DIP fallback if absent.
+    percentageText.FontSize(12);
+    try {
+        auto style = wux::Application::Current().Resources().TryLookup(
+            winrt::box_value(L"CaptionTextBlockStyle")).try_as<wux::Style>();
+        if (style) {
+            percentageText.Style(style);
+            percentageText.ClearValue(wuc::TextBlock::FontSizeProperty());
+        }
+    } catch (...) {
+        // The taskbar can be created before application resources exist.
+    }
+    percentageText.VerticalAlignment(wux::VerticalAlignment::Center);
+    percentageText.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    wuxm::TranslateTransform percentageOffset;
+    // Keep the full inter-item gap; only a small baseline correction is
+    // needed. These are XAML DIPs, scaled by the monitor's DPI.
+    percentageOffset.Y(-1);
+    percentageText.RenderTransform(percentageOffset);
+    percentageText.Visibility(visibility);
+    content.Children().Append(percentageText);
+    SetElementIcon(button, content);
+}
+
 static OrderedTrayButtons CreateTrayButtons() {
     OrderedTrayButtons buttons;
     if (g_settings.showBatteryButton) {
@@ -6993,42 +6994,9 @@ static OrderedTrayButtons CreateTrayButtons() {
         g_batteryLeafIcon.IsHitTestVisible(false);
         g_batteryLeafIcon.Visibility(wux::Visibility::Collapsed);
         host.Children().Append(g_batteryLeafIcon);
-        if (auto items = g_batteryButton.try_as<wuc::ItemsControl>()) items.Items().Clear();
-        else if (auto control = g_batteryButton.try_as<wuc::ContentControl>()) control.Content(nullptr);
-        wuc::StackPanel content;
-        g_batteryContent = content;
-        content.Name(L"SeparateTrayBatteryContent");
-        content.Orientation(wuc::Orientation::Horizontal);
-        content.VerticalAlignment(wux::VerticalAlignment::Center);
-        content.Spacing(4);
-        // Native battery content has breathing room inside its hover surface.
-        content.Margin({8, 0, 8, 0});
-        content.Children().Append(host);
-        g_batteryPercentageText = wuc::TextBlock();
-        g_batteryPercentageText.Name(L"SeparateTrayBatteryPercentage");
-        // Percentage is caption text, not a 16-DIP icon glyph. Let the tray's
-        // caption style supply typography; retain a 12-DIP fallback if absent.
-        g_batteryPercentageText.FontSize(12);
-        try {
-            auto style = wux::Application::Current().Resources().TryLookup(
-                winrt::box_value(L"CaptionTextBlockStyle")).try_as<wux::Style>();
-            if (style) {
-                g_batteryPercentageText.Style(style);
-                g_batteryPercentageText.ClearValue(wuc::TextBlock::FontSizeProperty());
-            }
-        } catch (...) {
-            // The taskbar can be created before application resources exist.
-        }
-        g_batteryPercentageText.VerticalAlignment(wux::VerticalAlignment::Center);
-        g_batteryPercentageText.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        wuxm::TranslateTransform percentageOffset;
-        // Keep the full inter-item gap; only a small baseline correction is
-        // needed. These are XAML DIPs, scaled by the monitor's DPI.
-        percentageOffset.Y(-1);
-        g_batteryPercentageText.RenderTransform(percentageOffset);
-        g_batteryPercentageText.Visibility(wux::Visibility::Collapsed);
-        content.Children().Append(g_batteryPercentageText);
-        SetElementIcon(g_batteryButton, content);
+        SetTrayPercentageContent(g_batteryButton, host, g_batteryContent,
+            g_batteryPercentageText, L"SeparateTrayBatteryContent",
+            L"SeparateTrayBatteryPercentage", wux::Visibility::Collapsed);
         ApplyTrayButtonMetrics(g_batteryButton);
         UpdateSeparateBatteryButton();
     }
@@ -7059,64 +7027,31 @@ static OrderedTrayButtons CreateTrayButtons() {
                                          L"SeparateQuickSettingsXamlSound",
                                          L"Sound");
         if (g_settings.showVolumePercentage) {
-            if (auto items = g_soundButton.try_as<wuc::ItemsControl>()) items.Items().Clear();
-            else if (auto control = g_soundButton.try_as<wuc::ContentControl>()) control.Content(nullptr);
-        wuc::StackPanel content;
-        g_soundContent = content;
-        content.Name(L"SeparateTraySoundContent");
-        content.Orientation(wuc::Orientation::Horizontal);
-        content.VerticalAlignment(wux::VerticalAlignment::Center);
-        content.Spacing(4);
-        // Native battery content has breathing room inside its hover surface.
-        content.Margin({8, 0, 8, 0});
-        content.Children().Append(g_soundIcon.host);
-        g_soundPercentageText = wuc::TextBlock();
-        g_soundPercentageText.Name(L"SeparateTraySoundPercentage");
-        // Percentage is caption text, not a 16-DIP icon glyph. Let the tray's
-        // caption style supply typography; retain a 12-DIP fallback if absent.
-        g_soundPercentageText.FontSize(12);
-        try {
-            auto style = wux::Application::Current().Resources().TryLookup(
-                winrt::box_value(L"CaptionTextBlockStyle")).try_as<wux::Style>();
-            if (style) {
-                g_soundPercentageText.Style(style);
-                g_soundPercentageText.ClearValue(wuc::TextBlock::FontSizeProperty());
+            SetTrayPercentageContent(g_soundButton, g_soundIcon.host, g_soundContent,
+                g_soundPercentageText, L"SeparateTraySoundContent",
+                L"SeparateTraySoundPercentage", wux::Visibility::Visible);
+            if (g_settings.constantVolumeWidth) {
+                // Measure every valid label with the actual caption typography,
+                // including proportional digits, rather than assuming 100% is widest.
+                wuc::TextBlock probe;
+                probe.FontFamily(g_soundPercentageText.FontFamily());
+                probe.FontSize(g_soundPercentageText.FontSize());
+                probe.FontWeight(g_soundPercentageText.FontWeight());
+                probe.FontStyle(g_soundPercentageText.FontStyle());
+                probe.FontStretch(g_soundPercentageText.FontStretch());
+                probe.CharacterSpacing(g_soundPercentageText.CharacterSpacing());
+                g_soundPercentageReservedWidth = 0;
+                for (int percent = 0; percent <= 100; ++percent) {
+                    probe.Text(std::to_wstring(percent) + L"%");
+                    probe.Measure({INFINITY, INFINITY});
+                    g_soundPercentageReservedWidth = (std::max)(g_soundPercentageReservedWidth,
+                        static_cast<double>(probe.DesiredSize().Width));
+                }
+                g_soundPercentageReservedWidth = std::ceil(g_soundPercentageReservedWidth);
+                g_soundPercentageText.Width(g_soundPercentageReservedWidth);
+                g_soundPercentageText.TextAlignment(wux::TextAlignment::Right);
             }
-        } catch (...) {
-            // The taskbar can be created before application resources exist.
-        }
-        if (g_settings.constantVolumeWidth) {
-            // Measure every valid label with the actual caption typography,
-            // including proportional digits, rather than assuming 100% is widest.
-            wuc::TextBlock probe;
-            probe.FontFamily(g_soundPercentageText.FontFamily());
-            probe.FontSize(g_soundPercentageText.FontSize());
-            probe.FontWeight(g_soundPercentageText.FontWeight());
-            probe.FontStyle(g_soundPercentageText.FontStyle());
-            probe.FontStretch(g_soundPercentageText.FontStretch());
-            probe.CharacterSpacing(g_soundPercentageText.CharacterSpacing());
-            g_soundPercentageReservedWidth = 0;
-            for (int percent = 0; percent <= 100; ++percent) {
-                probe.Text(std::to_wstring(percent) + L"%");
-                probe.Measure({INFINITY, INFINITY});
-                g_soundPercentageReservedWidth = (std::max)(g_soundPercentageReservedWidth,
-                    static_cast<double>(probe.DesiredSize().Width));
-            }
-            g_soundPercentageReservedWidth = std::ceil(g_soundPercentageReservedWidth);
-            g_soundPercentageText.Width(g_soundPercentageReservedWidth);
-            g_soundPercentageText.TextAlignment(wux::TextAlignment::Right);
-        }
-        g_soundPercentageText.VerticalAlignment(wux::VerticalAlignment::Center);
-        g_soundPercentageText.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        wuxm::TranslateTransform percentageOffset;
-        // Keep the full inter-item gap; only a small baseline correction is
-        // needed. These are XAML DIPs, scaled by the monitor's DPI.
-        percentageOffset.Y(-1);
-        g_soundPercentageText.RenderTransform(percentageOffset);
-        g_soundPercentageText.Visibility(wux::Visibility::Visible);
-        content.Children().Append(g_soundPercentageText);
-        SetElementIcon(g_soundButton, content);
-        ApplyTrayButtonMetrics(g_soundButton);
+            ApplyTrayButtonMetrics(g_soundButton);
         }
     } else {
         g_soundButton = nullptr;
@@ -7215,20 +7150,22 @@ struct ChevronStyle : std::enable_shared_from_this<ChevronStyle> {
         button = nullptr;
     }
 };
-[[clang::no_destroy]] static std::vector<std::shared_ptr<ChevronStyle>> g_chevronStyles;
+[[clang::no_destroy]] static std::optional<std::vector<std::shared_ptr<ChevronStyle>>> g_chevronStyles;
 
 static void RestoreChevronStyles() {
-    for (auto const& style : g_chevronStyles) style->Remove();
-    g_chevronStyles.clear();
+    if (!g_chevronStyles) return;
+    for (auto const& style : *g_chevronStyles) style->Remove();
+    g_chevronStyles.reset();
 }
 
 static void ApplyChevronStyles(wux::DependencyObject const& root, int depth = 0) {
     if (!root || depth > 48 || !g_settings.increaseChevronSize) return;
     if (auto element = root.try_as<wux::FrameworkElement>(); element &&
         winrt::get_class_name(element) == L"SystemTray.ChevronIconView") {
-        for (auto const& style : g_chevronStyles) if (style->button == element) return;
+        if (!g_chevronStyles) g_chevronStyles.emplace();
+        for (auto const& style : *g_chevronStyles) if (style->button == element) return;
         auto style = std::make_shared<ChevronStyle>();
-        g_chevronStyles.push_back(style);
+        g_chevronStyles->push_back(style);
         style->Attach(element);
         return;
     }
@@ -7551,8 +7488,8 @@ static void RemoveXamlButtons() {
         g_bluetoothIcon = {};
         g_networkIcon = {};
         g_soundIcon = {};
-    g_soundContent = nullptr;
-    g_soundPercentageText = nullptr;
+        g_soundContent = nullptr;
+        g_soundPercentageText = nullptr;
         g_originalGroupedButton = nullptr;
     } catch (...) {
         Wh_Log(L"RemoveXamlButtons error: 0x%08X", winrt::to_hresult());
