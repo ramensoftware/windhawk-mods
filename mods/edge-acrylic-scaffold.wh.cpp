@@ -65,23 +65,14 @@ Untested starting point. It does three things:
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
-
 #include <windhawk_api.h>
-
 #include <windhawk_utils.h>
-
 #include <shellapi.h>
-
 #include <atomic>
-
 #include <cstring>
-
 #include <string>
-
 #include <string_view>
-
 #include <unordered_set>
-
 #include <vector>
 
 #ifndef _M_X64
@@ -137,21 +128,21 @@ namespace {
     using LoadLibraryExW_t = decltype( & LoadLibraryExW);
     LoadLibraryExW_t g_origLoadLibraryExW = nullptr;
     void LoadSettings() {
-        g_discovery.store(Wh_GetIntSetting(L "discoveryMode") != 0);
-        g_clearAll.store(Wh_GetIntSetting(L "clearAll") != 0);
-        g_hideCaption.store(Wh_GetIntSetting(L "hideNativeCaptionButtons") != 0);
-        g_tweakTabs.store(Wh_GetIntSetting(L "tweakTabs") != 0);
-        g_tabInactivePct.store(Wh_GetIntSetting(L "tabInactiveOpacity"));
-        g_tabActivePct.store(Wh_GetIntSetting(L "tabActiveOpacity"));
-        PCWSTR raw = Wh_GetStringSetting(L "clearClasses");
+        g_discovery.store(Wh_GetIntSetting(L"discoveryMode") != 0);
+        g_clearAll.store(Wh_GetIntSetting(L"clearAll") != 0);
+        g_hideCaption.store(Wh_GetIntSetting(L"hideNativeCaptionButtons") != 0);
+        g_tweakTabs.store(Wh_GetIntSetting(L"tweakTabs") != 0);
+        g_tabInactivePct.store(Wh_GetIntSetting(L"tabInactiveOpacity"));
+        g_tabActivePct.store(Wh_GetIntSetting(L"tabActiveOpacity"));
+        PCWSTR raw = Wh_GetStringSetting(L"clearClasses");
         std::vector < std::string > list;
         std::string current;
         for (const wchar_t * p = raw;; ++p) {
-            if ( * p == L ',' || ! * p) {
+            if ( * p == L',' || ! * p) {
                 if (!current.empty()) list.push_back(current);
                 current.clear();
                 if (! * p) break;
-            } else if ( * p < 128 && * p != L ' ') {
+            } else if ( * p < 128 && * p != L' ') {
                 current.push_back(static_cast < char > ( * p));
             }
         }
@@ -161,7 +152,7 @@ namespace {
         AcquireSRWLockExclusive( & g_lock);
         g_clear = std::move(list);
         ReleaseSRWLockExclusive( & g_lock);
-        Wh_Log(L "Settings loaded: clearAll=%d, %u class name(s) in clear list", g_clearAll.load() ? 1 : 0, static_cast < unsigned > (count));
+        Wh_Log(L"Settings loaded: clearAll=%d, %u class name(s) in clear list", g_clearAll.load() ? 1 : 0, static_cast < unsigned > (count));
     }
     bool ShouldClear(std::string_view name) {
         bool match = false;
@@ -181,7 +172,7 @@ namespace {
         ReleaseSRWLockExclusive( & g_lock);
         if (isNew) {
             std::wstring wide(name.begin(), name.end());
-            Wh_Log(L "View class: %s", wide.c_str());
+            Wh_Log(L"View class: %s", wide.c_str());
         }
     }
     void LogClearOnce(std::string_view name) {
@@ -191,12 +182,12 @@ namespace {
         ReleaseSRWLockExclusive( & g_lock);
         if (isNew) {
             std::wstring wide(name.begin(), name.end());
-            Wh_Log(L "Clearing class: %s", wide.c_str());
+            Wh_Log(L"Clearing class: %s", wide.c_str());
         }
     }
     void OnPaintBackground_Hook(void * view, void * canvas) {
         if (view && canvas && g_ready.load(std::memory_order_acquire)) {
-            if (g_paintCalls.fetch_add(1, std::memory_order_relaxed) == 0) Wh_Log(L "OnPaintBackground hook is live");
+            if (g_paintCalls.fetch_add(1, std::memory_order_relaxed) == 0) Wh_Log(L"OnPaintBackground hook is live");
             if (g_clearAll.load(std::memory_order_relaxed)) {
                 g_drawColor(canvas, 0, 0 /* SkBlendMode::kClear */ );
                 return;
@@ -223,7 +214,7 @@ namespace {
         static std::atomic < unsigned > calls {
             0
         };
-        if (calls.fetch_add(1) < 8) Wh_Log(L "ShouldWindowContentsBeTransparent called: original=%d forced=%d", original ? 1 : 0, force ? 1 : 0);
+        if (calls.fetch_add(1) < 8) Wh_Log(L"ShouldWindowContentsBeTransparent called: original=%d forced=%d", original ? 1 : 0, force ? 1 : 0);
         return force ? true : original;
     }
     bool InsideModule(HMODULE module, void * address) {
@@ -241,26 +232,25 @@ namespace {
         static std::atomic < unsigned > calls {
             0
         };
-        if (calls.fetch_add(1) < 12) Wh_Log(L "EdgeGetTabBackgroundColor: state=%d flag=%d color=%08X", state, flag ? 1 : 0, color);
+        if (calls.fetch_add(1) < 12) Wh_Log(L"EdgeGetTabBackgroundColor: state=%d flag=%d color=%08X", state, flag ? 1 : 0, color);
         if (!g_tweakTabs.load(std::memory_order_relaxed) || !g_ready.load(std::memory_order_acquire)) return color;
         int pct = state == 0 ? g_tabActivePct.load() : g_tabInactivePct.load();
         if (pct >= 100) return color;
         if (pct < 0) pct = 0;
         const unsigned alpha = ((color >> 24) * static_cast < unsigned > (pct) + 50) / 100;
-        return (color & 0x00ffffff u) | (alpha << 24);
+        return (color & 0x00ffffffu) | (alpha << 24);
     }
     bool ResolveAndHook(HMODULE module) {
         void * a[5] {};
-        // Explicitly named array targeting msedge.dll to pass linter expectations
         WindhawkUtils::SYMBOL_HOOK msedgeDllHooks[] = {
-            Use code with caution. {
+            {
                 {
-                    L "protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"
+                    L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"
                 }, & a[0], nullptr, true
             },
             {
                 {
-                    L "public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"
+                    L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"
                 },
                 & a[1],
                 nullptr,
@@ -268,22 +258,20 @@ namespace {
             },
             {
                 {
-                    L "public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits > __cdecl views::View::GetClassNameW(void)const ",
-                        L "public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits > __cdecl views::View::GetClassNameW(void)const",
-                        L "public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits > __cdecl views::View::GetClassName(void)const"
+                    L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits > __cdecl views::View::GetClassNameW(void)const ",
+                    L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits > __cdecl views::View::GetClassNameW(void)const",
+                    L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits > __cdecl views::View::GetClassName(void)const"
                 },
                 & a[2],
                 nullptr,
                 true
             },
-            // Edge's PDB lists const methods with a trailing space after "const".
-            // Only the browser-window class is hooked, not the shared base class.
             {
                 {
-                    L "private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const ",
-                        L "public: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const ",
-                        L "private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const",
-                        L "public: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const"
+                    L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const ",
+                    L"public: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const ",
+                    L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const",
+                    L"public: virtual bool __cdecl BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent(void)const"
                 },
                 & a[3],
                 nullptr,
@@ -291,8 +279,8 @@ namespace {
             },
             {
                 {
-                    L "private: virtual unsigned int __cdecl EdgeTabStyleViews::EdgeGetTabBackgroundColor(enum TabStyle::TabSelectionState,bool)const ",
-                        L "private: virtual unsigned int __cdecl EdgeTabStyleViews::EdgeGetTabBackgroundColor(enum TabStyle::TabSelectionState,bool)const"
+                    L"private: virtual unsigned int __cdecl EdgeTabStyleViews::EdgeGetTabBackgroundColor(enum TabStyle::TabSelectionState,bool)const ",
+                    L"private: virtual unsigned int __cdecl EdgeTabStyleViews::EdgeGetTabBackgroundColor(enum TabStyle::TabSelectionState,bool)const"
                 },
                 & a[4],
                 nullptr,
@@ -300,30 +288,29 @@ namespace {
             },
         };
         if (!WindhawkUtils::HookSymbols(module, msedgeDllHooks, ARRAYSIZE(msedgeDllHooks))) {
-            Wh_Log(L "HookSymbols failed (no symbols for this msedge.dll build?)");
+            Wh_Log(L"HookSymbols failed (no symbols for this msedge.dll build?)");
             return false;
         }
         const wchar_t * labels[] = {
-            L "View::OnPaintBackground",
-            L "Canvas::DrawColor",
-            L "View::GetClassName",
-            L "ShouldWindowContentsBeTransparent",
-            L "EdgeGetTabBackgroundColor"
+            L"View::OnPaintBackground",
+            L"Canvas::DrawColor",
+            L"View::GetClassName",
+            L"ShouldWindowContentsBeTransparent",
+            L"EdgeGetTabBackgroundColor"
         };
-        for (unsigned i = 0; i < 5; ++i) Wh_Log(L "Symbol %s: %s", labels[i], a[i] ? L "resolved" : L "NOT found");
+        for (unsigned i = 0; i < 5; ++i) Wh_Log(L"Symbol %s: %s", labels[i], a[i] ? L"resolved" : L"NOT found");
         for (unsigned i = 0; i < 5; ++i)
             if (a[i] && !InsideModule(module, a[i])) {
-                Wh_Log(L "Symbol %u resolved outside msedge.dll; aborting", i);
+                Wh_Log(L"Symbol %u resolved outside msedge.dll; aborting", i);
                 return false;
             }
-        // Minimum: paint + DrawColor. Without GetClassName we can only use the clearAll test.
         if (!a[0] || !a[1]) return false;
-        if (!a[2]) Wh_Log(L "GetClassName not found: class names unavailable, only clearAll works");
-        g_drawColor = reinterpret_cast(a[1]);
-        g_getClass = reinterpret_cast(a[2]);
+        if (!a[2]) Wh_Log(L"GetClassName not found: class names unavailable, only clearAll works");
+        g_drawColor = reinterpret_cast<DrawColorFn>(a[1]);
+        g_getClass = reinterpret_cast<GetClassFn>(a[2]);
         if (!Hook(a[0], OnPaintBackground_Hook, & g_origPaint)) return false;
-        if (a[3] && !Hook(a[3], ShouldWindowContentsBeTransparent_Hook, & g_origTransparent)) Wh_Log(L "Could not hook the transparent-window function");
-        if (a[4] && !Hook(a[4], TabBackgroundColor_Hook, & g_origTabColor)) Wh_Log(L "Could not hook the tab background color function");
+        if (a[3] && !Hook(a[3], ShouldWindowContentsBeTransparent_Hook, & g_origTransparent)) Wh_Log(L"Could not hook the transparent-window function");
+        if (a[4] && !Hook(a[4], TabBackgroundColor_Hook, & g_origTabColor)) Wh_Log(L"Could not hook the tab background color function");
         return true;
     }
     bool TryInstall(HMODULE module, bool applyNow) {
@@ -346,17 +333,14 @@ namespace {
         ReleaseSRWLockExclusive( & g_initLock);
         return installed;
     }
-    // ---- Native caption button workaround (adapted from the Brave Acrylic approach) ----
-    // With a transparent window, Windows draws its own caption buttons beneath Edge's. Hide only
-    // WS_SYSMENU for the real style; Chromium still reads its original logical style.
-    constexpr wchar_t kNativeCaptionProperty[] = L "Windhawk.EdgeAcrylic.NativeCaption";
-    std::atomic g_captionFixActive {
+    constexpr wchar_t kNativeCaptionProperty[] = L"Windhawk.EdgeAcrylic.NativeCaption";
+    std::atomic < bool > g_captionFixActive {
         false
     };
-    std::atomic g_captionStopping {
+    std::atomic < bool > g_captionStopping {
         false
     };
-    std::atomic g_captionPropertyUsed {
+    std::atomic < bool > g_captionPropertyUsed {
         false
     };
     bool g_captionHooksInstalled = false;
@@ -378,7 +362,7 @@ namespace {
         const auto exStyle = pOrigGetWindowLongPtrW(window, GWL_EXSTYLE);
         if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_DLGMODALFRAME)) return false;
         wchar_t name[32] {};
-        return GetClassNameW(window, name, ARRAYSIZE(name)) && !wcscmp(name, L "Chrome_WidgetWin_1");
+        return GetClassNameW(window, name, ARRAYSIZE(name)) && !wcscmp(name, L"Chrome_WidgetWin_1");
     }
     void RefreshNativeCaption(HWND window) {
         SetWindowPos(window, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -390,7 +374,7 @@ namespace {
         SetWindowLongPtrW(window, GWL_STYLE, style | WS_SYSMENU);
         RefreshNativeCaption(window);
     }
-    template
+    template < typename Value >
     Value ReadCaptionStyle(HWND window, int index, Value(WINAPI * original)(HWND, int)) {
         if (index != GWL_STYLE || (!g_captionFixActive.load(std::memory_order_acquire) && !g_captionPropertyUsed.load(std::memory_order_relaxed))) return original(window, index);
         auto value = original(window, index);
@@ -400,12 +384,12 @@ namespace {
         return value;
     }
     LONG_PTR WINAPI GetWindowLongPtrW_Hook(HWND window, int index) {
-        return ReadCaptionStyle(window, index, pOrigGetWindowLongPtrW);
+        return ReadCaptionStyle<LONG_PTR>(window, index, pOrigGetWindowLongPtrW);
     }
     LONG WINAPI GetWindowLongW_Hook(HWND window, int index) {
-        return ReadCaptionStyle(window, index, pOrigGetWindowLongW);
+        return ReadCaptionStyle<LONG>(window, index, pOrigGetWindowLongW);
     }
-    template
+    template < typename Value >
     Value WriteCaptionStyle(HWND window, int index, Value value, Value(WINAPI * original)(HWND, int, Value)) {
         if (index != GWL_STYLE || g_captionStyleWrite == window || (!g_captionFixActive.load(std::memory_order_acquire) && !g_captionPropertyUsed.load(std::memory_order_relaxed))) return original(window, index, value);
         const bool owned = GetPropW(window, kNativeCaptionProperty) != nullptr;
@@ -413,7 +397,7 @@ namespace {
         bool marked = owned;
         if (hide && !owned) {
             g_captionPropertyUsed.store(true, std::memory_order_relaxed);
-            marked = SetPropW(window, kNativeCaptionProperty, reinterpret_cast(1)) != FALSE;
+            marked = SetPropW(window, kNativeCaptionProperty, reinterpret_cast<HANDLE>(1)) != FALSE;
         } else if (!hide && owned) {
             RemovePropW(window, kNativeCaptionProperty);
             marked = false;
@@ -421,11 +405,11 @@ namespace {
         const HWND previousWrite = g_captionStyleWrite;
         g_captionStyleWrite = window;
         SetLastError(ERROR_SUCCESS);
-        const auto previous = original(window, index, hide && marked ? value & ~static_cast(WS_SYSMENU) : value);
+        const auto previous = original(window, index, hide && marked ? value & ~static_cast<Value>(WS_SYSMENU) : value);
         const DWORD error = GetLastError();
         g_captionStyleWrite = previousWrite;
         if (!previous && error) {
-            if (owned) SetPropW(window, kNativeCaptionProperty, reinterpret_cast(1));
+            if (owned) SetPropW(window, kNativeCaptionProperty, reinterpret_cast<HANDLE>(1));
             else RemovePropW(window, kNativeCaptionProperty);
         } else if (hide && marked && !g_captionFixActive.load(std::memory_order_acquire)) {
             RestoreNativeCaption(window);
@@ -434,10 +418,10 @@ namespace {
         return previous && owned ? previous | WS_SYSMENU : previous;
     }
     LONG_PTR WINAPI SetWindowLongPtrW_Hook(HWND window, int index, LONG_PTR value) {
-        return WriteCaptionStyle(window, index, value, pOrigSetWindowLongPtrW);
+        return WriteCaptionStyle<LONG_PTR>(window, index, value, pOrigSetWindowLongPtrW);
     }
     LONG WINAPI SetWindowLongW_Hook(HWND window, int index, LONG value) {
-        return WriteCaptionStyle(window, index, value, pOrigSetWindowLongW);
+        return WriteCaptionStyle<LONG>(window, index, value, pOrigSetWindowLongW);
     }
     void ApplyNativeCaption(HWND window) {
         if (!g_captionFixActive.load(std::memory_order_acquire) || GetPropW(window, kNativeCaptionProperty)) return;
@@ -469,31 +453,29 @@ namespace {
     }
     void InstallNativeCaptionHooks() {
         g_captionHooksInstalled = WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, & pOrigCreateWindowExW) && WindhawkUtils::SetFunctionHook(GetWindowLongPtrW, GetWindowLongPtrW_Hook, & pOrigGetWindowLongPtrW) && WindhawkUtils::SetFunctionHook(SetWindowLongPtrW, SetWindowLongPtrW_Hook, & pOrigSetWindowLongPtrW) && WindhawkUtils::SetFunctionHook(GetWindowLongW, GetWindowLongW_Hook, & pOrigGetWindowLongW) && WindhawkUtils::SetFunctionHook(SetWindowLongW, SetWindowLongW_Hook, & pOrigSetWindowLongW);
-        if (!g_captionHooksInstalled) Wh_Log(L "Native caption fix unavailable");
+        if (!g_captionHooksInstalled) Wh_Log(L"Native caption fix unavailable");
     }
-    // ---- end caption workaround ----
     bool IsExecutableLoad(DWORD flags) {
         return !(flags & (DONT_RESOLVE_DLL_REFERENCES | LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE));
     }
     HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
         const HMODULE module = g_origLoadLibraryExW(name, file, flags);
         const DWORD error = GetLastError();
-        if (module && IsExecutableLoad(flags) && module == GetModuleHandleW(L "msedge.dll")) {
+        if (module && IsExecutableLoad(flags) && module == GetModuleHandleW(L"msedge.dll")) {
             TryInstall(module, true);
             SyncNativeCaptions();
         }
         SetLastError(error);
         return module;
     }
-    // Only the main browser process has no --type= argument.
     bool IsBrowserProcess() {
         int count = 0;
         auto * args = CommandLineToArgvW(GetCommandLineW(), & count);
         if (!args) return false;
         bool browser = true;
         for (int i = 1; i < count; ++i) {
-            if (!wcscmp(args[i], L "--")) break;
-            if (!wcsncmp(args[i], L "--type=", 7)) browser = false;
+            if (!wcscmp(args[i], L"--")) break;
+            if (!wcsncmp(args[i], L"--type=", 7)) browser = false;
         }
         LocalFree(args);
         return browser;
@@ -504,8 +486,8 @@ BOOL Wh_ModInit() {
     g_browser = true;
     LoadSettings();
     InstallNativeCaptionHooks();
-    if (HMODULE edge = GetModuleHandleW(L "msedge.dll")) return TryInstall(edge, false);
-    const HMODULE kernelBase = GetModuleHandleW(L "kernelbase.dll");
+    if (HMODULE edge = GetModuleHandleW(L"msedge.dll")) return TryInstall(edge, false);
+    const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     const auto loader = kernelBase ? reinterpret_cast < LoadLibraryExW_t > (GetProcAddress(kernelBase, "LoadLibraryExW")) : nullptr;
     return loader && WindhawkUtils::SetFunctionHook(loader, LoadLibraryExW_Hook, & g_origLoadLibraryExW);
 }
@@ -517,8 +499,7 @@ void Wh_ModAfterInit() {
         g_ready.store(true, std::memory_order_release);
     }
     ReleaseSRWLockExclusive( & g_initLock);
-    // Cover a load that happened between ModInit's check and the loader hook going live.
-    if (HMODULE edge = GetModuleHandleW(L "msedge.dll")) TryInstall(edge, true);
+    if (HMODULE edge = GetModuleHandleW(L"msedge.dll")) TryInstall(edge, true);
     SyncNativeCaptions();
 }
 void Wh_ModSettingsChanged() {
@@ -535,7 +516,6 @@ void Wh_ModBeforeUninit() {
     g_applyAfterInit = false;
     g_ready.store(false, std::memory_order_release);
     ReleaseSRWLockExclusive( & g_initLock);
-    // Restore the real WS_SYSMENU bit while the style hooks are still installed.
     if (g_browser) EnumWindows(SyncNativeCaptionWindow, 0);
 }
 #endif
