@@ -1,10 +1,12 @@
 // ==WindhawkMod==
 // @id              background-dimmer
 // @name            Background Dimmer
-// @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in its own configuration window
+// @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in a secondary configuration window
 // @version         1.0.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
+// @include         windhawk-mod-uiaccess.exe
+// @include         windhawk-mod.exe
 // @include         windhawk.exe
 // @compilerOptions -lcomctl32 -lcomdlg32 -lgdi32 -lgdiplus -lshell32
 // ==/WindhawkMod==
@@ -18,6 +20,8 @@
 Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.
 
 The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.
+
+Elevated (admin) windows need Windhawk 2 for complete background dimming.
 
 ## Live configuration
 
@@ -72,6 +76,11 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 #include <stdio.h>
 #include <wchar.h>
 #include <wctype.h>
+
+#if __has_include(<windhawk_tool_mod.h>)
+#include <windhawk_tool_mod.h>
+#define HAS_TOOL_MOD_HEADER
+#endif
 
 // ───────────── GDI+ (flat API, only to load PNG/JPG/GIF images) ─────────────
 
@@ -1051,6 +1060,10 @@ void WhTool_ModUninit() {
     }
 }
 
+#ifndef HAS_TOOL_MOD_HEADER
+// Launcher for Windhawk 1.x. On Windhawk 2, windhawk_tool_mod.h provides it and runs the mod in a UIAccess host,
+// which can place the layer behind elevated windows.
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -1229,3 +1242,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+#endif  // HAS_TOOL_MOD_HEADER
