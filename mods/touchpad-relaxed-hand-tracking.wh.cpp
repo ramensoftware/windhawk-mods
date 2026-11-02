@@ -1,10 +1,11 @@
 // ==WindhawkMod==
 // @id              touchpad-relaxed-hand-tracking
 // @name            Touchpad Relaxed Hand Tracking
-// @description     Enables 5-2 fingers mouse pointer tracking for improved hand ergonomics (excludes admin windows, like Windhawk)
+// @description     Enables 5-2 fingers mouse pointer tracking for improved hand ergonomics (admin windows need Windhawk 2)
 // @version         1.0.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
+// @include         windhawk-mod-uiaccess.exe
 // @include         windhawk.exe
 // @compilerOptions -lhid -lwtsapi32
 // @license         GPL-3.0
@@ -30,7 +31,7 @@ The options to start with four or three fingers conflict with the respective Win
 
 ## 2 fingers detection
 
-When active, two fingers do everything: glide, right click (tap) and scroll (tap-drag). Windows' own two-finger gestures have to be disabled in **Settings → Bluetooth & devices → Touchpad**: uncheck **Scroll & zoom → Drag two fingers to scroll** and **Taps → Tap with two fingers to right-click**. Otherwise both commands respond. With two-finger detection active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.
+When active, two fingers do everything: glide, right click (tap) and scroll (tap-drag). Windows' own two-finger gestures have to be disabled in **Settings → Bluetooth & devices → Touchpad**: uncheck **Scroll & zoom → Drag two fingers to scroll** and **Taps → Tap with two fingers to right-click**. Otherwise both commands respond. On Windhawk 1.x, with two-finger detection active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.
 
 ## Speed
 
@@ -43,9 +44,15 @@ Right after installing, before anything is learned, the glide uses a default spe
 - Requires a precision touchpad.
 - Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. **Disabling Windows three and four fingers swipes removes the conflict.**
 - Two-finger scroll is ignored while more-fingers gliding. Scrolling is only blocked in programs which receive it as mouse wheel input, not in those which scroll through the Windows precision touchpad path.
-- **While a program running as administrator is in the foreground, Windows do not comunicates with the mod, getting only native configured gestures.**
+- **Programs running as administrator need Windhawk 2.** On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.
 - Movements aginst the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.
 - The two-finger scroll reaches programs as mouse wheel input. Excel gets the native touchpad scroll through its own precision channel, which the mod can't use, and scrolls poorly with the wheel over its cells. **Keep Windows two-finger scroll if you work a lot in Excel and alike.**
+
+<details>
+<summary>Why programs running as administrator depend on the Windhawk version</summary>
+
+Windows keeps ordinary programs from reading input meant for programs running as administrator and from sending input to them. Windhawk 2 can run a tool mod as a UIAccess process, which Windows lets through, and this mod asks for it, falling back to an ordinary process if UIAccess isn't available. Windhawk 1.x runs tool mods as ordinary processes only. The same mod works on both: when it's compiled, it picks Windhawk 2's launcher if it's there, and its own otherwise.
+</details>
 
 ## Credits
 
@@ -93,6 +100,12 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 #include <shellapi.h>
 #include <wtsapi32.h>
 
+// Windhawk 2 ships the tool mod launcher, which can run the mod with UIAccess; Windhawk 1.x needs the one at the
+// end of this file.
+#if __has_include(<windhawk_tool_mod.h>)
+#include <windhawk_tool_mod.h>
+#define WH_TOOL_MOD_HEADER 1
+#endif
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -1832,6 +1845,8 @@ void WhTool_ModUninit() {
     SaveCurve();
 }
 
+#ifndef WH_TOOL_MOD_HEADER
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -2010,3 +2025,5 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
+#endif  // WH_TOOL_MOD_HEADER
