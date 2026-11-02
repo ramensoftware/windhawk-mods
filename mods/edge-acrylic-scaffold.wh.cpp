@@ -29,6 +29,8 @@ Untested starting point. It does three things:
 4. Check the log: it prints which symbols resolved and every class name seen.
 5. Put class names for the toolbar, tab strip, etc. into the class list. Settings changes apply
    to new paints, no rebuild needed. Restart Edge if the window stays opaque.
+6. Add NonClientView,BrowserRootView,BrowserView,AppLayerView,TopContainerView,EdgeToolbarView,BookmarkBarView,EdgeTabStripRegionView,EdgeTabStrip,EdgeTabContainerImpl,LocationBarView,OmniboxViewViews,EdgeTab,Tab,EdgeTabActionsMenuButton,EdgeNewTabButton 
+to the view calles to make transparent.
 
 ## Limits
 
