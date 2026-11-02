@@ -13,6 +13,9 @@
 // ==WindhawkModReadme==
 /*
 # Aero Flip 3D Recreation
+## Screenshot
+
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aeroflip3d.png)
 
 ## About the mod
 This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern Windows versions.
@@ -1101,6 +1104,7 @@ private:
     HWND                    m_windowHandle          = nullptr;
     bool                    m_isMessageLoopActive   = false;
     std::wstring            m_initializationError;
+    bool                    m_isShiftSlowdownSettingEnabled = false;  // DWM AnimationsShiftKey, read once in Initialize.
 
     // Per-monitor shell thumbnail + dark wash (client coords = virtual desktop).
     struct MonitorBackdrop
@@ -1804,6 +1808,8 @@ STDMETHODIMP Flip3DAccessible::put_accValue(VARIANT /*varChild*/, BSTR /*szValue
 #include <windowsx.h>
 
 
+namespace { bool ReadDwmShiftSlowdownSetting(); }  // Defined with the animation code below.
+
 // ============================================================================
 // Unique window-class name per DLL load.
 // Windhawk reloads the mod DLL inside the same windhawk.exe process whenever the
@@ -1861,6 +1867,9 @@ bool Flip3DCompApp::Initialize(HINSTANCE hInstance)
     m_moduleInstance = hInstance;
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    // The registry value is read once per session, not on every frame.
+    m_isShiftSlowdownSettingEnabled = ReadDwmShiftSlowdownSetting();
 
     Wh_Log(L"[init] LoadThumbApi");
     if (!LoadThumbApi())
@@ -1938,6 +1947,11 @@ int Flip3DCompApp::Run()
 
     MSG msg = {};
 
+    // Keep the overlay above everything, but not with a SetWindowPos call on
+    // every pass: once now, then at most twice a second.
+    EnsureTopmost();
+    ULONGLONG nextTopmostTick = GetTickCount64() + 500;
+
     while (msg.message != WM_QUIT)
     {
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
@@ -1951,7 +1965,11 @@ int Flip3DCompApp::Run()
 
         if (!m_isMinimized)
         {
-            EnsureTopmost();
+            if (GetTickCount64() >= nextTopmostTick)
+            {
+                EnsureTopmost();
+                nextTopmostTick = GetTickCount64() + 500;
+            }
             auto now = std::chrono::steady_clock::now();
             float dt = std::chrono::duration<float>(now - m_previousFrameTime).count();
             m_previousFrameTime = now;
@@ -1975,6 +1993,13 @@ int Flip3DCompApp::Run()
                 else
                     PostQuitMessage(0);
             }
+
+            // IDCompositionDevice::Commit is asynchronous, so without waiting
+            // this loop would spin at 100% of a core. DwmFlush blocks until the
+            // next composition pass (one pass per display refresh); if it fails
+            // (e.g. composition is being torn down) back off briefly instead.
+            if (FAILED(DwmFlush()))
+                Sleep(8);
         }
         else
         {
@@ -3661,7 +3686,7 @@ HRESULT Flip3DCompApp::CreateShellBackdrop()
 
 namespace
 {
-bool IsDwmShiftAnimationSlowdownActive()
+bool ReadDwmShiftSlowdownSetting()
 {
     DWORD enabled = 0;
     DWORD size = sizeof(enabled);
@@ -3674,8 +3699,7 @@ bool IsDwmShiftAnimationSlowdownActive()
         &enabled,
         &size);
 
-    return status == ERROR_SUCCESS && enabled != 0
-        && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    return status == ERROR_SUCCESS && enabled != 0;
 }
 } // This makes Flip3D compatible with the dwm slow animations DWORD Value like it was on Vista/7
 
@@ -4341,7 +4365,7 @@ void Flip3DCompApp::Update(float dtSeconds)
         OnThumbnailSourceSizeChanged();
 
     float animationRate = std::max(kAnimationRate, 0.0f);
-    if (IsDwmShiftAnimationSlowdownActive())
+    if (m_isShiftSlowdownSettingEnabled && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0)
         animationRate *= kShiftAnimationRate;
     dtSeconds *= animationRate;
 
@@ -6278,10 +6302,27 @@ LONG CALLBACK CrashLogVectoredHandler(PEXCEPTION_POINTERS info) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// True while a Flip3DCompApp session is on this thread's stack (starting,
+// running or closing). It stops a hotkey dispatched during the closing phase
+// from creating a second app on top of the one whose Run() is still executing.
+bool s_isSessionOnStack = false;
+
 void OpenOrAdvanceSwitcher(bool winChord) {
     Wh_Log(L"[OpenOrAdvanceSwitcher] enter winChord=%d running=%d", (int)winChord, (int)(s_flip3dApp != nullptr));
     PVOID vh = AddVectoredExceptionHandler(1, CrashLogVectoredHandler);
     struct VehGuard { PVOID h; ~VehGuard() { if (h) RemoveVectoredExceptionHandler(h); } } vehGuard{vh};
+    // Runs on every exit path of the outermost call (success, failed start,
+    // exception): releases the session flag and, if the mod was disabled in
+    // the meantime, destroys the controller so WhTool_ModUninit can finish.
+    struct SessionGuard {
+        bool armed = false;
+        ~SessionGuard() {
+            if (!armed) return;
+            s_isSessionOnStack = false;
+            if (s_shutdownRequested && s_controllerWindow && IsWindow(s_controllerWindow))
+                DestroyWindow(s_controllerWindow);
+        }
+    } sessionGuard;
     try {
     const ULONGLONG now = GetTickCount64();
     if (s_lastChordTickMs && now - s_lastChordTickMs < kDuplicateChordMs) return;
@@ -6289,14 +6330,18 @@ void OpenOrAdvanceSwitcher(bool winChord) {
 
     if (winChord) InjectWinMaskKeystroke();
 
-    if (s_flip3dApp && IsWindow(s_flip3dApp->WindowHandle())) {
-        HWND appWindow = s_flip3dApp->WindowHandle();
-        PostMessageW(appWindow, WM_KEYDOWN, VK_TAB, 0);
-        PostMessageW(appWindow, WM_KEYUP, VK_TAB, 0);
-        if (winChord) s_isWinTabSessionOpen = true;
-        else s_isManualSessionOpen = !s_isManualSessionOpen;
-        return;
+    if (s_isSessionOnStack) {
+        if (s_flip3dApp && IsWindow(s_flip3dApp->WindowHandle())) {
+            HWND appWindow = s_flip3dApp->WindowHandle();
+            PostMessageW(appWindow, WM_KEYDOWN, VK_TAB, 0);
+            PostMessageW(appWindow, WM_KEYUP, VK_TAB, 0);
+            if (winChord) s_isWinTabSessionOpen = true;
+            else s_isManualSessionOpen = !s_isManualSessionOpen;
+        }
+        return;  // Never start a second session over a live one.
     }
+    s_isSessionOnStack = true;
+    sessionGuard.armed = true;
 
     s_flip3dApp = std::make_unique<Flip3DCompApp>();
     HINSTANCE instance = GetThisModuleHandle();
@@ -6304,8 +6349,6 @@ void OpenOrAdvanceSwitcher(bool winChord) {
     if (!s_flip3dApp->Initialize(instance)) {
         const wchar_t* why = s_flip3dApp->InitErrorMessage();
         Wh_Log(L"Flip3DComp initialization failed: %s", why ? why : L"unknown error");
-        MessageBoxW(nullptr, why ? why : L"Flip3DComp initialization failed.",
-                    L"Aero Flip 3D", MB_OK | MB_ICONERROR | MB_TOPMOST);
         s_flip3dApp.reset();
         return;
     }
@@ -6611,7 +6654,32 @@ DWORD WINAPI ControllerThreadProc(void* context) noexcept {
 }
 } // unnamed namespace: internal controller state and callbacks
 
+// Checks once, before any hotkey or hook exists, that the system entry points
+// the renderer needs are present. If they are not, the mod does not start and
+// Win+Tab keeps opening the normal Task View.
+static bool ProbeRequiredSystemApis() {
+    HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
+    if (!dwmapi) {
+        Wh_Log(L"[init] dwmapi.dll could not be loaded; the mod will not start");
+        return false;
+    }
+    const bool hasCreateVisual = GetProcAddress(dwmapi, MAKEINTRESOURCEA(147)) != nullptr;
+    const bool hasQuerySize = GetProcAddress(dwmapi, MAKEINTRESOURCEA(162)) != nullptr;
+    FreeLibrary(dwmapi);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    const bool hasMinimizeRect =
+        user32 && GetProcAddress(user32, "GetWindowMinimizeRect") != nullptr;
+    if (!hasCreateVisual || !hasQuerySize || !hasMinimizeRect) {
+        Wh_Log(L"[init] Required system entry points are missing on this Windows build "
+               L"(dwmapi#147=%d dwmapi#162=%d GetWindowMinimizeRect=%d); the mod will not start",
+               (int)hasCreateVisual, (int)hasQuerySize, (int)hasMinimizeRect);
+        return false;
+    }
+    return true;
+}
+
 BOOL WhTool_ModInit() {
+    if (!ProbeRequiredSystemApis()) return FALSE;
     s_controllerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!s_controllerReadyEvent) return FALSE;
     DWORD tid = 0;
@@ -6643,74 +6711,176 @@ void WhTool_ModUninit() {
     s_controllerThreadId = 0;
 }
 
-// Windhawk tool-mod bootstrap. The renderer runs in a dedicated companion
-// process, but is compiled into this single .wh.cpp file (no external exe).
-bool s_isToolModLauncher = false;
-HANDLE s_toolModMutex = nullptr;
-void WINAPI ToolModEntryPointHook() { ExitThread(0); }
+void WhTool_ModSettingsChanged() {
+    // The mod has no settings.
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
 
 BOOL Wh_ModInit() {
-    DWORD sessionId = 0;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) || sessionId == 0)
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) return FALSE;
-    bool excluded = false, isCompanion = false;
-    for (int i = 1; i < argc; ++i) {
-        if (!wcscmp(argv[i], L"-service") || !wcscmp(argv[i], L"-service-start") ||
-            !wcscmp(argv[i], L"-service-stop")) excluded = true;
-        if (!wcscmp(argv[i], L"-tool-mod") && i + 1 < argc &&
-            !wcscmp(argv[i + 1], WH_MOD_ID)) isCompanion = true;
     }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
     LocalFree(argv);
-    if (excluded) return FALSE;
-    if (isCompanion) {
-        s_toolModMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!s_toolModMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
-            if (s_toolModMutex) CloseHandle(s_toolModMutex);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
-        if (!WhTool_ModInit()) ExitProcess(1);
-        auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dos) + dos->e_lfanew);
-        void* ep = reinterpret_cast<BYTE*>(dos) + nt->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(ep, reinterpret_cast<void*>(ToolModEntryPointHook), nullptr);
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
-    s_isToolModLauncher = true;
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!s_isToolModLauncher) return;
-    wchar_t hostPath[MAX_PATH]{};
-    DWORD n = GetModuleFileNameW(nullptr, hostPath, ARRAYSIZE(hostPath));
-    if (!n || n >= ARRAYSIZE(hostPath)) return;
-    wchar_t cmd[MAX_PATH + 96]{};
-    if (swprintf_s(cmd, L"\"%s\" -tool-mod \"%s\"", hostPath, WH_MOD_ID) < 0) return;
-    HMODULE kernel = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernel) kernel = GetModuleHandleW(L"kernel32.dll");
-    using CreateProcessInternalWFn = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR,
-        LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID,
-        LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    auto createInternal = kernel ? reinterpret_cast<CreateProcessInternalWFn>(
-        GetProcAddress(kernel, "CreateProcessInternalW")) : nullptr;
-    if (!createInternal) return;
-    STARTUPINFOW si{}; si.cb = sizeof(si); si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    if (createInternal(nullptr, hostPath, cmd, nullptr, nullptr, FALSE,
-                       NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
-        CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    if (!g_isToolModProcessLauncher) {
+        return;
     }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (s_isToolModLauncher) return;
-    WhTool_ModUninit();
-    if (s_toolModMutex) {
-        ReleaseMutex(s_toolModMutex);
-        CloseHandle(s_toolModMutex);
-        s_toolModMutex = nullptr;
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
