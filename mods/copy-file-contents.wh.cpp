@@ -2,7 +2,7 @@
 // @id              copy-file-contents
 // @name            Copy File Contents
 // @description     Copies a selected file's text or its SHA-256 hash without opening it, from a keyboard shortcut or the right-click menu.
-// @version         1.3
+// @version         1.4
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -38,6 +38,8 @@ be changed in the settings. Do not reuse Ctrl+Shift+C or Ctrl+Shift+N, which are
 File Explorer's own Copy as path and New folder, because the mod would take the
 key from Explorer.
 
+![Classic File Explorer menu with both entries](https://raw.githubusercontent.com/Metanoid18/windhawk-mods/copy-file-contents-shots/screenshots/copy-file-contents-menu.png)
+
 **Right-click.** The two entries are also added to the classic menu, reached
 with **Show more options** or Shift+F10. They are added at the bottom of that
 menu, below Properties, and removed again once the menu closes, so the menu is
@@ -52,16 +54,17 @@ and they do not need the menu at all.
 
 A file is copied only if it looks like text. Files that look binary are refused
 rather than pasted as garbage, and files larger than the size limit are refused
-the same way. When nothing at all could be copied, the reason is shown, and for
-a file that is text but too big, which is the one case where an editor helps, the
-mod offers to open it in Notepad instead, with the path passed quoted so a path
+the same way. When nothing at all could be copied, an optional prompt shows the
+reason. For an oversized local file up to 32 MB whose prefix looks like text, it offers
+to open it in Notepad instead. This prefix check is only a heuristic. Network and
+offline files are not opened for the offer. The path is passed quoted so a path
 with a space in it still opens.
 
 The size limit is 8 MB by default, with the unit chosen next to it, megabytes or
 kilobytes. A large selection is copied file by file, so one file over the limit is
 skipped and the rest are still copied. That partial copy is silent, because a
 dialog in the middle of copying five files is worse than a missing one. When
-nothing at all can be copied, you are asked instead.
+nothing at all can be copied, the optional prompt explains why instead.
 
 The whole selection is also held to a 32 MB budget, so selecting a whole folder of
 logs cannot make File Explorer allocate without bound. A file bigger than what is
@@ -139,7 +142,7 @@ hashing a whole disk in one go is on you, or set to 0 to be asked every time.
 /*
 - maxSize: 8
   $name: Largest file to copy
-  $description: Files bigger than this are refused, with an offer to open them instead. The unit is the setting below it, and 64 MB is the most this can ever be. A megabyte here is 1,048,576 bytes, the same as Windows shows in the file listing. One copy holds at most 32 MB of text in all, so no single file is copied beyond that, whatever this is set to.
+  $description: Files bigger than this are skipped. If nothing is copied, an oversized local file up to 32 MB may be offered in Notepad if its prefix looks like text. The unit is the setting below it, and 64 MB is the most this can ever be. A megabyte here is 1,048,576 bytes, the same as Windows shows in the file listing. One copy holds at most 32 MB of text in all, so no single file is copied beyond that, whatever this is set to.
 - maxSizeUnit: mb
   $name: Size unit
   $description: Megabytes or kilobytes. Whole numbers only; for one and a half megabytes, pick kilobytes and enter 1536.
@@ -154,7 +157,7 @@ hashing a whole disk in one go is on you, or set to 0 to be asked every time.
   $description: Adds the entry that puts the file's SHA-256 hash on the clipboard.
 - offerEditor: true
   $name: Offer to open a file that cannot be copied
-  $description: When a file is too big or not text, ask whether to open it instead of failing silently.
+  $description: When nothing was copied, report the reason. Offer Notepad only for an oversized local file up to 32 MB whose prefix looks like text.
 - hideWhenUncopyable: true
   $name: Hide "Copy contents" when nothing can be copied
   $description: When every selected file is binary or over the size limit, the entry is left out of the menu instead of being offered and then refusing. The first few KiB of each file are read to decide, except files that are offline, stored online only, or on a network share or a mapped network drive, which are not read.
@@ -545,12 +548,9 @@ enum class ReadResult {
     Unreadable,
 };
 
-// A control character that has no business in text. A NUL is the reason this
-// exists: it is valid UTF-8, so without this a binary file was accepted as
-// UTF-8 text and pasted full of invisible bytes, and the paste stopped at the
-// first one.
+// Reject NUL and uncommon control bytes, but allow form feeds and ANSI escapes.
 bool IsTextControl(unsigned char c) {
-    return c == 0 || (c < 0x20 && c != '\t' && c != '\r' && c != '\n') ||
+    return c == 0 || (c < 0x20 && c != '\t' && c != '\r' && c != '\n' && c != '\f' && c != 0x1B) ||
            c == 0x7F;
 }
 
@@ -642,6 +642,16 @@ bool LooksLikeAnsiText(const unsigned char* data, size_t size) {
     return true;
 }
 
+// In UTF-16, zero bytes are normal; a zero code unit truncates CF_UNICODETEXT.
+bool HasUtf16Null(const unsigned char* data, size_t size) {
+    for (size_t i = 0; i + 1 < size; i += 2) {
+        if (data[i] == 0 && data[i + 1] == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // A mark is the file saying what it is, and it is never overruled.
 ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
     const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
@@ -711,11 +721,17 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
         return ReadResult::Ok;
     }
     if (length >= 2 && data[0] == 0xFF && data[1] == 0xFE) {
+        if ((length - 2) % 2 != 0 || HasUtf16Null(data + 2, length - 2)) {
+            return ReadResult::Binary;
+        }
         *out = std::wstring(reinterpret_cast<const wchar_t*>(data + 2),
                             (length - 2) / sizeof(wchar_t));
         return ReadResult::Ok;
     }
     if (length >= 2 && data[0] == 0xFE && data[1] == 0xFF) {
+        if ((length - 2) % 2 != 0 || HasUtf16Null(data + 2, length - 2)) {
+            return ReadResult::Binary;
+        }
         out->clear();
         out->reserve((length - 2) / 2);
         for (size_t i = 2; i + 1 < length; i += 2) {
@@ -734,6 +750,9 @@ ReadResult ReadFileAsText(const std::wstring& path, std::wstring* out) {
     // the text would arrive full of invisible gaps.
     bool bigEndian = false;
     if (LooksLikeUtf16NoBom(data, length, &bigEndian)) {
+        if (length % 2 != 0 || HasUtf16Null(data, length)) {
+            return ReadResult::Binary;
+        }
         out->clear();
         out->reserve(length / 2);
         for (size_t i = 0; i + 1 < length; i += 2) {
@@ -809,11 +828,11 @@ bool SniffIsText(const unsigned char* data, size_t size) {
     }
     if (size >= 2 && ((data[0] == 0xFF && data[1] == 0xFE) ||
                       (data[0] == 0xFE && data[1] == 0xFF))) {
-        return true;
+        return !HasUtf16Null(data + 2, size - 2);
     }
     bool bigEndian = false;
     if (LooksLikeUtf16NoBom(data, size, &bigEndian)) {
-        return true;
+        return !HasUtf16Null(data, size);
     }
     if (LooksLikeUtf8(data, size)) {
         return true;
@@ -840,6 +859,24 @@ bool LooksCopyable(const std::wstring& path) {
     DWORD read = 0;
     const bool ok = ReadFile(probe, buffer, sizeof(buffer), &read, nullptr) != 0;
     CloseHandle(probe);
+    return ok && SniffIsText(buffer, read);
+}
+
+// Check a bounded local prefix before offering Notepad for a size refusal.
+// The remaining file may still be binary; this is a heuristic, not a guarantee.
+bool LooksLikeTextPrefix(const std::wstring& path) {
+    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE |
+                                        FILE_SHARE_DELETE,
+                                    nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    unsigned char buffer[kSniffBytes];
+    DWORD read = 0;
+    const bool ok = ReadFile(file, buffer, sizeof(buffer), &read, nullptr) != 0;
+    CloseHandle(file);
     return ok && SniffIsText(buffer, read);
 }
 
@@ -1014,15 +1051,15 @@ long long FileSizeBytes(const std::wstring& path) {
 // ---------------------------------------------------------------------------
 
 // Nothing was copied, so say why. Notepad is only offered for a file that is
-// text and small enough for opening it to be the better answer; for a binary
-// file or one that could not be read, the reason alone is the whole message.
+// small enough and looks like text in a local prefix; otherwise show the reason.
 void ReportRefusal(HWND owner, const std::wstring& path, const wchar_t* reason,
                    bool mayOfferEditor) {
     if (!g_settings.offerEditor || g_unloading || path.empty()) {
         return;
     }
     const long long size = mayOfferEditor ? FileSizeBytes(path) : -1;
-    const bool canOpen = size > 0 && size <= static_cast<long long>(kTotalTextBytes);
+    const bool canOpen = size > 0 && size <= static_cast<long long>(kTotalTextBytes) &&
+                         !IsRemoteOrSparse(path) && LooksLikeTextPrefix(path);
     std::wstring text = reason;
     if (canOpen) {
         text += L"\n\nOpen it instead?";
@@ -1050,8 +1087,7 @@ void DoCopyContents(HWND owner, const std::vector<std::wstring>& paths) {
     std::vector<Part> parts;
     std::wstring lastRefused;
     const wchar_t* lastReason = nullptr;
-    // Whether opening the refused file instead is a sensible offer, which is
-    // only true for a file that is text and was refused for its size.
+    // Whether a size refusal is eligible for the Notepad prefix check.
     bool lastMayOpen = false;
     size_t budget = kTotalTextBytes;
 
