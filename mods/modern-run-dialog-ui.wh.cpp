@@ -50,7 +50,7 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid
 
 - **Liquid Glass, Windows Blur & Opaque Themes:**
   * Three surface styles (**Liquid Glass** with refractive rim highlights and pointer specular glow, **Windows Blur**, and **Opaque**) with automatic Light/Dark mode and real-time desktop backdrop luminance detection.
-  * Adjustable UI scale (`85%` – `120%`) and taskbar-anchored positioning with smooth spring entrance animations.
+  * Adjustable UI scale (`85%` – `120%`) and taskbar-anchored positioning.
 
 - **Minimal Mode (Hide Browse & Exit Buttons):**
   * Toggle **Minimal Mode** with a single click from the main `⚙️` menu (or Windhawk settings) to hide the **Browse** and **Exit** buttons, keeping the standard dialog width while expanding the command input box right up to the **Run** button for a clean, distraction-free layout.
@@ -66,8 +66,8 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid
   * Type `ggsearch:<query>` to search Google in Chrome (or your default browser) and `msesearch:<query>` to search in Microsoft Edge.
 
 - **Scrollable History (Up to 50 Items) & Execution Timestamps:**
-  * Stores up to **50 recent commands** in a compact 5-row scrollable list (supports mouse wheel, draggable scrollbar, `Up`/`Down`/`PageUp`/`PageDown`, and `Delete` or the row `×` button to remove individual entries).
-  * Displays each command's native system icon, friendly application title, and relative execution timestamp, plus quick-launch footer buttons for **Run as Administrator**, **Open File Location**, **Environment Variables**, and **Pin Always on Top**.
+  * Stores up to **50 recent commands** in a compact 5-row scrollable list (supports mouse wheel, draggable scrollbar, `Up`/`Down`/`PageUp`/`PageDown`, and `Delete` to remove individual entries).
+  * Shows each command's native icon, application name, and last executed time.
 
 - **Smart Taskbar & `Win + R` Window Behavior:**
   * Pressing `Win + R` or clicking the Taskbar icon brings an unfocused Run dialog back to the foreground in a single action, or minimizes/closes it when already focused.
@@ -85,7 +85,7 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 
 - **3 Chế độ bề mặt (Liquid Glass, Làm mờ Windows & Nền đặc):**
   * Hỗ trợ hiệu ứng kính **Liquid Glass** (viền khúc xạ ánh sáng và phản chiếu theo trỏ chuột), **Windows Blur** và **Nền đặc**, tự động chuyển đổi giao diện Sáng / Tối theo hệ thống và độ sáng thực tế của màn hình nền.
-  * Tùy chỉnh tỷ lệ kích thước giao diện (`85%` – `120%`) kèm hiệu ứng chuyển động mượt mà.
+  * Tùy chỉnh tỷ lệ kích thước giao diện (`85%` – `120%`).
 
 - **Chế độ tối giản – Minimal Mode (Ẩn nút Duyệt & Thoát):**
   * Bật/tắt **Chế độ tối giản** chỉ với 1 cú nhấp chuột ngay trên menu chính `⚙️` (hoặc trong cài đặt Windhawk) để ẩn hai nút **Duyệt** và **Thoát**, giữ nguyên chiều rộng gốc của hộp thoại và mở rộng tối đa khung nhập lệnh sát tới nút **Chạy**.
@@ -100,9 +100,9 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   * Tự động gợi ý theo thời gian thực các ứng dụng trong Start Menu, `App Paths` và các công cụ hệ thống (`cmd`, `powershell`, `regedit`, `wt`, `.cpl`, `.msc`) ngay khi đang gõ.
   * Gõ `ggsearch:<từ khóa>` để tìm nhanh trên Google bằng Chrome (hoặc trình duyệt mặc định) và `msesearch:<từ khóa>` để tìm bằng Microsoft Edge.
 
-- **Lịch sử 50 mục có thanh cuộn & Thanh công cụ tiện ích:**
-  * Lưu tối đa **50 lệnh gần đây** trong khung nhìn gọn 5 dòng (hỗ trợ lăn chuột, kéo thanh cuộn, phím `Lên`/`Xuống`/`PageUp`/`PageDown`, và phím `Delete` hoặc nút `×` để xóa từng mục).
-  * Hiển thị biểu tượng gốc của phần mềm, tên ứng dụng và thời gian chạy lệnh gần nhất; tích hợp dải nút công cụ nhanh phía dưới gồm **Chạy với quyền Quản trị (Admin)**, **Mở vị trí tệp**, **Biến môi trường** và **Ghim cửa sổ lên trên cùng**.
+- **Lịch sử 50 mục có thanh cuộn & Thời gian chạy lệnh:**
+  * Lưu tối đa **50 lệnh gần đây** trong khung nhìn gọn 5 dòng (hỗ trợ lăn chuột, kéo thanh cuộn, phím `Lên`/`Xuống`/`PageUp`/`PageDown` và phím `Delete` để xóa từng lệnh).
+  * Hiển thị biểu tượng gốc của phần mềm, tên ứng dụng và thời gian thực thi gần nhất.
 
 - **Tương tác thông minh với `Win + R` và Taskbar:**
   * Khi hộp thoại đang bị che bởi cửa sổ khác, chỉ cần bấm 1 lần vào biểu tượng Run dưới Taskbar hoặc nhấn `Win + R` là hộp thoại nổi ngay lên trên cùng.
