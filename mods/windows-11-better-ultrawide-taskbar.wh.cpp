@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.85
+// @version         0.3.86
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -5019,6 +5019,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
     };
 
     static constexpr size_t kMaxAppSources = 7;
+    static constexpr int32_t kPoolBuffers = 2;
     static constexpr char kShader[] = R"(
 Texture2D<float4> backdrop : register(t0);
 Texture2D<float4> blurredBackdrop : register(t1);
@@ -5639,6 +5640,7 @@ float4 ps(VertexOutput input) : SV_Target {
     };
     PresentWorkContext* presentWorkContext{};
     std::vector<std::shared_ptr<Source>> sources;
+    std::vector<std::shared_ptr<Source>> parked;
     PTP_WORK sourceWork{};
     bool sourceWorkPending{},sourceUpdatePending{};
     uint64_t sourceRevision{};
@@ -6524,7 +6526,7 @@ float4 ps(VertexOutput input) : SV_Target {
                 capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
                     graphicsDevice,
                     directx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-                    2, source->poolSize);
+                    kPoolBuffers, source->poolSize);
             source->session = source->pool.CreateCaptureSession(source->item);
             std::weak_ptr<LiquidRenderer> weakRenderer = shared_from_this();
             std::weak_ptr<Source> weakSource = source;
@@ -6601,6 +6603,16 @@ float4 ps(VertexOutput input) : SV_Target {
         }
     }
 
+    // A parked pool is full, which is what stopped delivery; reading it restarts
+    // delivery. Every queued frame is stored, because a fresh frame can land in
+    // the first freed buffer, and a window that then stays static sends no other.
+    void ResumeSource(std::shared_ptr<Source> const& source) {
+        std::lock_guard lifecycleLock(source->lifecycleMutex);
+        std::lock_guard callbackLock(source->callbackMutex);
+        if (!source->pool || !source->active.load(std::memory_order_acquire)) return;
+        for (int32_t i = 0; i < kPoolBuffers; ++i) OnFrame(source, source->pool);
+    }
+
     void SetBodyVisual(Visual const& visual) {
         DWORD compositor = CompositorProcessId();
         std::vector<std::shared_ptr<Source>> old;
@@ -6617,6 +6629,8 @@ float4 ps(VertexOutput input) : SV_Target {
             requestedSources.clear();
             bodyVisual = visual;
             old = std::move(sources);
+            old.insert(old.end(), parked.begin(), parked.end());
+            parked.clear();
             if (compositor) compositorProcess = compositor;
         }
         RetireSources(std::move(old));
@@ -6718,12 +6732,13 @@ float4 ps(VertexOutput input) : SV_Target {
         std::vector<std::pair<HWND,RECT>> const& candidates,uint64_t revision) {
         DWORD compositor = CompositorProcessId();
         bool restarted{};
-        std::vector<std::shared_ptr<Source>> current, stale;
+        std::vector<std::shared_ptr<Source>> current, idle, stale;
         {
             std::lock_guard lock(mutex);
             if (!running || revision!=sourceRevision) return;
             UpdateDisplayCadenceLocked();
             current = sources;
+            idle = parked;
             restarted = compositor && compositorProcess && compositor != compositorProcess;
             if (restarted)
                 Wh_Log(L"[UWLIQUID] compositor changed %lu -> %lu; replacing %zu capture sessions",
@@ -6736,15 +6751,20 @@ float4 ps(VertexOutput input) : SV_Target {
         }
         EnsureGeometryCapture(restarted);
         std::vector<std::shared_ptr<Source>> next;
-        std::vector<std::shared_ptr<Source>> added;
+        std::vector<std::shared_ptr<Source>> added, resumed;
         std::vector<RECT> nextRects;
         for (auto const& [window, rect] : candidates) {
-            auto found = std::find_if(current.begin(), current.end(),
-                [&](auto const& source) { return source->window == window; });
+            auto byWindow = [&](auto const& source) { return source->window == window; };
+            auto found = std::find_if(current.begin(), current.end(), byWindow);
+            auto kept = std::find_if(idle.begin(), idle.end(), byWindow);
             if (found != current.end() &&
                 std::find(stale.begin(), stale.end(), *found) == stale.end()) {
                 next.push_back(*found);
                 nextRects.push_back(rect);
+            } else if (!restarted && kept != idle.end() && !(*kept)->closed) {
+                next.push_back(*kept);
+                nextRects.push_back(rect);
+                resumed.push_back(*kept);
             } else if (auto source = CreateSource(window, rect)) {
                 next.push_back(source);
                 nextRects.push_back(rect);
@@ -6756,7 +6776,7 @@ float4 ps(VertexOutput input) : SV_Target {
         bool committed{};
         {
             std::lock_guard lock(mutex);
-            if (running && revision==sourceRevision && sources == current) {
+            if (running && revision==sourceRevision && sources == current && parked == idle) {
                 bool changed = sources.size() != next.size();
                 for (size_t i = 0; i < next.size(); ++i) {
                     if (i >= sources.size() || sources[i] != next[i] ||
@@ -6764,12 +6784,33 @@ float4 ps(VertexOutput input) : SV_Target {
                         changed = true;
                     next[i]->rect = nextRects[i];
                 }
-                for (auto const& source : sources)
-                    if (std::find(next.begin(), next.end(), source) == next.end())
-                        removed.push_back(source);
+                for (auto const& source : resumed) {
+                    std::erase(parked, source);
+                    source->active.store(true, std::memory_order_release);
+                }
+                // A closed capture session leaves one frame of its size in the
+                // capture runtime until Explorer exits, so a window that only
+                // left the strip keeps its session parked.
+                for (auto const& source : sources) {
+                    if (std::find(next.begin(), next.end(), source) != next.end()) continue;
+                    if (std::find(stale.begin(), stale.end(), source) == stale.end() &&
+                        !source->closed && source->window && IsWindow(source->window)) {
+                        source->active.store(false, std::memory_order_release);
+                        parked.push_back(source);
+                    } else removed.push_back(source);
+                }
                 sources = next;
                 for (auto const& source : added)
                     source->active.store(true, std::memory_order_release);
+                std::erase_if(parked, [&](auto const& source) {
+                    bool evict = restarted || source->closed || !IsWindow(source->window);
+                    if (evict) removed.push_back(source);
+                    return evict;
+                });
+                while (parked.size() > kMaxAppSources) {
+                    removed.push_back(parked.front());
+                    parked.erase(parked.begin());
+                }
                 if (changed) SchedulePresentLocked();
                 committed = true;
             }
@@ -6781,6 +6822,7 @@ float4 ps(VertexOutput input) : SV_Target {
         // A removed source's window may already be destroyed, and the capture
         // server can leave that StopCapture unanswered (issue 16).
         RetireSources(std::move(removed));
+        for (auto const& source : resumed) ResumeSource(source);
         for (auto const& source : added) {
             if (StartSource(source)) continue;
             source->active.store(false, std::memory_order_release);
@@ -7034,7 +7076,7 @@ float4 ps(VertexOutput input) : SV_Target {
                 source->pool.Recreate(
                     graphicsDevice,
                     directx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-                    2, recreateSize);
+                    kPoolBuffers, recreateSize);
                 std::lock_guard lock(mutex);
                 if (source->active.load(std::memory_order_acquire))
                     source->poolSize = recreateSize;
@@ -7295,6 +7337,8 @@ float4 ps(VertexOutput input) : SV_Target {
         std::fill_n(sampledLensTags,kMaxButtonLenses,0);
         Teardown taken;
         taken.sources = std::exchange(sources, {});
+        taken.sources.insert(taken.sources.end(), parked.begin(), parked.end());
+        parked.clear();
         if (geometrySource) taken.sources.push_back(std::exchange(geometrySource, nullptr));
         for (auto const& source : taken.sources) source->active.store(false, std::memory_order_release);
         taken.sourceWork.reset(std::exchange(sourceWork, nullptr));
