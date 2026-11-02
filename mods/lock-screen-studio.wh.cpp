@@ -2,7 +2,7 @@
 // @id              lock-screen-studio
 // @name            Lock Screen Studio
 // @description     Make your lock screen your own with clock, weather and media themes, custom fonts and flexible layouts.
-// @version         0.0.1
+// @version         0.0.2
 // @author          Mitsu
 // @github          https://github.com/MitsuSarkar
 // @license         MIT
@@ -17,6 +17,26 @@
 
 Your lock screen, your layout.
 
+## New in 0.0.2
+
+An independent companion can sit anywhere on the screen: Cat, Dog, Fox, Bunny
+or Penguin. It dances during playback, sleeps while paused and rests when
+stopped. Select its own theme or follow the media theme; change its anchor,
+X/Y offsets, size, optional background and animation rate. Album art stays clear.
+
+Optional playback progress expands inside the native media card, with elapsed/total
+time. Click a non-control area of the media card to expand or collapse it;
+play/pause and previous/next keep their native actions. There is no arrow button.
+It uses Windows' playback timeline; unavailable
+durations are hidden and the bar is display-only. Both features can be disabled.
+The companion has species-specific artwork, fur markings and sleeping poses;
+its frames are cached and animations stop while the lock screen is hidden.
+Mac Light and Mac Dark media cards use subtle neutral borders by default.
+
+![Cat, Dog, Fox, Bunny and Penguin companion artwork in Pixel and Nord themes](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/944c26657e74bbc57da910c383d8c28fbed734cb/docs/screenshots/companions-preview.png)
+
+*Artwork preview rendered from the companion shapes, not a full lock-screen screenshot.*
+
 I wanted more choice than the standard Windows lock screen, so I made Lock Screen Studio: a set of clock, weather and media themes with the controls to make them your own. Keep it clean, build a desktop-style layout, or go all in on pixel art.
 
 ## A little inspiration
@@ -25,19 +45,19 @@ I wanted more choice than the standard Windows lock screen, so I made Lock Scree
 
 An upper-right pixel clock and date, paired with a compact weather card on the left. The card uses pixel lettering, angular weather icons and a stepped border.
 
-![Pixel clock and weather with a stepped card border](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/main/docs/screenshots/pixel-lock-screen.png)
+![Pixel clock and weather with a stepped card border](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/944c26657e74bbc57da910c383d8c28fbed734cb/docs/screenshots/pixel-lock-screen.png)
 
 ### Modern Flip
 
 A large split-flap clock in the center, with the date underneath, a dark weather card above and media controls along the bottom.
 
-![Modern Flip clock with a dark weather card and media controls](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/main/docs/screenshots/modern-flip.png)
+![Modern Flip clock with a dark weather card and media controls](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/944c26657e74bbc57da910c383d8c28fbed734cb/docs/screenshots/modern-flip.png)
 
 ### Sonoma
 
 A large, clean clock with a separate date pill, a dark weather card and compact media controls.
 
-![Sonoma clock with a date pill, weather and media controls](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/main/docs/screenshots/sonoma.png)
+![Sonoma clock with a date pill, weather and media controls](https://raw.githubusercontent.com/MitsuSarkar/lock-screen-studio/944c26657e74bbc57da910c383d8c28fbed734cb/docs/screenshots/sonoma.png)
 
 These are screenshots of my setup. The wallpaper is set separately in Windows and isn't included with the mod. Colors and layout can be changed in Settings.
 
@@ -265,6 +285,62 @@ Lock Screen Studio is maintained by **Mitsu**. It builds on the MIT-licensed Loc
 - hideMedia: false
 - mediaX: 0
 - mediaY: 0
+- mediaProgressEnabled: true
+  $name: Show media playback progress
+  $description: Adds a themed timeline inside the media card when Windows provides playback duration. Live streams and unavailable timelines are hidden. This is a progress display, not a seek slider.
+- mediaProgressTimes: true
+  $name: Show elapsed and total time
+- mediaProgressToggle: true
+  $name: Click media card to expand or collapse progress
+  $description: Click album art, text or card background to toggle the bar. Transport buttons and other interactive controls keep their own actions. No arrow is shown.
+- mediaProgressExpanded: false
+  $name: Start progress expanded
+  $description: The media card expands or collapses its timeline when clicked. Album art and transport controls remain visible. With click-to-expand disabled the bar stays expanded.
+- mediaProgressWidth: 280
+- companionEnabled: true
+  $name: Enable separate music companion
+- companionAnimal: cat
+  $options:
+    - cat: Cat
+    - dog: Dog
+    - fox: Fox
+    - bunny: Bunny
+    - penguin: Penguin
+- companionTheme: follow
+  $name: Companion theme
+  $options:
+    - follow: Follow media theme
+    - pixel: Cozy Pixel
+    - macos: Mac Light
+    - macosDark: Mac Dark
+    - nord: Nord
+    - catppuccin: Catppuccin
+    - gruvbox: Gruvbox
+    - smoke: Smoke
+    - minimal: Minimal
+- companionAnchor: bottomRight
+  $name: Companion screen anchor (independent of media)
+  $options:
+    - topLeft: Top left
+    - top: Top center
+    - topRight: Top right
+    - left: Center left
+    - center: Center
+    - right: Center right
+    - bottomLeft: Bottom left
+    - bottom: Bottom center
+    - bottomRight: Bottom right
+- companionX: 0
+- companionY: 0
+- companionSize: 96
+  $description: Animal size in DIPs, 32 to 240.
+- companionFps: 6
+  $name: Companion animation frames per second
+  $description: 2 to 8. Only animates during playback while the lock screen is visible. Paused and idle poses are static.
+- companionHideNoMedia: true
+  $name: Hide companion when no media is available
+- companionPanel: false
+  $name: Show themed background behind companion
 - mediaTheme: smoke
   $name: Media card theme
   $options:
@@ -281,6 +357,7 @@ Lock Screen Studio is maintained by **Mitsu**. It builds on the MIT-licensed Loc
   $description: "Optional #RRGGBB or #AARRGGBB override."
 - mediaForeground: ""
 - mediaAccent: ""
+  $description: Optional accent override. Empty uses theme defaults; Mac Light/Dark card borders are neutral gray rather than blue.
 - mediaOpacity: 88
   $description: Card background opacity, 0 to 100. Playback controls stay opaque.
 - mediaCornerRadius: 18
@@ -735,6 +812,104 @@ wux::UIElement CreateBatteryCapsule(bool alignLeft, bool isDarkTheme = false) {
     return capsule;
 }
 
+// Playback service is polled on the existing MTA worker, never awaited on UI.
+// No WinRT completion/event callbacks can outlive this DLL.
+#include <winrt/Windows.Media.Control.h>
+#include <mutex>
+#include <cmath>
+namespace StudioPlayback {
+enum class State { Unavailable, None, Playing, Paused, Stopped };
+struct Snapshot {
+    State state=State::None;
+    double position=0,duration=0,rate=1;
+    ULONGLONG sampled=0;
+};
+[[clang::no_destroy]] std::mutex mutex;
+Snapshot snapshot;
+std::atomic<bool> wanted{false};
+std::atomic<bool> visible{false};
+void Publish(Snapshot value) {
+    std::lock_guard lock(mutex);
+    snapshot=value;
+}
+Snapshot Read() {
+    std::lock_guard lock(mutex);
+    return snapshot;
+}
+// Pure timeline policy shared with the tests. Prevent stale data from running
+// indefinitely ahead if a player stops responding or the screen is reopened.
+double Position(Snapshot const& value,ULONGLONG now) {
+    double result=value.position;
+    if(value.state==State::Playing && now>=value.sampled)
+        result+=(std::min)(2.0,(now-value.sampled)/1000.0)*value.rate;
+    return (std::clamp)(result,0.0,(std::max)(0.0,value.duration));
+}
+class Poller {
+    using Manager=winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
+    Manager manager{nullptr};
+    winrt::Windows::Foundation::IAsyncOperation<Manager> request{nullptr};
+    ULONGLONG last=0,retry=0,requestStarted=0;
+    bool reported=false,wasEnabled=false;
+public:
+    ~Poller() { if(request) try { request.Cancel(); } catch(...) {} }
+    void Tick(ULONGLONG now,bool visible) {
+        if(!wanted.load() || !visible) {
+            if(wasEnabled) {
+                Publish({}); manager=nullptr;
+                if(request) try { request.Cancel(); } catch(...) {}
+                request=nullptr; last=0;
+            }
+            wasEnabled=false;
+            return;
+        }
+        wasEnabled=true;
+        if(last && now-last<1000) return;
+        last=now;
+        try {
+            if(!manager) {
+                if(now<retry) return;
+                if(!request) { request=Manager::RequestAsync(); requestStarted=now; }
+                auto status=request.Status();
+                if(status==winrt::Windows::Foundation::AsyncStatus::Started) {
+                    if(now-requestStarted>10000) { request.Cancel(); request=nullptr; retry=now+30000; Publish({State::Unavailable}); }
+                    return;
+                }
+                if(status!=winrt::Windows::Foundation::AsyncStatus::Completed)
+                    winrt::throw_hresult(request.ErrorCode());
+                manager=request.GetResults(); request=nullptr;
+                Wh_Log(L"Studio playback timeline connected.");
+            }
+            auto session=manager.GetCurrentSession();
+            if(!session) { Publish({}); return; }
+            Snapshot value;
+            auto info=session.GetPlaybackInfo();
+            using Status=winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
+            auto status=info.PlaybackStatus();
+            value.state=status==Status::Playing ? State::Playing : status==Status::Paused ? State::Paused : State::Stopped;
+            if(auto rate=info.PlaybackRate()) value.rate=rate.Value();
+            if(!std::isfinite(value.rate) || value.rate<0 || value.rate>16) value.rate=1;
+            try {
+                auto timeline=session.GetTimelineProperties();
+                auto start=timeline.StartTime().count();
+                value.duration=(timeline.EndTime().count()-start)/10000000.0;
+                value.position=(timeline.Position().count()-start)/10000000.0;
+                auto age=std::chrono::duration<double>(winrt::clock::now()-timeline.LastUpdatedTime()).count();
+                if(value.state==State::Playing && age>0 && age<7*86400) value.position+=age*value.rate;
+                if(!std::isfinite(value.duration) || value.duration<=0 || value.duration>7*86400) value.duration=0;
+                value.position=(std::clamp)(value.position,0.0,value.duration);
+            } catch(...) { value.duration=0; }
+            value.sampled=now;
+            Publish(value);
+        } catch(winrt::hresult_error const& error) {
+            if(!reported) { Wh_Log(L"Studio playback unavailable (%08X): %s. Native media is unaffected.",unsigned(error.code()),error.message().c_str()); reported=true; }
+            manager=nullptr; request=nullptr; retry=now+30000;
+            Publish({State::Unavailable});
+        } catch(...) { manager=nullptr; request=nullptr; retry=now+30000; Publish({State::Unavailable}); }
+    }
+};
+}
+void StudioSetPlaybackWanted(bool wanted) { StudioPlayback::wanted=wanted; }
+
 // Studio extension. All XAML operations run on the LockApp UI thread.
 struct StudioSettings {
     std::wstring font, foreground, accent, panel, dateFormat, text;
@@ -751,6 +926,11 @@ struct StudioSettings {
     std::wstring widgetMode, widgetAnchor;
     int widgetCardWidth;
     bool weatherIconVisible;
+    bool companionEnabled,companionHideNoMedia,companionPanel;
+    std::wstring companionAnimal,companionTheme,companionAnchor;
+    int companionX,companionY,companionSize,companionFps;
+    bool mediaProgressEnabled,mediaProgressTimes,mediaProgressToggle,mediaProgressExpanded;
+    int mediaProgressWidth;
     bool widgetCustomStyle;
     std::wstring weatherIconPosition,weatherIconCondition;
     int weatherIconX,weatherIconY,weatherIconSize;
@@ -779,6 +959,22 @@ void LoadStudioSettings() {
     studio.dateFont = StudioString(L"dateFontFamily");
     studio.widgetFont = StudioString(L"widgetFontFamily");
     studio.mediaFont = StudioString(L"mediaFontFamily");
+    studio.companionEnabled=Wh_GetIntSetting(L"companionEnabled")!=0;
+    studio.companionHideNoMedia=Wh_GetIntSetting(L"companionHideNoMedia")!=0;
+    studio.companionPanel=Wh_GetIntSetting(L"companionPanel")!=0;
+    studio.companionAnimal=StudioString(L"companionAnimal");
+    studio.companionTheme=StudioString(L"companionTheme");
+    studio.companionAnchor=StudioString(L"companionAnchor");
+    studio.companionX=StudioInt(L"companionX",-4000,4000);
+    studio.companionY=StudioInt(L"companionY",-4000,4000);
+    studio.companionSize=StudioInt(L"companionSize",32,240);
+    studio.companionFps=StudioInt(L"companionFps",2,8);
+    studio.mediaProgressEnabled=Wh_GetIntSetting(L"mediaProgressEnabled")!=0;
+    studio.mediaProgressTimes=Wh_GetIntSetting(L"mediaProgressTimes")!=0;
+    studio.mediaProgressToggle=Wh_GetIntSetting(L"mediaProgressToggle")!=0;
+    studio.mediaProgressExpanded=Wh_GetIntSetting(L"mediaProgressExpanded")!=0;
+    studio.mediaProgressWidth=StudioInt(L"mediaProgressWidth",120,600);
+    StudioSetPlaybackWanted(studio.companionEnabled || studio.mediaProgressEnabled);
     studio.foreground = StudioString(L"foreground");
     studio.accent = StudioString(L"accent");
     studio.panel = StudioString(L"panelColor");
@@ -1931,7 +2127,9 @@ void ResetStudioMediaRefresh();
 void ResetStudioCardOverlays();
 void FinishStudioCardOverlays();
 void ResetStudioWidgets();
+void ResetStudioMusicUi();
 void RestoreStudioNative() {
+    ResetStudioMusicUi();
     ResetStudioMediaRefresh();
     ResetStudioWidgets();
     ResetStudioCardOverlays();
@@ -1973,6 +2171,7 @@ void FindStudioWidget(wux::DependencyObject const& node, int depth, int& bestRan
     if (!node || depth > 96 || (g_activeClockElement && node == g_activeClockElement)) return;
     if (auto e = node.try_as<wux::FrameworkElement>()) {
         auto name = e.Name();
+        if(name==L"WindhawkStudioCompanion" || name==L"WindhawkStudioProgress" || name==L"WindhawkStudioWidgets") return;
         int rank = 100;
         if (!studio.widgetTarget.empty() && studio.widgetTarget != L"auto") {
             if (name == studio.widgetTarget) rank = 0;
@@ -2154,7 +2353,12 @@ void StyleStudioCardSurface(wux::FrameworkElement const& e, bool widget, bool ou
     // below it must not retain either Windows' border or another themed border.
     if (!outer) background.A = 0;
     auto brush = wuxm::SolidColorBrush(background);
-    auto borderBrush = wuxm::SolidColorBrush(StudioColor(widget ? studio.widgetAccent : studio.mediaAccent, colors.accent));
+    // Mac media surfaces use the same neutral outlines as Studio widget cards;
+    // blue remains the control/progress accent, not the default card border.
+    auto borderDefault = colors.accent;
+    if (!widget && theme == L"macos") borderDefault = 0xFFD2D2D7;
+    if (!widget && theme == L"macosDark") borderDefault = 0xFF38383A;
+    auto borderBrush = wuxm::SolidColorBrush(StudioColor(widget ? studio.widgetAccent : studio.mediaAccent, borderDefault));
     auto foreground = wuxm::SolidColorBrush(StudioColor(widget ? studio.widgetForeground : studio.mediaForeground, colors.foreground));
     double radius = theme == L"pixel" ? 0 : (widget ? studio.widgetRadius : studio.mediaRadius);
     auto corners = wux::CornerRadiusHelper::FromUniformRadius(radius);
@@ -2577,7 +2781,8 @@ void InspectStudioNative(wux::FrameworkElement const& e, int depth) {
 void WalkStudioNative(wux::DependencyObject const& node, int depth) {
     if (!node || depth > 96 || (g_activeClockElement && node == g_activeClockElement)) return;
     if (auto e = node.try_as<wux::FrameworkElement>()) {
-        if (e.Name() == L"WindhawkStudioCardPixelLayer" || e.Name()==L"WindhawkStudioWidgets") return;
+        if (e.Name() == L"WindhawkStudioCardPixelLayer" || e.Name()==L"WindhawkStudioWidgets" ||
+            e.Name()==L"WindhawkStudioCompanion" || e.Name()==L"WindhawkStudioProgress") return;
         try { InspectStudioNative(e, depth); }
         catch (winrt::hresult_error const& error) {
             if (studio.diagnostics) Wh_Log(L"Studio native element %s failed: %s", e.Name().c_str(), error.message().c_str());
@@ -3040,23 +3245,561 @@ void UpdateStudioWidgets() {
 }
 
 
+// UI-thread-only, independently placed animal and optional native-media timeline.
+// Original procedural artwork. Six cached poses, no bitmap sheets or downloads.
+#include <limits>
+#include <winrt/Windows.UI.Xaml.Input.h>
+[[clang::no_destroy]] wuxc::Grid studioMusicParent{nullptr};
+[[clang::no_destroy]] wuxc::Grid studioCompanionRoot{nullptr},studioProgressRoot{nullptr};
+[[clang::no_destroy]] wuxc::Border studioCompanionCard{nullptr},studioProgressCard{nullptr};
+[[clang::no_destroy]] std::vector<wuxc::Canvas> studioAnimalFrames;
+[[clang::no_destroy]] wuxc::StackPanel studioProgressDetails{nullptr};
+[[clang::no_destroy]] wux::Input::TappedEventHandler studioProgressTapped{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable studioProgressTappedBox{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock studioElapsed{nullptr},studioDuration{nullptr};
+[[clang::no_destroy]] wuxc::Border studioTrackFill{nullptr};
+[[clang::no_destroy]] wuxc::Grid studioProgressHost{nullptr};
+[[clang::no_destroy]] wuxc::Border studioProgressHostBorder{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel studioProgressWrapper{nullptr};
+[[clang::no_destroy]] wux::UIElement studioProgressOriginalChild{nullptr};
+[[clang::no_destroy]] wuxc::RowDefinition studioProgressRow{nullptr},studioProgressBaseRow{nullptr};
+[[clang::no_destroy]] wux::FrameworkElement studioProgressMedia{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable studioProgressOldHeight{nullptr};
+double studioProgressTrackWidth=0;
+bool studioHasProgressClick=false,studioProgressIsExpanded=true;
+int studioAnimalFrame=-1;
+ULONGLONG studioLastAnimalFrame=0,studioLastTimelinePaint=0;
+std::wstring studioAnimalKey;
+void DetachStudioProgress() {
+    if(studioHasProgressClick && studioProgressMedia && studioProgressTapped)
+        studioProgressMedia.RemoveHandler(wux::UIElement::TappedEvent(),studioProgressTappedBox);
+    studioHasProgressClick=false;
+    studioProgressTapped=nullptr;
+    studioProgressTappedBox=nullptr;
+    if(studioProgressHost && studioProgressRoot) {
+        uint32_t index;
+        if(studioProgressHost.Children().IndexOf(studioProgressRoot,index)) studioProgressHost.Children().RemoveAt(index);
+        if(studioProgressRow && studioProgressHost.RowDefinitions().IndexOf(studioProgressRow,index)) studioProgressHost.RowDefinitions().RemoveAt(index);
+        if(studioProgressBaseRow && studioProgressHost.RowDefinitions().IndexOf(studioProgressBaseRow,index)) studioProgressHost.RowDefinitions().RemoveAt(index);
+    }
+    if(studioProgressHostBorder && studioProgressHostBorder.Child()==studioProgressWrapper) {
+        studioProgressWrapper.Children().Clear();
+        studioProgressHostBorder.Child(studioProgressOriginalChild);
+    }
+    if(studioProgressMedia && studioProgressOldHeight) {
+        if(studioProgressOldHeight==wux::DependencyProperty::UnsetValue()) studioProgressMedia.ClearValue(wux::FrameworkElement::HeightProperty());
+        else studioProgressMedia.SetValue(wux::FrameworkElement::HeightProperty(),studioProgressOldHeight);
+    }
+    studioProgressHost=nullptr; studioProgressHostBorder=nullptr; studioProgressWrapper=nullptr;
+    studioProgressOriginalChild=nullptr; studioProgressRow=nullptr; studioProgressBaseRow=nullptr;
+    studioProgressMedia=nullptr; studioProgressOldHeight=nullptr;
+    studioProgressRoot=nullptr; studioProgressCard=nullptr; studioProgressDetails=nullptr;
+    studioElapsed=nullptr; studioDuration=nullptr; studioTrackFill=nullptr;
+    studioLastTimelinePaint=0;
+}
+void RemoveStudioMusicElement(wux::UIElement const& element) {
+    if(!studioMusicParent || !element) return;
+    uint32_t index;
+    if(studioMusicParent.Children().IndexOf(element,index)) studioMusicParent.Children().RemoveAt(index);
+}
+void ResetStudioMusicUi() {
+    DetachStudioProgress();
+    RemoveStudioMusicElement(studioCompanionRoot);
+    RemoveStudioMusicElement(studioProgressRoot);
+    studioAnimalFrames.clear();
+    studioCompanionCard=nullptr; studioProgressCard=nullptr;
+    studioCompanionRoot=nullptr; studioProgressRoot=nullptr; studioMusicParent=nullptr;
+    studioProgressDetails=nullptr;
+    studioElapsed=nullptr; studioDuration=nullptr; studioTrackFill=nullptr;
+    studioAnimalKey.clear(); studioAnimalFrame=-1;
+    studioLastAnimalFrame=studioLastTimelinePaint=0;
+}
+std::wstring StudioMusicHex(wu::Color c) {
+    wchar_t text[10]; swprintf_s(text,L"#%02X%02X%02X%02X",c.A,c.R,c.G,c.B);
+    return text;
+}
+std::wstring StudioCompanionSkin() {
+    auto theme=studio.companionTheme;
+    if(theme.empty() || theme==L"follow") theme=studio.mediaTheme;
+    return StudioCardSkinName(theme) ? theme : L"minimal";
+}
+// Original detailed animal artwork, built only when the selected skin changes.
+// Species have different silhouettes, facial markings, paws and sleeping poses.
+wuxc::Canvas BuildStudioAnimalPose(std::wstring const& animal,std::wstring const& theme,int frame) {
+    bool pixel=theme==L"pixel",sleep=frame==4,dance=frame<4;
+    bool dog=animal==L"dog",fox=animal==L"fox",bunny=animal==L"bunny",penguin=animal==L"penguin";
+    auto palette=StudioCardColors(theme);
+    auto accent=StudioColor(L"",palette.accent);
+    unsigned long base=dog ? 0xFFE3B46D : fox ? 0xFFEA8B47 : bunny ? 0xFFE9DFF0 : penguin ? 0xFF38475F : 0xFFF1D3A5;
+    if(theme==L"nord") base=dog ? 0xFFD8C2A3 : fox ? 0xFFD08770 : bunny ? 0xFFE5E9F0 : penguin ? 0xFF434C5E : 0xFFD8DEE9;
+    if(theme==L"catppuccin") base=dog ? 0xFFEBC8A2 : fox ? 0xFFFAB387 : bunny ? 0xFFE5D3F1 : penguin ? 0xFF45475A : 0xFFF5E0DC;
+    if(theme==L"gruvbox") base=dog ? 0xFFD5B06E : fox ? 0xFFD79921 : bunny ? 0xFFEBDBB2 : penguin ? 0xFF504945 : 0xFFEBD5A5;
+    auto fur=StudioColor(L"",base),cream=StudioColor(L"",0xFFFFF1D9);
+    auto ink=StudioColor(L"",0xFF302B37),pink=StudioColor(L"",0xFFEB9CA8);
+    auto gold=StudioColor(L"",0xFFF3B95F);
+    auto shade=[](wu::Color color,int amount) {
+        color.R=static_cast<uint8_t>((std::clamp)(int(color.R)+amount,0,255));
+        color.G=static_cast<uint8_t>((std::clamp)(int(color.G)+amount,0,255));
+        color.B=static_cast<uint8_t>((std::clamp)(int(color.B)+amount,0,255));
+        return color;
+    };
+    auto dark=shade(fur,-32),light=shade(fur,15),edge=shade(fur,-48);
+    auto pad=shade(accent,-35),shine=shade(accent,30);
+    std::wstring xml=L"<Canvas xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Width='96' Height='96' IsHitTestVisible='False'>";
+    auto n=[](int value){return std::to_wstring(value);};
+    auto path=[&](std::wstring const& data,wu::Color color) {
+        xml+=L"<Path Data='"+data+L"' Fill='"+StudioMusicHex(color)+L"'/>";
+    };
+    auto polygon=[&](std::initializer_list<int> coordinates,wu::Color color) {
+        std::wstring data=L"M";
+        bool x=true,first=true;
+        for(int value:coordinates) {
+            if(x && !first) data+=L" L";
+            if(!x) data+=L",";
+            data+=n(value); x=!x; first=false;
+        }
+        path(data+L"Z",color);
+    };
+    auto oval=[&](int x,int y,int w,int h,wu::Color color) {
+        if(pixel) {
+            int a=(std::min)({2,w/4,h/4});
+            int b=(std::min)({4,w/3,h/3});
+            polygon({x+b,y,x+w-b,y,x+w-b,y+a,x+w-a,y+a,x+w-a,y+b,x+w,y+b,
+                x+w,y+h-b,x+w-a,y+h-b,x+w-a,y+h-a,x+w-b,y+h-a,x+w-b,y+h,
+                x+b,y+h,x+b,y+h-a,x+a,y+h-a,x+a,y+h-b,x,y+h-b,x,y+b,x+a,y+b,x+a,y+a,x+b,y+a},color);
+        } else xml+=L"<Ellipse Canvas.Left='"+n(x)+L"' Canvas.Top='"+n(y)+L"' Width='"+n(w)+L"' Height='"+n(h)+L"' Fill='"+StudioMusicHex(color)+L"'/>";
+    };
+    auto line=[&](int x,int y,int w,int h,wu::Color color) {
+        polygon({x,y,x+w,y,x+w,y+h,x,y+h},color);
+    };
+    auto headphones=[&](int x,int y,int width,int height) {
+        if(pixel) polygon({x,y+height/2,x,y+4,x+4,y+4,x+4,y,x+width-4,y,x+width-4,y+4,x+width,y+4,
+            x+width,y+height/2,x+width-3,y+height/2,x+width-3,y+7,x+width-7,y+7,x+width-7,y+3,x+7,y+3,x+7,y+7,x+3,y+7,x+3,y+height/2},pad);
+        else path(L"M"+n(x)+L","+n(y+height/2)+L" C"+n(x-3)+L","+n(y-9)+L" "+n(x+width+3)+L","+n(y-9)+L" "+n(x+width)+L","+n(y+height/2)+L" L"+n(x+width-3)+L","+n(y+height/2)+L" C"+n(x+width)+L","+n(y-5)+L" "+n(x)+L","+n(y-5)+L" "+n(x+3)+L","+n(y+height/2)+L"Z",pad);
+        oval(x-3,y+height/2-4,9,18,pad); oval(x+width-6,y+height/2-4,9,18,pad);
+        oval(x-2,y+height/2-3,6,14,accent); oval(x+width-5,y+height/2-3,6,14,accent);
+        line(x,y+height/2,2,6,shine); line(x+width-3,y+height/2,2,6,shine);
+    };
+    auto shadow=shade(accent,-10); shadow.A=40;
+    oval(17,86,65,5,shadow);
+    if(sleep) {
+        if(penguin) {
+            // An upright tucked penguin, rather than a recolored curled cat.
+            oval(31,36,39,49,edge); oval(33,36,35,45,fur);
+            oval(39,46,24,34,cream); oval(32,48,12,29,dark);
+            oval(54,30,19,24,fur); oval(58,35,12,15,cream);
+            polygon({61,49,74,52,64,57},gold);
+            line(59,42,8,2,ink);
+            oval(35,80,16,5,gold); oval(56,80,15,5,gold);
+            headphones(49,27,24,20);
+        } else {
+            oval(18,53,57,31,edge); oval(19,51,54,30,fur);
+            oval(24,54,32,18,light);
+            if(fox) {
+                polygon({17,69,21,55,38,54,55,65,72,64,76,73,66,83,38,84,23,79},dark);
+                polygon({18,68,22,56,30,55,32,63,26,70,31,77,24,78},cream);
+                oval(44,49,31,25,fur);
+                polygon({46,59,55,64,68,59,72,67,59,73,49,69},cream);
+            } else {
+                oval(48,49,30,26,fur);
+                if(dog) { oval(45,49,12,25,dark); oval(60,62,19,11,cream); }
+                if(bunny) {
+                    oval(28,48,37,10,dark); oval(31,46,35,8,light); oval(35,48,22,3,pink);
+                    oval(20,66,14,14,cream); oval(58,64,22,11,cream);
+                }
+                if(!dog && !bunny) {
+                    polygon({49,53,49,40,60,50},fur); polygon({65,50,76,42,75,60},fur);
+                    polygon({51,49,51,44,56,49},pink);
+                    // Curled striped tail wraps over the sleeping body.
+                    oval(20,65,43,16,dark); oval(23,64,37,12,fur);
+                    line(28,65,4,9,dark); line(40,65,4,10,dark);
+                }
+            }
+            if(fox) { polygon({46,54,48,39,58,51},fur); polygon({64,51,75,41,74,61},fur); }
+            oval(52,72,13,7,cream); oval(66,72,12,7,cream);
+            line(57,61,6,2,ink); line(68,61,6,2,ink);
+            oval(64,67,3,2,ink); oval(56,66,4,2,pink);
+            headphones(45,46,33,22);
+        }
+        path(L"M78,25 H87 V28 L81,34 H87 V37 H77 V34 L84,28 H78Z",accent);
+        path(L"M84,14 H90 V16 L87,20 H91 V22 H83 V20 L88,16 H84Z",shade(accent,20));
+    } else {
+        constexpr int swayValues[]={-3,-1,3,1};
+        int sway=dance ? swayValues[frame] : 0;
+        int jump=dance && frame%2 ? (bunny ? -7 : -3) : 0;
+        int cx=47+sway,cy=28+jump;
+        int lift=dance ? (frame==0 || frame==3 ? -6 : 3) : 0;
+        if(fox) {
+            int tail=dance ? (frame==0 ? -6 : frame==2 ? 3 : 0) : 0;
+            polygon({cx+12,67+jump,cx+27,63+tail,cx+34,45+tail,cx+40,48+tail,cx+42,63+tail,cx+33,79+jump,cx+17,80+jump},edge);
+            polygon({cx+13,66+jump,cx+27,61+tail,cx+34,45+tail,cx+39,49+tail,cx+40,62+tail,cx+31,76+jump,cx+17,78+jump},fur);
+            polygon({cx+29,58+tail,cx+34,45+tail,cx+39,49+tail,cx+40,61+tail,cx+35,65+tail},cream);
+        } else if(!dog && !bunny && !penguin) {
+            oval(cx+17,56+jump,12,27,dark); oval(cx+18,55+jump,8,24,fur);
+            line(cx+18,61+jump,8,3,dark); line(cx+18,71+jump,8,3,dark);
+        } else if(dog) {
+            int wag=dance && frame%2 ? -6 : 2;
+            polygon({cx+13,67+jump,cx+28,62+wag,cx+32,53+wag,cx+36,55+wag,cx+33,67+wag,cx+18,75+jump},dark);
+        } else if(bunny) oval(cx+14,66+jump,14,14,cream);
+        if(penguin) {
+            oval(cx-20,cy+14,42,43,edge); oval(cx-18,cy+13,38,41,fur);
+            oval(cx-13,cy+21,28,31,cream);
+            polygon({cx-16,cy+23,cx-31,cy+14+lift,cx-29,cy+30+lift,cx-18,cy+40},dark);
+            polygon({cx+18,cy+23,cx+30,cy+15-lift,cx+30,cy+29-lift,cx+19,cy+41},dark);
+            polygon({cx-17,cy+49,cx-3,cy+49,cx-1,cy+55,cx-20,cy+55},gold);
+            polygon({cx+4,cy+49,cx+17,cy+49,cx+22,cy+55,cx+3,cy+55},gold);
+        } else {
+            int bodyWidth=bunny ? 28 : fox ? 29 : dog ? 33 : 32;
+            oval(cx-bodyWidth/2-1,cy+23,bodyWidth+2,34,edge);
+            oval(cx-bodyWidth/2,cy+22,bodyWidth,33,fur);
+            oval(cx-9,cy+28,bunny ? 19 : 18,22,cream);
+            if(fox) polygon({cx-11,cy+25,cx,cy+29,cx+11,cy+25,cx+8,cy+43,cx,cy+50,cx-9,cy+42},cream);
+            if(bunny) {
+                oval(cx-21,cy+48,20,10,cream); oval(cx+2,cy+48,20,10,cream);
+                line(cx-17,cy+52,1,4,pink); line(cx+8,cy+52,1,4,pink);
+            } else {
+                oval(cx-17,cy+49,14,9,fox ? ink : cream); oval(cx+3,cy+49,14,9,fox ? ink : cream);
+                if(!fox) { line(cx-13,cy+53,1,3,dark); line(cx+7,cy+53,1,3,dark); }
+            }
+            // Raised paw silhouettes and visible toe pads, not generic arms.
+            oval(cx-25,cy+27+lift,12,20,dark); oval(cx-26,cy+25+lift,11,18,fur);
+            oval(cx+14,cy+27-lift,12,20,dark); oval(cx+15,cy+25-lift,11,18,fur);
+            if(dance) {
+                oval(cx-23,cy+27+lift,5,6,pink); oval(cx+18,cy+27-lift,5,6,pink);
+            }
+        }
+        if(bunny) {
+            oval(cx-17,cy-23,12,33,edge); oval(cx-16,cy-24,10,32,fur);
+            oval(cx+6,cy-24+(dance && frame==2 ? 4 : 0),12,33,edge);
+            oval(cx+7,cy-24+(dance && frame==2 ? 4 : 0),10,31,fur);
+            oval(cx-13,cy-19,4,23,pink); oval(cx+10,cy-18,4,23,pink);
+        } else if(!dog && !penguin) {
+            int ear=fox ? 16 : 12;
+            polygon({cx-22,cy+8,cx-21,cy-ear,cx-4,cy+1},edge);
+            polygon({cx-20,cy+6,cx-19,cy-ear+3,cx-6,cy+2},fur);
+            polygon({cx+4,cy+1,cx+21,cy-ear,cx+22,cy+8},edge);
+            polygon({cx+6,cy+2,cx+19,cy-ear+3,cx+20,cy+6},fur);
+            polygon({cx-17,cy-5,cx-16,cy-8,cx-10,cy+1},pink);
+            polygon({cx+10,cy+1,cx+16,cy-8,cx+17,cy-5},pink);
+        }
+        int headWidth=fox ? 45 : bunny ? 39 : penguin ? 36 : 44;
+        oval(cx-headWidth/2-1,cy-1,headWidth+2,34,edge);
+        oval(cx-headWidth/2,cy-2,headWidth,33,fur);
+        oval(cx-headWidth/2+5,cy,headWidth-12,10,light);
+        if(dog) {
+            oval(cx-27,cy-1,13,33,dark); oval(cx+15,cy-1,13,33,dark);
+            oval(cx-26,cy+3,7,25,shade(dark,-12));
+            oval(cx+9,cy+6,10,13,dark);
+            oval(cx-13,cy+17,27,15,cream);
+        } else if(fox) {
+            polygon({cx-22,cy+14,cx-13,cy+15,cx-6,cy+24,cx,cy+27,cx+6,cy+24,cx+13,cy+15,cx+22,cy+14,cx+16,cy+29,cx,cy+34,cx-16,cy+29},cream);
+            polygon({cx-22,cy+17,cx-27,cy+20,cx-21,cy+22,cx-25,cy+26,cx-15,cy+29},fur);
+            polygon({cx+22,cy+17,cx+27,cy+20,cx+21,cy+22,cx+25,cy+26,cx+15,cy+29},fur);
+        } else if(penguin) {
+            oval(cx-15,cy+4,16,23,cream); oval(cx,cy+4,16,23,cream);
+        } else if(!bunny) {
+            oval(cx-15,cy+19,30,12,cream);
+            polygon({cx-8,cy,cx-3,cy+7,cx-1,cy,cx+2,cy+7,cx+6,cy},dark);
+            line(cx-23,cy+14,6,2,dark); line(cx+17,cy+14,6,2,dark);
+        }
+        // Bright eyes have tiny highlights; dance frames alternate happy eyes.
+        if(dance && frame%2) {
+            polygon({cx-13,cy+14,cx-10,cy+11,cx-7,cy+14,cx-7,cy+16,cx-10,cy+14,cx-13,cy+16},ink);
+            polygon({cx+7,cy+14,cx+10,cy+11,cx+13,cy+14,cx+13,cy+16,cx+10,cy+14,cx+7,cy+16},ink);
+        } else {
+            oval(cx-12,cy+11,5,7,ink); oval(cx+7,cy+11,5,7,ink);
+            oval(cx-11,cy+11,2,2,cream); oval(cx+8,cy+11,2,2,cream);
+        }
+        oval(cx-18,cy+19,6,3,pink); oval(cx+12,cy+19,6,3,pink);
+        if(penguin) polygon({cx-5,cy+20,cx+5,cy+20,cx+3,cy+27,cx-3,cy+27},gold);
+        else {
+            polygon({cx-4,cy+21,cx+4,cy+21,cx+2,cy+25,cx-2,cy+25},dog || fox ? ink : pink);
+            line(cx,cy+25,1,3,ink); line(cx-3,cy+28,3,1,ink); line(cx+1,cy+28,3,1,ink);
+            if(dog && dance) oval(cx+1,cy+28,5,5,pink);
+            if(!dog && !fox && !bunny) {
+                line(cx-23,cy+24,8,1,dark); line(cx+15,cy+24,8,1,dark);
+                line(cx-22,cy+27,6,1,dark); line(cx+16,cy+27,6,1,dark);
+            }
+        }
+        headphones(cx-headWidth/2-2,cy-3,headWidth+4,28);
+        if(dance) {
+            int rise=frame%2 ? -3 : 0;
+            path(L"M82,"+n(15+rise)+L" H85 V"+n(26+rise)+L" H79 V"+n(22+rise)+L" H82Z M85,"+n(15+rise)+L" H91 V"+n(18+rise)+L" H85Z",accent);
+            oval(9,38+rise,3,3,accent);
+        }
+    }
+    xml+=L"</Canvas>";
+    return wux::Markup::XamlReader::Load(xml).as<wuxc::Canvas>();
+}
+
+void StudioMusicAttach(wuxc::Grid const& root) {
+    wuxc::Grid::SetRowSpan(root,100); wuxc::Grid::SetColumnSpan(root,100);
+    wuxc::Canvas::SetZIndex(root,120);
+    root.HorizontalAlignment(wux::HorizontalAlignment::Left);
+    root.VerticalAlignment(wux::VerticalAlignment::Top);
+    g_lockRootGrid.Children().Append(root);
+}
+void StudioMusicPlace(wux::FrameworkElement const& element,double x,double y) {
+    auto old=element.RenderTransform().try_as<wuxm::TranslateTransform>();
+    if(old && old.X()==x && old.Y()==y) return;
+    wuxm::TranslateTransform transform; transform.X(x); transform.Y(y);
+    element.RenderTransform(transform);
+}
+void UpdateStudioCompanion(StudioPlayback::Snapshot const& playback,ULONGLONG now) {
+    if(!studio.companionEnabled) return;
+    bool noMedia=playback.state==StudioPlayback::State::None || playback.state==StudioPlayback::State::Unavailable;
+    auto visibility=noMedia && studio.companionHideNoMedia ? wux::Visibility::Collapsed : wux::Visibility::Visible;
+    if(visibility==wux::Visibility::Collapsed) {
+        if(studioCompanionRoot && studioCompanionRoot.Visibility()!=visibility) studioCompanionRoot.Visibility(visibility);
+        return;
+    }
+    auto theme=StudioCompanionSkin();
+    auto key=studio.companionAnimal+L":"+theme;
+    if(!studioCompanionRoot) {
+        wuxc::Grid root; root.Name(L"WindhawkStudioCompanion"); root.IsHitTestVisible(false);
+        wuxc::Grid frames; frames.Width(96); frames.Height(96);
+        for(int i=0;i<6;++i) {
+            auto frame=BuildStudioAnimalPose(studio.companionAnimal,theme,i);
+            frame.Visibility(wux::Visibility::Collapsed);
+            frames.Children().Append(frame); studioAnimalFrames.push_back(frame);
+        }
+        wuxc::Canvas art; art.Width(studio.companionSize); art.Height(studio.companionSize);
+        wuxm::ScaleTransform scale; scale.ScaleX(studio.companionSize/96.0); scale.ScaleY(studio.companionSize/96.0);
+        frames.RenderTransform(scale); art.Children().Append(frames);
+        wuxc::Border card; card.Child(art);
+        if(studio.companionPanel) {
+            auto palette=StudioCardColors(theme);
+            card.Background(wuxm::SolidColorBrush(StudioColor(L"",palette.background)));
+            card.BorderBrush(wuxm::SolidColorBrush(StudioColor(L"",palette.accent)));
+            card.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+            card.CornerRadius(wux::CornerRadiusHelper::FromUniformRadius(theme==L"pixel" ? 0 : 16));
+            card.Padding(wux::ThicknessHelper::FromUniformLength(8));
+        }
+        root.Children().Append(card); StudioMusicAttach(root);
+        studioCompanionRoot=root; studioCompanionCard=card; studioAnimalKey=key;
+    }
+    if(studioCompanionRoot.Visibility()!=visibility) studioCompanionRoot.Visibility(visibility);
+    if(visibility!=wux::Visibility::Visible) return;
+    int frame=playback.state==StudioPlayback::State::Playing ? int(now/(1000/studio.companionFps)%4) :
+        playback.state==StudioPlayback::State::Paused ? 4 : 5;
+    if(frame!=studioAnimalFrame) {
+        if(studioAnimalFrame>=0) studioAnimalFrames[studioAnimalFrame].Visibility(wux::Visibility::Collapsed);
+        studioAnimalFrames[frame].Visibility(wux::Visibility::Visible);
+        studioAnimalFrame=frame;
+    }
+    double size=studio.companionSize+(studio.companionPanel ? 18 : 0);
+    double w=g_lockRootGrid.ActualWidth(),h=g_lockRootGrid.ActualHeight();
+    auto anchor=studio.companionAnchor;
+    bool left=anchor==L"left" || anchor==L"topLeft" || anchor==L"bottomLeft";
+    bool right=anchor==L"right" || anchor==L"topRight" || anchor==L"bottomRight";
+    bool top=anchor==L"top" || anchor==L"topLeft" || anchor==L"topRight";
+    bool bottom=anchor==L"bottom" || anchor==L"bottomLeft" || anchor==L"bottomRight";
+    double x=left ? 24 : right ? w-size-24 : (w-size)/2;
+    double y=top ? 24 : bottom ? h-size-24 : (h-size)/2;
+    x+=MitsuPlacement::ClampOffset(x,size,w,8,studio.companionX);
+    y+=MitsuPlacement::ClampOffset(y,size,h,8,studio.companionY);
+    StudioMusicPlace(studioCompanionRoot,x,y);
+}
+std::wstring StudioPlaybackTime(double seconds) {
+    int value=static_cast<int>((std::max)(0.0,seconds));
+    wchar_t buffer[32];
+    if(value>=3600) swprintf_s(buffer,L"%d:%02d:%02d",value/3600,value/60%60,value%60);
+    else swprintf_s(buffer,L"%d:%02d",value/60,value%60);
+    return buffer;
+}
+void ApplyStudioProgressExpanded() {
+    if(studioProgressDetails) studioProgressDetails.Visibility(studioProgressIsExpanded ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    if(studioProgressCard) studioProgressCard.Visibility(studioProgressIsExpanded ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    studioLastTimelinePaint=0;
+}
+bool StudioProgressTapIsControl(wux::DependencyObject node) {
+    // OriginalSource can be an icon/path/text inside a transport button. Walk
+    // its ancestors; never swallow or toggle for an interactive descendant.
+    for(int depth=0;node && depth<64 && node!=studioProgressMedia;++depth) {
+        if(node.try_as<wuxc::Primitives::ButtonBase>() ||
+           node.try_as<wuxc::Primitives::RangeBase>() ||
+           node.try_as<wuxc::TextBox>() || node.try_as<wuxc::ComboBox>()) return true;
+        try { node=wuxm::VisualTreeHelper::GetParent(node); } catch(...) { return true; }
+    }
+    return node!=studioProgressMedia;
+}
+wuxc::Grid FindStudioProgressGrid(wux::DependencyObject const& node,int depth) {
+    if(!node || depth>8) return nullptr;
+    if(auto grid=node.try_as<wuxc::Grid>()) return grid;
+    int count=wuxm::VisualTreeHelper::GetChildrenCount(node);
+    for(int i=0;i<count;++i) if(auto grid=FindStudioProgressGrid(wuxm::VisualTreeHelper::GetChild(node,i),depth+1)) return grid;
+    return nullptr;
+}
+bool AttachStudioProgressInside(wux::FrameworkElement const& media,wuxc::Grid const& footer) {
+    // Append within the card's layout, so its existing surface grows around
+    // both the controls and the timeline. No second card/border is painted.
+    if(auto border=media.try_as<wuxc::Border>()) {
+        auto original=border.Child();
+        if(!original) return false;
+        wuxc::StackPanel wrapper;
+        border.Child(nullptr);
+        try {
+            wrapper.Children().Append(original); wrapper.Children().Append(footer);
+            border.Child(wrapper);
+        } catch(...) {
+            wrapper.Children().Clear(); border.Child(original); throw;
+        }
+        studioProgressHostBorder=border; studioProgressWrapper=wrapper; studioProgressOriginalChild=original;
+    } else {
+        auto grid=FindStudioProgressGrid(media,0);
+        if(!grid) return false;
+        if(grid.RowDefinitions().Size()==0) {
+            wuxc::RowDefinition base;
+            base.Height({1,wux::GridUnitType::Auto});
+            grid.RowDefinitions().Append(base); studioProgressBaseRow=base;
+        }
+        wuxc::RowDefinition row; row.Height({1,wux::GridUnitType::Auto});
+        auto index=grid.RowDefinitions().Size();
+        grid.RowDefinitions().Append(row);
+        wuxc::Grid::SetRow(footer,index); wuxc::Grid::SetColumnSpan(footer,100);
+        grid.Children().Append(footer);
+        studioProgressHost=grid; studioProgressRow=row;
+    }
+    studioProgressOldHeight=media.ReadLocalValue(wux::FrameworkElement::HeightProperty());
+    media.Height(std::numeric_limits<double>::quiet_NaN());
+    studioProgressMedia=media;
+    return true;
+}
+void UpdateStudioProgress(StudioPlayback::Snapshot const& playback,wux::FrameworkElement const& media,ULONGLONG now) {
+    if(!studio.mediaProgressEnabled || studio.hideMedia) return;
+    bool available=media && playback.duration>0 && playback.state!=StudioPlayback::State::None && playback.state!=StudioPlayback::State::Unavailable;
+    if(!available) {
+        if(studioProgressRoot) studioProgressRoot.Visibility(wux::Visibility::Collapsed);
+        return;
+    }
+    auto theme=StudioCardSkinName(studio.mediaTheme) ? studio.mediaTheme : L"smoke";
+    if(studioProgressRoot && studioProgressMedia!=media) DetachStudioProgress();
+    auto palette=StudioCardColors(theme);
+    if(!studioProgressRoot) {
+        auto fg=StudioColor(studio.mediaForeground,palette.foreground);
+        auto accent=StudioColor(studio.mediaAccent,palette.accent);
+        wuxc::Grid root; root.Name(L"WindhawkStudioProgress");
+        double cardWidth=media.ActualWidth();
+        if(cardWidth<80) return;
+        double width=(std::min)(double(studio.mediaProgressWidth),cardWidth-24);
+        studioProgressTrackWidth=width;
+        wuxc::Border card;
+        card.Padding(wux::ThicknessHelper::FromLengths(12,0,12,6));
+        wuxc::StackPanel content; content.Spacing(4);
+        wuxc::StackPanel details; details.Spacing(4);
+        details.Width(width);
+        details.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        wuxc::Grid track; track.Height(4); track.Width(width);
+        wuxc::Border rail; rail.Background(wuxm::SolidColorBrush(fg)); rail.Opacity(0.18);
+        wuxc::Border fill; fill.Background(wuxm::SolidColorBrush(accent));
+        fill.HorizontalAlignment(wux::HorizontalAlignment::Left); fill.Width(0);
+        track.Children().Append(rail); track.Children().Append(fill); details.Children().Append(track);
+        wuxc::Grid labels;
+        wuxc::TextBlock elapsed,total;
+        auto family=studio.mediaFont.empty() ? L"Segoe UI Variable Text" : studio.mediaFont;
+        elapsed.FontFamily(wuxm::FontFamily(family)); total.FontFamily(wuxm::FontFamily(family));
+        elapsed.FontSize(12); total.FontSize(12);
+        elapsed.Foreground(wuxm::SolidColorBrush(fg)); total.Foreground(wuxm::SolidColorBrush(fg));
+        total.HorizontalAlignment(wux::HorizontalAlignment::Right);
+        labels.Children().Append(elapsed); labels.Children().Append(total);
+        if(studio.mediaProgressTimes) details.Children().Append(labels);
+        studioProgressDetails=details; studioTrackFill=fill; studioElapsed=elapsed; studioDuration=total;
+        studioProgressIsExpanded=studio.mediaProgressExpanded || !studio.mediaProgressToggle;
+        content.Children().Append(details);
+        card.Child(content); root.Children().Append(card);
+        if(!AttachStudioProgressInside(media,root)) {
+            DetachStudioProgress(); return;
+        }
+        studioProgressRoot=root; studioProgressCard=card;
+        if(studio.mediaProgressToggle) {
+            studioProgressTapped=[](winrt::Windows::Foundation::IInspectable const&,wux::Input::TappedRoutedEventArgs const& args) {
+                if(!studioProgressRoot || studioProgressRoot.Visibility()!=wux::Visibility::Visible) return;
+                auto source=args.OriginalSource().try_as<wux::DependencyObject>();
+                if(StudioProgressTapIsControl(source)) return;
+                studioProgressIsExpanded=!studioProgressIsExpanded;
+                ApplyStudioProgressExpanded();
+                args.Handled(true);
+            };
+            studioProgressTappedBox=winrt::box_value(studioProgressTapped);
+            media.AddHandler(wux::UIElement::TappedEvent(),studioProgressTappedBox,true);
+            studioHasProgressClick=true;
+        }
+        ApplyStudioProgressExpanded();
+    }
+    if(studioProgressRoot.Visibility()!=wux::Visibility::Visible) studioProgressRoot.Visibility(wux::Visibility::Visible);
+    if(studioProgressIsExpanded && (!studioLastTimelinePaint || now-studioLastTimelinePaint>=500)) {
+        double position=StudioPlayback::Position(playback,now);
+        double width=studioProgressTrackWidth*position/playback.duration;
+        if(theme==L"pixel") width=std::floor(width/4)*4;
+        if(studioTrackFill.Width()!=width) studioTrackFill.Width(width);
+        auto elapsed=StudioPlaybackTime(position),total=StudioPlaybackTime(playback.duration);
+        if(studioElapsed.Text()!=elapsed) studioElapsed.Text(elapsed);
+        if(studioDuration.Text()!=total) studioDuration.Text(total);
+        studioLastTimelinePaint=now;
+    }
+}
+StudioPlayback::State StudioNativePlaybackState(wux::DependencyObject const& node,int depth,int& budget) {
+    if(!node || depth>32 || --budget<0) return StudioPlayback::State::Unavailable;
+    if(auto element=node.try_as<wux::FrameworkElement>()) {
+        if(element.Visibility()!=wux::Visibility::Visible) return StudioPlayback::State::Unavailable;
+        if(element.try_as<wuxc::Primitives::ButtonBase>()) {
+            std::wstring name(wux::Automation::AutomationProperties::GetName(element));
+            for(auto& c:name) c=static_cast<wchar_t>(towlower(c));
+            if(name==L"pause" || name==L"pause playback") return StudioPlayback::State::Playing;
+            if(name==L"play" || name==L"resume" || name==L"play playback") return StudioPlayback::State::Paused;
+        }
+    }
+    int count=wuxm::VisualTreeHelper::GetChildrenCount(node);
+    for(int i=0;i<count && budget>0;++i) {
+        auto result=StudioNativePlaybackState(wuxm::VisualTreeHelper::GetChild(node,i),depth+1,budget);
+        if(result!=StudioPlayback::State::Unavailable) return result;
+    }
+    return StudioPlayback::State::Unavailable;
+}
+void UpdateStudioMusicUi(wux::FrameworkElement const& media,ULONGLONG now) {
+    if(!studio.companionEnabled && !studio.mediaProgressEnabled) return;
+    if(!g_lockRootGrid) return;
+    if(studioMusicParent && studioMusicParent!=g_lockRootGrid) ResetStudioMusicUi();
+    studioMusicParent=g_lockRootGrid;
+    auto playback=StudioPlayback::Read();
+    // Best-effort state-only fallback if this LockApp cannot access GSMTC.
+    // Native accessibility labels cannot provide duration: never invent it.
+    static ULONGLONG lastNativeRead=0;
+    static StudioPlayback::State nativeState=StudioPlayback::State::Unavailable;
+    if((playback.state==StudioPlayback::State::Unavailable || playback.state==StudioPlayback::State::None) &&
+       media && media.ActualWidth()>0 && media.Visibility()==wux::Visibility::Visible) {
+        if(!lastNativeRead || now-lastNativeRead>=1000) {
+            int budget=256;
+            try { nativeState=StudioNativePlaybackState(media,0,budget); } catch(...) { nativeState=StudioPlayback::State::Unavailable; }
+            lastNativeRead=now;
+        }
+        playback.state=nativeState;
+    }
+    UpdateStudioCompanion(playback,now);
+    UpdateStudioProgress(playback,media,now);
+}
+
 // All work stays on LockApp's UI thread. Weak references cannot keep an old
 // media tree alive and no event handlers can survive DLL unload.
 [[clang::no_destroy]] winrt::weak_ref<wux::FrameworkElement> studioFastMedia;
 ULONGLONG studioLastMediaRefresh = 0;
 bool studioWasVisible = false;
 ULONGLONG studioLastWidgetDiscovery = 0;
+ULONGLONG studioLastWidgetPaint=0,studioLastMediaDiscovery=0,studioLastMediaSkin=0;
 void ResetStudioMediaRefresh() {
     studioFastMedia = {};
     studioLastMediaRefresh = 0;
     studioWasVisible = false;
     studioLastWidgetDiscovery = 0;
+    studioLastWidgetPaint=studioLastMediaDiscovery=studioLastMediaSkin=0;
 }
 wux::FrameworkElement FindStudioMedia(wux::DependencyObject const& node, int depth, int& budget) {
     if (!node || depth > 96 || --budget < 0 ||
         (g_activeClockElement && node == g_activeClockElement)) return nullptr;
-    if (auto element = node.try_as<wux::FrameworkElement>())
-        if (StudioMediaName(element.Name())) return element;
+    if (auto element = node.try_as<wux::FrameworkElement>()) {
+        if(element.Name()==L"WindhawkStudioCompanion" || element.Name()==L"WindhawkStudioProgress" || element.Name()==L"WindhawkStudioWidgets") return nullptr;
+        else if (StudioMediaName(element.Name())) return element;
+    }
     int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
     for (int i = 0; i < count && budget > 0; ++i) try {
         auto match = FindStudioMedia(wuxm::VisualTreeHelper::GetChild(node, i), depth + 1, budget);
@@ -3074,9 +3817,11 @@ bool StudioMediaAttached(wux::DependencyObject node, wux::DependencyObject const
 void RefreshStudioMedia(ULONGLONG now) {
     auto window = wux::Window::Current();
     if (!window || !window.Visible()) {
+        StudioPlayback::visible=false;
         studioWasVisible = false;
         return;
     }
+    StudioPlayback::visible=true;
     bool justVisible = !studioWasVisible;
     studioWasVisible = true;
     if (!justVisible && now - studioLastMediaRefresh < 125) return;
@@ -3090,7 +3835,8 @@ void RefreshStudioMedia(ULONGLONG now) {
             SelectStudioWidget(content);
             studioLastWidgetDiscovery = now;
         }
-        if (studioWidget) {
+        if (studioWidget && (justVisible || !studioLastWidgetPaint || now-studioLastWidgetPaint>=500)) {
+            studioLastWidgetPaint=now;
             if (studio.widgetMode==L"studio") UpdateStudioWidgets();
             else {
                 if (studioWidgetMotion && studioWidgetMotion != studioWidget) InspectStudioNative(studioWidgetMotion,0);
@@ -3099,18 +3845,23 @@ void RefreshStudioMedia(ULONGLONG now) {
         }
     }
     bool themed = StudioCardSkinName(studio.mediaTheme);
-    if (!themed && studio.mediaFont.empty() && !studio.hideMedia && !studio.mediaX && !studio.mediaY) return;
+    bool styleWanted=themed || !studio.mediaFont.empty() || studio.hideMedia || studio.mediaX || studio.mediaY;
     auto media = studioFastMedia.get();
-    if (!media || !StudioMediaAttached(media, content)) {
+    if (media && !StudioMediaAttached(media, content)) { media=nullptr; studioFastMedia={}; }
+    if ((styleWanted || studio.mediaProgressEnabled) && !media &&
+        (justVisible || !studioLastMediaDiscovery || now-studioLastMediaDiscovery>=1000)) {
+        studioLastMediaDiscovery=now;
         int budget = 8192;
         media = FindStudioMedia(content, 0, budget);
         studioFastMedia = media ? winrt::make_weak(media) : winrt::weak_ref<wux::FrameworkElement>{};
     }
-    if (media) {
+    if (media && styleWanted && (justVisible || !studioLastMediaSkin || now-studioLastMediaSkin>=250)) {
+        studioLastMediaSkin=now;
         // Do not finish/prune a full native scan after a subtree-only pass:
         // widget and other rule targets must keep their saved original values.
         WalkStudioNative(media, 0);
     }
+    UpdateStudioMusicUi(media,now);
 }
 
 // Helper to apply root horizontal and vertical alignments (supports bottomLeft Sonoma style)
@@ -4714,6 +5465,7 @@ void ScanNode(wux::DependencyObject const& node, ScanResult& result, int depth) 
     if (auto element = node.try_as<wux::FrameworkElement>()) {
         auto name = element.Name();
 
+        if(name==L"WindhawkStudioCompanion" || name==L"WindhawkStudioProgress" || name==L"WindhawkStudioWidgets") return;
         if (name == L"LockRootGrid") {
             if (!result.hasLockRoot) {
                 if (auto grid = element.try_as<wuxc::Grid>()) {
@@ -4858,6 +5610,7 @@ void OnUiThreadTick() {
     // Runs independently of clock rendering. Cached media subtree only;
     // discovery is needed only while the card is absent or replaced.
     RefreshStudioMedia(now);
+    if(!StudioPlayback::visible.load()) return;
 
     int intervalMs = g_settings.showSeconds ? 500 : 1000;
     if ((now - g_lastUiTick) < static_cast<ULONGLONG>(intervalMs)) return;
@@ -4942,6 +5695,12 @@ HWND FindCoreWindow() {
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
+    bool comInitialized=SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED));
+    struct StudioApartmentCleanup {
+        bool initialized;
+        ~StudioApartmentCleanup() { if(initialized) CoUninitialize(); }
+    } apartmentCleanup{comInitialized};
+    StudioPlayback::Poller playbackPoller;
     // Wait for LockApp's CoreWindow, then install the message hook on its
     // thread. Retry until the window exists or the mod is unloaded.
     while (WaitForSingleObject(g_stopEvent, 250) == WAIT_TIMEOUT) {
@@ -4969,7 +5728,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     // Wake the UI thread periodically. The hook itself throttles updates to
     // 500 ms when seconds are shown and to 1000 ms otherwise.
     while (WaitForSingleObject(g_stopEvent,
-            IsWindowVisible(g_coreWindow.load()) ? 125 : 500) == WAIT_TIMEOUT) {
+            IsWindowVisible(g_coreWindow.load()) && StudioPlayback::visible.load() ? 125 : 1000) == WAIT_TIMEOUT) {
         HWND window = g_coreWindow.load();
         if (!window) {
             continue;
@@ -4978,6 +5737,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             Wh_Log(L"The lock screen window disappeared; stopping the worker.");
             break;
         }
+        playbackPoller.Tick(GetTickCount64(),IsWindowVisible(window)!=FALSE && StudioPlayback::visible.load());
         PostMessageW(window, WM_NULL, 0, 0);
     }
 
