@@ -21,7 +21,7 @@ Dims inactive windows so the active one stands out, while the background stays r
 
 The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.
 
-Elevated (admin) windows need Windhawk 2 for complete background dimming.
+Windows that run as administrator need Windhawk 2 (currently in alpha). On Windhawk 1.x the layer can't move behind them, so when one of them gets focus, the previously active window stays undimmed.
 
 ## Live configuration
 
@@ -76,11 +76,6 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 #include <stdio.h>
 #include <wchar.h>
 #include <wctype.h>
-
-#if __has_include(<windhawk_tool_mod.h>)
-#include <windhawk_tool_mod.h>
-#define HAS_TOOL_MOD_HEADER
-#endif
 
 // ───────────── GDI+ (flat API, only to load PNG/JPG/GIF images) ─────────────
 
@@ -1060,10 +1055,6 @@ void WhTool_ModUninit() {
     }
 }
 
-#ifndef HAS_TOOL_MOD_HEADER
-// Launcher for Windhawk 1.x. On Windhawk 2, windhawk_tool_mod.h provides it and runs the mod in a UIAccess host,
-// which can place the layer behind elevated windows.
-
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -1242,4 +1233,3 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
-#endif  // HAS_TOOL_MOD_HEADER
