@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              maycon-large-folder-icons
-// @name            Large icons — DevMaycon
-// @description     Consistent large icons for Explorer folders and removable drives. Created for DevMaycon.
+// @name            Large icons — Dev_Maycon
+// @description     Consistent large icons for Explorer folders and removable drives. Created for Dev_Maycon.
 // @version         1.1.0
-// @author          DevMaycon
+// @author          Dev_Maycon
 // @github          https://github.com/MayconDIS
 // @homepage        https://github.com/MayconDIS/Windhawk_Mods
 // @include         explorer.exe
@@ -14,15 +14,15 @@
 
 // ==WindhawkModReadme==
 /*
-# Large icons — DevMaycon
+# Large icons — Dev_Maycon
 
-![Large icons — DevMaycon](https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/large-icons.svg)
+![Large icons — Dev_Maycon](https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/large-icons.svg)
 
 *Original project illustration.*
 
 **A consistent folder view, wherever your files live.**
 
-Created for DevMaycon with Codex assistance. This project keeps Explorer
+Created for Dev_Maycon with Codex assistance. This project keeps Explorer
 folders in large-icon view using Windows Shell interfaces.
 
 ## Quick start
@@ -71,16 +71,16 @@ WinSetView. Disabling stops enforcement; Windows may retain the last view.
 
 ## Version 1.1.0
 
-- DevMaycon branding and original English project documentation.
+- Dev_Maycon branding and original English project documentation.
 - Clearer function names for view processing and monitoring.
 - Existing mod identity and user settings preserved during the update.
 
 
 ## Credits and links
 
-Original project: **DevMaycon**, developed with Codex assistance. Licensed under **GPL-3.0-only**.
+Original project: **Dev_Maycon**, developed with Codex assistance. Licensed under **GPL-3.0-only**.
 
-- Custom edition and maintenance: **DevMaycon**.
+- Custom edition and maintenance: **Dev_Maycon**.
 - Development assistance: **OpenAI Codex**.
 - Repository: [MayconDIS/Windhawk_Mods](https://github.com/MayconDIS/Windhawk_Mods).
 - GitHub profile: [MayconDIS](https://github.com/MayconDIS).
