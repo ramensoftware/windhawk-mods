@@ -16,7 +16,7 @@
 
 Tired of clicking the small three-dot overflow icon on your taskbar? This mod transforms the overflow menu into a fluid, responsive, zero-click experience. Just hover your mouse over the chevron button, and your hidden system tray icons appear instantly. 
 
-![How It Works](https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/how-it-works.png)
+https://github.com/Cougar16/win11-taskbar-overflow-hover/blob/main/assets/Hover-Overflow-Menu.png?raw=true
 
 ✨ **Smart Features:**
 * **Zero-Click Open:** Auto-expands the hidden icons menu just by resting your cursor on the overflow button (300ms default delay, easily adjustable).
