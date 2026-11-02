@@ -24,6 +24,13 @@ page does: it creates cursor files for the theme and points the Windows pointer
 settings at them. Because of this, the theme works in every program that uses
 the standard Windows cursors.
 
+## Preview
+![Preview 1](https://i.imgur.com/YBKMSqy.gif)
+
+![Preview 2](https://i.imgur.com/oIhV764.gif)
+
+![Preview 3](https://i.imgur.com/lO9i7j0.gif)
+
 ## Themes
 - **Classic White**: White arrow with a black outline.
 - **Classic Black**: Black arrow with a white outline.
