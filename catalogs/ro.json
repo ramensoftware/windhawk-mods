@@ -7420,7 +7420,7 @@
         "ratingUsers": 213,
         "reviews": 0,
         "trendingSorting": 12.77142242755619,
-        "updated": 1791234098000,
+        "updated": 1793646142000,
         "users": 14960
       },
       "metadata": {
@@ -7436,7 +7436,7 @@
         ],
         "license": "GPL-3.0",
         "name": "File Operation Styler",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "files-2-folders": {

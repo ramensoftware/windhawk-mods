@@ -1,3 +1,11 @@
+## 1.3.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2ca0c456759cd0eeb5f5d0f4d737362b6b406d74/mods/file-operation-styler.wh.cpp))
+
+* Fixed compatibility with Windows 11 26H2 builds where the native transfer-rate calculation symbol is unavailable.
+* Fixed multiple simultaneous file operations extending beyond the screen by adding a scrollable layout with a fixed footer.
+* Added scrollbar and mouse-wheel navigation for grouped file operations.
+* Improved layout handling when transfers are added, removed, or completed.
+* Improved Glass text antialiasing and native window resizing compatibility.
+
 ## 1.2.0 ([Oct 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/933fcf4fe0178cc31ac1888d772f05af15bbb1c8/mods/file-operation-styler.wh.cpp))
 
 * Added a Frosted Glass theme with Windows Acrylic and Custom Blur styles, including adjustable tint and opacity.

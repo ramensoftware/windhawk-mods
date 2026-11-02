@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-02T17:04:42.000Z</updated>
+    <updated>2026-11-02T19:02:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Operation Styler 1.3.0]]></title>
+        <id>https://windhawk.net/mods/file-operation-styler#2ca0c456759cd0eeb5f5d0f4d737362b6b406d74</id>
+        <link href="https://windhawk.net/mods/file-operation-styler"/>
+        <updated>2026-11-02T19:02:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with Windows 11 26H2 builds where the native transfer-rate calculation symbol is unavailable.</li>
+<li>Fixed multiple simultaneous file operations extending beyond the screen by adding a scrollable layout with a fixed footer.</li>
+<li>Added scrollbar and mouse-wheel navigation for grouped file operations.</li>
+<li>Improved layout handling when transfers are added, removed, or completed.</li>
+<li>Improved Glass text antialiasing and native window resizing compatibility.</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hyprland Windows 1.2.1]]></title>
         <id>https://windhawk.net/mods/hyprland-windows#16e402d6bbc717c0cceb7e9262a8b52694842a7e</id>
@@ -953,32 +970,6 @@ unrecognized or ambiguous slides are left unchanged.</p>]]></content>
         <author>
             <name>HHeitlager</name>
             <uri>https://github.com/hheitlager</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8/8.1 Family Safety Applet Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#f7502792d29d0612ef13f0e3eab910b9f3cb79e7</id>
-        <link href="https://windhawk.net/mods/win8-family-safety-applet-restorer"/>
-        <updated>2026-10-31T19:48:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows881familysafetyappletrestorer">Windows 8/8.1 Family Safety Applet Restorer</h1>
-<p>This mod restores the classic Windows 8/8.1 Family Safety (Parental Controls) Control Panel applet that was removed from modern versions of Windows.</p>
-<p><strong>IMPORTANT:</strong> <code>svchost.exe</code> must be included in the mod's target processes.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety1.png" alt="family1" /></p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/familysafety2.png" alt="family2" /></p>
-<h2 id="about">About</h2>
-<p>The mod downloads the original Windows binaries from Microsoft’s public symbol server on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches in memory, and registers the applet virtually so that no permanent system files are modified.</p>
-<p>It supports 6 languages: English, Italian, Persian, Spanish, French and Portuguese.<br />
-The language can follow the Windows UI language or be forced to a specific locale.</p>
-<p>The applet appears under <strong>User Accounts</strong> in Control Panel Category view and can also be opened directly.</p>
-<p>Note: it might take a minute to load the applet because the mod downloads the required dependencies.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdministratoX - Original implementation and screenshots</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
