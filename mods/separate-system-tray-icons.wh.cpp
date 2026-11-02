@@ -2,7 +2,7 @@
 // @id              separate-system-tray-icons
 // @name            Separate System Tray Icons
 // @description     Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Asteski
 // @license         GPL-3.0
 // @github          https://github.com/Asteski
@@ -34,21 +34,50 @@ Buttons:
 - Control Center -> Control Center, Project, or a custom action
 - Battery -> Power settings by default, or Control Center/custom action
 
+When **Control Center action** is **Open Project**, its context menu shows
+**Display settings** in place of **Taskbar settings**. Recommended values for
+**Control Center glyph** in this mode are **E7F4** or **EBC6**; the glyph remains
+independently configurable.
+
 Use **Toggle buttons visibility** to choose which buttons appear. Drag items in
 **Button order** to arrange the buttons, including Battery. Removing an entry
 hides that button; adding it back shows it when its visibility toggle is
 enabled. Battery appears only on devices where Windows reports a battery.
+
+In the Sound context menu, **Volume percentage**, below **Open volume mixer**,
+toggles a label such as **50%** beside the glyph. A checkmark appears while it
+is enabled. This preference is saved and controlled through the menu, using
+the same caption styling and spacing as Battery. On vertical taskbars, the
+percentage appears below the glyph.
+
+Under Sound, **Constant width with volume percentage** is off by default.
+Enable it to reserve space for every volume value and right-align the text,
+keeping the button width and the percent sign's position steady. With it off,
+the button fits the current percentage text.
+
+The default middle-click actions are **Toggle mute** for Sound,
+**Toggle Bluetooth** for Bluetooth, **Toggle Wi-Fi** for Network, and
+**Toggle Energy saver** for Battery. Each can instead use **Custom action**.
+Toggle Wi-Fi leaves Ethernet connections unchanged.
+
+The **Chevron** settings group contains **Hide chevron** and **Increase
+chevron size**. Increasing the size sets the arrow to 16 px to match the tray
+icons; it is off by default.
+
+**Hide chevron** controls the hidden-icons arrow. **Disabled** keeps it unchanged;
+**Glyph** hides only the arrow and retains the button's hover highlight;
+**Glyph and highlight** makes the button invisible while keeping its space and
+click target; **Enabled** removes the entire button and its space.
 
 **Icon padding** adds horizontal or vertical space around each tray button.
 Both values default to 0 and apply to all five buttons. This changes spacing
 between buttons without resizing their glyphs or hover highlights. Values are
 in XAML pixels (DIPs), scaled by the monitor's display scale.
 
-Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
-muting. **Volume scroll step** selects Windows' default step or 1, 5, or 10
-percentage points per wheel notch. Middle-click can instead run a custom
-action; the other buttons also have independent custom middle-click actions.
-Leave an action empty to do nothing.
+Sound supports mouse-wheel volume adjustment (unmuting first).
+**Volume scroll step** selects Windows' default step or 1, 5, or 10 percentage
+points per wheel notch. Control Center has its own custom middle-click action.
+Leave a custom middle-click action empty to do nothing.
 
 **Show master volume in Sound output**, enabled by default, adds a master
 slider and mute button above the application mixer in Windows 11's Sound
@@ -102,7 +131,9 @@ by [Salyts](https://github.com/Salyts), licensed under MIT.
 
 Select **Custom action** for **Control Center action** or **Battery click
 action**, then enter an action in that group's **Custom action** field. The
-same formats work in **Custom middle-click action** fields.
+same formats work in **Custom middle-click action** fields. For Sound,
+Bluetooth, Network, and Battery, select **Custom action** under **Middle-click
+action** to use that field.
 
 | Prefix | Example | Description |
 |--------|---------|-------------|
@@ -144,6 +175,8 @@ needed, the mod logs the actual control class; the button names stay the same.
 | `SystemTray.OmniButton#SeparateQuickSettingsXamlBattery` | Separate battery button, including its highlight and click handling. |
 | `StackPanel#SeparateTrayBatteryContent` | Battery glyph and percentage layout; horizontal or vertical to match the taskbar. |
 | `TextBlock#SeparateTrayBatteryPercentage` | Battery percentage text. |
+| `StackPanel#SeparateTraySoundContent` | Sound glyph and volume percentage layout. |
+| `TextBlock#SeparateTraySoundPercentage` | Volume percentage text, including the percent sign. |
 | `Grid#SeparateTrayIconLayers` | Layered glyph host; battery has its own measured dimensions, other buttons use a 16-by-16 host. |
 | `FontIcon#SeparateTrayIconPrimary` | Main status or output-device glyph. |
 | `FontIcon#SeparateTrayIconUnderlay` | Theme-aware grey underlying glyph, where applicable. |
@@ -243,6 +276,9 @@ SOFTWARE.
     - showMasterVolumeInOutputPicker: true
       $name: Show master volume in Sound output
       $description: "Add a master volume slider and mute button above the application sliders in the Windows 11 Sound output flyout. Close and reopen the flyout after changing this option. Do not combine with another mod that inserts a master-volume row into the same flyout."
+    - constantVolumeWidth: false
+      $name: Constant width with volume percentage
+      $description: "Keep the Sound button width constant when Volume percentage is enabled in its context menu. Right-align the percentage so spare space stays between the glyph and the number."
     - middleClickAction: toggle_mute
       $name: Middle-click action
       $options:
@@ -260,9 +296,14 @@ SOFTWARE.
     - changeGlyphWhenDisabled: true
       $name: Show unavailable Bluetooth indicator
       $description: Change the Bluetooth icon appearance while Bluetooth is off.
+    - middleClickAction: toggle_bluetooth
+      $name: Middle-click action
+      $options:
+      - toggle_bluetooth: Toggle Bluetooth
+      - custom: Custom action
     - middleClickCustomAction: ""
       $name: Custom middle-click action
-      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
+      $description: "Used when Middle-click action is Custom action. Supports the same action formats as Control Center custom actions."
   $name: Bluetooth
 - network:
     - showSignalStrengthInTooltip: true
@@ -270,15 +311,23 @@ SOFTWARE.
     - speedTestUrl: "https://www.speedtest.net/run"
       $name: Speed test custom URL
       $description: Website opened by Perform speed test. Enter a full http:// or https:// address.
+    - middleClickAction: toggle_wifi
+      $name: Middle-click action
+      $description: Toggle Wi-Fi turns wireless networking on or off; Ethernet connections are unaffected.
+      $options:
+      - toggle_wifi: Toggle Wi-Fi
+      - custom: Custom action
     - middleClickCustomAction: ""
       $name: Custom middle-click action
-      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
+      $description: "Used when Middle-click action is Custom action. Supports the same action formats as Control Center custom actions."
   $name: Network
 - controlCenter:
     - controlCenterGlyph: F4C3
       $name: Control Center glyph
+      $description: "Recommended glyphs when Open Project is selected: E7F4 or EBC6."
     - actionMode: default
       $name: Control Center action
+      $description: "Open Project also replaces Taskbar settings with Display settings in this button's context menu."
       $options:
       - default: Open Control Center
       - project: Open Project
@@ -315,10 +364,28 @@ SOFTWARE.
     - customAction: "ms-settings:powersleep"
       $name: Custom action
       $description: "Used when Custom action is selected. Supports file paths, ~ folders, cmd:, ps:, powershell:, key:, hotkey:, web:, and ms-settings: actions."
+    - middleClickAction: toggle_energy_saver
+      $name: Middle-click action
+      $options:
+      - toggle_energy_saver: Toggle Energy saver
+      - custom: Custom action
     - middleClickCustomAction: ""
       $name: Custom middle-click action
-      $description: "Leave empty to do nothing. Supports the same action formats as Control Center custom actions."
+      $description: "Used when Middle-click action is Custom action. Supports the same action formats as Control Center custom actions."
   $name: Battery
+- chevron:
+    - hideChevron: disabled
+      $name: Hide chevron
+      $description: "Choose whether to hide the hidden-icons arrow, its hover highlight, or the entire button. Invisible buttons remain clickable in the two glyph modes."
+      $options:
+      - disabled: Disabled
+      - glyph: Glyph only
+      - glyph_and_highlight: Glyph and highlight only
+      - enabled: Enabled
+    - increaseSize: false
+      $name: Increase chevron size
+      $description: Increase the chevron glyph to 16 px to match the tray icons' size.
+  $name: Chevron
 - visibility:
     - showSoundButton: true
       $name: Sound
@@ -436,12 +503,16 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 struct Settings {
     bool soundMiddleClickToggleMute = true;
     std::wstring soundMiddleClickAction;
+    bool bluetoothMiddleClickToggle = true;
     std::wstring bluetoothMiddleClickAction;
+    bool networkMiddleClickToggle = true;
     std::wstring networkMiddleClickAction;
     std::wstring controlCenterMiddleClickAction;
+    bool batteryMiddleClickToggle = true;
     std::wstring batteryMiddleClickAction;
     std::wstring soundClickAction = L"sound_output";
     int volumeWheelStep = 0;
+    bool controlCenterOpensProject = false;
     std::wstring controlCenterGlyph = L"F4C3";
     std::wstring controlCenterAction = L"ms-controlcenter:";
     std::wstring batteryAction = L"ms-settings:powersleep";
@@ -461,8 +532,12 @@ struct Settings {
     bool energySaverLeafGlyph = true;
     bool showCurrentlyPlayingInSoundTooltip = true;
     bool soundIconFollowsOutputDevice = false;
+    bool showVolumePercentage = false;
+    bool constantVolumeWidth = false;
     std::wstring buttonOrder = L"sound,bluetooth,network,controlcenter,battery";
     bool swapTroubleshootingWithBottom = false;
+    std::wstring hideChevron = L"disabled";
+    bool increaseChevronSize = false;
     int iconPaddingHorizontal = 0;
     int iconPaddingVertical = 0;
 };
@@ -584,6 +659,9 @@ static ULONGLONG g_nextNativeSoundSearch = 0;
 [[clang::no_destroy]] static wux::FrameworkElement g_batteryLeafIcon{nullptr};
 [[clang::no_destroy]] static wuc::TextBlock g_batteryPercentageText{nullptr};
 [[clang::no_destroy]] static wuc::StackPanel g_batteryContent{nullptr};
+[[clang::no_destroy]] static wuc::StackPanel g_soundContent{nullptr};
+[[clang::no_destroy]] static wuc::TextBlock g_soundPercentageText{nullptr};
+static double g_soundPercentageReservedWidth = 0;
 static std::atomic<int> g_batteryPercentageEnabled{-1};
 static std::wstring g_batteryTooltipCache;
 
@@ -737,12 +815,17 @@ static std::wstring LoadButtonOrderSetting() {
 }
 
 static void LoadSettings() {
+    g_settings.hideChevron = GetStringSettingWithDefault(L"chevron.hideChevron", L"disabled");
+    g_settings.increaseChevronSize = Wh_GetIntSetting(L"chevron.increaseSize") != 0;
     g_settings.soundMiddleClickToggleMute =
         GetStringSettingWithDefault(L"sound.middleClickAction", L"toggle_mute") != L"custom";
     g_settings.soundMiddleClickAction = GetStringSettingWithDefault(L"sound.middleClickCustomAction", L"");
+    g_settings.bluetoothMiddleClickToggle = GetStringSettingWithDefault(L"bluetooth.middleClickAction", L"toggle_bluetooth") != L"custom";
     g_settings.bluetoothMiddleClickAction = GetStringSettingWithDefault(L"bluetooth.middleClickCustomAction", L"");
+    g_settings.networkMiddleClickToggle = GetStringSettingWithDefault(L"network.middleClickAction", L"toggle_wifi") != L"custom";
     g_settings.networkMiddleClickAction = GetStringSettingWithDefault(L"network.middleClickCustomAction", L"");
     g_settings.controlCenterMiddleClickAction = GetStringSettingWithDefault(L"controlCenter.middleClickCustomAction", L"");
+    g_settings.batteryMiddleClickToggle = GetStringSettingWithDefault(L"battery.middleClickAction", L"toggle_energy_saver") != L"custom";
     g_settings.batteryMiddleClickAction = GetStringSettingWithDefault(L"battery.middleClickCustomAction", L"");
     g_settings.batteryCustomAction = GetStringSettingWithDefault(L"battery.actionMode", L"custom") == L"custom";
     g_settings.batteryAction = g_settings.batteryCustomAction
@@ -760,6 +843,7 @@ static void LoadSettings() {
                                     L"ms-controlcenter:");
     const auto controlCenterActionMode =
         GetStringSettingWithDefault(L"controlCenter.actionMode", L"default");
+    g_settings.controlCenterOpensProject = controlCenterActionMode == L"project";
     if (controlCenterActionMode == L"project")
         g_settings.controlCenterAction = L"key:Win+P";
     else if (controlCenterActionMode != L"custom")
@@ -785,6 +869,13 @@ static void LoadSettings() {
     g_settings.energySaverLeafGlyph = Wh_GetIntSetting(L"battery.energySaverLeafGlyph") != 0;
     g_settings.showCurrentlyPlayingInSoundTooltip =
         Wh_GetIntSetting(L"sound.showCurrentlyPlayingInSoundTooltip") != 0;
+    g_settings.constantVolumeWidth = Wh_GetIntSetting(L"sound.constantVolumeWidth") != 0;
+    // Menu owns this preference. Import the old setting on first use.
+    const int savedVolumePercentage = Wh_GetIntValue(L"volumePercentageMenuOverride", -1);
+    g_settings.showVolumePercentage = savedVolumePercentage >= 0
+        ? savedVolumePercentage != 0 : Wh_GetIntSetting(L"sound.showVolumePercentage") != 0;
+    if (savedVolumePercentage < 0)
+        Wh_SetIntValue(L"volumePercentageMenuOverride", g_settings.showVolumePercentage ? 1 : 0);
     g_settings.soundIconFollowsOutputDevice =
         Wh_GetIntSetting(L"sound.soundIconFollowsOutputDevice") != 0;
     g_settings.buttonOrder = LoadButtonOrderSetting();
@@ -1348,6 +1439,45 @@ static void SetAirplaneModeLikelyEnabled(bool enabled) {
     } else {
         delete value;
     }
+}
+
+// Radio state changes run outside the XAML thread and use live device state.
+static std::atomic<bool> g_radioToggleBusy{false};
+static void ToggleTrayRadio(wdr::RadioKind kind) {
+    if (g_unloading || g_radioToggleBusy.exchange(true)) return;
+    HANDLE thread = StartOwnedWorker([kind] {
+        bool initialized = false;
+        try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            initialized = true;
+            {
+                const auto access = wdr::Radio::RequestAccessAsync().get();
+                if (access == wdr::RadioAccessStatus::Allowed) {
+                    auto radios = wdr::Radio::GetRadiosAsync().get();
+                    bool anyOn = false;
+                    for (auto const& radio : radios)
+                        if (radio.Kind() == kind && radio.State() == wdr::RadioState::On) anyOn = true;
+                    const auto target = anyOn ? wdr::RadioState::Off : wdr::RadioState::On;
+                    for (auto const& radio : radios) {
+                        if (g_unloading) break;
+                        if (radio.Kind() != kind) continue;
+                        const auto result = radio.SetStateAsync(target).get();
+                        if (result != wdr::RadioAccessStatus::Allowed)
+                            Wh_Log(L"Radio toggle denied: kind=%d status=%d", static_cast<int>(kind), static_cast<int>(result));
+                    }
+                } else {
+                    Wh_Log(L"Radio toggle access denied: kind=%d status=%d", static_cast<int>(kind), static_cast<int>(access));
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Radio toggle failed: %08X", winrt::to_hresult());
+        }
+        if (initialized) winrt::uninit_apartment();
+        g_radioToggleBusy.store(false);
+        RequestTrayRefresh(RefreshRadios | RefreshNetwork);
+    });
+    if (thread) CloseHandle(thread);
+    else g_radioToggleBusy.store(false);
 }
 
 struct WindowSearchByPid {
@@ -2459,10 +2589,12 @@ static void ApplyHoverBackgroundMetrics(wux::FrameworkElement const& button) {
             if (scale > 0) right -= 1.0 / scale;
         }
 
-        if (button == g_batteryButton && g_batteryPercentageText &&
-            g_batteryPercentageText.Visibility() == wux::Visibility::Visible) {
-            const bool vertical = g_batteryContent &&
-                g_batteryContent.Orientation() == wuc::Orientation::Vertical;
+        if ((button == g_batteryButton && g_batteryPercentageText &&
+             g_batteryPercentageText.Visibility() == wux::Visibility::Visible) ||
+            (button == g_soundButton && g_settings.showVolumePercentage && g_soundContent)) {
+            const auto percentageContent = button == g_soundButton ? g_soundContent : g_batteryContent;
+            const bool vertical = percentageContent &&
+                percentageContent.Orientation() == wuc::Orientation::Vertical;
             // Battery is wider/taller than a normal tray item. Preserve the
             // native highlight's exact cross-axis size, rather than letting
             // a difference in outer battery size stretch or shrink it.
@@ -2860,6 +2992,8 @@ static void RemoveInjectedControls(wuc::Panel const& parent) {
     g_bluetoothIcon = {};
     g_networkIcon = {};
     g_soundIcon = {};
+    g_soundContent = nullptr;
+    g_soundPercentageText = nullptr;
     g_compactGroupedIcon = {};
     g_bluetoothTooltipCache.clear();
     g_networkTooltipCache.clear();
@@ -3102,6 +3236,19 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
     element.Height(g_trayButtonHeight);
     element.MinWidth(0);
     element.MaxWidth(g_trayButtonWidth);
+    if (element.Name() == L"SeparateQuickSettingsXamlSound" && g_settings.showVolumePercentage) {
+        const bool horizontal = IsBatteryLayoutHorizontal();
+        element.Width(horizontal ? NAN : g_trayButtonWidth);
+        element.MaxWidth(horizontal ? INFINITY : g_trayButtonWidth);
+        if (!horizontal) {
+            element.Height(NAN);
+            element.MinHeight(g_trayButtonHeight);
+            element.MaxHeight(INFINITY);
+            element.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            element.VerticalAlignment(wux::VerticalAlignment::Center);
+            return;
+        }
+    }
     if (element.Name() == L"SeparateQuickSettingsXamlBattery") {
         const bool horizontal = IsBatteryLayoutHorizontal();
         const bool percentage = ShouldShowBatteryPercentage();
@@ -3842,6 +3989,85 @@ static wuxm::Brush BatteryStatusBrush(PCWSTR resource, wu::Color fallback) {
     return wuxm::SolidColorBrush(fallback);
 }
 
+static void UpdateSoundPercentage(SoundState const& state) {
+    if (!g_soundPercentageText || !g_soundContent || !g_soundButton) return;
+    const bool showPercent = g_settings.showVolumePercentage;
+    const int percent = (std::clamp)(static_cast<int>(state.volume * 100.0f + 0.5f), 0, 100);
+    const std::wstring label = state.available ? std::to_wstring(percent) + L"%" : L"";
+    if (g_soundPercentageText.Text() != label) g_soundPercentageText.Text(label);
+    SetTrayForeground(g_soundPercentageText, MakeIconBrush());
+    const bool horizontal = IsBatteryLayoutHorizontal();
+    // Right-align inside the reserved width so the percent sign stays in place.
+    const double textWidth = horizontal && g_settings.constantVolumeWidth
+        ? g_soundPercentageReservedWidth : NAN;
+    const double currentTextWidth = g_soundPercentageText.Width();
+    if (std::isnan(textWidth) ? !std::isnan(currentTextWidth) : currentTextWidth != textWidth)
+        g_soundPercentageText.Width(textWidth);
+    g_soundPercentageText.TextAlignment(horizontal && g_settings.constantVolumeWidth
+        ? wux::TextAlignment::Right : wux::TextAlignment::Center);
+
+    if (auto content = g_soundContent) {
+        auto orientation = horizontal ? wuc::Orientation::Horizontal : wuc::Orientation::Vertical;
+        double spacing = horizontal ? 4 : 0;
+        // Glyph-layer panels are not the glyph/percentage layout panel.
+        // Do not copy their zero inter-layer spacing into the visible row.
+        if (content.Orientation() != orientation) content.Orientation(orientation);
+        if (content.Spacing() != spacing) content.Spacing(spacing);
+        // The fixed icon-only button already gets its inset from the native
+        // OmniButton template. Extra content margins consume the glyph's space
+        // and clip it inside that fixed width.
+        const double inset = showPercent && horizontal ? 8 : 0;
+        const auto margin = content.Margin();
+        if (margin.Left != inset || margin.Right != inset)
+            content.Margin({inset, 0, inset, 0});
+    }
+    const double iconWidth = g_trayButtonWidth;
+    const double soundWidth = showPercent && horizontal ? NAN : iconWidth;
+    const double soundMaxWidth = showPercent ? INFINITY : iconWidth;
+    if (g_soundButton.MaxWidth() != soundMaxWidth)
+        g_soundButton.MaxWidth(soundMaxWidth);
+    const double currentWidth = g_soundButton.Width();
+    if (std::isnan(soundWidth) ? !std::isnan(currentWidth) : currentWidth != soundWidth)
+        g_soundButton.Width(soundWidth);
+    // Two vertical rows must measure naturally instead of being clipped to
+    // the height captured from a single-glyph notification button.
+    const bool stackedPercentage = showPercent && !horizontal;
+    // Measure only our own stack. Do not change native template ancestors:
+    // those participate in the tray's shared layout and visual states.
+    double soundHeight = g_trayButtonHeight;
+    if (stackedPercentage && g_soundContent) {
+        g_soundContent.Measure({static_cast<float>(soundWidth), INFINITY});
+        double padding = 0;
+        if (auto control = g_soundButton.try_as<wuc::Control>()) {
+            const auto p = control.Padding();
+            padding = p.Top + p.Bottom;
+        }
+        // Keep the normal row's surrounding space, then add the percentage
+        // row. Merely max(normal row, glyph + text) often keeps the old height
+        // unchanged, squeezing both rows into one notification hit target.
+        const double extraRow = std::max(0.0,
+            static_cast<double>(g_soundContent.DesiredSize().Height) -
+            static_cast<double>(g_soundIcon.host.DesiredSize().Height));
+        soundHeight = std::max(g_trayButtonHeight,
+            std::max(g_trayButtonHeight + extraRow,
+                static_cast<double>(g_soundContent.DesiredSize().Height) + padding));
+    }
+    if (g_soundButton.MinHeight() != 0) g_soundButton.MinHeight(0);
+    if (g_soundButton.MaxHeight() != INFINITY) g_soundButton.MaxHeight(INFINITY);
+    if (g_soundButton.Height() != soundHeight) {
+        g_soundButton.Height(soundHeight);
+        g_soundButton.InvalidateMeasure();
+        if (g_trayPanel) g_trayPanel.InvalidateMeasure();
+        Wh_Log(L"Sound measured layout: horizontal=%d percentage=%d height=%.1f.",
+               horizontal, showPercent, soundHeight);
+    }
+    if (auto offset = g_soundPercentageText.RenderTransform().try_as<wuxm::TranslateTransform>()) {
+        const double y = horizontal ? -1 : 0;
+        if (offset.Y() != y) offset.Y(y);
+    }
+    ApplyHoverBackgroundMetrics(g_soundButton);
+}
+
 static void UpdateSeparateBatteryButton() {
     if (!g_batteryButton || !g_batteryIcon.primary) return;
     // Verified against the Windows Settings handler on this build. Read the
@@ -4517,6 +4743,7 @@ static void UpdateDynamicXamlIcons() {
 
         if (g_soundIcon.primary) {
             SoundState const& state = snapshot.sound;
+            UpdateSoundPercentage(state);
             const bool useOutputDeviceGlyph =
                 g_settings.soundIconFollowsOutputDevice && state.available && !state.muted;
             SetCachedTrayToolTip(g_soundButton, g_soundTooltipCache,
@@ -5145,6 +5372,7 @@ enum class TrayContextCommand : UINT {
     SoundTroubleshoot,
     QuickSettingsTaskManager,
     QuickSettingsTaskbarSettings,
+    QuickSettingsDisplaySettings,
     QuickSettingsSystemSettings,
     BatteryPowerSettings,
 };
@@ -5203,6 +5431,9 @@ static void ExecuteTrayContextCommand(TrayContextCommand command) {
             break;
         case TrayContextCommand::QuickSettingsTaskbarSettings:
             ExecuteAction(L"ms-settings:taskbar");
+            break;
+        case TrayContextCommand::QuickSettingsDisplaySettings:
+            ExecuteAction(L"ms-settings:display");
             break;
         case TrayContextCommand::QuickSettingsSystemSettings:
             ExecuteAction(L"ms-settings:");
@@ -5311,6 +5542,39 @@ static void AppendWinUiBluetoothContextMenu(wuc::MenuFlyout const& flyout) {
     }
 }
 
+static void SetPercentageMenuCheck(wuc::MenuFlyoutItem const& item, bool enabled);
+
+static void AppendSoundPercentageMenuItem(wuc::MenuFlyout const& flyout) {
+    auto pending = std::make_shared<bool>(false);
+    const auto closed = flyout.Closed([pending](auto const&, auto const&) {
+        if (g_unloading || !std::exchange(*pending, false)) return;
+        const bool enabled = !g_settings.showVolumePercentage;
+        Wh_SetIntValue(L"volumePercentageMenuOverride", enabled ? 1 : 0);
+        g_settings.showVolumePercentage = enabled;
+        // Rebuild after the menu's event has returned, so its handlers remain
+        // alive until the closing event and anchor animation are finished.
+        if (g_soundButton) g_soundButton.Dispatcher().RunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [] {
+                if (!g_unloading) ApplyXamlButtons();
+            });
+    });
+    g_contextMenuEventRevokers.push_back([weak = winrt::make_weak(flyout), closed] {
+        if (auto source = weak.get()) source.Closed(closed);
+    });
+    wuc::MenuFlyoutItem item;
+    item.Text(L"Volume percentage");
+    SetPercentageMenuCheck(item, g_settings.showVolumePercentage);
+    const auto clicked = item.Click([pending, weak = winrt::make_weak(flyout)](auto const&, auto const&) {
+        if (g_unloading) return;
+        *pending = true;
+        if (auto menu = weak.get()) menu.Hide();
+    });
+    g_contextMenuEventRevokers.push_back([weak = winrt::make_weak(item), clicked] {
+        if (auto source = weak.get()) source.Click(clicked);
+    });
+    flyout.Items().Append(item);
+}
+
 static void AppendWinUiSoundContextMenu(wuc::MenuFlyout const& flyout) {
     auto items = flyout.Items();
     if (g_settings.swapTroubleshootingWithBottom) {
@@ -5326,6 +5590,7 @@ static void AppendWinUiSoundContextMenu(wuc::MenuFlyout const& flyout) {
                            TrayContextCommand::SoundSettings, L"\xE713");
     AppendWinUiContextItem(items, L"Open volume mixer",
                            TrayContextCommand::SoundMixer, L"\xE9E9");
+    AppendSoundPercentageMenuItem(flyout);
     AppendWinUiSeparator(items);
 
     wuc::MenuFlyoutSubItem outputSubmenu;
@@ -5445,8 +5710,11 @@ static void AppendWinUiQuickSettingsContextMenu(wuc::MenuFlyout const& flyout) {
                            TrayContextCommand::QuickSettingsTaskManager,
                            L"\xE9D9");
     AppendWinUiSeparator(items);
-    AppendWinUiContextItem(items, L"Taskbar settings",
-                           TrayContextCommand::QuickSettingsTaskbarSettings,
+    AppendWinUiContextItem(items,
+                           g_settings.controlCenterOpensProject ? L"Display settings" : L"Taskbar settings",
+                           g_settings.controlCenterOpensProject
+                               ? TrayContextCommand::QuickSettingsDisplaySettings
+                               : TrayContextCommand::QuickSettingsTaskbarSettings,
                            L"\xE713");
     AppendWinUiContextItem(items, L"System settings",
                            TrayContextCommand::QuickSettingsSystemSettings,
@@ -5632,7 +5900,7 @@ static void AppendWinUiEnergySaverItem(wuc::MenuFlyout const& flyout) {
     flyout.Items().Append(item);
 }
 
-static void SetBatteryPercentageCheck(wuc::MenuFlyoutItem const& item, bool enabled) {
+static void SetPercentageMenuCheck(wuc::MenuFlyoutItem const& item, bool enabled) {
     // Use the shared icon column; ToggleMenuFlyoutItem reserves a separate one.
     wuc::FontIcon icon;
     icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
@@ -5656,7 +5924,7 @@ static void RefreshBatteryMenuItems() {
         if (item.IsEnabled() != (state >= 0)) item.IsEnabled(state >= 0);
         const winrt::hstring status = state == 1 ? L"Checked" : L"Unchecked";
         if (wuxa::AutomationProperties::GetItemStatus(item) != status)
-            SetBatteryPercentageCheck(item, state == 1);
+            SetPercentageMenuCheck(item, state == 1);
     }
 }
 
@@ -5674,7 +5942,7 @@ static void AppendWinUiBatteryPercentageItem(wuc::MenuFlyout const& flyout) {
     wuc::MenuFlyoutItem item;
     item.Text(L"Battery percentage");
     const int state = g_batteryPercentageEnabled.load();
-    SetBatteryPercentageCheck(item, state == 1);
+    SetPercentageMenuCheck(item, state == 1);
     item.IsEnabled(state >= 0);
     g_batteryPercentageMenuItem = winrt::make_weak(item);
     {
@@ -6548,6 +6816,12 @@ static void AttachTrayButtonHandlers(wux::FrameworkElement const& element,
             SuppressMiddleClickTap(kind);
             if (kind == ButtonKind::Sound && g_settings.soundMiddleClickToggleMute) {
                 ToggleDefaultEndpointMute();
+            } else if (kind == ButtonKind::Bluetooth && g_settings.bluetoothMiddleClickToggle) {
+                ToggleTrayRadio(wdr::RadioKind::Bluetooth);
+            } else if (kind == ButtonKind::Network && g_settings.networkMiddleClickToggle) {
+                ToggleTrayRadio(wdr::RadioKind::WiFi);
+            } else if (kind == ButtonKind::Battery && g_settings.batteryMiddleClickToggle) {
+                QueueEnergySaverWork(1);
             } else {
                 std::wstring action;
                 switch (kind) {
@@ -6796,6 +7070,66 @@ static OrderedTrayButtons CreateTrayButtons() {
         g_soundButton = CreateTrayButton(ButtonKind::Sound, L"\xE767",
                                          L"SeparateQuickSettingsXamlSound",
                                          L"Sound");
+        if (g_settings.showVolumePercentage) {
+            if (auto items = g_soundButton.try_as<wuc::ItemsControl>()) items.Items().Clear();
+            else if (auto control = g_soundButton.try_as<wuc::ContentControl>()) control.Content(nullptr);
+        wuc::StackPanel content;
+        g_soundContent = content;
+        content.Name(L"SeparateTraySoundContent");
+        content.Orientation(wuc::Orientation::Horizontal);
+        content.VerticalAlignment(wux::VerticalAlignment::Center);
+        content.Spacing(4);
+        // Native battery content has breathing room inside its hover surface.
+        content.Margin({8, 0, 8, 0});
+        content.Children().Append(g_soundIcon.host);
+        g_soundPercentageText = wuc::TextBlock();
+        g_soundPercentageText.Name(L"SeparateTraySoundPercentage");
+        // Percentage is caption text, not a 16-DIP icon glyph. Let the tray's
+        // caption style supply typography; retain a 12-DIP fallback if absent.
+        g_soundPercentageText.FontSize(12);
+        try {
+            auto style = wux::Application::Current().Resources().TryLookup(
+                winrt::box_value(L"CaptionTextBlockStyle")).try_as<wux::Style>();
+            if (style) {
+                g_soundPercentageText.Style(style);
+                g_soundPercentageText.ClearValue(wuc::TextBlock::FontSizeProperty());
+            }
+        } catch (...) {
+            // The taskbar can be created before application resources exist.
+        }
+        if (g_settings.constantVolumeWidth) {
+            // Measure every valid label with the actual caption typography,
+            // including proportional digits, rather than assuming 100% is widest.
+            wuc::TextBlock probe;
+            probe.FontFamily(g_soundPercentageText.FontFamily());
+            probe.FontSize(g_soundPercentageText.FontSize());
+            probe.FontWeight(g_soundPercentageText.FontWeight());
+            probe.FontStyle(g_soundPercentageText.FontStyle());
+            probe.FontStretch(g_soundPercentageText.FontStretch());
+            probe.CharacterSpacing(g_soundPercentageText.CharacterSpacing());
+            g_soundPercentageReservedWidth = 0;
+            for (int percent = 0; percent <= 100; ++percent) {
+                probe.Text(std::to_wstring(percent) + L"%");
+                probe.Measure({INFINITY, INFINITY});
+                g_soundPercentageReservedWidth = (std::max)(g_soundPercentageReservedWidth,
+                    static_cast<double>(probe.DesiredSize().Width));
+            }
+            g_soundPercentageReservedWidth = std::ceil(g_soundPercentageReservedWidth);
+            g_soundPercentageText.Width(g_soundPercentageReservedWidth);
+            g_soundPercentageText.TextAlignment(wux::TextAlignment::Right);
+        }
+        g_soundPercentageText.VerticalAlignment(wux::VerticalAlignment::Center);
+        g_soundPercentageText.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        wuxm::TranslateTransform percentageOffset;
+        // Keep the full inter-item gap; only a small baseline correction is
+        // needed. These are XAML DIPs, scaled by the monitor's DPI.
+        percentageOffset.Y(-1);
+        g_soundPercentageText.RenderTransform(percentageOffset);
+        g_soundPercentageText.Visibility(wux::Visibility::Visible);
+        content.Children().Append(g_soundPercentageText);
+        SetElementIcon(g_soundButton, content);
+        ApplyTrayButtonMetrics(g_soundButton);
+        }
     } else {
         g_soundButton = nullptr;
     }
@@ -6817,6 +7151,151 @@ static OrderedTrayButtons CreateTrayButtons() {
     }
 
     return buttons;
+}
+
+// Opacity preserves layout and hit testing. Visibility::Collapsed removes the
+// click target and its layout space. Do not clear Content or change templates:
+// the native chevron keeps its overflow command, tooltip, and accessibility.
+struct ChevronStyle : std::enable_shared_from_this<ChevronStyle> {
+    struct SavedProperty {
+        wux::FrameworkElement owner{nullptr};
+        wux::DependencyProperty property{nullptr};
+        wf::IInspectable local{nullptr};
+        wux::Data::BindingBase binding{nullptr};
+        void Capture(wux::FrameworkElement const& element, wux::DependencyProperty const& prop) {
+            owner = element; property = prop;
+            local = owner.ReadLocalValue(property);
+            if (auto expression = owner.GetBindingExpression(property)) binding = expression.ParentBinding();
+        }
+        void Restore() {
+            if (!owner) return;
+            if (binding) owner.SetBinding(property, binding);
+            else if (local == wux::DependencyProperty::UnsetValue()) owner.ClearValue(property);
+            else owner.SetValue(property, local);
+            owner = nullptr; property = nullptr; local = nullptr; binding = nullptr;
+        }
+    };
+    wux::FrameworkElement button{nullptr};
+    SavedProperty hiddenPart;
+    SavedProperty glyphFontSize;
+    std::wstring mode;
+    winrt::event_token layoutUpdated{};
+    int64_t opacityChanged = 0, visibilityChanged = 0;
+    bool watchingOpacity = false, watchingVisibility = false, applying = false;
+
+    static wux::FrameworkElement FindGlyph(wux::DependencyObject const& root, int depth = 0) {
+        if (!root || depth > 12) return nullptr;
+        if (auto fe = root.try_as<wux::FrameworkElement>()) {
+            auto type = winrt::get_class_name(fe);
+            if (type == L"SystemTray.TextIconContent" || fe.try_as<wuc::TextBlock>() ||
+                fe.try_as<wuc::IconElement>() || fe.try_as<wuc::Image>() ||
+                fe.try_as<wux::Shapes::Path>() ||
+                type == L"Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer") return fe;
+        }
+        for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(root); i < count; ++i)
+            if (auto found = FindGlyph(wuxm::VisualTreeHelper::GetChild(root, i), depth + 1)) return found;
+        return nullptr;
+    }
+
+    static wuc::TextBlock FindSizeTarget(wux::DependencyObject const& root, int depth = 0) {
+        if (!root || depth > 12) return nullptr;
+        if (auto text = root.try_as<wuc::TextBlock>(); text && text.Name() == L"InnerTextBlock") {
+            auto parent = wuxm::VisualTreeHelper::GetParent(text).try_as<wux::FrameworkElement>();
+            if (parent && parent.Name() == L"Base" &&
+                winrt::get_class_name(parent) == L"SystemTray.AdaptiveTextBlock") return text;
+        }
+        for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(root); i < count; ++i)
+            if (auto found = FindSizeTarget(wuxm::VisualTreeHelper::GetChild(root, i), depth + 1)) return found;
+        return nullptr;
+    }
+
+    void Apply() {
+        if (applying || g_unloading) return;
+        applying = true;
+        try {
+            if (g_settings.increaseChevronSize) {
+                if (glyphFontSize.owner && !glyphFontSize.owner.XamlRoot()) glyphFontSize.Restore();
+                if (!glyphFontSize.owner) {
+                    if (auto text = FindSizeTarget(button)) glyphFontSize.Capture(text, wuc::TextBlock::FontSizeProperty());
+                }
+                if (auto text = glyphFontSize.owner.try_as<wuc::TextBlock>(); text && text.FontSize() != 16) text.FontSize(16);
+            }
+            if (mode == L"glyph") {
+                // A theme or taskbar rebuild can replace just the icon template.
+                if (hiddenPart.owner && !hiddenPart.owner.XamlRoot()) hiddenPart.Restore();
+                if (!hiddenPart.owner) {
+                    if (auto glyph = FindGlyph(button)) hiddenPart.Capture(glyph, wux::UIElement::OpacityProperty());
+                }
+                if (hiddenPart.owner && hiddenPart.owner.Opacity() != 0) hiddenPart.owner.Opacity(0);
+            } else if (mode == L"glyph_and_highlight") {
+                if (button.Opacity() != 0) button.Opacity(0);
+            } else if (mode == L"enabled") {
+                if (button.Visibility() != wux::Visibility::Collapsed) button.Visibility(wux::Visibility::Collapsed);
+            }
+        } catch (...) {
+            Wh_Log(L"Chevron style failed: %08X", winrt::to_hresult());
+        }
+        applying = false;
+    }
+
+    void Attach(wux::FrameworkElement const& element, std::wstring const& selectedMode) {
+        button = element;
+        mode = selectedMode;
+        auto weak = weak_from_this();
+        if (mode == L"glyph" || g_settings.increaseChevronSize) {
+            // The glyph may not exist until the native template is loaded.
+            layoutUpdated = button.LayoutUpdated([weak](auto const&, auto const&) {
+                if (auto self = weak.lock()) self->Apply();
+            });
+        }
+        if (mode == L"glyph_and_highlight") {
+            hiddenPart.Capture(button, wux::UIElement::OpacityProperty());
+            opacityChanged = button.RegisterPropertyChangedCallback(wux::UIElement::OpacityProperty(),
+                [weak](auto const&, auto const&) { if (auto self = weak.lock()) self->Apply(); });
+            watchingOpacity = true;
+        } else if (mode == L"enabled") {
+            hiddenPart.Capture(button, wux::UIElement::VisibilityProperty());
+            visibilityChanged = button.RegisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(),
+                [weak](auto const&, auto const&) { if (auto self = weak.lock()) self->Apply(); });
+            watchingVisibility = true;
+        }
+        Apply();
+    }
+
+    void Remove() noexcept {
+        applying = true;
+        auto attempt = [](auto&& action) {
+            try { action(); } catch (...) { Wh_Log(L"Chevron restore failed: %08X", winrt::to_hresult()); }
+        };
+        if (button) {
+            if (layoutUpdated.value) attempt([&] { button.LayoutUpdated(layoutUpdated); });
+            if (watchingOpacity) attempt([&] { button.UnregisterPropertyChangedCallback(wux::UIElement::OpacityProperty(), opacityChanged); });
+            if (watchingVisibility) attempt([&] { button.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(), visibilityChanged); });
+        }
+        attempt([&] { hiddenPart.Restore(); });
+        attempt([&] { glyphFontSize.Restore(); });
+        button = nullptr;
+    }
+};
+[[clang::no_destroy]] static std::vector<std::shared_ptr<ChevronStyle>> g_chevronStyles;
+
+static void RestoreChevronStyles() {
+    for (auto const& style : g_chevronStyles) style->Remove();
+    g_chevronStyles.clear();
+}
+
+static void ApplyChevronStyles(wux::DependencyObject const& root, int depth = 0) {
+    if (!root || depth > 48 || (g_settings.hideChevron == L"disabled" && !g_settings.increaseChevronSize)) return;
+    if (auto element = root.try_as<wux::FrameworkElement>(); element &&
+        winrt::get_class_name(element) == L"SystemTray.ChevronIconView") {
+        for (auto const& style : g_chevronStyles) if (style->button == element) return;
+        auto style = std::make_shared<ChevronStyle>();
+        g_chevronStyles.push_back(style);
+        style->Attach(element, g_settings.hideChevron);
+        return;
+    }
+    for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(root); i < count; ++i)
+        ApplyChevronStyles(wuxm::VisualTreeHelper::GetChild(root, i), depth + 1);
 }
 
 static bool TryInjectBesideControlCenterButton(wux::FrameworkElement const& root) {
@@ -6951,6 +7430,8 @@ static bool ApplyXamlButtons() {
     Wh_Log(L"ApplyXamlButtons: root=%s#%s",
            winrt::get_class_name(root).c_str(), root.Name().c_str());
 
+    ApplyChevronStyles(root);
+
     auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
     auto trayGrid = trayFrame.try_as<wuc::Grid>();
     if (!trayGrid) {
@@ -7051,6 +7532,7 @@ static void ApplyXamlButtonsWithRetry() {
 }
 
 static void RemoveXamlButtons() {
+    RestoreChevronStyles();
     // Settings reapplication rebuilds XAML only. Its status subscriptions are
     // independent of the settings and must stay alive rather than making the
     // taskbar thread wait for an in-flight RPC snapshot.
@@ -7131,6 +7613,8 @@ static void RemoveXamlButtons() {
         g_bluetoothIcon = {};
         g_networkIcon = {};
         g_soundIcon = {};
+    g_soundContent = nullptr;
+    g_soundPercentageText = nullptr;
         g_originalGroupedButton = nullptr;
     } catch (...) {
         Wh_Log(L"RemoveXamlButtons error: 0x%08X", winrt::to_hresult());
@@ -7141,6 +7625,8 @@ static void RemoveXamlButtons() {
     g_bluetoothButton = g_networkButton = g_soundButton = g_batteryButton = nullptr;
     g_compactGroupedButton = g_trayControlCenterButton = g_originalGroupedButton = nullptr;
     g_bluetoothIcon = {}; g_networkIcon = {}; g_soundIcon = {};
+    g_soundContent = nullptr;
+    g_soundPercentageText = nullptr;
     g_batteryIcon = {}; g_compactGroupedIcon = {};
     g_batteryLeafIcon = nullptr;
     g_batteryPercentageText = nullptr;
