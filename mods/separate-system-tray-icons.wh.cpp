@@ -55,19 +55,14 @@ Enable it to reserve space for every volume value and right-align the text,
 keeping the button width and the percent sign's position steady. With it off,
 the button fits the current percentage text.
 
-The default middle-click actions are **Toggle mute** for Sound,
-**Toggle Bluetooth** for Bluetooth, **Toggle Wi-Fi** for Network, and
-**Toggle Energy saver** for Battery. Each can instead use **Custom action**.
+Sound defaults to **Toggle mute** for middle-click. Bluetooth, Network, and
+Battery default to **Custom action**, preserving existing custom commands;
+an empty command does nothing. Their optional built-in actions are **Toggle
+Bluetooth**, **Toggle Wi-Fi**, and **Toggle Energy saver**, respectively.
 Toggle Wi-Fi leaves Ethernet connections unchanged.
 
-The **Chevron** settings group contains **Hide chevron** and **Increase
-chevron size**. Increasing the size sets the arrow to 16 px to match the tray
-icons; it is off by default.
-
-**Hide chevron** controls the hidden-icons arrow. **Disabled** keeps it unchanged;
-**Glyph** hides only the arrow and retains the button's hover highlight;
-**Glyph and highlight** makes the button invisible while keeping its space and
-click target; **Enabled** removes the entire button and its space.
+**Increase chevron size**, at the bottom of settings, sets the arrow to 16 px
+to match the tray icons. It is off by default.
 
 **Icon padding** adds horizontal or vertical space around each tray button.
 Both values default to 0 and apply to all five buttons. This changes spacing
@@ -296,7 +291,7 @@ SOFTWARE.
     - changeGlyphWhenDisabled: true
       $name: Show unavailable Bluetooth indicator
       $description: Change the Bluetooth icon appearance while Bluetooth is off.
-    - middleClickAction: toggle_bluetooth
+    - middleClickAction: custom
       $name: Middle-click action
       $options:
       - toggle_bluetooth: Toggle Bluetooth
@@ -311,7 +306,7 @@ SOFTWARE.
     - speedTestUrl: "https://www.speedtest.net/run"
       $name: Speed test custom URL
       $description: Website opened by Perform speed test. Enter a full http:// or https:// address.
-    - middleClickAction: toggle_wifi
+    - middleClickAction: custom
       $name: Middle-click action
       $description: Toggle Wi-Fi turns wireless networking on or off; Ethernet connections are unaffected.
       $options:
@@ -364,7 +359,7 @@ SOFTWARE.
     - customAction: "ms-settings:powersleep"
       $name: Custom action
       $description: "Used when Custom action is selected. Supports file paths, ~ folders, cmd:, ps:, powershell:, key:, hotkey:, web:, and ms-settings: actions."
-    - middleClickAction: toggle_energy_saver
+    - middleClickAction: custom
       $name: Middle-click action
       $options:
       - toggle_energy_saver: Toggle Energy saver
@@ -373,19 +368,6 @@ SOFTWARE.
       $name: Custom middle-click action
       $description: "Used when Middle-click action is Custom action. Supports the same action formats as Control Center custom actions."
   $name: Battery
-- chevron:
-    - hideChevron: disabled
-      $name: Hide chevron
-      $description: "Choose whether to hide the hidden-icons arrow, its hover highlight, or the entire button. Invisible buttons remain clickable in the two glyph modes."
-      $options:
-      - disabled: Disabled
-      - glyph: Glyph only
-      - glyph_and_highlight: Glyph and highlight only
-      - enabled: Enabled
-    - increaseSize: false
-      $name: Increase chevron size
-      $description: Increase the chevron glyph to 16 px to match the tray icons' size.
-  $name: Chevron
 - visibility:
     - showSoundButton: true
       $name: Sound
@@ -419,6 +401,9 @@ SOFTWARE.
 - swapTroubleshootingWithBottom: false
   $name: Swap troubleshooting position
   $description: "Move troubleshooting to the bottom of Bluetooth, network, and sound menus, swapping it with the bottom action(s)."
+- increaseChevronSize: false
+  $name: Increase chevron size
+  $description: Increase the chevron glyph to 16 px to match the tray icons size.
 */
 // ==/WindhawkModSettings==
 
@@ -503,12 +488,12 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 struct Settings {
     bool soundMiddleClickToggleMute = true;
     std::wstring soundMiddleClickAction;
-    bool bluetoothMiddleClickToggle = true;
+    bool bluetoothMiddleClickToggle = false;
     std::wstring bluetoothMiddleClickAction;
-    bool networkMiddleClickToggle = true;
+    bool networkMiddleClickToggle = false;
     std::wstring networkMiddleClickAction;
     std::wstring controlCenterMiddleClickAction;
-    bool batteryMiddleClickToggle = true;
+    bool batteryMiddleClickToggle = false;
     std::wstring batteryMiddleClickAction;
     std::wstring soundClickAction = L"sound_output";
     int volumeWheelStep = 0;
@@ -536,7 +521,6 @@ struct Settings {
     bool constantVolumeWidth = false;
     std::wstring buttonOrder = L"sound,bluetooth,network,controlcenter,battery";
     bool swapTroubleshootingWithBottom = false;
-    std::wstring hideChevron = L"disabled";
     bool increaseChevronSize = false;
     int iconPaddingHorizontal = 0;
     int iconPaddingVertical = 0;
@@ -815,17 +799,16 @@ static std::wstring LoadButtonOrderSetting() {
 }
 
 static void LoadSettings() {
-    g_settings.hideChevron = GetStringSettingWithDefault(L"chevron.hideChevron", L"disabled");
-    g_settings.increaseChevronSize = Wh_GetIntSetting(L"chevron.increaseSize") != 0;
+    g_settings.increaseChevronSize = Wh_GetIntSetting(L"increaseChevronSize") != 0;
     g_settings.soundMiddleClickToggleMute =
         GetStringSettingWithDefault(L"sound.middleClickAction", L"toggle_mute") != L"custom";
     g_settings.soundMiddleClickAction = GetStringSettingWithDefault(L"sound.middleClickCustomAction", L"");
-    g_settings.bluetoothMiddleClickToggle = GetStringSettingWithDefault(L"bluetooth.middleClickAction", L"toggle_bluetooth") != L"custom";
+    g_settings.bluetoothMiddleClickToggle = GetStringSettingWithDefault(L"bluetooth.middleClickAction", L"custom") != L"custom";
     g_settings.bluetoothMiddleClickAction = GetStringSettingWithDefault(L"bluetooth.middleClickCustomAction", L"");
-    g_settings.networkMiddleClickToggle = GetStringSettingWithDefault(L"network.middleClickAction", L"toggle_wifi") != L"custom";
+    g_settings.networkMiddleClickToggle = GetStringSettingWithDefault(L"network.middleClickAction", L"custom") != L"custom";
     g_settings.networkMiddleClickAction = GetStringSettingWithDefault(L"network.middleClickCustomAction", L"");
     g_settings.controlCenterMiddleClickAction = GetStringSettingWithDefault(L"controlCenter.middleClickCustomAction", L"");
-    g_settings.batteryMiddleClickToggle = GetStringSettingWithDefault(L"battery.middleClickAction", L"toggle_energy_saver") != L"custom";
+    g_settings.batteryMiddleClickToggle = GetStringSettingWithDefault(L"battery.middleClickAction", L"custom") != L"custom";
     g_settings.batteryMiddleClickAction = GetStringSettingWithDefault(L"battery.middleClickCustomAction", L"");
     g_settings.batteryCustomAction = GetStringSettingWithDefault(L"battery.actionMode", L"custom") == L"custom";
     g_settings.batteryAction = g_settings.batteryCustomAction
@@ -4787,6 +4770,7 @@ static std::atomic<HANDLE> g_statusRefreshEvent{nullptr};
 static std::atomic<unsigned> g_statusRefreshReasons{0};
 static constexpr UINT kRefreshMessage = WM_APP + 164;
 static constexpr UINT kDestroyRefreshWindowMessage = kRefreshMessage + 2;
+static constexpr UINT kRebuildButtonsMessage = kRefreshMessage + 3;
 static constexpr PCWSTR kRefreshWindowClass = L"SeparateSystemTrayIcons.Refresh";
 
 static void PostTrayRefresh(bool radiosChanged) {
@@ -4831,6 +4815,10 @@ static void RequestBluetoothTooltipRefresh() {
 
 static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
                                              WPARAM wp, LPARAM lp) {
+    if (message == kRebuildButtonsMessage) {
+        if (!g_unloading) ApplyXamlButtons();
+        return 0;
+    }
     if (message == WM_NCDESTROY) {
         // Runs on the window/hook owner thread, including thread shutdown.
         AcquireSRWLockExclusive(&g_refreshLock);
@@ -5551,12 +5539,12 @@ static void AppendSoundPercentageMenuItem(wuc::MenuFlyout const& flyout) {
         const bool enabled = !g_settings.showVolumePercentage;
         Wh_SetIntValue(L"volumePercentageMenuOverride", enabled ? 1 : 0);
         g_settings.showVolumePercentage = enabled;
-        // Rebuild after the menu's event has returned, so its handlers remain
-        // alive until the closing event and anchor animation are finished.
-        if (g_soundButton) g_soundButton.Dispatcher().RunAsync(
-            winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [] {
-                if (!g_unloading) ApplyXamlButtons();
-            });
+        // The taskbar-owned refresh window is destroyed before unload.
+        // A posted message cannot retain an untracked mod delegate.
+        AcquireSRWLockShared(&g_refreshLock);
+        if (!g_unloading && g_refreshWindow)
+            PostMessageW(g_refreshWindow, kRebuildButtonsMessage, 0, 0);
+        ReleaseSRWLockShared(&g_refreshLock);
     });
     g_contextMenuEventRevokers.push_back([weak = winrt::make_weak(flyout), closed] {
         if (auto source = weak.get()) source.Closed(closed);
@@ -7153,9 +7141,7 @@ static OrderedTrayButtons CreateTrayButtons() {
     return buttons;
 }
 
-// Opacity preserves layout and hit testing. Visibility::Collapsed removes the
-// click target and its layout space. Do not clear Content or change templates:
-// the native chevron keeps its overflow command, tooltip, and accessibility.
+// Optional 16-DIP chevron glyph; preserve the native button and interaction.
 struct ChevronStyle : std::enable_shared_from_this<ChevronStyle> {
     struct SavedProperty {
         wux::FrameworkElement owner{nullptr};
@@ -7176,26 +7162,9 @@ struct ChevronStyle : std::enable_shared_from_this<ChevronStyle> {
         }
     };
     wux::FrameworkElement button{nullptr};
-    SavedProperty hiddenPart;
     SavedProperty glyphFontSize;
-    std::wstring mode;
     winrt::event_token layoutUpdated{};
-    int64_t opacityChanged = 0, visibilityChanged = 0;
-    bool watchingOpacity = false, watchingVisibility = false, applying = false;
-
-    static wux::FrameworkElement FindGlyph(wux::DependencyObject const& root, int depth = 0) {
-        if (!root || depth > 12) return nullptr;
-        if (auto fe = root.try_as<wux::FrameworkElement>()) {
-            auto type = winrt::get_class_name(fe);
-            if (type == L"SystemTray.TextIconContent" || fe.try_as<wuc::TextBlock>() ||
-                fe.try_as<wuc::IconElement>() || fe.try_as<wuc::Image>() ||
-                fe.try_as<wux::Shapes::Path>() ||
-                type == L"Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer") return fe;
-        }
-        for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(root); i < count; ++i)
-            if (auto found = FindGlyph(wuxm::VisualTreeHelper::GetChild(root, i), depth + 1)) return found;
-        return nullptr;
-    }
+    bool applying = false;
 
     static wuc::TextBlock FindSizeTarget(wux::DependencyObject const& root, int depth = 0) {
         if (!root || depth > 12) return nullptr;
@@ -7213,67 +7182,36 @@ struct ChevronStyle : std::enable_shared_from_this<ChevronStyle> {
         if (applying || g_unloading) return;
         applying = true;
         try {
-            if (g_settings.increaseChevronSize) {
-                if (glyphFontSize.owner && !glyphFontSize.owner.XamlRoot()) glyphFontSize.Restore();
-                if (!glyphFontSize.owner) {
-                    if (auto text = FindSizeTarget(button)) glyphFontSize.Capture(text, wuc::TextBlock::FontSizeProperty());
+            if (glyphFontSize.owner && !glyphFontSize.owner.XamlRoot()) glyphFontSize.Restore();
+            if (!glyphFontSize.owner) {
+                if (auto text = FindSizeTarget(button)) {
+                    glyphFontSize.Capture(text, wuc::TextBlock::FontSizeProperty());
+                    text.FontSize(16);
                 }
-                if (auto text = glyphFontSize.owner.try_as<wuc::TextBlock>(); text && text.FontSize() != 16) text.FontSize(16);
             }
-            if (mode == L"glyph") {
-                // A theme or taskbar rebuild can replace just the icon template.
-                if (hiddenPart.owner && !hiddenPart.owner.XamlRoot()) hiddenPart.Restore();
-                if (!hiddenPart.owner) {
-                    if (auto glyph = FindGlyph(button)) hiddenPart.Capture(glyph, wux::UIElement::OpacityProperty());
-                }
-                if (hiddenPart.owner && hiddenPart.owner.Opacity() != 0) hiddenPart.owner.Opacity(0);
-            } else if (mode == L"glyph_and_highlight") {
-                if (button.Opacity() != 0) button.Opacity(0);
-            } else if (mode == L"enabled") {
-                if (button.Visibility() != wux::Visibility::Collapsed) button.Visibility(wux::Visibility::Collapsed);
-            }
-        } catch (...) {
-            Wh_Log(L"Chevron style failed: %08X", winrt::to_hresult());
-        }
+            // Apply once per template instance, rather than fighting Styler
+            // whenever another style changes the same property.
+        } catch (...) { Wh_Log(L"Chevron size failed: %08X", winrt::to_hresult()); }
         applying = false;
     }
 
-    void Attach(wux::FrameworkElement const& element, std::wstring const& selectedMode) {
+    void Attach(wux::FrameworkElement const& element) {
         button = element;
-        mode = selectedMode;
         auto weak = weak_from_this();
-        if (mode == L"glyph" || g_settings.increaseChevronSize) {
-            // The glyph may not exist until the native template is loaded.
-            layoutUpdated = button.LayoutUpdated([weak](auto const&, auto const&) {
-                if (auto self = weak.lock()) self->Apply();
-            });
-        }
-        if (mode == L"glyph_and_highlight") {
-            hiddenPart.Capture(button, wux::UIElement::OpacityProperty());
-            opacityChanged = button.RegisterPropertyChangedCallback(wux::UIElement::OpacityProperty(),
-                [weak](auto const&, auto const&) { if (auto self = weak.lock()) self->Apply(); });
-            watchingOpacity = true;
-        } else if (mode == L"enabled") {
-            hiddenPart.Capture(button, wux::UIElement::VisibilityProperty());
-            visibilityChanged = button.RegisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(),
-                [weak](auto const&, auto const&) { if (auto self = weak.lock()) self->Apply(); });
-            watchingVisibility = true;
-        }
+        layoutUpdated = button.LayoutUpdated([weak](auto const&, auto const&) {
+            if (auto self = weak.lock()) self->Apply();
+        });
         Apply();
     }
 
     void Remove() noexcept {
         applying = true;
-        auto attempt = [](auto&& action) {
-            try { action(); } catch (...) { Wh_Log(L"Chevron restore failed: %08X", winrt::to_hresult()); }
-        };
-        if (button) {
-            if (layoutUpdated.value) attempt([&] { button.LayoutUpdated(layoutUpdated); });
-            if (watchingOpacity) attempt([&] { button.UnregisterPropertyChangedCallback(wux::UIElement::OpacityProperty(), opacityChanged); });
-            if (watchingVisibility) attempt([&] { button.UnregisterPropertyChangedCallback(wux::UIElement::VisibilityProperty(), visibilityChanged); });
-        }
-        attempt([&] { hiddenPart.Restore(); });
-        attempt([&] { glyphFontSize.Restore(); });
+        try {
+            if (button && layoutUpdated.value) button.LayoutUpdated(layoutUpdated);
+            // Preserve a later style applied by another mod.
+            if (auto text = glyphFontSize.owner.try_as<wuc::TextBlock>(); text && text.FontSize() == 16)
+                glyphFontSize.Restore();
+        } catch (...) { Wh_Log(L"Chevron size restore failed: %08X", winrt::to_hresult()); }
         button = nullptr;
     }
 };
@@ -7285,13 +7223,13 @@ static void RestoreChevronStyles() {
 }
 
 static void ApplyChevronStyles(wux::DependencyObject const& root, int depth = 0) {
-    if (!root || depth > 48 || (g_settings.hideChevron == L"disabled" && !g_settings.increaseChevronSize)) return;
+    if (!root || depth > 48 || !g_settings.increaseChevronSize) return;
     if (auto element = root.try_as<wux::FrameworkElement>(); element &&
         winrt::get_class_name(element) == L"SystemTray.ChevronIconView") {
         for (auto const& style : g_chevronStyles) if (style->button == element) return;
         auto style = std::make_shared<ChevronStyle>();
         g_chevronStyles.push_back(style);
-        style->Attach(element, g_settings.hideChevron);
+        style->Attach(element);
         return;
     }
     for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(root); i < count; ++i)
