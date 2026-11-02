@@ -2524,14 +2524,21 @@ D2D1_COLOR_F GetAccentColor() {
 // The switcher (UI thread).
 
 // The GPU the monitor is connected to, and optionally its output for that
-// monitor. On laptops with two GPUs, rendering on the other one means every
-// frame is copied between them.
+// monitor, from the given DXGI factory or a new one. On laptops with two
+// GPUs, rendering on the other one means every frame is copied between them.
 com_ptr<IDXGIAdapter1> FindMonitorAdapter(
     HMONITOR monitor,
-    com_ptr<IDXGIOutput>* monitorOutput = nullptr) {
-    com_ptr<IDXGIFactory1> factory;
-    if (!monitor || FAILED(CreateDXGIFactory1(IID_PPV_ARGS(factory.put())))) {
+    com_ptr<IDXGIOutput>* monitorOutput = nullptr,
+    IDXGIFactory1* factory = nullptr) {
+    com_ptr<IDXGIFactory1> newFactory;
+    if (!monitor) {
         return nullptr;
+    }
+    if (!factory) {
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(newFactory.put())))) {
+            return nullptr;
+        }
+        factory = newFactory.get();
     }
     com_ptr<IDXGIAdapter1> adapter;
     for (UINT i = 0; SUCCEEDED(factory->EnumAdapters1(i, adapter.put()));
@@ -2563,11 +2570,11 @@ bool GetMonitorAdapterLuid(HMONITOR monitor, LUID* luid) {
     return true;
 }
 
-// Whether Windows shows the monitor in HDR ("Use HDR" is on for it). Looked up
-// with a new DXGI factory each time, since one keeps what it saw first.
-bool IsHdrMonitor(HMONITOR monitor) {
+// Whether Windows shows the monitor in HDR ("Use HDR" is on for it). The
+// factory must be current (see UpdateHdr): one keeps what it saw when made.
+bool IsHdrMonitor(HMONITOR monitor, IDXGIFactory1* factory) {
     com_ptr<IDXGIOutput> output;
-    if (!FindMonitorAdapter(monitor, &output) || !output) {
+    if (!FindMonitorAdapter(monitor, &output, factory) || !output) {
         return false;
     }
     auto output6 = output.try_as<IDXGIOutput6>();
@@ -2620,11 +2627,16 @@ float GetSdrWhiteLevel(HMONITOR monitor) {
     return 1;
 }
 
-// Whether the window covers its whole monitor (a full-screen game or video),
-// and which monitor.
+// Whether the window is full screen like a game or a video: it covers its
+// whole monitor, and has no frame and isn't maximized (a maximized window's
+// frame goes past its monitor's edges too, e.g. with the taskbar hidden).
+// Also which monitor.
 bool IsFullScreenWindow(HWND hwnd, HMONITOR* monitor = nullptr) {
-    HMONITOR windowMonitor =
-        hwnd ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) : nullptr;
+    if (!hwnd || IsZoomed(hwnd) ||
+        (GetWindowLongPtrW(hwnd, GWL_STYLE) & (WS_CAPTION | WS_THICKFRAME))) {
+        return false;
+    }
+    HMONITOR windowMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
     MONITORINFO info{sizeof(info)};
     RECT rect;
     if (!windowMonitor || !GetMonitorInfoW(windowMonitor, &info) ||
@@ -2639,14 +2651,31 @@ bool IsFullScreenWindow(HWND hwnd, HMONITOR* monitor = nullptr) {
     return true;
 }
 
-// Sets a gamma transfer effect to amplitude * value ^ exponent on the colors.
-void SetGammaTransfer(ID2D1Effect* effect, float amplitude, float exponent) {
+// Sets a color matrix effect to scale * value + offset on the colors.
+void SetColorMatrix(ID2D1Effect* effect, float scale, float offset) {
+    effect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX,
+                     D2D1::Matrix5x4F(scale, 0, 0, 0,  //
+                                      0, scale, 0, 0,  //
+                                      0, 0, scale, 0,  //
+                                      0, 0, 0, 1,      //
+                                      offset, offset, offset, 0));
+}
+
+// Sets a gamma transfer effect to amplitude * value ^ exponent + offset on
+// the colors.
+void SetGammaTransfer(ID2D1Effect* effect,
+                      float amplitude,
+                      float exponent,
+                      float offset) {
     effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_AMPLITUDE, amplitude);
     effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_OFFSET, offset);
     effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_AMPLITUDE, amplitude);
     effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_OFFSET, offset);
     effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_AMPLITUDE, amplitude);
     effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_OFFSET, offset);
 }
 
 struct EffectChain {
@@ -2892,20 +2921,27 @@ class Switcher {
 
     // HDR (see UpdateHdr): the session's monitor shows HDR, and its white for
     // SDR content in scRGB (1 is 80 nits). The swap chain is in scRGB, unless
-    // that failed once on this PC.
+    // that failed (see m_hdrFailed).
     bool m_hdr = false;
     float m_sdrWhite = 1;
     bool m_swapHdr = false;
+    // Set when HDR couldn't be set up; cleared with a new device or new
+    // settings, so a device lost at that moment (a driver update) doesn't
+    // turn HDR off for good.
     bool m_hdrFailed = false;
+    // Tells whether the switcher's monitor shows HDR (see UpdateHdr).
+    com_ptr<IDXGIFactory1> m_hdrFactory;
     // HDR: the frame drawn in SDR's terms, the texture every captured frame
-    // goes through, and the effects turning a captured frame (scRGB) into
-    // SDR's terms (scaled and clamped first, then gamma-encoded) and the
-    // drawn frame back into scRGB.
+    // goes through, and the effects (see UpdateHdr) turning a captured frame
+    // (scRGB) into SDR's terms (scaled and clamped, lifted, encoded) and the
+    // drawn frame back into scRGB (lifted, decoded).
     com_ptr<ID2D1Bitmap1> m_sceneBitmap;
     com_ptr<ID3D11Texture2D> m_hdrFrameTexture;
     com_ptr<ID2D1Bitmap1> m_hdrFrame;
     com_ptr<ID2D1Effect> m_clampScRgb;
+    com_ptr<ID2D1Effect> m_liftScRgb;
     com_ptr<ID2D1Effect> m_fromScRgb;
+    com_ptr<ID2D1Effect> m_liftScene;
     com_ptr<ID2D1Effect> m_toScRgb;
 
     // A minimized window being switched to, checked until it's restored (see
@@ -3371,7 +3407,9 @@ void Switcher::ReleaseDeviceResources() {
         entry.bitmap = nullptr;
     }
     m_clampScRgb = nullptr;
+    m_liftScRgb = nullptr;
     m_fromScRgb = nullptr;
+    m_liftScene = nullptr;
     m_toScRgb = nullptr;
     m_hdrFrame = nullptr;
     m_hdrFrameTexture = nullptr;
@@ -3413,6 +3451,7 @@ bool Switcher::DeviceRemoved() const {
 // tried again regularly.
 void Switcher::RecreateDevice(HMONITOR monitor) {
     ReleaseDeviceResources();
+    m_hdrFailed = false;
     if (CreateDeviceResources(monitor)) {
         g_ready = true;
         KillTimer(m_hwnd, kDeviceRetryTimerId);
@@ -3515,53 +3554,84 @@ void Switcher::UpdateFrameRate() {
 // SDR's terms as usual, in half floats: values from 0 to 1 are SDR's colors,
 // gamma-encoded, and brighter parts of the captured windows go above 1. Each
 // captured frame (scRGB, linear, SDR white at m_sdrWhite) is divided by the
-// SDR white and encoded with a 2.2 gamma (see ConvertHdrFrame), and the drawn
-// frame is decoded and multiplied back into scRGB (see RenderFrame), so the
-// windows come out exactly as they were. Looked up when a session's captures
-// start, since Windows' HDR can be switched any time.
+// SDR white and encoded (see ConvertHdrFrame), and the drawn frame is decoded
+// and multiplied back into scRGB (see RenderFrame), so the windows come out
+// exactly as they were. Looked up when a session's captures start, since
+// Windows' HDR can be switched any time.
+//
+// The decoding follows the sRGB curve, as Windows shows SDR content on an HDR
+// monitor, so the wallpaper and the rest drawn by the switcher look the same
+// as on the desktop: ((value + a) / (1 + a)) ^ 2.4, minus its value at 0 (c),
+// scaled so 1 stays 1. It goes on above 1, which the sRGB curve itself
+// doesn't; it differs from it only in the darkest tones, by less than 0.1% of
+// white. Both ways take two effects: a color matrix for what's inside the
+// power, and a gamma transfer.
 //
 // Colors beyond sRGB's are negative in scRGB, and have no power: they're
 // clamped to 0 first. The clamp keeps 0 to 1 only, so the frame is scaled
-// down by kHdrHeadroom before it, and the gamma's amplitude scales it back.
+// down by kHdrHeadroom before it, and scaled back by the gamma's amplitude.
 void Switcher::UpdateHdr() {
     // The brightest kept, in SDR whites (at least 10000 nits).
     constexpr float kHdrHeadroom = 128;
+    constexpr float a = 0.055f;
+    constexpr float exponent = 2.4f;
+    const float c = std::pow(a / (1 + a), exponent);
 
     const bool wasHdr = m_hdr;
     const float wasSdrWhite = m_sdrWhite;
     HMONITOR monitor = MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY);
-    m_hdr = m_settings.hdr && !m_hdrFailed && IsHdrMonitor(monitor);
+    m_hdr = false;
+    if (m_settings.hdr && !m_hdrFailed) {
+        // A factory tells when the displays or their HDR state changed since
+        // it was made (IsCurrent); only then is it made again.
+        if (!m_hdrFactory || !m_hdrFactory->IsCurrent()) {
+            m_hdrFactory = nullptr;
+            CreateDXGIFactory1(IID_PPV_ARGS(m_hdrFactory.put()));
+        }
+        m_hdr = m_hdrFactory && IsHdrMonitor(monitor, m_hdrFactory.get());
+    }
     m_sdrWhite = m_hdr ? GetSdrWhiteLevel(monitor) : 1;
     if (m_hdr && !m_fromScRgb) {
         if (FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
                                        m_clampScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_liftScRgb.put())) ||
             FAILED(m_ctx->CreateEffect(CLSID_D2D1GammaTransfer,
                                        m_fromScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_liftScene.put())) ||
             FAILED(m_ctx->CreateEffect(CLSID_D2D1GammaTransfer,
                                        m_toScRgb.put()))) {
             Wh_Log(L"HDR effects failed, HDR off");
             m_clampScRgb = nullptr;
+            m_liftScRgb = nullptr;
             m_fromScRgb = nullptr;
+            m_liftScene = nullptr;
             m_toScRgb = nullptr;
             m_hdr = false;
             m_hdrFailed = true;
         } else {
             m_clampScRgb->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT,
                                    (BOOL)TRUE);
-            m_fromScRgb->SetInputEffect(0, m_clampScRgb.get());
+            m_liftScRgb->SetInputEffect(0, m_clampScRgb.get());
+            m_fromScRgb->SetInputEffect(0, m_liftScRgb.get());
+            m_toScRgb->SetInputEffect(0, m_liftScene.get());
         }
     }
     if (m_hdr) {
-        const float scale = 1 / (m_sdrWhite * kHdrHeadroom);
-        m_clampScRgb->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX,
-                               D2D1::Matrix5x4F(scale, 0, 0, 0,  //
-                                                0, scale, 0, 0,  //
-                                                0, 0, scale, 0,  //
-                                                0, 0, 0, 1,      //
-                                                0, 0, 0, 0));
-        SetGammaTransfer(m_fromScRgb.get(), std::pow(kHdrHeadroom, 1 / 2.2f),
-                         1 / 2.2f);
-        SetGammaTransfer(m_toScRgb.get(), m_sdrWhite, 2.2f);
+        // Encoding: y = x / (white * headroom), clamped; then
+        // value = (1 + a) * (headroom * ((1 - c) * y + c / headroom))
+        //         ^ (1 / 2.4) - a.
+        SetColorMatrix(m_clampScRgb.get(), 1 / (m_sdrWhite * kHdrHeadroom), 0);
+        SetColorMatrix(m_liftScRgb.get(), 1 - c, c / kHdrHeadroom);
+        SetGammaTransfer(m_fromScRgb.get(),
+                         (1 + a) * std::pow(kHdrHeadroom, 1 / exponent),
+                         1 / exponent, -a);
+        // Decoding: x = white * (((value + a) / (1 + a)) ^ 2.4 - c) / (1 - c).
+        SetColorMatrix(m_liftScene.get(), 1, a);
+        SetGammaTransfer(m_toScRgb.get(),
+                         m_sdrWhite / (std::pow(1 + a, exponent) * (1 - c)),
+                         exponent, -m_sdrWhite * c / (1 - c));
     }
     // The effects' own buffers (perspective, shadows) keep values above 1.
     // Without HDR, they're left as they come (8 bits).
@@ -3636,8 +3706,8 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
         m_sceneBitmap = nullptr;
         m_swapChain = nullptr;
         if (hdr) {
-            // Not tried again. The windows' content, in SDR's terms, is then
-            // drawn as is.
+            // Not tried again until there's a new device or new settings.
+            // The windows' content, in SDR's terms, is then drawn as is.
             Wh_Log(L"HDR swap chain failed, HDR off: 0x%08X", (UINT)hr);
             m_hdrFailed = true;
             return EnsureSwapChain(width, height);
@@ -3687,6 +3757,7 @@ void Switcher::Shutdown() {
     m_iconCache.clear();
     m_dwriteFactory = nullptr;
     m_wicFactory = nullptr;
+    m_hdrFactory = nullptr;
     if (m_hwnd) {
         DestroyWindow(m_hwnd);
         m_hwnd = nullptr;
@@ -3856,6 +3927,7 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
 
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
+            m_hdrFailed = false;
             // A session in progress keeps the style of its shortcut.
             if (m_state != State::Idle) {
                 m_settings.style =
@@ -5097,7 +5169,11 @@ void Switcher::Teardown() {
     m_titleLayout = nullptr;
     m_titleIndex = -1;
     m_capturing = false;
-    // As large as the largest window: not kept while idle.
+    // As large as the largest window: not kept while idle. The effect holds
+    // on to it too.
+    if (m_clampScRgb) {
+        m_clampScRgb->SetInput(0, nullptr);
+    }
     m_hdrFrame = nullptr;
     m_hdrFrameTexture = nullptr;
     m_filter = {};
@@ -5238,7 +5314,9 @@ HWND ActivationTarget(HWND hwnd) {
 // A full-screen window that stays always on top while it's in front (SDL's
 // full-screen windows do, e.g. Counter-Strike 2's) keeps covering the window
 // switched to, which only gets the focus. It's put right under that window,
-// which also takes its always-on-top away until it's in front again.
+// which also takes its always-on-top away; SDL sets it again when the game is
+// in front again. Only borderless full-screen windows (see
+// IsFullScreenWindow), so windows pinned on top by the user keep their pin.
 // Asynchronously, so a busy game can't hold the switcher up.
 void LowerFullScreenWindow(HWND left, HWND target) {
     HMONITOR monitor;
@@ -5255,7 +5333,8 @@ void LowerFullScreenWindow(HWND left, HWND target) {
     }
     WCHAR className[64] = L"";
     GetClassNameW(left, className, ARRAYSIZE(className));
-    Wh_Log(L"Full-screen window %p (%s) put under %p", left, className, target);
+    Wh_Log(L"Full-screen window %p (%s, style %08X) put under %p", left,
+           className, (UINT)GetWindowLongPtrW(left, GWL_STYLE), target);
     SetWindowPos(left, target, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
                      SWP_ASYNCWINDOWPOS);
@@ -6952,7 +7031,7 @@ void Switcher::RenderFrame() {
 
     if (m_swapHdr) {
         m_ctx->SetTarget(m_targetBitmap.get());
-        m_toScRgb->SetInput(0, m_sceneBitmap.get());
+        m_liftScene->SetInput(0, m_sceneBitmap.get());
         m_ctx->DrawImage(m_toScRgb.get(),
                          D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
                          D2D1_COMPOSITE_MODE_SOURCE_COPY);
