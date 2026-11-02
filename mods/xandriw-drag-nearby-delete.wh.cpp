@@ -4,11 +4,11 @@
 // @name:zh-CN      一拖即删
 // @description     Drag & Trash: a cursor-following or nearby/top Recycle Bin with custom still/animated icons, batch recycling and Ctrl+Z undo.
 // @description:zh-CN 一拖即删：回收站可跟随鼠标或显示在附近/顶部，支持自定义静态/动态图标，并保留批量删除与 Ctrl+Z 撤销。
-// @version         1.1.7
+// @version         1.1.8
 // @author          XandriW
 // @github          https://github.com/xandri19wang
 // @include         explorer.exe
-// @compilerOptions -lole32 -lgdi32 -lshell32 -lgdiplus -luuid -lwinhttp
+// @compilerOptions -lole32 -lgdi32 -lshell32 -lgdiplus -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -46,8 +46,8 @@ Prefer the classic placement? Keep the original top-of-screen option.
 
 ### 04 · System or custom icon / 系统或自定义图标
 
-Use the Windows Recycle Bin icon, a local PNG/JPG/BMP/ICO/GIF, or a direct HTTPS image link.
-可使用 Windows 回收站图标、本地静态图片或 GIF 动图，也可填写 HTTPS 图片直链。
+Use the Windows Recycle Bin icon or a local PNG, JPG, BMP, ICO, or animated GIF.
+可使用 Windows 回收站图标、本地静态图片或 GIF 动图。
 
 ![Windows system icon](https://raw.githubusercontent.com/xandri19wang/drag-and-trash/main/demos/system-icon.gif)
 
@@ -55,7 +55,7 @@ Use the Windows Recycle Bin icon, a local PNG/JPG/BMP/ICO/GIF, or a direct HTTPS
 
 - **Batch recycling / 批量回收:** Drop several files together in one Shell operation.
 - **Ctrl+Z undo / 撤销:** Restore a supported recycle operation in File Explorer (within the active Shell session).
-- **Lightweight / 轻量:** GIF playback runs only while dragging. HTTPS images are downloaded to local cache on configuration/reload, never during a drag.
+- **Lightweight / 轻量:** GIF playback runs only while dragging; the mod never downloads files or contacts external servers.
 
 ## Credits & license / 原作者与授权
 
@@ -90,11 +90,11 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
   $options:
     - system: Current Windows Recycle Bin
     - local: Local image / GIF
-    - url: HTTPS image link
+
   $options:zh-CN:
     - system: 当前 Windows 回收站图标
     - local: 本地图片 / GIF 动图
-    - url: HTTPS 图片直链
+
 - IconPath: ""
   $name: Local image path
   $name:zh-CN: 本地图片路径
@@ -102,12 +102,7 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
   $description:zh-CN: 完整 PNG、JPG、BMP、ICO 或 GIF 路径；图标类型选本地时生效。
   #! $format: filePath
   #! $showIf: {IconSource: local}
-- IconUrl: ""
-  $name: Online image URL
-  $name:zh-CN: 在线图片链接
-  $description: HTTPS direct image URL. Downloaded and cached once, never during dragging.
-  $description:zh-CN: HTTPS 图片直链；下载并缓存，不在拖拽过程中联网。
-  #! $showIf: {IconSource: url}
+
 - IconSize: 72
   $name: Icon size (px)
   $name:zh-CN: 图标大小（像素）
@@ -137,9 +132,12 @@ This mod reuses and modifies the original MIT-licensed drag-and-drop and recycle
 */
 // ==/WindhawkModSettings==
 
+#ifndef WH_MOD_ID
+#define WH_MOD_ID L"xandriw-drag-nearby-delete"
+#endif
 #include <shlobj.h>
 #include <shobjidl.h>
-#include <winhttp.h>
+
 #include <algorithm>
 #include <string>
 #include <cstdint>
@@ -153,7 +151,7 @@ static const int BASE_WND_WIDTH    = 96;
 static const int BASE_WND_HEIGHT   = 96;
 static const float BASE_CENTER_X   = 48.0f;
 static const float BASE_CENTER_Y   = 48.0f;
-static const float BASE_RADIUS     = 37.0f;
+
 static const float BASE_HIT_MARGIN = 3.0f;
 
 constexpr WCHAR kClassName[] = L"XandriWNearbyRecycleTargetOverlay";
@@ -185,7 +183,7 @@ static ULONGLONG g_gifNextFrameAt = 0;
 struct UserSettings {
     std::wstring placement = L"follow";
     std::wstring iconSource = L"system";
-    std::wstring iconPath, iconUrl;
+    std::wstring iconPath;
     int iconSize = 72;
     int desktopDistance = 72;
     int folderDistance = 100;
@@ -203,9 +201,8 @@ static std::wstring ReadString(PCWSTR name) {
     if (s) Wh_FreeStringSetting(s);
     return value;
 }
-static int ReadNumber(PCWSTR name, int def, int min, int max) {
-    int value = Wh_GetIntSetting(name);
-    return value ? std::clamp(value, min, max) : def;
+static int ReadNumber(PCWSTR name, int min, int max) {
+    return std::clamp(Wh_GetIntSetting(name), min, max);
 }
 static void ReadSettings() {
     g_settings.placement = ReadString(L"Placement");
@@ -213,14 +210,12 @@ static void ReadSettings() {
         g_settings.placement != L"nearby" &&
         g_settings.placement != L"top") g_settings.placement = L"follow";
     g_settings.iconSource = ReadString(L"IconSource");
-    if (g_settings.iconSource != L"local" &&
-        g_settings.iconSource != L"url") g_settings.iconSource = L"system";
+    if (g_settings.iconSource != L"local") g_settings.iconSource = L"system";
     g_settings.iconPath = ReadString(L"IconPath");
-    g_settings.iconUrl = ReadString(L"IconUrl");
-    g_settings.iconSize = ReadNumber(L"IconSize", 72, 24, 72);
-    g_settings.desktopDistance = ReadNumber(L"DesktopDistance", 72, 48, 220);
-    g_settings.folderDistance = ReadNumber(L"FolderDistance", 100, 48, 220);
-    g_settings.topMargin = ReadNumber(L"TopMargin", 8, 0, 100);
+    g_settings.iconSize = ReadNumber(L"IconSize", 24, 72);
+    g_settings.desktopDistance = ReadNumber(L"DesktopDistance", 48, 220);
+    g_settings.folderDistance = ReadNumber(L"FolderDistance", 48, 220);
+    g_settings.topMargin = ReadNumber(L"TopMargin", 0, 100);
 }
 
 static bool SafeImageFile(const std::wstring& path) {
@@ -249,113 +244,11 @@ static bool HasIcoHeader(const std::wstring& path) {
     CloseHandle(f);
     return ok;
 }
-static std::wstring CacheFilePath(const std::wstring& url) {
-    wchar_t buffer[32768] = {};
-    size_t chars = Wh_GetModStoragePath(buffer, ARRAYSIZE(buffer));
-    if (!chars || chars >= ARRAYSIZE(buffer)) return L"";
-    uint64_t hash = 14695981039346656037ULL;
-    for (wchar_t c : url) {
-        hash ^= (uint16_t)c;
-        hash *= 1099511628211ULL;
-    }
-    wchar_t hashName[48] = {};
-    swprintf(hashName, ARRAYSIZE(hashName), L"\\image-%016llx.img",
-             (unsigned long long)hash);
-    return std::wstring(buffer) + hashName;
-}
-static bool FetchImageHttps(const std::wstring& url,
-                            const std::wstring& output) {
-    if (url.size() < 10 || url.size() > 4096 ||
-        url.compare(0, 8, L"https://") != 0 ||
-        output.empty()) return false;
-    URL_COMPONENTS parts = {};
-    parts.dwStructSize = sizeof(parts);
-    parts.dwSchemeLength = (DWORD)-1;
-    parts.dwHostNameLength = (DWORD)-1;
-    parts.dwUrlPathLength = (DWORD)-1;
-    parts.dwExtraInfoLength = (DWORD)-1;
-    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &parts) ||
-        parts.nScheme != INTERNET_SCHEME_HTTPS ||
-        !parts.dwHostNameLength) return false;
-    std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
-    std::wstring resource = parts.dwUrlPathLength ?
-        std::wstring(parts.lpszUrlPath, parts.dwUrlPathLength) : L"/";
-    if (parts.dwExtraInfoLength)
-        resource.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    HINTERNET session = WinHttpOpen(
-        L"DragAndTrash/1.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) return false;
-    WinHttpSetTimeouts(session, 2500, 2500, 3500, 4000);
-    HINTERNET connection = WinHttpConnect(session, host.c_str(), parts.nPort, 0);
-    HINTERNET request = connection ?
-        WinHttpOpenRequest(connection, L"GET", resource.c_str(), nullptr,
-                           WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                           WINHTTP_FLAG_SECURE) : nullptr;
-    // Never follow a redirect onto an insecure destination or local endpoint.
-    DWORD noRedirect = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
-    if (request) WinHttpSetOption(request, WINHTTP_OPTION_REDIRECT_POLICY,
-                                  &noRedirect, sizeof(noRedirect));
-    DWORD response = 0, responseBytes = sizeof(response);
-    bool ok = request &&
-        WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                           WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-        WinHttpReceiveResponse(request, nullptr) &&
-        WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE |
-                           WINHTTP_QUERY_FLAG_NUMBER,
-                           WINHTTP_HEADER_NAME_BY_INDEX, &response,
-                           &responseBytes, WINHTTP_NO_HEADER_INDEX) &&
-        response == 200;
-    std::wstring temp = output + L"." +
-                        std::to_wstring(GetCurrentProcessId()) + L"." +
-                        std::to_wstring(GetCurrentThreadId()) + L".tmp";
-    HANDLE f = INVALID_HANDLE_VALUE;
-    if (ok) {
-        f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr,
-                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        ok = (f != INVALID_HANDLE_VALUE);
-    }
-    BYTE chunk[8192];
-    DWORD total = 0;
-    while (ok) {
-        DWORD count = 0;
-        if (!WinHttpReadData(request, chunk, sizeof(chunk), &count)) {
-            ok = false; break;
-        }
-        if (!count) break;
-        if (count > 8 * 1024 * 1024 - total) {
-            ok = false; break;
-        }
-        DWORD written = 0;
-        if (!WriteFile(f, chunk, count, &written, nullptr) ||
-            written != count) {
-            ok = false; break;
-        }
-        total += count;
-    }
-    if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
-    if (request) WinHttpCloseHandle(request);
-    if (connection) WinHttpCloseHandle(connection);
-    WinHttpCloseHandle(session);
-    if (ok && total) {
-        ok = !!MoveFileExW(temp.c_str(), output.c_str(),
-                            MOVEFILE_REPLACE_EXISTING);
-    } else ok = false;
-    if (!ok) DeleteFileW(temp.c_str());
-    return ok;
-}
 static void PrepareImageForDrag() {
     g_activeImage.clear();
-    if (g_settings.iconSource == L"local") {
-        if (SafeImageFile(g_settings.iconPath))
-            g_activeImage = g_settings.iconPath;
-    } else if (g_settings.iconSource == L"url") {
-        std::wstring cache = CacheFilePath(g_settings.iconUrl);
-        if (!cache.empty() &&
-            (SafeImageFile(cache) || FetchImageHttps(g_settings.iconUrl, cache)) &&
-            SafeImageFile(cache))
-            g_activeImage = std::move(cache);
-    }
+    if (g_settings.iconSource == L"local" &&
+        SafeImageFile(g_settings.iconPath))
+        g_activeImage = g_settings.iconPath;
 }
 static float g_currentDpiScale = 1.0f;
 static AnimState g_animState = AnimState::HIDDEN;
@@ -427,12 +320,14 @@ void FreeDragGif() {
 }
 
 void LoadDragGif() {
-    if (g_gifImage) return;
+    if (g_gifImage || g_customIcon) return;
     if (g_activeImage.empty()) return;
     if (HasIcoHeader(g_activeImage)) {
+        int pixels = std::clamp(
+            (int)(g_settings.iconSize * g_currentDpiScale + 0.5f), 16, 256);
         g_customIcon = (HICON)LoadImageW(
-            nullptr, g_activeImage.c_str(), IMAGE_ICON, 0, 0,
-            LR_LOADFROMFILE | LR_DEFAULTSIZE);
+            nullptr, g_activeImage.c_str(), IMAGE_ICON, pixels, pixels,
+            LR_LOADFROMFILE);
         return;
     }
     auto* image = Gdiplus::Image::FromFile(g_activeImage.c_str(), FALSE);
@@ -1098,6 +993,10 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
 
     if (!RegisterClassExW(&wc)) {
         Wh_Log(L"Failed to register overlay window class (error: %lu)", GetLastError());
+        if (g_hRecycleIcon) {
+            DestroyIcon(g_hRecycleIcon);
+            g_hRecycleIcon = nullptr;
+        }
         GdiplusShutdown(g_gdiplusToken);
         OleUninitialize();
         return 0;
@@ -1120,6 +1019,10 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
     if (!g_hOverlayWnd) {
         Wh_Log(L"Failed to create overlay window (error: %lu)", GetLastError());
         UnregisterClassW(kClassName, hInstance);
+        if (g_hRecycleIcon) {
+            DestroyIcon(g_hRecycleIcon);
+            g_hRecycleIcon = nullptr;
+        }
         GdiplusShutdown(g_gdiplusToken);
         OleUninitialize();
         return 0;
