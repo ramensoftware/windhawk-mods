@@ -4548,6 +4548,8 @@ Config CurrentConfig() {
     return config;
 }
 
+void ShowError(std::wstring message, bool hint);
+
 template <typename Change>
 void UpdateConfig(Change change) {
     AcquireSRWLockExclusive(&g_configLock);
@@ -4555,7 +4557,8 @@ void UpdateConfig(Change change) {
     change(g_config);
     NormalizeConfig(&g_config);
     const std::wstring json = Utf8ToWide(ConfigToJson(g_config));
-    if (json.size() > kConfigMaxChars) {
+    const bool tooBig = json.size() > kConfigMaxChars;
+    if (tooBig) {
         // Saved, it couldn't be read back (everything would reset at the
         // next start): the change isn't kept. Only many long custom styles
         // get here.
@@ -4565,6 +4568,12 @@ void UpdateConfig(Change change) {
         Log(L"Configuration not saved");
     }
     ReleaseSRWLockExclusive(&g_configLock);
+    if (tooBig) {
+        ShowError(T(L"Too many long custom styles to save this change: shorten or delete one.",
+                    L"Estilos personalizados longos demais para salvar esta mudança: encurte ou "
+                    L"apague um."),
+                  false);
+    }
     if (HWND overlay = g_overlayWnd) {
         PostMessage(overlay, WM_APP_RELOAD, 0, 0);
     }
@@ -21049,6 +21058,16 @@ constexpr UiText kUiTexts[] = {
       L"Текст изменился после вставки: новая версия скопирована, вставьте её с помощью Ctrl+V.",
       L"पेस्ट करने के बाद टेक्स्ट बदल गया: नया संस्करण कॉपी हो गया है, इसे Ctrl+V से पेस्ट करें।",
       L"পেস্ট করার পরে টেক্সট বদলে গেছে: নতুন সংস্করণ কপি করা হয়েছে, Ctrl+V দিয়ে পেস্ট করুন।"}},
+    {{L"Too many long custom styles to save this change: shorten or delete one.",
+      L"Demasiados estilos personalizados largos para guardar este cambio: acorta o elimina uno.",
+      L"Estilos personalizados longos demais para salvar esta mudança: encurte ou apague um.",
+      L"Trop de styles personnalisés longs pour enregistrer cette modification : raccourcissez-en ou supprimez-en un.",
+      L"Zu viele lange eigene Stile, um diese Änderung zu speichern: Kürzen oder löschen Sie einen.",
+      L"長いカスタムスタイルが多すぎて、この変更を保存できません。どれかを短くするか削除してください。",
+      L"自定义风格太多太长，无法保存此更改：请缩短或删除一个。",
+      L"Слишком много длинных пользовательских стилей, чтобы сохранить это изменение: сократите или удалите один.",
+      L"यह बदलाव सहेजने के लिए बहुत सारी लंबी कस्टम शैलियाँ हैं: किसी एक को छोटा करें या हटाएँ।",
+      L"এই পরিবর্তন সংরক্ষণ করতে অনেক বেশি দীর্ঘ কাস্টম স্টাইল আছে: একটি ছোট করুন বা মুছে দিন।"}},
 };
 
 PCWSTR UiTextIn(const UiText* text, int language) {
