@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-01T23:02:49.000Z</updated>
+    <updated>2026-11-02T01:19:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab per monitor 1.2.1]]></title>
+        <id>https://windhawk.net/mods/alt-tab-per-monitor#252ab7ccd45d327de7be502a255e1c9b126828df</id>
+        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
+        <updated>2026-11-02T01:19:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with the latest Windows 11 update.</li>
+</ul>]]></content>
+        <author>
+            <name>L3r0y</name>
+            <uri>https://github.com/L3r0yThingz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.0.3]]></title>
         <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#568f435119377c2e880191bb82cffe0d5498f2ce</id>
@@ -962,32 +975,6 @@ The language can follow the Windows UI language or be forced to a specific local
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Open Window Underline 2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-open-window-underline#5685777d56f943dad16b7817f4ada0d71b0a1380</id>
-        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
-        <updated>2026-10-31T16:04:26.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li><strong>Icon underline (experimental)</strong> — a settings group that draws a line under each button's icon with the same open/minimized rule as the label underline, so the mod also works with "Combine taskbar buttons and hide labels".</li>
-<li>A composition <code>SpriteVisual</code> attached to <code>Image#Icon</code> via <code>ElementCompositionPreview::SetElementChildVisual</code>, sized and positioned relative to the element (<code>RelativeSizeAdjustment</code> / <code>RelativeOffsetAdjustment</code>): it follows the icon through resizes and DPI changes with no layout code and never enters the taskbar's layout.</li>
-<li>Options: thickness, width (% of the icon), distance from the icon (negative moves it over the icon), corner radius, opacity, color.</li>
-<li>Color: <code>#RRGGBB</code> / <code>#AARRGGBB</code>; <code>light|dark</code> variants; comma-separated horizontal gradients; both combinable. Empty uses the system accent color. The theme is read from <code>SystemUsesLightTheme</code>, since the taskbar follows the system theme.</li>
-<li>Corner radius: a <code>CompositionGeometricClip</code> with a rounded-rectangle geometry whose size is bound to the icon element's visual by an expression animation, so it tracks the line's relative width; 0 disables the clip.</li>
-<li>Colors are cached and refreshed through UISettings::ColorValuesChanged, which covers accent changes and system theme switches; subscribed whenever the icon underline is on; the brush and clip are rebuilt only when their parameters change, identified by their <code>Comment</code>.</li>
-<li>Visuals are tagged with a <code>Comment</code>, tracked only as weak element references, and hidden and detached when the option is turned off and on unload. An element that already carries another mod's child visual is left alone.</li>
-<li><strong>Hide the running indicator</strong> — hides the taskbar's own indicator under running buttons so the underline is the only cue. The same element marks the active window and, on some builds, attention requests, so those markers are hidden too (intended). Independent of the icon underline. Implemented by setting <code>IsVisible(false)</code> on <code>Rectangle#RunningIndicator</code>'s hand-off composition visual rather than its XAML properties, which the button's visual states would overwrite; restored when the option is turned off and on unload, handing control back to XAML.</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>A button without a label is evaluated when the icon underline or the indicator option is on; the view-model resolver works from the <code>ItemsRepeater</code> item, not the text. The title fallback still requires a label.</li>
-<li>README: icon-underline screenshot, the hidden-labels dependency on the view-model symbols, and the new options.</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>

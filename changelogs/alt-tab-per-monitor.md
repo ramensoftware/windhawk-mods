@@ -1,3 +1,7 @@
+## 1.2.1 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/252ab7ccd45d327de7be502a255e1c9b126828df/mods/alt-tab-per-monitor.wh.cpp))
+
+* Fixed compatibility with the latest Windows 11 update.
+
 ## 1.2 ([Mar 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2eec6038eb43a1847f7cf4dfa0fa65a101aafd18/mods/alt-tab-per-monitor.wh.cpp))
 
 * Added customization options for both the display location and the windows to show. Win+Alt+Tab can have different options.
