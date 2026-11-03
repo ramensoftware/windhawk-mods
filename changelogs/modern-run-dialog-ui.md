@@ -1,3 +1,13 @@
+## 4.0.2 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a22894f34de93ae33481c9ca3f29cf294832a9d9/mods/modern-run-dialog-ui.wh.cpp))
+
+- Fixed the Run dialog not being intercepted on Windows 11 Build 26300.9818+ (#6712) by matching the Run dialog resource ID (`1003`) with a `shell32.dll` dialog procedure in `DialogBoxParamW` (supporting localized `.dll.mui` module handles) and a thread-safe `ShowWindow` fallback (no `shell32.pdb` download required).
+- Added an in-app quick settings gear button (`⚙️`) on the command bar with a custom Direct2D/DirectWrite Fluent Acrylic popup menu.
+- Added a **Minimal Mode** option (toggleable directly from the main `⚙️` menu or mod settings) that hides the **Browse** and **Exit** buttons while keeping the standard dialog width and expanding the command input box.
+- Added support for custom static images (`.png`, `.jpg`, `.webp`, `.bmp`), animated `.gif`, and `.mp4`/`.webm` video backgrounds (up to 50 MB) with adjustable media opacity.
+- Added `ggsearch:<query>` (Google Chrome / default browser) and `msesearch:<query>` (Microsoft Edge) quick web search commands.
+- Expanded command history storage up to 50 items with a 5-row scrollable viewport, mouse wheel support, and a draggable Direct2D scrollbar.
+- Added UI scale options (`85%` – `120%`), single-click Taskbar / `Win + R` foreground restore, and fixed `GUID_NULL` linker compatibility with Clang 20 (`-luuid`).
+
 ## 3.0.6 ([Oct 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1b66e28eee1f1299f896cfa1bd3d8c738210e99b/mods/modern-run-dialog-ui.wh.cpp))
 
 Fixed an issue on Windows 11 build 26300.9807+ where the classic Run dialog appeared when shell32.pdb symbols were unavailable on Microsoft's symbol server (HTTP 404), by adding an automatic symbol-less hooking fallback (DialogBoxParamW, DialogBoxIndirectParamW, CreateDialogParamW, CreateDialogIndirectParamW, and ShowWindow) (#6544).

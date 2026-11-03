@@ -1,3 +1,10 @@
+## 1.7.3 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f77e18a3799ee9e4850f462144b08902bbab4530/mods/alt-tab-flip-3d.wh.cpp))
+
+* HDR: on a monitor with HDR turned on, windows with HDR content (videos, games, photos) keep their full brightness in the switcher, like in the native Alt+Tab (#6721). New "HDR" setting, on by default; monitors without HDR aren't affected.
+* Minimized windows, and windows hidden by window managers such as komorebi, now show their content on PCs where Windows refused to capture them and only their icon was shown (#6179).
+* Switching away from a full-screen game that stays always on top while it's in front (SDL games such as Counter-Strike 2) now brings the chosen window up. Before, it got the focus but stayed hidden behind the game.
+* Over a full-screen game, the switcher takes the focus while it's shown, like the native Alt+Tab, so Windows doesn't give the GPU to the game first: its animation ran at half its frame rate or less over Counter-Strike 2.
+
 ## 1.7.2 ([Oct 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/925f0a2bdfa754cab000f38401a3e51707248281/mods/alt-tab-flip-3d.wh.cpp))
 
 * New "Only the windows on the switcher's monitor" setting (off by default): the switcher lists only the windows on the monitor it opens on. While it's open, a key shows the windows of every monitor, and pressing it again goes back: the key left of 1 (under Esc) by default, or another one chosen in the new "Key that shows every monitor" setting (letters, digits, F1-F12, navigation keys, or none). A monitor without windows shows them all.

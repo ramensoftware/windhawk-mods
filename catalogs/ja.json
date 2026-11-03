@@ -416,14 +416,14 @@
         "ratingUsers": 243,
         "reviews": 1,
         "trendingSorting": 26.643770140546973,
-        "updated": 1792645283000,
+        "updated": 1793714609000,
         "users": 10036
       },
       "metadata": {
         "author": "caliberda",
         "compilerOptions": "-ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32",
         "description": "Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows",
-        "donateUrl": "https://livepix.gg/caliberda",
+        "donateUrl": "https://github.com/sponsors/cesarkali",
         "github": "https://github.com/cesarkali",
         "homepage": "https://caliberda.com.br",
         "include": [
@@ -432,7 +432,7 @@
         ],
         "license": "MIT",
         "name": "Alt+Tab Flip 3D (Vista Style)",
-        "version": "1.7.2"
+        "version": "1.7.3"
       }
     },
     "alt-tab-hide-ghost-windows": {
@@ -10550,7 +10550,7 @@
         "ratingUsers": 52,
         "reviews": 0,
         "trendingSorting": 37.251996388817886,
-        "updated": 1793027083000,
+        "updated": 1793714603000,
         "users": 1920
       },
       "metadata": {
@@ -10558,14 +10558,14 @@
           "x86-64"
         ],
         "author": "caotu2k5",
-        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32",
-        "description": "Transforms the classic Run dialog on Windows 10 & 11 into a modern Fluent UI with Liquid Glass, DirectWrite typography, app suggestions while typing, and instant history execution.",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32 -lole32 -luuid -lwindowscodecs -lmfplat -lmfreadwrite -lmfuuid",
+        "description": "Replaces the classic Win + R dialog with a modern Liquid Glass / Fluent UI, custom image/video backgrounds, and quick settings.",
         "github": "https://github.com/caotu2k5",
         "include": [
           "explorer.exe"
         ],
         "name": "Modern Run Dialog UI For Windows 10 & 11",
-        "version": "3.0.6"
+        "version": "4.0.2"
       }
     },
     "modernize-folder-picker-dialog": {

@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T03:03:58.000Z</updated>
+    <updated>2026-11-03T14:03:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.7.3]]></title>
+        <id>https://windhawk.net/mods/alt-tab-flip-3d#f77e18a3799ee9e4850f462144b08902bbab4530</id>
+        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
+        <updated>2026-11-03T14:03:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>HDR: on a monitor with HDR turned on, windows with HDR content (videos, games, photos) keep their full brightness in the switcher, like in the native Alt+Tab (#6721). New "HDR" setting, on by default; monitors without HDR aren't affected.</li>
+<li>Minimized windows, and windows hidden by window managers such as komorebi, now show their content on PCs where Windows refused to capture them and only their icon was shown (#6179).</li>
+<li>Switching away from a full-screen game that stays always on top while it's in front (SDL games such as Counter-Strike 2) now brings the chosen window up. Before, it got the focus but stayed hidden behind the game.</li>
+<li>Over a full-screen game, the switcher takes the focus while it's shown, like the native Alt+Tab, so Windows doesn't give the GPU to the game first: its animation ran at half its frame rate or less over Counter-Strike 2.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 4.0.2]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#a22894f34de93ae33481c9ca3f29cf294832a9d9</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-11-03T14:03:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the Run dialog not being intercepted on Windows 11 Build 26300.9818+ (#6712) by matching the Run dialog resource ID (<code>1003</code>) with a <code>shell32.dll</code> dialog procedure in <code>DialogBoxParamW</code> (supporting localized <code>.dll.mui</code> module handles) and a thread-safe <code>ShowWindow</code> fallback (no <code>shell32.pdb</code> download required).</li>
+<li>Added an in-app quick settings gear button (<code>⚙️</code>) on the command bar with a custom Direct2D/DirectWrite Fluent Acrylic popup menu.</li>
+<li>Added a <strong>Minimal Mode</strong> option (toggleable directly from the main <code>⚙️</code> menu or mod settings) that hides the <strong>Browse</strong> and <strong>Exit</strong> buttons while keeping the standard dialog width and expanding the command input box.</li>
+<li>Added support for custom static images (<code>.png</code>, <code>.jpg</code>, <code>.webp</code>, <code>.bmp</code>), animated <code>.gif</code>, and <code>.mp4</code>/<code>.webm</code> video backgrounds (up to 50 MB) with adjustable media opacity.</li>
+<li>Added <code>ggsearch:&lt;query&gt;</code> (Google Chrome / default browser) and <code>msesearch:&lt;query&gt;</code> (Microsoft Edge) quick web search commands.</li>
+<li>Expanded command history storage up to 50 items with a 5-row scrollable viewport, mouse wheel support, and a draggable Direct2D scrollbar.</li>
+<li>Added UI scale options (<code>85%</code> – <code>120%</code>), single-click Taskbar / <code>Win + R</code> foreground restore, and fixed <code>GUID_NULL</code> linker compatibility with Clang 20 (<code>-luuid</code>).</li>
+</ul>]]></content>
+        <author>
+            <name>caotu2k5</name>
+            <uri>https://github.com/caotu2k5</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Icon Dock 1.1.2]]></title>
         <id>https://windhawk.net/mods/desktop-icon-dock#ec6dbe374c301e756a29f4c47f32371c903009a7</id>
@@ -685,43 +720,6 @@ the mod is removed.</li>
         <author>
             <name>L3r0y</name>
             <uri>https://github.com/L3r0yThingz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.0.3]]></title>
-        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#568f435119377c2e880191bb82cffe0d5498f2ce</id>
-        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
-        <updated>2026-11-01T23:02:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>add WASAPI capture-endpoint audio scanning (microphones/line-in) with 5-second silence hysteresis</li>
-<li>implement network transfer shielding via extended TCP and UDP owner tables</li>
-<li>route early memory-cap sweeps through SystemActionArbiter with fast working-set pre-filtering</li>
-<li>replace hardcoded browser process names with command-line role detection (<code>--type=renderer</code> and <code>-contentproc</code>)</li>
-<li>preserve full process families in immunity sets to prevent active browser and Electron UI renderers from being trimmed</li>
-<li>add minimize-aware and multitasking-adaptive memory trim grace periods</li>
-<li>throttle runaway background tasks when saturating a single CPU core (&gt;= 80%)</li>
-<li>add borderless full-screen window geometry detection for gaming sanctuary</li>
-<li>preserve original application EcoQoS power-throttling state across throttling cycles</li>
-<li>reduce foreground focus debounce to 200 ms with bounded focus history</li>
-<li>include touchpad driver helpers in essential system security process immunity</li>
-<li>use native Windows SDK <code>&lt;iphlpapi.h&gt;</code> definitions and link <code>-liphlpapi</code> directly</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Corner Click Fix 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#0f752e6d527be1492ca41e8497c8c4bb723a3b2b</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-corner-fix"/>
-        <updated>2026-11-01T21:00:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Drops UI Automation for the hidden legacy start button via its accessibility action. UI Automation was causing activation+focus racing.</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>
