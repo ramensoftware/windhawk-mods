@@ -5746,7 +5746,7 @@ void __cdecl StartMenuVectorAppend_Hook(void* pThis, wuxc::MenuFlyoutItemBase co
 
 bool HookStartMenuDllSymbols(HMODULE module) {
     // StartMenu.dll, StartUI.dll
-    WindhawkUtils::SYMBOL_HOOK startMenuDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
                 LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>,struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>::Append(struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const &)const )",
@@ -5756,7 +5756,7 @@ bool HookStartMenuDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"[start] Could not hook the menu item list in the Start menu DLL");
         ReportHooks(false);
         return false;
