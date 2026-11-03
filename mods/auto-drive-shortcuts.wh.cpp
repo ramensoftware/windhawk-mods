@@ -9,6 +9,19 @@
 // @compilerOptions -lole32 -luuid -lshell32
 // ==/WindhawkMod==
 
+
+// ==WindhawkModReadme==
+// # Auto Drive Shortcuts
+//
+// Automatically creates desktop shortcuts for connected USB drives and deletes them when ejected, bringing macOS/Linux desktop behavior to Windows.
+//
+// ## Features
+// - **Automatic Creation:** Generates a shortcut on the Desktop pointing to the drive letter when a removable drive is attached.
+// - **Automatic Cleanup:** Removes the shortcut automatically upon drive disconnection or safe ejection.
+// - **Mounting Delay:** Includes a small initialization buffer to ensure the drive volume is fully mounted by Windows before shortcut creation.
+// ==/WindhawkModReadme==
+
+
 #include <windows.h>
 #include <dbt.h>
 #include <shlobj.h>
