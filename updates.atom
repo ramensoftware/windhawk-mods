@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T16:02:09.000Z</updated>
+    <updated>2026-11-03T22:04:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Notification Center Follows Taskbar 1.1.0]]></title>
+        <id>https://windhawk.net/mods/notification-center-follows-taskbar#2ed4cdb138bc83eaf598183d8e6c781189700e84</id>
+        <link href="https://windhawk.net/mods/notification-center-follows-taskbar"/>
+        <updated>2026-11-03T22:04:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to swap media playback and Quick Settings.</li>
+<li>Corrected the top-taskbar vertical gap to 12 logical pixels for Notification Center flyout, scaled for display DPI.</li>
+</ul>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Nested Tray Drawer 0.1.14]]></title>
         <id>https://windhawk.net/mods/nested-tray-drawer#fa0c9caef41dfab1355e934428e282518462a4f4</id>
@@ -702,26 +716,6 @@ the mod is removed.</li>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hyprland Windows 1.2.1]]></title>
-        <id>https://windhawk.net/mods/hyprland-windows#16e402d6bbc717c0cceb7e9262a8b52694842a7e</id>
-        <link href="https://windhawk.net/mods/hyprland-windows"/>
-        <updated>2026-11-02T17:04:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Win + mouse wheel makes a window larger or smaller, around its center or the cursor, also while it is being moved; two fingers on a touchpad do it too.</li>
-<li>Win + mouse now works over WinUI and XAML content as well (Paint, Windows Terminal, the tabs of File Explorer).</li>
-<li>A new setting: Win + Alt + left mouse button resizes a window, for a touchpad.</li>
-<li>A new setting for a click with the modifier held and no movement: with Alt it goes to the app by default, with Win it grabs the window.</li>
-<li>Win+Tab with no other desktop that has windows goes to an empty one, made if need be (can be turned off).</li>
-<li>A hidden menu bar no longer flickers: it shows up only while the keyboard is in it (Alt or F10).</li>
-<li>The window shortcut closes any window Alt+F4 would, Task Manager included.</li>
-<li>Fixes: Alt as the modifier works with Aero Snap and no longer opens menus, Esc cancels an Alt drag, closing an elevated window with Win held no longer opens Start, a window slow to resize keeps up with the cursor, and Win+Tab is left to Task View while it is open.</li>
-</ul>]]></content>
-        <author>
-            <name>hiword9</name>
-            <uri>https://github.com/HiWord9</uri>
         </author>
     </entry>
 </feed>

@@ -358,7 +358,7 @@
         "rating": 10,
         "ratingBreakdown": [1, 0, 4, 4, 83],
         "ratingUsers": 92,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 3.398748237485254,
         "updated": 1789501993000,
         "users": 2505
@@ -11649,7 +11649,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 13.1,
-        "updated": 1793239509000,
+        "updated": 1793743478000,
         "users": 131
       },
       "metadata": {
@@ -11658,14 +11658,15 @@
         ],
         "author": "Asteski",
         "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -lole32 -loleaut32 -lruntimeobject",
-        "description": "Correct Notification Center placement for all taskbar positions, with an optional calendar/notifications swap.",
+        "description": "Keep Notification Center aligned with your taskbar, with optional placement swaps for notifications/calendar and media playback/Quick Settings.",
         "github": "https://github.com/Asteski",
         "include": [
           "explorer.exe",
-          "ShellExperienceHost.exe"
+          "ShellExperienceHost.exe",
+          "ShellHost.exe"
         ],
         "name": "Notification Center Follows Taskbar",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "notifications-placement": {
