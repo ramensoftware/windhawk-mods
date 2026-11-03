@@ -217,9 +217,9 @@ Everything the mod does, in detail, is below.
     both the 5-hour session and the week in its panel. It reads only what
     the agents keep on this PC, never their logins: Codex's own logs, and
     for Claude Code in a terminal (Pro and Max plans) what it gives its
-    [status line](https://code.claude.com/docs/en/statusline), saved by the
-    status line's command (set up by the island when asked, or a line in
-    your own script; see the notes). The Claude desktop app doesn't leave
+    [status line](https://code.claude.com/docs/en/statusline), saved by a
+    line you add to its script (the panel copies it; see the notes). The
+    Claude desktop app doesn't leave
     its limits on this PC, so its use doesn't show;
   * your commands: shortcuts you add to programs, files, folders, links or
     command lines (a command line runs in its own hidden job; one that
@@ -625,8 +625,7 @@ or only its apps).
 * **Storage**: Windhawk keeps the settings, notes and the rest for the whole
   computer (every Windows account sees the same ones; the alarms, the
   timer's lengths, the folders' pins, favorites and order, the shelf's
-  files and the lyrics' apps are each account's own;
-  your commands, which can hold a command line's secrets, are shared);
+  files, the lyrics' apps and your commands are each account's own);
   export a backup before formatting.
 * **Two processes**: the island runs in a `windhawk.exe` process of its own,
   so a problem in it can't take the taskbar down; the dock runs in
@@ -667,25 +666,20 @@ or only its apps).
     changed (FindFirstChangeNotification, read on that thread, no
     polling), from files on this PC, nothing sent anywhere. Codex: the
     "rate_limits" it writes in its sessions' logs
-    (`%USERPROFILE%\.codex\sessions`, or under `CODEX_HOME`). Claude Code: the `rate_limits` of the JSON it gives its
-    status line's command, saved as `claude-status.json` in the mod's
-    storage folder (the panel shows its path). The panel's "Set up" does it
-    only after a second click, "Change it", on a page that shows which file
-    changes (Claude Code's `settings.json`, in `CLAUDE_CONFIG_DIR` or
-    `%USERPROFILE%\.claude`), the whole new command, and where a copy of
-    the settings goes (the mod's storage folder). Only the status line's
-    command changes, the rest of the file stays as it was: an existing
-    command becomes `tee '<that file>' 2>/dev/null | (` + your command +
-    `)`, so it still runs as before with the same input (and still runs if
-    the mod is removed); without a status line, one that only saves it is
-    added. "Undo the setup" puts the command back, or takes out the one the
-    island added, the same way. This needs Git Bash, which Claude Code runs
-    its status line in when it's installed; without it, or to do it
-    yourself, the panel's "Copy the line" copies the line for a PowerShell
-    status line script that read its input with
-    `$stdin = [Console]::In.ReadToEnd()` (add it after that); in a bash
-    script that read it with `input=$(cat)`, add
-    `printf '%s' "$input" > '<that file>'`;
+    (`%USERPROFILE%\.codex\sessions`, or under `CODEX_HOME`). Claude
+    Code: the `rate_limits` of the JSON it gives its status line's command,
+    saved in `claude-status_<your account's SID>.json` in the mod's storage
+    folder, made first so only your account can read it. The island never
+    changes Claude Code's settings: the panel's "Copy the line" copies the
+    line to add to your status line's script (with the file's path). With
+    Git Bash, which Claude Code runs its status line in when it's
+    installed, it's `printf '%s' "$input" > '<that file>'`, for a script
+    that read its input with `input=$(cat)`; without it,
+    `$stdin | Set-Content -Encoding utf8 -LiteralPath '<that file>'`, for a
+    PowerShell script that read it with
+    `$stdin = [Console]::In.ReadToEnd()` (add it after that line). Without
+    a status line yet, the command `cat > '<that file>'` (Git Bash) only
+    saves it and shows nothing;
   * world clocks: Windows' additional clocks (read from the registry,
     watched for changes);
   * the pill filling with downloads: the progress apps give their taskbar
@@ -711,7 +705,8 @@ or only its apps).
   * wallpapers: a transition window, then Windows' IDesktopWallpaper;
   * the input mode: asked to the app's input method window;
   * tray icons: as the apps send them to the taskbar (asked again when the
-    mod starts, and kept while it reloads);
+    mod starts, and kept while it reloads); with Windhawk run as
+    administrator, a click reaches only the apps that aren't;
   * power modes: the powrprof.dll functions Windows' Settings uses; the
     GPU: performance counters and the driver's own figures.
 * **Similar mods**: [Dynamic Island for
@@ -960,8 +955,8 @@ Tudo o que o mod faz, em detalhes, está abaixo.
     logs do próprio Codex e, para o Claude Code no terminal (planos Pro e
     Max), o que ele passa para a
     [linha de status](https://code.claude.com/docs/en/statusline), salvo
-    pelo comando dela (configurado pela ilha quando você pede, ou uma linha
-    no seu próprio script; veja as observações). O app de desktop do Claude
+    por uma linha que você adiciona ao script dela (o painel copia; veja as
+    observações). O app de desktop do Claude
     não deixa os limites neste PC, então o uso dele não aparece;
   * seus comandos: atalhos que você adiciona para programas, arquivos,
     pastas, links ou linhas de comando (uma linha de comando roda escondida
@@ -1384,10 +1379,8 @@ ampliação e os pulos; ela só pega os cliques em volta dos apps), ou como ela
 * **Armazenamento**: o Windhawk guarda as configurações, anotações e o resto
   para o computador todo (todas as contas do Windows veem os mesmos; os
   alarmes, os tempos do timer, as pastas fixadas, os favoritos e a ordem
-  das pastas, os arquivos da prateleira e os apps das letras são de cada
-  conta; os seus comandos, que podem ter segredos de uma
-  linha de comando, são compartilhados); exporte um backup antes de
-  formatar.
+  das pastas, os arquivos da prateleira, os apps das letras e os seus
+  comandos são de cada conta); exporte um backup antes de formatar.
 * **Dois processos**: a ilha roda num processo `windhawk.exe` próprio, então
   um problema nela não derruba a barra; a dock roda no `explorer.exe`. Se o
   driver de vídeo reiniciar, a ilha recomeça sozinha.
@@ -1430,24 +1423,19 @@ ampliação e os pulos; ela só pega os cliques em volta dos apps), ou como ela
     "rate_limits" que ele escreve nos logs das sessões
     (`%USERPROFILE%\.codex\sessions`, ou em `CODEX_HOME`).
     Claude Code: o `rate_limits` do JSON que ele passa para o comando da
-    linha de status, salvo como `claude-status.json` na pasta de dados do
-    mod (o painel mostra o caminho). O "Configurar" do painel só faz isso
-    depois de um segundo clique, em "Mudar", numa página que mostra qual
-    arquivo muda (o `settings.json` do Claude Code, em `CLAUDE_CONFIG_DIR`
-    ou `%USERPROFILE%\.claude`), o comando novo inteiro e para onde vai
-    uma cópia das configurações (a pasta de dados do mod). Só o comando da
-    linha de status muda, o resto do arquivo fica como estava: um comando
-    que já existe vira `tee '<esse arquivo>' 2>/dev/null | (` + o seu
-    comando + `)`, então ele continua rodando como antes, com a mesma
-    entrada (e continua rodando se o mod for removido); sem linha de status,
-    é adicionada uma que só salva. "Desfazer a configuração" devolve o
-    comando, ou tira a que a ilha adicionou, do mesmo jeito. Precisa do Git
-    Bash, onde o Claude Code roda a linha de status quando ele está
-    instalado; sem ele, ou para fazer você mesmo, o "Copiar a linha" do
-    painel copia a linha para um script PowerShell que leu a entrada com
-    `$stdin = [Console]::In.ReadToEnd()` (adicione depois dela); num script
-    bash que leu com `input=$(cat)`, adicione
-    `printf '%s' "$input" > '<esse arquivo>'`;
+    linha de status, salvo em `claude-status_<SID da sua conta>.json` na
+    pasta de dados do mod, criado antes para só a sua conta conseguir ler.
+    A ilha nunca muda as configurações do Claude Code: o "Copiar a linha"
+    do painel copia a linha para adicionar ao script da sua linha de status
+    (com o caminho do arquivo). Com o Git Bash, onde o Claude Code roda a
+    linha de status quando ele está instalado, é
+    `printf '%s' "$input" > '<esse arquivo>'`, para um script que leu a
+    entrada com `input=$(cat)`; sem ele,
+    `$stdin | Set-Content -Encoding utf8 -LiteralPath '<esse arquivo>'`,
+    para um script PowerShell que leu com
+    `$stdin = [Console]::In.ReadToEnd()` (adicione depois dessa linha). Sem
+    linha de status ainda, o comando `cat > '<esse arquivo>'` (Git Bash) só
+    salva e não mostra nada;
   * relógios mundiais: os relógios adicionais do Windows (lidos do registro,
     vigiado por mudanças);
   * a pílula enchendo com downloads: o progresso que os apps dão ao botão
@@ -1477,7 +1465,9 @@ ampliação e os pulos; ela só pega os cliques em volta dos apps), ou como ela
     Windows;
   * o modo de digitação: perguntado à janela do método de entrada do app;
   * ícones da bandeja: como os apps mandam para a barra (pedidos de novo
-    quando o mod começa, e guardados enquanto ele recarrega);
+    quando o mod começa, e guardados enquanto ele recarrega); com o
+    Windhawk rodando como administrador, um clique só chega aos apps que
+    não rodam assim;
   * modos de energia: as funções do powrprof.dll que as Configurações do
     Windows usam; a GPU: contadores de desempenho e os números do próprio
     driver.
@@ -2332,6 +2322,7 @@ escrever em português.
 #include <windhawk_utils.h>
 
 #include <appmodel.h>
+#include <aclapi.h>
 #include <audiopolicy.h>
 #include <bluetoothapis.h>
 #include <cfgmgr32.h>
@@ -3496,15 +3487,9 @@ std::atomic<double> g_backdropLight{0.5};
 
 std::atomic<bool> g_unloading;
 
-// The mod's storage is the computer's, shared by its accounts: what one
-// account's session changed in Windows (its auto-hide, its Do not disturb),
-// its explorer.exe part and what describes its own Windows (its
-// notifications cleared here, its tray icons kept across a reload) are kept
-// under a name with the account's SID, so another account never undoes or
-// reads them. Values kept before under the plain name
-// are read once and moved.
-std::wstring UserValueName(PCWSTR name) {
-    static const std::wstring suffix = [] {
+// The account's SID as text (empty if it can't be read).
+const std::wstring& UserSid() {
+    static const std::wstring sid = [] {
         std::wstring sid;
         HANDLE token = nullptr;
         if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
@@ -3521,9 +3506,21 @@ std::wstring UserValueName(PCWSTR name) {
             }
             CloseHandle(token);
         }
-        return sid.empty() ? std::wstring() : L"_" + sid;
+        return sid;
     }();
-    return name + suffix;
+    return sid;
+}
+
+// The mod's storage is the computer's, shared by its accounts: what one
+// account's session changed in Windows (its auto-hide, its Do not disturb),
+// its explorer.exe part and what describes its own Windows (its
+// notifications cleared here, its tray icons kept across a reload) are kept
+// under a name with the account's SID, so another account never undoes or
+// reads them. Values kept before under the plain name
+// are read once and moved.
+std::wstring UserValueName(PCWSTR name) {
+    const std::wstring& sid = UserSid();
+    return sid.empty() ? std::wstring(name) : name + (L"_" + sid);
 }
 
 // (`shared`: a value every account used before 2.1, like the timer's
@@ -11293,6 +11290,10 @@ void UnsubclassTaskbars() {
         if (IsWindow(hWnd)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, TaskbarSubclassProc);
+            // (Painted by Windows again: in the see-through modes the
+            // subclass painted it clear, see PaintTaskbarClear.)
+            RedrawWindow(hWnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         }
     }
 
@@ -11954,6 +11955,7 @@ bool ToastSoundLoops(const char* xml, int size);
 bool IsUrgentToast(const char* xml, int size);
 std::wstring PackageFolder(const std::wstring& appId);
 void StartToastShortcutsRead();
+void WaitForToastShortcutsRead();
 
 // The toasts newer than `lastId` (or only the one with the ID `onlyId`):
 // the AppUserModelIDs of their apps, and the toasts themselves; moves
@@ -12268,6 +12270,8 @@ void StopToastWatch() {
         CloseHandle(g_toastThread);
         g_toastThread = nullptr;
     }
+    // (The shortcuts' reader it may have started.)
+    WaitForToastShortcutsRead();
     for (HANDLE* event : {&g_toastStopEvent, &g_toastChangedEvent}) {
         if (*event) {
             CloseHandle(*event);
@@ -14646,7 +14650,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"A browser's download standing still shows paused", L"浏览器下载停滞时显示为暂停"},
     {L"A bubble on the island says when Caps Lock is turned on or off", L"大写锁定打开或关闭时，灵动岛上会弹出提示"},
     {L"A click on an item opens it; when you don't use it, the pill can shrink into a thin line", L"点击项目即可打开；不用时，胶囊可以收缩成一条细线"},
-    {L"A copy of the settings as they are goes to {copy}.", L"当前设置的副本会保存到 {copy}。"},
     {L"A file with all of it (agenda links too)", L"包含全部内容的文件（包括日程订阅链接）"},
     {L"A line while a window is maximized", L"窗口最大化时变为细线"},
     {L"A line with the mouse away", L"鼠标离开时变为细线"},
@@ -14716,6 +14719,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Apps with unsaved work can stop it.", L"有未保存工作的应用可能会阻止它。"},
     {L"Area that brings it back", L"唤回区域"},
     {L"Arguments (if any)", L"参数（如有）"},
+    {L"Arguments (optional)", L"参数（可选）"},
     {L"Ask every time", L"每次都询问"},
     {L"Ask the first time", L"第一次时询问"},
     {L"Audio visualizer", L"音频可视化"},
@@ -14784,7 +14788,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Caps Lock on", L"大写锁定已打开"},
     {L"Captions", L"实时字幕"},
     {L"Cast", L"投屏"},
-    {L"Change it", L"确认修改"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"更改会自动保存到正在使用的配置文件 · 铅笔可重命名、保存或删除"},
     {L"Charging", L"正在充电"},
     {L"Check every", L"检查间隔"},
@@ -14800,9 +14803,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"City not found", L"未找到城市"},
     {L"Claude Code", L"Claude Code"},
     {L"Claude Code (terminal)", L"Claude Code（终端）"},
-    {L"Claude Code gives its limits to its status line: the island can set it up (it shows what changes first), or copy the line for your status line's script (see the README)", L"Claude Code 会把额度传给其状态栏：灵动岛可以帮你设置（会先显示要修改的内容），或者复制这一行到你的状态栏脚本中（见 README）"},
+    {L"Claude Code gives its limits to its status line, run in Git Bash: copy the line into its script, after it reads its input with input=$(cat) (see the README)", L"Claude Code 会把额度传给其在 Git Bash 中运行的状态栏：把这一行复制到状态栏脚本中，放在脚本用 input=$(cat) 读取输入之后（见 README）"},
     {L"Claude Code tells its limits with a Pro or Max plan, after its first answer in a session", L"Claude Code 只在 Pro 或 Max 方案下、会话中第一次回答之后才提供额度"},
-    {L"Claude Code's settings couldn't be changed (see the island's logs)", L"无法修改 Claude Code 的设置（请查看灵动岛的日志）"},
     {L"Clear", L"晴"},
     {L"Clear all", L"全部清除"},
     {L"Click a screen to choose where the island appears.", L"点击屏幕以选择灵动岛显示的位置。"},
@@ -14889,8 +14891,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Dock", L"程序坞"},
     {L"Documents", L"文档"},
     {L"Done", L"完成"},
-    {L"Done: the limits show after Claude Code's next answer (restart it if they don't)", L"完成：Claude Code 下次回答后就会显示额度（如果没有显示，请重启它）"},
-    {L"Done: the status line is back as it was", L"完成：状态栏已恢复原样"},
     {L"Download pictures from the web (goes online)", L"从网络下载图片（需联网）"},
     {L"Downloading the icons", L"正在下载图标"},
     {L"Downloads", L"下载"},
@@ -15285,9 +15285,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Open an app to give it a place", L"打开一个应用来为它设置位置"},
     {L"Open in Explorer", L"在资源管理器中打开"},
     {L"Open it", L"打开"},
+    {L"Open something", L"打开某项"},
     {L"Open the Windows notification center", L"打开 Windows 通知中心"},
-    {L"Opens", L"打开"},
     {L"Opens a panel with your folder and place shortcuts", L"打开包含文件夹和位置快捷方式的面板"},
+    {L"Opens a program, a file, a folder, a link or a settings page, like the Run box (Win+R).", L"打开程序、文件、文件夹、链接或设置页面，就像“运行”框（Win+R）那样。"},
     {L"Opens pickers for the fill, text and icon colors", L"打开选色器，设置填充、文字和图标颜色"},
     {L"Opens the line", L"打开细线的方式"},
     {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"将未固定的图标显示为胶囊内列表、网格或带名称的列表"},
@@ -15391,6 +15392,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Room at the pill's ends", L"胶囊两端的空间"},
     {L"Rounds the corners where the bar meets the screen, like a screen's own round corners", L"把栏与屏幕相接处的角变圆，就像屏幕本身的圆角"},
     {L"Rows", L"行"},
+    {L"Run a command line", L"运行命令行"},
+    {L"Runs in cmd.exe without a window; a terminal shows only if it fails.", L"在 cmd.exe 中无窗口运行；只有失败时才会显示终端。"},
     {L"Safe to remove", L"可以安全移除"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"与主岛相同：这里的更改也适用于主岛 · + 为此显示器创建配置"},
     {L"Same as the main one", L"与主灵动岛相同"},
@@ -15431,8 +15434,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"See-through blurred pill with a bright edge, needs Windows transparency", L"带亮边的透明模糊胶囊，需要开启 Windows 透明效果"},
     {L"Set a timer", L"设置计时器"},
     {L"Set an alarm", L"设置闹钟"},
-    {L"Set up", L"设置"},
-    {L"Set up: the limits show after Claude Code's next answer, with a Pro or Max plan", L"已设置：Claude Code 下次回答后就会显示额度（需要 Pro 或 Max 方案）"},
     {L"Sets the order of day, month and year when the date shows", L"显示日期时设置日、月、年的先后顺序"},
     {L"Settings", L"设置"},
     {L"Settings back to their defaults", L"设置已恢复为默认值"},
@@ -15561,7 +15562,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"The glass gets a sheen, a beveled edge, light along its bottom and a soft shadow around it, and the panels' cards look like glass too (idea by Thiago Silva)", L"玻璃获得光泽、斜切边缘、底部的反射光和周围柔和的阴影，面板中的卡片也呈现玻璃质感（创意来自 Thiago Silva）"},
     {L"The hotspot isn't available now.", L"热点当前不可用。"},
     {L"The icons'", L"图标的颜色"},
-    {L"The island can't change Claude Code's settings here: copy the line into your status line's script (see the README)", L"灵动岛无法在这里修改 Claude Code 的设置：请把这一行复制到你的状态栏脚本中（见 README）"},
     {L"The island follows the mouse between screens.", L"灵动岛跟随鼠标在屏幕之间移动。"},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"由灵动岛处理通知和声音（Windows 保持安静）"},
     {L"The island is the pill at the top of the screen: the clock, the control center, your notifications and what's playing", L"灵动岛是屏幕顶部的胶囊：显示时钟、控制中心、你的通知和正在播放的内容"},
@@ -15576,7 +15576,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"The line's color, on the pill and lit in the panel", L"歌词行的颜色，用于胶囊和面板中的高亮"},
     {L"The list stays open after you click an icon (In the pill style)", L"点击图标后列表保持打开（仅限胶囊内样式）"},
     {L"The mod's site", L"模组网站"},
-    {L"The name has 1 to 32 characters.", L"名称为 1 到 32 个字符。"},
+    {L"The name has 1 to 32 characters (a letter outside English, like an accented one, counts as two or three).", L"名称为 1 到 32 个字符（英文以外的字符，如汉字或带重音的字母，算作两到三个）。"},
     {L"The next alarm that's on", L"下一个已开启的闹钟"},
     {L"The one chosen on the map", L"在地图上选择的屏幕"},
     {L"The password has 8 to 63 letters, numbers or symbols, without accents.", L"密码为 8 到 63 个字母、数字或符号，不含重音字符。"},
@@ -15598,10 +15598,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Their sliders talk to the monitor over its cable. Turn off if a monitor flickers or a dock or MST hub resets when the control center opens", L"它们的滑块通过线缆与显示器通信。如果打开控制中心时显示器闪烁，或扩展坞或 MST 集线器重置，请关闭此项"},
     {L"This PC", L"此电脑"},
     {L"This assistant sets the main choices in a few steps, and each one changes the island at once; everything else is in the tabs on the left", L"这个向导用几步设置主要选项，每个选择都会立刻改变灵动岛；其余设置都在左侧的选项卡中"},
-    {L"This changes {settings}: a status line is added, with the command below. It saves what Claude Code gives the status line in {file} and shows nothing; \"Undo the setup\" takes it out.", L"这会修改 {settings}：添加一个状态栏，使用下面的命令。它会把 Claude Code 传给状态栏的内容保存到 {file}，不显示任何内容；“撤销设置”会把它删除。"},
-    {L"This changes {settings}: the status line the island added is taken out.", L"这会修改 {settings}：删除灵动岛添加的状态栏。"},
-    {L"This changes {settings}: the status line's command becomes the one below. It saves what Claude Code gives the status line in {file}, then runs your command as before; \"Undo the setup\" puts your command back.", L"这会修改 {settings}：状态栏的命令会变成下面这个。它先把 Claude Code 传给状态栏的内容保存到 {file}，然后照常运行你的命令；“撤销设置”会恢复你的命令。"},
-    {L"This changes {settings}: the status line's command goes back to the one below.", L"这会修改 {settings}：状态栏的命令恢复为下面这个。"},
     {L"This monitor's profile: changes here apply to every monitor using it", L"此显示器的配置：这里的更改适用于使用它的所有显示器"},
     {L"Three", L"三个"},
     {L"Thumbnails of the files", L"文件缩略图"},
@@ -15648,7 +15644,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"UV index", L"紫外线指数"},
     {L"Ultrawide vertical stack", L"超宽垂直堆叠"},
     {L"Unavailable", L"不可用"},
-    {L"Undo the setup", L"撤销设置"},
     {L"Up to 40 favorite files", L"最多 40 个收藏文件"},
     {L"Upcoming events", L"即将到来的事件"},
     {L"Upcoming holidays", L"即将到来的节假日"},
@@ -15693,6 +15688,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"What Claude Code in a terminal gives its status line (a line in its script, see the item's panel). The Claude desktop app doesn't leave its limits on this PC, so it can't show here", L"终端中的 Claude Code 传给其状态栏的数据（在其脚本中加一行，见该项目的面板）。Claude 桌面应用不会把额度留在这台电脑上，所以这里无法显示"},
     {L"What Codex writes in its logs on this PC", L"Codex 在本机日志中写入的数据"},
     {L"What it does", L"作用"},
+    {L"What it opens", L"打开的内容"},
     {L"What needs doing?", L"要做什么？"},
     {L"What's new", L"新功能"},
     {L"What's playing", L"正在播放"},
@@ -15853,7 +15849,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"A browser's download standing still shows paused", L"Stehender Browser-Download erscheint pausiert"},
     {L"A bubble on the island says when Caps Lock is turned on or off", L"Eine Blase auf der Insel zeigt, wann die Feststelltaste ein- oder ausgeschaltet wird"},
     {L"A click on an item opens it; when you don't use it, the pill can shrink into a thin line", L"Ein Klick auf ein Element öffnet es; wenn du sie nicht benutzt, kann die Kapsel zu einer dünnen Linie schrumpfen"},
-    {L"A copy of the settings as they are goes to {copy}.", L"Eine Kopie der Einstellungen, wie sie jetzt sind, kommt nach {copy}."},
     {L"A file with all of it (agenda links too)", L"Eine Datei mit allem (auch die Kalender-Links)"},
     {L"A line while a window is maximized", L"Eine Linie, solange ein Fenster maximiert ist"},
     {L"A line with the mouse away", L"Eine Linie, wenn die Maus weg ist"},
@@ -15923,6 +15918,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Apps with unsaved work can stop it.", L"Apps mit nicht gespeicherter Arbeit können es verhindern."},
     {L"Area that brings it back", L"Bereich zum Zurückholen"},
     {L"Arguments (if any)", L"Argumente (falls nötig)"},
+    {L"Arguments (optional)", L"Argumente (optional)"},
     {L"Ask every time", L"Jedes Mal fragen"},
     {L"Ask the first time", L"Beim ersten Mal fragen"},
     {L"Audio visualizer", L"Audio-Visualizer"},
@@ -15991,7 +15987,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Caps Lock on", L"Feststelltaste an"},
     {L"Captions", L"Live-Untertitel"},
     {L"Cast", L"Streamen"},
-    {L"Change it", L"Ändern"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"Änderungen werden im verwendeten Profil gespeichert · der Stift benennt um, speichert oder löscht"},
     {L"Charging", L"Wird geladen"},
     {L"Check every", L"Prüfen alle"},
@@ -16007,9 +16002,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"City not found", L"Stadt nicht gefunden"},
     {L"Claude Code", L"Claude Code"},
     {L"Claude Code (terminal)", L"Claude Code (Terminal)"},
-    {L"Claude Code gives its limits to its status line: the island can set it up (it shows what changes first), or copy the line for your status line's script (see the README)", L"Claude Code übergibt seine Limits seiner Statuszeile: Die Insel kann sie einrichten (sie zeigt vorher, was sich ändert), oder kopiere die Zeile für das Skript deiner Statuszeile (siehe README)"},
+    {L"Claude Code gives its limits to its status line, run in Git Bash: copy the line into its script, after it reads its input with input=$(cat) (see the README)", L"Claude Code übergibt seine Limits seiner Statuszeile, die in Git Bash läuft: Kopiere die Zeile in deren Skript, nachdem es seine Eingabe mit input=$(cat) gelesen hat (siehe README)"},
     {L"Claude Code tells its limits with a Pro or Max plan, after its first answer in a session", L"Claude Code nennt seine Limits mit einem Pro- oder Max-Plan, nach seiner ersten Antwort in einer Sitzung"},
-    {L"Claude Code's settings couldn't be changed (see the island's logs)", L"Die Einstellungen von Claude Code konnten nicht geändert werden (siehe die Protokolle der Insel)"},
     {L"Clear", L"Klar"},
     {L"Clear all", L"Alle löschen"},
     {L"Click a screen to choose where the island appears.", L"Klicken Sie auf einen Bildschirm, um festzulegen, wo die Insel erscheint."},
@@ -16096,8 +16090,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Dock", L"Dock"},
     {L"Documents", L"Dokumente"},
     {L"Done", L"Fertig"},
-    {L"Done: the limits show after Claude Code's next answer (restart it if they don't)", L"Fertig: Die Limits erscheinen nach der nächsten Antwort von Claude Code (sonst starte es neu)"},
-    {L"Done: the status line is back as it was", L"Fertig: Die Statuszeile ist wieder wie vorher"},
     {L"Download pictures from the web (goes online)", L"Bilder aus dem Web laden (online)"},
     {L"Downloading the icons", L"Symbole werden heruntergeladen"},
     {L"Downloads", L"Downloads"},
@@ -16492,9 +16484,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Open an app to give it a place", L"Öffnen Sie eine App, um ihr eine Position zu geben"},
     {L"Open in Explorer", L"Im Explorer öffnen"},
     {L"Open it", L"Öffnen"},
+    {L"Open something", L"Etwas öffnen"},
     {L"Open the Windows notification center", L"Windows-Benachrichtigungscenter öffnen"},
-    {L"Opens", L"Öffnet"},
     {L"Opens a panel with your folder and place shortcuts", L"Öffnet ein Panel mit Ihren Ordner- und Ortsverknüpfungen"},
+    {L"Opens a program, a file, a folder, a link or a settings page, like the Run box (Win+R).", L"Öffnet ein Programm, eine Datei, einen Ordner, einen Link oder eine Einstellungsseite, wie das Ausführen-Fenster (Win+R)."},
     {L"Opens pickers for the fill, text and icon colors", L"Öffnet Auswahlfelder für Füllungs-, Text- und Symbolfarben"},
     {L"Opens the line", L"Öffnet die Linie"},
     {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"Öffnet nicht angeheftete Symbole als Liste in der Kapsel, als Raster oder als benannte Liste"},
@@ -16598,6 +16591,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Room at the pill's ends", L"Platz an den Enden der Kapsel"},
     {L"Rounds the corners where the bar meets the screen, like a screen's own round corners", L"Rundet die Ecken ab, an denen die Leiste auf den Bildschirm trifft, wie die runden Ecken eines Bildschirms"},
     {L"Rows", L"Zeilen"},
+    {L"Run a command line", L"Eine Befehlszeile ausführen"},
+    {L"Runs in cmd.exe without a window; a terminal shows only if it fails.", L"Läuft in cmd.exe ohne Fenster; ein Terminal erscheint nur, wenn sie fehlschlägt."},
     {L"Safe to remove", L"Sicher entfernbar"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"Wie die Hauptinsel: Änderungen hier gelten auch dort · + erstellt das Profil dieses Monitors"},
     {L"Same as the main one", L"Wie die Hauptinsel"},
@@ -16638,8 +16633,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"See-through blurred pill with a bright edge, needs Windows transparency", L"Durchsichtige, unscharfe Kapsel mit hellem Rand, braucht Windows-Transparenz"},
     {L"Set a timer", L"Timer stellen"},
     {L"Set an alarm", L"Wecker stellen"},
-    {L"Set up", L"Einrichten"},
-    {L"Set up: the limits show after Claude Code's next answer, with a Pro or Max plan", L"Eingerichtet: Die Limits erscheinen nach der nächsten Antwort von Claude Code, mit einem Pro- oder Max-Plan"},
     {L"Sets the order of day, month and year when the date shows", L"Legt die Reihenfolge von Tag, Monat und Jahr bei angezeigtem Datum fest"},
     {L"Settings", L"Einstellungen"},
     {L"Settings back to their defaults", L"Einstellungen auf Standard zurückgesetzt"},
@@ -16768,7 +16761,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"The glass gets a sheen, a beveled edge, light along its bottom and a soft shadow around it, and the panels' cards look like glass too (idea by Thiago Silva)", L"Das Glas bekommt einen Schimmer, eine abgeschrägte Kante, Licht an der Unterseite und einen weichen Schatten ringsum; die Karten der Bereiche sehen ebenfalls wie Glas aus (Idee von Thiago Silva)"},
     {L"The hotspot isn't available now.", L"Der Hotspot ist gerade nicht verfügbar."},
     {L"The icons'", L"Die der Symbole"},
-    {L"The island can't change Claude Code's settings here: copy the line into your status line's script (see the README)", L"Die Insel kann die Einstellungen von Claude Code hier nicht ändern: Kopiere die Zeile in das Skript deiner Statuszeile (siehe README)"},
     {L"The island follows the mouse between screens.", L"Die Insel folgt der Maus zwischen den Bildschirmen."},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"Die Insel übernimmt Benachrichtigungen und deren Töne (die von Windows bleiben stumm)"},
     {L"The island is the pill at the top of the screen: the clock, the control center, your notifications and what's playing", L"Die Insel ist die Kapsel oben auf dem Bildschirm: die Uhr, das Kontrollzentrum, deine Benachrichtigungen und die Wiedergabe"},
@@ -16783,7 +16775,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"The line's color, on the pill and lit in the panel", L"Farbe der Zeile, in der Kapsel und hervorgehoben im Panel"},
     {L"The list stays open after you click an icon (In the pill style)", L"Die Liste bleibt nach einem Klick auf ein Symbol offen (Stil In der Kapsel)"},
     {L"The mod's site", L"Website des Mods"},
-    {L"The name has 1 to 32 characters.", L"Der Name hat 1 bis 32 Zeichen."},
+    {L"The name has 1 to 32 characters (a letter outside English, like an accented one, counts as two or three).", L"Der Name hat 1 bis 32 Zeichen (ein Zeichen außerhalb des Englischen, etwa ein Buchstabe mit Akzent, zählt als zwei oder drei)."},
     {L"The next alarm that's on", L"Der nächste aktive Wecker"},
     {L"The one chosen on the map", L"Der auf der Karte gewählte"},
     {L"The password has 8 to 63 letters, numbers or symbols, without accents.", L"Das Kennwort hat 8 bis 63 Buchstaben, Ziffern oder Zeichen, ohne Akzente."},
@@ -16805,10 +16797,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"Their sliders talk to the monitor over its cable. Turn off if a monitor flickers or a dock or MST hub resets when the control center opens", L"Ihre Regler sprechen über das Kabel mit dem Monitor. Ausschalten, wenn ein Monitor flackert oder ein Dock oder MST-Hub beim Öffnen des Kontrollzentrums zurückgesetzt wird"},
     {L"This PC", L"Dieser PC"},
     {L"This assistant sets the main choices in a few steps, and each one changes the island at once; everything else is in the tabs on the left", L"Dieser Assistent legt die wichtigsten Optionen in wenigen Schritten fest, und jede ändert die Insel sofort; alles andere steht in den Tabs links"},
-    {L"This changes {settings}: a status line is added, with the command below. It saves what Claude Code gives the status line in {file} and shows nothing; \"Undo the setup\" takes it out.", L"Das ändert {settings}: Eine Statuszeile wird hinzugefügt, mit dem Befehl unten. Er speichert, was Claude Code der Statuszeile übergibt, in {file} und zeigt nichts an; „Einrichtung rückgängig machen“ entfernt sie wieder."},
-    {L"This changes {settings}: the status line the island added is taken out.", L"Das ändert {settings}: Die Statuszeile, die die Insel hinzugefügt hat, wird entfernt."},
-    {L"This changes {settings}: the status line's command becomes the one below. It saves what Claude Code gives the status line in {file}, then runs your command as before; \"Undo the setup\" puts your command back.", L"Das ändert {settings}: Der Befehl der Statuszeile wird zu dem unten. Er speichert, was Claude Code der Statuszeile übergibt, in {file} und führt dann deinen Befehl wie bisher aus; „Einrichtung rückgängig machen“ stellt deinen Befehl wieder her."},
-    {L"This changes {settings}: the status line's command goes back to the one below.", L"Das ändert {settings}: Der Befehl der Statuszeile wird wieder zu dem unten."},
     {L"This monitor's profile: changes here apply to every monitor using it", L"Profil dieses Monitors: Änderungen hier gelten für jeden Monitor, der es nutzt"},
     {L"Three", L"Drei"},
     {L"Thumbnails of the files", L"Miniaturansichten der Dateien"},
@@ -16855,7 +16843,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"UV index", L"UV-Index"},
     {L"Ultrawide vertical stack", L"Ultrabreit, vertikal gestapelt"},
     {L"Unavailable", L"Nicht verfügbar"},
-    {L"Undo the setup", L"Einrichtung rückgängig machen"},
     {L"Up to 40 favorite files", L"Bis zu 40 Lieblingsdateien"},
     {L"Upcoming events", L"Anstehende Termine"},
     {L"Upcoming holidays", L"Anstehende Feiertage"},
@@ -16900,6 +16887,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kGermanTexts[] = {
     {L"What Claude Code in a terminal gives its status line (a line in its script, see the item's panel). The Claude desktop app doesn't leave its limits on this PC, so it can't show here", L"Was Claude Code im Terminal seiner Statuszeile übergibt (eine Zeile in deren Skript, siehe das Panel des Elements). Die Claude-Desktop-App hinterlässt ihre Limits nicht auf diesem PC, daher können sie hier nicht erscheinen"},
     {L"What Codex writes in its logs on this PC", L"Was Codex auf diesem PC in seine Protokolle schreibt"},
     {L"What it does", L"Was sie macht"},
+    {L"What it opens", L"Was er öffnet"},
     {L"What needs doing?", L"Was ist zu tun?"},
     {L"What's new", L"Neuigkeiten"},
     {L"What's playing", L"Wiedergabe"},
@@ -17060,7 +17048,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"A browser's download standing still shows paused", L"Una descarga del navegador detenida se ve en pausa"},
     {L"A bubble on the island says when Caps Lock is turned on or off", L"Un globo en la isla avisa cuando Bloq Mayús se activa o desactiva"},
     {L"A click on an item opens it; when you don't use it, the pill can shrink into a thin line", L"Un clic en un elemento lo abre; cuando no la usas, la píldora puede reducirse a una línea fina"},
-    {L"A copy of the settings as they are goes to {copy}.", L"Una copia de la configuración tal como está va a {copy}."},
     {L"A file with all of it (agenda links too)", L"Un archivo con todo (también los enlaces de las agendas)"},
     {L"A line while a window is maximized", L"Una línea con una ventana maximizada"},
     {L"A line with the mouse away", L"Una línea con el ratón lejos"},
@@ -17130,6 +17117,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Apps with unsaved work can stop it.", L"Las apps con trabajo sin guardar pueden impedirlo."},
     {L"Area that brings it back", L"Zona que la recupera"},
     {L"Arguments (if any)", L"Argumentos (si hay)"},
+    {L"Arguments (optional)", L"Argumentos (opcional)"},
     {L"Ask every time", L"Preguntar siempre"},
     {L"Ask the first time", L"Preguntar la primera vez"},
     {L"Audio visualizer", L"Visualizador de audio"},
@@ -17198,7 +17186,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Caps Lock on", L"Bloq Mayús activado"},
     {L"Captions", L"Subtítulos"},
     {L"Cast", L"Transmitir"},
-    {L"Change it", L"Cambiar"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"Los cambios se guardan en el perfil en uso · el lápiz renombra, guarda o elimina"},
     {L"Charging", L"Cargando"},
     {L"Check every", L"Comprobar cada"},
@@ -17214,9 +17201,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"City not found", L"Ciudad no encontrada"},
     {L"Claude Code", L"Claude Code"},
     {L"Claude Code (terminal)", L"Claude Code (terminal)"},
-    {L"Claude Code gives its limits to its status line: the island can set it up (it shows what changes first), or copy the line for your status line's script (see the README)", L"Claude Code le pasa sus límites a su línea de estado: la isla puede configurarla (antes muestra qué cambia), o copia la línea para el script de tu línea de estado (mira el README)"},
+    {L"Claude Code gives its limits to its status line, run in Git Bash: copy the line into its script, after it reads its input with input=$(cat) (see the README)", L"Claude Code le pasa sus límites a su línea de estado, que corre en Git Bash: copia la línea en su script, después de que lea su entrada con input=$(cat) (mira el README)"},
     {L"Claude Code tells its limits with a Pro or Max plan, after its first answer in a session", L"Claude Code indica sus límites con un plan Pro o Max, después de su primera respuesta en una sesión"},
-    {L"Claude Code's settings couldn't be changed (see the island's logs)", L"No se pudo cambiar la configuración de Claude Code (mira los registros de la isla)"},
     {L"Clear", L"Despejado"},
     {L"Clear all", L"Borrar todo"},
     {L"Click a screen to choose where the island appears.", L"Haz clic en una pantalla para elegir dónde aparece la isla."},
@@ -17303,8 +17289,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Dock", L"Dock"},
     {L"Documents", L"Documentos"},
     {L"Done", L"Listo"},
-    {L"Done: the limits show after Claude Code's next answer (restart it if they don't)", L"Listo: los límites aparecen después de la próxima respuesta de Claude Code (reinícialo si no aparecen)"},
-    {L"Done: the status line is back as it was", L"Listo: la línea de estado volvió a ser como era"},
     {L"Download pictures from the web (goes online)", L"Descargar imágenes de la web (usa internet)"},
     {L"Downloading the icons", L"Descargando los iconos"},
     {L"Downloads", L"Descargas"},
@@ -17699,9 +17683,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Open an app to give it a place", L"Abre una app para darle un lugar"},
     {L"Open in Explorer", L"Abrir en el Explorador"},
     {L"Open it", L"Abrir"},
+    {L"Open something", L"Abrir algo"},
     {L"Open the Windows notification center", L"Abrir el centro de notificaciones de Windows"},
-    {L"Opens", L"Abre"},
     {L"Opens a panel with your folder and place shortcuts", L"Abre un panel con tus accesos directos a carpetas y lugares"},
+    {L"Opens a program, a file, a folder, a link or a settings page, like the Run box (Win+R).", L"Abre un programa, un archivo, una carpeta, un enlace o una página de configuración, como el cuadro Ejecutar (Win+R)."},
     {L"Opens pickers for the fill, text and icon colors", L"Abre selectores para los colores de relleno, texto e iconos"},
     {L"Opens the line", L"Abre la línea"},
     {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"Abre los iconos no anclados como lista en la píldora, cuadrícula o lista con nombres"},
@@ -17805,6 +17790,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Room at the pill's ends", L"Espacio en los extremos de la píldora"},
     {L"Rounds the corners where the bar meets the screen, like a screen's own round corners", L"Redondea las esquinas donde la barra se une a la pantalla, como las esquinas redondas de la propia pantalla"},
     {L"Rows", L"Filas"},
+    {L"Run a command line", L"Ejecutar una línea de comandos"},
+    {L"Runs in cmd.exe without a window; a terminal shows only if it fails.", L"Se ejecuta en cmd.exe sin ventana; solo aparece una terminal si falla."},
     {L"Safe to remove", L"Se puede quitar con seguridad"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"Igual que la principal: los cambios aquí también valen para ella · + crea el perfil de este monitor"},
     {L"Same as the main one", L"Igual que la principal"},
@@ -17845,8 +17832,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"See-through blurred pill with a bright edge, needs Windows transparency", L"Píldora transparente y desenfocada con borde brillante; necesita la transparencia de Windows"},
     {L"Set a timer", L"Poner temporizador"},
     {L"Set an alarm", L"Poner alarma"},
-    {L"Set up", L"Configurar"},
-    {L"Set up: the limits show after Claude Code's next answer, with a Pro or Max plan", L"Configurado: los límites aparecen después de la próxima respuesta de Claude Code, con un plan Pro o Max"},
     {L"Sets the order of day, month and year when the date shows", L"Define el orden de día, mes y año cuando se muestra la fecha"},
     {L"Settings", L"Configuración"},
     {L"Settings back to their defaults", L"Configuración restablecida a los valores predeterminados"},
@@ -17975,7 +17960,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"The glass gets a sheen, a beveled edge, light along its bottom and a soft shadow around it, and the panels' cards look like glass too (idea by Thiago Silva)", L"El cristal gana brillo, un borde biselado, luz en la parte inferior y una sombra suave alrededor, y las tarjetas de los paneles también parecen de cristal (idea de Thiago Silva)"},
     {L"The hotspot isn't available now.", L"La zona con cobertura no está disponible ahora."},
     {L"The icons'", L"El de los iconos"},
-    {L"The island can't change Claude Code's settings here: copy the line into your status line's script (see the README)", L"La isla no puede cambiar la configuración de Claude Code aquí: copia la línea en el script de tu línea de estado (mira el README)"},
     {L"The island follows the mouse between screens.", L"La isla sigue al ratón entre pantallas."},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"La isla gestiona las notificaciones y sus sonidos (las de Windows se quedan en silencio)"},
     {L"The island is the pill at the top of the screen: the clock, the control center, your notifications and what's playing", L"La isla es la píldora en la parte superior de la pantalla: el reloj, el centro de control, tus notificaciones y lo que suena"},
@@ -17990,7 +17974,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"The line's color, on the pill and lit in the panel", L"Color de la línea, en la píldora y resaltada en el panel"},
     {L"The list stays open after you click an icon (In the pill style)", L"La lista sigue abierta tras hacer clic en un icono (estilo En la píldora)"},
     {L"The mod's site", L"Sitio del mod"},
-    {L"The name has 1 to 32 characters.", L"El nombre tiene de 1 a 32 caracteres."},
+    {L"The name has 1 to 32 characters (a letter outside English, like an accented one, counts as two or three).", L"El nombre tiene de 1 a 32 caracteres (una letra que no es del inglés, como una con tilde, cuenta como dos o tres)."},
     {L"The next alarm that's on", L"La próxima alarma activada"},
     {L"The one chosen on the map", L"La elegida en el mapa"},
     {L"The password has 8 to 63 letters, numbers or symbols, without accents.", L"La contraseña tiene de 8 a 63 letras, números o símbolos, sin acentos."},
@@ -18012,10 +17996,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"Their sliders talk to the monitor over its cable. Turn off if a monitor flickers or a dock or MST hub resets when the control center opens", L"Sus controles hablan con el monitor por el cable. Desactívalo si un monitor parpadea o una base o un hub MST se reinicia al abrir el centro de control"},
     {L"This PC", L"Este PC"},
     {L"This assistant sets the main choices in a few steps, and each one changes the island at once; everything else is in the tabs on the left", L"Este asistente define las opciones principales en pocos pasos, y cada una cambia la isla al instante; todo lo demás está en las pestañas de la izquierda"},
-    {L"This changes {settings}: a status line is added, with the command below. It saves what Claude Code gives the status line in {file} and shows nothing; \"Undo the setup\" takes it out.", L"Esto cambia {settings}: se agrega una línea de estado, con el comando de abajo. Guarda lo que Claude Code le pasa a la línea de estado en {file} y no muestra nada; \"Deshacer la configuración\" la quita."},
-    {L"This changes {settings}: the status line the island added is taken out.", L"Esto cambia {settings}: se quita la línea de estado que agregó la isla."},
-    {L"This changes {settings}: the status line's command becomes the one below. It saves what Claude Code gives the status line in {file}, then runs your command as before; \"Undo the setup\" puts your command back.", L"Esto cambia {settings}: el comando de la línea de estado pasa a ser el de abajo. Guarda lo que Claude Code le pasa a la línea de estado en {file} y luego ejecuta tu comando como antes; \"Deshacer la configuración\" devuelve tu comando."},
-    {L"This changes {settings}: the status line's command goes back to the one below.", L"Esto cambia {settings}: el comando de la línea de estado vuelve a ser el de abajo."},
     {L"This monitor's profile: changes here apply to every monitor using it", L"Perfil de este monitor: los cambios aquí valen para todo monitor que lo use"},
     {L"Three", L"Tres"},
     {L"Thumbnails of the files", L"Miniaturas de los archivos"},
@@ -18062,7 +18042,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"UV index", L"Índice UV"},
     {L"Ultrawide vertical stack", L"Pila vertical ultraancha"},
     {L"Unavailable", L"No disponible"},
-    {L"Undo the setup", L"Deshacer la configuración"},
     {L"Up to 40 favorite files", L"Hasta 40 archivos favoritos"},
     {L"Upcoming events", L"Próximos eventos"},
     {L"Upcoming holidays", L"Próximos festivos"},
@@ -18107,6 +18086,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kSpanishTexts[] = {
     {L"What Claude Code in a terminal gives its status line (a line in its script, see the item's panel). The Claude desktop app doesn't leave its limits on this PC, so it can't show here", L"Lo que Claude Code en una terminal le pasa a su línea de estado (una línea en su script, mira el panel del elemento). La app de escritorio de Claude no deja sus límites en este PC, así que no puede aparecer aquí"},
     {L"What Codex writes in its logs on this PC", L"Lo que Codex escribe en sus registros en este PC"},
     {L"What it does", L"Qué hace"},
+    {L"What it opens", L"Qué abre"},
     {L"What needs doing?", L"¿Qué hay que hacer?"},
     {L"What's new", L"Novedades"},
     {L"What's playing", L"Reproduciendo"},
@@ -18267,7 +18247,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"A browser's download standing still shows paused", L"Остановившаяся загрузка браузера показана как пауза"},
     {L"A bubble on the island says when Caps Lock is turned on or off", L"Всплывающая подсказка на острове сообщает, когда Caps Lock включается или выключается"},
     {L"A click on an item opens it; when you don't use it, the pill can shrink into a thin line", L"Щелчок по элементу открывает его; когда капсулой не пользуются, она может сжаться до тонкой линии"},
-    {L"A copy of the settings as they are goes to {copy}.", L"Копия текущих настроек сохраняется в {copy}."},
     {L"A file with all of it (agenda links too)", L"Файл со всем (включая ссылки на календари)"},
     {L"A line while a window is maximized", L"Линия, пока окно развёрнуто"},
     {L"A line with the mouse away", L"Линия, пока мышь далеко"},
@@ -18337,6 +18316,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Apps with unsaved work can stop it.", L"Приложения с несохранёнными данными могут помешать."},
     {L"Area that brings it back", L"Область возврата"},
     {L"Arguments (if any)", L"Аргументы (если есть)"},
+    {L"Arguments (optional)", L"Аргументы (необязательно)"},
     {L"Ask every time", L"Спрашивать каждый раз"},
     {L"Ask the first time", L"Спросить в первый раз"},
     {L"Audio visualizer", L"Визуализатор звука"},
@@ -18405,7 +18385,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Caps Lock on", L"Caps Lock включён"},
     {L"Captions", L"Субтитры"},
     {L"Cast", L"Трансляция"},
-    {L"Change it", L"Изменить"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"Изменения сохраняются в используемом профиле · карандаш: переименовать, сохранить или удалить"},
     {L"Charging", L"Зарядка"},
     {L"Check every", L"Проверять каждые"},
@@ -18421,9 +18400,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"City not found", L"Город не найден"},
     {L"Claude Code", L"Claude Code"},
     {L"Claude Code (terminal)", L"Claude Code (терминал)"},
-    {L"Claude Code gives its limits to its status line: the island can set it up (it shows what changes first), or copy the line for your status line's script (see the README)", L"Claude Code передаёт лимиты своей строке состояния: остров может настроить её (сначала покажет, что изменится), или скопируйте строку для скрипта вашей строки состояния (см. README)"},
+    {L"Claude Code gives its limits to its status line, run in Git Bash: copy the line into its script, after it reads its input with input=$(cat) (see the README)", L"Claude Code передаёт лимиты своей строке состояния, которая работает в Git Bash: скопируйте строку в её скрипт после того, как он прочитает входные данные через input=$(cat) (см. README)"},
     {L"Claude Code tells its limits with a Pro or Max plan, after its first answer in a session", L"Claude Code сообщает лимиты с планом Pro или Max, после первого ответа в сессии"},
-    {L"Claude Code's settings couldn't be changed (see the island's logs)", L"Не удалось изменить настройки Claude Code (см. журналы острова)"},
     {L"Clear", L"Ясно"},
     {L"Clear all", L"Очистить всё"},
     {L"Click a screen to choose where the island appears.", L"Нажмите на экран, чтобы выбрать, где появится остров."},
@@ -18510,8 +18488,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Dock", L"Док"},
     {L"Documents", L"Документы"},
     {L"Done", L"Готово"},
-    {L"Done: the limits show after Claude Code's next answer (restart it if they don't)", L"Готово: лимиты появятся после следующего ответа Claude Code (если нет, перезапустите его)"},
-    {L"Done: the status line is back as it was", L"Готово: строка состояния снова такая, как была"},
     {L"Download pictures from the web (goes online)", L"Загружать изображения из интернета (нужен доступ в сеть)"},
     {L"Downloading the icons", L"Скачивание значков"},
     {L"Downloads", L"Загрузки"},
@@ -18906,9 +18882,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Open an app to give it a place", L"Откройте приложение, чтобы задать ему место"},
     {L"Open in Explorer", L"Открыть в Проводнике"},
     {L"Open it", L"Открыть"},
+    {L"Open something", L"Открыть что-то"},
     {L"Open the Windows notification center", L"Открыть центр уведомлений Windows"},
-    {L"Opens", L"Открывает"},
     {L"Opens a panel with your folder and place shortcuts", L"Открывает панель с ярлыками папок и мест"},
+    {L"Opens a program, a file, a folder, a link or a settings page, like the Run box (Win+R).", L"Открывает программу, файл, папку, ссылку или страницу параметров, как окно «Выполнить» (Win+R)."},
     {L"Opens pickers for the fill, text and icon colors", L"Открывает выбор цветов заливки, текста и значков"},
     {L"Opens the line", L"Открывает линию"},
     {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"Открывает незакреплённые значки списком в капсуле, сеткой или списком с именами"},
@@ -19012,6 +18989,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Room at the pill's ends", L"Место по краям капсулы"},
     {L"Rounds the corners where the bar meets the screen, like a screen's own round corners", L"Скругляет углы там, где панель встречается с экраном, как собственные скруглённые углы экрана"},
     {L"Rows", L"Строки"},
+    {L"Run a command line", L"Выполнить командную строку"},
+    {L"Runs in cmd.exe without a window; a terminal shows only if it fails.", L"Выполняется в cmd.exe без окна; терминал появляется, только если она завершится с ошибкой."},
     {L"Safe to remove", L"Можно извлекать"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"Как у главного: изменения здесь действуют и на него · + создаёт профиль этого монитора"},
     {L"Same as the main one", L"Как у главного"},
@@ -19052,8 +19031,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"See-through blurred pill with a bright edge, needs Windows transparency", L"Прозрачная размытая капсула со светлой каймой, нужна прозрачность Windows"},
     {L"Set a timer", L"Запустить таймер"},
     {L"Set an alarm", L"Поставить будильник"},
-    {L"Set up", L"Настроить"},
-    {L"Set up: the limits show after Claude Code's next answer, with a Pro or Max plan", L"Настроено: лимиты появятся после следующего ответа Claude Code, с планом Pro или Max"},
     {L"Sets the order of day, month and year when the date shows", L"Задаёт порядок дня, месяца и года при показе даты"},
     {L"Settings", L"Параметры"},
     {L"Settings back to their defaults", L"Настройки сброшены по умолчанию"},
@@ -19182,7 +19159,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"The glass gets a sheen, a beveled edge, light along its bottom and a soft shadow around it, and the panels' cards look like glass too (idea by Thiago Silva)", L"Стекло получает блик, скошенную кромку, свет снизу и мягкую тень вокруг, а карточки панелей тоже выглядят как стекло (идея Thiago Silva)"},
     {L"The hotspot isn't available now.", L"Хот-спот сейчас недоступен."},
     {L"The icons'", L"Как у значков"},
-    {L"The island can't change Claude Code's settings here: copy the line into your status line's script (see the README)", L"Остров не может изменить настройки Claude Code здесь: скопируйте строку в скрипт вашей строки состояния (см. README)"},
     {L"The island follows the mouse between screens.", L"Остров следует за мышью между экранами."},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"Остров обрабатывает уведомления и их звуки (Windows молчит)"},
     {L"The island is the pill at the top of the screen: the clock, the control center, your notifications and what's playing", L"Остров — это капсула вверху экрана: часы, центр управления, ваши уведомления и то, что сейчас играет"},
@@ -19197,7 +19173,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"The line's color, on the pill and lit in the panel", L"Цвет строки на капсуле и подсветка в панели"},
     {L"The list stays open after you click an icon (In the pill style)", L"Список остаётся открытым после нажатия на значок (стиль «В капсуле»)"},
     {L"The mod's site", L"Сайт мода"},
-    {L"The name has 1 to 32 characters.", L"Имя содержит от 1 до 32 символов."},
+    {L"The name has 1 to 32 characters (a letter outside English, like an accented one, counts as two or three).", L"Имя содержит от 1 до 32 символов (символ не из английского алфавита, например кириллица, считается за два или три)."},
     {L"The next alarm that's on", L"Следующий включённый будильник"},
     {L"The one chosen on the map", L"Выбранный на схеме"},
     {L"The password has 8 to 63 letters, numbers or symbols, without accents.", L"Пароль содержит от 8 до 63 букв, цифр или символов, без диакритических знаков."},
@@ -19219,10 +19195,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"Their sliders talk to the monitor over its cable. Turn off if a monitor flickers or a dock or MST hub resets when the control center opens", L"Их ползунки обращаются к монитору по кабелю. Отключите, если монитор мерцает или док-станция или MST-концентратор перезапускается при открытии центра управления"},
     {L"This PC", L"Этот компьютер"},
     {L"This assistant sets the main choices in a few steps, and each one changes the island at once; everything else is in the tabs on the left", L"Этот мастер задаёт основные параметры за несколько шагов, и каждый сразу меняет остров; всё остальное — на вкладках слева"},
-    {L"This changes {settings}: a status line is added, with the command below. It saves what Claude Code gives the status line in {file} and shows nothing; \"Undo the setup\" takes it out.", L"Это изменит {settings}: добавится строка состояния с командой ниже. Она сохраняет то, что Claude Code передаёт строке состояния, в {file} и ничего не показывает; «Отменить настройку» уберёт её."},
-    {L"This changes {settings}: the status line the island added is taken out.", L"Это изменит {settings}: строка состояния, добавленная островом, будет удалена."},
-    {L"This changes {settings}: the status line's command becomes the one below. It saves what Claude Code gives the status line in {file}, then runs your command as before; \"Undo the setup\" puts your command back.", L"Это изменит {settings}: команда строки состояния станет такой, как ниже. Она сохраняет то, что Claude Code передаёт строке состояния, в {file}, а затем запускает вашу команду как раньше; «Отменить настройку» вернёт вашу команду."},
-    {L"This changes {settings}: the status line's command goes back to the one below.", L"Это изменит {settings}: команда строки состояния снова станет такой, как ниже."},
     {L"This monitor's profile: changes here apply to every monitor using it", L"Профиль этого монитора: изменения здесь действуют на все мониторы, которые его используют"},
     {L"Three", L"Три"},
     {L"Thumbnails of the files", L"Миниатюры файлов"},
@@ -19269,7 +19241,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"UV index", L"УФ-индекс"},
     {L"Ultrawide vertical stack", L"Сверхширокая вертикальная стопка"},
     {L"Unavailable", L"Недоступно"},
-    {L"Undo the setup", L"Отменить настройку"},
     {L"Up to 40 favorite files", L"Не более 40 избранных файлов"},
     {L"Upcoming events", L"Ближайшие события"},
     {L"Upcoming holidays", L"Ближайшие праздники"},
@@ -19314,6 +19285,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kRussianTexts[] = {
     {L"What Claude Code in a terminal gives its status line (a line in its script, see the item's panel). The Claude desktop app doesn't leave its limits on this PC, so it can't show here", L"То, что Claude Code в терминале передаёт своей строке состояния (одна строка в её скрипте, см. панель элемента). Настольное приложение Claude не оставляет свои лимиты на этом ПК, поэтому здесь оно не отображается"},
     {L"What Codex writes in its logs on this PC", L"То, что Codex записывает в свои журналы на этом ПК"},
     {L"What it does", L"Что он делает"},
+    {L"What it opens", L"Что открывает"},
     {L"What needs doing?", L"Что нужно сделать?"},
     {L"What's new", L"Что нового"},
     {L"What's playing", L"Сейчас играет"},
@@ -19474,7 +19446,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"A browser's download standing still shows paused", L"止まったブラウザーのダウンロードを一時停止として表示"},
     {L"A bubble on the island says when Caps Lock is turned on or off", L"Caps Lock をオン・オフしたときにアイランドに吹き出しで知らせます"},
     {L"A click on an item opens it; when you don't use it, the pill can shrink into a thin line", L"項目をクリックすると開きます。使っていないときは、カプセルを細い線に縮められます"},
-    {L"A copy of the settings as they are goes to {copy}.", L"現在の設定のコピーを {copy} に保存します。"},
     {L"A file with all of it (agenda links too)", L"すべてを含むファイル（カレンダーのリンクも含む）"},
     {L"A line while a window is maximized", L"ウィンドウが最大化されている間はライン"},
     {L"A line with the mouse away", L"マウスが離れている間はライン"},
@@ -19544,6 +19515,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Apps with unsaved work can stop it.", L"未保存の作業があるアプリは中断する場合があります。"},
     {L"Area that brings it back", L"元に戻す領域"},
     {L"Arguments (if any)", L"引数（あれば）"},
+    {L"Arguments (optional)", L"引数（省略可）"},
     {L"Ask every time", L"毎回確認"},
     {L"Ask the first time", L"最初の 1 回だけ確認"},
     {L"Audio visualizer", L"オーディオビジュアライザー"},
@@ -19612,7 +19584,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Caps Lock on", L"Caps Lock オン"},
     {L"Captions", L"字幕"},
     {L"Cast", L"キャスト"},
-    {L"Change it", L"変更する"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"変更は使用中のプロファイルに保存されます · 鉛筆で名前の変更、保存、削除"},
     {L"Charging", L"充電中"},
     {L"Check every", L"確認間隔"},
@@ -19628,9 +19599,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"City not found", L"都市が見つかりません"},
     {L"Claude Code", L"Claude Code"},
     {L"Claude Code (terminal)", L"Claude Code（ターミナル）"},
-    {L"Claude Code gives its limits to its status line: the island can set it up (it shows what changes first), or copy the line for your status line's script (see the README)", L"Claude Code は上限をステータスラインに渡します。アイランドが設定できます（変更内容を先に表示します）。または、ステータスラインのスクリプト用に行をコピーしてください（README を参照）"},
+    {L"Claude Code gives its limits to its status line, run in Git Bash: copy the line into its script, after it reads its input with input=$(cat) (see the README)", L"Claude Code は上限を Git Bash で動くステータスラインに渡します。スクリプトが input=$(cat) で入力を読み込んだ後に、この行をコピーしてください（README を参照）"},
     {L"Claude Code tells its limits with a Pro or Max plan, after its first answer in a session", L"Claude Code は Pro または Max プランで、セッションの最初の応答の後に上限を伝えます"},
-    {L"Claude Code's settings couldn't be changed (see the island's logs)", L"Claude Code の設定を変更できませんでした（アイランドのログを参照）"},
     {L"Clear", L"晴れ"},
     {L"Clear all", L"すべてクリア"},
     {L"Click a screen to choose where the island appears.", L"画面をクリックして、アイランドを表示する場所を選びます。"},
@@ -19717,8 +19687,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Dock", L"Dock"},
     {L"Documents", L"ドキュメント"},
     {L"Done", L"完了"},
-    {L"Done: the limits show after Claude Code's next answer (restart it if they don't)", L"完了：Claude Code の次の応答の後に上限が表示されます（表示されない場合は再起動してください）"},
-    {L"Done: the status line is back as it was", L"完了：ステータスラインは元に戻りました"},
     {L"Download pictures from the web (goes online)", L"Web から画像をダウンロード（オンラインになります）"},
     {L"Downloading the icons", L"アイコンをダウンロード中"},
     {L"Downloads", L"ダウンロード"},
@@ -20113,9 +20081,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Open an app to give it a place", L"アプリを開いて場所を設定します"},
     {L"Open in Explorer", L"エクスプローラーで開く"},
     {L"Open it", L"開く"},
+    {L"Open something", L"何かを開く"},
     {L"Open the Windows notification center", L"Windows の通知センターを開く"},
-    {L"Opens", L"開く"},
     {L"Opens a panel with your folder and place shortcuts", L"フォルダーと場所のショートカット パネルを開きます"},
+    {L"Opens a program, a file, a folder, a link or a settings page, like the Run box (Win+R).", L"プログラム、ファイル、フォルダー、リンク、設定ページを「ファイル名を指定して実行」(Win+R) のように開きます。"},
     {L"Opens pickers for the fill, text and icon colors", L"塗りつぶし、文字、アイコンの色を選ぶピッカーを開きます"},
     {L"Opens the line", L"ラインを開く方法"},
     {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"固定されていないアイコンを、カプセル内のリスト、グリッド、名前付きリストで開きます"},
@@ -20219,6 +20188,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Room at the pill's ends", L"カプセルの両端の余白"},
     {L"Rounds the corners where the bar meets the screen, like a screen's own round corners", L"バーと画面が接する角を、画面自体の丸い角のように丸くします"},
     {L"Rows", L"行"},
+    {L"Run a command line", L"コマンドラインを実行"},
+    {L"Runs in cmd.exe without a window; a terminal shows only if it fails.", L"ウィンドウなしで cmd.exe で実行します。失敗したときだけターミナルが表示されます。"},
     {L"Safe to remove", L"安全に取り外せます"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"メインと同じ: ここでの変更はメインにも適用されます · + でこのモニターのプロファイルを作成"},
     {L"Same as the main one", L"メインと同じ"},
@@ -20259,8 +20230,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"See-through blurred pill with a bright edge, needs Windows transparency", L"明るい縁取りの透明でぼかし付きのカプセル。Windows の透明効果が必要です"},
     {L"Set a timer", L"タイマーを設定"},
     {L"Set an alarm", L"アラームを設定"},
-    {L"Set up", L"設定する"},
-    {L"Set up: the limits show after Claude Code's next answer, with a Pro or Max plan", L"設定済み：Pro または Max プランなら、Claude Code の次の応答の後に上限が表示されます"},
     {L"Sets the order of day, month and year when the date shows", L"日付を表示するときの日、月、年の順序を設定します"},
     {L"Settings", L"設定"},
     {L"Settings back to their defaults", L"設定を既定に戻しました"},
@@ -20389,7 +20358,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"The glass gets a sheen, a beveled edge, light along its bottom and a soft shadow around it, and the panels' cards look like glass too (idea by Thiago Silva)", L"ガラスにつや、面取りされた縁、下端の光、周囲のやわらかい影が加わり、パネルのカードもガラスのように見えます（Thiago Silva さんのアイデア）"},
     {L"The hotspot isn't available now.", L"ホットスポットは現在使用できません。"},
     {L"The icons'", L"アイコンの色"},
-    {L"The island can't change Claude Code's settings here: copy the line into your status line's script (see the README)", L"ここではアイランドが Claude Code の設定を変更できません。ステータスラインのスクリプトにこの行をコピーしてください（README を参照）"},
     {L"The island follows the mouse between screens.", L"アイランドは画面間でマウスに追従します。"},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"アイランドが通知とその音を処理します（Windows は静かになります）"},
     {L"The island is the pill at the top of the screen: the clock, the control center, your notifications and what's playing", L"アイランドは画面の上にあるカプセルです。時計、コントロール センター、通知、再生中のものが入っています"},
@@ -20404,7 +20372,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"The line's color, on the pill and lit in the panel", L"歌詞の行の色（カプセルと、パネルでのハイライト）"},
     {L"The list stays open after you click an icon (In the pill style)", L"アイコンをクリックした後もリストを開いたままにします（「カプセル内」スタイル）"},
     {L"The mod's site", L"Mod のサイト"},
-    {L"The name has 1 to 32 characters.", L"名前は 1 ～ 32 文字です。"},
+    {L"The name has 1 to 32 characters (a letter outside English, like an accented one, counts as two or three).", L"名前は 1 ～ 32 文字です（英語以外の文字、たとえば日本語やアクセント付きの文字は 2 ～ 3 文字分になります）。"},
     {L"The next alarm that's on", L"次にオンのアラーム"},
     {L"The one chosen on the map", L"マップで選んだもの"},
     {L"The password has 8 to 63 letters, numbers or symbols, without accents.", L"パスワードは 8 ～ 63 文字の英字、数字、記号です（アクセント付き文字は不可）。"},
@@ -20426,10 +20394,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"Their sliders talk to the monitor over its cable. Turn off if a monitor flickers or a dock or MST hub resets when the control center opens", L"スライダーはケーブル経由でモニターと通信します。コントロールセンターを開くとモニターがちらついたり、ドックや MST ハブがリセットされたりする場合はオフにしてください"},
     {L"This PC", L"PC"},
     {L"This assistant sets the main choices in a few steps, and each one changes the island at once; everything else is in the tabs on the left", L"このアシスタントは主な設定を数ステップで決めます。選ぶたびにアイランドがすぐ変わります。そのほかの設定は左のタブにあります"},
-    {L"This changes {settings}: a status line is added, with the command below. It saves what Claude Code gives the status line in {file} and shows nothing; \"Undo the setup\" takes it out.", L"{settings} を変更します：下のコマンドでステータスラインを追加します。Claude Code がステータスラインに渡す内容を {file} に保存し、何も表示しません。「設定を元に戻す」で削除されます。"},
-    {L"This changes {settings}: the status line the island added is taken out.", L"{settings} を変更します：アイランドが追加したステータスラインを削除します。"},
-    {L"This changes {settings}: the status line's command becomes the one below. It saves what Claude Code gives the status line in {file}, then runs your command as before; \"Undo the setup\" puts your command back.", L"{settings} を変更します：ステータスラインのコマンドが下のものになります。Claude Code がステータスラインに渡す内容を {file} に保存してから、これまでどおりあなたのコマンドを実行します。「設定を元に戻す」で元のコマンドに戻ります。"},
-    {L"This changes {settings}: the status line's command goes back to the one below.", L"{settings} を変更します：ステータスラインのコマンドが下のものに戻ります。"},
     {L"This monitor's profile: changes here apply to every monitor using it", L"このモニターのプロファイル: ここでの変更は、これを使うすべてのモニターに適用されます"},
     {L"Three", L"3 つ"},
     {L"Thumbnails of the files", L"ファイルのサムネイル"},
@@ -20476,7 +20440,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"UV index", L"紫外線指数"},
     {L"Ultrawide vertical stack", L"ウルトラワイド縦積み"},
     {L"Unavailable", L"利用不可"},
-    {L"Undo the setup", L"設定を元に戻す"},
     {L"Up to 40 favorite files", L"お気に入りのファイルは 40 個まで"},
     {L"Upcoming events", L"今後のイベント"},
     {L"Upcoming holidays", L"今後の祝日"},
@@ -20521,6 +20484,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kJapaneseTexts[] = {
     {L"What Claude Code in a terminal gives its status line (a line in its script, see the item's panel). The Claude desktop app doesn't leave its limits on this PC, so it can't show here", L"ターミナルの Claude Code がステータスラインに渡す内容（そのスクリプトに 1 行追加。項目のパネルを参照）。Claude のデスクトップアプリはこの PC に上限を残さないため、ここには表示できません"},
     {L"What Codex writes in its logs on this PC", L"Codex がこの PC 上のログに書き込む内容"},
     {L"What it does", L"機能"},
+    {L"What it opens", L"開くもの"},
     {L"What needs doing?", L"何をしますか?"},
     {L"What's new", L"新機能"},
     {L"What's playing", L"再生中"},
@@ -20681,7 +20645,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"A browser's download standing still shows paused", L"Tải xuống của trình duyệt đứng yên sẽ hiện là tạm dừng"},
     {L"A bubble on the island says when Caps Lock is turned on or off", L"Hiện khung nhỏ trên đảo khi bật hoặc tắt Caps Lock"},
     {L"A click on an item opens it; when you don't use it, the pill can shrink into a thin line", L"Bấm vào một mục để mở; khi không dùng, thanh đảo có thể thu gọn thành vạch mảnh"},
-    {L"A copy of the settings as they are goes to {copy}.", L"Bản sao thiết lập hiện tại sẽ được lưu vào {copy}."},
     {L"A file with all of it (agenda links too)", L"Lưu tất cả vào một tệp (gồm cả link lịch .ics)"},
     {L"A line while a window is maximized", L"Vạch mảnh khi có cửa sổ phóng to"},
     {L"A line with the mouse away", L"Vạch mảnh khi chuột rời đi"},
@@ -20751,6 +20714,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"Apps with unsaved work can stop it.", L"Các ứng dụng chưa lưu dữ liệu có thể ngăn thao tác này."},
     {L"Area that brings it back", L"Vùng đưa chuột để mở lại"},
     {L"Arguments (if any)", L"Tham số (nếu có)"},
+    {L"Arguments (optional)", L"Tham số (không bắt buộc)"},
     {L"Ask every time", L"Hỏi mỗi lần"},
     {L"Ask the first time", L"Hỏi lần đầu"},
     {L"Audio visualizer", L"Sóng nhạc"},
@@ -20819,7 +20783,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"Caps Lock on", L"Caps Lock bật"},
     {L"Captions", L"Phụ đề trực tiếp"},
     {L"Cast", L"Truyền màn hình (Cast)"},
-    {L"Change it", L"Đổi"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"Mọi thay đổi được lưu thẳng vào hồ sơ đang chọn · bấm hình cây bút để đổi tên, lưu đè hoặc xóa"},
     {L"Charging", L"Đang sạc"},
     {L"Check every", L"Kiểm tra mỗi"},
@@ -20835,9 +20798,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"City not found", L"Không tìm thấy thành phố"},
     {L"Claude Code", L"Claude Code"},
     {L"Claude Code (terminal)", L"Claude Code (terminal)"},
-    {L"Claude Code gives its limits to its status line: the island can set it up (it shows what changes first), or copy the line for your status line's script (see the README)", L"Claude Code gửi giới hạn của nó cho status line: đảo có thể tự thiết lập (hiện trước những gì sẽ đổi), hoặc bạn sao chép dòng lệnh vào script status line của mình (xem README)"},
+    {L"Claude Code gives its limits to its status line, run in Git Bash: copy the line into its script, after it reads its input with input=$(cat) (see the README)", L"Claude Code gửi giới hạn của nó cho status line, chạy bằng Git Bash: hãy sao chép dòng lệnh vào script của nó, sau đoạn đọc dữ liệu bằng input=$(cat) (xem README)"},
     {L"Claude Code tells its limits with a Pro or Max plan, after its first answer in a session", L"Claude Code chỉ báo giới hạn với gói Pro hoặc Max, sau câu trả lời đầu tiên của mỗi phiên"},
-    {L"Claude Code's settings couldn't be changed (see the island's logs)", L"Không thể đổi cài đặt của Claude Code (xem log của đảo)"},
     {L"Clear", L"Trời quang"},
     {L"Clear all", L"Xóa tất cả"},
     {L"Click a screen to choose where the island appears.", L"Bấm vào một màn hình để chọn nơi đặt đảo."},
@@ -20924,8 +20886,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"Dock", L"Dock"},
     {L"Documents", L"Tài liệu"},
     {L"Done", L"Xong"},
-    {L"Done: the limits show after Claude Code's next answer (restart it if they don't)", L"Xong: giới hạn sẽ hiện sau câu trả lời tiếp theo của Claude Code (khởi động lại nó nếu chưa thấy)"},
-    {L"Done: the status line is back as it was", L"Xong: status line đã về như cũ"},
     {L"Download pictures from the web (goes online)", L"Tải ảnh đại diện từ mạng (cần internet)"},
     {L"Downloading the icons", L"Đang tải các icon"},
     {L"Downloads", L"Tải xuống"},
@@ -21320,9 +21280,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"Open an app to give it a place", L"Hãy mở một ứng dụng để đặt vị trí riêng cho nó"},
     {L"Open in Explorer", L"Mở bằng Explorer"},
     {L"Open it", L"Mở ra"},
+    {L"Open something", L"Mở một thứ"},
     {L"Open the Windows notification center", L"Mở trung tâm thông báo của Windows"},
-    {L"Opens", L"Mở"},
     {L"Opens a panel with your folder and place shortcuts", L"Mở bảng truy cập nhanh các thư mục đã ghim và lối tắt hệ thống"},
+    {L"Opens a program, a file, a folder, a link or a settings page, like the Run box (Win+R).", L"Mở một chương trình, tệp, thư mục, liên kết hoặc trang cài đặt, như hộp Run (Win+R)."},
     {L"Opens pickers for the fill, text and icon colors", L"Mở bảng chọn màu riêng cho nền, chữ và icon"},
     {L"Opens the line", L"Mở vạch mảnh"},
     {L"Opens the unpinned icons as a list in the pill, a grid or a named list", L"Chọn cách mở các icon chưa ghim: trượt ngang trên đảo, xếp dạng lưới hoặc xếp danh sách kèm tên"},
@@ -21426,6 +21387,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"Room at the pill's ends", L"Khoảng đệm hai đầu đảo"},
     {L"Rounds the corners where the bar meets the screen, like a screen's own round corners", L"Bo tròn các góc nơi thanh gặp màn hình, như góc bo của chính màn hình"},
     {L"Rows", L"Chia hàng"},
+    {L"Run a command line", L"Chạy một dòng lệnh"},
+    {L"Runs in cmd.exe without a window; a terminal shows only if it fails.", L"Chạy trong cmd.exe không có cửa sổ; chỉ hiện terminal nếu nó lỗi."},
     {L"Safe to remove", L"Đã có thể rút USB an toàn"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"Đang dùng chung với đảo chính: chỉnh ở đây sẽ đổi cả đảo chính · bấm + để tách hồ sơ riêng cho màn hình này"},
     {L"Same as the main one", L"Giống đảo chính"},
@@ -21466,8 +21429,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"See-through blurred pill with a bright edge, needs Windows transparency", L"Thanh đảo trong suốt làm mờ hậu cảnh kèm viền sáng (cần bật hiệu ứng trong suốt của Windows)"},
     {L"Set a timer", L"Đặt hẹn giờ"},
     {L"Set an alarm", L"Đặt báo thức"},
-    {L"Set up", L"Thiết lập"},
-    {L"Set up: the limits show after Claude Code's next answer, with a Pro or Max plan", L"Đã thiết lập: giới hạn sẽ hiện sau câu trả lời tiếp theo của Claude Code, với gói Pro hoặc Max"},
     {L"Sets the order of day, month and year when the date shows", L"Chọn thứ tự hiển thị ngày, tháng, năm trên đồng hồ"},
     {L"Settings", L"Cài đặt"},
     {L"Settings back to their defaults", L"Cài đặt đã về mặc định"},
@@ -21596,7 +21557,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"The glass gets a sheen, a beveled edge, light along its bottom and a soft shadow around it, and the panels' cards look like glass too (idea by Thiago Silva)", L"Kính có độ bóng, cạnh vát, ánh sáng dọc mép dưới và bóng đổ mềm xung quanh, các thẻ trong bảng cũng trông như kính (ý tưởng của Thiago Silva)"},
     {L"The hotspot isn't available now.", L"Hiện không dùng được điểm phát sóng."},
     {L"The icons'", L"Theo màu icon"},
-    {L"The island can't change Claude Code's settings here: copy the line into your status line's script (see the README)", L"Đảo không đổi được cài đặt của Claude Code ở đây: hãy sao chép dòng lệnh vào script status line của bạn (xem README)"},
     {L"The island follows the mouse between screens.", L"Thanh đảo tự động di chuyển theo trỏ chuột sang màn hình bạn đang dùng."},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"Để đảo quản lý thông báo và âm báo (tắt chuông báo của Windows)"},
     {L"The island is the pill at the top of the screen: the clock, the control center, your notifications and what's playing", L"Đảo là thanh ở cạnh trên màn hình: đồng hồ, trung tâm điều khiển, thông báo và nội dung đang phát"},
@@ -21611,7 +21571,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"The line's color, on the pill and lit in the panel", L"Màu chữ của câu hát trên thanh đảo và câu đang sáng trong bảng lời bài hát"},
     {L"The list stays open after you click an icon (In the pill style)", L"Không tự đóng danh sách sau khi bấm vào một icon (chỉ áp dụng cho kiểu Ngay trên đảo)"},
     {L"The mod's site", L"Trang web của mod"},
-    {L"The name has 1 to 32 characters.", L"Tên dài từ 1 đến 32 ký tự."},
+    {L"The name has 1 to 32 characters (a letter outside English, like an accented one, counts as two or three).", L"Tên dài từ 1 đến 32 ký tự (một chữ ngoài tiếng Anh, như chữ có dấu, tính là hai hoặc ba)."},
     {L"The next alarm that's on", L"Báo thức tiếp theo đang bật"},
     {L"The one chosen on the map", L"Màn hình được chọn trên sơ đồ"},
     {L"The password has 8 to 63 letters, numbers or symbols, without accents.", L"Mật khẩu gồm 8 đến 63 chữ cái, chữ số hoặc ký hiệu, không dấu."},
@@ -21633,10 +21593,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"Their sliders talk to the monitor over its cable. Turn off if a monitor flickers or a dock or MST hub resets when the control center opens", L"Thanh trượt giao tiếp với màn hình qua cáp. Hãy tắt nếu màn hình nhấp nháy hoặc dock/hub MST bị reset khi mở trung tâm điều khiển"},
     {L"This PC", L"This PC"},
     {L"This assistant sets the main choices in a few steps, and each one changes the island at once; everything else is in the tabs on the left", L"Trợ lý này thiết lập các lựa chọn chính qua vài bước, mỗi bước đổi đảo ngay lập tức; mọi thứ còn lại nằm trong các tab bên trái"},
-    {L"This changes {settings}: a status line is added, with the command below. It saves what Claude Code gives the status line in {file} and shows nothing; \"Undo the setup\" takes it out.", L"Thao tác này sửa {settings}: thêm một status line với lệnh bên dưới. Nó lưu dữ liệu Claude Code gửi cho status line vào {file} và không hiện gì; \"Hoàn tác thiết lập\" sẽ gỡ nó đi."},
-    {L"This changes {settings}: the status line the island added is taken out.", L"Thao tác này sửa {settings}: status line do đảo thêm vào sẽ được gỡ đi."},
-    {L"This changes {settings}: the status line's command becomes the one below. It saves what Claude Code gives the status line in {file}, then runs your command as before; \"Undo the setup\" puts your command back.", L"Thao tác này sửa {settings}: lệnh của status line sẽ đổi thành lệnh bên dưới. Nó lưu dữ liệu Claude Code gửi cho status line vào {file}, rồi chạy lệnh của bạn như trước; \"Hoàn tác thiết lập\" sẽ trả lại lệnh của bạn."},
-    {L"This changes {settings}: the status line's command goes back to the one below.", L"Thao tác này sửa {settings}: lệnh của status line sẽ trở lại lệnh bên dưới."},
     {L"This monitor's profile: changes here apply to every monitor using it", L"Hồ sơ của màn hình này: mọi thay đổi sẽ áp dụng cho tất cả màn hình dùng chung hồ sơ này"},
     {L"Three", L"Ba tai thỏ"},
     {L"Thumbnails of the files", L"Ảnh thu nhỏ của tệp"},
@@ -21683,7 +21639,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"UV index", L"Chỉ số UV"},
     {L"Ultrawide vertical stack", L"Xếp chồng dọc siêu rộng (Ultrawide)"},
     {L"Unavailable", L"Không khả dụng"},
-    {L"Undo the setup", L"Hoàn tác thiết lập"},
     {L"Up to 40 favorite files", L"Tối đa 40 tệp yêu thích"},
     {L"Upcoming events", L"Sự kiện sắp tới"},
     {L"Upcoming holidays", L"Ngày lễ sắp tới"},
@@ -21728,6 +21683,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kVietnameseTexts[] = {
     {L"What Claude Code in a terminal gives its status line (a line in its script, see the item's panel). The Claude desktop app doesn't leave its limits on this PC, so it can't show here", L"Dữ liệu Claude Code trong terminal gửi cho status line (một dòng trong script, xem bảng của mục này). Ứng dụng Claude trên máy tính không để lại giới hạn trên máy này nên không hiện được ở đây"},
     {L"What Codex writes in its logs on this PC", L"Dữ liệu Codex ghi trong log trên máy này"},
     {L"What it does", L"Mô tả tác dụng"},
+    {L"What it opens", L"Thứ nó mở"},
     {L"What needs doing?", L"Thêm việc cần làm…"},
     {L"What's new", L"Có gì mới"},
     {L"What's playing", L"Đang phát"},
@@ -21972,7 +21928,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"The bubbles that ask or tell something (an option's needs, the "
          L"icons' tips, the settings bubble) are opaque whatever the island's "
          L"opacity.\n"
-         L"Vietnamese for the island's texts (thanks to @caotu2k5).\n"
          L"The mod's site, island.caliberda.com.br (About tab): every option "
          L"explained, the roadmap and your votes.\n"
          L"{Style}Settings reorganized: new Style, Hiding, Control center "
@@ -22172,7 +22127,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Os balões que perguntam ou avisam algo (o que uma opção precisa, as "
          L"dicas dos ícones, o balão das configurações) são opacos, seja qual "
          L"for a opacidade da ilha.\n"
-         L"Vietnamita nos textos da ilha (obrigado, @caotu2k5).\n"
          L"O site do mod, island.caliberda.com.br (aba Sobre): cada opção "
          L"explicada, o roadmap e os seus votos.\n"
          L"{Style}Configurações reorganizadas: abas novas Estilo, Esconder, "
@@ -22324,7 +22278,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#改进\n"
          L"设置窗口改为 Windows 11 的样子：自己的标题栏、更大的文字，窗口较宽时小选项每行两个，滚动条始终显示并可拖动（侧栏的也一样）。\n"
          L"询问或提示内容的气泡（选项需要的更改、图标的提示、设置气泡）不再随灵动岛的不透明度变透明。\n"
-         L"灵动岛文字新增越南语（感谢 @caotu2k5）。\n"
          L"模组网站 island.caliberda.com.br（“关于”选项卡）：每个选项的说明、路线图和你的投票。\n"
          L"{Style}设置已重新整理：新增“样式”“隐藏”“控制中心”和“横幅”选项卡，相互依赖的选项放在一起。\n"
          L"变暗的选项会说明原因；单击这行会显示它需要的一切，“是，更改”一次全部开启，“恢复所做的更改”可以撤销。\n"
@@ -22483,7 +22436,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Die Blasen, die etwas fragen oder sagen (was eine Option braucht, "
          L"die Tipps der Symbole, die Einstellungsblase), sind deckend, egal "
          L"welche Deckkraft die Insel hat.\n"
-         L"Vietnamesisch für die Texte der Insel (danke an @caotu2k5).\n"
          L"Die Website des Mods, island.caliberda.com.br (Tab Info): jede "
          L"Option erklärt, die Roadmap und deine Stimmen.\n"
          L"{Style}Einstellungen neu geordnet: neue Tabs Stil, Ausblenden, "
@@ -22701,7 +22653,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Los globos que preguntan o avisan algo (lo que necesita una opción, "
          L"las sugerencias de los iconos, el globo de configuración) son "
          L"opacos, sea cual sea la opacidad de la isla.\n"
-         L"Vietnamita para los textos de la isla (gracias a @caotu2k5).\n"
          L"El sitio del mod, island.caliberda.com.br (pestaña Acerca de): cada "
          L"opción explicada, la hoja de ruta y tus votos.\n"
          L"{Style}Configuración reorganizada: pestañas nuevas Estilo, "
@@ -22912,7 +22863,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Пузыри, которые что-то спрашивают или сообщают (что нужно "
          L"настройке, подсказки значков, пузырь настроек), непрозрачны при "
          L"любой прозрачности острова.\n"
-         L"Вьетнамский язык для текстов острова (спасибо @caotu2k5).\n"
          L"Сайт мода, island.caliberda.com.br (вкладка «О программе»): каждая "
          L"настройка с объяснением, планы и ваши голоса.\n"
          L"{Style}Настройки перестроены: новые вкладки «Стиль», «Скрытие», "
@@ -23073,7 +23023,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#改善\n"
          L"設定ウィンドウが Windows 11 の見た目になりました：専用のタイトル バー、大きな文字、幅の広いウィンドウでは小さなオプションを 1 行に 2 つ、常に表示されドラッグできるスクロール バー（サイド バーも）。\n"
          L"何かを尋ねたり知らせたりするバブル（オプションに必要なもの、アイコンのヒント、設定のバブル）は、アイランドの不透明度に関係なく不透明です。\n"
-         L"アイランドのテキストにベトナム語を追加（@caotu2k5 さんに感謝）。\n"
          L"Mod のサイト island.caliberda.com.br（「バージョン情報」タブ）：すべてのオプションの説明、ロードマップ、投票。\n"
          L"{Style}設定を整理：新しい「スタイル」「非表示」「コントロール センター」「バナー」タブ。関係するオプションをまとめました。\n"
          L"グレーのオプションには理由が出ます。その行をクリックすると必要なものがすべて表示され、「はい、変更する」で一度にすべてオンにし、「変"
@@ -23164,7 +23113,6 @@ const ReleaseNotes kReleaseNotes[] = {
          L"#Cải tiến\n"
          L"Cửa sổ cài đặt trông giống Windows 11: thanh tiêu đề riêng, chữ lớn hơn, các tùy chọn nhỏ hai cái một hàng khi cửa sổ rộng và thanh cuộn luôn hiện, kéo được (cả thanh bên).\n"
          L"Các bong bóng hỏi hoặc báo điều gì đó (thứ một tùy chọn cần, gợi ý của icon, bong bóng cài đặt) luôn đục, dù độ mờ của đảo là bao nhiêu.\n"
-         L"Tiếng Việt cho chữ của đảo (cảm ơn @caotu2k5).\n"
          L"Trang web của mod, island.caliberda.com.br (tab Giới thiệu): giải thích từng tùy chọn, lộ trình và lượt bình chọn của bạn.\n"
          L"{Style}Sắp xếp lại cài đặt: thêm các tab Kiểu dáng, Tự ẩn, Trung tâm điều khiển và Thông báo nổi, gom các tùy chọn phụ thuộc nhau lại với nhau.\n"
          L"Tùy chọn bị làm mờ sẽ nói lý do; bấm vào dòng đó để xem mọi thứ nó cần, \"Đồng ý, đổi\" bật hết một lần, còn \"Khôi phục phần đã đổi\" sẽ trả lại.\n"
@@ -25440,6 +25388,10 @@ constexpr UINT_PTR kAlarmSoundStopTimerId = 57;
 // looked at once more a moment later, for the places per app (#6692).
 constexpr UINT_PTR kPlaceRecheckTimerId = 60;
 constexpr UINT kPlaceRecheckMs = 400;
+// The app in front looked at for its profile once it stayed a moment (see
+// CheckAutoProfile).
+constexpr UINT_PTR kAutoProfileTimerId = 61;
+constexpr UINT kAutoProfileWaitMs = 700;
 constexpr UINT kGlassRenewMs[] = {15000, 30000, 75000};
 constexpr UINT kUrgentSoundMaxMs = 60000;
 constexpr UINT kPinDelayMs = 2000;
@@ -28035,6 +27987,9 @@ class Panel {
     bool m_windowActive = true;
     winrt::com_ptr<IDWriteTextFormat> m_captionFormat;
     UINT m_captionDpi = 0;
+    // The logo as drawn for its size (the window target's: made again with
+    // it).
+    winrt::com_ptr<ID2D1Bitmap> m_captionLogo;
     LONG CaptionHeight() const;
     void DrawCaption(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     // Where its contents are drawn in the window: under its title bar.
@@ -28334,8 +28289,27 @@ void Panel::DrawCaption(ID2D1RenderTarget* target,
     const float left = std::round(16 * scale);
     const float icon = std::round(16 * scale);
     const float iconTop = std::round((height - icon) / 2);
-    DrawModLogo(target, {left, iconTop, left + icon, iconTop + icon},
-                m_windowActive ? 1.0f : 0.6f);
+    if (!m_captionLogo || m_captionLogo->GetSize().width != icon) {
+        m_captionLogo = nullptr;
+        const D2D1_SIZE_F size{icon, icon};
+        const D2D1_SIZE_U pixels{(UINT32)icon, (UINT32)icon};
+        winrt::com_ptr<ID2D1BitmapRenderTarget> canvas;
+        if (SUCCEEDED(target->CreateCompatibleRenderTarget(
+                &size, &pixels, nullptr,
+                D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE, canvas.put()))) {
+            canvas->BeginDraw();
+            canvas->Clear(D2D1::ColorF(0, 0, 0, 0));
+            DrawModLogo(canvas.get(), {0, 0, icon, icon});
+            if (SUCCEEDED(canvas->EndDraw())) {
+                canvas->GetBitmap(m_captionLogo.put());
+            }
+        }
+    }
+    if (m_captionLogo) {
+        target->DrawBitmap(m_captionLogo.get(),
+                           {left, iconTop, left + icon, iconTop + icon},
+                           m_windowActive ? 1.0f : 0.6f);
+    }
     WCHAR title[128];
     const int length = GetWindowText(m_hwnd, title, ARRAYSIZE(title));
     // (Up to Windows' caption buttons.)
@@ -28408,6 +28382,7 @@ void Panel::OpenWindowed(float size, PCWSTR title) {
 
 void Panel::Destroy() {
     OnDestroy();
+    m_captionLogo = nullptr;
     m_windowTarget = nullptr;
     m_liquid.Destroy();
     if (m_hwnd) {
@@ -28929,6 +28904,7 @@ void Panel::RenderWindowed() {
         // (ClearType needs an opaque background.)
         m_windowTarget->SetTextAntialiasMode(
             D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        m_captionLogo = nullptr;
         OnWindowTargetMade();
     } else if (const D2D1_SIZE_U now = m_windowTarget->GetPixelSize();
                now.width != size.width || now.height != size.height) {
@@ -29692,7 +29668,8 @@ bool HttpsGet(const std::wstring& url,
               size_t maxSize,
               DWORD waitMs = 3000,
               const std::atomic<bool>* stop = nullptr,
-              HttpsCancel* cancel = nullptr);
+              HttpsCancel* cancel = nullptr,
+              DWORD* answer = nullptr);
 bool ReadTextFile(PCWSTR path, size_t limit, std::wstring* text);
 
 // Every icon of the font the island draws (see IconFont), as the settings'
@@ -30588,6 +30565,8 @@ constexpr size_t kIconSvgMost = 64 * 1024;
 constexpr UINT kIconPictureMost = 128;
 // (A folder changing: read once the changes stop for this long.)
 constexpr DWORD kIconChangeSettleMs = 400;
+// (At most this many waits, for a folder written all the time.)
+constexpr int kIconChangeSettleTimes = 15;
 // Told to the islands' thread: pictures read (see OnIconsRead).
 constexpr UINT WM_APP_ICONS = WM_APP + 100;
 // Every island drawn again with them (defined further down).
@@ -30886,8 +30865,9 @@ std::vector<IconPicture> ReadIconFolder(IWICImagingFactory* wic,
 // The online pack's pictures not downloaded yet (its picture for each
 // icon, once each), into its folder, the source's count told as it goes;
 // false if one couldn't be (the ones before are kept: the next time, only
-// the rest). Only the pictures' addresses are asked for: nothing about the
-// user is sent.
+// the rest). One the pack doesn't have (the server says 404) is skipped:
+// that icon keeps the island's own. Only the pictures' addresses are asked
+// for: nothing about the user is sent.
 bool DownloadIconPack(const OnlineIconPack& pack, const std::wstring& folder) {
     std::vector<std::wstring> names;
     for (const auto& icon : kIcons) {
@@ -30921,9 +30901,16 @@ bool DownloadIconPack(const OnlineIconPack& pack, const std::wstring& folder) {
     tell(0, IconSourceState::Downloading);
     for (size_t i = 0; i < names.size(); i++) {
         std::vector<BYTE> data;
+        DWORD answer = 0;
         if (!HttpsGet(pack.url + names[i] + pack.ending, &data, kIconSvgMost,
-                      5000, &g_iconStop, &g_iconCancel) ||
-            !LooksLikeSvg(std::string(data.begin(), data.end()))) {
+                      5000, &g_iconStop, &g_iconCancel, &answer)) {
+            if (answer != 404 || g_iconStop) {
+                return false;
+            }
+            IslandLog(L"Icon pack %s: no %s", pack.folder, names[i].c_str());
+            continue;
+        }
+        if (!LooksLikeSvg(std::string(data.begin(), data.end()))) {
             return false;
         }
         // (Whole, or not there: written beside it, then put in its place.)
@@ -31164,18 +31151,29 @@ DWORD WINAPI IconThreadProc(LPVOID) {
         }
         if (woken >= WAIT_OBJECT_0 + 2 &&
             woken < WAIT_OBJECT_0 + handles.size()) {
-            // (Read once the files are written: the changes settled.)
-            const auto& watch = watches[woken - WAIT_OBJECT_0 - 2];
-            FindNextChangeNotification(watch.second);
-            while (WaitForSingleObject(g_iconStopEvent, 0) == WAIT_TIMEOUT &&
-                   WaitForSingleObject(watch.second, kIconChangeSettleMs) ==
-                       WAIT_OBJECT_0) {
-                FindNextChangeNotification(watch.second);
+            // (Read once the files are written: the changes settled. A
+            // watch that can't go on, its folder gone, is dropped: made
+            // again above once the folder is back.)
+            const size_t index = woken - WAIT_OBJECT_0 - 2;
+            const std::wstring folder = watches[index].first;
+            const HANDLE change = watches[index].second;
+            bool watching = FindNextChangeNotification(change);
+            for (int times = 0;
+                 watching && times < kIconChangeSettleTimes &&
+                 WaitForSingleObject(g_iconStopEvent, 0) == WAIT_TIMEOUT &&
+                 WaitForSingleObject(change, kIconChangeSettleMs) ==
+                     WAIT_OBJECT_0;
+                 times++) {
+                watching = FindNextChangeNotification(change);
+            }
+            if (!watching) {
+                FindCloseChangeNotification(change);
+                watches.erase(watches.begin() + index);
             }
             AcquireSRWLockExclusive(&g_iconLock);
             for (auto& source : g_iconSources) {
                 if (source.kind == IconSourceKind::Folder &&
-                    source.what == watch.first) {
+                    source.what == folder) {
                     source.again = true;
                 }
             }
@@ -33416,9 +33414,13 @@ DWORD WINAPI AgendaThreadProc(LPVOID parameter) {
         }
         std::wstring text;
         bool ok;
+        // (Why it failed, for the log.)
+        DWORD answer = 0;
+        const ULONGLONG askedAt = GetTickCount64();
         if (source.starts_with(L"https://")) {
             std::vector<BYTE> data;
-            ok = HttpsGet(source, &data, kMaxAgendaBytes, 10000, &g_agendaStop);
+            ok = HttpsGet(source, &data, kMaxAgendaBytes, 10000, &g_agendaStop,
+                          nullptr, &answer);
             const int length =
                 ok ? MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(),
                                          (int)data.size(), nullptr, 0)
@@ -33433,6 +33435,34 @@ DWORD WINAPI AgendaThreadProc(LPVOID parameter) {
         }
         const bool fetched = ok;
         ok = ok && text.find(L"BEGIN:VCALENDAR") != std::wstring::npos;
+        if (!ok && !g_agendaStop) {
+            // Only its host: the address can be a secret one.
+            std::wstring where = L"a file";
+            if (source.starts_with(L"https://")) {
+                where = source.substr(8, source.find(L'/', 8) - 8);
+            }
+            std::wstring start = text.substr(0, 40);
+            std::replace_if(
+                start.begin(), start.end(), [](WCHAR c) { return c < 0x20; },
+                L' ');
+            if (fetched) {
+                IslandLog(L"Agenda from %s isn't a calendar: %u characters, "
+                          L"it starts with \"%s\"",
+                          where.c_str(), (unsigned)text.size(), start.c_str());
+            } else if (source.starts_with(L"https://")) {
+                // (No answer within the wait, an error, or a whole answer
+                // cut off or over kMaxAgendaBytes.)
+                IslandLog(L"Agenda from %s not read: %s %u after %.1f s",
+                          where.c_str(),
+                          !answer         ? L"no answer, status"
+                          : answer == 200 ? L"cut off or too big, HTTP"
+                                          : L"HTTP",
+                          (unsigned)answer,
+                          (GetTickCount64() - askedAt) / 1000.0);
+            } else {
+                IslandLog(L"Agenda from a file not read");
+            }
+        }
         std::wstring name;
         std::vector<AgendaEvent> events;
         if (ok) {
@@ -36947,19 +36977,75 @@ std::wstring KomorebiCommands(const std::wstring& komorebic, int button) {
     return button == 0 ? start : button == 1 ? stop : stop + L" && " + start;
 }
 
+// Whether this is the 32-bit Windhawk process on 64-bit Windows: it sees
+// SysWOW64 as System32, Program Files (x86) as %ProgramFiles% and the
+// registry's 32-bit view.
+bool IsWow64() {
+    static const bool wow64 = [] {
+        BOOL wow64 = FALSE;
+        return IsWow64Process(GetCurrentProcess(), &wow64) && wow64;
+    }();
+    return wow64;
+}
+
+// A path the user gave with its environment variables, as a 64-bit program
+// sees it: the 64-bit Program Files, and System32 through Sysnative (the
+// 32-bit process's way to the real one). Empty if it can't be expanded.
+std::wstring ExpandedAsNative(std::wstring text) {
+    WCHAR windows[MAX_PATH];
+    const bool wow64 = IsWow64() && GetWindowsDirectory(windows, MAX_PATH);
+    if (wow64) {
+        for (const auto& [from, to] :
+             {std::pair<std::wstring_view, std::wstring_view>{
+                  L"%programfiles%", L"%ProgramW6432%"},
+              {L"%commonprogramfiles%", L"%CommonProgramW6432%"}}) {
+            for (size_t at = 0;
+                 (at = std::wstring_view(text).find(L'%', at)) !=
+                 std::wstring::npos;
+                 at++) {
+                if (_wcsnicmp(text.c_str() + at, from.data(), from.size()) ==
+                    0) {
+                    text.replace(at, from.size(), to);
+                    at += to.size() - 1;
+                }
+            }
+        }
+    }
+    const DWORD size = ExpandEnvironmentStrings(text.c_str(), nullptr, 0);
+    std::wstring expanded(size, L'\0');
+    if (!size || ExpandEnvironmentStrings(text.c_str(), expanded.data(),
+                                          size) != size) {
+        return {};
+    }
+    expanded.resize(size - 1);
+    if (wow64) {
+        const std::wstring system = std::wstring(windows) + L"\\System32";
+        if (_wcsnicmp(expanded.c_str(), system.c_str(), system.size()) == 0 &&
+            (expanded.size() == system.size() ||
+             expanded[system.size()] == L'\\')) {
+            expanded.replace(0, system.size(),
+                             std::wstring(windows) + L"\\Sysnative");
+        }
+    }
+    return expanded;
+}
+
 // Runs a cmd line (what follows "cmd /c"), with the user's current
 // environment (komorebic looks for whkd and masir on PATH): without a
 // window, or in its own console window on the screen. It inherits nothing.
-// `process` (if given) gets its handles.
+// `process` (if given) gets its handles. The 64-bit cmd.exe, also from the
+// 32-bit Windhawk process: the 64-bit System32's tools found (wsl,
+// pnputil).
 bool StartKomorebiCommand(const std::wstring& line,
                           bool onScreen,
                           PROCESS_INFORMATION* process) {
     WCHAR cmd[MAX_PATH];
-    const UINT length = GetSystemDirectory(cmd, MAX_PATH);
-    if (!length || length + 9 > MAX_PATH) {
+    const UINT length = GetWindowsDirectory(cmd, MAX_PATH);
+    if (!length || length + 21 > MAX_PATH) {
         return false;
     }
-    wcscat_s(cmd, L"\\cmd.exe");
+    wcscat_s(cmd,
+             IsWow64() ? L"\\Sysnative\\cmd.exe" : L"\\System32\\cmd.exe");
     std::wstring command = L"cmd.exe /c \"" + line + L"\"";
     void* environment = FreshEnvironment();
     STARTUPINFO startup{};
@@ -47195,13 +47281,10 @@ std::wstring CommandIconPath(const UserCommand& command) {
                    ? file
                    : std::wstring();
     };
-    WCHAR expanded[MAX_PATH];
-    const DWORD length = ExpandEnvironmentStrings(
-        command.target.c_str(), expanded, ARRAYSIZE(expanded));
-    if (!length || length > ARRAYSIZE(expanded)) {
+    const std::wstring path = ExpandedAsNative(unquoted(command.target));
+    if (path.empty()) {
         return {};
     }
-    const std::wstring path = unquoted(expanded);
     if (IsLocalDrivePath(path)) {
         return there(path);
     }
@@ -47222,13 +47305,24 @@ std::wstring CommandIconPath(const UserCommand& command) {
         }
         return {};
     }
-    // A program by its name ("notepad", "chrome.exe").
+    // A program by its name ("notepad", "chrome.exe"), as the 64-bit Run box
+    // finds it.
     if (path.find_first_of(L"\\/:") == std::wstring::npos) {
         WCHAR found[MAX_PATH];
         if (SearchPath(nullptr, path.c_str(), L".exe", ARRAYSIZE(found), found,
                        nullptr)) {
-            if (std::wstring file = there(found); !file.empty()) {
+            if (std::wstring file = there(ExpandedAsNative(found));
+                !file.empty()) {
                 return file;
+            }
+        }
+        if (IsWow64()) {
+            WCHAR windows[MAX_PATH];
+            if (GetWindowsDirectory(windows, ARRAYSIZE(windows)) &&
+                SearchPath((std::wstring(windows) + L"\\Sysnative").c_str(),
+                           path.c_str(), L".exe", ARRAYSIZE(found), found,
+                           nullptr)) {
+                return there(found);
             }
         }
         std::wstring key =
@@ -47241,17 +47335,19 @@ std::wstring CommandIconPath(const UserCommand& command) {
             WCHAR value[MAX_PATH];
             DWORD size = sizeof(value);
             if (RegGetValue(root, key.c_str(), nullptr,
-                            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr,
-                            value, &size) == ERROR_SUCCESS) {
-                return there(unquoted(value));
+                            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ |
+                                RRF_SUBKEY_WOW6464KEY,
+                            nullptr, value, &size) == ERROR_SUCCESS) {
+                return there(ExpandedAsNative(unquoted(value)));
             }
         }
     }
     return {};
 }
 
-// As saved ("commands": id, a command line, on the pill, name, target,
-// arguments), read once and again after a change (see CommandsChanged).
+// As saved ("commands", the account's own, see UserValueName: id, a
+// command line, on the pill, name, target, arguments), read once and again
+// after a change (see CommandsChanged).
 std::vector<UserCommand> g_commands;
 bool g_commandsRead = false;
 
@@ -47259,7 +47355,8 @@ const std::vector<UserCommand>& Commands() {
     if (!g_commandsRead) {
         g_commandsRead = true;
         g_commands.clear();
-        for (const auto& record : LoadRecords(L"commands", 6, 1024 * 1024)) {
+        for (const auto& record : LoadRecords(
+                 UserValueName(L"commands").c_str(), 6, 1024 * 1024)) {
             UserCommand command{_wtoi64(record[0].c_str()), record[1] == L"1",
                                 record[2] == L"1", record[3], record[4],
                                 record[5]};
@@ -47278,7 +47375,7 @@ void SaveCommands(const std::vector<UserCommand>& commands) {
                            command.pinned ? L"1" : L"0", command.name,
                            command.target, command.arguments});
     }
-    SaveRecords(L"commands", records);
+    SaveRecords(UserValueName(L"commands").c_str(), records);
     g_commands = commands;
     for (auto& command : g_commands) {
         command.iconPath = CommandIconPath(command);
@@ -47302,10 +47399,14 @@ DWORD WINAPI CommandOpenThreadProc(LPVOID parameter) {
     const HRESULT com = CoInitializeEx(
         nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     SHELLEXECUTEINFO info{sizeof(info)};
-    // (%USERPROFILE% and the like as the Run box takes them.)
-    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_DOENVSUBST;
+    // (%USERPROFILE% and the like as the 64-bit Run box takes them.)
+    std::wstring target = ExpandedAsNative(job->target);
+    if (target.empty()) {
+        target = job->target;
+    }
+    info.fMask = SEE_MASK_NOASYNC;
     info.lpVerb = L"open";
-    info.lpFile = job->target.c_str();
+    info.lpFile = target.c_str();
     info.lpParameters =
         job->arguments.empty() ? nullptr : job->arguments.c_str();
     info.nShow = SW_SHOWNORMAL;
@@ -47860,30 +47961,45 @@ class CommandsPanel : public EditingPanel {
         y += header + gap;
         const float box = std::round(38 * s);
         const float button = std::round(34 * s);
+        // (A field's name over it.)
+        const float label = std::round(18 * s);
+        auto labelOver = [&](D2D1_RECT_F* rect) {
+            *rect = {padding + std::round(2 * s), y, width - padding,
+                     y + label};
+            y += label + std::round(4 * s);
+        };
         if (m_typing) {
+            labelOver(&m_nameLabel);
             m_nameBox = {padding, y, width - padding, y + box};
-            y += box + gap;
+            y += box + gap * 1.5f;
             const float half = std::floor((width - padding * 2 - gap) / 2);
             m_kindOpen = {padding, y, padding + half, y + button};
             m_kindTerminal = {width - padding - half, y, width - padding,
                               y + button};
-            y += button + gap;
-            // (An opening one's with "Choose..." beside it.)
+            y += button + std::round(4 * s);
+            // (What the kind chosen does, in a line or two.)
+            m_kindHint = {padding + std::round(2 * s), y, width - padding,
+                          y + std::round(30 * s)};
+            y += std::round(30 * s) + gap / 2;
+            // (Two lines: a path is often longer than the box. An opening
+            // one's with "Choose..." beside it.)
+            labelOver(&m_targetLabel);
+            const float tall = std::round(56 * s);
             const float choose = m_terminal ? 0 : std::round(120 * s);
             m_targetBox = {padding, y,
                            width - padding - (choose > 0 ? choose + gap : 0),
-                           y + box};
+                           y + tall};
             m_choose = {};
             if (choose > 0) {
                 m_choose = {width - padding - choose, y, width - padding,
                             y + box};
             }
-            y += box + gap;
+            y += tall + gap * 1.5f;
+            m_argsLabel = m_argsBox = {};
             if (!m_terminal) {
+                labelOver(&m_argsLabel);
                 m_argsBox = {padding, y, width - padding, y + box};
-                y += box + gap;
-            } else {
-                m_argsBox = {};
+                y += box + gap * 1.5f;
             }
             m_pinRow = {padding, y, width - padding, y + button};
             y += button + gap;
@@ -47892,7 +48008,8 @@ class CommandsPanel : public EditingPanel {
             y += button + gap;
         } else {
             m_nameBox = m_kindOpen = m_kindTerminal = m_targetBox = m_choose =
-                m_argsBox = m_pinRow = m_cancel = m_add = {};
+                m_argsBox = m_pinRow = m_cancel = m_add = m_nameLabel =
+                    m_targetLabel = m_argsLabel = m_kindHint = {};
         }
         m_statusRect = {};
         if (!m_status.empty()) {
@@ -48007,7 +48124,8 @@ class CommandsPanel : public EditingPanel {
     Hit m_hover;
     D2D1_RECT_F m_new{}, m_count{}, m_nameBox{}, m_kindOpen{},
         m_kindTerminal{}, m_targetBox{}, m_choose{}, m_argsBox{}, m_pinRow{},
-        m_add{}, m_cancel{}, m_none{}, m_statusRect{};
+        m_add{}, m_cancel{}, m_none{}, m_statusRect{}, m_nameLabel{},
+        m_targetLabel{}, m_argsLabel{}, m_kindHint{};
     std::vector<Row> m_rows;
 };
 
@@ -48038,23 +48156,51 @@ void CommandsPanel::Draw(ID2D1RenderTarget* target,
                          {m_new.left + std::round(28 * s), m_new.top,
                           m_new.right, m_new.bottom},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        const std::wstring count = std::to_wstring(m_commands.size());
-        brush->SetColor(Fg(0.45f));
-        m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-        target->DrawText(count.c_str(), (UINT32)count.size(),
-                         m_smallFormat.get(), m_count, brush,
-                         D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        // (How many, over the list: not while one is changed.)
+        if (!m_typing) {
+            const std::wstring count = std::to_wstring(m_commands.size());
+            brush->SetColor(Fg(0.45f));
+            m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            target->DrawText(count.c_str(), (UINT32)count.size(),
+                             m_smallFormat.get(), m_count, brush,
+                             D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            m_smallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        }
     }
     if (m_typing) {
+        auto label = [&](const D2D1_RECT_F& rect, PCWSTR text) {
+            brush->SetColor(Fg(0.6f));
+            target->DrawText(text, (UINT32)wcslen(text), m_smallFormat.get(),
+                             rect, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        };
+        label(m_nameLabel, Tr(L"Name", L"Nome"));
         DrawTextBox(target, brush, m_nameBox, m_name, m_nameEdit,
                     Tr(L"Name (like Downloads)", L"Nome (como Downloads)"),
                     m_field == 0);
-        DrawButton(target, brush, m_kindOpen, Tr(L"Opens", L"Abre"),
-                   !m_terminal, m_hover.part == Part::KindOpen);
+        DrawButton(target, brush, m_kindOpen,
+                   Tr(L"Open something", L"Abrir algo"), !m_terminal,
+                   m_hover.part == Part::KindOpen);
         DrawButton(target, brush, m_kindTerminal,
-                   Tr(L"Command line", L"Linha de comando"), m_terminal,
-                   m_hover.part == Part::KindTerminal);
+                   Tr(L"Run a command line", L"Rodar uma linha de comando"),
+                   m_terminal, m_hover.part == Part::KindTerminal);
+        {
+            PCWSTR hint =
+                m_terminal
+                    ? Tr(L"Runs in cmd.exe without a window; a terminal shows "
+                         L"only if it fails.",
+                         L"Roda no cmd.exe sem janela; um terminal só aparece "
+                         L"se ele falhar.")
+                    : Tr(L"Opens a program, a file, a folder, a link or a "
+                         L"settings page, like the Run box (Win+R).",
+                         L"Abre um programa, arquivo, pasta, link ou página "
+                         L"de configurações, como a caixa Executar (Win+R).");
+            brush->SetColor(Fg(0.5f));
+            target->DrawText(hint, (UINT32)wcslen(hint), m_smallFormat.get(),
+                             m_kindHint, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+        label(m_targetLabel, m_terminal
+                                 ? Tr(L"Command line", L"Linha de comando")
+                                 : Tr(L"What it opens", L"O que ele abre"));
         DrawTextBox(target, brush, m_targetBox, m_target, m_targetEdit,
                     m_terminal
                         ? Tr(L"Command (cmd, without a window)",
@@ -48070,6 +48216,8 @@ void CommandsPanel::Draw(ID2D1RenderTarget* target,
                        m_pickThread ? 0.5f : 1.0f);
         }
         if (!m_terminal) {
+            label(m_argsLabel,
+                  Tr(L"Arguments (optional)", L"Argumentos (opcional)"));
             DrawTextBox(target, brush, m_argsBox, m_arguments,
                         m_argumentsEdit,
                         Tr(L"Arguments (if any)", L"Argumentos (se tiver)"),
@@ -49728,19 +49876,27 @@ struct WeatherRequest {
 std::atomic<bool> g_weatherStop{false};
 // The clicks on "Use my location", counted on the island's thread.
 std::atomic<unsigned> g_weatherLocateClicks{0};
+// Its position not found this many times in a row since (a PC without
+// Wi-Fi positioning): the city typed shows meanwhile, and the location is
+// tried again at each fetch.
+std::atomic<int> g_weatherLocateMisses{0};
+constexpr int kWeatherLocateMisses = 3;
 // A click came while the weather was being fetched: asked again as it ends.
 bool g_weatherLocateAgain = false;
 
 // Waits for one of Windows' asynchronous calls in short turns, so it can be
-// canceled as the island stops. False if it was (its result isn't there).
+// canceled as the island stops (its status looked at: wait_for sets the
+// call's Completed handler, which a call takes only once). False if it was
+// (its result isn't there).
 template <typename Operation>
 bool WaitForWindows(const Operation& operation) {
-    while (operation.wait_for(std::chrono::milliseconds(100)) ==
+    while (operation.Status() ==
            winrt::Windows::Foundation::AsyncStatus::Started) {
         if (g_weatherStop) {
             operation.Cancel();
             return false;
         }
+        Sleep(100);
     }
     return true;
 }
@@ -49807,11 +49963,18 @@ DWORD WINAPI WeatherThreadProc(LPVOID parameter) {
             return 0;
         }
         if (located == Located::NotFound) {
-            // Kept chosen: asked again later (see OnWeather's 4).
-            PostMessage(request->notify, WM_APP_WEATHER, 4, 0);
-            return 0;
+            // Kept chosen: asked again later (see OnWeather's 4); after a
+            // few misses, the city typed (in `place`) meanwhile.
+            if (++g_weatherLocateMisses < kWeatherLocateMisses ||
+                place.name.empty()) {
+                PostMessage(request->notify, WM_APP_WEATHER, 4, 0);
+                return 0;
+            }
+            IslandLog(L"Location not found again: the city typed meanwhile");
+        } else {
+            g_weatherLocateMisses = 0;
+            place.name = Tr(L"My location", L"Minha localização");
         }
-        place.name = Tr(L"My location", L"Minha localização");
     } else if (!request->search.empty()) {
         Json found;
         // (In the island's language, so cities are found by their names
@@ -53361,9 +53524,9 @@ void StopPrivacyWatch() {
 // the keyboard of the app in front, and for Chinese, Japanese and Korean,
 // whether its input method types its own letters ("中") or English ones
 // ("英"): asked to the app's input method window (WM_IME_CONTROL), on a
-// thread (an app that's busy would hold it), over and over while it's in
-// front: Shift tells no event with some input methods (Microsoft Pinyin's
-// newest version, #6460).
+// thread of its own while the item is watched (an app that's busy would
+// hold it), over and over while it's in front: Shift tells no event with
+// some input methods (Microsoft Pinyin's newest version, #6460).
 
 // Tells the island (wParam: the language in its low word, 0 for another
 // keyboard, 1 for the input method's own letters, 2 for English ones in its
@@ -53376,9 +53539,13 @@ constexpr LPARAM kInputMethodAsked = 0x10000;
 constexpr int kInputMethodIdShift = 17;
 constexpr UINT kInputMethodIdMask = 0x7FFF;
 
+// The thread's: it asks each time `ask` is set (once more if it's set
+// again meanwhile), with the question's number then, until `stop`.
 struct InputMethodJob {
     HWND island;
-    UINT id;
+    HANDLE ask;
+    HANDLE stop;
+    std::atomic<UINT> id{0};
 };
 constexpr UINT_PTR kInputMethodTimerId = 25;
 constexpr UINT_PTR kInputMethodPollTimerId = 30;
@@ -53458,8 +53625,7 @@ bool ReadTsfInputMode(DWORD* conversion, DWORD* open) {
 // TSF if that doesn't answer. What it answered is logged when it changes
 // (#6460: an input method whose mode never shows, to see which step doesn't
 // answer).
-DWORD WINAPI InputMethodThreadProc(LPVOID parameter) {
-    std::unique_ptr<InputMethodJob> job((InputMethodJob*)parameter);
+void AskInputMethod(const InputMethodJob& job) {
     const HWND foreground = GetForegroundWindow();
     const LANGID language = ForegroundLanguage(foreground);
     WORD mode = 0;
@@ -53514,11 +53680,20 @@ DWORD WINAPI InputMethodThreadProc(LPVOID parameter) {
                       (unsigned)tsfConversion, (unsigned)tsfOpen);
         }
     }
-    PostMessage(job->island, WM_APP_INPUT_METHOD, MAKEWPARAM(language, mode),
+    PostMessage(job.island, WM_APP_INPUT_METHOD, MAKEWPARAM(language, mode),
                 (GetKeyboardLayoutList(0, nullptr) & 0xFFFF) |
                     kInputMethodAsked |
-                    ((LPARAM)(job->id & kInputMethodIdMask)
+                    ((LPARAM)(job.id & kInputMethodIdMask)
                      << kInputMethodIdShift));
+}
+
+DWORD WINAPI InputMethodThreadProc(LPVOID parameter) {
+    const auto& job = *(InputMethodJob*)parameter;
+    const HANDLE waits[] = {job.stop, job.ask};
+    while (WaitForMultipleObjects(2, waits, FALSE, INFINITE) ==
+           WAIT_OBJECT_0 + 1) {
+        AskInputMethod(job);
+    }
     return 0;
 }
 
@@ -56770,9 +56945,9 @@ class RecycleBinPanel : public Panel {
 // from what they keep on this PC: never their accounts, logins or tokens,
 // and nothing goes online. Codex writes them in its sessions' logs. Claude
 // Code gives them to its status line's command, which saves them in the
-// mod's storage (ClaudeUsageFile) for the island: set up by the island when
-// asked (see ChangedClaudeSettings), or by a line added to the user's own
-// status line script (see ClaudeUsageLine and the README).
+// mod's storage (ClaudeUsageFile) for the island, with a line the user adds
+// to their own status line script (see ClaudeUsageLine and the README): the
+// island never changes Claude Code's settings.
 
 enum class AiAgent { Claude, Codex, Count };
 constexpr int kAiAgents = (int)AiAgent::Count;
@@ -56795,10 +56970,13 @@ struct AiUsage {
 
 // Read while an island shows them, on the thread watching their files (see
 // AiUsageThreadProc), a moment after the first change (an answer writes
-// many times), and given to the main island; the islands laid out again
-// each minute (the time left goes down).
+// many times) and never sooner than a few seconds after the last read
+// (Codex writes its log all the time while it works), and given to the
+// main island; the islands laid out again each minute (the time left goes
+// down).
 AiUsage g_aiUsage[kAiAgents];
 constexpr UINT kAiUsageReadMs = 1000;
+constexpr UINT kAiUsageGapMs = 5000;
 constexpr UINT kAiUsageMinuteMs = 60 * 1000;
 // Used from this much (in percent): yellow, then red.
 constexpr double kAiUsageWarn = 70;
@@ -56837,11 +57015,10 @@ std::wstring ExpandedPath(PCWSTR path) {
     return expanded;
 }
 
-// A file in the mod's storage (made if it isn't there; empty without one):
-// what Claude Code's status line saves for the island, and the copy of
-// Claude Code's settings kept before the island changes them. The account's
-// own (the storage is the computer's, see UserValueName): another account's
-// Claude Code neither shows here nor has its settings put back over these.
+// A file in the mod's storage (its folder made if it isn't there; empty
+// without one): what Claude Code's status line saves for the island. The
+// account's own (the storage is the computer's, see UserValueName): another
+// account's Claude Code doesn't show here.
 std::wstring AiStorageFile(PCWSTR name) {
     WCHAR storage[MAX_PATH];
     if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
@@ -56855,15 +57032,68 @@ std::wstring ClaudeUsageFile() {
     return AiStorageFile(L"claude-status");
 }
 
-// The line that saves it, for a PowerShell status line script that read
-// its input into $stdin (other scripts: see the README).
-std::wstring ClaudeUsageLine() {
+// The line that saves it, for the user's status line script: in Git Bash
+// (where Claude Code runs it when it's there) one that read its input with
+// input=$(cat), else in PowerShell one that read it into $stdin (see the
+// README).
+std::wstring ClaudeUsageLine(bool bash) {
     std::wstring path = ClaudeUsageFile();
+    if (bash) {
+        std::replace(path.begin(), path.end(), L'\\', L'/');
+        for (size_t at = path.find(L'\''); at != std::wstring::npos;
+             at = path.find(L'\'', at + 4)) {
+            path.replace(at, 1, L"'\\''");
+        }
+        return L"printf '%s' \"$input\" > '" + path + L"'";
+    }
     for (size_t at = path.find(L'\''); at != std::wstring::npos;
          at = path.find(L'\'', at + 2)) {
         path.insert(at, 1, L'\'');
     }
     return L"$stdin | Set-Content -Encoding utf8 -LiteralPath '" + path + L"'";
+}
+
+// That file made before the status line first writes it, with only this
+// account allowed (the storage's folder lets the PC's other accounts read
+// it, and what Claude Code gives its status line has the session's folder
+// and log); the line's `>` and Set-Content keep the ACL of a file that's
+// there. One made before gets the same ACL. False if it can't be (logged).
+bool PrepareClaudeUsageFile() {
+    std::wstring path = ClaudeUsageFile();
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (path.empty() || UserSid().empty() ||
+        !ConvertStringSecurityDescriptorToSecurityDescriptor(
+            (L"D:P(A;;FA;;;" + UserSid() + L")").c_str(), SDDL_REVISION_1,
+            &descriptor, nullptr)) {
+        IslandLog(L"AI usage: Claude Code's file couldn't be made");
+        return false;
+    }
+    SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor, FALSE};
+    HANDLE file = CreateFile(
+        path.c_str(), GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &attributes,
+        CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    bool ok = file != INVALID_HANDLE_VALUE;
+    if (ok) {
+        CloseHandle(file);
+    } else if (GetLastError() == ERROR_FILE_EXISTS) {
+        PACL dacl = nullptr;
+        BOOL present = FALSE;
+        BOOL defaulted = FALSE;
+        ok = GetSecurityDescriptorDacl(descriptor, &present, &dacl,
+                                       &defaulted) &&
+             SetNamedSecurityInfo(path.data(), SE_FILE_OBJECT,
+                                  DACL_SECURITY_INFORMATION |
+                                      PROTECTED_DACL_SECURITY_INFORMATION,
+                                  nullptr, nullptr, dacl,
+                                  nullptr) == ERROR_SUCCESS;
+    }
+    LocalFree(descriptor);
+    if (!ok) {
+        IslandLog(L"AI usage: Claude Code's file couldn't be made: %u",
+                  (unsigned)GetLastError());
+    }
+    return ok;
 }
 
 // A file's last `limit` bytes as text (UTF-8, or UTF-16 with its mark),
@@ -56963,97 +57193,10 @@ size_t JsonValueEnd(std::wstring_view text, size_t start) {
     return std::wstring_view::npos;
 }
 
-// A member of the JSON object starting at `object`: where its name starts,
-// and where its value starts and ends. False if it isn't there.
-struct JsonMemberSpan {
-    size_t name = 0;
-    size_t start = 0;
-    size_t end = 0;
-};
-
-bool FindJsonMember(std::wstring_view text,
-                    size_t object,
-                    std::wstring_view name,
-                    JsonMemberSpan* span) {
-    if (object >= text.size() || text[object] != L'{') {
-        return false;
-    }
-    size_t at = SkipJsonSpaces(text, object + 1);
-    while (at < text.size() && text[at] == L'"') {
-        const size_t nameEnd = JsonValueEnd(text, at);
-        Json key;
-        if (nameEnd == std::wstring_view::npos ||
-            !JsonReader(std::wstring(text.substr(at, nameEnd - at)))
-                 .Read(&key)) {
-            return false;
-        }
-        const size_t colon = SkipJsonSpaces(text, nameEnd);
-        if (colon >= text.size() || text[colon] != L':') {
-            return false;
-        }
-        const size_t start = SkipJsonSpaces(text, colon + 1);
-        const size_t end = JsonValueEnd(text, start);
-        if (end == std::wstring_view::npos) {
-            return false;
-        }
-        if (key.string == name) {
-            *span = {at, start, end};
-            return true;
-        }
-        const size_t comma = SkipJsonSpaces(text, end);
-        if (comma >= text.size() || text[comma] != L',') {
-            return false;
-        }
-        at = SkipJsonSpaces(text, comma + 1);
-    }
-    return false;
-}
-
-// A text as a JSON string.
-std::wstring JsonQuoted(std::wstring_view value) {
-    std::wstring quoted = L"\"";
-    for (WCHAR c : value) {
-        switch (c) {
-            case L'"':
-                quoted += L"\\\"";
-                break;
-            case L'\\':
-                quoted += L"\\\\";
-                break;
-            case L'\n':
-                quoted += L"\\n";
-                break;
-            case L'\r':
-                quoted += L"\\r";
-                break;
-            case L'\t':
-                quoted += L"\\t";
-                break;
-            default:
-                if (c < 0x20) {
-                    WCHAR escaped[8];
-                    swprintf_s(escaped, L"\\u%04X", (unsigned)c);
-                    quoted += escaped;
-                } else {
-                    quoted += c;
-                }
-        }
-    }
-    return quoted + L"\"";
-}
-
-// Claude Code's settings file (in CLAUDE_CONFIG_DIR, or ~/.claude).
-std::wstring ClaudeSettingsFile() {
-    std::wstring folder = ExpandedPath(L"%CLAUDE_CONFIG_DIR%");
-    if (folder.empty()) {
-        folder = ExpandedPath(L"%USERPROFILE%\\.claude");
-    }
-    return folder.empty() ? folder : folder + L"\\settings.json";
-}
-
 // Git Bash, which Claude Code runs its status line in when it's there
 // (found as Claude Code finds it: CLAUDE_CODE_GIT_BASH_PATH, or beside
-// git); without it, PowerShell runs it, and the island doesn't set it up.
+// git); without it, PowerShell runs it. (The 64-bit Program Files too: the
+// island may be a 32-bit process.)
 bool GitBashFound() {
     auto exists = [](const std::wstring& path) {
         return !path.empty() &&
@@ -57075,245 +57218,8 @@ bool GitBashFound() {
             return true;
         }
     }
-    return exists(ExpandedPath(L"%ProgramFiles%\\Git\\bin\\bash.exe"));
-}
-
-// The file's path as it goes between single quotes in Git Bash.
-std::wstring ClaudeIslandFileForBash() {
-    std::wstring path = ClaudeUsageFile();
-    std::replace(path.begin(), path.end(), L'\\', L'/');
-    for (size_t at = path.find(L'\''); at != std::wstring::npos;
-         at = path.find(L'\'', at + 4)) {
-        path.replace(at, 1, L"'\\''");
-    }
-    return path;
-}
-
-// The island's part of the status line's command (Git Bash): what Claude
-// Code gives it saved for the island, then the command it had, run as
-// before in a subshell of its own (with the mod's storage gone, the saving
-// fails quietly and the command still runs); with none before, only the
-// saving (nothing shown).
-std::wstring ClaudeIslandCommand(const std::wstring& before) {
-    const std::wstring file = ClaudeIslandFileForBash();
-    return before.empty()
-               ? L"cat > '" + file + L"' 2>/dev/null"
-               : L"tee '" + file + L"' 2>/dev/null | (\n" + before + L"\n)";
-}
-
-// Whether a command has the island's part, and the command it had then
-// (empty: none).
-bool ClaudeCommandBefore(const std::wstring& command, std::wstring* before) {
-    const std::wstring file = ClaudeIslandFileForBash();
-    if (command == L"cat > '" + file + L"' 2>/dev/null") {
-        before->clear();
-        return true;
-    }
-    const std::wstring start = L"tee '" + file + L"' 2>/dev/null | (\n";
-    if (command.size() > start.size() + 2 && command.starts_with(start) &&
-        command.ends_with(L"\n)")) {
-        *before = command.substr(start.size(),
-                                 command.size() - start.size() - 2);
-        return true;
-    }
-    return false;
-}
-
-// Claude Code's settings' text with the island's part put in the status
-// line's command (`own`) or taken out: only that command changes (or the
-// status line the island added is added or taken out), the rest of the text
-// stays as it was. Empty if it can't be done (not JSON, a status line
-// that isn't a command, already done).
-std::wstring ChangedClaudeSettings(std::wstring text, bool own) {
-    const std::wstring nl =
-        text.find(L"\r\n") != std::wstring::npos ? L"\r\n" : L"\n";
-    if (SkipJsonSpaces(text, 0) >= text.size()) {
-        text = L"{" + nl + L"}" + nl;
-    }
-    Json settings;
-    const size_t object = SkipJsonSpaces(text, 0);
-    if (!JsonReader(text).Read(&settings) ||
-        settings.type != Json::Type::Object) {
-        return {};
-    }
-    JsonMemberSpan line;
-    if (FindJsonMember(text, object, L"statusLine", &line)) {
-        const Json& status = settings[L"statusLine"];
-        const Json& command = status[L"command"];
-        JsonMemberSpan commandSpan;
-        if (status.type != Json::Type::Object ||
-            command.type != Json::Type::String || command.string.empty() ||
-            (status[L"type"].type == Json::Type::String &&
-             status[L"type"].string != L"command") ||
-            !FindJsonMember(text, line.start, L"command", &commandSpan)) {
-            return {};
-        }
-        std::wstring before;
-        if (ClaudeCommandBefore(command.string, &before) == own) {
-            return {};
-        }
-        if (own || !before.empty()) {
-            text.replace(commandSpan.start,
-                         commandSpan.end - commandSpan.start,
-                         JsonQuoted(own ? ClaudeIslandCommand(command.string)
-                                        : before));
-        } else {
-            // (The one the island added: out, with its comma and spaces.)
-            size_t from = line.name;
-            size_t to = line.end;
-            size_t back = from;
-            while (back > object + 1 && iswspace(text[back - 1])) {
-                back--;
-            }
-            const size_t after = SkipJsonSpaces(text, to);
-            if (text[back - 1] == L',') {
-                from = back - 1;
-            } else if (after < text.size() && text[after] == L',') {
-                to = SkipJsonSpaces(text, after + 1);
-            } else {
-                from = back;
-            }
-            text.erase(from, to - from);
-        }
-    } else {
-        if (!own) {
-            return {};
-        }
-        const size_t close = JsonValueEnd(text, object) - 1;
-        size_t last = close;
-        while (last > object + 1 && iswspace(text[last - 1])) {
-            last--;
-        }
-        const std::wstring member =
-            L"\"statusLine\": {" + nl + L"    \"type\": \"command\"," + nl +
-            L"    \"command\": " + JsonQuoted(ClaudeIslandCommand(L"")) + nl +
-            L"  }";
-        if (text[last - 1] == L'{') {
-            text.replace(last, close - last, nl + L"  " + member + nl);
-        } else {
-            text.insert(last, L"," + nl + L"  " + member);
-        }
-    }
-    // (Still JSON, checked before it's written.)
-    Json check;
-    return JsonReader(text).Read(&check) ? text : std::wstring();
-}
-
-// Claude Code's settings as the island sees them (read when its panel
-// opens and after a change): their file, whether it's there, whether the
-// island can put its part in or take it out, whether it's there, and the
-// status line's command (and the one it had before the island's part).
-struct ClaudeSetup {
-    std::wstring settings;
-    bool exists = false;
-    bool bash = false;
-    bool changeable = false;
-    bool own = false;
-    std::wstring command;
-    std::wstring before;
-};
-
-// Its text (none when the file isn't there; at most 1 MB). False if it
-// can't be read.
-bool ReadClaudeSettings(const std::wstring& path,
-                        std::wstring* text,
-                        bool* exists) {
-    WIN32_FILE_ATTRIBUTE_DATA data;
-    *exists = GetFileAttributesEx(path.c_str(), GetFileExInfoStandard, &data);
-    text->clear();
-    if (!*exists) {
-        return GetLastError() == ERROR_FILE_NOT_FOUND ||
-               GetLastError() == ERROR_PATH_NOT_FOUND;
-    }
-    long long writtenAt = 0;
-    return data.nFileSizeHigh == 0 && data.nFileSizeLow < 1024 * 1024 &&
-           ReadFileEnd(path, 1024 * 1024, text, &writtenAt);
-}
-
-ClaudeSetup ReadClaudeSetup() {
-    ClaudeSetup setup;
-    setup.settings = ClaudeSettingsFile();
-    setup.bash = GitBashFound();
-    std::wstring text;
-    Json settings;
-    if (setup.settings.empty() ||
-        !ReadClaudeSettings(setup.settings, &text, &setup.exists) ||
-        (setup.exists && !JsonReader(text).Read(&settings))) {
-        return setup;
-    }
-    const Json& command = settings[L"statusLine"][L"command"];
-    if (command.type == Json::Type::String) {
-        setup.command = command.string;
-    }
-    setup.own = ClaudeCommandBefore(setup.command, &setup.before);
-    // (Taking it out needs no Git Bash; putting it in does.)
-    setup.changeable = (setup.own || setup.bash) &&
-                       !ChangedClaudeSettings(text, !setup.own).empty();
-    return setup;
-}
-
-// A text written as a UTF-8 file. False if it can't be.
-bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
-    const int size = WideCharToMultiByte(CP_UTF8, 0, text.data(),
-                                         (int)text.size(), nullptr, 0,
-                                         nullptr, nullptr);
-    std::string bytes(std::max(size, 0), '\0');
-    if (size > 0) {
-        WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(),
-                            bytes.data(), size, nullptr, nullptr);
-    }
-    HANDLE file = CreateFile(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    DWORD written = 0;
-    const bool ok = (bytes.empty() || WriteFile(file, bytes.data(),
-                                                (DWORD)bytes.size(), &written,
-                                                nullptr)) &&
-                    written == bytes.size();
-    CloseHandle(file);
-    return ok;
-}
-
-// The island's part put in Claude Code's settings (`own`) or taken out, as
-// the user confirmed in the panel: read again now (Claude Code may have
-// changed them), a copy of them as they were kept in the mod's storage,
-// then written whole beside them and moved over them. False if it can't
-// be done (logged).
-bool ApplyClaudeSetup(bool own) {
-    const std::wstring path = ClaudeSettingsFile();
-    std::wstring text;
-    bool exists = false;
-    if (path.empty() || !ReadClaudeSettings(path, &text, &exists)) {
-        IslandLog(L"AI usage: Claude Code's settings couldn't be read");
-        return false;
-    }
-    const std::wstring changed = ChangedClaudeSettings(text, own);
-    if (changed.empty()) {
-        IslandLog(L"AI usage: Claude Code's settings can't be changed");
-        return false;
-    }
-    if (exists) {
-        const std::wstring copy = AiStorageFile(L"claude-settings-before");
-        if (copy.empty() || !WriteUtf8File(copy, text)) {
-            IslandLog(L"AI usage: the copy of Claude Code's settings couldn't "
-                      L"be kept");
-            return false;
-        }
-    } else {
-        CreateDirectory(path.substr(0, path.rfind(L'\\')).c_str(), nullptr);
-    }
-    const std::wstring temporary = path + L".mac-island-dock";
-    if (!WriteUtf8File(temporary, changed) ||
-        !MoveFileEx(temporary.c_str(), path.c_str(),
-                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        IslandLog(L"AI usage: Claude Code's settings couldn't be written: %u",
-                  (unsigned)GetLastError());
-        DeleteFile(temporary.c_str());
-        return false;
-    }
-    return true;
+    return exists(ExpandedPath(L"%ProgramW6432%\\Git\\bin\\bash.exe")) ||
+           exists(ExpandedPath(L"%ProgramFiles%\\Git\\bin\\bash.exe"));
 }
 
 // The folders' or Codex logs' (rollout-*.jsonl) entries of a folder: the
@@ -57619,9 +57525,9 @@ struct AiUsageRead {
 // (FindFirstChangeNotification, like the folders' panel): the mod's storage
 // (Claude Code's status line's file) and Codex's sessions (all of its days'
 // folders). Both read there, once at the start and a moment after the
-// first change of a burst, and posted to the island (the files' reading
-// never on its thread). A folder not there yet is left out (see
-// Island::OnAiUsageMinute).
+// first change of a burst (see kAiUsageGapMs), and posted to the island
+// (the files' reading never on its thread). A folder not there yet is left
+// out (see Island::OnAiUsageMinute).
 struct AiUsageJob {
     HWND notify;
     HANDLE stop;
@@ -57644,6 +57550,7 @@ DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
         }
     }
     ULONGLONG readAt = GetTickCount64();
+    ULONGLONG readBefore = 0;
     for (;;) {
         DWORD timeout = INFINITE;
         if (readAt) {
@@ -57654,6 +57561,7 @@ DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
             WaitForMultipleObjects(count, waits, FALSE, timeout);
         if (woken == WAIT_TIMEOUT) {
             readAt = 0;
+            readBefore = GetTickCount64();
             auto read = std::make_unique<AiUsageRead>();
             read->claudeRead =
                 ReadClaudeUsage(&read->claude) ||
@@ -57675,7 +57583,8 @@ DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
             break;
         }
         if (!readAt) {
-            readAt = GetTickCount64() + kAiUsageReadMs;
+            readAt = std::max(GetTickCount64() + kAiUsageReadMs,
+                              readBefore + kAiUsageGapMs);
         }
         if (!FindNextChangeNotification(waits[k])) {
             break;
@@ -57689,11 +57598,8 @@ DWORD WINAPI AiUsageThreadProc(LPVOID parameter) {
 
 // The AI usage item clicked (islandAiUsage): each agent turned on, its
 // session's and week's use as bars, with when each starts over; without its
-// limits, how to have them. For Claude Code, the island can set up its
-// status line itself: a first click shows exactly what changes in which
-// file (the new command whole), a second one ("Change it") does it, and
-// "Undo the setup" puts the command back the same way; or the line for the
-// user's own status line script is copied.
+// limits, how to have them: for Claude Code, the line for the user's own
+// status line script is copied (Git Bash's or PowerShell's).
 class AiUsagePanel : public Panel {
    public:
     // The limits read again: shown at once if it's open.
@@ -57734,15 +57640,10 @@ class AiUsagePanel : public Panel {
             m_helpFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            11 * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
-            m_commandFormat = MakeFormat(L"Consolas", DWRITE_FONT_WEIGHT_NORMAL,
-                                         10.5f * scale,
-                                         DWRITE_TEXT_ALIGNMENT_LEADING);
-            for (auto* format : {m_helpFormat.get(), m_commandFormat.get()}) {
-                if (format) {
-                    format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
-                    format->SetParagraphAlignment(
-                        DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
-                }
+            if (m_helpFormat) {
+                m_helpFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+                m_helpFormat->SetParagraphAlignment(
+                    DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
             }
             m_buttonFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
@@ -57754,16 +57655,14 @@ class AiUsagePanel : public Panel {
     void OnOpen() override {
         m_hover = kNone;
         m_copiedAt = -10;
-        m_asking = kAskNone;
-        m_note.clear();
-        m_setup = ReadClaudeSetup();
+        m_bash = GitBashFound();
         Layout();
     }
 
     void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override {
         if (m_iconFormat && m_titleFormat && m_nameFormat && m_textFormat &&
             m_valueFormat && m_smallFormat && m_updatedFormat &&
-            m_helpFormat && m_commandFormat && m_buttonFormat) {
+            m_helpFormat && m_buttonFormat) {
             Walk(target, brush);
         }
     }
@@ -57791,65 +57690,21 @@ class AiUsagePanel : public Panel {
     }
 
     bool OnMouseUp(POINT pt) override {
-        switch (HitTest(pt)) {
-            case kCopy:
-                if (CopyTextToClipboard(m_hwnd, ClaudeUsageLine())) {
-                    m_copiedAt = NowSeconds();
-                }
-                return true;
-            case kSetUp:
-            case kUndo:
-                // What changes, said first.
-                m_asking = HitTest(pt) == kSetUp ? kAskSetUp : kAskUndo;
-                // (Made once here, not as each frame draws it: they ask the
-                // mod's storage folder.)
-                m_confirmText = ConfirmText();
-                m_confirmCommand = ConfirmCommand();
-                m_note.clear();
-                Layout();
-                return true;
-            case kCancel:
-                m_asking = kAskNone;
-                Layout();
-                return true;
-            case kConfirm: {
-                const bool own = m_asking == kAskSetUp;
-                const bool done = ApplyClaudeSetup(own);
-                m_failed = !done;
-                m_note =
-                    !done ? Tr(L"Claude Code's settings couldn't be changed "
-                               L"(see the island's logs)",
-                               L"Não deu para mudar as configurações do "
-                               L"Claude Code (veja os logs da ilha)")
-                    : own ? Tr(L"Done: the limits show after Claude Code's "
-                               L"next answer (restart it if they don't)",
-                               L"Pronto: os limites aparecem depois da "
-                               L"próxima resposta do Claude Code (reinicie "
-                               L"ele se não aparecerem)")
-                          : Tr(L"Done: the status line is back as it was",
-                               L"Pronto: a linha de status voltou a ser como "
-                               L"era");
-                m_asking = kAskNone;
-                m_setup = ReadClaudeSetup();
-                Layout();
-                return true;
-            }
-            default:
-                return false;
+        if (HitTest(pt) != kCopy) {
+            return false;
         }
+        // (Its file made first, only this account's.)
+        if (PrepareClaudeUsageFile() &&
+            CopyTextToClipboard(m_hwnd, ClaudeUsageLine(m_bash))) {
+            m_copiedAt = NowSeconds();
+        }
+        return true;
     }
 
    private:
     static constexpr int kNone = -1;
     static constexpr int kCopy = 0;
-    static constexpr int kSetUp = 1;
-    static constexpr int kUndo = 2;
-    static constexpr int kConfirm = 3;
-    static constexpr int kCancel = 4;
-    static constexpr int kParts = 5;
-    static constexpr int kAskNone = 0;
-    static constexpr int kAskSetUp = 1;
-    static constexpr int kAskUndo = 2;
+    static constexpr int kParts = 1;
     static constexpr float kWidth = 320;
 
     int HitTest(POINT pt) const {
@@ -57862,70 +57717,11 @@ class AiUsagePanel : public Panel {
     }
 
     void Layout() {
-        if (!m_titleFormat || !m_helpFormat || !m_commandFormat) {
+        if (!m_titleFormat || !m_helpFormat) {
             return;
         }
         const float bottom = Walk(nullptr, nullptr);
         m_size = {(LONG)std::round(kWidth * m_scale), (LONG)std::ceil(bottom)};
-    }
-
-    // What the confirmation says changes: in which file, what the command
-    // does, where the copy goes; and the command it'll be (empty: none).
-    std::wstring ConfirmText() const {
-        std::wstring text =
-            m_asking == kAskSetUp
-                ? (m_setup.command.empty()
-                       ? Tr(L"This changes {settings}: a status line is "
-                            L"added, with the command below. It saves what "
-                            L"Claude Code gives the status line in {file} "
-                            L"and shows nothing; \"Undo the setup\" takes it "
-                            L"out.",
-                            L"Isto muda {settings}: uma linha de status é "
-                            L"adicionada, com o comando abaixo. Ele salva o "
-                            L"que o Claude Code passa para a linha de status "
-                            L"em {file} e não mostra nada; \"Desfazer a "
-                            L"configuração\" tira ela.")
-                       : Tr(L"This changes {settings}: the status line's "
-                            L"command becomes the one below. It saves what "
-                            L"Claude Code gives the status line in {file}, "
-                            L"then runs your command as before; \"Undo the "
-                            L"setup\" puts your command back.",
-                            L"Isto muda {settings}: o comando da linha de "
-                            L"status vira o de baixo. Ele salva o que o "
-                            L"Claude Code passa para a linha de status em "
-                            L"{file} e depois roda o seu comando como antes; "
-                            L"\"Desfazer a configuração\" devolve o seu "
-                            L"comando."))
-            : m_setup.before.empty()
-                ? Tr(L"This changes {settings}: the status line the island "
-                     L"added is taken out.",
-                     L"Isto muda {settings}: a linha de status que a ilha "
-                     L"adicionou é tirada.")
-                : Tr(L"This changes {settings}: the status line's command "
-                     L"goes back to the one below.",
-                     L"Isto muda {settings}: o comando da linha de status "
-                     L"volta a ser o de baixo.");
-        if (m_setup.exists) {
-            text += L" ";
-            text += Tr(L"A copy of the settings as they are goes to {copy}.",
-                       L"Uma cópia das configurações como estão vai para "
-                       L"{copy}.");
-        }
-        auto put = [&](std::wstring_view name, const std::wstring& value) {
-            for (size_t at = text.find(name); at != std::wstring::npos;
-                 at = text.find(name, at + value.size())) {
-                text.replace(at, name.size(), value);
-            }
-        };
-        put(L"{settings}", m_setup.settings);
-        put(L"{file}", ClaudeUsageFile());
-        put(L"{copy}", AiStorageFile(L"claude-settings-before"));
-        return text;
-    }
-
-    std::wstring ConfirmCommand() const {
-        return m_asking == kAskSetUp ? ClaudeIslandCommand(m_setup.command)
-                                     : m_setup.before;
     }
 
     // Its contents from the top, drawn (or, without a target, only
@@ -57965,34 +57761,18 @@ class AiUsagePanel : public Panel {
             text(value, format, {padding, top, right, top + height}, color);
             top += height;
         };
-        // A row of buttons (the first one in the accent color when it
-        // does what was asked).
-        auto buttons = [&](std::initializer_list<std::pair<int, PCWSTR>> row,
-                           bool accent) {
+        // A button as wide as the panel's text.
+        auto button = [&](int part, PCWSTR label) {
             top += std::round(8 * s);
             const float height = std::round(28 * s);
-            const float gap = std::round(8 * s);
-            const float each =
-                (right - padding - gap * (row.size() - 1)) / row.size();
-            float left = padding;
-            bool first = true;
-            for (const auto& [part, label] : row) {
-                m_parts[part] = {left, top, left + each, top + height};
-                if (target) {
-                    const float lit =
-                        Hover(HoverKey(7400, part), m_hover == part);
-                    const float radius = height / 2;
-                    brush->SetColor(first && accent
-                                        ? Accent(0.85f + 0.15f * lit)
-                                        : Fg(0.1f + 0.08f * lit));
-                    GlassFill(target, {m_parts[part], radius, radius}, brush);
-                }
-                text(label, m_buttonFormat.get(), m_parts[part],
-                     first && accent ? D2D1_COLOR_F(D2D1::ColorF(1, 1, 1, 1))
-                                     : Fg(0.9f));
-                left += each + gap;
-                first = false;
+            m_parts[part] = {padding, top, right, top + height};
+            if (target) {
+                const float lit = Hover(HoverKey(7400, part), m_hover == part);
+                const float radius = height / 2;
+                brush->SetColor(Fg(0.1f + 0.08f * lit));
+                GlassFill(target, {m_parts[part], radius, radius}, brush);
             }
+            text(label, m_buttonFormat.get(), m_parts[part], Fg(0.9f));
             top += height;
         };
         for (D2D1_RECT_F& part : m_parts) {
@@ -58089,58 +57869,21 @@ class AiUsagePanel : public Panel {
                 }
                 continue;
             }
-            // Claude Code: what changes, asked first.
-            if (m_asking != kAskNone) {
-                paragraph(m_confirmText, m_helpFormat.get(), Fg(0.8f));
-                if (!m_confirmCommand.empty()) {
-                    paragraph(m_confirmCommand, m_commandFormat.get(),
-                              Fg(0.95f));
-                }
-                buttons({{kConfirm, Tr(L"Change it", L"Mudar")},
-                         {kCancel, Tr(L"Cancel", L"Cancelar")}},
-                        true);
-                continue;
-            }
-            if (!known) {
-                paragraph(Tr(L"Only Claude Code in a terminal: the Claude "
-                             L"desktop app doesn't leave its limits on this "
-                             L"PC",
-                             L"Só o Claude Code no terminal: o app de "
-                             L"desktop do Claude não deixa os limites neste "
-                             L"PC"),
-                          m_helpFormat.get(), Fg(0.6f));
-            }
-            if (!m_note.empty()) {
-                paragraph(m_note, m_helpFormat.get(),
-                          m_failed ? D2D1_COLOR_F(D2D1::ColorF(1, 0.45f, 0.3f))
-                                   : Fg(0.6f));
-            }
-            if (m_setup.own) {
-                if (!known) {
-                    paragraph(Tr(L"Set up: the limits show after Claude "
-                                 L"Code's next answer, with a Pro or Max plan",
-                                 L"Configurado: os limites aparecem depois da "
-                                 L"próxima resposta do Claude Code, com um "
-                                 L"plano Pro ou Max"),
-                              m_helpFormat.get(), Fg(0.6f));
-                }
-                if (m_setup.changeable) {
-                    buttons({{kUndo, Tr(L"Undo the setup",
-                                        L"Desfazer a configuração")}},
-                            false);
-                }
-                continue;
-            }
             if (known) {
                 continue;
             }
+            paragraph(Tr(L"Only Claude Code in a terminal: the Claude "
+                         L"desktop app doesn't leave its limits on this PC",
+                         L"Só o Claude Code no terminal: o app de desktop do "
+                         L"Claude não deixa os limites neste PC"),
+                      m_helpFormat.get(), Fg(0.6f));
             paragraph(
                 usage.writtenAt > 0
                     ? Tr(L"Claude Code tells its limits with a Pro or Max "
                          L"plan, after its first answer in a session",
                          L"O Claude Code informa os limites com um plano Pro "
                          L"ou Max, depois da primeira resposta numa sessão")
-                : !m_setup.bash
+                : !m_bash
                     ? Tr(L"Without Git Bash, Claude Code runs its status line "
                          L"in PowerShell: copy the line into its script, "
                          L"after it reads its input into $stdin (see the "
@@ -58149,31 +57892,19 @@ class AiUsagePanel : public Panel {
                          L"status no PowerShell: copie a linha para o script "
                          L"dela, depois que ele lê a entrada em $stdin (veja "
                          L"o README)")
-                : !m_setup.changeable
-                    ? Tr(L"The island can't change Claude Code's settings "
-                         L"here: copy the line into your status line's "
-                         L"script (see the README)",
-                         L"A ilha não consegue mudar as configurações do "
-                         L"Claude Code aqui: copie a linha para o script da "
-                         L"sua linha de status (veja o README)")
-                    : Tr(L"Claude Code gives its limits to its status line: "
-                         L"the island can set it up (it shows what changes "
-                         L"first), or copy the line for your status line's "
-                         L"script (see the README)",
+                    : Tr(L"Claude Code gives its limits to its status line, "
+                         L"run in Git Bash: copy the line into its script, "
+                         L"after it reads its input with input=$(cat) (see "
+                         L"the README)",
                          L"O Claude Code passa os limites para a linha de "
-                         L"status dele: a ilha pode configurar (ela mostra o "
-                         L"que muda antes), ou copie a linha para o script "
-                         L"da sua linha de status (veja o README)"),
+                         L"status dele, que roda no Git Bash: copie a linha "
+                         L"para o script dela, depois que ele lê a entrada "
+                         L"com input=$(cat) (veja o README)"),
                 m_helpFormat.get(), Fg(0.6f));
-            const PCWSTR copy = NowSeconds() - m_copiedAt < 2
-                                    ? Tr(L"✓ Copied", L"✓ Copiada")
-                                    : Tr(L"Copy the line", L"Copiar a linha");
-            if (m_setup.changeable && usage.writtenAt <= 0) {
-                buttons({{kSetUp, Tr(L"Set up", L"Configurar")},
-                         {kCopy, copy}},
-                        false);
-            } else if (usage.writtenAt <= 0) {
-                buttons({{kCopy, copy}}, false);
+            if (usage.writtenAt <= 0) {
+                button(kCopy, NowSeconds() - m_copiedAt < 2
+                                  ? Tr(L"✓ Copied", L"✓ Copiada")
+                                  : Tr(L"Copy the line", L"Copiar a linha"));
             }
         }
         if (!any) {
@@ -58192,21 +57923,14 @@ class AiUsagePanel : public Panel {
     winrt::com_ptr<IDWriteTextFormat> m_smallFormat;
     winrt::com_ptr<IDWriteTextFormat> m_updatedFormat;
     winrt::com_ptr<IDWriteTextFormat> m_helpFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_commandFormat;
     winrt::com_ptr<IDWriteTextFormat> m_buttonFormat;
     float m_preparedScale = 0;
     D2D1_RECT_F m_parts[kParts]{};
     int m_hover = kNone;
     double m_copiedAt = -10;
-    // Claude Code's settings as last read, what's being asked, and what the
-    // last change said (and whether it failed).
-    ClaudeSetup m_setup;
-    int m_asking = kAskNone;
-    // What the confirmation says, and the command it shows (see ConfirmText).
-    std::wstring m_confirmText;
-    std::wstring m_confirmCommand;
-    std::wstring m_note;
-    bool m_failed = false;
+    // Whether Git Bash runs Claude Code's status line (which line is
+    // copied), looked at as it opens.
+    bool m_bash = false;
 };
 
 // The other apps' tray icons that aren't pinned, opened from the arrow when
@@ -67170,9 +66894,10 @@ class Island final : public DropTarget::Receiver {
     void StartInputMethodQuery();
     void OnInputMethod(WPARAM state, LPARAM layouts);
     HWINEVENTHOOK m_inputMethodHooks[2] = {};
+    void StopInputMethodThread();
     HANDLE m_inputMethodThread = nullptr;
+    std::unique_ptr<InputMethodJob> m_inputMethodJob;
     UINT m_inputMethodId = 0;
-    bool m_inputMethodAgain = false;
     std::wstring m_inputMethodText;
     // The window in front when it was read (its top owner, see
     // OnInputMethod).
@@ -79486,15 +79211,22 @@ void ControlPanel::OpenHotspot() {
     StartHotspotWorker(new HotspotRequest{m_hwnd});
 }
 
-// Its name (1 to 32 characters) and password (8 to 63 letters, numbers or
-// symbols without accents, as WPA2 takes them) checked, then changed.
+// Its name (1 to 32 bytes in UTF-8, as a network's name is kept) and
+// password (8 to 63 letters, numbers or symbols without accents, as WPA2
+// takes them) checked, then changed.
 void ControlPanel::SaveHotspot() {
     if (m_hotspotBusy) {
         return;
     }
-    if (m_hotspotName.empty() || m_hotspotName.size() > 32) {
-        m_hotspotStatus = Tr(L"The name has 1 to 32 characters.",
-                             L"O nome tem de 1 a 32 caracteres.");
+    const int bytes = WideCharToMultiByte(
+        CP_UTF8, 0, m_hotspotName.data(), (int)m_hotspotName.size(), nullptr,
+        0, nullptr, nullptr);
+    if (m_hotspotName.empty() || bytes < 1 || bytes > 32) {
+        m_hotspotStatus =
+            Tr(L"The name has 1 to 32 characters (a letter outside English, "
+               L"like an accented one, counts as two or three).",
+               L"O nome tem de 1 a 32 caracteres (uma letra fora do inglês, "
+               L"como uma acentuada, conta como duas ou três).");
         return;
     }
     if (m_password.size() < 8 || m_password.size() > 63 ||
@@ -81288,9 +81020,14 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                     StartIconFolderDialog(index == 2);
                 } else if (index == 1) {
                     // (Only a folder on this computer: one from a backup may
-                    // be on another.)
-                    if (IsLocalDrivePath(g_iconFolder)) {
-                        ShellExecute(nullptr, L"open", g_iconFolder.c_str(),
+                    // be on another, or name a file, which "explore" never
+                    // runs.)
+                    const DWORD attributes =
+                        GetFileAttributes(g_iconFolder.c_str());
+                    if (IsLocalDrivePath(g_iconFolder) &&
+                        attributes != INVALID_FILE_ATTRIBUTES &&
+                        (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                        ShellExecute(nullptr, L"explore", g_iconFolder.c_str(),
                                      nullptr, nullptr, SW_SHOWNORMAL);
                     } else {
                         m_iconStatus = Tr(L"Only a folder on this computer",
@@ -82748,13 +82485,17 @@ bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
 
 // An https address's contents (up to `maxSize`), not waiting long (for
 // each answer, `waitMs`); given up once `stop` is set, and at once when
-// `cancel` is canceled.
+// `cancel` is canceled. `answer`: the server's HTTP status (0 without one).
 bool HttpsGet(const std::wstring& url,
               std::vector<BYTE>* data,
               size_t maxSize,
               DWORD waitMs,
               const std::atomic<bool>* stop,
-              HttpsCancel* cancel) {
+              HttpsCancel* cancel,
+              DWORD* answer) {
+    if (answer) {
+        *answer = 0;
+    }
     if (stop && *stop) {
         return false;
     }
@@ -82807,7 +82548,7 @@ bool HttpsGet(const std::wstring& url,
                 request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                 WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize,
                 WINHTTP_NO_HEADER_INDEX) &&
-            status == 200) {
+            (answer ? (*answer = status) : status) == 200) {
             // Whole, or nothing: a connection dropped halfway (the read
             // failing) isn't taken for the end.
             BYTE buffer[16 * 1024];
@@ -83174,11 +82915,11 @@ DWORD WINAPI ToastShortcutsThreadProc(LPVOID) {
 }
 
 // Starts reading the Start menu's shortcuts, once and then again at most
-// every few minutes.
+// every few minutes (never once the mod is unloading).
 void StartToastShortcutsRead() {
     AcquireSRWLockExclusive(&g_toastActivatorsLock);
     const ULONGLONG now = GetTickCount64();
-    if (!g_toastShortcutsReading &&
+    if (!g_unloading && !g_toastShortcutsReading &&
         (!g_toastShortcutsRead ||
          now - g_toastShortcutsRead > kToastShortcutsRefresh)) {
         if (g_toastShortcutsThread) {
@@ -83298,6 +83039,12 @@ void WaitForToastActivations() {
         CloseHandle(thread);
     }
     g_toastActivationThreads.clear();
+    WaitForToastShortcutsRead();
+}
+
+// The Start menu's shortcuts' reader, if one runs, waited for (it ends by
+// itself: a few thousand entries at most).
+void WaitForToastShortcutsRead() {
     AcquireSRWLockExclusive(&g_toastActivatorsLock);
     HANDLE shortcuts = std::exchange(g_toastShortcutsThread, nullptr);
     ReleaseSRWLockExclusive(&g_toastActivatorsLock);
@@ -83356,14 +83103,44 @@ bool ActivateToast(const std::wstring& appId,
     return true;
 }
 
+// Whether a process runs elevated (also when it can't be told).
+bool ProcessElevated(DWORD processId) {
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    HANDLE token = nullptr;
+    TOKEN_ELEVATION elevation{};
+    DWORD size = 0;
+    const bool known =
+        process && OpenProcessToken(process, TOKEN_QUERY, &token) &&
+        GetTokenInformation(token, TokenElevation, &elevation,
+                            sizeof(elevation), &size);
+    if (token) {
+        CloseHandle(token);
+    }
+    if (process) {
+        CloseHandle(process);
+    }
+    return !known || elevation.TokenIsElevated;
+}
+
 // A mouse message to a tray icon's app, as from the taskbar (its menu or
-// window can come to the front, even from another process of the app: Steam
-// draws its menu in steamwebhelper.exe).
-// In the form its version takes, or the newer one (`newer`).
+// window can come to the front; with the island not elevated even from
+// another process of the app: Steam draws its menu in steamwebhelper.exe).
+// In the form its version takes, or the newer one (`newer`). With the
+// island elevated (Windhawk run as administrator), only to an app that
+// isn't: the icons come from explorer's messages, which UIPI lets a lower
+// process send too (see AllowExplorerMessages), and nothing may reach an
+// elevated window through the island.
 void PostTrayIconMessage(const TrayIcon& icon,
                          UINT message,
                          bool newer = false) {
-    AllowSetForegroundWindow(ASFW_ANY);
+    static const bool elevated = ProcessElevated(GetCurrentProcessId());
+    DWORD owner = 0;
+    if (!GetWindowThreadProcessId(icon.owner, &owner) ||
+        (elevated && ProcessElevated(owner))) {
+        return;
+    }
+    AllowSetForegroundWindow(elevated ? owner : ASFW_ANY);
     POINT pt;
     GetCursorPos(&pt);
     if (newer || TrayIconNewer(icon)) {
@@ -89394,7 +89171,7 @@ constexpr BackupValue kBackupValues[] = {
     {L"pomodoroBreak", 0, 5 * 60, true},
     {L"alarms", 4096, 0, true},
     {L"lyricsApps", kLyricsAppsRoom, 0, true},
-    {L"commands", 1024 * 1024},
+    {L"commands", 1024 * 1024, 0, true},
     {L"autoProfiles", 8192},
 };
 constexpr WCHAR kBackupHeader[] = L"Mac Island & Dock backup";
@@ -91238,7 +91015,10 @@ void FrontLastApp() {
 
 // The app in front with a profile of its own (#6166): applied, the one in
 // use before kept (its settings, if none was) to go back to when another
-// app comes in front, unless the app's profile stays ("k").
+// app comes in front, unless the app's profile stays ("k"). Looked at once
+// the app stayed in front a moment (kAutoProfileWaitMs): passing through
+// apps with Alt+Tab doesn't apply each one's (a style of its own restarts
+// the islands).
 std::wstring g_autoProfileApp;
 int g_autoProfileBefore = -1;
 std::wstring g_autoProfileBeforeSettings;
@@ -91325,7 +91105,10 @@ void CALLBACK IslandForegroundProc(HWINEVENTHOOK,
                                    DWORD) {
     if (g_island) {
         ForEachIsland([](Island& island) { island.OnForegroundChanged(); });
-        CheckAutoProfile();
+        if (Island* main = MainIsland(); main && main->Window()) {
+            SetTimer(main->Window(), kAutoProfileTimerId, kAutoProfileWaitMs,
+                     nullptr);
+        }
     }
     if (Island* main = MainIsland()) {
         main->CheckInputMethodSoon();
@@ -91926,6 +91709,10 @@ void Island::UpdateAiUsageWatch() {
         return;
     }
     auto* job = new AiUsageJob{m_hwnd, m_aiUsageStop};
+    // (Its file only this account's before Claude Code writes there.)
+    if (g_settings.islandAiClaude) {
+        PrepareClaudeUsageFile();
+    }
     const std::wstring status = ClaudeUsageFile();
     job->folders[(int)AiAgent::Claude] = status.substr(0, status.rfind(L'\\'));
     const std::wstring codex = CodexSessionsFolder();
@@ -91968,8 +91755,15 @@ void Island::StopAiUsageWatch() {
 }
 
 // Each minute: the time left goes down (laid out again, nothing read); Codex's
-// sessions watched once they're there.
+// sessions watched once they're there, and the watch started again if its
+// thread ended by itself (a folder it watched gone).
 void Island::OnAiUsageMinute() {
+    if (m_aiUsageThread &&
+        WaitForSingleObject(m_aiUsageThread, 0) == WAIT_OBJECT_0) {
+        StopAiUsageWatch();
+        UpdateAiUsageWatch();
+        return;
+    }
     if (!m_aiCodexWatched) {
         const std::wstring codex = CodexSessionsFolder();
         if (!codex.empty() &&
@@ -92617,6 +92411,7 @@ bool Island::Create() {
         // (Counted, so a fetch that ends later doesn't undo this click; and
         // asked again if one is still going, see OnWeather.)
         g_weatherLocateClicks++;
+        g_weatherLocateMisses = 0;
         g_weatherLocateAgain = true;
         StartWeather({});
     };
@@ -92906,11 +92701,7 @@ void Island::Destroy() {
             hook = nullptr;
         }
     }
-    if (m_inputMethodThread) {
-        WaitForSingleObject(m_inputMethodThread, INFINITE);
-        CloseHandle(m_inputMethodThread);
-        m_inputMethodThread = nullptr;
-    }
+    StopInputMethodThread();
     StopDesktopsWatch();
     StopWorldClocksWatch();
     StopAiUsageWatch();
@@ -99805,6 +99596,7 @@ void Island::UpdateInputMethodWatch() {
         }
         KillTimer(m_hwnd, kInputMethodTimerId);
         KillTimer(m_hwnd, kInputMethodPollTimerId);
+        StopInputMethodThread();
         ForEachIsland(
             [](Island& island) { island.m_inputMethodText.clear(); });
         return;
@@ -99828,9 +99620,9 @@ void Island::UpdateInputMethodWatch() {
     CheckInputMethodSoon();
 }
 
-// Another keyboard is told right away; an input method's mode is asked on a
-// thread, one question at a time (another asked meanwhile waits for its
-// answer). Both are looked at again every moment (see
+// Another keyboard is told right away; an input method's mode is asked on
+// its thread, one question at a time (another asked meanwhile is asked once
+// it answers). Both are looked at again every moment (see
 // kInputMethodPollTimerId) while an input method is in front, or while
 // there are keyboards to switch between (switched in the same app, newer
 // Windows builds tell no event either, #6816).
@@ -99851,20 +99643,41 @@ void Island::StartInputMethodQuery() {
         return;
     }
     SetTimer(m_hwnd, kInputMethodPollTimerId, kInputMethodPollMs, nullptr);
-    if (m_inputMethodThread) {
-        if (WaitForSingleObject(m_inputMethodThread, 0) != WAIT_OBJECT_0) {
-            m_inputMethodAgain = true;
+    if (!m_inputMethodThread) {
+        auto job = std::make_unique<InputMethodJob>();
+        job->island = m_hwnd;
+        job->ask = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        job->stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        if (job->ask && job->stop) {
+            m_inputMethodThread = CreateThread(
+                nullptr, 0, InputMethodThreadProc, job.get(), 0, nullptr);
+        }
+        if (!m_inputMethodThread) {
+            for (HANDLE event : {job->ask, job->stop}) {
+                if (event) {
+                    CloseHandle(event);
+                }
+            }
             return;
         }
-        CloseHandle(m_inputMethodThread);
-        m_inputMethodThread = nullptr;
+        m_inputMethodJob = std::move(job);
     }
-    auto* job = new InputMethodJob{m_hwnd, ++m_inputMethodId};
-    m_inputMethodThread =
-        CreateThread(nullptr, 0, InputMethodThreadProc, job, 0, nullptr);
+    m_inputMethodJob->id = ++m_inputMethodId;
+    SetEvent(m_inputMethodJob->ask);
+}
+
+// Its thread ended (the item off, the island closing).
+void Island::StopInputMethodThread() {
     if (!m_inputMethodThread) {
-        delete job;
+        return;
     }
+    SetEvent(m_inputMethodJob->stop);
+    WaitForSingleObject(m_inputMethodThread, INFINITE);
+    CloseHandle(m_inputMethodThread);
+    m_inputMethodThread = nullptr;
+    CloseHandle(m_inputMethodJob->ask);
+    CloseHandle(m_inputMethodJob->stop);
+    m_inputMethodJob.reset();
 }
 
 // Its short text: the input method's letters ("中" or "英", "あ" or "A",
@@ -106923,23 +106736,13 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             OnIconsRead();
             return 0;
         case WM_APP_INPUT_METHOD:
-            // The thread's answer (it's ending): asked again if something
-            // changed meanwhile.
-            // (One asked before another question, or before the app in
-            // front had no input modes: left, it would show the old app's.)
+            // The thread's answer. (One asked before another question, or
+            // before the app in front had no input modes: left, it would
+            // show the old app's.)
             if ((lParam & kInputMethodAsked) &&
                 (((UINT)lParam >> kInputMethodIdShift) & kInputMethodIdMask) !=
                     (m_inputMethodId & kInputMethodIdMask)) {
                 return 0;
-            }
-            if (m_main && (lParam & kInputMethodAsked) && m_inputMethodThread) {
-                WaitForSingleObject(m_inputMethodThread, INFINITE);
-                CloseHandle(m_inputMethodThread);
-                m_inputMethodThread = nullptr;
-                if (m_inputMethodAgain) {
-                    m_inputMethodAgain = false;
-                    StartInputMethodQuery();
-                }
             }
             // (Each island showing the item, as itself.)
             ForEachIsland([&](Island& island) {
@@ -107151,7 +106954,14 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             if (wParam == kInputMethodPollTimerId) {
-                StartInputMethodQuery();
+                // (Not while no island showing it is there: a full-screen
+                // app; the app in front changing asks again.)
+                if (AnyIslandLook([](Island& island) {
+                        return island.m_visible &&
+                               g_settings.islandInputMethod;
+                    })) {
+                    StartInputMethodQuery();
+                }
                 return 0;
             }
             if (wParam == kFoldersDropTimerId) {
@@ -107176,6 +106986,11 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             if (wParam == kAutoHideTimerId) {
                 CheckAutoHide();
+                return 0;
+            }
+            if (wParam == kAutoProfileTimerId) {
+                KillTimer(m_hwnd, kAutoProfileTimerId);
+                CheckAutoProfile();
                 return 0;
             }
             if (wParam == kCapsLockTimerId) {
