@@ -11,7 +11,7 @@
 // @include explorer.exe
 // @include StartMenuExperienceHost.exe
 // @architecture x86-64
-// @compilerOptions -lcomctl32 -lshell32 -lole32 -loleaut32 -lshlwapi -lpropsys -lruntimeobject -luuid -luxtheme -lgdi32 -luser32 -lcomdlg32 -ldwmapi
+// @compilerOptions -lcomctl32 -lshell32 -lole32 -loleaut32 -lshlwapi -lruntimeobject -luuid -lgdi32 -luser32 -lcomdlg32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -36,14 +36,7 @@ the Start menu process found the **Start settings** item.
 
 Whenever the mod is loaded (installed, updated, switched on again, or Explorer restarted), it restarts the Start menu
 process if that process started before the mod. The new process loads with the mod from its start, so the new menu
-item appears and empty tiles are hidden from the first time the menu is opened, without restarting Explorer.
-
-Empty category tiles (a heading with no apps) are hidden, and shown again as soon as an app
-is assigned to them. The **Hide empty category tiles** setting turns this off. Turn it off if you also run the
-separate mod **Start Menu Hide Empty Categories**, so the two do not work on the same tiles. Changing the setting
-restarts the Start menu process. If both mods are hiding empty tiles at the same time, this mod notices and shows a
-warning: in an orange line at the top of the manager window, and in a popup once each time it happens (a dialog in
-the manager window when it is open, otherwise a message box).
+item appears without restarting Explorer.
 
 **Known issue:** if the *Other* category is empty when this mod is disabled or removed, Windows 11 still
 shows an empty *Other* container in the Start menu. The mod avoids this by restoring the categories Windows had
@@ -58,7 +51,8 @@ the Feedback Hub.
 it. Apps you never changed are left alone. (Start does not choose a category again once the stored value
 is deleted, so deleting values would put those apps under *Other*.) The mod saves each app's original
 value the first time it changes it, and **Reset all** first writes a copy of your current layout to
-`%LOCALAPPDATA%\Windhawk\StartMenuCategoryManager`, which **Import** can load.
+the mod's storage folder, which **Import** can load. Windhawk removes that folder together with the mod, so use
+**Export** if you want a copy that stays.
 
 The manager lists every app the Start menu knows about (desktop apps and Microsoft
 Store apps, taken from `shell:AppsFolder`) and lets you assign a Start menu category
@@ -70,7 +64,7 @@ to an app or to a whole Start menu folder.
 - **Advanced setting:** the mod's settings page has an option that shows a **Set as original** button.
   It replaces every saved original category with the layout as it is right now, so **Reset all**
   would go back to that layout instead of Windows' own categories. This cannot be undone. It is
-  off by default and only meant for testing.
+  off by default.
 - Choosing **Windows default** puts the app back to the category it had before the mod changed it.
 - Applying a change restarts StartMenuExperienceHost so it takes effect immediately.
 - Categories are stored under `HKCU\Software\Microsoft\Windows\CurrentVersion\Start\TileProperties`.
@@ -165,7 +159,7 @@ started within the last second is left alone.
 By default the mod puts everything back when it unloads (disabled, uninstalled or updated): every app it changed goes
 back to the category it had before, and the Start menu restarts. Your layout is saved first, and the next time the mod
 loads it is applied again, so disabling and enabling the mod (or recompiling it) leaves your categories as they were.
-The same copy is also kept among the newest backups in `%LOCALAPPDATA%\Windhawk\StartMenuCategoryManager`, and
+The same copy is also kept among the newest backups in the mod's storage folder, and
 **Import** can load it. This also avoids the empty *Other* container that Windows 11 can show after the mod is removed.
 Turn on **Keep modified categories when this mod is unloaded** if you would rather leave the categories in place when
 the mod unloads. **Reset all** does the same restore whenever you want it.
@@ -173,39 +167,21 @@ the mod unloads. **Reset all** does the same restore whenever you want it.
 ## Tested on
 
 Only Windows 11 build 26300, on one computer, with Windows in Brazilian Portuguese. On any other build the mod may
-fail to attach; it then switches only the affected feature off (see below).
-
-**Languages.** Hiding empty category tiles recognises headings in English and Brazilian Portuguese only. The
-Brazilian Portuguese headings were taken from Start itself. The English ones are translations that have not been
-checked against Start in English, so some may not match, and an empty tile whose heading does not match stays visible.
-Other display languages are not supported for this feature. Assigning categories does not depend on the headings.
+fail to attach to the Start menu (see below).
 
 ## If a Windows update breaks the mod
 
 The mod depends on private parts of the Start menu that Microsoft can change without notice. It was written and tested
-on Windows 11 build 26300. When something stops matching, the mod keeps running and switches only the affected feature
-off. What you may see:
+on Windows 11 build 26300. When something stops matching, the mod keeps running and only the Start menu item is lost. What you may see:
 
 - **No "Manage Categories" item in the Start menu's right-click menu.** The menu hook did not attach. Windows then also
   shows a one-time message per Windows build.
-- **Empty category tiles stay visible, or the other tiles do not move up to fill the gap.** The manager window shows an
-  orange warning at the top that names what did not attach.
 - **Category changes still work** either way, because they only write the registry and restart Start.
 
-Where to look: the Windhawk log (lines starting with `[start]`) says which hook was not found, and
-`%LOCALAPPDATA%\Windhawk\StartMenuCategoryManager\crashes.log` records any crash or fault. The functions the mod
-hooks, all inside the Start menu DLL (`StartMenu.dll`, or `StartUI.dll` on some builds), are:
-
-1. `consume_..._IVector<IVector<MenuFlyoutItemBase>>::Append`, which adds the menu item.
-2. `StartBlendedFlexFrame::OnContextRequested`, `CategoryProvider::PruneAndCombineCategories` and
-   `CategoryProvider::CombineCategories`, which find the empty tiles.
-3. Two `ReplaceAll` functions of the category list (`AllAppsGroupViewModel`), which are optional and only make the
-   tiles close up.
-
-To find the new names after an update, search the Start menu DLL's symbols in Windhawk for those class and function
-names. The empty-tile feature also reads Start's internal category map at fixed byte offsets (the constants
-`kCategoryMap...` and `kCategoryNode...` in the source), checked on build 26300. If the log reports a
-"Category map walk mismatch", those offsets no longer fit and need to be re-checked for the new build.
+Where to look: the Windhawk log (lines starting with `[start]`) says whether the hook was found. The only function the mod
+hooks in the Start menu DLL (`StartMenu.dll`, or `StartUI.dll` on some builds) is
+`consume_..._IVector<IVector<MenuFlyoutItemBase>>::Append`, which adds the menu item. To find its new name after an
+update, search the Start menu DLL's symbols in Windhawk for that class and function name.
 */
 // ==/WindhawkModReadme==
 
@@ -226,29 +202,16 @@ names. The empty-tile feature also reads Start's internal category map at fixed 
     Windows o criou e evita o contêiner "Outro" vazio que o Windows 11 pode mostrar depois que o mod some. Seu layout
     é salvo antes e aplicado de novo na próxima vez que o mod carregar, então desativar e ativar o mod (ou recompilá-lo)
     mantém suas categorias como estavam. Ligado: suas categorias simplesmente ficam como estão quando o mod é descarregado.
-- hideEmptyTiles: true
-  $name: "Hide empty category tiles"
-  $description: >-
-    On (default): category tiles with no apps are hidden and the other tiles move up to fill the gap. Off: this mod
-    leaves the tiles alone (none of the hooks that do this are installed), so it can run next to the separate mod
-    "Start Menu Hide Empty Categories". Changing this restarts the Start menu process. If both are hiding tiles, a
-    warning is shown.
-  $name:pt-BR: "Ocultar blocos de categoria vazios"
-  $description:pt-BR: >-
-    Ligado (padrão): os blocos de categoria sem aplicativos são ocultados e os outros blocos sobem para preencher o
-    espaço. Desligado: este mod não mexe nos blocos (nenhum dos hooks que fazem isso é instalado), então pode funcionar
-    junto com o mod separado "Ocultar Categorias Vazias do Menu Iniciar". Alterar esta opção reinicia o processo do Menu Iniciar. Se os dois
-    estiverem ocultando blocos, um aviso é exibido.
 - showSetOriginalButton: false
   $name: "Advanced: show the Set as original button"
   $description: >-
-    DANGEROUS, for testing only. Adds a button to the manager that replaces the saved original
+    Adds a button to the manager that replaces the saved original
     category of every app with the category it has right now. After that, Reset all and
     "Windows default" go back to THIS layout, not to the categories Windows chose, and the real
     originals are lost for good. Leave this off unless you know exactly why you need it.
   $name:pt-BR: "Avançado: mostrar o botão Definir como original"
   $description:pt-BR: >-
-    PERIGOSO, apenas para testes. Adiciona ao gerenciador um botão que substitui a categoria original salva de cada
+    Adiciona ao gerenciador um botão que substitui a categoria original salva de cada
     aplicativo pela categoria que ele tem agora. Depois disso, "Redefinir tudo" e "Padrão do Windows" voltam para ESTE
     layout, e não para as categorias escolhidas pelo Windows, e os originais verdadeiros são perdidos de vez. Deixe
     desligado, a menos que saiba exatamente por que precisa dele.
@@ -270,14 +233,8 @@ names. The empty-tile feature also reads Start's internal category map at fixed 
 //   Creating and showing the manager window
 //   Opening the manager from the Start menu process   the named event between the two processes
 //   Start menu context menu injection runs inside StartMenuExperienceHost.exe
-//   Hiding empty category tiles       runs inside StartMenuExperienceHost.exe
-//   Category rebuild hooks, ABI-side hook             the tile hooks
-//   Crash logging                     both processes
 //   Wh_ModInit and friends            entry points
 // ===========================================================================
-
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 
 #include <windows.h>
 #include <commctrl.h>
@@ -321,17 +278,13 @@ names. The empty-tile feature also reads Start's internal category map at fixed 
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <propsys.h>
-#include <propkey.h>
 #include <objbase.h>
-#include <uxtheme.h>
 #include <cwctype>
 #include <string>
 #include <vector>
-#include <map>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
-#include <algorithm>
 #include <atomic>
 #include <string_view>
 #include <memory>
@@ -366,14 +319,10 @@ constexpr wchar_t kManageItemGlyph[] = L"\xE8A9";
 // Start's own "Start settings" item uses the cog, which the injection looks for.
 constexpr wchar_t kStartSettingsGlyph[] = L"\xE713";
 
-// Shown in the log. Keep in sync with @version.
-constexpr wchar_t kModVersion[] = L"1.0.0";
-
 
 constexpr UINT WM_APP_SHOW = WM_APP + 2;
 constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 5;
 constexpr UINT WM_APP_CONFIRM_DONE = WM_APP + 7;  // The confirmation dialog was answered.
-constexpr UINT WM_APP_DUPLICATE_WARNING = WM_APP + 8;  // Both mods hide empty tiles: show the warning dialog.
 constexpr UINT_PTR kConfirmTimerId = 0x434F4E46;
 constexpr UINT WM_APP_THEME_CHANGED = WM_APP + 6;  // The light / dark mode of Windows changed under an open manager.
 
@@ -405,9 +354,8 @@ struct ShortcutInfo {
 };
 
 // Start stores a numeric ID per app. Microsoft publishes no list, and several IDs can map to
-// the same heading (sub-categories). "verified" means the ID was confirmed on a real Start
-// menu (apps Start itself put under that heading, or the heading an applied ID produced);
-// IDs 0 to 31 are all mapped (tested on Windows 11 26H2, build 26300; the pt-BR names are Start's own, the English
+// the same heading (sub-categories), so kCategories lists one ID per heading and CanonicalCategoryId maps the others
+// onto it. IDs 0 to 31 are all mapped (tested on Windows 11 26H2, build 26300; the pt-BR names are Start's own, the English
 // names are translations). Start shows a category as its own tile only when at least 3 apps carry it; with fewer, the
 // apps fall under a broader one (Games, Music and Sports under Entertainment; Travel, Medicine, Health & Wellness,
 // Personal Finance, Shopping and Food & Dining under Lifestyle). An app inside a Start folder counts as one app. An ID
@@ -416,82 +364,46 @@ struct NativeCategory {
     const wchar_t* name;
     const wchar_t* namePt;  // The heading as Start shows it in Brazilian Portuguese.
     DWORD id;
-    bool verified;
 };
 
 const NativeCategory kCategories[] = {
-    {L"Accessibility", L"Acessibilidade", 1, true},
-    {L"Business", L"Comercial", 20, true},
-    {L"Creativity", L"Criatividade", 7, true},
-    {L"Developer Tools", L"Ferramentas de Desenvolvedor", 15, true},
-    {L"Education", L"Educa\u00e7\u00e3o", 19, true},
-    {L"Entertainment", L"Entretenimento", 16, true},
-    {L"Food & Dining", L"Bares e Restaurantes", 29, true},
-    {L"Games", L"Jogos", 3, true},
-    {L"Health & Wellness", L"Sa\u00fade e Bem-estar", 12, true},
-    {L"Information & Reading", L"Informa\u00e7\u00f5es e Leitura", 14, true},
-    {L"Kids + Family", L"Crian\u00e7as + Fam\u00edlia", 10, true},
-    {L"Lifestyle", L"Estilo de vida", 27, true},
-    {L"Medicine", L"Medicina", 11, true},
-    {L"Music", L"M\u00fasica", 17, true},
-    {L"Other", L"Outro", 0, true},
-    {L"Personal Finance", L"Finan\u00e7as Pessoais", 18, true},
-    {L"Productivity", L"Produtividade", 5, true},
-    {L"Shopping", L"Compras", 28, true},
-    {L"Social", L"Social", 8, true},
-    {L"Sports", L"Esportes", 26, true},
-    {L"Travel", L"Viagem", 4, true},
-    {L"Utilities & Tools", L"Utilit\u00e1rios e Ferramentas", 9, true},
+    {L"Accessibility", L"Acessibilidade", 1},
+    {L"Business", L"Comercial", 20},
+    {L"Creativity", L"Criatividade", 7},
+    {L"Developer Tools", L"Ferramentas de Desenvolvedor", 15},
+    {L"Education", L"Educa\u00e7\u00e3o", 19},
+    {L"Entertainment", L"Entretenimento", 16},
+    {L"Food & Dining", L"Bares e Restaurantes", 29},
+    {L"Games", L"Jogos", 3},
+    {L"Health & Wellness", L"Sa\u00fade e Bem-estar", 12},
+    {L"Information & Reading", L"Informa\u00e7\u00f5es e Leitura", 14},
+    {L"Kids + Family", L"Crian\u00e7as + Fam\u00edlia", 10},
+    {L"Lifestyle", L"Estilo de vida", 27},
+    {L"Medicine", L"Medicina", 11},
+    {L"Music", L"M\u00fasica", 17},
+    {L"Other", L"Outro", 0},
+    {L"Personal Finance", L"Finan\u00e7as Pessoais", 18},
+    {L"Productivity", L"Produtividade", 5},
+    {L"Shopping", L"Compras", 28},
+    {L"Social", L"Social", 8},
+    {L"Sports", L"Esportes", 26},
+    {L"Travel", L"Viagem", 4},
+    {L"Utilities & Tools", L"Utilit\u00e1rios e Ferramentas", 9},
 };
 
 constexpr LONG_PTR kComboDefault = -1;  // "Windows default": remove the override.
 constexpr DWORD kMaxCustomId = 999;
 
-bool g_showOriginalButton = false;  // The "Advanced" setting; read when the mod loads.
-bool g_restoreOnUnload = false;     // Restore the originals when the mod unloads (Explorer only): the inverse of the "keepOnUnload" setting.
+std::atomic<bool> g_showOriginalButton{false};  // The "Advanced" setting; read when the mod loads.
+std::atomic<bool> g_restoreOnUnload{false};  // Restore the originals when the mod unloads (Explorer only): the inverse of the "keepOnUnload" setting.
 bool g_isDark = false;
 int g_folderIconIndex = 0;
 std::vector<AppEntry> g_apps;
 std::vector<ShortcutInfo> g_shortcuts;    // Every Start menu shortcut found on disk.
 int g_conflictsLogged = 0;
 
-HWND g_xamlListWindow = nullptr;  // The manager window; it is reused, not opened again.
+std::atomic<HWND> g_xamlListWindow{nullptr};  // The manager window; it is reused, not opened again.
 std::atomic<bool> g_shuttingDown{false};
-const wchar_t* g_crashStage = L"starting up";
-std::wstring g_markerDir;   // Folder for the crash log and the per-process markers.
-std::wstring g_markerPath;  // This process's marker file.
-const wchar_t* g_markedStage = nullptr;
-
-// Writes a marker: which process, its state ("running" or "expected"), and its last step.
-void WriteMarkerFile(const std::wstring& path, DWORD pid, const wchar_t* state, const wchar_t* stage) {
-    if (path.empty()) return;
-    const std::wstring text = L"pid=" + std::to_wstring(pid) + L"\r\nstate=" + state + L"\r\nstage=" +
-                              (stage ? stage : L"") + L"\r\n";
-    const int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0,
-                                           nullptr, nullptr);
-    if (length <= 0) return;
-    std::string bytes(static_cast<size_t>(length), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), bytes.data(), length, nullptr, nullptr);
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
-                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
-    CloseHandle(file);
-}
-
-std::wstring MarkerPathFor(const wchar_t* processName) {
-    if (g_markerDir.empty()) return L"";
-    return g_markerDir + std::wstring(L"\\running-") + processName + L".txt";
-}
-
-// Records the step the mod has started. The marker is only rewritten when the step changes.
-void MarkStage(const wchar_t* stage) {
-    g_crashStage = stage;
-    if (stage == g_markedStage) return;
-    g_markedStage = stage;
-    WriteMarkerFile(g_markerPath, GetCurrentProcessId(), L"running", stage);
-}
 HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 SRWLOCK g_uiLock = SRWLOCK_INIT;
@@ -552,74 +464,36 @@ struct FolderLess {
 };
 
 
+// Start can show several IDs under one heading; this returns the ID that kCategories lists for that heading.
+DWORD CanonicalCategoryId(DWORD id) {
+    switch (id) {
+        case 2: case 13: return 5;                 // Productivity
+        case 6: case 22: case 23: case 30: return 7;  // Creativity
+        case 21: case 24: case 25: case 31: return 14;  // Information & Reading
+        default: return id;
+    }
+}
+
+const NativeCategory* FindNativeCategory(DWORD id) {
+    const DWORD canonical = CanonicalCategoryId(id);
+    for (const auto& cat : kCategories) {
+        if (cat.id == canonical) return &cat;
+    }
+    return nullptr;
+}
+
 std::wstring CategoryNameEn(DWORD id, bool hasCategory) {
     if (!hasCategory) return L"Windows default";
-    switch (id) {
-        case 0: return L"Other";
-        case 1: return L"Accessibility";
-        case 2: case 5: case 13: return L"Productivity";
-        case 3: return L"Games";
-        case 27: return L"Lifestyle";
-        case 4: return L"Travel";
-        case 11: return L"Medicine";
-        case 12: return L"Health & Wellness";
-        case 18: return L"Personal Finance";
-        case 28: return L"Shopping";
-        case 6: case 7: case 22: case 23: case 30: return L"Creativity";
-        case 8: return L"Social";
-        case 9: return L"Utilities & Tools";
-        case 10: return L"Kids + Family";
-        case 14: case 21: case 24: case 25: case 31: return L"Information & Reading";
-        case 15: return L"Developer Tools";
-        case 16: return L"Entertainment";
-        case 17: return L"Music";
-        case 26: return L"Sports";
-        case 19: return L"Education";
-        case 20: return L"Business";
-        case 29: return L"Food & Dining";
-        default: return L"Unknown ID (" + std::to_wstring(id) + L")";
-    }
+    if (const NativeCategory* cat = FindNativeCategory(id)) return cat->name;
+    return L"Unknown ID (" + std::to_wstring(id) + L")";
 }
 
 // The heading name in the display language (Brazilian Portuguese names are Start's own).
 std::wstring CategoryName(DWORD id, bool hasCategory) {
-    std::wstring en = CategoryNameEn(id, hasCategory);
-    if (!IsPortuguese()) return en;
-
-    static const struct {
-        const wchar_t* en;
-        const wchar_t* pt;
-    } kNames[] = {
-        {L"Windows default", L"Padr\u00e3o do Windows"},
-        {L"Other", L"Outro"},
-        {L"Hidden", L"Oculto"},
-        {L"Accessibility", L"Acessibilidade"},
-        {L"Games", L"Jogos"},
-        {L"Productivity", L"Produtividade"},
-        {L"Creativity", L"Criatividade"},
-        {L"Utilities & Tools", L"Utilit\u00e1rios e Ferramentas"},
-        {L"Social", L"Social"},
-        {L"Music", L"M\u00fasica"},
-        {L"Sports", L"Esportes"},
-        {L"Information & Reading", L"Informa\u00e7\u00f5es e Leitura"},
-        {L"Developer Tools", L"Ferramentas de Desenvolvedor"},
-        {L"Business", L"Comercial"},
-        {L"Education", L"Educa\u00e7\u00e3o"},
-        {L"Entertainment", L"Entretenimento"},
-        {L"Food & Dining", L"Bares e Restaurantes"},
-        {L"Kids + Family", L"Crian\u00e7as + Fam\u00edlia"},
-        {L"Lifestyle", L"Estilo de vida"},
-        {L"Travel", L"Viagem"},
-        {L"Medicine", L"Medicina"},
-        {L"Health & Wellness", L"Sa\u00fade e Bem-estar"},
-        {L"Personal Finance", L"Finan\u00e7as Pessoais"},
-        {L"Shopping", L"Compras"},
-    };
-    for (const auto& n : kNames) {
-        if (en == n.en) return n.pt;
-    }
-    if (en.rfind(L"Unknown ID", 0) == 0) return L"ID desconhecido (" + std::to_wstring(id) + L")";
-    return en;
+    if (!IsPortuguese()) return CategoryNameEn(id, hasCategory);
+    if (!hasCategory) return L"Padr\u00e3o do Windows";
+    if (const NativeCategory* cat = FindNativeCategory(id)) return cat->namePt;
+    return L"ID desconhecido (" + std::to_wstring(id) + L")";
 }
 
 // Name plus the raw ID, so the list shows exactly what is stored in the registry.
@@ -706,6 +580,17 @@ std::wstring GetKnownFolder(REFKNOWNFOLDERID id) {
     return result;
 }
 
+// This mod's own module handle. Window classes are registered under it, so they cannot clash with Explorer's own
+// classes or with another copy of the mod.
+HMODULE ModuleInstance() {
+    static HMODULE module = nullptr;
+    if (!module) {
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&ModuleInstance), &module);
+    }
+    return module;
+}
+
 bool ReadTextFile(const std::wstring& path, std::wstring& out) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                               FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -757,19 +642,11 @@ void SetStatus(const std::wstring& text) {
 // The Start menu process is sandboxed, so it cannot write to the registry or to Explorer's files. Named events are the
 // channel that already works (it is how Start asks Explorer to open the manager). Explorer creates one manual-reset
 // event per question and Start signals the ones whose answer is "yes". Start resets all of them when it starts, so an
-// old answer is never kept. "Done" means Start has finished hooking the menu and the tiles. "GapChecked" is signalled
-// later, at Start's first category rebuild, because only then is it known whether the optional ReplaceAll hook is in.
-enum HookPart { kHookMenu = 0, kHookTiles, kHookGapFill, kHookGapChecked, kHookDone, kHookPartCount };
-constexpr const wchar_t* kHookPartNames[kHookPartCount] = {L"Menu", L"Tiles", L"GapFill", L"GapChecked", L"Done"};
+// old answer is never kept. "Done" means Start has finished trying to hook the menu item.
+enum HookPart { kHookMenu = 0, kHookDone, kHookPartCount };
+constexpr const wchar_t* kHookPartNames[kHookPartCount] = {L"Menu", L"Done"};
 HANDLE g_hookEvents[kHookPartCount] = {};
 HANDLE g_hookWatchThread = nullptr;
-
-// The "Hide empty category tiles" setting. Read when the mod loads (both processes) and when the setting changes.
-// When it is off, the tile hooks are not installed at all. The menu item is not affected either way.
-std::atomic<bool> g_hideEmptyTiles{true};
-
-// The Windows build the category map offsets (kCategoryMap...Offset and kCategoryNode...Offset) were checked on.
-constexpr wchar_t kOffsetsVerifiedBuild[] = L"26300";
 
 std::wstring HookEventName(int part) {
     DWORD session = 0;
@@ -828,11 +705,8 @@ void CloseHookStatusEvents() {
 }
 
 struct HookStatus {
-    bool known = false;       // Start has finished trying to hook the menu and the tiles.
-    bool menuItem = false;    // The "Manage Categories" menu item hook is in.
-    bool tiles = false;       // The hooks that find and hide empty tiles are in.
-    bool gapChecked = false;  // The optional ReplaceAll hook has been looked for.
-    bool gapFill = false;     // ...and it is in.
+    bool known = false;     // Start has finished trying to hook the menu item.
+    bool menuItem = false;  // The "Manage Categories" menu item hook is in.
 };
 
 HookStatus ReadHookStatus() {
@@ -840,89 +714,7 @@ HookStatus ReadHookStatus() {
     HookStatus status;
     status.known = on(kHookDone);
     status.menuItem = on(kHookMenu);
-    status.tiles = on(kHookTiles);
-    status.gapChecked = on(kHookGapChecked);
-    status.gapFill = on(kHookGapFill);
     return status;
-}
-
-// The separate mod "Start Menu Hide Empty Categories" creates this event in Explorer, and its copy in the Start menu
-// process signals it once its tile hooks are in. The name and the security descriptor must match that mod's.
-std::wstring OtherTileHiderEventName() {
-    DWORD session = 0;
-    ProcessIdToSessionId(GetCurrentProcessId(), &session);
-    return L"Global\\WindhawkHideEmptyCategories-" + std::to_wstring(session) + L"-Active";
-}
-
-// Explorer: true when the separate mod is installed and its tile hooks are in the Start menu process.
-bool OtherTileHiderActive() {
-    HANDLE handle = OpenEventW(SYNCHRONIZE, FALSE, OtherTileHiderEventName().c_str());
-    if (!handle) return false;
-    const bool active = WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
-    CloseHandle(handle);
-    return active;
-}
-
-// Explorer: true when this mod and the separate mod are both hiding empty tiles.
-bool DuplicateTileHiding() {
-    if (!g_hideEmptyTiles) return false;
-    const HookStatus status = ReadHookStatus();
-    return status.known && status.tiles && OtherTileHiderActive();
-}
-
-std::wstring DuplicateTileHidingText() {
-    return IsPortuguese()
-        ? L"Este mod e o \"Ocultar Categorias Vazias do Menu Iniciar\" estão ocultando os blocos vazios do Menu Iniciar ao mesmo "
-          L"tempo. Os dois atuam nos mesmos blocos e podem interferir um no outro. Desative a opção \"Ocultar blocos de categoria vazios\" "
-          L"nas configurações deste mod, ou desative o outro mod."
-        : L"This mod and Start Menu Hide Empty Categories are both hiding the empty Start tiles. They work on the same "
-          L"tiles and can interfere with each other. Turn off \"Hide empty category tiles\" in this mod's settings, or "
-          L"disable the other mod.";
-}
-
-// Empty when everything attached (or nothing is known yet). Otherwise says what did not attach.
-std::wstring HookFailureWarning() {
-    const HookStatus status = ReadHookStatus();
-    if (!status.known) return L"";
-    const bool gapMissing = status.gapChecked && !status.gapFill;
-    if (status.menuItem && status.tiles && !gapMissing) return L"";
-
-    const std::wstring build = WindowsBuildString();
-    if (status.menuItem && status.tiles) {
-        // Only the optional hook that closes gaps is missing. Nothing is broken, so say it plainly.
-        return IsPortuguese()
-            ? L"O gancho opcional que fecha os espa\u00e7os entre os blocos do Menu Iniciar n\u00e3o foi encontrado no "
-              L"Windows build " + build + L", ent\u00e3o os outros blocos podem n\u00e3o subir quando um bloco vazio "
-              L"\u00e9 ocultado. Os blocos vazios continuam ocultos e as altera\u00e7\u00f5es de categoria funcionam."
-            : L"The optional hook that closes the gaps between Start tiles was not found on Windows build " + build +
-              L", so the other tiles may not move up when an empty tile is hidden. Empty tiles are still hidden and "
-              L"category changes work.";
-    }
-    std::wstring en = L"Part of the mod could not attach to the Start menu on Windows build " + build + L": ";
-    std::wstring pt = L"Parte do mod n\u00e3o conseguiu se conectar ao Menu Iniciar no Windows build " + build + L": ";
-    if (!status.menuItem) {
-        en += L"the Manage Categories menu item and the hiding of empty tiles are off. ";
-        pt += L"o item Gerenciar Categorias e a oculta\u00e7\u00e3o de blocos vazios est\u00e3o desativados. ";
-    } else {
-        en += L"empty category tiles are not hidden. ";
-        pt += L"blocos de categoria vazios n\u00e3o s\u00e3o ocultados. ";
-    }
-    en += L"This usually follows a Windows update, and the mod needs an update. Category changes still work.";
-    pt += L"Isso costuma acontecer ap\u00f3s uma atualiza\u00e7\u00e3o do Windows, e o mod precisa ser atualizado. "
-          L"As altera\u00e7\u00f5es de categoria continuam funcionando.";
-    return IsPortuguese() ? pt : en;
-}
-
-// What the banner in the manager window shows: the warning about both mods hiding tiles, then the one about hooks that
-// did not attach. Empty when there is nothing to warn about.
-std::wstring HookStatusWarning() {
-    std::wstring text = DuplicateTileHiding() ? DuplicateTileHidingText() : std::wstring();
-    const std::wstring failure = HookFailureWarning();
-    if (!failure.empty()) {
-        if (!text.empty()) text += L"\n\n";
-        text += failure;
-    }
-    return text;
 }
 
 // Start menu process: clears every answer when it starts.
@@ -942,43 +734,23 @@ void SignalHookPart(int part) {
     }
 }
 
-// Start menu process: the result of hooking the menu item and the tiles.
-void ReportHooks(bool menuItem, bool tiles) {
+// Start menu process: the result of hooking the menu item.
+void ReportHooks(bool menuItem) {
     if (menuItem) SignalHookPart(kHookMenu);
-    if (tiles) SignalHookPart(kHookTiles);
     SignalHookPart(kHookDone);
-    Wh_Log(L"[start] Windows build %ls: menu item hook %ls, empty-tile hooks %ls", WindowsBuildString().c_str(),
-           menuItem ? L"ok" : L"NOT FOUND", tiles ? L"ok" : L"NOT FOUND");
-}
-
-// Start menu process: whether the optional ReplaceAll hook is in (known at the first category rebuild).
-void ReportGapHook(bool present) {
-    if (present) SignalHookPart(kHookGapFill);
-    SignalHookPart(kHookGapChecked);
+    Wh_Log(L"[start] Windows build %ls: menu item hook %ls", WindowsBuildString().c_str(),
+           menuItem ? L"ok" : L"NOT FOUND");
 }
 
 // Explorer: if the menu item hook failed, the manager cannot be opened at all, so a warning inside it would never be
 // seen. This shows one message box per Windows build instead.
 void WarnMenuItemMissing() {
     const std::wstring build = WindowsBuildString();
-    HKEY key = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Windhawk\\StartMenuCategoryManager", 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &key,
-                        nullptr) != ERROR_SUCCESS) {
-        return;
-    }
     wchar_t warned[64]{};
-    DWORD size = sizeof(warned) - sizeof(wchar_t);
-    DWORD type = 0;
-    const bool already = RegQueryValueExW(key, L"WarnedBuild", nullptr, &type, reinterpret_cast<BYTE*>(warned),
-                                          &size) == ERROR_SUCCESS && type == REG_SZ && build == warned;
-    if (!already) {
-        // Recorded before the message is shown, so a crash cannot make it appear on every start.
-        RegSetValueExW(key, L"WarnedBuild", 0, REG_SZ, reinterpret_cast<const BYTE*>(build.c_str()),
-                       static_cast<DWORD>((build.size() + 1) * sizeof(wchar_t)));
-    }
-    RegCloseKey(key);
-    if (already) return;
+    Wh_GetStringValue(L"WarnedBuild", warned, ARRAYSIZE(warned));
+    if (build == warned) return;
+    // Recorded before the message is shown, so a crash cannot make it appear on every start.
+    Wh_SetStringValue(L"WarnedBuild", build.c_str());
 
     const std::wstring text =
         std::wstring(Tr(L"Start Menu Category Manager could not add its \"Manage Categories\" item to the Start menu "
@@ -995,67 +767,40 @@ void WarnMenuItemMissing() {
                 MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
 }
 
-std::wstring DuplicateTileHidingPopupText() {
-    return DuplicateTileHidingText() +
-           Tr(L"\n\nThis message is shown once each time this happens.",
-              L"\n\nEsta mensagem aparece uma vez cada vez que isso acontece.");
-}
-
-// Shown once each time both mods start hiding tiles together. The banner in the manager window shows the warning
-// whenever the window is open. With the window open, the popup is a dialog in the window, like the other ones (it
-// has to be made on the window's own thread, so it is requested with a message). Without the window, a message box.
-void WarnDuplicateTileHiding() {
-    Wh_Log(L"Both this mod and Start Menu Hide Empty Categories are hiding empty tiles");
-    if (HWND window = g_xamlListWindow) {
-        if (PostMessageW(window, WM_APP_DUPLICATE_WARNING, 0, 0)) return;
-    }
-    const std::wstring text = DuplicateTileHidingPopupText();
-    MessageBoxW(nullptr, text.c_str(), L"Start Menu Category Manager",
-                MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
-}
-
-// Explorer, one check per second until the mod unloads. Looks once for the answer from Start about the menu item (and
-// warns if that hook did not attach; the manager cannot be opened then, so a banner would never be seen). It keeps
-// running afterwards because the other mod can be installed, enabled or switched on at any time.
+// Explorer: waits (up to 3 minutes) for Start's answer about the menu item, and warns if that hook did not attach. The
+// manager cannot be opened then, so a warning inside it would never be seen.
 DWORD WINAPI HookWatchThreadProc(LPVOID) {
     if (!g_stopEvent) return 0;
-    bool menuChecked = false;
-    bool duplicateWarned = false;
-    for (int second = 0;; ++second) {
+    for (int second = 0; second < 180; ++second) {
         // Anything but a timeout means the stop event was set, or it was closed while a message box was open.
         if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT || g_shuttingDown) return 0;
-
-        if (!menuChecked) {
-            const HookStatus status = ReadHookStatus();
-            if (status.known) {
-                menuChecked = true;
-                if (!status.menuItem) WarnMenuItemMissing();
-            } else if (second >= 180) {
-                menuChecked = true;  // Start never answered. Stop waiting for it.
-            }
-        }
-
-        if (DuplicateTileHiding()) {
-            if (!duplicateWarned) {
-                duplicateWarned = true;
-                WarnDuplicateTileHiding();
-            }
-        } else {
-            duplicateWarned = false;
+        const HookStatus status = ReadHookStatus();
+        if (status.known) {
+            if (!status.menuItem) WarnMenuItemMissing();
+            return 0;
         }
     }
+    return 0;  // Start never answered. Stop waiting for it.
 }
 
 void StartHookWatch() {
     g_hookWatchThread = CreateThread(nullptr, 0, HookWatchThreadProc, nullptr, 0, nullptr);
 }
 
-// Must run before g_stopEvent is closed. If the message box is still open after 3 seconds the thread is left alone:
-// the mod's module is pinned (see InstallCrashLogging), so its code stays valid.
+BOOL CALLBACK CloseThreadWindow(HWND hwnd, LPARAM) {
+    PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
+// Must run before g_stopEvent is closed. The watch thread can be blocked in a message box (WarnMenuItemMissing), so that
+// box is closed first. The thread runs this mod's code, so it is waited for without a time limit.
 void StopHookWatch() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_hookWatchThread) {
-        WaitForSingleObject(g_hookWatchThread, 3000);
+        const DWORD threadId = GetThreadId(g_hookWatchThread);
+        while (WaitForSingleObject(g_hookWatchThread, 50) == WAIT_TIMEOUT) {
+            EnumThreadWindows(threadId, CloseThreadWindow, 0);
+        }
         CloseHandle(g_hookWatchThread);
         g_hookWatchThread = nullptr;
     }
@@ -1165,7 +910,6 @@ std::wstring GetItemString(IShellItem* item, SIGDN type) {
 
 // Enumerates every app the Start menu knows about (Store apps and desktop apps).
 void ScanAppsFolder(std::vector<AppEntry>& out) {
-    MarkStage(L"scanning shell:AppsFolder for apps");
     IShellItem* folder = nullptr;
     if (FAILED(SHCreateItemFromParsingName(L"shell:AppsFolder", nullptr, IID_PPV_ARGS(&folder))) || !folder) {
         Wh_Log(L"Could not open shell:AppsFolder");
@@ -1234,7 +978,6 @@ void ScanAppsFolder(std::vector<AppEntry>& out) {
 }
 
 void LoadEntries() {
-    MarkStage(L"loading the app list");
     g_apps.clear();
     g_shortcuts.clear();
     g_conflictsLogged = 0;
@@ -1360,50 +1103,91 @@ void InitFolderIconIndex() {
 // Registry writes / Start menu restart
 // ---------------------------------------------------------------------------
 
+// The mod's storage folder. Windhawk removes it together with the mod. Empty if it cannot be found.
+std::wstring ModStorageDirectory() {
+    wchar_t path[MAX_PATH]{};
+    if (Wh_GetModStoragePath(path, ARRAYSIZE(path)) == 0) return L"";
+    CreateDirectoryW(path, nullptr);  // Harmless when it already exists.
+    return path;
+}
+
 // The category every key had before the mod first changed it. Windows does not choose a category
 // again once its stored value is deleted, so "go back to the default" has to mean "put back what
 // was there". Each record is stored once and never overwritten.
-constexpr wchar_t kOriginalsPath[] = L"Software\\Windhawk\\StartMenuCategoryManager\\OriginalCategories";
+// Kept in originals.txt in the mod's storage folder, one "<key><TAB><category id, or none>" line per key. The map is the
+// copy in memory: it is loaded the first time it is needed and written back whenever it changes.
 constexpr wchar_t kNoneMarker[] = L"none";  // The key had no Category value.
+std::map<std::wstring, std::wstring> g_originals;
+bool g_originalsLoaded = false;
+
+std::wstring OriginalsFilePath() {
+    const std::wstring dir = ModStorageDirectory();
+    return dir.empty() ? std::wstring() : dir + L"\\originals.txt";
+}
+
+bool LoadOriginals() {
+    if (g_originalsLoaded) return true;
+    const std::wstring path = OriginalsFilePath();
+    if (path.empty()) return false;
+    g_originals.clear();
+    std::wstring text;
+    if (ReadTextFile(path, text)) {
+        size_t pos = 0;
+        while (pos < text.size()) {
+            size_t end = text.find(L'\n', pos);
+            if (end == std::wstring::npos) end = text.size();
+            std::wstring line = text.substr(pos, end - pos);
+            pos = end + 1;
+            if (!line.empty() && line.back() == L'\r') line.pop_back();
+            const size_t tab = line.find(L'\t');
+            if (line.empty() || line[0] == L'#' || tab == std::wstring::npos || tab == 0) continue;
+            g_originals[line.substr(0, tab)] = line.substr(tab + 1);
+        }
+    }
+    g_originalsLoaded = true;
+    return true;
+}
+
+bool SaveOriginals() {
+    const std::wstring path = OriginalsFilePath();
+    if (path.empty()) return false;
+    std::wstring text = L"# Start Menu Category Manager: the category of each key before the mod changed it\r\n"
+                        L"# <key><TAB><category id, or none>\r\n";
+    for (const auto& item : g_originals) text += item.first + L"\t" + item.second + L"\r\n";
+    return WriteTextFile(path, text);
+}
 
 // With skipIfNone, a key that has no value right now is not recorded. Import uses this, so a layout
 // that was wiped (every value deleted) is not saved as "originally had no category".
 // Returns false if the original could not be saved, so the caller can refuse to change the value.
 bool RememberOriginalCategory(const std::wstring& regKey, HKEY appKey, bool skipIfNone = false) {
-    HKEY store = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kOriginalsPath, 0, nullptr, REG_OPTION_NON_VOLATILE,
-                        KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &store, nullptr) != ERROR_SUCCESS) {
+    if (!LoadOriginals()) return false;
+    if (g_originals.count(regKey)) return true;  // Each record is stored once and never overwritten.
+    DWORD current = 0;
+    if (ReadDword(appKey, L"Category", &current)) {
+        g_originals[regKey] = std::to_wstring(current);
+    } else if (!skipIfNone) {
+        g_originals[regKey] = kNoneMarker;
+    } else {
+        return true;
+    }
+    if (!SaveOriginals()) {
+        g_originals.erase(regKey);
         return false;
     }
-    bool ok = true;
-    if (RegQueryValueExW(store, regKey.c_str(), nullptr, nullptr, nullptr, nullptr) == ERROR_FILE_NOT_FOUND) {
-        DWORD current = 0;
-        if (ReadDword(appKey, L"Category", &current)) {
-            ok = RegSetValueExW(store, regKey.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE*>(&current),
-                                sizeof(current)) == ERROR_SUCCESS;
-        } else if (!skipIfNone) {
-            ok = RegSetValueExW(store, regKey.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(kNoneMarker),
-                                sizeof(kNoneMarker)) == ERROR_SUCCESS;
-        }
-    }
-    RegCloseKey(store);
-    return ok;
+    return true;
 }
+// 0: nothing saved for this key. 1: *value is the saved category. 2: the key had no category.
 int LookupOriginalCategory(const std::wstring& regKey, DWORD* value) {
-    HKEY store = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kOriginalsPath, 0, KEY_QUERY_VALUE, &store) != ERROR_SUCCESS) return 0;
-    DWORD type = 0;
-    DWORD data[4]{};
-    DWORD size = sizeof(data);
-    const LSTATUS status = RegQueryValueExW(store, regKey.c_str(), nullptr, &type,
-                                            reinterpret_cast<BYTE*>(data), &size);
-    RegCloseKey(store);
-    if (status != ERROR_SUCCESS) return 0;
-    if (type == REG_DWORD && size >= sizeof(DWORD)) {
-        *value = data[0];
-        return 1;
-    }
-    return type == REG_SZ ? 2 : 0;
+    if (!LoadOriginals()) return 0;
+    const auto it = g_originals.find(regKey);
+    if (it == g_originals.end()) return 0;
+    if (it->second == kNoneMarker) return 2;
+    wchar_t* end = nullptr;
+    const unsigned long parsed = wcstoul(it->second.c_str(), &end, 10);
+    if (end == it->second.c_str() || *end != L'\0') return 0;
+    *value = static_cast<DWORD>(parsed);
+    return 1;
 }
 
 enum class WriteResult { Failed, Unchanged, Changed, NoOriginal };
@@ -1414,7 +1198,6 @@ int LookupOriginalCategory(const std::wstring& regKey, DWORD* value);
 // The key is opened with KEY_QUERY_VALUE as well as KEY_SET_VALUE: RememberOriginalCategory and the
 // "already has this value" check read the current value through the same handle.
 WriteResult WriteSingleCategoryKey(const std::wstring& regKey, LONG_PTR categoryValue, bool createIfMissing) {
-    MarkStage(L"writing a category to the registry");
     const std::wstring fullPath = std::wstring(kRegistryPath) + L"\\" + regKey;
     constexpr REGSAM kAccess = KEY_SET_VALUE | KEY_QUERY_VALUE;
     HKEY appKey = nullptr;
@@ -1504,12 +1287,45 @@ bool WriteFolderShortcutKeys(const std::wstring& folder, LONG_PTR categoryValue)
     return anyChanged;
 }
 
+enum class StartModState { Absent, Late, FromStart };
+
+// Whether the process has this copy of the mod, and whether it has had it since it started. A copy loaded into a Start
+// process that was already running comes after StartMenu.dll (or StartUI.dll) in the module list, which is in load
+// order; Start has built its menus by then, so such a copy cannot add items to them. The DLL's file name carries the
+// version, so an updated mod is a different file. If the module list cannot be read the answer is Absent.
+StartModState ProcessModState(DWORD pid) {
+    wchar_t selfPath[MAX_PATH]{};
+    if (!GetModuleFileNameW(ModuleInstance(), selfPath, ARRAYSIZE(selfPath))) return StartModState::Absent;
+    const wchar_t* selfName = PathFindFileNameW(selfPath);
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    if (snapshot == INVALID_HANDLE_VALUE) return StartModState::Absent;
+    StartModState state = StartModState::Absent;
+    bool sawStartMenuDll = false;
+    MODULEENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (Module32FirstW(snapshot, &entry)) {
+        do {
+            if (_wcsicmp(entry.szModule, L"StartMenu.dll") == 0 || _wcsicmp(entry.szModule, L"StartUI.dll") == 0) {
+                sawStartMenuDll = true;
+            } else if (_wcsicmp(entry.szModule, selfName) == 0) {
+                state = sawStartMenuDll ? StartModState::Late : StartModState::FromStart;
+                break;
+            }
+        } while (Module32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return state;
+}
+
 // Ends the Start menu process so it starts again with the new registry values. A process that started within the last
 // second is left alone: it was started by an earlier restart, has not read the layout yet, and killing it again would
-// only make Start flap. Calls from different threads cannot overlap.
-void RestartStartMenuHost() {
-    static std::atomic_flag s_busy = ATOMIC_FLAG_INIT;
-    if (s_busy.test_and_set()) return;
+// only make Start flap. Only the current session's Start process is touched. Calls from different threads run one
+// after the other, so a request that arrives during a restart is not lost.
+void RestartStartMenuHost(bool onlyIfWithoutMod = false) {
+    static SRWLOCK s_lock = SRWLOCK_INIT;
+    AcquireSRWLockExclusive(&s_lock);
+    DWORD ownSession = 0;
+    const bool haveSession = ProcessIdToSessionId(GetCurrentProcessId(), &ownSession) != 0;
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot != INVALID_HANDLE_VALUE) {
@@ -1517,13 +1333,24 @@ void RestartStartMenuHost() {
         GetSystemTimeAsFileTime(&nowFt);
         const ULONGLONG now = (static_cast<ULONGLONG>(nowFt.dwHighDateTime) << 32) | nowFt.dwLowDateTime;
         constexpr ULONGLONG kMinAge = 10000000ull;  // 1 s in 100 ns units.
-        bool markerWritten = false;
 
         PROCESSENTRY32W entry{};
         entry.dwSize = sizeof(entry);
         if (Process32FirstW(snapshot, &entry)) {
             do {
                 if (_wcsicmp(entry.szExeFile, L"StartMenuExperienceHost.exe") != 0) continue;
+                DWORD session = 0;
+                if (haveSession && (!ProcessIdToSessionId(entry.th32ProcessID, &session) || session != ownSession)) continue;
+                if (onlyIfWithoutMod) {
+                    const StartModState modState = ProcessModState(entry.th32ProcessID);
+                    if (modState == StartModState::FromStart) {
+                        Wh_Log(L"Start (process %lu) has had this mod since it started; leaving it alone", entry.th32ProcessID);
+                        continue;
+                    }
+                    Wh_Log(L"Start (process %lu) %ls; restarting it", entry.th32ProcessID,
+                           modState == StartModState::Late ? L"got this mod only after it had started"
+                                                           : L"does not have this mod");
+                }
                 HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
                                               entry.th32ProcessID);
                 if (!hProcess) continue;
@@ -1534,11 +1361,6 @@ void RestartStartMenuHost() {
                     tooYoung = now > start && now - start < kMinAge;
                 }
                 if (!tooYoung) {
-                    if (!markerWritten) {
-                        markerWritten = true;
-                        WriteMarkerFile(MarkerPathFor(L"StartMenuExperienceHost.exe"), 0, L"expected",
-                                        L"restarted by this mod");
-                    }
                     TerminateProcess(hProcess, 0);
                 }
                 CloseHandle(hProcess);
@@ -1546,18 +1368,17 @@ void RestartStartMenuHost() {
         }
         CloseHandle(snapshot);
     }
-    s_busy.clear();
+    ReleaseSRWLockExclusive(&s_lock);
 }
 
-// Restarts the Start menu process when this mod loads (installed, updated, switched on again, or Explorer restarted).
-// A Start menu process that was already running when the mod loaded built its first category list before any hook was
-// in place, so its empty tiles would leave a gap until the menu was opened twice, and it would not have the new
-// "Manage Categories" item either. The new process starts with the hooks in place. A process that started within the
-// last second is left alone (RestartStartMenuHost). Only Explorer's copy calls this: the Start menu copy would be
-// killed by its own restart.
+// Restarts the Start menu process when this mod loads (installed, updated or switched on again), but only if that
+// process does not have this copy of the mod yet: a Start menu process without it has no "Manage Categories" item. One
+// that already has it (Explorer was restarted, or the user signed in) is left alone. The new process starts with the
+// hook in place. A process that started within the last second is also left alone (RestartStartMenuHost). Only
+// Explorer's copy calls this: the Start menu copy would be killed by its own restart.
 void RestartStartMenuStartedBeforeMod() {
-    Wh_Log(L"Restarting the Start menu process (if it started before this mod) so it loads with the mod from the start");
-    RestartStartMenuHost();
+    Wh_Log(L"Restarting the Start menu process if it does not have this mod yet");
+    RestartStartMenuHost(true);
 }
 
 // Writes the category to every target app, then re-reads what the registry now holds (instead of
@@ -1671,26 +1492,14 @@ int RestoreOriginalCategories() {
         DWORD value;
     };
     std::vector<Saved> items;
-    HKEY store = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kOriginalsPath, 0, KEY_QUERY_VALUE, &store) != ERROR_SUCCESS) return 0;
-    for (DWORD index = 0;; ++index) {
-        std::vector<wchar_t> name(16384, L'\0');  // Registry value names are at most 16383 characters.
-        DWORD nameLen = static_cast<DWORD>(name.size());
-        DWORD type = 0;
-        DWORD data[4]{};
-        DWORD dataLen = sizeof(data);
-        const LSTATUS status = RegEnumValueW(store, index, name.data(), &nameLen, nullptr, &type,
-                                             reinterpret_cast<BYTE*>(data), &dataLen);
-        if (status == ERROR_NO_MORE_ITEMS) break;
-        if (status != ERROR_SUCCESS) {
-            Wh_Log(L"Could not read a saved original (status %ld)", static_cast<long>(status));
-            continue;
+    if (!LoadOriginals()) return 0;
+    for (const auto& original : g_originals) {
+        if (original.second == kNoneMarker) {
+            items.push_back({original.first, true, 0});
+        } else {
+            items.push_back({original.first, false, static_cast<DWORD>(wcstoul(original.second.c_str(), nullptr, 10))});
         }
-        const std::wstring keyName(name.data(), nameLen);
-        if (type == REG_DWORD && dataLen >= sizeof(DWORD)) items.push_back({keyName, false, data[0]});
-        else if (type == REG_SZ) items.push_back({keyName, true, 0});
     }
-    RegCloseKey(store);
 
     int restored = 0;
     for (const auto& item : items) {
@@ -1712,16 +1521,7 @@ int RestoreOriginalCategories() {
 }
 
 // The folder for backups and for the layout kept across an unload. Empty if it cannot be made.
-std::wstring LayoutDirectory() {
-    wchar_t base[MAX_PATH]{};
-    const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-    if (n == 0 || n >= ARRAYSIZE(base)) return L"";
-    std::wstring dir = std::wstring(base) + L"\\Windhawk";
-    CreateDirectoryW(dir.c_str(), nullptr);
-    dir += L"\\StartMenuCategoryManager";
-    CreateDirectoryW(dir.c_str(), nullptr);
-    return dir;
-}
+std::wstring LayoutDirectory() { return ModStorageDirectory(); }
 
 // The layout saved when the mod unloads (RestoreOnUnload); the next load applies it and deletes it.
 std::wstring KeptLayoutPath() {
@@ -1801,7 +1601,7 @@ void CollectLayoutNodes(HKEY key, const std::wstring& path, std::vector<LayoutNo
     }
 }
 
-// Debug: makes the layout as it is right now the "original" that Reset all goes back to. Every
+// Makes the layout as it is right now the "original" that Reset all goes back to. Every
 // saved original is replaced by the current value of every key that has a Category.
 void SetCurrentLayoutAsOriginalNow() {
     HKEY root = nullptr;
@@ -1813,26 +1613,22 @@ void SetCurrentLayoutAsOriginalNow() {
     CollectLayoutNodes(root, L"", nodes, 0);
     RegCloseKey(root);
 
-    RegDeleteTreeW(HKEY_CURRENT_USER, kOriginalsPath);
-    HKEY store = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kOriginalsPath, 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE,
-                        nullptr, &store, nullptr) != ERROR_SUCCESS) {
+    if (!LoadOriginals()) {
         SetStatus(Tr(L"Could not save the originals.", L"N\u00e3o foi poss\u00edvel salvar as originais."));
         return;
     }
+    const std::map<std::wstring, std::wstring> previous = g_originals;
+    g_originals.clear();
     size_t saved = 0;
     for (const auto& node : nodes) {
-        LSTATUS status;
-        if (node.hasCategory) {
-            status = RegSetValueExW(store, node.path.c_str(), 0, REG_DWORD,
-                                    reinterpret_cast<const BYTE*>(&node.category), sizeof(DWORD));
-        } else {
-            status = RegSetValueExW(store, node.path.c_str(), 0, REG_SZ,
-                                    reinterpret_cast<const BYTE*>(kNoneMarker), sizeof(kNoneMarker));
-        }
-        if (status == ERROR_SUCCESS) ++saved;
+        g_originals[node.path] = node.hasCategory ? std::to_wstring(node.category) : std::wstring(kNoneMarker);
+        ++saved;
     }
-    RegCloseKey(store);
+    if (!SaveOriginals()) {
+        g_originals = previous;
+        SetStatus(Tr(L"Could not save the originals.", L"N\u00e3o foi poss\u00edvel salvar as originais."));
+        return;
+    }
     SetStatus(IsPortuguese() ? std::to_wstring(saved) + L" entradas salvas como originais."
                              : std::to_wstring(saved) + L" entries saved as originals.");
 }
@@ -1890,8 +1686,7 @@ void ResetAllCategories(std::function<void()> onDone) {
 // Runs when the mod unloads unless the "keepOnUnload" setting is on: puts every changed app back to the category it had
 // before the mod changed it, and restarts Start so it shows them. The current layout is saved first, both as a backup
 // and as the layout the next load applies again (RestoreKeptLayout). If it cannot be saved, nothing is restored. Updating
-// or recompiling the mod unloads it too, so those restore as well. It does not call MarkStage: the crash marker is
-// already deleted at unload.
+// or recompiling the mod unloads it too, so those restore as well.
 void RestoreOnUnload() {
     const std::wstring backup = SaveLayoutBackup();
     const std::wstring kept = KeptLayoutPath();
@@ -2129,17 +1924,25 @@ void MakeXamlIslandsTransparent() {
     }
 }
 
-wuxh::WindowsXamlManager g_xamlManager{nullptr};
+[[clang::no_destroy]] wuxh::WindowsXamlManager g_xamlManager{nullptr};
 
 
 // ---------------------------------------------------------------------------
 // The manager window: a XAML TreeView of the app list hosted in a Win32 window
 // ---------------------------------------------------------------------------
 
-wuxh::DesktopWindowXamlSource g_xamlTreeSource{nullptr};
+[[clang::no_destroy]] wuxh::DesktopWindowXamlSource g_xamlTreeSource{nullptr};
 HWND g_xamlTreeChild = nullptr;
-std::wstring g_xamlTreeClass;
-wuxc::TextBlock g_xamlStatus{nullptr};
+std::wstring g_xamlTreeClass = L"WindhawkStartCategoryManager.Window";
+bool g_xamlTreeClassRegistered = false;
+HICON g_classIcon = nullptr;  // The window class icons; destroyed after the class is unregistered.
+HICON g_classIconSmall = nullptr;
+void ReleaseClassIcons() {
+    if (g_classIcon) DestroyIcon(g_classIcon);
+    if (g_classIconSmall) DestroyIcon(g_classIconSmall);
+    g_classIcon = g_classIconSmall = nullptr;
+}
+[[clang::no_destroy]] wuxc::TextBlock g_xamlStatus{nullptr};
 // True from the moment the manager window starts closing until the next one is created. XAML events that
 // still arrive in that gap must not touch the old window's controls.
 bool g_xamlClosing = false;
@@ -2148,31 +1951,23 @@ void SetXamlStatus(const std::wstring& text) {
     if (g_xamlStatus) g_xamlStatus.Text(text);
 }
 
-wuxc::TextBlock g_xamlHookBanner{nullptr};  // Orange warning above the toolbar when some Start hooks did not attach.
-
-void UpdateHookBanner() {
-    if (!g_xamlHookBanner) return;
-    const std::wstring text = HookStatusWarning();
-    g_xamlHookBanner.Text(text);
-    g_xamlHookBanner.Visibility(text.empty() ? wux::Visibility::Collapsed : wux::Visibility::Visible);
-}
-wuxc::TreeView g_xamlTree{nullptr};
-wuxc::TextBox g_xamlSearch{nullptr};
-wuxc::ComboBox g_xamlFilter{nullptr};
-wuxc::ComboBox g_xamlSort{nullptr};
-wuxc::CheckBox g_xamlCheckAll{nullptr};
-wuxc::Button g_xamlExpand{nullptr};
-wuxc::StackPanel g_xamlBar{nullptr};
-wuxc::Button g_xamlAdvanced{nullptr};
-wux::DispatcherTimer g_xamlSearchTimer{nullptr};
+[[clang::no_destroy]] wuxc::TreeView g_xamlTree{nullptr};
+[[clang::no_destroy]] wuxc::TextBox g_xamlSearch{nullptr};
+[[clang::no_destroy]] wuxc::ComboBox g_xamlFilter{nullptr};
+[[clang::no_destroy]] wuxc::ComboBox g_xamlSort{nullptr};
+[[clang::no_destroy]] wuxc::CheckBox g_xamlCheckAll{nullptr};
+[[clang::no_destroy]] wuxc::Button g_xamlExpand{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_xamlBar{nullptr};
+[[clang::no_destroy]] wuxc::Button g_xamlAdvanced{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_xamlSearchTimer{nullptr};
 std::wstring g_xamlSearchText;
 std::vector<size_t> g_xamlFilterCounts;
 bool g_xamlExpanded = true;
 std::map<std::wstring, bool> g_folderExpanded;  // Folders the user opened or closed one by one; the rest follow g_xamlExpanded.
 bool g_xamlBusy = false;  // Set while the filter drop-down is being refilled.
-constexpr int kXamlFilterAll = -100;  // The same value as the Win32 filter.
-wuxc::Button g_xamlBulkPicker{nullptr};
-wuxc::TextBox g_xamlCustomId{nullptr};
+constexpr int kXamlFilterAll = -100;
+[[clang::no_destroy]] wuxc::Button g_xamlBulkPicker{nullptr};
+[[clang::no_destroy]] wuxc::TextBox g_xamlCustomId{nullptr};
 
 // Set to false to turn system icons off. The XAML tree then shows the placeholder glyphs.
 constexpr bool kShowSystemIcons = true;
@@ -2248,7 +2043,7 @@ wuxm::ImageSource MakeIconSourceFromHicon(HICON icon) {
 // Turns a system icon into a bitmap XAML can show. Returns null when that is not possible.
 // One bitmap source per system icon index, shared by every row that shows it and kept across rebuilds of the list.
 // Cleared when the manager window closes, because the sources belong to that window's XAML thread.
-std::map<int, wuxm::ImageSource> g_iconCache;
+[[clang::no_destroy]] std::map<int, wuxm::ImageSource> g_iconCache;
 
 wuxm::ImageSource MakeSystemIconSource(int iconIndex) {
     if (!kShowSystemIcons) return nullptr;
@@ -2360,7 +2155,7 @@ wuxc::StackPanel MakeTreeRow(const std::wstring& name, const wchar_t* glyph, boo
     return row;
 }
 
-// The category drop-down of a row. Its items match the Win32 manager: "Windows default" first, then the categories.
+// The category drop-down of a row. Its items: "Windows default" first, then the categories.
 // Every drop-down has this width, so they line up. Set from the longest name before the rows are built.
 double g_pickerWidth = 260.0;
 
@@ -2561,7 +2356,7 @@ int PickerTag(wuxc::Button const& button) {
     return tag ? winrt::unbox_value<int>(tag) : -1;
 }
 
-// A drop-down as on Win32: a button showing the name. Its flyout lists "Name (ID n)", then a separator and the ID prompt.
+// A drop-down: a button showing the name. Its flyout lists "Name (ID n)", then a separator and the ID prompt.
 // Defined further down; the drop-down handlers below log their failures through it.
 void LogXamlHandlerFailure(const wchar_t* name);
 
@@ -2729,7 +2524,7 @@ struct RowWidth {
     double last;
     int depth;  // 0 for a folder or a loose app, 1 for an app inside a folder.
 };
-std::vector<RowWidth> g_rowWidths;
+[[clang::no_destroy]] std::vector<RowWidth> g_rowWidths;
 
 // The gap between the list's left or right edge and a top-level card, in DIPs: the same on both sides.
 constexpr double kCardSideGap = 36;
@@ -3196,11 +2991,11 @@ wuxc::ScrollViewer FindScrollViewer(wux::DependencyObject const& parent) {
 // XAML shows a thin scroll bar and widens it while the mouse is on it. In this window the wide form falls back to
 // the thin one after a few seconds even though the button is still held on the bar. While the left button is held
 // on the bar, this puts the bar back into its wide state every 250 ms. It is only a visual workaround; scrolling
-// itself is not touched. The names of the bar's visual states are logged once, so a wrong guess can be corrected.
+// itself is not touched.
 namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
 
-wuxcp::ScrollBar g_scrollBar{nullptr};
-wux::DispatcherTimer g_scrollBarTimer{nullptr};
+[[clang::no_destroy]] wuxcp::ScrollBar g_scrollBar{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_scrollBarTimer{nullptr};
 bool g_scrollBarHooked = false;
 bool g_scrollBarHeld = false;
 
@@ -3219,22 +3014,6 @@ wuxcp::ScrollBar FindVerticalScrollBar(wux::DependencyObject const& parent, int 
 
 void ForceScrollBarExpanded() {
     if (!g_scrollBar) return;
-    static bool s_logged = false;
-    if (!s_logged) {
-        s_logged = true;
-        try {
-            std::wstring text;
-            if (auto root = wuxm::VisualTreeHelper::GetChild(g_scrollBar, 0).try_as<wux::FrameworkElement>()) {
-                for (auto const& group : wux::VisualStateManager::GetVisualStateGroups(root)) {
-                    text += std::wstring(group.Name().c_str()) + L"[";
-                    for (auto const& state : group.States()) text += std::wstring(state.Name().c_str()) + L" ";
-                    text += L"] ";
-                }
-            }
-            Wh_Log(L"[xaml] scroll bar visual states: %ls", text.c_str());
-        } catch (...) {
-        }
-    }
     // A name that does not exist in the bar's template is ignored, so both guesses are safe to try.
     wux::VisualStateManager::GoToState(g_scrollBar, L"MouseIndicatorFull", false);
     wux::VisualStateManager::GoToState(g_scrollBar, L"Expanded", false);
@@ -3387,7 +3166,7 @@ bool IsOn(wuxc::CheckBox const& check) {
     return value && value.Value();
 }
 
-wux::DispatcherTimer g_markReloadTimer{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_markReloadTimer{nullptr};
 
 // Rebuilds the list a moment later (outside the event that asked for it), keeping the scroll position, so that every
 // place that shows a heading's name gets or loses its mark.
@@ -3415,7 +3194,7 @@ void ScheduleMarkReload() {
     timer.Start();
 }
 
-// Applies a category to some apps at once, the way the Win32 drop-downs do, and shows the result.
+// Applies a category to some apps at once and shows the result.
 void ApplyRowCategory(const std::vector<size_t>& indices, int tag, const std::vector<std::wstring>& folders) {
     std::vector<size_t> targets;
     for (size_t i : indices) {
@@ -3475,8 +3254,8 @@ struct WrapGroup {
     std::vector<wux::FrameworkElement> items;
     double spacing = 8;
 };
-WrapGroup g_toolbarGroup;
-WrapGroup g_barGroup;
+[[clang::no_destroy]] WrapGroup g_toolbarGroup;
+[[clang::no_destroy]] WrapGroup g_barGroup;
 double g_xamlContentWidth = 0;  // The width of the XAML content, in DIPs; 0 until the first layout.
 std::map<void*, double> g_itemWidths;
 constexpr double kWrapSideMargins = 24;  // The 12 DIP margin on each side of the toolbar and the bottom bar.
@@ -3583,7 +3362,7 @@ int XamlFilterSelection() {
     return item ? winrt::unbox_value<int>(item.Tag()) : kXamlFilterAll;
 }
 
-wux::DispatcherTimer g_filterStarTimer{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_filterStarTimer{nullptr};
 
 // The closed filter box shows the chosen entry as plain text: give it the tip and, once the box has updated,
 // colour the "*" of a marked heading.
@@ -3627,14 +3406,14 @@ void AttachWheelCycle(wuxc::ComboBox const& combo) {
     });
 }
 
-// The sort drop-down's value (one of the Win32 SortMode values).
+// The sort drop-down's value (one of the SortMode values).
 int XamlSortMode() {
     if (!g_xamlSort) return kSortNameAsc;
     auto item = g_xamlSort.SelectedItem().try_as<wuxc::ComboBoxItem>();
     return item ? winrt::unbox_value<int>(item.Tag()) : kSortNameAsc;
 }
 
-// The same rule as the Win32 manager: the category filter, then the search text.
+// The category filter, then the search text.
 bool XamlAppMatches(const AppEntry& app, int filter, const std::wstring& search) {
     if (filter != kXamlFilterAll) {
         if (filter == -1) {
@@ -3652,7 +3431,6 @@ bool XamlAppMatches(const AppEntry& app, int filter, const std::wstring& search)
 
 // Standalone apps and folders in one list, sorted by the chosen order; folders show their matching apps.
 void BuildXamlTree(wuxc::TreeView const& tree) {
-    MarkStage(L"building the app list");
     RefreshHeadingCounts();
     g_rowWidths.clear();
     // The width only depends on the category names and the font, so measure it once instead of creating
@@ -3666,7 +3444,7 @@ void BuildXamlTree(wuxc::TreeView const& tree) {
     const int sortMode = XamlSortMode();
     auto visible = [&](const AppEntry& app) { return XamlAppMatches(app, filter, search); };
 
-    // A folder's ID range comes from all of its apps, not only the visible ones (as on Win32).
+    // A folder's ID range comes from all of its apps, not only the visible ones
     struct FolderInfo {
         bool anyId = false;
         DWORD minId = 0;
@@ -3851,11 +3629,11 @@ void UpdateBulkPickerMark() {
 void RebuildXamlTree(wuxc::TreeView const& tree) {
     tree.RootNodes().Clear();
     BuildXamlTree(tree);
-    RefreshXamlFilterCounts();  // The counts change when apps change category, as on Win32.
+    RefreshXamlFilterCounts();  // The counts change when apps change category.
     UpdateBulkPickerMark();
 }
 
-// Puts a text box in place of the drop-down, as the Win32 manager does. Enter applies the ID, Esc or leaving
+// Puts a text box in place of the drop-down. Enter applies the ID, Esc or leaving
 // the box cancels. The tree is rebuilt afterwards, so the drop-down shows the real category again.
 void ShowCustomIdInline(wuxc::TreeView const& tree, wuxc::Button const& picker, std::vector<size_t> const indices,
                         std::vector<std::wstring> const folders) {
@@ -3914,7 +3692,7 @@ void ShowCustomIdInline(wuxc::TreeView const& tree, wuxc::Button const& picker, 
     box.Focus(wux::FocusState::Programmatic);
 }
 
-// Applies the bottom bar's category to every ticked app, then clears the ticks, as the Win32 Apply button does.
+// Applies the bottom bar's category to every ticked app, then clears the ticks.
 void ApplyTickedFromXaml(wuxc::TreeView const& tree) {
     std::vector<size_t> targets;
     std::set<std::wstring, FolderLess> folderSet;
@@ -4000,7 +3778,7 @@ void UpdateXamlCheckAll() {
     g_xamlCheckAll.IsChecked(total > 0 && ticked == total);
 }
 
-// Fills the category filter with counts, keeping the chosen entry. Same counts as the Win32 filter.
+// Fills the category filter with counts, keeping the chosen entry.
 void PopulateXamlFilter() {
     if (!g_xamlFilter) return;
     const int previous = XamlFilterSelection();
@@ -4047,15 +3825,15 @@ void PopulateXamlFilter() {
     UpdateFilterForeground();
 }
 
-// Refills the filter only when a count changed, as the Win32 manager does.
+// Refills the filter only when a count changed.
 void RefreshXamlFilterCounts() {
     if (ComputeFilterCounts() != g_xamlFilterCounts || CurrentLowSet() != g_xamlFilterLowSet) PopulateXamlFilter();
 }
 
-wuxm::RotateTransform g_refreshRotate{nullptr};  // On the refresh icon.
-wuxa::Storyboard g_spinStory{nullptr};
-wuxa::Storyboard g_flickerStory{nullptr};
-wux::DispatcherTimer g_refreshTimer{nullptr};
+[[clang::no_destroy]] wuxm::RotateTransform g_refreshRotate{nullptr};  // On the refresh icon.
+[[clang::no_destroy]] wuxa::Storyboard g_spinStory{nullptr};
+[[clang::no_destroy]] wuxa::Storyboard g_flickerStory{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_refreshTimer{nullptr};
 ULONGLONG g_lastReloadEnd = 0;
 bool g_refreshPending = false;
 
@@ -4115,7 +3893,6 @@ void RefreshXamlList(wuxc::TreeView const& tree) {
             if (!g_xamlClosing) {
                 if (auto strongTree = weakTree.get()) {
                     LoadEntries();
-                    UpdateHookBanner();
                     PopulateXamlFilter();
                     RebuildXamlTree(strongTree);
                 }
@@ -4145,7 +3922,7 @@ constexpr int kResizeBorder = 6;         // DIPs
 constexpr int kMinWindowWidth = 560;     // DIPs: the widest single control plus margins; the rows wrap below this
 constexpr int kMinWindowHeight = 480;    // DIPs: room for wrapped toolbars and a few rows of the list
 
-wuxc::TextBlock g_xamlMaxGlyph{nullptr};  // The maximise / restore glyph, updated when the window changes state.
+[[clang::no_destroy]] wuxc::TextBlock g_xamlMaxGlyph{nullptr};  // The maximise / restore glyph, updated when the window changes state.
 
 int ScaleForWindow(HWND hwnd, int value) {
     return MulDiv(value, static_cast<int>(GetDpiForWindow(hwnd)), 96);
@@ -4160,16 +3937,16 @@ int ScaleForWindow(HWND hwnd, int value) {
 // sees the mouse over that button, so this window handles its hover, press and click from the non-client mouse
 // messages. If Windows ignores it, nothing is lost but the layout chooser: the XAML button underneath is unchanged.
 winrt::Windows::UI::Color CaptionHoverColor(bool isClose);  // Defined with the caption buttons, further down.
-wuxc::Border g_maxBorder{nullptr};
+[[clang::no_destroy]] wuxc::Border g_maxBorder{nullptr};
 bool g_maxHot = false;
 bool g_maxPressed = false;
 HWND g_maxBar = nullptr;
-std::wstring g_maxBarClass;
+std::wstring g_maxBarClass = L"WindhawkStartCategoryManager.MaxBar";
+bool g_maxBarClassRegistered = false;
 
 void SetMaxButtonHot(bool hot) {
     if (hot == g_maxHot) return;
     g_maxHot = hot;
-    MarkStage(L"snap layouts: maximise button hover colour");
     try {
         if (g_maxBorder && !g_xamlClosing) {
             g_maxBorder.Background(wuxm::SolidColorBrush(hot ? CaptionHoverColor(false)
@@ -4186,7 +3963,6 @@ LRESULT CALLBACK MaxBarWndProc(HWND bar, UINT msg, WPARAM wParam, LPARAM lParam)
             return HTMAXBUTTON;
         case WM_NCMOUSEMOVE: {
             if (g_xamlClosing) return 0;
-            MarkStage(L"snap layouts: mouse over the maximise button");
             SetMaxButtonHot(true);
             TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE | TME_NONCLIENT, bar, 0};
             TrackMouseEvent(&track);
@@ -4204,7 +3980,6 @@ LRESULT CALLBACK MaxBarWndProc(HWND bar, UINT msg, WPARAM wParam, LPARAM lParam)
             g_maxPressed = false;
             HWND top = GetParent(bar);
             if (clicked && top && !g_xamlClosing) {
-                MarkStage(L"snap layouts: click on the maximise button");
                 PostMessageW(top, WM_SYSCOMMAND, IsZoomed(top) ? SC_RESTORE : SC_MAXIMIZE, 0);
             }
             return 0;
@@ -4234,25 +4009,23 @@ void PositionMaxBar(HWND top) {
 }
 
 void CreateMaxBar(HWND top) {
-    static bool registered = false;
-    if (!registered) {
-        g_maxBarClass = L"WindhawkXamlMaxBar" + std::to_wstring(GetTickCount64());
+    if (!g_maxBarClassRegistered) {
         WNDCLASSEXW wc{sizeof(wc)};
         wc.lpfnWndProc = MaxBarWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = ModuleInstance();
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = nullptr;
         wc.lpszClassName = g_maxBarClass.c_str();
-        registered = RegisterClassExW(&wc) != 0;
+        g_maxBarClassRegistered = RegisterClassExW(&wc) != 0;
     }
-    if (!registered) {
+    if (!g_maxBarClassRegistered) {
         Wh_Log(L"[xaml] could not register the maximise bar class (%lu)", GetLastError());
         return;
     }
     // The same kind of window as the drag bar: layered, fully opaque, no drawing surface. Invisible, but it still
     // receives the mouse.
     g_maxBar = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, g_maxBarClass.c_str(), L"",
-                               WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, top, nullptr, GetModuleHandleW(nullptr), nullptr);
+                               WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, top, nullptr, ModuleInstance(), nullptr);
     if (!g_maxBar) {
         Wh_Log(L"[xaml] could not create the maximise bar (%lu)", GetLastError());
         return;
@@ -4294,7 +4067,8 @@ LRESULT TitleBarHitTest(HWND hwnd, LPARAM lParam) {
 // dragging a maximised window back down. Pressing it starts Windows' real move from this plain window procedure,
 // not from a XAML event, which is what made the move loop crash before.
 HWND g_dragBar = nullptr;
-std::wstring g_dragBarClass;
+std::wstring g_dragBarClass = L"WindhawkStartCategoryManager.DragBar";
+bool g_dragBarClassRegistered = false;
 
 // An icon for a menu item: a glyph of the Segoe icon font, drawn in the colour of the menu text. The bitmap is a
 // 32-bit image with transparency; the brightness of the drawn glyph becomes its opacity.
@@ -4356,7 +4130,6 @@ HBITMAP MakeMenuGlyphBitmap(HWND hwnd, const wchar_t* glyph, bool enabled) {
 // The window has no system menu of its own (it would make Windows draw its own caption buttons), so the same menu
 // is built here from the standard commands. Used for a right click on the title bar and for Alt+Space.
 void ShowWindowMenu(HWND top, int x, int y) {
-    MarkStage(L"window menu: building it");
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
     const bool zoomed = IsZoomed(top) != FALSE;
@@ -4385,7 +4158,6 @@ void ShowWindowMenu(HWND top, int x, int y) {
     setIcon(SC_MINIMIZE, L"\xE921", true);
     setIcon(SC_MAXIMIZE, L"\xE922", !zoomed);
     setIcon(SC_CLOSE, L"\xE8BB", true);
-    MarkStage(L"window menu: showing it");
     SetForegroundWindow(top);
     const int command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, x, y, 0, top, nullptr);
     DestroyMenu(menu);
@@ -4441,25 +4213,23 @@ void PositionDragBar(HWND top) {
 }
 
 void CreateDragBar(HWND top) {
-    static bool registered = false;
-    if (!registered) {
-        g_dragBarClass = L"WindhawkXamlDragBar" + std::to_wstring(GetTickCount64());
+    if (!g_dragBarClassRegistered) {
         WNDCLASSEXW wc{sizeof(wc)};
         wc.style = CS_DBLCLKS;
         wc.lpfnWndProc = DragBarWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = ModuleInstance();
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = nullptr;
         wc.lpszClassName = g_dragBarClass.c_str();
-        registered = RegisterClassExW(&wc) != 0;
+        g_dragBarClassRegistered = RegisterClassExW(&wc) != 0;
     }
-    if (!registered) {
+    if (!g_dragBarClassRegistered) {
         Wh_Log(L"[xaml] could not register the drag bar class (%lu)", GetLastError());
         return;
     }
     // Layered, fully opaque, with no drawing surface: invisible, but it still receives the mouse.
     g_dragBar = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, g_dragBarClass.c_str(), L"",
-                                WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, top, nullptr, GetModuleHandleW(nullptr), nullptr);
+                                WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, top, nullptr, ModuleInstance(), nullptr);
     if (!g_dragBar) {
         Wh_Log(L"[xaml] could not create the drag bar (%lu)", GetLastError());
         return;
@@ -4549,11 +4319,11 @@ winrt::Windows::UI::Color WindowTintColor() {
 }
 
 // The parts of the window that are kept so the mode can change under an open window.
-wuxc::Grid g_xamlRoot{nullptr};
-wuxm::SolidColorBrush g_tintBrush{nullptr};
-wuxm::SolidColorBrush g_listBrush{nullptr};
-wuxc::TextBlock g_titleText{nullptr};
-std::vector<wuxc::TextBlock> g_captionGlyphs;
+[[clang::no_destroy]] wuxc::Grid g_xamlRoot{nullptr};
+[[clang::no_destroy]] wuxm::SolidColorBrush g_tintBrush{nullptr};
+[[clang::no_destroy]] wuxm::SolidColorBrush g_listBrush{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_titleText{nullptr};
+[[clang::no_destroy]] std::vector<wuxc::TextBlock> g_captionGlyphs;
 
 // ---------------------------------------------------------------------------
 // Confirmation dialog
@@ -4568,8 +4338,8 @@ struct PendingConfirm {
     wuxc::ContentDialogResult result = wuxc::ContentDialogResult::None;
     std::function<void()> onYes;
 };
-std::shared_ptr<PendingConfirm> g_pendingConfirm;
-std::function<void()> g_confirmedAction;
+[[clang::no_destroy]] std::shared_ptr<PendingConfirm> g_pendingConfirm;
+[[clang::no_destroy]] std::function<void()> g_confirmedAction;
 
 void ConfirmAsync(const wchar_t* titleEn, const wchar_t* titlePt, const wchar_t* en, const wchar_t* pt, UINT icon,
                   std::function<void()> onYes, bool infoOnly) {
@@ -4584,7 +4354,6 @@ void ConfirmAsync(const wchar_t* titleEn, const wchar_t* titlePt, const wchar_t*
         if (MessageBoxW(g_xamlListWindow, text, title, MB_YESNO | icon | MB_DEFBUTTON2) == IDYES && onYes) onYes();
     };
     if (!g_xamlRoot || g_xamlClosing || !g_xamlListWindow) return fallback();
-    MarkStage(L"confirm dialog: opening it");
     try {
         wuxc::FontIcon symbol;
         symbol.Glyph(icon == MB_ICONWARNING ? L"\xE7BA" : L"\xE897");  // Warning / Help
@@ -4640,7 +4409,6 @@ void ConfirmAsync(const wchar_t* titleEn, const wchar_t* titlePt, const wchar_t*
 
 // Runs on WM_APP_CONFIRM_DONE: lets go of the dialog and, for "Yes", schedules the action.
 void FinishConfirm(HWND window) {
-    MarkStage(L"confirm dialog: answered");
     std::shared_ptr<PendingConfirm> pending = std::move(g_pendingConfirm);
     g_pendingConfirm = nullptr;
     if (!pending) return;
@@ -4850,7 +4618,7 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                         LogXamlHandlerFailure(L"LayoutUpdated");
                     }
                 });
-                // The bottom bar: a category for the ticked apps, Apply, and the same tools as the Win32 manager.
+                // The bottom bar: a category for the ticked apps, Apply, and the other tools.
                 g_xamlBulkPicker = MakePicker(false, 0, false, [](int) { SetCustomIdBoxVisible(false); },
                                               [](wuxc::Button const& picker) {
                     picker.Content(winrt::box_value(std::wstring(Tr(L"Custom ID...", L"ID personalizado..."))));
@@ -4927,7 +4695,7 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 g_xamlBar = bar;
                 UpdateXamlAdvancedButton();
 
-                // The toolbar above the list, in the order of the Win32 manager.
+                // The toolbar above the list.
                 wuxc::StackPanel toolbar;
                 toolbar.Orientation(wuxc::Orientation::Vertical);
                 toolbar.Spacing(8);
@@ -4939,7 +4707,7 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 g_xamlSearch.PlaceholderText(Tr(L"Search apps", L"Pesquisar aplicativos"));
                 g_xamlSearch.VerticalAlignment(wux::VerticalAlignment::Center);
                 g_xamlSearchTimer = wux::DispatcherTimer{};
-                g_xamlSearchTimer.Interval(wf::TimeSpan{1500000});  // 150 ms, as on Win32.
+                g_xamlSearchTimer.Interval(wf::TimeSpan{1500000});  // 150 ms.
                 g_xamlSearchTimer.Tick([tree](wf::IInspectable const&, wf::IInspectable const&) {
                     if (g_xamlClosing || !g_xamlSearchTimer) return;
                     try {
@@ -5094,17 +4862,7 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 root.RowDefinitions().Append(treeRow);
                 root.RowDefinitions().Append(barRow);
                 wuxc::Grid::SetRow(titleBar, 0);
-                // The warning about Start hooks that did not attach sits above the toolbar, hidden unless it has something to say.
-                g_xamlHookBanner = wuxc::TextBlock{};
-                g_xamlHookBanner.TextWrapping(wux::TextWrapping::Wrap);
-                g_xamlHookBanner.Margin(wux::Thickness{12, 8, 12, 0});
-                g_xamlHookBanner.Foreground(wuxm::SolidColorBrush(winrt::Windows::UI::Color{255, 224, 120, 0}));
-                wuxc::StackPanel topStack;
-                topStack.Orientation(wuxc::Orientation::Vertical);
-                topStack.Children().Append(g_xamlHookBanner);
-                topStack.Children().Append(toolbar);
-                UpdateHookBanner();
-                wuxc::Grid::SetRow(topStack, 1);
+                wuxc::Grid::SetRow(toolbar, 1);
                 wuxc::Grid::SetRow(tree, 2);
                 wuxc::Grid::SetRow(bar, 3);
                 // The list background: square, the full width of the window, and exactly as tall as the tree (the tree's
@@ -5115,7 +4873,7 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 listBackground.Margin(wux::Thickness{0, 12, 0, 12});
                 wuxc::Grid::SetRow(listBackground, 2);
                 root.Children().Append(titleBar);
-                root.Children().Append(topStack);
+                root.Children().Append(toolbar);
                 root.Children().Append(listBackground);
                 root.Children().Append(tree);
                 root.Children().Append(bar);
@@ -5176,13 +4934,6 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         case WM_APP_CONFIRM_DONE:
             FinishConfirm(hwnd);
             return 0;
-        case WM_APP_DUPLICATE_WARNING: {
-            // Posted by the watch thread: this runs on the window's own thread, which is where the dialog must be made.
-            const std::wstring text = DuplicateTileHidingPopupText();
-            ConfirmAsync(L"Duplicate tile hiding", L"Ocultação duplicada", text.c_str(), text.c_str(),
-                         MB_ICONWARNING, nullptr, true);
-            return 0;
-        }
         case WM_TIMER:
             if (wParam == kConfirmTimerId) {
                 RunConfirmedAction(hwnd);
@@ -5306,7 +5057,6 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             g_captionGlyphs.clear();
             g_xamlTree = nullptr;
             g_xamlStatus = nullptr;
-            g_xamlHookBanner = nullptr;
             g_xamlSearch = nullptr;
             g_xamlFilter = nullptr;
             g_xamlSort = nullptr;
@@ -5332,6 +5082,13 @@ LRESULT CALLBACK XamlTreeWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             g_xamlTreeChild = nullptr;
             g_dragBar = nullptr;
             g_xamlMaxGlyph = nullptr;
+            // A confirmation left open by a closing window would block every later Reset all, Import and Export.
+            if (g_pendingConfirm) {
+                g_pendingConfirm->operation = nullptr;  // Breaks the loop between the operation, its callback and this state.
+                g_pendingConfirm->dialog = nullptr;
+                g_pendingConfirm = nullptr;
+            }
+            g_confirmedAction = nullptr;
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -5423,18 +5180,15 @@ double ComputeToolbarFitWidth() {
 // Creating and showing the manager window
 // ---------------------------------------------------------------------------
 void OpenXamlTreeWindow() {
-    MarkStage(L"opening the manager window");
     if (g_xamlListWindow && IsWindow(g_xamlListWindow)) {
         ShowWindow(g_xamlListWindow, IsIconic(g_xamlListWindow) ? SW_RESTORE : SW_SHOW);
         SetForegroundWindow(g_xamlListWindow);
         return;
     }
-    static bool registered = false;
-    if (!registered) {
-        g_xamlTreeClass = L"WindhawkXamlTree" + std::to_wstring(GetTickCount64());
+    if (!g_xamlTreeClassRegistered) {
         WNDCLASSEXW wc{sizeof(wc)};
         wc.lpfnWndProc = XamlTreeWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = ModuleInstance();
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = nullptr;  // Never paint a fill: the backdrop must show through.
         const UINT iconDpi = GetDpiForSystem();
@@ -5446,9 +5200,12 @@ void OpenXamlTreeWindow() {
         wc.hIconSm = CreateSettingsAppIcon(smallSize);
         if (!wc.hIconSm) wc.hIconSm = CreateCogIcon(smallSize, iconColor);
         wc.lpszClassName = g_xamlTreeClass.c_str();
-        registered = RegisterClassExW(&wc) != 0;
+        g_classIcon = wc.hIcon;
+        g_classIconSmall = wc.hIconSm;
+        g_xamlTreeClassRegistered = RegisterClassExW(&wc) != 0;
+        if (!g_xamlTreeClassRegistered) ReleaseClassIcons();
     }
-    if (!registered) {
+    if (!g_xamlTreeClassRegistered) {
         Wh_Log(L"[xaml] could not register the tree window class (%lu)", GetLastError());
         return;
     }
@@ -5456,7 +5213,7 @@ void OpenXamlTreeWindow() {
     // would be out of date after the user switches between light and dark.
     g_isDark = SystemUsesDarkApps();
     const UINT sysDpi = GetDpiForSystem();
-    const int width = MulDiv(1100, sysDpi, 96);  // The same size as the Win32 window.
+    const int width = MulDiv(1100, sysDpi, 96);
     const int height = MulDiv(640, sysDpi, 96);
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
@@ -5470,7 +5227,7 @@ void OpenXamlTreeWindow() {
                                 // The caption style stays (it is what gives the minimise animation), and the window
                                 // is still minimised, maximised and closed by the SC_ commands the buttons send.
                                 WS_OVERLAPPEDWINDOW & ~WS_SYSMENU, x, y, width, height, nullptr, nullptr,
-                                GetModuleHandleW(nullptr), nullptr);
+                                ModuleInstance(), nullptr);
     g_xamlListWindow = tree;
     if (tree) {
         GiveWindowOwnTaskbarIdentity(tree);
@@ -5639,6 +5396,30 @@ void GiveWindowOwnTaskbarIdentity(HWND hwnd) {
 }
 
 
+// After the manager window is gone: lets go of what the XAML globals still hold. This runs on the manager thread,
+// which owns those objects. The globals are marked [[clang::no_destroy]], so nothing else would release them.
+void ReleaseManagerUiState() {
+    std::map<int, wuxm::ImageSource>().swap(g_iconCache);
+    std::vector<RowWidth>().swap(g_rowWidths);
+    std::vector<wuxc::TextBlock>().swap(g_captionGlyphs);
+    g_toolbarGroup = WrapGroup{};
+    g_barGroup = WrapGroup{};
+    g_pendingConfirm = nullptr;
+    g_confirmedAction = nullptr;
+}
+
+// After the manager thread has ended: no window of these classes exists any more, and their window procedures are code
+// of this mod, so they must be unregistered before the DLL is unloaded.
+void UnregisterManagerWindowClasses() {
+    const HMODULE module = ModuleInstance();
+    if (g_maxBarClassRegistered && UnregisterClassW(g_maxBarClass.c_str(), module)) g_maxBarClassRegistered = false;
+    if (g_dragBarClassRegistered && UnregisterClassW(g_dragBarClass.c_str(), module)) g_dragBarClassRegistered = false;
+    if (g_xamlTreeClassRegistered && UnregisterClassW(g_xamlTreeClass.c_str(), module)) {
+        g_xamlTreeClassRegistered = false;
+        ReleaseClassIcons();
+    }
+}
+
 DWORD WINAPI ManagerThreadProc(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -5658,6 +5439,7 @@ DWORD WINAPI ManagerThreadProc(LPVOID) {
     }
 
     if (g_xamlListWindow && IsWindow(g_xamlListWindow)) DestroyWindow(g_xamlListWindow);
+    ReleaseManagerUiState();
     g_xamlTreeSource = nullptr;
     g_xamlManager = nullptr;
     if (SUCCEEDED(hrCo)) CoUninitialize();
@@ -5666,7 +5448,6 @@ DWORD WINAPI ManagerThreadProc(LPVOID) {
 }
 
 void ShowManager() {
-    MarkStage(L"starting the manager thread");
     if (g_shuttingDown) {
         Wh_Log(L"Open request ignored: the mod is shutting down");
         return;
@@ -5762,7 +5543,7 @@ void StartOpenRequestListener() {
 void StopOpenRequestListener() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_openThread) {
-        WaitForSingleObject(g_openThread, 3000);
+        WaitForSingleObject(g_openThread, INFINITE);  // It runs this mod's code, so it must be gone first.
         CloseHandle(g_openThread);
         g_openThread = nullptr;
     }
@@ -5772,12 +5553,16 @@ void StopOpenRequestListener() {
 }
 
 void SignalExplorerToOpenManager() {
-    MarkStage(L"asking Explorer to open the manager");
     HANDLE ev = OpenEventW(EVENT_MODIFY_STATE, FALSE, GetOpenEventName().c_str());
     if (!ev) {
         Wh_Log(L"[start] Could not reach explorer.exe to open the manager (error %lu)", GetLastError());
         return;
     }
+    // Start has the foreground at this moment, so it can hand that right to Explorer. Without it Explorer's
+    // SetForegroundWindow for the manager window may be refused.
+    DWORD shellProcess = 0;
+    if (HWND shell = GetShellWindow()) GetWindowThreadProcessId(shell, &shellProcess);
+    if (shellProcess != 0) AllowSetForegroundWindow(shellProcess);
     SetEvent(ev);
     CloseHandle(ev);
     Wh_Log(L"[start] Asked Explorer to open the manager");
@@ -5804,13 +5589,9 @@ void DismissStartMenu() {
 }
 
 void OnManagerClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
-    if (g_isStartHost) {
-        // Close Start first, then let Explorer bring the manager window forward.
-        DismissStartMenu();
-        SignalExplorerToOpenManager();
-    } else {
-        ShowManager();
-    }
+    // Only the Start menu process has the item. Close Start first, then let Explorer bring the manager window forward.
+    DismissStartMenu();
+    SignalExplorerToOpenManager();
 }
 
 // ---------------------------------------------------------------------------
@@ -5840,6 +5621,63 @@ void AppendInjectedItems(void* vectorThis);
 using MenuFlyoutItemBaseVector_Append_t = void(__cdecl*)(void*, wuxc::MenuFlyoutItemBase const&);
 MenuFlyoutItemBaseVector_Append_t MenuFlyoutItemBaseVector_Append_Original = nullptr;
 
+// The items this mod put into Start's menus. The Click handler is code in this mod, so it has to be taken off the
+// items before the mod unloads; otherwise Start would call (or release) it after it is gone.
+struct InjectedItem {
+    winrt::weak_ref<wuxc::MenuFlyoutItem> item;
+    winrt::weak_ref<wuxc::MenuFlyoutSeparator> separator;
+    winrt::event_token clickToken;
+};
+SRWLOCK g_injectedLock = SRWLOCK_INIT;
+[[clang::no_destroy]] std::vector<InjectedItem> g_injectedItems;
+[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher g_startDispatcher{nullptr};
+
+// Runs on Start's UI thread, which owns the items.
+void ReleaseInjectedItems() {
+    std::vector<InjectedItem> items;
+    AcquireSRWLockExclusive(&g_injectedLock);
+    items.swap(g_injectedItems);
+    ReleaseSRWLockExclusive(&g_injectedLock);
+    for (auto& injected : items) {
+        try {
+            if (auto item = injected.item.get()) {
+                item.Click(injected.clickToken);
+                item.Visibility(wux::Visibility::Collapsed);
+            }
+            if (auto separator = injected.separator.get()) separator.Visibility(wux::Visibility::Collapsed);
+        } catch (...) {
+        }
+    }
+}
+
+// Called from Wh_ModUninit, which does not run on Start's UI thread.
+void ReleaseInjectedItemsOnUiThread() {
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    AcquireSRWLockExclusive(&g_injectedLock);
+    dispatcher = g_startDispatcher;
+    ReleaseSRWLockExclusive(&g_injectedLock);
+    if (!dispatcher) return;
+    try {
+        if (dispatcher.HasThreadAccess()) {
+            ReleaseInjectedItems();
+            return;
+        }
+        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!done) return;
+        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [done]() {
+            ReleaseInjectedItems();
+            SetEvent(done);
+        });
+        // If Start's UI thread is stuck the handle is left open: the queued call would still signal it later.
+        if (WaitForSingleObject(done, 5000) == WAIT_OBJECT_0) {
+            CloseHandle(done);
+            Sleep(50);  // Lets the dispatcher release the call above, which is code in this mod, before it unloads.
+        }
+    } catch (...) {
+        Wh_Log(L"[start] Could not release the injected menu items");
+    }
+}
+
 void AppendInjectedItems(void* vectorThis) {
     try {
         wuxc::MenuFlyoutItem item;
@@ -5853,11 +5691,22 @@ void AppendInjectedItems(void* vectorThis) {
         icon.FontSize(16);
         item.Icon(icon);
 
-        item.Click(wux::RoutedEventHandler{&OnManagerClick});
+        const winrt::event_token clickToken = item.Click(wux::RoutedEventHandler{&OnManagerClick});
 
         wuxc::MenuFlyoutSeparator separator;
         separator.Name(kSeparatorName);
         separator.Tag(winrt::box_value(winrt::hstring{kSeparatorName}));
+
+        {
+            AcquireSRWLockExclusive(&g_injectedLock);
+            g_startDispatcher = item.Dispatcher();
+            // Menus are rebuilt each time they open; forget the items Start has already let go of.
+            g_injectedItems.erase(std::remove_if(g_injectedItems.begin(), g_injectedItems.end(),
+                                                 [](const InjectedItem& injected) { return !injected.item.get(); }),
+                                  g_injectedItems.end());
+            g_injectedItems.push_back({winrt::make_weak(item), winrt::make_weak(separator), clickToken});
+            ReleaseSRWLockExclusive(&g_injectedLock);
+        }
 
         MenuFlyoutItemBaseVector_Append_Original(vectorThis, item);
         MenuFlyoutItemBaseVector_Append_Original(vectorThis, separator);
@@ -5887,7 +5736,6 @@ bool IsStartSettingsItem(wuxc::MenuFlyoutItemBase const& base) {
 }
 
 void __cdecl StartMenuVectorAppend_Hook(void* pThis, wuxc::MenuFlyoutItemBase const& item) {
-    MarkStage(L"adding the Manage Categories item to Start's menu");
     try {
         if (!IsNamedItem(item, kItemName) && !IsNamedItem(item, kSeparatorName) && IsStartSettingsItem(item)) {
             AppendInjectedItems(pThis);
@@ -5896,630 +5744,9 @@ void __cdecl StartMenuVectorAppend_Hook(void* pThis, wuxc::MenuFlyoutItemBase co
     MenuFlyoutItemBaseVector_Append_Original(pThis, item);
 }
 
-// ---------------------------------------------------------------------------
-// Hiding empty category tiles (runs inside StartMenuExperienceHost.exe)
-// ---------------------------------------------------------------------------
-
-// The headings a category tile can have. A tile is only ever touched when its title is one of
-// these, so app tiles and anything else in the grid are never hidden.
-constexpr const wchar_t* kTileHeadings[] = {
-    L"Acessibilidade", L"Accessibility",
-    L"Criatividade", L"Creativity",
-    L"Ferramentas de Desenvolvimento", L"Ferramentas de Desenvolvedor", L"Developer Tools",
-    L"Jogos", L"Games",
-    L"Informa\u00e7\u00f5es e Leitura", L"Information & Reading",
-    L"M\u00fasica", L"Music",
-    L"Outro", L"Other",
-    L"Produtividade", L"Productivity",
-    L"Social",
-    L"Esportes", L"Sports",
-    L"Utilit\u00e1rios e Ferramentas", L"Utilities & Tools",
-    L"Comercial", L"Business",
-    L"Educa\u00e7\u00e3o", L"Education",
-    L"Entretenimento", L"Entertainment",
-    L"Estilo de vida", L"Lifestyle",
-    L"Bares e Restaurantes", L"Food & Dining",
-    L"Crian\u00e7as + Fam\u00edlia", L"Kids + Family",
-    L"Viagem", L"Travel",
-    L"Medicina", L"Medicine",
-    L"Sa\u00fade e Bem-estar", L"Health & Wellness",
-    L"Finan\u00e7as Pessoais", L"Personal Finance",
-    L"Compras", L"Shopping",
-};
-
-// Titles are compared using only plain letters, digits and spaces. Start may store accented
-// letters differently from this file, and the accent is not needed to tell the headings apart.
-std::wstring TileKey(const std::wstring& text) {
-    std::wstring key;
-    for (wchar_t c : text) {
-        if (c < 128 && (iswalnum(c) || c == L' ')) key.push_back(c);
-    }
-    return key;
-}
-
-bool IsTileHeading(const std::wstring& text) {
-    for (const wchar_t* heading : kTileHeadings) {
-        if (TileKey(text) == TileKey(heading)) return true;
-    }
-    return false;
-}
-
-std::wstring ElementClassName(wux::DependencyObject const& obj) {
-    try {
-        return std::wstring(winrt::get_class_name(obj).c_str());
-    } catch (...) {
-        return L"";
-    }
-}
-
-// The images inside a tile, and its title (the first text block).
-struct TileContent {
-    std::wstring title;
-    int images = 0;
-};
-
-void CountTileContent(wux::DependencyObject const& obj, int depth, TileContent& out) {
-    if (depth > 40) return;
-    if (ElementClassName(obj) == L"Windows.UI.Xaml.Controls.Image") {
-        ++out.images;
-    } else if (auto textBlock = obj.try_as<wuxc::TextBlock>()) {
-        if (out.title.empty()) out.title = std::wstring(textBlock.Text().c_str());
-    }
-    const int count = wuxm::VisualTreeHelper::GetChildrenCount(obj);
-    for (int i = 0; i < count; ++i) {
-        CountTileContent(wuxm::VisualTreeHelper::GetChild(obj, i), depth + 1, out);
-    }
-}
-
-// Start keeps each category's apps in a map, and prunes it every time it rebuilds the categories.
-// Layout: the entry count is at offset 16 and the first list node at
-// offset 8. Each node holds its next pointer at offset 0, its category key at offset 16, and the
-// begin and end pointers of its app list at offsets 24 and 32 (8 bytes per app).
-constexpr size_t kCategoryMapHeadOffset = 8;
-constexpr size_t kCategoryMapSizeOffset = 16;
-constexpr size_t kCategoryNodeNextOffset = 0;
-constexpr size_t kCategoryNodeKeyOffset = 16;
-constexpr size_t kCategoryNodeBeginOffset = 24;
-constexpr size_t kCategoryNodeEndOffset = 32;
-constexpr int kMaxCategoryNodes = 512;
-
-// The headings (in both languages) of the categories that currently have no apps.
-// Only tiles with these titles are ever hidden.
-std::set<std::wstring> g_emptyHeadings;
-// False until Start has rebuilt its categories once in this session.
-bool g_mapKnown = false;
-// How many times Start has rebuilt its categories since this mod loaded, and whether the first rebuild was the one
-// Start does when it starts up (the process was young), before anyone opened the menu.
-std::atomic<int> g_rebuildCount{0};
-bool g_startupCleanupAllowed = false;
-
-
-// True when every byte of [p, p + size) is committed, readable memory. Replaces IsBadReadPtr, which can swallow
-// guard-page faults that the system needs to see (stack growth).
-bool IsReadableMemory(const void* p, size_t size) {
-    if (!p || size == 0) return false;
-    constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ |
-                                PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    const unsigned char* cur = static_cast<const unsigned char*>(p);
-    const unsigned char* end = cur + size;
-    if (end < cur) return false;
-    while (cur < end) {
-        MEMORY_BASIC_INFORMATION mbi{};
-        if (VirtualQuery(cur, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
-        if (mbi.State != MEM_COMMIT) return false;
-        if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-        if (!(mbi.Protect & kReadable)) return false;
-        const unsigned char* regionEnd = static_cast<const unsigned char*>(mbi.BaseAddress) + mbi.RegionSize;
-        if (regionEnd <= cur) return false;
-        cur = regionEnd;
-    }
-    return true;
-}
-
-// Reads through ReadProcessMemory instead of dereferencing after a VirtualQuery check. The check and the read cannot be
-// made atomic, so memory that is freed in between would still fault. ReadProcessMemory on this process copies inside the
-// kernel, reports bad memory as a failure, and raises no exception that the crash log would pick up.
-bool ReadWordAt(const void* base, size_t offset, unsigned long long* out) {
-    if (!base) return false;
-    const void* p = static_cast<const unsigned char*>(base) + offset;
-    unsigned long long value = 0;
-    SIZE_T got = 0;
-    if (!ReadProcessMemory(GetCurrentProcess(), p, &value, sizeof(value), &got) || got != sizeof(value)) return false;
-    *out = value;
-    return true;
-}
-
-// Reads Start's category map and records the headings of the categories with no apps.
-void RecordEmptyCategories(void* map) {
-    unsigned long long head = 0;
-    unsigned long long declaredSize = 0;
-    if (!ReadWordAt(map, kCategoryMapHeadOffset, &head) ||
-        !ReadWordAt(map, kCategoryMapSizeOffset, &declaredSize)) {
-        Wh_Log(L"[start] Could not read the category map");
-        return;
-    }
-
-    std::set<std::wstring> empty;
-    int walked = 0;
-    unsigned long long node = 0;
-    if (ReadWordAt(reinterpret_cast<void*>(head), kCategoryNodeNextOffset, &node)) {
-        while (node != head && node != 0 && walked < kMaxCategoryNodes) {
-            const void* n = reinterpret_cast<void*>(node);
-            unsigned long long key = 0, begin = 0, end = 0, next = 0;
-            if (!ReadWordAt(n, kCategoryNodeKeyOffset, &key) ||
-                !ReadWordAt(n, kCategoryNodeBeginOffset, &begin) ||
-                !ReadWordAt(n, kCategoryNodeEndOffset, &end) ||
-                !ReadWordAt(n, kCategoryNodeNextOffset, &next)) {
-                break;
-            }
-            const unsigned long long count = end >= begin ? (end - begin) / 8 : 0;
-            const DWORD id = static_cast<DWORD>(key & 0xFFFFFFFFull);
-            if (count == 0 && CategoryNameEn(id, true).rfind(L"Unknown", 0) != 0) {
-                empty.insert(TileKey(CategoryNameEn(id, true)));
-                empty.insert(TileKey(CategoryName(id, true)));
-            }
-            node = next;
-            ++walked;
-        }
-    }
-
-    if (static_cast<unsigned long long>(walked) != declaredSize) {
-        Wh_Log(L"[start] Category map walk mismatch: declared %ls, walked %ls (Windows build %ls; the offsets were checked on build %ls)",
-               std::to_wstring(declaredSize).c_str(), std::to_wstring(walked).c_str(),
-               WindowsBuildString().c_str(), kOffsetsVerifiedBuild);
-        return;  // Keep the last good result rather than guess.
-    }
-    g_emptyHeadings = empty;
-    g_mapKnown = true;
-
-}
-
-// Logs the list the category grid is bound to: how many groups it holds and how many apps each has.
-void LogGridSource(wux::DependencyObject const& grid) {
-    static int s_logged = 0;
-    if (s_logged >= 20) return;
-    try {
-        wux::DependencyObject walker = grid;
-        wux::DependencyObject gridView{nullptr};
-        for (int i = 0; i < 10 && !gridView; ++i) {
-            walker = wuxm::VisualTreeHelper::GetParent(walker);
-            if (!walker) return;
-            if (ElementClassName(walker) == L"Windows.UI.Xaml.Controls.GridView") gridView = walker;
-        }
-        if (!gridView) return;
-        auto items = gridView.try_as<wuxc::ItemsControl>();
-        if (!items) return;
-        auto source = items.ItemsSource();
-        auto list = source ? source.try_as<winrt::Windows::Foundation::Collections::IVector<winrt::Windows::Foundation::IInspectable>>()
-                           : nullptr;
-        ++s_logged;
-        if (!list) {
-            Wh_Log(L"[start] The grid's items source is not a list");
-            return;
-        }
-        std::wstring sizes;
-        for (uint32_t i = 0; i < list.Size(); ++i) {
-            auto group = list.GetAt(i).try_as<winrt::Windows::UI::Xaml::Data::ICollectionViewGroup>();
-            sizes += (group ? std::to_wstring(group.GroupItems().Size()) : std::wstring(L"?")) + L" ";
-        }
-        Wh_Log(L"[start] The grid shows list %p: %u groups (apps per group: %ls)", winrt::get_abi(list), list.Size(),
-               sizes.c_str());
-    } catch (...) {
-    }
-}
-
-// Shows a category tile when it holds apps, and hides it when it is empty.
-void ApplyCategoryTiles(wux::DependencyObject const& grid) {
-    const int count = wuxm::VisualTreeHelper::GetChildrenCount(grid);
-    for (int i = 0; i < count; ++i) {
-        auto item = wuxm::VisualTreeHelper::GetChild(grid, i);
-        if (ElementClassName(item) != L"Windows.UI.Xaml.Controls.GridViewItem") continue;
-
-        TileContent content;
-        CountTileContent(item, 0, content);
-        if (!IsTileHeading(content.title)) continue;
-
-        auto element = item.try_as<wux::UIElement>();
-        if (!element) continue;
-
-        // Until Start has rebuilt its categories in this session, the map has not been read, so fall
-        // back to the icon count. Once the map is known, it decides.
-        const bool empty = g_mapKnown ? g_emptyHeadings.count(TileKey(content.title)) > 0
-                                      : content.images == 0;
-        const wux::Visibility wanted = empty ? wux::Visibility::Collapsed : wux::Visibility::Visible;
-        if (element.Visibility() != wanted) {
-            if (empty) {
-                static int s_hidLogged = 0;
-                if (s_hidLogged++ < 40) Wh_Log(L"[start] Hid the empty tile '%ls'", content.title.c_str());
-                LogGridSource(grid);
-            }
-            element.Visibility(wanted);
-        }
-    }
-}
-
-// Removes the entry of an empty category from the list the grid is bound to, so the other tiles move up. Only done for
-// the list Start builds when it starts up, while nobody has opened the menu: the same removal from a timer right
-// after the rebuild that happens when the menu opens crashed Start (access violation inside StartMenu.dll, 30 to
-// 50 ms later). Those later lists are cleaned inside Start's own ReplaceAll call instead.
-using IInspectableList = winrt::Windows::Foundation::Collections::IVector<winrt::Windows::Foundation::IInspectable>;
-
-void RemoveEmptyTilesFromSource(wux::DependencyObject const& grid) {
-    if (!g_startupCleanupAllowed || g_rebuildCount != 1) return;
-    if (!g_mapKnown) return;
-    MarkStage(L"removing an empty category from Start's list (start-up)");
-    try {
-        wux::DependencyObject walker = grid;
-        wux::DependencyObject gridView{nullptr};
-        for (int i = 0; i < 10 && !gridView; ++i) {
-            walker = wuxm::VisualTreeHelper::GetParent(walker);
-            if (!walker) return;
-            if (ElementClassName(walker) == L"Windows.UI.Xaml.Controls.GridView") gridView = walker;
-        }
-        if (!gridView) return;
-        auto items = gridView.try_as<wuxc::ItemsControl>();
-        if (!items) return;
-        auto source = items.ItemsSource();
-        auto list = source ? source.try_as<IInspectableList>() : nullptr;
-        if (!list) return;
-
-        std::vector<winrt::Windows::Foundation::IInspectable> toRemove;
-        const int count = wuxm::VisualTreeHelper::GetChildrenCount(grid);
-        for (int i = 0; i < count; ++i) {
-            auto child = wuxm::VisualTreeHelper::GetChild(grid, i);
-            if (ElementClassName(child) != L"Windows.UI.Xaml.Controls.GridViewItem") continue;
-            TileContent content;
-            CountTileContent(child, 0, content);
-            if (!IsTileHeading(content.title) || g_emptyHeadings.count(TileKey(content.title)) == 0) continue;
-            auto element = child.try_as<wux::FrameworkElement>();
-            auto entry = element ? element.DataContext() : nullptr;
-            if (entry) toRemove.push_back(entry);
-        }
-        int removed = 0;
-        for (const auto& entry : toRemove) {
-            for (uint32_t j = 0; j < list.Size(); ++j) {
-                if (list.GetAt(j) == entry) {
-                    list.RemoveAt(j);
-                    ++removed;
-                    break;
-                }
-            }
-        }
-        static int s_logged = 0;
-        if (removed > 0 && s_logged++ < 10) {
-            Wh_Log(L"[start] Start-up cleanup: removed %d empty entries from the grid's list", removed);
-        }
-    } catch (...) {
-        static bool loggedFailure = false;
-        if (!loggedFailure) {
-            loggedFailure = true;
-            Wh_Log(L"[start] Could not remove the empty category from the grid's list");
-        }
-    }
-}
-
-void FindItemGrids(wux::DependencyObject const& obj, int depth) {
-    if (depth > 60) return;
-    if (ElementClassName(obj) == L"Windows.UI.Xaml.Controls.ItemsWrapGrid") {
-        ApplyCategoryTiles(obj);
-        RemoveEmptyTilesFromSource(obj);
-    }
-    const int count = wuxm::VisualTreeHelper::GetChildrenCount(obj);
-    for (int i = 0; i < count; ++i) {
-        FindItemGrids(wuxm::VisualTreeHelper::GetChild(obj, i), depth + 1);
-    }
-}
-
-wux::DependencyObject g_startRoot{nullptr};
-
-void UpdateCategoryTiles() {
-    if (!g_hideEmptyTiles) return;
-    MarkStage(L"checking Start's category tiles");
-    try {
-        wux::DependencyObject root{nullptr};
-        if (auto window = wux::Window::Current()) {
-            if (auto content = window.Content()) root = content;
-        }
-        if (!root && g_startRoot) root = g_startRoot;  // Fallback: the frame from the last right-click.
-        if (!root) return;
-        FindItemGrids(root, 0);
-    } catch (...) {
-        g_startRoot = nullptr;  // The tree was torn down; look for a fresh root next time.
-    }
-}
-
-// The check runs on a timer inside Start's own window, so it also works when the menu was already
-// open before the mod loaded. The window's procedure is replaced with a plain one that handles the
-// timer and passes everything else on. Only basic Windows calls are used (no comctl32 subclassing,
-// which needs a newer library version than Windhawk mods load by default).
-constexpr UINT_PTR kTileTimerId = 0x5443;
-constexpr UINT kTileTimerMs = 250;
-HWND g_tileWindow = nullptr;
-WNDPROC g_tileOriginalProc = nullptr;
-
-// SetTimer needs the window's own thread, and Wh_ModInit may run on another one. In that case a
-// private message makes the window's thread (through TileWindowProc) start the timer itself.
-UINT TileStartMessage() {
-    static const UINT message = RegisterWindowMessageW(L"WindhawkStartCategoryManager.TileTimerStart");
-    return message;
-}
-
-void StartTileTimer(HWND hwnd) {
-    if (!SetTimer(hwnd, kTileTimerId, kTileTimerMs, nullptr)) {
-        Wh_Log(L"[start] Could not start the tile timer (error %lu)", GetLastError());
-    }
-}
-
-bool IsStartCoreWindow(HWND hwnd) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) return false;
-    wchar_t cls[128]{};
-    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
-    return wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0;
-}
-
-LRESULT CALLBACK TileWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == WM_TIMER && wParam == kTileTimerId && !g_shuttingDown) {
-        UpdateCategoryTiles();  // Runs on the window's own thread, which may use the UI.
-    } else if (msg == TileStartMessage() && !g_shuttingDown) {
-        StartTileTimer(hwnd);
-        return 0;
-    }
-    return CallWindowProcW(g_tileOriginalProc, hwnd, msg, wParam, lParam);
-}
-
-BOOL CALLBACK AttachTileWindowProc(HWND hwnd, LPARAM) {
-    if (g_tileWindow || !IsStartCoreWindow(hwnd)) return TRUE;
-    WNDPROC previous = reinterpret_cast<WNDPROC>(
-        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(TileWindowProc)));
-    if (!previous) return TRUE;
-    g_tileOriginalProc = previous;
-    g_tileWindow = hwnd;
-    if (GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId()) {
-        StartTileTimer(hwnd);
-    } else {
-        PostMessageW(hwnd, TileStartMessage(), 0, 0);
-    }
-    return TRUE;
-}
-
-void StartCategoryTileWatch() {
-    if (!g_hideEmptyTiles || g_tileWindow) return;
-    EnumWindows(AttachTileWindowProc, 0);
-}
-
-void StopCategoryTileWatch() {
-    if (!g_tileWindow) return;
-    KillTimer(g_tileWindow, kTileTimerId);
-    // Put Start's window procedure back, but only if ours is still the one in place. If another mod
-    // (for example Start Menu Styler) replaced the procedure after ours, it holds a pointer to ours
-    // as its "previous" one, so taking ours out would break its chain, and unloading this code
-    // would leave a dangling pointer. In that case ours stays: it only passes messages on
-    // (g_shuttingDown is set) and this module is kept loaded until Start restarts.
-    if (reinterpret_cast<WNDPROC>(GetWindowLongPtrW(g_tileWindow, GWLP_WNDPROC)) == TileWindowProc) {
-        SetWindowLongPtrW(g_tileWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(g_tileOriginalProc));
-    } else {
-        HMODULE self = nullptr;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           reinterpret_cast<LPCWSTR>(&TileWindowProc), &self);
-    }
-    g_tileWindow = nullptr;
-}
-
-using StartFrameContextRequested_t = void(__cdecl*)(void*, void*, void*);
-StartFrameContextRequested_t StartFrameContextRequested_Original = nullptr;
-
-// Start's right-click handler runs on the UI thread, so it also starts the tile watch.
-void __cdecl StartFrameContextRequested_Hook(void* self, void* sender, void* args) {
-    try {
-        auto const& element = *static_cast<wux::UIElement const*>(sender);
-        g_startRoot = element;
-    } catch (...) {
-    }
-    StartCategoryTileWatch();
-    StartFrameContextRequested_Original(self, sender, args);
-}
-
-HMODULE GetStartMenuModuleHandle();
-
-void LogAbiHookState();
-
-using PruneAndCombine_t = void(__cdecl*)(void*, void*);
-PruneAndCombine_t PruneAndCombine_Original = nullptr;
-
-HMODULE GetStartMenuModuleHandle();
-
-// ---------------------------------------------------------------------------
-// Category rebuild hooks
-// ---------------------------------------------------------------------------
-// Start rebuilds its categories when it opens, on the UI thread, so this is where the tile check
-// starts without a right-click.
-void __cdecl PruneAndCombine_Hook(void* self, void* map) {
-    MarkStage(L"Start rebuilding its categories (PruneAndCombine hook)");
-    static int s_rebuilds = 0;
-    if (s_rebuilds++ < 40) Wh_Log(L"[start] Start is rebuilding its categories");
-    LogAbiHookState();
-    if (++g_rebuildCount == 1) {
-        FILETIME created{}, exited{}, kernel{}, user{}, now{};
-        GetSystemTimeAsFileTime(&now);
-        if (GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) {
-            const ULONGLONG start = (static_cast<ULONGLONG>(created.dwHighDateTime) << 32) | created.dwLowDateTime;
-            const ULONGLONG current = (static_cast<ULONGLONG>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
-            const ULONGLONG ageMs = current > start ? (current - start) / 10000 : 0;
-            g_startupCleanupAllowed = ageMs < 10000;
-            Wh_Log(L"[start] First rebuild, Start process age %llu ms: start-up cleanup %ls", ageMs,
-                   g_startupCleanupAllowed ? L"allowed" : L"not allowed");
-        }
-    }
-    StartCategoryTileWatch();
-    PruneAndCombine_Original(self, map);
-    RecordEmptyCategories(map);
-    UpdateCategoryTiles();
-}
-
-// Removing entries from Start's list from a timer right after the rebuild that happens when the menu opens crashes
-// Start: it faults inside StartMenu.dll 30 to 50 ms later. Removing them inside Start's own ReplaceAll call, before it
-// does anything else with the list, does not. So that is where empty entries are removed from those lists. The one
-// list that never goes through such a call here is the one built when Start starts up (see RemoveEmptyTilesFromSource).
-using ListOp1_t = void(__cdecl*)(void*, void*);
-ListOp1_t ReplaceAll_Original = nullptr;
-
-// Removes empty category groups from the list that Start has just filled, before the menu draws it.
-void RemoveEmptyGroupsFromAbi(void* abi, const wchar_t* source) {
-    try {
-        if (!abi || !IsReadableMemory(abi, sizeof(void*))) return;
-        winrt::Windows::Foundation::IInspectable inspectable{nullptr};
-        winrt::copy_from_abi(inspectable, abi);
-        auto items = inspectable.try_as<winrt::Windows::Foundation::Collections::IVector<winrt::Windows::Foundation::IInspectable>>();
-        if (!items) {
-            static bool loggedNotList = false;
-            if (!loggedNotList) {
-                loggedNotList = true;
-                Wh_Log(L"[start] ReplaceAll was given something that is not a list; the hook's layout assumption may be wrong for this build");
-            }
-            return;
-        }
-        const uint32_t size = items.Size();
-        uint32_t removed = 0;
-        std::wstring sizes;  // The number of apps in each group, in list order, before anything was removed.
-        for (uint32_t i = size; i-- > 0;) {
-            auto entry = items.GetAt(i);
-            auto group = entry.try_as<winrt::Windows::UI::Xaml::Data::ICollectionViewGroup>();
-            if (!group) continue;
-            const uint32_t apps = group.GroupItems().Size();
-            sizes = std::to_wstring(apps) + L" " + sizes;
-            if (apps != 0) continue;
-            items.RemoveAt(i);
-            ++removed;
-        }
-        static int s_loggedRemoved = 0;
-        static int s_loggedNothing = 0;
-        if (removed > 0 ? s_loggedRemoved++ < 60 : (!sizes.empty() && s_loggedNothing++ < 15)) {
-            Wh_Log(L"[start] %ls: %u groups, removed %u empty (apps per group: %ls)", source, size, removed,
-                   sizes.c_str());
-        }
-    } catch (...) {
-        Wh_Log(L"[start] Removing the empty groups failed with an exception");
-    }
-}
-
-// `list` is the address of the vector wrapper, whose first member is the ABI pointer. Check both
-// before touching them, since this layout is an assumption about Start's build.
-void RemoveEmptyGroupsFromStartList(void* list) {
-    if (!IsReadableMemory(list, sizeof(void*))) return;
-    RemoveEmptyGroupsFromAbi(*static_cast<void* const*>(list), L"ReplaceAll (wrapper)");
-}
-
-// Keeps the category list free of empty groups right after Start fills it.
-void __cdecl ReplaceAll_Hook(void* self, void* items) {
-    MarkStage(L"Start filling its category list (ReplaceAll hook)");
-    ReplaceAll_Original(self, items);
-    RemoveEmptyGroupsFromStartList(self);
-}
-
-// ---------------------------------------------------------------------------
-// ABI-side hook on Start's category list. The hook on the C++ wrapper above only sees callers that use the
-// out-of-line copy of that wrapper; other call sites have it compiled inline. The ABI function is where every caller
-// ends up. It is found by name through Windhawk, like the other Start hooks.
-// ---------------------------------------------------------------------------
-using ProduceReplaceAll_t = int(__cdecl*)(void*, uint32_t, void*);
-ProduceReplaceAll_t ProduceReplaceAll_Original = nullptr;
-
-int __cdecl ProduceReplaceAll_Hook(void* self, uint32_t count, void* items) {
-    MarkStage(L"Start filling its category list (ABI ReplaceAll hook)");
-    const int result = ProduceReplaceAll_Original(self, count, items);
-    if (result >= 0) RemoveEmptyGroupsFromAbi(self, L"ReplaceAll (ABI)");
-    return result;
-}
-
-// Says in the log whether the hook above was found, since it is the one that is most likely to break when Windows
-// changes the Start menu: without it the empty tiles are still hidden, but the other tiles do not move up.
-void LogAbiHookState() {
-    static bool logged = false;
-    if (logged) return;
-    logged = true;
-    if (ProduceReplaceAll_Original) {
-        Wh_Log(L"[start] The ABI ReplaceAll hook is installed");
-    } else {
-        Wh_Log(L"[start] The ABI ReplaceAll function was not found; empty tiles will be hidden but may leave gaps");
-    }
-    // Either ReplaceAll hook removes empty groups as Start fills its list, so the tiles can only be left with gaps
-    // when both are missing.
-    ReportGapHook(ProduceReplaceAll_Original != nullptr || ReplaceAll_Original != nullptr);
-}
-
-using CombineCategories_t = void(__cdecl*)(void*, void*, void*, bool);
-CombineCategories_t CombineCategories_Original = nullptr;
-
-void __cdecl CombineCategories_Hook(void* self, void* map, void* merges, bool flag) {
-    MarkStage(L"Start combining its categories (CombineCategories hook)");
-    CombineCategories_Original(self, map, merges, flag);
-    RecordEmptyCategories(map);
-}
-
-// Hooked separately from the menu item, so a failure here only disables the tile feature.
-bool HookCategoryTileSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {
-                LR"(public: void __cdecl winrt::StartMenu::implementation::StartBlendedFlexFrame::OnContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))",
-            },
-            &StartFrameContextRequested_Original,
-            StartFrameContextRequested_Hook,
-        },
-        {
-            {
-                LR"(private: void __cdecl winrt::StartMenu::implementation::CategoryProvider::PruneAndCombineCategories(class std::unordered_map<enum winrt::StartMenu::AppCategory,class std::vector<struct winrt::StartMenu::IAllAppsItemViewModel,class std::allocator<struct winrt::StartMenu::IAllAppsItemViewModel> >,struct std::hash<enum winrt::StartMenu::AppCategory>,struct std::equal_to<enum winrt::StartMenu::AppCategory>,class std::allocator<struct std::pair<enum winrt::StartMenu::AppCategory const ,class std::vector<struct winrt::StartMenu::IAllAppsItemViewModel,class std::allocator<struct winrt::StartMenu::IAllAppsItemViewModel> > > > > &))",
-            },
-            &PruneAndCombine_Original,
-            PruneAndCombine_Hook,
-        },
-        {
-            {
-                LR"(private: void __cdecl winrt::StartMenu::implementation::CategoryProvider::CombineCategories(class std::unordered_map<enum winrt::StartMenu::AppCategory,class std::vector<struct winrt::StartMenu::IAllAppsItemViewModel,class std::allocator<struct winrt::StartMenu::IAllAppsItemViewModel> >,struct std::hash<enum winrt::StartMenu::AppCategory>,struct std::equal_to<enum winrt::StartMenu::AppCategory>,class std::allocator<struct std::pair<enum winrt::StartMenu::AppCategory const ,class std::vector<struct winrt::StartMenu::IAllAppsItemViewModel,class std::allocator<struct winrt::StartMenu::IAllAppsItemViewModel> > > > > &,class std::map<enum winrt::StartMenu::AppCategory,class std::vector<enum winrt::StartMenu::AppCategory,class std::allocator<enum winrt::StartMenu::AppCategory> >,struct std::less<enum winrt::StartMenu::AppCategory>,class std::allocator<struct std::pair<enum winrt::StartMenu::AppCategory const ,class std::vector<enum winrt::StartMenu::AppCategory,class std::allocator<enum winrt::StartMenu::AppCategory> > > > > &,bool))",
-            },
-            &CombineCategories_Original,
-            CombineCategories_Hook,
-        },
-        {
-            // The function every caller of the category list's ReplaceAll ends up in, including call sites where the
-            // wrapper above was compiled inline. Windhawk may spell the pointer parts of this name in more than one way, so
-            // several spellings are given.
-            {
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void * __ptr64 * __ptr64) __ptr64)",
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void * __ptr64 * __ptr64) )",
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void * *) )",
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void *  * ) )",
-            },
-            &ProduceReplaceAll_Original,
-            ProduceReplaceAll_Hook,
-            true,
-        },
-        {
-            // Removes empty groups from Start's category list as it is filled, so the remaining tiles close up.
-            // Optional: if a Windows update renames it, the other tile hooks keep working and only the gaps return.
-            {
-                LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IObservableVector<struct winrt::StartMenu::AllAppsGroupViewModel>,struct winrt::StartMenu::AllAppsGroupViewModel>::ReplaceAll(struct winrt::array_view<struct winrt::StartMenu::AllAppsGroupViewModel const >)const )",
-            },
-            &ReplaceAll_Original,
-            ReplaceAll_Hook,
-            true,
-        },
-    };
-
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"[start] Could not hook the Start frame; empty category tiles will not be hidden");
-        return false;
-    }
-    if (!ReplaceAll_Original) {
-        Wh_Log(L"[start] The category list's ReplaceAll was not found; empty tiles will be hidden but may leave gaps");
-    }
-    return true;
-}
-
 bool HookStartMenuDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // StartMenu.dll, StartUI.dll
+    WindhawkUtils::SYMBOL_HOOK startMenuDllHooks[] = {
         {
             {
                 LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>,struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>::Append(struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const &)const )",
@@ -6529,21 +5756,13 @@ bool HookStartMenuDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {
         Wh_Log(L"[start] Could not hook the menu item list in the Start menu DLL");
-        ReportHooks(false, !g_hideEmptyTiles);
+        ReportHooks(false);
         return false;
     }
     Wh_Log(L"[start] Hooking the Start menu DLL");
-    bool tilesHooked = true;
-    if (g_hideEmptyTiles) {
-        tilesHooked = HookCategoryTileSymbols(module);
-    } else {
-        // Switched off in the settings: nothing is hooked, and nothing is reported as missing.
-        Wh_Log(L"[start] Hiding empty tiles is switched off in the settings; the tile hooks are not installed");
-    }
-    ReportHooks(true, tilesHooked);
-    if (!g_hideEmptyTiles) ReportGapHook(true);
+    ReportHooks(true);
     return true;
 }
 
@@ -6569,413 +5788,36 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     return module;
 }
 
-// ---------------------------------------------------------------------------
-// Crash logging (explorer.exe and StartMenuExperienceHost.exe). A crash report says what kind of
-// fault it was, which module it happened in, what the mod was doing, and the call stack. Reports are
-// appended to crashes.log in %LOCALAPPDATA%\Windhawk\StartMenuCategoryManager.
-// ---------------------------------------------------------------------------
-
-LPTOP_LEVEL_EXCEPTION_FILTER g_previousCrashFilter = nullptr;
-// The module stays pinned, so a disable/enable runs Wh_ModInit again in this same copy. The handlers below stay installed,
-// so they must be installed only once: a second SetUnhandledExceptionFilter would return CrashFilter itself as the
-// "previous" filter, and CrashFilter would call itself until the stack overflowed.
-bool g_crashHandlersInstalled = false;
-std::wstring g_crashLogPath;
-HMODULE g_selfModule = nullptr;
-
-const wchar_t* DescribeExceptionCode(DWORD code) {
-    switch (code) {
-        case EXCEPTION_ACCESS_VIOLATION:
-            return L"access violation (code read or wrote memory it is not allowed to use)";
-        case EXCEPTION_IN_PAGE_ERROR:
-            return L"in-page error (memory could not be loaded from disk or the page file)";
-        case EXCEPTION_STACK_OVERFLOW:
-            return L"stack overflow (too much recursion, or a very large stack buffer)";
-        case EXCEPTION_ILLEGAL_INSTRUCTION:
-            return L"illegal instruction (the code jumped to data or to a corrupt address)";
-        case EXCEPTION_INT_DIVIDE_BY_ZERO:
-            return L"integer divide by zero";
-        case EXCEPTION_DATATYPE_MISALIGNMENT:
-            return L"misaligned data access";
-        case 0xC000027B:
-            return L"exception raised inside the Windows XAML framework (Windows.UI.Xaml.dll)";
-        case 0xC0000374:
-            return L"heap corruption (memory was written outside a block it owns)";
-        case 0xC0000409:
-            return L"stack buffer overrun (a fixed-size buffer on the stack was written past its end)";
-        case 0xC000041D:
-            return L"exception inside a window or UI callback (it escaped its handler)";
-        case 0xC0000135:
-            return L"a DLL could not be found";
-        case 0xC0000139:
-            return L"a function was missing from a DLL";
-        case 0xC0000142:
-            return L"a DLL failed to start";
-        default:
-            return L"unrecognised fault code";
-    }
-}
-
-// The module that contains an address, and the offset inside it (what a .pdb file needs to name the function).
-std::wstring LocateAddress(const void* address, bool* isSelf) {
-    *isSelf = false;
-    HMODULE module = nullptr;
-    if (!address || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                        reinterpret_cast<LPCWSTR>(address), &module)) {
-        return L"(not inside any loaded module)";
-    }
-    wchar_t path[MAX_PATH]{};
-    GetModuleFileNameW(module, path, ARRAYSIZE(path));
-    const DWORD_PTR offset = reinterpret_cast<DWORD_PTR>(address) - reinterpret_cast<DWORD_PTR>(module);
-    *isSelf = module == g_selfModule;
-    wchar_t offsetText[32]{};
-    wsprintfW(offsetText, L"+0x%X", static_cast<unsigned int>(offset));
-    return std::wstring(PathFindFileNameW(path)) + std::wstring(offsetText);
-}
-
-// A plain-language reading of the fault, based on what kind of fault it was and where it happened.
-std::wstring ExplainFault(const EXCEPTION_RECORD* record, bool faultIsSelf, const std::wstring& where) {
-    std::wstring text;
-    if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
-        const ULONG_PTR address = record->ExceptionInformation[1];
-        const bool writing = record->ExceptionInformation[0] == 1;
-        wchar_t addr[32]{};
-        wsprintfW(addr, L"0x%p", reinterpret_cast<void*>(address));
-        if (address < 0x10000) {
-            text = L"It used a null (or nearly null) pointer, " + std::wstring(addr) + L".";
-        } else if (writing) {
-            text = L"It wrote through a pointer that is no longer valid (freed, or never set), " + std::wstring(addr) + L".";
-        } else {
-            text = L"It read through a pointer that is no longer valid (freed, or never set), " + std::wstring(addr) + L".";
-        }
-        text += L"\r\n";
-    }
-    if (faultIsSelf) {
-        text += L"The fault is in this mod's own code. The stack shows what called it.";
-    } else if (where.find(L"msvcrt") != std::wstring::npos || where.find(L"ucrtbase") != std::wstring::npos ||
-               where.find(L"vcruntime") != std::wstring::npos) {
-        text += L"The fault is inside a C runtime function (memcpy, malloc, string functions) that was given bad input. "
-                L"The frame just below it in the stack is the code that called it.";
-    } else if (where.find(L"StartMenu") != std::wstring::npos) {
-        text += L"The fault is inside Start's own code. It often happens after a hook passed it data it did not expect.";
-    } else {
-        text += L"The fault is inside a module that does not belong to this mod.";
-    }
-    return text;
-}
-
-void AppendCrashReport(const std::wstring& text) {
-    if (g_crashLogPath.empty()) return;
-
-    // Keep the file small: start again once it is over 512 KB.
-    WIN32_FILE_ATTRIBUTE_DATA attrs{};
-    if (GetFileAttributesExW(g_crashLogPath.c_str(), GetFileExInfoStandard, &attrs)) {
-        const unsigned long long size = (static_cast<unsigned long long>(attrs.nFileSizeHigh) << 32) | attrs.nFileSizeLow;
-        if (size > 512ull * 1024) DeleteFileW(g_crashLogPath.c_str());
-    }
-
-    const int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0,
-                                           nullptr, nullptr);
-    if (length <= 0) return;
-    std::string bytes(static_cast<size_t>(length), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), bytes.data(), length, nullptr, nullptr);
-
-    HANDLE file = CreateFileW(g_crashLogPath.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
-    CloseHandle(file);
-}
-
-// Writes a short crash entry without allocating memory (no std::string or std::wstring). After a stack overflow almost
-// no stack is left, and after heap damage the allocator may not work, so the full report could fault again or hang.
-// Only fixed buffers and plain Win32 calls are used here.
-void WriteShortCrashReport(const EXCEPTION_RECORD* record, bool firstChance) {
-    if (g_crashLogPath.empty()) return;
-    char stage[160] = "";
-    if (WideCharToMultiByte(CP_UTF8, 0, g_crashStage, -1, stage, sizeof(stage) - 1, nullptr, nullptr) <= 0) {
-        stage[0] = '\0';
-    }
-    SYSTEMTIME now{};
-    GetLocalTime(&now);
-    const unsigned long long address = reinterpret_cast<ULONG_PTR>(record->ExceptionAddress);
-    char text[512];
-    const int length = wsprintfA(
-        text,
-        "==== %04d-%02d-%02d %02d:%02d:%02d  %s (PID %lu, thread %lu)\r\n"
-        "Fault:  %s [code 0x%08X] at 0x%08X%08X\r\n"
-        "Doing:  %s\r\n"
-        "(Short report: a full one cannot be written safely after this kind of fault.)\r\n\r\n",
-        now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond,
-        firstChance ? "first-chance fault, may be handled" : "crashed", GetCurrentProcessId(), GetCurrentThreadId(),
-        record->ExceptionCode == EXCEPTION_STACK_OVERFLOW ? "stack overflow" : "heap corruption",
-        static_cast<unsigned int>(record->ExceptionCode), static_cast<unsigned int>(address >> 32),
-        static_cast<unsigned int>(address & 0xFFFFFFFFull), stage);
-    if (length <= 0) return;
-    HANDLE file = CreateFileW(g_crashLogPath.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(file, text, static_cast<DWORD>(length), &written, nullptr);
-    CloseHandle(file);
-}
-
-void WriteCrashReport(EXCEPTION_POINTERS* info, bool firstChance) {
-    const EXCEPTION_RECORD* record = info->ExceptionRecord;
-    if (record->ExceptionCode == EXCEPTION_STACK_OVERFLOW || record->ExceptionCode == 0xC0000374) {
-        WriteShortCrashReport(record, firstChance);
-        return;
-    }
-
-    wchar_t exe[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
-    const std::wstring process = PathFindFileNameW(exe);
-
-    SYSTEMTIME now{};
-    GetLocalTime(&now);
-    wchar_t stamp[64]{};
-    wsprintfW(stamp, L"%04d-%02d-%02d %02d:%02d:%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
-              now.wSecond);
-    wchar_t code[16]{};
-    wsprintfW(code, L"%08X", static_cast<unsigned int>(record->ExceptionCode));
-
-    bool faultIsSelf = false;
-    const std::wstring where = LocateAddress(record->ExceptionAddress, &faultIsSelf);
-
-    void* frames[32]{};
-    const USHORT frameCount = CaptureStackBackTrace(0, ARRAYSIZE(frames), frames, nullptr);
-    std::wstring stack;
-    for (USHORT i = 0; i < frameCount; ++i) {
-        bool self = false;
-        stack += L"  " + std::to_wstring(i) + L". " + LocateAddress(frames[i], &self);
-        if (self) stack += L"   <- this mod";
-        stack += L"\r\n";
-    }
-
-    std::wstring report;
-    report += L"==== " + std::wstring(stamp) + L"  " + process + (firstChance ? L" first-chance fault, may be handled (PID " : L" crashed (PID ") +
-              std::to_wstring(GetCurrentProcessId()) + L", thread " + std::to_wstring(GetCurrentThreadId()) + L")\r\n";
-    report += L"Fault:  " + std::wstring(DescribeExceptionCode(record->ExceptionCode)) + L" [code 0x" +
-              std::wstring(code) + L"]\r\n";
-    report += L"Where:  " + where + L"\r\n";
-    report += L"Doing:  " + std::wstring(g_crashStage) + L"\r\n";
-    report += ExplainFault(record, faultIsSelf, where) + L"\r\n";
-    report += L"Stack (top = where the fault happened):\r\n" + stack + L"\r\n";
-
-    Wh_Log(L"[crash] %ls %ls (PID %lu, thread %lu)", process.c_str(),
-           firstChance ? L"first-chance fault" : L"crashed", GetCurrentProcessId(), GetCurrentThreadId());
-    Wh_Log(L"[crash] Fault: %ls [code 0x%ls]", DescribeExceptionCode(record->ExceptionCode), code);
-    Wh_Log(L"[crash] Where: %ls", where.c_str());
-    Wh_Log(L"[crash] Doing: %ls", g_crashStage);
-    AppendCrashReport(report);
-}
-
-LONG WINAPI CrashFilter(EXCEPTION_POINTERS* info) {
-    static volatile LONG reporting = 0;
-    if (InterlockedCompareExchange(&reporting, 1, 0) == 0) {
-        try {
-            WriteCrashReport(info, false);
-        } catch (...) {
-        }
-    }
-    if (g_previousCrashFilter && g_previousCrashFilter != CrashFilter) return g_previousCrashFilter(info);
-    return EXCEPTION_CONTINUE_SEARCH;  // Windows' own crash handling still runs.
-}
-
-// XAML reports why it is about to fail through a WinRT "originate error" exception (code 0x40080201; its
-// parameters are the HRESULT, the message length and a pointer to the message). Explorer raises these in normal
-// use too, so they are logged only while the manager window is open, and at most 60 per process. A fast-fail
-// skips every exception handler, so this is the only trace of the reason it leaves.
-void LogWinrtOriginatedError(EXCEPTION_POINTERS* info) {
-    static volatile LONG logged = 0;
-    static volatile LONG busy = 0;
-    if (!g_xamlListWindow) return;
-    if (InterlockedCompareExchange(&busy, 1, 0) != 0) return;
-    if (InterlockedIncrement(&logged) <= 60) {
-        try {
-            const EXCEPTION_RECORD* record = info->ExceptionRecord;
-            const unsigned int hr =
-                record->NumberParameters > 0 ? static_cast<unsigned int>(record->ExceptionInformation[0]) : 0;
-            std::wstring message;
-            if (record->NumberParameters >= 3 && record->ExceptionInformation[2] != 0) {
-                const SIZE_T chars = (std::min<SIZE_T>)(record->ExceptionInformation[1], 400);
-                std::wstring buffer(chars, L'\0');
-                SIZE_T bytesRead = 0;
-                if (chars > 0 &&
-                    ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(record->ExceptionInformation[2]),
-                                      buffer.data(), chars * sizeof(wchar_t), &bytesRead)) {
-                    buffer.resize(bytesRead / sizeof(wchar_t));
-                    message = buffer;
-                }
-            }
-            void* frames[24]{};
-            const USHORT frameCount = CaptureStackBackTrace(0, ARRAYSIZE(frames), frames, nullptr);
-            std::wstring stack;
-            for (USHORT i = 0; i < frameCount; ++i) {
-                bool self = false;
-                stack += L"  " + std::to_wstring(i) + L". " + LocateAddress(frames[i], &self);
-                if (self) stack += L"   <- this mod";
-                stack += L"\r\n";
-            }
-            wchar_t code[16]{};
-            wsprintfW(code, L"%08X", hr);
-            Wh_Log(L"[xaml] WinRT error 0x%ls while the manager window is open: %ls (doing: %ls)", code,
-                   message.c_str(), g_crashStage);
-            AppendCrashReport(L"[xaml] WinRT error 0x" + std::wstring(code) + L": " + message + L"\r\nDoing:  " +
-                              g_crashStage + L"\r\nStack:\r\n" + stack + L"\r\n");
-        } catch (...) {
-        }
-    }
-    InterlockedExchange(&busy, 0);
-}
-
-// Sees fatal faults as they happen, even when they are handled later or never escape. Ordinary exceptions
-// are ignored, and only the first 20 fatal ones are reported per process, so the log cannot flood.
-LONG CALLBACK FirstChanceCrashWatch(EXCEPTION_POINTERS* info) {
-    static volatile LONG reported = 0;
-    static volatile LONG busy = 0;
-    const DWORD code = info->ExceptionRecord->ExceptionCode;
-    if (code == 0x40080201) {
-        LogWinrtOriginatedError(info);
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-    const bool fatal = code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_STACK_OVERFLOW ||
-                       code == EXCEPTION_ILLEGAL_INSTRUCTION || code == EXCEPTION_IN_PAGE_ERROR ||
-                       code == 0xC0000374 || code == 0xC0000409 || code == 0xC000041D || code == 0xC000027B;
-    if (!fatal) return EXCEPTION_CONTINUE_SEARCH;
-    if (InterlockedCompareExchange(&busy, 1, 0) != 0) return EXCEPTION_CONTINUE_SEARCH;
-    // A fault that is handled and repeats from the same place (some code probes memory on purpose) is reported once, so
-    // it cannot use up the 20 reports that a different, real fault might need. An unhandled crash goes through
-    // CrashFilter, which has its own limit.
-    static void* seenAddresses[8];
-    static int seenCount = 0;
-    void* const address = info->ExceptionRecord->ExceptionAddress;
-    bool repeat = false;
-    for (int i = 0; i < seenCount; ++i) {
-        if (seenAddresses[i] == address) {
-            repeat = true;
-            break;
-        }
-    }
-    if (!repeat) {
-        if (seenCount < 8) seenAddresses[seenCount++] = address;
-        if (InterlockedIncrement(&reported) <= 20) {
-            try {
-                WriteCrashReport(info, true);
-            } catch (...) {
-            }
-        }
-    }
-    InterlockedExchange(&busy, 0);
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-// Reads a value from a marker file ("key=value" on its own line).
-std::wstring MarkerValue(const std::wstring& text, const wchar_t* key) {
-    const std::wstring needle = std::wstring(key) + L"=";
-    const size_t at = text.find(needle);
-    if (at == std::wstring::npos) return L"";
-    const size_t end = text.find(L'\n', at);
-    std::wstring value = text.substr(at + needle.size(),
-                                     end == std::wstring::npos ? std::wstring::npos : end - at - needle.size());
-    while (!value.empty() && value.back() == L'\r') value.pop_back();
-    return value;
-}
-
-// If the previous copy of this process left a "running" marker, it ended without unloading the mod:
-// a crash the handler could not see, or a forced kill. An "expected" marker is a restart this mod made.
-void CheckPreviousProcessEnd(const std::wstring& processName) {
-    if (g_markerPath.empty()) return;
-    std::wstring text;
-    if (!ReadTextFile(g_markerPath, text)) return;
-    const std::wstring pid = MarkerValue(text, L"pid");
-    const std::wstring state = MarkerValue(text, L"state");
-    const std::wstring stage = MarkerValue(text, L"stage");
-    if (state == L"expected") {
-        Wh_Log(L"[crash] This mod restarted the %ls on purpose (previous PID %ls).", processName.c_str(), pid.c_str());
-    } else if (state == L"running") {
-        SYSTEMTIME now{};
-        GetLocalTime(&now);
-        wchar_t stamp[64]{};
-        wsprintfW(stamp, L"%04d-%02d-%02d %02d:%02d:%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
-                  now.wSecond);
-        const std::wstring line = std::wstring(stamp) + L"  The previous " + processName + L" (PID " + pid +
-                                  L") ended without unloading the mod. Its last recorded step was: " + stage +
-                                  L". Event Viewer shows whether it was a crash; this could also be a normal restart or shutdown.\r\n\r\n";
-        Wh_Log(L"[crash] The previous %ls (PID %ls) ended without unloading the mod. Last step: %ls",
-               processName.c_str(), pid.c_str(), stage.c_str());
-        AppendCrashReport(line);
-    }
-}
-
-void InstallCrashLogging() {
-    // Pin this module, so a crash after Windhawk unloads the mod cannot jump into freed code.
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                       reinterpret_cast<LPCWSTR>(&InstallCrashLogging), &g_selfModule);
-
-    wchar_t exe[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
-    const std::wstring processName = PathFindFileNameW(exe);
-
-    wchar_t base[MAX_PATH]{};
-    if (GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base)) > 0) {
-        const std::wstring dir = std::wstring(base) + L"\\Windhawk";
-        CreateDirectoryW(dir.c_str(), nullptr);
-        g_markerDir = dir + L"\\StartMenuCategoryManager";
-        CreateDirectoryW(g_markerDir.c_str(), nullptr);
-        g_crashLogPath = g_markerDir + L"\\crashes.log";
-    }
-    g_markerPath = MarkerPathFor(processName.c_str());
-    CheckPreviousProcessEnd(processName);
-    WriteMarkerFile(g_markerPath, GetCurrentProcessId(), L"running", g_crashStage);
-
-    if (!g_crashHandlersInstalled) {
-        g_crashHandlersInstalled = true;
-        g_previousCrashFilter = SetUnhandledExceptionFilter(CrashFilter);
-        AddVectoredExceptionHandler(1, FirstChanceCrashWatch);
-    }
-
-    // A start-up line for every process that loads the mod. It shows that the crash handler is active.
-    SYSTEMTIME now{};
-    GetLocalTime(&now);
-    wchar_t stamp[64]{};
-    wsprintfW(stamp, L"%04d-%02d-%02d %02d:%02d:%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
-              now.wSecond);
-    AppendCrashReport(std::wstring(stamp) + L"  loaded in " + processName + L" (PID " +
-                      std::to_wstring(GetCurrentProcessId()) + L"). Manage Categories v" +
-                      std::wstring(kModVersion) + L", crash handler active.\r\n\r\n");
-    Wh_Log(L"Crash handler active in %ls (PID %lu), Manage Categories v%ls", processName.c_str(),
-           GetCurrentProcessId(), kModVersion);
-}
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
 // Wh_ModInit and friends
 // ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
-    // The module is pinned (see InstallCrashLogging), so disabling and enabling the mod loads this same copy again with
-    // its old globals. Wh_ModUninit sets g_shuttingDown; without this reset ShowManager would refuse every request.
-    g_shuttingDown = false;
-    g_hideEmptyTiles = Wh_GetIntSetting(L"hideEmptyTiles") != 0;
-    InstallCrashLogging();
+    Wh_Log(L"Start Menu Category Manager %ls", WH_MOD_VERSION);
     wchar_t exePath[MAX_PATH]{};
     GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
     g_isStartHost = _wcsicmp(PathFindFileNameW(exePath), L"StartMenuExperienceHost.exe") == 0;
 
+    // Explorer can run folder windows in separate processes, and each of them loads the mod. Only the shell process
+    // (the one that owns the desktop) does the work.
+    if (!g_isStartHost) {
+        DWORD shellProcess = 0;
+        if (HWND shell = GetShellWindow()) GetWindowThreadProcessId(shell, &shellProcess);
+        if (shellProcess != 0 && shellProcess != GetCurrentProcessId()) {
+            Wh_Log(L"Not the shell Explorer process; the mod does nothing here");
+            return FALSE;
+        }
+    }
+
     if (g_isStartHost) {
         ResetHookReport();
-        Wh_Log(L"[start] Windows build %ls; the category map offsets were checked on build %ls",
-               WindowsBuildString().c_str(), kOffsetsVerifiedBuild);
+        Wh_Log(L"[start] Windows build %ls", WindowsBuildString().c_str());
         if (HMODULE startModule = GetStartMenuModuleHandle()) {
             g_startModuleHooked = true;
             HookStartMenuDllSymbols(startModule);
-        } else {
         }
 
-        StartCategoryTileWatch();
         HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
         auto loadLibraryExW = kernelBase
             ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelBase, "LoadLibraryExW"))
@@ -6991,7 +5833,7 @@ BOOL Wh_ModInit() {
         CreateHookStatusEvents();  // Before Start is restarted below, so the new Start process can report to them.
         StartOpenRequestListener();
         StartHookWatch();
-        // Once per installed version, restart the Start menu so its new item appears.
+        // Restart the Start menu if it does not have this mod yet, so its new item appears.
         RestartStartMenuStartedBeforeMod();
     }
     return TRUE;
@@ -7012,28 +5854,17 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     // Defining this stops Windhawk from reloading the whole mod when a setting changes, so the open
     // manager window can pick the new value up itself.
-    const bool hideEmptyTiles = Wh_GetIntSetting(L"hideEmptyTiles") != 0;
-    if (g_isStartHost) {
-        g_hideEmptyTiles = hideEmptyTiles;  // Explorer's copy restarts this process; until then the timer stands down.
-        return;
-    }
+    if (g_isStartHost) return;
     g_showOriginalButton = Wh_GetIntSetting(L"showSetOriginalButton") != 0;
     g_restoreOnUnload = Wh_GetIntSetting(L"keepOnUnload") == 0;
-    if (hideEmptyTiles != g_hideEmptyTiles) {
-        // The Start menu process has hooks that cannot be added or removed while it runs, and tiles that were already
-        // hidden stay hidden. A restart brings it back the way the new setting wants it.
-        g_hideEmptyTiles = hideEmptyTiles;
-        RestartStartMenuHost();
-    }
     if (HWND window = g_xamlListWindow) PostMessageW(window, WM_APP_SETTINGS_CHANGED, 0, 0);
 }
 
 void Wh_ModUninit() {
     g_shuttingDown = true;
-    if (!g_markerPath.empty()) DeleteFileW(g_markerPath.c_str());  // A clean unload is not a crash.
     if (g_isStartHost) {
-        StopCategoryTileWatch();
-        return;  // Nothing else but the hooks lives in the Start menu process.
+        ReleaseInjectedItemsOnUiThread();  // Besides the hooks, only the menu items' Click handler lives in Start.
+        return;
     }
 
     StopHookWatch();
@@ -7048,12 +5879,13 @@ void Wh_ModUninit() {
     if (thread) {
         // Ask the manager thread to quit and wait for it, so no mod code is
         // running (or has a live window) when Windhawk unloads the DLL.
-        for (int i = 0; i < 50; ++i) {
+        for (;;) {
             PostThreadMessageW(threadId, WM_QUIT, 0, 0);
             if (WaitForSingleObject(thread, 100) == WAIT_OBJECT_0) break;
         }
         CloseHandle(thread);
     }
+    UnregisterManagerWindowClasses();  // No window of these classes exists any more, and their code is about to unload.
 
     if (g_restoreOnUnload) RestoreOnUnload();
     CloseHookStatusEvents();
