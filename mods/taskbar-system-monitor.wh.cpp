@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdiplus -liphlpapi -lpdh -lole32 -loleaut32 -lwbemuuid -lshell32 -lgdi32 -lcomctl32 -lpsapi -ldwmapi -lshlwapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdiplus -liphlpapi -lpdh -lole32 -loleaut32 -lwbemuuid -lshell32 -lgdi32 -lcomctl32 -lpsapi -ldwmapi -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -174,6 +174,8 @@ Windows does not give normal programs real CPU temperatures.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <wtypes.h>
+#include <ole2.h>
 #include <algorithm>
 using std::min;
 using std::max;
