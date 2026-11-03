@@ -2246,7 +2246,7 @@ static void QueuePrompt(const CaptureRecord& record, const Settings& settings) {
 
 static std::wstring RenameObserved(CaptureRecord& record, LockedCapture& capture,
                                    bool timeOnly) {
-    if ((record.label.empty() && !timeOnly) || !capture.canDelete) return {};
+    if (!capture.canDelete) return {};
     FILETIME local;
     SYSTEMTIME time;
     // Observation time was captured before any earlier prompt/countdown.
@@ -2311,21 +2311,28 @@ static void ProcessOne(CaptureRecord record) {
             g_retryCaptures.push_back({std::move(record), GetTickCount64() + 100});
             return;
         }
+        const wchar_t* skipped = nullptr;
+        DWORD error = 0;
         if (!opened) {
-            Wh_Log(L"Rename skipped, file stayed locked (%lu): %s",
-                   GetLastError(), record.path.c_str());
+            error = GetLastError();
+            skipped = L"skipped, file stayed locked";
         } else if (!SameIdentity(record.identity, early.info)) {
-            Wh_Log(L"Rename skipped, file was replaced: %s", record.path.c_str());
-        } else if (record.label.empty() && !settings.renameTimeOnly) {
-            Wh_Log(L"Rename skipped, no window title was in front: %s",
-                   record.path.c_str());
-        } else if (!early.canDelete) {
-            Wh_Log(L"Rename skipped, no rename access: %s", record.path.c_str());
+            skipped = L"skipped, file was replaced";
         } else {
             auto renamed = RenameObserved(record, early, settings.renameTimeOnly);
-            if (!renamed.empty()) record.path = std::move(renamed);
-            else Wh_Log(L"Rename failed (%lu): %s", GetLastError(),
-                        record.path.c_str());
+            if (!renamed.empty()) {
+                record.path = std::move(renamed);
+            } else {
+                error = GetLastError();
+                skipped = L"failed";
+            }
+        }
+        // Paths stay out of the log unless the user turned details on.
+        if (skipped) {
+            if (settings.logDetails)
+                Wh_Log(L"Rename %s (%lu); %s", skipped, error, record.path.c_str());
+            else
+                Wh_Log(L"Rename %s (%lu)", skipped, error);
         }
         record.renamed = true;
         record.deleteRetries = 0;
@@ -2341,8 +2348,9 @@ static void ProcessOne(CaptureRecord record) {
         return;
     }
     LockedCapture capture;
-    // Read-only files must remain copyable even if cleanup/rename rights fail.
-    bool needsDeleteAccess = settings.renameFromWindow || action == ACTION_DELETE ||
+    // Read-only files must remain copyable even if cleanup rights fail. The
+    // rename already happened above, so it doesn't need this access.
+    bool needsDeleteAccess = action == ACTION_DELETE ||
         action == ACTION_COPY_DELETE || settings.deleteFile || settings.removeExactDuplicates;
     const bool deleteOpened =
         needsDeleteAccess && capture.Open(record.path, settings.folder, true);
