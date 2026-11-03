@@ -1581,9 +1581,13 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       agendaEl = el('div', 'olkt-agenda');
       pane.appendChild(agendaEl);
     }
-    // Match the pane's own background so the tree does not show through.
-    let bgEl = pane, bg = 'rgba(0, 0, 0, 0)';
-    while (bgEl && (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent')) { bg = getComputedStyle(bgEl).backgroundColor; bgEl = bgEl.parentElement; }
+    // Match the pane's own background so the tree does not show through. Only an opaque
+    // color will do: a picture theme leaves every ancestor transparent or translucent, and
+    // then the theme's own background token stands in.
+    const alpha = c => { const p = (c.match(/rgba?\(([^)]+)\)/) || [, ''])[1].split(','); return p.length === 4 ? Number(p[3]) : c === 'transparent' ? 0 : 1; };
+    let bgEl = pane, bg = '';
+    while (bgEl && !bg) { const c = getComputedStyle(bgEl).backgroundColor; if (alpha(c) === 1) bg = c; bgEl = bgEl.parentElement; }
+    if (!bg) bg = 'var(--colorNeutralBackground1,#1f1f1f)';
     agendaEl.style.background = bg;
     agendaEl.style.setProperty('--olkt-pane-bg', bg);
 
@@ -1677,10 +1681,17 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     agendaEl.style.height = h ? h + 'px' : '';
     // Cap the folder tree at the agenda's top edge so it scrolls in the space left.
     // (Padding cannot work: this element has no fixed height and just grows.)
+    // Outlook's own min-height would beat the cap, so it comes off. The cap is then checked
+    // against where the tree really ends: under a zoomed ancestor a CSS pixel inside the tree
+    // is not a pixel on screen, and the first cap lands short or long by that factor.
     if (scroller) {
       scroller.style.paddingBottom = '';
-      const avail = agendaEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-      scroller.style.maxHeight = Math.max(60, Math.round(avail)) + 'px';
+      scroller.style.minHeight = '0px';
+      const top = scroller.getBoundingClientRect().top;
+      const avail = Math.max(60, Math.round(agendaEl.getBoundingClientRect().top - top));
+      scroller.style.maxHeight = avail + 'px';
+      const got = scroller.getBoundingClientRect().bottom - top;
+      if (got > avail + 1) scroller.style.maxHeight = Math.max(60, Math.floor(avail * avail / got)) + 'px';
     }
   }
 
@@ -2927,7 +2938,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       if (boundList) unbindList(boundList);
       if (acctListBound) acctListBound.removeEventListener('pointerdown', onAcctPress, true);
       clearInterval(agendaTimer);
-      document.querySelectorAll(`${PANE} .customScrollBar`).forEach(n => { n.style.paddingBottom = ''; n.style.maxHeight = ''; });
+      document.querySelectorAll(`${PANE} .customScrollBar`).forEach(n => { n.style.paddingBottom = ''; n.style.maxHeight = ''; n.style.minHeight = ''; });
       document.querySelectorAll(OURS).forEach(n => n.remove());
       document.querySelectorAll('[data-olkt-favs]').forEach(n => n.removeAttribute('data-olkt-favs'));
       for (const a of ['data-olkt-label', 'data-olkt-tz', 'data-olkt-short', 'data-olkt-off', 'data-olkt-time', 'data-olkt-chip', 'data-olkt-open', 'data-olkt-othertab', 'data-olkt-ov', 'data-olkt-sig', 'data-olkt-merges', 'data-olkt-marked', 'data-olkt-quoted', 'data-olkt-collapsed'])document.querySelectorAll(`[${a}]`).forEach(n => n.removeAttribute(a));
