@@ -2,11 +2,11 @@
 // @id              windows-hello-auto-ok
 // @name            Windows Hello Auto OK
 // @description     Language-independent confirmation of ready Windows Hello biometric dialogs across applications.
-// @version         0.1.2
+// @version         0.1.3
 // @author          hermanzamula
 // @github          https://github.com/hermanzamula
-// @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -ladvapi32 -lshell32 -luiautomationcore
+// @include         CredentialUIBroker.exe
+// @compilerOptions -lole32 -loleaut32 -luuid -luiautomationcore
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -24,13 +24,16 @@ regardless of the requesting application or interface language.
 Detection uses AutomationId, control types, visibility and enabled state.
 It never matches captions, translated messages, account names or websites.
 Visible dialogs owned by the Windows CredentialUIBroker are monitored directly,
-even when another application has focus. Visible credential input fields prevent
+only while the Hello dialog itself is the foreground window. Visible credential input fields prevent
 automatic confirmation.
 
-The mod runs in an isolated Windhawk tool process. Windows requires elevated
-access to credential UI, so enabling the mod may display a UAC consent prompt.
-Declining that prompt leaves automatic confirmation inactive; toggle the mod
-off and on to retry. No scheduled tasks or services are created by this mod.
+This removes Windows Hello's manual confirmation step: a program requesting
+verification can be approved as soon as Windows recognizes you, provided its
+Hello dialog is active. Background dialogs are never confirmed automatically.
+
+The mod runs inside CredentialUIBroker.exe, with no helper process or UAC launcher.
+It reacts to window events and checks readiness only while its dialog is active.
+No credential values, account names, or biometric data are read.
 
 This is an experimental release. Its readiness check describes the standard
 Windows Hello UI structure, not an independent biometric-success API. Windows
@@ -41,8 +44,6 @@ to the system UI may require an update.
 
 // ==WindhawkModSettings==
 /*
-- Enabled: true
-  $name: Enable automatic confirmation
 - DelayMs: 350
   $name: Confirmation delay in milliseconds
   $description: A stable ready state is required for 150 to 3000 milliseconds.
@@ -52,7 +53,6 @@ to the system UI may require an update.
 #include <windows.h>
 #include <uiautomation.h>
 #include <wrl/client.h>
-#include <shellapi.h>
 #include <algorithm>
 #include <atomic>
 #include <map>
@@ -114,7 +114,7 @@ struct DialogState {
     std::optional<ULONGLONG> readySince;
     bool handled = false;
 
-    // Each dialog has its own timer, independent of focus and other open dialogs.
+    // Each activation starts a fresh stable-readiness interval.
     bool ReadyLongEnough(ULONGLONG now, DWORD delay) {
         if (!readySince) {
             readySince = now;
@@ -123,25 +123,19 @@ struct DialogState {
         return now - *readySince >= delay;
     }
 
-    // A complete non-ready state starts a new confirmation cycle for this window.
+    // Resets the timer without allowing a second invoke for the same window.
     void ResetReadiness() {
         readySince.reset();
-        handled = false;
     }
 };
 
 #ifndef HELLO_AUTO_OK_TEST
 constexpr DWORD kPollIntervalMs = 150;
-constexpr DWORD kResultWaitMs = 900;
-constexpr DWORD kShutdownWaitMs = 5000;
 constexpr int kMaxDialogControls = 160;
 
 HANDLE stopEvent = nullptr;
 HANDLE worker = nullptr;
-std::atomic<bool> enabled{true};
 std::atomic<DWORD> delayMs{350};
-std::wstring nativeBrokerPath;
-std::wstring wowBrokerPath;
 
 // Closes an owned handle and clears it so cleanup can be called more than once.
 void CloseOwnedHandle(HANDLE& handle) {
@@ -149,75 +143,15 @@ void CloseOwnedHandle(HANDLE& handle) {
     handle = nullptr;
 }
 
-// Checks the current process token; elevation applies only to the tool host.
-bool IsElevated() {
-    HANDLE token = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+// Logs only a generic state; no dialog or account data is stored.
+void ReportState(PCWSTR state) { Wh_Log(L"%s", state); }
 
-    TOKEN_ELEVATION elevation{};
-    DWORD size = 0;
-    bool queried = GetTokenInformation(token, TokenElevation, &elevation,
-                                      sizeof(elevation), &size);
-    CloseOwnedHandle(token);
-    return queried && elevation.TokenIsElevated;
-}
-
-// Stores a generic diagnostic state without recording dialog or account data.
-void ReportState(PCWSTR state) {
-    Wh_SetStringValue(L"runtime-state", state);
-    Wh_Log(L"%s", state);
-}
-
-// Builds native and WOW64 paths without 32-bit system-directory redirection.
-bool InitializeBrokerPaths() {
-    WCHAR windows[MAX_PATH];
-    UINT length = GetSystemWindowsDirectoryW(windows, ARRAYSIZE(windows));
-    if (!length || length >= ARRAYSIZE(windows)) return false;
-
-    nativeBrokerPath = std::wstring(windows) + L"\\System32\\CredentialUIBroker.exe";
-    wowBrokerPath = std::wstring(windows) + L"\\SysWOW64\\CredentialUIBroker.exe";
-    return true;
-}
-
-// Reads an executable path using query-only process access.
-std::wstring GetProcessPath(DWORD pid) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) return {};
-
-    WCHAR path[32768];
-    DWORD length = ARRAYSIZE(path);
-    bool queried = QueryFullProcessImageNameW(process, 0, path, &length);
-    CloseOwnedHandle(process);
-    return queried ? std::wstring(path, length) : std::wstring{};
-}
-
-// Accepts only visible windows owned by a Windows credential-broker executable.
+// Restricts all UI Automation work to this broker's visible foreground window.
 bool IsBrokerWindow(HWND window) {
-    if (!window || !IsWindowVisible(window)) return false;
-
+    if (!window || GetForegroundWindow() != window || !IsWindowVisible(window)) return false;
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
-    std::wstring path = GetProcessPath(pid);
-    return _wcsicmp(path.c_str(), nativeBrokerPath.c_str()) == 0 ||
-           _wcsicmp(path.c_str(), wowBrokerPath.c_str()) == 0;
-}
-
-// Collects only visible credential-broker windows on the current desktop.
-BOOL CALLBACK CollectBrokerWindow(HWND window, LPARAM context) {
-    try {
-        if (IsBrokerWindow(window))
-            reinterpret_cast<std::vector<HWND>*>(context)->push_back(window);
-        return TRUE;
-    } catch (...) {
-        return FALSE;
-    }
-}
-
-// Enumerates Hello dialogs without consulting the requesting app or foreground window.
-std::vector<HWND> GetBrokerWindows() {
-    std::vector<HWND> windows;
-    if (!EnumWindows(CollectBrokerWindow, reinterpret_cast<LPARAM>(&windows))) return {};
-    return windows;
+    return pid == GetCurrentProcessId();
 }
 
 // Finds descendants within one dialog; a failed query yields an empty COM pointer.
@@ -225,23 +159,29 @@ ComPtr<IUIAutomationElementArray> GetDialogControls(IUIAutomation* automation, H
     ComPtr<IUIAutomationElement> root;
     ComPtr<IUIAutomationCondition> condition;
     ComPtr<IUIAutomationElementArray> controls;
+    ComPtr<IUIAutomationCacheRequest> cache;
+    if (FAILED(automation->CreateCacheRequest(&cache))) return {};
+    for (PROPERTYID property : {UIA_IsOffscreenPropertyId, UIA_IsEnabledPropertyId,
+            UIA_IsPasswordPropertyId, UIA_ControlTypePropertyId, UIA_AutomationIdPropertyId}) {
+        if (FAILED(cache->AddProperty(property))) return {};
+    }
     if (FAILED(automation->ElementFromHandle(window, &root)) ||
         FAILED(automation->CreateTrueCondition(&condition)) ||
-        FAILED(root->FindAll(TreeScope_Descendants, condition.Get(), &controls))) return {};
+        FAILED(root->FindAllBuildCache(TreeScope_Descendants, condition.Get(), cache.Get(), &controls))) return {};
     return controls;
 }
 
 // Reads structural properties, leaving offscreen controls otherwise untouched.
 bool ReadControlProperties(IUIAutomationElement* element, Node& node) {
     BOOL offscreen = TRUE;
-    if (FAILED(element->get_CurrentIsOffscreen(&offscreen))) return false;
+    if (FAILED(element->get_CachedIsOffscreen(&offscreen))) return false;
     node.visible = !offscreen;
     if (!node.visible) return true;
 
     BOOL active = FALSE, password = TRUE;
-    if (FAILED(element->get_CurrentIsEnabled(&active)) ||
-        FAILED(element->get_CurrentIsPassword(&password)) ||
-        FAILED(element->get_CurrentControlType(&node.type))) return false;
+    if (FAILED(element->get_CachedIsEnabled(&active)) ||
+        FAILED(element->get_CachedIsPassword(&password)) ||
+        FAILED(element->get_CachedControlType(&node.type))) return false;
     node.enabled = active;
     node.password = password;
     return true;
@@ -250,7 +190,7 @@ bool ReadControlProperties(IUIAutomationElement* element, Node& node) {
 // Reads only the language-neutral ID, releasing the string allocated by UIA.
 bool ReadAutomationId(IUIAutomationElement* element, std::wstring& result) {
     BSTR id = nullptr;
-    HRESULT status = element->get_CurrentAutomationId(&id);
+    HRESULT status = element->get_CachedAutomationId(&id);
     if (SUCCEEDED(status) && id) result.assign(id, SysStringLen(id));
     SysFreeString(id);
     return SUCCEEDED(status);
@@ -293,9 +233,8 @@ std::optional<std::vector<Node>> ReadReadyDialog(IUIAutomation* automation, HWND
     return nodes;
 }
 
-// Reloads the pause switch and bounds the readiness delay to supported values.
+// Bounds the readiness delay to supported values.
 void LoadSettings() {
-    enabled.store(Wh_GetIntSetting(L"Enabled") != 0);
     delayMs.store(static_cast<DWORD>(std::clamp(Wh_GetIntSetting(L"DelayMs"), 150, 3000)));
 }
 
@@ -306,7 +245,7 @@ bool InvokeConfirmation(HWND window, IUIAutomationElement* button) {
         ReportState(L"invoke-unavailable");
         return false;
     }
-    if (!IsBrokerWindow(window) || !enabled.load()) return false;
+    if (!IsBrokerWindow(window)) return false;
 
     ReportState(L"invoking-confirmation");
     if (SUCCEEDED(invoke->Invoke())) return true;
@@ -314,33 +253,18 @@ bool InvokeConfirmation(HWND window, IUIAutomationElement* button) {
     return false;
 }
 
-// Counts a confirmation only after its window closes; false requests worker shutdown.
-bool RecordConfirmationResult(HWND window) {
-    if (WaitForSingleObject(stopEvent, kResultWaitMs) != WAIT_TIMEOUT) return false;
-    if (!IsWindow(window) || !IsWindowVisible(window)) {
-        Wh_SetIntValue(L"confirmed-count", Wh_GetIntValue(L"confirmed-count", 0) + 1);
-        ReportState(L"confirmed");
-    } else {
-        ReportState(L"confirmation-result-unknown");
-    }
-    return true;
-}
-
 class DialogMonitor {
 public:
-    // Checks every visible Hello dialog. False means shutdown was requested.
-    bool Poll(IUIAutomation* automation) {
-        auto windows = GetBrokerWindows();
-        DiscardClosedDialogs(windows);
-        if (!enabled.load()) {
-            ResetCandidates();
-            return true;
-        }
-        for (HWND window : windows) {
-            if (!PollDialog(automation, window)) return false;
-        }
-        return true;
+    // Reads only the active broker dialog, resetting timing after focus changes.
+    void Poll(IUIAutomation* automation) {
+        HWND window = GetForegroundWindow();
+        if (window != active_) ResetCandidates();
+        active_ = window;
+        if (IsBrokerWindow(window)) PollDialog(automation, window);
     }
+
+    // Destroy events end a window's lifetime, allowing a reused handle to start fresh.
+    void Forget(HWND window) { dialogs_.erase(window); }
 
     // Discards timing after a pause or exception without repeating handled confirmations.
     void ResetCandidates() {
@@ -349,13 +273,7 @@ public:
 
 private:
     std::map<HWND, DialogState> dialogs_;
-
-    // Forget hidden or destroyed dialogs so reused window handles get fresh state.
-    void DiscardClosedDialogs(const std::vector<HWND>& windows) {
-        std::erase_if(dialogs_, [&](const auto& entry) {
-            return std::find(windows.begin(), windows.end(), entry.first) == windows.end();
-        });
-    }
+    HWND active_ = nullptr;
 
     // Advances one dialog's timer, preserving its handled state through transient UIA errors.
     bool PollDialog(IUIAutomation* automation, HWND window) {
@@ -384,36 +302,65 @@ private:
         auto button = std::find_if(nodes->begin(), nodes->end(), IsConfirmation);
         state.handled = true;
         state.readySince.reset();
-        if (!InvokeConfirmation(window, button->element.Get())) return true;
-        return RecordConfirmationResult(window);
+        InvokeConfirmation(window, button->element.Get());
+        return true;
     }
 
-    // Obtains the final ready snapshot unless automatic confirmation has been paused.
+    // Obtains the final ready snapshot only while the same dialog remains active.
     std::optional<std::vector<Node>> GetCurrentReadyDialog(IUIAutomation* automation, HWND window) {
-        if (!enabled.load()) return std::nullopt;
+        if (!IsBrokerWindow(window)) return std::nullopt;
         return ReadReadyDialog(automation, window);
     }
 };
 
-// Owns UIA for the polling loop and discards candidates after transient failures.
+// Event callbacks run on the worker's message loop and never call UI Automation.
+thread_local bool focusChanged = false;
+thread_local std::vector<HWND> destroyedWindows;
+void CALLBACK OnWindowEvent(HWINEVENTHOOK, DWORD event, HWND window,
+                            LONG object, LONG child, DWORD, DWORD) {
+    if (event == EVENT_SYSTEM_FOREGROUND) focusChanged = true;
+    if (event == EVENT_OBJECT_DESTROY && object == OBJID_WINDOW && child == CHILDID_SELF)
+        destroyedWindows.push_back(window);
+}
+
+// Dispatches events before polling, preserving focus changes between timer ticks.
+void DispatchEvents(DialogMonitor& monitor) {
+    MSG message;
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+    if (focusChanged) monitor.ResetCandidates();
+    focusChanged = false;
+    for (HWND window : destroyedWindows) monitor.Forget(window);
+    destroyedWindows.clear();
+}
+
+// Sleeps indefinitely while inactive; only active broker dialogs need readiness ticks.
 void RunMonitor() {
     ComPtr<IUIAutomation> automation;
     if (FAILED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&automation)))) {
-        ReportState(L"uia-initialization-failed");
-        return;
-    }
-
-    DialogMonitor monitor;
-    ReportState(L"watching");
-    while (WaitForSingleObject(stopEvent, kPollIntervalMs) == WAIT_TIMEOUT) {
-        try {
-            if (!monitor.Poll(automation.Get())) break;
-        } catch (...) {
-            monitor.ResetCandidates();
-            ReportState(L"snapshot-error");
+                                IID_PPV_ARGS(&automation)))) return;
+    HWINEVENTHOOK focus = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+        nullptr, OnWindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
+    HWINEVENTHOOK lifetime = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+        nullptr, OnWindowEvent, GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
+    if (focus && lifetime) {
+        DialogMonitor monitor;
+        for (;;) {
+            DispatchEvents(monitor);
+            if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) break;
+            try { monitor.Poll(automation.Get()); }
+            catch (...) { monitor.ResetCandidates(); ReportState(L"snapshot-error"); }
+            DWORD timeout = IsBrokerWindow(GetForegroundWindow()) ? kPollIntervalMs : INFINITE;
+            DWORD result = MsgWaitForMultipleObjects(1, &stopEvent, FALSE, timeout, QS_ALLINPUT);
+            if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
         }
+    } else {
+        ReportState(L"window-event-hook-failed");
     }
+    if (lifetime) UnhookWinEvent(lifetime);
+    if (focus) UnhookWinEvent(focus);
 }
 
 // Keeps COM initialization and teardown on the worker thread, outside Windhawk callbacks.
@@ -440,22 +387,30 @@ bool StartWorker() {
     return false;
 }
 
-// Starts monitoring only inside an elevated tool host with valid broker paths.
-bool StartRuntime() {
-    if (!IsElevated()) {
-        ReportState(L"elevation-required");
-        return false;
+// Rejects executables outside the two Windows broker locations, even if renamed.
+bool IsSystemBroker() {
+    WCHAR image[MAX_PATH], windows[MAX_PATH];
+    DWORD length = GetModuleFileNameW(nullptr, image, ARRAYSIZE(image));
+    UINT directoryLength = GetSystemWindowsDirectoryW(windows, ARRAYSIZE(windows));
+    if (!length || length >= ARRAYSIZE(image) ||
+        !directoryLength || directoryLength >= ARRAYSIZE(windows)) return false;
+    for (PCWSTR directory : {L"\\System32\\CredentialUIBroker.exe", L"\\SysWOW64\\CredentialUIBroker.exe"}) {
+        if (_wcsicmp(image, (std::wstring(windows) + directory).c_str()) == 0) return true;
     }
-    if (!InitializeBrokerPaths()) return false;
+    return false;
+}
+
+// Starts a worker in this broker process without creating an elevated host.
+bool StartRuntime() {
+    if (!IsSystemBroker()) return false;
     LoadSettings();
     return StartWorker();
 }
 
-// Stops the worker before unloading its code; a stuck provider ends only this tool host.
+// Waits for COM and event callbacks to finish before the DLL can be unloaded.
 void StopRuntime() {
     if (stopEvent) SetEvent(stopEvent);
-    if (worker && WaitForSingleObject(worker, kShutdownWaitMs) != WAIT_OBJECT_0)
-        ExitProcess(0);
+    if (worker) WaitForSingleObject(worker, INFINITE);
     CloseOwnedHandle(worker);
     CloseOwnedHandle(stopEvent);
 }
@@ -463,149 +418,12 @@ void StopRuntime() {
 }  // namespace HelloAutoOk
 
 #ifndef HELLO_AUTO_OK_TEST
-// Starts the mod's runtime when Windhawk loads its dedicated worker process.
-BOOL WhTool_ModInit() { return HelloAutoOk::StartRuntime(); }
+// Windhawk loads this mod only in the credential broker.
+BOOL Wh_ModInit() { return HelloAutoOk::StartRuntime(); }
 
-// Applies settings changes without restarting the worker.
-void WhTool_ModSettingsChanged() { HelloAutoOk::LoadSettings(); }
+// Applies the delay without restarting the worker.
+void Wh_ModSettingsChanged() { HelloAutoOk::LoadSettings(); }
 
-// Stops monitoring before the dedicated worker process exits.
-void WhTool_ModUninit() { HelloAutoOk::StopRuntime(); }
-
-// Adapted from the official Windhawk 1.7.3 tool-mod process model:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-namespace ToolHost {
-constexpr PCWSTR kMutexName = L"windhawk-tool-mod_" WH_MOD_ID;
-bool isLauncher = false;
-HANDLE instanceMutex = nullptr;
-
-enum class ProcessRole { Ignore, Launcher, Worker };
-
-// Excludes Windhawk services, which run outside the interactive user session.
-bool IsServiceSession() {
-    DWORD sessionId = 0;
-    return ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0;
-}
-
-// Excludes short-lived Windhawk control commands from launching another worker.
-bool IsControlCommand(PCWSTR argument) {
-    for (const auto* flag : {L"-service", L"-service-start", L"-service-stop", L"-exit",
-                             L"-restart", L"-safe-mode", L"-check-for-updates",
-                             L"-app-settings-changed", L"-run-ui"}) {
-        if (wcscmp(argument, flag) == 0) return true;
-    }
-    return false;
-}
-
-// Separates the launcher, this mod's worker, and unrelated Windhawk invocations.
-ProcessRole GetProcessRole() {
-    if (IsServiceSession()) return ProcessRole::Ignore;
-    int count = 0;
-    LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &count);
-    if (!arguments) return ProcessRole::Ignore;
-
-    bool excluded = std::any_of(arguments + 1, arguments + count, IsControlCommand);
-    ProcessRole role = ProcessRole::Launcher;
-    for (int i = 1; i < count - 1; ++i) {
-        if (wcscmp(arguments[i], L"-tool-mod") == 0) {
-            role = wcscmp(arguments[i + 1], WH_MOD_ID) == 0
-                ? ProcessRole::Worker : ProcessRole::Ignore;
-            break;
-        }
-    }
-    LocalFree(arguments);
-    return excluded ? ProcessRole::Ignore : role;
-}
-
-// Claims the per-session mutex so only one worker for this mod can run.
-bool ClaimWorkerInstance() {
-    instanceMutex = CreateMutexW(nullptr, TRUE, kMutexName);
-    return instanceMutex && GetLastError() != ERROR_ALREADY_EXISTS;
-}
-
-// Ends Windhawk's original main thread while the mod's worker keeps the host alive.
-void WINAPI StopDefaultMainThread() { ExitThread(0); }
-
-// Replaces only this dedicated executable's entry point, as required by the tool pattern.
-void HookHostEntryPoint() {
-    auto* base = reinterpret_cast<BYTE*>(GetModuleHandleW(nullptr));
-    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    void* entryPoint = base + nt->OptionalHeader.AddressOfEntryPoint;
-    Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(StopDefaultMainThread), nullptr);
-}
-
-// Starts one isolated runtime before preventing the host's normal application startup.
-BOOL InitializeWorkerHost() {
-    if (!ClaimWorkerInstance() || !WhTool_ModInit()) ExitProcess(1);
-    HookHostEntryPoint();
-    return TRUE;
-}
-
-// Detects an existing worker; denied mutex access also means another instance owns it.
-bool IsWorkerRunning() {
-    HANDLE existing = OpenMutexW(SYNCHRONIZE, FALSE, kMutexName);
-    if (!existing) return GetLastError() == ERROR_ACCESS_DENIED;
-    CloseHandle(existing);
-    return true;
-}
-
-// Uses the current Windhawk executable for the child rather than a configured path.
-std::wstring GetExecutablePath() {
-    WCHAR path[MAX_PATH];
-    DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    return length && length < ARRAYSIZE(path) ? std::wstring(path, length) : std::wstring{};
-}
-
-// Asks Windows to elevate the isolated host when needed and leaves consent to the user.
-void LaunchWorker(const std::wstring& path) {
-    HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    SHELLEXECUTEINFOW launch{sizeof(launch)};
-    launch.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-    launch.lpVerb = HelloAutoOk::IsElevated() ? nullptr : L"runas";
-    launch.lpFile = path.c_str();
-    launch.lpParameters = L"-tool-mod \"" WH_MOD_ID L"\"";
-    launch.nShow = SW_HIDE;
-
-    if (!ShellExecuteExW(&launch)) {
-        Wh_Log(L"Tool host not started; error %lu", GetLastError());
-    } else if (launch.hProcess) {
-        CloseHandle(launch.hProcess);
-    }
-    if (SUCCEEDED(apartment)) CoUninitialize();
-}
-}  // namespace ToolHost
-
-// Routes Windhawk's initialization callback according to this process's role.
-BOOL Wh_ModInit() {
-    switch (ToolHost::GetProcessRole()) {
-        case ToolHost::ProcessRole::Worker:
-            return ToolHost::InitializeWorkerHost();
-        case ToolHost::ProcessRole::Ignore:
-            return FALSE;
-        case ToolHost::ProcessRole::Launcher:
-            ToolHost::isLauncher = true;
-            return TRUE;
-    }
-    return FALSE;
-}
-
-// Launches a worker after Windhawk finishes loading this mod into its launcher.
-void Wh_ModAfterInit() {
-    if (!ToolHost::isLauncher || ToolHost::IsWorkerRunning()) return;
-    auto path = ToolHost::GetExecutablePath();
-    if (!path.empty()) ToolHost::LaunchWorker(path);
-}
-
-// Settings belong to the worker; launcher instances have no monitor to update.
-void Wh_ModSettingsChanged() {
-    if (!ToolHost::isLauncher) WhTool_ModSettingsChanged();
-}
-
-// Unloads the runtime only in the worker and leaves the normal Windhawk process alive.
-void Wh_ModUninit() {
-    if (ToolHost::isLauncher) return;
-    WhTool_ModUninit();
-    ExitProcess(0);
-}
+// Releases the worker without terminating the credential broker.
+void Wh_ModUninit() { HelloAutoOk::StopRuntime(); }
 #endif
