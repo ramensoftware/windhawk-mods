@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              taskbar-system-utilities
 // @name            Taskbar System Utilities
-// @description     Native WinUI taskbar tools: Restart Explorer, Clean Temp, Flush DNS, Reset GPU and Get IP.
+// @description     Native XAML taskbar tools: Restart Explorer, Clean Temp, Flush DNS, Reset GPU and Get Local IP.
 // @version         1.0
 // @author          Marco Petrucci
 // @github          https://github.com/marco00petrucci
 // @donateUrl       https://www.paypal.me/marco00petrucci
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -lwininet -luser32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -luser32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -16,21 +16,28 @@
 /*
 # Taskbar System Utilities
 
-Modern system utilities seamlessly integrated into the Windows 11 Taskbar XAML
-context menu. This mod provides a suite of native tools with a **modern WinUI
-interface**, **asynchronous non-blocking execution**, and **zero UAC prompts**
-for taskbar actions.
+System utilities integrated into the Windows 11 Taskbar XAML context menu with
+**native XAML flyout cards**, **synchronous UI thread safety**, and **zero UAC
+prompts**.
+
+![Taskbar System Utilities Screenshot](https://i.imgur.com/RquNZCE.gif)
 
 ## Features
-- **Restart Explorer**: Instantly restarts `explorer.exe` cleanly.
-- **Clean Temp**: Asynchronous C++ recursive cleaner for `%TEMP%` and
-  accessible files in `%WINDIR%\Temp` with a sleek WinUI summary card.
-- **Clean DNS Cache**: Flushes the DNS resolver cache directly in memory via
+- **Restart Explorer**: Restarts the `explorer.exe` shell process from the
+  taskbar context menu.
+- **Clean Temp**: Recursive cleaner for `%TEMP%` and accessible files in
+  `%WINDIR%\Temp` with a XAML summary card.
+- **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
   `dnsapi.dll!DnsFlushResolverCache`.
-- **Restart Graphics Driver**: Triggers the native `Win + Ctrl + Shift + B`
-  kernel WDDM reset without UAC prompts.
-- **Get Current IP**: Asynchronously queries Local IPv4 (WinSock) and Public IP
-  (WinINet), displaying a modern WinUI card.
+- **Restart Graphics Driver**: Triggers the `Win + Ctrl + Shift + B` display
+  driver reset shortcut.
+- **Get Local IP**: Lists active local IPv4 and IPv6 addresses across network
+  adapters using `GetAdaptersAddresses` (`iphlpapi.dll`) with optional clipboard
+  copy.
+
+## Credits
+Taskbar context menu hooking mechanism adapted from the
+`taskbar-restart-explorer` mod by **Mgrmjp**.
 */
 // ==/WindhawkModReadme==
 
@@ -50,10 +57,10 @@ for taskbar actions.
   $description: Custom text for Clean Temp.
 - cleanRecycleBin: false
   $name: Empty Recycle Bin on Clean Temp
-  $description: Also empty Recycle Bin when cleaning temp.
+  $description: Permanently empty Recycle Bin on all drives.
 - notifyCleanTemp: true
-  $name: Show WinUI Dialog after Clean Temp
-  $description: Show modern WinUI summary dialog after cleaning.
+  $name: Show Card after Clean Temp
+  $description: Show XAML summary card after cleaning.
 - showFlushDns: true
   $name: Enable Clean DNS Cache
   $description: Show Clean DNS Cache in taskbar menu.
@@ -61,8 +68,8 @@ for taskbar actions.
   $name: Clean DNS Cache Label
   $description: Custom text for Clean DNS Cache.
 - notifyFlushDns: true
-  $name: Show WinUI Dialog after Clean DNS
-  $description: Show modern WinUI dialog when DNS cache is flushed.
+  $name: Show Card after Clean DNS
+  $description: Show XAML card when DNS cache is flushed.
 - showRestartGpu: true
   $name: Enable Restart Graphics Driver
   $description: Show Restart Graphics Driver in taskbar menu.
@@ -70,30 +77,31 @@ for taskbar actions.
   $name: Restart Graphics Driver Label
   $description: Custom text for Restart Graphics Driver.
 - showGetIp: true
-  $name: Enable Get Current IP
-  $description: Show Get Current IP in taskbar menu.
-- textGetIp: Get Current IP
-  $name: Get Current IP Label
-  $description: Custom text for Get Current IP.
-- copyIpToClipboard: true
+  $name: Enable Get Local IP
+  $description: Show Get Local IP in taskbar menu.
+- textGetIp: Get Local IP
+  $name: Get Local IP Label
+  $description: Custom text for Get Local IP.
+- copyIpToClipboard: false
   $name: Auto-Copy IP to Clipboard
-  $description: Copy detected IPs to clipboard automatically.
+  $description: Copy detected local IPs to clipboard.
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_utils.h>
-
-#include <shellapi.h>
-#include <windows.h>
-#include <wininet.h>
+// clang-format off
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <iphlpapi.h>
+#include <shellapi.h>
+// clang-format on
+
+#include <windhawk_utils.h>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -104,19 +112,17 @@ for taskbar actions.
 #include <winrt/base.h>
 
 #include <atomic>
-#include <cctype>
-#include <chrono>
 #include <cwchar>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
 namespace wf = winrt::Windows::Foundation;
 namespace wu = winrt::Windows::UI;
-namespace wuc = winrt::Windows::UI::Core;
 namespace wut = winrt::Windows::UI::Text;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
@@ -125,7 +131,7 @@ namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
 // ============================================================================
-// Global State & Lifetime Synchronization
+// Global State & Thread / Window Synchronization
 // ============================================================================
 
 struct ModSettings {
@@ -145,8 +151,8 @@ struct ModSettings {
     std::wstring textRestartGpu = L"Restart Graphics Driver";
 
     bool showGetIp = true;
-    std::wstring textGetIp = L"Get Current IP";
-    bool copyIpToClipboard = true;
+    std::wstring textGetIp = L"Get Local IP";
+    bool copyIpToClipboard = false;
 };
 
 std::mutex g_settingsMutex;
@@ -157,61 +163,127 @@ static constexpr wchar_t kGuardItemName[] = L"WindhawkSystemUtilitiesGuardItem";
 std::atomic<bool> g_taskbarViewModuleHooked{false};
 std::atomic<bool> g_restartStarted{false};
 std::atomic<bool> g_unloading{false};
-std::atomic<int> g_activeAsyncTasks{0};
 
 thread_local int g_taskbarSettingsMenuDepth = 0;
 thread_local bool g_currentMenuInjected = false;
 
-std::mutex g_targetMutex;
+// Accessed only on the taskbar UI thread
 winrt::weak_ref<wux::FrameworkElement> g_lastTargetWeak;
-winrt::weak_ref<wuc::CoreDispatcher> g_dispatcherWeak;
+winrt::weak_ref<wuxc::Flyout> g_activeFlyoutWeak;
+winrt::weak_ref<wuxc::Button> g_activeOkButtonWeak;
+winrt::event_token g_activeOkClickToken{};
 
-void SetLastTarget(wux::FrameworkElement const& target) {
-    std::lock_guard<std::mutex> lock(g_targetMutex);
-    g_lastTargetWeak = target;
-    g_dispatcherWeak = target.Dispatcher();
-}
-
-wux::FrameworkElement GetLastTargetOnUIThread() {
-    std::lock_guard<std::mutex> lock(g_targetMutex);
-    return g_lastTargetWeak.get();
-}
-
-wuc::CoreDispatcher GetLastDispatcher() {
-    std::lock_guard<std::mutex> lock(g_targetMutex);
-    return g_dispatcherWeak.get();
-}
-
-template <typename F>
-void RunAsyncTracked(F&& fn) {
-    if (g_unloading.load()) {
-        return;
-    }
-
-    g_activeAsyncTasks.fetch_add(1);
-    try {
-        std::thread([task = std::forward<F>(fn)]() mutable {
-            try {
-                if (!g_unloading.load()) {
-                    task();
-                }
-            } catch (...) {
-                Wh_Log(L"Background task threw an exception");
-            }
-            g_activeAsyncTasks.fetch_sub(1);
-        }).detach();
-    } catch (...) {
-        g_activeAsyncTasks.fetch_sub(1);
-    }
-}
+std::mutex g_threadsMutex;
+std::vector<HANDLE> g_threads;
 
 ModSettings GetSettingsSnapshot() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return g_settings;
 }
 
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId = 0;
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId()) {
+                WCHAR szClassName[32];
+                if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+                    _wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+                    *reinterpret_cast<HWND*>(lParam) = hWnd;
+                    return FALSE;
+                }
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+    return hTaskbarWnd;
+}
+
+const UINT g_runFromWindowThreadMsg =
+    RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+bool RunFromWindowThread(HWND hWnd, std::function<void()> proc) {
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!dwThreadId) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc();
+        return true;
+    }
+
+    struct CallWndProcParam {
+        std::function<void()>* proc;
+    };
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp =
+                    reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == g_runFromWindowThreadMsg) {
+                    auto* param =
+                        reinterpret_cast<CallWndProcParam*>(cwp->lParam);
+                    (*param->proc)();
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    CallWndProcParam param{&proc};
+    SendMessageW(hWnd, g_runFromWindowThreadMsg, 0,
+                 reinterpret_cast<LPARAM>(&param));
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+template <typename F>
+void RunAsyncTracked(F&& fn) {
+    std::lock_guard<std::mutex> lock(g_threadsMutex);
+    if (g_unloading.load()) {
+        return;
+    }
+
+    for (auto it = g_threads.begin(); it != g_threads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_threads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    auto task = std::make_unique<std::function<void()>>(std::forward<F>(fn));
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](void* p) -> DWORD {
+            std::unique_ptr<std::function<void()>> task(
+                static_cast<std::function<void()>*>(p));
+            try {
+                (*task)();
+            } catch (...) {
+                Wh_Log(L"Background task threw an exception");
+            }
+            return 0;
+        },
+        task.get(), 0, nullptr);
+
+    if (thread) {
+        task.release();
+        g_threads.push_back(thread);
+    }
+}
+
 // ============================================================================
-// WinUI 11 Flyout Card Builder
+// Native XAML Flyout Card Builder (Theme-Aware & Unload-Safe)
 // ============================================================================
 
 using DialogRow = std::pair<std::wstring, std::wstring>;
@@ -228,22 +300,45 @@ wuxc::FontIcon CreateFluentIcon(const wchar_t* glyph, double size = 16.0) {
     return icon;
 }
 
-void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
-                                   const wchar_t* glyphIcon,
-                                   const std::vector<DialogRow>& rows,
-                                   const std::wstring& footerNote = L"") {
+void CloseActiveFlyoutOnUIThread() {
+    try {
+        if (auto btn = g_activeOkButtonWeak.get()) {
+            if (g_activeOkClickToken) {
+                btn.Click(g_activeOkClickToken);
+            }
+        }
+    } catch (...) {
+    }
+    g_activeOkButtonWeak = nullptr;
+    g_activeOkClickToken = {};
+
+    try {
+        if (auto fl = g_activeFlyoutWeak.get()) {
+            fl.Hide();
+        }
+    } catch (...) {
+    }
+    g_activeFlyoutWeak = nullptr;
+}
+
+void ShowModernXAMLCardOnUIThread(const std::wstring& titleText,
+                                  const wchar_t* glyphIcon,
+                                  const std::vector<DialogRow>& rows,
+                                  const std::wstring& footerNote = L"") {
     if (g_unloading.load()) {
         return;
     }
 
     try {
-        auto target = GetLastTargetOnUIThread();
+        CloseActiveFlyoutOnUIThread();
+
+        auto target = g_lastTargetWeak.get();
         if (!target || !target.XamlRoot()) {
-            Wh_Log(
-                L"Cannot display WinUI card: taskbar target or XamlRoot "
-                L"unavailable");
+            Wh_Log(L"Cannot display XAML card: target or XamlRoot unavailable");
             return;
         }
+
+        bool isLight = (target.ActualTheme() == wux::ElementTheme::Light);
 
         wuxc::Flyout flyout;
         flyout.ShouldConstrainToRootBounds(false);
@@ -265,11 +360,11 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
             wuxc::Control::BackgroundProperty(), MakeBrush(0, 0, 0, 0)));
         flyout.FlyoutPresenterStyle(presenterStyle);
 
-        // Main Windows 11 Dark Acrylic-like Card Container (#202020 + #383838
-        // border)
         wuxc::Border card;
-        card.Background(MakeBrush(255, 32, 32, 32));
-        card.BorderBrush(MakeBrush(255, 58, 58, 58));
+        card.Background(isLight ? MakeBrush(255, 249, 249, 249)
+                                : MakeBrush(255, 32, 32, 32));
+        card.BorderBrush(isLight ? MakeBrush(255, 218, 218, 218)
+                                 : MakeBrush(255, 58, 58, 58));
         card.BorderThickness({1, 1, 1, 1});
         card.CornerRadius({12, 12, 12, 12});
         card.Padding({22, 20, 22, 18});
@@ -284,13 +379,15 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
         headerStack.Spacing(12);
 
         wuxc::Border iconBadge;
-        iconBadge.Background(MakeBrush(35, 96, 205, 255));
+        iconBadge.Background(isLight ? MakeBrush(28, 0, 103, 192)
+                                     : MakeBrush(35, 96, 205, 255));
         iconBadge.CornerRadius({8, 8, 8, 8});
         iconBadge.Width(36);
         iconBadge.Height(36);
 
         auto headerIcon = CreateFluentIcon(glyphIcon, 18.0);
-        headerIcon.Foreground(MakeBrush(255, 96, 205, 255));
+        headerIcon.Foreground(isLight ? MakeBrush(255, 0, 103, 192)
+                                      : MakeBrush(255, 96, 205, 255));
         headerIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
         headerIcon.VerticalAlignment(wux::VerticalAlignment::Center);
         iconBadge.Child(headerIcon);
@@ -300,7 +397,8 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
         titleBlock.Text(titleText);
         titleBlock.FontWeight(wut::FontWeights::SemiBold());
         titleBlock.FontSize(16);
-        titleBlock.Foreground(MakeBrush(255, 255, 255, 255));
+        titleBlock.Foreground(isLight ? MakeBrush(255, 26, 26, 26)
+                                      : MakeBrush(255, 255, 255, 255));
         titleBlock.VerticalAlignment(wux::VerticalAlignment::Center);
         headerStack.Children().Append(titleBlock);
 
@@ -308,8 +406,10 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
 
         // 2. Inner Content Box for structured Key-Value metrics
         wuxc::Border metricsBox;
-        metricsBox.Background(MakeBrush(255, 43, 43, 43));
-        metricsBox.BorderBrush(MakeBrush(255, 53, 53, 53));
+        metricsBox.Background(isLight ? MakeBrush(255, 240, 240, 240)
+                                      : MakeBrush(255, 43, 43, 43));
+        metricsBox.BorderBrush(isLight ? MakeBrush(255, 226, 226, 226)
+                                       : MakeBrush(255, 53, 53, 53));
         metricsBox.BorderThickness({1, 1, 1, 1});
         metricsBox.CornerRadius({8, 8, 8, 8});
         metricsBox.Padding({14, 12, 14, 12});
@@ -329,7 +429,8 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
             wuxc::TextBlock lblBlock;
             lblBlock.Text(label);
             lblBlock.FontSize(13);
-            lblBlock.Foreground(MakeBrush(255, 175, 175, 175));
+            lblBlock.Foreground(isLight ? MakeBrush(255, 92, 92, 92)
+                                        : MakeBrush(255, 175, 175, 175));
             lblBlock.VerticalAlignment(wux::VerticalAlignment::Center);
             lblBlock.Margin({0, 0, 16, 0});
             rowGrid.Children().Append(lblBlock);
@@ -339,7 +440,8 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
             valBlock.Text(val);
             valBlock.FontSize(13);
             valBlock.FontWeight(wut::FontWeights::SemiBold());
-            valBlock.Foreground(MakeBrush(255, 245, 245, 245));
+            valBlock.Foreground(isLight ? MakeBrush(255, 26, 26, 26)
+                                        : MakeBrush(255, 245, 245, 245));
             valBlock.HorizontalAlignment(wux::HorizontalAlignment::Right);
             valBlock.VerticalAlignment(wux::VerticalAlignment::Center);
             valBlock.TextAlignment(wux::TextAlignment::Right);
@@ -364,13 +466,15 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
             noteStack.VerticalAlignment(wux::VerticalAlignment::Center);
 
             auto checkIcon = CreateFluentIcon(L"\xE73E", 13.0);
-            checkIcon.Foreground(MakeBrush(255, 108, 203, 95));
+            checkIcon.Foreground(isLight ? MakeBrush(255, 15, 123, 15)
+                                         : MakeBrush(255, 108, 203, 95));
             noteStack.Children().Append(checkIcon);
 
             wuxc::TextBlock noteBlock;
             noteBlock.Text(footerNote);
             noteBlock.FontSize(12);
-            noteBlock.Foreground(MakeBrush(255, 160, 160, 160));
+            noteBlock.Foreground(isLight ? MakeBrush(255, 100, 100, 100)
+                                         : MakeBrush(255, 160, 160, 160));
             noteStack.Children().Append(noteBlock);
 
             footerGrid.Children().Append(noteStack);
@@ -387,7 +491,9 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
         okButton.HorizontalAlignment(wux::HorizontalAlignment::Right);
 
         winrt::weak_ref<wuxc::Flyout> weakFlyout(flyout);
-        okButton.Click(
+        g_activeFlyoutWeak = flyout;
+        g_activeOkButtonWeak = okButton;
+        g_activeOkClickToken = okButton.Click(
             [weakFlyout](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                 if (auto fl = weakFlyout.get()) {
                     fl.Hide();
@@ -401,31 +507,29 @@ void ShowModernWinUICardOnUIThread(const std::wstring& titleText,
         flyout.Content(card);
         flyout.ShowAt(target);
     } catch (...) {
-        Wh_Log(L"Failed to display WinUI Flyout card");
+        Wh_Log(L"Failed to display XAML Flyout card");
     }
 }
 
-// Dispatches the WinUI Flyout creation back onto the Taskbar XAML UI thread
-void DispatchWinUICard(std::wstring titleText,
-                       const wchar_t* glyphIcon,
-                       std::vector<DialogRow> rows,
-                       std::wstring footerNote = L"") {
-    auto dispatcher = GetLastDispatcher();
-    if (!dispatcher) {
-        Wh_Log(L"Cannot dispatch WinUI card: CoreDispatcher unavailable");
+void DispatchXAMLCardSync(const std::wstring& titleText,
+                          const wchar_t* glyphIcon,
+                          const std::vector<DialogRow>& rows,
+                          const std::wstring& footerNote = L"") {
+    if (g_unloading.load()) {
         return;
     }
 
-    try {
-        dispatcher.RunAsync(
-            wuc::CoreDispatcherPriority::Normal,
-            [title = std::move(titleText), glyphIcon, rows = std::move(rows),
-             footer = std::move(footerNote)]() {
-                ShowModernWinUICardOnUIThread(title, glyphIcon, rows, footer);
-            });
-    } catch (...) {
-        Wh_Log(L"CoreDispatcher::RunAsync failed");
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd) {
+        return;
     }
+
+    RunFromWindowThread(hTaskbarWnd, [&]() {
+        if (!g_unloading.load()) {
+            ShowModernXAMLCardOnUIThread(titleText, glyphIcon, rows,
+                                         footerNote);
+        }
+    });
 }
 
 bool CopyTextToClipboard(const std::wstring& text) {
@@ -479,8 +583,15 @@ void OnRestartExplorerClick(wf::IInspectable const&,
         return;
     }
 
-    wchar_t commandLine[] =
-        L"cmd.exe /d /c \"taskkill /f /im explorer.exe >nul 2>nul & start \"\" "
+    wchar_t sysDir[MAX_PATH] = {};
+    if (GetSystemDirectoryW(sysDir, MAX_PATH) == 0) {
+        g_restartStarted = false;
+        return;
+    }
+
+    std::wstring cmdPath = std::wstring(sysDir) + L"\\cmd.exe";
+    wchar_t cmdArgs[] =
+        L"/d /c \"taskkill /f /im explorer.exe >nul 2>nul & start \"\" "
         L"explorer.exe\"";
 
     STARTUPINFOW si = {};
@@ -489,7 +600,7 @@ void OnRestartExplorerClick(wf::IInspectable const&,
     si.wShowWindow = SW_HIDE;
     PROCESS_INFORMATION pi = {};
 
-    if (CreateProcessW(nullptr, commandLine, nullptr, nullptr, FALSE,
+    if (CreateProcessW(cmdPath.c_str(), cmdArgs, nullptr, nullptr, FALSE,
                        CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, nullptr,
                        nullptr, &si, &pi)) {
         CloseHandle(pi.hThread);
@@ -499,7 +610,7 @@ void OnRestartExplorerClick(wf::IInspectable const&,
     }
 }
 
-// Native C++ Recursive Temp Cleaner
+// Clean Temp (Deletes all unlocked temporary files immediately)
 struct CleanStats {
     DWORD filesDeleted = 0;
     DWORD filesSkipped = 0;
@@ -562,12 +673,6 @@ void CleanDirectoryRecursive(const std::wstring& dirPath,
                 CleanDirectoryRecursive(fullPath, true, stats);
             }
         } else {
-            if (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY) {
-                SetFileAttributesW(
-                    fullPath.c_str(),
-                    fd.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY);
-            }
-
             ULONGLONG fileSize =
                 (static_cast<ULONGLONG>(fd.nFileSizeHigh) << 32) |
                 fd.nFileSizeLow;
@@ -626,7 +731,7 @@ void OnCleanTempClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
 
             std::vector<DialogRow> rows = {
                 {L"Deleted files", std::to_wstring(stats.filesDeleted)},
-                {L"In-use skipped", std::to_wstring(stats.filesSkipped)},
+                {L"Locked / skipped", std::to_wstring(stats.filesSkipped)},
                 {L"Space recovered", mbBuf},
             };
 
@@ -635,8 +740,8 @@ void OnCleanTempClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     ? L"No removable temp files found"
                     : L"Cleanup completed";
 
-            DispatchWinUICard(L"Temporary Files Cleaned", L"\xE74D",
-                              std::move(rows), std::move(footer));
+            DispatchXAMLCardSync(L"Temporary Files Cleaned", L"\xE74D", rows,
+                                 footer);
         }
     });
 }
@@ -646,7 +751,8 @@ using DnsFlushResolverCache_t = BOOL(WINAPI*)();
 
 void OnFlushDnsClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     BOOL flushed = FALSE;
-    if (HMODULE hDnsApi = LoadLibraryW(L"dnsapi.dll")) {
+    if (HMODULE hDnsApi = LoadLibraryExW(L"dnsapi.dll", nullptr,
+                                         LOAD_LIBRARY_SEARCH_SYSTEM32)) {
         auto pFlush = reinterpret_cast<DnsFlushResolverCache_t>(
             GetProcAddress(hDnsApi, "DnsFlushResolverCache"));
         if (pFlush) {
@@ -661,7 +767,7 @@ void OnFlushDnsClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
             {L"Resolver Cache", flushed ? L"Flushed" : L"Failed"},
             {L"Method", L"dnsapi.dll (In-Memory)"},
         };
-        ShowModernWinUICardOnUIThread(
+        ShowModernXAMLCardOnUIThread(
             L"DNS Cache", L"\xE774", rows,
             flushed ? L"Cache cleared successfully" : L"Error flushing cache");
     }
@@ -671,6 +777,10 @@ void OnFlushDnsClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
 void OnRestartGpuClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     RunAsyncTracked([]() {
         Sleep(150);
+        if (g_unloading.load()) {
+            return;
+        }
+
         static constexpr WORD kKeys[] = {VK_LWIN, VK_CONTROL, VK_SHIFT, 'B'};
         INPUT inputs[8] = {};
 
@@ -690,111 +800,99 @@ void OnRestartGpuClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     });
 }
 
-// Get Current IP
-std::wstring GetLocalIPv4() {
-    std::wstring result = L"Disconnected";
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
-        SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-        if (sock != INVALID_SOCKET) {
-            sockaddr_in serv = {};
-            serv.sin_family = AF_INET;
-            InetPtonW(AF_INET, L"8.8.8.8", &serv.sin_addr);
-            serv.sin_port = htons(53);
+// Get Local IP via GetAdaptersAddresses
+std::vector<DialogRow> GetLocalAdapterIPs(std::wstring& clipboardText) {
+    std::vector<DialogRow> rows;
+    clipboardText.clear();
 
-            if (connect(sock, reinterpret_cast<sockaddr*>(&serv),
-                        sizeof(serv)) == 0) {
-                sockaddr_in name = {};
-                int namelen = sizeof(name);
-                if (getsockname(sock, reinterpret_cast<sockaddr*>(&name),
-                                &namelen) == 0) {
-                    wchar_t buffer[INET_ADDRSTRLEN] = {};
-                    if (InetNtopW(AF_INET, &name.sin_addr, buffer,
-                                  INET_ADDRSTRLEN)) {
-                        result = buffer;
-                    }
-                }
-            }
-            closesocket(sock);
-        }
-        WSACleanup();
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
+                  GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG outBufLen = 15000;
+    std::vector<BYTE> buffer(outBufLen);
+
+    DWORD dwRetVal = GetAdaptersAddresses(
+        AF_UNSPEC, flags, nullptr,
+        reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data()), &outBufLen);
+    if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(outBufLen);
+        dwRetVal = GetAdaptersAddresses(
+            AF_UNSPEC, flags, nullptr,
+            reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data()), &outBufLen);
     }
-    return result;
-}
 
-std::wstring GetPublicIP() {
-    std::wstring result = L"Unavailable";
-    HINTERNET hInternet =
-        InternetOpenW(L"WindhawkSystemUtilities/1.0",
-                      INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (hInternet) {
-        DWORD timeout = 2500;
-        InternetSetOptionW(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout,
-                           sizeof(timeout));
-        InternetSetOptionW(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout,
-                           sizeof(timeout));
-
-        HINTERNET hConnect = InternetOpenUrlW(
-            hInternet, L"https://api.ipify.org", nullptr, 0,
-            INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE |
-                INTERNET_FLAG_SECURE,
-            0);
-        if (hConnect) {
-            char buffer[64] = {};
-            DWORD bytesRead = 0;
-            if (InternetReadFile(hConnect, buffer, sizeof(buffer) - 1,
-                                 &bytesRead) &&
-                bytesRead > 0) {
-                buffer[bytesRead] = '\0';
-                std::string raw(buffer);
-                while (!raw.empty() &&
-                       std::isspace(static_cast<unsigned char>(raw.back()))) {
-                    raw.pop_back();
-                }
-
-                in_addr addr4;
-                in6_addr addr6;
-                if (InetPtonA(AF_INET, raw.c_str(), &addr4) == 1 ||
-                    InetPtonA(AF_INET6, raw.c_str(), &addr6) == 1) {
-                    wchar_t wbuffer[64] = {};
-                    MultiByteToWideChar(CP_UTF8, 0, raw.c_str(), -1, wbuffer,
-                                        64);
-                    result = wbuffer;
-                }
-            }
-            InternetCloseHandle(hConnect);
-        }
-        InternetCloseHandle(hInternet);
+    if (dwRetVal != NO_ERROR) {
+        rows.emplace_back(L"Status", L"Failed to query adapters");
+        return rows;
     }
-    return result;
+
+    for (auto* adapter = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
+         adapter != nullptr; adapter = adapter->Next) {
+        if (adapter->OperStatus != IfOperStatusUp ||
+            adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+            continue;
+        }
+
+        for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr;
+             unicast = unicast->Next) {
+            SOCKADDR* addr = unicast->Address.lpSockaddr;
+            if (!addr) {
+                continue;
+            }
+
+            wchar_t ipStr[INET6_ADDRSTRLEN] = {};
+            if (addr->sa_family == AF_INET) {
+                auto* sa4 = reinterpret_cast<sockaddr_in*>(addr);
+                InetNtopW(AF_INET, &sa4->sin_addr, ipStr, ARRAYSIZE(ipStr));
+            } else if (addr->sa_family == AF_INET6) {
+                auto* sa6 = reinterpret_cast<sockaddr_in6*>(addr);
+                if (IN6_IS_ADDR_LINKLOCAL(&sa6->sin6_addr)) {
+                    continue;
+                }
+                InetNtopW(AF_INET6, &sa6->sin6_addr, ipStr, ARRAYSIZE(ipStr));
+            }
+
+            if (ipStr[0] != L'\0') {
+                std::wstring label =
+                    adapter->FriendlyName ? adapter->FriendlyName : L"Adapter";
+                if (addr->sa_family == AF_INET6) {
+                    label += L" (IPv6)";
+                }
+                rows.emplace_back(label, ipStr);
+                if (!clipboardText.empty()) {
+                    clipboardText += L"\r\n";
+                }
+                clipboardText += label + L": " + ipStr;
+            }
+        }
+    }
+
+    if (rows.empty()) {
+        rows.emplace_back(L"Network", L"Disconnected");
+    }
+
+    return rows;
 }
 
 void OnGetIpClick(wf::IInspectable const&, wux::RoutedEventArgs const&) {
     RunAsyncTracked([]() {
         auto cfg = GetSettingsSnapshot();
 
-        std::wstring localIp = GetLocalIPv4();
-        std::wstring publicIp = GetPublicIP();
+        std::wstring clipboardText;
+        std::vector<DialogRow> rows = GetLocalAdapterIPs(clipboardText);
 
         if (g_unloading.load()) {
             return;
         }
 
         std::wstring footer;
-        if (cfg.copyIpToClipboard) {
-            if (CopyTextToClipboard(L"Local IPv4: " + localIp +
-                                    L"\r\nPublic IP: " + publicIp)) {
+        if (cfg.copyIpToClipboard && !clipboardText.empty()) {
+            if (CopyTextToClipboard(clipboardText)) {
                 footer = L"Copied to clipboard";
             }
         }
 
-        std::vector<DialogRow> rows = {
-            {L"Local IPv4", localIp},
-            {L"Public IP", publicIp},
-        };
-
-        DispatchWinUICard(L"Network IP Addresses", L"\xE968", std::move(rows),
-                          std::move(footer));
+        DispatchXAMLCardSync(L"Local Network Addresses", L"\xE968", rows,
+                             footer);
     });
 }
 
@@ -917,7 +1015,7 @@ void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
     unsigned long long options) {
     try {
         if (target && target.XamlRoot()) {
-            SetLastTarget(target);
+            g_lastTargetWeak = target;
         }
     } catch (...) {
     }
@@ -962,6 +1060,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
@@ -1020,7 +1119,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 std::wstring LoadStringSetting(const wchar_t* name,
                                const wchar_t* defaultValue) {
     auto val = WindhawkUtils::StringSetting::make(name);
-    return (val.get() && val.get()[0] != L'\0') ? val.get() : defaultValue;
+    return val.get()[0] != L'\0' ? val.get() : defaultValue;
 }
 
 void LoadSettings() {
@@ -1043,7 +1142,7 @@ void LoadSettings() {
         LoadStringSetting(L"textRestartGpu", L"Restart Graphics Driver");
 
     fresh.showGetIp = Wh_GetIntSetting(L"showGetIp");
-    fresh.textGetIp = LoadStringSetting(L"textGetIp", L"Get Current IP");
+    fresh.textGetIp = LoadStringSetting(L"textGetIp", L"Get Local IP");
     fresh.copyIpToClipboard = Wh_GetIntSetting(L"copyIpToClipboard");
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -1093,18 +1192,20 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    g_unloading.store(true);
-
-    // Wait for any active background worker threads (IP query or Temp cleanup) before allowing Windhawk to unmap the DLL from explorer.exe memory
-    while (g_activeAsyncTasks.load() > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+        g_unloading.store(true);
+        threads.swap(g_threads);
     }
 
-    winrt::weak_ref<wux::FrameworkElement> oldTarget;
-    winrt::weak_ref<wuc::CoreDispatcher> oldDispatcher;
-    {
-        std::lock_guard<std::mutex> lock(g_targetMutex);
-        oldTarget = std::exchange(g_lastTargetWeak, nullptr);
-        oldDispatcher = std::exchange(g_dispatcherWeak, nullptr);
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd,
+                            []() { CloseActiveFlyoutOnUIThread(); });
     }
 }
