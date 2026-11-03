@@ -197,6 +197,7 @@ using std::max;
 #include <cwchar>
 #include <map>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -594,7 +595,7 @@ static bool g_kmtTried = false;
 static void SampleGpuTempKmt() {
     if (!g_kmtTried) {
         g_kmtTried = true;
-        HMODULE gdi = LoadLibraryExW(L"gdi32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        HMODULE gdi = GetModuleHandleW(L"gdi32.dll");  // always loaded in explorer
         if (gdi) {
             g_kmtEnum = (KmtEnumAdapters2_t)GetProcAddress(gdi, "D3DKMTEnumAdapters2");
             g_kmtQuery = (KmtQueryAdapterInfo_t)GetProcAddress(gdi, "D3DKMTQueryAdapterInfo");
@@ -888,7 +889,6 @@ static DWORD WINAPI UiaWorker(LPVOID) {
         uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond);
     }
     HANDLE handles[2] = {g_stopEvent, g_uiaEvent};
-    bool first = true;
     while (!g_stop) {
         std::vector<HWND> list;
         AcquireSRWLockShared(&g_btnLock);
@@ -900,12 +900,10 @@ static DWORD WINAPI UiaWorker(LPVOID) {
             if (uia && cache && cond) MeasureTaskbarButton(uia, cache, cond, tb);
             if (!GetBtn(tb).ok) allOk = false;
         }
-        first = false;
         DWORD r = WaitForMultipleObjects(2, handles, FALSE, allOk ? 3000 : 400);
         if (r == WAIT_OBJECT_0) break;
         if (r == WAIT_OBJECT_0 + 1 && WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;  // debounce
     }
-    (void)first;
     if (cond) cond->Release();
     if (cache) cache->Release();
     if (uia) uia->Release();
@@ -925,8 +923,21 @@ struct Frame {
     std::vector<Cell> cells;
 };
 
+static void FreeFrame(Frame* f) {
+    if (!f) return;
+    if (f->dib) DeleteObject(f->dib);
+    delete f;
+}
+
+// At most one finished picture waits for each overlay; a newer one replaces it.
+struct FrameSlot {
+    std::atomic<Frame*> pending{nullptr};
+    ~FrameSlot() { FreeFrame(pending.exchange(nullptr)); }
+};
+
 // Lives on, and is only touched from, the thread of its taskbar window.
 struct Overlay {
+    std::shared_ptr<FrameSlot> slot;
     HWND taskbar = nullptr, hwnd = nullptr, tip = nullptr;
     int lastW = 0, lastH = 0;
     bool lastAuto = false, shown = false, noRoomLogged = false;
@@ -1050,6 +1061,7 @@ static void UpdatePosition(Overlay* ov, bool force) {
 }
 
 static void ApplyFrame(Overlay* ov, Frame* f) {
+    bool moved = f->W != ov->lastW || f->H != ov->lastH || f->useAuto != ov->lastAuto;
     HDC screen = GetDC(nullptr);
     HDC mem = CreateCompatibleDC(screen);
     HGDIOBJ old = SelectObject(mem, f->dib);
@@ -1058,12 +1070,12 @@ static void ApplyFrame(Overlay* ov, Frame* f) {
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     ov->lastW = f->W; ov->lastH = f->H; ov->lastAuto = f->useAuto;
     ov->cells = std::move(f->cells);
-    SetWindowPos(ov->hwnd, nullptr, 0, 0, f->W, f->H, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+    if (moved) SetWindowPos(ov->hwnd, nullptr, 0, 0, f->W, f->H, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
     UpdateLayeredWindow(ov->hwnd, screen, nullptr, &size, mem, &src, 0, &bf, ULW_ALPHA);
     SelectObject(mem, old);
     DeleteDC(mem);
     ReleaseDC(nullptr, screen);
-    UpdatePosition(ov, true);
+    if (moved) UpdatePosition(ov, true);
 }
 
 // ---- value formatting ----
@@ -1241,10 +1253,12 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     Overlay* ov = (Overlay*)GetWindowLongPtrW(h, GWLP_USERDATA);
     switch (m) {
         case WM_FRAME: {
-            Frame* f = (Frame*)l;
-            if (ov) ApplyFrame(ov, f);
-            if (f->dib) DeleteObject(f->dib);
-            delete f;
+            if (ov && ov->slot) {
+                if (Frame* f = ov->slot->pending.exchange(nullptr)) {
+                    ApplyFrame(ov, f);
+                    FreeFrame(f);
+                }
+            }
             return 0;
         }
         case WM_UPDATEPOS:
@@ -1305,12 +1319,21 @@ static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
+        case WM_NCDESTROY: {  // also reached when the taskbar window dies and takes its owned overlay with it
+            {
+                std::lock_guard<std::mutex> lock(g_pairMutex);
+                g_pairs.erase(std::remove_if(g_pairs.begin(), g_pairs.end(), [&](const auto& pr) { return pr.second == h; }), g_pairs.end());
+            }
+            SetWindowLongPtrW(h, GWLP_USERDATA, 0);
+            delete ov;
+            break;
+        }
     }
     return DefWindowProcW(h, m, w, l);
 }
 
 // ---- create / destroy, run on the taskbar's thread ----
-struct CreateParam { HWND taskbar; HWND result; };
+struct CreateParam { HWND taskbar; HWND result; std::shared_ptr<FrameSlot> slot; };
 
 static void WINAPI CreateOverlayOnThread(PVOID p) {
     CreateParam* cp = (CreateParam*)p;
@@ -1324,6 +1347,7 @@ static void WINAPI CreateOverlayOnThread(PVOID p) {
     Overlay* ov = new Overlay();
     ov->taskbar = cp->taskbar;
     ov->hwnd = hwnd;
+    ov->slot = cp->slot;
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)ov);
 
     ov->tip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
@@ -1347,21 +1371,13 @@ static void WINAPI CreateOverlayOnThread(PVOID p) {
 }
 
 static void WINAPI DestroyOverlayOnThread(PVOID p) {
-    HWND hwnd = (HWND)p;
-    {
-        std::lock_guard<std::mutex> lock(g_pairMutex);
-        g_pairs.erase(std::remove_if(g_pairs.begin(), g_pairs.end(), [&](const auto& pr) { return pr.second == hwnd; }), g_pairs.end());
-    }
-    Overlay* ov = (Overlay*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-    DestroyWindow(hwnd);  // also destroys the owned tooltip
-    delete ov;
+    DestroyWindow((HWND)p);  // also destroys the owned tooltip; WM_NCDESTROY frees the rest
 }
 
 // ------------------------------------------------------- worker thread ----
 
 // W-side bookkeeping for each overlay; the Overlay object itself belongs to the taskbar thread
-struct OvRef { HWND taskbar; HWND hwnd; ULONGLONG startTick; };
+struct OvRef { HWND taskbar; HWND hwnd; ULONGLONG startTick; std::shared_ptr<FrameSlot> slot; std::wstring lastKey; };
 static std::vector<OvRef> g_refs;  // worker thread only
 
 static void NotifyOverlays(HWND onlyTaskbar) {
@@ -1520,12 +1536,14 @@ struct RenderCache {
     std::unique_ptr<Graphics> mg;
     std::unordered_map<std::wstring, float> widths;
 };
-static std::map<UINT, std::unique_ptr<RenderCache>> g_renderCaches;  // worker thread only
+// Worker thread only. Never destroyed automatically: at process exit its GDI+ objects would be torn down under
+// the loader lock after the worker was killed. The worker releases it explicitly before GdiplusShutdown.
+[[clang::no_destroy]] static std::optional<std::map<UINT, std::unique_ptr<RenderCache>>> g_renderCaches;
 static const Settings* g_renderCacheSettings = nullptr;
 
 static RenderCache& GetRenderCache(UINT dpi, float fontPx) {
-    if (g_renderCacheSettings != g_cfgPtr.load()) { g_renderCaches.clear(); g_renderCacheSettings = g_cfgPtr.load(); }
-    auto& slot = g_renderCaches[dpi];
+    if (g_renderCacheSettings != g_cfgPtr.load()) { g_renderCaches->clear(); g_renderCacheSettings = g_cfgPtr.load(); }
+    auto& slot = (*g_renderCaches)[dpi];
     if (!slot) {
         slot = std::make_unique<RenderCache>();
         const Settings& s = g_s;
@@ -1542,7 +1560,7 @@ static RenderCache& GetRenderCache(UINT dpi, float fontPx) {
     return *slot;
 }
 
-static void RenderOverlay(const OvRef& ref) {
+static void RenderOverlay(OvRef& ref) {
     const Settings& s = g_s;
     RECT trc;
     if (!GetWindowRect(ref.taskbar, &trc)) return;
@@ -1599,6 +1617,17 @@ static void RenderOverlay(const OvRef& ref) {
     for (size_t i = 0; i < cols.size(); i++) totalW += cols[i].w + (i ? colGap : 0);
     int W = std::max(1, (int)std::ceil(totalW));
     float rowH = (float)H / rows;
+
+    // nothing visible changed since the last picture of this overlay: do not draw or post anything
+    {
+        std::wstring key = Fmt(L"%p|%d|%d|%d|%d|", (const void*)&s, W, H, (int)useAuto, (int)(g_disp.ram * icon / 100.0));
+        for (auto& cl : cols)
+            for (auto& sv : cl.segs)
+                for (auto& sg : sv) key += sg.text + (sg.warn ? L"!" : L"") + L"\x1f";
+        if (s.spark) key += Fmt(L"h%d", g_histPos);
+        if (key == ref.lastKey) return;
+        ref.lastKey = std::move(key);
+    }
 
     // draw into a DIB so we can use per-pixel alpha; the finished bitmap is handed to the taskbar thread
     BITMAPINFO bi = {};
@@ -1677,15 +1706,14 @@ static void RenderOverlay(const OvRef& ref) {
     frame->W = W;
     frame->H = H;
     frame->useAuto = useAuto;
+    // one pending frame per overlay: a newer one replaces an older one that was not applied yet
     Frame* raw = frame.release();
-    if (!PostMessageW(ref.hwnd, WM_FRAME, 0, (LPARAM)raw)) {  // window is gone
-        DeleteObject(raw->dib);
-        delete raw;
-    }
+    if (Frame* old = ref.slot->pending.exchange(raw)) FreeFrame(old);  // a WM_FRAME is already queued
+    else if (!PostMessageW(ref.hwnd, WM_FRAME, 0, 0)) FreeFrame(ref.slot->pending.exchange(nullptr));  // window is gone
 }
 
 static void RenderAll() {
-    for (const OvRef& ref : g_refs) RenderOverlay(ref);
+    for (OvRef& ref : g_refs) RenderOverlay(ref);
 }
 
 // ---- keeping the overlay list in sync with the taskbars / monitors ----
@@ -1730,9 +1758,9 @@ static void SyncOverlays() {
         bool have = false;
         for (const OvRef& r : g_refs) if (r.taskbar == tb) have = true;
         if (have) continue;
-        CreateParam cp = {tb, nullptr};
+        CreateParam cp = {tb, nullptr, std::make_shared<FrameSlot>()};
         if (RunFromWindowThread(tb, CreateOverlayOnThread, &cp) && cp.result)
-            g_refs.push_back({tb, cp.result, GetTickCount64()});
+            g_refs.push_back({tb, cp.result, GetTickCount64(), cp.slot, L""});
     }
 
     // hide in full-screen apps / games, but only if that state lasts a few seconds
@@ -1784,15 +1812,15 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             } else if (w == 4) {
                 SyncOverlays();
             } else if (w == 6) {  // overlays that have not got their first picture yet
-                for (const OvRef& ref : g_refs) RenderOverlay(ref);
-                if (!g_refs.empty() && GetTickCount64() - g_refs.front().startTick > 6000) KillTimer(h, 6);
+                static ULONGLONG t0 = GetTickCount64();
+                if (GetTickCount64() - t0 > 6000) KillTimer(h, 6);
+                for (OvRef& ref : g_refs) RenderOverlay(ref);
             }
             return 0;
         case WM_CLOSE:
             PostQuitMessage(0);
             return 0;
         case WM_SETTINGS: {
-            LoadSettings();
             SetTimer(h, 1, g_s.refreshMs, nullptr);
             SyncOverlays();
             for (const OvRef& ref : g_refs) PostMessageW(ref.hwnd, WM_APPLYSTYLE, 0, 0);
@@ -1824,6 +1852,7 @@ static DWORD WINAPI Worker(LPVOID) {
     GdiplusStartupInput gin;
     ULONG_PTR token = 0;
     GdiplusStartup(&token, &gin, nullptr);
+    g_renderCaches.emplace();
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
     g_runMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
@@ -1889,7 +1918,7 @@ static DWORD WINAPI Worker(LPVOID) {
     if (overlayClass) UnregisterClassW(kClass, inst);
     if (msgClass) UnregisterClassW(kMsgClass, inst);
 
-    g_renderCaches.clear();  // GDI+ objects must be gone before GdiplusShutdown
+    g_renderCaches.reset();  // GDI+ objects must be gone before GdiplusShutdown
     GdiplusShutdown(token);
     return 0;
 }
@@ -1907,7 +1936,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    // settings are applied on the worker thread
+    LoadSettings();  // thread-safe; the worker applies the change
     if (HWND wnd = g_msgWnd.load()) PostMessageW(wnd, WM_SETTINGS, 0, 0);
 }
 
