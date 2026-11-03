@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T23:01:40.000Z</updated>
+    <updated>2026-11-03T23:49:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.11]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#a59167ace74a357b5c27f8755145a407bf5baf9a</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-11-03T23:49:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the following themes: Blob, Borderless, Command Center, DockLike, FluentGlass, LiquidGlass, Luminosity, OS26 Liquid Glass, Pills, Surface, TaskbarXII, TintedGlass.</li>
+<li>Object values such as brushes and transforms are now created separately for each element. Previously, the state of one element could affect other elements that use the same value. This fixes some long-standing issues such as <a href="https://github.com/ramensoftware/windhawk-mods/issues/742">Acrylic background not working with multiple monitors</a> and <a href="https://github.com/ramensoftware/windhawk-mods/issues/1403">problems with multiple progress bars</a>.</li>
+<li>Fixed crashes when the mod is disabled or its settings are changed.</li>
+<li>Improved restoration of some styles that weren't restored correctly.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AI Voice Typing 1.0.0]]></title>
         <id>https://windhawk.net/mods/ai-voice-typing#245488f83190691fbd1edc64d149ac240debf2b0</id>
@@ -995,63 +1011,6 @@ the mod is removed.</li>
         <author>
             <name>Dev-StudioCode</name>
             <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Desktop Icon Spacing 1.1.6]]></title>
-        <id>https://windhawk.net/mods/force-desktop-icon-spacing#d73440af76a0f26cebb28452af94b9312da51b31</id>
-        <link href="https://windhawk.net/mods/force-desktop-icon-spacing"/>
-        <updated>2026-11-02T23:02:24.000Z</updated>
-        <content type="html"><![CDATA[<p>Precisely control the desktop icon spacing: set the horizontal/vertical icon grid spacing and reserve a blank margin at the bottom of the icon area (above the taskbar).</p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>The desktop list view (<code>SysListView32</code>) is subclassed (event-driven; the only polling is a one-time boot check that polls the icon count once a second for up to a minute after Explorer starts): every spacing request Explorer makes is transparently replaced with the configured values, and the icon area height is capped so it never enters the reserved bottom strip.</li>
-<li>Values are absolute and applied in one pass: the same settings always produce the same layout, never cumulative drift.</li>
-<li>The vertical grid is anchored at the top: increasing the vertical spacing stretches the grid downward, so the extra space is absorbed by the bottom region. No blank strip is created at the top, and the icon area is never shifted as a whole.</li>
-<li>The bottom margin caps the icon area height only (the top edge stays fixed), so icon columns wrap earlier and never enter the reserved bottom strip.</li>
-<li>All pixel values are scaled by the list view's DPI: the configured numbers apply at 100% scaling and scale up automatically on higher DPI.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Horizontal spacing (pixels)</strong>: width of each icon grid cell, at 100% scaling. Larger = more horizontal gap between icons.</li>
-<li><strong>Vertical spacing (pixels)</strong>: height of each icon grid cell, at 100% scaling. Larger = taller rows; the grid grows downward and the extra space is absorbed by the bottom region.</li>
-<li><strong>Bottom margin (pixels)</strong>: blank strip reserved at the bottom of the icon area, above the taskbar, at 100% scaling. The icon grid never enters it. 0 = no reservation.</li>
-<li><strong>Rearrange icons on startup</strong>: arrange icons once when the mod loads and every time Explorer starts (sign-in, reboot, Explorer restart), so the spacing/margin take effect. Turn this off to keep icons where you place them by hand. Changes made in the settings always rearrange.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The grid cell size stays fixed when you change the icon size (Large/Medium/Small icons or Ctrl+wheel); adjust the spacing settings when you switch to Large icons, otherwise large icons may overlap their labels.</li>
-<li>This mod doesn't write any registry values. If you want free icon placement, turn off "Auto arrange icons" and "Align icons to grid" in the desktop right-click menu yourself.</li>
-<li>Disabling or unloading the mod restores the original icon spacing and the full icon area height. Icons stay where the mod arranged them (as with a manual "Arrange icons").</li>
-<li>The bottom margin applies to the whole icon area (the list view spans all monitors); on multi-monitor setups it lands above the taskbar of the bottom-most monitor.</li>
-</ul>
-<h2 id="">简体中文说明</h2>
-<p>精确控制桌面图标间距：自由调节图标网格的水平/垂直间距，并在图标区域底部（任务栏上方）预留空白边距。</p>
-<h3 id="-1">工作原理</h3>
-<ul>
-<li>通过子类化（事件驱动；唯一的轮询是资源管理器启动后长达一分钟、每秒一次的图标数量一次性开机检查）挂钩桌面列表视图（<code>SysListView32</code>）：资源管理器发出的每个间距设置请求都会被透明替换为配置值，图标区域高度被限制在预留边距之上。</li>
-<li>所有数值均为绝对值、一次性应用——同一配置永远得到同一布局，不存在多次叠加漂移。</li>
-<li>垂直网格顶端锚定：调大垂直间距时行距拉大、网格向下延伸，多余空间挤占底部区域——顶部不会产生空白，图标区域也不会被整体移动。</li>
-<li>底部边距只限制图标区域高度（顶边固定），图标换列提前，永不进入底部预留区。</li>
-<li>所有像素值按列表视图的 DPI 自动缩放：配置数值对应 100% 缩放，高 DPI 下自动放大。</li>
-</ul>
-<h3 id="-2">设置项</h3>
-<ul>
-<li><strong>水平间距（像素）</strong>：图标网格单元宽度（100% 缩放下），数值越大图标水平间距越大。</li>
-<li><strong>垂直间距（像素）</strong>：图标网格单元高度（100% 缩放下），数值越大行距越大，网格向下延伸，多余空间挤占底部区域。</li>
-<li><strong>底部边距（像素）</strong>：图标区域底部（任务栏上方）预留的空白高度（100% 缩放下），图标网格不会进入该区域。0 = 不预留。</li>
-<li><strong>启动时重排图标</strong>：模组加载时以及资源管理器每次启动时（登录、重启、重启资源管理器）各执行一次"排列图标"，使间距/边距生效。若希望保留手动拖放的图标布局，可关闭此项。在设置面板修改参数时始终会重排。</li>
-</ul>
-<h3 id="-3">注意</h3>
-<ul>
-<li>切换图标大小（大/中/小图标或 Ctrl+滚轮）时网格单元尺寸保持不变；切换到大图标时请相应调大间距设置，否则大图标可能与文字标签重叠。</li>
-<li>本模组不写入任何注册表值。如需自由摆放图标，请自行在桌面右键菜单中关闭"自动排列图标"和"将图标与网格对齐"。</li>
-<li>停用或卸载模组会自动恢复原始图标间距与图标区域完整高度；图标停留在重排后的位置（与手动"排列图标"一致）。</li>
-<li>底部边距作用于整个图标区域（列表视图横跨所有显示器）；多显示器下预留空白位于最底部显示器的任务栏上方。</li>
-</ul>]]></content>
-        <author>
-            <name>Koewen</name>
-            <uri>https://github.com/Koewen</uri>
         </author>
     </entry>
 </feed>

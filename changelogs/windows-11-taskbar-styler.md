@@ -1,3 +1,10 @@
+## 1.11 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a59167ace74a357b5c27f8755145a407bf5baf9a/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Updated the following themes: Blob, Borderless, Command Center, DockLike, FluentGlass, LiquidGlass, Luminosity, OS26 Liquid Glass, Pills, Surface, TaskbarXII, TintedGlass.
+* Object values such as brushes and transforms are now created separately for each element. Previously, the state of one element could affect other elements that use the same value. This fixes some long-standing issues such as [Acrylic background not working with multiple monitors](https://github.com/ramensoftware/windhawk-mods/issues/742) and [problems with multiple progress bars](https://github.com/ramensoftware/windhawk-mods/issues/1403).
+* Fixed crashes when the mod is disabled or its settings are changed.
+* Improved restoration of some styles that weren't restored correctly.
+
 ## 1.10 ([Sep 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/162bca0d6b4fe4da2c63c21f17921a165d5870fa/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Fixed running indication in several themes - a regression that was introduced in the previous update.
