@@ -16,29 +16,37 @@
 /*
 # Modern Run Dialog UI For Windows 10 & 11
 
-![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402liquidglass.png)
+![Modern Run Dialog UI Preview (Liquid Glass)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101liquidglass.png)
 
 *Liquid Glass mode*
 
-![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402windowsblur.png)
+![Modern Run Dialog UI Preview (Windows Blur)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101windowsblur.png)
 
 *Windows Blur mode*
 
-![Modern Run Dialog UI Preview (App Suggestions)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402recommendprogram.png)
+![Modern Run Dialog UI Preview (App Suggestions)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101recommendprogram.png)
 
 *App & command suggestions*
 
-![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402minimalmode.png)
+![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101minimalmode.png)
 
 *Minimal Mode*
 
-![Modern Run Dialog UI Preview (Google Search)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402googlesearch.png)
+![Modern Run Dialog UI Preview (Google Search)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101googlesearch.png)
 
 *Google Search (`ggsearch:`)*
 
-![Modern Run Dialog UI Preview (Menu Mod And Custom Background)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/402modmenuandcustombackground.png)
+![Modern Run Dialog UI Preview (Background Change)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101backgroundchange.png)
 
-*In-App Quick Settings Menu (`⚙️`) & Custom Background*
+*Background Change*
+
+![Modern Run Dialog UI Preview (Theme Menu)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101thememenu.png)
+
+*Theme Menu*
+
+![Modern Run Dialog UI Preview (Resize Menu)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/4.0.101/40101resizemenu.png)
+
+*Resize Menu*
 
 ---
 
@@ -49,17 +57,17 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid
 ### Key Features
 
 - **Liquid Glass, Windows Blur & Opaque Themes:**
-  * Three surface styles (**Liquid Glass** with refractive rim highlights and pointer specular glow, **Windows Blur**, and **Opaque**) with automatic Light/Dark mode and real-time desktop backdrop luminance detection.
-  * Adjustable UI scale (`85%` – `120%`) and taskbar-anchored positioning.
+  * Three surface styles (**Liquid Glass** with 3D Snell's-law optical edge refraction, chromatic dispersion, refractive rim highlights, and adjustable tint from `-100` Max Transparent default to `100` High Contrast, **Windows Blur** with `0`–`255` opacity, and **Opaque**) with automatic Light/Dark mode and real-time desktop backdrop luminance detection.
+  * Adjustable UI scale presets (`85%` – `120%`), inline `-` / `+` and direct keyboard input for Width (`px`), Height (`px`), and Font Size (`pt`) with live preview, and taskbar-anchored positioning.
 
 - **Minimal Mode (Hide Browse & Exit Buttons):**
   * Toggle **Minimal Mode** with a single click from the main `⚙️` menu (or Windhawk settings) to hide the **Browse** and **Exit** buttons, keeping the standard dialog width while expanding the command input box right up to the **Run** button for a clean, distraction-free layout.
 
 - **Custom Image, GIF & Video Backgrounds:**
-  * Set any static image (`.png`, `.jpg`, `.webp`, `.bmp`), animated `.gif`, or `.mp4` / `.webm` video (up to 50 MB, decoded via Windows Media Foundation & WIC) as the dialog background with adjustable media opacity presets (`35%`, `60%`, `85%`, `100%`).
+  * Set any static image (`.png`, `.jpg`, `.webp`, `.bmp`), animated `.gif`, or `.mp4` / `.webm` video (up to 50 MB, decoded via Windows Media Foundation & WIC) as the dialog background with adjustable media opacity (`20` – `255`, presets `90`, `150`, `215`, `255`) and automatic text contrast adaptation.
 
 - **In-App Quick Settings Menu (`⚙️`):**
-  * Built-in Fluent Acrylic popup menu on the command bar to switch surface themes, Light/Dark mode, UI scale (`85%` – `120%`), **Minimal Mode**, custom background media, history preferences, and display language, or clear stored history on the fly without opening Windhawk.
+  * Built-in Liquid Glass / Fluent popup menu on the command bar with inline `-` / `[value]` / `+` controls to switch surface themes, Liquid Glass tint (`-100` – `100`), Windows Blur opacity (`0` – `255`), Light/Dark mode, UI scale (`85%` – `120%`) & custom dimensions, **Minimal Mode**, custom background media, history preferences, and display language, or clear stored history on the fly without opening Windhawk.
 
 - **Live App Suggestions & Instant Web Search (`ggsearch:` / `msesearch:`):**
   * Real-time suggestions for installed Start Menu applications, Registry `App Paths`, and system utilities (`cmd`, `powershell`, `regedit`, `wt`, `.cpl`, `.msc`) as you type.
@@ -72,8 +80,8 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a borderless **Liquid
 - **Smart Taskbar & `Win + R` Window Behavior:**
   * Pressing `Win + R` or clicking the Taskbar icon brings an unfocused Run dialog back to the foreground in a single action, or minimizes/closes it when already focused.
 
-- **Multi-Language Support (21 Languages):**
-  * Auto-detects your Windows UI language or lets you choose from 21 built-in languages (English, Vietnamese, Japanese, Korean, Simplified/Traditional Chinese, Thai, Indonesian, Malay, French, German, Spanish, Portuguese, Italian, Russian, Ukrainian, Polish, Dutch, Turkish, Hindi, and Arabic).
+- **Multi-Language Support (21 Languages Across Dialog & Menu):**
+  * Auto-detects your Windows UI language or lets you choose from 21 built-in languages across both the Run dialog and the entire in-app `⚙️` quick settings menu (English, Vietnamese, Japanese, Korean, Simplified/Traditional Chinese, Thai, Indonesian, Malay, French, German, Spanish, Portuguese, Italian, Russian, Ukrainian, Polish, Dutch, Turkish, Hindi, and Arabic).
 
 ---
 
@@ -84,17 +92,17 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 ### Tính năng chính
 
 - **3 Chế độ bề mặt (Liquid Glass, Làm mờ Windows & Nền đặc):**
-  * Hỗ trợ hiệu ứng kính **Liquid Glass** (viền khúc xạ ánh sáng và phản chiếu theo trỏ chuột), **Windows Blur** và **Nền đặc**, tự động chuyển đổi giao diện Sáng / Tối theo hệ thống và độ sáng thực tế của màn hình nền.
-  * Tùy chỉnh tỷ lệ kích thước giao diện (`85%` – `120%`).
+  * Hỗ trợ hiệu ứng kính **Liquid Glass** (khúc xạ ánh sáng vát cạnh 3D, tán sắc lăng kính, viền phản quang và tùy chỉnh độ trong suốt từ `-100` Trong suốt tối đa mặc định đến `100` Tương phản cao), **Windows Blur** (`0` – `255`) và **Nền đặc**, tự động chuyển đổi giao diện Sáng / Tối theo hệ thống và độ sáng thực tế của màn hình nền.
+  * Tùy chỉnh kích thước theo các mức có sẵn (`85%` – `120%`) hoặc nhập số / bấm `-` `+` chỉnh trực tiếp Chiều rộng (`px`), Chiều cao (`px`) và Cỡ chữ (`pt`) ngay trên menu (xem trực tiếp).
 
 - **Chế độ tối giản – Minimal Mode (Ẩn nút Duyệt & Thoát):**
   * Bật/tắt **Chế độ tối giản** chỉ với 1 cú nhấp chuột ngay trên menu chính `⚙️` (hoặc trong cài đặt Windhawk) để ẩn hai nút **Duyệt** và **Thoát**, giữ nguyên chiều rộng gốc của hộp thoại và mở rộng tối đa khung nhập lệnh sát tới nút **Chạy**.
 
 - **Hình nền tùy chỉnh (Ảnh tĩnh, GIF động & Video MP4):**
-  * Cho phép chọn ảnh tĩnh (`.png`, `.jpg`, `.webp`, `.bmp`), ảnh động `.gif` hoặc video `.mp4` / `.webm` (tối đa 50 MB) làm nền hộp thoại Run với các mức độ rõ lớp phủ tùy chọn (`35%`, `60%`, `85%`, `100%`).
+  * Cho phép chọn ảnh tĩnh (`.png`, `.jpg`, `.webp`, `.bmp`), ảnh động `.gif` hoặc video `.mp4` / `.webm` (tối đa 50 MB) làm nền hộp thoại Run với độ rõ tùy chỉnh (`20` – `255`, có sẵn các mức `90`, `150`, `215`, `255`) và tự động đổi màu chữ theo độ sáng hình nền.
 
 - **Menu Cài đặt nhanh trực tiếp (`⚙️`):**
-  * Nút bánh răng trên thanh lệnh mở menu Fluent Acrylic có icon trực quan, giúp đổi tức thì giao diện bề mặt, chế độ Sáng/Tối, kích thước UI, **Chế độ tối giản**, hình nền tùy chỉnh, tùy chọn lịch sử, ngôn ngữ hiển thị hoặc xóa toàn bộ lịch sử ngay trên hộp thoại Run.
+  * Nút bánh răng trên thanh lệnh mở menu Liquid Glass / Fluent có ô nhập số `-` / `[giá trị]` / `+` trực quan, giúp đổi tức thì giao diện bề mặt, độ đậm kính Liquid Glass (`-100` – `100`), độ mờ Windows Blur (`0` – `255`), chế độ Sáng/Tối, kích thước UI & cỡ chữ, **Chế độ tối giản**, hình nền tùy chỉnh, tùy chọn lịch sử, ngôn ngữ hiển thị hoặc xóa toàn bộ lịch sử ngay trên hộp thoại Run.
 
 - **Gợi ý ứng dụng & Tìm kiếm trình duyệt (`ggsearch:` / `msesearch:`):**
   * Tự động gợi ý theo thời gian thực các ứng dụng trong Start Menu, `App Paths` và các công cụ hệ thống (`cmd`, `powershell`, `regedit`, `wt`, `.cpl`, `.msc`) ngay khi đang gõ.
@@ -107,8 +115,8 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 - **Tương tác thông minh với `Win + R` và Taskbar:**
   * Khi hộp thoại đang bị che bởi cửa sổ khác, chỉ cần bấm 1 lần vào biểu tượng Run dưới Taskbar hoặc nhấn `Win + R` là hộp thoại nổi ngay lên trên cùng.
 
-- **Hỗ trợ 21 ngôn ngữ hiển thị:**
-  * Tự động nhận diện ngôn ngữ Windows hoặc chọn cố định trong 21 ngôn ngữ (Tiếng Việt, Tiếng Anh, Nhật, Hàn, Trung Giản thể/Phồn thể, Thái, Indonesia, Mã Lai, Pháp, Đức, Tây Ban Nha, Bồ Đào Nha, Ý, Nga, Ukraina, Ba Lan, Hà Lan, Thổ Nhĩ Kỳ, Hindi và Ả Rập).
+- **Hỗ trợ đầy đủ 21 ngôn ngữ hiển thị (Cả Hộp thoại & Menu `⚙️`):**
+  * Tự động nhận diện ngôn ngữ Windows hoặc chọn cố định trong 21 ngôn ngữ cho toàn bộ hộp thoại Run lẫn menu cài đặt nhanh `⚙️` (Tiếng Việt, Tiếng Anh, Nhật, Hàn, Trung Giản thể/Phồn thể, Thái, Indonesia, Mã Lai, Pháp, Đức, Tây Ban Nha, Bồ Đào Nha, Ý, Nga, Ukraina, Ba Lan, Hà Lan, Thổ Nhĩ Kỳ, Hindi và Ả Rập).
 */
 // ==/WindhawkModReadme==
 
@@ -197,8 +205,8 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   $description: Hides the Browse and Exit buttons on the command bar while keeping the standard dialog width.
   $description:vi-VN: Ẩn hai nút Duyệt và Thoát trên thanh nhập lệnh (chỉ giữ nút Chạy và Cài đặt nhanh), giữ nguyên chiều rộng hộp thoại.
 - uiScalePercent: "100"
-  $name: Appearance · UI Size / Scale (85% – 120%)
-  $name:vi-VN: Kích thước giao diện (85% – 120%)
+  $name: Appearance · UI Size / Scale Preset (85% – 120%)
+  $name:vi-VN: Tỷ lệ kích thước giao diện có sẵn (85% – 120%)
   $description: Adjust the overall size of the Run dialog (85% Compact, 100% Default, 110% Medium, 120% Large). Also adjustable via the Gear button.
   $description:vi-VN: Điều chỉnh tỷ lệ kích thước tổng thể của hộp thoại Run (85% Nhỏ gọn, 100% Mặc định, 110% Vừa, 120% Lớn). Có thể chỉnh trực tiếp qua nút Bánh răng.
   $options:vi-VN:
@@ -213,11 +221,16 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   - "100": 100% – Default (Standard)
   - "110": 110% – Medium Large
   - "120": 120% – Large
-- blurOpacity: 170
+- glassOpacity: -100
+  $name: Liquid Glass Opacity / Tint (-100 to 100)
+  $name:vi-VN: Độ đậm / Trong suốt của Liquid Glass (-100 đến 100)
+  $description: Adjusts Liquid Glass transparency from Max Transparent (-100, default) and Clear (0) to Tinted (60–100) for higher contrast.
+  $description:vi-VN: Điều chỉnh độ trong suốt của Liquid Glass từ Trong suốt tối đa (-100, mặc định), Chuẩn (0) đến Đậm tương phản cao (60–100).
+- blurOpacity: 0
   $name: Appearance · Blur Opacity (0–255)
   $name:vi-VN: Độ đậm nền Blur (0–255)
-  $description: Background tint opacity when using Windows Blur (0–255, default is 170).
-  $description:vi-VN: Độ đậm lớp phủ nền khi dùng Làm mờ Windows (0–255, mặc định là 170).
+  $description: Background tint opacity when using Windows Blur (0–255, default is 0).
+  $description:vi-VN: Độ đậm lớp phủ nền khi dùng Làm mờ Windows (0–255, mặc định là 0).
 - customBackgroundPath: ""
   $name: Custom Background · File Path (Image / Animated GIF / MP4 Video)
   $name:vi-VN: Hình nền tùy chỉnh · Đường dẫn tệp (Ảnh / GIF động / Video MP4)
@@ -228,11 +241,11 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   $name:vi-VN: Hình nền tùy chỉnh · Giới hạn dung lượng tối đa (20–50 MB)
   $description: Maximum allowed file size in megabytes for custom background files (20–50 MB, default is 50 MB).
   $description:vi-VN: Giới hạn dung lượng tối đa cho phép đối với tệp hình nền động/video MP4 (từ 20 đến 50 MB, mặc định 50 MB).
-- customBackgroundOpacity: 150
+- customBackgroundOpacity: 255
   $name: Custom Background · Media Opacity (20–255)
   $name:vi-VN: Hình nền tùy chỉnh · Độ rõ hình nền (20–255)
-  $description: Opacity of the custom background image/video layer (20–255, default is 150 so text remains easy to read).
-  $description:vi-VN: Độ rõ của lớp hình nền ảnh/video tùy chỉnh (20–255, mặc định 150 để chữ và hiệu ứng kính luôn sắc nét, dễ đọc).
+  $description: Opacity of the custom background image/video layer (20–255, default is 255 for full original image detail; text contrast adapts automatically to the background).
+  $description:vi-VN: Độ rõ của hình nền ảnh/GIF/video (20–255, mặc định 255 để giữ nguyên 100% chi tiết gốc của hình nền; màu chữ tự động đổi theo độ sáng hình nền).
 - enableAppSuggestions: true
   $name: Experimental · App Suggestions & Web Search (ggsearch / msesearch)
   $name:vi-VN: Gợi ý ứng dụng & Tìm kiếm trình duyệt (ggsearch / msesearch)
@@ -263,6 +276,21 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   $name:vi-VN: Để trống ô nhập khi mở
   $description: Show placeholder text on open — instead of pre-filling the last command.
   $description:vi-VN: Hiển thị dòng gợi ý khi mới mở thay vì điền sẵn lệnh cũ.
+- customDialogWidth: 0
+  $name: Appearance · Custom Dialog Width in px (0 = Follow Preset, or 360–1200)
+  $name:vi-VN: Chiều rộng hộp thoại tùy chỉnh (0 = Theo thiết lập sẵn, hoặc 360–1200 px)
+  $description: Manually set the Run box width in pixels/DIPs (e.g. 495, 560, 616, 720). Set to 0 to follow the 85%–120% UI Size preset.
+  $description:vi-VN: Tự chỉnh chiều rộng hộp thoại Run theo pixel/DIP (ví dụ 495, 560, 616, 720). Để 0 nếu muốn dùng theo mức 85%–120% có sẵn.
+- customBarHeight: 0
+  $name: Appearance · Custom Height in px (0 = Follow Preset, or 36–96 bar / 150–600 total)
+  $name:vi-VN: Chiều cao hộp thoại tùy chỉnh (0 = Theo thiết lập sẵn, hoặc 36–96 px thanh lệnh)
+  $description: Manually set the command bar height (36–96 px, default 52) or total height (150–600 px), scaling row height proportionally. Set to 0 to follow the UI Size preset.
+  $description:vi-VN: Tự chỉnh chiều cao thanh nhập lệnh (36–96 px, chuẩn 52 px) hoặc tổng chiều cao (150–600 px); chiều cao từng dòng lịch sử sẽ tự co giãn tương ứng. Để 0 để theo mức có sẵn.
+- customFontSize: 0
+  $name: Appearance · Custom Font Size in pt (0 = Follow Preset, or 9–24)
+  $name:vi-VN: Cỡ chữ tùy chỉnh (0 = Theo thiết lập sẵn, hoặc 9–24 pt)
+  $description: Manually set the text font size (9–24 pt, default 14). Set to 0 to follow the UI Size preset.
+  $description:vi-VN: Tự chỉnh cỡ chữ hiển thị trong hộp thoại Run (9–24 pt, chuẩn 14). Để 0 để tự động theo mức kích thước có sẵn.
 - taskbarClickAction: minimize
   $name: Behavior · Taskbar Icon Click Action
   $name:vi-VN: Hành vi khi bấm icon Run trên Taskbar
@@ -312,6 +340,10 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 #include <thread>
 #include <condition_variable>
 
+#include <cstdint>
+#ifndef DWMWA_CLOAKED
+#define DWMWA_CLOAKED 14
+#endif
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
@@ -462,11 +494,15 @@ struct ModSettings {
     ColorMode colorMode = ColorMode::Auto;
     bool minimalMode = false;
     int uiScalePercent = 100;
+    int customDialogWidth = 0;
+    int customBarHeight = 0;
+    int customFontSize = 0;
     bool taskbarCloseInsteadOfMinimize = false;
-    int blurOpacity = 170;
+    int glassOpacity = -100;
+    int blurOpacity = 0;
     std::wstring customBackgroundPath;
     int customBackgroundMaxMb = 50;
-    int customBackgroundOpacity = 150;
+    int customBackgroundOpacity = 255;
     bool enableAppSuggestions = true;
     int maxHistoryItems = 35;
     int visibleHistoryRows = 5;
@@ -550,71 +586,785 @@ D2D1_COLOR_F GetSystemAccentColorF() {
     return D2D1::ColorF(0.10f, 0.47f, 0.83f, 1.0f);
 }
 
-// Temporary 16x16 background luminance sampler to adapt Liquid Glass text contrast
-bool SampleBackdropLuminanceIsLight(int x, int y, int w, int h, bool dialogAlreadyVisible, bool prevLight) {
-    if (w <= 0 || h <= 0) return prevLight;
+// --- Real-Time iOS 26 Optical Liquid Glass Snapshot, Gaussian Blur & 3D Snell's-Law Lens Refraction Engine ---
 
-    HDC hScreenDC = GetDC(nullptr);
-    if (!hScreenDC) return prevLight;
-
-    HDC hMemDC = CreateCompatibleDC(hScreenDC);
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = 16;
-    bmi.bmiHeader.biHeight = -16;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    DWORD* pixels = nullptr;
-    HBITMAP hBmp = CreateDIBSection(hMemDC, &bmi, DIB_RGB_COLORS, (void**)&pixels, nullptr, 0);
+struct CleanDesktopSnapshot {
+    std::vector<DWORD> pixels;
+    int monX = 0;
+    int monY = 0;
+    int monW = 0;
+    int monH = 0;
+    ULONGLONG captureTick = 0;
     bool valid = false;
-    double lum = 0.0;
+};
 
-    if (hBmp && pixels) {
-        HGDIOBJ oldBmp = SelectObject(hMemDC, hBmp);
-        SetStretchBltMode(hMemDC, HALFTONE);
+static std::mutex g_desktopSnapMutex;
+static CleanDesktopSnapshot g_desktopSnap;
 
-        BOOL ok = FALSE;
-        if (!dialogAlreadyVisible) {
-            int sx = x + w / 6;
-            int sy = y + h / 6;
-            int sw = (std::max)(16, (w * 2) / 3);
-            int sh = (std::max)(16, (h * 2) / 3);
-            ok = StretchBlt(hMemDC, 0, 0, 16, 16, hScreenDC, sx, sy, sw, sh, SRCCOPY);
-        } else {
-            int sampleY = (y >= 28) ? (y - 24) : (y + h + 4);
-            int sx = x + w / 6;
-            int sw = (std::max)(16, (w * 2) / 3);
-            ok = StretchBlt(hMemDC, 0, 0, 16, 16, hScreenDC, sx, sampleY, sw, 16, SRCCOPY);
+struct BevelPixelLUT {
+    uint32_t dstIdx;
+    int16_t dxR, dyR;
+    int16_t dxG, dyG;
+    int16_t dxB, dyB;
+    uint8_t crispMix;
+    uint8_t alpha;
+    uint16_t invFr;
+    uint16_t frR_255, frG_255, frB_255;
+    uint16_t trR_a, trG_a, trB_a;
+    uint8_t sheenR, sheenG, sheenB;
+};
+
+struct InteriorRowSpan {
+    int y;
+    int xStart, xEnd;
+    int dyG;
+};
+
+struct OpticalLensGeometryLUT {
+    int w = 0;
+    int h = 0;
+    UINT dpi = 0;
+    int glassPct = -9999;
+    bool isLight = false;
+    bool isMenu = false;
+    uint8_t interiorAlpha = 0;
+    std::vector<int16_t> interiorDxG;
+    std::vector<uint8_t> sheenMap;
+    std::vector<InteriorRowSpan> interiorSpans;
+    std::vector<BevelPixelLUT> bevelPixels;
+};
+
+struct PreblurredMonitorCache {
+    std::vector<DWORD> softRGB;
+    std::vector<DWORD> crispRGB;
+    std::vector<DWORD> softPremul;
+    std::vector<DWORD> blurTmp;
+    int monX = 0;
+    int monY = 0;
+    int monW = 0;
+    int monH = 0;
+    int halfW = 0;
+    int halfH = 0;
+    int softRad = -1;
+    int crispRad = -1;
+    int glassPct = -9999;
+    uint8_t bakedAlpha = 0;
+    bool isLight = false;
+    ULONGLONG snapTick = 0;
+};
+
+struct OpticalGlassCache {
+    std::vector<DWORD> premulPixels;
+    OpticalLensGeometryLUT lut;
+    int wndX = -99999;
+    int wndY = -99999;
+    int w = 0;
+    int h = 0;
+    int glassPct = -9999;
+    bool isLight = false;
+    bool isMenu = false;
+    ULONGLONG snapTick = 0;
+};
+
+static std::mutex g_opticalCacheMutex;
+static PreblurredMonitorCache g_dlgMonitorBlurCache;
+static PreblurredMonitorCache g_menuMonitorBlurCache;
+static OpticalGlassCache g_dlgOpticalCache;
+static OpticalGlassCache g_menuMainOpticalCache;
+static OpticalGlassCache g_menuSubOpticalCache;
+
+extern std::atomic<HWND> g_hActiveGearMenu;
+extern std::atomic<HWND> g_hActiveCustomSizeWnd;
+
+void CaptureCleanMonitorBackdrop(HWND hRefWnd, bool forceExcludeVisible = false) {
+    HMONITOR hMon = hRefWnd && IsWindow(hRefWnd)
+        ? MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    int monX = 0, monY = 0, monW = GetSystemMetrics(SM_CXSCREEN), monH = GetSystemMetrics(SM_CYSCREEN);
+    if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        monX = mi.rcMonitor.left;
+        monY = mi.rcMonitor.top;
+        monW = mi.rcMonitor.right - mi.rcMonitor.left;
+        monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    }
+    if (monW <= 0 || monH <= 0 || monW > 7680 || monH > 4320) return;
+
+    std::vector<HWND> excludedHwnds;
+    auto excludeWndIfVisible = [&](HWND w) {
+        if (w && IsWindow(w) && IsWindowVisible(w)) {
+            SetWindowDisplayAffinity(w, 0x00000011 /*WDA_EXCLUDEFROMCAPTURE*/);
+            excludedHwnds.push_back(w);
         }
+    };
 
-        if (ok) {
-            auto srgbToLinear = [](BYTE v) -> double {
-                double c = v / 255.0;
-                return (c <= 0.04045) ? (c / 12.92) : std::pow((c + 0.055) / 1.055, 2.4);
-            };
-            double total = 0.0;
-            for (int i = 0; i < 256; ++i) {
-                DWORD px = pixels[i];
-                double r = srgbToLinear((px >> 16) & 0xFF);
-                double g = srgbToLinear((px >> 8) & 0xFF);
-                double b = srgbToLinear(px & 0xFF);
-                total += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            }
-            lum = total / 256.0;
-            valid = true;
+    if (forceExcludeVisible) {
+        excludeWndIfVisible(hRefWnd);
+        excludeWndIfVisible(g_hActiveGearMenu.load());
+        excludeWndIfVisible(g_hActiveCustomSizeWnd.load());
+        if (!excludedHwnds.empty()) {
+            // Double DwmFlush guarantees DWM has committed WDA_EXCLUDEFROMCAPTURE to the desktop surface
+            // before BitBlt reads hScreenDC, preventing any self-capture saturation feedback loop.
+            DwmFlush();
+            DwmFlush();
         }
-
-        SelectObject(hMemDC, oldBmp);
-        DeleteObject(hBmp);
     }
 
-    DeleteDC(hMemDC);
-    ReleaseDC(nullptr, hScreenDC);
+    HDC hScreenDC = GetDC(nullptr);
+    if (hScreenDC) {
+        HDC hMemDC = CreateCompatibleDC(hScreenDC);
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = monW;
+        bmi.bmiHeader.biHeight = -monH;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
 
-    if (!valid) return prevLight;
-    return prevLight ? (lum > 0.52) : (lum > 0.62);
+        DWORD* dibPixels = nullptr;
+        HBITMAP hBmp = CreateDIBSection(hMemDC, &bmi, DIB_RGB_COLORS, (void**)&dibPixels, nullptr, 0);
+        if (hBmp && dibPixels) {
+            HGDIOBJ oldBmp = SelectObject(hMemDC, hBmp);
+            if (BitBlt(hMemDC, 0, 0, monW, monH, hScreenDC, monX, monY, SRCCOPY)) {
+                GdiFlush();
+                std::lock_guard<std::mutex> lock(g_desktopSnapMutex);
+                g_desktopSnap.monX = monX;
+                g_desktopSnap.monY = monY;
+                g_desktopSnap.monW = monW;
+                g_desktopSnap.monH = monH;
+                g_desktopSnap.pixels.assign(dibPixels, dibPixels + (size_t)monW * (size_t)monH);
+                g_desktopSnap.captureTick = GetTickCount64();
+                g_desktopSnap.valid = true;
+            }
+            SelectObject(hMemDC, oldBmp);
+            DeleteObject(hBmp);
+        }
+        DeleteDC(hMemDC);
+        ReleaseDC(nullptr, hScreenDC);
+    }
+
+    for (HWND w : excludedHwnds) {
+        if (IsWindow(w)) {
+            SetWindowDisplayAffinity(w, 0x00000000 /*WDA_NONE*/);
+        }
+    }
+}
+
+// Ultra-fast 3-pass separable sliding-window box blur using fixed-point reciprocal multiplication
+void BlurBufferSeparableRGB(std::vector<DWORD>& buf, std::vector<DWORD>& tmp, int w, int h, int radius) {
+    if (radius <= 0 || w <= 2 || h <= 2) return;
+    radius = std::clamp(radius, 1, (std::min)(w - 1, h - 1) / 2);
+    if (radius <= 0) return;
+    const uint32_t diam = (uint32_t)(radius * 2 + 1);
+    const uint32_t invDiam = (1u << 24) / diam + 1u;
+
+    for (int pass = 0; pass < 3; ++pass) {
+        // Horizontal pass: buf -> tmp
+        for (int y = 0; y < h; ++y) {
+            const DWORD* rowIn = &buf[(size_t)y * w];
+            DWORD* rowOut = &tmp[(size_t)y * w];
+            uint32_t sumR = 0, sumG = 0, sumB = 0;
+            for (int k = -radius; k <= radius; ++k) {
+                int idx = std::clamp(k, 0, w - 1);
+                DWORD p = rowIn[idx];
+                sumR += (p >> 16) & 0xFF;
+                sumG += (p >> 8) & 0xFF;
+                sumB += p & 0xFF;
+            }
+            for (int x = 0; x < w; ++x) {
+                DWORD r = (sumR * invDiam) >> 24;
+                DWORD g = (sumG * invDiam) >> 24;
+                DWORD b = (sumB * invDiam) >> 24;
+                rowOut[x] = (r << 16) | (g << 8) | b;
+
+                int outIdx = std::clamp(x - radius, 0, w - 1);
+                int inIdx  = std::clamp(x + radius + 1, 0, w - 1);
+                DWORD pOut = rowIn[outIdx];
+                DWORD pIn  = rowIn[inIdx];
+                sumR += ((pIn >> 16) & 0xFF) - ((pOut >> 16) & 0xFF);
+                sumG += ((pIn >> 8) & 0xFF)  - ((pOut >> 8) & 0xFF);
+                sumB += (pIn & 0xFF)         - (pOut & 0xFF);
+            }
+        }
+        // Vertical pass: tmp -> buf
+        for (int x = 0; x < w; ++x) {
+            uint32_t sumR = 0, sumG = 0, sumB = 0;
+            for (int k = -radius; k <= radius; ++k) {
+                int iy = std::clamp(k, 0, h - 1);
+                DWORD p = tmp[(size_t)iy * w + x];
+                sumR += (p >> 16) & 0xFF;
+                sumG += (p >> 8) & 0xFF;
+                sumB += p & 0xFF;
+            }
+            for (int y = 0; y < h; ++y) {
+                DWORD r = (sumR * invDiam) >> 24;
+                DWORD g = (sumG * invDiam) >> 24;
+                DWORD b = (sumB * invDiam) >> 24;
+                buf[(size_t)y * w + x] = (r << 16) | (g << 8) | b;
+
+                int outY = std::clamp(y - radius, 0, h - 1);
+                int inY  = std::clamp(y + radius + 1, 0, h - 1);
+                DWORD pOut = tmp[(size_t)outY * w + x];
+                DWORD pIn  = tmp[(size_t)inY * w + x];
+                sumR += ((pIn >> 16) & 0xFF) - ((pOut >> 16) & 0xFF);
+                sumG += ((pIn >> 8) & 0xFF)  - ((pOut >> 8) & 0xFF);
+                sumB += (pIn & 0xFF)         - (pOut & 0xFF);
+            }
+        }
+    }
+}
+
+void BuildOpticalLensGeometryLUT(OpticalLensGeometryLUT& lut, int w, int h, UINT dpi, int glassPct, bool isLight, bool isMenuPanel) {
+    lut.w = w;
+    lut.h = h;
+    lut.dpi = dpi;
+    lut.glassPct = glassPct;
+    lut.isLight = isLight;
+    lut.isMenu = isMenuPanel;
+
+    float negF = (glassPct < 0) ? (std::clamp(-glassPct, 0, 100) / 100.0f) : 0.0f;
+    const float cornerR = (float)dpi * 8.0f / 96.0f;
+    const float cx = w * 0.5f;
+    const float cy = h * 0.5f;
+    const float hxBox = (std::max)(1.0f, cx - cornerR);
+    const float hyBox = (std::max)(1.0f, cy - cornerR);
+
+    const float bevelW = ((float)dpi / 96.0f) * (20.0f + 10.0f * negF);
+    const float maxDisp = ((float)dpi / 96.0f) * (16.0f + 20.0f * negF);
+    const float zoom = 1.032f + 0.045f * negF;
+    const float invZoomDelta = 1.0f - (1.0f / zoom);
+
+    const float interiorOpacity = (glassPct < 0)
+        ? std::clamp(0.24f + 0.74f * std::pow(negF, 0.52f), 0.24f, 0.98f)
+        : 0.0f;
+    lut.interiorAlpha = (uint8_t)std::clamp((int)std::round(interiorOpacity * 255.0f), 0, 255);
+
+    lut.interiorDxG.resize(w);
+    for (int x = 0; x < w; ++x) {
+        float dx = (x + 0.5f) - cx;
+        float baseShiftX = -dx * invZoomDelta;
+        lut.interiorDxG[x] = (int16_t)std::round(((float)x + baseShiftX) * 0.5f);
+    }
+
+    lut.sheenMap.resize((size_t)w * (size_t)h);
+    lut.interiorSpans.clear();
+    lut.bevelPixels.clear();
+    lut.bevelPixels.reserve((size_t)(w + h) * 48);
+
+    for (int y = 0; y < h; ++y) {
+        float dy = (y + 0.5f) - cy;
+        float qy = std::fabs(dy) - hyBox;
+        float oy = (std::max)(qy, 0.0f);
+        float baseShiftY = -dy * invZoomDelta;
+        int rowDyG = (int)std::round(((float)y + baseShiftY) * 0.5f);
+        float v = (float)y / (float)(std::max)(1, h);
+
+        int spanStart = -1;
+        for (int x = 0; x < w; ++x) {
+            float u = (float)x / (float)(std::max)(1, w);
+            float diag = u * 0.55f + v * 0.45f;
+            float sheen = (diag < 0.38f)
+                ? ((1.0f - diag / 0.38f) * (12.0f + 8.0f * negF))
+                : ((diag > 0.72f) ? (((diag - 0.72f) / 0.28f) * (7.0f + 5.0f * negF)) : 0.0f);
+            uint8_t sheenU8 = (uint8_t)std::clamp((int)std::round(sheen), 0, 32);
+            lut.sheenMap[(size_t)y * w + x] = sheenU8;
+
+            float dx = (x + 0.5f) - cx;
+            float qx = std::fabs(dx) - hxBox;
+            float ox = (std::max)(qx, 0.0f);
+
+            float outDist = std::sqrt(ox * ox + oy * oy);
+            float inDist  = (std::min)((std::max)(qx, qy), 0.0f);
+            float sdf     = outDist + inDist - cornerR;
+            float distFromEdge = (std::max)(0.0f, -sdf);
+
+            float tBevel = (distFromEdge < bevelW) ? (1.0f - distFromEdge / bevelW) : 0.0f;
+            if (tBevel <= 0.0f) {
+                if (spanStart < 0) spanStart = x;
+                continue;
+            }
+            if (spanStart >= 0) {
+                lut.interiorSpans.push_back({ y, spanStart, x, rowDyG });
+                spanStart = -1;
+            }
+
+            float bevelAlpha = std::clamp(tBevel * tBevel * (0.65f + 0.33f * negF), 0.0f, 0.98f);
+            float pixelAlpha = (std::max)(interiorOpacity, bevelAlpha);
+            if (pixelAlpha <= 0.004f) continue;
+
+            float nx = 0.0f, ny = 0.0f;
+            if (outDist > 1e-4f) {
+                nx = (dx >= 0.0f ? 1.0f : -1.0f) * (ox / outDist);
+                ny = (dy >= 0.0f ? 1.0f : -1.0f) * (oy / outDist);
+            } else {
+                float maxQ = (std::max)(qx, qy);
+                float wx = std::exp(std::clamp((qx - maxQ) * 0.28f, -20.0f, 0.0f));
+                float wy = std::exp(std::clamp((qy - maxQ) * 0.28f, -20.0f, 0.0f));
+                nx = (dx >= 0.0f ? 1.0f : -1.0f) * wx;
+                ny = (dy >= 0.0f ? 1.0f : -1.0f) * wy;
+                float nLen = std::sqrt(nx * nx + ny * ny);
+                if (nLen > 1e-4f) { nx /= nLen; ny /= nLen; }
+            }
+
+            float baseShiftX = -dx * invZoomDelta;
+            float lensCurve = tBevel * tBevel * (0.40f + 0.60f * tBevel);
+            float dispX = -nx * lensCurve * maxDisp;
+            float dispY = -ny * lensCurve * maxDisp;
+
+            BevelPixelLUT bp{};
+            bp.dstIdx = (uint32_t)((size_t)y * w + x);
+            bp.dxR = (int16_t)std::round(((float)x + baseShiftX + dispX * 0.80f) * 0.5f);
+            bp.dyR = (int16_t)std::round(((float)y + baseShiftY + dispY * 0.80f) * 0.5f);
+            bp.dxG = (int16_t)std::round(((float)x + baseShiftX + dispX * 1.00f) * 0.5f);
+            bp.dyG = (int16_t)std::round(((float)y + baseShiftY + dispY * 1.00f) * 0.5f);
+            bp.dxB = (int16_t)std::round(((float)x + baseShiftX + dispX * 1.22f) * 0.5f);
+            bp.dyB = (int16_t)std::round(((float)y + baseShiftY + dispY * 1.22f) * 0.5f);
+
+            if (tBevel > 0.30f) {
+                float cm = std::clamp((tBevel - 0.30f) / 0.70f, 0.0f, 1.0f);
+                cm = cm * cm * (0.42f + 0.25f * negF);
+                bp.crispMix = (uint8_t)std::clamp((int)std::round(cm * 255.0f), 0, 255);
+            } else {
+                bp.crispMix = 0;
+            }
+
+            float lightTL = (std::max)(0.0f, -0.66f * nx - 0.75f * ny);
+            float lightBR = (std::max)(0.0f,  0.66f * nx + 0.75f * ny);
+            float fresnel = std::clamp(std::pow(tBevel, 1.55f) * (0.15f + 0.30f * lightTL + 0.20f * lightBR) * (1.0f + 0.28f * negF), 0.0f, 0.82f);
+            uint32_t frU8 = (uint32_t)std::clamp((int)std::round(fresnel * 256.0f), 0, 256);
+            bp.invFr = (uint16_t)(256u - frU8);
+            bp.frR_255 = (uint16_t)std::round((232.0f + 23.0f * lightBR) * frU8);
+            bp.frG_255 = (uint16_t)std::round((244.0f - 10.0f * lightBR) * frU8);
+            bp.frB_255 = (uint16_t)(255u * frU8);
+
+            bp.alpha = (uint8_t)std::clamp((int)std::round(pixelAlpha * 255.0f), 1, 255);
+            bp.trR_a = bp.alpha;
+            bp.trG_a = bp.alpha;
+            bp.trB_a = bp.alpha;
+
+            float bevelSheen = sheen * tBevel;
+            bp.sheenR = (uint8_t)std::clamp((int)std::round(bevelSheen * 0.92f), 0, 32);
+            bp.sheenG = (uint8_t)std::clamp((int)std::round(bevelSheen * 0.97f), 0, 32);
+            bp.sheenB = (uint8_t)std::clamp((int)std::round(bevelSheen * 1.02f), 0, 32);
+            lut.bevelPixels.push_back(bp);
+        }
+        if (spanStart >= 0) {
+            lut.interiorSpans.push_back({ y, spanStart, w, rowDyG });
+        }
+    }
+}
+
+void EnsurePreblurredMonitorCache(PreblurredMonitorCache& mcache, int softRad, int crispRad,
+                                  int glassPct, uint8_t interiorAlpha, bool isLight, ULONGLONG snapTick) {
+    if (mcache.snapTick == snapTick && mcache.softRad == softRad && mcache.crispRad == crispRad &&
+        mcache.glassPct == glassPct && mcache.bakedAlpha == interiorAlpha && mcache.isLight == isLight &&
+        !mcache.softRGB.empty()) {
+        return;
+    }
+
+    int monX = 0, monY = 0, monW = 0, monH = 0;
+    {
+        std::lock_guard<std::mutex> snapLock(g_desktopSnapMutex);
+        if (!g_desktopSnap.valid || g_desktopSnap.pixels.empty()) return;
+        monX = g_desktopSnap.monX;
+        monY = g_desktopSnap.monY;
+        monW = g_desktopSnap.monW;
+        monH = g_desktopSnap.monH;
+        const int halfW = (std::max)(4, monW / 2);
+        const int halfH = (std::max)(4, monH / 2);
+
+        mcache.monX = monX;
+        mcache.monY = monY;
+        mcache.monW = monW;
+        mcache.monH = monH;
+        mcache.halfW = halfW;
+        mcache.halfH = halfH;
+        mcache.softRad = softRad;
+        mcache.crispRad = crispRad;
+        mcache.glassPct = glassPct;
+        mcache.bakedAlpha = interiorAlpha;
+        mcache.isLight = isLight;
+        mcache.snapTick = snapTick;
+
+        const size_t totalHalf = (size_t)halfW * (size_t)halfH;
+        mcache.softRGB.resize(totalHalf);
+        mcache.crispRGB.resize(totalHalf);
+        mcache.softPremul.resize(totalHalf);
+        mcache.blurTmp.resize(totalHalf);
+
+        const DWORD* snapPx = g_desktopSnap.pixels.data();
+        for (int hy = 0; hy < halfH; ++hy) {
+            int sy0 = std::clamp(hy * 2, 0, monH - 1);
+            int sy1 = std::clamp(sy0 + 1, 0, monH - 1);
+            const DWORD* row0 = &snapPx[(size_t)sy0 * monW];
+            const DWORD* row1 = &snapPx[(size_t)sy1 * monW];
+            DWORD* dstSoft = &mcache.softRGB[(size_t)hy * halfW];
+            DWORD* dstCrisp = &mcache.crispRGB[(size_t)hy * halfW];
+            for (int hx = 0; hx < halfW; ++hx) {
+                int sx0 = std::clamp(hx * 2, 0, monW - 1);
+                int sx1 = std::clamp(sx0 + 1, 0, monW - 1);
+                DWORD p00 = row0[sx0], p10 = row0[sx1], p01 = row1[sx0], p11 = row1[sx1];
+                DWORD r = (((p00 >> 16) & 0xFF) + ((p10 >> 16) & 0xFF) + ((p01 >> 16) & 0xFF) + ((p11 >> 16) & 0xFF)) >> 2;
+                DWORD g = (((p00 >> 8) & 0xFF)  + ((p10 >> 8) & 0xFF)  + ((p01 >> 8) & 0xFF)  + ((p11 >> 8) & 0xFF))  >> 2;
+                DWORD b = ((p00 & 0xFF)         + (p10 & 0xFF)         + (p01 & 0xFF)         + (p11 & 0xFF))         >> 2;
+                DWORD packed = (r << 16) | (g << 8) | b;
+                dstSoft[hx] = packed;
+                dstCrisp[hx] = packed;
+            }
+        }
+    }
+
+    BlurBufferSeparableRGB(mcache.softRGB, mcache.blurTmp, mcache.halfW, mcache.halfH, softRad);
+    BlurBufferSeparableRGB(mcache.crispRGB, mcache.blurTmp, mcache.halfW, mcache.halfH, crispRad);
+
+    // Pre-apply natural iOS 26 vibrancy & subtle glass body tint across the half-res monitor buffers once
+    float negF = (glassPct < 0) ? (std::clamp(-glassPct, 0, 100) / 100.0f) : 0.0f;
+    float posF = (glassPct > 0) ? (std::clamp(glassPct, 0, 100) / 100.0f) : 0.0f;
+    const float satBoost = 1.12f + 0.12f * negF - 0.10f * posF;
+    const float tintWeight = (glassPct < 0)
+        ? (0.18f * (1.0f - negF) * (1.0f - 0.45f * negF) + 0.02f)
+        : (0.20f + 0.48f * posF);
+    const int satScale = (int)std::round(satBoost * 256.0f);
+    const int tintW = (int)std::round(tintWeight * 256.0f);
+    const int invTintW = 256 - tintW;
+    const int tintR = (isLight ? 242 : 18) * tintW;
+    const int tintG = (isLight ? 245 : 23) * tintW;
+    const int tintB = (isLight ? 252 : 34) * tintW;
+    const uint32_t intA = interiorAlpha;
+
+    const size_t totalHalf = mcache.softRGB.size();
+    for (size_t i = 0; i < totalHalf; ++i) {
+        {
+            DWORD p = mcache.softRGB[i];
+            int r = (p >> 16) & 0xFF;
+            int g = (p >> 8)  & 0xFF;
+            int b =  p        & 0xFF;
+            int luma = (77 * r + 150 * g + 29 * b) >> 8;
+            r = std::clamp(luma + (((r - luma) * satScale) >> 8), 0, 255);
+            g = std::clamp(luma + (((g - luma) * satScale) >> 8), 0, 255);
+            b = std::clamp(luma + (((b - luma) * satScale) >> 8), 0, 255);
+            r = std::clamp((r * invTintW + tintR) >> 8, 0, 255);
+            g = std::clamp((g * invTintW + tintG) >> 8, 0, 255);
+            b = std::clamp((b * invTintW + tintB) >> 8, 0, 255);
+            mcache.softRGB[i] = ((DWORD)r << 16) | ((DWORD)g << 8) | (DWORD)b;
+            mcache.softPremul[i] = (intA << 24)
+                | ((((uint32_t)r * intA) >> 8) << 16)
+                | ((((uint32_t)g * intA) >> 8) << 8)
+                |  (((uint32_t)b * intA) >> 8);
+        }
+        {
+            DWORD p = mcache.crispRGB[i];
+            int r = (p >> 16) & 0xFF;
+            int g = (p >> 8)  & 0xFF;
+            int b =  p        & 0xFF;
+            int luma = (77 * r + 150 * g + 29 * b) >> 8;
+            r = std::clamp(luma + (((r - luma) * satScale) >> 8), 0, 255);
+            g = std::clamp(luma + (((g - luma) * satScale) >> 8), 0, 255);
+            b = std::clamp(luma + (((b - luma) * satScale) >> 8), 0, 255);
+            r = std::clamp((r * invTintW + tintR) >> 8, 0, 255);
+            g = std::clamp((g * invTintW + tintG) >> 8, 0, 255);
+            b = std::clamp((b * invTintW + tintB) >> 8, 0, 255);
+            mcache.crispRGB[i] = ((DWORD)r << 16) | ((DWORD)g << 8) | (DWORD)b;
+        }
+    }
+}
+
+// Renders zero-latency iOS 26 Control Center Liquid Glass onto pRT using pre-blurred monitor buffers & LUT
+void DrawOpticalLiquidGlassBackdrop(ID2D1RenderTarget* pRT, HWND hWnd, int w, int h,
+                                    UINT dpi, int glassPct, bool isLight, bool isMenuPanel, int cacheSlot) {
+    if (!pRT || !hWnd || w <= 0 || h <= 0) return;
+
+    RECT rcWnd = {};
+    GetWindowRect(hWnd, &rcWnd);
+    int wndX = rcWnd.left;
+    int wndY = rcWnd.top;
+
+    bool needCapture = false;
+    ULONGLONG snapTick = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_desktopSnapMutex);
+        needCapture = (!g_desktopSnap.valid || g_desktopSnap.pixels.empty());
+        snapTick = g_desktopSnap.captureTick;
+    }
+    if (needCapture) {
+        CaptureCleanMonitorBackdrop(hWnd, true);
+        std::lock_guard<std::mutex> lock(g_desktopSnapMutex);
+        if (!g_desktopSnap.valid || g_desktopSnap.pixels.empty()) return;
+        snapTick = g_desktopSnap.captureTick;
+    }
+
+    OpticalGlassCache* cache = (cacheSlot == 0) ? &g_dlgOpticalCache
+                             : ((cacheSlot == 1) ? &g_menuMainOpticalCache : &g_menuSubOpticalCache);
+    PreblurredMonitorCache& mcache = isMenuPanel ? g_menuMonitorBlurCache : g_dlgMonitorBlurCache;
+
+    std::lock_guard<std::mutex> cacheLock(g_opticalCacheMutex);
+    if (cache->w != w || cache->h != h || cache->wndX != wndX || cache->wndY != wndY ||
+        cache->glassPct != glassPct || cache->isLight != isLight || cache->isMenu != isMenuPanel ||
+        cache->snapTick != snapTick || (int)cache->premulPixels.size() != w * h) {
+
+        bool shapeOrStyleChanged = (cache->lut.w != w || cache->lut.h != h || cache->lut.dpi != dpi ||
+                                    cache->lut.glassPct != glassPct || cache->lut.isLight != isLight ||
+                                    cache->lut.isMenu != isMenuPanel);
+        if (shapeOrStyleChanged) {
+            BuildOpticalLensGeometryLUT(cache->lut, w, h, dpi, glassPct, isLight, isMenuPanel);
+        }
+
+        float negF = (glassPct < 0) ? (std::clamp(-glassPct, 0, 100) / 100.0f) : 0.0f;
+        float posF = (glassPct > 0) ? (std::clamp(glassPct, 0, 100) / 100.0f) : 0.0f;
+        float softRadF = (8.0f - 4.2f * negF + 4.0f * posF + (isMenuPanel ? 1.5f : 0.0f)) * ((float)dpi / 96.0f);
+        int softRad = std::clamp((int)std::round(softRadF), 3, 18);
+        int crispRad = std::clamp(softRad / 2, 1, 6);
+
+        EnsurePreblurredMonitorCache(mcache, softRad, crispRad, glassPct, cache->lut.interiorAlpha, isLight, snapTick);
+        if (mcache.softRGB.empty() || mcache.halfW <= 0 || mcache.halfH <= 0) return;
+
+        cache->w = w;
+        cache->h = h;
+        cache->wndX = wndX;
+        cache->wndY = wndY;
+        cache->glassPct = glassPct;
+        cache->isLight = isLight;
+        cache->isMenu = isMenuPanel;
+        cache->snapTick = snapTick;
+        cache->premulPixels.resize((size_t)w * (size_t)h);
+
+        const int bw = mcache.halfW;
+        const int bh = mcache.halfH;
+        const int hx0 = (wndX - mcache.monX) >> 1;
+        const int hy0 = (wndY - mcache.monY) >> 1;
+
+        // 1. Ultra-fast interior spans (< 0.19 ms for the entire window!)
+        if (cache->lut.interiorAlpha > 0) {
+            const int16_t* dxArr = cache->lut.interiorDxG.data();
+            const DWORD* premulBase = mcache.softPremul.data();
+            for (const auto& sp : cache->lut.interiorSpans) {
+                int sy = std::clamp(hy0 + sp.dyG, 0, bh - 1);
+                const DWORD* srcRow = &premulBase[(size_t)sy * bw];
+                DWORD* dstRow = &cache->premulPixels[(size_t)sp.y * w];
+                if (hx0 + dxArr[sp.xStart] >= 0 && hx0 + dxArr[sp.xEnd - 1] < bw) {
+                    const DWORD* srcOffsetRow = srcRow + hx0;
+                    for (int x = sp.xStart; x < sp.xEnd; ++x) {
+                        dstRow[x] = srcOffsetRow[dxArr[x]];
+                    }
+                } else {
+                    for (int x = sp.xStart; x < sp.xEnd; ++x) {
+                        dstRow[x] = srcRow[std::clamp(hx0 + dxArr[x], 0, bw - 1)];
+                    }
+                }
+            }
+        } else if (shapeOrStyleChanged) {
+            std::fill(cache->premulPixels.begin(), cache->premulPixels.end(), 0);
+        }
+
+        // 2. Sparse 3D Snell's-law bevel pixels with chromatic dispersion & Fresnel rim cushion
+        const DWORD* softData  = mcache.softRGB.data();
+        const DWORD* crispData = mcache.crispRGB.data();
+        DWORD* outData = cache->premulPixels.data();
+
+        for (const auto& bp : cache->lut.bevelPixels) {
+            int sxR = std::clamp(hx0 + bp.dxR, 0, bw - 1);
+            int syR = std::clamp(hy0 + bp.dyR, 0, bh - 1);
+            int sxG = std::clamp(hx0 + bp.dxG, 0, bw - 1);
+            int syG = std::clamp(hy0 + bp.dyG, 0, bh - 1);
+            int sxB = std::clamp(hx0 + bp.dxB, 0, bw - 1);
+            int syB = std::clamp(hy0 + bp.dyB, 0, bh - 1);
+
+            uint32_t r = (softData[(size_t)syR * bw + sxR] >> 16) & 0xFF;
+            uint32_t g = (softData[(size_t)syG * bw + sxG] >> 8)  & 0xFF;
+            uint32_t b =  softData[(size_t)syB * bw + sxB]        & 0xFF;
+
+            if (bp.crispMix > 0) {
+                uint32_t rC = (crispData[(size_t)syR * bw + sxR] >> 16) & 0xFF;
+                uint32_t gC = (crispData[(size_t)syG * bw + sxG] >> 8)  & 0xFF;
+                uint32_t bC =  crispData[(size_t)syB * bw + sxB]        & 0xFF;
+                uint32_t cm = bp.crispMix, invCm = 256 - cm;
+                r = (r * invCm + rC * cm) >> 8;
+                g = (g * invCm + gC * cm) >> 8;
+                b = (b * invCm + bC * cm) >> 8;
+            }
+
+            r = (std::min)(255u, r + bp.sheenR);
+            g = (std::min)(255u, g + bp.sheenG);
+            b = (std::min)(255u, b + bp.sheenB);
+
+            uint32_t invFr = bp.invFr;
+            r = (r * invFr + bp.frR_255) >> 8;
+            g = (g * invFr + bp.frG_255) >> 8;
+            b = (b * invFr + bp.frB_255) >> 8;
+
+            uint32_t aByte = bp.alpha;
+            uint32_t rByte = (std::min)(aByte, (r * bp.trR_a) >> 8);
+            uint32_t gByte = (std::min)(aByte, (g * bp.trG_a) >> 8);
+            uint32_t bByte = (std::min)(aByte, (b * bp.trB_a) >> 8);
+            outData[bp.dstIdx] = (aByte << 24) | (rByte << 16) | (gByte << 8) | bByte;
+        }
+    }
+
+    D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.0f, 96.0f);
+    ID2D1Bitmap* pGlassBmp = nullptr;
+    if (SUCCEEDED(pRT->CreateBitmap(D2D1::SizeU((UINT32)w, (UINT32)h),
+                                    cache->premulPixels.data(), (UINT32)(w * 4),
+                                    &bmpProps, &pGlassBmp)) && pGlassBmp) {
+        D2D1_RECT_F dstRect = D2D1::RectF(0.0f, 0.0f, (float)w, (float)h);
+        pRT->DrawBitmap(pGlassBmp, dstRect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        pGlassBmp->Release();
+    }
+}
+
+// Computes a pure Win32 window-topology signature of visible background windows on the monitor
+// (Zero GetPixel calls -> immune to mouse hover, pointer glow, DWM shadows, or open menu popups!)
+uint64_t GetBackdropWindowTopologySignature(HWND hDlg) {
+    HMONITOR hMon = (hDlg && IsWindow(hDlg))
+        ? MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    RECT rcMon = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+    if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        rcMon = mi.rcMonitor;
+    }
+
+    DWORD selfPid = GetCurrentProcessId();
+    HWND hGearMenu = g_hActiveGearMenu.load();
+    HWND hSizeWnd  = g_hActiveCustomSizeWnd.load();
+
+    uint64_t hash = 14695981039346656037ULL;
+    auto mixHash = [&](uint64_t v) {
+        hash ^= v;
+        hash *= 1099511628211ULL;
+    };
+
+    for (HWND w = GetTopWindow(nullptr); w != nullptr; w = GetWindow(w, GW_HWNDNEXT)) {
+        if (w == hDlg || w == hGearMenu || w == hSizeWnd) continue;
+        if (!IsWindowVisible(w) || IsIconic(w)) continue;
+        if (hDlg && GetWindow(w, GW_OWNER) == hDlg) continue;
+
+        LONG_PTR exStyle = GetWindowLongPtrW(w, GWL_EXSTYLE);
+        if (exStyle & WS_EX_TOOLWINDOW) continue;
+
+        DWORD cloaked = 0;
+        if (SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
+            continue;
+        }
+
+        RECT rcW = {};
+        if (!GetWindowRect(w, &rcW) || rcW.right <= rcW.left || rcW.bottom <= rcW.top) continue;
+
+        RECT rcInter = {};
+        if (!IntersectRect(&rcInter, &rcW, &rcMon)) continue;
+
+        DWORD wndPid = 0;
+        GetWindowThreadProcessId(w, &wndPid);
+        if (wndPid == selfPid) {
+            wchar_t cls[64] = {};
+            if (GetClassNameW(w, cls, ARRAYSIZE(cls))) {
+                // In explorer.exe, only track real File Explorer folder windows and the Desktop
+                if (_wcsicmp(cls, L"CabinetWClass") != 0 &&
+                    _wcsicmp(cls, L"ExploreWClass") != 0 &&
+                    _wcsicmp(cls, L"Progman") != 0 &&
+                    _wcsicmp(cls, L"WorkerW") != 0) {
+                    continue;
+                }
+            }
+        }
+
+        mixHash((uint64_t)(uintptr_t)w);
+        mixHash((uint64_t)(int64_t)rcW.left);
+        mixHash((uint64_t)(int64_t)rcW.top);
+        mixHash((uint64_t)(int64_t)rcW.right);
+        mixHash((uint64_t)(int64_t)rcW.bottom);
+        mixHash((uint64_t)(IsZoomed(w) ? 1 : 0));
+    }
+    return hash;
+}
+
+// Samples true background luminance directly from g_desktopSnap pixels directly behind the dialog
+bool SampleBackdropLuminanceFromSnap(int wndX, int wndY, int w, int h, bool prevLight) {
+    std::lock_guard<std::mutex> lock(g_desktopSnapMutex);
+    if (!g_desktopSnap.valid || g_desktopSnap.pixels.empty() || w <= 0 || h <= 0) {
+        return prevLight;
+    }
+    const int monX = g_desktopSnap.monX;
+    const int monY = g_desktopSnap.monY;
+    const int monW = g_desktopSnap.monW;
+    const int monH = g_desktopSnap.monH;
+    const DWORD* snapPx = g_desktopSnap.pixels.data();
+
+    int relX = wndX - monX;
+    int relY = wndY - monY;
+
+    auto srgbToLinear = [](BYTE v) -> double {
+        double c = v / 255.0;
+        return (c <= 0.04045) ? (c / 12.92) : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+
+    std::vector<double> samples;
+    samples.reserve(256);
+
+    int stepX = (std::max)(1, w / 16);
+    int stepY = (std::max)(1, h / 16);
+
+    for (int sy = relY + stepY / 2; sy < relY + h && sy < monH; sy += stepY) {
+        if (sy < 0) continue;
+        const DWORD* row = &snapPx[(size_t)sy * monW];
+        for (int sx = relX + stepX / 2; sx < relX + w && sx < monW; sx += stepX) {
+            if (sx < 0) continue;
+            DWORD px = row[sx];
+            double r = srgbToLinear((px >> 16) & 0xFF);
+            double g = srgbToLinear((px >> 8) & 0xFF);
+            double b = srgbToLinear(px & 0xFF);
+            double lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            samples.push_back(lum);
+        }
+    }
+
+    if (samples.empty()) return prevLight;
+    size_t mid = samples.size() / 2;
+    std::nth_element(samples.begin(), samples.begin() + mid, samples.end());
+    double medianLum = samples[mid];
+    double avgLum = 0.0;
+    for (double v : samples) avgLum += v;
+    avgLum /= (double)samples.size();
+    double effectiveLum = medianLum * 0.65 + avgLum * 0.35;
+
+    return prevLight ? (effectiveLum > 0.36) : (effectiveLum > 0.44);
+}
+
+bool SampleCustomBgPixelsIsLight(const BYTE* bgPixels, UINT w, UINT h, bool validPrev, bool prevLight) {
+    if (!bgPixels || w == 0 || h == 0) return prevLight;
+    auto srgbToLinear = [](BYTE v) -> double {
+        double c = v / 255.0;
+        return (c <= 0.04045) ? (c / 12.92) : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+
+    std::vector<double> samples;
+    samples.reserve(256);
+    UINT stepX = (std::max)(1u, w / 16);
+    UINT stepY = (std::max)(1u, h / 16);
+    for (UINT y = stepY / 2; y < h && samples.size() < 256; y += stepY) {
+        const BYTE* row = bgPixels + (size_t)y * w * 4;
+        for (UINT x = stepX / 2; x < w && samples.size() < 256; x += stepX) {
+            const BYTE* px = row + (size_t)x * 4;
+            BYTE b = px[0], g = px[1], r = px[2], a = px[3];
+            if (a > 0 && a < 255) {
+                r = (BYTE)(std::min)(255, (int)r * 255 / a);
+                g = (BYTE)(std::min)(255, (int)g * 255 / a);
+                b = (BYTE)(std::min)(255, (int)b * 255 / a);
+            }
+            double lum = 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+            samples.push_back(lum);
+        }
+    }
+    if (samples.empty()) return prevLight;
+    size_t mid = samples.size() / 2;
+    std::nth_element(samples.begin(), samples.begin() + mid, samples.end());
+    double medianLum = samples[mid];
+    double avgLum = 0.0;
+    for (double v : samples) avgLum += v;
+    avgLum /= (double)samples.size();
+    double effectiveLum = medianLum * 0.65 + avgLum * 0.35;
+    if (!validPrev) return effectiveLum > 0.42;
+    return prevLight ? (effectiveLum > 0.36) : (effectiveLum > 0.46);
 }
 
 SurfaceTheme ResolveEffectiveSurface(const ModSettings& settings) {
@@ -627,37 +1377,1453 @@ SurfaceTheme ResolveEffectiveSurface(const ModSettings& settings) {
     return settings.surfaceTheme;
 }
 
-LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
-    if (lang == L"auto") {
+std::wstring ResolveEffectiveLanguageCode(std::wstring lang) {
+    if (lang == L"auto" || lang.empty()) {
         LANGID lid = GetUserDefaultUILanguage();
         WORD prim = PRIMARYLANGID(lid);
         WORD sub  = SUBLANGID(lid);
         switch (prim) {
-            case LANG_VIETNAMESE: lang = L"vi"; break;
-            case LANG_THAI:       lang = L"th"; break;
-            case LANG_INDONESIAN: lang = L"id"; break;
-            case LANG_MALAY:      lang = L"ms"; break;
-            case LANG_JAPANESE:   lang = L"ja"; break;
+            case LANG_VIETNAMESE: return L"vi";
+            case LANG_THAI:       return L"th";
+            case LANG_INDONESIAN: return L"id";
+            case LANG_MALAY:      return L"ms";
+            case LANG_JAPANESE:   return L"ja";
             case LANG_CHINESE:
-                lang = (sub == SUBLANG_CHINESE_SIMPLIFIED || sub == SUBLANG_CHINESE_SINGAPORE)
+                return (sub == SUBLANG_CHINESE_SIMPLIFIED || sub == SUBLANG_CHINESE_SINGAPORE)
                        ? L"zh_cn" : L"zh_tw";
-                break;
-            case LANG_KOREAN:     lang = L"ko"; break;
-            case LANG_FRENCH:     lang = L"fr"; break;
-            case LANG_GERMAN:     lang = L"de"; break;
-            case LANG_SPANISH:    lang = L"es"; break;
-            case LANG_PORTUGUESE: lang = L"pt"; break;
-            case LANG_ITALIAN:    lang = L"it"; break;
-            case LANG_RUSSIAN:    lang = L"ru"; break;
-            case LANG_UKRAINIAN:  lang = L"uk"; break;
-            case LANG_POLISH:     lang = L"pl"; break;
-            case LANG_DUTCH:      lang = L"nl"; break;
-            case LANG_TURKISH:    lang = L"tr"; break;
-            case LANG_HINDI:      lang = L"hi"; break;
-            case LANG_ARABIC:     lang = L"ar"; break;
-            default:              lang = L"en"; break;
+            case LANG_KOREAN:     return L"ko";
+            case LANG_FRENCH:     return L"fr";
+            case LANG_GERMAN:     return L"de";
+            case LANG_SPANISH:    return L"es";
+            case LANG_PORTUGUESE: return L"pt";
+            case LANG_ITALIAN:    return L"it";
+            case LANG_RUSSIAN:    return L"ru";
+            case LANG_UKRAINIAN:  return L"uk";
+            case LANG_POLISH:     return L"pl";
+            case LANG_DUTCH:      return L"nl";
+            case LANG_TURKISH:    return L"tr";
+            case LANG_HINDI:      return L"hi";
+            case LANG_ARABIC:     return L"ar";
+            default:              return L"en";
         }
     }
+    return lang;
+}
+
+struct MenuLocalizedStrings {
+    const wchar_t* surfaceThemeMenu;
+    const wchar_t* liquidGlass;
+    const wchar_t* windowsBlur;
+    const wchar_t* opaqueSolid;
+    const wchar_t* glassTintRange;
+    const wchar_t* glassPresetM100;
+    const wchar_t* glassPresetM80;
+    const wchar_t* glassPresetM50;
+    const wchar_t* glassPreset0;
+    const wchar_t* glassPreset15;
+    const wchar_t* glassPreset30;
+    const wchar_t* glassPreset55;
+    const wchar_t* glassPreset80;
+    const wchar_t* blurOpacityRange;
+    const wchar_t* colorModeMenu;
+    const wchar_t* colorAuto;
+    const wchar_t* colorDark;
+    const wchar_t* colorLight;
+    const wchar_t* uiSizeMenu;
+    const wchar_t* scale85;
+    const wchar_t* scale90;
+    const wchar_t* scale100;
+    const wchar_t* scale110;
+    const wchar_t* scale120;
+    const wchar_t* widthPx;
+    const wchar_t* heightPx;
+    const wchar_t* fontSizePt;
+    const wchar_t* resetCustomSize;
+    const wchar_t* minimalModeMenu;
+    const wchar_t* customBgMenu;
+    const wchar_t* selectBgFile;
+    const wchar_t* clearCustomBg;
+    const wchar_t* mediaOpacityRange;
+    const wchar_t* bgOpacity90;
+    const wchar_t* bgOpacity150;
+    const wchar_t* bgOpacity215;
+    const wchar_t* bgOpacity255;
+    const wchar_t* historyMenu;
+    const wchar_t* maxStoredRange;
+    const wchar_t* visibleRowsRange;
+    const wchar_t* maxHist10;
+    const wchar_t* maxHist30;
+    const wchar_t* maxHist35;
+    const wchar_t* maxHist50;
+    const wchar_t* maxHist0;
+    const wchar_t* showTimestamp;
+    const wchar_t* appSuggestions;
+    const wchar_t* displayLanguageMenu;
+    const wchar_t* autoLanguage;
+    const wchar_t* clearAllHistory;
+    const wchar_t* customSizeDlgTitle;
+    const wchar_t* resetDefaultBtn;
+    const wchar_t* doneOkBtn;
+    const wchar_t* bgBrowseFilter;
+    const wchar_t* bgBrowseTitle;
+    const wchar_t* bgSizeLimitFmt;
+    const wchar_t* ggSearchEmptyHint;
+    const wchar_t* ggSearchQueryPrefix;
+    const wchar_t* mseSearchEmptyHint;
+    const wchar_t* mseSearchQueryPrefix;
+};
+
+MenuLocalizedStrings GetMenuLocalizedStrings(std::wstring lang) {
+    lang = ResolveEffectiveLanguageCode(std::move(lang));
+
+    if (lang == L"vi") {
+        return {
+            L"Giao diện bề mặt (Surface Theme)",
+            L"Liquid Glass",
+            L"Làm mờ Windows (Windows Blur)",
+            L"Nền đặc (Opaque)",
+            L"Độ đậm Liquid Glass (-100 – 100)",
+            L"Kính: Trong suốt tối đa (-100)",
+            L"Kính: Trong suốt cực cao (-80)",
+            L"Kính: Siêu trong suốt (-50)",
+            L"Kính: Trong suốt chuẩn (0)",
+            L"Kính: Trong suốt cao – Clear (15)",
+            L"Kính: Chuẩn iOS – Balanced (30)",
+            L"Kính: Đậm vừa – Medium Tint (55)",
+            L"Kính: Tương phản cao – Tinted (80)",
+            L"Độ đậm Windows Blur (0 – 255)",
+            L"Chế độ Sáng / Tối (Color Mode)",
+            L"Tự động theo Windows (Auto)",
+            L"Giao diện Tối (Dark Mode)",
+            L"Giao diện Sáng (Light Mode)",
+            L"Kích thước giao diện (UI Size)",
+            L"85% – Nhỏ gọn (Compact)",
+            L"90% – Hơi nhỏ",
+            L"100% – Mặc định (Chuẩn)",
+            L"110% – Lớn vừa (Medium)",
+            L"120% – Rất lớn (Large)",
+            L"Chiều rộng (Width px)",
+            L"Chiều cao (Height px)",
+            L"Cỡ chữ (Font Size pt)",
+            L"Đặt lại theo tỷ lệ có sẵn (Reset)",
+            L"Chế độ tối giản (Ẩn Duyệt & Thoát)",
+            L"Hình nền tùy chỉnh (Ảnh / GIF / MP4)",
+            L"Chọn tệp hình nền (Ảnh / GIF / MP4 ≤ 50MB)...",
+            L"Gỡ bỏ hình nền tùy chỉnh",
+            L"Độ rõ hình nền (20 – 255)",
+            L"Độ rõ nền: Dịu nhẹ (90)",
+            L"Độ rõ nền: Cân bằng (150)",
+            L"Độ rõ nền: Rõ nét (215)",
+            L"Độ rõ nền: Tối đa (255)",
+            L"Lịch sử & Gợi ý (Tối đa 50 mục / Cuộn 5 dòng)",
+            L"Số mục lưu tối đa (0 – 50)",
+            L"Số dòng hiển thị (3 – 10)",
+            L"Giới hạn lưu: 10 mục",
+            L"Giới hạn lưu: 30 mục (Hiển thị 5 + Cuộn)",
+            L"Giới hạn lưu: 35 mục (Mặc định)",
+            L"Giới hạn lưu: 50 mục (Tối đa)",
+            L"Tắt danh sách lịch sử (0)",
+            L"Hiển thị thời gian thực thi",
+            L"Gợi ý ứng dụng & Tìm kiếm ggsearch:/msesearch:",
+            L"Ngôn ngữ hiển thị (Display Language)",
+            L"Tự động theo hệ thống (Auto)",
+            L"Xóa toàn bộ lịch sử đã lưu (Clear History)",
+            L"Tùy chỉnh Kích thước & Cỡ chữ (Xem trực tiếp)",
+            L"Mặc định (Reset)",
+            L"Xong (OK)",
+            L"Hình nền & Video (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Tất cả tệp (*.*)\0*.*\0\0",
+            L"Chọn ảnh tĩnh, ảnh động GIF hoặc video MP4 làm hình nền (tối đa 20-50 MB)",
+            L"Tệp hình nền vượt quá giới hạn dung lượng (%d MB). Vui lòng chọn tệp ảnh/GIF/MP4 nhỏ hơn %d MB.",
+            L"Gõ từ khóa để tìm kiếm Google bằng Chrome",
+            L"Tìm trên Google (Chrome): \"",
+            L"Gõ từ khóa để tìm kiếm bằng Microsoft Edge",
+            L"Tìm bằng Microsoft Edge: \""
+        };
+    }
+    if (lang == L"th") {
+        return {
+            L"รูปแบบพื้นผิว (Surface Theme)",
+            L"Liquid Glass",
+            L"เบลอแบบ Windows (Windows Blur)",
+            L"พื้นหลังทึบ (Opaque)",
+            L"ความเข้ม Liquid Glass (-100 – 100)",
+            L"กระจก: โปร่งใสสูงสุด (-100)",
+            L"กระจก: โปร่งใสสูงพิเศษ (-80)",
+            L"กระจก: โปร่งใสพิเศษ (-50)",
+            L"กระจก: โปร่งใสมาตรฐาน (0)",
+            L"กระจก: ใสคมชัด – Clear (15)",
+            L"กระจก: สมดุลแบบ iOS – Balanced (30)",
+            L"กระจก: เข้มปานกลาง – Medium Tint (55)",
+            L"กระจก: คอนทราสต์สูง – Tinted (80)",
+            L"ความทึบแสง Windows Blur (0 – 255)",
+            L"โหมดสีสว่าง / มืด (Color Mode)",
+            L"อัตโนมัติตาม Windows (Auto)",
+            L"โหมดมืด (Dark Mode)",
+            L"โหมดสว่าง (Light Mode)",
+            L"ขนาดส่วนติดต่อผู้ใช้ (UI Size)",
+            L"85% – กะทัดรัด (Compact)",
+            L"90% – เล็กลงเล็กน้อย",
+            L"100% – ค่าเริ่มต้น (มาตรฐาน)",
+            L"110% – ขนาดกลาง (Medium)",
+            L"120% – ขนาดใหญ่ (Large)",
+            L"ความกว้าง (Width px)",
+            L"ความสูงแถบ (Height px)",
+            L"ขนาดตัวอักษร (Font Size pt)",
+            L"รีเซ็ตขนาดกลับเป็นค่าที่ตั้งไว้",
+            L"โหมดมินิมอล (ซ่อนปุ่มเรียกดู & ออก)",
+            L"พื้นหลังกำหนดเอง (รูปภาพ / GIF / MP4)",
+            L"เลือกไฟล์พื้นหลัง (รูปภาพ / GIF / MP4 ≤ 50MB)...",
+            L"ลบพื้นหลังกำหนดเอง",
+            L"ความชัดพื้นหลัง (20 – 255)",
+            L"ความชัดพื้นหลัง: นุ่มนวล (90)",
+            L"ความชัดพื้นหลัง: สมดุล (150)",
+            L"ความชัดพื้นหลัง: คมชัด (215)",
+            L"ความชัดพื้นหลัง: สูงสุด (255)",
+            L"ประวัติ & คำแนะนำ (สูงสุด 50 / เลื่อน 5 แถว)",
+            L"จำนวนประวัติสูงสุด (0 – 50)",
+            L"จำนวนแถวที่แสดง (3 – 10)",
+            L"จำกัดการเก็บ: 10 รายการ",
+            L"จำกัดการเก็บ: 30 รายการ (แสดง 5 + เลื่อน)",
+            L"จำกัดการเก็บ: 35 รายการ (ค่าเริ่มต้น)",
+            L"จำกัดการเก็บ: 50 รายการ (สูงสุด)",
+            L"ปิดรายการประวัติ (0)",
+            L"แสดงเวลาที่เรียกใช้ล่าสุด",
+            L"แนะนำแอป & ค้นหาด่วน ggsearch:/msesearch:",
+            L"ภาษาที่แสดงผล (Display Language)",
+            L"อัตโนมัติตามระบบ (Auto)",
+            L"ล้างประวัติที่บันทึกไว้ทั้งหมด",
+            L"กำหนดขนาดและตัวอักษรเอง (ดูตัวอย่างสด)",
+            L"ค่าเริ่มต้น (Reset)",
+            L"เสร็จสิ้น (OK)",
+            L"สื่อพื้นหลัง (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0ไฟล์ทั้งหมด (*.*)\0*.*\0\0",
+            L"เลือกรูปภาพ, GIF เคลื่อนไหว หรือวิดีโอ MP4 เป็นพื้นหลัง (สูงสุด 20-50 MB)",
+            L"ไฟล์ที่เลือกมีขนาดเกินขีดจำกัด (%d MB) กรุณาเลือกไฟล์ขนาดต่ำกว่า %d MB",
+            L"พิมพ์คำค้นหาเพื่อค้นหา Google ใน Chrome",
+            L"ค้นหา Google (Chrome): \"",
+            L"พิมพ์คำค้นหาเพื่อค้นหาใน Microsoft Edge",
+            L"ค้นหาใน Microsoft Edge: \""
+        };
+    }
+    if (lang == L"id") {
+        return {
+            L"Tema Permukaan (Surface Theme)",
+            L"Liquid Glass",
+            L"Windows Blur",
+            L"Buram Padat (Opaque)",
+            L"Kepekatan Liquid Glass (-100 – 100)",
+            L"Kaca: Transparan Maksimal (-100)",
+            L"Kaca: Ekstra Transparan (-80)",
+            L"Kaca: Ultra Transparan (-50)",
+            L"Kaca: Bening Standar (0)",
+            L"Kaca: Bening – Clear (15)",
+            L"Kaca: Seimbang iOS – Balanced (30)",
+            L"Kaca: Sedang – Medium Tint (55)",
+            L"Kaca: Kontras Tinggi – Tinted (80)",
+            L"Opasitas Windows Blur (0 – 255)",
+            L"Mode Warna (Terang / Gelap)",
+            L"Otomatis Ikuti Windows (Auto)",
+            L"Mode Gelap (Dark Mode)",
+            L"Mode Terang (Light Mode)",
+            L"Ukuran Tampilan (UI Size)",
+            L"85% – Ringkas (Compact)",
+            L"90% – Sedikit Lebih Kecil",
+            L"100% – Default (Standar)",
+            L"110% – Sedang (Medium)",
+            L"120% – Besar (Large)",
+            L"Lebar (Width px)",
+            L"Tinggi Bar (Height px)",
+            L"Ukuran Font (Font Size pt)",
+            L"Atur Ulang Ukuran ke Preset",
+            L"Mode Minimalis (Sembunyikan Telusuri & Keluar)",
+            L"Latar Belakang Kustom (Gambar / GIF / MP4)",
+            L"Pilih File Latar Belakang (Gambar / GIF / MP4 ≤ 50MB)...",
+            L"Hapus Latar Belakang Kustom",
+            L"Opasitas Media (20 – 255)",
+            L"Opasitas Media: Halus (90)",
+            L"Opasitas Media: Seimbang (150)",
+            L"Opasitas Media: Jelas (215)",
+            L"Opasitas Media: Penuh (255)",
+            L"Riwayat & Saran (Maks 50 / Gulir 5 Baris)",
+            L"Maks Item Tersimpan (0 – 50)",
+            L"Baris Terlihat (3 – 10)",
+            L"Batas Simpan: 10 Item",
+            L"Batas Simpan: 30 Item (Tampil 5 + Gulir)",
+            L"Batas Simpan: 35 Item (Default)",
+            L"Batas Simpan: 50 Item (Maksimum)",
+            L"Nonaktifkan Daftar Riwayat (0)",
+            L"Tampilkan Waktu Eksekusi",
+            L"Saran Aplikasi & ggsearch:/msesearch:",
+            L"Bahasa Tampilan (Display Language)",
+            L"Otomatis – Default Sistem",
+            L"Hapus Semua Riwayat Tersimpan",
+            L"Ukuran & Font Kustom (Pratinjau Langsung)",
+            L"Reset Default",
+            L"Selesai (OK)",
+            L"Media Latar (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Semua File (*.*)\0*.*\0\0",
+            L"Pilih gambar, GIF animasi, atau video MP4 sebagai latar (maks 20-50 MB)",
+            L"File latar melebihi batas ukuran (%d MB). Pilih file di bawah %d MB.",
+            L"Ketik kata kunci untuk mencari di Google (Chrome)",
+            L"Cari di Google (Chrome): \"",
+            L"Ketik kata kunci untuk mencari di Microsoft Edge",
+            L"Cari di Microsoft Edge: \""
+        };
+    }
+    if (lang == L"ms") {
+        return {
+            L"Tema Permukaan (Surface Theme)",
+            L"Liquid Glass",
+            L"Kabur Windows (Windows Blur)",
+            L"Legap (Opaque)",
+            L"Kepekatan Liquid Glass (-100 – 100)",
+            L"Kaca: Lutsinar Maksimum (-100)",
+            L"Kaca: Lutsinar Ekstrem (-80)",
+            L"Kaca: Ultra Lutsinar (-50)",
+            L"Kaca: Jernih Lalai (0)",
+            L"Kaca: Jernih – Clear (15)",
+            L"Kaca: Seimbang iOS – Balanced (30)",
+            L"Kaca: Sederhana – Medium Tint (55)",
+            L"Kaca: Kontras Tinggi – Tinted (80)",
+            L"Kelegapan Windows Blur (0 – 255)",
+            L"Mod Warna (Cerah / Gelap)",
+            L"Automatik Ikut Windows (Auto)",
+            L"Mod Gelap (Dark Mode)",
+            L"Mod Cerah (Light Mode)",
+            L"Saiz Antara Muka (UI Size)",
+            L"85% – Padat (Compact)",
+            L"90% – Sedikit Kecil",
+            L"100% – Lalai (Standard)",
+            L"110% – Sederhana Besar",
+            L"120% – Besar (Large)",
+            L"Lebar (Width px)",
+            L"Tinggi Bar (Height px)",
+            L"Saiz Fon (Font Size pt)",
+            L"Tetapkan Semula Saiz ke Pratetap",
+            L"Mod Minimal (Sembunyikan Semak & Keluar)",
+            L"Latar Belakang Tersuai (Imej / GIF / MP4)",
+            L"Pilih Fail Latar Belakang (Imej / GIF / MP4 ≤ 50MB)...",
+            L"Buang Latar Belakang Tersuai",
+            L"Kelegapan Media (20 – 255)",
+            L"Kelegapan Media: Halus (90)",
+            L"Kelegapan Media: Seimbang (150)",
+            L"Kelegapan Media: Jelas (215)",
+            L"Kelegapan Media: Penuh (255)",
+            L"Sejarah & Cadangan (Sehingga 50 / Tatal 5)",
+            L"Item Disimpan Maksimum (0 – 50)",
+            L"Baris Kelihatan (3 – 10)",
+            L"Had Simpanan: 10 Item",
+            L"Had Simpanan: 30 Item (Papar 5 + Tatal)",
+            L"Had Simpanan: 35 Item (Lalai)",
+            L"Had Simpanan: 50 Item (Maksimum)",
+            L"Lumpuhkan Senarai Sejarah (0)",
+            L"Tunjukkan Masa Pelaksanaan",
+            L"Cadangan Aplikasi & ggsearch:/msesearch:",
+            L"Bahasa Paparan (Display Language)",
+            L"Automatik – Lalai Sistem",
+            L"Padam Semua Sejarah Disimpan",
+            L"Saiz & Fon Tersuai (Pratonton Langsung)",
+            L"Tetap Semula",
+            L"Selesai (OK)",
+            L"Media Latar (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Semua Fail (*.*)\0*.*\0\0",
+            L"Pilih imej, GIF animasi atau video MP4 sebagai latar belakang (maks 20-50 MB)",
+            L"Fail melebihi had saiz (%d MB). Sila pilih fail di bawah %d MB.",
+            L"Taip kata kunci untuk mencari di Google (Chrome)",
+            L"Cari di Google (Chrome): \"",
+            L"Taip kata kunci untuk mencari di Microsoft Edge",
+            L"Cari di Microsoft Edge: \""
+        };
+    }
+    if (lang == L"ja") {
+        return {
+            L"サーフェステーマ (Surface Theme)",
+            L"Liquid Glass",
+            L"Windows ブラー (Windows Blur)",
+            L"不透明 (Opaque)",
+            L"Liquid Glass の濃度 (-100 – 100)",
+            L"ガラス: 最大透明 (-100)",
+            L"ガラス: 超高透明 (-80)",
+            L"ガラス: ウルトラ透明 (-50)",
+            L"ガラス: 標準クリア (0)",
+            L"ガラス: クリア – Clear (15)",
+            L"ガラス: iOS バランス – Balanced (30)",
+            L"ガラス: ミディアム – Medium Tint (55)",
+            L"ガラス: 高コントラスト – Tinted (80)",
+            L"Windows ブラーの不透明度 (0 – 255)",
+            L"カラーモード (ライト / ダーク)",
+            L"自動 – Windows の設定に従う",
+            L"ダークモード (Dark Mode)",
+            L"ライトモード (Light Mode)",
+            L"UI サイズ / スケール",
+            L"85% – コンパクト (Compact)",
+            L"90% – やや小さめ",
+            L"100% – デフォルト (標準)",
+            L"110% – やや大きめ (Medium)",
+            L"120% – 大 (Large)",
+            L"幅 (Width px)",
+            L"バーの高さ (Height px)",
+            L"フォントサイズ (Font Size pt)",
+            L"カスタムサイズをプリセットに戻す",
+            L"ミニマルモード (参照・閉じるを隠す)",
+            L"カスタム背景 (画像 / GIF / MP4)",
+            L"背景ファイルを選択 (画像 / GIF / MP4 ≤ 50MB)...",
+            L"カスタム背景をクリア",
+            L"背景メディアの不透明度 (20 – 255)",
+            L"背景の不透明度: 控えめ (90)",
+            L"背景の不透明度: バランス (150)",
+            L"背景の不透明度: 鮮明 (215)",
+            L"背景の不透明度: 最大 (255)",
+            L"履歴と候補 (最大50件 / 5行スクロール)",
+            L"最大保存件数 (0 – 50)",
+            L"表示行数 (3 – 10)",
+            L"最大保存件数: 10件",
+            L"最大保存件数: 30件 (5行表示 + スクロール)",
+            L"最大保存件数: 35件 (標準)",
+            L"最大保存件数: 50件 (最大)",
+            L"履歴リストを無効化 (0)",
+            L"実行日時を表示",
+            L"アプリ候補と検索 ggsearch:/msesearch:",
+            L"表示言語 (Display Language)",
+            L"自動 – システム既定",
+            L"保存された履歴をすべて消去",
+            L"カスタムサイズとフォント (ライブプレビュー)",
+            L"リセット (Reset)",
+            L"完了 (OK)",
+            L"背景メディア (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0すべてのファイル (*.*)\0*.*\0\0",
+            L"背景用の画像、GIFアニメーション、またはMP4動画を選択 (最大 20-50 MB)",
+            L"選択したファイルは上限 (%d MB) を超えています。%d MB 以下のファイルを選択してください。",
+            L"キーワードを入力して Chrome で Google 検索",
+            L"Google 検索 (Chrome): \"",
+            L"キーワードを入力して Microsoft Edge で検索",
+            L"Microsoft Edge で検索: \""
+        };
+    }
+    if (lang == L"zh_cn") {
+        return {
+            L"表面材质主题 (Surface Theme)",
+            L"液态玻璃 (Liquid Glass)",
+            L"Windows 模糊 (Windows Blur)",
+            L"纯色不透明 (Opaque)",
+            L"液态玻璃浓度 (-100 – 100)",
+            L"玻璃: 极致透明 (-100)",
+            L"玻璃: 超高透明 (-80)",
+            L"玻璃: 超透明 (-50)",
+            L"玻璃: 标准清透 (0)",
+            L"玻璃: 清透 – Clear (15)",
+            L"玻璃: iOS 均衡 – Balanced (30)",
+            L"玻璃: 适中色调 – Medium Tint (55)",
+            L"玻璃: 高对比度 – Tinted (80)",
+            L"Windows 模糊不透明度 (0 – 255)",
+            L"深浅色模式 (Color Mode)",
+            L"自动跟随 Windows (Auto)",
+            L"深色模式 (Dark Mode)",
+            L"浅色模式 (Light Mode)",
+            L"界面尺寸与缩放 (UI Size)",
+            L"85% – 紧凑 (Compact)",
+            L"90% – 稍小",
+            L"100% – 默认 (标准)",
+            L"110% – 中等偏大 (Medium)",
+            L"120% – 大号 (Large)",
+            L"窗口宽度 (Width px)",
+            L"输入栏高度 (Height px)",
+            L"字体大小 (Font Size pt)",
+            L"重置为预设比例 (Reset)",
+            L"极简模式 (隐藏浏览与退出按钮)",
+            L"自定义背景 (图片 / GIF / MP4)",
+            L"选择背景文件 (图片 / GIF / MP4 ≤ 50MB)...",
+            L"清除自定义背景",
+            L"背景媒体清晰度 (20 – 255)",
+            L"背景清晰度: 柔和 (90)",
+            L"背景清晰度: 均衡 (150)",
+            L"背景清晰度: 鲜明 (215)",
+            L"背景清晰度: 完全显示 (255)",
+            L"历史与建议 (最多 50 项 / 滚动 5 行)",
+            L"最大保存数量 (0 – 50)",
+            L"可见行数 (3 – 10)",
+            L"保存上限: 10 项",
+            L"保存上限: 30 项 (显示 5 行 + 滚动)",
+            L"保存上限: 35 项 (默认)",
+            L"保存上限: 50 项 (最大)",
+            L"禁用历史记录列表 (0)",
+            L"显示最近执行时间",
+            L"应用建议与网页搜索 ggsearch:/msesearch:",
+            L"显示语言 (Display Language)",
+            L"自动 – 系统默认",
+            L"清除所有已保存的历史记录",
+            L"自定义尺寸与字体 (实时预览)",
+            L"恢复默认 (Reset)",
+            L"完成 (OK)",
+            L"背景媒体 (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0所有文件 (*.*)\0*.*\0\0",
+            L"选择静态图片、动态 GIF 或 MP4 视频作为背景 (最大 20-50 MB)",
+            L"所选背景文件超过大小限制 (%d MB)，请选择小于 %d MB 的文件。",
+            L"输入关键词使用 Chrome 进行 Google 搜索",
+            L"Google 搜索 (Chrome): \"",
+            L"输入关键词使用 Microsoft Edge 搜索",
+            L"Microsoft Edge 搜索: \""
+        };
+    }
+    if (lang == L"zh_tw") {
+        return {
+            L"表面材質主題 (Surface Theme)",
+            L"液態玻璃 (Liquid Glass)",
+            L"Windows 模糊 (Windows Blur)",
+            L"純色不透明 (Opaque)",
+            L"液態玻璃濃度 (-100 – 100)",
+            L"玻璃: 極致透明 (-100)",
+            L"玻璃: 超高透明 (-80)",
+            L"玻璃: 超透明 (-50)",
+            L"玻璃: 標準清透 (0)",
+            L"玻璃: 清透 – Clear (15)",
+            L"玻璃: iOS 均衡 – Balanced (30)",
+            L"玻璃: 適中色調 – Medium Tint (55)",
+            L"玻璃: 高對比度 – Tinted (80)",
+            L"Windows 模糊不透明度 (0 – 255)",
+            L"深淺色模式 (Color Mode)",
+            L"自動跟隨 Windows (Auto)",
+            L"深色模式 (Dark Mode)",
+            L"淺色模式 (Light Mode)",
+            L"介面尺寸與縮放 (UI Size)",
+            L"85% – 緊湊 (Compact)",
+            L"90% – 稍小",
+            L"100% – 預設 (標準)",
+            L"110% – 中等偏大 (Medium)",
+            L"120% – 大型 (Large)",
+            L"視窗寬度 (Width px)",
+            L"輸入列高度 (Height px)",
+            L"字型大小 (Font Size pt)",
+            L"重設為預設比例 (Reset)",
+            L"極簡模式 (隱藏瀏覽與退出按鈕)",
+            L"自訂背景 (圖片 / GIF / MP4)",
+            L"選擇背景檔案 (圖片 / GIF / MP4 ≤ 50MB)...",
+            L"清除自訂背景",
+            L"背景媒體清晰度 (20 – 255)",
+            L"背景清晰度: 柔和 (90)",
+            L"背景清晰度: 均衡 (150)",
+            L"背景清晰度: 鮮明 (215)",
+            L"背景清晰度: 完整顯示 (255)",
+            L"歷史與建議 (最多 50 項 / 捲動 5 行)",
+            L"最大儲存數量 (0 – 50)",
+            L"可見行數 (3 – 10)",
+            L"儲存上限: 10 項",
+            L"儲存上限: 30 項 (顯示 5 行 + 捲動)",
+            L"儲存上限: 35 項 (預設)",
+            L"儲存上限: 50 項 (最大)",
+            L"停用歷史記錄清單 (0)",
+            L"顯示最近執行時間",
+            L"應用程式建議與搜尋 ggsearch:/msesearch:",
+            L"顯示語言 (Display Language)",
+            L"自動 – 系統預設",
+            L"清除所有已儲存的歷史記錄",
+            L"自訂尺寸與字型 (即時預覽)",
+            L"恢復預設 (Reset)",
+            L"完成 (OK)",
+            L"背景媒體 (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0所有檔案 (*.*)\0*.*\0\0",
+            L"選擇靜態圖片、動態 GIF 或 MP4 影片作為背景 (最大 20-50 MB)",
+            L"所選背景檔案超過大小限制 (%d MB)，請選擇小於 %d MB 的檔案。",
+            L"輸入關鍵字使用 Chrome 進行 Google 搜尋",
+            L"Google 搜尋 (Chrome): \"",
+            L"輸入關鍵字使用 Microsoft Edge 搜尋",
+            L"Microsoft Edge 搜尋: \""
+        };
+    }
+    if (lang == L"ko") {
+        return {
+            L"표면 테마 (Surface Theme)",
+            L"Liquid Glass",
+            L"Windows 블러 (Windows Blur)",
+            L"불투명 (Opaque)",
+            L"Liquid Glass 농도 (-100 – 100)",
+            L"유리: 최대 투명 (-100)",
+            L"유리: 초고투명 (-80)",
+            L"유리: 울트라 투명 (-50)",
+            L"유리: 기본 클리어 (0)",
+            L"유리: 선명함 – Clear (15)",
+            L"유리: iOS 밸런스 – Balanced (30)",
+            L"유리: 중간 틴트 – Medium Tint (55)",
+            L"유리: 고대비 틴트 – Tinted (80)",
+            L"Windows 블러 불투명도 (0 – 255)",
+            L"색상 모드 (라이트 / 다크)",
+            L"자동 – Windows 설정 따름",
+            L"다크 모드 (Dark Mode)",
+            L"라이트 모드 (Light Mode)",
+            L"UI 크기 및 배율 (UI Size)",
+            L"85% – 작게 (Compact)",
+            L"90% – 약간 작게",
+            L"100% – 기본값 (표준)",
+            L"110% – 중간 크게 (Medium)",
+            L"120% – 크게 (Large)",
+            L"창 너비 (Width px)",
+            L"입력줄 높이 (Height px)",
+            L"글꼴 크기 (Font Size pt)",
+            L"사용자 지정 크기를 프리셋으로 초기화",
+            L"미니멀 모드 (찾아보기 및 닫기 숨기기)",
+            L"사용자 지정 배경 (이미지 / GIF / MP4)",
+            L"배경 파일 선택 (이미지 / GIF / MP4 ≤ 50MB)...",
+            L"사용자 지정 배경 지우기",
+            L"배경 미디어 불투명도 (20 – 255)",
+            L"배경 불투명도: 은은함 (90)",
+            L"배경 불투명도: 균형 (150)",
+            L"배경 불투명도: 선명함 (215)",
+            L"배경 불투명도: 최대 (255)",
+            L"기록 및 추천 (최대 50개 / 5줄 스크롤)",
+            L"최대 저장 개수 (0 – 50)",
+            L"표시할 줄 수 (3 – 10)",
+            L"최대 저장: 10개",
+            L"최대 저장: 30개 (5줄 표시 + 스크롤)",
+            L"최대 저장: 35개 (기본값)",
+            L"최대 저장: 50개 (최대)",
+            L"기록 목록 사용 안 함 (0)",
+            L"최근 실행 시간 표시",
+            L"앱 추천 및 웹 검색 ggsearch:/msesearch:",
+            L"표시 언어 (Display Language)",
+            L"자동 – 시스템 기본값",
+            L"저장된 모든 기록 지우기",
+            L"사용자 지정 크기 및 글꼴 (실시간 미리보기)",
+            L"초기화 (Reset)",
+            L"완료 (OK)",
+            L"배경 미디어 (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0모든 파일 (*.*)\0*.*\0\0",
+            L"배경으로 사용할 이미지, 애니메이션 GIF 또는 MP4 비디오 선택 (최대 20-50 MB)",
+            L"선택한 파일이 크기 제한(%d MB)을 초과합니다. %d MB 미만의 파일을 선택하세요.",
+            L"Chrome에서 Google 검색할 키워드 입력",
+            L"Google 검색 (Chrome): \"",
+            L"Microsoft Edge에서 검색할 키워드 입력",
+            L"Microsoft Edge 검색: \""
+        };
+    }
+    if (lang == L"fr") {
+        return {
+            L"Thème de surface (Surface Theme)",
+            L"Liquid Glass",
+            L"Flou Windows (Windows Blur)",
+            L"Opaque (Sans flou)",
+            L"Teinte Liquid Glass (-100 – 100)",
+            L"Verre : Transparence maximale (-100)",
+            L"Verre : Transparence extrême (-80)",
+            L"Verre : Ultra transparent (-50)",
+            L"Verre : Clair par défaut (0)",
+            L"Verre : Clair – Clear (15)",
+            L"Verre : Équilibré iOS – Balanced (30)",
+            L"Verre : Teinte moyenne – Medium (55)",
+            L"Verre : Contraste élevé – Tinted (80)",
+            L"Opacité du flou Windows (0 – 255)",
+            L"Mode de couleur (Clair / Sombre)",
+            L"Auto – Suivre Windows",
+            L"Mode sombre (Dark Mode)",
+            L"Mode clair (Light Mode)",
+            L"Taille de l'interface (UI Size)",
+            L"85% – Compact",
+            L"90% – Légèrement réduit",
+            L"100% – Par défaut (Standard)",
+            L"110% – Moyen grand",
+            L"120% – Grand (Large)",
+            L"Largeur (Width px)",
+            L"Hauteur de barre (Height px)",
+            L"Taille de police (Font Size pt)",
+            L"Réinitialiser la taille au préréglage",
+            L"Mode minimal (Masquer Parcourir et Quitter)",
+            L"Arrière-plan personnalisé (Image / GIF / MP4)",
+            L"Choisir un fichier de fond (Image / GIF / MP4 ≤ 50 Mo)...",
+            L"Supprimer l'arrière-plan personnalisé",
+            L"Opacité du média (20 – 255)",
+            L"Opacité : Subtile (90)",
+            L"Opacité : Équilibrée (150)",
+            L"Opacité : Vive (215)",
+            L"Opacité : Maximale (255)",
+            L"Historique et suggestions (Max 50 / 5 lignes)",
+            L"Éléments max enregistrés (0 – 50)",
+            L"Lignes visibles (3 – 10)",
+            L"Max enregistré : 10 éléments",
+            L"Max enregistré : 30 éléments (5 + défilement)",
+            L"Max enregistré : 35 éléments (Par défaut)",
+            L"Max enregistré : 50 éléments (Maximum)",
+            L"Désactiver l'historique (0)",
+            L"Afficher l'heure d'exécution",
+            L"Suggestions d'applis et ggsearch:/msesearch:",
+            L"Langue d'affichage (Display Language)",
+            L"Auto – Langue du système",
+            L"Effacer tout l'historique enregistré",
+            L"Taille et police personnalisées (Aperçu)",
+            L"Réinitialiser",
+            L"Terminé (OK)",
+            L"Média de fond (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Tous les fichiers (*.*)\0*.*\0\0",
+            L"Sélectionner une image, un GIF animé ou une vidéo MP4 (max 20-50 Mo)",
+            L"Le fichier dépasse la limite autorisée (%d Mo). Veuillez choisir un fichier de moins de %d Mo.",
+            L"Tapez un mot-clé pour rechercher sur Google (Chrome)",
+            L"Recherche Google (Chrome) : \"",
+            L"Tapez un mot-clé pour rechercher dans Microsoft Edge",
+            L"Recherche Microsoft Edge : \""
+        };
+    }
+    if (lang == L"de") {
+        return {
+            L"Oberflächendesign (Surface Theme)",
+            L"Liquid Glass",
+            L"Windows-Unschärfe (Windows Blur)",
+            L"Undurchsichtig (Opaque)",
+            L"Liquid Glass Tönung (-100 – 100)",
+            L"Glas: Maximale Transparenz (-100)",
+            L"Glas: Extreme Transparenz (-80)",
+            L"Glas: Ultratransparent (-50)",
+            L"Glas: Standard Klar (0)",
+            L"Glas: Klar – Clear (15)",
+            L"Glas: iOS Ausgewogen – Balanced (30)",
+            L"Glas: Mittlere Tönung – Medium (55)",
+            L"Glas: Hoher Kontrast – Tinted (80)",
+            L"Windows-Blur Deckkraft (0 – 255)",
+            L"Farbmodus (Hell / Dunkel)",
+            L"Automatisch – Windows folgen",
+            L"Dunkler Modus (Dark Mode)",
+            L"Heller Modus (Light Mode)",
+            L"UI-Größe / Skalierung",
+            L"85% – Kompakt",
+            L"90% – Etwas kleiner",
+            L"100% – Standard",
+            L"110% – Mittelgroß",
+            L"120% – Groß (Large)",
+            L"Breite (Width px)",
+            L"Leistenhöhe (Height px)",
+            L"Schriftgröße (Font Size pt)",
+            L"Größe auf Voreinstellung zurücksetzen",
+            L"Minimalmodus (Durchsuchen & Schließen ausblenden)",
+            L"Eigener Hintergrund (Bild / GIF / MP4)",
+            L"Hintergrunddatei wählen (Bild / GIF / MP4 ≤ 50MB)...",
+            L"Eigenen Hintergrund entfernen",
+            L"Medien-Deckkraft (20 – 255)",
+            L"Deckkraft: Dezent (90)",
+            L"Deckkraft: Ausgewogen (150)",
+            L"Deckkraft: Kräftig (215)",
+            L"Deckkraft: Voll (255)",
+            L"Verlauf & Vorschläge (Bis 50 / 5 Zeilen)",
+            L"Max. gespeicherte Einträge (0 – 50)",
+            L"Sichtbare Zeilen (3 – 10)",
+            L"Max. Einträge: 10",
+            L"Max. Einträge: 30 (5 zeigen + Scrollen)",
+            L"Max. Einträge: 35 (Standard)",
+            L"Max. Einträge: 50 (Maximum)",
+            L"Verlaufsliste deaktivieren (0)",
+            L"Ausführungszeitpunkt anzeigen",
+            L"App-Vorschläge & ggsearch:/msesearch:",
+            L"Anzeigesprache (Display Language)",
+            L"Automatisch – Systemstandard",
+            L"Gesamten Verlauf löschen",
+            L"Benutzerdefinierte Größe & Schrift (Live-Vorschau)",
+            L"Zurücksetzen",
+            L"Fertig (OK)",
+            L"Hintergrundmedien (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Alle Dateien (*.*)\0*.*\0\0",
+            L"Bild, animiertes GIF oder MP4-Video als Hintergrund wählen (max. 20-50 MB)",
+            L"Die ausgewählte Datei überschreitet das Limit (%d MB). Bitte wählen Sie eine Datei unter %d MB.",
+            L"Suchbegriff für Google-Suche in Chrome eingeben",
+            L"Google-Suche (Chrome): \"",
+            L"Suchbegriff für Suche in Microsoft Edge eingeben",
+            L"Microsoft Edge-Suche: \""
+        };
+    }
+    if (lang == L"es") {
+        return {
+            L"Tema de superficie (Surface Theme)",
+            L"Liquid Glass",
+            L"Desenfoque de Windows (Windows Blur)",
+            L"Opaco (Sin desenfoque)",
+            L"Tinte de Liquid Glass (-100 – 100)",
+            L"Cristal: Transparencia máxima (-100)",
+            L"Cristal: Transparencia extrema (-80)",
+            L"Cristal: Ultra transparente (-50)",
+            L"Cristal: Claro predeterminado (0)",
+            L"Cristal: Claro – Clear (15)",
+            L"Cristal: Equilibrado iOS – Balanced (30)",
+            L"Cristal: Tinte medio – Medium (55)",
+            L"Cristal: Alto contraste – Tinted (80)",
+            L"Opacidad de Windows Blur (0 – 255)",
+            L"Modo de color (Claro / Oscuro)",
+            L"Automático – Seguir a Windows",
+            L"Modo oscuro (Dark Mode)",
+            L"Modo claro (Light Mode)",
+            L"Tamaño de interfaz (UI Size)",
+            L"85% – Compacto",
+            L"90% – Un poco más pequeño",
+            L"100% – Predeterminado (Estándar)",
+            L"110% – Mediano grande",
+            L"120% – Grande (Large)",
+            L"Ancho (Width px)",
+            L"Altura de barra (Height px)",
+            L"Tamaño de fuente (Font Size pt)",
+            L"Restablecer tamaño al ajuste predefinido",
+            L"Modo mínimo (Ocultar Examinar y Salir)",
+            L"Fondo personalizado (Imagen / GIF / MP4)",
+            L"Seleccionar archivo de fondo (Imagen / GIF / MP4 ≤ 50MB)...",
+            L"Quitar fondo personalizado",
+            L"Opacidad del fondo (20 – 255)",
+            L"Opacidad: Sutil (90)",
+            L"Opacidad: Equilibrada (150)",
+            L"Opacidad: Nítida (215)",
+            L"Opacidad: Máxima (255)",
+            L"Historial y sugerencias (Máx. 50 / 5 filas)",
+            L"Máx. elementos guardados (0 – 50)",
+            L"Filas visibles (3 – 10)",
+            L"Máximo guardado: 10 elementos",
+            L"Máximo guardado: 30 elementos (5 + desplazar)",
+            L"Máximo guardado: 35 elementos (Predeterminado)",
+            L"Máximo guardado: 50 elementos (Máximo)",
+            L"Desactivar historial (0)",
+            L"Mostrar hora de ejecución",
+            L"Sugerencias de apps y ggsearch:/msesearch:",
+            L"Idioma de visualización (Display Language)",
+            L"Automático – Predeterminado del sistema",
+            L"Borrar todo el historial guardado",
+            L"Tamaño y fuente personalizados (Vista previa)",
+            L"Restablecer",
+            L"Listo (OK)",
+            L"Medios de fondo (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Todos los archivos (*.*)\0*.*\0\0",
+            L"Seleccione imagen, GIF animado o video MP4 de fondo (máx. 20-50 MB)",
+            L"El archivo supera el límite permitido (%d MB). Elija un archivo menor de %d MB.",
+            L"Escriba una palabra clave para buscar en Google (Chrome)",
+            L"Buscar en Google (Chrome): \"",
+            L"Escriba una palabra clave para buscar en Microsoft Edge",
+            L"Buscar en Microsoft Edge: \""
+        };
+    }
+    if (lang == L"pt") {
+        return {
+            L"Tema da superfície (Surface Theme)",
+            L"Liquid Glass",
+            L"Desfoque do Windows (Windows Blur)",
+            L"Opaco (Sem desfoque)",
+            L"Tom do Liquid Glass (-100 – 100)",
+            L"Vidro: Transparência máxima (-100)",
+            L"Vidro: Transparência extrema (-80)",
+            L"Vidro: Ultra transparente (-50)",
+            L"Vidro: Transparente padrão (0)",
+            L"Vidro: Claro – Clear (15)",
+            L"Vidro: Equilibrado iOS – Balanced (30)",
+            L"Vidro: Tom médio – Medium (55)",
+            L"Vidro: Alto contraste – Tinted (80)",
+            L"Opacidade do Windows Blur (0 – 255)",
+            L"Modo de cor (Claro / Escuro)",
+            L"Automático – Seguir o Windows",
+            L"Modo escuro (Dark Mode)",
+            L"Modo claro (Light Mode)",
+            L"Tamanho da interface (UI Size)",
+            L"85% – Compacto",
+            L"90% – Um pouco menor",
+            L"100% – Padrão (Standard)",
+            L"110% – Médio grande",
+            L"120% – Grande (Large)",
+            L"Largura (Width px)",
+            L"Altura da barra (Height px)",
+            L"Tamanho da fonte (Font Size pt)",
+            L"Redefinir tamanho para a predefinição",
+            L"Modo mínimo (Ocultar Procurar e Sair)",
+            L"Plano de fundo personalizado (Imagem / GIF / MP4)",
+            L"Selecionar arquivo de fundo (Imagem / GIF / MP4 ≤ 50MB)...",
+            L"Remover plano de fundo personalizado",
+            L"Opacidade da mídia (20 – 255)",
+            L"Opacidade: Sutil (90)",
+            L"Opacidade: Equilibrada (150)",
+            L"Opacidade: Nítida (215)",
+            L"Opacidade: Total (255)",
+            L"Histórico e sugestões (Até 50 / Rolar 5)",
+            L"Máx. de itens salvos (0 – 50)",
+            L"Linhas visíveis (3 – 10)",
+            L"Máximo salvo: 10 itens",
+            L"Máximo salvo: 30 itens (Mostrar 5 + Rolar)",
+            L"Máximo salvo: 35 itens (Padrão)",
+            L"Máximo salvo: 50 itens (Máximo)",
+            L"Desativar lista de histórico (0)",
+            L"Mostrar horário de execução",
+            L"Sugestões de apps e ggsearch:/msesearch:",
+            L"Idioma de exibição (Display Language)",
+            L"Automático – Padrão do sistema",
+            L"Limpar todo o histórico salvo",
+            L"Tamanho e fonte personalizados (Visualização)",
+            L"Redefinir",
+            L"Concluído (OK)",
+            L"Mídia de fundo (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Todos os arquivos (*.*)\0*.*\0\0",
+            L"Selecione imagem, GIF animado ou vídeo MP4 de fundo (máx. 20-50 MB)",
+            L"O arquivo selecionado excede o limite (%d MB). Escolha um arquivo abaixo de %d MB.",
+            L"Digite uma palavra-chave para pesquisar no Google (Chrome)",
+            L"Pesquisar no Google (Chrome): \"",
+            L"Digite uma palavra-chave para pesquisar no Microsoft Edge",
+            L"Pesquisar no Microsoft Edge: \""
+        };
+    }
+    if (lang == L"it") {
+        return {
+            L"Tema superficie (Surface Theme)",
+            L"Liquid Glass",
+            L"Sfocatura Windows (Windows Blur)",
+            L"Opaco (Senza sfocatura)",
+            L"Tinta Liquid Glass (-100 – 100)",
+            L"Vetro: Trasparenza massima (-100)",
+            L"Vetro: Trasparenza estrema (-80)",
+            L"Vetro: Ultra trasparente (-50)",
+            L"Vetro: Trasparente predefinito (0)",
+            L"Vetro: Chiaro – Clear (15)",
+            L"Vetro: Bilanciato iOS – Balanced (30)",
+            L"Vetro: Tinta media – Medium (55)",
+            L"Vetro: Alto contrasto – Tinted (80)",
+            L"Opacità Windows Blur (0 – 255)",
+            L"Modalità colore (Chiaro / Scuro)",
+            L"Automatico – Segui Windows",
+            L"Modalità scura (Dark Mode)",
+            L"Modalità chiara (Light Mode)",
+            L"Dimensioni interfaccia (UI Size)",
+            L"85% – Compatto",
+            L"90% – Leggermente più piccolo",
+            L"100% – Predefinito (Standard)",
+            L"110% – Medio grande",
+            L"120% – Grande (Large)",
+            L"Larghezza (Width px)",
+            L"Altezza barra (Height px)",
+            L"Dimensione carattere (Font Size pt)",
+            L"Ripristina dimensioni predefinite",
+            L"Modalità minimale (Nascondi Sfoglia ed Esci)",
+            L"Sfondo personalizzato (Immagine / GIF / MP4)",
+            L"Seleziona file di sfondo (Immagine / GIF / MP4 ≤ 50MB)...",
+            L"Rimuovi sfondo personalizzato",
+            L"Opacità sfondo (20 – 255)",
+            L"Opacità: Leggera (90)",
+            L"Opacità: Bilanciata (150)",
+            L"Opacità: Vivida (215)",
+            L"Opacità: Massima (255)",
+            L"Cronologia e suggerimenti (Max 50 / Scorri 5)",
+            L"Elementi salvati max (0 – 50)",
+            L"Righe visibili (3 – 10)",
+            L"Max salvati: 10 elementi",
+            L"Max salvati: 30 elementi (Mostra 5 + Scorri)",
+            L"Max salvati: 35 elementi (Predefinito)",
+            L"Max salvati: 50 elementi (Massimo)",
+            L"Disattiva cronologia (0)",
+            L"Mostra orario di esecuzione",
+            L"Suggerimenti app e ggsearch:/msesearch:",
+            L"Lingua di visualizzazione (Display Language)",
+            L"Automatico – Predefinita di sistema",
+            L"Cancella tutta la cronologia salvata",
+            L"Dimensioni e carattere personalizzati (Anteprima)",
+            L"Ripristina",
+            L"Fatto (OK)",
+            L"Media di sfondo (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Tutti i file (*.*)\0*.*\0\0",
+            L"Seleziona un'immagine, GIF animata o video MP4 come sfondo (max 20-50 MB)",
+            L"Il file supera il limite consentito (%d MB). Scegli un file inferiore a %d MB.",
+            L"Digita una parola chiave per cercare su Google (Chrome)",
+            L"Cerca su Google (Chrome): \"",
+            L"Digita una parola chiave per cercare in Microsoft Edge",
+            L"Cerca in Microsoft Edge: \""
+        };
+    }
+    if (lang == L"ru") {
+        return {
+            L"Тема поверхности (Surface Theme)",
+            L"Liquid Glass (Жидкое стекло)",
+            L"Размытие Windows (Windows Blur)",
+            L"Непрозрачный фон (Opaque)",
+            L"Оттенок Liquid Glass (-100 – 100)",
+            L"Стекло: Макс. прозрачность (-100)",
+            L"Стекло: Экстра прозрачность (-80)",
+            L"Стекло: Ультрапрозрачное (-50)",
+            L"Стекло: Чистое по умолчанию (0)",
+            L"Стекло: Прозрачное – Clear (15)",
+            L"Стекло: Баланс iOS – Balanced (30)",
+            L"Стекло: Средний тон – Medium (55)",
+            L"Стекло: Высокий контраст – Tinted (80)",
+            L"Непрозрачность Windows Blur (0 – 255)",
+            L"Цветовой режим (Светлый / Тёмный)",
+            L"Авто – Как в системе Windows",
+            L"Тёмный режим (Dark Mode)",
+            L"Светлый режим (Light Mode)",
+            L"Размер интерфейса (UI Size)",
+            L"85% – Компактный",
+            L"90% – Чуть меньше",
+            L"100% – По умолчанию (Стандарт)",
+            L"110% – Средне-крупный",
+            L"120% – Крупный (Large)",
+            L"Ширина окна (Width px)",
+            L"Высота панели (Height px)",
+            L"Размер шрифта (Font Size pt)",
+            L"Сбросить размер к пресету",
+            L"Минималистичный режим (Скрыть Обзор и Выход)",
+            L"Свой фон (Изображение / GIF / MP4)",
+            L"Выбрать файл фона (Изображение / GIF / MP4 ≤ 50 МБ)...",
+            L"Удалить пользовательский фон",
+            L"Прозрачность медиафона (20 – 255)",
+            L"Прозрачность фона: Мягкая (90)",
+            L"Прозрачность фона: Средняя (150)",
+            L"Прозрачность фона: Яркая (215)",
+            L"Прозрачность фона: Полная (255)",
+            L"История и подсказки (До 50 / Прокрутка 5)",
+            L"Макс. число элементов (0 – 50)",
+            L"Видимых строк (3 – 10)",
+            L"Лимит истории: 10 элементов",
+            L"Лимит истории: 30 (Показ 5 + прокрутка)",
+            L"Лимит истории: 35 (По умолчанию)",
+            L"Лимит истории: 50 (Максимум)",
+            L"Отключить список истории (0)",
+            L"Показывать время запуска",
+            L"Подсказки программ и ggsearch:/msesearch:",
+            L"Язык интерфейса (Display Language)",
+            L"Авто – Язык системы",
+            L"Очистить всю сохранённую историю",
+            L"Свой размер и шрифт (Предпросмотр)",
+            L"Сбросить (Reset)",
+            L"Готово (OK)",
+            L"Фоновые медиа (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Все файлы (*.*)\0*.*\0\0",
+            L"Выберите изображение, анимацию GIF или видео MP4 для фона (до 20-50 МБ)",
+            L"Файл превышает лимит размера (%d МБ). Выберите файл меньше %d МБ.",
+            L"Введите запрос для поиска в Google через Chrome",
+            L"Поиск Google (Chrome): \"",
+            L"Введите запрос для поиска в Microsoft Edge",
+            L"Поиск в Microsoft Edge: \""
+        };
+    }
+    if (lang == L"uk") {
+        return {
+            L"Тема поверхні (Surface Theme)",
+            L"Liquid Glass (Рідке скло)",
+            L"Розмиття Windows (Windows Blur)",
+            L"Непрозорий фон (Opaque)",
+            L"Відтінок Liquid Glass (-100 – 100)",
+            L"Скло: Макс. прозорість (-100)",
+            L"Скло: Екстра прозорість (-80)",
+            L"Скло: Ультрапрозоре (-50)",
+            L"Скло: Чисте за замовчуванням (0)",
+            L"Скло: Прозоре – Clear (15)",
+            L"Скло: Баланс iOS – Balanced (30)",
+            L"Скло: Середній тон – Medium (55)",
+            L"Скло: Високий контраст – Tinted (80)",
+            L"Непрозорість Windows Blur (0 – 255)",
+            L"Колірний режим (Світлий / Темний)",
+            L"Авто – Як у системі Windows",
+            L"Темний режим (Dark Mode)",
+            L"Світлий режим (Light Mode)",
+            L"Розмір інтерфейсу (UI Size)",
+            L"85% – Компактний",
+            L"90% – Трохи менший",
+            L"100% – За замовчуванням (Стандарт)",
+            L"110% – Середньо-великий",
+            L"120% – Великий (Large)",
+            L"Ширина вікна (Width px)",
+            L"Висота панелі (Height px)",
+            L"Розмір шрифту (Font Size pt)",
+            L"Скинути розмір до пресету",
+            L"Мінімалістичний режим (Сховати Огляд і Вихід)",
+            L"Власний фон (Зображення / GIF / MP4)",
+            L"Вибрати файл фону (Зображення / GIF / MP4 ≤ 50 МБ)...",
+            L"Видалити власний фон",
+            L"Прозорість медіафону (20 – 255)",
+            L"Прозорість фону: М'яка (90)",
+            L"Прозорість фону: Збалансована (150)",
+            L"Прозорість фону: Яскрава (215)",
+            L"Прозорість фону: Повна (255)",
+            L"Історія та підказки (До 50 / Прокрутка 5)",
+            L"Макс. кількість елементів (0 – 50)",
+            L"Видимих рядків (3 – 10)",
+            L"Ліміт історії: 10 елементів",
+            L"Ліміт історії: 30 (Показ 5 + прокрутка)",
+            L"Ліміт історії: 35 (За замовчуванням)",
+            L"Ліміт історії: 50 (Максимум)",
+            L"Вимкнути список історії (0)",
+            L"Показувати час виконання",
+            L"Підказки програм і ggsearch:/msesearch:",
+            L"Мова інтерфейсу (Display Language)",
+            L"Авто – Мова системи",
+            L"Очистити всю збережену історію",
+            L"Власний розмір і шрифт (Перегляд наживо)",
+            L"Скинути (Reset)",
+            L"Готово (OK)",
+            L"Фонові медіа (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Усі файли (*.*)\0*.*\0\0",
+            L"Виберіть зображення, анімацію GIF або відео MP4 для фону (до 20-50 МБ)",
+            L"Файл перевищує ліміт розміру (%d МБ). Виберіть файл менше %d МБ.",
+            L"Введіть запит для пошуку в Google через Chrome",
+            L"Пошук Google (Chrome): \"",
+            L"Введіть запит для пошуку в Microsoft Edge",
+            L"Пошук у Microsoft Edge: \""
+        };
+    }
+    if (lang == L"pl") {
+        return {
+            L"Motyw powierzchni (Surface Theme)",
+            L"Liquid Glass",
+            L"Rozmycie Windows (Windows Blur)",
+            L"Nieprzezroczysty (Opaque)",
+            L"Odcień Liquid Glass (-100 – 100)",
+            L"Szkło: Maks. przezroczystość (-100)",
+            L"Szkło: Ekstremalna przezroczystość (-80)",
+            L"Szkło: Ultraprzezroczyste (-50)",
+            L"Szkło: Domyślne czyste (0)",
+            L"Szkło: Czyste – Clear (15)",
+            L"Szkło: Zrównoważone iOS – Balanced (30)",
+            L"Szkło: Średni odcień – Medium (55)",
+            L"Szkło: Wysoki kontrast – Tinted (80)",
+            L"Nieprzezroczystość Windows Blur (0 – 255)",
+            L"Tryb kolorów (Jasny / Ciemny)",
+            L"Automatycznie – Zgodnie z Windows",
+            L"Tryb ciemny (Dark Mode)",
+            L"Tryb jasny (Light Mode)",
+            L"Rozmiar interfejsu (UI Size)",
+            L"85% – Kompaktowy",
+            L"90% – Nieco mniejszy",
+            L"100% – Domyślny (Standard)",
+            L"110% – Średnio duży",
+            L"120% – Duży (Large)",
+            L"Szerokość (Width px)",
+            L"Wysokość paska (Height px)",
+            L"Rozmiar czcionki (Font Size pt)",
+            L"Przywróć rozmiar z ustawienia",
+            L"Tryb minimalny (Ukryj Przeglądaj i Wyjdź)",
+            L"Własne tło (Obraz / GIF / MP4)",
+            L"Wybierz plik tła (Obraz / GIF / MP4 ≤ 50MB)...",
+            L"Usuń własne tło",
+            L"Krycie multimediów tła (20 – 255)",
+            L"Krycie tła: Subtelne (90)",
+            L"Krycie tła: Zrównoważone (150)",
+            L"Krycie tła: Wyraźne (215)",
+            L"Krycie tła: Pełne (255)",
+            L"Historia i sugestie (Do 50 / Przewijaj 5)",
+            L"Maks. zapisanych elementów (0 – 50)",
+            L"Widoczne wiersze (3 – 10)",
+            L"Limit historii: 10 elementów",
+            L"Limit historii: 30 (Pokaż 5 + przewijanie)",
+            L"Limit historii: 35 (Domyślnie)",
+            L"Limit historii: 50 (Maksimum)",
+            L"Wyłącz listę historii (0)",
+            L"Pokaż czas wykonania",
+            L"Sugestie aplikacji i ggsearch:/msesearch:",
+            L"Język wyświetlania (Display Language)",
+            L"Automatycznie – Domyślny systemu",
+            L"Wyczyść całą zapisaną historię",
+            L"Własny rozmiar i czcionka (Podgląd na żywo)",
+            L"Resetuj",
+            L"Gotowe (OK)",
+            L"Multimedia tła (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Wszystkie pliki (*.*)\0*.*\0\0",
+            L"Wybierz obraz, animowany GIF lub wideo MP4 jako tło (maks. 20-50 MB)",
+            L"Wybrany plik przekracza limit (%d MB). Wybierz plik mniejszy niż %d MB.",
+            L"Wpisz słowo kluczowe, aby wyszukać w Google (Chrome)",
+            L"Szukaj w Google (Chrome): \"",
+            L"Wpisz słowo kluczowe, aby wyszukać w Microsoft Edge",
+            L"Szukaj w Microsoft Edge: \""
+        };
+    }
+    if (lang == L"nl") {
+        return {
+            L"Oppervlaktethema (Surface Theme)",
+            L"Liquid Glass",
+            L"Windows-vervaging (Windows Blur)",
+            L"Ondoorzichtig (Opaque)",
+            L"Liquid Glass-tint (-100 – 100)",
+            L"Glas: Max. transparant (-100)",
+            L"Glas: Extreem transparant (-80)",
+            L"Glas: Ultratransparant (-50)",
+            L"Glas: Standaard helder (0)",
+            L"Glas: Helder – Clear (15)",
+            L"Glas: Gebalanceerd iOS – Balanced (30)",
+            L"Glas: Gemiddelde tint – Medium (55)",
+            L"Glas: Hoog contrast – Tinted (80)",
+            L"Windows Blur-dekking (0 – 255)",
+            L"Kleurmodus (Licht / Donker)",
+            L"Automatisch – Volg Windows",
+            L"Donkere modus (Dark Mode)",
+            L"Lichte modus (Light Mode)",
+            L"UI-grootte / Schaal",
+            L"85% – Compact",
+            L"90% – Iets kleiner",
+            L"100% – Standaard",
+            L"110% – Middelgroot",
+            L"120% – Groot (Large)",
+            L"Breedte (Width px)",
+            L"Balkhoogte (Height px)",
+            L"Tekengrootte (Font Size pt)",
+            L"Grootte herstellen naar voorinstelling",
+            L"Minimale modus (Verberg Bladeren & Sluiten)",
+            L"Aangepaste achtergrond (Afbeelding / GIF / MP4)",
+            L"Kies achtergrondbestand (Afbeelding / GIF / MP4 ≤ 50MB)...",
+            L"Aangepaste achtergrond wissen",
+            L"Media-dekking (20 – 255)",
+            L"Dekking: Subtiel (90)",
+            L"Dekking: Gebalanceerd (150)",
+            L"Dekking: Helder (215)",
+            L"Dekking: Volledig (255)",
+            L"Geschiedenis & suggesties (Max 50 / Scroll 5)",
+            L"Max. opgeslagen items (0 – 50)",
+            L"Zichtbare rijen (3 – 10)",
+            L"Max. opgeslagen: 10 items",
+            L"Max. opgeslagen: 30 items (Toon 5 + Scroll)",
+            L"Max. opgeslagen: 35 items (Standaard)",
+            L"Max. opgeslagen: 50 items (Maximum)",
+            L"Geschiedenislijst uitschakelen (0)",
+            L"Uitvoeringstijd tonen",
+            L"App-suggesties & ggsearch:/msesearch:",
+            L"Weergavetaal (Display Language)",
+            L"Automatisch – Systeemstandaard",
+            L"Alle opgeslagen geschiedenis wissen",
+            L"Aangepaste grootte & lettertype (Live voorbeeld)",
+            L"Standaard (Reset)",
+            L"Klaar (OK)",
+            L"Achtergrondmedia (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Alle bestanden (*.*)\0*.*\0\0",
+            L"Selecteer een afbeelding, geanimeerde GIF of MP4-video als achtergrond (max. 20-50 MB)",
+            L"Het geselecteerde bestand overschrijdt de limiet (%d MB). Kies een bestand onder %d MB.",
+            L"Typ een trefwoord om met Google in Chrome te zoeken",
+            L"Zoeken op Google (Chrome): \"",
+            L"Typ een trefwoord om in Microsoft Edge te zoeken",
+            L"Zoeken in Microsoft Edge: \""
+        };
+    }
+    if (lang == L"tr") {
+        return {
+            L"Yüzey Teması (Surface Theme)",
+            L"Liquid Glass",
+            L"Windows Bulanıklığı (Windows Blur)",
+            L"Opak (Bulanıklık Yok)",
+            L"Liquid Glass Tonu (-100 – 100)",
+            L"Cam: Maksimum Şeffaf (-100)",
+            L"Cam: Aşırı Şeffaf (-80)",
+            L"Cam: Ultra Şeffaf (-50)",
+            L"Cam: Varsayılan Net (0)",
+            L"Cam: Net – Clear (15)",
+            L"Cam: Dengeli iOS – Balanced (30)",
+            L"Cam: Orta Ton – Medium Tint (55)",
+            L"Cam: Yüksek Kontrast – Tinted (80)",
+            L"Windows Blur Opaklığı (0 – 255)",
+            L"Renk Modu (Açık / Koyu)",
+            L"Otomatik – Windows'u Takip Et",
+            L"Koyu Mod (Dark Mode)",
+            L"Açık Mod (Light Mode)",
+            L"Arayüz Boyutu / Ölçek",
+            L"85% – Kompakt",
+            L"90% – Biraz Küçük",
+            L"100% – Varsayılan (Standart)",
+            L"110% – Orta Büyük",
+            L"120% – Büyük (Large)",
+            L"Genişlik (Width px)",
+            L"Çubuk Yüksekliği (Height px)",
+            L"Yazı Tipi Boyutu (Font Size pt)",
+            L"Özel Boyutu Ön Ayara Sıfırla",
+            L"Minimal Mod (Gözat ve Çıkış'ı Gizle)",
+            L"Özel Arka Plan (Resim / GIF / MP4)",
+            L"Arka Plan Dosyası Seç (Resim / GIF / MP4 ≤ 50MB)...",
+            L"Özel Arka Planı Kaldır",
+            L"Medya Opaklığı (20 – 255)",
+            L"Medya Opaklığı: Hafif (90)",
+            L"Medya Opaklığı: Dengeli (150)",
+            L"Medya Opaklığı: Canlı (215)",
+            L"Medya Opaklığı: Tam (255)",
+            L"Geçmiş ve Öneriler (En Fazla 50 / 5 Satır Kaydır)",
+            L"Maks. Kayıtlı Öğe (0 – 50)",
+            L"Görünür Satır Sayısı (3 – 10)",
+            L"Kayıt Sınırı: 10 Öğe",
+            L"Kayıt Sınırı: 30 Öğe (5 Göster + Kaydır)",
+            L"Kayıt Sınırı: 35 Öğe (Varsayılan)",
+            L"Kayıt Sınırı: 50 Öğe (Maksimum)",
+            L"Geçmiş Listesini Kapat (0)",
+            L"Çalıştırma Zamanını Göster",
+            L"Uygulama Önerileri ve ggsearch:/msesearch:",
+            L"Görüntüleme Dili (Display Language)",
+            L"Otomatik – Sistem Varsayılanı",
+            L"Kayıtlı Tüm Geçmişi Temizle",
+            L"Özel Boyut ve Yazı Tipi (Canlı Önizleme)",
+            L"Sıfırla (Reset)",
+            L"Tamam (OK)",
+            L"Arka Plan Medyası (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Tüm Dosyalar (*.*)\0*.*\0\0",
+            L"Arka plan için resim, hareketli GIF veya MP4 video seçin (maks. 20-50 MB)",
+            L"Seçilen dosya boyut sınırını (%d MB) aşıyor. Lütfen %d MB altında bir dosya seçin.",
+            L"Chrome ile Google'da aramak için anahtar kelime yazın",
+            L"Google'da Ara (Chrome): \"",
+            L"Microsoft Edge ile aramak için anahtar kelime yazın",
+            L"Microsoft Edge'de Ara: \""
+        };
+    }
+    if (lang == L"hi") {
+        return {
+            L"सतह थीम (Surface Theme)",
+            L"Liquid Glass",
+            L"विंडोज़ ब्लर (Windows Blur)",
+            L"अपारदर्शी (Opaque)",
+            L"Liquid Glass टिंट (-100 – 100)",
+            L"ग्लास: अधिकतम पारदर्शी (-100)",
+            L"ग्लास: अत्यंत पारदर्शी (-80)",
+            L"ग्लास: अल्ट्रा पारदर्शी (-50)",
+            L"ग्लास: डिफ़ॉल्ट क्लियर (0)",
+            L"ग्लास: क्लियर – Clear (15)",
+            L"ग्लास: iOS संतुलित – Balanced (30)",
+            L"ग्लास: मध्यम टिंट – Medium (55)",
+            L"ग्लास: उच्च कंट्रास्ट – Tinted (80)",
+            L"Windows Blur अपारदर्शिता (0 – 255)",
+            L"रंग मोड (लाइट / डार्क)",
+            L"ऑटो – विंडोज़ का अनुसरण करें",
+            L"डार्क मोड (Dark Mode)",
+            L"लाइट मोड (Light Mode)",
+            L"UI आकार / स्केल (UI Size)",
+            L"85% – कॉम्पैक्ट (Compact)",
+            L"90% – थोड़ा छोटा",
+            L"100% – डिफ़ॉल्ट (मानक)",
+            L"110% – मध्यम बड़ा",
+            L"120% – बड़ा (Large)",
+            L"चौड़ाई (Width px)",
+            L"बार की ऊँचाई (Height px)",
+            L"फ़ॉन्ट आकार (Font Size pt)",
+            L"कस्टम आकार को प्रीसेट पर रीसेट करें",
+            L"मिनिमल मोड (ब्राउज़ और बंद करें छुपाएँ)",
+            L"कस्टम पृष्ठभूमि (छवि / GIF / MP4)",
+            L"पृष्ठभूमि फ़ाइल चुनें (छवि / GIF / MP4 ≤ 50MB)...",
+            L"कस्टम पृष्ठभूमि हटाएँ",
+            L"मीडिया अपारदर्शिता (20 – 255)",
+            L"मीडिया अपारदर्शिता: हल्का (90)",
+            L"मीडिया अपारदर्शिता: संतुलित (150)",
+            L"मीडिया अपारदर्शिता: स्पष्ट (215)",
+            L"मीडिया अपारदर्शिता: पूर्ण (255)",
+            L"इतिहास और सुझाव (अधिकतम 50 / 5 पंक्तियाँ)",
+            L"अधिकतम संग्रहीत आइटम (0 – 50)",
+            L"दिखने वाली पंक्तियाँ (3 – 10)",
+            L"अधिकतम आइटम: 10",
+            L"अधिकतम आइटम: 30 (5 दिखाएँ + स्क्रॉल)",
+            L"अधिकतम आइटम: 35 (डिफ़ॉल्ट)",
+            L"अधिकतम आइटम: 50 (अधिकतम)",
+            L"इतिहास सूची बंद करें (0)",
+            L"निष्पादन समय दिखाएँ",
+            L"ऐप सुझाव और ggsearch:/msesearch:",
+            L"प्रदर्शन भाषा (Display Language)",
+            L"ऑटो – सिस्टम डिफ़ॉल्ट",
+            L"सहेजा गया सभी इतिहास साफ़ करें",
+            L"कस्टम आकार और फ़ॉन्ट (लाइव पूर्वावलोकन)",
+            L"रीसेट (Reset)",
+            L"पूर्ण (OK)",
+            L"पृष्ठभूमि मीडिया (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0सभी फ़ाइलें (*.*)\0*.*\0\0",
+            L"पृष्ठभूमि के लिए छवि, एनिमेटेड GIF या MP4 वीडियो चुनें (अधिकतम 20-50 MB)",
+            L"चयनित फ़ाइल आकार सीमा (%d MB) से अधिक है। कृपया %d MB से कम की फ़ाइल चुनें।",
+            L"Chrome में Google खोजने के लिए कीवर्ड टाइप करें",
+            L"Google खोज (Chrome): \"",
+            L"Microsoft Edge में खोजने के लिए कीवर्ड टाइप करें",
+            L"Microsoft Edge खोज: \""
+        };
+    }
+    if (lang == L"ar") {
+        return {
+            L"سمة السطح (Surface Theme)",
+            L"Liquid Glass (الزجاج السائل)",
+            L"تمويه ويندوز (Windows Blur)",
+            L"معتم (Opaque)",
+            L"درجة Liquid Glass (-100 – 100)",
+            L"زجاج: أقصى شفافية (-100)",
+            L"زجاج: شفافية فائقة جداً (-80)",
+            L"زجاج: شفافية فائقة (-50)",
+            L"زجاج: صافي افتراضي (0)",
+            L"زجاج: صافي – Clear (15)",
+            L"زجاج: متوازن iOS – Balanced (30)",
+            L"زجاج: متوسط التظليل – Medium (55)",
+            L"زجاج: تباين عالٍ – Tinted (80)",
+            L"عتامة تمويه ويندوز (0 – 255)",
+            L"وضع الألوان (فاتح / داكن)",
+            L"تلقائي – اتباع نظام ويندوز",
+            L"الوضع الداكن (Dark Mode)",
+            L"الوضع الفاتح (Light Mode)",
+            L"حجم الواجهة والمقياس (UI Size)",
+            L"85% – مدمج (Compact)",
+            L"90% – أصغر قليلاً",
+            L"100% – افتراضي (قياسي)",
+            L"110% – متوسط كبير",
+            L"120% – كبير (Large)",
+            L"العرض (Width px)",
+            L"ارتفاع الشريط (Height px)",
+            L"حجم الخط (Font Size pt)",
+            L"إعادة تعيين الحجم إلى الإعداد المسبق",
+            L"الوضع المبسط (إخفاء استعراض وخروج)",
+            L"خلفية مخصصة (صورة / GIF / MP4)",
+            L"اختيار ملف الخلفية (صورة / GIF / MP4 ≤ 50MB)...",
+            L"إزالة الخلفية المخصصة",
+            L"عتامة وسائط الخلفية (20 – 255)",
+            L"عتامة الخلفية: خفيفة (90)",
+            L"عتامة الخلفية: متوازنة (150)",
+            L"عتامة الخلفية: واضحة (215)",
+            L"عتامة الخلفية: كاملة (255)",
+            L"السجل والاقتراحات (حتى 50 / تمرير 5)",
+            L"الحد الأقصى للعناصر المحفوظة (0 – 50)",
+            L"الصفوف المرئية (3 – 10)",
+            L"الحد الأقصى: 10 عناصر",
+            L"الحد الأقصى: 30 عنصراً (عرض 5 + تمرير)",
+            L"الحد الأقصى: 35 عنصراً (افتراضي)",
+            L"الحد الأقصى: 50 عنصراً (الأقصى)",
+            L"تعطيل قائمة السجل (0)",
+            L"إظهار وقت التنفيذ",
+            L"اقتراحات التطبيقات و ggsearch:/msesearch:",
+            L"لغة العرض (Display Language)",
+            L"تلقائي – لغة النظام الافتراضية",
+            L"مسح كل السجل المحفوظ",
+            L"حجم وخط مخصص (معاينة مباشرة)",
+            L"إعادة تعيين",
+            L"تم (OK)",
+            L"وسائط الخلفية (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0كل الملفات (*.*)\0*.*\0\0",
+            L"اختر صورة أو GIF متحرك أو فيديو MP4 كخلفية (الحد الأقصى 20-50 ميجابايت)",
+            L"الملف المحدد يتجاوز الحد المسموح (%d ميجابايت). يرجى اختيار ملف أقل من %d ميجابايت.",
+            L"اكتب كلمة مفتاحية للبحث في Google عبر Chrome",
+            L"بحث Google (Chrome): \"",
+            L"اكتب كلمة مفتاحية للبحث في Microsoft Edge",
+            L"بحث Microsoft Edge: \""
+        };
+    }
+
+    // Default: English ("en")
+    return {
+        L"Surface Theme",
+        L"Liquid Glass",
+        L"Windows Blur",
+        L"Off – Opaque",
+        L"Liquid Glass Tint (-100 – 100)",
+        L"Glass: Max Transparent (-100)",
+        L"Glass: Extreme Transparent (-80)",
+        L"Glass: Ultra Transparent (-50)",
+        L"Glass: Clear Default (0)",
+        L"Glass: Clear (15)",
+        L"Glass: Balanced iOS (30)",
+        L"Glass: Medium Tint (55)",
+        L"Glass: High Contrast Tinted (80)",
+        L"Windows Blur Opacity (0 – 255)",
+        L"Color Mode",
+        L"Auto – Follow Windows",
+        L"Dark Mode",
+        L"Light Mode",
+        L"UI Size / Scale",
+        L"85% – Compact",
+        L"90% – Slightly Smaller",
+        L"100% – Default (Standard)",
+        L"110% – Medium Large",
+        L"120% – Large",
+        L"Width (px)",
+        L"Bar Height (px)",
+        L"Font Size (pt)",
+        L"Reset Custom Size to Preset",
+        L"Minimal Mode (Hide Browse & Exit)",
+        L"Custom Background (Image / GIF / MP4)",
+        L"Select Background File (Image / GIF / MP4 ≤ 50MB)...",
+        L"Clear Custom Background",
+        L"Media Opacity (20 – 255)",
+        L"Media Opacity: Subtle (90)",
+        L"Media Opacity: Balanced (150)",
+        L"Media Opacity: Vivid (215)",
+        L"Media Opacity: Full (255)",
+        L"History & Suggestions (Up to 50 / Scroll 5)",
+        L"Max Stored Items (0 – 50)",
+        L"Visible Rows (3 – 10)",
+        L"Max Stored Items: 10",
+        L"Max Stored Items: 30 (Show 5 + Scroll)",
+        L"Max Stored Items: 35 (Default)",
+        L"Max Stored Items: 50 (Maximum)",
+        L"Disable History List (0)",
+        L"Show Execution Timestamp",
+        L"App Suggestions & ggsearch:/msesearch:",
+        L"Display Language",
+        L"Auto – System Default",
+        L"Clear All Stored History",
+        L"Custom Size & Font (Live Preview)",
+        L"Reset Default",
+        L"Done (OK)",
+        L"Background Media (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0All Files (*.*)\0*.*\0\0",
+        L"Select static image, animated GIF, or MP4 video background (max 20-50 MB)",
+        L"The selected background file exceeds the maximum allowed size (%d MB). Please choose an image/GIF/MP4 under %d MB.",
+        L"Type a keyword to search Google in Chrome",
+        L"Search Google in Chrome: \"",
+        L"Type a keyword to search in Microsoft Edge",
+        L"Search in Microsoft Edge: \""
+    };
+}
+
+LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
+    lang = ResolveEffectiveLanguageCode(std::move(lang));
 
     if (lang == L"vi") {
         return {
@@ -1091,6 +3257,8 @@ std::wstring GetUserOverrideKey(const wchar_t* name) {
 void ClearAllInAppOverrides() {
     const wchar_t* keys[] = {
         L"language", L"surfaceTheme", L"colorMode", L"minimalMode", L"uiScalePercent",
+        L"customDialogWidth", L"customBarHeight", L"customFontSize",
+        L"glassOpacity", L"blurOpacity", L"visibleHistoryRows",
         L"maxHistoryItems", L"showTimestamp",
         L"enableAppSuggestions", L"customBackgroundPath", L"customBackgroundOpacity"
     };
@@ -1164,8 +3332,33 @@ void LoadSettings(bool fromSettingsChanged = false) {
     int scaleOverride = Wh_GetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), -1);
     newSettings.uiScalePercent = std::clamp(scaleOverride > 0 ? scaleOverride : scaleSetting, 85, 120);
 
+    int widthSetting = Wh_GetIntSetting(L"customDialogWidth");
+    int widthOverride = Wh_GetIntValue(GetUserOverrideKey(L"customDialogWidth").c_str(), -1);
+    int rawWidth = (widthOverride >= 0) ? widthOverride : widthSetting;
+    newSettings.customDialogWidth = (rawWidth > 0) ? std::clamp(rawWidth, 360, 1200) : 0;
+
+    int heightSetting = Wh_GetIntSetting(L"customBarHeight");
+    int heightOverride = Wh_GetIntValue(GetUserOverrideKey(L"customBarHeight").c_str(), -1);
+    int rawHeight = (heightOverride >= 0) ? heightOverride : heightSetting;
+    if (rawHeight >= 150) {
+        rawHeight = MulDiv(rawHeight, kBaseInputBarHeight, kBaseInputBarHeight + 5 * kBaseRowHeight + kBaseListPadTop + kBaseListPadBottom);
+    }
+    newSettings.customBarHeight = (rawHeight > 0) ? std::clamp(rawHeight, 36, 96) : 0;
+
+    int fontSetting = Wh_GetIntSetting(L"customFontSize");
+    int fontOverride = Wh_GetIntValue(GetUserOverrideKey(L"customFontSize").c_str(), -1);
+    int rawFont = (fontOverride >= 0) ? fontOverride : fontSetting;
+    newSettings.customFontSize = (rawFont > 0) ? std::clamp(rawFont, 9, 24) : 0;
+
     newSettings.taskbarCloseInsteadOfMinimize = (wcscmp(tbAction.get(), L"close") == 0);
-    newSettings.blurOpacity = std::clamp(Wh_GetIntSetting(L"blurOpacity"), 0, 255);
+    int glassOpSetting = Wh_GetIntSetting(L"glassOpacity");
+    if (glassOpSetting < -100 || glassOpSetting > 100) glassOpSetting = -100;
+    int glassOpOverride = Wh_GetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), -999);
+    newSettings.glassOpacity = std::clamp((glassOpOverride >= -100 && glassOpOverride <= 100) ? glassOpOverride : glassOpSetting, -100, 100);
+
+    int blurOpSetting = std::clamp(Wh_GetIntSetting(L"blurOpacity"), 0, 255);
+    int blurOpOverride = Wh_GetIntValue(GetUserOverrideKey(L"blurOpacity").c_str(), -1);
+    newSettings.blurOpacity = std::clamp(blurOpOverride >= 0 ? blurOpOverride : blurOpSetting, 0, 255);
 
     newSettings.customBackgroundPath = bgPathSetting.get() ? TrimCommandString(bgPathSetting.get()) : L"";
     if (Wh_GetStringValue(GetUserOverrideKey(L"customBackgroundPath").c_str(), strOverride, MAX_PATH) > 0 && strOverride[0]) {
@@ -1184,8 +3377,8 @@ void LoadSettings(bool fromSettingsChanged = false) {
     newSettings.customBackgroundMaxMb = std::clamp(maxMbSetting, 20, 50);
 
     int bgOpSetting = Wh_GetIntSetting(L"customBackgroundOpacity");
-    if (bgOpSetting < 0) {
-        bgOpSetting = 150;
+    if (bgOpSetting <= 0) {
+        bgOpSetting = 255;
     }
     int bgOpOverride = Wh_GetIntValue(GetUserOverrideKey(L"customBackgroundOpacity").c_str(), -1);
     newSettings.customBackgroundOpacity = std::clamp(bgOpOverride >= 0 ? bgOpOverride : bgOpSetting, 20, 255);
@@ -1199,7 +3392,8 @@ void LoadSettings(bool fromSettingsChanged = false) {
 
     int visRowsSetting = Wh_GetIntSetting(L"visibleHistoryRows");
     if (visRowsSetting <= 0) visRowsSetting = 5;
-    newSettings.visibleHistoryRows = std::clamp(visRowsSetting, 3, 10);
+    int visRowsOverride = Wh_GetIntValue(GetUserOverrideKey(L"visibleHistoryRows").c_str(), -1);
+    newSettings.visibleHistoryRows = std::clamp(visRowsOverride >= 3 ? visRowsOverride : visRowsSetting, 3, 10);
 
     int showTsOverride = Wh_GetIntValue(GetUserOverrideKey(L"showTimestamp").c_str(), -1);
     newSettings.showTimestamp = (showTsOverride >= 0) ? (showTsOverride != 0) : (Wh_GetIntSetting(L"showTimestamp") != 0);
@@ -1274,6 +3468,8 @@ struct RunDialogState {
     SurfaceTheme effectiveSurface = SurfaceTheme::Glass;
     bool isLightMode = false;
     bool backdropLightSample = false;
+    bool customBgIsLight = false;
+    bool customBgLumValid = false;
 
     UINT dpi = 96;
     int topAreaHeight = 0;
@@ -1303,6 +3499,26 @@ struct RunDialogState {
     bool isBrowsingFile = false;
     bool suppressSuggestionUpdate = false;
     bool pendingUninit = false;
+
+    // Zero-latency direct window dragging state
+    bool windowDragging = false;
+    POINT windowDragStartCursor = { 0, 0 };
+    int windowDragStartX = 0;
+    int windowDragStartY = 0;
+
+    // Real-time background window topology tracking (immune to mouse hover / menu popups)
+    uint64_t lastTopologySig = 0;
+    bool pendingTopologyRecapture = false;
+    ULONGLONG topologyChangeTick = 0;
+
+    // Persistent double-buffer DIB & Direct2D RenderTarget for 0-ms paint overhead
+    HDC hCachedMemDC = nullptr;
+    HBITMAP hCachedBmp = nullptr;
+    HGDIOBJ hOldCachedBmp = nullptr;
+    DWORD* cachedDibPixels = nullptr;
+    int cachedDibW = 0;
+    int cachedDibH = 0;
+    ID2D1DCRenderTarget* pCachedRT = nullptr;
 
     // Custom Background Media State (Static Image / Animated GIF / MP4 Video)
     std::wstring loadedBgPath;
@@ -1458,6 +3674,7 @@ void StopKeyHookThread() {
     }
 }
 
+bool ResolveDialogLightContrast(const RunDialogState* state);
 void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
 void CloseActiveGearMenu();
 void CloseRunDialog(HWND hDlg);
@@ -1471,6 +3688,7 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool showErrorIfTooLarge
 void StepCustomBackgroundAnimation(RunDialogState* state);
 void ApplyReloadedSettingsToDialog(RunDialogState* state);
 void OpenGearSettingsMenu(RunDialogState* state);
+void CheckAndUpdateBackdropInRealtime(HWND hWnd, RunDialogState* state, bool forceImmediate = false);
 
 int GetDlgScale(const RunDialogState* state) {
     return state ? std::clamp(state->settings.uiScalePercent, 85, 120) : 100;
@@ -1484,11 +3702,37 @@ float DpiScaleSF(float value, const RunDialogState* state) {
     return DpiScaleF(value, state ? state->dpi : 96, GetDlgScale(state));
 }
 
+float GetFontSizeSF(float baseDip, const RunDialogState* state) {
+    if (state && state->settings.customFontSize > 0) {
+        float customMain = (float)std::clamp(state->settings.customFontSize, 9, 24);
+        float scaledDip = baseDip * (customMain / 13.5f);
+        return scaledDip * (static_cast<float>(state->dpi) / 96.0f);
+    }
+    return DpiScaleSF(baseDip, state);
+}
+
 int GetDlgWidth(const RunDialogState* state) {
+    if (state && state->settings.customDialogWidth >= 360) {
+        int wDip = std::clamp(state->settings.customDialogWidth, 360, 1200);
+        return DpiScale(wDip, state->dpi, 100);
+    }
     return DpiScaleS(kBaseDlgWidth, state);
 }
 
+int GetInputBarHeight(const RunDialogState* state) {
+    if (state && state->settings.customBarHeight > 0) {
+        int barDip = std::clamp(state->settings.customBarHeight, 36, 96);
+        return DpiScale(barDip, state->dpi, 100);
+    }
+    return DpiScaleS(kBaseInputBarHeight, state);
+}
+
 int GetRowHeight(const RunDialogState* state) {
+    if (state && state->settings.customBarHeight > 0) {
+        int barDip = std::clamp(state->settings.customBarHeight, 36, 96);
+        int rowDip = std::clamp(MulDiv(kBaseRowHeight, barDip, kBaseInputBarHeight), 26, 72);
+        return DpiScale(rowDip, state->dpi, 100);
+    }
     return DpiScaleS(kBaseRowHeight, state);
 }
 
@@ -1500,8 +3744,28 @@ int GetListPadBottom(const RunDialogState* state) {
     return DpiScaleS(kBaseListPadBottom, state);
 }
 
-int GetInputBarHeight(const RunDialogState* state) {
-    return DpiScaleS(kBaseInputBarHeight, state);
+inline bool HasActiveCustomBackground(const RunDialogState* state) {
+    if (!state) return false;
+    return (state->pVideoReader && !state->videoFrameBuffer.empty()) || !state->bgFrames.empty();
+}
+
+void UpdateCustomBackgroundLuminance(RunDialogState* state) {
+    if (!state) return;
+    const BYTE* bgPixels = nullptr;
+    if (state->pVideoReader && !state->videoFrameBuffer.empty()) {
+        bgPixels = state->videoFrameBuffer.data();
+    } else if (!state->bgFrames.empty()) {
+        size_t idx = state->bgCurrentFrame % state->bgFrames.size();
+        bgPixels = state->bgFrames[idx].pixels.data();
+    }
+    if (bgPixels && state->bgFrameW > 0 && state->bgFrameH > 0) {
+        bool newLight = SampleCustomBgPixelsIsLight(
+            bgPixels, state->bgFrameW, state->bgFrameH, state->customBgLumValid, state->customBgIsLight);
+        state->customBgIsLight = newLight;
+        state->customBgLumValid = true;
+    } else {
+        state->customBgLumValid = false;
+    }
 }
 
 int GetVisibleRowCount(const RunDialogState* state) {
@@ -1553,6 +3817,7 @@ void ReleaseCustomBackgroundMedia(RunDialogState* state) {
     state->bgFrameW = 0;
     state->bgFrameH = 0;
     state->bgCurrentFrame = 0;
+    state->customBgLumValid = false;
     state->loadedBgPath.clear();
 }
 
@@ -1632,7 +3897,13 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool showErrorIfTooLarge
     }
 
     ReleaseCustomBackgroundMedia(state);
-    if (path.empty()) return;
+    if (path.empty()) {
+        if (state->hDlg && IsWindow(state->hDlg)) {
+            ApplyWindowAppearance(state->hDlg, state);
+            InvalidateRect(state->hDlg, nullptr, TRUE);
+        }
+        return;
+    }
 
     wchar_t expandedPath[MAX_PATH] = {};
     if (ExpandEnvironmentStringsW(path.c_str(), expandedPath, MAX_PATH) > 0 && expandedPath[0]) {
@@ -1651,16 +3922,10 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool showErrorIfTooLarge
     ULONGLONG maxBytes = (ULONGLONG)std::clamp(state->settings.customBackgroundMaxMb, 20, 50) * 1024ULL * 1024ULL;
     if (fileSize.QuadPart == 0 || fileSize.QuadPart > maxBytes) {
         if (showErrorIfTooLarge && state->hDlg && IsWindow(state->hDlg)) {
-            bool isVi = (state->settings.language == L"vi") ||
-                        (state->settings.language == L"auto" && PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_VIETNAMESE);
-            wchar_t msg[256] = {};
-            if (isVi) {
-                swprintf_s(msg, L"Tệp hình nền vượt quá giới hạn dung lượng cho phép (%d MB). Vui lòng chọn tệp ảnh/GIF/MP4 nhỏ hơn %d MB.",
-                           state->settings.customBackgroundMaxMb, state->settings.customBackgroundMaxMb);
-            } else {
-                swprintf_s(msg, L"The selected background file exceeds the maximum allowed size (%d MB). Please choose an image/GIF/MP4 under %d MB.",
-                           state->settings.customBackgroundMaxMb, state->settings.customBackgroundMaxMb);
-            }
+            MenuLocalizedStrings ml = GetMenuLocalizedStrings(state->settings.language);
+            wchar_t msg[320] = {};
+            swprintf_s(msg, ml.bgSizeLimitFmt,
+                       state->settings.customBackgroundMaxMb, state->settings.customBackgroundMaxMb);
             MessageBoxW(state->hDlg, msg, L"Modern Run Dialog UI", MB_ICONWARNING | MB_OK);
         }
         return;
@@ -1709,7 +3974,9 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool showErrorIfTooLarge
                                 pReader = nullptr;
                                 state->loadedBgPath = state->settings.customBackgroundPath;
                                 DecodeNextVideoFrame(state);
+                                UpdateCustomBackgroundLuminance(state);
                                 if (state->hDlg && IsWindow(state->hDlg)) {
+                                    ApplyWindowAppearance(state->hDlg, state);
                                     SetTimer(state->hDlg, kTimerBgMedia, state->videoIntervalMs, nullptr);
                                 }
                             }
@@ -1806,6 +4073,10 @@ void ReloadCustomBackgroundMedia(RunDialogState* state, bool showErrorIfTooLarge
     if (!state->bgFrames.empty()) {
         state->loadedBgPath = state->settings.customBackgroundPath;
         state->bgCurrentFrame = 0;
+        UpdateCustomBackgroundLuminance(state);
+        if (state->hDlg && IsWindow(state->hDlg)) {
+            ApplyWindowAppearance(state->hDlg, state);
+        }
         if (state->bgFrames.size() > 1 && state->hDlg && IsWindow(state->hDlg)) {
             SetTimer(state->hDlg, kTimerBgMedia, state->bgFrames[0].delayMs, nullptr);
         }
@@ -1816,10 +4087,20 @@ void StepCustomBackgroundAnimation(RunDialogState* state) {
     if (!state || !state->hDlg || IsIconic(state->hDlg)) return;
     if (state->pVideoReader) {
         if (DecodeNextVideoFrame(state)) {
+            bool prevLight = state->customBgIsLight;
+            UpdateCustomBackgroundLuminance(state);
+            if (state->customBgIsLight != prevLight) {
+                state->isLightMode = ResolveDialogLightContrast(state);
+            }
             InvalidateRect(state->hDlg, nullptr, FALSE);
         }
     } else if (state->bgFrames.size() > 1) {
         state->bgCurrentFrame = (state->bgCurrentFrame + 1) % state->bgFrames.size();
+        bool prevLight = state->customBgIsLight;
+        UpdateCustomBackgroundLuminance(state);
+        if (state->customBgIsLight != prevLight) {
+            state->isLightMode = ResolveDialogLightContrast(state);
+        }
         SetTimer(state->hDlg, kTimerBgMedia, state->bgFrames[state->bgCurrentFrame].delayMs, nullptr);
         InvalidateRect(state->hDlg, nullptr, FALSE);
     }
@@ -1885,10 +4166,14 @@ void ClampDialogToMonitorWorkArea(HWND hDlg, int* inOutX, int* inOutY, int width
 
 void ResizeDialogPreservingBottomAnchor(RunDialogState* state, int oldHeight) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
-    if (oldHeight == state->totalHeight) return;
+    int dlgW = GetDlgWidth(state);
+    RECT rcCur = {};
+    GetWindowRect(state->hDlg, &rcCur);
+    int curW = rcCur.right - rcCur.left;
+    int curH = rcCur.bottom - rcCur.top;
+    if (oldHeight == state->totalHeight && curW == dlgW && curH == state->totalHeight) return;
 
     state->normalY += (oldHeight - state->totalHeight);
-    int dlgW = GetDlgWidth(state);
     ClampDialogToMonitorWorkArea(state->hDlg, &state->normalX, &state->normalY, dlgW, state->totalHeight, state->dpi);
     if (!IsIconic(state->hDlg)) {
         SetWindowPos(state->hDlg, nullptr, state->normalX, state->normalY, dlgW, state->totalHeight,
@@ -1937,8 +4222,11 @@ void RestoreRunDialog(RunDialogState* state) {
     g_lastToggleTick.store(now);
 
     int dlgW = GetDlgWidth(state);
-    state->backdropLightSample = SampleBackdropLuminanceIsLight(
-        state->normalX, state->normalY, dlgW, state->totalHeight, false, state->backdropLightSample);
+    CaptureCleanMonitorBackdrop(state->hDlg, false);
+    state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+        state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
+    state->lastTopologySig = GetBackdropWindowTopologySignature(state->hDlg);
+    state->pendingTopologyRecapture = false;
 
     g_internalActivation = true;
     if (IsIconic(state->hDlg)) {
@@ -2054,21 +4342,16 @@ void OpenBrowseCustomBackgroundDialog(RunDialogState* state) {
     state->isBrowsingFile = true;
     g_isBrowsingFile.store(true);
 
-    bool isVi = (state->settings.language == L"vi") ||
-                (state->settings.language == L"auto" && PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_VIETNAMESE);
+    MenuLocalizedStrings ml = GetMenuLocalizedStrings(state->settings.language);
 
     wchar_t filePath[MAX_PATH] = {};
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hDlg;
-    ofn.lpstrFilter = isVi
-        ? L"Hình nền & Video (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0Tất cả tệp (*.*)\0*.*\0\0"
-        : L"Background Media (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif;*.mp4;*.webm\0All Files (*.*)\0*.*\0\0";
+    ofn.lpstrFilter = ml.bgBrowseFilter;
     ofn.lpstrFile = filePath;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrTitle = isVi
-        ? L"Chọn ảnh tĩnh, ảnh động GIF hoặc video MP4 làm hình nền (tối đa 20-50 MB)"
-        : L"Select static image, animated GIF, or MP4 video background (max 20-50 MB)";
+    ofn.lpstrTitle = ml.bgBrowseTitle;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
 
     BOOL picked = GetOpenFileNameW(&ofn);
@@ -2096,12 +4379,8 @@ void OpenBrowseCustomBackgroundDialog(RunDialogState* state) {
             int maxMb = std::clamp(state->settings.customBackgroundMaxMb, 20, 50);
             ULONGLONG maxBytes = (ULONGLONG)maxMb * 1024ULL * 1024ULL;
             if (fileSize.QuadPart > maxBytes) {
-                wchar_t msg[256] = {};
-                if (isVi) {
-                    swprintf_s(msg, L"Tệp đã chọn vượt quá giới hạn dung lượng (%d MB). Vui lòng chọn tệp ảnh/GIF/MP4 nhỏ hơn %d MB.", maxMb, maxMb);
-                } else {
-                    swprintf_s(msg, L"The selected file exceeds the %d MB limit. Please choose an image/GIF/MP4 under %d MB.", maxMb, maxMb);
-                }
+                wchar_t msg[320] = {};
+                swprintf_s(msg, ml.bgSizeLimitFmt, maxMb, maxMb);
                 MessageBoxW(hDlg, msg, L"Modern Run Dialog UI", MB_ICONWARNING | MB_OK);
             } else {
                 Wh_SetStringValue(GetUserOverrideKey(L"customBackgroundPath").c_str(), filePath);
@@ -2534,10 +4813,15 @@ bool ResolveDialogLightContrast(const RunDialogState* state) {
         double lum = (0.299 * GetRValue(winBg) + 0.587 * GetGValue(winBg) + 0.114 * GetBValue(winBg)) / 255.0;
         return lum > 0.5;
     }
+    // When a custom background image/GIF/video is active, text color always adapts
+    // to the background media's luminance rather than the default Windows theme.
+    if (state && HasActiveCustomBackground(state) && state->customBgLumValid) {
+        return state->customBgIsLight;
+    }
     if (state->settings.colorMode == ColorMode::Light) return true;
     if (state->settings.colorMode == ColorMode::Dark) return false;
     if (state->effectiveSurface == SurfaceTheme::Glass) {
-        return state->backdropLightSample;
+        return state ? state->backdropLightSample : false;
     }
     return IsSystemAppLightTheme();
 }
@@ -2547,14 +4831,19 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
 
     state->effectiveSurface = ResolveEffectiveSurface(state->settings);
     state->isLightMode = ResolveDialogLightContrast(state);
+    bool hasCustomBg = HasActiveCustomBackground(state);
 
-    BOOL dark = state->isLightMode ? FALSE : TRUE;
+    // Always keep DWMWA_USE_IMMERSIVE_DARK_MODE = TRUE when Liquid Glass is active so Windows 11 DWM
+    // never injects the opaque milky-white Light-Mode Acrylic exclusion fog!
+    BOOL dark = (!hasCustomBg && state->effectiveSurface == SurfaceTheme::Glass)
+                ? TRUE
+                : (state->isLightMode ? FALSE : TRUE);
     DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
 
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hDlg, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 
-    COLORREF borderCol = (state->effectiveSurface == SurfaceTheme::Glass)
+    COLORREF borderCol = (!hasCustomBg && state->effectiveSurface == SurfaceTheme::Glass)
         ? 0xFFFFFFFE // DWMWA_COLOR_NONE (Liquid Glass draws its own dual refractive rim)
         : (state->isLightMode ? RGB(204, 208, 216) : RGB(64, 68, 76));
     DwmSetWindowAttribute(hDlg, DWMWA_BORDER_COLOR, &borderCol, sizeof(borderCol));
@@ -2567,11 +4856,16 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
     if (!pSetWCA) return;
 
     ACCENT_POLICY policy = {};
-    if (state->effectiveSurface == SurfaceTheme::Glass) {
+    if (hasCustomBg || state->effectiveSurface == SurfaceTheme::Solid || IsHighContrastActive()) {
+        // When custom background is active (or Opaque theme), disable DWM blur/glass completely
+        // so custom background never mixes with Liquid Glass or Windows Blur!
+        policy.AccentState = ACCENT_DISABLED;
+    } else if (state->effectiveSurface == SurfaceTheme::Glass) {
         policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
         policy.AccentFlags = 2;
-        DWORD alpha = state->isLightMode ? 32 : 24;
-        DWORD bgr   = state->isLightMode ? 0x00F2F0F4 : 0x00181214;
+        int glassPct = std::clamp(state->settings.glassOpacity, -100, 100);
+        DWORD alpha = (glassPct >= 0) ? (DWORD)std::clamp(MulDiv(glassPct, 180, 100), 4, 215) : 2;
+        DWORD bgr   = state->isLightMode ? 0x00F4F2F0 : 0x001E1A16;
         policy.GradientColor = (alpha << 24) | bgr;
     } else if (state->effectiveSurface == SurfaceTheme::Blur) {
         policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
@@ -2579,8 +4873,13 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
         DWORD alpha = static_cast<DWORD>(state->settings.blurOpacity) & 0xFF;
         DWORD bgr   = state->isLightMode ? 0x00F6F3F2 : 0x00241E1C;
         policy.GradientColor = (alpha << 24) | bgr;
-    } else {
-        policy.AccentState = ACCENT_DISABLED;
+    }
+
+    // Ensure WS_EX_LAYERED is never left active on the dialog so DWM blur and text/button opacity stay 100% intact
+    LONG_PTR exStyle = GetWindowLongPtrW(hDlg, GWL_EXSTYLE);
+    if (exStyle & WS_EX_LAYERED) {
+        SetLayeredWindowAttributes(hDlg, 0, 255, LWA_ALPHA);
+        SetWindowLongPtrW(hDlg, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
     }
 
     WINDOWCOMPOSITIONATTRIBDATA data = {};
@@ -2589,6 +4888,64 @@ void ApplyWindowAppearance(HWND hDlg, RunDialogState* state) {
     data.cbData = sizeof(policy);
     pSetWCA(hDlg, &data);
 }
+
+void CheckAndUpdateBackdropInRealtime(HWND hWnd, RunDialogState* state, bool forceImmediate) {
+    if (!state || !hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
+    if (state->effectiveSurface != SurfaceTheme::Glass || HasActiveCustomBackground(state)) return;
+    // Never recapture while Gear menu, Custom Size window, File Browse dialog, or mouse drag is active
+    if (state->isBrowsingFile || state->windowDragging || state->scrollbarDragging ||
+        g_hActiveGearMenu.load() != nullptr || g_hActiveCustomSizeWnd.load() != nullptr) {
+        return;
+    }
+    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
+        return;
+    }
+
+    uint64_t curSig = GetBackdropWindowTopologySignature(hWnd);
+    ULONGLONG now = GetTickCount64();
+
+    if (forceImmediate) {
+        state->lastTopologySig = curSig;
+        state->pendingTopologyRecapture = true;
+        state->topologyChangeTick = now;
+        return;
+    }
+
+    if (curSig != state->lastTopologySig) {
+        state->lastTopologySig = curSig;
+        state->pendingTopologyRecapture = true;
+        state->topologyChangeTick = now;
+        return;
+    }
+
+    if (!state->pendingTopologyRecapture) {
+        return;
+    }
+
+    // Wait ~180 ms after the window topology change settles so Windows 11 DWM minimize/restore animations finish
+    if (now - state->topologyChangeTick < 180) {
+        return;
+    }
+
+    state->pendingTopologyRecapture = false;
+    CaptureCleanMonitorBackdrop(hWnd, true);
+    state->lastTopologySig = GetBackdropWindowTopologySignature(hWnd);
+
+    int dlgW = GetDlgWidth(state);
+    bool newLight = SampleBackdropLuminanceFromSnap(
+        state->normalX, state->normalY, dlgW, state->totalHeight, state->backdropLightSample);
+
+    bool changed = (newLight != state->backdropLightSample);
+    state->backdropLightSample = newLight;
+    bool prevMode = state->isLightMode;
+    state->isLightMode = ResolveDialogLightContrast(state);
+
+    if (changed || state->isLightMode != prevMode) {
+        ApplyWindowAppearance(hWnd, state);
+    }
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
 
 struct BuiltinCommandEntry {
     const wchar_t* key;
@@ -3099,21 +5456,18 @@ void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& raw
     std::wstring webSearchKeyword;
     int webSearchKind = ParseWebSearchCommand(trimmed, &webSearchKeyword);
     if (webSearchKind != 0) {
-        bool isVi = (state->settings.language == L"vi") ||
-                    (state->settings.language == L"auto" && PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_VIETNAMESE);
+        MenuLocalizedStrings ml = GetMenuLocalizedStrings(state->settings.language);
         HistoryItem webItem;
         webItem.cmd = trimmed;
         webItem.execTarget = trimmed;
         if (webSearchKind == 1) {
             webItem.appName = webSearchKeyword.empty()
-                ? (isVi ? L"Gõ từ khóa để tìm kiếm Google bằng Chrome" : L"Type a keyword to search Google in Chrome")
-                : (isVi ? (L"Tìm trên Google (Chrome): \"" + webSearchKeyword + L"\"")
-                        : (L"Search Google in Chrome: \"" + webSearchKeyword + L"\""));
+                ? ml.ggSearchEmptyHint
+                : (std::wstring(ml.ggSearchQueryPrefix) + webSearchKeyword + L"\"");
         } else {
             webItem.appName = webSearchKeyword.empty()
-                ? (isVi ? L"Gõ từ khóa để tìm kiếm bằng Microsoft Edge" : L"Type a keyword to search in Microsoft Edge")
-                : (isVi ? (L"Tìm bằng Microsoft Edge: \"" + webSearchKeyword + L"\"")
-                        : (L"Search in Microsoft Edge: \"" + webSearchKeyword + L"\""));
+                ? ml.mseSearchEmptyHint
+                : (std::wstring(ml.mseSearchQueryPrefix) + webSearchKeyword + L"\"");
         }
         webItem.isSuggestion = true;
         webItem.ownsIcon = false;
@@ -3355,15 +5709,26 @@ int MeasureButtonWidthAt96Dpi(const wchar_t* label, int minWidth96) {
 ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
     int dlgW = GetDlgWidth(state);
     int barH = GetInputBarHeight(state);
+    UINT dpi = state ? state->dpi : 96;
     int btnH = DpiScaleS(30, state);
+    if (state && state->settings.customBarHeight > 0) {
+        btnH = std::clamp(barH - DpiScale(18, dpi, 100), DpiScale(24, dpi, 100), DpiScale(44, dpi, 100));
+    }
     int top  = state->topAreaHeight + (barH - btnH) / 2;
     int gap  = DpiScaleS(7, state);
     int rightMargin = DpiScaleS(12, state);
 
-    int wGear   = btnH; // Square 30x30 (scaled) Gear button right next to Exit
-    int wBrowse = DpiScaleS(MeasureButtonWidthAt96Dpi(state->i18n.browseBtn, 86), state);
-    int wRun    = DpiScaleS(MeasureButtonWidthAt96Dpi(state->i18n.runBtn,    80), state);
-    int wClose  = DpiScaleS(MeasureButtonWidthAt96Dpi(state->i18n.exitBtn,   76), state);
+    float fontScale = (state && state->settings.customFontSize > 0)
+                      ? (std::clamp(state->settings.customFontSize, 9, 24) / 13.5f)
+                      : (GetDlgScale(state) / 100.0f);
+    auto scaleBtnW = [&](int base96W) -> int {
+        return (int)std::ceil(base96W * (dpi / 96.0f) * std::clamp(fontScale, 0.80f, 1.45f));
+    };
+
+    int wGear   = btnH;
+    int wBrowse = scaleBtnW(MeasureButtonWidthAt96Dpi(state->i18n.browseBtn, 86));
+    int wRun    = scaleBtnW(MeasureButtonWidthAt96Dpi(state->i18n.runBtn,    80));
+    int wClose  = scaleBtnW(MeasureButtonWidthAt96Dpi(state->i18n.exitBtn,   76));
 
     ActionButtonsLayout layout = {};
     layout.rcGear = { dlgW - rightMargin - wGear, top, dlgW - rightMargin, top + btnH };
@@ -3378,7 +5743,8 @@ ActionButtonsLayout GetActionButtonsLayout(const RunDialogState* state) {
     }
 
     int editRightAnchor = (state && state->settings.minimalMode) ? layout.rcRun.left : layout.rcBrowse.left;
-    int editH = DpiScaleS(24, state);
+    int editH = (std::max)(DpiScaleS(24, state), (int)std::ceil(GetFontSizeSF(13.5f, state) * 1.6f));
+    editH = (std::min)(editH, barH - DpiScale(6, dpi, 100));
     int editTop = state->topAreaHeight + (barH - editH) / 2;
     layout.rcEdit = {
         DpiScaleS(46, state),
@@ -3478,12 +5844,13 @@ int HitTestHistoryRow(const RunDialogState* state, POINT pt) {
 // --- Direct2D Liquid Glass, Vector Icons & DirectWrite Rendering Helpers ---
 
 void DrawD2DGlassRim(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT dpi, bool isLight, float outerThicknessDip = 1.2f) {
+    // Single crisp 5-stop refractive glass rim (no secondary inner border line)
     D2D1_GRADIENT_STOP stops[5] = {
-        { 0.00f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.90f : 0.87f) },
-        { 0.30f, D2D1::ColorF(0.75f, 0.87f, 1.00f, isLight ? 0.42f : 0.27f) },
-        { 0.50f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.16f : 0.07f) },
-        { 0.80f, D2D1::ColorF(1.00f, 0.85f, 0.93f, isLight ? 0.48f : 0.38f) },
-        { 1.00f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.78f : 0.69f) }
+        { 0.00f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.88f : 0.92f) },
+        { 0.30f, D2D1::ColorF(185.0f / 255.0f, 228.0f / 255.0f, 1.00f, isLight ? 0.42f : 0.46f) },
+        { 0.52f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.22f : 0.18f) },
+        { 0.76f, D2D1::ColorF(1.00f, 210.0f / 255.0f, 240.0f / 255.0f, isLight ? 0.44f : 0.48f) },
+        { 1.00f, D2D1::ColorF(1.00f, 1.00f, 1.00f, isLight ? 0.72f : 0.76f) }
     };
 
     ID2D1GradientStopCollection* pStops = nullptr;
@@ -3499,16 +5866,11 @@ void DrawD2DGlassRim(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UINT 
         pStops->Release();
     }
 
-    float inset = DpiScaleF(2.0f, dpi);
-    if ((rc.right - rc.left) > inset * 2.0f && (rc.bottom - rc.top) > inset * 2.0f) {
-        D2D1_RECT_F innerRc = D2D1::RectF(rc.left + inset, rc.top + inset, rc.right - inset, rc.bottom - inset);
-        float innerRadius = (std::max)(1.0f, radius - inset);
-        ID2D1SolidColorBrush* pInnerBr = nullptr;
-        if (SUCCEEDED(pRT->CreateSolidColorBrush(
-                D2D1::ColorF(1.0f, 1.0f, 1.0f, isLight ? 0.25f : 0.125f), &pInnerBr))) {
-            pRT->DrawRoundedRectangle(D2D1::RoundedRect(innerRc, innerRadius, innerRadius),
-                                      pInnerBr, DpiScaleF(0.55f, dpi));
-            pInnerBr->Release();
+    if (isLight) {
+        ID2D1SolidColorBrush* pDarkRim = nullptr;
+        if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.12f), &pDarkRim))) {
+            pRT->DrawRoundedRectangle(D2D1::RoundedRect(rc, radius, radius), pDarkRim, DpiScaleF(0.85f, dpi));
+            pDarkRim->Release();
         }
     }
 }
@@ -3517,13 +5879,15 @@ void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UI
                         D2D1_COLOR_F bgTint, bool hovered, bool pressed, bool isLight) {
     D2D1_ROUNDED_RECT rrect = D2D1::RoundedRect(rc, radius, radius);
 
+    // Layer 1: Subtle Acrylic/Glass base
     ID2D1SolidColorBrush* pBaseBr = nullptr;
     if (SUCCEEDED(pRT->CreateSolidColorBrush(
-            isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.22f) : D2D1::ColorF(0.69f, 0.69f, 0.69f, 0.08f), &pBaseBr))) {
+            isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.035f) : D2D1::ColorF(0.69f, 0.69f, 0.69f, 0.06f), &pBaseBr))) {
         pRT->FillRoundedRectangle(rrect, pBaseBr);
         pBaseBr->Release();
     }
 
+    // Layer 2: Button background tint (0.28 base opacity in live-update ControlTemplate)
     if (bgTint.a > 0.001f) {
         ID2D1SolidColorBrush* pTintBr = nullptr;
         if (SUCCEEDED(pRT->CreateSolidColorBrush(bgTint, &pTintBr))) {
@@ -3532,11 +5896,12 @@ void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UI
         }
     }
 
+    // Layer 3: Diagonal highlight sheen (0.16 normal, 0.30 PointerOver, 0.50 Pressed)
     float hlOpacity = pressed ? 0.50f : (hovered ? 0.30f : 0.16f);
     D2D1_GRADIENT_STOP hlStops[3] = {
         { 0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.00f * hlOpacity) },
         { 0.45f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.00f) },
-        { 1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.53f * hlOpacity) }
+        { 1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.533f * hlOpacity) }
     };
 
     ID2D1GradientStopCollection* pHlStops = nullptr;
@@ -3551,27 +5916,135 @@ void DrawD2DGlassButton(ID2D1RenderTarget* pRT, D2D1_RECT_F rc, float radius, UI
         pHlStops->Release();
     }
 
+    // Layer 4: Outer refractive border (1.2 DIP) + inner hairline border
     DrawD2DGlassRim(pRT, rc, radius, dpi, isLight, 1.2f);
 }
 
-void DrawD2DPointerSpecularGlow(ID2D1RenderTarget* pRT, POINT mousePt, int w, int h, UINT dpi, bool isLight) {
-    float radius = DpiScaleF(190.0f, dpi);
-    D2D1_GRADIENT_STOP stops[2] = {
-        { 0.0f, isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.18f) : D2D1::ColorF(0.88f, 0.92f, 1.0f, 0.10f) },
-        { 1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.0f) }
-    };
+void DrawD2DPointerSpecularGlow(ID2D1RenderTarget* pRT, POINT mousePt, bool hasMousePt, int w, int h, UINT dpi, bool isLight) {
+    // True iOS 26 Liquid Glass 4-Edge Refractive Lens Cushion (Images 2-6):
+    // Keeps the interior 100% clear while bending light along the 4 perimeter edges & corners.
+    float topBand  = DpiScaleF(15.0f, dpi);
+    float botBand  = DpiScaleF(13.0f, dpi);
+    float sideBand = DpiScaleF(13.0f, dpi);
 
-    ID2D1GradientStopCollection* pStops = nullptr;
-    if (SUCCEEDED(pRT->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pStops))) {
-        ID2D1RadialGradientBrush* pRadial = nullptr;
-        D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES radProps = D2D1::RadialGradientBrushProperties(
-            D2D1::Point2F((float)mousePt.x, (float)mousePt.y),
-            D2D1::Point2F(0.0f, 0.0f), radius, radius);
-        if (SUCCEEDED(pRT->CreateRadialGradientBrush(radProps, pStops, &pRadial))) {
-            pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, (float)w, (float)h), pRadial);
-            pRadial->Release();
+    // 1. Top edge refractive cushion (fades to 0.0 within 15 DIPs)
+    {
+        D2D1_GRADIENT_STOP stops[3] = {
+            { 0.00f, D2D1::ColorF(0.92f, 0.97f, 1.00f, isLight ? 0.20f : 0.16f) },
+            { 0.45f, D2D1::ColorF(0.88f, 0.95f, 1.00f, isLight ? 0.05f : 0.04f) },
+            { 1.00f, D2D1::ColorF(1.00f, 1.00f, 1.00f, 0.00f) }
+        };
+        ID2D1GradientStopCollection* pStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pStops))) {
+            ID2D1LinearGradientBrush* pBr = nullptr;
+            D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0.0f, 0.0f), D2D1::Point2F(0.0f, topBand));
+            if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pStops, &pBr))) {
+                pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, (float)w, (std::min)((float)h, topBand)), pBr);
+                pBr->Release();
+            }
+            pStops->Release();
         }
-        pStops->Release();
+    }
+
+    // 2. Bottom edge refractive cushion (fades from 0.0 to edge glow within 13 DIPs)
+    if ((float)h > botBand) {
+        D2D1_GRADIENT_STOP stops[3] = {
+            { 0.00f, D2D1::ColorF(0.80f, 0.92f, 1.00f, 0.00f) },
+            { 0.55f, D2D1::ColorF(0.80f, 0.92f, 1.00f, isLight ? 0.04f : 0.03f) },
+            { 1.00f, D2D1::ColorF(0.85f, 0.94f, 1.00f, isLight ? 0.14f : 0.11f) }
+        };
+        ID2D1GradientStopCollection* pStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(stops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pStops))) {
+            ID2D1LinearGradientBrush* pBr = nullptr;
+            D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0.0f, (float)h - botBand), D2D1::Point2F(0.0f, (float)h));
+            if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pStops, &pBr))) {
+                pRT->FillRectangle(D2D1::RectF(0.0f, (float)h - botBand, (float)w, (float)h), pBr);
+                pBr->Release();
+            }
+            pStops->Release();
+        }
+    }
+
+    // 3. Left edge refractive cushion
+    if ((float)w > sideBand) {
+        D2D1_GRADIENT_STOP stops[2] = {
+            { 0.00f, D2D1::ColorF(0.88f, 0.95f, 1.00f, isLight ? 0.13f : 0.10f) },
+            { 1.00f, D2D1::ColorF(0.88f, 0.95f, 1.00f, 0.00f) }
+        };
+        ID2D1GradientStopCollection* pStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pStops))) {
+            ID2D1LinearGradientBrush* pBr = nullptr;
+            D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F(0.0f, 0.0f), D2D1::Point2F(sideBand, 0.0f));
+            if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pStops, &pBr))) {
+                pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, sideBand, (float)h), pBr);
+                pBr->Release();
+            }
+            pStops->Release();
+        }
+    }
+
+    // 4. Right edge refractive cushion
+    if ((float)w > sideBand) {
+        D2D1_GRADIENT_STOP stops[2] = {
+            { 0.00f, D2D1::ColorF(0.88f, 0.95f, 1.00f, 0.00f) },
+            { 1.00f, D2D1::ColorF(0.88f, 0.95f, 1.00f, isLight ? 0.11f : 0.08f) }
+        };
+        ID2D1GradientStopCollection* pStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pStops))) {
+            ID2D1LinearGradientBrush* pBr = nullptr;
+            D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
+                D2D1::Point2F((float)w - sideBand, 0.0f), D2D1::Point2F((float)w, 0.0f));
+            if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pStops, &pBr))) {
+                pRT->FillRectangle(D2D1::RectF((float)w - sideBand, 0.0f, (float)w, (float)h), pBr);
+                pBr->Release();
+            }
+            pStops->Release();
+        }
+    }
+
+    // 5. Top-left & bottom-right rim glare highlights (matching Image 3 glass cards)
+    {
+        float glareRx = DpiScaleF(95.0f, dpi);
+        float glareRy = DpiScaleF(16.0f, dpi);
+        D2D1_GRADIENT_STOP gStops[2] = {
+            { 0.0f, D2D1::ColorF(0.92f, 0.98f, 1.00f, 0.24f) },
+            { 1.0f, D2D1::ColorF(0.92f, 0.98f, 1.00f, 0.00f) }
+        };
+        ID2D1GradientStopCollection* pGStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(gStops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pGStops))) {
+            ID2D1RadialGradientBrush* pGlare = nullptr;
+            D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES gp1 = D2D1::RadialGradientBrushProperties(
+                D2D1::Point2F((float)w * 0.22f, DpiScaleF(2.0f, dpi)),
+                D2D1::Point2F(0.0f, 0.0f), glareRx, glareRy);
+            if (SUCCEEDED(pRT->CreateRadialGradientBrush(gp1, pGStops, &pGlare))) {
+                pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, (float)w, DpiScaleF(20.0f, dpi)), pGlare);
+                pGlare->Release();
+            }
+            pGStops->Release();
+        }
+    }
+
+    // 6. Subtle interactive pointer refraction (only when mouse is inside, low alpha so text stays sharp)
+    if (hasMousePt) {
+        float rad = DpiScaleF(130.0f, dpi);
+        D2D1_GRADIENT_STOP radStops[2] = {
+            { 0.0f, D2D1::ColorF(0.90f, 0.96f, 1.00f, 0.06f) },
+            { 1.0f, D2D1::ColorF(1.00f, 1.00f, 1.00f, 0.00f) }
+        };
+        ID2D1GradientStopCollection* pRadStops = nullptr;
+        if (SUCCEEDED(pRT->CreateGradientStopCollection(radStops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pRadStops))) {
+            ID2D1RadialGradientBrush* pRadial = nullptr;
+            D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES radProps = D2D1::RadialGradientBrushProperties(
+                D2D1::Point2F((float)mousePt.x, (float)mousePt.y), D2D1::Point2F(0.0f, 0.0f), rad, rad);
+            if (SUCCEEDED(pRT->CreateRadialGradientBrush(radProps, pRadStops, &pRadial))) {
+                pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, (float)w, (float)h), pRadial);
+                pRadial->Release();
+            }
+            pRadStops->Release();
+        }
     }
 }
 
@@ -3821,6 +6294,7 @@ struct FluentMenuItem {
     bool disabled = false;
     bool isSeparator = false;
     std::vector<FluentMenuItem> subItems;
+    int inlineEditKind = 0; // 0 = normal, 1 = Width (px), 2 = Height (px), 3 = Font Size (pt)
 };
 
 struct FluentMenuPanelState {
@@ -3852,9 +6326,14 @@ struct FluentMenuSession {
     bool mouseReleasedSinceOpen = false;
     bool wasForeground = false;
     int pendingHoverSubIdx = -1;
+    int editingInlineKind = 0;      // 0 = none, 1 = Width, 2 = Height, 3 = Font
+    bool inlineEditReplace = false; // true right after clicking box so first digit replaces whole number
+    std::wstring inlineEditBuf;
+    int pressedInlinePart = 0;      // 0 = none, 1 = [-], 2 = [box], 3 = [+]
 };
 
 std::atomic<HWND> g_hActiveGearMenu{nullptr};
+std::atomic<HWND> g_hActiveCustomSizeWnd{nullptr};
 constexpr UINT_PTR kTimerMenuSubHover = 9501;
 constexpr UINT_PTR kTimerMenuWatchdog = 9502;
 constexpr wchar_t kFluentMenuClassName[] = L"WindhawkModernRunFluentMenuWnd";
@@ -3863,6 +6342,13 @@ void CloseActiveGearMenu() {
     if (HWND hGearMenu = g_hActiveGearMenu.load()) {
         if (IsWindow(hGearMenu)) {
             PostMessageW(hGearMenu, WM_CLOSE, 0, 0);
+        }
+    }
+    if (!g_isBrowsingFile.load()) {
+        if (HWND hSizeWnd = g_hActiveCustomSizeWnd.load()) {
+            if (IsWindow(hSizeWnd)) {
+                PostMessageW(hSizeWnd, WM_CLOSE, 0, 0);
+            }
         }
     }
 }
@@ -3881,6 +6367,169 @@ int GetMenuPadY(const FluentMenuSession* s) {
 
 bool PanelNeedsScroll(const FluentMenuPanelState* p) {
     return (int)p->items.size() > p->maxVisibleRows;
+}
+
+void ApplyFluentMenuWindowBackdrop(HWND hWnd, const FluentMenuSession* s);
+
+int GetInlineMenuFieldValue(const RunDialogState* state, int kind) {
+    if (!state) return (kind == 1) ? kBaseDlgWidth : ((kind == 2) ? kBaseInputBarHeight : 14);
+    int scale = GetDlgScale(state);
+    switch (kind) {
+        case 1:
+            return (state->settings.customDialogWidth >= 360)
+                   ? std::clamp(state->settings.customDialogWidth, 360, 1200)
+                   : MulDiv(kBaseDlgWidth, scale, 100);
+        case 2:
+            return (state->settings.customBarHeight > 0)
+                   ? std::clamp(state->settings.customBarHeight, 36, 96)
+                   : MulDiv(kBaseInputBarHeight, scale, 100);
+        case 3:
+            return (state->settings.customFontSize > 0)
+                   ? std::clamp(state->settings.customFontSize, 9, 24)
+                   : (int)std::round(13.5f * scale / 100.0f);
+        case 4:
+            return std::clamp(state->settings.glassOpacity, -100, 100);
+        case 5:
+            return std::clamp(state->settings.blurOpacity, 0, 255);
+        case 6:
+            return std::clamp(state->settings.customBackgroundOpacity, 20, 255);
+        case 7:
+            return std::clamp(state->settings.maxHistoryItems, 0, 50);
+        case 8:
+            return std::clamp(state->settings.visibleHistoryRows, 3, 10);
+        default:
+            return 0;
+    }
+}
+
+void ApplyInlineMenuFieldValue(FluentMenuSession* s, int kind, int val) {
+    if (!s || !s->dlgState || !s->dlgState->hDlg || !IsWindow(s->dlgState->hDlg)) return;
+    RunDialogState* st = s->dlgState;
+    if (kind == 1) {
+        val = std::clamp(val, 360, 1200);
+        Wh_SetIntValue(GetUserOverrideKey(L"customDialogWidth").c_str(), val);
+    } else if (kind == 2) {
+        if (val >= 150) {
+            val = MulDiv(val, kBaseInputBarHeight,
+                         kBaseInputBarHeight + 5 * kBaseRowHeight + kBaseListPadTop + kBaseListPadBottom);
+        }
+        val = std::clamp(val, 36, 96);
+        Wh_SetIntValue(GetUserOverrideKey(L"customBarHeight").c_str(), val);
+    } else if (kind == 3) {
+        val = std::clamp(val, 9, 24);
+        Wh_SetIntValue(GetUserOverrideKey(L"customFontSize").c_str(), val);
+    } else if (kind == 4) {
+        val = std::clamp(val, -100, 100);
+        Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), val);
+        Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass");
+    } else if (kind == 5) {
+        val = std::clamp(val, 0, 255);
+        Wh_SetIntValue(GetUserOverrideKey(L"blurOpacity").c_str(), val);
+        Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"blur");
+    } else if (kind == 6) {
+        val = std::clamp(val, 20, 255);
+        Wh_SetIntValue(GetUserOverrideKey(L"customBackgroundOpacity").c_str(), val);
+    } else if (kind == 7) {
+        val = std::clamp(val, 0, 50);
+        Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), val);
+    } else if (kind == 8) {
+        val = std::clamp(val, 3, 10);
+        Wh_SetIntValue(GetUserOverrideKey(L"visibleHistoryRows").c_str(), val);
+    } else {
+        return;
+    }
+
+    LoadSettings(false);
+    int oldHeight = st->totalHeight;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        st->settings = g_settings;
+        st->i18n = g_i18n;
+    }
+    if (kind == 7) {
+        LoadHistoryItems(st);
+        std::wstring curText = GetEffectiveInputText(st->hModernEdit);
+        UpdateAppSuggestionsForQuery(st, curText);
+    }
+    UpdateDialogEditFont(st);
+    RecomputeDialogMetrics(st);
+    ResizeDialogPreservingBottomAnchor(st, oldHeight);
+    ApplyWindowAppearance(st->hDlg, st);
+    InvalidateRect(st->hDlg, nullptr, TRUE);
+    UpdateWindow(st->hDlg);
+
+    if (kind == 4 || kind == 5) {
+        s->surface = st->effectiveSurface;
+        if (s->mainPanel.hWnd && IsWindow(s->mainPanel.hWnd)) ApplyFluentMenuWindowBackdrop(s->mainPanel.hWnd, s);
+        if (s->subPanel.hWnd && IsWindow(s->subPanel.hWnd)) ApplyFluentMenuWindowBackdrop(s->subPanel.hWnd, s);
+        for (auto& it : s->subPanel.items) {
+            if (it.id == 101) it.checked = (st->settings.surfaceTheme == SurfaceTheme::Glass);
+            else if (it.id == 102) it.checked = (st->settings.surfaceTheme == SurfaceTheme::Blur);
+            else if (it.id == 103) it.checked = (st->settings.surfaceTheme == SurfaceTheme::Solid);
+            else if (kind == 4) {
+                if (it.id == 107) it.checked = (val <= -90);
+                else if (it.id == 108) it.checked = (val > -90 && val <= -65);
+                else if (it.id == 109) it.checked = (val > -65 && val <= -25);
+                else if (it.id == 110) it.checked = (val > -25 && val <= 5);
+                else if (it.id == 111) it.checked = (val > 5 && val <= 20);
+                else if (it.id == 112) it.checked = (val > 20 && val <= 42);
+                else if (it.id == 113) it.checked = (val > 42 && val <= 68);
+                else if (it.id == 114) it.checked = (val > 68);
+            }
+        }
+    } else if (kind >= 1 && kind <= 3) {
+        for (auto& it : s->subPanel.items) {
+            if (it.id >= 301 && it.id <= 305) it.checked = false;
+        }
+    } else if (kind == 6) {
+        for (auto& it : s->subPanel.items) {
+            if (it.id == 503) it.checked = (val <= 95);
+            else if (it.id == 504) it.checked = (val > 95 && val <= 175);
+            else if (it.id == 505) it.checked = (val > 175 && val <= 230);
+            else if (it.id == 506) it.checked = (val > 230);
+        }
+    } else if (kind == 7) {
+        for (auto& it : s->subPanel.items) {
+            if (it.id == 401) it.checked = (val == 10);
+            else if (it.id == 402) it.checked = (val == 30);
+            else if (it.id == 403) it.checked = (val == 35);
+            else if (it.id == 404) it.checked = (val == 50);
+            else if (it.id == 405) it.checked = (val == 0);
+        }
+    }
+    if (s->mainPanel.openSubIdx >= 0 && s->mainPanel.openSubIdx < (int)s->mainPanel.items.size()) {
+        s->mainPanel.items[s->mainPanel.openSubIdx].subItems = s->subPanel.items;
+    }
+    if (s->subPanel.hWnd && IsWindow(s->subPanel.hWnd)) InvalidateRect(s->subPanel.hWnd, nullptr, FALSE);
+    if (s->mainPanel.hWnd && IsWindow(s->mainPanel.hWnd)) InvalidateRect(s->mainPanel.hWnd, nullptr, FALSE);
+}
+
+void CommitInlineMenuEdit(FluentMenuSession* s) {
+    if (!s || s->editingInlineKind == 0) return;
+    if (!s->inlineEditBuf.empty() && s->inlineEditBuf != L"-") {
+        int val = _wtoi(s->inlineEditBuf.c_str());
+        ApplyInlineMenuFieldValue(s, s->editingInlineKind, val);
+    }
+    s->inlineEditReplace = false;
+    s->inlineEditBuf = std::to_wstring(GetInlineMenuFieldValue(s->dlgState, s->editingInlineKind));
+}
+
+void GetInlineControlRects(const FluentMenuSession* s, const FluentMenuPanelState* p,
+                           float rowTop, float rowH,
+                           D2D1_RECT_F* outMinus, D2D1_RECT_F* outBox, D2D1_RECT_F* outPlus) {
+    UINT dpi = s->effectiveDpi;
+    float sbReserve = PanelNeedsScroll(p) ? DpiScaleF(8.0f, dpi) : 0.0f;
+    float rightEdge = (float)p->width - DpiScaleF(8.0f, dpi) - sbReserve;
+    float btnW = DpiScaleF(24.0f, dpi);
+    float boxW = DpiScaleF(66.0f, dpi);
+    float gap  = DpiScaleF(4.0f, dpi);
+    float ctlH = DpiScaleF(24.0f, dpi);
+    float top  = rowTop + (rowH - ctlH) * 0.5f;
+    float bot  = top + ctlH;
+    if (outPlus)  *outPlus  = D2D1::RectF(rightEdge - btnW, top, rightEdge, bot);
+    if (outBox)   *outBox   = D2D1::RectF(rightEdge - btnW - gap - boxW, top, rightEdge - btnW - gap, bot);
+    if (outMinus) *outMinus = D2D1::RectF(rightEdge - btnW - gap - boxW - gap - btnW, top,
+                                          rightEdge - btnW - gap - boxW - gap, bot);
 }
 
 void ComputeFluentPanelMetrics(FluentMenuSession* s, FluentMenuPanelState* p) {
@@ -3910,10 +6559,20 @@ void ComputeFluentPanelMetrics(FluentMenuSession* s, FluentMenuPanelState* p) {
         }
     }
 
-    // Left icon margin (42px) + text width + right chevron/padding (38px)
+    bool hasInlineInputs = false;
+    for (const auto& item : p->items) {
+        if (item.inlineEditKind != 0) {
+            hasInlineInputs = true;
+            break;
+        }
+    }
+    // Left icon margin (42px) + text width + right chevron/padding (or 140px for inline input controls)
     int extraRight = PanelNeedsScroll(p) ? DpiScale(44, s->effectiveDpi) : DpiScale(38, s->effectiveDpi);
+    if (hasInlineInputs) {
+        extraRight += DpiScale(136, s->effectiveDpi);
+    }
     p->width = DpiScale(42, s->effectiveDpi) + (int)std::ceil(maxTextW) + extraRight;
-    p->width = std::clamp(p->width, DpiScale(210, s->effectiveDpi), DpiScale(420, s->effectiveDpi));
+    p->width = std::clamp(p->width, DpiScale(210, s->effectiveDpi), DpiScale(460, s->effectiveDpi));
 
     int totalH = padY * 2;
     if (PanelNeedsScroll(p)) {
@@ -3967,7 +6626,7 @@ int GetRowTopYInPanel(const FluentMenuSession* s, const FluentMenuPanelState* p,
 void ApplyFluentMenuWindowBackdrop(HWND hWnd, const FluentMenuSession* s) {
     if (!hWnd || !s) return;
 
-    BOOL dark = s->isLight ? FALSE : TRUE;
+    BOOL dark = (s->surface == SurfaceTheme::Glass) ? TRUE : (s->isLight ? FALSE : TRUE);
     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
 
     DWORD corner = 2; // DWMWCP_ROUND
@@ -3987,12 +6646,25 @@ void ApplyFluentMenuWindowBackdrop(HWND hWnd, const FluentMenuSession* s) {
     ACCENT_POLICY policy = {};
     if (s->surface == SurfaceTheme::Solid || IsHighContrastActive()) {
         policy.AccentState = ACCENT_DISABLED;
+    } else if (s->surface == SurfaceTheme::Glass) {
+        policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
+        policy.AccentFlags = 2;
+        int glassPct = (s->dlgState) ? std::clamp(s->dlgState->settings.glassOpacity, -100, 100) : -100;
+        DWORD alpha = (glassPct >= 0) ? (DWORD)std::clamp(MulDiv(glassPct, 180, 100), 6, 215) : 3;
+        DWORD bgr   = 0x001E1A16;
+        policy.GradientColor = (alpha << 24) | bgr;
     } else {
         policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
         policy.AccentFlags = 2;
         DWORD alpha = s->isLight ? 185 : 162;
         DWORD bgr   = s->isLight ? 0x00F8F5F4 : 0x002A1816;
         policy.GradientColor = (alpha << 24) | bgr;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_LAYERED) {
+        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
     }
 
     WINDOWCOMPOSITIONATTRIBDATA data = {};
@@ -4024,7 +6696,7 @@ void ShowSubMenuForParentRow(FluentMenuSession* s, int parentIdx) {
     s->subPanel.pressedIdx = -1;
     s->subPanel.openSubIdx = -1;
     s->subPanel.scrollOffset = 0;
-    s->subPanel.maxVisibleRows = 12;
+    s->subPanel.maxVisibleRows = (parentIdx == 0) ? 16 : 12;
 
     // Auto-scroll to checked item if list is scrollable (e.g. Display Language submenu)
     if (PanelNeedsScroll(&s->subPanel)) {
@@ -4116,39 +6788,29 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                 pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
                 pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
 
-                // 1. Acrylic / Glass Translucent Backdrop
+                // 1. Liquid Glass / Acrylic / Solid Backdrop
                 if (highContrast) {
                     COLORREF winBg = GetSysColor(COLOR_WINDOW);
                     pRT->Clear(D2D1::ColorF(GetRValue(winBg) / 255.0f, GetGValue(winBg) / 255.0f, GetBValue(winBg) / 255.0f, 1.0f));
                 } else if (s->surface == SurfaceTheme::Solid) {
                     pRT->Clear(isLight ? D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f)
                                        : D2D1::ColorF(0.11f, 0.12f, 0.16f, 1.0f));
+                } else if (s->surface == SurfaceTheme::Glass) {
+                    int glassPct = (s->dlgState) ? std::clamp(s->dlgState->settings.glassOpacity, -100, 100) : -100;
+                    float menuAlpha = (glassPct >= 0)
+                        ? (0.04f + (glassPct / 100.0f) * 0.48f)
+                        : 0.01f;
+                    pRT->Clear(isLight ? D2D1::ColorF(0.92f, 0.94f, 0.97f, menuAlpha)
+                                       : D2D1::ColorF(0.06f, 0.08f, 0.11f, menuAlpha));
+                    int slot = (hWnd == s->mainPanel.hWnd) ? 1 : 2;
+                    DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, dpi, glassPct, isLight, true, slot);
                 } else {
-                    // Translucent dark or light frost tint
-                    pRT->Clear(isLight ? D2D1::ColorF(0.95f, 0.96f, 0.99f, 0.30f)
-                                       : D2D1::ColorF(0.06f, 0.08f, 0.14f, 0.34f));
+                    pRT->Clear(isLight ? D2D1::ColorF(246.0f / 255.0f, 246.0f / 255.0f, 250.0f / 255.0f, 145.0f / 255.0f)
+                                       : D2D1::ColorF(32.0f / 255.0f, 33.0f / 255.0f, 38.0f / 255.0f, 140.0f / 255.0f));
                 }
 
                 if (!highContrast && s->surface == SurfaceTheme::Glass) {
-                    D2D1_GRADIENT_STOP sheenStops[3] = {
-                        { 0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, isLight ? 0.15f : 0.09f) },
-                        { 0.50f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.01f) },
-                        { 1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, isLight ? 0.08f : 0.05f) }
-                    };
-                    ID2D1GradientStopCollection* pSheenStops = nullptr;
-                    if (SUCCEEDED(pRT->CreateGradientStopCollection(sheenStops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pSheenStops))) {
-                        ID2D1LinearGradientBrush* pSheenBr = nullptr;
-                        D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
-                            D2D1::Point2F(0.0f, 0.0f), D2D1::Point2F((float)w, (float)h));
-                        if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pSheenStops, &pSheenBr))) {
-                            pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, (float)w, (float)h), pSheenBr);
-                            pSheenBr->Release();
-                        }
-                        pSheenStops->Release();
-                    }
-                    if (p->hasMousePt) {
-                        DrawD2DPointerSpecularGlow(pRT, p->mousePt, w, h, dpi, isLight);
-                    }
+                    DrawD2DPointerSpecularGlow(pRT, p->mousePt, p->hasMousePt, w, h, dpi, isLight);
                 }
 
                 // 2. Brushes & Text Format
@@ -4222,22 +6884,29 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                         D2D1_RECT_F rcPill = D2D1::RectF(
                             padX, curY + DpiScaleF(1.5f, dpi),
                             (float)w - padX - sbReserve, curY + rowH - DpiScaleF(1.5f, dpi));
-                        ID2D1SolidColorBrush* pHlBr = nullptr;
-                        D2D1_COLOR_F hlCol = isLight
-                            ? D2D1::ColorF(0.0f, 0.0f, 0.0f, isPressed ? 0.11f : 0.065f)
-                            : D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.15f : 0.095f);
-                        if (SUCCEEDED(pRT->CreateSolidColorBrush(hlCol, &pHlBr))) {
-                            pRT->FillRoundedRectangle(D2D1::RoundedRect(rcPill, pillRadius, pillRadius), pHlBr);
-                            pHlBr->Release();
-                        }
-                        ID2D1SolidColorBrush* pHlBorder = nullptr;
-                        D2D1_COLOR_F hlBCol = isLight
-                            ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.06f)
-                            : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f);
-                        if (SUCCEEDED(pRT->CreateSolidColorBrush(hlBCol, &pHlBorder))) {
-                            pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcPill, pillRadius, pillRadius),
-                                                      pHlBorder, DpiScaleF(0.8f, dpi));
-                            pHlBorder->Release();
+                        if (s->surface == SurfaceTheme::Glass && !highContrast) {
+                            D2D1_COLOR_F rowTint = isLight
+                                ? D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.28f : 0.16f)
+                                : D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.18f : 0.10f);
+                            DrawD2DGlassButton(pRT, rcPill, pillRadius, dpi, rowTint, isHovered, isPressed, isLight);
+                        } else {
+                            ID2D1SolidColorBrush* pHlBr = nullptr;
+                            D2D1_COLOR_F hlCol = isLight
+                                ? D2D1::ColorF(0.0f, 0.0f, 0.0f, isPressed ? 0.11f : 0.065f)
+                                : D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.15f : 0.095f);
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(hlCol, &pHlBr))) {
+                                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcPill, pillRadius, pillRadius), pHlBr);
+                                pHlBr->Release();
+                            }
+                            ID2D1SolidColorBrush* pHlBorder = nullptr;
+                            D2D1_COLOR_F hlBCol = isLight
+                                ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.06f)
+                                : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f);
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(hlBCol, &pHlBorder))) {
+                                pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcPill, pillRadius, pillRadius),
+                                                          pHlBorder, DpiScaleF(0.8f, dpi));
+                                pHlBorder->Release();
+                            }
                         }
                     }
 
@@ -4252,22 +6921,105 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                         DrawD2DFluentMenuIcon(pRT, pItemIconBr, pRoundStroke, item.icon, iconCx, iconCy, dpi);
                     }
 
-                    if (pFmtItem && pItemTextBr && !item.label.empty()) {
-                        D2D1_RECT_F rcText = D2D1::RectF(
-                            DpiScaleF(42.0f, dpi),
-                            curY,
-                            (float)w - DpiScaleF(26.0f, dpi) - sbReserve,
-                            curY + rowH);
-                        pRT->DrawText(item.label.c_str(), (UINT32)item.label.size(),
-                                      pFmtItem, rcText, pItemTextBr, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                    }
+                    if (item.inlineEditKind != 0) {
+                        D2D1_RECT_F rcMinus = {}, rcBox = {}, rcPlus = {};
+                        GetInlineControlRects(s, p, curY, (float)rowH, &rcMinus, &rcBox, &rcPlus);
 
-                    if (!item.subItems.empty() && pBrSub && pRoundStroke) {
-                        float chevX = (float)w - DpiScaleF(16.0f, dpi) - sbReserve;
-                        DrawD2DMenuChevronRight(pRT, pBrSub, pRoundStroke, chevX, iconCy, dpi);
-                    } else if (item.checked && item.icon != FluentMenuIcon::None && pBrAccent && pRoundStroke) {
-                        float chkX = (float)w - DpiScaleF(17.0f, dpi) - sbReserve;
-                        DrawD2DMenuCheckmark(pRT, pBrAccent, pRoundStroke, chkX, iconCy, dpi);
+                        if (pFmtItem && pItemTextBr && !item.label.empty()) {
+                            D2D1_RECT_F rcText = D2D1::RectF(
+                                DpiScaleF(42.0f, dpi),
+                                curY,
+                                rcMinus.left - DpiScaleF(6.0f, dpi),
+                                curY + rowH);
+                            pRT->DrawText(item.label.c_str(), (UINT32)item.label.size(),
+                                          pFmtItem, rcText, pItemTextBr, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                        }
+
+                        bool isEditingThis = (s->editingInlineKind == item.inlineEditKind);
+                        float ctlRad = DpiScaleF(5.0f, dpi);
+
+                        bool hovMinus = isHovered && p->hasMousePt &&
+                                        p->mousePt.x >= rcMinus.left && p->mousePt.x <= rcMinus.right &&
+                                        p->mousePt.y >= rcMinus.top && p->mousePt.y <= rcMinus.bottom;
+                        bool hovPlus  = isHovered && p->hasMousePt &&
+                                        p->mousePt.x >= rcPlus.left && p->mousePt.x <= rcPlus.right &&
+                                        p->mousePt.y >= rcPlus.top && p->mousePt.y <= rcPlus.bottom;
+                        bool hovBox   = isHovered && p->hasMousePt &&
+                                        p->mousePt.x >= rcBox.left && p->mousePt.x <= rcBox.right &&
+                                        p->mousePt.y >= rcBox.top && p->mousePt.y <= rcBox.bottom;
+
+                        bool prsMinus = isPressed && (s->pressedInlinePart == 1);
+                        bool prsPlus  = isPressed && (s->pressedInlinePart == 3);
+
+                        D2D1_COLOR_F btnTint = isLight
+                            ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.08f)
+                            : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.14f);
+                        DrawD2DGlassButton(pRT, rcMinus, ctlRad, dpi, btnTint, hovMinus, prsMinus, isLight);
+                        DrawD2DGlassButton(pRT, rcPlus,  ctlRad, dpi, btnTint, hovPlus,  prsPlus,  isLight);
+
+                        // Input box background & focus border
+                        if (s->surface == SurfaceTheme::Glass && !highContrast) {
+                            D2D1_COLOR_F boxTint = isEditingThis
+                                ? (isLight ? D2D1::ColorF(0.07f, 0.45f, 0.88f, 0.18f) : D2D1::ColorF(0.14f, 0.54f, 0.98f, 0.24f))
+                                : (isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.06f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f));
+                            DrawD2DGlassButton(pRT, rcBox, ctlRad, dpi, boxTint, hovBox || isEditingThis, false, isLight);
+                        } else {
+                            D2D1_COLOR_F boxFill = isEditingThis
+                                ? (isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.88f) : D2D1::ColorF(0.05f, 0.10f, 0.18f, 0.78f))
+                                : (isLight ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.58f) : D2D1::ColorF(0.06f, 0.08f, 0.12f, 0.52f));
+                            ID2D1SolidColorBrush* pBoxFillBr = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(boxFill, &pBoxFillBr))) {
+                                pRT->FillRoundedRectangle(D2D1::RoundedRect(rcBox, ctlRad, ctlRad), pBoxFillBr);
+                                pBoxFillBr->Release();
+                            }
+                            ID2D1Brush* pBoxBorderBr = (isEditingThis || hovBox) ? (ID2D1Brush*)pBrAccent : (ID2D1Brush*)pBrSub;
+                            if (pBoxBorderBr) {
+                                pRT->DrawRoundedRectangle(D2D1::RoundedRect(rcBox, ctlRad, ctlRad),
+                                                          pBoxBorderBr, DpiScaleF(isEditingThis ? 1.6f : 1.0f, dpi));
+                            }
+                        }
+
+                        IDWriteTextFormat* pFmtCtl = nullptr;
+                        if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
+                                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                                DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(12.0f, dpi), L"", &pFmtCtl))) {
+                            pFmtCtl->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                            pFmtCtl->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+
+                            if (pBrText) {
+                                pRT->DrawText(L"−", 1, pFmtCtl, rcMinus, pBrText);
+                                pRT->DrawText(L"+", 1, pFmtCtl, rcPlus,  pBrText);
+
+                                wchar_t valStr[32] = {};
+                                if (isEditingThis) {
+                                    swprintf_s(valStr, L"%s|", s->inlineEditBuf.c_str());
+                                } else {
+                                    int curVal = GetInlineMenuFieldValue(s->dlgState, item.inlineEditKind);
+                                    swprintf_s(valStr, L"%d", curVal);
+                                }
+                                pRT->DrawText(valStr, (UINT32)wcslen(valStr), pFmtCtl, rcBox,
+                                              isEditingThis && pBrAccent ? pBrAccent : pBrText);
+                            }
+                            pFmtCtl->Release();
+                        }
+                    } else {
+                        if (pFmtItem && pItemTextBr && !item.label.empty()) {
+                            D2D1_RECT_F rcText = D2D1::RectF(
+                                DpiScaleF(42.0f, dpi),
+                                curY,
+                                (float)w - DpiScaleF(26.0f, dpi) - sbReserve,
+                                curY + rowH);
+                            pRT->DrawText(item.label.c_str(), (UINT32)item.label.size(),
+                                          pFmtItem, rcText, pItemTextBr, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                        }
+
+                        if (!item.subItems.empty() && pBrSub && pRoundStroke) {
+                            float chevX = (float)w - DpiScaleF(16.0f, dpi) - sbReserve;
+                            DrawD2DMenuChevronRight(pRT, pBrSub, pRoundStroke, chevX, iconCy, dpi);
+                        } else if (item.checked && item.icon != FluentMenuIcon::None && pBrAccent && pRoundStroke) {
+                            float chkX = (float)w - DpiScaleF(17.0f, dpi) - sbReserve;
+                            DrawD2DMenuCheckmark(pRT, pBrAccent, pRoundStroke, chkX, iconCy, dpi);
+                        }
                     }
 
                     curY += rowH;
@@ -4470,12 +7222,23 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
         case WM_LBUTTONDOWN: {
             if (!p || !p->session) return 0;
+            FluentMenuSession* s = p->session;
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            int row = HitTestFluentMenuRow(p->session, p, pt);
+            RECT rcRow = {};
+            int row = HitTestFluentMenuRow(s, p, pt, &rcRow);
+            s->pressedInlinePart = 0;
             if (row >= 0 && row < (int)p->items.size() && !p->items[row].disabled) {
                 p->pressedIdx = row;
-                if (!p->isSubMenu && !p->items[row].subItems.empty()) {
-                    ShowSubMenuForParentRow(p->session, row);
+                const auto& item = p->items[row];
+                if (item.inlineEditKind != 0) {
+                    D2D1_RECT_F rcMinus = {}, rcBox = {}, rcPlus = {};
+                    GetInlineControlRects(s, p, (float)rcRow.top, (float)(rcRow.bottom - rcRow.top),
+                                          &rcMinus, &rcBox, &rcPlus);
+                    if (pt.x >= rcMinus.left && pt.x <= rcMinus.right) s->pressedInlinePart = 1;
+                    else if (pt.x >= rcPlus.left && pt.x <= rcPlus.right) s->pressedInlinePart = 3;
+                    else s->pressedInlinePart = 2;
+                } else if (!p->isSubMenu && !item.subItems.empty()) {
+                    ShowSubMenuForParentRow(s, row);
                 }
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
@@ -4484,18 +7247,81 @@ LRESULT CALLBACK FluentMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
         case WM_LBUTTONUP: {
             if (!p || !p->session) return 0;
+            FluentMenuSession* s = p->session;
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
-            int row = HitTestFluentMenuRow(p->session, p, pt);
+            RECT rcRow = {};
+            int row = HitTestFluentMenuRow(s, p, pt, &rcRow);
+            int pressedPart = s->pressedInlinePart;
+            s->pressedInlinePart = 0;
             p->pressedIdx = -1;
             InvalidateRect(hWnd, nullptr, FALSE);
 
             if (row >= 0 && row < (int)p->items.size() && !p->items[row].disabled) {
                 const auto& item = p->items[row];
+                if (item.inlineEditKind != 0) {
+                    D2D1_RECT_F rcMinus = {}, rcBox = {}, rcPlus = {};
+                    GetInlineControlRects(s, p, (float)rcRow.top, (float)(rcRow.bottom - rcRow.top),
+                                          &rcMinus, &rcBox, &rcPlus);
+                    int releasePart = 2;
+                    if (pt.x >= rcMinus.left && pt.x <= rcMinus.right) releasePart = 1;
+                    else if (pt.x >= rcPlus.left && pt.x <= rcPlus.right) releasePart = 3;
+
+                    if (s->editingInlineKind != 0 && s->editingInlineKind != item.inlineEditKind) {
+                        CommitInlineMenuEdit(s);
+                    }
+
+                    auto getInlineStep = [](int k) -> int {
+                        if (k == 1 || k == 5 || k == 6) return 10;
+                        if (k == 4 || k == 7) return 5;
+                        if (k == 2) return 2;
+                        return 1;
+                    };
+                    if (releasePart == 1 && (pressedPart == 1 || pressedPart == 0)) {
+                        if (s->editingInlineKind == item.inlineEditKind) CommitInlineMenuEdit(s);
+                        int curVal = GetInlineMenuFieldValue(s->dlgState, item.inlineEditKind);
+                        int step = getInlineStep(item.inlineEditKind);
+                        if (GetAsyncKeyState(VK_SHIFT) & 0x8000) step *= 2;
+                        ApplyInlineMenuFieldValue(s, item.inlineEditKind, curVal - step);
+                        s->editingInlineKind = item.inlineEditKind;
+                        s->inlineEditBuf = std::to_wstring(GetInlineMenuFieldValue(s->dlgState, item.inlineEditKind));
+                        s->inlineEditReplace = true;
+                    } else if (releasePart == 3 && (pressedPart == 3 || pressedPart == 0)) {
+                        if (s->editingInlineKind == item.inlineEditKind) CommitInlineMenuEdit(s);
+                        int curVal = GetInlineMenuFieldValue(s->dlgState, item.inlineEditKind);
+                        int step = getInlineStep(item.inlineEditKind);
+                        if (GetAsyncKeyState(VK_SHIFT) & 0x8000) step *= 2;
+                        ApplyInlineMenuFieldValue(s, item.inlineEditKind, curVal + step);
+                        s->editingInlineKind = item.inlineEditKind;
+                        s->inlineEditBuf = std::to_wstring(GetInlineMenuFieldValue(s->dlgState, item.inlineEditKind));
+                        s->inlineEditReplace = true;
+                    } else {
+                        s->editingInlineKind = item.inlineEditKind;
+                        s->inlineEditBuf = std::to_wstring(GetInlineMenuFieldValue(s->dlgState, item.inlineEditKind));
+                        s->inlineEditReplace = true;
+                    }
+                    // Ensure keyboard focus is on the dialog's edit control so typing from keyboard always reaches GetMessageW
+                    if (s->dlgState && s->dlgState->hDlg) {
+                        if (GetForegroundWindow() != s->dlgState->hDlg) {
+                            SetForegroundWindow(s->dlgState->hDlg);
+                        }
+                        if (s->dlgState->hModernEdit && IsWindow(s->dlgState->hModernEdit)) {
+                            SetFocus(s->dlgState->hModernEdit);
+                        } else {
+                            SetFocus(s->dlgState->hDlg);
+                        }
+                    }
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                if (s->editingInlineKind != 0) {
+                    CommitInlineMenuEdit(s);
+                    s->editingInlineKind = 0;
+                }
                 if (!item.subItems.empty()) {
-                    ShowSubMenuForParentRow(p->session, row);
+                    ShowSubMenuForParentRow(s, row);
                 } else if (item.id != 0) {
-                    p->session->selectedCmd = item.id;
-                    p->session->running = false;
+                    s->selectedCmd = item.id;
+                    s->running = false;
                 }
             }
             return 0;
@@ -4536,8 +7362,8 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
     session.dlgState = state;
     session.dpi = state->dpi;
     session.effectiveDpi = MulDiv(state->dpi, GetDlgScale(state), 100);
-    session.isLight = state->isLightMode;
     session.surface = state->effectiveSurface;
+    session.isLight = state ? state->isLightMode : false;
     session.mouseReleasedSinceOpen =
         (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0 &&
         (GetAsyncKeyState(VK_RBUTTON) & 0x8000) == 0 &&
@@ -4590,6 +7416,14 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
 
     ShowWindow(hMainWnd, SW_SHOWNOACTIVATE);
     InvalidateRect(hMainWnd, nullptr, TRUE);
+    if (state->hDlg && IsWindow(state->hDlg)) {
+        if (GetForegroundWindow() != state->hDlg) {
+            SetForegroundWindow(state->hDlg);
+        }
+        if (state->hModernEdit && IsWindow(state->hModernEdit)) {
+            SetFocus(state->hModernEdit);
+        }
+    }
     SetTimer(hMainWnd, kTimerMenuWatchdog, 30, nullptr);
 
     MSG msg = {};
@@ -4642,8 +7476,147 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
             }
         }
 
-        // Keyboard navigation (Escape, Up, Down, Right, Left, Enter)
-        if (msg.message == WM_KEYDOWN) {
+        auto tryLiveApplyInlineBuf = [&]() {
+            if (session.inlineEditBuf.empty() || session.inlineEditBuf == L"-") return;
+            int liveVal = _wtoi(session.inlineEditBuf.c_str());
+            int k = session.editingInlineKind;
+            if ((k == 1 && liveVal >= 360 && liveVal <= 1200) ||
+                (k == 2 && liveVal >= 36 && liveVal <= 96) ||
+                (k == 3 && liveVal >= 9 && liveVal <= 24) ||
+                (k == 4 && liveVal >= -100 && liveVal <= 100) ||
+                (k == 5 && liveVal >= 0 && liveVal <= 255) ||
+                (k == 6 && liveVal >= 20 && liveVal <= 255) ||
+                (k == 7 && liveVal >= 0 && liveVal <= 50) ||
+                (k == 8 && liveVal >= 3 && liveVal <= 10)) {
+                ApplyInlineMenuFieldValue(&session, k, liveVal);
+            }
+        };
+
+        auto handleInlineCharInput = [&](wchar_t ch) {
+            if (ch == L'-') {
+                if (session.editingInlineKind == 4) {
+                    if (session.inlineEditReplace || session.inlineEditBuf.empty()) {
+                        session.inlineEditBuf = L"-";
+                        session.inlineEditReplace = false;
+                    } else if (session.inlineEditBuf[0] == L'-') {
+                        session.inlineEditBuf.erase(0, 1);
+                        tryLiveApplyInlineBuf();
+                    } else {
+                        session.inlineEditBuf = L"-" + session.inlineEditBuf;
+                        tryLiveApplyInlineBuf();
+                    }
+                    if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+                }
+                return;
+            }
+            if (ch >= L'0' && ch <= L'9') {
+                if (session.inlineEditReplace) {
+                    session.inlineEditBuf.clear();
+                    session.inlineEditReplace = false;
+                }
+                size_t maxLen = (!session.inlineEditBuf.empty() && session.inlineEditBuf[0] == L'-') ? 4 : 4;
+                if (session.inlineEditBuf.size() < maxLen) {
+                    session.inlineEditBuf.push_back(ch);
+                }
+                tryLiveApplyInlineBuf();
+                if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+            }
+        };
+
+        // Handle WM_CHAR for IME / Unikey / EVKey injected digits or minus sign when inline box is focused
+        if ((msg.message == WM_CHAR || msg.message == WM_IME_CHAR) && session.editingInlineKind != 0) {
+            wchar_t ch = (wchar_t)msg.wParam;
+            if ((ch >= L'0' && ch <= L'9') || ch == L'-') {
+                handleInlineCharInput(ch);
+            } else if (ch == VK_BACK) {
+                if (session.inlineEditReplace) {
+                    session.inlineEditBuf.clear();
+                    session.inlineEditReplace = false;
+                } else if (!session.inlineEditBuf.empty()) {
+                    session.inlineEditBuf.pop_back();
+                    tryLiveApplyInlineBuf();
+                }
+                if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+            }
+            continue;
+        }
+
+        // Keyboard navigation & inline input box typing
+        if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) {
+            if (session.editingInlineKind != 0) {
+                if (msg.wParam == VK_PACKET) {
+                    TranslateMessage(&msg);
+                    continue;
+                }
+                wchar_t digit = 0;
+                if (msg.wParam >= '0' && msg.wParam <= '9' && (GetKeyState(VK_SHIFT) & 0x8000) == 0) {
+                    digit = (wchar_t)msg.wParam;
+                } else if (msg.wParam >= VK_NUMPAD0 && msg.wParam <= VK_NUMPAD9) {
+                    digit = (wchar_t)(L'0' + (msg.wParam - VK_NUMPAD0));
+                }
+                if (digit != 0) {
+                    handleInlineCharInput(digit);
+                    continue;
+                }
+                if (msg.wParam == VK_OEM_MINUS || msg.wParam == VK_SUBTRACT) {
+                    handleInlineCharInput(L'-');
+                    continue;
+                }
+                if (msg.wParam == VK_BACK || msg.wParam == VK_DELETE) {
+                    if (session.inlineEditReplace) {
+                        session.inlineEditBuf.clear();
+                        session.inlineEditReplace = false;
+                    } else if (!session.inlineEditBuf.empty()) {
+                        session.inlineEditBuf.pop_back();
+                        tryLiveApplyInlineBuf();
+                    }
+                    if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+                    continue;
+                }
+                if (msg.wParam == VK_UP || msg.wParam == VK_DOWN) {
+                    CommitInlineMenuEdit(&session);
+                    int k = session.editingInlineKind;
+                    int curVal = GetInlineMenuFieldValue(session.dlgState, k);
+                    int step = (k == 1 || k == 5 || k == 6) ? 10 : ((k == 4 || k == 7) ? 5 : ((k == 2) ? 2 : 1));
+                    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) step *= 2;
+                    int nextVal = (msg.wParam == VK_UP) ? (curVal + step) : (curVal - step);
+                    ApplyInlineMenuFieldValue(&session, k, nextVal);
+                    session.inlineEditBuf = std::to_wstring(GetInlineMenuFieldValue(session.dlgState, k));
+                    session.inlineEditReplace = true;
+                    if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+                    continue;
+                }
+                if (msg.wParam == VK_RETURN) {
+                    CommitInlineMenuEdit(&session);
+                    session.inlineEditReplace = true;
+                    if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+                    continue;
+                }
+                if (msg.wParam == VK_TAB) {
+                    CommitInlineMenuEdit(&session);
+                    std::vector<int> subInlineKinds;
+                    for (const auto& it : session.subPanel.items) {
+                        if (it.inlineEditKind != 0) subInlineKinds.push_back(it.inlineEditKind);
+                    }
+                    if (!subInlineKinds.empty()) {
+                        auto itPos = std::find(subInlineKinds.begin(), subInlineKinds.end(), session.editingInlineKind);
+                        size_t nextIdx = (itPos != subInlineKinds.end())
+                                         ? ((std::distance(subInlineKinds.begin(), itPos) + 1) % subInlineKinds.size())
+                                         : 0;
+                        session.editingInlineKind = subInlineKinds[nextIdx];
+                        session.inlineEditBuf = std::to_wstring(GetInlineMenuFieldValue(session.dlgState, session.editingInlineKind));
+                        session.inlineEditReplace = true;
+                    }
+                    if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+                    continue;
+                }
+                if (msg.wParam == VK_ESCAPE) {
+                    session.editingInlineKind = 0;
+                    session.inlineEditBuf.clear();
+                    if (IsWindow(hSubWnd)) InvalidateRect(hSubWnd, nullptr, FALSE);
+                    continue;
+                }
+            }
             if (msg.wParam == VK_ESCAPE) {
                 session.running = false;
                 break;
@@ -4731,6 +7704,10 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
         }
     }
 
+    if (session.editingInlineKind != 0) {
+        CommitInlineMenuEdit(&session);
+        session.editingInlineKind = 0;
+    }
     g_hActiveGearMenu.store(nullptr);
     if (IsWindow(hMainWnd)) KillTimer(hMainWnd, kTimerMenuWatchdog);
     if (IsWindow(hSubWnd)) DestroyWindow(hSubWnd);
@@ -4739,26 +7716,619 @@ UINT RunFluentPopupMenu(RunDialogState* state, std::vector<FluentMenuItem>&& men
     return session.selectedCmd;
 }
 
+struct CustomSizeDialogSession {
+    RunDialogState* dlgState = nullptr;
+    HWND hWnd = nullptr;
+    UINT dpi = 96;
+    bool isLight = false;
+    SurfaceTheme surface = SurfaceTheme::Glass;
+    bool running = true;
+    int hoveredBtn = -1;
+    int pressedBtn = -1;
+    int activeField = 0; // 0 = Width, 1 = Height, 2 = Font
+    std::wstring typingBuf;
+    POINT mousePt = { -1, -1 };
+    bool hasMousePt = false;
+    bool mouseReleasedSinceOpen = false;
+    bool wasForeground = false;
+};
+
+int GetEffectiveCustomWidthDip(const RunDialogState* state) {
+    if (!state) return kBaseDlgWidth;
+    if (state->settings.customDialogWidth >= 360) return std::clamp(state->settings.customDialogWidth, 360, 1200);
+    return MulDiv(kBaseDlgWidth, GetDlgScale(state), 100);
+}
+
+int GetEffectiveCustomBarHeightDip(const RunDialogState* state) {
+    if (!state) return kBaseInputBarHeight;
+    if (state->settings.customBarHeight > 0) return std::clamp(state->settings.customBarHeight, 36, 96);
+    return MulDiv(kBaseInputBarHeight, GetDlgScale(state), 100);
+}
+
+int GetEffectiveCustomFontPt(const RunDialogState* state) {
+    if (!state) return 14;
+    if (state->settings.customFontSize > 0) return std::clamp(state->settings.customFontSize, 9, 24);
+    return (int)std::round(13.5f * GetDlgScale(state) / 100.0f);
+}
+
+void ApplyLiveCustomDimensionChange(RunDialogState* state, int newW, int newH, int newF) {
+    if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
+    if (newW >= 0) Wh_SetIntValue(GetUserOverrideKey(L"customDialogWidth").c_str(), newW);
+    if (newH >= 0) Wh_SetIntValue(GetUserOverrideKey(L"customBarHeight").c_str(), newH);
+    if (newF >= 0) Wh_SetIntValue(GetUserOverrideKey(L"customFontSize").c_str(), newF);
+    LoadSettings(false);
+    ApplyReloadedSettingsToDialog(state);
+}
+
+// Button IDs in CustomSizeDialog:
+// Row 0 (Width):  10 = -20, 11 = -5, 12 = Value Box, 13 = +5, 14 = +20
+// Row 1 (Height): 20 = -4,  21 = -1, 22 = Value Box, 23 = +1, 24 = +4
+// Row 2 (Font):   30 = -2,  31 = -1, 32 = Value Box, 33 = +1, 34 = +2
+// Bottom:         40 = Reset, 41 = Done
+RECT GetCustomSizeBtnRect(int btnId, int w, int h, UINT dpi) {
+    int padX = DpiScale(16, dpi);
+    int rowStartY = DpiScale(46, dpi);
+    int rowStepY  = DpiScale(42, dpi);
+    int btnH      = DpiScale(28, dpi);
+    int wSmall    = DpiScale(34, dpi);
+    int wVal      = DpiScale(72, dpi);
+    int gap       = DpiScale(5, dpi);
+
+    int rightEdge = w - padX;
+    int x4 = rightEdge - wSmall;
+    int x3 = x4 - gap - wSmall;
+    int x2 = x3 - gap - wVal;
+    int x1 = x2 - gap - wSmall;
+    int x0 = x1 - gap - wSmall;
+
+    if (btnId >= 10 && btnId <= 34) {
+        int r = (btnId / 10) - 1;
+        int c = btnId % 10;
+        int top = rowStartY + r * rowStepY;
+        if (c == 0) return { x0, top, x0 + wSmall, top + btnH };
+        if (c == 1) return { x1, top, x1 + wSmall, top + btnH };
+        if (c == 2) return { x2, top, x2 + wVal,   top + btnH };
+        if (c == 3) return { x3, top, x3 + wSmall, top + btnH };
+        if (c == 4) return { x4, top, x4 + wSmall, top + btnH };
+    }
+    int botY = h - DpiScale(42, dpi);
+    int botH = DpiScale(30, dpi);
+    if (btnId == 40) {
+        return { padX, botY, padX + DpiScale(130, dpi), botY + botH };
+    }
+    if (btnId == 41) {
+        return { w - padX - DpiScale(100, dpi), botY, w - padX, botY + botH };
+    }
+    return { 0, 0, 0, 0 };
+}
+
+int HitTestCustomSizeBtn(POINT pt, int w, int h, UINT dpi) {
+    const int ids[] = { 10, 11, 12, 13, 14, 20, 21, 22, 23, 24, 30, 31, 32, 33, 34, 40, 41 };
+    for (int id : ids) {
+        RECT rc = GetCustomSizeBtnRect(id, w, h, dpi);
+        if (PtInRect(&rc, pt)) return id;
+    }
+    return -1;
+}
+
+void CommitCustomSizeTypingBuf(CustomSizeDialogSession* s) {
+    if (!s || s->typingBuf.empty() || !s->dlgState) return;
+    int val = _wtoi(s->typingBuf.c_str());
+    s->typingBuf.clear();
+    if (val <= 0) return;
+    if (s->activeField == 0) {
+        ApplyLiveCustomDimensionChange(s->dlgState, std::clamp(val, 360, 1200), -1, -1);
+    } else if (s->activeField == 1) {
+        if (val >= 150) {
+            val = MulDiv(val, kBaseInputBarHeight, kBaseInputBarHeight + 5 * kBaseRowHeight + kBaseListPadTop + kBaseListPadBottom);
+        }
+        ApplyLiveCustomDimensionChange(s->dlgState, -1, std::clamp(val, 36, 96), -1);
+    } else if (s->activeField == 2) {
+        ApplyLiveCustomDimensionChange(s->dlgState, -1, -1, std::clamp(val, 9, 24));
+    }
+}
+
+void PaintCustomSizeDialog(HWND hWnd, CustomSizeDialogSession* s) {
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint(hWnd, &ps);
+    if (!s || !s->dlgState || !g_pD2DFactory || !g_pDWriteFactory) {
+        EndPaint(hWnd, &ps);
+        return;
+    }
+
+    RECT rcClient = {};
+    GetClientRect(hWnd, &rcClient);
+    int w = rcClient.right;
+    int h = rcClient.bottom;
+    UINT dpi = s->dpi;
+    bool isLight = s->isLight;
+    bool highContrast = IsHighContrastActive();
+
+    if (w > 0 && h > 0) {
+        HDC hMemDC = CreateCompatibleDC(hdc);
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        DWORD* pixels = nullptr;
+        HBITMAP hBmp = CreateDIBSection(hMemDC, &bmi, DIB_RGB_COLORS, (void**)&pixels, nullptr, 0);
+        if (hBmp && pixels) {
+            HGDIOBJ oldBmp = SelectObject(hMemDC, hBmp);
+            D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                96.0f, 96.0f);
+
+            ID2D1DCRenderTarget* pRT = nullptr;
+            if (SUCCEEDED(g_pD2DFactory->CreateDCRenderTarget(&rtProps, &pRT)) && pRT) {
+                pRT->BindDC(hMemDC, &rcClient);
+                pRT->BeginDraw();
+                pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+                if (highContrast) {
+                    COLORREF winBg = GetSysColor(COLOR_WINDOW);
+                    pRT->Clear(D2D1::ColorF(GetRValue(winBg) / 255.0f, GetGValue(winBg) / 255.0f, GetBValue(winBg) / 255.0f, 1.0f));
+                } else if (s->surface == SurfaceTheme::Solid) {
+                    pRT->Clear(isLight ? D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f)
+                                       : D2D1::ColorF(0.11f, 0.12f, 0.16f, 1.0f));
+                } else if (s->surface == SurfaceTheme::Glass) {
+                    pRT->Clear(isLight ? D2D1::ColorF(0.98f, 0.98f, 1.00f, 0.18f)
+                                       : D2D1::ColorF(0.92f, 0.94f, 1.00f, 0.10f));
+                    DrawD2DPointerSpecularGlow(pRT, s->mousePt, s->hasMousePt, w, h, dpi, isLight);
+                } else {
+                    pRT->Clear(isLight ? D2D1::ColorF(246.0f / 255.0f, 246.0f / 255.0f, 250.0f / 255.0f, 150.0f / 255.0f)
+                                       : D2D1::ColorF(32.0f / 255.0f, 33.0f / 255.0f, 38.0f / 255.0f, 145.0f / 255.0f));
+                }
+
+                D2D1_COLOR_F colText = isLight ? D2D1::ColorF(0.08f, 0.09f, 0.12f, 1.0f) : D2D1::ColorF(0.96f, 0.97f, 0.99f, 1.0f);
+                D2D1_COLOR_F colSub  = isLight ? D2D1::ColorF(0.20f, 0.23f, 0.30f, 0.78f) : D2D1::ColorF(0.84f, 0.88f, 0.95f, 0.78f);
+                ID2D1SolidColorBrush* pBrText = nullptr;
+                ID2D1SolidColorBrush* pBrSub  = nullptr;
+                pRT->CreateSolidColorBrush(colText, &pBrText);
+                pRT->CreateSolidColorBrush(colSub,  &pBrSub);
+
+                IDWriteTextFormat* pFmtTitle = nullptr;
+                IDWriteTextFormat* pFmtLabel = nullptr;
+                IDWriteTextFormat* pFmtBtn   = nullptr;
+                g_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(13.5f, dpi), L"", &pFmtTitle);
+                g_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(12.5f, dpi), L"", &pFmtLabel);
+                g_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(12.0f, dpi), L"", &pFmtBtn);
+
+                if (pFmtTitle) pFmtTitle->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                if (pFmtLabel) pFmtLabel->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                if (pFmtBtn) {
+                    pFmtBtn->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                    pFmtBtn->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                }
+
+                MenuLocalizedStrings ml = GetMenuLocalizedStrings(s->dlgState->settings.language);
+                float padX = DpiScaleF(16.0f, dpi);
+                if (pFmtTitle && pBrText) {
+                    const wchar_t* title = ml.customSizeDlgTitle;
+                    D2D1_RECT_F rcTitle = D2D1::RectF(padX, DpiScaleF(10.0f, dpi), (float)w - padX, DpiScaleF(38.0f, dpi));
+                    pRT->DrawText(title, (UINT32)wcslen(title), pFmtTitle, rcTitle, pBrText);
+                }
+
+                const wchar_t* rowLabels[3] = {
+                    ml.widthPx,
+                    ml.heightPx,
+                    ml.fontSizePt
+                };
+
+                int curVals[3] = {
+                    GetEffectiveCustomWidthDip(s->dlgState),
+                    GetEffectiveCustomBarHeightDip(s->dlgState),
+                    GetEffectiveCustomFontPt(s->dlgState)
+                };
+                const wchar_t* stepLabels[3][4] = {
+                    { L"-20", L"-5", L"+5", L"+20" },
+                    { L"-4",  L"-1", L"+1", L"+4"  },
+                    { L"-2",  L"-1", L"+1", L"+2"  }
+                };
+
+                auto drawPillBtn = [&](int id, const wchar_t* text, bool isValueBox, bool isPrimary, bool isFocusedField) {
+                    RECT rWin = GetCustomSizeBtnRect(id, w, h, dpi);
+                    D2D1_RECT_F rc = D2D1::RectF((float)rWin.left, (float)rWin.top, (float)rWin.right, (float)rWin.bottom);
+                    float rad = DpiScaleF(6.0f, dpi);
+                    bool hov = (s->hoveredBtn == id);
+                    bool prs = (s->pressedBtn == id);
+
+                    D2D1_COLOR_F tint = D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.08f);
+                    if (isPrimary) {
+                        tint = D2D1::ColorF(0.10f, 0.48f, 0.88f, prs ? 0.55f : (hov ? 0.44f : 0.34f));
+                    } else if (isValueBox && isFocusedField) {
+                        tint = D2D1::ColorF(0.14f, 0.52f, 0.92f, 0.24f);
+                    } else if (hov || prs) {
+                        tint = isLight
+                            ? D2D1::ColorF(0.0f, 0.0f, 0.0f, prs ? 0.16f : 0.09f)
+                            : D2D1::ColorF(1.0f, 1.0f, 1.0f, prs ? 0.22f : 0.14f);
+                    }
+                    DrawD2DGlassButton(pRT, rc, rad, dpi, tint, hov || isFocusedField, prs, isLight);
+                    if (pFmtBtn && pBrText && text) {
+                        pRT->DrawText(text, (UINT32)wcslen(text), pFmtBtn, rc, pBrText);
+                    }
+                };
+
+                for (int r = 0; r < 3; ++r) {
+                    int baseId = (r + 1) * 10;
+                    RECT rcFirst = GetCustomSizeBtnRect(baseId, w, h, dpi);
+                    D2D1_RECT_F rcLbl = D2D1::RectF(padX, (float)rcFirst.top, (float)rcFirst.left - DpiScaleF(8.0f, dpi), (float)rcFirst.bottom);
+                    if (pFmtLabel && pBrSub) {
+                        pRT->DrawText(rowLabels[r], (UINT32)wcslen(rowLabels[r]), pFmtLabel, rcLbl, pBrSub);
+                    }
+
+                    drawPillBtn(baseId + 0, stepLabels[r][0], false, false, false);
+                    drawPillBtn(baseId + 1, stepLabels[r][1], false, false, false);
+
+                    wchar_t valBuf[32] = {};
+                    if (s->activeField == r && !s->typingBuf.empty()) {
+                        swprintf_s(valBuf, L"%s_", s->typingBuf.c_str());
+                    } else {
+                        swprintf_s(valBuf, r == 2 ? L"%d pt" : L"%d px", curVals[r]);
+                    }
+                    drawPillBtn(baseId + 2, valBuf, true, false, s->activeField == r);
+
+                    drawPillBtn(baseId + 3, stepLabels[r][2], false, false, false);
+                    drawPillBtn(baseId + 4, stepLabels[r][3], false, false, false);
+                }
+
+                drawPillBtn(40, ml.resetDefaultBtn, false, false, false);
+                drawPillBtn(41, ml.doneOkBtn, false, true, false);
+
+                if (s->surface == SurfaceTheme::Glass && !highContrast) {
+                    float rimInset = DpiScaleF(0.6f, dpi);
+                    D2D1_RECT_F rcRim = D2D1::RectF(rimInset, rimInset, (float)w - rimInset, (float)h - rimInset);
+                    DrawD2DGlassRim(pRT, rcRim, DpiScaleF(8.0f, dpi), dpi, isLight, 1.4f);
+                }
+
+                pRT->EndDraw();
+                if (pFmtBtn)   pFmtBtn->Release();
+                if (pFmtLabel) pFmtLabel->Release();
+                if (pFmtTitle) pFmtTitle->Release();
+                if (pBrSub)    pBrSub->Release();
+                if (pBrText)   pBrText->Release();
+                pRT->Release();
+            }
+            BitBlt(hdc, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY);
+            SelectObject(hMemDC, oldBmp);
+            DeleteObject(hBmp);
+        }
+        DeleteDC(hMemDC);
+    }
+    EndPaint(hWnd, &ps);
+}
+
+LRESULT CALLBACK CustomSizeDialogWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    auto* s = reinterpret_cast<CustomSizeDialogSession*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+    switch (uMsg) {
+        case WM_NCCREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
+            return TRUE;
+        }
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT:
+            PaintCustomSizeDialog(hWnd, s);
+            return 0;
+        case WM_MOUSEMOVE: {
+            if (!s) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            s->mousePt = pt;
+            s->hasMousePt = true;
+            RECT rc = {};
+            GetClientRect(hWnd, &rc);
+            int hit = HitTestCustomSizeBtn(pt, rc.right, rc.bottom, s->dpi);
+            if (hit != s->hoveredBtn) {
+                s->hoveredBtn = hit;
+            }
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hWnd, 0 };
+            TrackMouseEvent(&tme);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        case WM_MOUSELEAVE: {
+            if (!s) return 0;
+            s->hasMousePt = false;
+            s->hoveredBtn = -1;
+            s->pressedBtn = -1;
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        case WM_LBUTTONDOWN: {
+            if (!s) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            RECT rc = {};
+            GetClientRect(hWnd, &rc);
+            int hit = HitTestCustomSizeBtn(pt, rc.right, rc.bottom, s->dpi);
+            s->pressedBtn = hit;
+            SetCapture(hWnd);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        case WM_LBUTTONUP: {
+            if (!s) return 0;
+            POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            RECT rc = {};
+            GetClientRect(hWnd, &rc);
+            int hit = HitTestCustomSizeBtn(pt, rc.right, rc.bottom, s->dpi);
+            int pressed = s->pressedBtn;
+            s->pressedBtn = -1;
+            ReleaseCapture();
+
+            if (hit == pressed && hit != -1 && s->dlgState) {
+                CommitCustomSizeTypingBuf(s);
+                int curW = GetEffectiveCustomWidthDip(s->dlgState);
+                int curH = GetEffectiveCustomBarHeightDip(s->dlgState);
+                int curF = GetEffectiveCustomFontPt(s->dlgState);
+
+                if (hit == 10) { s->activeField = 0; ApplyLiveCustomDimensionChange(s->dlgState, std::clamp(curW - 20, 360, 1200), -1, -1); }
+                else if (hit == 11) { s->activeField = 0; ApplyLiveCustomDimensionChange(s->dlgState, std::clamp(curW - 5, 360, 1200), -1, -1); }
+                else if (hit == 12) { s->activeField = 0; s->typingBuf.clear(); }
+                else if (hit == 13) { s->activeField = 0; ApplyLiveCustomDimensionChange(s->dlgState, std::clamp(curW + 5, 360, 1200), -1, -1); }
+                else if (hit == 14) { s->activeField = 0; ApplyLiveCustomDimensionChange(s->dlgState, std::clamp(curW + 20, 360, 1200), -1, -1); }
+                else if (hit == 20) { s->activeField = 1; ApplyLiveCustomDimensionChange(s->dlgState, -1, std::clamp(curH - 4, 36, 96), -1); }
+                else if (hit == 21) { s->activeField = 1; ApplyLiveCustomDimensionChange(s->dlgState, -1, std::clamp(curH - 1, 36, 96), -1); }
+                else if (hit == 22) { s->activeField = 1; s->typingBuf.clear(); }
+                else if (hit == 23) { s->activeField = 1; ApplyLiveCustomDimensionChange(s->dlgState, -1, std::clamp(curH + 1, 36, 96), -1); }
+                else if (hit == 24) { s->activeField = 1; ApplyLiveCustomDimensionChange(s->dlgState, -1, std::clamp(curH + 4, 36, 96), -1); }
+                else if (hit == 30) { s->activeField = 2; ApplyLiveCustomDimensionChange(s->dlgState, -1, -1, std::clamp(curF - 2, 9, 24)); }
+                else if (hit == 31) { s->activeField = 2; ApplyLiveCustomDimensionChange(s->dlgState, -1, -1, std::clamp(curF - 1, 9, 24)); }
+                else if (hit == 32) { s->activeField = 2; s->typingBuf.clear(); }
+                else if (hit == 33) { s->activeField = 2; ApplyLiveCustomDimensionChange(s->dlgState, -1, -1, std::clamp(curF + 1, 9, 24)); }
+                else if (hit == 34) { s->activeField = 2; ApplyLiveCustomDimensionChange(s->dlgState, -1, -1, std::clamp(curF + 2, 9, 24)); }
+                else if (hit == 40) {
+                    Wh_DeleteValue(GetUserOverrideKey(L"customDialogWidth").c_str());
+                    Wh_DeleteValue(GetUserOverrideKey(L"customBarHeight").c_str());
+                    Wh_DeleteValue(GetUserOverrideKey(L"customFontSize").c_str());
+                    LoadSettings(false);
+                    ApplyReloadedSettingsToDialog(s->dlgState);
+                } else if (hit == 41) {
+                    s->running = false;
+                }
+            }
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        case WM_CHAR: {
+            if (!s) return 0;
+            if (wParam >= L'0' && wParam <= L'9') {
+                if (s->typingBuf.size() < 4) {
+                    s->typingBuf.push_back((wchar_t)wParam);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+            } else if (wParam == VK_BACK) {
+                if (!s->typingBuf.empty()) {
+                    s->typingBuf.pop_back();
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+            }
+            return 0;
+        }
+        case WM_KEYDOWN: {
+            if (!s) return 0;
+            if (wParam == VK_ESCAPE) {
+                s->typingBuf.clear();
+                s->running = false;
+                return 0;
+            }
+            if (wParam == VK_RETURN) {
+                if (!s->typingBuf.empty()) {
+                    CommitCustomSizeTypingBuf(s);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                } else {
+                    s->running = false;
+                }
+                return 0;
+            }
+            if (wParam == VK_TAB || wParam == VK_DOWN || wParam == VK_UP) {
+                CommitCustomSizeTypingBuf(s);
+                int delta = (wParam == VK_UP) ? 2 : 1;
+                s->activeField = (s->activeField + delta) % 3;
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
+            break;
+        }
+        case WM_TIMER: {
+            if (wParam == kTimerMenuWatchdog && s) {
+                HWND hDlg = s->dlgState ? s->dlgState->hDlg : nullptr;
+                if (!hDlg || !IsWindow(hDlg) || !IsWindowVisible(hDlg) || IsIconic(hDlg) ||
+                    s->dlgState->pendingUninit || g_unloading.load()) {
+                    s->running = false;
+                    PostMessageW(hWnd, WM_NULL, 0, 0);
+                    return 0;
+                }
+                bool anyMouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+                                    (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+                if (!anyMouseDown) {
+                    s->mouseReleasedSinceOpen = true;
+                } else if (s->mouseReleasedSinceOpen) {
+                    POINT ptCursor = {};
+                    GetCursorPos(&ptCursor);
+                    RECT rcWnd = {}, rcDlg = {};
+                    GetWindowRect(hWnd, &rcWnd);
+                    GetWindowRect(hDlg, &rcDlg);
+                    if (!PtInRect(&rcWnd, ptCursor) && !PtInRect(&rcDlg, ptCursor)) {
+                        CommitCustomSizeTypingBuf(s);
+                        s->running = false;
+                        PostMessageW(hWnd, WM_NULL, 0, 0);
+                        return 0;
+                    }
+                }
+            }
+            break;
+        }
+        case WM_ACTIVATEAPP: {
+            if (wParam == FALSE && s) {
+                CommitCustomSizeTypingBuf(s);
+                s->running = false;
+                PostMessageW(hWnd, WM_NULL, 0, 0);
+            }
+            return 0;
+        }
+        case WM_CLOSE: {
+            if (s) {
+                CommitCustomSizeTypingBuf(s);
+                s->running = false;
+                PostMessageW(hWnd, WM_NULL, 0, 0);
+            }
+            return 0;
+        }
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+void OpenCustomSizeDialog(RunDialogState* state) {
+    if (!state || !state->hDlg || state->isBrowsingFile || state->pendingUninit || g_unloading.load()) return;
+    HWND hDlg = state->hDlg;
+    state->isBrowsingFile = true;
+    g_isBrowsingFile.store(true);
+
+    static constexpr wchar_t kCustomSizeClass[] = L"WindhawkModernRunCustomSizeWnd";
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = CustomSizeDialogWndProc;
+    wc.hInstance = GetModInstanceHandle();
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = kCustomSizeClass;
+    RegisterClassExW(&wc);
+
+    CustomSizeDialogSession session;
+    session.dlgState = state;
+    session.dpi = state->dpi;
+    session.isLight = state->isLightMode;
+    session.surface = state->effectiveSurface;
+    session.mouseReleasedSinceOpen = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0;
+
+    int wndW = DpiScale(420, session.dpi);
+    int wndH = DpiScale(226, session.dpi);
+
+    RECT rcDlg = {};
+    GetWindowRect(hDlg, &rcDlg);
+    HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    RECT rcWork = {};
+    if (hMon && GetMonitorInfoW(hMon, &mi)) rcWork = mi.rcWork;
+    else SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+
+    int posX = rcDlg.right - wndW;
+    int posY = rcDlg.top - wndH - DpiScale(8, session.dpi);
+    if (posY < rcWork.top + DpiScale(8, session.dpi)) {
+        posY = rcDlg.bottom + DpiScale(8, session.dpi);
+    }
+    posX = std::clamp(posX, (int)rcWork.left + DpiScale(8, session.dpi), (int)rcWork.right - wndW - DpiScale(8, session.dpi));
+    posY = std::clamp(posY, (int)rcWork.top + DpiScale(8, session.dpi), (int)rcWork.bottom - wndH - DpiScale(8, session.dpi));
+
+    HWND hWnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        kCustomSizeClass, L"",
+        WS_POPUP,
+        posX, posY, wndW, wndH,
+        hDlg, nullptr, GetModInstanceHandle(), &session);
+
+    if (hWnd) {
+        session.hWnd = hWnd;
+        g_hActiveCustomSizeWnd.store(hWnd);
+
+        FluentMenuSession dummyMenuSession;
+        dummyMenuSession.isLight = session.isLight;
+        dummyMenuSession.surface = session.surface;
+        ApplyFluentMenuWindowBackdrop(hWnd, &dummyMenuSession);
+
+        ShowWindow(hWnd, SW_SHOW);
+        SetForegroundWindow(hWnd);
+        SetFocus(hWnd);
+        InvalidateRect(hWnd, nullptr, TRUE);
+        SetTimer(hWnd, kTimerMenuWatchdog, 30, nullptr);
+
+        MSG msg = {};
+        while (session.running && !g_unloading.load() && !state->pendingUninit &&
+               IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg) &&
+               GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            if (msg.message == g_msgUninit && g_msgUninit != 0) {
+                session.running = false;
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        g_hActiveCustomSizeWnd.store(nullptr);
+        if (IsWindow(hWnd)) {
+            KillTimer(hWnd, kTimerMenuWatchdog);
+            DestroyWindow(hWnd);
+        }
+    }
+
+    UnregisterClassW(kCustomSizeClass, GetModInstanceHandle());
+    g_isBrowsingFile.store(false);
+    state->isBrowsingFile = false;
+
+    if (IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg) && !state->pendingUninit && !g_unloading.load()) {
+        SetForegroundWindow(hDlg);
+        if (state->hModernEdit && IsWindow(state->hModernEdit)) {
+            SetFocus(state->hModernEdit);
+        }
+        InvalidateRect(hDlg, nullptr, TRUE);
+    }
+}
+
 void OpenGearSettingsMenu(RunDialogState* state) {
     if (!state || !state->hDlg || state->isBrowsingFile) return;
     HWND hDlg = state->hDlg;
     state->isBrowsingFile = true;
     g_isBrowsingFile.store(true);
 
-    bool isVi = (state->settings.language == L"vi") ||
-                (state->settings.language == L"auto" && PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_VIETNAMESE);
+    MenuLocalizedStrings ml = GetMenuLocalizedStrings(state->settings.language);
 
     std::vector<FluentMenuItem> menuItems;
 
-    // 1. Surface Theme Submenu
+    // 1. Surface Theme Submenu (Liquid Glass -100..100 without % unit + Windows Blur 0..255 inline input)
     {
+        int curGlassOp = std::clamp(state->settings.glassOpacity, -100, 100);
+        FluentMenuItem sep;
+        sep.isSeparator = true;
+
+        FluentMenuItem glassOpItem;
+        glassOpItem.label = ml.glassTintRange;
+        glassOpItem.icon  = FluentMenuIcon::Surface;
+        glassOpItem.inlineEditKind = 4;
+
+        FluentMenuItem blurOpItem;
+        blurOpItem.label = ml.blurOpacityRange;
+        blurOpItem.icon  = FluentMenuIcon::Surface;
+        blurOpItem.inlineEditKind = 5;
+
         FluentMenuItem item;
-        item.label = isVi ? L"Giao diện bề mặt (Surface Theme)" : L"Surface Theme";
+        item.label = ml.surfaceThemeMenu;
         item.icon  = FluentMenuIcon::Surface;
         item.subItems = {
-            { 101, L"Liquid Glass", FluentMenuIcon::None, state->settings.surfaceTheme == SurfaceTheme::Glass, false, false, {} },
-            { 102, isVi ? L"Làm mờ Windows (Windows Blur)" : L"Windows Blur", FluentMenuIcon::None, state->settings.surfaceTheme == SurfaceTheme::Blur, false, false, {} },
-            { 103, isVi ? L"Nền đặc (Opaque)" : L"Off – Opaque", FluentMenuIcon::None, state->settings.surfaceTheme == SurfaceTheme::Solid, false, false, {} }
+            { 101, ml.liquidGlass, FluentMenuIcon::None, state->settings.surfaceTheme == SurfaceTheme::Glass, false, false, {} },
+            { 102, ml.windowsBlur, FluentMenuIcon::None, state->settings.surfaceTheme == SurfaceTheme::Blur, false, false, {} },
+            { 103, ml.opaqueSolid, FluentMenuIcon::None, state->settings.surfaceTheme == SurfaceTheme::Solid, false, false, {} },
+            sep,
+            glassOpItem,
+            { 107, ml.glassPresetM100, FluentMenuIcon::None, curGlassOp <= -90, false, false, {} },
+            { 108, ml.glassPresetM80,  FluentMenuIcon::None, curGlassOp > -90 && curGlassOp <= -65, false, false, {} },
+            { 109, ml.glassPresetM50,  FluentMenuIcon::None, curGlassOp > -65 && curGlassOp <= -25, false, false, {} },
+            { 110, ml.glassPreset0,    FluentMenuIcon::None, curGlassOp > -25 && curGlassOp <= 5, false, false, {} },
+            { 111, ml.glassPreset15,   FluentMenuIcon::None, curGlassOp > 5 && curGlassOp <= 20, false, false, {} },
+            { 112, ml.glassPreset30,   FluentMenuIcon::None, curGlassOp > 20 && curGlassOp <= 42, false, false, {} },
+            { 113, ml.glassPreset55,   FluentMenuIcon::None, curGlassOp > 42 && curGlassOp <= 68, false, false, {} },
+            { 114, ml.glassPreset80,   FluentMenuIcon::None, curGlassOp > 68, false, false, {} },
+            sep,
+            blurOpItem
         };
         menuItems.push_back(std::move(item));
     }
@@ -4766,28 +8336,54 @@ void OpenGearSettingsMenu(RunDialogState* state) {
     // 2. Color Mode Submenu
     {
         FluentMenuItem item;
-        item.label = isVi ? L"Chế độ Sáng / Tối (Color Mode)" : L"Color Mode";
+        item.label = ml.colorModeMenu;
         item.icon  = FluentMenuIcon::ColorMode;
         item.subItems = {
-            { 201, isVi ? L"Tự động theo Windows (Auto)" : L"Auto – Follow Windows", FluentMenuIcon::None, state->settings.colorMode == ColorMode::Auto, false, false, {} },
-            { 202, isVi ? L"Giao diện Tối (Dark Mode)" : L"Dark Mode", FluentMenuIcon::None, state->settings.colorMode == ColorMode::Dark, false, false, {} },
-            { 203, isVi ? L"Giao diện Sáng (Light Mode)" : L"Light Mode", FluentMenuIcon::None, state->settings.colorMode == ColorMode::Light, false, false, {} }
+            { 201, ml.colorAuto,  FluentMenuIcon::None, state->settings.colorMode == ColorMode::Auto, false, false, {} },
+            { 202, ml.colorDark,  FluentMenuIcon::None, state->settings.colorMode == ColorMode::Dark, false, false, {} },
+            { 203, ml.colorLight, FluentMenuIcon::None, state->settings.colorMode == ColorMode::Light, false, false, {} }
         };
         menuItems.push_back(std::move(item));
     }
 
-    // 3. UI Size / Scale Submenu
+    // 3. UI Size / Scale Submenu (Presets 85%–120% + Direct Inline Input Boxes for Width / Height / Font Size)
     {
         int curScale = state->settings.uiScalePercent;
+        bool hasManualSize = (state->settings.customDialogWidth > 0) ||
+                             (state->settings.customBarHeight > 0) ||
+                             (state->settings.customFontSize > 0);
+        FluentMenuItem sep;
+        sep.isSeparator = true;
+
+        FluentMenuItem wItem;
+        wItem.label = ml.widthPx;
+        wItem.icon  = FluentMenuIcon::Scale;
+        wItem.inlineEditKind = 1;
+
+        FluentMenuItem hItem;
+        hItem.label = ml.heightPx;
+        hItem.icon  = FluentMenuIcon::Scale;
+        hItem.inlineEditKind = 2;
+
+        FluentMenuItem fItem;
+        fItem.label = ml.fontSizePt;
+        fItem.icon  = FluentMenuIcon::Scale;
+        fItem.inlineEditKind = 3;
+
         FluentMenuItem item;
-        item.label = isVi ? L"Kích thước giao diện (UI Size)" : L"UI Size / Scale";
+        item.label = ml.uiSizeMenu;
         item.icon  = FluentMenuIcon::Scale;
         item.subItems = {
-            { 301, isVi ? L"85% – Nhỏ gọn (Compact)" : L"85% – Compact", FluentMenuIcon::None, curScale == 85, false, false, {} },
-            { 302, isVi ? L"90% – Hơi nhỏ" : L"90% – Slightly Smaller", FluentMenuIcon::None, curScale == 90, false, false, {} },
-            { 303, isVi ? L"100% – Mặc định (Chuẩn)" : L"100% – Default (Standard)", FluentMenuIcon::None, curScale == 100, false, false, {} },
-            { 304, isVi ? L"110% – Lớn vừa (Medium)" : L"110% – Medium Large", FluentMenuIcon::None, curScale == 110, false, false, {} },
-            { 305, isVi ? L"120% – Rất lớn (Large)" : L"120% – Large", FluentMenuIcon::None, curScale == 120, false, false, {} }
+            { 301, ml.scale85,  FluentMenuIcon::None, !hasManualSize && curScale == 85, false, false, {} },
+            { 302, ml.scale90,  FluentMenuIcon::None, !hasManualSize && curScale == 90, false, false, {} },
+            { 303, ml.scale100, FluentMenuIcon::None, !hasManualSize && curScale == 100, false, false, {} },
+            { 304, ml.scale110, FluentMenuIcon::None, !hasManualSize && curScale == 110, false, false, {} },
+            { 305, ml.scale120, FluentMenuIcon::None, !hasManualSize && curScale == 120, false, false, {} },
+            sep,
+            wItem,
+            hItem,
+            fItem,
+            { 311, ml.resetCustomSize, FluentMenuIcon::RemoveBg, false, false, false, {} }
         };
         menuItems.push_back(std::move(item));
     }
@@ -4796,51 +8392,70 @@ void OpenGearSettingsMenu(RunDialogState* state) {
     {
         FluentMenuItem minItem;
         minItem.id      = 350;
-        minItem.label   = isVi ? L"Chế độ tối giản (Ẩn Duyệt & Thoát)" : L"Minimal Mode (Hide Browse & Exit)";
+        minItem.label   = ml.minimalModeMenu;
         minItem.icon    = FluentMenuIcon::MinimalLayout;
         minItem.checked = state->settings.minimalMode;
         menuItems.push_back(std::move(minItem));
     }
 
-    // 4. Custom Background Media Submenu
+    // 4. Custom Background Media Submenu (with inline keyboard input for Media Opacity 20-255)
     {
         int curBgOp = state->settings.customBackgroundOpacity;
         FluentMenuItem sep;
         sep.isSeparator = true;
 
+        FluentMenuItem bgOpItem;
+        bgOpItem.label = ml.mediaOpacityRange;
+        bgOpItem.icon  = FluentMenuIcon::Background;
+        bgOpItem.inlineEditKind = 6;
+
         FluentMenuItem item;
-        item.label = isVi ? L"Hình nền tùy chỉnh (Ảnh / GIF / MP4)" : L"Custom Background (Image / GIF / MP4)";
+        item.label = ml.customBgMenu;
         item.icon  = FluentMenuIcon::Background;
         item.subItems = {
-            { 501, isVi ? L"Chọn tệp hình nền (Ảnh / GIF / MP4 ≤ 50MB)..." : L"Select Background File (Image / GIF / MP4 ≤ 50MB)...", FluentMenuIcon::FolderPick, false, false, false, {} },
-            { 502, isVi ? L"Gỡ bỏ hình nền tùy chỉnh" : L"Clear Custom Background", FluentMenuIcon::RemoveBg, false, state->settings.customBackgroundPath.empty(), false, {} },
+            { 501, ml.selectBgFile,  FluentMenuIcon::FolderPick, false, false, false, {} },
+            { 502, ml.clearCustomBg, FluentMenuIcon::RemoveBg, false, state->settings.customBackgroundPath.empty(), false, {} },
             sep,
-            { 503, isVi ? L"Độ rõ nền: Dịu nhẹ (35%)" : L"Media Opacity: Subtle (35%)", FluentMenuIcon::None, curBgOp <= 95, false, false, {} },
-            { 504, isVi ? L"Độ rõ nền: Cân bằng (60%)" : L"Media Opacity: Balanced (60%)", FluentMenuIcon::None, curBgOp > 95 && curBgOp <= 175, false, false, {} },
-            { 505, isVi ? L"Độ rõ nền: Rõ nét (85%)" : L"Media Opacity: Vivid (85%)", FluentMenuIcon::None, curBgOp > 175 && curBgOp <= 230, false, false, {} },
-            { 506, isVi ? L"Độ rõ nền: Tối đa (100%)" : L"Media Opacity: Full (100%)", FluentMenuIcon::None, curBgOp > 230, false, false, {} }
+            bgOpItem,
+            { 503, ml.bgOpacity90,  FluentMenuIcon::None, curBgOp <= 95, false, false, {} },
+            { 504, ml.bgOpacity150, FluentMenuIcon::None, curBgOp > 95 && curBgOp <= 175, false, false, {} },
+            { 505, ml.bgOpacity215, FluentMenuIcon::None, curBgOp > 175 && curBgOp <= 230, false, false, {} },
+            { 506, ml.bgOpacity255, FluentMenuIcon::None, curBgOp > 230, false, false, {} }
         };
         menuItems.push_back(std::move(item));
     }
 
-    // 5. History Capacity & Scrollable Viewport Submenu
+    // 5. History Capacity & Scrollable Viewport Submenu (with inline keyboard inputs for Max Items & Visible Rows)
     {
         int curMaxH = state->settings.maxHistoryItems;
         FluentMenuItem sep;
         sep.isSeparator = true;
 
+        FluentMenuItem maxHistItem;
+        maxHistItem.label = ml.maxStoredRange;
+        maxHistItem.icon  = FluentMenuIcon::History;
+        maxHistItem.inlineEditKind = 7;
+
+        FluentMenuItem visRowsItem;
+        visRowsItem.label = ml.visibleRowsRange;
+        visRowsItem.icon  = FluentMenuIcon::History;
+        visRowsItem.inlineEditKind = 8;
+
         FluentMenuItem item;
-        item.label = isVi ? L"Lịch sử & Gợi ý (Tối đa 50 mục / Cuộn 5 dòng)" : L"History & Suggestions (Up to 50 / Scroll 5)";
+        item.label = ml.historyMenu;
         item.icon  = FluentMenuIcon::History;
         item.subItems = {
-            { 401, isVi ? L"Giới hạn lưu: 10 mục" : L"Max Stored Items: 10", FluentMenuIcon::None, curMaxH == 10, false, false, {} },
-            { 402, isVi ? L"Giới hạn lưu: 30 mục (Hiển thị 5 + Cuộn)" : L"Max Stored Items: 30 (Show 5 + Scroll)", FluentMenuIcon::None, curMaxH == 30, false, false, {} },
-            { 403, isVi ? L"Giới hạn lưu: 35 mục (Mặc định)" : L"Max Stored Items: 35 (Default)", FluentMenuIcon::None, curMaxH == 35, false, false, {} },
-            { 404, isVi ? L"Giới hạn lưu: 50 mục (Tối đa)" : L"Max Stored Items: 50 (Maximum)", FluentMenuIcon::None, curMaxH == 50, false, false, {} },
-            { 405, isVi ? L"Tắt danh sách lịch sử (0)" : L"Disable History List (0)", FluentMenuIcon::None, curMaxH == 0, false, false, {} },
+            maxHistItem,
+            visRowsItem,
             sep,
-            { 406, isVi ? L"Hiển thị thời gian thực thi" : L"Show Execution Timestamp", FluentMenuIcon::None, state->settings.showTimestamp, false, false, {} },
-            { 407, isVi ? L"Gợi ý ứng dụng & Tìm kiếm ggsearch:/msesearch:" : L"App Suggestions & ggsearch:/msesearch:", FluentMenuIcon::None, state->settings.enableAppSuggestions, false, false, {} }
+            { 401, ml.maxHist10,      FluentMenuIcon::None, curMaxH == 10, false, false, {} },
+            { 402, ml.maxHist30,      FluentMenuIcon::None, curMaxH == 30, false, false, {} },
+            { 403, ml.maxHist35,      FluentMenuIcon::None, curMaxH == 35, false, false, {} },
+            { 404, ml.maxHist50,      FluentMenuIcon::None, curMaxH == 50, false, false, {} },
+            { 405, ml.maxHist0,       FluentMenuIcon::None, curMaxH == 0, false, false, {} },
+            sep,
+            { 406, ml.showTimestamp,  FluentMenuIcon::None, state->settings.showTimestamp, false, false, {} },
+            { 407, ml.appSuggestions, FluentMenuIcon::None, state->settings.enableAppSuggestions, false, false, {} }
         };
         menuItems.push_back(std::move(item));
     }
@@ -4848,16 +8463,16 @@ void OpenGearSettingsMenu(RunDialogState* state) {
     // 6. Display Language Submenu
     struct LangOption { UINT id; const wchar_t* code; const wchar_t* label; };
     static constexpr LangOption kLangOpts[] = {
-        { 600, L"auto",  L"Auto – System Default (Tự động)" },
+        { 600, L"auto",  nullptr },
         { 601, L"vi",    L"Tiếng Việt (Vietnamese)" },
-        { 602, L"en",    L"English (Tiếng Anh)" },
+        { 602, L"en",    L"English" },
         { 603, L"zh_cn", L"简体中文 (Simplified Chinese)" },
         { 604, L"zh_tw", L"繁體中文 (Traditional Chinese)" },
         { 605, L"ja",    L"日本語 (Japanese)" },
         { 606, L"ko",    L"한국어 (Korean)" },
         { 607, L"th",    L"ไทย (Thai)" },
-        { 608, L"id",    L"Bahasa Indonesia" },
-        { 609, L"ms",    L"Bahasa Melayu" },
+        { 608, L"id",    L"Bahasa Indonesia (Indonesian)" },
+        { 609, L"ms",    L"Bahasa Melayu (Malay)" },
         { 610, L"fr",    L"Français (French)" },
         { 611, L"de",    L"Deutsch (German)" },
         { 612, L"es",    L"Español (Spanish)" },
@@ -4873,10 +8488,11 @@ void OpenGearSettingsMenu(RunDialogState* state) {
     };
     {
         FluentMenuItem item;
-        item.label = isVi ? L"Ngôn ngữ hiển thị (Display Language)" : L"Display Language";
+        item.label = ml.displayLanguageMenu;
         item.icon  = FluentMenuIcon::Language;
         for (const auto& opt : kLangOpts) {
-            item.subItems.push_back({ opt.id, opt.label, FluentMenuIcon::None, state->settings.language == opt.code, false, false, {} });
+            const wchar_t* lbl = opt.label ? opt.label : ml.autoLanguage;
+            item.subItems.push_back({ opt.id, lbl, FluentMenuIcon::None, state->settings.language == opt.code, false, false, {} });
         }
         menuItems.push_back(std::move(item));
     }
@@ -4889,7 +8505,7 @@ void OpenGearSettingsMenu(RunDialogState* state) {
 
         FluentMenuItem clearItem;
         clearItem.id    = 701;
-        clearItem.label = isVi ? L"Xóa toàn bộ lịch sử đã lưu (Clear History)" : L"Clear All Stored History";
+        clearItem.label = ml.clearAllHistory;
         clearItem.icon  = FluentMenuIcon::ClearTrash;
         menuItems.push_back(std::move(clearItem));
     }
@@ -4918,19 +8534,37 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         OpenBrowseCustomBackgroundDialog(state);
         return;
     }
+    if (cmd == 310) {
+        OpenCustomSizeDialog(state);
+        return;
+    }
 
     if (cmd != 0) {
+        auto clearManualDimensions = []() {
+            Wh_SetIntValue(GetUserOverrideKey(L"customDialogWidth").c_str(), 0);
+            Wh_SetIntValue(GetUserOverrideKey(L"customBarHeight").c_str(), 0);
+            Wh_SetIntValue(GetUserOverrideKey(L"customFontSize").c_str(), 0);
+        };
         if (cmd == 101) Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass");
         else if (cmd == 102) Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"blur");
         else if (cmd == 103) Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"solid");
+        else if (cmd == 107) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), -100); }
+        else if (cmd == 108) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), -80); }
+        else if (cmd == 109) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), -50); }
+        else if (cmd == 110) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), 0); }
+        else if (cmd == 111) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), 15); }
+        else if (cmd == 112) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), 30); }
+        else if (cmd == 113) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), 55); }
+        else if (cmd == 114) { Wh_SetStringValue(GetUserOverrideKey(L"surfaceTheme").c_str(), L"glass"); Wh_SetIntValue(GetUserOverrideKey(L"glassOpacity").c_str(), 80); }
         else if (cmd == 201) Wh_SetStringValue(GetUserOverrideKey(L"colorMode").c_str(), L"auto");
         else if (cmd == 202) Wh_SetStringValue(GetUserOverrideKey(L"colorMode").c_str(), L"dark");
         else if (cmd == 203) Wh_SetStringValue(GetUserOverrideKey(L"colorMode").c_str(), L"light");
-        else if (cmd == 301) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 85);
-        else if (cmd == 302) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 90);
-        else if (cmd == 303) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 100);
-        else if (cmd == 304) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 110);
-        else if (cmd == 305) Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 120);
+        else if (cmd == 301) { clearManualDimensions(); Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 85); }
+        else if (cmd == 302) { clearManualDimensions(); Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 90); }
+        else if (cmd == 303) { clearManualDimensions(); Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 100); }
+        else if (cmd == 304) { clearManualDimensions(); Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 110); }
+        else if (cmd == 305) { clearManualDimensions(); Wh_SetIntValue(GetUserOverrideKey(L"uiScalePercent").c_str(), 120); }
+        else if (cmd == 311) { clearManualDimensions(); }
         else if (cmd == 350) Wh_SetIntValue(GetUserOverrideKey(L"minimalMode").c_str(), state->settings.minimalMode ? 0 : 1);
         else if (cmd == 401) Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), 10);
         else if (cmd == 402) Wh_SetIntValue(GetUserOverrideKey(L"maxHistoryItems").c_str(), 30);
@@ -4993,8 +8627,9 @@ void UpdateDialogEditFont(RunDialogState* state) {
     if (state->hFontEditCtl) {
         DeleteObject(state->hFontEditCtl);
     }
+    int fontPx = (int)std::round(GetFontSizeSF(13.5f, state));
     state->hFontEditCtl = CreateFontW(
-        -DpiScaleS(13, state), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        -fontPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
@@ -5160,6 +8795,23 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
             DeleteObject(state->hFontEditCtl);
             state->hFontEditCtl = nullptr;
         }
+        if (state->pCachedRT) {
+            state->pCachedRT->Release();
+            state->pCachedRT = nullptr;
+        }
+        if (state->hCachedMemDC) {
+            if (state->hOldCachedBmp) {
+                SelectObject(state->hCachedMemDC, state->hOldCachedBmp);
+                state->hOldCachedBmp = nullptr;
+            }
+            if (state->hCachedBmp) {
+                DeleteObject(state->hCachedBmp);
+                state->hCachedBmp = nullptr;
+            }
+            DeleteDC(state->hCachedMemDC);
+            state->hCachedMemDC = nullptr;
+        }
+        state->cachedDibPixels = nullptr;
         if (state->hRunIcon) {
             DestroyIcon(state->hRunIcon);
             state->hRunIcon = nullptr;
@@ -5300,20 +8952,29 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             break;
         }
 
+        case WM_EXITSIZEMOVE: {
+            if (state && !IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass &&
+                state->settings.colorMode == ColorMode::Auto) {
+                bool newSample = SampleBackdropLuminanceFromSnap(
+                    state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
+                if (newSample != state->backdropLightSample) {
+                    state->backdropLightSample = newSample;
+                    ApplyWindowAppearance(hWnd, state);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+            }
+            break;
+        }
+
         case WM_WINDOWPOSCHANGED: {
             auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
             if (wp && state && !IsIconic(hWnd) && !(wp->flags & SWP_NOMOVE)) {
                 if (wp->x > -10000 && wp->y > -10000) {
                     state->normalX = wp->x;
                     state->normalY = wp->y;
-                    if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
-                        bool newSample = SampleBackdropLuminanceIsLight(
-                            state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, true, state->backdropLightSample);
-                        if (newSample != state->backdropLightSample) {
-                            state->backdropLightSample = newSample;
-                            ApplyWindowAppearance(hWnd, state);
-                            InvalidateRect(hWnd, nullptr, FALSE);
-                        }
+                    if (state->effectiveSurface == SurfaceTheme::Glass) {
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        UpdateWindow(hWnd);
                     }
                 }
             }
@@ -5346,14 +9007,8 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 return 0;
             }
             if (wParam == kTimerLuminance && state) {
-                if (!IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
-                    bool newSample = SampleBackdropLuminanceIsLight(
-                        state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, true, state->backdropLightSample);
-                    if (newSample != state->backdropLightSample) {
-                        state->backdropLightSample = newSample;
-                        ApplyWindowAppearance(hWnd, state);
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                    }
+                if (!IsIconic(hWnd) && state->effectiveSurface == SurfaceTheme::Glass) {
+                    CheckAndUpdateBackdropInRealtime(hWnd, state, false);
                 }
                 return 0;
             }
@@ -5441,6 +9096,12 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     SetFocus(state->hModernEdit);
                 }
             }
+            if (LOWORD(wParam) == WA_INACTIVE && state) {
+                state->windowDragging = false;
+            }
+            if (state && state->effectiveSurface == SurfaceTheme::Glass && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
+                CheckAndUpdateBackdropInRealtime(hWnd, state, false);
+            }
             if (IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
@@ -5450,8 +9111,48 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_ERASEBKGND:
             return 1;
 
+        case WM_CAPTURECHANGED: {
+            if (state && (HWND)lParam != hWnd) {
+                if (state->windowDragging) {
+                    state->windowDragging = false;
+                    if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
+                        bool newSample = SampleBackdropLuminanceFromSnap(
+                            state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
+                        if (newSample != state->backdropLightSample) {
+                            state->backdropLightSample = newSample;
+                            ApplyWindowAppearance(hWnd, state);
+                            InvalidateRect(hWnd, nullptr, FALSE);
+                        }
+                    }
+                }
+                state->scrollbarDragging = false;
+            }
+            break;
+        }
+
         case WM_MOUSEMOVE: {
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+
+            if (state->windowDragging) {
+                if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
+                    state->windowDragging = false;
+                    ReleaseCapture();
+                    return 0;
+                }
+                POINT ptScreen = {};
+                GetCursorPos(&ptScreen);
+                int newX = state->windowDragStartX + (ptScreen.x - state->windowDragStartCursor.x);
+                int newY = state->windowDragStartY + (ptScreen.y - state->windowDragStartCursor.y);
+                if (newX != state->normalX || newY != state->normalY) {
+                    state->normalX = newX;
+                    state->normalY = newY;
+                    SetWindowPos(hWnd, nullptr, newX, newY, 0, 0,
+                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    UpdateWindow(hWnd);
+                }
+                return 0;
+            }
 
             if (state->scrollbarDragging && HasVerticalScrollbar(state)) {
                 RECT rcTrack = GetScrollbarTrackRect(state);
@@ -5596,14 +9297,32 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 return 0;
             }
 
-            ReleaseCapture();
-            SendMessageW(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            state->windowDragging = true;
+            GetCursorPos(&state->windowDragStartCursor);
+            state->windowDragStartX = state->normalX;
+            state->windowDragStartY = state->normalY;
+            SetCapture(hWnd);
             return 0;
         }
 
         case WM_LBUTTONUP: {
             POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
             ActionButtonsLayout layout = GetActionButtonsLayout(state);
+
+            if (state->windowDragging) {
+                state->windowDragging = false;
+                ReleaseCapture();
+                if (state->effectiveSurface == SurfaceTheme::Glass && state->settings.colorMode == ColorMode::Auto) {
+                    bool newSample = SampleBackdropLuminanceFromSnap(
+                        state->normalX, state->normalY, GetDlgWidth(state), state->totalHeight, state->backdropLightSample);
+                    if (newSample != state->backdropLightSample) {
+                        state->backdropLightSample = newSample;
+                        ApplyWindowAppearance(hWnd, state);
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                    }
+                }
+                return 0;
+            }
 
             if (state->scrollbarDragging) {
                 state->scrollbarDragging = false;
@@ -5684,39 +9403,98 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             ActionButtonsLayout layout = GetActionButtonsLayout(state);
 
             if (w > 0 && h > 0) {
-                HDC hMemDC = CreateCompatibleDC(hdc);
-                BITMAPINFO bmi = {};
-                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                bmi.bmiHeader.biWidth = w;
-                bmi.bmiHeader.biHeight = -h;
-                bmi.bmiHeader.biPlanes = 1;
-                bmi.bmiHeader.biBitCount = 32;
-                bmi.bmiHeader.biCompression = BI_RGB;
+                if (!state->hCachedMemDC || !state->hCachedBmp || !state->pCachedRT ||
+                    state->cachedDibW != w || state->cachedDibH != h) {
+                    if (state->pCachedRT) {
+                        state->pCachedRT->Release();
+                        state->pCachedRT = nullptr;
+                    }
+                    if (state->hCachedMemDC) {
+                        if (state->hOldCachedBmp) {
+                            SelectObject(state->hCachedMemDC, state->hOldCachedBmp);
+                            state->hOldCachedBmp = nullptr;
+                        }
+                        if (state->hCachedBmp) {
+                            DeleteObject(state->hCachedBmp);
+                            state->hCachedBmp = nullptr;
+                        }
+                        DeleteDC(state->hCachedMemDC);
+                        state->hCachedMemDC = nullptr;
+                    }
+                    state->cachedDibPixels = nullptr;
 
-                DWORD* pixels = nullptr;
-                HBITMAP hBmp = CreateDIBSection(hMemDC, &bmi, DIB_RGB_COLORS, (void**)&pixels, nullptr, 0);
-                if (hBmp && pixels) {
-                    HGDIOBJ oldBmp = SelectObject(hMemDC, hBmp);
+                    state->hCachedMemDC = CreateCompatibleDC(hdc);
+                    if (state->hCachedMemDC) {
+                        BITMAPINFO bmi = {};
+                        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                        bmi.bmiHeader.biWidth = w;
+                        bmi.bmiHeader.biHeight = -h;
+                        bmi.bmiHeader.biPlanes = 1;
+                        bmi.bmiHeader.biBitCount = 32;
+                        bmi.bmiHeader.biCompression = BI_RGB;
 
-                    D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
-                        D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-                        96.0f, 96.0f);
+                        state->hCachedBmp = CreateDIBSection(state->hCachedMemDC, &bmi, DIB_RGB_COLORS,
+                                                             (void**)&state->cachedDibPixels, nullptr, 0);
+                        if (state->hCachedBmp && state->cachedDibPixels) {
+                            state->hOldCachedBmp = SelectObject(state->hCachedMemDC, state->hCachedBmp);
+                            D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+                                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                                96.0f, 96.0f);
+                            if (SUCCEEDED(g_pD2DFactory->CreateDCRenderTarget(&rtProps, &state->pCachedRT)) && state->pCachedRT) {
+                                state->pCachedRT->BindDC(state->hCachedMemDC, &rcClient);
+                                state->cachedDibW = w;
+                                state->cachedDibH = h;
+                            }
+                        }
+                    }
+                }
 
-                    ID2D1DCRenderTarget* pRT = nullptr;
-                    if (SUCCEEDED(g_pD2DFactory->CreateDCRenderTarget(&rtProps, &pRT)) && pRT) {
+                HDC hMemDC = state->hCachedMemDC;
+                ID2D1DCRenderTarget* pRT = state->pCachedRT;
+                if (hMemDC && state->hCachedBmp && state->cachedDibPixels) {
+                    if (pRT) {
                         pRT->BindDC(hMemDC, &rcClient);
                         pRT->BeginDraw();
                         pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
                         pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
 
-                        // 1. Paint Surface Backdrop (Liquid Glass / Windows Blur / Solid / High Contrast)
+                        // 1. Check Custom Background Media (Static Image / Animated GIF / MP4 Video)
+                        const BYTE* bgPixels = nullptr;
+                        if (state->pVideoReader && !state->videoFrameBuffer.empty()) {
+                            bgPixels = state->videoFrameBuffer.data();
+                        } else if (!state->bgFrames.empty()) {
+                            size_t idx = state->bgCurrentFrame % state->bgFrames.size();
+                            bgPixels = state->bgFrames[idx].pixels.data();
+                        }
+                        bool hasCustomBg = (bgPixels != nullptr && state->bgFrameW > 0 && state->bgFrameH > 0 && !highContrast);
+                        if (hasCustomBg && state->customBgLumValid) {
+                            // Text & UI contrast adapts directly to the custom background media
+                            isLight = state->customBgIsLight;
+                            state->isLightMode = isLight;
+                        }
+
+                        // 1a. Paint Surface Backdrop (Liquid Glass / Windows Blur / Solid / High Contrast)
                         if (highContrast) {
                             COLORREF winBg = GetSysColor(COLOR_WINDOW);
                             pRT->Clear(D2D1::ColorF(GetRValue(winBg) / 255.0f, GetGValue(winBg) / 255.0f, GetBValue(winBg) / 255.0f, 1.0f));
+                        } else if (hasCustomBg) {
+                            // Solid opaque base under custom background so Liquid Glass / Windows Blur never bleeds through
+                            pRT->Clear(isLight ? D2D1::ColorF(0.95f, 0.95f, 0.96f, 1.0f)
+                                               : D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.0f));
                         } else if (surface == SurfaceTheme::Glass) {
-                            pRT->Clear(isLight ? D2D1::ColorF(0.95f, 0.96f, 0.98f, 0.34f)
-                                               : D2D1::ColorF(0.07f, 0.07f, 0.09f, 0.32f));
+                            // True iOS 26 Liquid Glass (-100 to 100):
+                            // At 0: 0.02f (exact Clear default) + optical curved-edge lens refraction.
+                            // Above 0: increases smoked glass tint up to 0.50f.
+                            // Below 0 (-1 to -100): renders full iOS 26 Optical Liquid Glass (Gaussian blur +
+                            // 3D Snell's-law curved-edge refraction + RGB prism dispersion + vibrancy boost)!
+                            int glassPct = std::clamp(state->settings.glassOpacity, -100, 100);
+                            float glassAlpha = (glassPct >= 0)
+                                ? (0.02f + (glassPct / 100.0f) * 0.48f)
+                                : 0.01f;
+                            pRT->Clear(isLight ? D2D1::ColorF(0.92f, 0.94f, 0.97f, glassAlpha)
+                                               : D2D1::ColorF(0.06f, 0.08f, 0.11f, glassAlpha));
+                            DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, effectiveDpi, glassPct, isLight, false, 0);
                         } else if (surface == SurfaceTheme::Blur) {
                             pRT->Clear(isLight ? D2D1::ColorF(0.96f, 0.97f, 0.99f, 0.20f)
                                                : D2D1::ColorF(0.08f, 0.08f, 0.10f, 0.22f));
@@ -5725,21 +9503,13 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                                : D2D1::ColorF(0.12f, 0.12f, 0.15f, 1.0f));
                         }
 
-                        // 1b. Paint Custom Background Image / Animated GIF / MP4 Video Frame (aspect-fill)
-                        const BYTE* bgPixels = nullptr;
-                        if (state->pVideoReader && !state->videoFrameBuffer.empty()) {
-                            bgPixels = state->videoFrameBuffer.data();
-                        } else if (!state->bgFrames.empty()) {
-                            size_t idx = state->bgCurrentFrame % state->bgFrames.size();
-                            bgPixels = state->bgFrames[idx].pixels.data();
-                        }
-                        if (bgPixels && state->bgFrameW > 0 && state->bgFrameH > 0 && !highContrast) {
+                        // 1b. Paint Custom Background Image / Animated GIF / MP4 Video Frame directly (no theme veil wash-out!)
+                        if (hasCustomBg) {
                             D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
                                 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
                             ID2D1Bitmap* pBgBitmap = nullptr;
                             if (SUCCEEDED(pRT->CreateBitmap(D2D1::SizeU(state->bgFrameW, state->bgFrameH),
                                                             bgPixels, state->bgFrameW * 4, &bmpProps, &pBgBitmap)) && pBgBitmap) {
-                                // Center-crop (aspect-fill) source rect so the media fills the dialog without stretching
                                 float dstAspect = (float)w / (float)h;
                                 float srcAspect = (float)state->bgFrameW / (float)state->bgFrameH;
                                 D2D1_RECT_F srcRect = D2D1::RectF(0.0f, 0.0f, (float)state->bgFrameW, (float)state->bgFrameH);
@@ -5757,70 +9527,52 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                 pRT->DrawBitmap(pBgBitmap, dstRect, mediaOpacity,
                                                 D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, srcRect);
                                 pBgBitmap->Release();
-
-                                // Subtle contrast veil over custom media so text and icons stay legible
-                                ID2D1SolidColorBrush* pVeilBr = nullptr;
-                                D2D1_COLOR_F veilCol = isLight
-                                    ? D2D1::ColorF(0.96f, 0.97f, 0.99f, 0.24f * mediaOpacity)
-                                    : D2D1::ColorF(0.05f, 0.06f, 0.08f, 0.32f * mediaOpacity);
-                                if (SUCCEEDED(pRT->CreateSolidColorBrush(veilCol, &pVeilBr))) {
-                                    pRT->FillRectangle(dstRect, pVeilBr);
-                                    pVeilBr->Release();
-                                }
                             }
+                        } else if (!highContrast && surface == SurfaceTheme::Glass) {
+                            // Liquid Glass 4-stop diagonal sheen + radial specular highlight from live-update
+                            DrawD2DPointerSpecularGlow(pRT, state->mousePt, state->hasMousePt, w, h, effectiveDpi, isLight);
                         }
 
-                        if (!highContrast && surface == SurfaceTheme::Glass) {
-                            D2D1_GRADIENT_STOP sheenStops[3] = {
-                                { 0.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, isLight ? 0.16f : 0.10f) },
-                                { 0.45f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.01f) },
-                                { 1.00f, D2D1::ColorF(1.0f, 1.0f, 1.0f, isLight ? 0.09f : 0.06f) }
-                            };
-                            ID2D1GradientStopCollection* pSheenStops = nullptr;
-                            if (SUCCEEDED(pRT->CreateGradientStopCollection(sheenStops, 3, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &pSheenStops))) {
-                                ID2D1LinearGradientBrush* pSheenBr = nullptr;
-                                D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gp = D2D1::LinearGradientBrushProperties(
-                                    D2D1::Point2F(0.0f, 0.0f), D2D1::Point2F((float)w, (float)h));
-                                if (SUCCEEDED(pRT->CreateLinearGradientBrush(gp, pSheenStops, &pSheenBr))) {
-                                    pRT->FillRectangle(D2D1::RectF(0.0f, 0.0f, (float)w, (float)h), pSheenBr);
-                                    pSheenBr->Release();
-                                }
-                                pSheenStops->Release();
-                            }
-
-                            if (state->hasMousePt) {
-                                DrawD2DPointerSpecularGlow(pRT, state->mousePt, w, h, effectiveDpi, isLight);
-                            }
-                        }
-
-                        // 2. Create Brushes & Round-Cap Stroke Style
-                        D2D1_COLOR_F colPrimary, colSecondary, colTime, colHint;
+                        // 2. Create Brushes & Round-Cap Stroke Style (adapting to custom background luminance when active)
+                        D2D1_COLOR_F colPrimary, colSecondary, colTime, colHint, colTextShadow;
                         if (highContrast) {
                             COLORREF fg = GetSysColor(COLOR_WINDOWTEXT);
                             colPrimary = colSecondary = colTime = colHint =
                                 D2D1::ColorF(GetRValue(fg) / 255.0f, GetGValue(fg) / 255.0f, GetBValue(fg) / 255.0f, 1.0f);
+                            colTextShadow = D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f);
+                        } else if (hasCustomBg) {
+                            colPrimary    = isLight ? D2D1::ColorF(0.04f, 0.05f, 0.08f, 1.00f) : D2D1::ColorF(0.99f, 0.99f, 1.00f, 1.00f);
+                            colSecondary  = isLight ? D2D1::ColorF(0.10f, 0.12f, 0.16f, 0.88f) : D2D1::ColorF(0.95f, 0.96f, 0.99f, 0.86f);
+                            colTime       = isLight ? D2D1::ColorF(0.12f, 0.14f, 0.18f, 0.84f) : D2D1::ColorF(0.93f, 0.95f, 0.98f, 0.82f);
+                            colHint       = isLight ? D2D1::ColorF(0.14f, 0.16f, 0.20f, 0.76f) : D2D1::ColorF(0.92f, 0.94f, 0.98f, 0.74f);
+                            colTextShadow = isLight ? D2D1::ColorF(1.00f, 1.00f, 1.00f, 0.72f) : D2D1::ColorF(0.00f, 0.00f, 0.00f, 0.78f);
                         } else {
-                            colPrimary   = isLight ? D2D1::ColorF(0.08f, 0.08f, 0.10f, 1.00f) : D2D1::ColorF(0.96f, 0.96f, 0.97f, 1.00f);
-                            colSecondary = isLight ? D2D1::ColorF(0.15f, 0.16f, 0.20f, 0.72f) : D2D1::ColorF(0.94f, 0.94f, 0.96f, 0.68f);
-                            colTime      = isLight ? D2D1::ColorF(0.18f, 0.20f, 0.24f, 0.66f) : D2D1::ColorF(0.92f, 0.93f, 0.96f, 0.64f);
-                            colHint      = isLight ? D2D1::ColorF(0.20f, 0.22f, 0.26f, 0.56f) : D2D1::ColorF(0.90f, 0.91f, 0.95f, 0.54f);
+                            colPrimary    = isLight ? D2D1::ColorF(0.06f, 0.07f, 0.10f, 1.00f) : D2D1::ColorF(0.98f, 0.99f, 1.00f, 1.00f);
+                            colSecondary  = isLight ? D2D1::ColorF(0.16f, 0.18f, 0.24f, 0.88f) : D2D1::ColorF(0.92f, 0.94f, 0.98f, 0.78f);
+                            colTime       = isLight ? D2D1::ColorF(0.18f, 0.20f, 0.26f, 0.82f) : D2D1::ColorF(0.90f, 0.93f, 0.97f, 0.74f);
+                            colHint       = isLight ? D2D1::ColorF(0.24f, 0.27f, 0.34f, 0.72f) : D2D1::ColorF(0.88f, 0.91f, 0.96f, 0.68f);
+                            colTextShadow = (surface == SurfaceTheme::Glass)
+                                ? (isLight ? D2D1::ColorF(0.00f, 0.00f, 0.00f, 0.00f) : D2D1::ColorF(0.00f, 0.00f, 0.00f, 0.62f))
+                                : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f);
                         }
 
                         ID2D1SolidColorBrush* pBrPrimary = nullptr;
                         ID2D1SolidColorBrush* pBrSecondary = nullptr;
                         ID2D1SolidColorBrush* pBrTime = nullptr;
                         ID2D1SolidColorBrush* pBrHint = nullptr;
+                        ID2D1SolidColorBrush* pBrShadow = nullptr;
                         pRT->CreateSolidColorBrush(colPrimary, &pBrPrimary);
                         pRT->CreateSolidColorBrush(colSecondary, &pBrSecondary);
                         pRT->CreateSolidColorBrush(colTime, &pBrTime);
                         pRT->CreateSolidColorBrush(colHint, &pBrHint);
+                        pRT->CreateSolidColorBrush(colTextShadow, &pBrShadow);
 
                         ID2D1StrokeStyle* pRoundStroke = nullptr;
                         D2D1_STROKE_STYLE_PROPERTIES strokeProps = D2D1::StrokeStyleProperties(
                             D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
                         g_pD2DFactory->CreateStrokeStyle(strokeProps, nullptr, 0, &pRoundStroke);
 
-                        // 3. Create DirectWrite Text Formats
+                        // 3. Create DirectWrite Text Formats (respecting customFontSize when set)
                         IDWriteTextFormat* pFmtRow = nullptr;
                         IDWriteTextFormat* pFmtTime = nullptr;
                         IDWriteTextFormat* pFmtInput = nullptr;
@@ -5828,16 +9580,16 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                         g_pDWriteFactory->CreateTextFormat(
                             L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                            DWRITE_FONT_STRETCH_NORMAL, DpiScaleSF(13.5f, state), L"", &pFmtRow);
+                            DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(13.5f, state), L"", &pFmtRow);
                         g_pDWriteFactory->CreateTextFormat(
                             L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                            DWRITE_FONT_STRETCH_NORMAL, DpiScaleSF(12.0f, state), L"", &pFmtTime);
+                            DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(12.0f, state), L"", &pFmtTime);
                         g_pDWriteFactory->CreateTextFormat(
                             L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                            DWRITE_FONT_STRETCH_NORMAL, DpiScaleSF(13.5f, state), L"", &pFmtInput);
+                            DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(13.5f, state), L"", &pFmtInput);
                         g_pDWriteFactory->CreateTextFormat(
                             L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                            DWRITE_FONT_STRETCH_NORMAL, DpiScaleSF(13.0f, state), L"", &pFmtBtn);
+                            DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(13.0f, state), L"", &pFmtBtn);
 
                         if (pFmtRow) {
                             pFmtRow->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -5886,10 +9638,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                 float padX = DpiScaleSF(10.0f, state);
                                 float padY = DpiScaleSF(2.0f, state);
                                 D2D1_RECT_F rcPill = D2D1::RectF(padX, rowTop + padY, (float)w - padX - sbReserve, rowTop + rowH - padY);
-                                if (surface == SurfaceTheme::Glass) {
+                                if (!hasCustomBg && surface == SurfaceTheme::Glass) {
                                     D2D1_COLOR_F rowTint = isLight
-                                        ? D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.26f : 0.14f)
-                                        : D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.16f : 0.08f);
+                                        ? D2D1::ColorF(0.0f, 0.0f, 0.0f, isPressed ? 0.14f : (isSelected ? 0.09f : 0.055f))
+                                        : D2D1::ColorF(1.0f, 1.0f, 1.0f, isPressed ? 0.26f : 0.14f);
                                     DrawD2DGlassButton(pRT, rcPill, pillRadius, effectiveDpi, rowTint, isHovered, isPressed, isLight);
                                 } else {
                                     ID2D1SolidColorBrush* pHlBr = nullptr;
@@ -5915,6 +9667,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                     DWRITE_TEXT_METRICS tm = {};
                                     pTimeLayout->GetMetrics(&tm);
                                     float timeRight = (float)w - DpiScaleSF(42.0f, state) - sbReserve;
+                                    if ((hasCustomBg || surface == SurfaceTheme::Glass) && pBrShadow) {
+                                        float shOff = DpiScaleF(1.0f, dpi);
+                                        pRT->DrawTextLayout(D2D1::Point2F(timeRight - DpiScaleSF(160.0f, state) + shOff, rowTop + shOff),
+                                                            pTimeLayout, pBrShadow);
+                                    }
                                     pRT->DrawTextLayout(D2D1::Point2F(timeRight - DpiScaleSF(160.0f, state), rowTop),
                                                         pTimeLayout, pBrTime);
                                     rightLimit = timeRight - tm.widthIncludingTrailingWhitespace - DpiScaleSF(12.0f, state);
@@ -5944,6 +9701,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                     DWRITE_TEXT_RANGE cmdRange = { 0, (UINT32)cmdStr.size() };
                                     pRowLayout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD, cmdRange);
 
+                                    if ((hasCustomBg || surface == SurfaceTheme::Glass) && pBrShadow) {
+                                        float shOff = DpiScaleF(1.0f, dpi);
+                                        pRT->DrawTextLayout(D2D1::Point2F(textLeftX + shOff, rowTop + shOff),
+                                                            pRowLayout, pBrShadow, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                                    }
                                     if (fullStr.size() > cmdStr.size() && pBrSecondary) {
                                         DWRITE_TEXT_RANGE appRange = {
                                             (UINT32)cmdStr.size(),
@@ -5989,11 +9751,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                             }
                         }
 
-                        // Subtle divider line between history/suggestion list and input bar
+                        // Subtle divider line + iOS 26 Liquid Glass input capsule around the command input box
                         if (state->topAreaHeight > 0) {
                             ID2D1SolidColorBrush* pDivBr = nullptr;
                             D2D1_COLOR_F divCol = isLight ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f)
-                                                          : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f);
+                                                          : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f);
                             if (SUCCEEDED(pRT->CreateSolidColorBrush(divCol, &pDivBr))) {
                                 float divX = DpiScaleSF(12.0f, state);
                                 pRT->DrawLine(D2D1::Point2F(divX, (float)state->topAreaHeight),
@@ -6001,6 +9763,17 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                               pDivBr, DpiScaleSF(1.0f, state));
                                 pDivBr->Release();
                             }
+                        }
+                        if (!hasCustomBg && surface == SurfaceTheme::Glass && !highContrast) {
+                            D2D1_RECT_F rcInputCapsule = D2D1::RectF(
+                                DpiScaleSF(10.0f, state),
+                                (float)layout.rcEdit.top - DpiScaleSF(2.0f, state),
+                                (float)layout.rcEdit.right + DpiScaleSF(6.0f, state),
+                                (float)layout.rcEdit.bottom + DpiScaleSF(2.0f, state));
+                            D2D1_COLOR_F capTint = isLight
+                                ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.045f)
+                                : D2D1::ColorF(0.85f, 0.94f, 1.0f, 0.07f);
+                            DrawD2DGlassButton(pRT, rcInputCapsule, pillRadius, effectiveDpi, capTint, false, false, isLight);
                         }
 
                         // 5. Draw Input Box with DirectWrite HitTestTextPosition for caret & selection placement
@@ -6030,6 +9803,12 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                         if (textLen == 0) {
                             if (pFmtInput && pBrHint) {
+                                if ((hasCustomBg || surface == SurfaceTheme::Glass) && pBrShadow) {
+                                    float shOff = DpiScaleF(1.0f, dpi);
+                                    D2D1_RECT_F rcSh = D2D1::RectF(rcEdit.left + shOff, rcEdit.top + shOff, rcEdit.right + shOff, rcEdit.bottom + shOff);
+                                    pRT->DrawText(state->i18n.placeholder, (UINT32)wcslen(state->i18n.placeholder),
+                                                  pFmtInput, rcSh, pBrShadow);
+                                }
                                 pRT->DrawText(state->i18n.placeholder, (UINT32)wcslen(state->i18n.placeholder),
                                               pFmtInput, rcEdit, pBrHint);
                             }
@@ -6068,6 +9847,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                     }
                                 }
 
+                                if ((hasCustomBg || surface == SurfaceTheme::Glass) && pBrShadow) {
+                                    float shOff = DpiScaleF(1.0f, dpi);
+                                    pRT->DrawTextLayout(D2D1::Point2F(rcEdit.left - scrollOffsetX + shOff, rcEdit.top + shOff),
+                                                        pInputLayout, pBrShadow);
+                                }
                                 pRT->DrawTextLayout(D2D1::Point2F(rcEdit.left - scrollOffsetX, rcEdit.top),
                                                     pInputLayout, pBrPrimary);
                                 pInputLayout->Release();
@@ -6095,51 +9879,66 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                                             (float)rWin.right, (float)rWin.bottom);
                             D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(rcBtn, pillRadius, pillRadius);
 
-                            D2D1_COLOR_F fillCol = {};
-                            D2D1_COLOR_F borderCol = {};
                             D2D1_COLOR_F contentCol = {};
 
-                            if (kind == ActionBtnKind::Browse || kind == ActionBtnKind::Gear) {
-                                if (isLight) {
-                                    fillCol = D2D1::ColorF(0.87f, 0.88f, 0.91f, pressed ? 0.96f : (hovered ? 0.92f : 0.84f));
-                                    borderCol = D2D1::ColorF(0.0f, 0.0f, 0.0f, hovered ? 0.24f : 0.14f);
-                                    contentCol = D2D1::ColorF(0.10f, 0.11f, 0.14f, 1.0f);
+                            if (!hasCustomBg && surface == SurfaceTheme::Glass && !highContrast) {
+                                // True Liquid Glass buttons with subtle crystal tints and refractive rims
+                                D2D1_COLOR_F glassTint = {};
+                                if (kind == ActionBtnKind::Browse || kind == ActionBtnKind::Gear) {
+                                    glassTint = isLight
+                                        ? D2D1::ColorF(0.06f, 0.08f, 0.14f, pressed ? 0.16f : (hovered ? 0.10f : 0.05f))
+                                        : D2D1::ColorF(0.85f, 0.92f, 1.00f, pressed ? 0.22f : (hovered ? 0.14f : 0.07f));
+                                } else if (kind == ActionBtnKind::Run) {
+                                    glassTint = isLight
+                                        ? D2D1::ColorF(0.06f, 0.45f, 0.90f, pressed ? 0.36f : (hovered ? 0.26f : 0.16f))
+                                        : D2D1::ColorF(0.12f, 0.54f, 0.98f, pressed ? 0.44f : (hovered ? 0.34f : 0.22f));
                                 } else {
-                                    fillCol = D2D1::ColorF(0.17f, 0.18f, 0.22f, pressed ? 0.94f : (hovered ? 0.90f : 0.84f));
-                                    borderCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, hovered ? 0.26f : 0.15f);
-                                    contentCol = D2D1::ColorF(0.98f, 0.98f, 0.99f, 1.0f);
+                                    glassTint = isLight
+                                        ? D2D1::ColorF(0.82f, 0.16f, 0.26f, pressed ? 0.32f : (hovered ? 0.22f : 0.13f))
+                                        : D2D1::ColorF(0.92f, 0.22f, 0.32f, pressed ? 0.40f : (hovered ? 0.30f : 0.18f));
                                 }
-                            } else if (kind == ActionBtnKind::Run) {
-                                fillCol = pressed
-                                    ? D2D1::ColorF(0.07f, 0.40f, 0.74f, 0.96f)
-                                    : (hovered ? D2D1::ColorF(0.14f, 0.52f, 0.89f, 0.98f)
-                                               : D2D1::ColorF(0.09f, 0.47f, 0.83f, 0.95f));
-                                borderCol = D2D1::ColorF(0.38f, 0.68f, 0.98f, hovered ? 0.65f : 0.40f);
-                                contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
+                                DrawD2DGlassButton(pRT, rcBtn, pillRadius, effectiveDpi, glassTint, hovered, pressed, isLight);
+                                contentCol = isLight
+                                    ? D2D1::ColorF(0.05f, 0.06f, 0.10f, pressed ? 0.86f : 1.0f)
+                                    : D2D1::ColorF(0.99f, 0.99f, 1.00f, pressed ? 0.86f : 1.0f);
                             } else {
-                                // Exit button: dark crimson fill
-                                fillCol = pressed
-                                    ? D2D1::ColorF(0.25f, 0.11f, 0.14f, 0.94f)
-                                    : (hovered ? D2D1::ColorF(0.39f, 0.16f, 0.21f, 0.96f)
-                                               : D2D1::ColorF(0.31f, 0.13f, 0.17f, 0.90f));
-                                borderCol = D2D1::ColorF(0.66f, 0.28f, 0.34f, hovered ? 0.62f : 0.40f);
-                                contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
-                            }
+                                D2D1_COLOR_F fillCol = {};
+                                D2D1_COLOR_F borderCol = {};
+                                if (kind == ActionBtnKind::Browse || kind == ActionBtnKind::Gear) {
+                                    fillCol = D2D1::ColorF(0.17f, 0.18f, 0.22f, pressed ? 0.95f : (hovered ? 0.91f : 0.86f));
+                                    borderCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, hovered ? 0.28f : 0.16f);
+                                    contentCol = D2D1::ColorF(0.98f, 0.98f, 0.99f, 1.0f);
+                                } else if (kind == ActionBtnKind::Run) {
+                                    fillCol = pressed
+                                        ? D2D1::ColorF(0.07f, 0.40f, 0.74f, 0.96f)
+                                        : (hovered ? D2D1::ColorF(0.14f, 0.52f, 0.89f, 0.98f)
+                                                   : D2D1::ColorF(0.09f, 0.47f, 0.83f, 0.95f));
+                                    borderCol = D2D1::ColorF(0.38f, 0.68f, 0.98f, hovered ? 0.65f : 0.40f);
+                                    contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
+                                } else {
+                                    fillCol = pressed
+                                        ? D2D1::ColorF(0.25f, 0.11f, 0.14f, 0.94f)
+                                        : (hovered ? D2D1::ColorF(0.39f, 0.16f, 0.21f, 0.96f)
+                                                   : D2D1::ColorF(0.31f, 0.13f, 0.17f, 0.90f));
+                                    borderCol = D2D1::ColorF(0.66f, 0.28f, 0.34f, hovered ? 0.62f : 0.40f);
+                                    contentCol = D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f);
+                                }
 
-                            if (pressed) {
-                                contentCol.a *= 0.86f;
-                            }
+                                if (pressed) {
+                                    contentCol.a *= 0.86f;
+                                }
 
-                            ID2D1SolidColorBrush* pFillBr = nullptr;
-                            if (SUCCEEDED(pRT->CreateSolidColorBrush(fillCol, &pFillBr))) {
-                                pRT->FillRoundedRectangle(rr, pFillBr);
-                                pFillBr->Release();
-                            }
+                                ID2D1SolidColorBrush* pFillBr = nullptr;
+                                if (SUCCEEDED(pRT->CreateSolidColorBrush(fillCol, &pFillBr))) {
+                                    pRT->FillRoundedRectangle(rr, pFillBr);
+                                    pFillBr->Release();
+                                }
 
-                            ID2D1SolidColorBrush* pBorderBr = nullptr;
-                            if (SUCCEEDED(pRT->CreateSolidColorBrush(borderCol, &pBorderBr))) {
-                                pRT->DrawRoundedRectangle(rr, pBorderBr, DpiScaleSF(1.0f, state));
-                                pBorderBr->Release();
+                                ID2D1SolidColorBrush* pBorderBr = nullptr;
+                                if (SUCCEEDED(pRT->CreateSolidColorBrush(borderCol, &pBorderBr))) {
+                                    pRT->DrawRoundedRectangle(rr, pBorderBr, DpiScaleSF(1.0f, state));
+                                    pBorderBr->Release();
+                                }
                             }
 
                             ID2D1SolidColorBrush* pContentBr = nullptr;
@@ -6186,12 +9985,12 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         drawActionButton(layout.rcGear, nullptr, ActionBtnKind::Gear,
                                          state->gearHovered, state->gearPressed);
 
-                        // 7. Draw Outer Window Liquid Glass Dual Rim
-                        if (surface == SurfaceTheme::Glass && !highContrast) {
+                        // 7. Draw Outer Window Liquid Glass Dual Rim (only when custom background is NOT active)
+                        if (!hasCustomBg && surface == SurfaceTheme::Glass && !highContrast) {
                             float rimInset = DpiScaleSF(0.6f, state);
                             D2D1_RECT_F rcWindowRim = D2D1::RectF(rimInset, rimInset,
                                                                   (float)w - rimInset, (float)h - rimInset);
-                            DrawD2DGlassRim(pRT, rcWindowRim, DpiScaleSF(8.0f, state), effectiveDpi, isLight, 1.3f);
+                            DrawD2DGlassRim(pRT, rcWindowRim, DpiScaleSF(8.0f, state), effectiveDpi, isLight, 1.35f);
                         }
 
                         pRT->EndDraw();
@@ -6201,11 +10000,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         if (pFmtTime)  pFmtTime->Release();
                         if (pFmtRow)   pFmtRow->Release();
                         if (pRoundStroke) pRoundStroke->Release();
+                        if (pBrShadow)    pBrShadow->Release();
                         if (pBrHint)      pBrHint->Release();
                         if (pBrTime)      pBrTime->Release();
                         if (pBrSecondary) pBrSecondary->Release();
                         if (pBrPrimary)   pBrPrimary->Release();
-                        pRT->Release();
                     }
 
                     // 8. Draw Native App Icons onto the premultiplied DIB for visible rows only
@@ -6229,10 +10028,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     }
 
                     BitBlt(hdc, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY);
-                    SelectObject(hMemDC, oldBmp);
-                    DeleteObject(hBmp);
                 }
-                DeleteDC(hMemDC);
             }
 
             EndPaint(hWnd, &ps);
@@ -6330,8 +10126,11 @@ void TransformRunDialog(HWND hDlg) {
     state->normalX = newX;
     state->normalY = newY;
 
-    state->backdropLightSample = SampleBackdropLuminanceIsLight(
-        newX, newY, dlgW, state->totalHeight, false, false);
+    CaptureCleanMonitorBackdrop(hDlg, IsWindowVisible(hDlg) != FALSE);
+    state->backdropLightSample = SampleBackdropLuminanceFromSnap(
+        newX, newY, dlgW, state->totalHeight, false);
+    state->lastTopologySig = GetBackdropWindowTopologySignature(hDlg);
+    state->pendingTopologyRecapture = false;
 
     ApplyWindowAppearance(hDlg, state);
 
@@ -6367,7 +10166,7 @@ void TransformRunDialog(HWND hDlg) {
 
     SetWindowSubclass(hDlg, RunDlgSubclassProc, 1, (DWORD_PTR)state);
     SetTimer(hDlg, kTimerCaret, 530, nullptr);
-    SetTimer(hDlg, kTimerLuminance, 2000, nullptr);
+    SetTimer(hDlg, kTimerLuminance, 150, nullptr);
 
     SetWindowPos(hDlg, nullptr, newX, newY, dlgW, state->totalHeight,
                  SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
