@@ -6,8 +6,6 @@
 // @author          hermanzamula
 // @github          https://github.com/hermanzamula
 // @include         windhawk.exe
-// @architecture    x86
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -luuid -ladvapi32 -lshell32 -luiautomationcore
 // @license         MIT
 // ==/WindhawkMod==
