@@ -3,7 +3,7 @@
 // @name            Win Duo Bar
 // @description     A compact ring widget for the Windows 11 taskbar clock: a battery gauge ring, a Wi-Fi symbol, the time and date, and a charging animation
 // @description:zh-CN 一个替换 Windows 11 任务栏时钟的圆环小组件：电量圆环、Wi-Fi 图标、时间日期，以及充电动画
-// @version         1.1.2
+// @version         1.1.3
 // @author          Felinyu
 // @github          https://github.com/Felinyu
 // @license         GPL-3.0
@@ -414,7 +414,10 @@ BatteryInfo ReadBatteryInfo() {
     return info;
 }
 
-NetworkInfo ReadNetworkInfo() {
+// Returns nullopt only if the profile query itself failed, e.g. when called
+// from an input-synchronous context (see the note in RefreshWidgets). A natural
+// offline state is a valid result with NetworkKind::offline.
+std::optional<NetworkInfo> TryReadNetworkInfo() {
     NetworkInfo info{};
 
     // Follow the system's active internet connection, so the widget shows the
@@ -435,9 +438,10 @@ NetworkInfo ReadNetworkInfo() {
         }
 
         info.kind = profile.IsWlanConnectionProfile() ? NetworkKind::wifi
-                                                     : NetworkKind::ethernet;
+                                                      : NetworkKind::ethernet;
     } catch (...) {
         Wh_Log(L"Failed to read the network info");
+        return std::nullopt;
     }
 
     return info;
@@ -628,6 +632,7 @@ struct WidgetInstance {
     winrt::Windows::UI::Color foreground{255, 255, 255, 255};
     BatteryInfo battery{};
     NetworkInfo network{};
+    bool networkValid = false;
     WidgetTuning tuning{};
     bool tuningValid = false;
     std::wstring timeString;
@@ -668,6 +673,13 @@ winrt::event_token g_networkStatusToken{};
 // that unloading can wait for an in-flight invocation, since it runs mod code.
 struct NetworkSubscriptionMarker {};
 std::shared_ptr<NetworkSubscriptionMarker> g_networkCallbackRef;
+
+// The last successfully read network state, applied to new or rebuilt widgets
+// without querying the network from their (possibly input-synchronous) context.
+// UI-thread only.
+NetworkInfo g_lastNetworkInfo{};
+bool g_lastNetworkInfoValid = false;
+int g_networkReadRetriesLeft = 0;
 
 void OnAnimTick();
 void EnsureAnimTimer();
@@ -1063,6 +1075,7 @@ void BuildInstanceVisuals(WidgetInstance& instance) {
     instance.notchTarget = 1.0;
     instance.battery = BatteryInfo{};
     instance.network = NetworkInfo{};
+    instance.networkValid = false;
     instance.tuning = g_tuning;
     instance.tuningValid = true;
     instance.timeString.clear();
@@ -1088,6 +1101,7 @@ void ReleaseInstanceVisuals(WidgetInstance& instance) {
     instance.size = 0;
     instance.tuning = WidgetTuning{};
     instance.tuningValid = false;
+    instance.networkValid = false;
     instance.ringColorSet = false;
     instance.notchT = 1.0;
     instance.notchTarget = 1.0;
@@ -1276,8 +1290,10 @@ void UpdateNetwork(WidgetInstance& instance,
         return;
     }
 
-    bool changed = force || info.kind != instance.network.kind;
+    bool changed = force || !instance.networkValid ||
+                   info.kind != instance.network.kind;
     instance.network = info;
+    instance.networkValid = true;
 
     if (!changed) {
         return;
@@ -1308,7 +1324,18 @@ void RefreshInstance(WidgetInstance& instance, bool force) {
     UpdateTimeAndDate(instance, FormatTimeString(st), FormatDateString(st),
                       force);
     UpdateBattery(instance, ReadBatteryInfo(), force);
-    UpdateNetwork(instance, ReadNetworkInfo(), force);
+
+    // Don't query the network here. This can run from an input-synchronous
+    // context (a forced refresh inside the SendMessage hook callback used to run
+    // code on the taskbar thread), where the out-of-process WinRT calls of the
+    // network APIs fail. Apply the last known state instead and let the next
+    // timer tick re-read it in a normal context.
+    if (g_lastNetworkInfoValid) {
+        UpdateNetwork(instance, g_lastNetworkInfo, force);
+    }
+    if (force) {
+        g_networkDirty.store(true);
+    }
 }
 
 // ===== Charging animation timer =====
@@ -2029,16 +2056,41 @@ void RefreshWidgets(bool force) {
     std::wstring dateString = FormatDateString(st);
     BatteryInfo battery = ReadBatteryInfo();
 
-    // The network state is only re-read after a NetworkStatusChanged event
-    // (or when forced), so no out-of-process calls run on the UI thread every
-    // second.
+    // The network state is only re-read after a NetworkStatusChanged event (or
+    // on a retry), from this 1 s timer, so no out-of-process calls run on the
+    // UI thread every second. A forced refresh (start, settings change, new
+    // clock) may run inside the SendMessage hook callback used to execute code
+    // on the taskbar thread, which is an input-synchronous context where those
+    // WinRT calls fail, so it only applies the last known state; the actual
+    // read happens from the timer tick, in a normal context.
+    std::optional<NetworkInfo> network;
     bool networkDirty = g_networkDirty.exchange(false);
     if (force) {
-        networkDirty = true;
-    }
-    std::optional<NetworkInfo> network;
-    if (networkDirty) {
-        network = ReadNetworkInfo();
+        g_networkDirty.store(true);
+        g_networkReadRetriesLeft = 3;
+        if (g_lastNetworkInfoValid) {
+            network = g_lastNetworkInfo;
+        }
+    } else if (networkDirty) {
+        if (auto info = TryReadNetworkInfo()) {
+            g_lastNetworkInfo = *info;
+            g_lastNetworkInfoValid = true;
+            network = *info;
+            if (info->kind == NetworkKind::offline &&
+                g_networkReadRetriesLeft > 0) {
+                // A read that follows a forced refresh may have run in a bad
+                // call context; retry a few times before accepting "offline".
+                g_networkReadRetriesLeft--;
+                g_networkDirty.store(true);
+            } else {
+                g_networkReadRetriesLeft = 0;
+            }
+        } else if (g_networkReadRetriesLeft > 0) {
+            g_networkReadRetriesLeft--;
+            g_networkDirty.store(true);
+        }
+    } else if (g_lastNetworkInfoValid) {
+        network = g_lastNetworkInfo;
     }
 
     for (auto& instance : *g_instances) {
