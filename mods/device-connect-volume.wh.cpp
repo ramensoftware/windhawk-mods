@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          0Allu
 // @github          https://github.com/0Allu
-// @homepage        https://github.com/0Allu/better-volume-mixer
+// @homepage        https://github.com/0Allu/device-connect-volume
 // @donateUrl       https://ko-fi.com/0allu
 // @include         windhawk.exe
 // @compilerOptions -lole32 -lshell32
