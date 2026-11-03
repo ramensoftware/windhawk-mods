@@ -77,20 +77,23 @@ To mitigate this, install this mod: [*Fix language indicator in Win10 taskbar un
 #include <vector>
 #include <mutex>
 
-typedef LONG(WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-REGQUERYVALUEEXW pOriginalRegQueryValueExW;
+#include <windhawk_utils.h>
 
-// x64: explorer.exe build 7AC6EEC3442000 from msdl.microsoft.com.
-constexpr wchar_t kExplorerSha256_X64[] =
-    L"58f78b5f90efc75d6c7d3d85bc8b36983fe410406f217619dbe2384130d65bfe";
-constexpr wchar_t kExplorerUrl_X64[] =
-    L"https://msdl.microsoft.com/download/symbols/explorer.exe/7AC6EEC3442000/explorer.exe";
+decltype(&RegQueryValueExW) pOriginalRegQueryValueExW;
 
-// ARM64: explorer.exe build 49385C6C56a000 from msdl.microsoft.com.
-constexpr wchar_t kExplorerSha256_ARM64[] =
+#if defined(_M_ARM64)
+// ARM64: explorer.exe 49385C6C56a000 from msdl.microsoft.com.
+constexpr wchar_t kExplorerSha256[] =
     L"e736d177181c10203764840123f0be4d87d802c738efbb4a6d7faab90b51ddb4";
-constexpr wchar_t kExplorerUrl_ARM64[] =
+constexpr wchar_t kExplorerUrl[] =
     L"https://msdl.microsoft.com/download/symbols/explorer.exe/49385C6C56a000/explorer.exe";
+#else
+// x64: explorer.exe 7AC6EEC3442000 from msdl.microsoft.com.
+constexpr wchar_t kExplorerSha256[] =
+    L"58f78b5f90efc75d6c7d3d85bc8b36983fe410406f217619dbe2384130d65bfe";
+constexpr wchar_t kExplorerUrl[] =
+    L"https://msdl.microsoft.com/download/symbols/explorer.exe/7AC6EEC3442000/explorer.exe";
+#endif
 
 // Handle kept open to deny write access to the verified explorer.exe for as
 // long as this process (userinit.exe) is alive. Closed in Wh_ModUninit.
@@ -98,20 +101,6 @@ HANDLE g_explorerFile = INVALID_HANDLE_VALUE;
 
 std::once_flag g_setupFlag;
 std::wstring g_shellPath;  // empty => fall back to the original shell value
-
-bool IsArm64System() {
-    SYSTEM_INFO si{};
-    GetNativeSystemInfo(&si);
-    return si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64;
-}
-
-inline const wchar_t* GetExplorerSha256() {
-    return IsArm64System() ? kExplorerSha256_ARM64 : kExplorerSha256_X64;
-}
-
-inline const wchar_t* GetExplorerUrl() {
-    return IsArm64System() ? kExplorerUrl_ARM64 : kExplorerUrl_X64;
-}
 
 bool ComputeSha256(HANDLE hFile, BYTE out[32]) {
     bool ok = false;
@@ -189,7 +178,7 @@ bool OpenAndVerify(const std::wstring& path, HANDLE* outFile) {
     if (file == INVALID_HANDLE_VALUE) {
         return false;
     }
-    if (!VerifySha256(file, GetExplorerSha256())) {
+    if (!VerifySha256(file, kExplorerSha256)) {
         CloseHandle(file);
         return false;
     }
@@ -229,10 +218,8 @@ bool DownloadAndVerify(const std::wstring& storageDir, const std::wstring& final
     std::wstring tempPath = storageDir + L"\\explorer.exe.download";
     DeleteFileW(tempPath.c_str());  // best-effort cleanup of a stale temp file
 
-    const wchar_t* downloadUrl = GetExplorerUrl();
-    Wh_Log(L"Downloading explorer.exe for %s from %s",
-           IsArm64System() ? L"ARM64" : L"x64", downloadUrl);
-    HRESULT hr = URLDownloadToFileW(nullptr, downloadUrl, tempPath.c_str(), 0, nullptr);
+    Wh_Log(L"Downloading explorer.exe from %s", kExplorerUrl);
+    HRESULT hr = URLDownloadToFileW(nullptr, kExplorerUrl, tempPath.c_str(), 0, nullptr);
     if (FAILED(hr)) {
         Wh_Log(L"Failed to download explorer.exe: 0x%08X", hr);
         DeleteFileW(tempPath.c_str());
@@ -251,7 +238,7 @@ bool DownloadAndVerify(const std::wstring& storageDir, const std::wstring& final
         return false;
     }
 
-    if (!VerifySha256(file, GetExplorerSha256())) {
+    if (!VerifySha256(file, kExplorerSha256)) {
         Wh_Log(L"Downloaded explorer.exe did not match the expected hash");
         CloseHandle(file);
         DeleteFileW(tempPath.c_str());
@@ -375,10 +362,10 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
 BOOL Wh_ModInit(void) {
     Wh_Log(L"Init");
 
-    Wh_SetFunctionHook(
-        (void*)GetProcAddress(LoadLibraryW(L"kernelbase.dll"), "RegQueryValueExW"),
-        (void*)RegQueryValueExWHook,
-        (void**)&pOriginalRegQueryValueExW);
+    auto pRegQueryValueExW = (decltype(&RegQueryValueExW))GetProcAddress(
+        GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW");
+    WindhawkUtils::SetFunctionHook(pRegQueryValueExW, RegQueryValueExWHook,
+                                   &pOriginalRegQueryValueExW);
 
     return TRUE;
 }
