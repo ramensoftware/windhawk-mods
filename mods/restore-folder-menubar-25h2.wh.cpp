@@ -71,8 +71,6 @@ Can be disabled in the mod settings.
 #include <Windows.h>
 #include <winternl.h>
 #include <tlhelp32.h>
-#include <psapi.h>
-#include <dbghelp.h>
 #include <strsafe.h>
 #include <commctrl.h>
 #include <uxtheme.h>
@@ -80,24 +78,18 @@ Can be disabled in the mod settings.
 #include <vector>
 #include <algorithm>
 #include <mutex>
+#include <atomic>
+#include <unordered_set>
 #include <vssym32.h>
-#include <windhawk_api.h>
-#include <windows.h>
-
-#ifndef ARRAYSIZE
-#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
-#endif
-
-#if defined(__GNUC__)
-#define NOINLINE __attribute__((noinline))
-#else
-#define NOINLINE __declspec(noinline)
-#endif
 
 typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
+
 REGQUERYVALUEEXW pOriginalRegQueryValueExW = nullptr;
 
 // ---------------------------------------------------------------------------
+// Globals
+// ---------------------------------------------------------------------------
+
 bool g_settingDisplayMenuBar = true;
 bool g_settingControlPanelColorFix = true;
 
@@ -108,275 +100,32 @@ std::vector<HWND> g_subclassedCabinets;
 
 HANDLE g_hookEvent = NULL;
 HANDLE g_workerThread = NULL;
-volatile BOOL g_stopWorker = FALSE;
-
-#define WM_MENUBAR_HACKFIX (WM_USER + 1)
-
-// ---------------------------------------------------------------------------
-// explorerframe name checks (lock-free, safe inside Ldr hook)
-// ---------------------------------------------------------------------------
-bool IsEFBaseCounted(const WCHAR* s, int cch)
-{
-    if (cch == 13) {
-        static const WCHAR k[] = L"explorerframe";
-        for (int i = 0; i < 13; i++) {
-            WCHAR a = s[i], b = k[i];
-            if (a >= L'A' && a <= L'Z') a += 32;
-            if (b >= L'A' && b <= L'Z') b += 32;
-            if (a != b) return false;
-        }
-        return true;
-    }
-    if (cch == 17) {
-        static const WCHAR k[] = L"explorerframe.dll";
-        for (int i = 0; i < 17; i++) {
-            WCHAR a = s[i], b = k[i];
-            if (a >= L'A' && a <= L'Z') a += 32;
-            if (b >= L'A' && b <= L'Z') b += 32;
-            if (a != b) return false;
-        }
-        return true;
-    }
-    return false;
-}
-
-bool IsExplorerFrameDllNameW(LPCWSTR path)
-{
-    if (!path || !*path) return false;
-    LPCWSTR base = path;
-    for (LPCWSTR p = path; *p; ++p)
-        if (*p == L'\\' || *p == L'/') base = p + 1;
-    return lstrcmpiW(base, L"explorerframe.dll") == 0 ||
-           lstrcmpiW(base, L"explorerframe") == 0;
-}
-
-bool IsExplorerFrameDllNameA(LPCSTR path)
-{
-    if (!path || !*path) return false;
-    LPCSTR base = path;
-    for (LPCSTR p = path; *p; ++p)
-        if (*p == '\\' || *p == '/') base = p + 1;
-    return lstrcmpiA(base, "explorerframe.dll") == 0 ||
-           lstrcmpiA(base, "explorerframe") == 0;
-}
-
-bool IsExplorerFrameUnicodeString(PUNICODE_STRING s)
-{
-    if (!s || !s->Buffer || s->Length < 13 * (USHORT)sizeof(WCHAR))
-        return false;
-    USHORT cch = (USHORT)(s->Length / sizeof(WCHAR));
-    int lastSlash = -1;
-    for (int i = 0; i < cch; i++) {
-        WCHAR c = s->Buffer[i];
-        if (c == L'\\' || c == L'/') lastSlash = i;
-    }
-    int start = lastSlash + 1;
-    int len = (int)cch - start;
-    if (len <= 0) return false;
-    return IsEFBaseCounted(s->Buffer + start, len);
-}
+std::atomic<bool> g_stopWorker{false};
+std::atomic<bool> g_initDone{false};
+UINT g_msgMenubarHackfix = 0;
 
 // ---------------------------------------------------------------------------
-int FindMenuBand(HWND hReBar)
-{
-    int bandCount = (int)SendMessage(hReBar, RB_GETBANDCOUNT, 0, 0);
-    for (int i = 0; i < bandCount; i++)
-    {
-        REBARBANDINFO rbbi = { sizeof(REBARBANDINFO) };
-        rbbi.fMask = RBBIM_CHILD | RBBIM_STYLE;
-        SendMessage(hReBar, RB_GETBANDINFO, i, (LPARAM)&rbbi);
-        if (rbbi.hwndChild == NULL) continue;
-        wchar_t className[256];
-        GetClassNameW(rbbi.hwndChild, className, 256);
-        if (lstrcmpW(className, L"ToolbarWindow32") != 0) continue;
-        if (SendMessageW(rbbi.hwndChild, TB_GETIMAGELIST, 0, 0) != NULL) continue;
-        return i;
-    }
-    return -1;
-}
-
-LRESULT CALLBACK RebarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
-{
-    if (uMsg == WM_DESTROY) {
-        std::lock_guard<std::mutex> lock(g_subclassedMutex);
-        g_subclassedRebars.erase(std::remove(g_subclassedRebars.begin(), g_subclassedRebars.end(), hWnd), g_subclassedRebars.end());
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-    if (uMsg == WM_MENUBAR_HACKFIX) {
-        HWND workerW = GetParent(hWnd);
-        if (!workerW) return 0;
-        HWND parent = GetParent(workerW);
-        if (!parent) return 0;
-        wchar_t cls[256] = {};
-        GetClassNameW(parent, cls, 256);
-        if (!lstrcmpW(cls, L"ShellTabWindowClass"))
-            SendMessageW(parent, WM_WININICHANGE, 0, 0);
-        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-        return 0;
-    }
-    if (uMsg == RB_SHOWBAND) {
-        int menuBandIndex = FindMenuBand(hWnd);
-        if ((int)wParam == menuBandIndex) {
-            LRESULT toRet = DefSubclassProc(hWnd, uMsg, wParam, (LPARAM)g_settingDisplayMenuBar);
-            if (g_settingDisplayMenuBar)
-                PostMessage(hWnd, WM_MENUBAR_HACKFIX, 0, 0);
-            return toRet;
-        }
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-LRESULT CALLBACK ListviewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
-{
-    if (uMsg == WM_DESTROY) {
-        std::lock_guard<std::mutex> lock(g_subclassedMutex);
-        g_subclassedListviews.erase(std::remove(g_subclassedListviews.begin(), g_subclassedListviews.end(), hWnd), g_subclassedListviews.end());
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-    if (uMsg == WM_SETREDRAW) wParam = TRUE;
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-// Fallback for CExplorerFrame::v_WndProc - HWND based, version independent
-LRESULT CALLBACK CabinetSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
-{
-    if (uMsg == WM_NCDESTROY) {
-        std::lock_guard<std::mutex> lock(g_subclassedMutex);
-        g_subclassedCabinets.erase(std::remove(g_subclassedCabinets.begin(), g_subclassedCabinets.end(), hWnd), g_subclassedCabinets.end());
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-    if (uMsg == WM_SHOWWINDOW) {
-        SendMessageW(hWnd, WM_WININICHANGE, 0, 0);
-    }
-    if (uMsg == WM_ERASEBKGND) {
-        if (!IsAppThemed()) {
-            if ((GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED) == 0) {
-                HDC hdc = (HDC)wParam;
-                if (GetObjectType(hdc) != OBJ_MEMDC) {
-                    RECT rc; GetClientRect(hWnd, &rc);
-                    FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
-                    return 1;
-                }
-            }
-        }
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-void EnsureRebarSubclassed(HWND h)
-{
-    if (!h || !IsWindow(h)) return;
-    {
-        std::lock_guard<std::mutex> lock(g_subclassedMutex);
-        for (HWND x : g_subclassedRebars) if (x == h) return;
-    }
-    WindhawkUtils::SetWindowSubclassFromAnyThread(h, RebarSubclassProc, 0);
-    std::lock_guard<std::mutex> lock(g_subclassedMutex);
-    for (HWND x : g_subclassedRebars) if (x == h) return;
-    g_subclassedRebars.push_back(h);
-}
-
-void EnsureCabinetSubclassed(HWND h)
-{
-    if (!h || !IsWindow(h)) return;
-    {
-        std::lock_guard<std::mutex> lock(g_subclassedMutex);
-        for (HWND x : g_subclassedCabinets) if (x == h) return;
-    }
-    WindhawkUtils::SetWindowSubclassFromAnyThread(h, CabinetSubclassProc, 0);
-    std::lock_guard<std::mutex> lock(g_subclassedMutex);
-    for (HWND x : g_subclassedCabinets) if (x == h) return;
-    g_subclassedCabinets.push_back(h);
-}
-
+// Helpers
 // ---------------------------------------------------------------------------
-// per-copy slots (different HMODULE -> different hook addr -> different orig)
-// ---------------------------------------------------------------------------
-typedef long (*__cdecl CBSInitialize_t)(void*, HWND);
-typedef long (*__cdecl CEFWndProc_t)(void*, HWND, unsigned int, WPARAM, LPARAM);
-typedef long (*__cdecl CSBSetFlags_t)(void*, unsigned long, unsigned long);
 
-static const int kMaxEFSlots = 8;
-struct EFSlot {
-    bool inUse = false;
-    HMODULE hMod = nullptr;
-    CBSInitialize_t initOrig = nullptr;
-    CEFWndProc_t wndProcOrig = nullptr;
-    CSBSetFlags_t setFlagsOrig = nullptr;
-};
-EFSlot g_efSlots[kMaxEFSlots];
-std::mutex g_efSlotsMutex;
-
-long __cdecl CommonCBSInitializeHook(int slot, void* pThis, HWND hWnd)
-{
-    if (GetWindowLong(hWnd, GWL_EXSTYLE) == 0) {
-        HWND rb = FindWindowExW(hWnd, NULL, L"ReBarWindow32", NULL);
-        if (rb) EnsureRebarSubclassed(rb);
-    }
-    CBSInitialize_t o = g_efSlots[slot].initOrig;
-    return o ? o(pThis, hWnd) : 0;
-}
-long __cdecl CommonCEFWndProcHook(int slot, void* pThis, HWND hWnd, unsigned int uMsg, WPARAM wParam, LPARAM lParam)
-{
-    if (uMsg == WM_SHOWWINDOW) SendMessageW(hWnd, WM_WININICHANGE, 0, 0);
-    if (uMsg == WM_ERASEBKGND) {
-        if (!IsAppThemed() && ((GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED) == 0)) {
-            HDC hdc = (HDC)wParam;
-            if (GetObjectType(hdc) != OBJ_MEMDC) {
-                RECT rc; GetClientRect(hWnd, &rc);
-                FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
-                return 1;
-            }
-        }
-    }
-    CEFWndProc_t o = g_efSlots[slot].wndProcOrig;
-    return o ? o(pThis, hWnd, uMsg, wParam, lParam) : 0;
-}
-long __cdecl CommonCSBSetFlagsHook(int slot, void* pThis, unsigned long a, unsigned long b)
-{
-    if (a & BSF_UISETBYAUTOMATION) a &= ~BSF_UISETBYAUTOMATION;
-    CSBSetFlags_t o = g_efSlots[slot].setFlagsOrig;
-    return o ? o(pThis, a, b) : 0;
-}
-
-template<int S> NOINLINE long __cdecl CBSInitializeHookT(void* pThis, HWND hWnd) { return CommonCBSInitializeHook(S, pThis, hWnd); }
-template<int S> NOINLINE long __cdecl CEFWndProcHookT(void* pThis, HWND hWnd, unsigned int m, WPARAM w, LPARAM l) { return CommonCEFWndProcHook(S, pThis, hWnd, m, w, l); }
-template<int S> NOINLINE long __cdecl CSBSetFlagsHookT(void* pThis, unsigned long a, unsigned long b) { return CommonCSBSetFlagsHook(S, pThis, a, b); }
-
-void* g_CBSHooks[kMaxEFSlots] = {
-    (void*)CBSInitializeHookT<0>, (void*)CBSInitializeHookT<1>,
-    (void*)CBSInitializeHookT<2>, (void*)CBSInitializeHookT<3>,
-    (void*)CBSInitializeHookT<4>, (void*)CBSInitializeHookT<5>,
-    (void*)CBSInitializeHookT<6>, (void*)CBSInitializeHookT<7>,
-};
-void* g_WndProcHooks[kMaxEFSlots] = {
-    (void*)CEFWndProcHookT<0>, (void*)CEFWndProcHookT<1>,
-    (void*)CEFWndProcHookT<2>, (void*)CEFWndProcHookT<3>,
-    (void*)CEFWndProcHookT<4>, (void*)CEFWndProcHookT<5>,
-    (void*)CEFWndProcHookT<6>, (void*)CEFWndProcHookT<7>,
-};
-void* g_SetFlagsHooks[kMaxEFSlots] = {
-    (void*)CSBSetFlagsHookT<0>, (void*)CSBSetFlagsHookT<1>,
-    (void*)CSBSetFlagsHookT<2>, (void*)CSBSetFlagsHookT<3>,
-    (void*)CSBSetFlagsHookT<4>, (void*)CSBSetFlagsHookT<5>,
-    (void*)CSBSetFlagsHookT<6>, (void*)CSBSetFlagsHookT<7>,
-};
-
-// ---------------------------------------------------------------------------
-// real path via mapped file (bypasses LDR masking)
-// ---------------------------------------------------------------------------
 bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
 {
     WCHAR drives[512];
     DWORD drLen = GetLogicalDriveStringsW(ARRAYSIZE(drives), drives);
-    if (!drLen) return false;
-    for (WCHAR* d = drives; *d; d += wcslen(d) + 1) {
+    if (!drLen)
+        return false;
+
+    for (WCHAR* d = drives; *d; d += wcslen(d) + 1)
+    {
         WCHAR drive[3] = { d[0], d[1], L'\0' };
         WCHAR device[512];
-        if (!QueryDosDeviceW(drive, device, ARRAYSIZE(device))) continue;
+        if (!QueryDosDeviceW(drive, device, ARRAYSIZE(device)))
+            continue;
+
         size_t devLen = wcslen(device);
         if (_wcsnicmp(ntPath, device, devLen) == 0 &&
-            (ntPath[devLen] == L'\\' || ntPath[devLen] == L'\0')) {
+            (ntPath[devLen] == L'\\' || ntPath[devLen] == L'\0'))
+        {
             if (FAILED(StringCchPrintfW(dosPath, dosLen, L"%s%s", drive, ntPath + devLen)))
                 return false;
             return true;
@@ -385,146 +134,355 @@ bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
     return false;
 }
 
+// Real path via mapped file, bypasses LDR FullDllName spoofing.
+// Uses K32GetMappedFileNameW from kernel32, so no -lpsapi needed
+// (psapi.dll just forwards to kernel32 anyway).
 bool GetRealModulePath(HMODULE hMod, WCHAR* dosPath, DWORD dosLen)
 {
-    WCHAR ntPath[1024];
-    if (!GetMappedFileNameW(GetCurrentProcess(), hMod, ntPath, ARRAYSIZE(ntPath)))
+    using K32GetMappedFileNameW_t = DWORD (WINAPI *)(HANDLE, LPVOID, LPWSTR, DWORD);
+
+    static K32GetMappedFileNameW_t pK32 = nullptr;
+    static bool tried = false;
+    if (!tried)
+    {
+        tried = true;
+        HMODULE hK32 = GetModuleHandleW(L"kernel32.dll");
+        if (hK32)
+            pK32 = (K32GetMappedFileNameW_t)GetProcAddress(hK32, "K32GetMappedFileNameW");
+    }
+
+    if (!pK32)
         return false;
+
+    WCHAR ntPath[1024];
+    if (!pK32(GetCurrentProcess(), hMod, ntPath, ARRAYSIZE(ntPath)))
+        return false;
+
     return NtPathToDosPath(ntPath, dosPath, dosLen);
 }
 
-DWORD GetModuleSize(HMODULE hMod)
+int FindMenuBand(HWND hReBar)
 {
-    MODULEINFO mi = {};
-    if (GetModuleInformation(GetCurrentProcess(), hMod, &mi, sizeof(mi)) && mi.SizeOfImage)
-        return (DWORD)mi.SizeOfImage;
+    int bandCount = (int)SendMessage(hReBar, RB_GETBANDCOUNT, 0, 0);
+    for (int i = 0; i < bandCount; i++)
+    {
+        REBARBANDINFO rbbi = { sizeof(REBARBANDINFO) };
+        rbbi.fMask = RBBIM_CHILD | RBBIM_STYLE;
+        SendMessage(hReBar, RB_GETBANDINFO, i, (LPARAM)&rbbi);
 
-    DWORD size = 0;
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
-    if (hSnap != INVALID_HANDLE_VALUE) {
-        MODULEENTRY32W me;
-        me.dwSize = sizeof(me);
-        if (Module32FirstW(hSnap, &me)) {
-            do {
-                if (me.hModule == hMod) { size = me.modBaseSize; break; }
-            } while (Module32NextW(hSnap, &me));
-        }
-        CloseHandle(hSnap);
+        if (rbbi.hwndChild == NULL) continue;
+
+        wchar_t className[256];
+        GetClassNameW(rbbi.hwndChild, className, 256);
+        if (lstrcmpW(className, L"ToolbarWindow32") != 0) continue;
+
+        // Menu band toolbar has no image list
+        if (SendMessageW(rbbi.hwndChild, TB_GETIMAGELIST, 0, 0) != NULL) continue;
+
+        return i;
     }
-    return size;
+    return -1;
 }
 
 // ---------------------------------------------------------------------------
-// custom DbgHelp hook for masked copies (uses real path, not LDR path)
+// Rebar subclass
 // ---------------------------------------------------------------------------
-bool TryHookOne(const wchar_t* const cands[], int nCand, DWORD64 modBase, DWORD modSize, void* hookFunc, void** origOut)
+
+LRESULT CALLBACK RebarSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
+    _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData)
 {
-    HANDLE hProc = GetCurrentProcess();
-    const DWORD MAXN = 1024;
-    DWORD bufSize = sizeof(SYMBOL_INFOW) + MAXN * sizeof(WCHAR);
-    SYMBOL_INFOW* sym = (SYMBOL_INFOW*)HeapAlloc(GetProcessHeap(), 0, bufSize);
-    if (!sym) return false;
-    sym->SizeOfStruct = sizeof(SYMBOL_INFOW);
-    sym->MaxNameLen = MAXN;
-    bool hooked = false;
-    for (int i = 0; i < nCand; i++) {
-        if (SymFromNameW(hProc, cands[i], sym)) {
-            DWORD64 addr = sym->Address;
-            if (addr >= modBase && addr < modBase + modSize) {
-                if (Wh_SetFunctionHook((void*)addr, hookFunc, origOut)) {
-                    Wh_Log(L"Hooked %s at %p", cands[i], (void*)addr);
-                    hooked = true;
-                    break;
+    if (uMsg == WM_DESTROY)
+    {
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedRebars.erase(
+                std::remove(g_subclassedRebars.begin(), g_subclassedRebars.end(), hWnd),
+                g_subclassedRebars.end());
+        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    if (g_msgMenubarHackfix && uMsg == g_msgMenubarHackfix)
+    {
+        HWND workerW = GetParent(hWnd);
+        if (!workerW) return 0;
+
+        HWND parent = GetParent(workerW);
+        if (!parent) return 0;
+
+        wchar_t cls[256] = {};
+        GetClassNameW(parent, cls, 256);
+
+        if (!lstrcmpW(cls, L"ShellTabWindowClass"))
+        {
+            SendMessageW(parent, WM_WININICHANGE, 0, 0);
+        }
+
+        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        return 0;
+    }
+
+    if (uMsg == RB_SHOWBAND)
+    {
+        int menuBandIndex = FindMenuBand(hWnd);
+        if ((int)wParam == menuBandIndex)
+        {
+            LRESULT toRet = DefSubclassProc(hWnd, uMsg, wParam, (LPARAM)g_settingDisplayMenuBar);
+            if (g_settingDisplayMenuBar && g_msgMenubarHackfix)
+                PostMessage(hWnd, g_msgMenubarHackfix, 0, 0);
+            return toRet;
+        }
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// ---------------------------------------------------------------------------
+// Listview subclass
+// ---------------------------------------------------------------------------
+
+LRESULT CALLBACK ListviewSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
+    _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_DESTROY)
+    {
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedListviews.erase(
+                std::remove(g_subclassedListviews.begin(), g_subclassedListviews.end(), hWnd),
+                g_subclassedListviews.end());
+        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    if (uMsg == WM_SETREDRAW)
+    {
+        wParam = TRUE;
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// ---------------------------------------------------------------------------
+// Cabinet subclass (single mechanism for frame behavior,
+// replaces CExplorerFrame::v_WndProc symbol hook)
+// ---------------------------------------------------------------------------
+
+LRESULT CALLBACK CabinetSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
+    _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_NCDESTROY)
+    {
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedCabinets.erase(
+                std::remove(g_subclassedCabinets.begin(), g_subclassedCabinets.end(), hWnd),
+                g_subclassedCabinets.end());
+        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    if (uMsg == WM_SHOWWINDOW)
+    {
+        SendMessageW(hWnd, WM_WININICHANGE, 0, 0);
+    }
+
+    if (uMsg == WM_ERASEBKGND)
+    {
+        if (!IsAppThemed())
+        {
+            if ((GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED) == 0)
+            {
+                HDC hdc = (HDC)wParam;
+
+                if (GetObjectType(hdc) != OBJ_MEMDC)
+                {
+                    RECT rc;
+                    GetClientRect(hWnd, &rc);
+                    HBRUSH hbr = (HBRUSH)(COLOR_WINDOW + 1);
+                    FillRect(hdc, &rc, hbr);
+                    return 1;
                 }
             }
         }
     }
-    HeapFree(GetProcessHeap(), 0, sym);
-    return hooked;
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-bool InstallMaskedCustom(HMODULE hMod, int slot)
+bool EnsureRebarSubclassed(HWND h)
 {
-    WCHAR realDos[MAX_PATH];
-    if (!GetRealModulePath(hMod, realDos, ARRAYSIZE(realDos))) {
-        Wh_Log(L"GetRealModulePath failed for %p", hMod);
+    if (!h || !IsWindow(h))
         return false;
-    }
-    DWORD size = GetModuleSize(hMod);
-    if (!size) {
-        Wh_Log(L"GetModuleSize failed for %p", hMod);
-        return false;
-    }
-    HANDLE hProc = GetCurrentProcess();
-    SymInitializeW(hProc, NULL, FALSE);
-    DWORD64 base = (DWORD64)hMod;
-    SymUnloadModule64(hProc, base);
-    DWORD64 modBase = SymLoadModuleExW(hProc, NULL, realDos, NULL, base, size, NULL, 0);
-    if (!modBase) {
-        Wh_Log(L"SymLoadModuleEx failed %u for %s", GetLastError(), realDos);
-        return false;
-    }
-    Wh_Log(L"SymLoad ok %p -> %s", hMod, realDos);
 
-    static const wchar_t* wndCands[] = {
-        L"private: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
-        L"protected: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
-        L"public: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
-    };
-    static const wchar_t* initCands[] = {
-        L"protected: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
-        L"private: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
-        L"public: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)"
-    };
-    static const wchar_t* flagsCands[] = {
-        L"public: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
-        L"protected: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
-        L"private: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)"
-    };
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        for (HWND x : g_subclassedRebars)
+            if (x == h)
+                return true;
+    }
 
-    bool okWnd = TryHookOne(wndCands, 3, modBase, size, g_WndProcHooks[slot], (void**)&g_efSlots[slot].wndProcOrig);
-    bool okInit = TryHookOne(initCands, 3, modBase, size, g_CBSHooks[slot], (void**)&g_efSlots[slot].initOrig);
-    bool okFlags = TryHookOne(flagsCands, 3, modBase, size, g_SetFlagsHooks[slot], (void**)&g_efSlots[slot].setFlagsOrig);
-    Wh_Log(L"Masked result %p: wnd=%d init=%d flags=%d", hMod, (int)okWnd, (int)okInit, (int)okFlags);
-    return okWnd || okInit || okFlags;
+    BOOL ok = WindhawkUtils::SetWindowSubclassFromAnyThread(h, RebarSubclassProc, 0);
+    if (!ok)
+        return false;
+
+    std::lock_guard<std::mutex> lock(g_subclassedMutex);
+    for (HWND x : g_subclassedRebars)
+        if (x == h)
+            return true;
+
+    g_subclassedRebars.push_back(h);
+    return true;
 }
+
+bool EnsureCabinetSubclassed(HWND h)
+{
+    if (!h || !IsWindow(h))
+        return false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        for (HWND x : g_subclassedCabinets)
+            if (x == h)
+                return true;
+    }
+
+    BOOL ok = WindhawkUtils::SetWindowSubclassFromAnyThread(h, CabinetSubclassProc, 0);
+    if (!ok)
+        return false;
+
+    std::lock_guard<std::mutex> lock(g_subclassedMutex);
+    for (HWND x : g_subclassedCabinets)
+        if (x == h)
+            return true;
+
+    g_subclassedCabinets.push_back(h);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// explorerframe originals: per-copy slots.
+// Realistically 1-2 copies (system + redirected), 4 slots leave headroom.
+// Only Init + SetFlags need per-copy originals, frame is covered by HWND.
+// ---------------------------------------------------------------------------
+
+typedef long (*__cdecl CBSInitialize_t)(void*, HWND);
+typedef long (*__cdecl CSBSetFlags_t)(void*, unsigned long, unsigned long);
+
+static const int kMaxEFSlots = 4;
+
+struct EFSlot {
+    bool inUse = false;
+    HMODULE hMod = nullptr;
+    CBSInitialize_t initOrig = nullptr;
+    CSBSetFlags_t setFlagsOrig = nullptr;
+    bool hookOk = false;
+};
+
+EFSlot g_efSlots[kMaxEFSlots];
+std::mutex g_efSlotsMutex;
+std::unordered_set<HMODULE> g_efTried;
+
+long __cdecl CommonCBSInitializeHook(int slot, void* pThis, HWND hWnd)
+{
+    if (GetWindowLong(hWnd, GWL_EXSTYLE) == 0)
+    {
+        HWND rb = FindWindowExW(hWnd, NULL, L"ReBarWindow32", NULL);
+        if (rb != NULL)
+            EnsureRebarSubclassed(rb);
+    }
+
+    CBSInitialize_t orig = g_efSlots[slot].initOrig;
+    return orig ? orig(pThis, hWnd) : 0;
+}
+
+long __cdecl CommonCSBSetFlagsHook(int slot, void* pThis, unsigned long a, unsigned long b)
+{
+    if (a & BSF_UISETBYAUTOMATION)
+        a &= ~BSF_UISETBYAUTOMATION;
+
+    CSBSetFlags_t orig = g_efSlots[slot].setFlagsOrig;
+    return orig ? orig(pThis, a, b) : 0;
+}
+
+template<int S> __attribute__((noinline)) long __cdecl CBSInitializeHookT(void* pThis, HWND hWnd)
+{
+    return CommonCBSInitializeHook(S, pThis, hWnd);
+}
+
+template<int S> __attribute__((noinline)) long __cdecl CSBSetFlagsHookT(void* pThis, unsigned long a, unsigned long b)
+{
+    return CommonCSBSetFlagsHook(S, pThis, a, b);
+}
+
+void* g_CBSHooks[kMaxEFSlots] = {
+    (void*)CBSInitializeHookT<0>, (void*)CBSInitializeHookT<1>,
+    (void*)CBSInitializeHookT<2>, (void*)CBSInitializeHookT<3>,
+};
+
+void* g_SetFlagsHooks[kMaxEFSlots] = {
+    (void*)CSBSetFlagsHookT<0>, (void*)CSBSetFlagsHookT<1>,
+    (void*)CSBSetFlagsHookT<2>, (void*)CSBSetFlagsHookT<3>,
+};
 
 bool InstallViaWindhawk(HMODULE hMod, int slot)
 {
-    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
-        { { L"private: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
-            L"protected: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
-            L"public: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)" },
-          (void**)&g_efSlots[slot].wndProcOrig, g_WndProcHooks[slot], true },
-        { { L"protected: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
-            L"private: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
-            L"public: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)" },
-          (void**)&g_efSlots[slot].initOrig, g_CBSHooks[slot], true },
-        { { L"public: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
-            L"protected: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
-            L"private: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)" },
-          (void**)&g_efSlots[slot].setFlagsOrig, g_SetFlagsHooks[slot], true },
+    if (g_stopWorker.load())
+        return false;
+
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] =
+    {
+        {
+            {
+                L"protected: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
+                L"private: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
+                L"public: virtual long __cdecl CBandSite::_Initialize(struct HWND__ *)",
+            },
+            (void**)&g_efSlots[slot].initOrig,
+            g_CBSHooks[slot],
+            true,
+        },
+        {
+            {
+                L"public: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
+                L"protected: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
+                L"private: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)",
+            },
+            (void**)&g_efSlots[slot].setFlagsOrig,
+            g_SetFlagsHooks[slot],
+            true,
+        },
     };
+
     WindhawkUtils::HookSymbols(hMod, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks));
-    return g_efSlots[slot].wndProcOrig || g_efSlots[slot].initOrig || g_efSlots[slot].setFlagsOrig;
+
+    bool ok = (g_efSlots[slot].initOrig != nullptr) || (g_efSlots[slot].setFlagsOrig != nullptr);
+
+    // Hooks registered outside Wh_ModInit are not enabled until applied.
+    if (ok && g_initDone.load() && !g_stopWorker.load())
+    {
+        Wh_ApplyHookOperations();
+    }
+
+    return ok;
 }
 
 bool InstallExplorerFrameHooks(HMODULE hMod)
 {
-    if (!hMod) return false;
-    int slot = -1;
+    if (!hMod || g_stopWorker.load())
+        return false;
+
     {
         std::lock_guard<std::mutex> lock(g_efSlotsMutex);
         for (int i = 0; i < kMaxEFSlots; i++)
-            if (g_efSlots[i].inUse && g_efSlots[i].hMod == hMod) return true;
-        for (int i = 0; i < kMaxEFSlots; i++)
-            if (!g_efSlots[i].inUse) { slot = i; break; }
-        if (slot < 0) { Wh_Log(L"No free slots for %p", hMod); return false; }
-        g_efSlots[slot].inUse = true;
-        g_efSlots[slot].hMod = hMod;
-        g_efSlots[slot].initOrig = nullptr;
-        g_efSlots[slot].wndProcOrig = nullptr;
-        g_efSlots[slot].setFlagsOrig = nullptr;
+        {
+            if (g_efSlots[i].inUse && g_efSlots[i].hMod == hMod)
+                return g_efSlots[i].hookOk;
+        }
+
+        // Remember attempted modules, HookSymbols once per module.
+        if (g_efTried.find(hMod) != g_efTried.end())
+            return false;
     }
 
     WCHAR ldrPath[MAX_PATH] = {};
@@ -533,40 +491,76 @@ bool InstallExplorerFrameHooks(HMODULE hMod)
     bool haveReal = GetRealModulePath(hMod, realPath, ARRAYSIZE(realPath));
     bool masked = (n1 && haveReal && _wcsicmp(ldrPath, realPath) != 0);
 
-    if (masked) Wh_Log(L"Masked copy %p LDR=[%s] real=[%s]", hMod, ldrPath, realPath);
-    else Wh_Log(L"Hooking %p LDR=[%s] real=[%s]", hMod, n1 ? ldrPath : L"?", haveReal ? realPath : L"?");
-
-    bool ok = masked ? InstallMaskedCustom(hMod, slot) : InstallViaWindhawk(hMod, slot);
-    if (!ok) {
-        if (masked) {
-            Wh_Log(L"Custom failed, trying Windhawk for %p", hMod);
-            ok = InstallViaWindhawk(hMod, slot);
-        } else if (haveReal) {
-            Wh_Log(L"Windhawk failed, trying custom for %p", hMod);
-            ok = InstallMaskedCustom(hMod, slot);
-        }
-    }
-
-    if (!ok) {
-        Wh_Log(L"All symbol hooks failed for %p, fallback subclassing covers UI", hMod);
+    if (masked)
+    {
+        // Masked copy: LDR path lies, symbol resolution would target
+        // the wrong file. Skip symbols, HWND fallback covers UI.
+        Wh_Log(L"Masked copy %p LDR=[%s] real=[%s], skip symbols, HWND fallback covers", hMod, ldrPath, realPath);
         std::lock_guard<std::mutex> lock(g_efSlotsMutex);
-        g_efSlots[slot].inUse = false;
-        g_efSlots[slot].hMod = nullptr;
-        return false;
+        g_efTried.insert(hMod);
+        return true;
     }
-    Wh_Log(L"Hooked %p slot %d wnd=%p init=%p flags=%p", hMod, slot,
-        g_efSlots[slot].wndProcOrig, g_efSlots[slot].initOrig, g_efSlots[slot].setFlagsOrig);
-    return true;
+
+    int slot = -1;
+    {
+        std::lock_guard<std::mutex> lock(g_efSlotsMutex);
+        for (int i = 0; i < kMaxEFSlots; i++)
+        {
+            if (!g_efSlots[i].inUse)
+            {
+                slot = i;
+                break;
+            }
+        }
+
+        if (slot < 0)
+        {
+            Wh_Log(L"No free slots for %p", hMod);
+            return false;
+        }
+
+        g_efSlots[slot].inUse = true;
+        g_efSlots[slot].hMod = hMod;
+        g_efSlots[slot].initOrig = nullptr;
+        g_efSlots[slot].setFlagsOrig = nullptr;
+        g_efSlots[slot].hookOk = false;
+        g_efTried.insert(hMod);
+    }
+
+    Wh_Log(L"Hooking %p LDR=[%s]", hMod, n1 ? ldrPath : L"?");
+
+    bool ok = InstallViaWindhawk(hMod, slot);
+
+    {
+        std::lock_guard<std::mutex> lock(g_efSlotsMutex);
+        g_efSlots[slot].hookOk = ok;
+        // Keep slot even on failure to avoid retry loop.
+    }
+
+    if (!ok)
+        Wh_Log(L"Symbol hooks failed for %p, HWND fallback covers", hMod);
+    else
+        Wh_Log(L"Hooked %p slot %d init=%p flags=%p", hMod, slot, g_efSlots[slot].initOrig, g_efSlots[slot].setFlagsOrig);
+
+    return ok;
 }
 
 void HookAllLoadedExplorerFrameCopies()
 {
+    if (g_stopWorker.load())
+        return;
+
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
-    if (hSnap == INVALID_HANDLE_VALUE) return;
-    MODULEENTRY32W me; me.dwSize = sizeof(me);
+    if (hSnap == INVALID_HANDLE_VALUE)
+        return;
+
+    MODULEENTRY32W me;
+    me.dwSize = sizeof(me);
     std::vector<HMODULE> efMods;
-    if (Module32FirstW(hSnap, &me)) {
-        do {
+    if (Module32FirstW(hSnap, &me))
+    {
+        do
+        {
             if (!lstrcmpiW(me.szModule, L"explorerframe.dll") || !lstrcmpiW(me.szModule, L"explorerframe"))
                 efMods.push_back(me.hModule);
         } while (Module32NextW(hSnap, &me));
@@ -575,166 +569,221 @@ void HookAllLoadedExplorerFrameCopies()
 
     {
         std::lock_guard<std::mutex> lock(g_efSlotsMutex);
-        for (int i = 0; i < kMaxEFSlots; i++) if (g_efSlots[i].inUse) {
+        for (int i = 0; i < kMaxEFSlots; i++)
+        {
+            if (!g_efSlots[i].inUse)
+                continue;
+
             bool found = false;
-            for (HMODULE h : efMods) if (h == g_efSlots[i].hMod) { found = true; break; }
-            if (!found) {
+            for (HMODULE h : efMods)
+            {
+                if (h == g_efSlots[i].hMod)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
                 Wh_Log(L"Free slot %d (%p gone)", i, g_efSlots[i].hMod);
                 g_efSlots[i].inUse = false;
                 g_efSlots[i].hMod = nullptr;
                 g_efSlots[i].initOrig = nullptr;
-                g_efSlots[i].wndProcOrig = nullptr;
                 g_efSlots[i].setFlagsOrig = nullptr;
+                g_efSlots[i].hookOk = false;
             }
         }
+
+        for (auto it = g_efTried.begin(); it != g_efTried.end(); )
+        {
+            bool found = false;
+            for (HMODULE h : efMods)
+            {
+                if (h == *it)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+                it = g_efTried.erase(it);
+            else
+                ++it;
+        }
     }
-    if (!efMods.empty())
-        Wh_Log(L"Found %zu explorerframe copies", efMods.size());
-    for (HMODULE h : efMods) InstallExplorerFrameHooks(h);
+
+    for (HMODULE h : efMods)
+        InstallExplorerFrameHooks(h);
 }
 
 // ---------------------------------------------------------------------------
-// load triggers: only SetEvent, heavy work in worker (no loader-lock deadlock)
+// Load trigger: only SetEvent, heavy work in worker (no loader-lock deadlock).
+// Single hook: every LoadLibrary in kernelbase ends up in LdrLoadDll,
+// and the redirector bypasses LoadLibrary hooks via LoadLibraryExW_Original.
 // ---------------------------------------------------------------------------
+
 typedef LONG (WINAPI *LdrLoadDll_t)(PWSTR SearchPath, PULONG DllCharacteristics, PUNICODE_STRING DllName, PVOID* BaseAddress);
 LdrLoadDll_t pOriginalLdrLoadDll = nullptr;
 
 LONG WINAPI LdrLoadDll_Hook(PWSTR SearchPath, PULONG DllCharacteristics, PUNICODE_STRING DllName, PVOID* BaseAddress)
 {
     LONG st = pOriginalLdrLoadDll(SearchPath, DllCharacteristics, DllName, BaseAddress);
-    if (st >= 0 && BaseAddress && *BaseAddress && DllName && DllName->Buffer) {
-        if (IsExplorerFrameUnicodeString(DllName)) {
-            if (g_hookEvent) SetEvent(g_hookEvent);
-        }
+
+    if (st >= 0 && BaseAddress && *BaseAddress)
+    {
+        // Signal on every successful load, no name checks here.
+        // Auto-reset event merges bursts into one rescan, worker
+        // finds explorerframe copies via Toolhelp by base name.
+        if (g_hookEvent && !g_stopWorker.load())
+            SetEvent(g_hookEvent);
     }
+
     return st;
-}
-
-typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR, HANDLE, DWORD);
-typedef HMODULE (WINAPI *LoadLibraryW_t)(LPCWSTR);
-typedef HMODULE (WINAPI *LoadLibraryExA_t)(LPCSTR, HANDLE, DWORD);
-typedef HMODULE (WINAPI *LoadLibraryA_t)(LPCSTR);
-LoadLibraryExW_t pOriginalLoadLibraryExW = nullptr;
-LoadLibraryW_t pOriginalLoadLibraryW = nullptr;
-LoadLibraryExA_t pOriginalLoadLibraryExA = nullptr;
-LoadLibraryA_t pOriginalLoadLibraryA = nullptr;
-
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR n, HANDLE f, DWORD fl)
-{
-    HMODULE r = pOriginalLoadLibraryExW(n, f, fl);
-    if (r && IsExplorerFrameDllNameW(n) && g_hookEvent) SetEvent(g_hookEvent);
-    return r;
-}
-HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR n)
-{
-    HMODULE r = pOriginalLoadLibraryW(n);
-    if (r && IsExplorerFrameDllNameW(n) && g_hookEvent) SetEvent(g_hookEvent);
-    return r;
-}
-HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR n, HANDLE f, DWORD fl)
-{
-    HMODULE r = pOriginalLoadLibraryExA(n, f, fl);
-    if (r && IsExplorerFrameDllNameA(n) && g_hookEvent) SetEvent(g_hookEvent);
-    return r;
-}
-HMODULE WINAPI LoadLibraryA_Hook(LPCSTR n)
-{
-    HMODULE r = pOriginalLoadLibraryA(n);
-    if (r && IsExplorerFrameDllNameA(n) && g_hookEvent) SetEvent(g_hookEvent);
-    return r;
-}
-
-void* GetKernelProc(const char* name)
-{
-    HMODULE hb = GetModuleHandleW(L"kernelbase.dll");
-    if (hb) { void* p = (void*)GetProcAddress(hb, name); if (p) return p; }
-    HMODULE h32 = GetModuleHandleW(L"kernel32.dll");
-    if (h32) { void* p = (void*)GetProcAddress(h32, name); if (p) return p; }
-    return nullptr;
 }
 
 // ---------------------------------------------------------------------------
 // CreateWindow fallback (version independent)
 // ---------------------------------------------------------------------------
+
 typedef HWND (WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
 CreateWindowExW_t pOriginalCreateWindowExW = nullptr;
 
 HWND WINAPI CreateWindowExW_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD style, int x, int y, int w, int h, HWND parent, HMENU menu, HINSTANCE inst, LPVOID param)
 {
     HWND hwnd = pOriginalCreateWindowExW(ex, cls, name, style, x, y, w, h, parent, menu, inst, param);
-    if (hwnd) {
+
+    if (hwnd)
+    {
         wchar_t buf[64];
-        if (GetClassNameW(hwnd, buf, 64)) {
+        if (GetClassNameW(hwnd, buf, 64))
+        {
             if (!lstrcmpW(buf, L"CabinetWClass") || !lstrcmpW(buf, L"ExploreWClass"))
+            {
                 EnsureCabinetSubclassed(hwnd);
+            }
             else if (!lstrcmpW(buf, L"ReBarWindow32"))
-                EnsureRebarSubclassed(hwnd);
+            {
+                HWND root = GetAncestor(hwnd, GA_ROOT);
+                if (root)
+                {
+                    wchar_t rootCls[64];
+                    if (GetClassNameW(root, rootCls, 64) &&
+                        (!lstrcmpW(rootCls, L"CabinetWClass") || !lstrcmpW(rootCls, L"ExploreWClass")))
+                    {
+                        EnsureRebarSubclassed(hwnd);
+                    }
+                }
+            }
         }
     }
+
     return hwnd;
 }
 
 BOOL CALLBACK EnumChildForRebar(HWND h, LPARAM)
 {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+
     wchar_t cls[64];
     if (GetClassNameW(h, cls, 64) && !lstrcmpW(cls, L"ReBarWindow32"))
         EnsureRebarSubclassed(h);
+
     return TRUE;
 }
+
 BOOL CALLBACK EnumWindowsProc(HWND h, LPARAM)
 {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+
     wchar_t cls[64];
-    if (!GetClassNameW(h, cls, 64)) return TRUE;
-    if (!lstrcmpW(cls, L"CabinetWClass") || !lstrcmpW(cls, L"ExploreWClass")) {
+    if (!GetClassNameW(h, cls, 64))
+        return TRUE;
+
+    if (!lstrcmpW(cls, L"CabinetWClass") || !lstrcmpW(cls, L"ExploreWClass"))
+    {
         EnsureCabinetSubclassed(h);
         EnumChildWindows(h, EnumChildForRebar, 0);
     }
+
     return TRUE;
 }
+
 void SubclassExistingWindows()
 {
     EnumWindows(EnumWindowsProc, 0);
 }
 
 // ---------------------------------------------------------------------------
-// shell32 / dui70 / registry (unchanged, copy-independent)
+// Hook: CListViewHost::CreateControl
 // ---------------------------------------------------------------------------
+
 typedef long (*__cdecl CLVHCreateControl_t)(void*, HWND, void*, void*);
 CLVHCreateControl_t CLVHCreateControlOriginal = nullptr;
 
 long __cdecl CLVHCreateControlHook(void* pThis, HWND hWnd, void* a, void* b)
 {
     long ret = CLVHCreateControlOriginal(pThis, hWnd, a, b);
-    HWND lv = GetWindow(hWnd, GW_CHILD);
-    if (lv) {
-        wchar_t name[32]; GetClassNameW(lv, name, 32);
-        if (!lstrcmpW(name, L"SysListView32")) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(lv, ListviewSubclassProc, NULL);
-            std::lock_guard<std::mutex> lock(g_subclassedMutex);
-            g_subclassedListviews.push_back(lv);
+
+    HWND listview = GetWindow(hWnd, GW_CHILD);
+    if (listview != NULL)
+    {
+        wchar_t name[32];
+        GetClassNameW(listview, name, 32);
+        if (lstrcmpW(name, L"SysListView32") == 0)
+        {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(listview, ListviewSubclassProc, NULL))
+            {
+                std::lock_guard<std::mutex> lock(g_subclassedMutex);
+                g_subclassedListviews.push_back(listview);
+            }
         }
     }
+
     return ret;
 }
 
-typedef VOID(__cdecl *Element_PaintBgT)(class Element*, HDC, class Value*, LPRECT, LPRECT, LPRECT, LPRECT);
+// ---------------------------------------------------------------------------
+// Hook: DirectUI::Element::PaintBackground (Control Panel Color Fix)
+// ---------------------------------------------------------------------------
+
+typedef VOID(__cdecl *Element_PaintBgT)(
+    class Element*, HDC, class Value*, LPRECT, LPRECT, LPRECT, LPRECT);
 Element_PaintBgT Element_PaintBg = nullptr;
 
-VOID __cdecl Element_PaintBgHook(class Element* This, HDC hdc, class Value* value, LPRECT pRect, LPRECT pClip, LPRECT pEx, LPRECT pTarg)
+VOID __cdecl Element_PaintBgHook(
+    class Element* This, HDC hdc, class Value* value,
+    LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
 {
-    if (!value || !pRect) { Element_PaintBg(This, hdc, value, pRect, pClip, pEx, pTarg); return; }
-    if (g_settingControlPanelColorFix) {
-        if ((int)(*(DWORD*)value << 26) >> 26 != 9) {
+    if (!value || !pRect) {
+        Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
+        return;
+    }
+    if (g_settingControlPanelColorFix)
+    {
+        if ((int)(*(DWORD*)value << 26) >> 26 != 9)
+        {
             auto v44 = *((unsigned __int64*)value + 1);
-            if (((v44 + 20) & 7) == 4) {
+            auto v45 = (v44 + 20) & 7;
+            if (v45 == 4)
+            {
                 HWND wnd = WindowFromDC(hdc);
                 HTHEME hTh = OpenThemeData(wnd, L"ControlPanel");
-                if (hTh) {
-                    COLORREF c;
-                    if (SUCCEEDED(GetThemeColor(hTh, 2, 0, TMT_FILLCOLOR, &c))) {
-                        HBRUSH br = CreateSolidBrush(c);
-                        FillRect(hdc, pRect, br);
-                        DeleteObject(br);
+                if (hTh)
+                {
+                    COLORREF clrBg;
+                    if (SUCCEEDED(GetThemeColor(hTh, 2, 0, TMT_FILLCOLOR, &clrBg)))
+                    {
+                        HBRUSH brush = CreateSolidBrush(clrBg);
+                        FillRect(hdc, pRect, brush);
+                        DeleteObject(brush);
                     }
                     CloseThemeData(hTh);
                 }
@@ -742,110 +791,212 @@ VOID __cdecl Element_PaintBgHook(class Element* This, HDC hdc, class Value* valu
             }
         }
     }
-    Element_PaintBg(This, hdc, value, pRect, pClip, pEx, pTarg);
+
+    Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
 }
 
-LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR v, LPDWORD r, LPDWORD t, LPBYTE d, LPDWORD cb)
+// ---------------------------------------------------------------------------
+// Also hook registry query for greater reliability
+// ---------------------------------------------------------------------------
+
+LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData)
 {
-    if (v && !lstrcmpiW(v, L"AlwaysShowMenus")) {
-        if (d && !cb) return ERROR_INVALID_PARAMETER;
-        if (t) *t = REG_DWORD;
-        if (cb) {
-            DWORD buf = *cb; *cb = sizeof(DWORD);
-            if (d) {
-                if (buf < sizeof(DWORD)) return ERROR_MORE_DATA;
-                *(DWORD*)d = g_settingDisplayMenuBar;
+    if (lpValueName && !lstrcmpiW(lpValueName, L"AlwaysShowMenus")) {
+        if (lpData && !lpcbData) return ERROR_INVALID_PARAMETER;
+
+        if (lpType) *lpType = REG_DWORD;
+
+        if (lpcbData)
+        {
+            DWORD cbBuffer = *lpcbData;
+            *lpcbData = sizeof(DWORD);
+            if (lpData)
+            {
+                if (cbBuffer < sizeof(DWORD)) return ERROR_MORE_DATA;
+                *(DWORD*)lpData = g_settingDisplayMenuBar;
             }
         }
         return ERROR_SUCCESS;
     }
-    return pOriginalRegQueryValueExW(hKey, v, r, t, d, cb);
+    return pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
 }
 
 // ---------------------------------------------------------------------------
+// Worker (event-driven, no polling, no EnumWindows here)
+// ---------------------------------------------------------------------------
+
 DWORD WINAPI HookWorkerThreadProc(LPVOID)
 {
-    while (!g_stopWorker) {
-        WaitForSingleObject(g_hookEvent, 3000);
-        if (g_stopWorker) break;
+    while (!g_stopWorker.load())
+    {
+        WaitForSingleObject(g_hookEvent, INFINITE);
+
+        if (g_stopWorker.load())
+            break;
+
         HookAllLoadedExplorerFrameCopies();
-        SubclassExistingWindows();
     }
+
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Mod lifecycle
+// ---------------------------------------------------------------------------
+
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"Explorer Frame Fixes v5 init");
+    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Init");
+
     g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
     g_settingControlPanelColorFix = Wh_GetIntSetting(L"ControlPanelColorFix");
+    g_msgMenubarHackfix = RegisterWindowMessageW(L"Windhawk_MenubarHackfix_restore-folder-menubar-25h2");
 
-    g_hookEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    // --- explorerframe.dll hooks ---
+    // SEARCH_SYSTEM32 as hardening (not a KnownDLL, bare name would
+    // check app dir first). Still compatible with the redirector:
+    // it matches by base name and redirects this call too, and any
+    // extra copies are picked up by HookAllLoadedExplorerFrameCopies.
+    HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hExplorerFrame)
+        InstallExplorerFrameHooks(hExplorerFrame);
 
-    HMODULE hInit = LoadLibraryW(L"explorerframe.dll");
-    if (hInit) InstallExplorerFrameHooks(hInit);
     HookAllLoadedExplorerFrameCopies();
 
+    // --- shell32.dll hooks ---
     HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32) return FALSE;
-    WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {
-        { { L"public: virtual long __cdecl CListViewHost::CreateControl(struct HWND__ *,struct IListControlHost *,struct IViewSettings *)" },
-          (void**)&CLVHCreateControlOriginal, (void*)CLVHCreateControlHook, FALSE }
-    };
-    if (!WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, ARRAYSIZE(shell32_dll_hooks))) return FALSE;
-
-    HMODULE hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hDui70) {
-        WindhawkUtils::SYMBOL_HOOK dui70_dll_hook = {
-            { L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)" },
-            (void**)&Element_PaintBg, (void*)Element_PaintBgHook, false
-        };
-        WindhawkUtils::HookSymbols(hDui70, &dui70_dll_hook, 1);
+    if (!hShell32)
+    {
+        Wh_Log(L"Failed to load shell32.dll");
+        return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW"),
-        (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
+    WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] =
+    {
+        {
+            { L"public: virtual long __cdecl CListViewHost::CreateControl(struct HWND__ *,struct IListControlHost *,struct IViewSettings *)" },
+            (void**)&CLVHCreateControlOriginal,
+            (void*)CLVHCreateControlHook,
+            FALSE
+        }
+    };
+
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, ARRAYSIZE(shell32_dll_hooks)))
+    {
+        Wh_Log(L"Failed to install shell32.dll hooks");
+        return FALSE;
+    }
+
+    // --- dui70.dll hook (Control Panel Color Fix) ---
+    HMODULE hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hDui70)
+    {
+        Wh_Log(L"Failed to load dui70.dll — Control Panel Color Fix will be skipped.");
+    }
+    else
+    {
+        WindhawkUtils::SYMBOL_HOOK dui70_dll_hook = {
+            { L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)" },
+            (void**)&Element_PaintBg,
+            (void*)Element_PaintBgHook,
+            false
+        };
+
+        if (!WindhawkUtils::HookSymbols(hDui70, &dui70_dll_hook, 1))
+        {
+            Wh_Log(L"Failed to hook DirectUI::Element::PaintBackground — Control Panel Color Fix will be skipped.");
+        }
+        else
+        {
+            Wh_Log(L"Control Panel Color Fix hook installed.");
+        }
+    }
+
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
 
     void* pCW = (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowExW");
-    if (pCW) Wh_SetFunctionHook(pCW, (void*)CreateWindowExW_Hook, (void**)&pOriginalCreateWindowExW);
+    if (pCW)
+        Wh_SetFunctionHook(pCW, (void*)CreateWindowExW_Hook, (void**)&pOriginalCreateWindowExW);
+
+    // One-time sweep for pre-existing windows, new ones via CreateWindow hook.
     SubclassExistingWindows();
+
+    g_hookEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!g_hookEvent)
+    {
+        Wh_Log(L"Failed to create event");
+        return FALSE;
+    }
 
     void* pLdr = (void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "LdrLoadDll");
-    if (pLdr) Wh_SetFunctionHook(pLdr, (void*)LdrLoadDll_Hook, (void**)&pOriginalLdrLoadDll);
-
-    void* pExW = GetKernelProc("LoadLibraryExW");
-    if (pExW) Wh_SetFunctionHook(pExW, (void*)LoadLibraryExW_Hook, (void**)&pOriginalLoadLibraryExW);
-    void* pW = GetKernelProc("LoadLibraryW");
-    if (pW) Wh_SetFunctionHook(pW, (void*)LoadLibraryW_Hook, (void**)&pOriginalLoadLibraryW);
-    void* pExA = GetKernelProc("LoadLibraryExA");
-    if (pExA) Wh_SetFunctionHook(pExA, (void*)LoadLibraryExA_Hook, (void**)&pOriginalLoadLibraryExA);
-    void* pA = GetKernelProc("LoadLibraryA");
-    if (pA) Wh_SetFunctionHook(pA, (void*)LoadLibraryA_Hook, (void**)&pOriginalLoadLibraryA);
+    if (pLdr && !Wh_SetFunctionHook(pLdr, (void*)LdrLoadDll_Hook, (void**)&pOriginalLdrLoadDll))
+        Wh_Log(L"Failed to hook LdrLoadDll");
 
     g_workerThread = CreateThread(NULL, 0, HookWorkerThreadProc, NULL, 0, NULL);
+    if (!g_workerThread)
+    {
+        Wh_Log(L"Failed to create worker thread");
+        CloseHandle(g_hookEvent);
+        g_hookEvent = NULL;
+        return FALSE;
+    }
 
-    HookAllLoadedExplorerFrameCopies();
-    SubclassExistingWindows();
+    g_initDone.store(true);
+
     return TRUE;
+}
+
+void Wh_ModBeforeUninit()
+{
+    g_stopWorker.store(true);
+
+    if (g_hookEvent)
+        SetEvent(g_hookEvent);
+
+    if (g_workerThread)
+    {
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = NULL;
+    }
 }
 
 void Wh_ModUninit()
 {
-    g_stopWorker = TRUE;
-    if (g_hookEvent) SetEvent(g_hookEvent);
-    if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 5000);
-        CloseHandle(g_workerThread);
-        g_workerThread = NULL;
-    }
-    if (g_hookEvent) { CloseHandle(g_hookEvent); g_hookEvent = NULL; }
+    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Uninit");
 
-    std::vector<HWND> rb, lv, cab;
-    { std::lock_guard<std::mutex> lock(g_subclassedMutex);
-      rb.swap(g_subclassedRebars); lv.swap(g_subclassedListviews); cab.swap(g_subclassedCabinets); }
-    for (HWND h : rb) WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, RebarSubclassProc);
-    for (HWND h : lv) WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, ListviewSubclassProc);
-    for (HWND h : cab) WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, CabinetSubclassProc);
+    // Take a snapshot of the vectors under the lock and clear the globals,
+    // then remove the subclasses outside the lock. This is important because
+    // RemoveWindowSubclassFromAnyThread sends a message to the target
+    // window's thread, which could be blocked waiting on g_subclassedMutex
+    // (e.g. in a WM_DESTROY handler) — locking around it could deadlock.
+    std::vector<HWND> rebars;
+    std::vector<HWND> listviews;
+    std::vector<HWND> cabinets;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        rebars.swap(g_subclassedRebars);
+        listviews.swap(g_subclassedListviews);
+        cabinets.swap(g_subclassedCabinets);
+    }
+
+    Wh_Log(L"Removing subclasses from %zu rebars.", rebars.size());
+    for (HWND h : rebars)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, RebarSubclassProc);
+
+    Wh_Log(L"Removing subclasses from %zu listviews.", listviews.size());
+    for (HWND h : listviews)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, ListviewSubclassProc);
+
+    Wh_Log(L"Removing subclasses from %zu cabinets.", cabinets.size());
+    for (HWND h : cabinets)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, CabinetSubclassProc);
+
+    if (g_hookEvent)
+    {
+        CloseHandle(g_hookEvent);
+        g_hookEvent = NULL;
+    }
 }
 
 void Wh_ModSettingsChanged()
