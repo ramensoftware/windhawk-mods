@@ -8,7 +8,7 @@
 // @homepage        https://github.com/luizbizzio/taskbar-zones
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -std=c++20 -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
