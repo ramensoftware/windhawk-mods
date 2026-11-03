@@ -23,10 +23,12 @@ prompts**.
 ![Taskbar System Utilities Screenshot](https://i.imgur.com/RquNZCE.gif)
 
 ## Features
-- **Restart Explorer**: Restarts the `explorer.exe` shell process from the
+- **Restart Explorer**: Instantly restarts the `explorer.exe` shell process from the
   taskbar context menu.
-- **Clean Temp**: Recursive cleaner for `%TEMP%` and accessible files in
-  `%WINDIR%\Temp` with a XAML summary card.
+- **Clean Temp**: Comprehensive temporary file cleaner for `%TEMP%` and
+  accessible files in `%WINDIR%\Temp`. Deletes all unlocked temporary files
+  regardless of age (relying on Windows file sharing locks to protect actively
+  opened files) and displays a XAML summary card.
 - **Clean DNS Cache**: Flushes the Windows DNS resolver cache via
   `dnsapi.dll!DnsFlushResolverCache`.
 - **Restart Graphics Driver**: Triggers the `Win + Ctrl + Shift + B` display
@@ -35,9 +37,9 @@ prompts**.
   adapters using `GetAdaptersAddresses` (`iphlpapi.dll`) with optional clipboard
   copy.
 
-## Credits
-Taskbar context menu hooking mechanism adapted from the
-`taskbar-restart-explorer` mod by **Mgrmjp**.
+## Credits & Licensing
+Taskbar context menu injection hooks adapted from `taskbar-restart-explorer` by
+**Mgrmjp**. This project is distributed under the MIT license.
 */
 // ==/WindhawkModReadme==
 
