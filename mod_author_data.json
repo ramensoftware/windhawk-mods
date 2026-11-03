@@ -46,6 +46,12 @@
     "githubId": 4949197,
     "homepages": []
   },
+  "https://github.com/afate123": {
+    "author": "afate123",
+    "github": "https://github.com/afate123",
+    "githubId": 62317246,
+    "homepages": []
+  },
   "https://github.com/ahmed605": {
     "author": "ahmed605",
     "github": "https://github.com/ahmed605",
@@ -1664,6 +1670,7 @@
     "github": "https://github.com/RBND",
     "githubId": 26013355,
     "homepages": [
+      "https://github.com/RBND/HomeExplorer",
       "https://github.com/RBND/CMD-Admin"
     ]
   },
