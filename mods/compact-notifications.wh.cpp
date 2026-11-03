@@ -36,6 +36,16 @@ cards with a round avatar, the sender in bold and up to a few lines of text, sli
   letter of the app as the last resort. Web images aren't downloaded.
 * **Priority notifications** (reminders, alarms, incoming calls) get a colored outline and stay until handled.
 
+## Settings
+
+* **Appearance**: theme, size, lines of text, card width, corner radius, background opacity, your own card
+  and text colors, distance from the screen edge.
+* **Avatars**: on or off, circle, rounded square or square, the app's name before the sender.
+* **Animation**: on or off, speed, how many cards show at once.
+* **Position**: monitor and corner.
+* **Per-app rules**: for a single app (by the name shown on its notifications), hide the buttons, the reply
+  box or the avatar, or don't show cards for it at all; its notifications still go to the notification center.
+
 ## How long a card stays
 
 A card stays exactly as long as the original notification would. Windows sets this time in
@@ -72,7 +82,50 @@ works as before. Turning the mod off brings the original banners back.
   - maxLines: 4
     $name: Lines of text
     $description: Longer messages make the card taller up to this many lines; the rest is cut off with "…". From 1 to 10.
+  - width: 360
+    $name: Card width
+    $description: In pixels at 100% size. From 280 to 600.
+  - cornerRadius: 12
+    $name: Corner radius
+    $description: Roundness of the cards, in pixels. 0 makes square corners. From 0 to 24.
+  - opacity: 100
+    $name: Background opacity (%)
+    $description: Below 100 the desktop shows through the cards. From 30 to 100.
+  - cardColor: ""
+    $name: Card color
+    $description: Hex color like #202020. Empty uses the theme's color.
+  - textColor: ""
+    $name: Text color
+    $description: Hex color like #FFFFFF. Empty uses the theme's color.
+  - margin: 0
+    $name: Distance from the screen edge
+    $description: Extra space between the cards and the screen edge, in pixels. From 0 to 200.
   $name: Appearance
+- avatars:
+  - show: true
+    $name: Show avatars
+    $description: When off, the text starts at the left edge of the card.
+  - shape: circle
+    $name: Shape
+    $options:
+    - circle: Circle
+    - rounded: Rounded square
+    - square: Square
+  - appName: false
+    $name: Show the app name
+    $description: Adds the app's name before the sender, e.g. "Discord · Anna".
+  $name: Avatars
+- animation:
+  - enabled: true
+    $name: Animate cards
+    $description: Slide in and fade out. When off, cards appear and disappear at once.
+  - speed: 100
+    $name: Animation speed (%)
+    $description: 200 is twice as fast, 50 half as fast. From 25 to 400.
+  - maxCards: 5
+    $name: Most cards at once
+    $description: When more notifications come, the oldest cards fade out (the notifications stay in the notification center). From 1 to 10.
+  $name: Animation
 - position:
   - monitor: cursor
     $name: Monitor
@@ -98,6 +151,23 @@ works as before. Turning the mod off brings the original banners back.
     $name: Priority color
     $description: Hex color, for example #F0A020 (orange) or #E0102F (red).
   $name: Behavior
+- appRules:
+  - - app: ""
+      $name: App name
+      $description: As shown on the notification or in the notification center, e.g. "Discord" or "Mozilla Firefox". Not case-sensitive.
+    - show: card
+      $name: Notifications from this app
+      $options:
+      - card: Show a card
+      - mute: Don't show (they still go to the notification center)
+    - buttons: true
+      $name: Show buttons
+    - replyBox: true
+      $name: Show the reply box
+    - avatar: true
+      $name: Show the avatar
+  $name: Per-app rules
+  $description: Settings for single apps; they override the ones above. Add one entry per app.
 */
 // ==/WindhawkModSettings==
 
@@ -112,6 +182,7 @@ works as before. Turning the mod off brings the original banners back.
 #include <windhawk_utils.h>
 
 #include <climits>
+#include <format>
 #include <wchar.h>
 
 #include <algorithm>
@@ -1047,31 +1118,69 @@ DWORD WINAPI WorkerThread(LPVOID) {
 // Drawing: one layered, never-activated window in a bottom corner with a stack of cards:
 // newest at the bottom, slides in from the right, fades out. Buttons and the reply box sit under the text.
 
-constexpr float kWidth = 360;  // window width in DIPs; cards are kWidth - 2 * kPad wide
-constexpr float kPad = 8;      // room around the stack (shadow) and gap between cards
-constexpr float kCardPadX = 12, kCardPadY = 10, kAvatar = 40, kGap = 10, kRadius = 12;
+constexpr float kPad = 8;  // room around the stack (shadow) and gap between cards
+constexpr float kCardPadX = 12, kCardPadY = 10, kAvatar = 40, kGap = 10;
 constexpr float kFontSize = 13, kLine = kFontSize * 1.35f;
 constexpr float kFieldHeight = 28, kRowGap = 8, kFieldRadius = 7, kButtonGap = 6;
 constexpr DWORD kInMs = 280, kOutMs = 400;
 
-// Mod settings (WindhawkModSettings). Sizes above are in CSS pixels; "size" scales all of them.
+// Mod settings (WindhawkModSettings). Sizes are in CSS pixels; "size" scales all of them.
 enum class ThemeChoice { Auto, Dark, Light };
+enum class AvatarShape { Circle, Rounded, Square };
+constexpr UINT32 kNoColor = 0xFFFFFFFF;
+
+struct AppRule {
+    std::wstring app;
+    bool mute = false;
+    bool buttons = true, replyBox = true, avatar = true;
+};
+
 struct Settings {
     ThemeChoice theme = ThemeChoice::Auto;
     float zoom = 1.3f;
     float maxLines = 4;  // longer messages make the card taller up to this; the rest is cut with an ellipsis
+    float width = 360;   // window width; cards are width - 2 * kPad wide
+    float radius = 12;
+    float opacity = 1;
+    UINT32 cardColor = kNoColor, textColor = kNoColor;
+    float margin = 0;
+    bool showAvatars = true;
+    AvatarShape avatarShape = AvatarShape::Circle;
+    bool appName = false;
+    DWORD inMs = kInMs, outMs = kOutMs;  // 0 without animation
+    int maxCards = 5;
     bool cursorMonitor = true;
     bool top = false, left = false;  // corner
     bool showActions = true;
     bool highlightPriority = true;
     UINT32 priorityColor = 0xF0A020;  // reminders, alarms, calls
+    std::vector<AppRule> rules;
 } g_settings;
 
 std::wstring StringSetting(const wchar_t* name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting(Wh_GetStringSetting(name)).get();
+}
+
+// "#RRGGBB" or "RRGGBB"; kNoColor when empty or invalid.
+UINT32 ColorSetting(const wchar_t* name) {
+    std::wstring color = StringSetting(name);
+    if (!color.empty() && color[0] == L'#') {
+        color.erase(0, 1);
+    }
+    if (color.size() == 6 && color.find_first_not_of(L"0123456789abcdefABCDEF") == std::wstring::npos) {
+        return wcstoul(color.c_str(), nullptr, 16);
+    }
+    return kNoColor;
+}
+
+// The rule for an app, or the default one (everything on).
+AppRule RuleFor(const std::wstring& app) {
+    for (const AppRule& rule : g_settings.rules) {
+        if (_wcsicmp(rule.app.c_str(), app.c_str()) == 0) {
+            return rule;
+        }
+    }
+    return {};
 }
 
 void LoadSettings() {
@@ -1090,17 +1199,54 @@ void LoadSettings() {
     s.left = corner.find(L"Left") != std::wstring::npos;
     s.showActions = Wh_GetIntSetting(L"behavior.showActions") != 0;
     s.highlightPriority = Wh_GetIntSetting(L"behavior.highlightPriority") != 0;
-    std::wstring color = StringSetting(L"behavior.priorityColor");
-    if (!color.empty() && color[0] == L'#') {
-        color.erase(0, 1);
+    if (UINT32 color = ColorSetting(L"behavior.priorityColor"); color != kNoColor) {
+        s.priorityColor = color;
     }
-    if (color.size() == 6 && color.find_first_not_of(L"0123456789abcdefABCDEF") == std::wstring::npos) {
-        s.priorityColor = wcstoul(color.c_str(), nullptr, 16);
+    // A missing number reads as 0, so only values in range replace the defaults.
+    int width = Wh_GetIntSetting(L"appearance.width");
+    if (width) {
+        s.width = (float)std::clamp(width, 280, 600);
+    }
+    s.radius = (float)std::clamp(Wh_GetIntSetting(L"appearance.cornerRadius"), 0, 24);
+    if (int opacity = Wh_GetIntSetting(L"appearance.opacity")) {
+        s.opacity = std::clamp(opacity, 30, 100) / 100.0f;
+    }
+    s.cardColor = ColorSetting(L"appearance.cardColor");
+    s.textColor = ColorSetting(L"appearance.textColor");
+    s.margin = (float)std::clamp(Wh_GetIntSetting(L"appearance.margin"), 0, 200);
+    s.showAvatars = Wh_GetIntSetting(L"avatars.show") != 0;
+    std::wstring shape = StringSetting(L"avatars.shape");
+    s.avatarShape = shape == L"rounded" ? AvatarShape::Rounded : shape == L"square" ? AvatarShape::Square
+                                                                                   : AvatarShape::Circle;
+    s.appName = Wh_GetIntSetting(L"avatars.appName") != 0;
+    if (!Wh_GetIntSetting(L"animation.enabled")) {
+        s.inMs = s.outMs = 0;
+    } else if (int speed = Wh_GetIntSetting(L"animation.speed")) {
+        speed = std::clamp(speed, 25, 400);
+        s.inMs = kInMs * 100 / speed;
+        s.outMs = kOutMs * 100 / speed;
+    }
+    if (int maxCards = Wh_GetIntSetting(L"animation.maxCards")) {
+        s.maxCards = std::clamp(maxCards, 1, 10);
+    }
+    for (int i = 0; i < 100; i++) {
+        AppRule rule;
+        rule.app = StringSetting(std::format(L"appRules[{}].app", i).c_str());
+        if (rule.app.empty()) {
+            break;
+        }
+        rule.mute = StringSetting(std::format(L"appRules[{}].show", i).c_str()) == L"mute";
+        rule.buttons = Wh_GetIntSetting(std::format(L"appRules[{}].buttons", i).c_str()) != 0;
+        rule.replyBox = Wh_GetIntSetting(std::format(L"appRules[{}].replyBox", i).c_str()) != 0;
+        rule.avatar = Wh_GetIntSetting(std::format(L"appRules[{}].avatar", i).c_str()) != 0;
+        s.rules.push_back(rule);
     }
     g_settings = s;
-    Log(L"Settings: theme %d, size %d%%, %d lines, %s monitor, corner %s%s, actions %d, priority %d #%06X", (int)s.theme,
-        (int)(s.zoom * 100 + 0.5f), (int)s.maxLines, s.cursorMonitor ? L"cursor" : L"primary", s.top ? L"top" : L"bottom",
-        s.left ? L"Left" : L"Right", s.showActions, s.highlightPriority, s.priorityColor);
+    Log(L"Settings: theme %d, size %d%%, %d lines, width %d, %s monitor, corner %s%s, actions %d, priority %d #%06X, "
+        L"%d rules",
+        (int)s.theme, (int)(s.zoom * 100 + 0.5f), (int)s.maxLines, (int)s.width,
+        s.cursorMonitor ? L"cursor" : L"primary", s.top ? L"top" : L"bottom", s.left ? L"Left" : L"Right",
+        s.showActions, s.highlightPriority, s.priorityColor, (int)s.rules.size());
 }
 
 // Black cards in dark mode, white ones in light mode.
@@ -1110,6 +1256,30 @@ struct Theme {
 };
 constexpr Theme kDark{0x000000, 0x121212, 0x3a3b3c, 0xe4e6eb, 0x1c1c1d, 0x2a2b2c, 0.9f};
 constexpr Theme kLight{0xffffff, 0xf2f2f2, 0x808080, 0x050505, 0xf0f2f5, 0xe4e6eb, 0.25f};
+
+// a + (b - a) * t per channel.
+UINT32 Mix(UINT32 a, UINT32 b, float t) {
+    UINT32 result = 0;
+    for (int shift = 0; shift <= 16; shift += 8) {
+        float x = (float)((a >> shift) & 0xff), y = (float)((b >> shift) & 0xff);
+        result |= (UINT32)(x + (y - x) * t + 0.5f) << shift;
+    }
+    return result;
+}
+
+// The theme with the colors from the settings; hover and field shades are derived from the card color.
+Theme CustomTheme(Theme theme) {
+    if (g_settings.textColor != kNoColor) {
+        theme.ink = g_settings.textColor;
+    }
+    if (g_settings.cardColor != kNoColor) {
+        theme.card = g_settings.cardColor;
+        theme.cardHover = Mix(theme.card, theme.ink, 0.07f);
+        theme.field = Mix(theme.card, theme.ink, 0.11f);
+        theme.fieldHover = Mix(theme.card, theme.ink, 0.17f);
+    }
+    return theme;
+}
 
 bool SystemUsesLightTheme() {
     DWORD value = 0, size = sizeof(value);
@@ -1132,6 +1302,7 @@ struct Card {
     IDWriteTextLayout* title = nullptr;
     IDWriteTextLayout* text = nullptr;
     ID2D1Bitmap* avatar = nullptr;
+    bool showAvatar = true;   // the avatars setting and the app's rule
     float contentHeight = 0;  // avatar and texts, without buttons and the reply box
     float height = 0;
     ULONGLONG shownAt = 0;
@@ -1140,6 +1311,7 @@ struct Card {
 };
 
 std::vector<Card> g_cards;
+std::vector<std::wstring> g_skipped;  // ids of toasts shown without a card (see ApplySnapshot)
 Hit g_hover;
 Theme g_theme = kDark;
 HMONITOR g_monitor = nullptr;  // where the current stack is shown
@@ -1171,6 +1343,11 @@ RECT WorkArea() {
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfo(Monitor(), &mi);
     return mi.rcWork;
+}
+
+// How far an animation of ms milliseconds is after elapsed ones, 0 to 1 (done at once when ms is 0).
+float Progress(ULONGLONG elapsed, DWORD ms) {
+    return ms ? std::clamp(elapsed / (float)ms, 0.0f, 1.0f) : 1.0f;
 }
 
 float EaseOut(float t) {
@@ -1213,9 +1390,17 @@ ID2D1Bitmap* LoadBitmap(const std::wstring& path) {
     return bitmap;
 }
 
+// Room the avatar takes left of the texts.
+float AvatarSpace(const Card& card) {
+    return card.showAvatar ? kAvatar + kGap : 0;
+}
+
 void LayoutCard(Card& card) {
-    float textWidth = kWidth - 2 * kPad - 2 * kCardPadX - kAvatar - kGap;
+    float textWidth = g_settings.width - 2 * kPad - 2 * kCardPadX - AvatarSpace(card);
     std::wstring title = card.info.title.empty() ? card.info.app : card.info.title;
+    if (g_settings.appName && !card.info.app.empty() && title != card.info.app) {
+        title = card.info.app + L" · " + title;
+    }
     g_dwrite->CreateTextLayout(title.c_str(), (UINT32)title.size(), g_titleFormat, textWidth, kLine, &card.title);
     g_dwrite->CreateTextLayout(card.info.text.c_str(), (UINT32)card.info.text.size(), g_textFormat, textWidth,
                                g_settings.maxLines * kLine, &card.text);
@@ -1224,7 +1409,7 @@ void LayoutCard(Card& card) {
     if (card.text && SUCCEEDED(card.text->GetMetrics(&metrics))) {
         textHeight = std::min(metrics.height, g_settings.maxLines * kLine);
     }
-    card.contentHeight = std::max(kAvatar, kLine + textHeight);
+    card.contentHeight = std::max(card.showAvatar ? kAvatar : 0, kLine + textHeight);
     card.height = card.contentHeight + 2 * kCardPadY;
     if (card.info.hasInput) {
         card.height += kRowGap + kFieldHeight;
@@ -1232,19 +1417,19 @@ void LayoutCard(Card& card) {
     if (!card.info.buttons.empty()) {
         card.height += kRowGap + kFieldHeight;
     }
-    card.avatar = LoadBitmap(card.info.image);
+    card.avatar = card.showAvatar ? LoadBitmap(card.info.image) : nullptr;
 }
 
 // Rows under the text, in card coordinates (left edge 0): the reply box, then the buttons side by side.
 D2D1_RECT_F InputRect(const Card& card) {
     float top = kCardPadY + card.contentHeight + kRowGap;
-    return {kCardPadX, top, kWidth - 2 * kPad - kCardPadX, top + kFieldHeight};
+    return {kCardPadX, top, g_settings.width - 2 * kPad - kCardPadX, top + kFieldHeight};
 }
 
 D2D1_RECT_F ButtonRect(const Card& card, int index) {
     float top = kCardPadY + card.contentHeight + kRowGap + (card.info.hasInput ? kFieldHeight + kRowGap : 0);
     int count = (int)card.info.buttons.size();
-    float width = (kWidth - 2 * kPad - 2 * kCardPadX - (count - 1) * kButtonGap) / count;
+    float width = (g_settings.width - 2 * kPad - 2 * kCardPadX - (count - 1) * kButtonGap) / count;
     float left = kCardPadX + index * (width + kButtonGap);
     return {left, top, left + width, top + kFieldHeight};
 }
@@ -1267,28 +1452,54 @@ void ApplySnapshot() {
             card.info.inputFocused = live->inputFocused;
         }
     }
+    // Toasts that get no card (muted apps, cards pushed out by "Most cards at once") are remembered while the
+    // banner still has them, so they don't come back on the next snapshot.
+    std::erase_if(g_skipped, [&](const std::wstring& id) {
+        return std::none_of(snapshot.begin(), snapshot.end(), [&](const ToastInfo& t) { return t.id == id; });
+    });
     for (auto& info : snapshot) {
         bool have = std::any_of(g_cards.begin(), g_cards.end(), [&](const Card& c) { return c.info.id == info.id; });
-        if (!have) {
-            // A new stack follows the cursor's monitor and the current theme; a growing one stays where it is.
-            if (std::all_of(g_cards.begin(), g_cards.end(), [](const Card& c) { return c.goneAt; })) {
-                POINT cursor{};
-                GetCursorPos(&cursor);
-                g_monitor = g_settings.cursorMonitor ? MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY) : nullptr;
-                bool light = g_settings.theme == ThemeChoice::Light ||
-                             (g_settings.theme == ThemeChoice::Auto && SystemUsesLightTheme());
-                g_theme = light ? kLight : kDark;
-            }
-            Card card;
-            card.info = info;
-            if (!g_settings.showActions) {
-                card.info.buttons.clear();
-                card.info.hasInput = false;
-            }
-            card.info.priority = card.info.priority && g_settings.highlightPriority;
-            card.shownAt = now;
-            LayoutCard(card);
-            g_cards.push_back(card);
+        if (have || std::find(g_skipped.begin(), g_skipped.end(), info.id) != g_skipped.end()) {
+            continue;
+        }
+        AppRule rule = RuleFor(info.app);
+        if (rule.mute) {
+            g_skipped.push_back(info.id);
+            continue;
+        }
+        // A new stack follows the cursor's monitor and the current theme; a growing one stays where it is.
+        if (std::all_of(g_cards.begin(), g_cards.end(), [](const Card& c) { return c.goneAt; })) {
+            POINT cursor{};
+            GetCursorPos(&cursor);
+            g_monitor = g_settings.cursorMonitor ? MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY) : nullptr;
+            bool light = g_settings.theme == ThemeChoice::Light ||
+                         (g_settings.theme == ThemeChoice::Auto && SystemUsesLightTheme());
+            g_theme = CustomTheme(light ? kLight : kDark);
+        }
+        Card card;
+        card.info = info;
+        if (!g_settings.showActions || !rule.buttons) {
+            card.info.buttons.clear();
+        }
+        if (!g_settings.showActions || !rule.replyBox) {
+            card.info.hasInput = false;
+        }
+        card.showAvatar = g_settings.showAvatars && rule.avatar;
+        card.info.priority = card.info.priority && g_settings.highlightPriority;
+        card.shownAt = now;
+        LayoutCard(card);
+        g_cards.push_back(card);
+    }
+    // Over the limit, the oldest cards still showing fade out.
+    int showing = (int)std::count_if(g_cards.begin(), g_cards.end(), [](const Card& c) { return !c.goneAt; });
+    for (auto& card : g_cards) {
+        if (showing <= g_settings.maxCards) {
+            break;
+        }
+        if (!card.goneAt) {
+            card.goneAt = now;
+            g_skipped.push_back(card.info.id);
+            showing--;
         }
     }
 }
@@ -1330,7 +1541,7 @@ D2D1_RECT_F Offset(D2D1_RECT_F rect, float x, float y) {
 
 void DrawCard(Card& card, int index, float x, float alpha) {
     const Theme& theme = g_theme;
-    float cardWidth = kWidth - 2 * kPad;
+    float cardWidth = g_settings.width - 2 * kPad;
     D2D1_RECT_F rect{x, card.top, x + cardWidth, card.top + card.height};
     bool live = !card.goneAt;
     bool hovered = live && g_hover.card == index;
@@ -1339,22 +1550,33 @@ void DrawCard(Card& card, int index, float x, float alpha) {
     for (int layer = 4; layer >= 1; layer--) {
         float grow = layer * 2.0f;
         FillRounded(D2D1_RECT_F{rect.left - grow, rect.top - grow + 4, rect.right + grow, rect.bottom + grow + 4},
-                    kRadius + grow, 0x000000, 0.06f * alpha);
+                    g_settings.radius + grow, 0x000000, 0.06f * g_settings.opacity * alpha);
     }
-    FillRounded(rect, kRadius, hovered && g_hover.part == Part::Body ? theme.cardHover : theme.card, alpha);
+    FillRounded(rect, g_settings.radius, hovered && g_hover.part == Part::Body ? theme.cardHover : theme.card,
+                g_settings.opacity * alpha);
     if (card.info.priority) {
         // Reminders, alarms and calls: accent outline and a bar along the left edge.
-        StrokeRounded(rect, kRadius, g_settings.priorityColor, alpha, 1.5f);
-        FillRounded(D2D1_RECT_F{rect.left + 4, rect.top + kRadius, rect.left + 7, rect.bottom - kRadius}, 1.5f,
+        StrokeRounded(rect, g_settings.radius, g_settings.priorityColor, alpha, 1.5f);
+        FillRounded(D2D1_RECT_F{rect.left + 4, rect.top + g_settings.radius, rect.left + 7, rect.bottom - g_settings.radius}, 1.5f,
                     g_settings.priorityColor, alpha);
     } else {
-        StrokeRounded(rect, kRadius, theme.border, theme.borderAlpha * alpha, 1);
+        StrokeRounded(rect, g_settings.radius, theme.border, theme.borderAlpha * alpha, 1);
     }
 
-    // Avatar: the toast's image cropped to a circle (object-fit: cover), otherwise the app's first letter.
+    // Avatar: the toast's image cropped to the avatar shape (object-fit: cover), otherwise the app's first letter.
     float cx = rect.left + kCardPadX + kAvatar / 2, cy = rect.top + kCardPadY + card.contentHeight / 2;
+    auto fillAvatar = [&](ID2D1Brush* brush) {
+        if (g_settings.avatarShape == AvatarShape::Circle) {
+            D2D1_ELLIPSE circle{{cx, cy}, kAvatar / 2, kAvatar / 2};
+            g_target->FillEllipse(&circle, brush);
+        } else {
+            float r = g_settings.avatarShape == AvatarShape::Rounded ? kAvatar * 0.22f : 0;
+            D2D1_ROUNDED_RECT square{{cx - kAvatar / 2, cy - kAvatar / 2, cx + kAvatar / 2, cy + kAvatar / 2}, r, r};
+            g_target->FillRoundedRectangle(&square, brush);
+        }
+    };
     ID2D1BitmapBrush* avatarBrush = nullptr;
-    if (card.avatar) {
+    if (card.showAvatar && card.avatar) {
         D2D1_SIZE_F size = card.avatar->GetSize();
         float fit = kAvatar / std::min(size.width, size.height);
         D2D1_BITMAP_BRUSH_PROPERTIES brushProps{D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
@@ -1364,13 +1586,12 @@ void DrawCard(Card& card, int index, float x, float alpha) {
                                                                               cy - size.height * fit / 2)};
         g_target->CreateBitmapBrush(card.avatar, &brushProps, &common, &avatarBrush);
     }
-    D2D1_ELLIPSE circle{{cx, cy}, kAvatar / 2, kAvatar / 2};
     if (avatarBrush) {
-        g_target->FillEllipse(&circle, avatarBrush);
+        fillAvatar(avatarBrush);
         avatarBrush->Release();
-    } else {
+    } else if (card.showAvatar) {
         if (ID2D1SolidColorBrush* fill = Brush(card.info.priority ? g_settings.priorityColor : 0x808080, 0.3f * alpha)) {
-            g_target->FillEllipse(&circle, fill);
+            fillAvatar(fill);
             fill->Release();
         }
         std::wstring source = card.info.app.empty() ? card.info.title : card.info.app;
@@ -1381,7 +1602,7 @@ void DrawCard(Card& card, int index, float x, float alpha) {
         }
     }
 
-    float textLeft = rect.left + kCardPadX + kAvatar + kGap;
+    float textLeft = rect.left + kCardPadX + AvatarSpace(card);
     DWRITE_TEXT_METRICS metrics{};
     float textHeight = card.text && SUCCEEDED(card.text->GetMetrics(&metrics)) ? std::min(metrics.height, g_settings.maxLines * kLine) : 0;
     float textTop = rect.top + kCardPadY + (card.contentHeight - kLine - textHeight) / 2;
@@ -1458,7 +1679,7 @@ bool Render() {
     ULONGLONG now = GetTickCount64();
     g_cards.erase(std::remove_if(g_cards.begin(), g_cards.end(),
                                  [&](Card& c) {
-                                     bool done = c.goneAt && now - c.goneAt >= kOutMs;
+                                     bool done = c.goneAt && now - c.goneAt >= g_settings.outMs;
                                      if (done) {
                                          ReleaseCard(c);
                                      }
@@ -1476,7 +1697,7 @@ bool Render() {
     for (auto& card : g_cards) {
         heightDip += card.height + kPad;
     }
-    SIZE size{(LONG)(kWidth * scale + 0.5f), (LONG)(heightDip * scale + 0.5f)};
+    SIZE size{(LONG)(g_settings.width * scale + 0.5f), (LONG)(heightDip * scale + 0.5f)};
     if (size.cx != g_bitmapSize.cx || size.cy != g_bitmapSize.cy) {
         if (g_bitmap) {
             DeleteObject(g_bitmap);
@@ -1496,15 +1717,15 @@ bool Render() {
     g_target->Clear(&transparent);
 
     bool animating = false;
-    float cardWidth = kWidth - 2 * kPad;
+    float cardWidth = g_settings.width - 2 * kPad;
     float y = kPad;
     // Newest card next to the screen edge: at the bottom in bottom corners, at the top in top corners.
     for (size_t n = 0; n < g_cards.size(); n++) {
         size_t i = g_settings.top ? g_cards.size() - 1 - n : n;
         Card& card = g_cards[i];
         card.top = y;
-        float in = EaseOut((now - card.shownAt) / (float)kInMs);
-        float alpha = card.goneAt ? 1 - std::clamp((now - card.goneAt) / (float)kOutMs, 0.0f, 1.0f) : 1.0f;
+        float in = EaseOut(Progress(now - card.shownAt, g_settings.inMs));
+        float alpha = card.goneAt ? 1 - Progress(now - card.goneAt, g_settings.outMs) : 1.0f;
         animating |= in < 1 || card.goneAt;
         float slide = (1 - in) * cardWidth * 1.1f;
         DrawCard(card, (int)i, kPad + (g_settings.left ? -slide : slide), alpha);
@@ -1513,7 +1734,9 @@ bool Render() {
     g_target->EndDraw();
 
     RECT work = WorkArea();
-    POINT dst{g_settings.left ? work.left : work.right - size.cx, g_settings.top ? work.top : work.bottom - size.cy};
+    LONG margin = (LONG)(g_settings.margin * Scale() / g_settings.zoom + 0.5f);  // screen pixels, not zoomed
+    POINT dst{g_settings.left ? work.left + margin : work.right - size.cx - margin,
+              g_settings.top ? work.top + margin : work.bottom - size.cy - margin};
     POINT src{0, 0};
     BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     UpdateLayeredWindow(g_window, nullptr, &dst, &size, g_memDC, &src, 0, &blend, ULW_ALPHA);
@@ -1542,11 +1765,11 @@ Hit HitTest(POINT pt) {
     float x = pt.x / scale, y = pt.y / scale;
     for (size_t i = 0; i < g_cards.size(); i++) {
         const Card& card = g_cards[i];
-        if (card.goneAt || x < kPad || x >= kWidth - kPad || y < card.top || y >= card.top + card.height) {
+        if (card.goneAt || x < kPad || x >= g_settings.width - kPad || y < card.top || y >= card.top + card.height) {
             continue;
         }
         float cardX = x - kPad, cardY = y - card.top;
-        float bx = kWidth - 2 * kPad - 14, by = 14;
+        float bx = g_settings.width - 2 * kPad - 14, by = 14;
         if ((cardX - bx) * (cardX - bx) + (cardY - by) * (cardY - by) <= 12 * 12) {
             return {(int)i, Part::Close};
         }
