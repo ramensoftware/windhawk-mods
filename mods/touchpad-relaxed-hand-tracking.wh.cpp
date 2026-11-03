@@ -130,19 +130,13 @@ constexpr int kFingers = 5;
 // one stays, so that the multiplier doesn't flap.
 constexpr double kHandMovers = 2.7;
 constexpr double kFewMovers = 2.3;
-// Under this, per frame, a finger is resting jitter.
+// Under this, per frame, the most moved finger is resting jitter: the median is followed, which cancels it.
 constexpr double kJitterMm = 0.1;
 // After a stop the touchpad keeps reporting the resting fingers creeping at 2–4 mm/s for a few hundred ms,
 // which Windows doesn't turn into pointer movement and the glide did: the pointer slid on. Under the first
-// speed (the hand's, smoothed) the pointer stops, and it only starts again over the second.
+// speed the pointer stops, and it only starts again over the second.
 constexpr double kStopSpeed = 4.0;
 constexpr double kStartSpeed = 7.0;
-// One Euro filter (Casiez et al., 2012): the hand's movement is smoothed more the slower it goes, where jitter
-// shows and a little lag doesn't, and hardly at all when fast, where lag would show. Cutoff in Hz: kEuroMinCutoff
-// at rest, plus kEuroBeta per mm/s of the hand's speed, which is itself smoothed at kEuroSpeedCutoff.
-constexpr double kEuroMinCutoff = 2.0;
-constexpr double kEuroBeta = 0.15;
-constexpr double kEuroSpeedCutoff = 1.0;
 // More than this in one frame isn't a finger moving: the touchpad gave a contact's id to another contact,
 // typically when the thumb lands late, and following it would throw the pointer to the thumb.
 constexpr double kJumpMm = 10.0;
@@ -328,8 +322,6 @@ struct {
     std::unordered_map<ULONG, std::pair<double, double>> last;  // id -> previous position, mm
     bool fewMoving;  // the lower speed multiplier applies
     double accX, accY;
-    double lagX, lagY;  // mm of hand movement the filter hasn't passed on yet
-    double handSpeed;   // mm/s, smoothed, which sets the filter's cutoff
     std::unordered_map<ULONG, Track> tracks;
     bool recentClick;
     DWORD lastLossTime;
@@ -627,9 +619,6 @@ void EndGlide() {
     g_state.anchorValid = false;
     g_state.speed = 0;
     g_state.stopped = true;
-    g_state.lagX = 0;
-    g_state.lagY = 0;
-    g_state.handSpeed = 0;
     g_state.tracks.clear();
     g_learn.active = false;
     if (g_curveDirty && Now() - g_lastSave >= kSaveIntervalSec) {
@@ -876,39 +865,25 @@ void TrackTwoFingers(const std::vector<const Contact*>& fingers, int touching, D
     }
 }
 
-double EuroAlpha(double cutoff, double dt) {
-    double tau = 1 / (2 * 3.14159265358979 * cutoff);
-    return 1 / (1 + tau / dt);
-}
-
 void Move(double dxMm, double dyMm, double dt, double multiplier) {
-    dt = std::max(dt, kMinFrameSec);
-    double raw = std::hypot(dxMm, dyMm) / dt;
-    g_state.handSpeed += (raw - g_state.handSpeed) * EuroAlpha(kEuroSpeedCutoff, dt);
-    if (g_state.stopped ? g_state.handSpeed < kStartSpeed : g_state.handSpeed < kStopSpeed) {
-        g_state.stopped = true;
-        g_state.speed = 0;
-        g_state.lagX = 0;
-        g_state.lagY = 0;
-        g_state.accX = 0;
-        g_state.accY = 0;
-        return;
+    if (dt > 0) {
+        double v = std::hypot(dxMm, dyMm) / std::max(dt, kMinFrameSec);
+        if (g_state.stopped ? v < kStartSpeed : v < kStopSpeed) {
+            g_state.stopped = true;
+            g_state.speed = v;
+            g_state.accX = 0;
+            g_state.accY = 0;
+            return;
+        }
+        g_state.stopped = false;
+        // Smoothed when speeding up, which absorbs spikes, but followed at once when slowing down: a slow
+        // drop kept the last millimeters of a stop on the fast part of the curve, and the pointer slid on.
+        g_state.speed = v < g_state.speed ? v : g_state.speed + (v - g_state.speed) * 0.3;
     }
-    g_state.stopped = false;
-
-    double alpha = EuroAlpha(kEuroMinCutoff + kEuroBeta * g_state.handSpeed, dt);
-    g_state.lagX += dxMm;
-    g_state.lagY += dyMm;
-    double ox = g_state.lagX * alpha;
-    double oy = g_state.lagY * alpha;
-    g_state.lagX -= ox;
-    g_state.lagY -= oy;
-    // The curve takes the filtered speed, which follows a stop as the movement does.
-    g_state.speed = std::hypot(ox, oy) / dt;
 
     double pxPerMm = CurveAt(g_state.speed) * multiplier;
-    g_state.accX += ox * pxPerMm;
-    g_state.accY += oy * pxPerMm;
+    g_state.accX += dxMm * pxPerMm;
+    g_state.accY += dyMm * pxPerMm;
     LONG mx = (LONG)g_state.accX;
     LONG my = (LONG)g_state.accY;
     g_state.accX -= mx;
@@ -1456,13 +1431,14 @@ void ProcessFrame() {
     }
 
     // Each finger weighs as much as it moved: resting ones drop out on their own, a finger moving alone leads,
-    // and one which lags (the thumb) weighs less, with no choice of fingers that could flip between frames. While
-    // the contacts settle after a count change, the median is followed, which a single shifted contact doesn't
-    // move.
+    // and one which lags (the thumb) weighs less, with no choice of fingers that could flip between frames. At
+    // rest, and while the contacts settle after a count change, the median is followed, which cancels jitter
+    // and a single shifted contact.
     double dx = 0;
     double dy = 0;
     std::vector<double> allX;
     std::vector<double> allY;
+    double best = 0;
     for (const Contact* c : used) {
         auto found = g_state.last.find(c->id);
         if (found == g_state.last.end()) {
@@ -1479,6 +1455,7 @@ void ProcessFrame() {
         }
         allX.push_back(fx);
         allY.push_back(fy);
+        best = std::max(best, d);
     }
 
     if (allX.empty()) {
@@ -1486,7 +1463,7 @@ void ProcessFrame() {
         return;
     }
 
-    if (now - g_state.countChangeTime < kSettleMs) {
+    if (best < kJitterMm || now - g_state.countChangeTime < kSettleMs) {
         dx = Median(allX);
         dy = Median(allY);
     } else {
@@ -1497,10 +1474,8 @@ void ProcessFrame() {
             dy += allY[i] * d;
             sum += d;
         }
-        if (sum > 0) {
-            dx /= sum;
-            dy /= sum;
-        }
+        dx /= sum;
+        dy /= sum;
     }
 
     double dt = t - g_state.lastFrameTime;
