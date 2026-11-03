@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
-// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
-// @version         1.6.0
+// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, or hide specific indicators
+// @version         1.6.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -19,22 +19,15 @@
 /*
 # On-Screen Indicator Position
 
-Windows 11 shows an on-screen indicator when you change the volume or
-brightness, toggle airplane mode, or when the camera or microphone privacy state
-changes. Under **Settings > System > Notifications > On-screen indicators**,
-Windows lets you put it in one of three places: top left, top center, or bottom
-center.
+Move Windows 11's volume, brightness and other on-screen indicators to any
+corner, edge center or the center of the screen. Give each type its own position
+and offsets, or hide the ones you don't want to see.
 
-This mod replaces that with a full nine-point grid, any corner, any edge center,
-or dead center, plus a pixel offset for fine-tuning. Each kind of indicator can
-also be given a spot of its own, so the volume one can sit somewhere different
-from the brightness one.
-
-The brightness indicator moved to the middle of the right edge:
+The brightness indicator at the middle of the right edge:
 
 ![Indicator at middle right](https://raw.githubusercontent.com/mario0318/windhawk-mods/3685cdf56c55ba8cb3398b1cf9e35b5e95e68eb1/on-screen-indicator-position/middle-right.jpg)
 
-## Positions
+## Positions and offsets
 
 ```
  Top left        Top center        Top right
@@ -42,104 +35,100 @@ The brightness indicator moved to the middle of the right edge:
  Bottom left     Bottom center     Bottom right
 ```
 
-The indicator is kept inside the area Windows lays it out in, so an offset that
-would push it past an edge stops at the edge instead of moving off screen. You
-can also leave the position on **Windows default** and use the offsets alone to
-nudge one of the built-in positions.
+**Position** is the main position. Under **Position per indicator**, choose a
+different position for any indicator that needs one. **Same as the main position**
+follows the main setting. **Windows default** keeps the position Windows chose;
+offsets still apply.
 
-## A different spot per indicator
+Offsets move an indicator from its chosen position. Positive horizontal values
+move it right, and positive vertical values move it down. Negative values move
+it the other way. Values are pixels at 100% display scaling; an offset of 20
+becomes 30 pixels at 150%. The indicator stays inside the area Windows provides
+for it, so large offsets stop at the edge.
 
-Volume, brightness, keyboard brightness, airplane mode, camera, microphone, the
-virtual desktop name popup and the other text indicators can each be given their own
-position. Anything left on **Same as the main position** follows the setting above,
-so you only have to touch the ones you want somewhere else. Handy if you want the
-volume indicator out of the way at the bottom but still want the camera one where
-you will notice it.
+Under **Offsets per indicator**, choose **Use this offset** for either direction
+to replace the main offset. A custom value of 0 removes that direction's offset.
+The other direction can still use the main offset.
 
-If you used **Other indicators** to place the "Desktop N" popup before 1.4.0,
-set **Virtual desktop name** to that spot after updating. It now has its own setting
-and otherwise follows the main position.
-
-Volume kept at the top left while brightness sits in the middle. Only one of them is
-ever on screen at a time, so this is the same desktop photographed twice:
+Volume at the top left and brightness in the center, shown in separate photos
+because Windows displays one indicator at a time:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
 
+**Virtual desktop name** controls the name popup shown when switching desktops.
+**Other indicators** covers the remaining text popups. If you used **Other
+indicators** for the desktop name before version 1.4.0, copy that position to
+**Virtual desktop name**.
+
 ## Hide individual indicators
 
-Choose **Hidden** for an indicator to stop it appearing. The underlying action,
-such as changing volume or brightness, still works. Other indicators keep their
-own settings. Change it back to any position to show it again.
+Choose **Hidden** under **Position per indicator** to hide that type on every
+monitor. Changing volume or brightness still works. Choose any position to show
+it again. Display profiles cannot change whether an indicator is hidden.
 
-Hiding applies to the indicator type on every monitor. Display profiles only
-change placement. If Windows changes an entry point that the mod needs, that
-indicator may remain visible; check the mod log for missing entry points.
-Microphone and text indicators, including the virtual desktop name, need their
-public show entry points for hiding. If those are unavailable on your Windows
-build, these indicators remain visible even when set to **Hidden**.
+Some Windows builds may not support hiding every type. If an indicator still
+appears, check the mod log for a message about unavailable hiding.
 
-## Skip the slide out animation
+## Display profiles
 
-The indicator normally slides off screen when it's done. With **Skip the slide out
-animation** on, it just disappears. Windows already has a no-animation hide path
-and the mod asks for that one instead, so the slide in and everything outside the
-indicator are left alone. If the setting ever appears to do nothing, the mod's log
-says so on a build where the entry points have moved.
+Profiles apply different positions and offsets for different display setups.
+They change placement on the monitor Windows already chose, so they cannot move
+an indicator to another monitor.
 
-## Independent offsets and display profiles
+Enable a profile and choose which monitor, active monitor count and indicator
+it should match. All conditions must match. Leave the monitor name empty, the
+count at 0 or the indicator on **All indicators** to skip that condition.
+Monitor names match part of the name and ignore letter case. Enable mod logging
+and trigger an indicator to see its monitor name in the log.
 
-Each indicator can use the main horizontal and vertical offsets, or its own
-values, including zero. Each one can also stay at the Windows default position
-while the others move.
+The first enabled matching profile applies. Settings left on **Keep the indicator
+position** or **Keep the indicator offset** use the main or per-indicator value;
+they do not take values from later profiles. For example, a profile can move the
+volume indicator when a dock is connected without changing the other indicators.
 
-Display profiles change the placement on the screen Windows already chose. A
-profile can match part of the monitor's name, the number of monitors in use, and
-one kind of indicator. The first enabled profile that matches wins, and anything
-it leaves on "Keep" uses the indicator settings. For example, use a different
-position when a dock is connected.
+To choose which monitor shows an indicator, use [Volume control open
+location](https://windhawk.net/mods/volume-control-open-location). It works with
+this mod. If offsets or monitor-specific profiles use the wrong display, try
+disabling the monitor-selection mod to check for a conflict.
 
-**Seconds on screen** changes the indicator's one-shot timeout from 1 to 60
-seconds. Leave it at 0 to keep the Windows timeout. It does not change animations.
+## Timing and animation
 
-## Choosing a monitor
+**Seconds on screen** sets the automatic dismissal delay from 1 to 60 seconds.
+Leave it at 0 to use Windows' timing. It does not keep an indicator visible if
+Windows replaces or dismisses it for another reason, and it may have no effect
+on Windows builds that use a different timer.
 
-This mod only changes where the indicator sits on a screen, not which screen it
-appears on. For that, use [Volume control open
-location](https://windhawk.net/mods/volume-control-open-location), which selects
-a monitor by number or by interface name. The two work together.
+**Skip the slide out animation** makes the indicator disappear instead of sliding
+away. It does not change the slide-in animation. If the slide-in direction looks
+wrong for your chosen position, try changing **Position of on-screen indicators**
+under **Settings > System > Notifications**, if your Windows build offers it.
 
-## Notes
+## Compatibility and limitations
 
-* The slide-in animation direction is chosen by Windows from the built-in
-  setting, not by this mod. If the animation looks wrong for your new position,
-  change the built-in setting to whichever of the three has the animation you
-  like, then let this mod do the actual placement.
-* Offsets are given at 100% scaling and scaled to whichever monitor the
-  indicator appears on, so the same value moves the same distance on a display
-  running at 150%.
-* With two indicators set to different spots you can catch the previous one
-  flashing at the new spot for a frame before the new one draws. That's the
-  confirmator reusing its frame, the placement hook can't do anything about it.
-  Skipping the slide out makes it easier to catch rather than harder, since what
-  lands at the new spot is the tail end of the previous indicator instead of an
-  empty frame.
-* Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
-  Build 26300 uses the same confirmator, so it should behave the same.
-  The ARM64 hooks were checked against the disassembly of the confirmator DLL
-  but not run on hardware, so if you use it there please let me know how it
-  goes.
+Tested on Windows 11 build 26200 (25H2) x64 with displays at 100% and 150%
+scaling. ARM64 support was checked against disassembly, but has not been tested
+on hardware.
+
+Windows updates can change how indicators work. If the mod cannot identify all
+indicator types, per-indicator positions and offsets are ignored. Profiles for
+**All indicators** can still apply, and hiding can still work for types the mod
+can hide. If the virtual desktop name cannot be identified separately, it uses
+**Other indicators** settings. Check the mod log when a setting has no effect.
+
+When indicators use different positions, the previous one may briefly flash at
+the new position before the next one appears. Windows reuses the same indicator
+window. Skipping the slide out animation can make this more noticeable.
 
 ## Credits
 
-The hook onto the indicator's own placement function comes from [Volume control
-open location](https://windhawk.net/mods/volume-control-open-location) and
+The placement hook is based on [Volume control open
+location](https://windhawk.net/mods/volume-control-open-location) and
 [Taskbar primary on secondary
-monitor](https://windhawk.net/mods/taskbar-primary-on-secondary-monitor), which
-both target the same function and work out the origin handling.
+monitor](https://windhawk.net/mods/taskbar-primary-on-secondary-monitor).
 
 ## Issues
 
-Bugs and feature requests go on the [issues
+Report bugs and request features on the [issues
 page](https://github.com/mario0318/on-screen-indicator-position/issues).
 */
 // ==/WindhawkModReadme==
@@ -149,8 +138,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
 - position: topRight
   $name: Position
   $description: >-
-    Where on the screen the indicator appears. Anything left on "Same as the main
-    position" below follows this one.
+    The main position for all indicators. Choose exceptions under Position per indicator.
   $options:
   - windowsDefault: Windows default (only apply the offsets)
   - topLeft: Top left
@@ -165,15 +153,13 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
 - offsetX: 0
   $name: Horizontal offset
   $description: >-
-    Nudge the indicator sideways. A positive number moves it right, a negative one
-    moves it left. It stops at the edge of the screen rather than going off it, and
-    the same number moves it the same distance on any display.
+    Positive values move it right; negative values move it left. Values are pixels
+    at 100% display scaling and scale with the display. Movement stops at the edge.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
-    Nudge the indicator up or down. A positive number moves it down, a negative one
-    moves it up. It stops at the edge of the screen rather than going off it, and
-    the same number moves it the same distance on any display.
+    Positive values move it down; negative values move it up. Values are pixels
+    at 100% display scaling and scale with the display. Movement stops at the edge.
 - skipHideAnimation: false
   $name: Skip the slide out animation
   $description: The indicator disappears instead of sliding away.
@@ -270,6 +256,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     - bottomRight: Bottom right
   - text: same
     $name: Other indicators
+    $description: Text popups other than the virtual desktop name.
     $options:
     - same: Same as the main position
     - hidden: Hidden
@@ -285,6 +272,7 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     - bottomRight: Bottom right
   - virtualDesktop: same
     $name: Virtual desktop name
+    $description: The name popup shown when switching virtual desktops.
     $options:
     - same: Same as the main position
     - hidden: Hidden
@@ -300,13 +288,12 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
     - bottomRight: Bottom right
   $name: Position per indicator
   $description: >-
-    Give one kind of indicator a spot of its own. The virtual desktop name popup
-    is separated from other text indicators so it can be placed independently.
-    Anything left on "Same as the main position" follows the Position setting
-    above. Independent offsets can be set in Offsets per indicator below.
+    Choose a position for each type, or Hidden to hide it on every monitor.
+    "Same as the main position" follows Position above. Set separate offsets below.
+    Some Windows builds may not support every type; check the mod log if a setting has no effect.
 - durationSeconds: 0
   $name: Seconds on screen
-  $description: 0 keeps the Windows timeout. Values from 1 to 60 change the indicator timeout. Only one-shot timers set by the indicator itself are adjusted.
+  $description: Automatic dismissal delay in seconds, from 1 to 60. 0 uses Windows timing. Another indicator can replace it sooner. May have no effect on some Windows builds.
 - indicatorOffsets:
   - volume:
     - horizontal: inherit
@@ -315,14 +302,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Volume
   - brightness:
     - horizontal: inherit
@@ -331,14 +320,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Brightness
   - keyboardBrightness:
     - horizontal: inherit
@@ -347,14 +338,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Keyboard brightness
   - airplaneMode:
     - horizontal: inherit
@@ -363,14 +356,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Airplane mode
   - camera:
     - horizontal: inherit
@@ -379,14 +374,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Camera
   - microphone:
     - horizontal: inherit
@@ -395,14 +392,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Microphone
   - text:
     - horizontal: inherit
@@ -411,14 +410,16 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Other indicators
   - virtualDesktop:
     - horizontal: inherit
@@ -427,24 +428,26 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Use the main offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Use the main offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     $name: Virtual desktop name
   $name: Offsets per indicator
-  $description: Choose Use this offset to set an independent value, including zero. Leaving either axis inherited preserves its main offset.
+  $description: Choose Use this offset to replace the main offset in either direction. A value of 0 removes that offset. The other direction can still use the main offset.
 - displayProfiles:
   - - monitor: ""
-      $name: Monitor interface name contains
-      $description: Optional unique part of the monitor interface name, or its display name such as DISPLAY1. Leave empty to match any monitor. Enable mod logs to see names.
+      $name: Monitor name contains
+      $description: Match part of the monitor name, such as DISPLAY1, ignoring letter case. Empty matches any monitor. Enable this profile and mod logging, then trigger an indicator to see names.
     - monitorCount: 0
-      $name: Number of connected monitors
-      $description: 0 matches any setup. Counts the monitors Windows is using for the desktop, so a mirrored pair counts as one, and a closed laptop with one external screen also counts as one. Use the monitor name to tell such setups apart.
+      $name: Number of active monitors
+      $description: 0 matches any count. Counts displays Windows uses for the desktop. Mirrored displays count as one; a disabled laptop screen does not count.
     - indicator: all
       $name: Indicator
       $options:
@@ -477,18 +480,20 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
       - inherit: Keep the indicator offset
       - custom: Use this offset
     - x: 0
-      $name: Horizontal offset
+      $name: Custom horizontal offset
+      $description: Used when Use this offset is selected. Positive moves right; negative moves left. Pixels at 100% scaling; 0 adds no offset.
     - vertical: inherit
       $name: Vertical offset source
       $options:
       - inherit: Keep the indicator offset
       - custom: Use this offset
     - y: 0
-      $name: Vertical offset
+      $name: Custom vertical offset
+      $description: Used when Use this offset is selected. Positive moves down; negative moves up. Pixels at 100% scaling; 0 adds no offset.
     - enabled: false
       $name: Enable this profile
   $name: Display profiles
-  $description: The first enabled matching profile wins. Profiles change placement on the monitor Windows selected. They do not move the indicator to a different monitor.
+  $description: All conditions in a profile must match. The first enabled match applies; later profiles are ignored. Profiles change placement on the selected monitor, not which monitor is used.
 */
 // ==/WindhawkModSettings==
 
@@ -496,12 +501,12 @@ page](https://github.com/mario0318/on-screen-indicator-position/issues).
 
 #include <shellscalingapi.h>
 
-#include <atomic>
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 enum class Position {
     windowsDefault,
@@ -519,8 +524,8 @@ enum class Position {
 };
 
 // Which indicator is being shown. Windows has a separate entry point per kind,
-// so the kind is recorded as one is requested and read back when the position is
-// worked out. `same` means the kind has no position of its own.
+// so the kind is recorded as one is requested and read back when the position
+// is worked out. `same` means the kind has no position of its own.
 enum class Indicator {
     volume,
     brightness,
@@ -536,15 +541,15 @@ enum class Indicator {
     unknown,
 };
 
-// Only one indicator is on screen at a time, and the entry point runs before the
-// position is worked out, so a single value is enough.
+// Only one indicator is on screen at a time, and the entry point runs before
+// the position is worked out, so a single value is enough.
 std::atomic<Indicator> g_currentIndicator{Indicator::unknown};
 
-// Set when any of the per-kind entry points didn't resolve. The recorded kind is
-// then meaningless, since an unhooked kind would be placed using whichever kind
-// was recorded before it, so the overrides are ignored for the session and
-// everything uses the main position. Checked once at init rather than guessed at
-// per placement.
+// Set when any of the per-kind entry points didn't resolve. The recorded kind
+// is then meaningless, since an unhooked kind would be placed using whichever
+// kind was recorded before it, so the overrides are ignored for the session and
+// everything uses the main position. Checked once at init rather than guessed
+// at per placement.
 std::atomic<bool> g_kindUnreliable{false};
 
 // Must match the `position` default in the settings block above.
@@ -575,12 +580,14 @@ struct Settings {
     Settings() { perIndicator.fill(Position::inherit); }
 };
 // One immutable snapshot per call: a settings reload cannot mix an anchor from
-// one generation with offsets from another. Profiles are never copied per frame.
+// one generation with offsets from another. Profiles are never copied per
+// frame.
 class SettingsStore {
     SRWLOCK lock = SRWLOCK_INIT;
     std::shared_ptr<const Settings> value = std::make_shared<Settings>();
     std::atomic<int> fastDuration{0};
-public:
+
+   public:
     std::shared_ptr<const Settings> load() {
         AcquireSRWLockShared(&lock);
         auto result = value;
@@ -606,13 +613,13 @@ bool AnyPerIndicator(const Settings& settings) {
     return !settings.profiles.empty();
 }
 
-// Only for the log, so a line someone is asked to read back says which kind it was
-// rather than a number to count enum members against.
+// Only for the log, so a line someone is asked to read back says which kind it
+// was rather than a number to count enum members against.
 PCWSTR IndicatorName(Indicator indicator) {
     static constexpr PCWSTR kNames[] = {
-        L"volume",     L"brightness",      L"keyboardBrightness",
-        L"airplaneMode", L"camera",        L"microphone",
-        L"text",       L"virtualDesktop",
+        L"volume",       L"brightness",     L"keyboardBrightness",
+        L"airplaneMode", L"camera",         L"microphone",
+        L"text",         L"virtualDesktop",
     };
     static_assert(ARRAYSIZE(kNames) == (size_t)Indicator::count);
 
@@ -623,7 +630,8 @@ PCWSTR IndicatorName(Indicator indicator) {
 // Logged from both Wh_ModInit and Wh_ModSettingsChanged.
 constexpr PCWSTR kKindUnreliableMessage =
     L"An indicator entry point did not resolve, so per-indicator positions and "
-    L"offsets are ignored. Hidden still applies where a suppressing hook resolved";
+    L"offsets are ignored. Hidden still applies where a suppressing hook "
+    L"resolved";
 
 // Set once in Wh_ModInit when either half of the hide pair didn't resolve.
 bool g_hideAnimationUnavailable = false;
@@ -632,9 +640,9 @@ constexpr PCWSTR kHideAnimationUnavailableMessage =
     L"The hide entry points didn't resolve, so the slide out animation is left "
     L"alone";
 
-// Set once in Wh_ModInit when ShowText's thunk didn't resolve. The ramp alone still
-// recognises text indicators, but only the thunk can tell the virtual desktop popup
-// apart from them.
+// Set once in Wh_ModInit when ShowText's thunk didn't resolve. The ramp alone
+// still recognises text indicators, but only the thunk can tell the virtual
+// desktop popup apart from them.
 bool g_virtualDesktopUndetectable = false;
 
 constexpr PCWSTR kVirtualDesktopUndetectableMessage =
@@ -646,21 +654,27 @@ struct Placement {
     int x;
     int y;
 };
-Placement ResolvePlacement(const Settings& settings, Indicator kind,
-                           PCWSTR monitorName, int monitorCount) {
+Placement ResolvePlacement(const Settings& settings,
+                           Indicator kind,
+                           PCWSTR monitorName,
+                           int monitorCount) {
     Placement result{settings.position, settings.offsetX, settings.offsetY};
     const size_t i = (size_t)kind;
     if (!g_kindUnreliable.load() && i < (size_t)Indicator::count) {
         if (settings.perIndicator[i] != Position::inherit)
             result.position = settings.perIndicator[i];
         const auto& offset = settings.offsets[i];
-        if (offset.customX) result.x = offset.x;
-        if (offset.customY) result.y = offset.y;
+        if (offset.customX)
+            result.x = offset.x;
+        if (offset.customY)
+            result.y = offset.y;
     }
     for (const auto& profile : settings.profiles) {
-        if (profile.monitorCount && profile.monitorCount != monitorCount) continue;
+        if (profile.monitorCount && profile.monitorCount != monitorCount)
+            continue;
         if (profile.indicator != Indicator::unknown &&
-            (g_kindUnreliable.load() || profile.indicator != kind)) continue;
+            (g_kindUnreliable.load() || profile.indicator != kind))
+            continue;
         if (!profile.monitor.empty()) {
             const size_t length = wcslen(monitorName);
             const size_t needle = profile.monitor.size();
@@ -673,11 +687,15 @@ Placement ResolvePlacement(const Settings& settings, Indicator kind,
                     break;
                 }
             }
-            if (!matched) continue;
+            if (!matched)
+                continue;
         }
-        if (profile.position != Position::inherit) result.position = profile.position;
-        if (profile.offsets.customX) result.x = profile.offsets.x;
-        if (profile.offsets.customY) result.y = profile.offsets.y;
+        if (profile.position != Position::inherit)
+            result.position = profile.position;
+        if (profile.offsets.customX)
+            result.x = profile.offsets.x;
+        if (profile.offsets.customY)
+            result.y = profile.offsets.y;
         break;
     }
     return result;
@@ -745,7 +763,8 @@ void PlaceInArea(const WinrtRect& area,
             rect->X = right;
             rect->Y = bottom;
             break;
-        case Position::hidden:  // Only show hooks suppress; layout stays valid otherwise.
+        case Position::hidden:  // Only show hooks suppress; layout stays valid
+                                // otherwise.
         case Position::inherit:
         case Position::windowsDefault:
             // Keep the position Windows picked and only apply the offsets.
@@ -941,8 +960,10 @@ DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledAsync,
 // register here would be unsafe. The public microphone thunk handles hiding.
 using ShowMicrophoneMutedAsync_t = void*(WINAPI*)(void*, void*, int, void*);
 ShowMicrophoneMutedAsync_t ShowMicrophoneMutedAsync_Original;
-void* WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, void* retval,
-                                         int value, void* text) {
+void* WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis,
+                                           void* retval,
+                                           int value,
+                                           void* text) {
     g_currentIndicator.store(Indicator::microphone);
     return ShowMicrophoneMutedAsync_Original(pThis, retval, value, text);
 }
@@ -958,26 +979,32 @@ void* WINAPI ShowTextAsync_Hook(void* pThis,
                                 void* retval,
                                 void* text,
                                 bool value) {
-    // The original owns the by-value hstring. Always forward so it is destroyed;
-    // text hiding is handled by the public thunk with its borrowed string.
+    // The original owns the by-value hstring. Always forward so it is
+    // destroyed; text hiding is handled by the public thunk with its borrowed
+    // string.
     g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
                                                   : Indicator::text);
     return ShowTextAsync_Original(pThis, retval, text, value);
 }
 
 // Called at startup and after settings changes, including when another missing
-// entry point has disabled per-indicator placement. Hiding is independent of it.
+// entry point has disabled per-indicator placement. Hiding is independent of
+// it.
 void LogUnavailableHiding(const Settings& settings) {
     if (!ShowTextThunk_Original &&
         (settings.perIndicator[(size_t)Indicator::text] == Position::hidden ||
-         settings.perIndicator[(size_t)Indicator::virtualDesktop] == Position::hidden)) {
-        Wh_Log(L"ShowText thunk did not resolve; Hidden is unavailable for text "
-               L"and virtual desktop indicators");
+         settings.perIndicator[(size_t)Indicator::virtualDesktop] ==
+             Position::hidden)) {
+        Wh_Log(
+            L"ShowText thunk did not resolve; Hidden is unavailable for text "
+            L"and virtual desktop indicators");
     }
     if (!ShowMicrophoneMutedThunk_Original &&
-        settings.perIndicator[(size_t)Indicator::microphone] == Position::hidden) {
-        Wh_Log(L"ShowMicrophoneMuted thunk did not resolve; Hidden is unavailable "
-               L"for the microphone indicator");
+        settings.perIndicator[(size_t)Indicator::microphone] ==
+            Position::hidden) {
+        Wh_Log(
+            L"ShowMicrophoneMuted thunk did not resolve; Hidden is unavailable "
+            L"for the microphone indicator");
     }
 }
 
@@ -1004,9 +1031,10 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     Wh_Log(L"> skip=%d", (int)skip);
 
     if (skip) {
-        // Restored however this returns. Hide is an implementation method rather
-        // than an abi thunk, so an hresult_error coming out of it would otherwise
-        // leave the flag latched and the setting dead for the rest of the session.
+        // Restored however this returns. Hide is an implementation method
+        // rather than an abi thunk, so an hresult_error coming out of it would
+        // otherwise leave the flag latched and the setting dead for the rest of
+        // the session.
         ResetOnExit reset{redirecting};
 
         redirecting = true;
@@ -1017,10 +1045,11 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
 }
 
 // GetDpiForMonitor returns the real effective DPI only to a per-monitor aware
-// caller, so make sure of that for the call and restore the thread's own context.
+// caller, so make sure of that for the call and restore the thread's own
+// context.
 UINT QueryMonitorDpi(HMONITOR monitor) {
-    DPI_AWARENESS_CONTEXT previous =
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     UINT dpiX = 0;
     UINT dpiY = 0;
     HRESULT hr = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
@@ -1073,8 +1102,8 @@ std::wstring MonitorDisplayName(PCWSTR device) {
 void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
     const auto settings = g_settings.load();
     const Indicator kind = g_currentIndicator.load();
-    RECT bounds{(LONG)rect.X, (LONG)rect.Y,
-                (LONG)(rect.X + rect.Width), (LONG)(rect.Y + rect.Height)};
+    RECT bounds{(LONG)rect.X, (LONG)rect.Y, (LONG)(rect.X + rect.Width),
+                (LONG)(rect.Y + rect.Height)};
     HMONITOR monitor = MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST);
     std::wstring monitorName;
     if (!settings->profiles.empty()) {
@@ -1085,12 +1114,13 @@ void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
         }
     }
     Placement placement = ResolvePlacement(*settings, kind, monitorName.c_str(),
-                                            GetSystemMetrics(SM_CMONITORS));
+                                           GetSystemMetrics(SM_CMONITORS));
     const UINT dpi = placement.x || placement.y ? QueryMonitorDpi(monitor) : 96;
     placement.x = MulDiv(placement.x, dpi, 96);
     placement.y = MulDiv(placement.y, dpi, 96);
     WinrtRect area{0, 0, rect.Width, rect.Height};
-    if (placement.position != Position::windowsDefault || placement.x || placement.y)
+    if (placement.position != Position::windowsDefault || placement.x ||
+        placement.y)
         PlaceInArea(area, placement.position, placement.x, placement.y, result);
     result->X += rect.X;
     result->Y += rect.Y;
@@ -1126,9 +1156,12 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
     return result;
 }
 
-Position PositionFromString(PCWSTR value, Position fallback = Position::windowsDefault) {
-    if (wcscmp(value, L"hidden") == 0) return Position::hidden;
-    if (!*value || wcscmp(value, L"same") == 0) return Position::inherit;
+Position PositionFromString(PCWSTR value,
+                            Position fallback = Position::windowsDefault) {
+    if (wcscmp(value, L"hidden") == 0)
+        return Position::hidden;
+    if (!*value || wcscmp(value, L"same") == 0)
+        return Position::inherit;
     if (wcscmp(value, L"topLeft") == 0) {
         return Position::topLeft;
     } else if (wcscmp(value, L"topCenter") == 0) {
@@ -1163,41 +1196,63 @@ Position PositionFromString(PCWSTR value, Position fallback = Position::windowsD
 OffsetOverride LoadOffsets(const std::wstring& prefix) {
     OffsetOverride result;
     result.customX = wcscmp(WindhawkUtils::StringSetting::make(
-        (prefix + L".horizontal").c_str()).get(), L"custom") == 0;
-    result.customY = wcscmp(WindhawkUtils::StringSetting::make(
-        (prefix + L".vertical").c_str()).get(), L"custom") == 0;
-    result.x = std::clamp(Wh_GetIntSetting((prefix + L".x").c_str()), -100000, 100000);
-    result.y = std::clamp(Wh_GetIntSetting((prefix + L".y").c_str()), -100000, 100000);
+                                (prefix + L".horizontal").c_str())
+                                .get(),
+                            L"custom") == 0;
+    result.customY =
+        wcscmp(
+            WindhawkUtils::StringSetting::make((prefix + L".vertical").c_str())
+                .get(),
+            L"custom") == 0;
+    result.x =
+        std::clamp(Wh_GetIntSetting((prefix + L".x").c_str()), -100000, 100000);
+    result.y =
+        std::clamp(Wh_GetIntSetting((prefix + L".y").c_str()), -100000, 100000);
     return result;
 }
 
 void LoadSettings() {
     auto settings = std::make_shared<Settings>();
     auto value = WindhawkUtils::StringSetting::make(L"position");
-    settings->position = *value.get() ? PositionFromString(value.get()) : kDefaultPosition;
-    if (settings->position == Position::inherit || settings->position == Position::hidden) settings->position = kDefaultPosition;
-    settings->offsetX = std::clamp(Wh_GetIntSetting(L"offsetX"), -100000, 100000);
-    settings->offsetY = std::clamp(Wh_GetIntSetting(L"offsetY"), -100000, 100000);
+    settings->position =
+        *value.get() ? PositionFromString(value.get()) : kDefaultPosition;
+    if (settings->position == Position::inherit ||
+        settings->position == Position::hidden)
+        settings->position = kDefaultPosition;
+    settings->offsetX =
+        std::clamp(Wh_GetIntSetting(L"offsetX"), -100000, 100000);
+    settings->offsetY =
+        std::clamp(Wh_GetIntSetting(L"offsetY"), -100000, 100000);
     settings->skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation") != 0;
-    settings->durationSeconds = std::clamp(Wh_GetIntSetting(L"durationSeconds"), 0, 60);
-    static const PCWSTR names[] = {L"volume", L"brightness", L"keyboardBrightness",
-        L"airplaneMode", L"camera", L"microphone", L"text", L"virtualDesktop"};
+    settings->durationSeconds =
+        std::clamp(Wh_GetIntSetting(L"durationSeconds"), 0, 60);
+    static const PCWSTR names[] = {
+        L"volume",       L"brightness",    L"keyboardBrightness",
+        L"airplaneMode", L"camera",        L"microphone",
+        L"text",         L"virtualDesktop"};
     for (size_t i = 0; i < ARRAYSIZE(names); ++i) {
         std::wstring key = std::wstring(L"perIndicator.") + names[i];
         auto position = WindhawkUtils::StringSetting::make(key.c_str());
-        settings->perIndicator[i] = PositionFromString(position.get(), Position::inherit);
-        settings->offsets[i] = LoadOffsets(std::wstring(L"indicatorOffsets.") + names[i]);
+        settings->perIndicator[i] =
+            PositionFromString(position.get(), Position::inherit);
+        settings->offsets[i] =
+            LoadOffsets(std::wstring(L"indicatorOffsets.") + names[i]);
     }
     for (int i = 0;; ++i) {
         const auto prefix = L"displayProfiles[" + std::to_wstring(i) + L"]";
-        auto kind = WindhawkUtils::StringSetting::make((prefix + L".indicator").c_str());
+        auto kind = WindhawkUtils::StringSetting::make(
+            (prefix + L".indicator").c_str());
         // Every stored entry has an indicator value, so an empty one is the end
         // of the array.
-        if (!*kind.get()) break;
+        if (!*kind.get())
+            break;
 
-        if (!Wh_GetIntSetting((prefix + L".enabled").c_str())) continue;
+        if (!Wh_GetIntSetting((prefix + L".enabled").c_str()))
+            continue;
         DisplayProfile profile;
-        profile.monitor = WindhawkUtils::StringSetting::make((prefix + L".monitor").c_str()).get();
+        profile.monitor =
+            WindhawkUtils::StringSetting::make((prefix + L".monitor").c_str())
+                .get();
         profile.monitorCount = std::clamp(
             Wh_GetIntSetting((prefix + L".monitorCount").c_str()), 0, 64);
         bool valid = wcscmp(kind.get(), L"all") == 0;
@@ -1207,10 +1262,14 @@ void LoadSettings() {
                 valid = true;
             }
         }
-        if (!valid) continue;
-        auto position = WindhawkUtils::StringSetting::make((prefix + L".position").c_str());
-        profile.position = PositionFromString(position.get(), Position::inherit);
-        if (profile.position == Position::hidden) profile.position = Position::inherit;
+        if (!valid)
+            continue;
+        auto position =
+            WindhawkUtils::StringSetting::make((prefix + L".position").c_str());
+        profile.position =
+            PositionFromString(position.get(), Position::inherit);
+        if (profile.position == Position::hidden)
+            profile.position = Position::inherit;
         profile.offsets = LoadOffsets(prefix);
         settings->profiles.push_back(std::move(profile));
     }
@@ -1220,15 +1279,19 @@ void LoadSettings() {
 // Duration overrides are scoped to one-shot relative timers requested directly
 // by HardwareConfirmator. Absolute, periodic, cancellation and short animation
 // timers pass through. Hook both APIs because Windows builds use either one.
-FILETIME* AdjustDueTime(void* caller, const FILETIME* due, DWORD period,
+FILETIME* AdjustDueTime(void* caller,
+                        const FILETIME* due,
+                        DWORD period,
                         FILETIME& adjusted) {
     const int seconds = g_settings.duration();
-    if (!seconds || !due || period) return const_cast<FILETIME*>(due);
+    if (!seconds || !due || period)
+        return const_cast<FILETIME*>(due);
     HMODULE module = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<PCWSTR>(caller), &module) ||
-        module != g_hardwareConfirmatorModule) return const_cast<FILETIME*>(due);
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<PCWSTR>(caller), &module) ||
+        module != g_hardwareConfirmatorModule)
+        return const_cast<FILETIME*>(due);
     LARGE_INTEGER value;
     value.LowPart = due->dwLowDateTime;
     value.HighPart = due->dwHighDateTime;
@@ -1428,29 +1491,22 @@ BOOL Wh_ModInit() {
         const void* ramp;
         const void* thunk;
     } kindRecorders[] = {
-        {L"ShowVolume",
-         (void*)ShowVolumeAsync_Original,
+        {L"ShowVolume", (void*)ShowVolumeAsync_Original,
          (void*)ShowVolumeThunk_Original},
-        {L"ShowBrightness",
-         (void*)ShowBrightnessAsync_Original,
+        {L"ShowBrightness", (void*)ShowBrightnessAsync_Original,
          (void*)ShowBrightnessThunk_Original},
-        {L"ShowKeyboardBrightness",
-         (void*)ShowKeyboardBrightnessAsync_Original,
+        {L"ShowKeyboardBrightness", (void*)ShowKeyboardBrightnessAsync_Original,
          (void*)ShowKeyboardBrightnessThunk_Original},
-        {L"ShowAirplaneModeOn",
-         (void*)ShowAirplaneModeOnAsync_Original,
+        {L"ShowAirplaneModeOn", (void*)ShowAirplaneModeOnAsync_Original,
          (void*)ShowAirplaneModeOnThunk_Original},
-        {L"ShowCameraOn",
-         (void*)ShowCameraOnAsync_Original,
+        {L"ShowCameraOn", (void*)ShowCameraOnAsync_Original,
          (void*)ShowCameraOnThunk_Original},
         {L"ShowCameraAccessEnabled",
          (void*)ShowCameraAccessEnabledAsync_Original,
          (void*)ShowCameraAccessEnabledThunk_Original},
-        {L"ShowMicrophoneMuted",
-         (void*)ShowMicrophoneMutedAsync_Original,
+        {L"ShowMicrophoneMuted", (void*)ShowMicrophoneMutedAsync_Original,
          (void*)ShowMicrophoneMutedThunk_Original},
-        {L"ShowText",
-         (void*)ShowTextAsync_Original,
+        {L"ShowText", (void*)ShowTextAsync_Original,
          (void*)ShowTextThunk_Original},
     };
 
@@ -1462,10 +1518,11 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Report all of them before deciding, so a build that moved several shows all.
+    // Report all of them before deciding, so a build that moved several shows
+    // all.
     for (const auto& recorder : kindRecorders) {
-        Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d", recorder.name,
-               !!recorder.ramp, !!recorder.thunk);
+        Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d",
+               recorder.name, !!recorder.ramp, !!recorder.thunk);
 
         if (!recorder.ramp && !recorder.thunk) {
             g_kindUnreliable = true;
@@ -1480,11 +1537,11 @@ BOOL Wh_ModInit() {
 
     // The thread_local flag that tells virtual desktop popups apart from other
     // text indicators is set from ShowText's thunk, so if the thunk didn't
-    // resolve, virtual desktop popups silently follow the Other indicators position.
-    // The ramp resolving on its own is enough to keep text detection working,
-    // so it wouldn't trip the recorder check above. Only worth saying if the
-    // user has actually set a per-kind position for the virtual desktop popup, and
-    // not when every kind already falls back to the main position.
+    // resolve, virtual desktop popups silently follow the Other indicators
+    // position. The ramp resolving on its own is enough to keep text detection
+    // working, so it wouldn't trip the recorder check above. Only worth saying
+    // if the user has actually set a per-kind position for the virtual desktop
+    // popup, and not when every kind already falls back to the main position.
     g_virtualDesktopUndetectable =
         !ShowTextThunk_Original && ShowTextAsync_Original;
     if (g_virtualDesktopUndetectable && !g_kindUnreliable &&
@@ -1505,7 +1562,9 @@ BOOL Wh_ModInit() {
          !WindhawkUtils::SetFunctionHook(SetThreadpoolTimerEx,
                                          SetThreadpoolTimerEx_Hook,
                                          &SetThreadpoolTimerEx_Original))) {
-        Wh_Log(L"Duration timer hook unavailable; Windows timeout may be retained");
+        Wh_Log(
+            L"Duration timer hook unavailable; Windows timeout may be "
+            L"retained");
     }
     return TRUE;
 }

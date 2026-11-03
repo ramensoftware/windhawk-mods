@@ -351,6 +351,33 @@
         "version": "1.3"
       }
     },
+    "ai-voice-typing": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793746900000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793746900000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caliberda",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -lshell32 -lgdi32 -ladvapi32 -lcrypt32 -lwinhttp -ld2d1 -ldwrite -lshcore -ldwmapi -lcomctl32 -lwinmm -loleaut32 -lruntimeobject",
+        "description": "Press a shortcut, speak, and your words are typed where the cursor is, in any app: transcribed and cleaned up by AI in your style (natural, professional, prompt) or translated, with a free key (Groq, Gemini, Mistral and more)",
+        "donateUrl": "https://github.com/sponsors/cesarkali",
+        "github": "https://github.com/cesarkali",
+        "homepage": "https://caliberda.com.br",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "AI Voice Typing",
+        "version": "1.0.0"
+      }
+    },
     "alt-drag": {
       "details": {
         "defaultSorting": 25050,
@@ -5696,7 +5723,7 @@
         "ratingUsers": 24,
         "reviews": 0,
         "trendingSorting": 0.7626243525337719,
-        "updated": 1778785705000,
+        "updated": 1793746878000,
         "users": 2106
       },
       "metadata": {
@@ -5710,7 +5737,7 @@
           "svchost.exe"
         ],
         "name": "Expanded Clipboard (Win+V)",
-        "version": "0.7.1"
+        "version": "0.7.5"
       }
     },
     "explorer-32px-icons": {
@@ -7447,10 +7474,13 @@
         "ratingUsers": 61,
         "reviews": 0,
         "trendingSorting": 0.45632734582663037,
-        "updated": 1790319797000,
+        "updated": 1793746895000,
         "users": 1274
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "Armaninyow",
         "compilerOptions": "-lole32 -loleaut32 -lpropsys -lshell32 -lcomctl32 -lgdi32",
         "description": "Automatically fits all column widths to their content when refreshing in Details view. Has no effect on other view modes.",
@@ -7460,7 +7490,7 @@
         ],
         "license": "MIT",
         "name": "File Explorer Details Auto-Fit Columns",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "file-explorer-remove-suffixes": {
@@ -12014,7 +12044,7 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 1.8700743894902097,
-        "updated": 1793397890000,
+        "updated": 1793746888000,
         "users": 354
       },
       "metadata": {
@@ -12023,13 +12053,13 @@
         ],
         "author": "mario0318",
         "compilerOptions": "-lshcore",
-        "description": "Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation",
+        "description": "Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, or hide specific indicators",
         "github": "https://github.com/mario0318",
         "include": [
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.6.0"
+        "version": "1.6.1"
       }
     },
     "one-hair": {
@@ -15339,6 +15369,35 @@
         "license": "MIT",
         "name": "Taskbar AI Quota Bars",
         "version": "1.6.5"
+      }
+    },
+    "taskbar-ai-usage": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793746883000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793746883000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Sof2245",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -lxmllite -ld2d1 -ldwrite -ld3d11 -ldxgi -lwindowscodecs",
+        "description": "Shows your Claude, Codex, Antigravity and GitHub Copilot usage limits as ring tiles on the Windows 11 taskbar, with a Fluent flyout for the details",
+        "github": "https://github.com/Sof2245",
+        "homepage": "https://github.com/Sof2245/taskbar-ai-usage",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar AI Usage",
+        "version": "1.0.1"
       }
     },
     "taskbar-app-memory": {

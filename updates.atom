@@ -2,12 +2,484 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T22:04:38.000Z</updated>
+    <updated>2026-11-03T23:01:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AI Voice Typing 1.0.0]]></title>
+        <id>https://windhawk.net/mods/ai-voice-typing#245488f83190691fbd1edc64d149ac240debf2b0</id>
+        <link href="https://windhawk.net/mods/ai-voice-typing"/>
+        <updated>2026-11-03T23:01:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="aivoicetyping">AI Voice Typing</h1>
+<p><strong>English</strong> | <a href="#português">Português</a> | <a href="#español">Español</a></p>
+<p>Press a shortcut, speak, press it again, and your words are typed where the
+cursor is, in any app. An AI transcribes what you said and cleans it up in the
+style you choose, or translates it. It uses a cloud provider you set up with
+your own key: <strong>Groq</strong> is recommended (very fast, and its key is free).</p>
+<p><img src="https://i.imgur.com/c9LNTHL.gif" alt="Dictating into a text field: the live text, the AI rewrite and the result" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li><strong>Dictation in any app.</strong> A small bar at the bottom of the screen shows what
+you're saying while you speak. When you stop, the text is pasted where you
+were typing and also left on the clipboard. Dictating again right after, in
+the same field, adds the space between the two.</li>
+<li><strong>Cleaned up in your style.</strong> The AI removes the "ums", repetitions and false
+starts, and fixes punctuation, without changing what you said. Styles:
+Natural, Professional, Prompt (for writing to an AI), Raw and Transcript
+only, plus your own. Each app can have its own style (Outlook always
+Professional, VS Code always Prompt).</li>
+<li><strong>Translation.</strong> Ctrl+Shift+Y dictates and translates, to one of 34
+languages.</li>
+<li><strong>The result card.</strong> After each dictation, a card shows the text. Its chips
+redo it in another style or translate it, and <strong>Replace</strong> swaps the pasted
+text for the new version.</li>
+<li><strong>Command.</strong> Select text in any app, press Ctrl+Alt+K and say what to do
+with it ("more formal", "translate to Spanish", "summarize as bullets"). The
+result replaces the selection.</li>
+<li><strong>About 100 languages</strong> to speak in, detected by itself or chosen. The
+settings and the bar are in English, Spanish, Portuguese, French, German,
+Japanese, Chinese, Russian, Hindi and Bengali.</li>
+<li><strong>Several providers</strong>: Groq, Google Gemini, Mistral, OpenRouter, OpenAI, or
+an OpenAI-compatible server. With more than one set up, the next one is
+tried when one fails. If the transcription still fails, the recording is
+kept so you can <strong>try again</strong> without speaking it all again.</li>
+</ul>
+<p><img src="https://i.imgur.com/teLIabS.gif" alt="Command: the selected text rewritten from a spoken instruction" /></p>
+<h2 id="gettingstarted">Getting started</h2>
+<ol>
+<li>Create a free key at <a href="https://console.groq.com/keys">console.groq.com/keys</a>
+(or at another provider: the settings show how, step by step).</li>
+<li>The first time, a short setup wizard opens: the look, the provider (paste
+the key and it's tested at once), the shortcut and style, and a test
+dictation. It can be done again from General.</li>
+<li>Click any text field, press <strong>Ctrl+Shift+Space</strong>, speak, and press it again
+(or click the bar's stop button).</li>
+</ol>
+<p>| Shortcut | What it does |
+|---|---|
+| <strong>Ctrl+Shift+Space</strong> | Dictate (press again to stop; in hold mode, hold it while you speak) |
+| <strong>Ctrl+Shift+Y</strong> | Dictate and translate |
+| <strong>Ctrl+Alt+K</strong> | Command on the selected text (while you speak, the card also offers the styles, to apply one without speaking) |
+| <strong>Esc</strong> | Cancel while recording (while it's being processed, the bar's ✕ cancels) |</p>
+<p>Every shortcut can be changed in the settings. "Paste again" (the last
+dictation into the app in front) and "Dictate now" are in the icon's menu;
+"Paste again" has no shortcut by default, because Ctrl+Alt+V is Office's
+Paste Special.</p>
+<p><img src="https://i.imgur.com/1YTQOiV.png" alt="The result card, translated to Spanish" /></p>
+<h2 id="settings">Settings</h2>
+<p>Click the mod's icon in the notification area to open them (right-click it
+for a quick menu): this session's history (with "Redo" in another style or
+language), the styles and your own ones, a style per app, the providers (keys,
+models and the order they're tried in), the shortcuts, the spoken language,
+microphone and dictionary, and the look: theme, accent color, the card's width
+and a glass look for the bar. Start and stop sounds are on by default and can
+be turned off.</p>
+<p><img src="https://i.imgur.com/GKBPArQ.png" alt="The settings window" /></p>
+<h2 id="privacy">Privacy</h2>
+<ul>
+<li>The audio goes only to the speech provider you set up (for example Groq,
+<code>api.groq.com</code>), and only with a key saved: while you speak (the live
+preview, which can be turned off) and when you stop. The transcript then
+goes to the text provider for the style or the translation, along with the
+name of the app you're typing into (so the text fits it) and the words in
+your dictionary. With Command, the selected text goes too. Each provider's
+own privacy policy applies (on Gemini's free tier, Google may use what's
+sent to improve its products).</li>
+<li>If Groq answers that the chosen model no longer exists, the mod asks Groq
+for its current list of models, tries up to 4 of them with a short test
+(a second of near-silence, or "OK"), and keeps the one that works.</li>
+<li>Servers contacted, only those of the providers you set up:
+<code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
+<code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, or the address you
+give for an OpenAI-compatible server.</li>
+<li>Nothing is saved to disk: the audio, the text and the history stay in
+memory. A recording whose transcription failed also stays only in memory
+(the last 3), until it's tried again or the history is cleared.</li>
+<li>The dictated text is left on the clipboard, like a normal copy. Command
+copies the selection with Ctrl+C and then puts your clipboard back as it
+was.</li>
+<li>Your keys are stored encrypted for your Windows account (DPAPI), in the
+mod's own storage, and are removed with the mod.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Windows doesn't let a normal app type into apps running as administrator:
+there, the text is only copied (paste it with Ctrl+V), and Command can't
+read the selection.</li>
+<li>Command doesn't work in terminals (Ctrl+C stops the program there).</li>
+<li>Ctrl+Alt is AltGr on many keyboards: where AltGr+K types a character (for
+example Hungarian or Czech), Command starts without a shortcut; choose one
+in the settings.</li>
+<li>The glass look needs Windows' transparency effects (with them off, or with
+the energy saver on, the bar stays solid).</li>
+<li>Cloud providers only (no local models), over https, so it needs an internet
+connection. The OpenAI-compatible server is used for the text, not for
+speech.</li>
+<li>A recording stops by itself after 12 minutes and is transcribed (the
+providers take files of about 13 minutes at most).</li>
+</ul>
+<p>Prefer a standalone app with more options? The same author makes
+<a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
+<h2 id="contactandsupport">Contact and support</h2>
+<p>Made in Brazil by <strong>caliberda</strong>. Bugs: please open
+<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on GitHub</a>
+(that's where they're tracked). If the mod helps you, you can support it on
+<a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a>. Instagram:
+<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
+<a href="https://caliberda.com.br">caliberda.com.br</a></p>
+<h2 id="portugus">Português</h2>
+<p>Aperte um atalho, fale, aperte de novo, e suas palavras são digitadas onde
+está o cursor, em qualquer app. Uma IA transcreve o que você disse e limpa no
+estilo que você escolher, ou traduz. Ela usa um provedor na nuvem que você
+configura com a sua própria chave: a <strong>Groq</strong> é a recomendada (muito rápida,
+e a chave é grátis).</p>
+<h3 id="oquefaz">O que faz</h3>
+<ul>
+<li><strong>Ditado em qualquer app.</strong> Uma barrinha embaixo da tela mostra o que você
+está falando enquanto fala. Quando você para, o texto é colado onde você
+estava digitando e também fica na área de transferência. Ditando de novo
+logo em seguida, no mesmo campo, o espaço entre os dois entra sozinho.</li>
+<li><strong>Limpo no seu estilo.</strong> A IA tira os "hã", "né", repetições e frases
+começadas de novo, e acerta a pontuação, sem mudar o que você disse.
+Estilos: Natural, Profissional, Prompt (para escrever para uma IA), Cru e Só
+transcrição, e os seus. Cada app pode ter o seu estilo (Outlook sempre
+Profissional, VS Code sempre Prompt).</li>
+<li><strong>Tradução.</strong> Ctrl+Shift+Y dita e traduz, para um de 34 idiomas.</li>
+<li><strong>O card do resultado.</strong> Depois de cada ditado, um card mostra o texto. Os
+chips refazem em outro estilo ou traduzem, e <strong>Substituir</strong> troca o texto
+colado pela versão nova.</li>
+<li><strong>Comando.</strong> Selecione um texto em qualquer app, aperte Ctrl+Alt+K e diga o
+que fazer ("mais formal", "traduz pro inglês", "resume em tópicos"). O
+resultado substitui a seleção.</li>
+<li><strong>Cerca de 100 idiomas</strong> para falar, detectados sozinhos ou escolhidos. As
+configurações e a barra estão em português, inglês, espanhol, francês,
+alemão, japonês, chinês, russo, hindi e bengali.</li>
+<li><strong>Vários provedores</strong>: Groq, Google Gemini, Mistral, OpenRouter, OpenAI ou
+um servidor compatível com a OpenAI. Com mais de um, o próximo é tentado
+quando um falha. Se a transcrição ainda assim falhar, a gravação fica
+guardada para <strong>tentar de novo</strong> sem falar tudo outra vez.</li>
+</ul>
+<h3 id="comocomear">Como começar</h3>
+<ol>
+<li>Crie uma chave grátis em
+<a href="https://console.groq.com/keys">console.groq.com/keys</a> (ou em outro
+provedor: as configurações mostram o passo a passo).</li>
+<li>Na primeira vez, abre um assistente rápido: a aparência, o provedor (cole
+a chave e ela é testada na hora), o atalho e o estilo, e um ditado de
+teste. Dá para refazer em Geral.</li>
+<li>Clique em qualquer campo de texto, aperte <strong>Ctrl+Shift+Espaço</strong>, fale e
+aperte de novo (ou clique no botão de parar da barra).</li>
+</ol>
+<p>| Atalho | O que faz |
+|---|---|
+| <strong>Ctrl+Shift+Espaço</strong> | Ditar (aperte de novo para parar; no modo segurar, segure enquanto fala) |
+| <strong>Ctrl+Shift+Y</strong> | Ditar e traduzir |
+| <strong>Ctrl+Alt+K</strong> | Comando no texto selecionado (enquanto você fala, o card também oferece os estilos, para aplicar um sem falar) |
+| <strong>Esc</strong> | Cancela durante a gravação (enquanto processa, o ✕ da barra cancela) |</p>
+<p>Todos os atalhos podem ser trocados nas configurações. "Colar de novo" (o
+último ditado no app da frente) e "Ditar agora" ficam no menu do ícone;
+"Colar de novo" não tem atalho por padrão, porque Ctrl+Alt+V é o Colar
+especial do Office.</p>
+<h3 id="configuraes">Configurações</h3>
+<p>Clique no ícone do mod na área de notificação para abri-las (com o botão
+direito, um menu rápido): o histórico desta sessão (com "Refazer" em outro
+estilo ou idioma), os estilos e os seus, um estilo por app, os provedores
+(chaves, modelos e a ordem de tentativa), os atalhos, o idioma falado, o
+microfone e o dicionário, e a aparência: tema, cor de destaque, largura do
+card e o visual de vidro da barra. Os sons de início e fim vêm ligados e dá
+para desligar.</p>
+<h3 id="privacidade">Privacidade</h3>
+<ul>
+<li>O áudio vai só para o provedor de voz que você configurou (por exemplo a
+Groq, <code>api.groq.com</code>) e só com uma chave salva: enquanto você fala (a
+prévia ao vivo, que dá para desligar) e quando você para. A transcrição
+então vai ao provedor de texto para o estilo ou a tradução, junto com o
+nome do app em que você está digitando (para o texto combinar com ele) e
+as palavras do seu dicionário. No Comando, o texto selecionado vai junto.
+Vale a política de privacidade de cada provedor (no plano grátis do
+Gemini, o Google pode usar o que é enviado para melhorar os produtos dele).</li>
+<li>Se a Groq responder que o modelo escolhido não existe mais, o mod pede à
+Groq a lista atual de modelos, testa até 4 deles com um teste curto (um
+segundo de quase silêncio, ou "OK") e fica com o que funcionar.</li>
+<li>Servidores contatados, só os dos provedores que você configurou:
+<code>api.groq.com</code>, <code>generativelanguage.googleapis.com</code> (Gemini),
+<code>openrouter.ai</code>, <code>api.mistral.ai</code>, <code>api.openai.com</code>, ou o endereço que
+você informar para um servidor compatível com a OpenAI.</li>
+<li>Nada é gravado em disco: o áudio, o texto e o histórico ficam na memória.
+Uma gravação cuja transcrição falhou também fica só na memória (as 3
+últimas), até ser tentada de novo ou o histórico ser limpo.</li>
+<li>O texto ditado fica na área de transferência, como uma cópia normal. O
+Comando copia a seleção com Ctrl+C e depois devolve a sua área de
+transferência como estava.</li>
+<li>As chaves são guardadas criptografadas para a sua conta do Windows
+(DPAPI), no armazenamento do próprio mod, e são apagadas junto com ele.</li>
+</ul>
+<h3 id="limitaesconhecidas">Limitações conhecidas</h3>
+<ul>
+<li>O Windows não deixa um app comum digitar em apps abertos como
+administrador: neles, o texto só é copiado (cole com Ctrl+V), e o Comando
+não consegue ler a seleção.</li>
+<li>O Comando não funciona em terminais (lá o Ctrl+C interrompe o programa).</li>
+<li>Ctrl+Alt é o AltGr em muitos teclados: onde AltGr+K digita um caractere
+(por exemplo húngaro ou tcheco), o Comando começa sem atalho; escolha um
+nas configurações.</li>
+<li>O vidro precisa dos efeitos de transparência do Windows (desligados, ou
+com a economia de energia, a barra fica sólida).</li>
+<li>Só provedores na nuvem (sem modelos locais), por https, então precisa de
+internet. O servidor compatível com a OpenAI é usado para o texto, não para
+a voz.</li>
+<li>Uma gravação para sozinha depois de 12 minutos e é transcrita (os
+provedores aceitam arquivos de uns 13 minutos no máximo).</li>
+</ul>
+<p>Prefere um app separado com mais opções? O mesmo autor faz o
+<a href="https://flowvoice.caliberda.com.br">FlowVoice</a>.</p>
+<h3 id="contatoeapoio">Contato e apoio</h3>
+<p>Feito no Brasil por <strong>caliberda</strong>. Bugs: abra
+<a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAI%20Voice%20Typing%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no GitHub</a>
+(é lá que eles são acompanhados). Se o mod te ajuda, dá para apoiar pelo
+<a href="https://github.com/sponsors/cesarkali">GitHub Sponsors</a> ou por Pix no
+<a href="https://livepix.gg/caliberda">LivePix</a>. Instagram:
+<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
+<a href="https://caliberda.com.br">caliberda.com.br</a></p>
+<h2 id="espaol">Español</h2>
+<p>Pulsa un atajo, habla, vuelve a pulsarlo y tus palabras se escriben donde
+está el cursor, en cualquier app. Una IA transcribe lo que dijiste y lo
+limpia en el estilo que elijas, o lo traduce. Usa un proveedor en la nube que
+configuras con tu propia clave: se recomienda <strong>Groq</strong> (muy rápido, y la clave
+es gratis).</p>
+<ul>
+<li><strong>Dictado en cualquier app</strong>, con una barra pequeña que muestra lo que dices
+mientras hablas. El texto se pega donde escribías y también queda en el
+portapapeles.</li>
+<li><strong>Limpio en tu estilo</strong> (Natural, Profesional, Prompt, Crudo, Solo
+transcripción y los tuyos), con un estilo por app.</li>
+<li><strong>Traducción</strong> a 34 idiomas con Ctrl+Shift+Y, y una tarjeta con chips para
+rehacer el texto en otro estilo o idioma.</li>
+<li><strong>Comando</strong> (Ctrl+Alt+K): selecciona un texto, di qué hacer y el resultado
+reemplaza la selección.</li>
+<li><strong>Unos 100 idiomas</strong> para hablar; la configuración y la barra están en
+español, inglés, portugués, francés, alemán, japonés, chino, ruso, hindi y
+bengalí.</li>
+<li><strong>Varios proveedores</strong> (Groq, Gemini, Mistral, OpenRouter, OpenAI o un
+servidor compatible con OpenAI): si uno falla, se usa el siguiente, y si la
+transcripción falla, la grabación se guarda para reintentar sin volver a
+hablar.</li>
+</ul>
+<p>Para empezar: crea una clave gratis en
+<a href="https://console.groq.com/keys">console.groq.com/keys</a>; la primera vez se
+abre un asistente rápido. Luego haz clic en un campo de texto, pulsa
+<strong>Ctrl+Shift+Espacio</strong>, habla y vuelve a pulsarlo. <strong>Esc</strong> cancela. "Pegar de
+nuevo" y "Dictar ahora" están en el menú del icono del área de notificación.</p>
+<p>Privacidad: el audio va solo al proveedor de voz que configuraste, solo con
+una clave guardada (mientras hablas, para la vista previa en vivo, y al
+parar); el texto va al proveedor de texto, con el nombre de la app en la que
+escribes y las palabras de tu diccionario, y con el Comando también va el
+texto seleccionado. Si Groq responde que el modelo elegido ya no existe, el
+mod pide su lista de modelos y prueba hasta 4 con una prueba corta. Rige la
+política de privacidad de cada proveedor. No se
+guarda nada en disco: si una transcripción falla, la grabación queda solo en
+memoria (las 3 últimas). Las claves se guardan cifradas para tu cuenta de
+Windows. Limitaciones: no escribe en apps abiertas como administrador (el
+texto queda copiado), el Comando no funciona en terminales, solo usa
+proveedores en la nube y necesita internet, y una grabación se detiene sola a
+los 12 minutos.</p>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.3.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#9139f648d3da6bb9520a2a6b622a5a0b86e62e21</id>
+        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
+        <updated>2026-11-03T23:01:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a tiny horizontal scrollbar sometimes appearing on Windows 11 26H2</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[On-Screen Indicator Position 1.6.1]]></title>
+        <id>https://windhawk.net/mods/on-screen-indicator-position#5cf491884d624c9e771bff6d9c482e54e7291672</id>
+        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
+        <updated>2026-11-03T23:01:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated settings descriptions and mod information, with clearer names for custom offsets and display profile fields.</li>
+<li>Code formatting cleanup only; no behavior changes.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Usage 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-usage#f4350f743d2adcf3fa2efe4c869ad6d9feaf0126</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-usage"/>
+        <updated>2026-11-03T23:01:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaraiusage">Taskbar AI Usage</h1>
+<p>See how much of your AI subscription you have left in one place. Get a glimpse
+of all your accounts on the taskbar: Dynamic rings fill as you use your quota.
+A Fluent flyout shows the details of every limit, time for the next reset and
+whether you are burning through it faster than the clock.</p>
+<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/hero.png" alt="Claude flyout above the taskbar tiles" /></p>
+<h3 id="supportedservices">Supported services</h3>
+<ul>
+<li><strong>Claude.</strong> 5-hour session, weekly, Fable weekly, model and surface limits,
+and monthly extra usage.</li>
+<li><strong>ChatGPT / Codex.</strong> 5-hour session, weekly, additional rate limits such as
+Codex Spark, and prepaid credits.</li>
+<li><strong>Antigravity.</strong> Gemini and other-model pools, each with session and weekly
+quotas.</li>
+<li><strong>GitHub Copilot.</strong> Monthly AI credits.</li>
+</ul>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Multiple tiles and accounts.</strong> Pick up to three quotas to show on the tiles.
+The color moves from green to yellow, orange and red as you pass your
+thresholds.</li>
+<li><strong>Pace at a glance.</strong> A dot on each ring marks where you would be if you
+spread your usage evenly over the window. An indicator estimates when you will
+hit your next limit.</li>
+<li><strong>Fluent flyout.</strong> Compact rows per quota with its reset countdown, banked
+free resets, and direct access to the provider dashboard. Click to show or get
+a glance on hover.</li>
+<li><strong>Sign in your way.</strong> With your permission, the mod finds the Claude Code,
+Codex, Visual Studio and GitHub CLI sign-ins already on this PC and adds an
+account for each, using that sign-in read-only. Or sign in each account on its
+own. Antigravity can read its running local session. An account you remove
+stays removed until you rescan.</li>
+<li><strong>Notifications.</strong> On by default: a notification tells you when usage crosses
+the red threshold, with the next reset time. Pick another threshold or turn
+them off in Settings &gt; Behavior.</li>
+<li><strong>Languages.</strong> English, Spanish and Simplified Chinese, following your Windows
+display language.</li>
+</ul>
+<p>| Codex | Antigravity | Copilot |
+|---|---|---|
+| <img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-codex.png" alt="Codex flyout" /> | <img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-antigravity.png" alt="Antigravity flyout" /> | <img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/flyout-copilot.png" alt="Copilot flyout" /> |</p>
+<p><img src="https://raw.githubusercontent.com/Sof2245/taskbar-ai-usage/main/docs/images/settings-display.png" alt="Settings window, Display page" /></p>
+<h3 id="gettingstarted">Getting started</h3>
+<ol>
+<li>Enable the mod. Settings opens and asks whether the mod may look for AI
+providers already signed in on this PC. Choose <strong>Find accounts</strong> to add them,
+or <strong>Not now</strong>. You can rescan later with <strong>Rescan</strong> on the Accounts page.</li>
+<li>For anything else, click the <strong>+</strong> tile (or right-click a tile and choose
+<strong>Settings</strong>), add the account and click <strong>Sign in</strong>.</li>
+<li>Left-click a tile for its flyout. Right-click it to refresh, open the
+dashboard, hide accounts or open settings.</li>
+</ol>
+<p>If you use <strong>Taskbar AI Quota Bars</strong>, disable it first. Both mods would poll the
+same accounts, and they don't share accounts or sign-ins.</p>
+<h3 id="privacyanddisclaimers">Privacy and disclaimers</h3>
+<ul>
+<li>Sign-ins are stored only on this PC, encrypted with Windows DPAPI for your
+user account. Each token is sent only to the provider that issued it, and the
+mod sends no telemetry. Details are under <strong>Network and credentials</strong>.</li>
+<li>A borrowed sign-in is read on every poll. The mod never writes, refreshes or
+stores it, and never sends a prompt.</li>
+<li><strong>Let Claude Code renew its expired sign-in</strong> (per Claude account, in the
+account editor) is off by default. When you turn it on and a borrowed Claude
+Code sign-in expires, the mod starts <code>claude.exe</code> hidden so that Claude Code
+renews and rewrites its own credentials. It starts in safe mode, without your
+hooks, plugins or MCP servers, with its telemetry and update checks off, and
+receives no prompt. The mod only runs <code>claude.exe</code> from
+<code>%LOCALAPPDATA%\Microsoft\WinGet\Links</code> or <code>%USERPROFILE%\.local\bin</code>, at most
+every 10 minutes, and stops after three failed attempts. With it off, an
+expired sign-in shows "run claude".</li>
+<li>Usage comes from undocumented endpoints that can change and stop working
+without notice. The author is not responsible for its accuracy.</li>
+<li>Neither this mod nor its author is affiliated with Anthropic, OpenAI, Google,
+GitHub, Microsoft or any other usage provider.</li>
+</ul>
+<h3 id="networkandcredentials">Network and credentials</h3>
+<ul>
+<li><p><strong>Hosts contacted.</strong> Each sign-in only goes to its own provider:</p></li>
+<li><p>Claude: <code>console.anthropic.com</code> (sign-in, token refresh) and
+<code>api.anthropic.com</code> (usage, profile).</p></li>
+<li><p>ChatGPT / Codex: <code>auth.openai.com</code> (sign-in, token refresh) and
+<code>chatgpt.com</code> (usage, credits).</p></li>
+<li><p>Antigravity: <code>oauth2.googleapis.com</code> (sign-in, token refresh, revocation)
+and <code>cloudcode-pa.googleapis.com</code> / <code>daily-cloudcode-pa.googleapis.com</code>
+(quota, polled at your poll interval). Without its own sign-in, it asks the
+running Antigravity app's local server on <code>127.0.0.1</code> every minute. Signing
+out, or removing the account together with its sign-in, also revokes that
+sign-in at Google.</p></li>
+<li><p>GitHub Copilot: <code>github.com</code> (device sign-in) and <code>api.github.com</code> (user,
+Copilot quota).</p></li>
+<li><p><strong>Client identities.</strong> Sign-in uses the public OAuth clients of Claude Code,
+Codex, Antigravity and GitHub Copilot (copilot.vim). The Claude usage request
+identifies itself as the Claude Code CLI, because the server only returns the
+free-resets data to it. Antigravity requests use the Antigravity app's user
+agent.</p></li>
+<li><p><strong>Scopes requested.</strong></p></li>
+<li><p>Claude: <code>org:create_api_key user:profile user:inference</code>.</p></li>
+<li><p>OpenAI: <code>openid profile email offline_access api.connectors.read
+api.connectors.invoke</code>.</p></li>
+<li><p>Google: <code>cloud-platform userinfo.email userinfo.profile</code>, the same set
+Google's Gemini CLI requests for these Cloud Code endpoints, which publish
+no narrower scope. A scope never grants more than your Google account
+already has.</p></li>
+<li><p>GitHub: <code>read:user</code>.</p>
+<p>A borrowed sign-in keeps whatever scopes its own app requested.</p></li>
+<li><p><strong>On this PC.</strong></p></li>
+<li><p>During a sign-in only (up to 3 minutes), a listener on <code>127.0.0.1</code> receives
+the browser redirect: ports 1455/1457 for OpenAI, 51121 for Google.</p></li>
+<li><p>To find a running Antigravity session, the mod reads the command line of
+the Antigravity language server process in your session.</p></li>
+<li><p>Read-only files: the Claude Code and Codex credential files (for borrowed
+sign-ins) and Claude Code's usage cache (<code>.claude.json</code>). Credential
+Manager: the GitHub CLI and Visual Studio GitHub entries. None of these is
+read to find accounts until you allow it.</p></li>
+<li><p>Notifications register
+<code>HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAiUsage</code> while they
+are on. The mod deletes it when it unloads, when you turn notifications off,
+and at start if notifications are off. After the first notification Windows
+keeps its own entry in Settings &gt; System &gt; Notifications, which may remain
+after the mod is removed.</p></li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>Based on a fork of
+<a href="https://github.com/Cleroth/windhawk-taskbar-ai-quota">Taskbar AI Quota Bars</a>
+by Cleroth.</li>
+<li>The flyout and button styling come from
+<a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player">Taskbar Fluent Media Player</a>
+by Salyts.</li>
+<li>Provider logos come from <a href="https://simpleicons.org">Simple Icons</a>
+(CC0); the Copilot logo is from
+<a href="https://github.com/primer/octicons">Primer Octicons</a> (MIT, GitHub Inc.).</li>
+<li>Claude, Anthropic, OpenAI, Codex, Gemini, Antigravity, GitHub and Copilot are
+trademarks of their owners. Their names and logos appear only to identify
+which account a tile belongs to.</li>
+</ul>
+<h3 id="reportabug">Report a bug</h3>
+<p>Found a problem or have an idea?
+<a href="https://github.com/Sof2245/taskbar-ai-usage/issues">Open an issue on GitHub</a>.</p>]]></content>
+        <author>
+            <name>Sof2245</name>
+            <uri>https://github.com/Sof2245</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Expanded Clipboard (Win+V) 0.7.5]]></title>
+        <id>https://windhawk.net/mods/expanded-clipboard#b981076dc9c81084b9fcc2ab9f5b5f706a5f0024</id>
+        <link href="https://windhawk.net/mods/expanded-clipboard"/>
+        <updated>2026-11-03T23:01:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Only target the svchost instance hosting the clipboard service (<code>cbdhsvc</code>), fixing breakage of unrelated svchost-hosted services (Control Panel network adapter properties page). https://github.com/ramensoftware/windhawk-mods/issues/5060</li>
+</ul>]]></content>
+        <author>
+            <name>takattowo</name>
+            <uri>https://github.com/takattowo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Notification Center Follows Taskbar 1.1.0]]></title>
         <id>https://windhawk.net/mods/notification-center-follows-taskbar#2ed4cdb138bc83eaf598183d8e6c781189700e84</id>
@@ -580,142 +1052,6 @@ the mod is removed.</li>
         <author>
             <name>Koewen</name>
             <uri>https://github.com/Koewen</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Language Switcher Position 1.3]]></title>
-        <id>https://windhawk.net/mods/language-switcher-position#45b36d8bf133e4b61001eedfac9d5ac0a07909f0</id>
-        <link href="https://windhawk.net/mods/language-switcher-position"/>
-        <updated>2026-11-02T23:02:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="languageswitcherposition">Language Switcher Position</h1>
-<h2 id="english">English</h2>
-<p>This mod allows you to customize the position of the modern Windows 11 26H2 input language switcher, which appears when clicking the language indicator (РУС / ENG) in the system tray.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Left</strong> — positions the switcher at the left edge of the screen.</li>
-<li><strong>Center</strong> — positions the switcher in the center of the screen.</li>
-<li><strong>Right</strong> — positions the switcher at the right edge of the screen.</li>
-<li><strong>Custom X/Y</strong> — manually sets the window coordinates.</li>
-<li><strong>Vertical offset</strong> — provides additional vertical positioning control.</li>
-</ul>
-<h3 id="screenshots">Screenshots</h3>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/left.png" alt="Left position" /></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/center.png" alt="Center position" /></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/right.png" alt="Right position" /></p>
-<p><img src="https://raw.githubusercontent.com/MaestroSky/Language-Switcher-Position/main/images/default.png" alt="Default position" /></p>
-<h3 id="settings">Settings</h3>
-<p><strong>Horizontal position</strong> — selects the horizontal alignment: Left, Center, Right, or Custom X/Y.</p>
-<p><strong>Custom X coordinate</strong> — the horizontal window coordinate in pixels.</p>
-<p><strong>Custom Y coordinate</strong> — the vertical window coordinate in pixels.</p>
-<p><strong>Vertical offset</strong> — additional vertical displacement relative to the original Windows position. Used with Left, Center, and Right modes.</p>
-<h3 id="compatibility">Compatibility</h3>
-<ul>
-<li>Windows 11 26H2</li>
-<li>Windows Explorer (explorer.exe)</li>
-<li>Modern XAML input language switcher.</li>
-</ul>
-<h3 id="note">Note</h3>
-<p>Positioning is calculated relative to the full monitor dimensions, including the taskbar area. Custom coordinates are specified in screen pixels.</p>
-<p>The mod only changes the position of the switcher window and does not modify Windows input language settings.</p>
-<hr />
-<h2 id="">Українська</h2>
-<p>Мод дозволяє змінювати положення сучасного перемикача мов введення Windows 11 26H2, який з'являється після натискання на індикатор мови (РУС / ENG) у системному треї.</p>
-<h3 id="-1">Можливості</h3>
-<ul>
-<li><strong>Left</strong> — розміщення перемикача біля лівого краю екрана.</li>
-<li><strong>Center</strong> — розміщення по центру екрана.</li>
-<li><strong>Right</strong> — розміщення біля правого краю екрана.</li>
-<li><strong>Custom X/Y</strong> — ручне налаштування координат вікна.</li>
-<li><strong>Vertical offset</strong> — додаткове вертикальне зміщення.</li>
-</ul>
-<h3 id="-2">Налаштування</h3>
-<p><strong>Horizontal position</strong> — вибір горизонтального розташування перемикача: Left, Center, Right або Custom X/Y.</p>
-<p><strong>Custom X coordinate</strong> — горизонтальна координата вікна в пікселях.</p>
-<p><strong>Custom Y coordinate</strong> — вертикальна координата вікна в пікселях.</p>
-<p><strong>Vertical offset</strong> — додаткове вертикальне зміщення відносно початкової позиції Windows. Використовується в режимах Left, Center та Right.</p>
-<h3 id="-3">Сумісність</h3>
-<ul>
-<li>Windows 11 26H2</li>
-<li>Windows Explorer (explorer.exe)</li>
-<li>Сучасний XAML-перемикач мов введення.</li>
-</ul>
-<h3 id="-4">Примітка</h3>
-<p>Позиціонування виконується відносно повного розміру монітора, включно з областю панелі завдань. Користувацькі координати задаються в екранних пікселях.</p>
-<p>Мод змінює лише положення вікна перемикача та не впливає на системні налаштування мов введення.</p>]]></content>
-        <author>
-            <name>MaestroSky</name>
-            <uri>https://github.com/MaestroSky</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Steam Games in Explorer 1.2]]></title>
-        <id>https://windhawk.net/mods/explorer-steam-games#60313640913ae0898aa64c4085841b4712fed91f</id>
-        <link href="https://windhawk.net/mods/explorer-steam-games"/>
-        <updated>2026-11-02T21:05:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>added an optional “Navigation pane icons” setting, so you can use your own icon for each navigation pane entry (an .ico file or an .exe/.dll with an index). If the field is empty or the file doesn’t exist, the default icon is used. Like before, it only writes to the private hive, never the real registry.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.2.0]]></title>
-        <id>https://windhawk.net/mods/win81-start-screen-recreation#208aff70c74897d4deff49304a06090ca069e814</id>
-        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
-        <updated>2026-11-02T21:05:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved the context menus to match the Windows 8/8.1 interface</li>
-<li>Improved the animations to be more accurate to the original Windows 8.1</li>
-<li>Improved the arrow that switches from "All apps" to Start (and viceversa)</li>
-<li>Implemented a best-effort mechanism to display the taskbar when hovering at the bottom of the screen, replicating the behavior introduced in Windows 8.1 Update 1</li>
-<li>Applied minor improvements to the tile logic</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Open Window Underline 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-open-window-underline#163f117dea654633b7f6b69312420f17df7af7c5</id>
-        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
-        <updated>2026-11-02T21:05:09.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="fixed">Fixed</h3>
-<ul>
-<li><strong>Icon underline color under per-taskbar theme overrides.</strong> The light/dark color was chosen from the Windows mode (<code>SystemUsesLightTheme</code>), so a taskbar that another mod had switched to the other theme — Top Taskbar Bleed does this through <code>RequestedTheme</code> when a light window is maximized — kept the wrong color. The theme is now read from the icon element's <code>ActualTheme</code>, which reflects the Windows mode as mirrored into the tree <em>and</em> any per-taskbar override, and colors are cached per theme.</li>
-<li><strong>All lines recolor together on a theme change.</strong> Each icon subscribes to its own <code>ActualThemeChanged</code> and recolors its line when it fires (a brush swap only; window state is left to the hooks and refresh passes). A single tree-root subscription was tried first and left buttons inconsistent, since it can run while some icons still report the old theme. Windows mode switches take the same path.</li>
-<li><strong>Fast double theme flips.</strong> A window that opens light and turns dark a few frames later (with Top Taskbar Bleed following it) could leave the line in the first theme until the button was next evaluated. A theme change now also requests a coalesced refresh pass (<code>WM_APP_REQUEST_REFRESH</code>, 60 ms plus the 300 ms follow-up) that re-reads every icon's settled theme.</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>Accent default is theme-shaded: <code>AccentLight2</code> on a dark taskbar, <code>AccentDark1</code> on a light one (the shades WinUI's accent fills use), so the line keeps its contrast on both themes. Setting description and README say so.</li>
-<li>Each icon's <code>ActualThemeChanged</code> subscription is made once, with the <code>winrt::event_token</code> kept in the icon's entry; it is revoked when the option is turned off and on unload.</li>
-<li>README: the icon underline's theme is the one each button is rendered with; the How-it-works bullet mentions <code>ActualTheme</code>.</li>
-</ul>
-<h3 id="unchanged">Unchanged</h3>
-<p>Label underline, resolver, WinEvent handling and the running-indicator option are as in v2.0. The unload path gains only the revocation of the per-icon theme subscriptions.</p>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Operation Styler 1.3.0]]></title>
-        <id>https://windhawk.net/mods/file-operation-styler#2ca0c456759cd0eeb5f5d0f4d737362b6b406d74</id>
-        <link href="https://windhawk.net/mods/file-operation-styler"/>
-        <updated>2026-11-02T19:02:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with Windows 11 26H2 builds where the native transfer-rate calculation symbol is unavailable.</li>
-<li>Fixed multiple simultaneous file operations extending beyond the screen by adding a scrollable layout with a fixed footer.</li>
-<li>Added scrollbar and mouse-wheel navigation for grouped file operations.</li>
-<li>Improved layout handling when transfers are added, removed, or completed.</li>
-<li>Improved Glass text antialiasing and native window resizing compatibility.</li>
-</ul>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>

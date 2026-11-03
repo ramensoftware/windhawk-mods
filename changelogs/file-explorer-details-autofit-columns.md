@@ -1,3 +1,7 @@
+## 1.3.0 ([Nov 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9139f648d3da6bb9520a2a6b622a5a0b86e62e21/mods/file-explorer-details-autofit-columns.wh.cpp))
+
+* Fixed a tiny horizontal scrollbar sometimes appearing on Windows 11 26H2
+
 ## 1.2.0 ([Sep 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/74b039ce245ef372309dc3409117394c9bc0d906/mods/file-explorer-details-autofit-columns.wh.cpp))
 
 - Added a new "Passive Triggers" setting that lets you turn off automatic fitting for folder changes, navigating between folders, and restoring a minimized window
