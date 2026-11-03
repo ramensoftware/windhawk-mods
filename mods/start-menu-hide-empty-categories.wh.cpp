@@ -697,7 +697,8 @@ int __cdecl ProduceReplaceAll_Hook(void* self, uint32_t count, void* items) {
 }
 
 bool HookStartMenuDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // StartMenu.dll, StartUI.dll
+    WindhawkUtils::SYMBOL_HOOK startMenuDllHooks[] = {
         {
             {
                 LR"(public: void __cdecl winrt::StartMenu::implementation::StartBlendedFlexFrame::OnContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))",
@@ -720,11 +721,9 @@ bool HookStartMenuDllSymbols(HMODULE module) {
             CombineCategories_Hook,
         },
         {
-            // Optional. Windhawk may spell the pointer parts of this name in more than one way, so several
+            // Optional. Windhawk may spell the pointer parts of this name in more than one way, so both
             // spellings are given.
             {
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void * __ptr64 * __ptr64) __ptr64)",
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void * __ptr64 * __ptr64) )",
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void * *) )",
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::convertible_observable_vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::vector<struct winrt::StartMenu::AllAppsGroupViewModel,class std::allocator<struct winrt::StartMenu::AllAppsGroupViewModel> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::StartMenu::AllAppsGroupViewModel> >::ReplaceAll(unsigned int,void *  * ) )",
             },
@@ -743,7 +742,7 @@ bool HookStartMenuDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {
         Wh_Log(L"[start] Windows build %ls: could not hook the Start menu; empty category tiles will not be hidden",
                WindowsBuildString().c_str());
         return false;
