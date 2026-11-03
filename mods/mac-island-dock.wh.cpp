@@ -2335,6 +2335,7 @@ escrever em português.
 #include <dwmapi.h>
 #include <dwrite.h>
 #include <endpointvolume.h>
+#include <exdisp.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <imm.h>
 #include <mmdeviceapi.h>
@@ -2362,6 +2363,7 @@ escrever em português.
 #include <shellapi.h>
 #include <sddl.h>
 #include <shellscalingapi.h>
+#include <shldisp.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
@@ -13766,9 +13768,95 @@ BOOL CALLBACK FindAppWindowProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+// Whether a process runs elevated (also when it can't be told).
+bool ProcessElevated(DWORD processId) {
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    HANDLE token = nullptr;
+    TOKEN_ELEVATION elevation{};
+    DWORD size = 0;
+    const bool known =
+        process && OpenProcessToken(process, TOKEN_QUERY, &token) &&
+        GetTokenInformation(token, TokenElevation, &elevation,
+                            sizeof(elevation), &size);
+    if (token) {
+        CloseHandle(token);
+    }
+    if (process) {
+        CloseHandle(process);
+    }
+    return !known || elevation.TokenIsElevated;
+}
+
+// CLSID_ShellWindows and SID_STopLevelBrowser.
+constexpr GUID kCLSID_ShellWindows = {
+    0x9ba05972,
+    0xf6a8,
+    0x11cf,
+    {0xa4, 0x42, 0x00, 0xa0, 0xc9, 0x0a, 0x8f, 0x39}};
+constexpr GUID kSID_STopLevelBrowser = {
+    0x4c96be40,
+    0x915c,
+    0x11cf,
+    {0x99, 0xd3, 0x00, 0xaa, 0x00, 0x4a, 0xe8, 0x37}};
+
+// A program, file or app (shell:AppsFolder\...) started by Explorer's own
+// shell, as the user and unelevated: the desktop's view, its shell's
+// IShellDispatch2::ShellExecute (see "How can I launch an unelevated
+// process from my elevated process", The Old New Thing). On a thread with
+// COM. False if it can't be.
+bool ShellExecuteAsUser(const std::wstring& target) {
+    winrt::com_ptr<IShellWindows> windows;
+    winrt::com_ptr<IDispatch> desktop;
+    VARIANT none;
+    VariantInit(&none);
+    long found = 0;
+    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(windows.put()))) ||
+        windows->FindWindowSW(&none, &none, SWC_DESKTOP, &found,
+                              SWFO_NEEDDISPATCH, desktop.put()) != S_OK ||
+        !desktop) {
+        return false;
+    }
+    winrt::com_ptr<IShellBrowser> browser;
+    winrt::com_ptr<IShellView> view;
+    winrt::com_ptr<IDispatch> background;
+    winrt::com_ptr<IDispatch> application;
+    const auto provider = desktop.try_as<IServiceProvider>();
+    if (!provider ||
+        FAILED(provider->QueryService(kSID_STopLevelBrowser,
+                                      IID_PPV_ARGS(browser.put()))) ||
+        FAILED(browser->QueryActiveShellView(view.put())) ||
+        FAILED(view->GetItemObject(SVGIO_BACKGROUND,
+                                   IID_PPV_ARGS(background.put())))) {
+        return false;
+    }
+    const auto folderView = background.try_as<IShellFolderViewDual>();
+    if (!folderView || FAILED(folderView->get_Application(application.put()))) {
+        return false;
+    }
+    const auto shell = application.try_as<IShellDispatch2>();
+    if (!shell) {
+        return false;
+    }
+    BSTR file = SysAllocString(target.c_str());
+    VARIANT show;
+    VariantInit(&show);
+    show.vt = VT_I4;
+    show.lVal = SW_SHOWNORMAL;
+    const HRESULT hr =
+        file ? shell->ShellExecute(file, none, none, none, show)
+             : E_OUTOFMEMORY;
+    SysFreeString(file);
+    return SUCCEEDED(hr);
+}
+
 // Brings an app to the front by its AppUserModelID: its window if it has one
 // (restored if minimized), otherwise it's started, or brought back from the
-// tray, through the shell.
+// tray, through the shell. With Windhawk run as administrator, the island
+// never starts it itself: the ID comes from explorer.exe's message, which a
+// lower process can send too, and what the island starts would run
+// elevated; Explorer starts it, as the user (see ShellExecuteAsUser).
 void OpenApp(const std::wstring& appId) {
     if (appId.empty()) {
         return;
@@ -13784,6 +13872,13 @@ void OpenApp(const std::wstring& appId) {
     const std::wstring target = appId.find(L'\\') != std::wstring::npos
                                     ? appId
                                     : L"shell:AppsFolder\\" + appId;
+    static const bool elevated = ProcessElevated(GetCurrentProcessId());
+    if (elevated) {
+        if (!ShellExecuteAsUser(target)) {
+            IslandLog(L"An app couldn't be started through Explorer");
+        }
+        return;
+    }
     ShellExecute(nullptr, L"open", target.c_str(), nullptr, nullptr,
                  SW_SHOWNORMAL);
 }
@@ -30565,8 +30660,9 @@ constexpr size_t kIconSvgMost = 64 * 1024;
 constexpr UINT kIconPictureMost = 128;
 // (A folder changing: read once the changes stop for this long.)
 constexpr DWORD kIconChangeSettleMs = 400;
-// (At most this many waits, for a folder written all the time.)
-constexpr int kIconChangeSettleTimes = 15;
+// (At most this many waits, about a minute, for a folder written all the
+// time: saving Windows' icons there takes several seconds.)
+constexpr int kIconChangeSettleTimes = 150;
 // Told to the islands' thread: pictures read (see OnIconsRead).
 constexpr UINT WM_APP_ICONS = WM_APP + 100;
 // Every island drawn again with them (defined further down).
@@ -30823,7 +30919,9 @@ std::vector<IconPicture> ReadIconFolder(IWICImagingFactory* wic,
     size_t entries = 0;
     do {
         const PCWSTR dot = wcsrchr(data.cFileName, L'.');
+        // (Not an online pack's mark of a picture it doesn't have.)
         if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !dot ||
+            _wcsicmp(dot, L".none") == 0 ||
             (((ULONGLONG)data.nFileSizeHigh << 32) | data.nFileSizeLow) >
                 kIconFileMost) {
             continue;
@@ -30865,9 +30963,10 @@ std::vector<IconPicture> ReadIconFolder(IWICImagingFactory* wic,
 // The online pack's pictures not downloaded yet (its picture for each
 // icon, once each), into its folder, the source's count told as it goes;
 // false if one couldn't be (the ones before are kept: the next time, only
-// the rest). One the pack doesn't have (the server says 404) is skipped:
-// that icon keeps the island's own. Only the pictures' addresses are asked
-// for: nothing about the user is sent.
+// the rest). One the pack doesn't have (the server says 404) is skipped,
+// and remembered (an empty <name>.none beside them) so it's never asked for
+// again: that icon keeps the island's own. Only the pictures' addresses are
+// asked for: nothing about the user is sent.
 bool DownloadIconPack(const OnlineIconPack& pack, const std::wstring& folder) {
     std::vector<std::wstring> names;
     for (const auto& icon : kIcons) {
@@ -30875,9 +30974,12 @@ bool DownloadIconPack(const OnlineIconPack& pack, const std::wstring& folder) {
             continue;
         }
         const std::wstring name = icon.*pack.name;
+        auto missing = [&](PCWSTR ending) {
+            const std::wstring path = folder + L"\\" + name + ending;
+            return GetFileAttributes(path.c_str()) == INVALID_FILE_ATTRIBUTES;
+        };
         if (std::find(names.begin(), names.end(), name) == names.end() &&
-            GetFileAttributes((folder + L"\\" + name + L".svg").c_str()) ==
-                INVALID_FILE_ATTRIBUTES) {
+            missing(L".svg") && missing(L".none")) {
             names.push_back(name);
         }
     }
@@ -30908,6 +31010,12 @@ bool DownloadIconPack(const OnlineIconPack& pack, const std::wstring& folder) {
                 return false;
             }
             IslandLog(L"Icon pack %s: no %s", pack.folder, names[i].c_str());
+            const HANDLE none = CreateFile(
+                (folder + L"\\" + names[i] + L".none").c_str(), GENERIC_WRITE,
+                0, nullptr, CREATE_ALWAYS, 0, nullptr);
+            if (none != INVALID_HANDLE_VALUE) {
+                CloseHandle(none);
+            }
             continue;
         }
         if (!LooksLikeSvg(std::string(data.begin(), data.end()))) {
@@ -36989,8 +37097,10 @@ bool IsWow64() {
 }
 
 // A path the user gave with its environment variables, as a 64-bit program
-// sees it: the 64-bit Program Files, and System32 through Sysnative (the
-// 32-bit process's way to the real one). Empty if it can't be expanded.
+// sees it: the 64-bit Program Files, and a file in System32 through
+// Sysnative (the 32-bit process's way to the real one; a folder stays as it
+// is: the 64-bit Explorer that shows it doesn't know that name). Empty if it
+// can't be expanded.
 std::wstring ExpandedAsNative(std::wstring text) {
     WCHAR windows[MAX_PATH];
     const bool wow64 = IsWow64() && GetWindowsDirectory(windows, MAX_PATH);
@@ -37023,8 +37133,14 @@ std::wstring ExpandedAsNative(std::wstring text) {
         if (_wcsnicmp(expanded.c_str(), system.c_str(), system.size()) == 0 &&
             (expanded.size() == system.size() ||
              expanded[system.size()] == L'\\')) {
-            expanded.replace(0, system.size(),
-                             std::wstring(windows) + L"\\Sysnative");
+            const std::wstring native = std::wstring(windows) +
+                                        L"\\Sysnative" +
+                                        expanded.substr(system.size());
+            const DWORD attributes = GetFileAttributes(native.c_str());
+            if (attributes != INVALID_FILE_ATTRIBUTES &&
+                !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                expanded = native;
+            }
         }
     }
     return expanded;
@@ -83101,26 +83217,6 @@ bool ActivateToast(const std::wstring& appId,
     }
     g_toastActivationThreads.push_back(thread);
     return true;
-}
-
-// Whether a process runs elevated (also when it can't be told).
-bool ProcessElevated(DWORD processId) {
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    HANDLE token = nullptr;
-    TOKEN_ELEVATION elevation{};
-    DWORD size = 0;
-    const bool known =
-        process && OpenProcessToken(process, TOKEN_QUERY, &token) &&
-        GetTokenInformation(token, TokenElevation, &elevation,
-                            sizeof(elevation), &size);
-    if (token) {
-        CloseHandle(token);
-    }
-    if (process) {
-        CloseHandle(process);
-    }
-    return !known || elevation.TokenIsElevated;
 }
 
 // A mouse message to a tray icon's app, as from the taskbar (its menu or
