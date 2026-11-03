@@ -14,7 +14,7 @@
 # Taskbar Overflow on Hover 🚀
 
 A zero-click QoL upgrade for Windows 11. Hover over the taskbar overflow button
-to open the hidden system tray icons.
+to open the hidden running Apps icons.
 
 ![Hover overflow menu](https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/assets/Hover-Overflow-Menu.png)
 
