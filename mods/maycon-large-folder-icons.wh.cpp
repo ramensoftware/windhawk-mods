@@ -2,7 +2,7 @@
 // @id              maycon-large-folder-icons
 // @name            Large icons — Dev_Maycon
 // @description     Consistent large icons for Explorer folders and removable drives. Created for Dev_Maycon.
-// @version         1.1.0
+// @version         1.1.1
 // @author          Dev_Maycon
 // @github          https://github.com/MayconDIS
 // @homepage        https://github.com/MayconDIS/Windhawk_Mods
@@ -69,6 +69,12 @@ WinSetView. Disabling stops enforcement; Windows may retain the last view.
 - `scripts/build.ps1` — reproducible build without installing the mod.
 - `docs/large-icons/README.md` — this guide and recovery notes.
 
+## Version 1.1.1
+
+- Fixed: navigation-only mode now tracks each Explorer tab separately, so
+  manual view changes are respected when several tabs are open.
+- Added decision-logic tests.
+
 ## Version 1.1.0
 
 - Dev_Maycon branding and original English project documentation.
@@ -132,15 +138,30 @@ static DWORD g_threadId = 0;
 static std::atomic<int> g_iconSize{96}, g_interval{1500};
 static std::atomic<bool> g_always{true};
 static std::atomic<unsigned> g_generation{0};
-static std::map<HWND, std::wstring> g_previous;
+// Keyed per Explorer tab: every tab of a window shares the top-level HWND, so
+// the window handle alone cannot track each tab's last navigated path.
+using ViewKey = UINT_PTR;
+static std::map<ViewKey, std::wstring> g_previous;
 
 static bool Stopping() {
     return g_stop && WaitForSingleObject(g_stop, 0) == WAIT_OBJECT_0;
 }
 
-static void ProcessFolderView(IDispatch* dispatch, std::map<HWND, std::wstring>& seen) {
+// Pure decision logic, kept free of COM so it can be unit tested.
+[[maybe_unused]] static bool ShouldApplyView(bool alwaysEnforce, const std::wstring* previousPath,
+                            const std::wstring& path, FOLDERVIEWMODE mode, int size,
+                            int desired) {
+    if (!alwaysEnforce && previousPath && *previousPath == path) return false;
+    return !(mode == FVM_ICON && size == desired);
+}
+
+static void ProcessFolderView(IDispatch* dispatch, std::map<ViewKey, std::wstring>& seen) {
     ComPtr<IWebBrowser2> web;
     if (FAILED(dispatch->QueryInterface(IID_IWebBrowser2, web.out()))) return;
+    // COM identity of the tab's browser object: stable for the tab's lifetime.
+    ComPtr<IUnknown> identity;
+    if (FAILED(web->QueryInterface(IID_IUnknown, identity.out()))) return;
+    const ViewKey key = reinterpret_cast<ViewKey>(identity.get());
     SHANDLE_PTR handle = 0;
     if (FAILED(web->get_HWND(&handle))) return;
     HWND hwnd = reinterpret_cast<HWND>(handle);
@@ -175,24 +196,25 @@ static void ProcessFolderView(IDispatch* dispatch, std::map<HWND, std::wstring>&
     if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &pathRaw)) || !pathRaw) return;
     std::wstring path(pathRaw);
     CoTaskMemFree(pathRaw);
-    seen[hwnd] = path;
+    seen[key] = path;
     FOLDERVIEWMODE mode{};
     int size = 0;
     if (FAILED(folderView->GetViewModeAndIconSize(&mode, &size))) return;
 #ifdef MAYCON_DIAGNOSTIC
-    wprintf(L"HWND=%p PID=%lu Mode=%d IconSize=%d Path=%ls\n", hwnd, pid, int(mode), size, path.c_str());
+    wprintf(L"HWND=%p Tab=%p PID=%lu Mode=%d IconSize=%d Path=%ls\n", hwnd,
+            reinterpret_cast<void*>(key), pid, int(mode), size, path.c_str());
 #else
-    const auto previous = g_previous.find(hwnd);
-    if (!g_always.load() && previous != g_previous.end() && previous->second == path) return;
+    const auto previous = g_previous.find(key);
     const int desired = g_iconSize.load();
-    if (mode == FVM_ICON && size == desired) return;
+    if (!ShouldApplyView(g_always.load(), previous != g_previous.end() ? &previous->second : nullptr,
+                         path, mode, size, desired)) return;
     if (Stopping()) return;
     hr = folderView->SetViewModeAndIconSize(FVM_ICON, desired);
     if (SUCCEEDED(hr)) {
         Wh_Log(L"Folder view applied: window=%p, size=%d", hwnd, desired);
     } else {
         // Retry on the next scan, including in navigation-only mode.
-        seen.erase(hwnd);
+        seen.erase(key);
     }
 #endif
 }
@@ -203,7 +225,7 @@ static void ScanOpenFolders() {
                                 IID_IShellWindows, windows.out()))) return;
     long count = 0;
     if (FAILED(windows->get_Count(&count))) return;
-    std::map<HWND, std::wstring> seen;
+    std::map<ViewKey, std::wstring> seen;
     for (long i = 0; i < count && !Stopping(); ++i) {
         VARIANT index{};
         index.vt = VT_I4;
