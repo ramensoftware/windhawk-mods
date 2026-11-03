@@ -22,9 +22,9 @@ Move the pointer with more fingers resting on the precision touchpad, as if glid
 
 - **Trigger:** with 5 (or as few as configured) fingers touching the pad.
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
-- **Movement:** it leaves out the finger which moves the least (usually the thumb, to avoid conflict). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
-- **Click:** you don't need to lift all fingers. With the hand resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to select word by word. A hold lasts until the whole hand leaves the pad. **Tap to click** option controls its sensitivity.
-- **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-figer tap-slide to scroll while "inside" the more-fingers action. **Both will get activated if you start with 2 and rest more on the touchpad.**
+- **Movement:** each finger weighs as much as it moves, so resting fingers drop out and one which lags (usually the thumb) doesn't fight the others. With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
+- **Click:** you don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad. **Tap to click** option controls its sensitivity.
+- **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll while "inside" the more-fingers action. **Both will get activated if you start with 2 and rest more on the touchpad.**
 
 ## 4 and 3 fingers detection
 
@@ -46,14 +46,8 @@ Right after installing, before anything is learned, the glide uses a default spe
 - Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. **Disabling Windows three and four fingers swipes removes the conflict.**
 - Two-finger scroll is ignored while more-fingers gliding. Scrolling is only blocked in programs which receive it as mouse wheel input, not in those which scroll through the Windows precision touchpad path.
 - **Programs running as administrator need Windhawk 2.** On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.
-- Movements aginst the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.
+- Movements against the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.
 - The two-finger scroll reaches programs as mouse wheel input. Excel gets the native touchpad scroll through its own precision channel, which the mod can't use, and scrolls poorly with the wheel over its cells. **Keep Windows two-finger scroll if you work a lot in Excel and alike.**
-
-<details>
-<summary>Why programs running as administrator depend on the Windhawk version</summary>
-
-Windows keeps ordinary programs from reading input meant for programs running as administrator and from sending input to them. Windhawk 2 can run a tool mod as a UIAccess process, which Windows lets through, and this mod asks for it, falling back to an ordinary process if UIAccess isn't available. Windhawk 1.x runs tool mods as ordinary processes only. The same mod works on both: when it's compiled, it picks Windhawk 2's launcher if it's there, and its own otherwise.
-</details>
 
 ## Credits
 
@@ -73,13 +67,13 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   - lenient: Lenient
 - multiplierFive: "2.0"
   $name: 5-3 fingers speed multiplier
-  $description: When more fingers are gliding and you'd need room to travell. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
+  $description: When more fingers are gliding and you'd need room to travel. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
 - multiplierOne: "1.0"
   $name: 2-1 fingers speed multiplier
   $description: When fewer fingers move or are left gliding. 1.0 is native.
 - armFive: true
   $name: 5 fingers detection
-  $description: The glide starts with five contacts, thumb included. Off, it only starts with the enabled below.
+  $description: Tracking starts with five contacts. Stops only if all fingers lift the pad.
 - armFour: false
   $name: 4 fingers detection
   $description: You have to disable the four-finger swipes in Windows touchpad settings, otherwise it also responds.
@@ -131,20 +125,24 @@ constexpr USAGE kUsageContactId = 0x51;
 constexpr USAGE kUsageContactCount = 0x54;
 
 constexpr int kFingers = 5;
-// The second most moved finger under the first share of the most moved one: a single finger is moving; over
-// the second: the hand is. In between, the last decision stays, so that the multiplier doesn't flap.
-constexpr double kSingleFingerShare = 0.33;
-constexpr double kHandShare = 0.5;
-// Under this, per frame, the most moved finger is resting jitter: the average is followed, which cancels it.
+// How many fingers move, weighing each by how much it moved (1 when one moves alone, 5 when five move as one):
+// over the first the higher speed multiplier applies, under the second the lower one, and in between the last
+// one stays, so that the multiplier doesn't flap.
+constexpr double kHandMovers = 2.7;
+constexpr double kFewMovers = 2.3;
+// Under this, per frame, a finger is resting jitter.
 constexpr double kJitterMm = 0.1;
-// A single finger counts as moving alone only past this, per frame: the uneven tails of a stopping hand stay
-// under it, and following the most moved of them made the pointer slide on after the hand stopped.
-constexpr double kSingleStartMm = 0.3;
 // After a stop the touchpad keeps reporting the resting fingers creeping at 2–4 mm/s for a few hundred ms,
 // which Windows doesn't turn into pointer movement and the glide did: the pointer slid on. Under the first
-// speed the pointer stops, and it only starts again over the second.
+// speed (the hand's, smoothed) the pointer stops, and it only starts again over the second.
 constexpr double kStopSpeed = 4.0;
 constexpr double kStartSpeed = 7.0;
+// One Euro filter (Casiez et al., 2012): the hand's movement is smoothed more the slower it goes, where jitter
+// shows and a little lag doesn't, and hardly at all when fast, where lag would show. Cutoff in Hz: kEuroMinCutoff
+// at rest, plus kEuroBeta per mm/s of the hand's speed, which is itself smoothed at kEuroSpeedCutoff.
+constexpr double kEuroMinCutoff = 2.0;
+constexpr double kEuroBeta = 0.15;
+constexpr double kEuroSpeedCutoff = 1.0;
 // More than this in one frame isn't a finger moving: the touchpad gave a contact's id to another contact,
 // typically when the thumb lands late, and following it would throw the pointer to the thumb.
 constexpr double kJumpMm = 10.0;
@@ -328,8 +326,10 @@ struct {
     DWORD armTime;
     bool anchorValid;
     std::unordered_map<ULONG, std::pair<double, double>> last;  // id -> previous position, mm
-    bool single;
+    bool fewMoving;  // the lower speed multiplier applies
     double accX, accY;
+    double lagX, lagY;  // mm of hand movement the filter hasn't passed on yet
+    double handSpeed;   // mm/s, smoothed, which sets the filter's cutoff
     std::unordered_map<ULONG, Track> tracks;
     bool recentClick;
     DWORD lastLossTime;
@@ -627,6 +627,9 @@ void EndGlide() {
     g_state.anchorValid = false;
     g_state.speed = 0;
     g_state.stopped = true;
+    g_state.lagX = 0;
+    g_state.lagY = 0;
+    g_state.handSpeed = 0;
     g_state.tracks.clear();
     g_learn.active = false;
     if (g_curveDirty && Now() - g_lastSave >= kSaveIntervalSec) {
@@ -873,25 +876,39 @@ void TrackTwoFingers(const std::vector<const Contact*>& fingers, int touching, D
     }
 }
 
+double EuroAlpha(double cutoff, double dt) {
+    double tau = 1 / (2 * 3.14159265358979 * cutoff);
+    return 1 / (1 + tau / dt);
+}
+
 void Move(double dxMm, double dyMm, double dt, double multiplier) {
-    if (dt > 0) {
-        double v = std::hypot(dxMm, dyMm) / std::max(dt, kMinFrameSec);
-        if (g_state.stopped ? v < kStartSpeed : v < kStopSpeed) {
-            g_state.stopped = true;
-            g_state.speed = v;
-            g_state.accX = 0;
-            g_state.accY = 0;
-            return;
-        }
-        g_state.stopped = false;
-        // Smoothed when speeding up, which absorbs spikes, but followed at once when slowing down: a slow
-        // drop kept the last millimeters of a stop on the fast part of the curve, and the pointer slid on.
-        g_state.speed = v < g_state.speed ? v : g_state.speed + (v - g_state.speed) * 0.3;
+    dt = std::max(dt, kMinFrameSec);
+    double raw = std::hypot(dxMm, dyMm) / dt;
+    g_state.handSpeed += (raw - g_state.handSpeed) * EuroAlpha(kEuroSpeedCutoff, dt);
+    if (g_state.stopped ? g_state.handSpeed < kStartSpeed : g_state.handSpeed < kStopSpeed) {
+        g_state.stopped = true;
+        g_state.speed = 0;
+        g_state.lagX = 0;
+        g_state.lagY = 0;
+        g_state.accX = 0;
+        g_state.accY = 0;
+        return;
     }
+    g_state.stopped = false;
+
+    double alpha = EuroAlpha(kEuroMinCutoff + kEuroBeta * g_state.handSpeed, dt);
+    g_state.lagX += dxMm;
+    g_state.lagY += dyMm;
+    double ox = g_state.lagX * alpha;
+    double oy = g_state.lagY * alpha;
+    g_state.lagX -= ox;
+    g_state.lagY -= oy;
+    // The curve takes the filtered speed, which follows a stop as the movement does.
+    g_state.speed = std::hypot(ox, oy) / dt;
 
     double pxPerMm = CurveAt(g_state.speed) * multiplier;
-    g_state.accX += dxMm * pxPerMm;
-    g_state.accY += dyMm * pxPerMm;
+    g_state.accX += ox * pxPerMm;
+    g_state.accY += oy * pxPerMm;
     LONG mx = (LONG)g_state.accX;
     LONG my = (LONG)g_state.accY;
     g_state.accX -= mx;
@@ -1301,6 +1318,7 @@ void ProcessFrame() {
     if (canArm && !g_state.armed) {
         g_state.armed = true;
         g_state.armTime = now;
+        g_state.fewMoving = count <= 2;
         SetWheelBlock(true);
         SetTimer(g_hWnd, kStaleTimerId, kStaleFrameMs, nullptr);
         Wh_Log(L"Glide started");
@@ -1371,10 +1389,20 @@ void ProcessFrame() {
     for (const Contact* c : used) {
         g_state.allLast[c->id] = {c->x, c->y};
     }
-    double allBest = allMoved.empty() ? 0 : *std::max_element(allMoved.begin(), allMoved.end());
-    int allCount = (int)allMoved.size();
-    int allMoving = (int)std::count_if(allMoved.begin(), allMoved.end(),
-                                       [allBest](double d) { return d >= allBest * kSingleFingerShare; });
+    double movedSum = 0;
+    double movedSq = 0;
+    for (double d : allMoved) {
+        movedSum += d;
+        movedSq += d * d;
+    }
+    if (movedSum >= kJitterMm) {
+        double movers = movedSum * movedSum / movedSq;
+        if (movers >= kHandMovers) {
+            g_state.fewMoving = false;
+        } else if (movers <= kFewMovers) {
+            g_state.fewMoving = true;
+        }
+    }
 
     // Only the fingers which started the glide move the pointer, until they have all lifted: then those left
     // take over. Fingers joining later rest, tap and count for nothing else, so the pointer doesn't take up
@@ -1427,15 +1455,14 @@ void ProcessFrame() {
         it = present ? std::next(it) : g_state.last.erase(it);
     }
 
-    // A single finger moving alone is followed on its own, not divided by the resting ones. Slow, the median of
-    // the fingers is followed: it cancels their jitter like an average.
+    // Each finger weighs as much as it moved: resting ones drop out on their own, a finger moving alone leads,
+    // and one which lags (the thumb) weighs less, with no choice of fingers that could flip between frames. While
+    // the contacts settle after a count change, the median is followed, which a single shifted contact doesn't
+    // move.
     double dx = 0;
     double dy = 0;
     std::vector<double> allX;
     std::vector<double> allY;
-    double best = -1;
-    double second = 0;
-    int counted = 0;
     for (const Contact* c : used) {
         auto found = g_state.last.find(c->id);
         if (found == g_state.last.end()) {
@@ -1446,63 +1473,34 @@ void ProcessFrame() {
         double fx = c->x - prev.first;
         double fy = c->y - prev.second;
         prev = {c->x, c->y};
-        if (std::hypot(fx, fy) > kJumpMm) {
+        double d = std::hypot(fx, fy);
+        if (d > kJumpMm) {
             continue;
         }
-        counted++;
         allX.push_back(fx);
         allY.push_back(fy);
-        double d = std::hypot(fx, fy);
-        if (d > best) {
-            second = std::max(second, best);
-            best = d;
-            dx = fx;
-            dy = fy;
-        } else {
-            second = std::max(second, d);
-        }
     }
 
-    if (!counted) {
+    if (allX.empty()) {
         g_state.lastFrameTime = t;
         return;
     }
 
-    bool settling = now - g_state.countChangeTime < kSettleMs;
-    if (best < kJitterMm) {
-        g_state.single = false;
-    } else if (best >= kSingleStartMm && second < best * kSingleFingerShare && !settling) {
-        g_state.single = true;
-    } else if (second > best * kHandShare) {
-        g_state.single = false;
-    }
-    int moving = allCount;
-    if (!g_state.single && best >= kSingleStartMm && !settling) {
-        // Only the moving fingers count, over a share of the most moved one, and the least moving of them is
-        // left out: the thumb, which travels less than the fingers opposite it, stops pulling the pointer back.
-        std::vector<size_t> movers;
-        for (size_t i = 0; i < allX.size(); i++) {
-            if (std::hypot(allX[i], allY[i]) >= best * kSingleFingerShare) {
-                movers.push_back(i);
-            }
-        }
-        moving = allMoving;
-        if (movers.size() >= 2) {
-            movers.erase(std::min_element(movers.begin(), movers.end(), [&](size_t a, size_t b) {
-                return std::hypot(allX[a], allY[a]) < std::hypot(allX[b], allY[b]);
-            }));
-        }
-        dx = 0;
-        dy = 0;
-        for (size_t i : movers) {
-            dx += allX[i];
-            dy += allY[i];
-        }
-        dx /= movers.size();
-        dy /= movers.size();
-    } else if (!g_state.single || settling) {
+    if (now - g_state.countChangeTime < kSettleMs) {
         dx = Median(allX);
         dy = Median(allY);
+    } else {
+        double sum = 0;
+        for (size_t i = 0; i < allX.size(); i++) {
+            double d = std::hypot(allX[i], allY[i]);
+            dx += allX[i] * d;
+            dy += allY[i] * d;
+            sum += d;
+        }
+        if (sum > 0) {
+            dx /= sum;
+            dy /= sum;
+        }
     }
 
     double dt = t - g_state.lastFrameTime;
@@ -1537,8 +1535,7 @@ void ProcessFrame() {
         g_state.accY = 0;
         return;
     }
-    // Up to two fingers moving, or one moving alone, aim like a single finger; three to five move the hand.
-    Move(dx, dy, dt, g_state.single || moving <= 2 ? g_multOne.load() : g_multFive.load());
+    Move(dx, dy, dt, g_state.fewMoving ? g_multOne.load() : g_multFive.load());
 }
 
 // The touchpad.
