@@ -23,6 +23,8 @@ This is a tool mod: it runs in its own dedicated process instead of being
 injected into `explorer.exe`, so it cannot affect the shell's stability and
 survives Explorer restarts.
 
+![Screenshot](https://i.imgur.com/dDy0BoL.png)
+
 ### Features
 - **Real-time monitoring:** CPU load, RAM usage and active network speed.
 - **Windows 11 look:** blends with the taskbar, configurable corner style.
