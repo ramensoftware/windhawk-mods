@@ -2,10 +2,11 @@
 // @id              taskbar-per-monitor-alignment
 // @name            Per-monitor taskbar icon alignment
 // @description     Choose icon alignment (Left, Center, Right) and Start button placement (Left, Right) independently for each monitor (Windows 11).
-// @version         1.0.0
+// @version         1.0.1
 // @author          vmTools
 // @github          https://github.com/VitalyTz
 // @homepage        https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment
+// @donateUrl       https://ko-fi.com/vtools
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
@@ -21,6 +22,10 @@ Choose how the taskbar looks on **each monitor separately**: its icons **Left**,
 the right edge, or with the icons. Windows only offers one alignment for every
 taskbar, and only Left or Center.
 
+[![Support on Ko-fi](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/support_me_on_kofi_150.png)](https://ko-fi.com/vtools)
+
+Like this mod? You can [support its development on Ko-fi](https://ko-fi.com/vtools).
+
 ![A monitor with centered icons and the Start button at the left edge](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/monitor2-overview.jpg)
 
 | Icons | Start button | Result |
@@ -33,7 +38,7 @@ taskbar, and only Left or Center.
 
 ## Settings
 
-![Mod settings](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/settings.jpg)
+![Mod settings](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/settings-v2.jpg)
 
 * **Primary monitor / Other monitors** set the icon alignment and the Start button
   placement for every monitor of that kind. *Windows default* keeps whatever Windows
@@ -98,7 +103,7 @@ taskbar** off (or use the option below it, *Disable all taskbar features for
 compatibility with other taskbar mods*), then restart Explorer. The page should look
 like this:
 
-![Start11's Taskbar page with Let Start11 enhance the taskbar switched off](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting.png)
+![Start11's Taskbar page with Let Start11 enhance the taskbar switched off](https://raw.githubusercontent.com/VitalyTz/windhawk-taskbar-per-monitor-alignment/main/docs/start11-setting-v2.png)
 
 For any other tool, switch its taskbar features off for a moment to check whether they
 are the cause.
