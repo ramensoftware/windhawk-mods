@@ -7,7 +7,7 @@
 // @github          https://github.com/Anixx
 // @architecture    x86-64
 // @include         explorer.exe
-// @compilerOptions -lwininet -lshell32 -lntdll -lbcrypt
+// @compilerOptions -lwininet -lshell32 -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,15 +23,12 @@ This mod downloads the classic Explorerframe.dll from the Microsoft's symbols' s
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
 #include <winternl.h>
 #include <wininet.h>
 #include <shlobj.h>
 #include <strsafe.h>
 #include <bcrypt.h>
 
-// compile-time выбор, а не рантайм машины/процесса.
-// Мод собирается под архитектуру процесса, в чужой процесс его dll не загрузить.
 #if defined(_M_ARM64) || defined(_M_ARM64EC) || defined(__aarch64__)
 static const WCHAR* kDownloadUrl =
     L"https://msdl.microsoft.com/download/symbols/explorerframe.dll/1187AEC054e000/explorerframe.dll";
@@ -62,9 +59,6 @@ static WCHAR g_stagingDllPath[MAX_PATH] = {0};
 static WCHAR g_tempDllPath[MAX_PATH + 4] = {0};
 static WCHAR g_canonicalDllPath[MAX_PATH] = {0};
 
-// Пин загружаемого файла: открыт с FILE_SHARE_READ без WRITE/DELETE
-// от проверки в ModInit/worker до Uninit. Пока хэндл жив, файл нельзя
-// подменить/усечь между проверкой и LoadLibrary.
 static HANDLE g_hPinnedFile = INVALID_HANDLE_VALUE;
 static LONG g_ready = 0;
 
@@ -126,10 +120,6 @@ static BOOL ComputeHashFromHandle(HANDLE hFile, WCHAR outHex[65]) {
         if (!ReadFile(hFile, buf, sizeof(buf), &br, NULL)) { ok = FALSE; break; }
         if (br == 0) break;
         if (BCryptHashData(hHash, buf, br, 0) < 0) { ok = FALSE; break; }
-        if (g_hStopEvent && WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
-            // не отменяем хеш локального файла жестко, но дальше загрузка не нужна
-            break;
-        }
     }
     if (ok && BCryptFinishHash(hHash, sum, sizeof(sum), 0) >= 0) {
         for (int i = 0; i < 32; i++) {
@@ -147,8 +137,6 @@ static BOOL ComputeHashFromHandle(HANDLE hFile, WCHAR outHex[65]) {
     return ok;
 }
 
-// Открыть staging только на чтение без SHARE_WRITE/DELETE, прохэшировать
-// через этот же хэндл и оставить хэндл открытым.
 static BOOL TryPinExistingFile(void) {
     if (InterlockedCompareExchange(&g_ready, 0, 0) != 0)
         return TRUE;
@@ -177,45 +165,54 @@ static BOOL IsStopRequested(void) {
     return g_hStopEvent && WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0;
 }
 
-// Качалка только для worker-thread. Пишет в tmp, проверяет, потом rename.
+static void PublishCancelHandle(HINTERNET* slot, HINTERNET h) {
+    AcquireSRWLockExclusive(&g_cancelLock);
+    *slot = h;
+    ReleaseSRWLockExclusive(&g_cancelLock);
+}
+
+// TRUE = мы забрали владение, надо закрыть. FALSE = уже забрал Uninit, не трогать.
+static BOOL ClaimCancelHandle(HINTERNET* slot, HINTERNET h) {
+    BOOL took = FALSE;
+    AcquireSRWLockExclusive(&g_cancelLock);
+    if (*slot == h) {
+        *slot = NULL;
+        took = TRUE;
+    }
+    ReleaseSRWLockExclusive(&g_cancelLock);
+    return took;
+}
+
 static BOOL DownloadToTempCancellable(void) {
     if (!kDownloadUrl || g_tempDllPath[0] == L'\0')
         return FALSE;
 
     HINTERNET hInet = InternetOpenW(L"WindhawkMod/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (!hInet) return FALSE;
+    PublishCancelHandle(&g_hInetCancel, hInet);
 
-    AcquireSRWLockExclusive(&g_cancelLock);
     if (IsStopRequested()) {
-        ReleaseSRWLockExclusive(&g_cancelLock);
-        InternetCloseHandle(hInet);
+        if (ClaimCancelHandle(&g_hInetCancel, hInet))
+            InternetCloseHandle(hInet);
         return FALSE;
     }
-    g_hInetCancel = hInet;
-    ReleaseSRWLockExclusive(&g_cancelLock);
 
     HINTERNET hUrl = InternetOpenUrlW(hInet, kDownloadUrl, NULL, 0,
         INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE, 0);
     if (!hUrl) {
-        AcquireSRWLockExclusive(&g_cancelLock);
-        if (g_hInetCancel == hInet) g_hInetCancel = NULL;
-        ReleaseSRWLockExclusive(&g_cancelLock);
-        InternetCloseHandle(hInet);
+        // только если еще опубликовано, иначе Uninit уже закрыл
+        if (ClaimCancelHandle(&g_hInetCancel, hInet))
+            InternetCloseHandle(hInet);
         return FALSE;
     }
-
-    AcquireSRWLockExclusive(&g_cancelLock);
-    g_hUrlCancel = hUrl;
-    ReleaseSRWLockExclusive(&g_cancelLock);
+    PublishCancelHandle(&g_hUrlCancel, hUrl);
 
     HANDLE hFile = CreateFileW(g_tempDllPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
-        AcquireSRWLockExclusive(&g_cancelLock);
-        if (g_hUrlCancel == hUrl) g_hUrlCancel = NULL;
-        if (g_hInetCancel == hInet) g_hInetCancel = NULL;
-        ReleaseSRWLockExclusive(&g_cancelLock);
-        InternetCloseHandle(hUrl);
-        InternetCloseHandle(hInet);
+        if (ClaimCancelHandle(&g_hUrlCancel, hUrl))
+            InternetCloseHandle(hUrl);
+        if (ClaimCancelHandle(&g_hInetCancel, hInet))
+            InternetCloseHandle(hInet);
         return FALSE;
     }
 
@@ -226,29 +223,25 @@ static BOOL DownloadToTempCancellable(void) {
 
     for (;;) {
         if (IsStopRequested()) { ok = FALSE; break; }
-        BOOL r = InternetReadFile(hUrl, buf, sizeof(buf), &br);
-        if (!r) { ok = FALSE; break; } // сюда же приходим при cancel через CloseHandle
+        if (!InternetReadFile(hUrl, buf, sizeof(buf), &br)) { ok = FALSE; break; }
         if (br == 0) break;
         if (!WriteFile(hFile, buf, br, &bw, NULL) || bw != br) { ok = FALSE; break; }
         total += br;
     }
     CloseHandle(hFile);
 
-    // снять публикацию без double-close
-    AcquireSRWLockExclusive(&g_cancelLock);
-    HINTERNET toCloseUrl = NULL, toCloseInet = NULL;
-    if (g_hUrlCancel == hUrl) { g_hUrlCancel = NULL; toCloseUrl = hUrl; } else { hUrl = NULL; }
-    if (g_hInetCancel == hInet) { g_hInetCancel = NULL; toCloseInet = hInet; } else { hInet = NULL; }
-    ReleaseSRWLockExclusive(&g_cancelLock);
-    if (toCloseUrl) InternetCloseHandle(toCloseUrl);
-    if (toCloseInet) InternetCloseHandle(toCloseInet);
+    if (ClaimCancelHandle(&g_hUrlCancel, hUrl))
+        InternetCloseHandle(hUrl);
+    hUrl = NULL;
+    if (ClaimCancelHandle(&g_hInetCancel, hInet))
+        InternetCloseHandle(hInet);
+    hInet = NULL;
 
     if (!ok || total == 0) {
         DeleteFileW(g_tempDllPath);
         return FALSE;
     }
 
-    // Проверка после скачивания из интернета, tmp еще не имеет финального имени
     HANDLE hTmp = CreateFileW(g_tempDllPath, GENERIC_READ, FILE_SHARE_READ,
         NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hTmp == INVALID_HANDLE_VALUE) {
@@ -269,13 +262,10 @@ static BOOL DownloadToTempCancellable(void) {
         return FALSE;
     }
 
-    // Только после verify отдаем финальное имя
-    if (!MoveFileWithProgressW(g_tempDllPath, g_stagingDllPath, NULL, NULL, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        // fallback на MoveFileEx
-        if (!MoveFileExW(g_tempDllPath, g_stagingDllPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            DeleteFileW(g_tempDllPath);
-            return FALSE;
-        }
+    // MoveFileExW уже включает MoveFileWithProgressW, fallback не нужен
+    if (!MoveFileExW(g_tempDllPath, g_stagingDllPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(g_tempDllPath);
+        return FALSE;
     }
     Wh_Log(L"Скачано %u -> %s", total, g_stagingDllPath);
     return TRUE;
@@ -283,13 +273,11 @@ static BOOL DownloadToTempCancellable(void) {
 
 static DWORD WINAPI DownloadWorkerProc(LPVOID) {
     if (IsStopRequested()) return 1;
-    // файл уже могли дописать/починить параллельно - сначала пин
     if (TryPinExistingFile())
         return 0;
     if (IsStopRequested()) return 1;
     if (!DownloadToTempCancellable())
         return 1;
-    // после rename пиним финальный файл
     TryPinExistingFile();
     return 0;
 }
@@ -392,7 +380,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (g_stagingDllPath[0] != L'\0' && _wcsicmp(lpLibFileName, g_stagingDllPath) == 0)
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    // Хуки никогда не качают и не хешируют: пока не готов - сквозной проход
     if (!IsReady())
         return LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (!EnterHook())
@@ -462,14 +449,21 @@ BOOL Wh_ModInit(void) {
     size_t r = Wh_GetModStoragePath(modDir, sizeof(modDir) / sizeof(modDir[0]));
     if (r == 0 || modDir[0] == L'\0') {
         Wh_Log(L"Wh_GetModStoragePath failed");
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
         return FALSE;
     }
 
-    // x64 -> <storage>\x64\explorerframe.dll, ARM64 -> <storage>\ARM64\explorerframe.dll
-    if (FAILED(StringCchPrintfW(g_stagingDllPath, MAX_PATH, L"%s\\%s\\explorerframe.dll", modDir, kArchSubdir)))
+    if (FAILED(StringCchPrintfW(g_stagingDllPath, MAX_PATH, L"%s\\%s\\explorerframe.dll", modDir, kArchSubdir))) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
         return FALSE;
-    if (FAILED(StringCchPrintfW(g_tempDllPath, MAX_PATH + 4, L"%s.tmp", g_stagingDllPath)))
+    }
+    if (FAILED(StringCchPrintfW(g_tempDllPath, MAX_PATH + 4, L"%s.tmp", g_stagingDllPath))) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
         return FALSE;
+    }
 
     WCHAR sysDir[MAX_PATH];
     GetSystemDirectoryW(sysDir, MAX_PATH);
@@ -477,36 +471,42 @@ BOOL Wh_ModInit(void) {
 
     EnsureDirectoryExists(g_stagingDllPath);
 
-    // Одна проверка в init, без сети
-    if (!TryPinExistingFile()) {
-        // битый - удалить, дальше worker перезапишет через tmp+rename
+    BOOL pinned = TryPinExistingFile();
+    if (!pinned) {
         DeleteFileW(g_stagingDllPath);
-        Wh_Log(L"Файл не готов, качаем в фоне для следующих загрузок");
-        g_hWorkerThread = CreateThread(NULL, 0, DownloadWorkerProc, NULL, 0, NULL);
-        // даже если поток не создался - хуки все равно ставим в pass-through
     }
 
+    // kernelbase/ntdll всегда загружены, failure-пути нет.
+    // Поэтому после старта воркера ниже return FALSE уже невозможен.
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (!hKernelBase || !hNtdll) return FALSE;
 
-    FARPROC pExW = GetProcAddress(hKernelBase, "LoadLibraryExW");
-    FARPROC pLdr = GetProcAddress(hNtdll, "LdrLoadDll");
-    if (pExW) Wh_SetFunctionHook((void*)pExW, (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
-    if (pLdr) Wh_SetFunctionHook((void*)pLdr, (void*)LdrLoadDll_Hook, (void**)&LdrLoadDll_Original);
+    if (hKernelBase) {
+        FARPROC pExW = GetProcAddress(hKernelBase, "LoadLibraryExW");
+        if (pExW)
+            Wh_SetFunctionHook((void*)pExW, (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
+    }
+    if (hNtdll) {
+        FARPROC pLdr = GetProcAddress(hNtdll, "LdrLoadDll");
+        if (pLdr)
+            Wh_SetFunctionHook((void*)pLdr, (void*)LdrLoadDll_Hook, (void**)&LdrLoadDll_Original);
+    }
 
-    // TRUE даже когда не готов: хуки в pass-through до конца сессии/следующего старта
+    if (!pinned) {
+        Wh_Log(L"Файл не готов, качаем в фоне");
+        g_hWorkerThread = CreateThread(NULL, 0, DownloadWorkerProc, NULL, 0, NULL);
+    }
+
     return TRUE;
 }
 
 void Wh_ModUninit(void) {
     if (g_hStopEvent) SetEvent(g_hStopEvent);
 
-    // сорвать блокирующий WinInet в worker
     AcquireSRWLockExclusive(&g_cancelLock);
     HINTERNET hu = g_hUrlCancel;
-    HINTERNET hi = g_hInetCancel;
     g_hUrlCancel = NULL;
+    HINTERNET hi = g_hInetCancel;
     g_hInetCancel = NULL;
     ReleaseSRWLockExclusive(&g_cancelLock);
     if (hu) InternetCloseHandle(hu);
