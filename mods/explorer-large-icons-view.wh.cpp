@@ -92,9 +92,26 @@ static std::atomic<bool> g_alwaysEnforce{true};
 static std::mutex g_handledMutex;
 static std::unordered_set<HWND> g_handled;
 
-// Set while this thread changes a view, so the SetCurrentViewMode hook ignores
-// the change made by the mod itself.
-static thread_local bool t_applying = false;
+// View windows the mod is changing right now, so the SetCurrentViewMode hook
+// ignores the mod's own change. Keyed by view, not by thread: through
+// ShellWindows the change is requested from another thread but runs on the
+// view's thread. Guarded by g_handledMutex.
+static std::unordered_set<HWND> g_applying;
+
+static bool IsApplying(HWND viewWindow) {
+    std::lock_guard<std::mutex> lock(g_handledMutex);
+    return g_applying.count(viewWindow) != 0;
+}
+
+static bool BeginApplying(HWND viewWindow) {
+    std::lock_guard<std::mutex> lock(g_handledMutex);
+    return g_applying.insert(viewWindow).second;
+}
+
+static void EndApplying(HWND viewWindow) {
+    std::lock_guard<std::mutex> lock(g_handledMutex);
+    g_applying.erase(viewWindow);
+}
 
 // Pure decision logic, kept free of COM so it can be unit tested.
 static bool ShouldApplyView(bool alwaysEnforce, bool alreadyHandled, FOLDERVIEWMODE mode,
@@ -158,7 +175,6 @@ static bool IsFileSystemFolder(IFolderView2* folderView) {
 
 // `view` is a CDefView (in a hook, on its own thread) or a proxy to one.
 static void ApplyLargeIcons(IUnknown* view, bool ignoreHandled) {
-    if (t_applying) return;
     ComPtr<IShellView> shellView;
     ComPtr<IFolderView2> folderView;
     if (FAILED(view->QueryInterface(IID_PPV_ARGS(&shellView))) ||
@@ -166,7 +182,7 @@ static void ApplyLargeIcons(IUnknown* view, bool ignoreHandled) {
         return;
     }
     HWND viewWindow = nullptr;
-    if (FAILED(shellView->GetWindow(&viewWindow)) || !viewWindow) return;
+    if (FAILED(shellView->GetWindow(&viewWindow)) || !viewWindow || IsApplying(viewWindow)) return;
     if (!IsInFileExplorerWindow(viewWindow) || !IsFileSystemFolder(folderView.Get())) return;
 
     FOLDERVIEWMODE mode{};
@@ -175,9 +191,9 @@ static void ApplyLargeIcons(IUnknown* view, bool ignoreHandled) {
     const int desired = g_iconSize.load();
     const bool handled = !ignoreHandled && IsHandled(viewWindow);
     if (ShouldApplyView(g_alwaysEnforce.load(), handled, mode, size, desired)) {
-        t_applying = true;
+        if (!BeginApplying(viewWindow)) return;  // another thread is changing it
         const HRESULT hr = folderView->SetViewModeAndIconSize(FVM_ICON, desired);
-        t_applying = false;
+        EndApplying(viewWindow);
         if (FAILED(hr)) {
             // Not marked as handled: retried at the next activation.
             Wh_Log(L"SetViewModeAndIconSize failed: 0x%08X", static_cast<unsigned>(hr));
@@ -244,15 +260,33 @@ static HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT state) {
     return hr;
 }
 
+// After the view of an open folder changes, "Keep enforcing" switches it back.
+// In navigation-only mode the view is already handled and is left alone. The
+// mod's own change is skipped by ApplyLargeIcons (the view is in g_applying).
+static void OnViewChanged(void* pThis) {
+    ApplyLargeIcons(static_cast<IUnknown*>(pThis), false);
+}
+
 using CDefView_SetCurrentViewMode_t = HRESULT(__thiscall*)(void*, UINT);
 static CDefView_SetCurrentViewMode_t CDefView_SetCurrentViewMode_orig;
 
-// Runs when the view mode of an open folder changes; "Keep enforcing" switches
-// it back. In navigation-only mode the view is already handled and is left alone.
+// Public entry point for view mode changes.
 static HRESULT __thiscall CDefView_SetCurrentViewMode_hook(void* pThis, UINT viewMode) {
     const HRESULT hr = CDefView_SetCurrentViewMode_orig(pThis, viewMode);
-    if (SUCCEEDED(hr)) ApplyLargeIcons(static_cast<IUnknown*>(pThis), false);
+    if (SUCCEEDED(hr)) OnViewChanged(pThis);
     return hr;
+}
+
+using CDefView_SwitchToViewModeAndIconSize_t = void(__thiscall*)(void*, FOLDERVIEWMODE, int);
+static CDefView_SwitchToViewModeAndIconSize_t CDefView_SwitchToViewModeAndIconSize_orig;
+
+// Internal switch also used for icon size changes (e.g. "Medium icons", or a
+// size set through IFolderView2), which don't go through SetCurrentViewMode.
+// Optional: a private symbol that may not exist on every Windows build.
+static void __thiscall CDefView_SwitchToViewModeAndIconSize_hook(void* pThis, FOLDERVIEWMODE mode,
+                                                                 int size) {
+    CDefView_SwitchToViewModeAndIconSize_orig(pThis, mode, size);
+    OnViewChanged(pThis);
 }
 
 static int ClampSetting(int value, int minimum, int maximum) {
@@ -288,11 +322,22 @@ BOOL Wh_ModInit() {
             &CDefView_SetCurrentViewMode_orig,
             CDefView_SetCurrentViewMode_hook,
         },
+        {
+            {
+                L"private: void __cdecl CDefView::_SwitchToViewModeAndIconSize(enum FOLDERVIEWMODE,int)",
+                L"void __cdecl CDefView::_SwitchToViewModeAndIconSize(enum FOLDERVIEWMODE,int)",
+            },
+            &CDefView_SwitchToViewModeAndIconSize_orig,
+            CDefView_SwitchToViewModeAndIconSize_hook,
+            true,
+        },
     };
     if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to hook CDefView symbols");
         return FALSE;
     }
+    if (!CDefView_SwitchToViewModeAndIconSize_orig)
+        Wh_Log(L"Icon size hook unavailable: size changes are reverted at the next activation");
     return TRUE;
 }
 
