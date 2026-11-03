@@ -4,7 +4,7 @@
 // @name:zh-CN      一拖即删
 // @description     Drag & Trash: a cursor-following or nearby/top Recycle Bin with custom still/animated icons, batch recycling and Ctrl+Z undo.
 // @description:zh-CN 一拖即删：回收站可跟随鼠标或显示在附近/顶部，支持自定义静态/动态图标，并保留批量删除与 Ctrl+Z 撤销。
-// @version         1.1.11
+// @version         1.3.1
 // @author          XandriW
 // @github          https://github.com/xandri19wang
 // @include         explorer.exe
@@ -53,6 +53,7 @@ Use the Windows Recycle Bin icon, a local image/GIF, or an HTTPS image URL fetch
 
 ## More / 其他功能
 
+- **Start Menu search / 开始菜单搜索:** Recycle real files and folders dragged from Everything & Power Tools in the Start Menu (no app deletion).
 - **Hover icon / 悬停图标:** Optional separate local still image or GIF; blank inherits the drag icon.
 - **Auto mirror / 自动翻转:** Flip custom images according to their position relative to the cursor.
 - **Batch recycling / 批量回收:** Drop several files together in one Shell operation.
@@ -206,6 +207,10 @@ static volatile LONG g_imageStop = 0;
 static HANDLE g_imageWorker = nullptr;
 static std::wstring g_remoteCache;
 static constexpr UINT WM_HTTPS_IMAGE_READY = WM_APP + 181;
+// The Everything & Power Tools in the Start Menu search window is hosted by
+// explorer.exe, but offers COPY-only drags. Recycle only when the exact
+// search window initiated this drag; all other copy-only drags stay rejected.
+static LONG g_dragFromStartEverything = 0;
 static Gdiplus::Image* g_gifImage = nullptr;
 static std::vector<UINT> g_gifDelaysMs;
 static UINT g_gifFrame = 0;
@@ -828,6 +833,33 @@ static bool ExtractDragPaths(IDataObject* source, std::vector<wchar_t>& output) 
     return ok;
 }
 
+static bool IsStartEverythingSearchDrag() {
+    POINT cursor = {};
+    if (!GetCursorPos(&cursor)) return false;
+    HWND cursorWindow = WindowFromPoint(cursor);
+    HWND windows[] = {cursorWindow, GetForegroundWindow()};
+    for (HWND window : windows) {
+        for (int depth = 0; window && depth < 16; ++depth) {
+            wchar_t className[128] = {};
+            if (GetClassNameW(window, className, ARRAYSIZE(className)) &&
+                wcscmp(className, L"StartEverything_SearchWindowPrototype") == 0)
+                return true;
+            window = GetParent(window);
+        }
+    }
+    return false;
+}
+
+// Return COPY for search-origin files only because that source offers no MOVE.
+// The drop target itself sends original file paths to the Recycle Bin; the
+// COPY outcome only tells StartEverything to finish the drag and hide search.
+static DWORD AllowedRecycleEffect(DWORD offered) {
+    if (offered & DROPEFFECT_MOVE) return DROPEFFECT_MOVE;
+    if ((offered & DROPEFFECT_COPY) &&
+        InterlockedCompareExchange(&g_dragFromStartEverything, 0, 0))
+        return DROPEFFECT_COPY;
+    return DROPEFFECT_NONE;
+}
 class CRecycleDropTarget final : public IDropTarget {
     LONG m_refCount = 1;
     bool m_hasHDrop = false;
@@ -872,9 +904,9 @@ public:
     HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* pDataObj, DWORD, POINTL pt, DWORD* pdwEffect) override {
         m_hasHDrop = HasFileDragFormat(pDataObj);
 
-        bool canMove = pdwEffect && (*pdwEffect & DROPEFFECT_MOVE);
-        if (m_hasHDrop && canMove && IsOverTrash(pt)) {
-            *pdwEffect = DROPEFFECT_MOVE;
+        DWORD recycleEffect = pdwEffect ? AllowedRecycleEffect(*pdwEffect) : DROPEFFECT_NONE;
+        if (m_hasHDrop && recycleEffect && IsOverTrash(pt)) {
+            *pdwEffect = recycleEffect;
             g_targetScale = 1.2f;
             g_hovering = true;
         } else {
@@ -886,9 +918,9 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* pdwEffect) override {
-        bool canMove = pdwEffect && (*pdwEffect & DROPEFFECT_MOVE);
-        if (m_hasHDrop && canMove && IsOverTrash(pt)) {
-            *pdwEffect = DROPEFFECT_MOVE;
+        DWORD recycleEffect = pdwEffect ? AllowedRecycleEffect(*pdwEffect) : DROPEFFECT_NONE;
+        if (m_hasHDrop && recycleEffect && IsOverTrash(pt)) {
+            *pdwEffect = recycleEffect;
             g_targetScale = 1.2f;
             g_hovering = true;
         } else {
@@ -907,9 +939,9 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE Drop(IDataObject* pDataObj, DWORD, POINTL pt, DWORD* pdwEffect) override {
-        const bool canMove = pdwEffect && (*pdwEffect & DROPEFFECT_MOVE);
+        DWORD recycleEffect = pdwEffect ? AllowedRecycleEffect(*pdwEffect) : DROPEFFECT_NONE;
         bool accepted = false;
-        if (m_hasHDrop && canMove && IsOverTrash(pt)) {
+        if (m_hasHDrop && recycleEffect && IsOverTrash(pt)) {
             std::vector<wchar_t> buffer;
             if (ExtractDragPaths(pDataObj, buffer) && buffer.size() > 2) {
                 EnterCriticalSection(&g_deleteCs);
@@ -924,7 +956,7 @@ public:
                 Wh_Log(L"Drag did not contain a complete recyclable file selection");
             }
         }
-        if (pdwEffect) *pdwEffect = accepted ? DROPEFFECT_MOVE : DROPEFFECT_NONE;
+        if (pdwEffect) *pdwEffect = accepted ? recycleEffect : DROPEFFECT_NONE;
         m_hasHDrop = false;
         return S_OK;
     }
@@ -1123,6 +1155,37 @@ static bool UpdateAutoMirror() {
     return true;
 }
 
+static void RestoreDragOverlayZOrder(HWND hWnd, bool force) {
+    if (!IsWindowVisible(hWnd)) return;
+    bool mustRaise = force ||
+        !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST);
+    if (!mustRaise) {
+        RECT overlayBounds = {};
+        if (GetWindowRect(hWnd, &overlayBounds)) {
+            // Only react to Explorer windows actually covering the target.
+            // This avoids continuously competing with unrelated topmost apps.
+            for (HWND above = GetWindow(hWnd, GW_HWNDPREV); above;
+                 above = GetWindow(above, GW_HWNDPREV)) {
+                if (!IsWindowVisible(above) || IsIconic(above)) continue;
+                wchar_t className[64] = {};
+                GetClassNameW(above, className, ARRAYSIZE(className));
+                if (wcscmp(className, L"CabinetWClass") != 0 &&
+                    wcscmp(className, L"ExploreWClass") != 0) continue;
+                RECT otherBounds = {}, intersection = {};
+                if (GetWindowRect(above, &otherBounds) &&
+                    IntersectRect(&intersection, &overlayBounds, &otherBounds)) {
+                    mustRaise = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (mustRaise) {
+        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                     SWP_NOOWNERZORDER);
+    }
+}
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_HTTPS_IMAGE_READY: {
@@ -1140,6 +1203,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
         case WM_UPDATE_DRAG_STATE: {
             if (wParam != 0) {
+                InterlockedExchange(&g_dragFromDesktop, (wParam & 2) ? 1 : 0);
+                InterlockedExchange(&g_dragFromStartEverything,
+                                    (wParam & 4) ? 1 : 0);
                 POINT ptCursor;
                 GetCursorPos(&ptCursor);
                 HMONITOR hMon = MonitorFromPoint(ptCursor, MONITOR_DEFAULTTONEAREST);
@@ -1200,17 +1266,27 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 RenderFrame(hWnd);
                 g_lastRenderedScale = g_currentScale;
                 ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+                RestoreDragOverlayZOrder(hWnd, true);
                 SetTimer(hWnd, TIMER_ANIM, 25, nullptr);
             } else {
                 if (g_animState != AnimState::DROPPED) {
                     g_targetScale = 0.0f;
                 }
+                InterlockedExchange(&g_dragFromDesktop, 0);
+                InterlockedExchange(&g_dragFromStartEverything, 0);
             }
             return 0;
         }
 
         case WM_TIMER: {
             if (wParam == TIMER_ANIM) {
+                // Validate the Z-order every ~150 ms only while dragging.
+                // Do not force an unconditional raise on every 25 ms frame.
+                static unsigned zOrderCheck = 0;
+                if (g_animState == AnimState::VISIBLE &&
+                    ++zOrderCheck % 6 == 0) {
+                    RestoreDragOverlayZOrder(hWnd, false);
+                }
                 if (abs((int)((g_targetScale - g_currentScale) * 1000.0f)) < 5) {
                     g_currentScale = g_targetScale;
                 } else {
@@ -1370,6 +1446,7 @@ DWORD WINAPI OverlayUIThread(LPVOID) {
     OleUninitialize();
     return 0;
 }
+static HWND FindSharedRecycleOverlay();
 using DoDragDrop_t = decltype(&DoDragDrop);
 static DoDragDrop_t pOriginalDoDragDrop = nullptr;
 
@@ -1379,23 +1456,67 @@ HRESULT WINAPI Hooked_DoDragDrop(IDataObject* pDataObj, IDropSource* pDropSource
         bIsFileDrag = HasFileDragFormat(pDataObj);
     }
 
-    if (bIsFileDrag && InterlockedIncrement(&g_activeDrags) == 1 && g_hOverlayWnd) {
-        InterlockedExchange(&g_dragFromDesktop, IsDesktopDragStart() ? 1 : 0);
-        PostMessageW(g_hOverlayWnd, WM_UPDATE_DRAG_STATE, 1, 0);
+    if (bIsFileDrag && InterlockedIncrement(&g_activeDrags) == 1) {
+        bool fromSearch = IsStartEverythingSearchDrag() &&
+                          (dwOKEffects & DROPEFFECT_COPY);
+        bool fromDesktop = !fromSearch && IsDesktopDragStart();
+        InterlockedExchange(&g_dragFromStartEverything, fromSearch ? 1 : 0);
+        InterlockedExchange(&g_dragFromDesktop, fromDesktop ? 1 : 0);
+        if (fromSearch) Wh_Log(L"StartEverything file drag: allow COPY-only source");
+        // Numeric flags are safe across Explorer process boundaries.
+        // bit 0: drag started, bit 1: desktop, bit 2: StartEverything.
+        HWND overlay = FindSharedRecycleOverlay();
+        if (overlay) {
+            PostMessageW(overlay, WM_UPDATE_DRAG_STATE,
+                         1 | (fromDesktop ? 2 : 0) | (fromSearch ? 4 : 0), 0);
+        }
     }
 
     HRESULT hr = pOriginalDoDragDrop(pDataObj, pDropSource, dwOKEffects, pdwEffect);
 
-    if (bIsFileDrag && InterlockedDecrement(&g_activeDrags) == 0 && g_hOverlayWnd) {
-        PostMessageW(g_hOverlayWnd, WM_UPDATE_DRAG_STATE, 0, 0);
+    if (bIsFileDrag && InterlockedDecrement(&g_activeDrags) == 0) {
+        InterlockedExchange(&g_dragFromStartEverything, 0);
+        HWND overlay = FindSharedRecycleOverlay();
+        if (overlay) PostMessageW(overlay, WM_UPDATE_DRAG_STATE, 0, 0);
     }
 
     return hr;
 }
 
+static bool g_isDesktopShellHost = false;
+
+// Window registration, GDI+ and deletion workers live in the desktop shell.
+// Other explorer.exe instances keep only the lightweight DoDragDrop hook.
+static bool IsDesktopShellHostProcess() {
+    HWND shell = GetShellWindow();
+    DWORD ownerPid = 0;
+    if (shell) GetWindowThreadProcessId(shell, &ownerPid);
+    if (ownerPid) return ownerPid == GetCurrentProcessId();
+    // During early shell startup GetShellWindow can be null. The real
+    // desktop shell has no /factory command line; separate folder
+    // Explorer processes are launched with /factory,... -Embedding.
+    PCWSTR commandLine = GetCommandLineW();
+    return commandLine &&
+        !wcsstr(commandLine, L"/factory,") &&
+        !wcsstr(commandLine, L"-Embedding");
+}
+
+static HWND FindSharedRecycleOverlay() {
+    if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) return g_hOverlayWnd;
+    return FindWindowW(kClassName, nullptr);
+}
+
 void Wh_ModUninit();
 
 BOOL Wh_ModInit() {
+    // One warm overlay for the desktop shell, no idle UI/worker per folder.
+    // Hooks in other Explorer processes communicate via the named window.
+    g_isDesktopShellHost = IsDesktopShellHostProcess();
+    if (!g_isDesktopShellHost) {
+        return WindhawkUtils::SetFunctionHook(
+                   DoDragDrop, Hooked_DoDragDrop, &pOriginalDoDragDrop)
+                   ? TRUE : FALSE;
+    }
     InterlockedExchange(&g_imageStop, 0);
     ReadSettings();
     InitializeCriticalSection(&g_deleteCs);
@@ -1443,6 +1564,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 }
 
 void Wh_ModUninit() {
+    if (!g_isDesktopShellHost) return;
     InterlockedExchange(&g_imageStop, 1);
     if (g_hUIThread) {
         if (g_readyEvent) WaitForSingleObject(g_readyEvent, INFINITE);
