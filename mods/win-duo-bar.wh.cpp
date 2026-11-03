@@ -3,7 +3,7 @@
 // @name            Win Duo Bar
 // @description     A compact ring widget for the Windows 11 taskbar clock: a battery gauge ring, a Wi-Fi symbol, the time and date, and a charging animation
 // @description:zh-CN 一个替换 Windows 11 任务栏时钟的圆环小组件：电量圆环、Wi-Fi 图标、时间日期，以及充电动画
-// @version         1.1.0
+// @version         1.1.1
 // @author          Felinyu
 // @github          https://github.com/Felinyu
 // @license         GPL-3.0
@@ -53,7 +53,7 @@ that default size and scale together with the "Widget size" setting.
 
 This mod replaces the clock only. To hide the system battery and network tray
 icons, which the widget makes redundant, use the
-[Taskbar tray system icon tweaks](https://github.com/ramensoftware/windhawk-mods/blob/master/mods/taskbar-tray-system-icon-tweaks.wh.cpp)
+[Taskbar tray system icon tweaks](https://windhawk.net/mods/taskbar-tray-system-icon-tweaks)
 mod instead.
 
 Only Windows 11 is supported.
@@ -81,7 +81,7 @@ Win Duo Bar 是一个替换 Windows 11 通知区域时钟的圆环小组件：
 
 本模组只替换时钟。如需隐藏系统托盘的电量和网络图标（小组件已替代它们），
 请使用
-[Taskbar tray system icon tweaks](https://github.com/ramensoftware/windhawk-mods/blob/master/mods/taskbar-tray-system-icon-tweaks.wh.cpp)
+[Taskbar tray system icon tweaks](https://windhawk.net/mods/taskbar-tray-system-icon-tweaks)
 模组。
 
 仅支持 Windows 11。
@@ -250,7 +250,6 @@ mod. The Wi-Fi symbol geometry is traced from a "09"-style Wi-Fi icon reference.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Networking.Connectivity.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -450,14 +449,25 @@ std::wstring Pad2(int value) {
 
 // The taskbar clock follows the short time format of the user locale. In a
 // format picture, a lowercase "h" is a 12-hour clock hour and an uppercase "H"
-// is a 24-hour one.
+// is a 24-hour one. Quoted parts of the picture are literal text, not format
+// specifiers, e.g. French (Canada) uses "HH 'h' mm".
 bool SystemUses12HourClock() {
     WCHAR format[32]{};
     if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTTIME, format,
                          ARRAYSIZE(format))) {
         return false;
     }
-    return wcschr(format, L'h') != nullptr;
+
+    bool inQuotes = false;
+    for (const WCHAR* p = format; *p; p++) {
+        if (*p == L'\'') {
+            inQuotes = !inQuotes;
+        } else if (!inQuotes && *p == L'h') {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::wstring FormatTimeString(const SYSTEMTIME& st) {
@@ -1209,6 +1219,13 @@ void UpdateTimeAndDate(WidgetInstance& instance,
             instance.dateText.Text(dateString);
         }
     }
+
+    // The "Show the date row" setting can change without a rebuild, so apply
+    // it on every forced refresh (settings change, start, widget attach).
+    if (force && instance.dateText) {
+        instance.dateText.Visibility(g_settings.showDate ? Visibility::Visible
+                                                         : Visibility::Collapsed);
+    }
 }
 
 void UpdateBattery(WidgetInstance& instance,
@@ -1662,6 +1679,37 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
+void ApplySettingsOnTaskbarThread();
+
+// Called when Explorer creates the taskbar, e.g. after signing in or when the
+// taskbar was restarted, so that the widget appears without a settings change.
+using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
+TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original;
+void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    TrayUI_StartTaskbar_Original(pThis);
+
+    if (g_unloading) {
+        return;
+    }
+
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(
+            hTaskbarWnd,
+            [](void*) {
+                try {
+                    ApplySettingsOnTaskbarThread();
+                } catch (winrt::hresult_error const& e) {
+                    Wh_Log(L"Failed to start the widget: %08X", e.code().value);
+                } catch (...) {
+                    Wh_Log(L"Failed to start the widget");
+                }
+            },
+            nullptr);
+    }
+}
+
 // ===== Network status subscription =====
 
 void SubscribeNetworkStatusChanged() {
@@ -1770,41 +1818,48 @@ bool InjectIntoClock(FrameworkElement clockContent) {
         return false;
     }
 
-    WidgetInstance instance;
-    instance.nativeContent = clockContent;
-    instance.hostPanel = host;
-    instance.savedNativeVisibility =
-        clockContent.ReadLocalValue(UIElement::VisibilityProperty())
-            .try_as<Visibility>();
-
-    BuildInstanceVisuals(instance);
-    if (!instance.canvas) {
-        return false;
-    }
-
     try {
-        // Remove a leftover widget of a previous load of the mod, if any.
+        // Remove a leftover widget of a previous load of the mod, if any. Its
+        // native clock is still collapsed, so don't save that as the value to
+        // restore later.
         auto children = host.Children();
+        bool hadLeftover = false;
         for (uint32_t i = children.Size(); i-- > 0;) {
             auto element = children.GetAt(i).try_as<FrameworkElement>();
             if (element && element.Name() == kWidgetRootName) {
                 children.RemoveAt(i);
+                hadLeftover = true;
             }
+        }
+
+        WidgetInstance instance;
+        instance.nativeContent = clockContent;
+        instance.hostPanel = host;
+        if (hadLeftover) {
+            clockContent.ClearValue(UIElement::VisibilityProperty());
+        } else {
+            instance.savedNativeVisibility =
+                clockContent.ReadLocalValue(UIElement::VisibilityProperty())
+                    .try_as<Visibility>();
+        }
+
+        BuildInstanceVisuals(instance);
+        if (!instance.canvas) {
+            return false;
         }
 
         children.Append(instance.canvas);
         clockContent.Visibility(Visibility::Collapsed);
+
+        g_instances->push_back(std::move(instance));
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Failed to attach the widget: %08X", e.code().value);
-        ReleaseInstanceVisuals(instance);
         return false;
     } catch (...) {
         Wh_Log(L"Failed to attach the widget");
-        ReleaseInstanceVisuals(instance);
         return false;
     }
 
-    g_instances->push_back(std::move(instance));
     RefreshInstance(g_instances->back(), true);
 
     Wh_Log(L"Attached a widget to a taskbar clock");
@@ -2112,7 +2167,8 @@ HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
         // yet, retry once it's loaded.
         if (!g_timer) {
             StartWidgetUi();
-        } else if (!InjectIntoClock(clockContent)) {
+        }
+        if (!InjectIntoClock(clockContent)) {
             InjectIntoClockWhenLoaded(clockContent);
         }
     } catch (winrt::hresult_error const& e) {
@@ -2257,6 +2313,13 @@ bool HookTaskbarDllSymbols() {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
             &CSecondaryTaskBand_GetTaskbarHost_Original,
             nullptr,
+            true,
+        },
+        // Only used to start the widget when Explorer creates the taskbar.
+        {
+            {LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+            &TrayUI_StartTaskbar_Original,
+            TrayUI_StartTaskbar_Hook,
             true,
         },
     };
