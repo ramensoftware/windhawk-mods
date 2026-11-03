@@ -147,6 +147,9 @@ constexpr DWORD kSettleMs = 80;
 // The hand comes down over a moment: fingers landing this soon after the glide started still move the pointer,
 // otherwise starting with two fingers enabled would leave the rest of a landing hand out.
 constexpr DWORD kRefJoinMs = 300;
+// A later finger moving this much more than the hand glided since it landed is moving on its own, for precision:
+// it joins them.
+constexpr double kSoloJoinMm = 2.0;
 
 struct TapProfile {
     bool on;
@@ -1394,7 +1397,8 @@ void ProcessFrame() {
     for (const Contact* c : used) {
         auto it = g_state.tracks.find(c->id);
         if (!isRef(c) && it != g_state.tracks.end() &&
-            (LONG)(it->second.born - g_state.armTime) <= (LONG)kRefJoinMs) {
+            ((LONG)(it->second.born - g_state.armTime) <= (LONG)kRefJoinMs ||
+             it->second.maxDist > kSoloJoinMm + (g_state.travel - it->second.travelLand))) {
             g_state.refIds.push_back(c->id);
         }
     }
