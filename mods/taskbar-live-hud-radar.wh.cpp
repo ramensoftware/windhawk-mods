@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              taskbar-live-hud
+// @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, network speed, optional ping and a working set trimmer
 // @version         1.0
