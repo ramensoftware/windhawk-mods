@@ -84,12 +84,14 @@ Keep your apps on the **left or right side** of the Windows 11 taskbar. Each app
 ## Notes
 
 - Your Windows pinned apps are not changed.
-- Do not use other mods that move the same taskbar icons at the same time.
+- Do not enable **Taskbar Split** or other mods that reposition the same icons at the same time.
+- If the taskbar is too crowded to fit both zones, Windows' normal layout is used until space is available again.
+- Secondary monitors show only the app buttons that Windows puts on each taskbar.
 - Windows updates may affect compatibility.
 
 ## Credits
 
-Made by **Luiz Bizzio**. Based on [Taskbar Split by Arkadiusz (Artllex)](https://github.com/Artllex/taskbar-split).
+**Taskbar Zones** is maintained by **Luiz Bizzio**. It is a separate, modified version of [Taskbar Split by Arkadiusz (Artllex)](https://github.com/Artllex/taskbar-split), with persistent per-app zones, cross-zone dragging and secondary taskbar support.
 
 Licensed under **GPL-3.0**. Additional code credits and copyright notices are in the source file.
 */
@@ -103,7 +105,7 @@ Licensed under **GPL-3.0**. Additional code credits and copyright notices are in
   $description: Empty space before the first system button, in device-independent pixels (DIPs).
 - runningGap: 0
   $name: Gap after system buttons
-  $description: Space between Start/Search/Widgets/Task View and running apps.
+  $description: Space between Start/Search/Widgets/Task View and the left app zone.
 - trayGap: 8
   $name: Gap before tray
   $description: Space between right-side apps and the notification area or system monitoring widget.
@@ -116,9 +118,6 @@ Licensed under **GPL-3.0**. Additional code credits and copyright notices are in
 - systemButtonsLeft: true
   $name: Keep system buttons on the left
   $description: Put Start, Search, Widgets and Task View at the left edge. Recommended for the intended split layout.
-- additionalRightReserve: 0
-  $name: Additional space before the tray (DIP)
-  $description: Extra gap before the measured tray or reserved Taskbar System Info slot, in DIP. Use zero for the default gap.
 */
 // ==/WindhawkModSettings==
 
@@ -172,7 +171,6 @@ struct Settings {
     std::atomic<int> pinnedIconScale{100};
     std::atomic<bool> systemButtonsLeft{true};
     std::atomic<bool> sectionDragging{true};
-    std::atomic<int> additionalRightReserve{0};
 };
 
 Settings g_settings;
@@ -204,8 +202,6 @@ void LoadSettings() {
         std::clamp(Wh_GetIntSetting(L"pinnedIconScale"), 50, 100);
     g_settings.systemButtonsLeft =
         Wh_GetIntSetting(L"systemButtonsLeft") != 0;
-    g_settings.additionalRightReserve =
-        std::clamp(Wh_GetIntSetting(L"additionalRightReserve"), 0, 1600);
 }
 
 FrameworkElement FindDirectChild(
@@ -727,6 +723,7 @@ struct WidgetWatch {
     bool observed = false;
     bool visible = false;
     bool pollTimerArmed = false;
+    UINT pollIntervalMs = 400;
     double width = 0;
     double x = 0;
     double trayX = 0;
@@ -782,6 +779,13 @@ void PollWidgetGeometry(HWND window) {
         double trayX = TrayEdgeForContent(content, root);
         if (!std::isfinite(trayX) || trayX <= 0) return;
         auto& state = it->second;
+        // Poll actively when the widget is present or the split is crowded.
+        // In the ordinary no-widget case, use a slower watch for late injection.
+        UINT interval = (visible || state.lastGoodWidth > 2 ||
+                         !g_uiStates[window].layoutValid) ? 400 : 1600;
+        if (state.pollTimerArmed && state.pollIntervalMs != interval &&
+            SetTimer(window, WidgetPollTimerId(), interval, nullptr))
+            state.pollIntervalMs = interval;
         auto moved = [](double a, double b) {
             return !std::isfinite(a) || !std::isfinite(b) ||
                 std::abs(a-b) > 1.0;
@@ -1009,75 +1013,7 @@ double FixedRightEdge(FrameworkElement const& content,
             right = std::min(right, widgetX - 6);
         }
     }
-    right -= static_cast<double>(g_settings.additionalRightReserve.load());
     return std::clamp(right, contentLeft, trayEdge);
-}
-
-// Bounded, length-prefixed format: IDs can contain punctuation/newlines.
-std::wstring EncodeAppOrder(std::vector<std::wstring> const& ids) {
-    std::wstring data = L"1;";
-    for (auto const& id : ids) {
-        if (id.empty() || id.size() > 1024) continue;
-        auto part = std::to_wstring(id.size()) + L":" + id;
-        if (data.size() + part.size() >= 65535) return {};
-        data += part;
-    }
-    return data;
-}
-
-std::vector<std::wstring> DecodeAppOrder(std::wstring const& data) {
-    std::vector<std::wstring> ids;
-    if (data.rfind(L"1;", 0) != 0 || data.size() >= 65535) return ids;
-    size_t pos = 2;
-    while (pos < data.size()) {
-        size_t length = 0, digits = 0;
-        while (pos < data.size() && data[pos] >= L'0' && data[pos] <= L'9') {
-            if (++digits > 4) return {};
-            length = length * 10 + (data[pos++] - L'0');
-        }
-        if (!digits || !length || length > 1024 || pos >= data.size() || data[pos++] != L':' ||
-            length > data.size() - pos || ids.size() >= 512) return {};
-        auto id = data.substr(pos, length);
-        if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
-        pos += length;
-    }
-    return ids;
-}
-
-// Each state record holds all three lists. The primary key is written once;
-// a previous valid record is kept separately for interrupted writes.
-bool DecodePersistedState(std::wstring const& record, PersistedAppState& parsed) {
-    if (record.rfind(L"2;", 0) != 0 || record.size() >= 65535) return false;
-    size_t pos = 2;
-    std::vector<std::wstring> parts;
-    for (int i = 0; i < 3; ++i) {
-        size_t length = 0, digits = 0;
-        while (pos < record.size() && record[pos] >= L'0' && record[pos] <= L'9') {
-            if (++digits > 5) return false;
-            length = length * 10 + (record[pos++] - L'0');
-        }
-        if (!digits || !length || pos >= record.size() || record[pos++] != L':' ||
-            length > record.size() - pos) return false;
-        auto part = record.substr(pos, length);
-        if (part.rfind(L"1;", 0) != 0 || EncodeAppOrder(DecodeAppOrder(part)) != part)
-            return false;
-        parts.push_back(std::move(part));
-        pos += length;
-    }
-    if (pos != record.size()) return false;
-    parsed.leftOrder = DecodeAppOrder(parts[0]);
-    parsed.rightOrder = DecodeAppOrder(parts[1]);
-    parsed.rightIds = DecodeAppOrder(parts[2]);
-    // An AppID may be on only one side of the saved ordering.
-    for (auto const& id : parsed.rightIds) {
-        parsed.leftOrder.erase(std::remove(parsed.leftOrder.begin(),
-            parsed.leftOrder.end(), id), parsed.leftOrder.end());
-    }
-    for (auto const& id : parsed.leftOrder) {
-        parsed.rightOrder.erase(std::remove(parsed.rightOrder.begin(),
-            parsed.rightOrder.end(), id), parsed.rightOrder.end());
-    }
-    return true;
 }
 
 std::wstring ReadStoredString(wchar_t const* key) {
@@ -1287,7 +1223,7 @@ bool SaveBankState(wchar_t bank, std::wstring const& record,
     return true;
 }
 
-void RememberLegacyRightSide(std::vector<std::wstring>& ids,
+void RememberRightId(std::vector<std::wstring>& ids,
                              std::wstring const& id) {
     if (id.empty() || id.size() > 1024 ||
         id.find(L'\0') != std::wstring::npos || ids.size() >= 512) return;
@@ -1317,33 +1253,6 @@ void EnsureSharedStateLoadedLocked() {
         g_activeStorageBank = active;
         return;
     }
-    auto latest = ReadStoredString(L"fixed-sides-state-v2");
-    if (DecodePersistedState(latest, next)) {
-        for (auto const& id : next.rightIds) RememberLegacyRightSide(next.rightOrder, id);
-        for (auto const& id : next.rightOrder) RememberLegacyRightSide(next.rightIds, id);
-        g_sharedState = std::move(next);
-        return;
-    }
-    auto fallback = ReadStoredString(L"fixed-sides-state-backup-v2");
-    if (DecodePersistedState(fallback, next)) {
-        Wh_Log(L"Recovered previous valid fixed sides state");
-        for (auto const& id : next.rightIds) RememberLegacyRightSide(next.rightOrder, id);
-        for (auto const& id : next.rightOrder) RememberLegacyRightSide(next.rightIds, id);
-        g_sharedState = std::move(next);
-        return;
-    }
-    // One-time migration from v0.1.1 (three separate keys).
-    next.leftOrder = DecodeAppOrder(ReadStoredString(L"running-app-order-v1"));
-    next.rightOrder = DecodeAppOrder(ReadStoredString(L"pinned-app-order-v1"));
-    next.rightIds = DecodeAppOrder(ReadStoredString(L"fixed-right-apps-v1"));
-    for (auto const& id : next.rightIds) {
-        next.leftOrder.erase(std::remove(next.leftOrder.begin(),
-            next.leftOrder.end(), id), next.leftOrder.end());
-        RememberLegacyRightSide(next.rightOrder, id);
-    }
-    for (auto const& id : next.rightOrder)
-        RememberLegacyRightSide(next.rightIds, id);
-    g_sharedState = std::move(next);
 }
 
 void LoadAppOrders() {
@@ -1412,7 +1321,7 @@ bool FlushPendingStorage(bool force = false) {
     g_storageNextAttempt = now + delay;
     if (!g_storageLastErrorLog || now - g_storageLastErrorLog >= 30000) {
         g_storageLastErrorLog = now;
-        Wh_Log(L"Taskbar Zones: saving preferences failed, will retry in %lu ms", delay);
+        Wh_Log(L"saving preferences failed, will retry in %lu ms", delay);
     }
     return false;
 }
@@ -1420,9 +1329,9 @@ bool FlushPendingStorage(bool force = false) {
 bool SaveStateLocked(PersistedAppState const& next) {
     PersistedAppState normalized = next;
     for (auto const& id : normalized.rightIds)
-        RememberLegacyRightSide(normalized.rightOrder, id);
+        RememberRightId(normalized.rightOrder, id);
     for (auto const& id : normalized.rightOrder)
-        RememberLegacyRightSide(normalized.rightIds, id);
+        RememberRightId(normalized.rightIds, id);
     for (auto const& id : normalized.rightIds)
         normalized.leftOrder.erase(std::remove(normalized.leftOrder.begin(),
             normalized.leftOrder.end(), id), normalized.leftOrder.end());
@@ -1436,7 +1345,7 @@ bool SaveStateLocked(PersistedAppState const& next) {
     HWND window = g_activeTaskbarWindow;
     if (!window || !IsTaskbarWindow(window) ||
         GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId()) {
-        Wh_Log(L"Taskbar Zones: no owner taskbar for storage scheduling");
+        Wh_Log(L"no owner taskbar for storage scheduling");
         return false;
     }
     std::wstring oldRecord = g_dirtyRecord;
@@ -1453,7 +1362,7 @@ bool SaveStateLocked(PersistedAppState const& next) {
         g_storageDirty = oldDirty;
         g_storageFailures = oldFailures;
         g_storageNextAttempt = oldNextAttempt;
-        Wh_Log(L"Taskbar Zones: cannot start storage timer");
+        Wh_Log(L"cannot start storage timer");
         return false;
     }
     g_sharedState = std::move(normalized);
@@ -1526,12 +1435,12 @@ void PlanElement(FrameworkElement const& element, double x, double scale) {
                                     element.ActualWidth()});
 }
 
-bool BuildLayoutPlan() {
+bool BuildLayoutPlan(FrameworkElement const& knownRepeater) {
     g_arrangePlan.clear();
     Ui().layoutValid = false;
     Ui().slots.clear();
     try {
-        auto repeater = GetTaskbarRepeater();
+        auto repeater = knownRepeater ? knownRepeater : GetTaskbarRepeater();
         auto content = repeater && repeater.XamlRoot()
                            ? repeater.XamlRoot().Content().try_as<FrameworkElement>()
                            : nullptr;
@@ -1757,7 +1666,7 @@ bool BuildLayoutPlan() {
     } catch (...) {
         g_arrangePlan.clear();
         RestoreVisualStatesForWindow(g_activeTaskbarWindow);
-        Wh_Log(L"Taskbar Zones: layout pass failed safely");
+        Wh_Log(L"layout pass failed safely");
         return false;
     }
 }
@@ -1850,6 +1759,7 @@ HRESULT WINAPI ArrangeOverride_Hook(
     // A primary and a secondary taskbar have distinct XAML roots and layouts.
     // Compare the exact layout ABI identity instead of assuming one taskbar.
     HWND window = nullptr;
+    FrameworkElement arrangeRepeater{nullptr};
     try {
         winrt::Windows::Foundation::IUnknown caller{nullptr};
         winrt::copy_from_abi(caller, self);
@@ -1873,8 +1783,10 @@ HRESULT WINAPI ArrangeOverride_Hook(
                     layout.as<winrt::Windows::Foundation::IUnknown>() ==
                     currentLayout.as<winrt::Windows::Foundation::IUnknown>();
             }
-            if (currentOwner) window = cached->second.window;
-            else g_layoutOwners.erase(cached);
+            if (currentOwner) {
+                window = cached->second.window;
+                arrangeRepeater = currentElement;
+            } else g_layoutOwners.erase(cached);
         }
         if (!window) for (HWND candidate : AllTaskbarWindows()) {
             if (GetWindowThreadProcessId(candidate, nullptr) != GetCurrentThreadId())
@@ -1889,6 +1801,7 @@ HRESULT WINAPI ArrangeOverride_Hook(
             if (nativeLayout && layout.as<winrt::Windows::Foundation::IUnknown>() ==
                 nativeLayout.as<winrt::Windows::Foundation::IUnknown>()) {
                 window = candidate;
+                arrangeRepeater = element;
                 g_layoutOwners[identity] = CachedLayoutOwner{layout, candidate};
                 break;
             }
@@ -1906,7 +1819,7 @@ HRESULT WINAPI ArrangeOverride_Hook(
     bool planReady = false;
     try {
         if (EnsureArrangeHook()) {
-            planReady = BuildLayoutPlan();
+            planReady = BuildLayoutPlan(arrangeRepeater);
             g_useArrangePlan = planReady;
         } else {
             RestoreVisualStatesForWindow(window);
@@ -1929,8 +1842,8 @@ HRESULT WINAPI ArrangeOverride_Hook(
                 }
             }
             UpdateDragPreview();
-            if (auto repeater = GetTaskbarRepeater()) {
-                for (auto const& child : RepeaterElements(repeater)) {
+            if (arrangeRepeater) {
+                for (auto const& child : RepeaterElements(arrangeRepeater)) {
                     if (IsTaskButton(child) && ElementWidth(child) > 0 &&
                         !g_arrangePlan.count(winrt::get_abi(child))) {
                         RequestRefresh();
@@ -2675,15 +2588,19 @@ bool EnsureTaskbarSubclass(HWND window) {
     }
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
             window, TaskbarSubclassProc, 0)) return false;
-    if (g_unloading) {
+    // Serialize the final unload check and insertion with the unload snapshot.
+    // Otherwise a late subclass could be installed after the snapshot.
+    bool removeAfterInstall = false;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        if (g_unloading) removeAfterInstall = true;
+        else g_subclassedTaskbars.insert(window);
+    }
+    if (removeAfterInstall) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, TaskbarSubclassProc);
         return false;
     }
-    {
-        std::lock_guard<std::mutex> lock(g_windowsMutex);
-        g_subclassedTaskbars.insert(window);
-    }
-    Wh_Log(L"Taskbar Zones v1.0.0: attached to %ls taskbar (HWND %p)",
+    Wh_Log(L"Attached to %ls taskbar (HWND %p)",
         FindWindowW(L"Shell_TrayWnd", nullptr) == window ? L"primary" : L"secondary",
         window);
     return true;
@@ -2771,7 +2688,51 @@ HWND FindTaskbarWindowForElement(FrameworkElement const& element) {
     return nullptr;
 }
 
-void ClearCachedOwnersForWindow(HWND window);
+// Must run on the taskbar's owning UI thread: all these caches are thread-local.
+// Destruction on the Windhawk worker thread would leave the UI copies behind.
+void ReleaseTaskbarUiCaches(HWND window, bool dropUnrestoredVisuals) {
+    g_uiStates.erase(window);
+    g_repeaterByWindow.erase(window);
+    RemoveWidgetWatch(window);
+    g_traySearch.erase(window);
+    ClearCachedOwnersForWindow(window);
+    for (auto it = g_layoutOwners.begin(); it != g_layoutOwners.end();) {
+        if (it->second.window == window) it = g_layoutOwners.erase(it);
+        else ++it;
+    }
+    if (g_widgetsWindow == window || g_unloading) {
+        g_widgetsCache = nullptr;
+        g_widgetsFrame = nullptr;
+        g_widgetsWindow = nullptr;
+        g_widgetsNextSearch = 0;
+        g_widgetsInvalidated = true;
+    }
+    if (dropUnrestoredVisuals) {
+        for (auto it = g_visualStates.begin(); it != g_visualStates.end();) {
+            if (it->second.owner == window) it = g_visualStates.erase(it);
+            else ++it;
+        }
+    }
+
+    // Another taskbar on the same UI thread may still need its saved visual
+    // state for native-layout restoration. Only release the bucket arrays after
+    // every window-owned entry is gone and no arrange call is active.
+    if (!g_unloading || g_insideArrange || g_useArrangePlan ||
+        !g_uiStates.empty() || !g_layoutOwners.empty() ||
+        !g_repeaterByWindow.empty() || !g_visualStates.empty() ||
+        !g_traySearch.empty() || !g_widgetWatches.empty() || !owners.empty())
+        return;
+    // swap destroys weak COM references and releases hash buckets on the UI
+    // thread, while the DLL is still loaded. clear() alone retains buckets.
+    decltype(g_layoutOwners){}.swap(g_layoutOwners);
+    decltype(g_repeaterByWindow){}.swap(g_repeaterByWindow);
+    decltype(g_visualStates){}.swap(g_visualStates);
+    decltype(g_traySearch){}.swap(g_traySearch);
+    decltype(g_uiStates){}.swap(g_uiStates);
+    decltype(g_widgetWatches){}.swap(g_widgetWatches);
+    decltype(owners){}.swap(owners);
+    decltype(g_arrangePlan){}.swap(g_arrangePlan);
+}
 
 LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
                                      LPARAM lParam, DWORD_PTR) {
@@ -2801,18 +2762,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
             CancelSectionGesture();
         if (g_dropSettleWindow == window) FlushPendingDrop();
         RestoreVisualStatesForWindow(window);
-        g_uiStates.erase(window);
-        for (auto it = g_layoutOwners.begin(); it != g_layoutOwners.end();) {
-            if (it->second.window == window) it = g_layoutOwners.erase(it);
-            else ++it;
-        }
-        RemoveWidgetWatch(window);
-        g_traySearch.erase(window);
-        ClearCachedOwnersForWindow(window);
-        g_repeaterByWindow.erase(window);
-        g_widgetsWindow = nullptr;
-        g_widgetsCache = nullptr;
-        g_widgetsFrame = nullptr;
+        ReleaseTaskbarUiCaches(window, true);
         {
             std::lock_guard<std::mutex> lock(g_windowsMutex);
             g_subclassedTaskbars.erase(window);
@@ -2856,18 +2806,12 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
         } catch (...) {
             Wh_Log(L"Native layout restoration failed on one monitor");
         }
-        if (nativeLayoutUpdated && visualStatesRestored && g_unloading) {
-            g_uiStates.erase(window);
-            g_repeaterByWindow.erase(window);
-            RemoveWidgetWatch(window);
-            g_traySearch.erase(window);
-            ClearCachedOwnersForWindow(window);
-                for (auto it = g_layoutOwners.begin(); it != g_layoutOwners.end();) {
-                if (it->second.window == window) it = g_layoutOwners.erase(it);
-                else ++it;
-            }
-        }
-        return (nativeLayoutUpdated && visualStatesRestored) ? 1 : 0;
+        bool restored = nativeLayoutUpdated && visualStatesRestored;
+        // On the first attempt retain failed visual states for retry. On the
+        // final attempt release all other UI-owned caches even on failure.
+        if (g_unloading && (restored || wParam == 1))
+            ReleaseTaskbarUiCaches(window, !restored);
+        return restored ? 1 : 0;
     }
     if (message == WM_DISPLAYCHANGE || message == WM_DPICHANGED ||
         message == WM_SETTINGCHANGE) {
@@ -3092,7 +3036,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
 BOOL Wh_ModInit() {
     LoadSettings();
     if (!HookTaskbarHostSymbols()) {
-        Wh_Log(L"Taskbar Zones: failed to hook taskbar.dll");
+        Wh_Log(L"failed to hook taskbar.dll");
         return FALSE;
     }
     if (HMODULE module = CurrentTaskbarViewModule()) {
@@ -3126,25 +3070,27 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    g_unloading = true;
-    // One final verified storage attempt; no worker join or sleeping.
-    FlushStorageBeforeUninit();
     std::vector<HWND> windows;
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
+        g_unloading = true;
         windows.assign(g_subclassedTaskbars.begin(), g_subclassedTaskbars.end());
     }
+    // One final verified storage attempt; no worker join or sleeping.
+    FlushStorageBeforeUninit();
     for (HWND window : windows) {
         if (!IsWindow(window)) continue;
         DWORD_PTR acknowledged = 0;
-        auto restore = [&](UINT timeout) {
+        auto restore = [&](UINT timeout, bool finalAttempt) {
             acknowledged = 0;
-            return SendMessageTimeoutW(window, RestoreMessage(), 0, 0,
+            return SendMessageTimeoutW(window, RestoreMessage(),
+                finalAttempt ? 1 : 0, 0,
                 SMTO_ABORTIFHUNG | SMTO_BLOCK, timeout, &acknowledged) != 0 &&
                 acknowledged == 1;
         };
-        bool restored = restore(1200);
-        if (!restored && IsTaskbarWindow(window)) restored = restore(600);
+        bool restored = restore(1200, false);
+        if (!restored && IsTaskbarWindow(window))
+            restored = restore(600, true);
         if (!restored) {
             // Never leave a callback into an unloaded DLL installed: removing
             // the subclass is mandatory, even if a window is unresponsive.
@@ -3163,22 +3109,6 @@ void Wh_ModBeforeUninit() {
     std::lock_guard<std::mutex> lock(g_windowsMutex);
     g_subclassedTaskbars.clear();
     g_refreshPending.clear();
-}
-
-void Wh_ModUninit() {
-    // XAML objects belong to their UI threads. Per-thread weak references are
-    // destroyed by those threads; do not release other monitors' refs here.
-    g_visualStates.clear();
-    g_widgetsCache = nullptr;
-    g_widgetsFrame = nullptr;
-    g_repeaterByWindow.clear();
-    g_uiStates.clear();
-    g_layoutOwners.clear();
-    g_traySearch.clear();
-    // Owner taskbar windows cancel timers on RestoreMessage/WM_NCDESTROY.
-    // Never access XAML cross-thread during final process unload.
-    g_widgetWatches.clear();
-    owners.clear();
 }
 
 
