@@ -357,9 +357,7 @@ static BOOL PatchLoaderEntryPath(HMODULE hModule) {
 }
 
 typedef HMODULE (WINAPI *LoadLibraryExW_t)(LPCWSTR, HANDLE, DWORD);
-typedef NTSTATUS (NTAPI *LdrLoadDll_t)(PWSTR, PULONG, PUNICODE_STRING, PHANDLE);
 static LoadLibraryExW_t LoadLibraryExW_Original = NULL;
-static LdrLoadDll_t LdrLoadDll_Original = NULL;
 
 static BOOL EnterHook(void) {
     if (t_inHook) return FALSE;
@@ -395,47 +393,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         SetLastError(err);
     }
     return res;
-}
-
-NTSTATUS NTAPI LdrLoadDll_Hook(PWSTR SearchPath, PULONG Flags, PUNICODE_STRING ModuleFileName, PHANDLE ModuleHandle) {
-    if (!ModuleFileName || !ModuleFileName->Buffer || !ModuleHandle)
-        return LdrLoadDll_Original(SearchPath, Flags, ModuleFileName, ModuleHandle);
-
-    size_t len = ModuleFileName->Length / sizeof(WCHAR);
-    BOOL need = FALSE;
-    if (len >= 17) {
-        PCWSTR tail = ModuleFileName->Buffer + len - 17;
-        WCHAR tmp[18];
-        for (int i = 0; i < 17; i++) tmp[i] = tail[i];
-        tmp[17] = L'\0';
-        if (_wcsicmp(tmp, L"explorerframe.dll") == 0) need = TRUE;
-    }
-    if (!need)
-        return LdrLoadDll_Original(SearchPath, Flags, ModuleFileName, ModuleHandle);
-    if (!IsReady())
-        return LdrLoadDll_Original(SearchPath, Flags, ModuleFileName, ModuleHandle);
-
-    {
-        size_t curLen = len;
-        size_t ourLen = wcslen(g_stagingDllPath);
-        if (curLen == ourLen && _wcsnicmp(ModuleFileName->Buffer, g_stagingDllPath, ourLen) == 0)
-            return LdrLoadDll_Original(SearchPath, Flags, ModuleFileName, ModuleHandle);
-    }
-    if (!EnterHook())
-        return LdrLoadDll_Original(SearchPath, Flags, ModuleFileName, ModuleHandle);
-
-    WCHAR redirBuf[MAX_PATH];
-    StringCchCopyW(redirBuf, MAX_PATH, g_stagingDllPath);
-    UNICODE_STRING redir;
-    redir.Buffer = redirBuf;
-    redir.Length = (USHORT)(wcslen(redirBuf) * sizeof(WCHAR));
-    redir.MaximumLength = (USHORT)((wcslen(redirBuf) + 1) * sizeof(WCHAR));
-
-    NTSTATUS st = LdrLoadDll_Original(SearchPath, Flags, &redir, ModuleHandle);
-    LeaveHook();
-    if (st >= 0 && ModuleHandle && *ModuleHandle)
-        PatchLoaderEntryPath((HMODULE)*ModuleHandle);
-    return st;
 }
 
 BOOL Wh_ModInit(void) {
