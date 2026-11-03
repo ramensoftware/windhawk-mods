@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              xandriw-drag-nearby-delete
+// @id              drag-and-trash
 // @name            Drag & Trash
 // @name:zh-CN      一拖即删
 // @description     Drag & Trash: a cursor-following or nearby/top Recycle Bin with custom still/animated icons, batch recycling and Ctrl+Z undo.
@@ -53,7 +53,7 @@ Use the Windows Recycle Bin icon, a local image/GIF, or an HTTPS image URL fetch
 
 ## More / 其他功能
 
-- **Start Menu search / 开始菜单搜索:** Recycle real files and folders dragged from Everything & Power Tools in the Start Menu (no app deletion).
+- **[Everything & Power Tools](https://windhawk.net/mods/start-everything) integration / 联动支持:** Drag real files or folders from its Start Menu search results directly into Drag & Trash to recycle them. Apps and virtual items are not supported. / 使用该 Mod 时，可以从开始菜单搜索结果中将真实文件或文件夹直接拖入「一拖即删」进行回收，不支持删除应用程序或虚拟项目。
 - **Hover icon / 悬停图标:** Optional separate local still image or GIF; blank inherits the drag icon.
 - **Auto mirror / 自动翻转:** Flip custom images according to their position relative to the cursor.
 - **Batch recycling / 批量回收:** Drop several files together in one Shell operation.
