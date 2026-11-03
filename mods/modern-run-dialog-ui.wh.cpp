@@ -4,7 +4,7 @@
 // @name:vi-VN      Giao diện Hộp thoại Run Hiện đại cho Windows 10 & 11
 // @description     Replaces the classic Win + R dialog with a modern Liquid Glass / Fluent UI, custom image/video backgrounds, and quick settings.
 // @description:vi-VN Làm mới hộp thoại Run (Win + R) với giao diện Liquid Glass / Fluent hiện đại, hỗ trợ hình nền ảnh/video và menu cài đặt nhanh.
-// @version         4.0.2
+// @version         4.0.101
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
