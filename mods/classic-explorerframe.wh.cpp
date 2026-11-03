@@ -471,28 +471,11 @@ BOOL Wh_ModInit(void) {
 
     EnsureDirectoryExists(g_stagingDllPath);
 
-    BOOL pinned = TryPinExistingFile();
-    if (!pinned) {
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"), (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
+
+    if (!TryPinExistingFile())
+    {
         DeleteFileW(g_stagingDllPath);
-    }
-
-    // kernelbase/ntdll всегда загружены, failure-пути нет.
-    // Поэтому после старта воркера ниже return FALSE уже невозможен.
-    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-
-    if (hKernelBase) {
-        FARPROC pExW = GetProcAddress(hKernelBase, "LoadLibraryExW");
-        if (pExW)
-            Wh_SetFunctionHook((void*)pExW, (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Original);
-    }
-    if (hNtdll) {
-        FARPROC pLdr = GetProcAddress(hNtdll, "LdrLoadDll");
-        if (pLdr)
-            Wh_SetFunctionHook((void*)pLdr, (void*)LdrLoadDll_Hook, (void**)&LdrLoadDll_Original);
-    }
-
-    if (!pinned) {
         Wh_Log(L"Файл не готов, качаем в фоне");
         g_hWorkerThread = CreateThread(NULL, 0, DownloadWorkerProc, NULL, 0, NULL);
     }
