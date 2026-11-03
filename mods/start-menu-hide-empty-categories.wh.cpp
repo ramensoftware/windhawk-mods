@@ -41,8 +41,9 @@ When the mod is loaded (installed, updated or switched on again), it restarts th
 does not have this copy of the mod yet. The new process loads with the mod from its start, so empty tiles are hidden
 from the first time the menu is opened. A Start process that already has the mod (for example after Explorer
 restarted) is left alone, and so is one that started within the last second. When the mod is switched off or removed,
-the Start menu process is restarted once more so the tiles it had hidden come back. Start can flash or close for a
-moment each time.
+the Start menu process is restarted once more so the categories it had hidden or removed come back at once; Start does
+not rebuild its category list every time the menu opens, so without the restart they could stay hidden for a while.
+Start can flash or close for a moment each time.
 
 **The *Other* category.** If *Other* is empty, Windows 11 still shows an empty *Other* container. This mod hides it
 too, but only while the mod is loaded.
@@ -146,7 +147,13 @@ StartModState ProcessModState(DWORD pid) {
     wchar_t selfPath[MAX_PATH]{};
     if (!GetModuleFileNameW(ModuleInstance(), selfPath, ARRAYSIZE(selfPath))) return StartModState::Absent;
     const wchar_t* selfName = PathFindFileNameW(selfPath);
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    // The snapshot can fail with ERROR_BAD_LENGTH while the process is loading or unloading modules; retry a few times.
+    HANDLE snapshot = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+        if (snapshot != INVALID_HANDLE_VALUE || GetLastError() != ERROR_BAD_LENGTH) break;
+        Sleep(10);
+    }
     if (snapshot == INVALID_HANDLE_VALUE) return StartModState::Absent;
     StartModState state = StartModState::Absent;
     bool sawStartMenuDll = false;
@@ -255,7 +262,7 @@ void RemoveEmptyGroups(IInspectableList const& items) {
 }
 
 // The tiles this mod has collapsed, so that only those are ever shown again or reset. Only used on Start's UI thread.
-[[clang::no_destroy]] std::vector<winrt::weak_ref<wux::FrameworkElement>> g_collapsedTiles;
+std::vector<winrt::weak_ref<wux::FrameworkElement>> g_collapsedTiles;
 
 // True if the tile was one this mod collapsed (and forgets it).
 bool TakeCollapsedTile(wux::FrameworkElement const& element) {
@@ -282,7 +289,7 @@ void RestoreCollapsedTiles() {
     tiles.swap(g_collapsedTiles);
     for (auto const& weakTile : tiles) {
         try {
-            if (auto tile = weakTile.get()) tile.Visibility(wux::Visibility::Visible);
+            if (auto tile = weakTile.get()) tile.ClearValue(wux::UIElement::VisibilityProperty());
         } catch (...) {
         }
     }
@@ -326,7 +333,7 @@ void ApplyCategoryTiles(wux::DependencyObject const& panel) {
                 g_collapsedTiles.push_back(winrt::make_weak(element));
             }
         } else if (TakeCollapsedTile(element)) {
-            element.Visibility(wux::Visibility::Visible);
+            element.ClearValue(wux::UIElement::VisibilityProperty());  // Back to what Start's style gives it.
         }
     }
 }
@@ -347,6 +354,10 @@ void ProcessCategoryGrid(wux::DependencyObject const& panel) {
     if (!g_startupCleanupAllowed || g_rebuildCount != 1) return;
     try {
         RemoveEmptyGroups(list);
+        // The removed groups no longer need hiding, and their containers go back to the panel's recycle pool. XAML does
+        // not reset a local value when it reuses a container, so a container left collapsed would stay hidden when a
+        // category with apps is later shown in it.
+        RestoreCollapsedTiles();
     } catch (...) {
         static bool loggedFailure = false;
         if (!loggedFailure) {
@@ -369,7 +380,7 @@ void FindItemGrids(wux::DependencyObject const& obj, int depth) {
 }
 
 // A weak reference: a strong global would be released on the wrong thread when the mod unloads.
-[[clang::no_destroy]] winrt::weak_ref<wux::UIElement> g_startRoot;
+winrt::weak_ref<wux::UIElement> g_startRoot;
 
 void UpdateCategoryTiles() {
     try {
@@ -394,7 +405,7 @@ void UpdateCategoryTiles() {
 constexpr UINT_PTR kTileTimerId = 0x5448;
 constexpr UINT kTileTimerMs = 250;
 constexpr ULONGLONG kTileActiveMs = 5000;
-HWND g_tileWindow = nullptr;
+std::atomic<HWND> g_tileWindow{nullptr};
 std::atomic<ULONGLONG> g_tileActiveUntil{0};
 
 // SetTimer needs the window's own thread, and some callers run on another one. In that case a private message makes
@@ -471,7 +482,7 @@ void StartCategoryTileWatch() {
 void StopCategoryTileWatch() {
     HWND hwnd = g_tileWindow;
     if (!hwnd) return;
-    g_tileWindow = nullptr;
+    g_tileWindow.store(nullptr);
     DWORD_PTR ignored = 0;
     SendMessageTimeoutW(hwnd, TileStopMessage(), 0, 0, SMTO_ABORTIFHUNG, 2000, &ignored);
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TileSubclassProc);
@@ -687,8 +698,8 @@ void Wh_ModUninit() {
         return;  // Nothing else but the hooks lives in the Start menu process.
     }
 
-    // Explorer: the tiles hidden so far, and the empty groups removed from Start's list, stay that way until Start
-    // rebuilds them. Restarting the Start menu process brings everything back the way Windows made it.
+    // Explorer: the empty groups removed from Start's list stay removed until Start rebuilds its category list, which
+    // it does not do every time the menu opens (tested: they stayed hidden for two or more openings). Restarting the
+    // Start menu process brings everything back the way Windows made it.
     RestartStartMenuHost();
-
 }
