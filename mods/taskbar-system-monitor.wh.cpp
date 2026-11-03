@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdiplus -liphlpapi -lpdh -lole32 -loleaut32 -lwbemuuid -lshell32 -lgdi32 -lcomctl32 -lpsapi
+// @compilerOptions -lgdiplus -liphlpapi -lpdh -lole32 -loleaut32 -lwbemuuid -lshell32 -lgdi32 -lcomctl32 -lpsapi -ldwmapi -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,8 +24,14 @@ icon, with clean outline icons. Works with Taskbar Styler docks and on every mon
 - **Click** opens Task Manager (configurable); **right-click** shows a small menu.
 - Smooth value animation, optional 60-second sparklines, optional warning colors (off by default).
 - RAM icon fills up with usage. KiB/MiB/GiB or KB/MB/GB, bytes or bits for network.
-- Follows the taskbar (auto-hide, Start menu, minimising) and stays above it.
+- Follows the taskbar (auto-hide, Start menu, minimising), hides while a fullscreen window covers the screen.
 - Every monitor's taskbar gets its own monitor.
+
+## How this differs from similar mods
+Other mods already show CPU/GPU/RAM in the taskbar (Taskbar System Info), a network speed (Taskbar Network Speed
+Indicator) or put values into the clock (Taskbar Clock Customization). This mod puts **CPU, GPU, RAM, disk and
+network in one compact widget** with per-item icons (the RAM icon fills with usage), a free-form layout string,
+hover tooltips (busiest apps, disk read/write, data used today), click actions and a daily data counter.
 
 ## Layout string
 Columns are separated by `|`, rows inside a column by `,`. Items: `cpu`, `gpu`, `ram`, `disk`, `down`, `up`
@@ -38,18 +44,21 @@ and `-` for an empty slot (up to 3 rows).
 | `cpu,ram,disk\|down,up` | three rows |
 
 ## About temperatures
-Windows does not give normal programs real CPU or most GPU temperatures.
-- **NVIDIA GPUs** work out of the box.
-- For accurate **CPU / AMD / Intel GPU** temperatures run
+Windows does not give normal programs real CPU temperatures.
+- **GPU temperature** comes from the graphics driver through the same Windows interface Task Manager uses
+  (works for NVIDIA and for most AMD/Intel drivers that report one).
+- For accurate **CPU** temperatures run
   [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (as administrator,
-  it can stay minimised in the tray). The mod reads its WMI data automatically.
+  it can stay minimised in the tray). The mod reads its WMI data automatically, even if it is started later.
 - Without it the CPU value comes from Windows' ACPI thermal zone, which is only approximate and missing on some
-  PCs. An integrated GPU can show the CPU/APU temperature (they share one die) - this can be turned off.
+  PCs. An integrated GPU without its own sensor can show the CPU/APU temperature (they share one die) - this can
+  be turned off.
 
 ## Notes
-- Position is found automatically by measuring the first taskbar icon. If you use a Taskbar Styler dock, set
-  *dock margin* to its margin so the monitor stays put when icons are added.
-- The mod only needs to run in `explorer.exe`. It draws its own windows and does not hook any functions.
+- The monitor needs free space left of the first taskbar icon (a centered taskbar, or a Taskbar Styler dock).
+  Its position is found by measuring the first icon. With a dock, set *dock margin* to the dock's margin so the
+  monitor stays in place when icons are added; with 0 it sits right next to the first icon.
+- The mod runs only in `explorer.exe` and draws its own windows; it does not hook any functions.
 - "Data used today" is stored in the mod's local storage so it survives restarts.
 */
 // ==/WindhawkModReadme==
@@ -92,21 +101,21 @@ Windows does not give normal programs real CPU or most GPU temperatures.
 - showGpuTemp: true
   $name: Show GPU temperature
 - igpuTempFromCpu: true
-  $name: Integrated GPU - show the CPU/APU temperature
-  $description: An integrated Radeon shares one die with the CPU, and Windows can't read its own sensor, so the CPU temperature is shown for it.
+  $name: GPU without a sensor - show the CPU/APU temperature
+  $description: An integrated GPU shares one die with the CPU. If the driver reports no GPU temperature, the CPU temperature is shown for it.
 - tempUnit: celsius
   $name: Temperature unit
   $options:
   - celsius: Celsius
   - fahrenheit: Fahrenheit
 - ramShowTotal: false
-  $name: RAM - show total (14.6/15.2 GB instead of 14.6 GB)
+  $name: RAM - show total (14.6/15.2 GiB instead of 14.6 GiB)
 - ramShowPercent: false
   $name: RAM - also show percentage
 - netUnit: bytes
   $name: Network unit
   $options:
-  - bytes: KB/s, MB/s
+  - bytes: KiB/s, MiB/s
   - bits: Kbps, Mbps
 - netInlineTotal: false
   $name: Network - show data used today next to the speed
@@ -130,11 +139,12 @@ Windows does not give normal programs real CPU or most GPU temperatures.
   - custom: Custom command
   - none: Nothing
 - customCommand: ""
-  $name: Custom command for left click
+  $name: Custom command for left click (arguments allowed)
 - autoPosition: true
   $name: Auto-position next to the first taskbar icon
-- dockMargin: 200
+- dockMargin: 0
   $name: Taskbar Styler dock margin (px at 100% scale, 0 = hug the first icon)
+  $description: The monitor starts this far from the screen edge (plus the left padding), so it stays put when icons are added. It never overlaps the first icon.
 - leftPadding: 16
   $name: Left padding inside the taskbar (px at 100% scale)
 - gapToIcons: 16
@@ -152,7 +162,17 @@ Windows does not give normal programs real CPU or most GPU temperatures.
 */
 // ==/WindhawkModSettings==
 
+// Threads:
+//  * worker      - message loop, timers, drawing (GDI+), event hooks. Never touches the taskbar's windows.
+//  * sampler     - all sensor access (PDH / WMI / D3DKMT / iphlpapi).
+//  * UI Automation - measures the first taskbar icon, only when something may have moved it.
+//  * the taskbar's own UI thread - hosts the overlay windows and their tooltips (so no cross-thread owner
+//    relationship ties its input queue to a mod thread). It only applies finished frames and handles the mouse.
+// Every thread is signalled and joined (without timeout) in Wh_ModUninit.
+
 #define NOMINMAX
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <algorithm>
 using std::min;
@@ -163,15 +183,19 @@ using std::max;
 #include <pdhmsg.h>
 #include <wbemidl.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <uiautomation.h>
 #include <commctrl.h>
+#include <dwmapi.h>
 #include <tlhelp32.h>
 #include <psapi.h>
+#include <atomic>
 #include <cmath>
 #include <cstdarg>
 #include <cwchar>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -204,14 +228,20 @@ struct Settings {
     int clickAction = 0;  // 0 taskmgr, 1 resmon, 2 custom, 3 none
     std::wstring customCmd;
     bool autoPos = true;
-    int dockMargin = 200, leftPad = 16, gapIcons = 16, colGap = 20, itemGap = 5;
+    int dockMargin = 0, leftPad = 16, gapIcons = 16, colGap = 20, itemGap = 5;
     int leftOffset = 262, topOffset = 8, height = 56;
 };
-static Settings g_s;
+
+// Settings are immutable snapshots: a change publishes a new snapshot, readers on any thread use the current one.
+// Old snapshots stay alive until the mod unloads, so a reader never sees a half-written or freed object.
+static std::atomic<const Settings*> g_cfgPtr{nullptr};
+static std::mutex g_cfgMutex;
+static std::vector<std::unique_ptr<Settings>> g_cfgAll;
+#define g_s (*g_cfgPtr.load())
 
 static std::wstring GetStr(const wchar_t* name) {
     PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring r = v ? v : L"";
+    std::wstring r = v;
     Wh_FreeStringSetting(v);
     return r;
 }
@@ -226,7 +256,7 @@ static bool ParseHex(std::wstring s, BYTE* r, BYTE* g, BYTE* b) {
     return true;
 }
 
-static int ItemFromName(std::wstring s) {
+static int ItemFromName(const std::wstring& s) {
     std::wstring t;
     for (wchar_t c : s) if (c != L' ' && c != L'\t') t += (wchar_t)towlower(c);
     if (t == L"cpu") return IT_CPU;
@@ -238,8 +268,8 @@ static int ItemFromName(std::wstring s) {
     return IT_NONE;
 }
 
-static void ParseLayout(const std::wstring& layout) {
-    g_s.cols.clear();
+static std::vector<std::vector<int>> ParseLayout(const std::wstring& layout) {
+    std::vector<std::vector<int>> cols;
     size_t pos = 0;
     while (pos <= layout.size()) {
         size_t bar = layout.find(L'|', pos);
@@ -254,56 +284,63 @@ static void ParseLayout(const std::wstring& layout) {
         }
         bool any = false;
         for (int i : items) if (i != IT_NONE) any = true;
-        if (any) g_s.cols.push_back(items);
+        if (any) cols.push_back(items);
         if (bar == std::wstring::npos) break;
         pos = bar + 1;
     }
-    if (g_s.cols.empty()) g_s.cols = {{IT_CPU, IT_GPU}, {IT_RAM, IT_DISK}, {IT_DOWN, IT_UP}};
+    if (cols.empty()) cols = {{IT_CPU, IT_GPU}, {IT_RAM, IT_DISK}, {IT_DOWN, IT_UP}};
+    return cols;
 }
 
 static void LoadSettings() {
-    ParseLayout(GetStr(L"layout"));
-    g_s.allMonitors = Wh_GetIntSetting(L"allMonitors") != 0;
-    g_s.refreshMs = std::clamp(Wh_GetIntSetting(L"refreshMs"), 500, 5000);
-    g_s.smoothing = std::clamp(Wh_GetIntSetting(L"smoothing"), 0, 90);
-    g_s.fontFamily = GetStr(L"fontFamily");
-    if (g_s.fontFamily.empty()) g_s.fontFamily = L"Segoe UI Variable Text";
-    g_s.fontSize = std::clamp(Wh_GetIntSetting(L"fontSize"), 8, 30);
-    g_s.bold = Wh_GetIntSetting(L"fontBold") != 0;
-    g_s.hasColor = ParseHex(GetStr(L"textColor"), &g_s.tr, &g_s.tg, &g_s.tb);
-    g_s.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 10, 100);
-    g_s.icons = Wh_GetIntSetting(L"showIcons") != 0;
-    g_s.iconScale = std::clamp(Wh_GetIntSetting(L"iconScale"), 60, 220);
-    g_s.warn = Wh_GetIntSetting(L"colorWarnings") != 0;
-    g_s.warnUsage = Wh_GetIntSetting(L"warnUsage");
-    g_s.warnTemp = Wh_GetIntSetting(L"warnTemp");
-    if (!ParseHex(GetStr(L"warnColor"), &g_s.wr, &g_s.wg, &g_s.wb)) { g_s.wr = 255; g_s.wg = 90; g_s.wb = 90; }
-    g_s.showCpuTemp = Wh_GetIntSetting(L"showCpuTemp") != 0;
-    g_s.showGpuTemp = Wh_GetIntSetting(L"showGpuTemp") != 0;
-    g_s.igpuFromCpu = Wh_GetIntSetting(L"igpuTempFromCpu") != 0;
-    g_s.fahrenheit = GetStr(L"tempUnit") == L"fahrenheit";
-    g_s.ramTotal = Wh_GetIntSetting(L"ramShowTotal") != 0;
-    g_s.ramPct = Wh_GetIntSetting(L"ramShowPercent") != 0;
-    g_s.bits = GetStr(L"netUnit") == L"bits";
-    g_s.netTotal = Wh_GetIntSetting(L"netInlineTotal") != 0;
-    g_s.spark = Wh_GetIntSetting(L"sparklines") != 0;
-    g_s.sparkOp = std::clamp(Wh_GetIntSetting(L"sparkOpacity"), 5, 100);
-    g_s.tips = Wh_GetIntSetting(L"tooltips") != 0;
-    g_s.tipLive = Wh_GetIntSetting(L"tooltipLive") != 0;
-    g_s.binary = Wh_GetIntSetting(L"binaryUnits") != 0;
-    g_s.interactive = Wh_GetIntSetting(L"interactive") != 0;
+    auto sp = std::make_unique<Settings>();
+    Settings& s = *sp;
+    s.cols = ParseLayout(GetStr(L"layout"));
+    s.allMonitors = Wh_GetIntSetting(L"allMonitors") != 0;
+    s.refreshMs = std::clamp<int>(Wh_GetIntSetting(L"refreshMs"), 500, 5000);
+    s.smoothing = std::clamp<int>(Wh_GetIntSetting(L"smoothing"), 0, 90);
+    s.fontFamily = GetStr(L"fontFamily");
+    if (s.fontFamily.empty()) s.fontFamily = L"Segoe UI Variable Text";
+    s.fontSize = std::clamp<int>(Wh_GetIntSetting(L"fontSize"), 8, 30);
+    s.bold = Wh_GetIntSetting(L"fontBold") != 0;
+    s.hasColor = ParseHex(GetStr(L"textColor"), &s.tr, &s.tg, &s.tb);
+    s.opacity = std::clamp<int>(Wh_GetIntSetting(L"opacity"), 10, 100);
+    s.icons = Wh_GetIntSetting(L"showIcons") != 0;
+    s.iconScale = std::clamp<int>(Wh_GetIntSetting(L"iconScale"), 60, 220);
+    s.warn = Wh_GetIntSetting(L"colorWarnings") != 0;
+    s.warnUsage = Wh_GetIntSetting(L"warnUsage");
+    s.warnTemp = Wh_GetIntSetting(L"warnTemp");
+    if (!ParseHex(GetStr(L"warnColor"), &s.wr, &s.wg, &s.wb)) { s.wr = 255; s.wg = 90; s.wb = 90; }
+    s.showCpuTemp = Wh_GetIntSetting(L"showCpuTemp") != 0;
+    s.showGpuTemp = Wh_GetIntSetting(L"showGpuTemp") != 0;
+    s.igpuFromCpu = Wh_GetIntSetting(L"igpuTempFromCpu") != 0;
+    s.fahrenheit = GetStr(L"tempUnit") == L"fahrenheit";
+    s.ramTotal = Wh_GetIntSetting(L"ramShowTotal") != 0;
+    s.ramPct = Wh_GetIntSetting(L"ramShowPercent") != 0;
+    s.bits = GetStr(L"netUnit") == L"bits";
+    s.netTotal = Wh_GetIntSetting(L"netInlineTotal") != 0;
+    s.spark = Wh_GetIntSetting(L"sparklines") != 0;
+    s.sparkOp = std::clamp<int>(Wh_GetIntSetting(L"sparkOpacity"), 5, 100);
+    s.tips = Wh_GetIntSetting(L"tooltips") != 0;
+    s.tipLive = Wh_GetIntSetting(L"tooltipLive") != 0;
+    s.binary = Wh_GetIntSetting(L"binaryUnits") != 0;
+    s.interactive = Wh_GetIntSetting(L"interactive") != 0;
     std::wstring ca = GetStr(L"clickAction");
-    g_s.clickAction = ca == L"resmon" ? 1 : ca == L"custom" ? 2 : ca == L"none" ? 3 : 0;
-    g_s.customCmd = GetStr(L"customCommand");
-    g_s.autoPos = Wh_GetIntSetting(L"autoPosition") != 0;
-    g_s.dockMargin = Wh_GetIntSetting(L"dockMargin");
-    g_s.leftPad = Wh_GetIntSetting(L"leftPadding");
-    g_s.gapIcons = Wh_GetIntSetting(L"gapToIcons");
-    g_s.colGap = Wh_GetIntSetting(L"columnGap");
-    g_s.itemGap = Wh_GetIntSetting(L"itemGap");
-    g_s.leftOffset = Wh_GetIntSetting(L"leftOffset");
-    g_s.topOffset = Wh_GetIntSetting(L"topOffset");
-    g_s.height = Wh_GetIntSetting(L"height");
+    s.clickAction = ca == L"resmon" ? 1 : ca == L"custom" ? 2 : ca == L"none" ? 3 : 0;
+    s.customCmd = GetStr(L"customCommand");
+    s.autoPos = Wh_GetIntSetting(L"autoPosition") != 0;
+    s.dockMargin = Wh_GetIntSetting(L"dockMargin");
+    s.leftPad = Wh_GetIntSetting(L"leftPadding");
+    s.gapIcons = Wh_GetIntSetting(L"gapToIcons");
+    s.colGap = Wh_GetIntSetting(L"columnGap");
+    s.itemGap = Wh_GetIntSetting(L"itemGap");
+    s.leftOffset = Wh_GetIntSetting(L"leftOffset");
+    s.topOffset = Wh_GetIntSetting(L"topOffset");
+    s.height = Wh_GetIntSetting(L"height");
+
+    std::lock_guard<std::mutex> lock(g_cfgMutex);
+    g_cfgPtr.store(sp.get());
+    g_cfgAll.push_back(std::move(sp));
 }
 
 // ---------------------------------------------------------------- state ----
@@ -313,22 +350,43 @@ struct Stats {
     double gpu = -1, cpuTemp = -1, gpuTemp = -1, disk = -1;
     double down = 0, up = 0, diskRead = 0, diskWrite = 0;
     double todayDown = 0, todayUp = 0;
+    int cpuTempSrc = 0;  // 0 none, 1 LibreHardwareMonitor, 2 Windows thermal zone
 };
-static Stats g_st;
-static int g_cpuTempSrc = 0;  // 0 none, 1 LibreHardwareMonitor, 2 Windows thermal zone
-static int g_gpuTempSrc = 0;  // 0 none, 1 sensor
+static Stats g_st;  // private to the sampler thread
+static Stats g_pub;  // published copy, read by everybody else
+static SRWLOCK g_pubLock = SRWLOCK_INIT;
+
+static Stats GetStats() {
+    AcquireSRWLockShared(&g_pubLock);
+    Stats s = g_pub;
+    ReleaseSRWLockShared(&g_pubLock);
+    return s;
+}
 
 struct Disp { double cpu = 0, gpu = -1, ram = 0, disk = -1, down = 0, up = 0; };
-static Disp g_disp;
+static Disp g_disp;  // worker thread only
 
-static volatile bool g_stop = false;
+static std::atomic<bool> g_stop{false};
+static std::atomic<HWND> g_msgWnd{nullptr};
+static std::atomic<bool> g_fullscreen{false};
+static std::atomic<bool> g_lightTheme{false};
 static HANDLE g_thread = nullptr;
-static HWND g_msgWnd = nullptr;
-static bool g_fullscreen = false;
-static bool g_lightTheme = false;
+static HANDLE g_stopEvent = nullptr;  // manual reset, set on unload
+static HANDLE g_uiaEvent = nullptr;   // auto reset: "something may have moved the taskbar icons"
+static UINT g_runMsg = 0;
 static const wchar_t* kClass = L"WhTaskbarSysMon";
 static const wchar_t* kMsgClass = L"WhTaskbarSysMonMsg";
 static const UINT WM_SETTINGS = WM_APP + 1;
+static const UINT WM_FRAME = WM_APP + 10;
+static const UINT WM_UPDATEPOS = WM_APP + 11;
+static const UINT WM_APPLYSTYLE = WM_APP + 12;
+
+static HINSTANCE GetModuleInstance() {
+    HINSTANCE h = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&GetModuleInstance, &h);
+    return h;
+}
 
 // -------------------------------------------------------------- sensors ----
 
@@ -376,33 +434,29 @@ static void PersistNetToday(bool force) {
     Wh_SetBinaryValue(L"netToday", &nt, sizeof(nt));
 }
 
+// 64-bit interface counters (no wrap-around even at 10 Gbps); only real (hardware) adapters, so VPN / virtual
+// switches do not count traffic twice
 static void SampleNet() {
-    static std::map<DWORD, std::pair<DWORD, DWORD>> prev;  // per interface, 32-bit counters wrap
+    static std::map<NET_IFINDEX, std::pair<ULONG64, ULONG64>> prev;
     static ULONGLONG pTick = 0;
-    ULONG size = 0;
-    GetIfTable(nullptr, &size, FALSE);
-    if (!size) return;
-    std::vector<BYTE> buf(size);
-    auto* t = (PMIB_IFTABLE)buf.data();
-    if (GetIfTable(t, &size, FALSE) != NO_ERROR) return;
+    PMIB_IF_TABLE2 t = nullptr;
+    if (GetIfTable2(&t) != NO_ERROR || !t) return;
     ULONGLONG now = GetTickCount64();
     double dIn = 0, dOut = 0;
-    for (DWORD i = 0; i < t->dwNumEntries; i++) {
-        const MIB_IFROW& r = t->table[i];
-        if (r.dwType != IF_TYPE_ETHERNET_CSMACD && r.dwType != IF_TYPE_IEEE80211) continue;
-        if (r.dwOperStatus != IF_OPER_STATUS_OPERATIONAL && r.dwOperStatus != IF_OPER_STATUS_CONNECTED) continue;
-        std::string d((const char*)r.bDescr);
-        if (d.find("Virtual") != std::string::npos || d.find("VMware") != std::string::npos ||
-            d.find("TAP") != std::string::npos || d.find("VPN") != std::string::npos ||
-            d.find("Hyper-V") != std::string::npos)
-            continue;  // avoid double counting
-        auto it = prev.find(r.dwIndex);
+    std::map<NET_IFINDEX, std::pair<ULONG64, ULONG64>> cur;
+    for (ULONG i = 0; i < t->NumEntries; i++) {
+        const MIB_IF_ROW2& r = t->Table[i];
+        if (r.Type == IF_TYPE_SOFTWARE_LOOPBACK || r.OperStatus != IfOperStatusUp) continue;
+        if (!r.InterfaceAndOperStatusFlags.HardwareInterface || r.InterfaceAndOperStatusFlags.FilterInterface) continue;
+        cur[r.InterfaceIndex] = {r.InOctets, r.OutOctets};
+        auto it = prev.find(r.InterfaceIndex);
         if (it != prev.end() && pTick) {
-            dIn += (DWORD)(r.dwInOctets - it->second.first);
-            dOut += (DWORD)(r.dwOutOctets - it->second.second);
+            if (r.InOctets >= it->second.first) dIn += (double)(r.InOctets - it->second.first);
+            if (r.OutOctets >= it->second.second) dOut += (double)(r.OutOctets - it->second.second);
         }
-        prev[r.dwIndex] = {r.dwInOctets, r.dwOutOctets};
     }
+    FreeMibTable(t);
+    prev = std::move(cur);
     if (pTick && now > pTick) {
         double dt = (now - pTick) / 1000.0;
         g_st.down = dIn / dt;
@@ -416,7 +470,7 @@ static void SampleNet() {
     pTick = now;
 }
 
-// ---- GPU usage via PDH (any vendor) ----
+// ---- GPU usage via PDH (any vendor): the busiest adapter, like Task Manager shows each GPU ----
 static PDH_HQUERY g_pdhQ = nullptr;
 static PDH_HCOUNTER g_pdhC = nullptr;
 static int g_pdhAge = 999;
@@ -440,14 +494,19 @@ static void SampleGpuPdh() {
     std::vector<BYTE> buf(size);
     auto* items = (PDH_FMT_COUNTERVALUE_ITEM_W*)buf.data();
     if (PdhGetFormattedCounterArrayW(g_pdhC, PDH_FMT_DOUBLE, &size, &count, items) != ERROR_SUCCESS) return;
-    std::map<std::wstring, double> perType;  // sum per engine type, like Task Manager
+    // adapter ("luid_..._phys_N") -> engine type -> summed utilization
+    std::map<std::wstring, std::map<std::wstring, double>> perAdapter;
     for (DWORD i = 0; i < count; i++) {
         if (items[i].FmtValue.CStatus != PDH_CSTATUS_VALID_DATA && items[i].FmtValue.CStatus != PDH_CSTATUS_NEW_DATA) continue;
-        const wchar_t* e = wcsstr(items[i].szName, L"engtype_");
-        perType[e ? e + 8 : L"?"] += items[i].FmtValue.doubleValue;
+        std::wstring name = items[i].szName;
+        size_t l = name.find(L"luid_"), e = name.find(L"_eng_"), t = name.find(L"engtype_");
+        std::wstring adapter = (l != std::wstring::npos && e != std::wstring::npos && e > l) ? name.substr(l, e - l) : L"?";
+        std::wstring type = t != std::wstring::npos ? name.substr(t + 8) : L"?";
+        perAdapter[adapter][type] += items[i].FmtValue.doubleValue;
     }
     double best = 0;
-    for (auto& kv : perType) best = std::max(best, kv.second);
+    for (auto& a : perAdapter)
+        for (auto& kv : a.second) best = std::max(best, kv.second);
     g_st.gpu = std::min(best, 100.0);
 }
 
@@ -478,6 +537,10 @@ static void SampleDisk() {
 static PDH_HQUERY g_thQ = nullptr;
 static PDH_HCOUNTER g_thC = nullptr;
 static bool g_thTried = false;
+static double g_cpuTempThermal = -1;  // sampler-private partial results, merged in PublishStats
+static double g_cpuTempLhm = -1;
+static double g_gpuTempKmt = -1;
+static double g_gpuTempLhm = -1;
 
 static void SampleThermalPdh() {
     if (!g_thTried) {
@@ -502,46 +565,60 @@ static void SampleThermalPdh() {
         double c = items[i].FmtValue.doubleValue - 273.15;  // reported in Kelvin
         if (c > 10 && c < 120) best = std::max(best, c);
     }
-    if (best > 0) { g_st.cpuTemp = best; g_cpuTempSrc = 2; }
+    if (best > 0) g_cpuTempThermal = best;
 }
 
-// ---- NVIDIA via NVML (usage + temperature) ----
-typedef int (*PFN_Init)();
-typedef int (*PFN_GetHandle)(unsigned, void**);
-typedef int (*PFN_GetTemp)(void*, int, unsigned*);
-struct NvmlUtil { unsigned gpu, mem; };
-typedef int (*PFN_GetUtil)(void*, NvmlUtil*);
-static PFN_GetTemp g_nvTemp = nullptr;
-static PFN_GetUtil g_nvUtil = nullptr;
-static void* g_nvDev = nullptr;
-static bool g_nvTried = false;
+// ---- GPU temperature from the graphics driver (D3DKMT, the interface Task Manager uses; any vendor) ----
+// Declared here because d3dkmthk.h is not available in every build environment.
+struct KmtAdapterInfo { UINT hAdapter; LUID adapterLuid; ULONG numOfSources; BOOL precisePresent; };
+struct KmtEnumAdapters2 { ULONG numAdapters; KmtAdapterInfo* pAdapters; };
+struct KmtCloseAdapter { UINT hAdapter; };
+struct KmtQueryAdapterInfo { UINT hAdapter; UINT type; VOID* pPrivateDriverData; UINT privateDriverDataSize; };
+struct KmtAdapterPerfData {
+    UINT PhysicalAdapterIndex;
+    ULONGLONG MemoryFrequency, MaxMemoryFrequency, MaxMemoryFrequencyOC, MemoryBandwidth, PCIEBandwidth;
+    ULONG FanRPM, Power, Temperature;
+    UCHAR PowerStateOverride;
+};
+static const UINT kKmtAdapterPerfData = 62;  // KMTQAITYPE_ADAPTERPERFDATA
+typedef LONG(WINAPI* KmtEnumAdapters2_t)(KmtEnumAdapters2*);
+typedef LONG(WINAPI* KmtQueryAdapterInfo_t)(KmtQueryAdapterInfo*);
+typedef LONG(WINAPI* KmtCloseAdapter_t)(const KmtCloseAdapter*);
+static KmtEnumAdapters2_t g_kmtEnum = nullptr;
+static KmtQueryAdapterInfo_t g_kmtQuery = nullptr;
+static KmtCloseAdapter_t g_kmtClose = nullptr;
+static bool g_kmtTried = false;
 
-static void InitNvml() {
-    g_nvTried = true;
-    HMODULE h = LoadLibraryW(L"nvml.dll");
-    if (!h) h = LoadLibraryW(L"C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvml.dll");
-    if (!h) return;
-    auto init = (PFN_Init)GetProcAddress(h, "nvmlInit_v2");
-    auto get = (PFN_GetHandle)GetProcAddress(h, "nvmlDeviceGetHandleByIndex_v2");
-    auto temp = (PFN_GetTemp)GetProcAddress(h, "nvmlDeviceGetTemperature");
-    auto util = (PFN_GetUtil)GetProcAddress(h, "nvmlDeviceGetUtilizationRates");
-    if (!init || !get || !temp || !util) return;
-    if (init() != 0 || get(0, &g_nvDev) != 0) return;
-    g_nvTemp = temp; g_nvUtil = util;
+static void SampleGpuTempKmt() {
+    if (!g_kmtTried) {
+        g_kmtTried = true;
+        HMODULE gdi = LoadLibraryExW(L"gdi32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (gdi) {
+            g_kmtEnum = (KmtEnumAdapters2_t)GetProcAddress(gdi, "D3DKMTEnumAdapters2");
+            g_kmtQuery = (KmtQueryAdapterInfo_t)GetProcAddress(gdi, "D3DKMTQueryAdapterInfo");
+            g_kmtClose = (KmtCloseAdapter_t)GetProcAddress(gdi, "D3DKMTCloseAdapter");
+        }
+    }
+    if (!g_kmtEnum || !g_kmtQuery || !g_kmtClose) return;
+    KmtEnumAdapters2 en = {};
+    g_kmtEnum(&en);  // first call only reports the count
+    if (!en.numAdapters || en.numAdapters > 16) return;
+    std::vector<KmtAdapterInfo> adapters(en.numAdapters);
+    en.pAdapters = adapters.data();
+    if (g_kmtEnum(&en) != 0) return;
+    double best = -1;
+    for (ULONG i = 0; i < en.numAdapters; i++) {
+        KmtAdapterPerfData perf = {};
+        KmtQueryAdapterInfo q = {adapters[i].hAdapter, kKmtAdapterPerfData, &perf, sizeof(perf)};
+        if (g_kmtQuery(&q) == 0 && perf.Temperature > 0) best = std::max(best, perf.Temperature / 10.0);  // tenths of a degree C
+        KmtCloseAdapter c = {adapters[i].hAdapter};
+        g_kmtClose(&c);
+    }
+    g_gpuTempKmt = best;
 }
 
-static bool SampleNvml() {
-    if (!g_nvTried) InitNvml();
-    if (!g_nvDev) return false;
-    unsigned t = 0; NvmlUtil u = {};
-    if (g_nvTemp(g_nvDev, 0, &t) == 0) { g_st.gpuTemp = t; g_gpuTempSrc = 1; }
-    if (g_nvUtil(g_nvDev, &u) == 0) g_st.gpu = u.gpu;
-    return true;
-}
-
-// ---- WMI: LibreHardwareMonitor (CPU temp, non-NVIDIA GPU temp) ----
+// ---- WMI: LibreHardwareMonitor (accurate CPU temperature, GPU temperature if the driver gives none) ----
 static IWbemServices* g_lhm = nullptr;
-static IWbemServices* g_acpi = nullptr;
 static ULONGLONG g_lastConnect = 0;
 
 static bool WmiConnect(const wchar_t* ns, IWbemServices** out) {
@@ -565,77 +642,61 @@ static double VarToDouble(VARIANT& v) {
     return r;
 }
 
-static bool WmiQuery(IWbemServices* svc, const wchar_t* q, IEnumWbemClassObject** en) {
-    BSTR lang = SysAllocString(L"WQL"), query = SysAllocString(q);
-    HRESULT hr = svc->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, en);
-    SysFreeString(lang); SysFreeString(query);
-    return SUCCEEDED(hr);
-}
-
 static void SampleWmi() {
     ULONGLONG now = GetTickCount64();
-    if (!g_lhm && !g_acpi && now - g_lastConnect > 30000) {
+    if (!g_lhm && now - g_lastConnect > 30000) {  // keeps retrying, so LibreHardwareMonitor started later is found
         g_lastConnect = now;
-        if (!WmiConnect(L"ROOT\\LibreHardwareMonitor", &g_lhm)) WmiConnect(L"ROOT\\WMI", &g_acpi);
+        WmiConnect(L"ROOT\\LibreHardwareMonitor", &g_lhm);
     }
-    if (g_lhm) {
-        IEnumWbemClassObject* en = nullptr;
-        if (!WmiQuery(g_lhm, L"SELECT Name,Identifier,Value FROM Sensor WHERE SensorType='Temperature'", &en)) {
-            g_lhm->Release(); g_lhm = nullptr; return;
-        }
-        int cpuPrio = 99, gpuPrio = 99;
-        double cpu = -1, gpu = -1;
-        IWbemClassObject* o = nullptr; ULONG n = 0;
-        while (en->Next(2000, 1, &o, &n) == S_OK && n) {
-            VARIANT name, id, val;
-            VariantInit(&name); VariantInit(&id); VariantInit(&val);
-            o->Get(L"Name", 0, &name, nullptr, nullptr);
-            o->Get(L"Identifier", 0, &id, nullptr, nullptr);
-            o->Get(L"Value", 0, &val, nullptr, nullptr);
-            std::wstring nm = name.vt == VT_BSTR ? name.bstrVal : L"";
-            std::wstring ident = id.vt == VT_BSTR ? id.bstrVal : L"";
-            double v = VarToDouble(val);
-            if (v > 0) {
-                if (ident.rfind(L"/intelcpu/", 0) == 0 || ident.rfind(L"/amdcpu/", 0) == 0) {
-                    int p = (nm.find(L"Package") != std::wstring::npos || nm.find(L"Tctl") != std::wstring::npos ||
-                             nm.find(L"Tdie") != std::wstring::npos) ? 0
-                          : nm.find(L"Core Max") != std::wstring::npos ? 1
-                          : nm.find(L"Core") != std::wstring::npos ? 2 : 3;
-                    if (p < cpuPrio) { cpuPrio = p; cpu = v; }
-                } else if (ident.rfind(L"/gpu", 0) == 0) {
-                    int p = nm.find(L"GPU Core") != std::wstring::npos ? 0 : 1;
-                    if (p < gpuPrio) { gpuPrio = p; gpu = v; }
-                }
+    if (!g_lhm) { g_cpuTempLhm = g_gpuTempLhm = -1; return; }
+
+    IEnumWbemClassObject* en = nullptr;
+    BSTR lang = SysAllocString(L"WQL");
+    BSTR query = SysAllocString(L"SELECT Name,Identifier,Value FROM Sensor WHERE SensorType='Temperature'");
+    HRESULT hr = g_lhm->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &en);
+    SysFreeString(lang); SysFreeString(query);
+    if (FAILED(hr)) {  // LibreHardwareMonitor was closed: drop the connection and look again later
+        g_lhm->Release(); g_lhm = nullptr;
+        g_cpuTempLhm = g_gpuTempLhm = -1;
+        return;
+    }
+    int cpuPrio = 99, gpuPrio = 99;
+    double cpu = -1, gpu = -1;
+    IWbemClassObject* o = nullptr; ULONG n = 0;
+    while (en->Next(2000, 1, &o, &n) == S_OK && n) {
+        VARIANT name, id, val;
+        VariantInit(&name); VariantInit(&id); VariantInit(&val);
+        o->Get(L"Name", 0, &name, nullptr, nullptr);
+        o->Get(L"Identifier", 0, &id, nullptr, nullptr);
+        o->Get(L"Value", 0, &val, nullptr, nullptr);
+        std::wstring nm = name.vt == VT_BSTR ? name.bstrVal : L"";
+        std::wstring ident = id.vt == VT_BSTR ? id.bstrVal : L"";
+        double v = VarToDouble(val);
+        if (v > 0) {
+            if (ident.rfind(L"/intelcpu/", 0) == 0 || ident.rfind(L"/amdcpu/", 0) == 0) {
+                int p = (nm.find(L"Package") != std::wstring::npos || nm.find(L"Tctl") != std::wstring::npos ||
+                         nm.find(L"Tdie") != std::wstring::npos) ? 0
+                      : nm.find(L"Core Max") != std::wstring::npos ? 1
+                      : nm.find(L"Core") != std::wstring::npos ? 2 : 3;
+                if (p < cpuPrio) { cpuPrio = p; cpu = v; }
+            } else if (ident.rfind(L"/gpu", 0) == 0) {
+                int p = nm.find(L"GPU Core") != std::wstring::npos ? 0 : 1;
+                if (p < gpuPrio) { gpuPrio = p; gpu = v; }
             }
-            VariantClear(&name); VariantClear(&id); VariantClear(&val);
-            o->Release();
         }
-        en->Release();
-        if (cpu > 0) { g_st.cpuTemp = cpu; g_cpuTempSrc = 1; }
-        if (gpu > 0 && !g_nvTemp) { g_st.gpuTemp = gpu; g_gpuTempSrc = 1; }
-    } else if (g_acpi) {  // usually needs admin; best effort
-        IEnumWbemClassObject* en = nullptr;
-        if (!WmiQuery(g_acpi, L"SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature", &en)) {
-            g_acpi->Release(); g_acpi = nullptr; return;
-        }
-        IWbemClassObject* o = nullptr; ULONG n = 0;
-        if (en->Next(2000, 1, &o, &n) == S_OK && n) {
-            VARIANT v; VariantInit(&v);
-            o->Get(L"CurrentTemperature", 0, &v, nullptr, nullptr);
-            double c = VarToDouble(v) / 10.0 - 273.15;
-            if (c > 10 && c < 120) { g_st.cpuTemp = c; g_cpuTempSrc = 2; }
-            VariantClear(&v);
-            o->Release();
-        }
-        en->Release();
+        VariantClear(&name); VariantClear(&id); VariantClear(&val);
+        o->Release();
     }
+    en->Release();
+    g_cpuTempLhm = cpu;
+    g_gpuTempLhm = gpu;
 }
 
 // ---- top processes (only sampled while a tooltip is being hovered) ----
 struct ProcAgg { std::wstring name; double cpu = 0; ULONGLONG mem = 0; };
 static std::vector<ProcAgg> g_topCpu, g_topMem;
 static SRWLOCK g_procLock = SRWLOCK_INIT;
-static volatile ULONGLONG g_procWanted = 0;
+static std::atomic<ULONGLONG> g_procWanted{0};
 
 static void SampleProcs() {
     static std::unordered_map<DWORD, ULONGLONG> prev;
@@ -711,17 +772,44 @@ static void CopyHistory(int item, double* out) {
     ReleaseSRWLockShared(&g_histLock);
 }
 
+static void PublishStats() {
+    // merge the partial temperature sources: LibreHardwareMonitor beats the Windows thermal zone, the driver beats LHM
+    g_st.cpuTemp = g_cpuTempLhm > 0 ? g_cpuTempLhm : g_cpuTempThermal;
+    g_st.cpuTempSrc = g_cpuTempLhm > 0 ? 1 : g_cpuTempThermal > 0 ? 2 : 0;
+    g_st.gpuTemp = g_gpuTempKmt > 0 ? g_gpuTempKmt : g_gpuTempLhm;
+    AcquireSRWLockExclusive(&g_pubLock);
+    g_pub = g_st;
+    ReleaseSRWLockExclusive(&g_pubLock);
+}
+
 static void SampleAll() {
     static int tick = 0;
     SampleCpuRam();
     SampleNet();
-    if (!SampleNvml()) SampleGpuPdh();
+    SampleGpuPdh();
+    SampleGpuTempKmt();
     SampleDisk();
     if (tick++ % 2 == 0) SampleWmi();
     if (!g_lhm) SampleThermalPdh();
-    if (GetTickCount64() - g_procWanted < 4000) SampleProcs();
+    if (GetTickCount64() - g_procWanted.load() < 4000) SampleProcs();
     PushHistory();
+    PublishStats();
     PersistNetToday(false);
+}
+
+static DWORD WINAPI SamplerWorker(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    while (!g_stop) {
+        SampleAll();
+        if (WaitForSingleObject(g_stopEvent, g_cfgPtr.load()->refreshMs) == WAIT_OBJECT_0) break;
+    }
+    PersistNetToday(true);
+    if (g_pdhQ) { PdhCloseQuery(g_pdhQ); g_pdhQ = nullptr; }
+    if (g_thQ) { PdhCloseQuery(g_thQ); g_thQ = nullptr; }
+    if (g_diskQ) { PdhCloseQuery(g_diskQ); g_diskQ = nullptr; }
+    if (g_lhm) { g_lhm->Release(); g_lhm = nullptr; }
+    CoUninitialize();
+    return 0;
 }
 
 // ---------------------------------------------------- taskbar discovery ----
@@ -745,17 +833,11 @@ static BtnInfo GetBtn(HWND tb) {
     return b;
 }
 
-static void MeasureTaskbarButton(IUIAutomation* uia, HWND tbWnd) {
+static void MeasureTaskbarButton(IUIAutomation* uia, IUIAutomationCacheRequest* cache, IUIAutomationCondition* cond, HWND tbWnd) {
     IUIAutomationElement* root = nullptr;
     if (FAILED(uia->ElementFromHandle(tbWnd, &root)) || !root) return;
-
-    VARIANT v; VariantInit(&v);
-    v.vt = VT_I4; v.lVal = UIA_ButtonControlTypeId;
-    IUIAutomationCondition* cond = nullptr;
-    uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond);
-
     IUIAutomationElementArray* arr = nullptr;
-    if (cond) root->FindAll(TreeScope_Descendants, cond, &arr);
+    root->FindAllBuildCache(TreeScope_Descendants, cond, cache, &arr);  // all rectangles in one round trip
 
     RECT tb = {};
     GetWindowRect(tbWnd, &tb);
@@ -768,7 +850,7 @@ static void MeasureTaskbarButton(IUIAutomation* uia, HWND tbWnd) {
             IUIAutomationElement* el = nullptr;
             if (FAILED(arr->GetElement(i, &el)) || !el) continue;
             RECT r = {};
-            if (SUCCEEDED(el->get_CurrentBoundingRectangle(&r)) && r.right - r.left > 10 && r.bottom - r.top > 10 &&
+            if (SUCCEEDED(el->get_CachedBoundingRectangle(&r)) && r.right - r.left > 10 && r.bottom - r.top > 10 &&
                 r.left >= tb.left && r.right <= tb.right && r.top >= tb.top - 4 && r.bottom <= tb.bottom + 4) {
                 if (!have || r.left < best.left) { best = r; have = true; }
             }
@@ -776,7 +858,6 @@ static void MeasureTaskbarButton(IUIAutomation* uia, HWND tbWnd) {
         }
         arr->Release();
     }
-    if (cond) cond->Release();
     root->Release();
 
     if (have) {
@@ -790,12 +871,22 @@ static void MeasureTaskbarButton(IUIAutomation* uia, HWND tbWnd) {
     }
 }
 
+// Measures the first icon when g_uiaEvent says something may have moved it (taskbar moved, app focus / minimise
+// changes, settings), debounced, plus a slow safety net. Quick retries only until the first measurement works.
 static DWORD WINAPI UiaWorker(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    static const GUID kClsidUia = {0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
-    static const GUID kIidUia = {0x30cbe57d, 0xd9d0, 0x452a, {0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee}};
     IUIAutomation* uia = nullptr;
-    CoCreateInstance(kClsidUia, nullptr, CLSCTX_INPROC_SERVER, kIidUia, (void**)&uia);
+    IUIAutomationCacheRequest* cache = nullptr;
+    IUIAutomationCondition* cond = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&uia)) && uia) {
+        uia->CreateCacheRequest(&cache);
+        if (cache) cache->AddProperty(UIA_BoundingRectanglePropertyId);
+        VARIANT v; VariantInit(&v);
+        v.vt = VT_I4; v.lVal = UIA_ButtonControlTypeId;
+        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond);
+    }
+    HANDLE handles[2] = {g_stopEvent, g_uiaEvent};
+    bool first = true;
     while (!g_stop) {
         std::vector<HWND> list;
         AcquireSRWLockShared(&g_btnLock);
@@ -804,45 +895,43 @@ static DWORD WINAPI UiaWorker(LPVOID) {
         bool allOk = !list.empty();
         for (HWND tb : list) {
             if (g_stop) break;
-            if (uia) MeasureTaskbarButton(uia, tb);
+            if (uia && cache && cond) MeasureTaskbarButton(uia, cache, cond, tb);
             if (!GetBtn(tb).ok) allOk = false;
         }
-        int waits = allOk ? 5 : 2;  // quick retries until found, then follow icon changes twice a second
-        for (int i = 0; i < waits && !g_stop; i++) Sleep(100);
+        first = false;
+        DWORD r = WaitForMultipleObjects(2, handles, FALSE, allOk ? 3000 : 400);
+        if (r == WAIT_OBJECT_0) break;
+        if (r == WAIT_OBJECT_0 + 1 && WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) break;  // debounce
     }
+    (void)first;
+    if (cond) cond->Release();
+    if (cache) cache->Release();
     if (uia) uia->Release();
     CoUninitialize();
     return 0;
 }
 
-static DWORD WINAPI SamplerWorker(LPVOID) {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    while (!g_stop) {
-        SampleAll();
-        int ms = g_s.refreshMs;
-        for (int i = 0; i < ms / 50 && !g_stop; i++) Sleep(50);
-    }
-    PersistNetToday(true);
-    if (g_pdhQ) { PdhCloseQuery(g_pdhQ); g_pdhQ = nullptr; }
-    if (g_thQ) { PdhCloseQuery(g_thQ); g_thQ = nullptr; }
-    if (g_diskQ) { PdhCloseQuery(g_diskQ); g_diskQ = nullptr; }
-    if (g_lhm) { g_lhm->Release(); g_lhm = nullptr; }
-    if (g_acpi) { g_acpi->Release(); g_acpi = nullptr; }
-    CoUninitialize();
-    return 0;
-}
-
-// ------------------------------------------------------------- overlays ----
+// ---------------------------------------------- overlay windows (taskbar thread) ----
 
 struct Cell { RECT r; int item; };
 
+// A finished picture prepared by the worker thread; the taskbar thread only applies it.
+struct Frame {
+    HBITMAP dib = nullptr;
+    int W = 0, H = 0;
+    bool useAuto = false;
+    std::vector<Cell> cells;
+};
+
+// Lives on, and is only touched from, the thread of its taskbar window.
 struct Overlay {
     HWND taskbar = nullptr, hwnd = nullptr, tip = nullptr;
     int lastW = 0, lastH = 0;
-    bool lastAuto = false, shown = false;
+    bool lastAuto = false, shown = false, noRoomLogged = false;
     LONG px = 0, py = 0;
-    int hideCount = 0;
-    ULONGLONG startTick = 0;
+    ULONGLONG hideSince = 0;
+    ULONGLONG lastCoverCheck = 0;
+    bool fsCovered = false;
     std::vector<Cell> cells;
     int hoverItem = -1;
     bool tracking = false;
@@ -850,57 +939,100 @@ struct Overlay {
     bool tipVisible = false;
     ULONGLONG tipStart = 0;
 };
-static std::vector<Overlay*> g_overlays;  // UI thread only
 
-typedef BOOL(WINAPI* GetWindowBand_t)(HWND, PDWORD);
-typedef BOOL(WINAPI* SetWindowBand_t)(HWND, HWND, DWORD);
-static GetWindowBand_t g_getBand = nullptr;
-static SetWindowBand_t g_setBand = nullptr;
+// (taskbar, overlay window) pairs, so event callbacks on any thread can notify the right window
+static std::mutex g_pairMutex;
+static std::vector<std::pair<HWND, HWND>> g_pairs;
+
+typedef void(WINAPI* RunProc_t)(PVOID);
+
+// Runs proc on the thread that owns hWnd, and waits for it.
+static bool RunFromWindowThread(HWND hWnd, RunProc_t proc, PVOID procParam) {
+    struct Param { RunProc_t proc; PVOID p; };
+    DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
+    if (tid == 0) return false;
+    if (tid == GetCurrentThreadId()) { proc(procParam); return true; }
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == g_runMsg) {
+                    Param* param = (Param*)cwp->lParam;
+                    param->proc(param->p);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, tid);
+    if (!hook) return false;
+    Param param = {proc, procParam};
+    SendMessageW(hWnd, g_runMsg, 0, (LPARAM)&param);
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+// true when a window above the taskbar covers the whole monitor (fullscreen video, photo viewer, game ...)
+static bool CoveredByFullscreen(Overlay* ov) {
+    HMONITOR mon = MonitorFromWindow(ov->taskbar, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfoW(mon, &mi)) return false;
+    int guard = 0;
+    for (HWND w = GetTopWindow(nullptr); w && guard < 400; w = GetWindow(w, GW_HWNDNEXT), guard++) {
+        if (w == ov->taskbar) return false;  // reached the taskbar: nothing above it covers the screen
+        if (w == ov->hwnd || w == ov->tip) continue;
+        if (!IsWindowVisible(w) || IsIconic(w)) continue;
+        LONG_PTR ex = GetWindowLongPtrW(w, GWL_EXSTYLE);
+        if (ex & WS_EX_TRANSPARENT) continue;  // click-through overlays (wallpaper tools etc.) do not count
+        DWORD cloaked = 0;
+        DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+        if (cloaked) continue;
+        RECT r;
+        if (!GetWindowRect(w, &r)) continue;
+        if (r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top && r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom)
+            return true;
+    }
+    return false;
+}
 
 static void UpdatePosition(Overlay* ov, bool force) {
     if (!ov->hwnd || !ov->taskbar || !ov->lastW) return;
     RECT trc;
     if (!GetWindowRect(ov->taskbar, &trc)) return;
+    const Settings& s = g_s;
 
-    // hide only when the taskbar has been gone for a few ticks (avoids flicker while apps minimise)
-    if (!IsWindowVisible(ov->taskbar) || g_fullscreen) ov->hideCount++; else ov->hideCount = 0;
-    if (ov->hideCount >= 4) {
-        if (ov->shown) { ShowWindow(ov->hwnd, SW_HIDE); ov->shown = false; }
-        return;
-    }
-    if (ov->hideCount > 0) return;
+    ULONGLONG now = GetTickCount64();
+    if (now - ov->lastCoverCheck >= 100) { ov->fsCovered = CoveredByFullscreen(ov); ov->lastCoverCheck = now; }
 
     float sc = GetDpiForWindow(ov->taskbar) / 96.0f;
     BtnInfo b = GetBtn(ov->taskbar);
     LONG x, y;
-    LONG wantManualX = trc.left + (LONG)((g_s.dockMargin > 0 ? g_s.dockMargin + g_s.leftPad : g_s.leftOffset) * sc);
+    bool noRoom = false;
     if (ov->lastAuto && b.ok) {
-        LONG gap = (LONG)(g_s.gapIcons * sc);
+        LONG gap = (LONG)(s.gapIcons * sc);
         LONG maxX = trc.left + b.relLeft - gap - ov->lastW;  // never overlap the first icon
-        LONG wantX = g_s.dockMargin > 0 ? trc.left + (LONG)((g_s.dockMargin + g_s.leftPad) * sc) : maxX;
+        if (maxX < trc.left) noRoom = true;                  // no free space left of the first icon
+        LONG wantX = s.dockMargin > 0 ? trc.left + (LONG)((s.dockMargin + s.leftPad) * sc) : maxX;
         x = std::max<LONG>(trc.left, std::min(wantX, maxX));
         y = trc.top + b.relTop;
     } else {
-        x = wantManualX;
-        y = trc.top + (LONG)(g_s.topOffset * sc);
+        x = trc.left + (LONG)(s.leftOffset * sc);
+        y = trc.top + (LONG)(s.topOffset * sc);
     }
+    if (noRoom && !ov->noRoomLogged) { Wh_Log(L"No free space left of the first taskbar icon, monitor hidden"); ov->noRoomLogged = true; }
+    if (!noRoom) ov->noRoomLogged = false;
 
-    // when the taskbar changes z-band (e.g. Start menu opens) follow it; the owner link normally does this already
-    if (g_getBand && ov == g_overlays.front()) {
-        DWORD tbBand = 0, myBand = 0;
-        g_getBand(ov->taskbar, &tbBand);
-        g_getBand(ov->hwnd, &myBand);
-        static DWORD lastTb = 0, lastMy = 0;
-        if (tbBand != lastTb || myBand != lastMy) {
-            Wh_Log(L"band taskbar=%u overlay=%u", tbBand, myBand);
-            lastTb = tbBand; lastMy = myBand;
+    // hide while the taskbar is hidden, a fullscreen window covers the screen, or there is no room; debounced a
+    // little so short flickers (apps minimising) do not make the monitor blink
+    bool wantHide = noRoom || !IsWindowVisible(ov->taskbar) || g_fullscreen.load() || ov->fsCovered;
+    if (wantHide) {
+        if (!ov->hideSince) { ov->hideSince = now; SetTimer(ov->hwnd, 2, 90, nullptr); }
+        if (now - ov->hideSince >= 80) {
+            if (ov->shown) { ShowWindow(ov->hwnd, SW_HIDE); ov->shown = false; }
         }
-        if (tbBand && myBand && tbBand != myBand && g_setBand) {
-            BOOL ok = g_setBand(ov->hwnd, nullptr, tbBand);
-            static int tries = 0;
-            if (tries++ < 6) Wh_Log(L"SetWindowBand(%u) -> %d err=%lu", tbBand, ok, ok ? 0 : GetLastError());
-        }
+        return;
     }
+    ov->hideSince = 0;
 
     // the taskbar re-raises itself above us when apps minimise / activate
     bool covered = false;
@@ -915,23 +1047,345 @@ static void UpdatePosition(Overlay* ov, bool force) {
     }
 }
 
-static HWINEVENTHOOK g_locHook = nullptr;
-static void CALLBACK LocationEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG, DWORD, DWORD) {
-    if (idObject != OBJID_WINDOW) return;
-    for (Overlay* ov : g_overlays)
-        if (ov->taskbar == hwnd) { UpdatePosition(ov, false); return; }  // follow the taskbar the instant it moves
+static void ApplyFrame(Overlay* ov, Frame* f) {
+    HDC screen = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(screen);
+    HGDIOBJ old = SelectObject(mem, f->dib);
+    SIZE size = {f->W, f->H};
+    POINT src = {0, 0};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    ov->lastW = f->W; ov->lastH = f->H; ov->lastAuto = f->useAuto;
+    ov->cells = std::move(f->cells);
+    SetWindowPos(ov->hwnd, nullptr, 0, 0, f->W, f->H, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
+    UpdateLayeredWindow(ov->hwnd, screen, nullptr, &size, mem, &src, 0, &bf, ULW_ALPHA);
+    SelectObject(mem, old);
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+    UpdatePosition(ov, true);
 }
 
-// -------------------------------------------------------------- drawing ----
-
-static bool LightTheme() {
-    DWORD v = 0, sz = sizeof(v);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS)
-        return v != 0;
-    return false;
+// ---- value formatting ----
+static std::wstring Fmt(const wchar_t* f, ...) {
+    wchar_t b[96];
+    va_list ap; va_start(ap, f);
+    _vsnwprintf(b, 95, f, ap);
+    va_end(ap);
+    b[95] = 0;
+    return b;
 }
 
+static const wchar_t* UK() { return g_s.binary ? L"KiB" : L"KB"; }
+static const wchar_t* UM() { return g_s.binary ? L"MiB" : L"MB"; }
+static const wchar_t* UG() { return g_s.binary ? L"GiB" : L"GB"; }
+
+static std::wstring FmtPct(double v) { return v < 0 ? L"--%" : Fmt(L"%.0f%%", v); }
+
+static std::wstring FmtTemp(double c) {
+    if (c <= 0) return g_s.fahrenheit ? L"--°F" : L"--°C";
+    return g_s.fahrenheit ? Fmt(L"%.0f°F", c * 9.0 / 5.0 + 32.0) : Fmt(L"%.0f°C", c);
+}
+
+static std::wstring FmtSpeed(double bps) {
+    if (g_s.bits) {
+        double kb = bps * 8 / 1000.0;
+        if (kb < 1000) return Fmt(L"%.0f Kbps", kb);
+        double mb = kb / 1000.0;
+        if (mb < 1000) return Fmt(L"%.1f Mbps", mb);
+        return Fmt(L"%.2f Gbps", mb / 1000.0);
+    }
+    double kb = bps / 1024.0;
+    if (kb < 1000) return Fmt(L"%.0f %s/s", kb, UK());
+    double mb = kb / 1024.0;
+    if (mb < 1000) return Fmt(L"%.1f %s/s", mb, UM());
+    return Fmt(L"%.2f %s/s", mb / 1024.0, UG());
+}
+
+static std::wstring FmtBytes(double b) {
+    double mb = b / 1048576.0;
+    if (mb < 1000) return Fmt(L"%.0f %s", mb, UM());
+    return Fmt(L"%.1f %s", mb / 1024.0, UG());
+}
+
+// -------------------------------------------------------------- tooltips ----
+
+static std::wstring ProcLines(bool byCpu) {
+    std::wstring s;
+    AcquireSRWLockShared(&g_procLock);
+    const auto& v = byCpu ? g_topCpu : g_topMem;
+    for (const auto& p : v)
+        s += byCpu ? Fmt(L"\r\n  %s  %.0f%%", p.name.c_str(), p.cpu)
+                   : Fmt(L"\r\n  %s  %s", p.name.c_str(), FmtBytes((double)p.mem).c_str());
+    ReleaseSRWLockShared(&g_procLock);
+    return s;
+}
+
+static std::wstring BuildTip(int item) {
+    g_procWanted.store(GetTickCount64());
+    Stats st = GetStats();
+    switch (item) {
+        case IT_CPU: {
+            std::wstring s = Fmt(L"CPU  %.0f%%", st.cpu);
+            if (st.cpuTemp > 0) s += L"\r\nTemperature  " + FmtTemp(st.cpuTemp) + (st.cpuTempSrc == 2 ? L"  (Windows thermal zone, approximate)" : L"");
+            else s += L"\r\nTemperature  not available (run LibreHardwareMonitor)";
+            std::wstring p = ProcLines(true);
+            if (!p.empty()) s += L"\r\nBusiest apps:" + p;
+            return s;
+        }
+        case IT_GPU: {
+            std::wstring s = L"GPU  " + FmtPct(st.gpu);
+            if (st.gpuTemp > 0) s += L"\r\nTemperature  " + FmtTemp(st.gpuTemp);
+            else if (g_s.igpuFromCpu && st.cpuTemp > 0) s += L"\r\nTemperature  " + FmtTemp(st.cpuTemp) + L"  (shared with the CPU)";
+            else s += L"\r\nTemperature  not available";
+            return s;
+        }
+        case IT_RAM: {
+            std::wstring s = Fmt(L"Memory  %.1f of %.1f %s used  (%.0f%%)\r\nFree  %.1f %s", st.ramUsedGB, st.ramTotalGB, UG(), st.ram,
+                                 st.ramTotalGB - st.ramUsedGB, UG());
+            std::wstring p = ProcLines(false);
+            if (!p.empty()) s += L"\r\nBiggest apps:" + p;
+            return s;
+        }
+        case IT_DISK:
+            return Fmt(L"Disk activity  %s\r\nRead  %s\r\nWrite  %s", FmtPct(st.disk).c_str(), FmtSpeed(st.diskRead).c_str(),
+                       FmtSpeed(st.diskWrite).c_str());
+        case IT_DOWN:
+        case IT_UP:
+            return Fmt(L"Download  %s\r\nUpload  %s\r\nToday  down %s, up %s", FmtSpeed(st.down).c_str(), FmtSpeed(st.up).c_str(),
+                       FmtBytes(st.todayDown).c_str(), FmtBytes(st.todayUp).c_str());
+    }
+    return L"";
+}
+
+// puts the tooltip right above the overlay, using the tooltip window's real size
+static void PositionTip(Overlay* ov, int item, int guessH) {
+    RECT wr;
+    GetWindowRect(ov->hwnd, &wr);
+    int w = 300, h = guessH;
+    if (ov->tipVisible) {
+        RECT tr;
+        if (GetWindowRect(ov->tip, &tr) && tr.bottom - tr.top > 4) { w = tr.right - tr.left; h = tr.bottom - tr.top; }
+    }
+    int cx = wr.left;
+    for (const Cell& c : ov->cells) if (c.item == item) { cx = wr.left + c.r.left; break; }
+    HMONITOR mon = MonitorFromWindow(ov->hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(mi)};
+    GetMonitorInfoW(mon, &mi);
+    int x = std::clamp<int>(cx, mi.rcMonitor.left, std::max<int>(mi.rcMonitor.left, mi.rcMonitor.right - w));
+    int y = wr.top - h - 8;
+    SendMessageW(ov->tip, TTM_TRACKPOSITION, 0, MAKELPARAM(x, y));
+}
+
+// refresh = true when called by the timer for an already visible tooltip
+static void ShowTip(Overlay* ov, int item, bool refresh) {
+    if (!ov->tip || !g_s.tips) return;
+    if (refresh) {
+        // not live: only the first moments are updated (so top-process data can arrive), then the text stays still
+        if (!ov->tipVisible || (!g_s.tipLive && GetTickCount64() - ov->tipStart > 2500)) return;
+    } else {
+        ov->tipStart = GetTickCount64();
+    }
+    std::wstring text = BuildTip(item);
+    if (refresh && text == ov->tipText) return;  // nothing changed: do not touch the tooltip at all
+
+    TOOLINFOW ti = {sizeof(ti)};
+    ti.hwnd = ov->hwnd;
+    ti.uId = 1;
+    ti.lpszText = (LPWSTR)text.c_str();
+    SendMessageW(ov->tip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+    ov->tipText = text;
+
+    int lines = 1;
+    for (wchar_t c : text) if (c == L'\n') lines++;
+    int guessH = (int)(lines * g_s.fontSize * 1.5 + 18);
+    PositionTip(ov, item, guessH);
+    if (!ov->tipVisible) {  // activate only once; updates afterwards just change text and position, so nothing flashes
+        SendMessageW(ov->tip, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
+        ov->tipVisible = true;
+    } else {
+        SendMessageW(ov->tip, TTM_UPDATE, 0, 0);
+    }
+    PositionTip(ov, item, guessH);  // again, now that the window has its real size
+}
+
+static void HideTip(Overlay* ov) {
+    if (!ov->tip) return;
+    TOOLINFOW ti = {sizeof(ti)};
+    ti.hwnd = ov->hwnd;
+    ti.uId = 1;
+    SendMessageW(ov->tip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&ti);
+    ov->tipVisible = false;
+    ov->tipText.clear();
+}
+
+static void RunClickAction() {
+    switch (g_s.clickAction) {
+        case 0: ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
+        case 1: ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
+        case 2:
+            if (!g_s.customCmd.empty()) {
+                std::wstring cmd = g_s.customCmd;
+                std::vector<wchar_t> file(cmd.begin(), cmd.end());
+                file.push_back(0);
+                std::wstring args = PathGetArgsW(file.data());  // split "program arguments"
+                PathRemoveArgsW(file.data());
+                PathUnquoteSpacesW(file.data());
+                ShellExecuteW(nullptr, L"open", file.data(), args.empty() ? nullptr : args.c_str(), nullptr, SW_SHOWNORMAL);
+            }
+            break;
+    }
+}
+
+static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    Overlay* ov = (Overlay*)GetWindowLongPtrW(h, GWLP_USERDATA);
+    switch (m) {
+        case WM_FRAME: {
+            Frame* f = (Frame*)l;
+            if (ov) ApplyFrame(ov, f);
+            if (f->dib) DeleteObject(f->dib);
+            delete f;
+            return 0;
+        }
+        case WM_UPDATEPOS:
+            if (ov) UpdatePosition(ov, false);
+            return 0;
+        case WM_APPLYSTYLE: {
+            LONG_PTR ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+            LONG_PTR want = g_s.interactive ? (ex & ~WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
+            if (want != ex) SetWindowLongPtrW(h, GWL_EXSTYLE, want);
+            return 0;
+        }
+        case WM_TIMER:
+            if (ov) {
+                if (w == 2) KillTimer(h, 2);
+                UpdatePosition(ov, false);  // slow safety net next to the event hooks
+                if (w == 1 && ov->hoverItem >= 0) ShowTip(ov, ov->hoverItem, true);
+            }
+            return 0;
+        case WM_MOUSEMOVE: {
+            if (!ov) break;
+            if (!ov->tracking) {
+                TRACKMOUSEEVENT t = {sizeof(t), TME_LEAVE, h, 0};
+                TrackMouseEvent(&t);
+                ov->tracking = true;
+            }
+            POINT pt = {(short)LOWORD(l), (short)HIWORD(l)};
+            int item = -1;
+            for (const Cell& c : ov->cells) if (PtInRect(&c.r, pt)) { item = c.item; break; }
+            if (item != ov->hoverItem) {
+                ov->hoverItem = item;
+                if (item >= 0) ShowTip(ov, item, false); else HideTip(ov);
+            }
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            if (ov) { ov->tracking = false; ov->hoverItem = -1; HideTip(ov); }
+            return 0;
+        case WM_LBUTTONUP:
+            if (ov) HideTip(ov);
+            RunClickAction();
+            return 0;
+        case WM_RBUTTONUP: {
+            if (ov) HideTip(ov);
+            HMENU menu = CreatePopupMenu();
+            AppendMenuW(menu, MF_STRING, 1, L"Open Task Manager");
+            AppendMenuW(menu, MF_STRING, 2, L"Open Resource Monitor");
+            AppendMenuW(menu, MF_STRING, 3, L"Open Performance Monitor");
+            POINT pt;
+            GetCursorPos(&pt);
+            SetForegroundWindow(h);
+            int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, h, nullptr);
+            PostMessageW(h, WM_NULL, 0, 0);
+            DestroyMenu(menu);
+            if (cmd == 1) ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            else if (cmd == 2) ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            else if (cmd == 3) ShellExecuteW(nullptr, L"open", L"perfmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
+            return 0;
+        }
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+// ---- create / destroy, run on the taskbar's thread ----
+struct CreateParam { HWND taskbar; HWND result; };
+
+static void WINAPI CreateOverlayOnThread(PVOID p) {
+    CreateParam* cp = (CreateParam*)p;
+    cp->result = nullptr;
+    DWORD ex = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+    if (!g_s.interactive) ex |= WS_EX_TRANSPARENT;
+    // Owned by the taskbar window on the SAME thread: the overlay then always stays above the taskbar, in every
+    // z-band (e.g. while the Start menu is open), without linking two threads' input queues.
+    HWND hwnd = CreateWindowExW(ex, kClass, L"", WS_POPUP, 0, 0, 10, 10, cp->taskbar, nullptr, GetModuleInstance(), nullptr);
+    if (!hwnd) return;
+    Overlay* ov = new Overlay();
+    ov->taskbar = cp->taskbar;
+    ov->hwnd = hwnd;
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)ov);
+
+    ov->tip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
+                              WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP | TTS_NOANIMATE | TTS_NOFADE, 0, 0, 0, 0, hwnd, nullptr,
+                              GetModuleInstance(), nullptr);
+    if (ov->tip) {
+        TOOLINFOW ti = {sizeof(ti)};
+        ti.uFlags = TTF_TRACK | TTF_ABSOLUTE;
+        ti.hwnd = hwnd;
+        ti.uId = 1;
+        ti.lpszText = (LPWSTR)L"";
+        SendMessageW(ov->tip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+        SendMessageW(ov->tip, TTM_SETMAXTIPWIDTH, 0, 600);
+    }
+    SetTimer(hwnd, 1, 400, nullptr);
+    {
+        std::lock_guard<std::mutex> lock(g_pairMutex);
+        g_pairs.push_back({cp->taskbar, hwnd});
+    }
+    cp->result = hwnd;
+}
+
+static void WINAPI DestroyOverlayOnThread(PVOID p) {
+    HWND hwnd = (HWND)p;
+    {
+        std::lock_guard<std::mutex> lock(g_pairMutex);
+        g_pairs.erase(std::remove_if(g_pairs.begin(), g_pairs.end(), [&](const auto& pr) { return pr.second == hwnd; }), g_pairs.end());
+    }
+    Overlay* ov = (Overlay*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+    DestroyWindow(hwnd);  // also destroys the owned tooltip
+    delete ov;
+}
+
+// ------------------------------------------------------- worker thread ----
+
+// W-side bookkeeping for each overlay; the Overlay object itself belongs to the taskbar thread
+struct OvRef { HWND taskbar; HWND hwnd; ULONGLONG startTick; };
+static std::vector<OvRef> g_refs;  // worker thread only
+
+static void NotifyOverlays(HWND onlyTaskbar) {
+    std::lock_guard<std::mutex> lock(g_pairMutex);
+    for (const auto& pr : g_pairs)
+        if (!onlyTaskbar || pr.first == onlyTaskbar) PostMessageW(pr.second, WM_UPDATEPOS, 0, 0);
+}
+
+// instant reaction to taskbar movement (auto-hide animation), focus / minimise changes
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG, DWORD, DWORD) {
+    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+        if (idObject != OBJID_WINDOW) return;
+        {
+            std::lock_guard<std::mutex> lock(g_pairMutex);
+            bool isTaskbar = false;
+            for (const auto& pr : g_pairs) if (pr.first == hwnd) { PostMessageW(pr.second, WM_UPDATEPOS, 0, 0); isTaskbar = true; }
+            if (!isTaskbar) return;
+        }
+        SetEvent(g_uiaEvent);
+        return;
+    }
+    NotifyOverlays(nullptr);  // foreground / minimise: z-order or covering may have changed
+    SetEvent(g_uiaEvent);     // ... and the taskbar icons may have moved
+}
+
+// ---- drawing (worker thread) ----
 static void RoundRect(GraphicsPath& p, RectF r, float d) {
     p.AddArc(r.X, r.Y, d, d, 180, 90);
     p.AddArc(r.X + r.Width - d, r.Y, d, d, 270, 90);
@@ -1019,129 +1473,120 @@ static void IconArrow(Graphics& g, float x, float y, float s, Color c, bool down
     g.DrawLine(&pen, x + s * 0.15f, y + s * 0.92f, x + s * 0.85f, y + s * 0.92f);
 }
 
-// ---- value formatting ----
-static const wchar_t* UK() { return g_s.binary ? L"KiB" : L"KB"; }
-static const wchar_t* UM() { return g_s.binary ? L"MiB" : L"MB"; }
-static const wchar_t* UG() { return g_s.binary ? L"GiB" : L"GB"; }
-static std::wstring Fmt(const wchar_t* f, ...) {
-    wchar_t b[96];
-    va_list ap; va_start(ap, f);
-    _vsnwprintf(b, 95, f, ap);
-    va_end(ap);
-    b[95] = 0;
-    return b;
-}
-
-static std::wstring FmtPct(double v) { return v < 0 ? L"--%" : Fmt(L"%.0f%%", v); }
-
-static std::wstring FmtTemp(double c) {
-    if (c <= 0) return g_s.fahrenheit ? L"--\u00B0F" : L"--\u00B0C";
-    return g_s.fahrenheit ? Fmt(L"%.0f\u00B0F", c * 9.0 / 5.0 + 32.0) : Fmt(L"%.0f\u00B0C", c);
-}
-
-static std::wstring FmtSpeed(double bps) {
-    if (g_s.bits) {
-        double kb = bps * 8 / 1000.0;
-        if (kb < 1000) return Fmt(L"%.0f Kbps", kb);
-        double mb = kb / 1000.0;
-        if (mb < 1000) return Fmt(L"%.1f Mbps", mb);
-        return Fmt(L"%.2f Gbps", mb / 1000.0);
-    }
-    double kb = bps / 1024.0;
-    if (kb < 1000) return Fmt(L"%.0f %s/s", kb, UK());
-    double mb = kb / 1024.0;
-    if (mb < 1000) return Fmt(L"%.1f %s/s", mb, UM());
-    return Fmt(L"%.2f %s/s", mb / 1024.0, UG());
-}
-
-static std::wstring FmtBytes(double b) {
-    double mb = b / 1048576.0;
-    if (mb < 1000) return Fmt(L"%.0f %s", mb, UM());
-    return Fmt(L"%.1f %s", mb / 1024.0, UG());
-}
-
-// ---- one text piece of an item: drawn at a fixed width (template) so columns don't jitter ----
+// one text piece of an item: drawn at a fixed width (its template) so columns do not jitter
 struct Seg { std::wstring text, tmpl; bool warn; };
 
-static void BuildSegs(int item, std::vector<Seg>& out) {
-    auto usageSeg = [&](double v) { return Seg{FmtPct(v), L"100%", v >= g_s.warnUsage}; };
-    auto tempSeg = [&](double c) { return Seg{FmtTemp(c), g_s.fahrenheit ? L"100\u00B0F" : L"100\u00B0C", c >= g_s.warnTemp}; };
+static void BuildSegs(int item, const Stats& st, std::vector<Seg>& out) {
+    const Settings& s = g_s;
+    auto usageSeg = [&](double v) { return Seg{FmtPct(v), L"100%", v >= s.warnUsage}; };
+    auto tempSeg = [&](double c) { return Seg{FmtTemp(c), s.fahrenheit ? L"100°F" : L"100°C", c >= s.warnTemp}; };
     switch (item) {
         case IT_CPU:
             out.push_back(usageSeg(g_disp.cpu));
-            if (g_s.showCpuTemp) out.push_back(tempSeg(g_st.cpuTemp));
+            if (s.showCpuTemp) out.push_back(tempSeg(st.cpuTemp));
             break;
         case IT_GPU: {
             out.push_back(usageSeg(g_disp.gpu));
-            if (g_s.showGpuTemp) {
-                double t = g_st.gpuTemp > 0 ? g_st.gpuTemp : (g_s.igpuFromCpu && g_st.cpuTemp > 0 ? g_st.cpuTemp : -1);
+            if (s.showGpuTemp) {
+                double t = st.gpuTemp > 0 ? st.gpuTemp : (s.igpuFromCpu && st.cpuTemp > 0 ? st.cpuTemp : -1);
                 out.push_back(tempSeg(t));
             }
             break;
         }
         case IT_RAM:
-            out.push_back(Seg{g_s.ramTotal ? Fmt(L"%.1f/%.1f %s", g_st.ramUsedGB, g_st.ramTotalGB, UG()) : Fmt(L"%.1f %s", g_st.ramUsedGB, UG()),
-                              g_s.ramTotal ? Fmt(L"99.9/99.9 %s", UG()) : Fmt(L"99.9 %s", UG()), g_st.ram >= g_s.warnUsage});
-            if (g_s.ramPct) out.push_back(usageSeg(g_st.ram));
+            out.push_back(Seg{s.ramTotal ? Fmt(L"%.1f/%.1f %s", st.ramUsedGB, st.ramTotalGB, UG()) : Fmt(L"%.1f %s", st.ramUsedGB, UG()),
+                              s.ramTotal ? Fmt(L"99.9/99.9 %s", UG()) : Fmt(L"99.9 %s", UG()), st.ram >= s.warnUsage});
+            if (s.ramPct) out.push_back(usageSeg(st.ram));
             break;
         case IT_DISK:
             out.push_back(usageSeg(g_disp.disk));
             break;
         case IT_DOWN:
         case IT_UP:
-            out.push_back(Seg{FmtSpeed(item == IT_DOWN ? g_disp.down : g_disp.up), g_s.bits ? std::wstring(L"999.9 Mbps") : Fmt(L"999.9 %s/s", UM()), false});
-            if (g_s.netTotal) out.push_back(Seg{FmtBytes(item == IT_DOWN ? g_st.todayDown : g_st.todayUp), Fmt(L"999.9 %s", UG()), false});
+            out.push_back(Seg{FmtSpeed(item == IT_DOWN ? g_disp.down : g_disp.up), s.bits ? std::wstring(L"999.9 Mbps") : Fmt(L"999.9 %s/s", UM()), false});
+            if (s.netTotal) out.push_back(Seg{FmtBytes(item == IT_DOWN ? st.todayDown : st.todayUp), Fmt(L"999.9 %s", UG()), false});
             break;
     }
 }
 
-static void Render(Overlay* ov) {
-    if (!ov->taskbar || !ov->hwnd) return;
+// font and measured text widths are cached per settings snapshot and monitor scale, not rebuilt every frame
+struct RenderCache {
+    std::unique_ptr<FontFamily> fam;
+    std::unique_ptr<Font> font;
+    std::unique_ptr<StringFormat> sf;
+    std::unique_ptr<Bitmap> mbmp;
+    std::unique_ptr<Graphics> mg;
+    std::unordered_map<std::wstring, float> widths;
+};
+static std::map<UINT, std::unique_ptr<RenderCache>> g_renderCaches;  // worker thread only
+static const Settings* g_renderCacheSettings = nullptr;
+
+static RenderCache& GetRenderCache(UINT dpi, float fontPx) {
+    if (g_renderCacheSettings != g_cfgPtr.load()) { g_renderCaches.clear(); g_renderCacheSettings = g_cfgPtr.load(); }
+    auto& slot = g_renderCaches[dpi];
+    if (!slot) {
+        slot = std::make_unique<RenderCache>();
+        const Settings& s = g_s;
+        slot->fam.reset(new FontFamily(s.fontFamily.c_str()));
+        if (!slot->fam->IsAvailable()) slot->fam.reset(new FontFamily(L"Segoe UI Variable Text"));
+        if (!slot->fam->IsAvailable()) slot->fam.reset(new FontFamily(L"Segoe UI"));
+        slot->font.reset(new Font(slot->fam.get(), fontPx, s.bold ? FontStyleBold : FontStyleRegular, UnitPixel));
+        slot->sf.reset(new StringFormat(StringFormat::GenericTypographic()));
+        slot->sf->SetFormatFlags(slot->sf->GetFormatFlags() | StringFormatFlagsMeasureTrailingSpaces | StringFormatFlagsNoWrap);
+        slot->sf->SetLineAlignment(StringAlignmentCenter);
+        slot->mbmp.reset(new Bitmap(1, 1, PixelFormat32bppPARGB));
+        slot->mg.reset(new Graphics(slot->mbmp.get()));
+    }
+    return *slot;
+}
+
+static void RenderOverlay(const OvRef& ref) {
+    const Settings& s = g_s;
     RECT trc;
-    if (!GetWindowRect(ov->taskbar, &trc)) return;
+    if (!GetWindowRect(ref.taskbar, &trc)) return;
 
     // wait (hidden) for the first measurement instead of flashing at a wrong spot
-    BtnInfo binfo = GetBtn(ov->taskbar);
-    bool useAuto = g_s.autoPos && binfo.ok && binfo.h >= 24;
-    if (g_s.autoPos && !useAuto && GetTickCount64() - ov->startTick < 4000) return;
-    if (g_fullscreen) { UpdatePosition(ov, false); return; }
+    BtnInfo binfo = GetBtn(ref.taskbar);
+    bool useAuto = s.autoPos && binfo.ok && binfo.h >= 24;
+    if (s.autoPos && !useAuto && GetTickCount64() - ref.startTick < 4000) return;
 
-    float sc = GetDpiForWindow(ov->taskbar) / 96.0f;
-    int H = g_s.height > 0 ? (int)(g_s.height * sc) : (trc.bottom - trc.top);
+    UINT dpi = GetDpiForWindow(ref.taskbar);
+    float sc = dpi / 96.0f;
+    int H = s.height > 0 ? (int)(s.height * sc) : (trc.bottom - trc.top);
     if (useAuto) H = binfo.h;
-    float fs = g_s.fontSize * sc;
-    float icon = fs * g_s.iconScale / 100.0f;
-    float gap = g_s.itemGap * sc, colGap = g_s.colGap * sc, pad = 4 * sc;
+    float fs = s.fontSize * sc;
+    float icon = fs * s.iconScale / 100.0f;
+    float gap = s.itemGap * sc, colGap = s.colGap * sc, pad = 4 * sc;
 
-    BYTE alpha = (BYTE)(255 * g_s.opacity / 100);
-    Color txt = g_s.hasColor ? Color(alpha, g_s.tr, g_s.tg, g_s.tb)
-                             : (g_lightTheme ? Color(alpha, 30, 30, 30) : Color(alpha, 240, 240, 240));
-    Color warnCol(alpha, g_s.wr, g_s.wg, g_s.wb);
+    BYTE alpha = (BYTE)(255 * s.opacity / 100);
+    Color txt = s.hasColor ? Color(alpha, s.tr, s.tg, s.tb)
+                           : (g_lightTheme.load() ? Color(alpha, 30, 30, 30) : Color(alpha, 240, 240, 240));
+    Color warnCol(alpha, s.wr, s.wg, s.wb);
 
-    std::unique_ptr<FontFamily> fam(new FontFamily(g_s.fontFamily.c_str()));
-    if (!fam->IsAvailable()) fam.reset(new FontFamily(L"Segoe UI Variable Text"));
-    if (!fam->IsAvailable()) fam.reset(new FontFamily(L"Segoe UI"));
-    Font font(fam.get(), fs, g_s.bold ? FontStyleBold : FontStyleRegular, UnitPixel);
-    StringFormat sf(StringFormat::GenericTypographic());
-    sf.SetFormatFlags(sf.GetFormatFlags() | StringFormatFlagsMeasureTrailingSpaces | StringFormatFlagsNoWrap);
-    sf.SetLineAlignment(StringAlignmentCenter);
+    RenderCache& rc = GetRenderCache(dpi, fs);
+    auto tw = [&](const std::wstring& str) {
+        auto it = rc.widths.find(str);
+        if (it != rc.widths.end()) return it->second;
+        RectF r;
+        rc.mg->MeasureString(str.c_str(), -1, rc.font.get(), PointF(0, 0), rc.sf.get(), &r);
+        rc.widths[str] = r.Width;
+        return r.Width;
+    };
 
-    Bitmap mbmp(1, 1, PixelFormat32bppPARGB);
-    Graphics mg(&mbmp);
-    auto tw = [&](const std::wstring& s) { RectF r; mg.MeasureString(s.c_str(), -1, &font, PointF(0, 0), &sf, &r); return r.Width; };
+    Stats st = GetStats();
 
     // layout: per column its items and segments
     struct ColLayout { std::vector<int> items; std::vector<std::vector<Seg>> segs; float w = 0; };
     std::vector<ColLayout> cols;
     int rows = 1;
-    for (const auto& c : g_s.cols) {
+    for (const auto& c : s.cols) {
         ColLayout cl;
         cl.items = c;
         rows = std::max<int>(rows, (int)c.size());
         for (int it : c) {
             std::vector<Seg> segs;
-            if (it != IT_NONE) BuildSegs(it, segs);
-            float w = g_s.icons ? icon + gap : 0;
+            if (it != IT_NONE) BuildSegs(it, st, segs);
+            float w = s.icons ? icon + gap : 0;
             for (size_t i = 0; i < segs.size(); i++) w += tw(segs[i].tmpl) + (i ? gap : 0);
             cl.w = std::max(cl.w, w);
             cl.segs.push_back(std::move(segs));
@@ -1153,7 +1598,7 @@ static void Render(Overlay* ov) {
     int W = std::max(1, (int)std::ceil(totalW));
     float rowH = (float)H / rows;
 
-    // draw into a DIB so we can use per-pixel alpha
+    // draw into a DIB so we can use per-pixel alpha; the finished bitmap is handed to the taskbar thread
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bi.bmiHeader.biWidth = W;
@@ -1161,18 +1606,16 @@ static void Render(Overlay* ov) {
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
-    HDC screen = GetDC(nullptr);
-    HDC mem = CreateCompatibleDC(screen);
     void* bits = nullptr;
-    HBITMAP dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!dib || !bits) { DeleteDC(mem); ReleaseDC(nullptr, screen); return; }
-    HGDIOBJ old = SelectObject(mem, dib);
-    ov->cells.clear();
+    HBITMAP dib = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!dib || !bits) { if (dib) DeleteObject(dib); return; }
+
+    auto frame = std::make_unique<Frame>();
     {
         Bitmap bmp(W, H, W * 4, PixelFormat32bppPARGB, (BYTE*)bits);
         Graphics g(&bmp);
         // an almost invisible fill keeps the whole area clickable / hoverable
-        g.Clear(g_s.interactive ? Color(2, 0, 0, 0) : Color(0, 0, 0, 0));
+        g.Clear(s.interactive ? Color(2, 0, 0, 0) : Color(0, 0, 0, 0));
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
@@ -1184,10 +1627,10 @@ static void Render(Overlay* ov) {
                 int item = cl.items[r];
                 if (item == IT_NONE) continue;
                 float rowY = (nItems == 1 && rows > 1) ? (H - rowH) / 2 : r * rowH;
-                ov->cells.push_back({{(LONG)x, (LONG)rowY, (LONG)(x + cl.w), (LONG)(rowY + rowH)}, item});
+                frame->cells.push_back({{(LONG)x, (LONG)rowY, (LONG)(x + cl.w), (LONG)(rowY + rowH)}, item});
 
                 // sparkline behind the item
-                if (g_s.spark) {
+                if (s.spark) {
                     double hist[60];
                     CopyHistory(item, hist);
                     double mx = (item == IT_DOWN || item == IT_UP) ? 100 * 1024.0 : 100.0;
@@ -1197,7 +1640,7 @@ static void Render(Overlay* ov) {
                     for (int i = 0; i < 60; i++) pts[i + 1] = PointF(x + cl.w * i / 59.0f, bottom - (float)(hist[i] / mx) * hgt);
                     pts[0] = PointF(x, bottom);
                     pts[61] = PointF(x + cl.w, bottom);
-                    BYTE sa = (BYTE)(alpha * g_s.sparkOp / 100);
+                    BYTE sa = (BYTE)(alpha * s.sparkOp / 100);
                     SolidBrush fill(Color((BYTE)(sa * 0.45f), txt.GetR(), txt.GetG(), txt.GetB()));
                     g.FillPolygon(&fill, pts, 62);
                     Pen line(Color(sa, txt.GetR(), txt.GetG(), txt.GetB()), std::max(1.0f, sc * 0.9f));
@@ -1205,7 +1648,7 @@ static void Render(Overlay* ov) {
                 }
 
                 float tx = x;
-                if (g_s.icons) {
+                if (s.icons) {
                     float iy = rowY + (rowH - icon) / 2;
                     switch (item) {
                         case IT_CPU: IconCpu(g, x, iy, icon, txt); break;
@@ -1219,8 +1662,8 @@ static void Render(Overlay* ov) {
                 }
                 const auto& segs = cl.segs[r];
                 for (size_t i = 0; i < segs.size(); i++) {
-                    SolidBrush b(g_s.warn && segs[i].warn ? warnCol : txt);
-                    g.DrawString(segs[i].text.c_str(), -1, &font, RectF(tx, rowY, 400 * sc, rowH), &sf, &b);
+                    SolidBrush b(s.warn && segs[i].warn ? warnCol : txt);
+                    g.DrawString(segs[i].text.c_str(), -1, rc.font.get(), RectF(tx, rowY, 400 * sc, rowH), rc.sf.get(), &b);
                     tx += tw(segs[i].tmpl) + gap;
                 }
             }
@@ -1228,226 +1671,22 @@ static void Render(Overlay* ov) {
         }
     }
 
-    SIZE size = {W, H};
-    POINT src = {0, 0};
-    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    ov->lastW = W; ov->lastH = H; ov->lastAuto = useAuto;
-    SetWindowPos(ov->hwnd, nullptr, 0, 0, W, H, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
-    UpdateLayeredWindow(ov->hwnd, screen, nullptr, &size, mem, &src, 0, &bf, ULW_ALPHA);
-
-    SelectObject(mem, old);
-    DeleteObject(dib);
-    DeleteDC(mem);
-    ReleaseDC(nullptr, screen);
-
-    UpdatePosition(ov, true);
+    frame->dib = dib;
+    frame->W = W;
+    frame->H = H;
+    frame->useAuto = useAuto;
+    Frame* raw = frame.release();
+    if (!PostMessageW(ref.hwnd, WM_FRAME, 0, (LPARAM)raw)) {  // window is gone
+        DeleteObject(raw->dib);
+        delete raw;
+    }
 }
 
 static void RenderAll() {
-    for (Overlay* ov : g_overlays) Render(ov);
+    for (const OvRef& ref : g_refs) RenderOverlay(ref);
 }
 
-// -------------------------------------------------------------- tooltips ----
-
-static std::wstring ProcLines(bool byCpu) {
-    std::wstring s;
-    AcquireSRWLockShared(&g_procLock);
-    const auto& v = byCpu ? g_topCpu : g_topMem;
-    for (const auto& p : v)
-        s += byCpu ? Fmt(L"\r\n  %s  %.0f%%", p.name.c_str(), p.cpu)
-                   : Fmt(L"\r\n  %s  %s", p.name.c_str(), FmtBytes((double)p.mem).c_str());
-    ReleaseSRWLockShared(&g_procLock);
-    return s;
-}
-
-static std::wstring BuildTip(int item) {
-    g_procWanted = GetTickCount64();
-    switch (item) {
-        case IT_CPU: {
-            std::wstring s = Fmt(L"CPU  %.0f%%", g_st.cpu);
-            if (g_st.cpuTemp > 0) s += L"\r\nTemperature  " + FmtTemp(g_st.cpuTemp) + (g_cpuTempSrc == 2 ? L"  (Windows thermal zone, approximate)" : L"");
-            else s += L"\r\nTemperature  not available (run LibreHardwareMonitor)";
-            std::wstring p = ProcLines(true);
-            if (!p.empty()) s += L"\r\nBusiest apps:" + p;
-            return s;
-        }
-        case IT_GPU: {
-            std::wstring s = L"GPU  " + FmtPct(g_st.gpu);
-            if (g_st.gpuTemp > 0) s += L"\r\nTemperature  " + FmtTemp(g_st.gpuTemp);
-            else if (g_s.igpuFromCpu && g_st.cpuTemp > 0) s += L"\r\nTemperature  " + FmtTemp(g_st.cpuTemp) + L"  (shared with the CPU)";
-            else s += L"\r\nTemperature  not available";
-            return s;
-        }
-        case IT_RAM: {
-            std::wstring s = Fmt(L"Memory  %.1f of %.1f %s used  (%.0f%%)\r\nFree  %.1f %s", g_st.ramUsedGB, g_st.ramTotalGB, UG(), g_st.ram,
-                                 g_st.ramTotalGB - g_st.ramUsedGB, UG());
-            std::wstring p = ProcLines(false);
-            if (!p.empty()) s += L"\r\nBiggest apps:" + p;
-            return s;
-        }
-        case IT_DISK:
-            return Fmt(L"Disk activity  %s\r\nRead  %s\r\nWrite  %s", FmtPct(g_st.disk).c_str(), FmtSpeed(g_st.diskRead).c_str(),
-                       FmtSpeed(g_st.diskWrite).c_str());
-        case IT_DOWN:
-        case IT_UP:
-            return Fmt(L"Download  %s\r\nUpload  %s\r\nToday  down %s, up %s", FmtSpeed(g_st.down).c_str(), FmtSpeed(g_st.up).c_str(),
-                       FmtBytes(g_st.todayDown).c_str(), FmtBytes(g_st.todayUp).c_str());
-    }
-    return L"";
-}
-
-// puts the tooltip right above the overlay, using the tooltip window's real size
-static void PositionTip(Overlay* ov, int item, int guessH) {
-    RECT wr;
-    GetWindowRect(ov->hwnd, &wr);
-    int w = 300, h = guessH;
-    if (ov->tipVisible) {
-        RECT tr;
-        if (GetWindowRect(ov->tip, &tr) && tr.bottom - tr.top > 4) { w = tr.right - tr.left; h = tr.bottom - tr.top; }
-    }
-    int cx = wr.left;
-    for (const Cell& c : ov->cells) if (c.item == item) { cx = wr.left + c.r.left; break; }
-    HMONITOR mon = MonitorFromWindow(ov->hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = {sizeof(mi)};
-    GetMonitorInfoW(mon, &mi);
-    int x = std::clamp<int>(cx, mi.rcMonitor.left, std::max<int>(mi.rcMonitor.left, mi.rcMonitor.right - w));
-    int y = wr.top - h - 8;
-    SendMessageW(ov->tip, TTM_TRACKPOSITION, 0, MAKELPARAM(x, y));
-}
-
-// refresh = true when called by the timer for an already visible tooltip
-static void ShowTip(Overlay* ov, int item, bool refresh) {
-    if (!ov->tip || !g_s.tips) return;
-    if (refresh) {
-        // not live: only the first moments are updated (so top-process data can arrive), then the text stays still
-        if (!ov->tipVisible || (!g_s.tipLive && GetTickCount64() - ov->tipStart > 2500)) return;
-    } else {
-        ov->tipStart = GetTickCount64();
-    }
-    std::wstring text = BuildTip(item);
-    if (refresh && text == ov->tipText) return;  // nothing changed: do not touch the tooltip at all
-
-    TOOLINFOW ti = {sizeof(ti)};
-    ti.hwnd = ov->hwnd;
-    ti.uId = 1;
-    ti.lpszText = (LPWSTR)text.c_str();
-    SendMessageW(ov->tip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
-    ov->tipText = text;
-
-    int lines = 1;
-    for (wchar_t c : text) if (c == L'\n') lines++;
-    int guessH = (int)(lines * g_s.fontSize * 1.5 + 18);
-    PositionTip(ov, item, guessH);
-    if (!ov->tipVisible) {  // activate only once; updates afterwards just change text and position, so nothing flashes
-        SendMessageW(ov->tip, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
-        ov->tipVisible = true;
-    } else {
-        SendMessageW(ov->tip, TTM_UPDATE, 0, 0);
-    }
-    PositionTip(ov, item, guessH);  // again, now that the window has its real size
-}
-
-static void HideTip(Overlay* ov) {
-    if (!ov->tip) return;
-    TOOLINFOW ti = {sizeof(ti)};
-    ti.hwnd = ov->hwnd;
-    ti.uId = 1;
-    SendMessageW(ov->tip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&ti);
-    ov->tipVisible = false;
-    ov->tipText.clear();
-}
-
-static void RunClickAction() {
-    switch (g_s.clickAction) {
-        case 0: ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
-        case 1: ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL); break;
-        case 2:
-            if (!g_s.customCmd.empty()) ShellExecuteW(nullptr, L"open", g_s.customCmd.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            break;
-    }
-}
-
-static LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    Overlay* ov = (Overlay*)GetWindowLongPtrW(h, GWLP_USERDATA);
-    switch (m) {
-        case WM_MOUSEMOVE: {
-            if (!ov) break;
-            if (!ov->tracking) {
-                TRACKMOUSEEVENT t = {sizeof(t), TME_LEAVE, h, 0};
-                TrackMouseEvent(&t);
-                ov->tracking = true;
-            }
-            POINT pt = {(short)LOWORD(l), (short)HIWORD(l)};
-            int item = -1;
-            for (const Cell& c : ov->cells) if (PtInRect(&c.r, pt)) { item = c.item; break; }
-            if (item != ov->hoverItem) {
-                ov->hoverItem = item;
-                if (item >= 0) ShowTip(ov, item, false); else HideTip(ov);
-            }
-            return 0;
-        }
-        case WM_MOUSELEAVE:
-            if (ov) { ov->tracking = false; ov->hoverItem = -1; HideTip(ov); }
-            return 0;
-        case WM_LBUTTONUP:
-            if (ov) HideTip(ov);
-            RunClickAction();
-            return 0;
-        case WM_RBUTTONUP: {
-            if (ov) HideTip(ov);
-            HMENU menu = CreatePopupMenu();
-            AppendMenuW(menu, MF_STRING, 1, L"Open Task Manager");
-            AppendMenuW(menu, MF_STRING, 2, L"Open Resource Monitor");
-            AppendMenuW(menu, MF_STRING, 3, L"Open Performance Monitor");
-            POINT pt;
-            GetCursorPos(&pt);
-            SetForegroundWindow(h);
-            int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, h, nullptr);
-            PostMessageW(h, WM_NULL, 0, 0);
-            DestroyMenu(menu);
-            if (cmd == 1) ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
-            else if (cmd == 2) ShellExecuteW(nullptr, L"open", L"resmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
-            else if (cmd == 3) ShellExecuteW(nullptr, L"open", L"perfmon.exe", nullptr, nullptr, SW_SHOWNORMAL);
-            return 0;
-        }
-        case WM_MOUSEACTIVATE:
-            return MA_NOACTIVATE;
-    }
-    return DefWindowProcW(h, m, w, l);
-}
-
-static Overlay* CreateOverlay(HWND taskbar) {
-    DWORD ex = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
-    if (!g_s.interactive) ex |= WS_EX_TRANSPARENT;
-    // owner = taskbar: the overlay stays above it in every z-band (e.g. while the Start menu is open)
-    HWND hwnd = CreateWindowExW(ex, kClass, L"", WS_POPUP, 0, 0, 10, 10, taskbar, nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (!hwnd) return nullptr;
-    Overlay* ov = new Overlay();
-    ov->taskbar = taskbar;
-    ov->hwnd = hwnd;
-    ov->startTick = GetTickCount64();
-    SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)ov);
-
-    ov->tip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP | TTS_NOANIMATE | TTS_NOFADE, 0, 0, 0, 0, hwnd,
-                              nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (ov->tip) {
-        TOOLINFOW ti = {sizeof(ti)};
-        ti.uFlags = TTF_TRACK | TTF_ABSOLUTE;
-        ti.hwnd = hwnd;
-        ti.uId = 1;
-        ti.lpszText = (LPWSTR)L"";
-        SendMessageW(ov->tip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
-        SendMessageW(ov->tip, TTM_SETMAXTIPWIDTH, 0, 600);
-    }
-    Wh_Log(L"overlay created for taskbar %p owner=%p", (void*)taskbar, (void*)GetWindow(hwnd, GW_OWNER));
-    return ov;
-}
-
-static void DestroyOverlay(Overlay* ov) {
-    if (ov->hwnd) DestroyWindow(ov->hwnd);
-    delete ov;
-}
-
+// ---- keeping the overlay list in sync with the taskbars / monitors ----
 static BOOL CALLBACK EnumTaskbars(HWND h, LPARAM lp) {
     wchar_t cls[64];
     if (!GetClassNameW(h, cls, 64)) return TRUE;
@@ -1461,25 +1700,37 @@ static BOOL CALLBACK EnumTaskbars(HWND h, LPARAM lp) {
     return TRUE;
 }
 
-// adds overlays for new taskbars (monitors), removes those of gone ones, refreshes shared flags
+static bool LightTheme() {
+    DWORD v = 0, sz = sizeof(v);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS)
+        return v != 0;
+    return false;
+}
+
 static void SyncOverlays() {
     std::vector<HWND> found;
     EnumWindows(EnumTaskbars, (LPARAM)&found);
 
     AcquireSRWLockExclusive(&g_btnLock);
+    bool changed = g_tbList != found;
     g_tbList = found;
     ReleaseSRWLockExclusive(&g_btnLock);
+    if (changed) SetEvent(g_uiaEvent);
 
-    for (size_t i = 0; i < g_overlays.size();) {
-        if (std::find(found.begin(), found.end(), g_overlays[i]->taskbar) == found.end() || !IsWindow(g_overlays[i]->taskbar)) {
-            DestroyOverlay(g_overlays[i]);
-            g_overlays.erase(g_overlays.begin() + i);
+    for (size_t i = 0; i < g_refs.size();) {
+        if (std::find(found.begin(), found.end(), g_refs[i].taskbar) == found.end() || !IsWindow(g_refs[i].taskbar)) {
+            RunFromWindowThread(g_refs[i].taskbar, DestroyOverlayOnThread, g_refs[i].hwnd);
+            g_refs.erase(g_refs.begin() + i);
         } else i++;
     }
     for (HWND tb : found) {
         bool have = false;
-        for (Overlay* ov : g_overlays) if (ov->taskbar == tb) have = true;
-        if (!have) if (Overlay* ov = CreateOverlay(tb)) g_overlays.push_back(ov);
+        for (const OvRef& r : g_refs) if (r.taskbar == tb) have = true;
+        if (have) continue;
+        CreateParam cp = {tb, nullptr};
+        if (RunFromWindowThread(tb, CreateOverlayOnThread, &cp) && cp.result)
+            g_refs.push_back({tb, cp.result, GetTickCount64()});
     }
 
     // hide in full-screen apps / games, but only if that state lasts a few seconds
@@ -1492,148 +1743,152 @@ static void SyncOverlays() {
     g_lightTheme = LightTheme();
 }
 
-// ---------------------------------------------------------- main window ----
-
 static bool EaseDisp() {
+    Stats st = GetStats();
     double s = g_s.smoothing / 100.0;
     bool moving = false;
     auto ease = [&](double& d, double target) {
-        if (s <= 0.0 || d < 0 || target < 0) { if (d != target) moving = moving || false; d = target; return; }
+        if (s <= 0.0 || d < 0 || target < 0) { d = target; return; }
         double nd = d + (target - d) * (1.0 - s) * 0.35;
         if (std::fabs(target - nd) < std::max(0.05, std::fabs(target) * 0.004)) nd = target;
         if (nd != target) moving = true;
         d = nd;
     };
-    ease(g_disp.cpu, g_st.cpu);
-    ease(g_disp.gpu, g_st.gpu);
-    ease(g_disp.ram, g_st.ram);
-    ease(g_disp.disk, g_st.disk);
-    ease(g_disp.down, g_st.down);
-    ease(g_disp.up, g_st.up);
+    ease(g_disp.cpu, st.cpu);
+    ease(g_disp.gpu, st.gpu);
+    ease(g_disp.ram, st.ram);
+    ease(g_disp.disk, st.disk);
+    ease(g_disp.down, st.down);
+    ease(g_disp.up, st.up);
     return moving;
-}
-
-static void ApplyInteractiveStyle() {
-    for (Overlay* ov : g_overlays) {
-        LONG_PTR ex = GetWindowLongPtrW(ov->hwnd, GWL_EXSTYLE);
-        LONG_PTR want = g_s.interactive ? (ex & ~WS_EX_TRANSPARENT) : (ex | WS_EX_TRANSPARENT);
-        if (want != ex) SetWindowLongPtrW(ov->hwnd, GWL_EXSTYLE, want);
-    }
 }
 
 static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
         case WM_TIMER:
-            if (w == 2) {  // fast tick: follow the taskbar
-                for (Overlay* ov : g_overlays) {
-                    UpdatePosition(ov, false);
-                    if (!ov->lastW) Render(ov);
-                    else if (ov->lastAuto) {
-                        BtnInfo b = GetBtn(ov->taskbar);
-                        if (b.ok && b.h != ov->lastH) Render(ov);
-                    }
-                }
-            } else if (w == 3) {  // easing animation
-                bool moving = EaseDisp();
-                RenderAll();
-                if (!moving) KillTimer(h, 3);
-            } else if (w == 4) {
-                SyncOverlays();
-            } else if (w == 1) {  // new sample available
+            if (w == 1) {  // a new sample is due
                 if (g_s.smoothing > 0) {
                     SetTimer(h, 3, 33, nullptr);
                 } else {
                     EaseDisp();
                     RenderAll();
                 }
-                for (Overlay* ov : g_overlays) if (ov->hoverItem >= 0) ShowTip(ov, ov->hoverItem, true);  // quiet refresh
+                // keep a visible tooltip fresh: its owner thread does the work
+                NotifyOverlays(nullptr);
+            } else if (w == 3) {  // easing animation, stops by itself once the values settled
+                bool moving = EaseDisp();
+                RenderAll();
+                if (!moving) KillTimer(h, 3);
+            } else if (w == 4) {
+                SyncOverlays();
+            } else if (w == 6) {  // overlays that have not got their first picture yet
+                for (const OvRef& ref : g_refs) RenderOverlay(ref);
+                if (!g_refs.empty() && GetTickCount64() - g_refs.front().startTick > 6000) KillTimer(h, 6);
             }
             return 0;
         case WM_CLOSE:
             PostQuitMessage(0);
             return 0;
-        case WM_SETTINGS:
+        case WM_SETTINGS: {
             LoadSettings();
             SetTimer(h, 1, g_s.refreshMs, nullptr);
             SyncOverlays();
-            ApplyInteractiveStyle();
+            for (const OvRef& ref : g_refs) PostMessageW(ref.hwnd, WM_APPLYSTYLE, 0, 0);
+            SetEvent(g_uiaEvent);
             EaseDisp();
             RenderAll();
             return 0;
+        }
     }
     return DefWindowProcW(h, m, w, l);
 }
 
 static DWORD WINAPI Worker(LPVOID) {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    // only the explorer.exe process that owns the taskbar draws the overlay; others stop right away
+    bool isShell = false;
+    for (;;) {
+        if (g_stop) break;
+        HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (tb) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(tb, &pid);
+            isShell = pid == GetCurrentProcessId();
+            break;  // the taskbar exists: it either belongs to this process or this is a folder-window process
+        }
+        if (WaitForSingleObject(g_stopEvent, 500) == WAIT_OBJECT_0) break;  // shell still starting up
+    }
+    if (!isShell || g_stop) return 0;
+
     GdiplusStartupInput gin;
     ULONG_PTR token = 0;
     GdiplusStartup(&token, &gin, nullptr);
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
+    g_runMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
-    // only the explorer.exe process that owns the taskbar draws the overlay
-    bool found = false;
-    for (int i = 0; i < 240 && !g_stop && !found; i++) {
-        HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
-        DWORD pid = 0;
-        if (tb) GetWindowThreadProcessId(tb, &pid);
-        if (tb && pid == GetCurrentProcessId()) found = true; else Sleep(500);
-    }
+    HINSTANCE inst = GetModuleInstance();
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = OverlayProc;
+    wc.hInstance = inst;
+    wc.lpszClassName = kClass;
+    wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+    bool overlayClass = RegisterClassW(&wc) != 0;
+    WNDCLASSW mc = {};
+    mc.lpfnWndProc = MsgProc;
+    mc.hInstance = inst;
+    mc.lpszClassName = kMsgClass;
+    bool msgClass = RegisterClassW(&mc) != 0;
 
-    if (found && !g_stop) {
-        HINSTANCE inst = GetModuleHandleW(nullptr);
-        WNDCLASSW wc = {};
-        wc.lpfnWndProc = OverlayProc;
-        wc.hInstance = inst;
-        wc.lpszClassName = kClass;
-        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        RegisterClassW(&wc);
-        WNDCLASSW mc = {};
-        mc.lpfnWndProc = MsgProc;
-        mc.hInstance = inst;
-        mc.lpszClassName = kMsgClass;
-        RegisterClassW(&mc);
-        g_msgWnd = CreateWindowExW(0, kMsgClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
+    HWND msgWnd = nullptr;
+    if (overlayClass && msgClass) msgWnd = CreateWindowExW(0, kMsgClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
+    else Wh_Log(L"Window class registration failed");
 
-        if (g_msgWnd) {
-            HMODULE u32 = GetModuleHandleW(L"user32.dll");
-            g_getBand = (GetWindowBand_t)GetProcAddress(u32, "GetWindowBand");
-            g_setBand = (SetWindowBand_t)GetProcAddress(u32, "SetWindowBand");
-            Wh_Log(L"started; GetWindowBand=%d SetWindowBand=%d", g_getBand != nullptr, g_setBand != nullptr);
+    if (msgWnd) {
+        g_msgWnd.store(msgWnd);
+        if (g_stop) PostQuitMessage(0);  // Wh_ModUninit ran before the window existed
 
-            LoadNetToday();
-            g_lightTheme = LightTheme();
-            SyncOverlays();
-            g_samplerThread = CreateThread(nullptr, 0, SamplerWorker, nullptr, 0, nullptr);
-            g_uiaThread = CreateThread(nullptr, 0, UiaWorker, nullptr, 0, nullptr);
-            g_locHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, LocationEventProc,
-                                            GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
-            SetTimer(g_msgWnd, 1, g_s.refreshMs, nullptr);
-            SetTimer(g_msgWnd, 2, 10, nullptr);
-            SetTimer(g_msgWnd, 4, 1000, nullptr);
+        LoadNetToday();
+        g_lightTheme = LightTheme();
+        g_samplerThread = CreateThread(nullptr, 0, SamplerWorker, nullptr, 0, nullptr);
+        g_uiaThread = CreateThread(nullptr, 0, UiaWorker, nullptr, 0, nullptr);
+        SyncOverlays();
 
-            MSG msg;
-            while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
+        // event hooks (worker thread's message loop delivers them): taskbar movement, focus and minimise changes
+        HWINEVENTHOOK hooks[3] = {
+            SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, GetCurrentProcessId(), 0,
+                            WINEVENT_OUTOFCONTEXT),
+            SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT),
+            SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT),
+        };
 
-            g_stop = true;
-            if (g_locHook) { UnhookWinEvent(g_locHook); g_locHook = nullptr; }
-            for (Overlay* ov : g_overlays) DestroyOverlay(ov);
-            g_overlays.clear();
-            if (g_samplerThread) { WaitForSingleObject(g_samplerThread, 4000); CloseHandle(g_samplerThread); g_samplerThread = nullptr; }
-            if (g_uiaThread) { WaitForSingleObject(g_uiaThread, 3000); CloseHandle(g_uiaThread); g_uiaThread = nullptr; }
-            DestroyWindow(g_msgWnd);
-            g_msgWnd = nullptr;
+        SetTimer(msgWnd, 1, g_s.refreshMs, nullptr);
+        SetTimer(msgWnd, 4, 1000, nullptr);
+        SetTimer(msgWnd, 6, 250, nullptr);
+
+        MSG msg;
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
-        UnregisterClassW(kClass, inst);
-        UnregisterClassW(kMsgClass, inst);
-    }
 
+        g_stop = true;
+        SetEvent(g_stopEvent);
+        for (HWINEVENTHOOK hk : hooks) if (hk) UnhookWinEvent(hk);
+        KillTimer(msgWnd, 1); KillTimer(msgWnd, 3); KillTimer(msgWnd, 4); KillTimer(msgWnd, 6);
+        // the overlay windows live on the taskbar's thread: destroy them there
+        for (const OvRef& ref : g_refs) RunFromWindowThread(ref.taskbar, DestroyOverlayOnThread, ref.hwnd);
+        g_refs.clear();
+        // no timeout: a thread still running inside the mod after it is unloaded would crash Explorer
+        if (g_samplerThread) { WaitForSingleObject(g_samplerThread, INFINITE); CloseHandle(g_samplerThread); g_samplerThread = nullptr; }
+        if (g_uiaThread) { WaitForSingleObject(g_uiaThread, INFINITE); CloseHandle(g_uiaThread); g_uiaThread = nullptr; }
+        g_msgWnd.store(nullptr);
+        DestroyWindow(msgWnd);
+    }
+    if (overlayClass) UnregisterClassW(kClass, inst);
+    if (msgClass) UnregisterClassW(kMsgClass, inst);
+
+    g_renderCaches.clear();  // GDI+ objects must be gone before GdiplusShutdown
     GdiplusShutdown(token);
-    CoUninitialize();
     return 0;
 }
 
@@ -1642,21 +1897,30 @@ static DWORD WINAPI Worker(LPVOID) {
 BOOL Wh_ModInit() {
     LoadSettings();
     g_stop = false;
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_uiaEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_uiaEvent) return FALSE;
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     return g_thread != nullptr;
 }
 
 void Wh_ModSettingsChanged() {
-    // settings are re-read on the UI thread, which owns them
-    if (g_msgWnd) PostMessageW(g_msgWnd, WM_SETTINGS, 0, 0);
+    // settings are applied on the worker thread
+    if (HWND wnd = g_msgWnd.load()) PostMessageW(wnd, WM_SETTINGS, 0, 0);
 }
 
 void Wh_ModUninit() {
     g_stop = true;
-    if (g_msgWnd) PostMessageW(g_msgWnd, WM_CLOSE, 0, 0);
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (HWND wnd = g_msgWnd.load()) PostMessageW(wnd, WM_CLOSE, 0, 0);
     if (g_thread) {
-        WaitForSingleObject(g_thread, 8000);
+        WaitForSingleObject(g_thread, INFINITE);  // no timeout: see the note above
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+    if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
+    if (g_uiaEvent) { CloseHandle(g_uiaEvent); g_uiaEvent = nullptr; }
+    std::lock_guard<std::mutex> lock(g_cfgMutex);
+    g_cfgAll.clear();
+    g_cfgPtr.store(nullptr);
 }
