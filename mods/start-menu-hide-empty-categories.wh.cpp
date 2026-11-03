@@ -559,7 +559,7 @@ void __cdecl ReplaceAll_Hook(void* self, void* items) {
 
 bool HookStartMenuDllSymbols(HMODULE module) {
     // StartMenu.dll, StartUI.dll
-    WindhawkUtils::SYMBOL_HOOK startMenuDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             // Optional. Only an extra trigger for the tile check (a right-click on the menu).
             {
@@ -587,7 +587,7 @@ bool HookStartMenuDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"[start] Windows build %ls: could not hook the Start menu; empty category tiles will not be hidden",
                WindowsBuildString().c_str());
         return false;
