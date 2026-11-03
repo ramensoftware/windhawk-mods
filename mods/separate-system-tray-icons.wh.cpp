@@ -270,7 +270,7 @@ SOFTWARE.
       - "10": 10%
     - soundClickAction: sound_output
       $name: Sound click action
-      $description: "What happens when the separated sound icon is clicked. Open sound output picker simulates Ctrl+Win+V, which can also be received by the focused app."
+      $description: "What happens when the separated sound icon is clicked. Open sound output picker opens the native flyout directly through its Windows URI."
       $options:
       - quick_settings: Open Control Center
       - sound_output: Open sound output picker
@@ -1318,10 +1318,10 @@ static void OpenNetwork(std::function<void()> launched = {}) {
     LaunchUri(L"ms-availablenetworks:", std::move(launched));
 }
 
-static void OpenSoundOutput() {
-    // Ctrl+Win+V is Windows' native sound-output picker command.
-    if (!SendShortcut(MOD_CONTROL | MOD_WIN, 'V'))
-        Wh_Log(L"Failed to invoke the native sound output picker shortcut.");
+static void OpenSoundOutput(std::function<void()> launched = {}) {
+    // Activate the native Sound output page without injecting keyboard input.
+    // Use the shell worker, just like the Bluetooth and network flyouts.
+    LaunchUri(L"ms-actioncenter:controlcenter/volume", std::move(launched));
 }
 
 static std::atomic<int> g_airplaneModeState{-1};
@@ -1728,8 +1728,7 @@ static void OpenBluetoothFileTransfer(bool send) {
 
 static void OpenSound(std::function<void()> launched = {}) {
     if (_wcsicmp(g_settings.soundClickAction.c_str(), L"sound_output") == 0) {
-        OpenSoundOutput();
-        if (launched) launched();
+        OpenSoundOutput(std::move(launched));
         return;
     }
 
@@ -6216,8 +6215,7 @@ static std::vector<ButtonKind> GetVisibleButtonOrder() {
 
 static bool SoundUsesQuickSettings() {
     // The native output picker needs the same tracked close path as Quick
-    // Settings. Ctrl+Win+V itself only opens the picker on recent Windows
-    // builds; it doesn't reliably toggle it closed on a second invocation.
+    // Settings; URI activation doesn't reliably toggle it closed.
     return _wcsicmp(g_settings.soundClickAction.c_str(), L"quick_settings") == 0 ||
            _wcsicmp(g_settings.soundClickAction.c_str(), L"sound_output") == 0;
 }
@@ -6300,6 +6298,9 @@ static void CaptureOpenedTrayFlyoutAsync(ButtonKind kind) {
     g_openedTrayFlyout[index] = nullptr;
     g_trayFlyoutFocusHandoffUntil[index] = 0;
     HANDLE thread = StartOwnedWorker([kind, index] {
+        const HWND initialForeground = GetForegroundWindow();
+        const bool soundOutput = kind == ButtonKind::Sound &&
+            _wcsicmp(g_settings.soundClickAction.c_str(), L"sound_output") == 0;
         // The URI action creates the flyout asynchronously. Record only the
         // foreground shell window created by this click; never scan arbitrary
         // windows later when toggling it closed. Some builds create the sound
@@ -6307,6 +6308,31 @@ static void CaptureOpenedTrayFlyoutAsync(ButtonKind kind) {
         for (int i = 0; i < 40 && !g_unloading; ++i) {
             Sleep(25);
             HWND hwnd = GetForegroundWindow();
+            if (soundOutput && !IsRecordedTrayFlyout(hwnd)) {
+                // URI activation can show Control Center without activating
+                // it. Foreground-only capture then misses it altogether, and
+                // Windows never starts its normal dismiss-on-deactivate path.
+                // Stop if the user has already switched to another window.
+                if (hwnd != initialForeground && !IsTaskbarForeground(hwnd)) return;
+                struct Search { HWND window{}; unsigned count{}; } search;
+                EnumWindows([](HWND window, LPARAM param) -> BOOL {
+                    wchar_t name[128]{};
+                    if (IsWindowVisible(window) &&
+                        GetClassNameW(window, name, ARRAYSIZE(name)) &&
+                        _wcsicmp(name, L"ControlCenterWindow") == 0 &&
+                        IsRecordedTrayFlyout(window)) {
+                        auto& result = *reinterpret_cast<Search*>(param);
+                        result.window = window;
+                        ++result.count;
+                    }
+                    return TRUE;
+                }, reinterpret_cast<LPARAM>(&search));
+                // Never activate an ambiguous or unrelated shell window.
+                if (search.count == 1 && GetForegroundWindow() == hwnd) {
+                    if (SetForegroundWindow(search.window))
+                        hwnd = GetForegroundWindow();
+                }
+            }
             if (IsRecordedTrayFlyout(hwnd)) {
                 g_openedTrayFlyout[index] = hwnd;
                 g_openedTrayFlyoutTick[index] = GetTickCount64();
