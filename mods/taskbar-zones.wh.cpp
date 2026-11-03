@@ -1768,13 +1768,14 @@ HRESULT WINAPI ArrangeOverride_Hook(
         void* identity = winrt::get_abi(layout);
         if (auto cached = g_layoutOwners.find(identity); cached != g_layoutOwners.end()) {
             bool currentOwner = false;
+            FrameworkElement currentElement{nullptr};
             if (cached->second.layout.get() == layout &&
                 IsTaskbarWindow(cached->second.window) &&
                 GetWindowThreadProcessId(cached->second.window, nullptr) == GetCurrentThreadId()) {
                 // A detached-but-alive Layout must not be reused for another
                 // taskbar after XAML hosts are recreated.
                 ScopedTaskbarContext currentContext(cached->second.window);
-                auto currentElement = GetTaskbarRepeater();
+                currentElement = GetTaskbarRepeater();
                 auto currentRepeater = currentElement
                     ? currentElement.try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>()
                     : nullptr;
