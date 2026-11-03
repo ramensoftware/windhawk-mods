@@ -44,7 +44,10 @@ notification.
 
 You can have SnapSentry rename each new screenshot from the window that was in
 front when the new file was observed, together with a timestamp, so a file ends up named for
-what it shows instead of Screenshot (1). The file stays in the same folder.
+what it shows instead of Screenshot (1). The file stays in the same folder. If the
+window has no title, such as the taskbar, the program's name is used instead. Turn on
+**Name by time only** to leave the window out and name each file with just the
+timestamp, which keeps names unique for scripts and other tools watching the folder.
 
 ![Screenshots renamed after the window they were taken from](https://raw.githubusercontent.com/mario0318/SnapSentry/70157e72808d7788583e09480e4011e95e8e8868/assets/demo-rename.png)
 
@@ -81,10 +84,10 @@ folder.
 ## The notification
 
 The popup is a real Windows notification, so it matches your light or dark theme.
-While the popup is turned on, SnapSentry leaves two things on your machine so the
-notification buttons work, a SnapSentry shortcut in your Start Menu programs
-folder and one registry entry. Turning the popup off or disabling the mod removes
-both again. Windows may keep SnapSentry listed under Settings > System >
+While the popup is turned on, a temporary registry entry gives the notification
+its name, icon and working buttons. Windows discards it when you sign out, and
+turning the popup off or disabling the mod removes it right away. Windows may
+keep SnapSentry listed under Settings > System >
 Notifications afterwards, along with your banner and sound choices for it. If
 the notification can't be shown, SnapSentry falls back to a standard dialog. If you have turned its notifications off, it takes
 that as a cue to stay quiet: it still copies to the clipboard but shows no dialog
@@ -174,7 +177,7 @@ page](https://github.com/mario0318/SnapSentry/issues).
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Windows may keep SnapSentry listed under Settings > System > Notifications. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. While it is on, a temporary registry entry gives the notification its name and buttons. Windows discards it at sign-out, and SnapSentry removes it when you turn this off or disable the mod. Windows may keep SnapSentry listed under Settings > System > Notifications. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. A countdown no longer holds up the next screenshot, which is copied straight away. Popups appear one at a time. Maximum 3600.
@@ -183,6 +186,9 @@ page](https://github.com/mario0318/SnapSentry/issues).
 - renameFromWindow: false
   $name: Rename screenshots after the active window
   $description: Names each screenshot after the window that was in front when the file appeared, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
+- renameTimeOnly: false
+  $name: Name by time only
+  $description: With renaming on, leaves the window or program name out and names each file with just the timestamp, such as 2026-11-03 07-43-31. Handy when a script or another tool watches the folder.
 - captureSessions: false
   $name: Capture sessions
   $description: Adds a SnapSentry tray icon. Start a session, take screenshots, then review their order and captions and export a contact sheet and Markdown packet. Session screenshots are always kept, including when ordinary deletion or duplicate removal is enabled. Sessions are limited to 64 images. Disabling the mod discards only the review list, never the images.
@@ -279,6 +285,7 @@ struct Settings {
     std::wstring folder;
     bool recycle;
     bool renameFromWindow;
+    bool renameTimeOnly;
     bool removeExactDuplicates;
     bool logDetails;
     bool sessions;
@@ -302,6 +309,7 @@ struct CaptureRecord {
     bool prompted = false;
     unsigned retries = 0;
     unsigned deleteRetries = 0;
+    bool renamed = false;  // Rename step finished, whether or not it renamed.
 };
 
 struct NameLess {
@@ -410,7 +418,7 @@ static ULONGLONG g_activeToastId;
 // pointer before treating a dismissal as the current toast's answer.
 static std::atomic<void*> g_activeToast{nullptr};
 static HANDLE g_toastActionEvent;      // Auto-reset: a toast was activated or dismissed.
-static std::atomic<bool> g_toastRegistered{false};  // AUMID+CLSID registration ok.
+static std::atomic<bool> g_toastRegistered{false};  // AUMID key and activator ok.
 
 // ============================================================================
 // Settings
@@ -454,6 +462,7 @@ static void LoadSettings() {
     s.popup = Wh_GetIntSetting(L"showActionPopup") != 0;
     s.recycle = Wh_GetIntSetting(L"recycle") != 0;
     s.renameFromWindow = Wh_GetIntSetting(L"renameFromWindow") != 0;
+    s.renameTimeOnly = Wh_GetIntSetting(L"renameTimeOnly") != 0;
     s.removeExactDuplicates = Wh_GetIntSetting(L"removeExactDuplicates") != 0;
     // Kept as its own toggle so file paths can be withheld from a log the user
     // might share; Windhawk's own logging switch is all-or-nothing.
@@ -632,15 +641,37 @@ static std::wstring SanitizeForFilename(const std::wstring& in) {
 }
 
 // Title of the window currently in front, sanitized for use in a file name.
+// Falls back to the program's name when the window has no title (the taskbar,
+// the desktop), and to a plain word when even that is unavailable, so a rename
+// always has something to use.
 static std::wstring ActiveWindowLabel() {
     HWND hwnd = GetForegroundWindow();
-    if (!hwnd) return L"";
-    int len = GetWindowTextLengthW(hwnd);
-    if (len <= 0) return L"";
-    std::wstring title((size_t)len + 1, L'\0');
-    int got = GetWindowTextW(hwnd, title.data(), len + 1);
-    title.resize(got < 0 ? 0 : (size_t)got);
-    return SanitizeForFilename(title);
+    if (hwnd) {
+        int len = GetWindowTextLengthW(hwnd);
+        if (len > 0) {
+            std::wstring title((size_t)len + 1, L'\0');
+            int got = GetWindowTextW(hwnd, title.data(), len + 1);
+            title.resize(got < 0 ? 0 : (size_t)got);
+            std::wstring label = SanitizeForFilename(title);
+            if (!label.empty()) return label;
+        }
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+            wchar_t image[MAX_PATH];
+            DWORD size = ARRAYSIZE(image);
+            std::wstring name;
+            if (QueryFullProcessImageNameW(process, 0, image, &size)) {
+                name = image;
+                name = name.substr(name.find_last_of(L'\\') + 1);
+                name = name.substr(0, name.find_last_of(L'.'));
+            }
+            CloseHandle(process);
+            name = SanitizeForFilename(name);
+            if (!name.empty()) return name;
+        }
+    }
+    return L"Screenshot";
 }
 
 // ============================================================================
@@ -883,49 +914,21 @@ static ImageCopy ClipboardImage(const std::wstring& path,
 // ============================================================================
 // Toast notification identity (AUMID + COM activator CLSID)
 //
-// Windows requires three things to agree before an unpackaged Win32 app gets
-// interactive toast notifications: a Start Menu shortcut carrying the AUMID
-// (PKEY_AppUserModel_ID) and the activator CLSID (PKEY_AppUserModel_ToastActivatorCLSID),
-// a registry LocalServer32 entry for that CLSID, and a live COM registration
-// (CoRegisterClassObject) for the process that wants to handle button clicks.
+// The notification service (WpnUserService) reads an unpackaged app's name,
+// icon and activator CLSID from HKCU\Software\Classes\AppUserModelId\<AUMID>.
+// The key is volatile, so Windows discards it at sign-out even if the mod never
+// gets to remove it. Button clicks reach the class object registered with
+// CoRegisterClassObject, which needs no LocalServer32 entry while it is live.
 // ============================================================================
 
 static constexpr wchar_t kAppUserModelId[] = L"mario0318.SnapSentry";
-static constexpr wchar_t kShortcutName[] = L"SnapSentry.lnk";
+static constexpr wchar_t kAumidParentKey[] = L"Software\\Classes\\AppUserModelId";
+static constexpr wchar_t kLegacyShortcutName[] = L"SnapSentry.lnk";
 
-// Assigned to this mod; do not reuse or change this value --
-// Windows ties the shortcut and registry state below to this exact value.
+// Assigned to this mod; do not reuse or change this value.
 // {304BD1DF-F3CE-414D-A33B-3BA70D2CE081}
 DEFINE_GUID(CLSID_SnapSentryToastActivator, 0x304bd1df, 0xf3ce, 0x414d, 0xa3,
             0x3b, 0x3b, 0xa7, 0x0d, 0x2c, 0xe0, 0x81);
-
-static bool SetStringProp(IPropertyStore* store, REFPROPERTYKEY key,
-                          const wchar_t* value) {
-    PROPVARIANT pv{};
-    pv.vt = VT_LPWSTR;
-    pv.pwszVal = (PWSTR)CoTaskMemAlloc((wcslen(value) + 1) * sizeof(wchar_t));
-    if (!pv.pwszVal) {
-        return false;
-    }
-    wcscpy_s(pv.pwszVal, wcslen(value) + 1, value);
-    bool ok = SUCCEEDED(store->SetValue(key, pv));
-    PropVariantClear(&pv);  // Also frees pwszVal (CoTaskMemAlloc-compatible).
-    return ok;
-}
-
-static bool SetClsidProp(IPropertyStore* store, REFPROPERTYKEY key,
-                         REFCLSID clsid) {
-    PROPVARIANT pv{};
-    pv.vt = VT_CLSID;
-    pv.puuid = (CLSID*)CoTaskMemAlloc(sizeof(CLSID));
-    if (!pv.puuid) {
-        return false;
-    }
-    *pv.puuid = clsid;
-    bool ok = SUCCEEDED(store->SetValue(key, pv));
-    PropVariantClear(&pv);
-    return ok;
-}
 
 static bool ShortcutHasCorrectProperties(IShellLinkW* link) {
     IPropertyStore* store = nullptr;
@@ -947,12 +950,8 @@ static bool ShortcutHasCorrectProperties(IShellLinkW* link) {
     return ok;
 }
 
-// Creates (or repairs) %APPDATA%\Microsoft\Windows\Start Menu\Programs\SnapSentry.lnk
-// pointing at the current windhawk.exe, tagged with our AUMID and activator CLSID.
-// Idempotent: does nothing if a correctly-tagged shortcut already exists.
-// True only if a shortcut already exists at the path and carries our exact AUMID
-// and activator CLSID. Uses its own throwaway object so a failed load never
-// touches the object we create the shortcut with.
+// True only if a shortcut exists at the path and carries our exact AUMID and
+// activator CLSID.
 static bool ShortcutExistsAndValid(const std::wstring& path) {
     if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         return false;
@@ -974,157 +973,152 @@ static bool ShortcutExistsAndValid(const std::wstring& path) {
     return ok;
 }
 
+// Saves the host executable's icon as a PNG in mod storage. The notification
+// service shows only image files for IconUri, not icons inside executables.
+static bool WriteToastIcon(std::wstring& path) {
+    WCHAR storage[MAX_PATH];
+    WCHAR exePath[MAX_PATH];
+    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) || exeLen == 0 ||
+        exeLen >= ARRAYSIZE(exePath)) {
+        return false;
+    }
+    // SHCreateDirectoryEx returns a Win32 error directly, not via GetLastError.
+    int dirResult = SHCreateDirectoryExW(nullptr, storage, nullptr);
+    if (dirResult != ERROR_SUCCESS && dirResult != ERROR_ALREADY_EXISTS) {
+        return false;
+    }
+    path = std::wstring(storage) + L"\\toast-icon.png";
+
+    HICON icon = nullptr;
+    if (FAILED(SHDefExtractIconW(exePath, 0, 0, &icon, nullptr, 64)) || !icon) {
+        return false;
+    }
+    using Microsoft::WRL::ComPtr;
+    ComPtr<IWICImagingFactory> factory;
+    ComPtr<IWICBitmap> bitmap;
+    ComPtr<IWICStream> stream;
+    ComPtr<IWICBitmapEncoder> encoder;
+    ComPtr<IWICBitmapFrameEncode> frame;
+    bool ok =
+        SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                   CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&factory))) &&
+        SUCCEEDED(factory->CreateBitmapFromHICON(icon, &bitmap)) &&
+        SUCCEEDED(factory->CreateStream(&stream)) &&
+        SUCCEEDED(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE)) &&
+        SUCCEEDED(factory->CreateEncoder(GUID_ContainerFormatPng, nullptr,
+                                         &encoder)) &&
+        SUCCEEDED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache)) &&
+        SUCCEEDED(encoder->CreateNewFrame(&frame, nullptr)) &&
+        SUCCEEDED(frame->Initialize(nullptr)) &&
+        SUCCEEDED(frame->WriteSource(bitmap.Get(), nullptr)) &&
+        SUCCEEDED(frame->Commit()) && SUCCEEDED(encoder->Commit());
+    DestroyIcon(icon);
+    return ok;
+}
+
+// Whether this process created the AppUserModelId parent key. It is removed
+// along with SnapSentry's entry, but only while nothing else is stored under it.
+static bool g_createdAumidParent = false;
+
 static bool EnsureAumidRegistered() {
-    PWSTR programs = nullptr;
-    HRESULT hr = SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs);
-    if (FAILED(hr)) {
-        Wh_Log(L"AUMID: SHGetKnownFolderPath failed 0x%08lx", hr);
+    std::wstring iconPath;
+    if (!WriteToastIcon(iconPath)) {
+        Wh_Log(L"Toast icon could not be written; using the default icon");
+        iconPath.clear();
+    }
+
+    // The parent stays non-volatile: other apps keep persistent entries under
+    // it, and those can't be created under a volatile key.
+    HKEY parent = nullptr;
+    DWORD parentDisposition = 0;
+    LSTATUS status = RegCreateKeyExW(
+        HKEY_CURRENT_USER, kAumidParentKey, 0, nullptr, REG_OPTION_NON_VOLATILE,
+        KEY_CREATE_SUB_KEY | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE | DELETE,
+        nullptr, &parent, &parentDisposition);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"AUMID parent key could not be opened (%ld)", status);
         return false;
     }
-    std::wstring path = std::wstring(programs) + L"\\" + kShortcutName;
-    CoTaskMemFree(programs);
-
-    if (ShortcutExistsAndValid(path)) {
-        return true;  // Already registered correctly.
+    if (parentDisposition == REG_CREATED_NEW_KEY) {
+        g_createdAumidParent = true;
     }
 
-    WCHAR exePath[MAX_PATH];
-    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
-        // At the buffer size it truncates with no null guarantee, so reject it
-        // rather than write a shortcut that points somewhere wrong.
-        Wh_Log(L"AUMID: GetModuleFileName failed/truncated %lu", GetLastError());
-        return false;
+    // REG_OPTION_VOLATILE is ignored for a key that already exists.
+    RegDeleteTreeW(parent, kAppUserModelId);
+    HKEY key = nullptr;
+    DWORD disposition = 0;
+    status = RegCreateKeyExW(parent, kAppUserModelId, 0, nullptr,
+                             REG_OPTION_VOLATILE, KEY_SET_VALUE, nullptr, &key,
+                             &disposition);
+    if (status == ERROR_SUCCESS && disposition != REG_CREATED_NEW_KEY) {
+        RegCloseKey(key);
+        status = ERROR_ALREADY_EXISTS;
     }
-
-    // Create the shortcut on a fresh object (the documented pattern).
-    IShellLinkW* link = nullptr;
-    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-                          IID_PPV_ARGS(&link));
-    if (FAILED(hr)) {
-        Wh_Log(L"AUMID: CoCreateInstance(ShellLink) failed 0x%08lx", hr);
-        return false;
-    }
-
-    bool ok = false;
-    do {
-        hr = link->SetPath(exePath);
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IShellLink::SetPath failed 0x%08lx", hr);
-            break;
-        }
-        hr = link->SetArguments(L"");
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IShellLink::SetArguments failed 0x%08lx", hr);
-            break;
-        }
-        hr = link->SetDescription(L"SnapSentry (Windhawk)");
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IShellLink::SetDescription failed 0x%08lx", hr);
-            break;
-        }
-
-        IPropertyStore* store = nullptr;
-        hr = link->QueryInterface(IID_PPV_ARGS(&store));
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: QI IPropertyStore failed 0x%08lx", hr);
-            break;
-        }
-        bool aumidProp = SetStringProp(store, PKEY_AppUserModel_ID, kAppUserModelId);
-        bool clsidProp = SetClsidProp(store, PKEY_AppUserModel_ToastActivatorCLSID,
-                                      CLSID_SnapSentryToastActivator);
-        hr = store->Commit();
-        store->Release();
-        if (!aumidProp || !clsidProp || FAILED(hr)) {
-            Wh_Log(L"AUMID: set props failed (aumid=%d clsid=%d commit=0x%08lx)",
-                   aumidProp, clsidProp, hr);
-            break;
-        }
-
-        IPersistFile* file = nullptr;
-        hr = link->QueryInterface(IID_PPV_ARGS(&file));
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: QI IPersistFile failed 0x%08lx", hr);
-            break;
-        }
-        hr = file->Save(path.c_str(), TRUE);
-        file->Release();
-        if (FAILED(hr)) {
-            Wh_Log(L"AUMID: IPersistFile::Save failed 0x%08lx", hr);
-            break;
-        }
-        ok = true;
-    } while (false);
-
-    link->Release();
-    return ok;
-}
-
-// Writes HKCU\Software\Classes\CLSID\{...}\LocalServer32 so Windows treats our
-// CLSID as a valid, launchable COM server for the AUMID above. While SnapSentry
-// is already running, CoRegisterClassObject (below) intercepts activation before
-// Windows would ever need to launch a process via this key; a cold launch (the
-// mod's process not already running when a toast button is clicked) is not
-// specially handled and is a known limitation. It is rare in practice because the
-// watcher runs continuously while the mod is enabled, and the key is removed on
-// unload so nothing is left to launch once the mod is gone.
-static bool EnsureClsidRegistered() {
-    WCHAR exePath[MAX_PATH];
-    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
-        return false;  // Truncated path would register a wrong LocalServer32 command.
-    }
-    WCHAR command[MAX_PATH + 64];
-    swprintf_s(command, L"\"%s\" -tool-mod \"%s\"", exePath, WH_MOD_ID);
-
-    WCHAR clsidStr[64];
-    StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr, ARRAYSIZE(clsidStr));
-    std::wstring keyPath = std::wstring(L"Software\\Classes\\CLSID\\") + clsidStr +
-                           L"\\LocalServer32";
-
-    // Windhawk currently hosts tool mods in an x86 process. Register both views
-    // so the 64-bit notification shell and a 32-bit caller resolve the same
-    // out-of-process activator.
-    bool ok = true;
-    const REGSAM views[] = {KEY_WOW64_64KEY, KEY_WOW64_32KEY};
-    for (REGSAM view : views) {
-        HKEY key = nullptr;
-        LSTATUS status = RegCreateKeyExW(
-            HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, 0,
-            KEY_SET_VALUE | view, nullptr, &key, nullptr);
-        if (status == ERROR_SUCCESS) {
+    if (status == ERROR_SUCCESS) {
+        WCHAR clsidStr[64];
+        StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr,
+                        ARRAYSIZE(clsidStr));
+        const struct {
+            const wchar_t* name;
+            const wchar_t* value;
+        } values[] = {{L"DisplayName", L"SnapSentry"},
+                      {L"CustomActivator", clsidStr},
+                      {L"IconUri", iconPath.c_str()}};
+        for (const auto& entry : values) {
+            if (!*entry.value) {
+                continue;
+            }
             status = RegSetValueExW(
-                key, nullptr, 0, REG_SZ, (const BYTE*)command,
-                (DWORD)((wcslen(command) + 1) * sizeof(wchar_t)));
-            RegCloseKey(key);
+                key, entry.name, 0, REG_SZ, (const BYTE*)entry.value,
+                (DWORD)((wcslen(entry.value) + 1) * sizeof(wchar_t)));
+            if (status != ERROR_SUCCESS) {
+                break;
+            }
         }
+        RegCloseKey(key);
         if (status != ERROR_SUCCESS) {
-            Wh_Log(L"Toast CLSID registration failed (view=0x%lx error=%ld)",
-                   view, status);
-            ok = false;
+            RegDeleteTreeW(parent, kAppUserModelId);
         }
     }
-    return ok;
+    RegCloseKey(parent);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"AUMID registration failed (%ld)", status);
+        return false;
+    }
+    return true;
 }
 
-// Removes the Start Menu shortcut we created, but only if it's still ours (same
-// AUMID and activator CLSID). A same-named file we didn't write is left alone so
-// unload never deletes an unrelated shortcut.
 static void RemoveAumidRegistration() {
-    PWSTR programs = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs))) {
-        return;
+    HKEY parent = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kAumidParentKey, 0,
+                      DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE,
+                      &parent) == ERROR_SUCCESS) {
+        RegDeleteTreeW(parent, kAppUserModelId);
+        RegCloseKey(parent);
     }
-    std::wstring path = std::wstring(programs) + L"\\" + kShortcutName;
-    CoTaskMemFree(programs);
-    if (ShortcutExistsAndValid(path)) {
-        DeleteFileW(path.c_str());
+    // RegDeleteKey fails while any subkey remains, so another app's entry keeps
+    // the parent in place.
+    if (g_createdAumidParent) {
+        RegDeleteKeyW(HKEY_CURRENT_USER, kAumidParentKey);
+        g_createdAumidParent = false;
     }
 }
 
-// Removes the CLSID key we wrote under both registry views. Deletes the whole
-// {clsid} subtree since the mod owns that GUID; a missing key is not an error.
-static void RemoveClsidRegistration() {
+// Versions before 0.23.0 registered the identity with a Start Menu shortcut and
+// a LocalServer32 key in both registry views. A same-named shortcut with other
+// properties is left alone.
+static void RemoveLegacyRegistration() {
+    PWSTR programs = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs))) {
+        std::wstring path = std::wstring(programs) + L"\\" + kLegacyShortcutName;
+        if (ShortcutExistsAndValid(path)) {
+            DeleteFileW(path.c_str());
+        }
+    }
+    CoTaskMemFree(programs);
+
     WCHAR clsidStr[64];
     StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr, ARRAYSIZE(clsidStr));
     const REGSAM views[] = {KEY_WOW64_64KEY, KEY_WOW64_32KEY};
@@ -2250,8 +2244,9 @@ static void QueuePrompt(const CaptureRecord& record, const Settings& settings) {
     else AuditResult(settings, AuditOutcome::Kept, L"prompt queue full or settings changed", record.path);
 }
 
-static std::wstring RenameObserved(CaptureRecord& record, LockedCapture& capture) {
-    if (record.label.empty() || !capture.canDelete) return {};
+static std::wstring RenameObserved(CaptureRecord& record, LockedCapture& capture,
+                                   bool timeOnly) {
+    if ((record.label.empty() && !timeOnly) || !capture.canDelete) return {};
     FILETIME local;
     SYSTEMTIME time;
     // Observation time was captured before any earlier prompt/countdown.
@@ -2263,7 +2258,8 @@ static std::wstring RenameObserved(CaptureRecord& record, LockedCapture& capture
     const auto slash = record.path.find_last_of(L"\\/");
     const auto dot = record.path.find_last_of(L'.');
     const auto extension = dot != std::wstring::npos && dot > slash ? record.path.substr(dot) : L"";
-    const auto prefix = record.path.substr(0, slash + 1) + stamp + L" " + record.label;
+    const auto prefix = record.path.substr(0, slash + 1) + stamp +
+                        (timeOnly ? std::wstring() : L" " + record.label);
     for (int n = 1; n <= 50; ++n) {
         const auto target = prefix + (n == 1 ? L"" : L" (" + std::to_wstring(n) + L")") + extension;
         if (target == record.path) return {};
@@ -2298,6 +2294,41 @@ static void ProcessOne(CaptureRecord record) {
         !record.identified || WaitStop(0)) {
         AuditResult(settings, AuditOutcome::Kept, L"capture cancelled or folder changed", record.path);
         return;
+    }
+    // Name the file as soon as it is seen, before any popup or countdown, so
+    // other tools watching the folder see its final name right away and never
+    // a second file appearing later.
+    if (settings.renameFromWindow && !record.session && !record.renamed) {
+        LockedCapture early;
+        const bool opened = early.Open(record.path, settings.folder, true);
+        // A thumbnailer or sync client can hold a new file briefly, so wait
+        // about a second before giving up on the name.
+        if (!opened && record.deleteRetries < 10 &&
+            g_retryCaptures.size() < kMaxPendingCaptures &&
+            record.generation == g_generation.load() && !WaitStop(0)) {
+            ++record.deleteRetries;
+            completion.deferred = true;
+            g_retryCaptures.push_back({std::move(record), GetTickCount64() + 100});
+            return;
+        }
+        if (!opened) {
+            Wh_Log(L"Rename skipped, file stayed locked (%lu): %s",
+                   GetLastError(), record.path.c_str());
+        } else if (!SameIdentity(record.identity, early.info)) {
+            Wh_Log(L"Rename skipped, file was replaced: %s", record.path.c_str());
+        } else if (record.label.empty() && !settings.renameTimeOnly) {
+            Wh_Log(L"Rename skipped, no window title was in front: %s",
+                   record.path.c_str());
+        } else if (!early.canDelete) {
+            Wh_Log(L"Rename skipped, no rename access: %s", record.path.c_str());
+        } else {
+            auto renamed = RenameObserved(record, early, settings.renameTimeOnly);
+            if (!renamed.empty()) record.path = std::move(renamed);
+            else Wh_Log(L"Rename failed (%lu): %s", GetLastError(),
+                        record.path.c_str());
+        }
+        record.renamed = true;
+        record.deleteRetries = 0;
     }
     if (settings.popup && record.action == -1 && !record.session) {
         QueuePrompt(record, settings);
@@ -2348,10 +2379,6 @@ static void ProcessOne(CaptureRecord record) {
         return;
     }
     if (CleanupCancelled(0, generation)) return;
-    if (settings.renameFromWindow && !record.session) {
-        auto renamed = RenameObserved(record, capture);
-        if (!renamed.empty()) record.path = std::move(renamed);
-    }
     std::array<BYTE, 32> digest{};
     const bool fingerprinted = HashFile(capture.file, digest);
     const bool forceImage = action == ACTION_COPY_DELETE;
@@ -2457,14 +2484,14 @@ static void ReleaseInflight(const std::wstring& path) {
     LeaveCriticalSection(&g_lock);
 }
 
-// Whether the Start Menu shortcut and the CLSID key are currently in place.
-// Prompt thread only: the shortcut work reads and writes COM objects and needs
-// that thread's apartment, which also hosts the toast activator.
+// Whether the AUMID key and the activator are currently in place. Prompt thread
+// only: the registration work uses COM objects and needs that thread's
+// apartment, which also hosts the toast activator.
 static bool g_toastRegApplied = false;
-// The first pass always runs, even when there is nothing to register. Windows can
-// be shut down or the tool process killed without the mod ever unloading cleanly,
-// which leaves the shortcut and the key behind; starting with the popup off is the
-// one moment nothing would otherwise reclaim them.
+// The first pass always runs, even when there is nothing to register. A killed
+// tool process leaves the AUMID key behind until sign-out, and older versions
+// left a shortcut and a CLSID key; starting with the popup off is the one
+// moment nothing would otherwise reclaim them.
 static bool g_toastRegSynced = false;
 
 // Clears anything SnapSentry left in Action Center, such as a kept-file
@@ -2495,11 +2522,9 @@ static void ClearToastHistory() {
     }
 }
 
-// The shortcut and the registry key exist for one reason, to let a toast button
-// activate us, so they follow the settings instead of being written
-// unconditionally at startup. With processing or the popup off there is no
-// notification, and a SnapSentry entry sitting in Start and in Search would be
-// there for nothing.
+// The AUMID key exists for one reason, to let a toast show as SnapSentry and
+// activate us, so it follows the settings instead of being written
+// unconditionally at startup.
 static void SyncToastRegistration(bool wantPopup, bool unloading) {
     // Clear Action Center on unload before the early return below: with the popup
     // already off at unload the requested state matches, and we would otherwise
@@ -2520,17 +2545,17 @@ static void SyncToastRegistration(bool wantPopup, bool unloading) {
     g_toastRegSynced = true;
     if (wantPopup) {
         g_toastRegApplied = true;  // Track intent, so teardown always cleans up.
-        // Both helpers are idempotent, so retrying after a partial failure is safe.
+        RemoveLegacyRegistration();
+        // The key is recreated each time, so retrying after a failure is safe.
         bool aumidOk = EnsureAumidRegistered();
-        bool clsidOk = EnsureClsidRegistered();
         // Don't re-register the class object if a previous attempt already did.
         HRESULT regHr = g_toastActivatorCookie ? S_OK : E_FAIL;
-        if (aumidOk && clsidOk && !g_toastActivatorCookie) {
+        if (aumidOk && !g_toastActivatorCookie) {
             regHr = CoRegisterClassObject(
                 CLSID_SnapSentryToastActivator, &g_toastActivatorFactory,
                 CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE, &g_toastActivatorCookie);
         }
-        g_toastRegistered = aumidOk && clsidOk && SUCCEEDED(regHr);
+        g_toastRegistered = aumidOk && SUCCEEDED(regHr);
         if (g_toastRegistered.load()) {
             Wh_Log(L"Toast notifications ready");
             // Reclaim anything an unclean exit left in Action Center: Windows
@@ -2546,9 +2571,9 @@ static void SyncToastRegistration(bool wantPopup, bool unloading) {
             PrewarmToast();  // Avoid a slow first popup.
         } else {
             Wh_Log(
-                L"Toast notification registration incomplete (aumid=%d clsid=%d "
+                L"Toast notification registration incomplete (aumid=%d "
                 L"hr=0x%08lx); using the dialog instead",
-                aumidOk, clsidOk, regHr);
+                aumidOk, regHr);
         }
         return;
     }
@@ -2566,7 +2591,7 @@ static void SyncToastRegistration(bool wantPopup, bool unloading) {
         ClearToastHistory();
     }
     RemoveAumidRegistration();
-    RemoveClsidRegistration();
+    RemoveLegacyRegistration();
     // Windows owns the per-AUMID notification settings, including the user's
     // banner and sound choices, so SnapSentry leaves that key intact.
     g_toastRegApplied = false;
@@ -4644,3 +4669,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
