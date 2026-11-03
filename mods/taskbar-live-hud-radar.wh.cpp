@@ -20,13 +20,13 @@ A compact system monitoring widget for the Windows 11 taskbar that displays real
 ![Screenshot](https://i.imgur.com/dDy0BoL.png)
 
 ### Features
-* **Real-time monitoring:** Tracks CPU, RAM, network traffic, and ping.
-* **Windows 11 design:** Blends into the taskbar using native Acrylic blur and customizable corner styles.
-* **Auto-hide:** Automatically hides when fullscreen applications or games are running.
+- **Real-time monitoring:** Tracks CPU, RAM, network traffic, and ping.
+- **Windows 11 design:** Blends into the taskbar using native Acrylic blur and customizable corner styles.
+- **Auto-hide:** Automatically hides when fullscreen applications or games are running.
 
 ### Controls
-* **Left Click:** Clean RAM (purges Standby List and background process memory).
-* **Alt + Left Click & Drag:** Adjust the horizontal position on the taskbar.
+- **Left Click:** Clean RAM (purges Standby List and background process memory).
+- **Alt + Left Click & Drag:** Adjust the horizontal position on the taskbar.
 */
 // ==/WindhawkModReadme==
 
@@ -42,9 +42,9 @@ A compact system monitoring widget for the Windows 11 taskbar that displays real
   $name: "Corner Style"
   $description: "Window corner shape of the widget"
   $options:
-  - round: "Rounded (Windows 11 Default)"
-  - small: "Small Rounded"
-  - square: "Square"
+    - round: "Rounded (Windows 11 Default)"
+    - small: "Small Rounded"
+    - square: "Square"
 - offsetX: 6
   $name: "Horizontal Offset (px)"
   $description: "Distance from the system tray (can also be adjusted via Alt + Left Click drag)"
@@ -67,9 +67,9 @@ A compact system monitoring widget for the Windows 11 taskbar that displays real
   $name: "Ping Target Server"
   $description: "Public DNS server used to measure network latency"
   $options:
-  - cf: "Cloudflare (1.1.1.1)"
-  - gg: "Google (8.8.8.8)"
-  - q9: "Quad9 (9.9.9.9)"
+    - cf: "Cloudflare (1.1.1.1)"
+    - gg: "Google (8.8.8.8)"
+    - q9: "Quad9 (9.9.9.9)"
 */
 // ==/WindhawkModSettings==
 
@@ -789,7 +789,6 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 COLORREF colWhite = RGB(245, 246, 250);
                 COLORREF colWarn  = RGB(255, 205, 75);
                 COLORREF colAlert = RGB(255, 95, 95);
-                COLORREF colNet   = RGB(115, 215, 255);
 
                 COLORREF cpuCol  = (cpu > 80) ? colAlert : (cpu > 55 ? colWarn : colWhite);
                 COLORREF ramCol  = (ram > 85) ? colAlert : (ram > 70 ? colWarn : colWhite);
@@ -838,7 +837,7 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                 if (showNet) {
                     if (items++ > 0) DrawSeg(memDC, xPos, yPos, L"  ", colLabel, g_hFontLabel);
-                    DrawSeg(memDC, xPos, yPos, netVal, colNet, g_hFontValue);
+                    DrawSeg(memDC, xPos, yPos, netVal, RGB(115, 215, 255), g_hFontValue);
                 }
 
                 if (showPing) {
