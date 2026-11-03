@@ -53,8 +53,6 @@ whiten out the window content on restore after the minimized state if the option
 For custom dark themes, fixes white header and sidebar in Control Panel. This is compatible with dark-toned Classic Theme.
 Can be disabled in the mod settings.
 
-Compatible with ExplorerFrame Legacy Redirector.
-
 */
 // ==/WindhawkModReadme==
 
@@ -493,7 +491,7 @@ bool InstallMaskedCustom(HMODULE hMod, int slot)
 
 bool InstallViaWindhawk(HMODULE hMod, int slot)
 {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         { { L"private: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
             L"protected: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
             L"public: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)" },
@@ -507,7 +505,7 @@ bool InstallViaWindhawk(HMODULE hMod, int slot)
             L"private: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)" },
           (void**)&g_efSlots[slot].setFlagsOrig, g_SetFlagsHooks[slot], true },
     };
-    WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks));
+    WindhawkUtils::HookSymbols(hMod, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks));
     return g_efSlots[slot].wndProcOrig || g_efSlots[slot].initOrig || g_efSlots[slot].setFlagsOrig;
 }
 
@@ -790,19 +788,19 @@ BOOL Wh_ModInit()
 
     HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
     if (!hShell32) return FALSE;
-    WindhawkUtils::SYMBOL_HOOK sh[] = {
+    WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {
         { { L"public: virtual long __cdecl CListViewHost::CreateControl(struct HWND__ *,struct IListControlHost *,struct IViewSettings *)" },
           (void**)&CLVHCreateControlOriginal, (void*)CLVHCreateControlHook, FALSE }
     };
-    if (!WindhawkUtils::HookSymbols(hShell32, sh, ARRAYSIZE(sh))) return FALSE;
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, ARRAYSIZE(shell32_dll_hooks))) return FALSE;
 
     HMODULE hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hDui70) {
-        WindhawkUtils::SYMBOL_HOOK dh = {
+        WindhawkUtils::SYMBOL_HOOK dui70_dll_hook = {
             { L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)" },
             (void**)&Element_PaintBg, (void*)Element_PaintBgHook, false
         };
-        WindhawkUtils::HookSymbols(hDui70, &dh, 1);
+        WindhawkUtils::HookSymbols(hDui70, &dui70_dll_hook, 1);
     }
 
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW"),
