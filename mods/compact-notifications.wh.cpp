@@ -8,10 +8,10 @@
 // @license         GPL-3.0
 // @include         ShellExperienceHost.exe
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -ldwmapi -ld2d1 -ldwrite -lshcore -lgdi32 -lwindowscodecs -ladvapi32 -lurlmon
+// @compilerOptions -lole32 -loleaut32 -ld2d1 -ldwrite -lshcore -lgdi32 -lwindowscodecs -ladvapi32
 // ==/WindhawkMod==
 
-// The tool-mod boilerplate and the banner detection idea come from the "Toast auto-dismiss" mod by nikitor32 (GPL-3.0),
+// The banner detection idea comes from the "Toast auto-dismiss" mod by nikitor32 (GPL-3.0),
 // the way the banner window is told apart from other shell windows from "Notifications placement" by m417z (GPL-3.0),
 // so this file is GPL-3.0 as well.
 
@@ -22,6 +22,8 @@
 Replaces Windows toast banners with compact chat-style cards: black (or white) rounded
 cards with a round avatar, the sender in bold and up to a few lines of text, sliding in from the screen edge.
 
+![Cards](https://raw.githubusercontent.com/Wheatlay/compact-notifications/master/docs/screenshot.png)
+
 ## What works
 
 * **Click** a card to do what clicking the original notification does (open the app or the conversation).
@@ -29,9 +31,9 @@ cards with a round avatar, the sender in bold and up to a few lines of text, sli
 * **Buttons** from the notification (for example *Reply*, *Snooze*, *Dismiss*) are shown under the text.
 * **Reply box**: click it and type, then press the app's send button. The text goes to the original reply
   box, so the app receives it as usual.
-* **Avatars**: the notification's image (local files, web images and images from Store apps), or a thumbnail of
-  its large picture (e.g. a screenshot); otherwise the app's registered icon (e.g. Firefox), and the first
-  letter of the app as the last resort.
+* **Avatars**: the notification's image (local files and images from Store apps), or a thumbnail of its
+  large picture (e.g. a screenshot); otherwise the app's registered icon (e.g. Firefox), and the first
+  letter of the app as the last resort. Web images aren't downloaded.
 * **Priority notifications** (reminders, alarms, incoming calls) get a colored outline and stay until handled.
 
 ## How long a card stays
@@ -50,6 +52,8 @@ works as before. Turning the mod off brings the original banners back.
 * Text styles, progress bars and large (hero) images are not shown.
 * While a full-screen app or *Do not disturb* is on, Windows doesn't show notifications at all, so there are
   no cards either.
+* The reply box on a card shows the typed text with the caret at the end; moving the caret with the arrow
+  keys or selecting text works, but isn't shown on the card.
 */
 // ==/WindhawkModReadme==
 
@@ -99,14 +103,15 @@ works as before. Turning the mod off brings the original banners back.
 
 #include <windows.h>
 #include <d2d1.h>
-#include <dwmapi.h>
 #include <dwrite.h>
 #include <shellscalingapi.h>
 #include <uiautomation.h>
 #include <wincodec.h>
 #include <appmodel.h>
-#include <urlmon.h>
 
+#include <windhawk_utils.h>
+
+#include <climits>
 #include <wchar.h>
 
 #include <algorithm>
@@ -277,29 +282,55 @@ int OffscreenX() {
     return GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN) + 200;
 }
 
+// The card window (in the shell's explorer). The banner is hidden only while it exists, so if nothing draws cards
+// (explorer restarting, Direct2D unavailable) the normal banners show.
+constexpr wchar_t kWindowClass[] = L"CompactNotifications";
+
+std::atomic<int> g_bannerX{INT_MIN};  // where Windows last put the banner, for RestoreBanner
+
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
-    if ((uFlags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE) && IsBannerWindow(hWnd)) {
+    if ((uFlags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE) && IsBannerWindow(hWnd) &&
+        FindWindowW(kWindowClass, nullptr)) {
         if (uFlags & SWP_NOMOVE) {
             RECT rc{};
             GetWindowRect(hWnd, &rc);
             Y = rc.top;
             uFlags &= ~SWP_NOMOVE;
+        } else {
+            g_bannerX = X;
         }
         X = OffscreenX();
     }
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
-void HideExistingBanner() {
+// This process's banner window, if it has one (ShellExperienceHost).
+HWND OwnBanner() {
     HWND hwnd = nullptr;
     while ((hwnd = FindWindowExW(HWND_DESKTOP, hwnd, L"Windows.UI.Core.CoreWindow", nullptr)) != nullptr) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid == GetCurrentProcessId() && IsBannerWindow(hwnd)) {
-            RECT rc{};
-            GetWindowRect(hwnd, &rc);
-            SetWindowPos_Original(hwnd, nullptr, OffscreenX(), rc.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            return hwnd;
         }
+    }
+    return nullptr;
+}
+
+void HideExistingBanner() {
+    HWND hwnd = OwnBanner();
+    RECT rc{};
+    if (hwnd && FindWindowW(kWindowClass, nullptr) && GetWindowRect(hwnd, &rc)) {
+        SetWindowPos_Original(hwnd, nullptr, OffscreenX(), rc.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+void RestoreBanner() {
+    HWND hwnd = OwnBanner();
+    RECT rc{};
+    int x = g_bannerX;
+    if (hwnd && x != INT_MIN && GetWindowRect(hwnd, &rc) && rc.left >= OffscreenX()) {
+        SetWindowPos_Original(hwnd, nullptr, x, rc.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
 
@@ -458,8 +489,8 @@ std::wstring WithScale(const std::wstring& path) {
     return {};
 }
 
-// The avatar file from a toast payload: the appLogoOverride image as a local file. Web images are downloaded to
-// the internet cache; ms-appx and ms-appdata point into the app's package and data folders.
+// The avatar file from a toast payload: the appLogoOverride image as a local file (web images are skipped);
+// ms-appx and ms-appdata point into the app's package and data folders.
 // Without one, any other image (hero or inline) stands in, e.g. the screenshot Snipping Tool attaches.
 std::wstring ImageFromPayload(const std::string& payload, const std::wstring& aumid, bool logoOnly);
 std::wstring AvatarFromPayload(const std::string& payload, const std::wstring& aumid) {
@@ -486,7 +517,7 @@ std::wstring ImageFromPayload(const std::string& payload, const std::wstring& au
         };
         auto starts = [&](const wchar_t* prefix) { return _wcsnicmp(src.c_str(), prefix, wcslen(prefix)) == 0; };
         if (starts(L"http://") || starts(L"https://")) {
-            return src;  // downloaded in the background (StartAvatarDownload), the card shows a letter until then
+            continue;  // web images aren't fetched (no network access); the app icon or the letter is used instead
         }
         if (starts(L"ms-appx:///")) {
             std::wstring root = PackagePath(family);
@@ -564,7 +595,6 @@ std::wstring FindAvatar(const std::wstring& title, const std::wstring& text) {
         g_sqlite.finalize(stmt);
     }
     g_sqlite.close(db);
-    // The download can take a moment, so it happens after the database is closed.
     return payload.empty() ? std::wstring() : AvatarFromPayload(payload, FromUtf8(aumid));
 }
 
@@ -616,18 +646,17 @@ HANDLE g_stopEvent = nullptr;
 HANDLE g_wakeEvent = nullptr;  // set when the banner window shows or moves, or a card is clicked
 HANDLE g_workerThread = nullptr;
 HANDLE g_uiThread = nullptr;
-DWORD g_uiThreadId = 0;
-HWND g_window = nullptr;
+std::atomic<HWND> g_window{nullptr};  // created by the card thread, posted to by the worker
 std::atomic<DWORD> g_shellPid{0};  // ShellExperienceHost, whose window events wake the worker
 HWINEVENTHOOK g_eventHook = nullptr;  // owned by the card thread
 
 constexpr UINT WM_APP_SNAPSHOT = WM_APP + 1;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
 constexpr UINT WM_APP_REHOOK = WM_APP + 3;  // ShellExperienceHost restarted: watch the new process
-constexpr UINT WM_APP_AVATAR = WM_APP + 4;  // a downloaded avatar is ready (lParam: AvatarReady*)
-// While a banner is up its toasts are read this often (typing, removed toasts). With no banner the worker sleeps
-// until a window event and only checks every kIdleMs in case one was missed.
-constexpr DWORD kPollMs = 100, kIdleMs = 2000;
+// While a banner is up its toasts are re-read every kBannerMs (removed toasts), or every kTypingMs while its reply
+// box has the keyboard focus (the card mirrors the typed text). Showing, hiding and resizing the banner wake the
+// worker at once through window events. With no banner it sleeps and only checks every kIdleMs in case one was missed.
+constexpr DWORD kTypingMs = 100, kBannerMs = 500, kIdleMs = 2000;
 
 // The banner window: the persistent one (any size) or only while it shows a toast.
 HWND FindBanner(bool showing) {
@@ -656,46 +685,6 @@ HWND FindVisibleBanner() {
     return FindBanner(true);
 }
 
-struct AvatarReady {
-    std::wstring id;    // toast
-    std::wstring path;  // downloaded file
-};
-
-// Web avatars download on their own thread, so a slow server never holds up the cards. The thread keeps the mod's
-// DLL loaded until it finishes, so unloading the mod in the meantime is safe.
-DWORD WINAPI AvatarDownloadThread(LPVOID param) {
-    auto job = static_cast<AvatarReady*>(param);
-    WCHAR file[MAX_PATH];
-    HRESULT hr = URLDownloadToCacheFileW(nullptr, job->path.c_str(), file, ARRAYSIZE(file), 0, nullptr);
-    if (SUCCEEDED(hr)) {
-        job->path = file;
-        HWND window = g_window;
-        if (!window || !PostMessage(window, WM_APP_AVATAR, 0, (LPARAM)job)) {
-            delete job;
-        }
-    } else {
-        Log(L"Downloading the avatar failed (%08lX): %s", hr, job->path.c_str());
-        delete job;
-    }
-    HMODULE self = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       (LPCWSTR)&AvatarDownloadThread, &self);
-    FreeLibraryAndExitThread(self, 0);
-}
-
-void StartAvatarDownload(const std::wstring& id, const std::wstring& url) {
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)&AvatarDownloadThread, &self)) {
-        return;
-    }
-    HANDLE thread = CreateThread(nullptr, 0, AvatarDownloadThread, new AvatarReady{id, url}, 0, nullptr);
-    if (thread) {
-        CloseHandle(thread);
-    } else {
-        FreeLibrary(self);
-    }
-}
-
 DWORD BannerProcess() {
     DWORD pid = 0;
     if (HWND banner = FindBanner(false)) {
@@ -719,6 +708,26 @@ HWINEVENTHOOK HookBannerEvents() {
     }
     return SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, pid, 0,
                            WINEVENT_OUTOFCONTEXT);
+}
+
+bool Stopping() {
+    return WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
+}
+
+// The cards belong to the shell's explorer, the one that owns the desktop window. Others (folder windows in their
+// own process, "Launch folder windows in a separate process") come and go, so they don't draw. At logon the
+// desktop window may not exist yet. False: another process is the shell, or the mod is unloading.
+bool IsShellProcess() {
+    for (;;) {
+        if (HWND shell = GetShellWindow()) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(shell, &pid);
+            return pid == GetCurrentProcessId();
+        }
+        if (WaitForSingleObject(g_stopEvent, 500) == WAIT_OBJECT_0) {
+            return false;
+        }
+    }
 }
 
 template <typename T>
@@ -794,7 +803,7 @@ void InvokeElement(IUIAutomationElement* element) {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
-    if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+    if (!IsShellProcess() || FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
         return 0;
     }
     {
@@ -859,9 +868,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
             }
         };
 
-        bool busy = true;  // a banner was up on the last pass (or this is the first pass)
+        bool busy = true;     // a banner was up on the last pass (or this is the first pass)
+        bool typing = false;  // a reply box had the keyboard focus on the last pass
         HANDLE waits[] = {g_stopEvent, g_wakeEvent};
-        while (WaitForMultipleObjects(2, waits, FALSE, busy ? kPollMs : kIdleMs) != WAIT_OBJECT_0) {
+        while (WaitForMultipleObjects(2, waits, FALSE, typing ? kTypingMs : busy ? kBannerMs : kIdleMs) !=
+               WAIT_OBJECT_0) {
             if (!busy) {
                 // ShellExperienceHost restarts (or starts late): its window events need a new hook.
                 DWORD pid = BannerProcess();
@@ -875,6 +886,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 commands.swap(g_commands);
             }
             for (auto& command : commands) {
+                if (Stopping()) {
+                    break;
+                }
                 for (auto& k : known) {
                     if (k.info.id != command.id) {
                         continue;
@@ -911,7 +925,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     SUCCEEDED(root->FindAll(TreeScope_Descendants, toastCondition.p, toasts.put())) && toasts) {
                     int count = 0;
                     toasts->get_Length(&count);
-                    for (int i = 0; i < count; i++) {
+                    // Each UIA call can take up to its timeout when the banner's process hangs, so unloading
+                    // the mod doesn't wait for the whole pass.
+                    for (int i = 0; i < count && !Stopping(); i++) {
                         IUIAutomationElement* element = nullptr;
                         if (FAILED(toasts->GetElement(i, &element)) || !element) {
                             continue;
@@ -937,10 +953,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
                                 info = old->info;
                             } else {
                                 info.image = FindAvatar(info.title, info.text);
-                                if (info.image.rfind(L"http", 0) == 0) {
-                                    StartAvatarDownload(info.id, info.image);
-                                    info.image.clear();
-                                }
                                 if (info.image.empty()) {
                                     info.image = AppIcon(info.app);
                                 }
@@ -992,10 +1004,15 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 k.element->Release();
             }
             known.swap(current);
+            if (Stopping()) {
+                break;  // the pass may be incomplete
+            }
 
             std::vector<ToastInfo> infos;
+            typing = false;
             for (auto& k : known) {
                 infos.push_back(k.info);
+                typing = typing || k.info.inputFocused;
             }
             bool changed = infos.size() != lastSent.size() ||
                            !std::equal(infos.begin(), infos.end(), lastSent.begin(), [](const ToastInfo& a, const ToastInfo& b) {
@@ -1007,8 +1024,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     g_snapshot = infos;
                 }
                 lastSent = infos;
-                if (g_window) {
-                    PostMessage(g_window, WM_APP_SNAPSHOT, 0, 0);
+                if (HWND window = g_window) {
+                    PostMessage(window, WM_APP_SNAPSHOT, 0, 0);
                 }
             }
         }
@@ -1561,17 +1578,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             Redraw();
             return 0;
-        case WM_APP_AVATAR: {
-            std::unique_ptr<AvatarReady> ready(reinterpret_cast<AvatarReady*>(lParam));
-            for (auto& card : g_cards) {
-                if (card.info.id == ready->id && !card.avatar) {
-                    card.info.image = ready->path;
-                    card.avatar = LoadBitmap(ready->path);
-                }
-            }
-            Redraw();
-            return 0;
-        }
         case WM_APP_REHOOK:
             if (g_eventHook) {
                 UnhookWinEvent(g_eventHook);
@@ -1719,69 +1725,82 @@ void ReleaseResources() {
     }
 }
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
 DWORD WINAPI UiThread(LPVOID) {
+    if (!IsShellProcess()) {
+        return 0;
+    }
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (CreateResources()) {
-        WNDCLASSW wc{};
-        wc.lpfnWndProc = WindowProc;
-        wc.hInstance = GetModuleHandle(nullptr);
-        wc.lpszClassName = L"CompactNotifications";
-        RegisterClassW(&wc);
-        g_window = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, wc.lpszClassName,
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = (HINSTANCE)&__ImageBase;
+    wc.lpszClassName = kWindowClass;
+    if (!CreateResources()) {
+        Log(L"Direct2D/DirectWrite unavailable");
+    } else if (!RegisterClassW(&wc)) {
+        Log(L"Registering the window class failed (%lu)", GetLastError());
+    } else {
+        g_window = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kWindowClass,
                                    L"Compact Notifications", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
-        Log(L"Card window %p (error %lu)", g_window, g_window ? 0 : GetLastError());
+        Log(L"Card window %p (error %lu)", g_window.load(), g_window ? 0 : GetLastError());
         // Out-of-context window events arrive through this thread's message loop.
         g_eventHook = HookBannerEvents();
-        MSG msg;
-        while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-            DispatchMessage(&msg);
+        // Waiting on the stop event directly: a WM_QUIT posted before this thread had a message queue would be lost.
+        while (MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                DispatchMessage(&msg);
+            }
         }
         if (g_eventHook) {
             UnhookWinEvent(g_eventHook);
             g_eventHook = nullptr;
         }
-        DestroyWindow(g_window);
-        g_window = nullptr;
-        UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    } else {
-        Log(L"Direct2D/DirectWrite unavailable");
+        HWND window = g_window.exchange(nullptr);
+        DestroyWindow(window);
+        UnregisterClassW(kWindowClass, wc.hInstance);
     }
     ReleaseResources();
     CoUninitialize();
     return 0;
 }
 
-BOOL WhTool_ModInit() {
+bool StartCards() {
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     g_wakeEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    g_uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_uiThreadId);
+    if (!g_stopEvent || !g_wakeEvent) {
+        return false;
+    }
+    g_uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     g_workerThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
-    return g_stopEvent && g_wakeEvent && g_uiThread && g_workerThread;
+    return g_uiThread && g_workerThread;
 }
 
-void WhTool_ModSettingsChanged() {}
-
-void WhTool_ModUninit() {
-    SetEvent(g_stopEvent);
-    // The card window goes first, so nothing frozen stays on the screen even if the worker is stuck.
-    PostThreadMessage(g_uiThreadId, WM_QUIT, 0, 0);
-    if (WaitForSingleObject(g_uiThread, 3000) != WAIT_OBJECT_0) {
-        Log(L"The card thread didn't stop");
+// Both threads end soon after the stop event: the card thread waits on it, the worker checks it between UIA calls.
+// Neither sends messages to the thread unloading the mod, so waiting without a timeout can't deadlock, and the mod's
+// code is never freed while one of them still runs.
+void StopCards() {
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
     }
-    if (WaitForSingleObject(g_workerThread, 5000) != WAIT_OBJECT_0) {
-        Log(L"The reading thread didn't stop");
+    for (HANDLE* handle : {&g_uiThread, &g_workerThread, &g_wakeEvent, &g_stopEvent}) {
+        if (*handle) {
+            if (handle == &g_uiThread || handle == &g_workerThread) {
+                WaitForSingleObject(*handle, INFINITE);
+            }
+            CloseHandle(*handle);
+            *handle = nullptr;
+        }
     }
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
-// Process roles: ShellExperienceHost only hides the banner; explorer hides it too (some builds move it from there)
-// and one explorer process also reads the toasts and draws the cards. Windhawk's separate "tool mod" process didn't
-// survive reloads, and explorer is always running anyway.
+// Process roles: ShellExperienceHost only hides the banner; explorer hides it too (some builds move it from there),
+// and the shell's explorer also reads the toasts and draws the cards (IsShellProcess). Windhawk's separate "tool mod"
+// process didn't survive reloads, and explorer is always running anyway.
 
-enum class Role { None, Shell, ShellWithCards };
-Role g_role = Role::None;
-HANDLE g_cardsMutex = nullptr;
+bool g_explorer = false;
 
 BOOL Wh_ModInit() {
     WCHAR path[MAX_PATH];
@@ -1794,41 +1813,33 @@ BOOL Wh_ModInit() {
     if (!explorer && _wcsicmp(base, L"ShellExperienceHost.exe") != 0) {
         return FALSE;
     }
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Original);
-    g_role = Role::Shell;
-    // With "open folders in a separate process" there are several explorers: only the first one draws.
-    if (explorer) {
-        g_cardsMutex = CreateMutex(nullptr, TRUE, L"windhawk_" WH_MOD_ID L"_cards");
-        if (g_cardsMutex && GetLastError() != ERROR_ALREADY_EXISTS) {
-            g_role = Role::ShellWithCards;
-        } else if (g_cardsMutex) {
-            CloseHandle(g_cardsMutex);
-            g_cardsMutex = nullptr;
-        }
-    }
-    Log(L"Loaded in %s, %s", base, g_role == Role::ShellWithCards ? L"drawing cards" : L"hiding only");
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
+    g_explorer = explorer;
+    Log(L"Loaded in %s", base);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     HideExistingBanner();
     LoadSettings();
-    if (g_role == Role::ShellWithCards && !WhTool_ModInit()) {
+    if (g_explorer && !StartCards()) {
         Log(L"Starting the cards failed");
     }
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_window) {
-        PostMessage(g_window, WM_APP_SETTINGS, 0, 0);
+    if (HWND window = g_window) {
+        PostMessage(window, WM_APP_SETTINGS, 0, 0);
     }
 }
 
+void Wh_ModBeforeUninit() {
+    // A banner that stays up (a reminder, an alarm) would otherwise stay off the screen until Windows moves it.
+    RestoreBanner();
+}
+
 void Wh_ModUninit() {
-    if (g_role == Role::ShellWithCards) {
-        WhTool_ModUninit();
-        ReleaseMutex(g_cardsMutex);
-        CloseHandle(g_cardsMutex);
+    if (g_explorer) {
+        StopCards();
     }
-    // The hook goes away with the mod and Windows places the next banner on the screen again.
 }
