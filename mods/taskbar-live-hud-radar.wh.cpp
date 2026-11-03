@@ -7,7 +7,7 @@
 // @github          https://github.com/lemon-web-stack
 // @homepage        https://github.com/lemon-web-stack
 // @include         explorer.exe
-// @compilerOptions -luser32 -lgdi32 -liphlpapi -lws2_32 -lpsapi -ldwmapi -lshell32 -lgdiplus
+// @compilerOptions -luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -77,13 +77,10 @@ A compact system monitoring widget for the Windows 11 taskbar that displays real
 #define _WIN32_WINNT 0x0A00
 #endif
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <windows.h>
 #include <shellapi.h>
 #include <dwmapi.h>
 #include <iphlpapi.h>
-#include <netioapi.h>
 #include <icmpapi.h>
 #include <psapi.h>
 #include <tlhelp32.h>
@@ -106,6 +103,20 @@ A compact system monitoring widget for the Windows 11 taskbar that displays real
 #ifndef DWMWA_SYSTEMBACKDROP_TYPE
 #define DWMWA_SYSTEMBACKDROP_TYPE 38
 #endif
+
+#ifndef MIB_IF_TYPE_LOOPBACK
+#define MIB_IF_TYPE_LOOPBACK 24
+#endif
+#ifndef MIB_IF_OPER_STATUS_OPERATIONAL
+#define MIB_IF_OPER_STATUS_OPERATIONAL 1
+#endif
+#ifndef MIB_IF_OPER_STATUS_CONNECTED
+#define MIB_IF_OPER_STATUS_CONNECTED 2
+#endif
+
+static inline unsigned long MakeIpv4(unsigned char a, unsigned char b, unsigned char c, unsigned char d) {
+    return (unsigned long)(a | (b << 8) | (c << 16) | (d << 24));
+}
 
 struct ModSettings {
     int updateInterval;
@@ -209,11 +220,11 @@ void LoadSettings(bool fromSettingsChanged = false) {
 
     PCWSTR targetStr = Wh_GetStringSetting(L"pingTarget");
     if (targetStr) {
-        if (lstrcmpiW(targetStr, L"gg") == 0) settings.pingIp = inet_addr("8.8.8.8");
-        else if (lstrcmpiW(targetStr, L"q9") == 0) settings.pingIp = inet_addr("9.9.9.9");
-        else settings.pingIp = inet_addr("1.1.1.1");
+        if (lstrcmpiW(targetStr, L"gg") == 0) settings.pingIp = MakeIpv4(8, 8, 8, 8);
+        else if (lstrcmpiW(targetStr, L"q9") == 0) settings.pingIp = MakeIpv4(9, 9, 9, 9);
+        else settings.pingIp = MakeIpv4(1, 1, 1, 1);
     } else {
-        settings.pingIp = inet_addr("1.1.1.1");
+        settings.pingIp = MakeIpv4(1, 1, 1, 1);
     }
     Wh_FreeStringSetting(targetStr);
 
@@ -263,69 +274,39 @@ int GetCpuUsage() {
     return (std::max)(0, (std::min)(100, usage));
 }
 
-typedef NETIOAPI_API (*GetIfTable2_t)(PMIB_IF_TABLE2*);
-typedef VOID (*FreeMibTable_t)(PVOID);
-
 void UpdateNetSpeed(ULONGLONG elapsedMs) {
     if (elapsedMs == 0) return;
-    static ULONG64 prevIn = 0, prevOut = 0;
+    static DWORD prevIn = 0, prevOut = 0;
     static bool firstRun = true;
-
-    static HMODULE hIphlp = GetModuleHandleW(L"iphlpapi.dll");
-    static GetIfTable2_t pGetIfTable2 = hIphlp ? (GetIfTable2_t)GetProcAddress(hIphlp, "GetIfTable2") : NULL;
-    static FreeMibTable_t pFreeMibTable = hIphlp ? (FreeMibTable_t)GetProcAddress(hIphlp, "FreeMibTable") : NULL;
-
-    if (pGetIfTable2 && pFreeMibTable) {
-        PMIB_IF_TABLE2 pTable = NULL;
-        if (pGetIfTable2(&pTable) == NO_ERROR && pTable) {
-            ULONG64 totalIn = 0, totalOut = 0;
-            for (ULONG i = 0; i < pTable->NumEntries; i++) {
-                const MIB_IF_ROW2& row = pTable->Table[i];
-                if (row.Type != IF_TYPE_SOFTWARE_LOOPBACK && (row.OperStatus == IfOperStatusUp)) {
-                    totalIn += row.InOctets;
-                    totalOut += row.OutOctets;
-                }
-            }
-
-            if (!firstRun) {
-                ULONG64 diffIn = (totalIn >= prevIn) ? (totalIn - prevIn) : 0;
-                ULONG64 diffOut = (totalOut >= prevOut) ? (totalOut - prevOut) : 0;
-                g_netDownKBps = (DWORD)((diffIn * 1000) / (elapsedMs * 1024));
-                g_netUpKBps = (DWORD)((diffOut * 1000) / (elapsedMs * 1024));
-            }
-
-            prevIn = totalIn;
-            prevOut = totalOut;
-            firstRun = false;
-            pFreeMibTable(pTable);
-            return;
-        }
-    }
 
     ULONG bufSize = 16384;
     MIB_IFTABLE* pIfTable = (MIB_IFTABLE*)malloc(bufSize);
     if (!pIfTable) return;
+
     if (GetIfTable(pIfTable, &bufSize, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
         free(pIfTable);
         pIfTable = (MIB_IFTABLE*)malloc(bufSize);
         if (!pIfTable) return;
     }
+
     if (GetIfTable(pIfTable, &bufSize, FALSE) == NO_ERROR) {
         DWORD totalIn = 0, totalOut = 0;
         for (DWORD i = 0; i < pIfTable->dwNumEntries; i++) {
-            MIB_IFROW& row = pIfTable->table[i];
+            const MIB_IFROW& row = pIfTable->table[i];
             if (row.dwType != MIB_IF_TYPE_LOOPBACK &&
                (row.dwOperStatus == MIB_IF_OPER_STATUS_OPERATIONAL || row.dwOperStatus == MIB_IF_OPER_STATUS_CONNECTED)) {
                 totalIn += row.dwInOctets;
                 totalOut += row.dwOutOctets;
             }
         }
+
         if (!firstRun) {
-            DWORD diffIn = (totalIn >= (DWORD)prevIn) ? (totalIn - (DWORD)prevIn) : 0;
-            DWORD diffOut = (totalOut >= (DWORD)prevOut) ? (totalOut - (DWORD)prevOut) : 0;
+            DWORD diffIn = (totalIn >= prevIn) ? (totalIn - prevIn) : 0;
+            DWORD diffOut = (totalOut >= prevOut) ? (totalOut - prevOut) : 0;
             g_netDownKBps = (DWORD)(((ULONGLONG)diffIn * 1000) / (elapsedMs * 1024));
             g_netUpKBps = (DWORD)(((ULONGLONG)diffOut * 1000) / (elapsedMs * 1024));
         }
+
         prevIn = totalIn;
         prevOut = totalOut;
         firstRun = false;
@@ -334,7 +315,7 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
 }
 
 int MeasurePing(unsigned long ip) {
-    if (ip == INADDR_NONE) return -1;
+    if (ip == 0 || ip == 0xFFFFFFFF) return -1;
 
     HANDLE hIcmp = IcmpCreateFile();
     if (hIcmp == INVALID_HANDLE_VALUE) return -1;
@@ -984,9 +965,6 @@ BOOL Wh_ModInit() {
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
 
-    WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
-
     LoadSettings(false);
     g_bRunning = true;
     g_hStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -1026,8 +1004,6 @@ void Wh_ModUninit() {
         CloseHandle(g_hStopEvent);
         g_hStopEvent = NULL;
     }
-
-    WSACleanup();
 
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
