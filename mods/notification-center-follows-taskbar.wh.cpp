@@ -1,12 +1,13 @@
 // ==WindhawkMod==
 // @id              notification-center-follows-taskbar
 // @name            Notification Center Follows Taskbar
-// @description     Correct Notification Center placement for all taskbar positions, with an optional calendar/notifications swap.
-// @version         1.0.0
+// @description     Keep Notification Center aligned with your taskbar, with optional placement swaps for notifications/calendar and media playback/Quick Settings.
+// @version         1.1.0
 // @author          Asteski
 // @github          https://github.com/Asteski
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
+// @include         ShellHost.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
@@ -15,13 +16,13 @@
 /*
 # Notification Center Follows Taskbar
 
-![Demonstration](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png)
+![Notification Center at the top + Swap notifications and calendar enabled](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar.png)
+![Swap media playback and Quick Settings enabled](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/notification-center-follows-taskbar/notification-center-follows-taskbar-02.png)
 
 Keeps the Windows 11 Notification Center (Win+N, including its calendar)
 correctly positioned with top, bottom, left, and right taskbars. Detects the
-taskbar on the flyout's monitor automatically. Adds the missing correction for
-top taskbars, with an 8 logical pixel vertical gap; retains the horizontal
-position chosen by Windows or other mods. Auto-hidden taskbars use the monitor's
+taskbar on the flyout's monitor automatically. Adds the optional right-edge
+repair after Explorer restarts. Auto-hidden taskbars use the monitor's
 working area.
 
 Install alongside your taskbar positioning mod. Close and reopen
@@ -41,17 +42,37 @@ transforms, including bindings. The positioning fix works without the swap.
 
 ## Other positioning mods
 
-The top-taskbar fix changes only Y by default, so horizontal alignment from
-Shell Flyout Positions is preserved. This mod and Shell Flyout Positions both
-observe the flyout being uncloaked; they should not both force its X coordinate.
+**Repair right-edge position (disable with Shell Flyout Positions)** is enabled
+by default. It keeps Notification Center right-aligned with top taskbars,
+including after Explorer restarts, while preserving the native panel inset.
+Disable it when using Shell Flyout Positions so that mod controls horizontal
+alignment. With repair disabled, this mod changes only the vertical position.
 
-**Repair right-edge position after Explorer restarts** is optional. It forces
-right alignment for top taskbars and overrides a left/center alignment selected
-in another mod. Leave it off when using Shell Flyout Positions. It is retained
-because we observed a surviving shell host occasionally reopening on the left
-after Explorer/taskbar recreation; forcing right alignment corrected that case.
+Enable **Swap media playback and Quick Settings** to put the media playback
+panel below Quick Settings (Win+A), keeping the familiar Windows appearance
+and spacing. Remove styling rules that already reorder these panels before
+enabling the option. Switching it off restores their original arrangement.
+Close and reopen Quick Settings after changing the option; no process restart
+is needed.
 
-ShellExperienceHost loads this mod only while panel swapping is enabled. Window
+This opt-in feature is a convenience for users who want both panel swaps
+without installing a Styler or attaching XAML Diagnostics. If you already use
+Windows 11 Notification Center Styler, you can use these equivalent rules
+instead and leave this mod's media swap disabled:
+
+```yaml
+controlStyles:
+  - target: Grid#ControlCenterRegion
+    styles:
+      - Grid.Row=0
+  - target: ControlCenter.MediaTransportControls#MediaTransportControls
+    styles:
+      - Grid.Row=1
+      - Margin=0,12,0,0
+      - Canvas.ZIndex=1
+```
+
+ShellExperienceHost/ShellHost loads this mod only while panel swapping is enabled. Window
 creation only schedules initialization; XAML is accessed later on its UI thread.
 */
 // ==/WindhawkModReadme==
@@ -61,9 +82,12 @@ creation only schedules initialization; XAML is accessed later on its UI thread.
 - swapPanels: false
   $name: Swap notifications and calendar
   $description: Put the calendar above notifications while keeping Windows' native panel sizes and scrolling. No fixed height limit or row sizing overrides.
-- repairHorizontalPosition: false
-  $name: Repair right-edge position after Explorer restarts
-  $description: Force right alignment with top taskbars. Leave off to preserve horizontal alignment from Windows or Shell Flyout Positions.
+- swapMediaPanels: false
+  $name: Swap media playback and Quick Settings
+  $description: Put media playback below Quick Settings while keeping the familiar Windows appearance and spacing. Switching this off restores the original arrangement.
+- repairHorizontalPosition: true
+  $name: Repair right-edge position (disable with Shell Flyout Positions)
+  $description: Keep Notification Center right-aligned with top taskbars after Explorer restarts. Disable when using Shell Flyout Positions to preserve its horizontal alignment.
 */
 // ==/WindhawkModSettings==
 
@@ -77,6 +101,8 @@ creation only schedules initialization; XAML is accessed later on its UI thread.
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <memory>
+#include <windhawk_utils.h>
 #include <commctrl.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -86,14 +112,20 @@ creation only schedules initialization; XAML is accessed later on its UI thread.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
 
 namespace {
 decltype(&SetWindowRgn) SetWindowRgn_Original;
 decltype(&DwmSetWindowAttribute) DwmSetWindowAttribute_Original;
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_swapPanels{false};
-std::atomic<bool> g_repairHorizontalPosition{false};
+std::atomic<bool> g_swapMediaPanels{false};
+std::atomic<bool> g_repairHorizontalPosition{true};
+
+
+
 bool g_shellHost = false;
+bool g_quickSettingsHost = false;
 thread_local bool g_adjusting = false;
 
 struct Placement {
@@ -189,9 +221,9 @@ void Restore(HWND window) {
 }
 
 POINT CalculateTopTaskbarPosition(const MONITORINFO& info, const RECT& visible,
-                                 UINT dpi, LONG nativeX,
-                                 bool repairHorizontalPosition = false) {
-    LONG verticalGap = MulDiv(8, dpi ? dpi : 96, 96);
+                                 UINT dpi, LONG nativeX = 0,
+                                 bool repairHorizontalPosition = true) {
+    LONG verticalGap = MulDiv(12, dpi ? dpi : 96, 96);
     // Use the visible region's right edge, not the outer host width: the host
     // can include transparent space. Don't retain a stale X after Explorer
     // recreates its taskbar or the surviving shell host is reused.
@@ -735,19 +767,267 @@ void Stop() {
     // handler/reference on its UI thread before this DLL can be unloaded.
     for (HWND window : candidates) SendMessageW(window, g_message, kStop, 0);
     g_window = nullptr;
+    g_rejectedGrid = {};
     { std::lock_guard lock(g_candidateMutex); g_candidates.clear(); }
 }
 }  // namespace PanelSwap
+
+// ShellHost Quick Settings is observed at XAML activation, independently of
+// Window::Current, CoreWindow HWNDs, and Notification Center discovery.
+namespace QuickSettings {
+using namespace PanelSwap;
+using winrt::Windows::UI::Core::CoreDispatcherPriority;
+// Saving a property must not keep a discarded flyout tree alive.
+struct SavedProperty {
+    winrt::weak_ref<DependencyObject> object;
+    DependencyProperty property;
+    winrt::Windows::Foundation::IInspectable value;
+    Binding binding{nullptr};
+    SavedProperty(DependencyObject const& target, DependencyProperty const& dp)
+        : object(winrt::make_weak(target)), property(dp), value(target.ReadLocalValue(dp)) {
+        if (auto expression = value.try_as<BindingExpression>()) binding = expression.ParentBinding();
+        // A BindingExpression can retain its target. Keep only the binding
+        // needed for restoration, not the expression attached to the old tree.
+        if (binding) value = nullptr;
+    }
+    void Restore() const {
+        auto target = object.get();
+        if (!target) return;
+        if (binding) BindingOperations::SetBinding(target, property, binding);
+        else if (value == DependencyProperty::UnsetValue()) target.ClearValue(property);
+        else target.SetValue(property, value);
+    }
+};
+struct State {
+    winrt::weak_ref<FrameworkElement> media;
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    DWORD threadId = GetCurrentThreadId();
+    winrt::event_token loaded{};
+    std::vector<SavedProperty> saved;
+    bool applied = false;
+};
+std::mutex mutex;
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<State>>> states;
+using Activate_t = HRESULT(WINAPI*)(void*, void**);
+Activate_t activateOriginal;
+using Showing_t = HRESULT(WINAPI*)(void*);
+Showing_t showingOriginal;
+decltype(&LoadLibraryExW) loadOriginal;
+std::atomic<bool> attempted{false};
+
+void RevokeLoaded(std::shared_ptr<State> const& state, FrameworkElement const& media) {
+    if (state->loaded.value) {
+        media.Loaded(state->loaded);
+        state->loaded = {};
+    }
+}
+
+FrameworkElement FindRegion(DependencyObject const& root, unsigned depth = 0) {
+    if (!root || depth > 40) return nullptr;
+    if (auto grid = root.try_as<Grid>(); grid && grid.Name() == L"ControlCenterRegion")
+        return grid;
+    if (auto panel = root.try_as<Panel>()) {
+        for (auto const& child : panel.Children())
+            if (auto found = FindRegion(child, depth + 1)) return found;
+        return nullptr;
+    }
+    for (int i = 0; i < VisualTreeHelper::GetChildrenCount(root); ++i)
+        if (auto found = FindRegion(VisualTreeHelper::GetChild(root, i), depth + 1))
+            return found;
+    return nullptr;
+}
+
+void Apply(std::shared_ptr<State> const& state, DependencyObject const& layoutRoot = nullptr) noexcept {
+    if (g_unloading || !g_swapMediaPanels || state->applied) return;
+    try {
+        auto media = state->media.get();
+        if (!media) return;
+        DependencyObject root = layoutRoot ? layoutRoot : media;
+        for (;;) {
+            auto parent = VisualTreeHelper::GetParent(root);
+            if (!parent) {
+                if (auto element = root.try_as<FrameworkElement>()) parent = element.Parent();
+            }
+            if (!parent) break;
+            root = parent;
+        }
+        auto region = FindRegion(root);
+        if (!region) {
+            Wh_Log(L"Media found without ControlCenterRegion; retry on next load/show");
+            return;
+        }
+        state->saved.emplace_back(region, Grid::RowProperty());
+        state->saved.emplace_back(media, Grid::RowProperty());
+        state->saved.emplace_back(media, FrameworkElement::MarginProperty());
+        state->saved.emplace_back(media, Canvas::ZIndexProperty());
+        state->applied = true;
+        Grid::SetRow(region, 0);
+        Grid::SetRow(media, 1);
+        media.Margin({0,12,0,0});
+        Canvas::SetZIndex(media, 1);
+        RevokeLoaded(state, media);
+        Wh_Log(L"ShellHost: applied Quick Settings/media styles on UI thread %lu", GetCurrentThreadId());
+    } catch (...) {
+        Wh_Log(L"Quick Settings styles failed: %08X", winrt::to_hresult().value);
+        for (auto it = state->saved.rbegin(); it != state->saved.rend(); ++it) {
+            try { it->Restore(); } catch (...) {}
+        }
+        state->saved.clear();
+        state->applied = false;
+        try { if (auto media = state->media.get()) RevokeLoaded(state, media); } catch (...) {}
+    }
+}
+
+std::shared_ptr<State> Observe(FrameworkElement const& element) {
+        if (!element || g_unloading) return {};
+        {
+            std::lock_guard lock(mutex);
+            if (states) std::erase_if(*states, [](auto const& state) {
+                return state->threadId == GetCurrentThreadId() && !state->media.get();
+            });
+            if (states) for (auto const& state : *states) {
+                if (state->threadId == GetCurrentThreadId() && state->media.get() == element)
+                    return state;
+            }
+        }
+        auto state = std::make_shared<State>();
+        state->media = winrt::make_weak(element);
+        state->dispatcher = element.Dispatcher();
+        std::weak_ptr<State> weak = state;
+        state->loaded = element.Loaded([weak](auto const&, auto const&) {
+            if (auto state = weak.lock()) Apply(state);
+        });
+        {
+            std::lock_guard lock(mutex);
+            if (!g_unloading) {
+                if (!states) states.emplace();
+                states->push_back(state);
+            } else {
+                element.Loaded(state->loaded);
+            }
+        }
+        return state;
+}
+
+HRESULT WINAPI Activate(void* type, void** result) {
+    auto hr = activateOriginal(type, result);
+    if (FAILED(hr) || !result || !*result || g_unloading) return hr;
+    try {
+        winrt::Windows::Foundation::IInspectable object{nullptr};
+        winrt::copy_from_abi(object, *result);
+        auto element = object.try_as<FrameworkElement>();
+        if (element && winrt::get_class_name(element) == L"ControlCenter.MediaTransportControls")
+            Observe(element);
+    } catch (...) { Wh_Log(L"Quick Settings activation failed: %08X", winrt::to_hresult().value); }
+    return hr;
+}
+
+// Hook the COM ABI produce thunk: self is IMediaTransportControls*, not the
+// implementation's C++ this pointer. QI retrieves the existing FrameworkElement.
+HRESULT WINAPI Showing(void* self) {
+    auto hr = showingOriginal(self);
+    if (FAILED(hr) || g_unloading || !g_swapMediaPanels) return hr;
+    try {
+        winrt::Windows::Foundation::IInspectable object{nullptr};
+        winrt::copy_from_abi(object, self);
+        auto element = object.try_as<FrameworkElement>();
+        if (element) {
+            if (auto state = Observe(element)) Apply(state);
+        } else Wh_Log(L"OnShowing object has no FrameworkElement interface");
+    } catch (...) { Wh_Log(L"Quick Settings showing callback failed: %08X", winrt::to_hresult().value); }
+    return hr;
+}
+
+bool HookShowing(HMODULE module) {
+    // Exact ABI producer name verified in the running ShellHost. Keep the
+    // struct qualifiers: they are part of Windhawk's undecorated symbol name.
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::MediaTransportControls,struct winrt::ControlCenter::IMediaTransportControls>::OnShowing(void)"},
+         &showingOriginal, Showing},
+    };
+    bool hooked = WindhawkUtils::HookSymbols(module, controlCenterDllHooks,
+                                           ARRAYSIZE(controlCenterDllHooks));
+    Wh_Log(L"%s", hooked ? L"OnShowing hooked" : L"OnShowing symbol hook unavailable");
+    return hooked;
+}
+
+HMODULE Module() {
+    return GetModuleHandleW(L"ControlCenter.dll");
+}
+void Hook(bool apply) {
+    auto module = Module();
+    if (!module || g_unloading || attempted.exchange(true)) return;
+    auto hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    try {
+        if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) winrt::throw_hresult(hr);
+        auto factoryFn = reinterpret_cast<HRESULT(WINAPI*)(void*,void**)>(
+            GetProcAddress(module, "DllGetActivationFactory"));
+        if (!factoryFn) winrt::throw_hresult(E_NOINTERFACE);
+        winrt::hstring name = L"ControlCenter.XamlMetaDataProvider";
+        winrt::Windows::Foundation::IActivationFactory factory{nullptr};
+        winrt::check_hresult(factoryFn(winrt::get_abi(name), winrt::put_abi(factory)));
+        auto provider = factory.ActivateInstance<winrt::Windows::Foundation::IInspectable>()
+            .as<winrt::Windows::UI::Xaml::Markup::IXamlMetadataProvider>();
+        auto type = provider.GetXamlType(L"ControlCenter.MediaTransportControls");
+        if (!type || !type.IsConstructible()) winrt::throw_hresult(E_NOINTERFACE);
+        auto target = (*reinterpret_cast<void***>(winrt::get_abi(type)))[18];
+        if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(Activate),
+                reinterpret_cast<void**>(&activateOriginal)))
+            winrt::throw_hresult(E_FAIL);
+        if (!HookShowing(module))
+            Wh_Log(L"Quick Settings showing hook unavailable; existing controls require host recreation");
+        if (apply && !Wh_ApplyHookOperations()) winrt::throw_hresult(E_FAIL);
+        Wh_Log(L"ShellHost: hooked Quick Settings XAML activation");
+    } catch (...) { Wh_Log(L"Quick Settings hook failed: %08X", winrt::to_hresult().value); }
+    if (SUCCEEDED(hr)) CoUninitialize();
+}
+HMODULE WINAPI Load(LPCWSTR name, HANDLE file, DWORD flags) {
+    auto module = loadOriginal(name, file, flags);
+    if (module && !attempted && module == Module()) Hook(true);
+    return module;
+}
+bool Init() {
+    Wh_Log(L"ShellHost initialized; waiting for ControlCenter module");
+    auto base = GetModuleHandleW(L"kernelbase.dll");
+    auto target = base ? GetProcAddress(base, "LoadLibraryExW") : nullptr;
+    if (!target || !Wh_SetFunctionHook(reinterpret_cast<void*>(target),
+            reinterpret_cast<void*>(Load), reinterpret_cast<void**>(&loadOriginal))) return false;
+    Hook(false);
+    return true;
+}
+void Stop() {
+    std::vector<std::shared_ptr<State>> cleanup;
+    { std::lock_guard lock(mutex); if (states) cleanup.swap(*states); states.reset(); }
+    for (auto const& state : cleanup) {
+        try {
+            state->dispatcher.RunAsync(CoreDispatcherPriority::Low, [state] {
+                if (auto media = state->media.get()) RevokeLoaded(state, media);
+                for (auto it = state->saved.rbegin(); it != state->saved.rend(); ++it) it->Restore();
+                state->saved.clear();
+                state->media = {};
+                state->dispatcher = nullptr;
+            }).get();
+        } catch (...) { Wh_Log(L"Quick Settings UI cleanup failed: %08X", winrt::to_hresult().value); }
+    }
+}
+} // namespace QuickSettings
 }  // namespace
 
 BOOL Wh_ModInit() {
-    g_swapPanels = Wh_GetIntSetting(L"swapPanels") != 0;
     g_repairHorizontalPosition = Wh_GetIntSetting(L"repairHorizontalPosition") != 0;
+    g_swapPanels = Wh_GetIntSetting(L"swapPanels") != 0;
+    g_swapMediaPanels = Wh_GetIntSetting(L"swapMediaPanels") != 0;
+
     WCHAR path[MAX_PATH];
     if (!GetModuleFileNameW(nullptr, path, ARRAYSIZE(path))) return FALSE;
     auto name = wcsrchr(path, L'\\');
-    g_shellHost = name && _wcsicmp(name + 1, L"ShellExperienceHost.exe") == 0;
+    g_quickSettingsHost = name && _wcsicmp(name + 1, L"ShellHost.exe") == 0;
+    g_shellHost = name && (_wcsicmp(name + 1, L"ShellExperienceHost.exe") == 0 ||
+                           _wcsicmp(name + 1, L"ShellHost.exe") == 0);
     if (g_shellHost) {
+        if (g_quickSettingsHost) return g_swapMediaPanels && QuickSettings::Init();
+        // Media styling belongs exclusively to ShellHost.exe.
+        g_swapMediaPanels = false;
         if (!g_swapPanels) return FALSE;
         PanelSwap::g_message = RegisterWindowMessageW(
             L"Windhawk_NotificationCenterFollowsTaskbar_PanelSwap");
@@ -763,14 +1043,17 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (g_quickSettingsHost) { QuickSettings::Hook(true); return; }
     if (g_shellHost) {
         PanelSwap::FindExistingWindows();
     }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    g_swapPanels = Wh_GetIntSetting(L"swapPanels") != 0;
     g_repairHorizontalPosition = Wh_GetIntSetting(L"repairHorizontalPosition") != 0;
+    g_swapPanels = Wh_GetIntSetting(L"swapPanels") != 0;
+    g_swapMediaPanels = Wh_GetIntSetting(L"swapMediaPanels") != 0;
+
     // Reload removes the ShellExperienceHost half entirely when swapping is off.
     *reload = g_shellHost;
     return TRUE;
@@ -778,6 +1061,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
+    if (g_quickSettingsHost) { QuickSettings::Stop(); return; }
     if (g_shellHost) {
         PanelSwap::Stop();
         return;
@@ -793,5 +1077,3 @@ void Wh_ModBeforeUninit() {
         Restore(window);
     }
 }
-
-
