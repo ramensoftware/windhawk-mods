@@ -187,7 +187,6 @@ works as before. Turning the mod off brings the original banners back.
 
 #include <algorithm>
 #include <atomic>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -840,14 +839,12 @@ std::wstring RuntimeId(IUIAutomationElement* element) {
     return id;
 }
 
-Com<IUIAutomationCondition>* NewIdCondition(IUIAutomation* uia, const wchar_t* automationId) {
-    auto condition = new Com<IUIAutomationCondition>();
+void NewIdCondition(IUIAutomation* uia, const wchar_t* automationId, Com<IUIAutomationCondition>& condition) {
     VARIANT v{};
     v.vt = VT_BSTR;
     v.bstrVal = SysAllocString(automationId);
-    uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, v, condition->put());
+    uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, v, condition.put());
     VariantClear(&v);
-    return condition;
 }
 
 std::wstring ChildName(IUIAutomationElement* toast, IUIAutomationCondition* condition) {
@@ -901,12 +898,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
             uia->CreatePropertyCondition(UIA_ClassNamePropertyId, v, toastCondition.put());
             VariantClear(&v);
         }
-        Com<IUIAutomationCondition>* senderCondition = NewIdCondition(uia.p, L"SenderName");
-        Com<IUIAutomationCondition>* titleCondition = NewIdCondition(uia.p, L"Title");
-        Com<IUIAutomationCondition>* textCondition = NewIdCondition(uia.p, L"MessageText");
-        Com<IUIAutomationCondition>* dismissCondition = NewIdCondition(uia.p, L"DismissButton");
-        Com<IUIAutomationCondition>* verbCondition = NewIdCondition(uia.p, L"VerbButton");
-        Com<IUIAutomationCondition>* editCondition = NewIdCondition(uia.p, L"Edit");
+        Com<IUIAutomationCondition> senderCondition;
+        NewIdCondition(uia.p, L"SenderName", senderCondition);
+        Com<IUIAutomationCondition> titleCondition;
+        NewIdCondition(uia.p, L"Title", titleCondition);
+        Com<IUIAutomationCondition> textCondition;
+        NewIdCondition(uia.p, L"MessageText", textCondition);
+        Com<IUIAutomationCondition> dismissCondition;
+        NewIdCondition(uia.p, L"DismissButton", dismissCondition);
+        Com<IUIAutomationCondition> verbCondition;
+        NewIdCondition(uia.p, L"VerbButton", verbCondition);
+        Com<IUIAutomationCondition> editCondition;
+        NewIdCondition(uia.p, L"Edit", editCondition);
 
         // Toasts on the banner. The element is needed to click, dismiss or type; runtimeId only saves re-reading
         // the texts while it stays the same.
@@ -947,8 +950,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
             if (!busy) {
                 // ShellExperienceHost restarts (or starts late): its window events need a new hook.
                 DWORD pid = BannerProcess();
-                if (pid && pid != g_shellPid && g_window) {
-                    PostMessage(g_window, WM_APP_REHOOK, 0, 0);
+                HWND window = g_window;
+                if (pid && pid != g_shellPid && window) {
+                    PostMessage(window, WM_APP_REHOOK, 0, 0);
                 }
             }
             std::vector<Command> commands;
@@ -964,9 +968,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     if (k.info.id != command.id) {
                         continue;
                     }
-                    IUIAutomationCondition* condition = command.action == Action::Dismiss  ? dismissCondition->p
-                                                        : command.action == Action::Button ? verbCondition->p
-                                                        : command.action == Action::FocusInput ? editCondition->p
+                    IUIAutomationCondition* condition = command.action == Action::Dismiss  ? dismissCondition.p
+                                                        : command.action == Action::Button ? verbCondition.p
+                                                        : command.action == Action::FocusInput ? editCondition.p
                                                                                                : nullptr;
                     if (!condition) {
                         InvokeElement(k.element);
@@ -1010,9 +1014,13 @@ DWORD WINAPI WorkerThread(LPVOID) {
                         if (same != known.end()) {
                             info = same->info;
                         } else {
-                            info.app = ChildName(element, senderCondition->p);
-                            info.title = ChildName(element, titleCondition->p);
-                            info.text = ChildName(element, textCondition->p);
+                            info.app = ChildName(element, senderCondition.p);
+                            info.title = ChildName(element, titleCondition.p);
+                            info.text = ChildName(element, textCondition.p);
+                            if (Stopping()) {
+                                element->Release();  // a new toast takes many UIA calls; don't make unloading wait
+                                break;
+                            }
                             std::wstring key = info.app + L"\n" + info.title + L"\n" + info.text + L"#";
                             int n = (int)std::count_if(current.begin(), current.end(), [&](const Known& k) {
                                 return k.info.id.rfind(key, 0) == 0;
@@ -1031,7 +1039,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                                 element->get_CurrentAutomationId(&automationId);
                                 info.priority = automationId && wcsncmp(automationId, L"PriorityToastView", 17) == 0;
                                 SysFreeString(automationId);
-                                auto buttons = findChildren(element, verbCondition->p);
+                                auto buttons = findChildren(element, verbCondition.p);
                                 for (auto button : buttons) {
                                     BSTR name = nullptr;
                                     button->get_CurrentName(&name);
@@ -1039,10 +1047,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
                                     SysFreeString(name);
                                 }
                                 release(buttons);
-                                auto edits = findChildren(element, editCondition->p);
+                                auto edits = findChildren(element, editCondition.p);
                                 info.hasInput = !edits.empty();
                                 release(edits);
-                                info.placeholder = ChildName(element, editCondition->p);
+                                info.placeholder = ChildName(element, editCondition.p);
                                 Log(L"Toast %s: %s / %s [%s] %d buttons%s", info.app.c_str(), info.title.c_str(),
                                     info.text.c_str(), info.image.c_str(), (int)info.buttons.size(),
                                     info.hasInput ? L", reply box" : L"");
@@ -1050,7 +1058,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                         }
                         // The reply box changes while typing: its text and focus are read on every pass.
                         if (info.hasInput) {
-                            auto edits = findChildren(element, editCondition->p);
+                            auto edits = findChildren(element, editCondition.p);
                             if (!edits.empty()) {
                                 Com<IUIAutomationValuePattern> value;
                                 BSTR text = nullptr;
@@ -1103,12 +1111,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
         for (auto& k : known) {
             k.element->Release();
         }
-        delete senderCondition;
-        delete titleCondition;
-        delete textCondition;
-        delete dismissCondition;
-        delete verbCondition;
-        delete editCondition;
     }
     CoUninitialize();
     return 0;
@@ -2000,7 +2002,8 @@ bool StartCards() {
     return g_uiThread && g_workerThread;
 }
 
-// Both threads end soon after the stop event: the card thread waits on it, the worker checks it between UIA calls.
+// Both threads end soon after the stop event: the card thread waits on it, the worker checks it between toasts
+// and while reading a new one.
 // Neither sends messages to the thread unloading the mod, so waiting without a timeout can't deadlock, and the mod's
 // code is never freed while one of them still runs.
 void StopCards() {
