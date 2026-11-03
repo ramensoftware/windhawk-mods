@@ -2,7 +2,7 @@
 // @id thinkpad-battery-controls
 // @name ThinkPad Battery Controls
 // @description Charge to full temporarily and restore Lenovo battery protection.
-// @version 0.9.15
+// @version 0.9.17
 // @author Bill Bauman
 // @github https://github.com/billbauman
 // @license Apache-2.0
@@ -3489,15 +3489,24 @@ void RenderAdvanced(C::StackPanel body, FrameworkElement target) {
       body.Children().Append(Text(L"Always-on USB", 16));
       body.Children().Append(Text(
           L"Supply power to supported USB ports while the laptop is sleeping or shut down.", 12));
-      C::ComboBox choices;
-      for (auto label : {L"Off", L"During sleep", L"During sleep and shutdown"})
-        choices.Items().Append(winrt::box_value(label));
-      choices.SelectedIndex(a.usb);
-      choices.HorizontalAlignment(HorizontalAlignment::Stretch);
+      C::StackPanel choices;
+      choices.Spacing(2);
+      auto selection = std::make_shared<int>(a.usb);
+      int index = 0;
+      for (auto label : {L"Off", L"During sleep", L"During sleep and shutdown"}) {
+        C::RadioButton choice;
+        choice.Content(winrt::box_value(label));
+        choice.GroupName(L"ThinkPadBatteryControlsUsbMode");
+        choice.IsChecked(index == a.usb);
+        choice.HorizontalAlignment(HorizontalAlignment::Stretch);
+        TrackEvent(choice.Checked(
+            winrt::auto_revoke,
+            SafeUi([selection, value = index](auto const&, auto const&) { *selection = value; })));
+        choices.Children().Append(choice);
+        ++index;
+      }
       body.Children().Append(choices);
-      auto apply = button(L"Apply USB setting", [choices](auto const&, auto const&) {
-        Send(21, choices.SelectedIndex());
-      });
+      button(L"Apply USB setting", [selection](auto const&, auto const&) { Send(21, *selection); });
       body.Children().Append(
           Text(L"This firmware setting can remain active after the mod is removed.", 12));
     } else
@@ -3637,7 +3646,7 @@ void ShowAdvanced(FrameworkElement target) {
   tabs.Orientation(C::Orientation::Horizontal);
   tabs.Spacing(6);
   int index = 0;
-  std::vector<PCWSTR> labels = {L"Battery health", L"Power", L"Experimental"};
+  std::vector<PCWSTR> labels = {L"Battery health", L"USB Power", L"Experimental"};
   if (advancedTab >= int(labels.size()))
     advancedTab = 0;
   for (auto label : labels) {
