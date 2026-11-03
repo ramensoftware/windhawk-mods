@@ -41,9 +41,9 @@ storage is moved across the first time this one runs. Other Outlook windows
 that are already open pick up a change when they are reopened.
 
 **Folder pane:** Favorites in groups that fold (right-click a group header for
-its menu, Shift+right-click a favorite to rename or move it), per-account
-compose buttons, a resizable pane, account trees under one foldable heading,
-accounts reordered by dragging.
+its menu, drag a favorite to move it, Shift+right-click it to rename or move
+it), per-account compose buttons, a resizable pane, account trees under one
+foldable heading, accounts reordered by dragging.
 
 **Agenda:** today and the next days from every account's calendar at the bottom
 of the folder pane, with a join button for online meetings, under a month grid
@@ -627,6 +627,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     });
     out.push(`.olkt-acct-drop{position:fixed;z-index:100000;height:2px;background:var(--colorBrandStroke1,#4aa3f0);pointer-events:none}`);
     out.push(`${ACCT_LIST}.olkt-dragging [role="treeitem"][aria-level="1"]{cursor:grabbing}`);
+    out.push(`[data-olkt-favs].olkt-dragging [role="treeitem"]{cursor:grabbing}`);
     out.push(`.olkt-head.olkt-accounts{margin-top:10px;padding-left:12px;border-top:1px solid var(--colorNeutralStroke2,#3a3a3a);border-radius:0;height:32px}`);
 
     // Favorites: our compose bar first, then anything not yet placed (in Outlook's
@@ -1014,6 +1015,85 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       prev = node;
     }
     return changed;
+  }
+
+  // Drag a favorite to move it: onto the upper or lower half of another favorite to
+  // land before or after it, onto a group header's upper half to land above the group,
+  // its lower half to land first inside it. Outlook's own drag of the row is cancelled
+  // for the press (the tree's order is ours; a native drop would only reorder Outlook's
+  // hidden list). A press without movement stays a normal click.
+  function onFavPress(ev) {
+    const list = boundList;
+    const item = ev.button === 0 && ev.target.closest('[role="treeitem"]');
+    if (!item || !item.parentElement || item.parentElement.parentElement !== list) return;
+    const folder = item.getAttribute('data-folder-name');
+    if (!folder || !cfg.favorites.length || matchesAnyGroup(folder) || cfg.hide.includes(folder)) return;
+    const startY = ev.clientY;
+    const noNative = e => e.preventDefault();
+    let node = null, line = null, drop = null;
+    const target = e => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const head = el && el.closest('.olkt-head[data-group]');
+      const row = !head && el && el.closest('[role="treeitem"]');
+      const hit = head || row;
+      if (!hit || !list.contains(hit)) return null;
+      const box = hit.getBoundingClientRect();
+      const low = e.clientY > box.top + box.height / 2;
+      if (head) {
+        const g = findGroup(head.dataset.group);
+        return g ? (low ? { into: g, y: box.bottom } : { ref: g, after: false, y: box.top }) : null;
+      }
+      const ref = findFolder(row.getAttribute('data-folder-name'));
+      return ref && ref !== node ? { ref, after: low, y: low ? box.bottom : box.top } : null;
+    };
+    const move = e => {
+      if (!line && Math.abs(e.clientY - startY) < 6) return;
+      if (!line) {
+        node = findFolder(folder);
+        if (!node && placeUnplaced()) node = findFolder(folder);
+        if (!node) { end(); return; }
+        line = document.createElement('div');
+        line.className = 'olkt-acct-drop';
+        document.body.appendChild(line);
+        list.classList.add('olkt-dragging');
+      }
+      drop = target(e);
+      const lb = list.getBoundingClientRect();
+      Object.assign(line.style, drop ? { display: '', left: lb.left + 8 + 'px', width: lb.width - 16 + 'px', top: drop.y - 1 + 'px' } : { display: 'none' });
+    };
+    const end = e => {
+      document.removeEventListener('pointermove', move, true);
+      document.removeEventListener('pointerup', end, true);
+      document.removeEventListener('pointercancel', end, true);
+      list.removeEventListener('dragstart', noNative, true);
+      if (!line) return;
+      line.remove();
+      list.classList.remove('olkt-dragging');
+      // Swallow the click the release turns into, and only that one.
+      const swallow = c => { c.stopPropagation(); c.preventDefault(); };
+      document.addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => document.removeEventListener('click', swallow, true), 0);
+      if (drop && e && e.type === 'pointerup') placeAt(node, drop);
+    };
+    list.addEventListener('dragstart', noNative, true);
+    document.addEventListener('pointermove', move, true);
+    document.addEventListener('pointerup', end, true);
+    document.addEventListener('pointercancel', end, true);
+  }
+
+  function placeAt(node, drop) {
+    const at = locate(node);
+    if (!at) return;
+    at.siblings.splice(at.index, 1);
+    if (drop.into) {
+      drop.into.items.unshift(node);
+      if (folds[drop.into.id]) toggleFold(drop.into.id);
+    } else {
+      const t = locate(drop.ref);
+      if (!t) { at.siblings.splice(at.index, 0, node); return; }
+      t.siblings.splice(t.index + (drop.after ? 1 : 0), 0, node);
+    }
+    save();
   }
 
   // ==== pane resize ====
@@ -2835,6 +2915,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     list.removeEventListener('contextmenu', onListContextMenu, true);
     list.removeEventListener('drop', onListRelease, true);
     list.removeEventListener('pointerup', onListRelease, true);
+    list.removeEventListener('pointerdown', onFavPress, true);
   }
   function ensure() {
     ensureCalendar();
@@ -2850,6 +2931,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       list.addEventListener('contextmenu', onListContextMenu, true);
       list.addEventListener('drop', onListRelease, true);
       list.addEventListener('pointerup', onListRelease, true);
+      list.addEventListener('pointerdown', onFavPress, true);
     }
     ensureCompose(list);
     if (adoptNewFavorites(list)) { save(); return; }
