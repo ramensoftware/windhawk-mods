@@ -19,6 +19,8 @@
 Keeps File Explorer folders in **Large icons** view. The icon size is
 configurable: 96 pixels matches Windows' own Large icons.
 
+![The same folder in Details view and with the mod enabled](https://raw.githubusercontent.com/MayconDIS/Windhawk_Mods/main/assets/large-icons-before-after.png)
+
 ## How it works
 
 The view is switched when a folder opens in a File Explorer window, without
