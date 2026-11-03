@@ -2,12 +2,246 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T00:04:26.000Z</updated>
+    <updated>2026-11-03T03:03:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Dock 1.1.2]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-dock#ec6dbe374c301e756a29f4c47f32371c903009a7</id>
+        <link href="https://windhawk.net/mods/desktop-icon-dock"/>
+        <updated>2026-11-03T03:03:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopicondock">Desktop Icon Dock</h1>
+<p>Turns shortcuts, files and folders that you drag onto it into a centered
+macOS-style dock. The dock is an independent list, not a mirror of the
+desktop. A fully transparent background is used by default, showing only the
+icons; an optional Liquid Glass panel is available.</p>
+<p><img src="https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg" alt="Desktop Icon Dock preview" /></p>
+<p><em>Example: icons arranged as a centered macOS-style dock; the hovered icon is
+magnified with its label shown.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Drag to add</strong>: drag a shortcut, file or folder from the desktop, File
+Explorer or a <code>shell:Desktop</code> window onto the dock. It is inserted at the
+drop position; items that are already in the dock are ignored. <code>.lnk</code> and
+<code>.url</code> shortcuts are copied into a dock-owned folder, so deleting the
+original shortcut from the desktop leaves the dock item intact; files,
+folders and virtual items are referenced by path.</li>
+<li><strong>Drag to reorder</strong>: hold the left mouse button on an icon and drag it
+within the dock. Icons rearrange live and the new order is saved when you
+release the button.</li>
+<li><strong>Drag out to put back on the desktop</strong>: drag an item outside the dock and
+release it over the desktop. The icon is placed at the release point. If the
+item already lives on the desktop, its original icon is moved there;
+otherwise a shortcut is created on the desktop and the original file or
+folder stays where it is. For a shortcut that was copied into the dock, the
+original shortcut is used, so dragging it out does not create a second
+<code>(2)</code> copy. Releasing over any other window leaves the item in the dock.
+Items that have no filesystem location, such as the Recycle Bin, are only
+removed from the dock. A dock-owned shortcut copy is removed after it has
+been placed back. Removing the last item brings back the empty-state hint.</li>
+<li><strong>Empty state</strong>: a visible drop target is shown when the list is empty, so
+the dock can always receive the first item. The window is never hidden just
+because the list is empty.</li>
+<li><strong>macOS-style hover magnification</strong>: icons grow smoothly as the pointer
+approaches, with cosine falloff and neighboring icons spreading aside.</li>
+<li><strong>Transparent background (default)</strong>: only the icons and a soft drop shadow
+are drawn, so the dock blends into the wallpaper; transparent areas of the
+dock window are click-through, so desktop right-click and clicks keep
+working.</li>
+<li><strong>Optional Liquid Glass panel</strong>: enabled by turning off "Transparent
+background". Blurred wallpaper backdrop, milky glass tint, specular rim and
+a hover glow. The backdrop is sampled from the screen above the dock and
+works with Wallpaper Engine and other animated wallpapers.</li>
+<li><strong>Name labels</strong>: hovering an icon shows a name pill above it; in transparent
+mode the pill stays at a fixed position instead of jumping while icons
+scale.</li>
+<li><strong>Native interaction</strong>: left click opens an item; right click opens that
+item's native Explorer context menu (open, send to, create shortcut,
+properties, delete, …).</li>
+<li><strong>Independent from the desktop</strong>: adding, removing, renaming or moving
+desktop icons does not change the dock. Shortcuts added to the dock are
+copied into its own folder, so even deleting them from the desktop does not
+affect the dock; files, folders and virtual items are referenced by path.
+The list is stored per user in Windhawk's mod storage and survives Explorer
+restarts.</li>
+<li><strong>Original desktop icons hidden in memory (optional)</strong>: when enabled, the
+desktop's list view is hidden while the dock is active; no Explorer setting
+or registry value is changed, and the icons are shown again when the mod is
+unloaded. Off by default, so the desktop remains available as a drag source.</li>
+<li><strong>Icon cache with cleanup</strong>: icons are cached per item path and reused;
+virtual items such as the Recycle Bin refresh their icons periodically.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The dock keeps its own ordered list. It does not read or rearrange the system
+desktop icons.</p>
+<ul>
+<li><strong>Storage</strong>: the ordered list is saved as <code>items.tsv</code> in Windhawk's mod
+storage, in a subfolder named after the current user's security identifier
+(SID), so each Windows user keeps a separate list. Each entry is a
+desktop-absolute parsing name, such as a full file path or a shell GUID for
+virtual items, followed by the original path for copied shortcuts. Shortcut
+copies live in the <code>Items</code> subfolder of the same directory. Every add,
+reorder and removal is written immediately. Windhawk removes the whole
+storage folder when the mod is uninstalled.</li>
+<li><strong>Adding</strong>: external drags are received through an OLE drop target
+(<code>IDropTarget</code>), supporting file drops and shell item lists. The insertion
+position follows the pointer; <code>.lnk</code> and <code>.url</code> shortcuts are copied into
+the dock folder first. Duplicates are skipped by parsing name. The drop is
+processed after the drop has been accepted, so a slow or unreachable path
+does not freeze the drag source.</li>
+<li><strong>Reordering and removing</strong>: these are handled inside the dock window with
+mouse capture, so they also work in the transparent gaps between icons.</li>
+<li><strong>Putting items back on the desktop</strong>: releasing outside the panel over the
+desktop places the item at the release point; releasing over any other
+window snaps it back into the dock. An item whose parent folder is already
+the user or public desktop has its original icon repositioned through the
+desktop's folder view; for a copied shortcut the original shortcut path is
+used. Any other file or folder gets a uniquely named <code>.lnk</code> shortcut on the
+user desktop (a source <code>.lnk</code> or <code>.url</code> is copied, other items get a new
+shortcut). The original file is never moved or deleted, and a dock-owned
+shortcut copy is removed after it has been placed back. Positioning follows
+the system "align icons to grid" setting.</li>
+<li><strong>Empty state</strong>: the centered hint pill is drawn with a non-transparent
+background and is registered as part of the same drop target.</li>
+<li><strong>Layout</strong>: centered horizontally at the bottom of the primary monitor,
+above the taskbar; the panel widens as items are added, and icons are
+vertically centered at rest.</li>
+<li><strong>Maintenance</strong>: every 30 seconds, entries that failed to resolve earlier
+are retried and the icons of virtual items are refreshed. Items that still
+cannot be resolved are skipped on screen but kept in storage.</li>
+<li><strong>Performance</strong>: in transparent mode the pointer position is polled every
+50 ms so hover magnification also works in the gaps between icons; idle CPU
+usage is negligible.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Description |
+| --- | --- | --- |
+| Icon size | 48 | Base size in pixels at 100% DPI, scaled with system DPI (about 72 px at 150%) |
+| Icon spacing | 10 | Pixel gap between icons at rest |
+| Maximum scale (%) | 175 | Largest magnification of the hovered icon |
+| Effect radius | 160 | Distance in pixels over which magnification fades out from the cursor |
+| Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
+| Smoothing speed | 16 | Higher is snappier, lower is softer |
+| Bottom offset | 10 | Gap between the dock and the taskbar, in pixels at 100% DPI |
+| Transparent background | On | Show only the icons; turn off to use the Liquid Glass panel |
+| Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
+| Glass blur | 20 | Glass mode only: backdrop blur strength |
+| Show labels | On | Show a name pill for the hovered item |
+| Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
+| Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |</p>
+<h2 id="howitdiffersfromexistingmods">How it differs from existing mods</h2>
+<p>This mod overlaps with Quick Launch Dock in the basic launcher behavior:
+drag in, reorder, click to launch, a persistent list. It exists separately
+because it targets a different use case: a dock that is part of the desktop,
+not a launcher that stays on top of other windows.</p>
+<ul>
+<li><strong>Desktop level</strong>: the window sits at the bottom of the Z-order, below all
+normal windows, and never takes focus. It is visible when the desktop is
+visible, like the desktop icons themselves.</li>
+<li><strong>Drag out to the desktop</strong>: items can be dragged from the dock back to the
+desktop, reusing the original shortcut when it is still there instead of
+creating a duplicate.</li>
+<li><strong>Desktop integration</strong>: hiding the system desktop icons in memory and
+opening the native Explorer context menu both work with the shell's desktop
+view from the mod's own process, without injecting into the running shell.</li>
+<li><strong>Screen-sampled glass</strong>: the backdrop and the name pills sample the screen
+area behind the dock, which requires a desktop-level window.</li>
+</ul>
+<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
+<ul>
+<li>Windows 10 / 11 on x86-64 only. The mod runs as a Windhawk tool mod in a
+dedicated explorer.exe process, separate from the shell's own explorer.exe;
+the shell is only accessed through its published shell interfaces. (The
+windhawk.exe host cannot be used here: Windhawk is a 32-bit app, while this
+mod is x86-64.)</li>
+<li>Primary monitor only; the dock is anchored to the bottom of the primary
+monitor, above the taskbar.</li>
+<li>The dock is a layered window placed below normal windows; full-screen apps
+and other windows cover it, which is expected.</li>
+<li>In transparent mode, fully transparent pixels are click-through; the icons
+themselves remain clickable.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><strong>After an Explorer restart</strong>: the dock runs in its own dedicated
+explorer.exe process, so a shell restart does not unload it; it reconnects to
+the new desktop view and reapplies the icon hiding.</li>
+<li><strong>An item disappeared</strong>: its stored parsing name could not be resolved (for
+example, the referenced file or folder was deleted or renamed). Shortcuts
+are copied into the dock folder and are not affected by deleting the
+desktop shortcut. The entry is kept in storage and retried; it reappears if
+the path is available again.</li>
+<li><strong>After dragging an item out, a shortcut appeared on the desktop</strong>: this is
+expected. Items that are not on the desktop are not moved; a shortcut is
+created at the release point instead. The original file or folder is not
+affected, and the shortcut can be deleted at any time.</li>
+<li><strong>Settings changes seem to have no effect</strong>: saving settings reloads and
+rebuilds the dock automatically; no Explorer restart is needed.</li>
+<li><strong>Add an item</strong>: drag it from the desktop or any File Explorer window onto
+the dock. You can also press Win+R and enter <code>shell:Desktop</code> to open a
+desktop folder and drag from there.</li>
+<li><strong>Reset the list</strong>: drag the items out, or uninstall the mod. Windhawk
+deletes the mod's storage, including the list and the shortcut copies, when
+the mod is removed.</li>
+</ul>
+<h2 id="">中文说明</h2>
+<p>本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。</p>
+<ul>
+<li>从桌面、资源管理器或 <code>shell:Desktop</code> 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（<code>.lnk</code> / <code>.url</code>）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。</li>
+<li>按住图标在 Dock 内拖动可实时排序；拖到 Dock 外、在桌面上松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；对于复制进来的快捷方式会优先使用原快捷方式，不会产生多余的 <code>(2)</code> 副本；在其他窗口上松手则项目留在 Dock。回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。</li>
+<li>Dock 是独立列表，不同步桌面；列表保存在 Windhawk 模组存储的 <code>items.tsv</code> 中，并按当前用户 SID 分目录，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于同一目录的 <code>Items</code> 子目录。卸载模组时 Windhawk 会删除整个存储目录。</li>
+<li>图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。</li>
+<li>“隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。</li>
+<li>解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。</li>
+<li>与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。</li>
+<li>仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。</li>
+</ul>
+<p>各设置项的说明见上方英文表格。</p>]]></content>
+        <author>
+            <name>yizqq0721</name>
+            <uri>https://github.com/yizqq0721</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Background Dimmer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/background-dimmer#a7de0d897193602ab4c4fa4a8c35bf549f1e9999</id>
+        <link href="https://windhawk.net/mods/background-dimmer"/>
+        <updated>2026-11-03T03:03:52.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/HvfnpFn.png" alt="Background Dimmer" /></p>
+<h1 id="backgrounddimmer">Background Dimmer</h1>
+<p>Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.</p>
+<p>The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.</p>
+<p>Windows that run as administrator need Windhawk 2 (currently in alpha). On Windhawk 1.x the layer can't move behind them, so when one of them gets focus, the previously active window stays undimmed.</p>
+<h2 id="liveconfiguration">Live configuration</h2>
+<p>The look is tuned in the mod's own <strong>configuration window</strong>, where every change shows up immediately on screen. Open it with the <strong>configuration hotkey</strong> (<strong>Win+Ctrl+Alt+D</strong> by default, changeable in the mod settings).</p>
+<p>The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.</p>
+<p>Changes made in the configuration window are saved automatically. Dimming can be turned off with the <strong>Active</strong> checkbox in the window, or with an optional on/off hotkey.</p>
+<h2 id="howthecontrolswork">How the controls work</h2>
+<ul>
+<li><strong>Opacity</strong>: how strongly the layer covers the background.</li>
+<li><strong>Brightness</strong>: the overall lightness of the layer.</li>
+<li><strong>Contrast</strong>: the difference between the light and dark parts of a pattern. At 0 the pattern disappears into a flat tint.</li>
+<li><strong>Size</strong>: the size of the checkerboard squares or the width of the stripes, in pixels.</li>
+<li><strong>Base color</strong>: tints the layer. White gives neutral gray tones.</li>
+</ul>
+<p>Brightness and contrast set the two pattern tones as <em>brightness ± contrast / 2</em>, so one controls how dark the layer is and the other how visible the pattern is. Near the ends of the range a tone is clipped to black or white, which keeps the pattern visible over a black base, as in the default look.</p>
+<h2 id="behavior">Behavior</h2>
+<ul>
+<li>Dialogs stay lit together with the window that owns them.</li>
+<li>The taskbar, Start, Alt+Tab and menus never move the layer.</li>
+<li>When the desktop has focus, the layer can either hide or cover everything (option in the configuration window).</li>
+<li>The mod runs in its own Windhawk process and does not inject into Explorer or any other program.</li>
+<li>Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).</li>
+<li>The appearance is stored per computer, so all Windows users of the same PC share it.</li>
+</ul>]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tab Router 1.1.1]]></title>
         <id>https://windhawk.net/mods/explorer-tab-router#62118eece92a009ea27315a1ba22c68555709bd9</id>
@@ -488,211 +722,6 @@
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Siri Plus Launchpad 1.0.0]]></title>
-        <id>https://windhawk.net/mods/siri-plus-launchpad#91b08e11456122862911513f39e4ca8f79542c49</id>
-        <link href="https://windhawk.net/mods/siri-plus-launchpad"/>
-        <updated>2026-11-01T16:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="siripluslaunchpad">Siri Plus Launchpad</h1>
-<p>A <a href="https://windhawk.net">Windhawk</a> mod that replaces the Windows 11 Start menu with a macOS-inspired launcher: a Siri-style search bar with a categories menu, app tabs, file search, clipboard history, quick actions and live glass effects.</p>
-<p>Press the <strong>Windows key</strong> (or click <strong>Start</strong>) and type, or pick what you want to search from the menu that drops down from the bar.</p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri.gif" alt="Original Siri mode" /></p>
-<hr />
-<h2 id="highlights">Highlights</h2>
-<ul>
-<li><strong>Four modes</strong>: Original Siri (default), Floating, Window and Fullscreen</li>
-<li><strong>Live glass</strong>: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus an experimental liquid glass with refraction in the Siri modes</li>
-<li><strong>One search for everything</strong>: Apps, Files, Clipboard and Actions</li>
-<li><strong>App tabs</strong>: All, automatic categories and up to 6 tabs of your own</li>
-<li><strong>Recent apps row</strong>: recently opened or installed apps (or the most used ones) on top</li>
-<li><strong>Power options</strong>: type <em>shut down</em>, <em>restart</em>, <em>sleep</em>, <em>lock</em> or <em>sign out</em>, or use the floating power button</li>
-<li><strong>Keyboard shortcuts</strong>: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, and can also open the launcher from any program (optional)</li>
-<li><strong>Custom icons</strong>: give any app your own icon (PNG, JPG, ICO, WebP…), or pick one from an <strong>icon gallery</strong> (any folder of icons, such as a downloaded icon pack), with search and a color filter</li>
-<li><strong>Themes</strong>: Clear glass, Light, Dark, OLED (deep black), Siri (macOS 27 gradient) and a fully Custom theme, with an optional glass effect on Light, Dark and OLED</li>
-<li><strong>Settings panel</strong>: the <strong>⋯</strong> button at the end of the bar opens every setting in a macOS-style panel, applied live</li>
-<li><strong>Move the bar</strong>: hold the Siri bar and drag it anywhere, on any monitor</li>
-<li><strong>Backup</strong>: save settings, folders, tabs and custom icons to one file and restore them, even after reinstalling</li>
-<li><strong>Your language</strong>: follows the Windows display language, or pick one (English, Portuguese, Spanish, French, German and Italian)</li>
-</ul>
-<hr />
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="originalsiridefault">Original Siri (default)</h3>
-<p>| Clear glass | Dark | OLED |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png" alt="Original Siri, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png" alt="Original Siri, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png" alt="Original Siri, OLED theme" /> |</p>
-<h3 id="floating">Floating</h3>
-<p>| Clear glass | Light | Siri gradient |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-glass.png" alt="Floating, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-light.png" alt="Floating, Light theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-siri.png" alt="Floating, Siri theme" /> |</p>
-<p>| Dark | OLED |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-dark.png" alt="Floating, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-oled.png" alt="Floating, OLED theme" /> |</p>
-<h3 id="window">Window</h3>
-<p>| Clear glass | Light | Siri gradient |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-glass.png" alt="Window, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-light.png" alt="Window, Light theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-siri.png" alt="Window, Siri theme" /> |</p>
-<p>| Dark | OLED |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-dark.png" alt="Window, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-oled.png" alt="Window, OLED theme" /> |</p>
-<h3 id="fullscreen">Fullscreen</h3>
-<p>| Clear glass | Light | Siri gradient |
-|---|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-glass.png" alt="Fullscreen, Clear glass theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-light.png" alt="Fullscreen, Light theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-siri.png" alt="Fullscreen, Siri theme" /> |</p>
-<p>| Dark | OLED |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-dark.png" alt="Fullscreen, Dark theme" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-oled.png" alt="Fullscreen, OLED theme" /> |</p>
-<h3 id="inaction">In action</h3>
-<p>| Settings panel | Moving the bar |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/settings-panel.gif" alt="The settings panel" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/drag-the-bar.gif" alt="Dragging the Siri bar" /> |</p>
-<p>| Right-click menus and tabs | Power options |
-|---|---|
-| <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/menus-and-tabs.gif" alt="Right-click menus and app tabs" /> | <img src="https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/power-options.gif" alt="Typing to shut down" /> |</p>
-<hr />
-<h2 id="modes">Modes</h2>
-<h3 id="originalsiridefault-1">Original Siri (default)</h3>
-<p>A search bar in the macOS 27 style.</p>
-<ul>
-<li><strong>Categories menu</strong>: hover over the bar (or click it) and a menu drops down with <strong>Applications</strong>, <strong>Files</strong>, <strong>Actions</strong> and <strong>Clipboard</strong>, each with its icon and its keyboard shortcut (default <strong>Ctrl+1 … Ctrl+4</strong>, configurable).</li>
-<li>Picking a category makes its icon and name glide from the menu into the bar, and the search then works inside that category. If you type straight away, you go to Applications.</li>
-<li><strong>Going back</strong>: hover the category icon in the bar and it turns into a back arrow. Click it, or press <strong>Esc</strong>, to return to "Search" with the magnifier and pick another category.</li>
-<li><strong>App tabs</strong>:</li>
-<li><strong>All</strong> comes first and shows every app.</li>
-<li>Then the automatic categories: Utilities, Productivity, Entertainment, Social, Creativity, Reading and Other.</li>
-<li>Then up to <strong>6 tabs of your own</strong>, for example "Games".</li>
-<li><strong>First row</strong>: recently opened or installed apps, or the most used ones (configurable), separated from the rest by a thin line.</li>
-<li><strong>Actions</strong>: Lock, Sleep, Restart, Shut down, Sign out, Settings, Task Manager, File Explorer, Control Panel, Screenshot and Empty Recycle Bin. Shut down works like Windows' own (fast startup when it is on) and warns before signing off other users who are still signed in.</li>
-</ul>
-<h3 id="floating-1">Floating</h3>
-<p>The bar appears out of an animated circle, the <strong>Siri wave</strong> or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble.</p>
-<h3 id="windowandfullscreen">Window and Fullscreen</h3>
-<p>The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.</p>
-<hr />
-<h2 id="managingapptabsoriginalsiri">Managing app tabs (Original Siri)</h2>
-<p>| What | How |
-|---|---|
-| Create a tab | Right-click an app → <strong>New tab with this app</strong>, or right-click the tab strip / an empty area → <strong>New tab</strong>. Type the name and press <strong>Enter</strong> |
-| Add apps | Inside a tab, right-click → <strong>Add app</strong>. A picker shows every app: <strong>long-press</strong> the first one, then a simple click selects or deselects the others (selected apps jiggle); <strong>Done</strong> saves |
-| Remove an app | Inside a tab, right-click the app → <strong>Remove from tab</strong> |
-| Rename or delete | Right-click the tab → <strong>Rename tab</strong> / <strong>Delete tab</strong> |
-| Built-in tabs | They can also be edited (add or remove apps) and deleted. <strong>Restore default tabs</strong> brings them back |
-| Move through tabs | <strong>Tab / Shift+Tab</strong>, or click and drag the strip sideways (the mouse wheel works too) |</p>
-<hr />
-<h2 id="files">Files</h2>
-<ul>
-<li><strong>Indexer</strong>: Everything (through IPC, no DLL needed), Windows Search or a direct scan. The default, Automatic, uses the first one that is available.</li>
-<li>When the search is empty, your <strong>recent searches</strong> are shown, with a button to clear them. History can be turned off.</li>
-<li>Results show the <strong>folder</strong> of each file under its name, in a list or as icons.</li>
-<li>The maximum number of results is configurable.</li>
-</ul>
-<h2 id="clipboard">Clipboard</h2>
-<ul>
-<li>Keeps the texts you copy while the mod runs (in memory only, never saved). The number of items and how long a copy stays (15 minutes to 7 days, or until Windows restarts) are configurable.</li>
-<li>The category only shows up when there is something in it. Each item has an <strong>×</strong> to remove it, and right-clicking gives <strong>Clear clipboard</strong>, which empties the history and the Windows clipboard.</li>
-<li><strong>Passwords stay out</strong>: items that password managers and browsers mark as secret are skipped, just like Windows' own clipboard history (Win+V).</li>
-<li>Shown as a <strong>list</strong>: the first line of each text, with a preview of the rest (or its size) underneath.</li>
-<li>Click an item to copy it again. Turning the category off also stops monitoring and clears the history.</li>
-</ul>
-<h2 id="appsandicons">Apps and icons</h2>
-<ul>
-<li><strong>Search</strong> apps by typing.</li>
-<li><strong>Folders</strong> (Window and Fullscreen): drag apps together, rename, undo. The Siri modes list the apps of every folder together.</li>
-<li><strong>Multi-select</strong> with jiggling icons, <strong>pin to taskbar</strong> (also by dragging an icon to the taskbar), <strong>uninstall</strong>.</li>
-<li><strong>Custom icons</strong>: right-click an app → <strong>Change icon…</strong> and pick an image (PNG, JPG, JPEG, BMP, ICO, GIF or WebP). The new icon is remembered across restarts; <strong>Reset icon</strong> brings back the original. Works in every mode, including apps inside folders.</li>
-<li><strong>Icon gallery</strong>: choose a folder of icon images in the settings (<em>Apps and icons → Icon gallery folder</em>, typed or picked with <strong>Choose…</strong>), for example a downloaded icon pack. Then right-click an app → <strong>Icon from gallery…</strong> The folder's images (subfolders included) show in the grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time the gallery opens. After picking, the launcher goes back to where it was, with that app selected.</li>
-<li>Icon size, number of columns and the scrolling direction are configurable.</li>
-</ul>
-<h2 id="settingspanel">Settings panel</h2>
-<ul>
-<li>Click the <strong>⋯</strong> button at the end of the bar (every mode). The bar moves to the left and becomes a list of sections, and a panel with the settings comes out of the button. Every change applies at once.</li>
-<li>Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.</li>
-<li><strong>Theme defaults</strong> (Appearance) brings back the chosen theme's own look. <strong>Restore all defaults</strong> (General) puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.</li>
-<li><strong>Back up</strong> saves everything to a <code>.siribackup</code> file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. <strong>Restore a backup</strong> brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.</li>
-<li>In Window and Fullscreen the window folds into its search field while the settings are open. With the bar low on the screen, the settings open upward.</li>
-</ul>
-<h2 id="movingthebarfloatingandoriginalsiri">Moving the bar (Floating and Original Siri)</h2>
-<ul>
-<li>Hold the bar for a moment and drag it anywhere, on any monitor. Its place is remembered. Low on the screen, the results and menus open above it.</li>
-<li>Right-click the bar → <strong>Put the bar back in the center</strong> (shown once it has been moved).</li>
-</ul>
-<hr />
-<h2 id="customization">Customization</h2>
-<p>All options are in the <strong>⋯</strong> settings panel (in six languages) and in the mod's <strong>Settings</strong> tab in Windhawk (English and Portuguese).</p>
-<p>| Block | Options |
-|---|---|
-| ① Mode | Original Siri (default), Floating, Window, Fullscreen |
-| ② Theme | Clear glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom |
-| Language | Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano |
-| ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), clear glass style (frosted, or experimental liquid for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
-| ④ Custom theme | Color, opacity, dark-to-light gradient, border width, color and opacity |
-| ⑤ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
-| ⑥ Floating and Original Siri | Bar size, results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, power options when typing, floating power button, first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults <strong>Ctrl+1</strong>, <strong>Ctrl+2</strong>, <strong>Ctrl+3</strong>, <strong>Ctrl+4</strong>; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
-| ⑦ Opening | Open with the Windows key and/or the Start button |
-| ⑧ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
-| ⑨ Files | On/off, search history, list or icons, indexer, maximum results |
-| ⑩ Clipboard | On/off, number of items kept, how long a copy stays |</p>
-<hr />
-<h2 id="keyboardandmouse">Keyboard and mouse</h2>
-<p>| Key / action | What it does |
-|---|---|
-| <strong>Win</strong> / Start button | Open or close |
-| Type | Search (in Original Siri, typing right away searches Applications) |
-| <strong>Ctrl+1 / 2 / 3 / 4</strong> | Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With <em>Also with the launcher closed</em> on (off by default) they open the launcher from any program, and other programs no longer get those keys |
-| <strong>Tab / Shift+Tab</strong> | Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions |
-| Arrows + <strong>Enter</strong> | Move through results / open |
-| Other <strong>Ctrl+digits</strong> | Launch the matching result (never an action such as Shut down) |
-| <strong>Esc</strong> | Closes menus, then clears the search, goes back to the categories and finally closes |
-| Right-click on the search bar | Cut, Copy, Paste, Select all, Delete all |
-| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → <strong>New folder with N items</strong> puts them in a folder; Original Siri: inside the app picker) |</p>
-<hr />
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11 (x64)</li>
-<li><a href="https://windhawk.net">Windhawk</a></li>
-<li>Live blur needs <strong>Transparency effects</strong> turned on in Windows (<em>Settings → Personalization → Colors</em>). Without it, a blurred still image is used.</li>
-<li>Optional: <a href="https://www.voidtools.com">Everything</a> for instant file search (run it normally, not as administrator)</li>
-</ul>
-<h2 id="privacyandfiles">Privacy and files</h2>
-<ul>
-<li>The mod never goes online.</li>
-<li>Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose.</li>
-<li>The clipboard history lives in memory only and is never written to disk.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>Category shortcuts from any program</strong> (off by default): when <em>Shortcuts → Also with the launcher closed</em> is on, Ctrl+1 … Ctrl+4 are registered as system hotkeys, so other programs no longer get them (for example, the browser's Ctrl+1 for the first tab). Leave it off, or pick other combinations, if you need those keys elsewhere.</li>
-<li><strong>Fullscreen Start</strong> (<code>fullscreen-start</code>): don't enable both. Each one replaces the Start menu through the same hook without calling the original, so only one of them would get the Windows key.</li>
-<li><strong>Spotlight Launcher</strong>: it adds a separate search bar on Alt+Space and leaves the Start menu alone. This mod replaces the Start menu itself (Windows key and Start button) and adds app tabs, folders, files, clipboard history and actions. Both can be used together.</li>
-</ul>
-<hr />
-<h2 id="supporttheproject">Support the project</h2>
-<p>If you enjoy Siri Plus Launchpad, you can support its development with a Pix donation:</p>
-<p><strong><a href="https://livepix.gg/kurokobr">Donate with LivePix (Pix)</a></strong></p>
-<hr />
-<h2 id="author">Author</h2>
-<p>Developed and maintained by <strong>Thiago Silva</strong> (<a href="https://github.com/brideinflame-rgb">github.com/brideinflame-rgb</a>).</p>
-<h2 id="license">License</h2>
-<p>Copyright (c) 2026 Thiago Silva. Licensed under the <strong>GNU General Public License v3.0</strong>.</p>]]></content>
-        <author>
-            <name>Thiago Silva</name>
-            <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Parallax Wallpaper 0.9.2]]></title>
-        <id>https://windhawk.net/mods/parallax-wallpaper#aa6d2e02e6c2f1bdd3448937e1147caf8ab9cad4</id>
-        <link href="https://windhawk.net/mods/parallax-wallpaper"/>
-        <updated>2026-11-01T15:03:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed perspective having no visible effect. Effect setup failed with E_INVALIDARG because the 3D transform was given an unsupported interpolation mode, so perspective disabled itself silently. It now uses cubic sampling, and falls back to linear sampling if a driver rejects it.</li>
-<li>Made perspective clearly visible: at 100% intensity, the virtual viewing distance now equals the screen's larger dimension (previously twice that), so the tilt no longer reads as extra movement.</li>
-<li>The default perspective tilt is now 4° instead of 2°. Existing settings are kept; if perspective still looks subtle, raise the tilt to 4° or more.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

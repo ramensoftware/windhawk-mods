@@ -2,12 +2,246 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-03T00:04:26.000Z</updated>
+    <updated>2026-11-03T03:03:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Dock 1.1.2]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-dock#ec6dbe374c301e756a29f4c47f32371c903009a7</id>
+        <link href="https://windhawk.net/mods/desktop-icon-dock"/>
+        <updated>2026-11-03T03:03:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopicondock">Desktop Icon Dock</h1>
+<p>Turns shortcuts, files and folders that you drag onto it into a centered
+macOS-style dock. The dock is an independent list, not a mirror of the
+desktop. A fully transparent background is used by default, showing only the
+icons; an optional Liquid Glass panel is available.</p>
+<p><img src="https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg" alt="Desktop Icon Dock preview" /></p>
+<p><em>Example: icons arranged as a centered macOS-style dock; the hovered icon is
+magnified with its label shown.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Drag to add</strong>: drag a shortcut, file or folder from the desktop, File
+Explorer or a <code>shell:Desktop</code> window onto the dock. It is inserted at the
+drop position; items that are already in the dock are ignored. <code>.lnk</code> and
+<code>.url</code> shortcuts are copied into a dock-owned folder, so deleting the
+original shortcut from the desktop leaves the dock item intact; files,
+folders and virtual items are referenced by path.</li>
+<li><strong>Drag to reorder</strong>: hold the left mouse button on an icon and drag it
+within the dock. Icons rearrange live and the new order is saved when you
+release the button.</li>
+<li><strong>Drag out to put back on the desktop</strong>: drag an item outside the dock and
+release it over the desktop. The icon is placed at the release point. If the
+item already lives on the desktop, its original icon is moved there;
+otherwise a shortcut is created on the desktop and the original file or
+folder stays where it is. For a shortcut that was copied into the dock, the
+original shortcut is used, so dragging it out does not create a second
+<code>(2)</code> copy. Releasing over any other window leaves the item in the dock.
+Items that have no filesystem location, such as the Recycle Bin, are only
+removed from the dock. A dock-owned shortcut copy is removed after it has
+been placed back. Removing the last item brings back the empty-state hint.</li>
+<li><strong>Empty state</strong>: a visible drop target is shown when the list is empty, so
+the dock can always receive the first item. The window is never hidden just
+because the list is empty.</li>
+<li><strong>macOS-style hover magnification</strong>: icons grow smoothly as the pointer
+approaches, with cosine falloff and neighboring icons spreading aside.</li>
+<li><strong>Transparent background (default)</strong>: only the icons and a soft drop shadow
+are drawn, so the dock blends into the wallpaper; transparent areas of the
+dock window are click-through, so desktop right-click and clicks keep
+working.</li>
+<li><strong>Optional Liquid Glass panel</strong>: enabled by turning off "Transparent
+background". Blurred wallpaper backdrop, milky glass tint, specular rim and
+a hover glow. The backdrop is sampled from the screen above the dock and
+works with Wallpaper Engine and other animated wallpapers.</li>
+<li><strong>Name labels</strong>: hovering an icon shows a name pill above it; in transparent
+mode the pill stays at a fixed position instead of jumping while icons
+scale.</li>
+<li><strong>Native interaction</strong>: left click opens an item; right click opens that
+item's native Explorer context menu (open, send to, create shortcut,
+properties, delete, …).</li>
+<li><strong>Independent from the desktop</strong>: adding, removing, renaming or moving
+desktop icons does not change the dock. Shortcuts added to the dock are
+copied into its own folder, so even deleting them from the desktop does not
+affect the dock; files, folders and virtual items are referenced by path.
+The list is stored per user in Windhawk's mod storage and survives Explorer
+restarts.</li>
+<li><strong>Original desktop icons hidden in memory (optional)</strong>: when enabled, the
+desktop's list view is hidden while the dock is active; no Explorer setting
+or registry value is changed, and the icons are shown again when the mod is
+unloaded. Off by default, so the desktop remains available as a drag source.</li>
+<li><strong>Icon cache with cleanup</strong>: icons are cached per item path and reused;
+virtual items such as the Recycle Bin refresh their icons periodically.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The dock keeps its own ordered list. It does not read or rearrange the system
+desktop icons.</p>
+<ul>
+<li><strong>Storage</strong>: the ordered list is saved as <code>items.tsv</code> in Windhawk's mod
+storage, in a subfolder named after the current user's security identifier
+(SID), so each Windows user keeps a separate list. Each entry is a
+desktop-absolute parsing name, such as a full file path or a shell GUID for
+virtual items, followed by the original path for copied shortcuts. Shortcut
+copies live in the <code>Items</code> subfolder of the same directory. Every add,
+reorder and removal is written immediately. Windhawk removes the whole
+storage folder when the mod is uninstalled.</li>
+<li><strong>Adding</strong>: external drags are received through an OLE drop target
+(<code>IDropTarget</code>), supporting file drops and shell item lists. The insertion
+position follows the pointer; <code>.lnk</code> and <code>.url</code> shortcuts are copied into
+the dock folder first. Duplicates are skipped by parsing name. The drop is
+processed after the drop has been accepted, so a slow or unreachable path
+does not freeze the drag source.</li>
+<li><strong>Reordering and removing</strong>: these are handled inside the dock window with
+mouse capture, so they also work in the transparent gaps between icons.</li>
+<li><strong>Putting items back on the desktop</strong>: releasing outside the panel over the
+desktop places the item at the release point; releasing over any other
+window snaps it back into the dock. An item whose parent folder is already
+the user or public desktop has its original icon repositioned through the
+desktop's folder view; for a copied shortcut the original shortcut path is
+used. Any other file or folder gets a uniquely named <code>.lnk</code> shortcut on the
+user desktop (a source <code>.lnk</code> or <code>.url</code> is copied, other items get a new
+shortcut). The original file is never moved or deleted, and a dock-owned
+shortcut copy is removed after it has been placed back. Positioning follows
+the system "align icons to grid" setting.</li>
+<li><strong>Empty state</strong>: the centered hint pill is drawn with a non-transparent
+background and is registered as part of the same drop target.</li>
+<li><strong>Layout</strong>: centered horizontally at the bottom of the primary monitor,
+above the taskbar; the panel widens as items are added, and icons are
+vertically centered at rest.</li>
+<li><strong>Maintenance</strong>: every 30 seconds, entries that failed to resolve earlier
+are retried and the icons of virtual items are refreshed. Items that still
+cannot be resolved are skipped on screen but kept in storage.</li>
+<li><strong>Performance</strong>: in transparent mode the pointer position is polled every
+50 ms so hover magnification also works in the gaps between icons; idle CPU
+usage is negligible.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Description |
+| --- | --- | --- |
+| Icon size | 48 | Base size in pixels at 100% DPI, scaled with system DPI (about 72 px at 150%) |
+| Icon spacing | 10 | Pixel gap between icons at rest |
+| Maximum scale (%) | 175 | Largest magnification of the hovered icon |
+| Effect radius | 160 | Distance in pixels over which magnification fades out from the cursor |
+| Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
+| Smoothing speed | 16 | Higher is snappier, lower is softer |
+| Bottom offset | 10 | Gap between the dock and the taskbar, in pixels at 100% DPI |
+| Transparent background | On | Show only the icons; turn off to use the Liquid Glass panel |
+| Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
+| Glass blur | 20 | Glass mode only: backdrop blur strength |
+| Show labels | On | Show a name pill for the hovered item |
+| Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
+| Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |</p>
+<h2 id="howitdiffersfromexistingmods">How it differs from existing mods</h2>
+<p>This mod overlaps with Quick Launch Dock in the basic launcher behavior:
+drag in, reorder, click to launch, a persistent list. It exists separately
+because it targets a different use case: a dock that is part of the desktop,
+not a launcher that stays on top of other windows.</p>
+<ul>
+<li><strong>Desktop level</strong>: the window sits at the bottom of the Z-order, below all
+normal windows, and never takes focus. It is visible when the desktop is
+visible, like the desktop icons themselves.</li>
+<li><strong>Drag out to the desktop</strong>: items can be dragged from the dock back to the
+desktop, reusing the original shortcut when it is still there instead of
+creating a duplicate.</li>
+<li><strong>Desktop integration</strong>: hiding the system desktop icons in memory and
+opening the native Explorer context menu both work with the shell's desktop
+view from the mod's own process, without injecting into the running shell.</li>
+<li><strong>Screen-sampled glass</strong>: the backdrop and the name pills sample the screen
+area behind the dock, which requires a desktop-level window.</li>
+</ul>
+<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
+<ul>
+<li>Windows 10 / 11 on x86-64 only. The mod runs as a Windhawk tool mod in a
+dedicated explorer.exe process, separate from the shell's own explorer.exe;
+the shell is only accessed through its published shell interfaces. (The
+windhawk.exe host cannot be used here: Windhawk is a 32-bit app, while this
+mod is x86-64.)</li>
+<li>Primary monitor only; the dock is anchored to the bottom of the primary
+monitor, above the taskbar.</li>
+<li>The dock is a layered window placed below normal windows; full-screen apps
+and other windows cover it, which is expected.</li>
+<li>In transparent mode, fully transparent pixels are click-through; the icons
+themselves remain clickable.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><strong>After an Explorer restart</strong>: the dock runs in its own dedicated
+explorer.exe process, so a shell restart does not unload it; it reconnects to
+the new desktop view and reapplies the icon hiding.</li>
+<li><strong>An item disappeared</strong>: its stored parsing name could not be resolved (for
+example, the referenced file or folder was deleted or renamed). Shortcuts
+are copied into the dock folder and are not affected by deleting the
+desktop shortcut. The entry is kept in storage and retried; it reappears if
+the path is available again.</li>
+<li><strong>After dragging an item out, a shortcut appeared on the desktop</strong>: this is
+expected. Items that are not on the desktop are not moved; a shortcut is
+created at the release point instead. The original file or folder is not
+affected, and the shortcut can be deleted at any time.</li>
+<li><strong>Settings changes seem to have no effect</strong>: saving settings reloads and
+rebuilds the dock automatically; no Explorer restart is needed.</li>
+<li><strong>Add an item</strong>: drag it from the desktop or any File Explorer window onto
+the dock. You can also press Win+R and enter <code>shell:Desktop</code> to open a
+desktop folder and drag from there.</li>
+<li><strong>Reset the list</strong>: drag the items out, or uninstall the mod. Windhawk
+deletes the mod's storage, including the list and the shortcut copies, when
+the mod is removed.</li>
+</ul>
+<h2 id="">中文说明</h2>
+<p>本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。</p>
+<ul>
+<li>从桌面、资源管理器或 <code>shell:Desktop</code> 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（<code>.lnk</code> / <code>.url</code>）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。</li>
+<li>按住图标在 Dock 内拖动可实时排序；拖到 Dock 外、在桌面上松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；对于复制进来的快捷方式会优先使用原快捷方式，不会产生多余的 <code>(2)</code> 副本；在其他窗口上松手则项目留在 Dock。回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。</li>
+<li>Dock 是独立列表，不同步桌面；列表保存在 Windhawk 模组存储的 <code>items.tsv</code> 中，并按当前用户 SID 分目录，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于同一目录的 <code>Items</code> 子目录。卸载模组时 Windhawk 会删除整个存储目录。</li>
+<li>图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。</li>
+<li>“隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。</li>
+<li>解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。</li>
+<li>与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。</li>
+<li>仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。</li>
+</ul>
+<p>各设置项的说明见上方英文表格。</p>]]></content>
+        <author>
+            <name>yizqq0721</name>
+            <uri>https://github.com/yizqq0721</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Background Dimmer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/background-dimmer#a7de0d897193602ab4c4fa4a8c35bf549f1e9999</id>
+        <link href="https://windhawk.net/mods/background-dimmer"/>
+        <updated>2026-11-03T03:03:52.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://i.imgur.com/HvfnpFn.png" alt="Background Dimmer" /></p>
+<h1 id="backgrounddimmer">Background Dimmer</h1>
+<p>Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.</p>
+<p>The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.</p>
+<p>Windows that run as administrator need Windhawk 2 (currently in alpha). On Windhawk 1.x the layer can't move behind them, so when one of them gets focus, the previously active window stays undimmed.</p>
+<h2 id="liveconfiguration">Live configuration</h2>
+<p>The look is tuned in the mod's own <strong>configuration window</strong>, where every change shows up immediately on screen. Open it with the <strong>configuration hotkey</strong> (<strong>Win+Ctrl+Alt+D</strong> by default, changeable in the mod settings).</p>
+<p>The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.</p>
+<p>Changes made in the configuration window are saved automatically. Dimming can be turned off with the <strong>Active</strong> checkbox in the window, or with an optional on/off hotkey.</p>
+<h2 id="howthecontrolswork">How the controls work</h2>
+<ul>
+<li><strong>Opacity</strong>: how strongly the layer covers the background.</li>
+<li><strong>Brightness</strong>: the overall lightness of the layer.</li>
+<li><strong>Contrast</strong>: the difference between the light and dark parts of a pattern. At 0 the pattern disappears into a flat tint.</li>
+<li><strong>Size</strong>: the size of the checkerboard squares or the width of the stripes, in pixels.</li>
+<li><strong>Base color</strong>: tints the layer. White gives neutral gray tones.</li>
+</ul>
+<p>Brightness and contrast set the two pattern tones as <em>brightness ± contrast / 2</em>, so one controls how dark the layer is and the other how visible the pattern is. Near the ends of the range a tone is clipped to black or white, which keeps the pattern visible over a black base, as in the default look.</p>
+<h2 id="behavior">Behavior</h2>
+<ul>
+<li>Dialogs stay lit together with the window that owns them.</li>
+<li>The taskbar, Start, Alt+Tab and menus never move the layer.</li>
+<li>When the desktop has focus, the layer can either hide or cover everything (option in the configuration window).</li>
+<li>The mod runs in its own Windhawk process and does not inject into Explorer or any other program.</li>
+<li>Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).</li>
+<li>The appearance is stored per computer, so all Windows users of the same PC share it.</li>
+</ul>]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tab Router 1.1.1]]></title>
         <id>https://windhawk.net/mods/explorer-tab-router#62118eece92a009ea27315a1ba22c68555709bd9</id>
@@ -1382,175 +1616,6 @@ F014
         <author>
             <name>Wildstyle23</name>
             <uri>https://github.com/wildstyle23</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinKlok 1.0.0]]></title>
-        <id>https://windhawk.net/mods/winklok#d5dc716a30408034afa9f68542ea575268d8621e</id>
-        <link href="https://windhawk.net/mods/winklok"/>
-        <updated>2026-10-30T13:03:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winklok">WinKlok</h1>
-<p><strong>A calmer, smarter clock mod for Windows 11 taskbar.</strong>
-WinKlok replaces the stock date/time flyout with a fast, native, Fluent-styled panel that
-combines a <strong>Calendar, Stopwatch, Timer, Alarm, Notes</strong> and <strong>Settings</strong> in one place, and puts
-live stopwatch and timer previews right next to the taskbar clock.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktop%20.jpg" alt="Desktop" /></p>
-<hr />
-<h2 id="highlights">Highlights</h2>
-<p>| | |
-|---|---|
-| <strong>Native look and feel</strong> | Drawn with Direct2D and DirectWrite in the Windows palette, with real acrylic blur, your accent colour, light and dark themes, and Windows-style slide-up animations. |
-| <strong>Everything in one panel</strong> | Calendar, Stopwatch, Timer, Alarm, Notes and Settings, one click away from the clock. |
-| <strong>Live taskbar previews</strong> | A running stopwatch or timer is shown beside the clock with pause/play and reset buttons. |
-| <strong>Smooth scrolling</strong> | Mouse wheel, precision touchpad (tracked from raw two-finger movement with kinetic momentum), touch and pen share smooth scrolling. |
-| <strong>Private by design</strong> | No network access, no telemetry, no accounts. Everything is stored locally by Windhawk. |</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/panelmodetable.jpg" alt="Panel Layout modes" /></p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/alltabs.png" alt="Panel Tabs" /></p>
-<hr />
-<h2 id="features">Features</h2>
-<h3 id="calendar">Calendar</h3>
-<ul>
-<li>Month, year and decade views, with smooth vertical month scrolling like the Windows calendar.</li>
-<li>Today and the selected date are marked with your accent colour. First day of the week follows Windows.</li>
-</ul>
-<h3 id="stopwatch">Stopwatch</h3>
-<ul>
-<li>Centisecond precision, up to 200 laps (the newest lap is always on top) and a smooth lap list.</li>
-<li>Keeps running while the panel is closed and shows a live preview next to the clock.</li>
-</ul>
-<h3 id="timer">Timer</h3>
-<ul>
-<li>Hours / minutes / seconds pickers, optional timer names and one-click presets you can save and remove.</li>
-<li>Run several timers at once. The most recently touched timer is shown beside the clock.</li>
-</ul>
-<h3 id="alarm">Alarm</h3>
-<ul>
-<li>Repeat on any days, custom label, snooze length and one of nine built-in sounds with live audition.</li>
-<li>The sound and snooze length you pick become the defaults for your next alarm.</li>
-<li>If an alarm or timer came due while the PC was off or asleep, it never rings late. One popup lists
-everything you missed, with dates and times.</li>
-</ul>
-<h3 id="notes">Notes</h3>
-<ul>
-<li>Any number of notes, saved automatically, with a rich preview of Markdown and LaTeX maths.</li>
-<li><strong>Paste from ChatGPT, Gemini, Google and the web and keep the structure</strong>: headings, lists,
-tables, block quotes, code blocks, links and equations are converted to Markdown as you paste.</li>
-<li>Links in the preview are clickable (only the link itself), plain URLs are detected automatically.</li>
-<li>One-tap <strong>Copy</strong> button for the whole note body (the title is not included), adjustable text size.</li>
-</ul>
-<h3 id="settings">Settings</h3>
-<ul>
-<li>Taskbar previews, preview layout, notification icon, 12/24-hour time (applied everywhere),
-panel material (acrylic or simple) and default timer / alarm sounds.</li>
-<li><strong>Sync time now</strong> (Windows asks for administrator permission whenever it is needed).</li>
-<li>A compact <strong>About</strong> card with the version, developer and project links.</li>
-</ul>
-<hr />
-<h2 id="firstrundefaults">First-run defaults</h2>
-<p>Notification bell off, taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the <em>Windows Alarm</em>
-tone for both timers and alarms.</p>
-<h2 id="gettingstarted">Getting started</h2>
-<ol>
-<li>Install and enable the mod in Windhawk.</li>
-<li>WinKlok takes over the taskbar clock within a second or so. If the clock does not change, restart
-Windows Explorer from Task Manager.</li>
-<li>Have fun…</li>
-</ol>
-<h2 id="tips">Tips</h2>
-<ul>
-<li>Scroll over the tab bar to reveal more tabs, or click a tab to slide it to the centre.</li>
-<li>Right-click a timer preset to reveal its remove button.</li>
-<li>The notification bell is optional. Turn it off in Settings if you prefer the stock one.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11 with the XAML taskbar, 64-bit only.</li>
-<li>Do not combine with other mods that rebuild the taskbar clock area (for example <em>Taskbar Clock
-Customization</em>) until you have verified they coexist.</li>
-<li>WinKlok does not change the taskbar height. Use the <em>Taskbar height and icon size</em> mod for that.</li>
-<li>To turn WinKlok off, disable the mod in Windhawk: the taskbar clock goes back to Windows immediately.</li>
-<li>If something misbehaves, enable logging for this mod in Windhawk and check the log.</li>
-</ul>
-<h2 id="fordevelopers">For developers</h2>
-<ul>
-<li>Single-file C++ mod, organised in blocks: engine and persistence, taskbar integration (XAML
-injection and hooks), native UI primitives, sound synthesis, rich-text and LaTeX engine, panel
-pages and alert windows.</li>
-<li>Rendering is plain Win32 + Direct2D/DirectWrite. There is no browser engine and no external asset.</li>
-<li>Alarm sounds are synthesised at runtime into in-memory WAV buffers, so nothing needs to be shipped.</li>
-<li>The pasted-HTML to Markdown converter lives next to the Notes editor and understands the clipboard
-<em>HTML Format</em> produced by modern browsers and chat apps.</li>
-<li>Contributions, bug reports and ideas are welcome on GitHub.</li>
-</ul>
-<h2 id="creditsandlicence">Credits and licence</h2>
-<p>Made by <strong>Shifting Whistler</strong>.</p>
-<ul>
-<li>GitHub: https://github.com/shifting-whistler</li>
-<li>WinKlok Repo: https://github.com/shifting-whistler/WinKlok</li>
-</ul>
-<p>WinKlok is free and open source software released under the <strong>GNU General Public License v3.0</strong>
-(or any later version). You are free to use, study, share and improve it under the terms of that licence.</p>]]></content>
-        <author>
-            <name>Shifting Whistler</name>
-            <uri>https://github.com/shifting-whistler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fast Backspace 1.0]]></title>
-        <id>https://windhawk.net/mods/fast-backspace#1539f9586a19f1ac140654f04292fe20b5cff3fd</id>
-        <link href="https://windhawk.net/mods/fast-backspace"/>
-        <updated>2026-10-30T00:01:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fastbackspace">Fast Backspace</h1>
-<p>Increase the speed of held Backspace without changing the repeat speed of other
-keys. The first press and the Windows keyboard repeat delay stay unchanged.</p>
-<h2 id="settings">Settings</h2>
-<p>Set <strong>Backspace speed multiplier</strong> to an integer from <strong>1</strong> to <strong>10</strong>. The default is
-<strong>2</strong>; <strong>1</strong> keeps normal Windows speed. Changes take effect immediately. Values
-outside this range are clamped. Start with a low value to avoid deleting too much.</p>
-<h2 id="behavior">Behavior</h2>
-<ul>
-<li>Single presses stay normal. Acceleration starts when Windows repeats a held
-physical Backspace key.</li>
-<li>Ctrl, Alt, Shift, and Windows-key combinations are not accelerated. Pressing
-another key during a hold cancels acceleration until Backspace is released.</li>
-<li>A repeat observed in a different foreground window cancels acceleration for
-that hold.</li>
-<li>Repeats arrive in small batches, which can feel bursty at high multipliers.
-Actual deletion speed depends on the application.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>A dedicated Windhawk tool process uses a global keyboard hook to observe repeats
-and queues bounded extra key-downs through <code>SendInput</code> outside the callback. Extra
-events retain the source scan code; the physical key-up releases Backspace, and
-stale input is discarded after release, cancellation, or shutdown.</p>
-<h2 id="compatibilityandlimitations">Compatibility and limitations</h2>
-<p>Designed for Windows 10 and 11 and applications that accept synthetic keyboard
-input. The mod runs independently of Explorer and does not inject into each app.</p>
-<ul>
-<li>Elevated apps, games, raw-input apps, remappers, accessibility tools, and remote
-sessions may reject or handle injected input differently. The mod does not
-bypass Windows integrity restrictions or operate on the secure desktop.</li>
-<li>Backspace is accelerated wherever it is handled, including password fields
-and non-text actions such as navigation. The global hook cannot reliably
-identify text fields. Disable the mod where this behavior is undesirable.</li>
-<li>Foreground-window checks cannot detect every change of focus inside one window
-or an application-specific mode change. Release Backspace before changing focus.</li>
-<li>Other hooks can block injected input. Windows can also silently remove a
-low-level hook if its thread times out; disable and re-enable the mod to retry.</li>
-<li>Disabling the mod cancels pending work and removes its hook. Input already
-delivered to an application cannot be undone. Physical input is passed through.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If Backspace is not faster, check that the multiplier exceeds 1, release and hold
-the key again without modifiers, and try an ordinary, non-elevated text editor.
-Disable and re-enable the mod if necessary. Windhawk logs initialization and
-input-insertion failures when logging is enabled. Failed batches are not retried.</p>]]></content>
-        <author>
-            <name>Enrique Bos</name>
-            <uri>https://github.com/enriquebos</uri>
         </author>
     </entry>
 </feed>

@@ -955,6 +955,32 @@
         "version": "1.0.2"
       }
     },
+    "background-dimmer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793675032000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793675032000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "3DDinosaur",
+        "compilerOptions": "-lcomctl32 -lcomdlg32 -lgdi32 -lgdiplus -lshell32",
+        "description": "Dims unfocused windows with a solid tint, pattern or image, tuned live in a secondary configuration window",
+        "github": "https://github.com/3DDinosaur",
+        "include": [
+          "windhawk-mod-uiaccess.exe",
+          "windhawk-mod.exe",
+          "windhawk.exe"
+        ],
+        "name": "Background Dimmer",
+        "version": "1.0.0"
+      }
+    },
     "balloon-sound-fix": {
       "details": {
         "defaultSorting": 4270,
@@ -4139,6 +4165,33 @@
         "license": "MIT",
         "name": "Desktop Icon Arrangement",
         "version": "0.1.1"
+      }
+    },
+    "desktop-icon-dock": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1793675038000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1793675038000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "yizqq0721",
+        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lole32 -loleaut32 -luuid -lshell32 -ladvapi32",
+        "description": "A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel",
+        "github": "https://github.com/yizqq0721",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Desktop Icon Dock",
+        "version": "1.1.2"
       }
     },
     "desktop-icon-section-autohide": {
