@@ -137,7 +137,7 @@ Copyright (c) 2026-present David Ravelo.
     $description: Live background blur tracks the desktop in real time for Acrylic, Glass, Frosted, and Aurora. It is off by default because Windows renders it via a separate layer, which can cause minor edge seams during animations and impacts performance. Enabling it on Windows 11 keeps the blur live but causes Windows to override manual blur strength settings. On Windows 10, the live option is ignored and always uses a single snapshot to prevent compositor trails.
   - BlurAmount: 50
     $name: Blur strength (0 to 100)
-    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects only while Live acrylic is off (with it on, Windows sets their blur strength). Ignored with "Solid".
+    $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects while Live acrylic is off — on Windows 11, with it on, Windows sets their blur strength. Ignored with "Solid".
   - Color: midnight
     $name: Color
     $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
@@ -2396,8 +2396,8 @@ static void LoadSettings() {
                    : (ef == L"glass")   ? BgEffect::Glass
                    : (ef == L"frosted") ? BgEffect::Frosted
                    : (ef == L"aurora")  ? BgEffect::Aurora
-                   : (ef == L"solid")   ? BgEffect::Solid
-                                        : BgEffect::Acrylic;
+                   : (ef == L"acrylic") ? BgEffect::Acrylic
+                                        : BgEffect::Solid;  // same as the declared default
     }
     c.blurPct = std::clamp(GetIntSetting(L"Appearance.BlurAmount"), 0, 100);
     c.liveAcrylic = GetIntSetting(L"Appearance.LiveAcrylic") != 0;
@@ -9111,7 +9111,6 @@ static HWND g_livePanel = nullptr;                  // acrylic of the details pa
 static bool g_liveWin11 = false;                    // Windows 11: corners rounded by DWM
 typedef HRESULT(WINAPI* LvDwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
 static LvDwmSetWindowAttribute_t g_pDwmSetAttr = nullptr;
-static int g_liveRgnSize[2][2] = {};                // Windows 10: size of the last region
 static int g_livePos[2][4] = {};                    // last x, y, w, h given to each window
 
 static bool UseLive() {
@@ -9119,7 +9118,7 @@ static bool UseLive() {
     // every resize), so the blur lags behind the drawn frame and leaves seams while the panel
     // animates. There the effects keep working from a single snapshot instead: one surface, no second
     // window, nothing to desynchronize.
-    if (!g_liveSupported || !g_liveWin11 || !g_cfg.liveAcrylic) return false;
+    if (!g_liveSupported || !g_cfg.liveAcrylic) return false;
     return g_cfg.effect == BgEffect::Acrylic || g_cfg.effect == BgEffect::Glass ||
            g_cfg.effect == BgEffect::Frosted || g_cfg.effect == BgEffect::Aurora;
 }
@@ -9162,7 +9161,7 @@ static bool LiveCreate(HINSTANCE hInst) {
     HMODULE u = GetModuleHandleW(L"user32.dll");
     g_pSetWCA = u ? (LvSetWindowCompositionAttribute_t)GetProcAddress(u, "SetWindowCompositionAttribute")
                   : nullptr;
-    g_liveSupported = g_pSetWCA && WindowsBuildAtLeast(17134);  // acrylic: 1803+
+    g_liveSupported = g_pSetWCA && WindowsBuildAtLeast(22000);  // live blur is Windows 11 only
     if (!g_liveSupported) return false;
 
     g_liveWin11 = WindowsBuildAtLeast(22000);
@@ -9229,7 +9228,6 @@ static void LiveHide() {
     LiveDisableAccent();
     if (g_liveWnd) ShowWindow(g_liveWnd, SW_HIDE);
     if (g_livePanel) ShowWindow(g_livePanel, SW_HIDE);
-    memset(g_liveRgnSize, 0, sizeof(g_liveRgnSize));
     memset(g_livePos, 0, sizeof(g_livePos));
 }
 
@@ -10790,14 +10788,7 @@ static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
         if (IsWindowVisible(wnd)) ShowWindow(wnd, SW_HIDE);
         return;
     }
-    if (!g_liveWin11 && (g_liveRgnSize[idx][0] != w || g_liveRgnSize[idx][1] != h)) {
-        g_liveRgnSize[idx][0] = w;
-        g_liveRgnSize[idx][1] = h;
-        const int d = (int)std::lround(kRadius * (float)g_scale * 2.f);
-        HRGN rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
-        SetWindowRgn(wnd, rgn, TRUE);  // the system takes ownership of rgn
-    }
-    // Acrylic windows are slow to move on some Windows 10 builds, so the window is only touched
+    // Acrylic windows are slow to move on some builds, so the window is only touched
     // when its rect changed, it is hidden, or something got between it and g_hwnd. Both acrylic
     // windows sit right below g_hwnd, in either order.
     const bool visible = IsWindowVisible(wnd) != FALSE;
@@ -10819,6 +10810,14 @@ static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
 }
 
 // Call from Present(): keeps the acrylic window aligned with g_hwnd.
+// The details panel's last pixels, where Windows collapses the rounded blur layer into a minimum
+// pill. Below this width the panels draw a tinted tail and the blur layer is hidden, so both sides
+// have to compare the same number: the rounded pixel width, never the raw float.
+static const float kTailPx = 24.f;
+static bool LivePanelTooNarrow(float widthPx) {
+    return widthPx < std::round(kTailPx * (float)g_scale);
+}
+
 static void LiveSync() {
     if (!g_liveWnd) return;
 
@@ -10846,7 +10845,7 @@ static void LiveSync() {
             const int pwid = (int)std::lround(kPanelW * s * a);
             // Below this width DWM's rounded acrylic stops shrinking and becomes a pill; the card
             // finishes the wipe alone (with a solid tail, see DrawDetailsPanel).
-            if (pwid >= (int)std::lround(24.f * s)) {  // same threshold as the tail (24 * s), not 24 px
+            if (!LivePanelTooNarrow((float)pwid)) {  // same threshold as the tail (24 * s), not 24 px
                 LivePlaceWindow(g_livePanel, 1, baseX + (int)std::lround(ox),
                                 baseY + (int)std::lround(cy), pwid,
                                 (int)std::lround(DetailsPanelH() * s));
@@ -11673,10 +11672,10 @@ static void DrawDetailsPanel(AppEntry& app, const AppDetails& d) {
     // DWM cannot draw its rounded acrylic narrower than ~2× the corner radius (it collapses into a
     // minimum pill). The last few pixels of the wipe are drawn as a solid tail instead, so the card
     // and the effect end together instead of the blur getting stuck.
-    if (UseLive() && cardW < 24.f * s) {
-        // Same translucent tint the acrylic has (not the opaque palette colour, which looked
-        // black) and it dissolves as the width reaches 0, so there is no dark bar at the end.
-        const float t = std::clamp(cardW / (24.f * s), 0.f, 1.f);
+    if (UseLive() && LivePanelTooNarrow(std::round(cardW))) {
+        // Same translucent tint the acrylic has and it dissolves as the width reaches 0, so there is
+        // no dark bar at the end.
+        const float t = std::clamp(cardW / (kTailPx * s), 0.f, 1.f);
         D2D1_COLOR_F tail = g_pal.bg;
         tail.a = EffectTintAlpha();
         FillRR(ox, oy, ox + cardW, oy + ph, kRadius * s, tail, a * t * t);
@@ -11789,10 +11788,10 @@ static void DrawWindowPanel(const WinPanelInfo& w) {
     // DWM cannot draw its rounded acrylic narrower than ~2× the corner radius (it collapses into a
     // minimum pill). The last few pixels of the wipe are drawn as a solid tail instead, so the card
     // and the effect end together instead of the blur getting stuck.
-    if (UseLive() && cardW < 24.f * s) {
-        // Same translucent tint the acrylic has (not the opaque palette colour, which looked
-        // black) and it dissolves as the width reaches 0, so there is no dark bar at the end.
-        const float t = std::clamp(cardW / (24.f * s), 0.f, 1.f);
+    if (UseLive() && LivePanelTooNarrow(std::round(cardW))) {
+        // Same translucent tint the acrylic has and it dissolves as the width reaches 0, so there is
+        // no dark bar at the end.
+        const float t = std::clamp(cardW / (kTailPx * s), 0.f, 1.f);
         D2D1_COLOR_F tail = g_pal.bg;
         tail.a = EffectTintAlpha();
         FillRR(ox, oy, ox + cardW, oy + ph, kRadius * s, tail, a * t * t);
@@ -13625,7 +13624,7 @@ static void ShowLauncher() {
     }
     LoadPalette();
     // With live acrylic on Windows 11, DWM rounds the corners (fixed radius ~8 px).
-    kRadius = (UseLive() && g_liveWin11) ? 8.f : 20.f;
+    kRadius = UseLive() ? 8.f : 20.f;
     if (!EnsureTarget()) {
         return;
     }
