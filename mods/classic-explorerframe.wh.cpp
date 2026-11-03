@@ -160,16 +160,6 @@ BOOL IsExplorerFrameByName(PCWSTR name) {
     return _wcsicmp(fileName, L"explorerframe.dll") == 0;
 }
 
-PPEB GetCurrentPeb() {
-#if defined(_M_X64) || defined(__x86_64__)
-    return (PPEB)__readgsqword(0x60);
-#elif defined(_M_IX86) || defined(__i386__)
-    return (PPEB)__readfsdword(0x30);
-#else
-    #error "Unsupported architecture"
-#endif
-}
-
 BOOL PatchLoaderEntryPath(HMODULE hModule) {
     PPEB peb;
     PLIST_ENTRY head, current;
@@ -177,7 +167,7 @@ BOOL PatchLoaderEntryPath(HMODULE hModule) {
     size_t fullLen, baseLen;
     PWSTR fullBuf, baseBuf;
 
-    peb = GetCurrentPeb();
+    peb = (PPEB)__readgsqword(0x60);
     if (!peb || !peb->Ldr) {
         Wh_Log(L"Не удалось получить PEB/Ldr");
         return FALSE;
