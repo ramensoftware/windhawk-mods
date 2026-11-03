@@ -20,9 +20,9 @@ Move the pointer with more fingers resting on the precision touchpad, as if glid
 
 ## How it works
 
-- **Trigger:** with 5 to as much fingers configured touching the pad.
+- **Trigger:** with 5 (or as few as configured) fingers touching the pad.
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
-- **Movement:** the pointer follows the fingers which move, leaving out the one which moves least (usually the thumb, so it doesn't fight the others). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
+- **Movement:** it leaves out the finger which moves the least (usually the thumb, to avoid conflict). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
 - **Click:** you don't need to lift all fingers. With the hand resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to select word by word. A hold lasts until the whole hand leaves the pad. **Tap to click** option controls its sensitivity.
 - **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-figer tap-slide to scroll while "inside" the more-fingers action. **Both will get activated if you start with 2 and rest more on the touchpad.**
 
@@ -77,6 +77,9 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 - multiplierOne: "1.0"
   $name: 2-1 fingers speed multiplier
   $description: When fewer fingers move or are left gliding. 1.0 is native.
+- armFive: true
+  $name: 5 fingers detection
+  $description: The glide starts with five contacts, thumb included. Off, it only starts with the enabled below.
 - armFour: false
   $name: 4 fingers detection
   $description: You have to disable the four-finger swipes in Windows touchpad settings, otherwise it also responds.
@@ -145,6 +148,13 @@ constexpr double kStartSpeed = 7.0;
 // More than this in one frame isn't a finger moving: the touchpad gave a contact's id to another contact,
 // typically when the thumb lands late, and following it would throw the pointer to the thumb.
 constexpr double kJumpMm = 10.0;
+// When the contact count changes, the touchpad shifts contacts for a few frames: a finger landing or lifting
+// grows or shrinks its contact, and neighbors which it touched are reported apart. Within this long of a count
+// change the median is followed, which a single shifted contact doesn't move.
+constexpr DWORD kSettleMs = 80;
+// The hand comes down over a moment: fingers landing this soon after the glide started still move the pointer,
+// otherwise starting with two fingers enabled would leave the rest of a landing hand out.
+constexpr DWORD kRefJoinMs = 300;
 
 struct TapProfile {
     bool on;
@@ -161,6 +171,14 @@ constexpr DWORD kTogetherMs = 100;
 // landed until it lifts is the hand moving with a finger bouncing, which clicked while gliding.
 constexpr DWORD kTapStillMs = 150;
 constexpr double kTapHandMm = 1.5;
+// A click goes where the pointer was before the tap began: a finger lifting off drags its contact for a few
+// frames, and the tap shakes the hand, which moved the pointer off the target. The tap begins when its finger
+// lands, or when a resting finger lifted up to kAimLookbackMs before that, minus kAimLiftMs of drag. Not when
+// the hand glided more than kAimMaxMm since, or the pointer is farther than kAimMaxPx: that's a real move.
+constexpr DWORD kAimLookbackMs = 800;
+constexpr DWORD kAimLiftMs = 50;
+constexpr double kAimMaxMm = 3.0;
+constexpr int kAimMaxPx = 30;
 constexpr ULONG kNoId = (ULONG)-1;
 // Tap and hold: a finger landing within the double-click time and this close to where the last tap was holds
 // the primary button once it can't be a tap anymore, until the whole hand leaves or another tap.
@@ -221,16 +239,23 @@ constexpr DWORD kStaleFrameMs = 500;
 // The wheel is only blocked while the touchpad reports: a wheel event without a recent report comes from a
 // mouse, or from a glide whose end was missed.
 constexpr DWORD kWheelReportMs = 250;
+// Two fingers alone on the pad moving apart or together are a pinch: the pointer holds still and Windows' zoom,
+// which reaches programs as Ctrl+wheel, passes the wheel block, until this long after the last pinching frame.
+constexpr DWORD kPinchHoldMs = 200;
+// Per frame, each pinching finger: under it, opposite moves are the fingers' jitter.
+constexpr double kPinchMm = 0.2;
 // Frames processed back to back would give a near-zero interval and spike the measured speed.
 constexpr double kMinFrameSec = 0.005;
 
 std::atomic<double> g_multFive{2.0};
 std::atomic<DWORD> g_lastReportTick;
+std::atomic<DWORD> g_pinchTick;
 std::atomic<double> g_multOne{1.0};
 std::atomic<bool> g_armTwo;
 std::atomic<bool> g_scrollReverse;
 std::atomic<bool> g_armThree;
 std::atomic<bool> g_armFour;
+std::atomic<bool> g_armFive{true};
 std::atomic<int> g_tapProfile{2};
 
 struct Bin {
@@ -292,6 +317,7 @@ struct Track {
 };
 
 std::deque<std::pair<DWORD, double>> g_travelLog;  // tick, g_state.travel then
+std::deque<std::pair<DWORD, POINT>> g_pointerLog;  // tick, pointer then
 std::unordered_map<HANDLE, Device> g_devices;
 std::vector<Contact> g_frame;
 ULONG g_frameExpected;
@@ -314,6 +340,11 @@ struct {
     bool holding;
     ULONG holdId;
     bool pendingDouble;  // a click is owed, waiting for a possible hold
+    DWORD restLiftTime;  // when a resting finger last lifted with the hand still on the pad
+    int lastTouching;
+    DWORD countChangeTime;
+    std::vector<ULONG> refIds;  // the fingers which move the pointer
+    std::unordered_map<ULONG, std::pair<double, double>> allLast;  // every finger's previous position, mm
     double travel;       // mm the glide moved, cumulative; creeping under kStopSpeed doesn't count
     bool pairScroll;     // two fingers came back after a two-finger tap and scroll while they stay
     ULONG scrollA, scrollB;
@@ -383,6 +414,7 @@ void LoadSettings() {
     g_scrollReverse = Wh_GetIntSetting(L"scrollReverse");
     g_armThree = Wh_GetIntSetting(L"armThree");
     g_armFour = Wh_GetIntSetting(L"armFour");
+    g_armFive = Wh_GetIntSetting(L"armFive");
 
     auto tap = WindhawkUtils::StringSetting::make(L"tapToClick");
     int profile = 2;
@@ -582,6 +614,10 @@ void EndGlide() {
     }
     g_state.pairScroll = false;
     g_travelLog.clear();
+    g_pointerLog.clear();
+    g_state.restLiftTime = 0;
+    g_state.refIds.clear();
+    g_state.allLast.clear();
     if (g_state.armed) {
         Wh_Log(L"Glide stopped");
         SetWheelBlock(false);
@@ -915,6 +951,32 @@ double TravelSince(DWORD tick) {
     return g_state.travel - at;
 }
 
+void AimTap(const Track& t) {
+    DWORD start = t.born;
+    if (g_state.restLiftTime && (LONG)(t.born - g_state.restLiftTime) >= 0 &&
+        t.born - g_state.restLiftTime <= kAimLookbackMs) {
+        start = g_state.restLiftTime;
+    }
+    start -= kAimLiftMs;
+    if (TravelSince(start) > kAimMaxMm) {
+        return;
+    }
+    const POINT* at = nullptr;
+    for (const auto& e : g_pointerLog) {
+        if ((LONG)(e.first - start) > 0) {
+            break;
+        }
+        at = &e.second;
+    }
+    POINT pos;
+    if (!at || !GetCursorPos(&pos) || (pos.x == at->x && pos.y == at->y)) {
+        return;
+    }
+    if (std::abs(pos.x - at->x) <= kAimMaxPx && std::abs(pos.y - at->y) <= kAimMaxPx) {
+        SendCursorPos(at->x, at->y);
+    }
+}
+
 bool HandStill(const Track& t) {
     return t.travelBefore + (g_state.travel - t.travelLand) <= kTapHandMm;
 }
@@ -1021,6 +1083,7 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
             if (p != g_state.tracks.end()) {
                 p->second.partnerUp = isTap ? now : 0;
             } else if (isTap && t.partnerUp && now - t.partnerUp <= kTogetherMs) {
+                AimTap(t);
                 TwoFingerTap(now);
             } else {
                 FirePendingDouble(now);
@@ -1041,10 +1104,14 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, DWORD now, int tou
             if (!(t.afterClick && OweClick(now))) {
                 g_state.lastTapX = t.x0;
                 g_state.lastTapY = t.y0;
+                AimTap(t);
                 Click(now);
             }
         } else {
             FirePendingDouble(now);
+            if (touching > 0) {
+                g_state.restLiftTime = now;
+            }
         }
         if (!released && !t.pressed && touching > 0 && tap.on && g_state.armed &&
             (LONG)(t.born - g_state.armTime) >= (LONG)tap.settleMs && now - t.born >= tap.minMs &&
@@ -1213,6 +1280,10 @@ void ProcessFrame() {
         }
     }
 
+    if (touching != g_state.lastTouching) {
+        g_state.lastTouching = touching;
+        g_state.countChangeTime = now;
+    }
     UpdateTracks(fingers, now, touching);
     Learn(fingers, touching, t);
     TrackTwoFingers(fingers, touching, now);
@@ -1225,8 +1296,8 @@ void ProcessFrame() {
     // A palm or thumb (Confidence = 0) only counts toward the whole hand's five: with three on, a two-finger
     // scroll with the thumb resting would start a glide. A count which is off doesn't start: its swipe is Windows'.
     int count = (int)fingers.size();
-    bool canArm = touching >= kFingers || count >= kFingers || (count == 2 && g_armTwo) || (count == 3 && g_armThree) ||
-                  (count == 4 && g_armFour);
+    bool canArm = (g_armFive && (touching >= kFingers || count >= kFingers)) || (count == 2 && g_armTwo) ||
+                  (count == 3 && g_armThree) || (count == 4 && g_armFour && (g_armFive || touching == 4));
     if (canArm && !g_state.armed) {
         g_state.armed = true;
         g_state.armTime = now;
@@ -1282,6 +1353,53 @@ void ProcessFrame() {
             continue;
         }
         used.push_back(c);
+    }
+
+    // The speed multiplier counts every finger, the ones which joined later too: only the pointer's direction
+    // comes from the fingers which started the glide.
+    std::vector<double> allMoved;
+    for (const Contact* c : used) {
+        auto found = g_state.allLast.find(c->id);
+        if (found != g_state.allLast.end()) {
+            double d = std::hypot(c->x - found->second.first, c->y - found->second.second);
+            if (d <= kJumpMm) {
+                allMoved.push_back(d);
+            }
+        }
+    }
+    g_state.allLast.clear();
+    for (const Contact* c : used) {
+        g_state.allLast[c->id] = {c->x, c->y};
+    }
+    double allBest = allMoved.empty() ? 0 : *std::max_element(allMoved.begin(), allMoved.end());
+    int allCount = (int)allMoved.size();
+    int allMoving = (int)std::count_if(allMoved.begin(), allMoved.end(),
+                                       [allBest](double d) { return d >= allBest * kSingleFingerShare; });
+
+    // Only the fingers which started the glide move the pointer, until they have all lifted: then those left
+    // take over. Fingers joining later rest, tap and count for nothing else, so the pointer doesn't take up
+    // their shifting as they land and lift.
+    auto isRef = [](const Contact* c) {
+        return std::find(g_state.refIds.begin(), g_state.refIds.end(), c->id) != g_state.refIds.end();
+    };
+    if (!std::any_of(used.begin(), used.end(), isRef)) {
+        g_state.refIds.clear();
+        for (const Contact* c : used) {
+            g_state.refIds.push_back(c->id);
+        }
+    }
+    for (const Contact* c : used) {
+        auto it = g_state.tracks.find(c->id);
+        if (!isRef(c) && it != g_state.tracks.end() &&
+            (LONG)(it->second.born - g_state.armTime) <= (LONG)kRefJoinMs) {
+            g_state.refIds.push_back(c->id);
+        }
+    }
+    // A hold or a scroll is the fingers working, not resting: every finger moves the pointer, or the wheel, so
+    // that the finger which holds, or the fingers back down on a scroll held by the thumb, are followed.
+    if (!g_state.holding && !g_two.scrolling) {
+        used.erase(std::remove_if(used.begin(), used.end(), [&](const Contact* c) { return !isRef(c); }),
+                   used.end());
     }
     if (used.empty()) {
         g_state.anchorValid = false;
@@ -1350,15 +1468,16 @@ void ProcessFrame() {
         return;
     }
 
+    bool settling = now - g_state.countChangeTime < kSettleMs;
     if (best < kJitterMm) {
         g_state.single = false;
-    } else if (best >= kSingleStartMm && second < best * kSingleFingerShare) {
+    } else if (best >= kSingleStartMm && second < best * kSingleFingerShare && !settling) {
         g_state.single = true;
     } else if (second > best * kHandShare) {
         g_state.single = false;
     }
-    int moving = counted;
-    if (!g_state.single && best >= kSingleStartMm) {
+    int moving = allCount;
+    if (!g_state.single && best >= kSingleStartMm && !settling) {
         // Only the moving fingers count, over a share of the most moved one, and the least moving of them is
         // left out: the thumb, which travels less than the fingers opposite it, stops pulling the pointer back.
         std::vector<size_t> movers;
@@ -1367,7 +1486,7 @@ void ProcessFrame() {
                 movers.push_back(i);
             }
         }
-        moving = (int)movers.size();
+        moving = allMoving;
         if (movers.size() >= 2) {
             movers.erase(std::min_element(movers.begin(), movers.end(), [&](size_t a, size_t b) {
                 return std::hypot(allX[a], allY[a]) < std::hypot(allX[b], allY[b]);
@@ -1381,7 +1500,7 @@ void ProcessFrame() {
         }
         dx /= movers.size();
         dy /= movers.size();
-    } else if (!g_state.single) {
+    } else if (!g_state.single || settling) {
         dx = Median(allX);
         dy = Median(allY);
     }
@@ -1393,13 +1512,29 @@ void ProcessFrame() {
         g_state.travel += frameMm;
     }
     g_travelLog.push_back({now, g_state.travel});
-    while (g_travelLog.size() > 1 && now - g_travelLog.front().first > 500) {
+    while (g_travelLog.size() > 1 && now - g_travelLog.front().first > kAimLookbackMs + 500) {
         g_travelLog.pop_front();
+    }
+    POINT cursor;
+    if (GetCursorPos(&cursor)) {
+        g_pointerLog.push_back({now, cursor});
+        while (g_pointerLog.size() > 1 && now - g_pointerLog.front().first > kAimLookbackMs + 500) {
+            g_pointerLog.pop_front();
+        }
     }
     if (g_two.scrolling) {
         if (!g_two.lifted) {
             Scroll(Median(allX), Median(allY), dt);
         }
+        return;
+    }
+    if (touching == 2 && allX.size() == 2 && std::hypot(allX[0], allY[0]) >= kPinchMm &&
+        std::hypot(allX[1], allY[1]) >= kPinchMm && allX[0] * allX[1] + allY[0] * allY[1] < 0) {
+        g_pinchTick = now;
+    }
+    if (now - g_pinchTick < kPinchHoldMs) {
+        g_state.accX = 0;
+        g_state.accY = 0;
         return;
     }
     // Up to two fingers moving, or one moving alone, aim like a single finger; three to five move the hand.
@@ -1607,7 +1742,8 @@ void OnRawInput(HRAWINPUT hRawInput) {
 // the system goes through it.
 LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL) &&
-        ((MSLLHOOKSTRUCT*)lParam)->dwExtraInfo != kScrollMark && GetTickCount() - g_lastReportTick < kWheelReportMs) {
+        ((MSLLHOOKSTRUCT*)lParam)->dwExtraInfo != kScrollMark && GetTickCount() - g_lastReportTick < kWheelReportMs &&
+        GetTickCount() - g_pinchTick >= kPinchHoldMs && GetAsyncKeyState(VK_CONTROL) >= 0) {
         return 1;
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
