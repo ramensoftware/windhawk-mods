@@ -27,7 +27,7 @@ A compact, minimal ring widget that replaces the Windows 11 notification-area
 clock. It shows the device status at a glance:
 
 - **Battery ring** - a 263 degree gauge with round caps and a translucent track.
-  The filled part follows the battery level; the ring is green while charging,
+  The filled part follows the battery level; the ring is green while plugged in,
   red when the battery is low (20% or less), yellow in battery saver mode and
   uses the taskbar text colour otherwise.
 - **Wi-Fi symbol** in the middle - two thick rounded arcs plus a solid dot,
@@ -62,7 +62,7 @@ Only Windows 11 is supported.
 
 Win Duo Bar 是一个替换 Windows 11 通知区域时钟的圆环小组件：
 
-- **电量圆环**：263° 圆环，圆头、带半透明轨道；电量部分随电量变化，充电时绿色、
+- **电量圆环**：263° 圆环，圆头、带半透明轨道；电量部分随电量变化，插电时绿色、
   低电量（≤20%）红色、节电模式黄色，其他情况跟随任务栏文字颜色。
 - **Wi-Fi 图标**：中间两条粗圆头弧线 + 实心圆点（按原版 09 图标描出）；当前连接
   不是无线时显示有线/VPN 图标，断网时变暗。
