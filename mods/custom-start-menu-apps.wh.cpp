@@ -3,8 +3,8 @@
 // @name            Custom Start Menu Apps
 // @description     Adds a customizable app panel beside the Windows 11 Start menu, with freely positioned shortcuts, automatic sizing and full support for Windows 11 Start Menu Styler
 // @version         0.7.1
-// @author          Nightmarehelltime & RTantrumR
-// @github          Nightmarehelltime
+// @author          Nightmarehelltime
+// @github          https://github.com/Nightmarehelltime
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -lmsimg32 -ladvapi32 -luuid -loleaut32
