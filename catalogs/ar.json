@@ -11153,7 +11153,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793502054000,
+        "updated": 1793721729000,
         "users": 65
       },
       "metadata": {
@@ -11169,7 +11169,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Nested Tray Drawer",
-        "version": "0.1.13"
+        "version": "0.1.14"
       }
     },
     "net-speed-taskbar": {

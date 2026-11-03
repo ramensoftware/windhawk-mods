@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-03T14:03:29.000Z</updated>
+    <updated>2026-11-03T16:02:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Nested Tray Drawer 0.1.14]]></title>
+        <id>https://windhawk.net/mods/nested-tray-drawer#fa0c9caef41dfab1355e934428e282518462a4f4</id>
+        <link href="https://windhawk.net/mods/nested-tray-drawer"/>
+        <updated>2026-11-03T16:02:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix initialization rejection on the taskbar.dll 26100.9818 identity-access path.</li>
+<li>Recognize bounded inlined x64 interface adjustments and safe integer instructions,
+while retaining strict pointer, field-copy and unknown-instruction checks.</li>
+</ul>]]></content>
+        <author>
+            <name>MEI</name>
+            <uri>https://github.com/Meidios</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.7.3]]></title>
         <id>https://windhawk.net/mods/alt-tab-flip-3d#f77e18a3799ee9e4850f462144b08902bbab4530</id>
@@ -707,19 +722,6 @@ the mod is removed.</li>
         <author>
             <name>hiword9</name>
             <uri>https://github.com/HiWord9</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab per monitor 1.2.1]]></title>
-        <id>https://windhawk.net/mods/alt-tab-per-monitor#252ab7ccd45d327de7be502a255e1c9b126828df</id>
-        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
-        <updated>2026-11-02T01:19:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with the latest Windows 11 update.</li>
-</ul>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>

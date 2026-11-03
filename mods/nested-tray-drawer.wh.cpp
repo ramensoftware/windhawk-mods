@@ -2,7 +2,7 @@
 // @id              nested-tray-drawer
 // @name            Nested Tray Drawer
 // @description     Collect rarely used tray icons in a second drawer.
-// @version         0.1.13
+// @version         0.1.14
 // @author          MEI
 // @github          https://github.com/Meidios
 // @include         explorer.exe
@@ -41,7 +41,7 @@ This does not make every Windows build supported: the symbol names, root layout
 and native identity ABI must still be compatible.
 
 Persistent identity uses Wh_Disasm to follow a recognized interface-adjustment
-thunk and the HWND/UID/GUID copy on x64 or ARM64. Both constructor-based and
+thunk or inline prefix and the HWND/UID/GUID copy on x64 or ARM64. Both constructor-based and
 inlined identity getters are recognized; the native owning-string return type
 is never called across C++ ABIs. Unrecognized symbols, instructions, field layouts
 or call targets are rejected rather than guessed. Some older ARM64 binaries
@@ -626,7 +626,107 @@ bool IdentityMemory(std::string_view text, IdentityMachine machine, int& base, i
     return IdentityNumber(text.substr(separator), offset) && offset >= -4096 && offset <= 4096;
 }
 
+bool DecodeX64IdentityAdjustment(const BYTE* query, ptrdiff_t& adjustment) {
+    // QueryInterface can be a tail thunk or contain the same null-preserving
+    // adjustment inline before a virtual call. Track only that bounded prefix.
+    enum Kind { Unknown, This, Added, Negated, Mask, Adjusted, Vtable, Target };
+    struct Value { Kind kind{}; int64_t delta{}; };
+    std::array<Value, 16> registers{};
+    registers[1] = {This, 0};  // RCX is the incoming interface pointer.
+    bool carryFromThis{};
+    for (int i = 0; i < 24; ++i) {
+        IdentityInstruction instruction;
+        if (!ReadIdentityInstruction(query, IdentityMachine::X64, instruction))
+            return false;
+        auto const& op = instruction.operation;
+        auto const& args = instruction.operands;
+        auto reg = [](std::string_view name) {
+            auto r = IdentityReg(name, IdentityMachine::X64);
+            return r.width == 8 && r.index >= 0 && r.index < 16 ? r.index : -1;
+        };
+        if (op == "nop" || op == "endbr64")
+            continue;
+        if (args.size() == 1 && (op == "jmp" || op == "call")) {
+            auto value = registers[1];
+            int64_t target{};
+            bool direct = IdentityNumber(args[0], target) && target > 0;
+            int targetReg = reg(args[0]);
+            bool virtualCall = op == "call" &&
+                ((direct && registers[0].kind == Target && registers[0].delta == value.delta) ||
+                 (targetReg >= 0 && registers[targetReg].kind == Target &&
+                  registers[targetReg].delta == value.delta));
+            if (value.kind != Adjusted || value.delta >= 0 || value.delta < -4096 ||
+                (!virtualCall && !(op == "jmp" && direct)))
+                return false;
+            adjustment = static_cast<ptrdiff_t>(value.delta);
+            return true;
+        }
+        if (op == "push" && args.size() == 1 && reg(args[0]) >= 0 &&
+            registers[4].kind == Unknown)
+            continue;
+        if (op == "sub" && args.size() == 2 && args[0] == "rsp" &&
+            registers[4].kind == Unknown) {
+            int64_t size{};
+            if (!IdentityNumber(args[1], size) || size < 0 || size > 4096)
+                return false;
+            carryFromThis = false;
+            continue;
+        }
+        if (op == "neg" && args == std::vector<std::string>{"rcx"} &&
+            registers[1].kind == This) {
+            registers[1] = {Negated, 0};
+            carryFromThis = true;
+            continue;
+        }
+        if (args.size() != 2)
+            return false;
+        int left = reg(args[0]), right = reg(args[1]), base{};
+        int64_t displacement{};
+        if (op == "sbb" && left >= 0 && left != 4 && left == right && carryFromThis) {
+            registers[left] = {Mask, 0};
+            carryFromThis = false;
+            continue;
+        }
+        if (op == "and" && left >= 0 && left != 4 && right >= 0 &&
+            registers[left].kind == Mask && registers[right].kind == Added) {
+            registers[left] = {Adjusted, registers[right].delta};
+            carryFromThis = false;
+            continue;
+        }
+        if (op == "lea" && left >= 0 && left != 4 &&
+            IdentityMemory(args[1], IdentityMachine::X64, base, displacement) &&
+            base < 16 && registers[base].kind == This && displacement < 0) {
+            registers[left] = {Added, displacement};
+            continue;
+        }
+        if (op == "mov") {
+            if (left >= 0 && left != 4 && right >= 0) {
+                registers[left] = registers[right];
+                continue;
+            }
+            if (right >= 0 && IdentityMemory(args[0], IdentityMachine::X64, base, displacement) &&
+                base == 4 && registers[4].kind == Unknown && displacement >= 0)
+                continue;  // Register save to an untracked stack frame.
+            if (left >= 0 && left != 4 &&
+                IdentityMemory(args[1], IdentityMachine::X64, base, displacement) && base < 16) {
+                auto value = registers[base];
+                if (value.kind == Adjusted && displacement == 0)
+                    registers[left] = {Vtable, value.delta};
+                else if (value.kind == Vtable && displacement >= 0 && displacement % 8 == 0)
+                    registers[left] = {Target, value.delta};
+                else
+                    return false;
+                continue;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
 bool DecodeIdentityAdjustment(const BYTE* query, IdentityMachine machine, ptrdiff_t& adjustment) {
+    if (machine == IdentityMachine::X64)
+        return DecodeX64IdentityAdjustment(query, adjustment);
     std::vector<IdentityInstruction> code;
     for (int i = 0; i < 12; ++i) {
         IdentityInstruction instruction;
@@ -645,20 +745,7 @@ bool DecodeIdentityAdjustment(const BYTE* query, IdentityMachine machine, ptrdif
         !IdentityNumber(code.back().operands[0], target) || target <= 0)
         return false;
     int64_t delta{};
-    if (machine == IdentityMachine::X64 && code.size() == 5) {
-        int base{};
-        if (code[0].operation != "lea" || code[0].operands.size() != 2 ||
-            !IdentityMemory(code[0].operands[1], machine, base, delta) || base != 1 ||
-            code[1].operation != "neg" || code[1].operands != std::vector<std::string>{"rcx"} ||
-            code[2].operation != "sbb" ||
-            code[2].operands != std::vector<std::string>{"rcx", "rcx"} ||
-            code[3].operation != "and" ||
-            code[3].operands != std::vector<std::string>{"rcx", code[0].operands[0]} ||
-            code[4].operation != "jmp" ||
-            (IdentityReg(code[0].operands[0], machine).width != 8 ||
-             IdentityReg(code[0].operands[0], machine).index == 1))
-            return false;
-    } else if (machine == IdentityMachine::Arm64 && code.size() == 4) {
+    if (machine == IdentityMachine::Arm64 && code.size() == 4) {
         if (code[0].operation != "sub" || code[0].operands.size() != 3 ||
             code[0].operands[1] != "x0" || IdentityReg(code[0].operands[0], machine).width != 8 ||
             IdentityReg(code[0].operands[0], machine).index == 0 ||
@@ -729,6 +816,15 @@ bool DecodeIdentityPrefix(const BYTE* function,
             continue;
         if (machine == IdentityMachine::Arm64 && (op == "pacibsp" || op == "paciasp")) {
             registers[30] = {};  // Pointer authentication writes the link register.
+            continue;
+        }
+        if (machine == IdentityMachine::X64 && op == "xor" && args.size() == 2 &&
+            args[0] == args[1]) {
+            auto destination = IdentityReg(args[0], machine);
+            if (destination.index < 0 || destination.index == stack ||
+                (destination.width != 4 && destination.width != 8))
+                return false;
+            registers[destination.index] = {};  // Both forms clear the complete GPR.
             continue;
         }
         // These stores only save registers to an untracked stack frame. In
@@ -812,10 +908,18 @@ bool DecodeIdentityPrefix(const BYTE* function,
             auto destination = IdentityReg(args[0], machine);
             int base{};
             int64_t displacement{};
-            if (destination.index < 0 || destination.width != 8 ||
+            if (destination.index < 0 ||
+                (destination.width != 8 &&
+                 !(machine == IdentityMachine::X64 && destination.width == 4)) ||
                 !IdentityMemory(args[1], machine, base, displacement))
                 return false;
             auto value = registers[base];
+            if (destination.width != 8) {
+                if (value.kind != IdentityValue::Unknown || destination.index == stack)
+                    return false;  // A pointer must never be truncated into a 32-bit alias.
+                registers[destination.index] = {};
+                continue;
+            }
             if (value.kind == IdentityValue::Source || value.kind == IdentityValue::Output)
                 value.offset += displacement;
             else
